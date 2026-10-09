@@ -780,7 +780,7 @@ P50/P95/P99 medidos ≤ orçamento ao throughput alvo, taxa de erro < [0.1]%.
       );
     },
 
-    // 1.21 F5 — uma alteração (kind "change", tamanho xs): UM ficheiro com todo o plano (o EN é a referência).
+    // uma alteração (kind "change", tamanho xs): UM ficheiro com todo o plano (o EN é a referência).
     change(a) {
       return `# Alteração: ${a.name}
 
@@ -892,7 +892,7 @@ const steering = {
       "# Padrões de API\n\n## Estilo e Contrato\n- Estilo: [REST | GraphQL | gRPC] · o contrato está em: [openapi.yaml | proto/ | schema.graphql] — escrito primeiro, revisto antes dos handlers.\n- Nomes: substantivos no plural para coleções · campos em [snake_case | camelCase] · datas em ISO 8601 UTC · IDs como strings.\n\n## Versionamento e Compatibilidade\n- Estratégia: [URL /v1 | cabeçalho | data] · só alterações aditivas dentro de uma versão · uma alteração incompatível sai numa nova versão.\n- Descontinuação: os cabeçalhos Deprecation e Sunset, pelo menos [6 meses] de aviso, uma entrada no changelog, o uso acompanhado por cliente.\n\n## Erros\n- application/problem+json (RFC 9457): type, title, status, detail, instance + um `code` estável; um erro de validação lista cada campo. Nenhum stack trace numa resposta.\n\n## Paginação, Idempotência e Concorrência\n- Paginação por cursor (um cursor opaco, no máximo [100] itens por página) · uma Idempotency-Key em cada criação não idempotente, guardada durante [24 h] · ETag / If-Match nas atualizações (412 numa versão desatualizada).\n\n## Limites de Taxa\n- Por [chave de API | utilizador | IP]: [N] pedidos por [janela] · 429 com Retry-After e os cabeçalhos RateLimit.\n\n## Verificações (locais)\n- Testes de contrato: [comando] · comparação de alterações incompatíveis com o contrato publicado: [comando].\n",
     "ui.md":
       "# Padrões de Interface\n\n## Design System\n- Componentes: [biblioteca / URL do Storybook] · tokens: [cor, espaçamento, tipografia — onde estão] · um componente novo entra primeiro no sistema (documentado, revisto), nunca como peça avulsa.\n\n## Estados\n- Cada vista desenha: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso.\n- Formulários: erros no campo + um resumo, os valores mantidos num erro, o botão de submeter nunca é o único sinal.\n\n## Acessibilidade\n- Alvo: WCAG 2.2 AA · operável com o teclado, foco visível · cada controlo com nome · contraste 4,5:1 (texto) / 3:1 (interface) · alvos ≥ 24×24 px · prefers-reduced-motion respeitado.\n- Verificações: [comando axe / Lighthouse] em cada execução local · uma passagem manual com teclado + leitor de ecrã ([NVDA / VoiceOver]) por feature.\n\n## Design Responsivo e i18n\n- Breakpoints: [360 / 768 / 1280 px] · expansão do texto +30–40 % · RTL: [sim / não] · datas, números e moeda pelo locale.\n\n## Orçamento de Desempenho\n- Core Web Vitals (p75): LCP ≤ 2,5 s · INP ≤ 200 ms · CLS ≤ 0,1 · JS por rota ≤ [170 KB gz] · medido por: [Lighthouse local / RUM].\n",
-    // 1.21 F4 — +data
+    // +data
     "data.md":
       "# Padrões de Pipelines de Dados\n\n## Contratos e Esquemas\n- Onde estão os esquemas: [YAML do dbt | um registo de esquemas | schemas/] · compatibilidade: só alterações aditivas; uma alteração incompatível sai numa nova versão com [N semanas] de descontinuação.\n- Nomes: tabelas e colunas em [snake_case] · datas e horas em UTC · as camadas: [raw → staging → marts].\n\n## Qualidade dos Dados\n- Cada conjunto de dados: chaves não nulas e únicas, valores e intervalos admitidos, verificações de anomalias na contagem de linhas · executadas na ingestão e antes de publicar · uma falha: [pôr as linhas em quarentena | parar a carga] e alertar o responsável.\n- Ferramenta: [testes dbt | Great Expectations | verificações SQL] · comando: [comando].\n\n## Idempotência e Backfills\n- Cada job reexecutável para uma partição: sobrescrever a partição ou MERGE numa chave — nunca um append às cegas · dados que chegam atrasados: uma janela de lookback de [N dias].\n- Backfills: primeiro uma execução de ensaio · no máximo [N] partições em paralelo · o custo estimado e aprovado por [papel].\n\n## Linhagem e Responsáveis\n- Cada conjunto de dados tem um responsável e um SLA de atualidade · a linhagem está em: [dbt docs | o catálogo de dados] · os consumidores sabem de uma alteração incompatível com [N dias] de antecedência.\n\n## Retenção e Custo\n- Retenção por camada: bruta [N dias] · curada [N meses] — dados pessoais segundo o privacy.md · particionado por [data], agrupado por [chave] · orçamento de custo: [valor por mês], com um alerta a [N] %.\n",
     "glossary.md":
@@ -911,7 +911,7 @@ const evalsReadme = "# Evals\n\n" +
     "Formato de item: `{ id, input, expect: { type, value|rubric } }`. Tipos de grader: contains | equals | regex | refuse | judge.\n" +
     "O system prompt é lido do `../prompts/vN.md` mais recente (a sua secção `## System`).\n";
 
-// 1.25.1 — what the stop gate's claims (msg.stopGate.claims) are made of: a claim is about the WORK (a task, the feature, everything,
+// what the stop gate's claims (msg.stopGate.claims) are made of: a claim is about the WORK (a task, the feature, everything,
 // the tests), never a bare verb — "Verifiquei o ficheiro…", "Concluí que o problema…", "Acabei de ler o código", "O método está
 // implementado em src/pay.ts" were sent back while any recent tick was unverified. See en.js (STOP_EN_*).
 const STOP_PT_DONE = String.raw`(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resolvid[oa]s?|complet[oa]s?|pront[oa]s?)`;
@@ -976,7 +976,7 @@ const msg = {
       changedByDate: (list, slug) => `avaliado só pela data do ficheiro (aprovado antes das impressões digitais de conteúdo — um clone ou uma cópia repõe as datas, por isso pode nem ser uma edição): ${list} — revê e volta a aprovar para o seguir pelo conteúdo (/approve ${slug} <fase>)`,
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
-    // 1.21 F5 — rigor à medida (o EN é a referência): tamanhos (spec_create {size}), a alteração (tamanho xs, um change.md).
+    // rigor à medida (o EN é a referência): tamanhos (spec_create {size}), a alteração (tamanho xs, um change.md).
     sizes: {
       spikeNoSize: "Um spike tem prazo, não tamanho — cria-se sem tamanho (o prazo limita-o).",
       changeSize: (size) => `kind "change" é tamanho xs — para o tamanho ${size} cria-se uma feature: spec_create {kind: "feature", size: "${size}"}.`,
@@ -1011,11 +1011,11 @@ const msg = {
     },
     kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
     langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,
-    // 1.23 review 5 — spec_create numa pasta que já existe (correr de novo) di-lo; uma feature nova cujo slug uma arquivada também tem é assinalada.
+    // spec_create numa pasta que já existe (correr de novo) di-lo; uma feature nova cujo slug uma arquivada também tem é assinalada.
     createExisted: (slug) => `'${slug}' já existe — nada foi recriado (os ficheiros foram mantidos; correr de novo só acrescenta os tracks que faltam).`,
     createSummaryKept: "O resumo indicado não foi escrito: os ficheiros da feature já têm um.",
     createArchivedTwin: (slug) => `Há também uma feature arquivada chamada '${slug}' (.specs/_archive/${slug}) — para a restaurar mais tarde, renomeia primeiro uma delas.`,
-    // 1.21 F3 — spec_create {kind: "bugfix"}: pré-preenchimento (reproduction · rootCause · condition · behaviour — nomes em inglês).
+    // spec_create {kind: "bugfix"}: pré-preenchimento (reproduction · rootCause · condition · behaviour — nomes em inglês).
     bugPrefill: {
       bugOnly: (key) => `${key} é um dado de bugfix — passa kind: "bugfix" (preenche o bug.md e o critério de regressão).`,
       bugOnlyCli: (flag) => `${flag} é um dado de bugfix, que preenche o bug.md e o critério de regressão — cria-a como bugfix: ${DEV_SPEC} bugfix "<nome>" ${flag} "…" (ou --kind bugfix).`,
@@ -1084,7 +1084,7 @@ const msg = {
         "um segundo sistema (um broker, outro serviço, um webhook…)"}; não foi ativado.`,
       keptOff: (t, kw) => `+${t} mantido inativo — '${kw}' apareceu negado.`,
       onAlthough: (t, quoted, list) => `+${t} está ATIVO embora ${quoted} tenha aparecido negado — ativado por: ${list}. Confirma que é intencional.`,
-      // 1.21 F2 — os ajustes de sinais do projeto (.specs/classifier.json) e classify --explain
+      // os ajustes de sinais do projeto (.specs/classifier.json) e classify --explain
       overridesApplied: (list) => `Os ajustes de sinais deste projeto mudaram a leitura (.specs/classifier.json): ${list.map((o) => `'${o.word}' para +${o.track} → ${({ off: "nenhum sinal", weak: "um sinal fraco", strong: "um sinal forte" })[o.effect]}`).join(", ")} — ${DEV_SPEC} signals list mostra todos.`,
       overridesInvalid: (code, n) => `.specs/classifier.json ${code === "invalid-entries" ? `tem ${n} entrada(s) inválida(s) (ignorada(s))` : `foi ignorado (${({ "invalid-json": "não é JSON válido", "invalid-shape": "sem lista \"signals\"", "too-big": "grande demais", "not-a-file": "não é um ficheiro normal", unreadable: "ilegível" })[code] || code})`} — ${DEV_SPEC} signals list diz o que corrigir.`,
       explainHead: "Palavras-chave encontradas (track · palavra-chave · nível da tabela → nível final):",
@@ -1094,7 +1094,7 @@ const msg = {
       explainOverride: (o, min) => `  +${o.track} '${o.word}' → ${o.effect} · ${o.origin === "set" ? "definido à mão" : `aprendido, ${o.count} correção(ões)`}${o.active ? "" : ` · pendente (${o.count} de ${min})`}${o.applied ? " · aplicado aqui" : ""}`,
       explainNoOverrides: "Ajustes de sinais do projeto: nenhum (.specs/classifier.json).",
     },
-    // 1.21 F2 — spec_tracks {action: "signals"} / dev-spec signals, e o que o spec_create aprende com uma correção da Fase 0
+    // spec_tracks {action: "signals"} / dev-spec signals, e o que o spec_create aprende com uma correção da Fase 0
     signals: {
       learnedPending: (t, w, e, n, min) => `Correção da Fase 0 registada: '${w}' ${e === "off" ? `sugeriu +${t} e a feature foi criada sem ele` : `era só uma pista para +${t} e a feature foi criada com ele`} (${n} de ${min} — após ${min} correções consistentes ${e === "off" ? `deixa de sugerir +${t}` : `passa a ser ${({ weak: "um sinal fraco", strong: "um sinal forte" })[e]} de +${t}`} neste projeto; ${DEV_SPEC} signals list).`,
       learnedActive: (t, w, e, n) => `Aprendido com ${n} correções consistentes da Fase 0: '${w}' ${e === "off" ? `deixa de sugerir +${t}` : `é ${({ weak: "um sinal fraco", strong: "um sinal forte" })[e]} de +${t}`} neste projeto (.specs/classifier.json — para desfazer: ${DEV_SPEC} signals forget ${t} "${w}").`,
@@ -1336,7 +1336,7 @@ const msg = {
       unticks: "'unticks' tem de ser um array",
     },
     depend: {
-      // 1.23 review 5 — "Precisa de atenção" do ROADMAP.md / .html: um dependsOn que não nomeia nenhuma feature
+      // "Precisa de atenção" do ROADMAP.md / .html: um dependsOn que não nomeia nenhuma feature
       roadmapStale: (feature, list, args) => `depende de ${list}, que não é nenhuma feature (uma entrada antiga ou editada à mão em .specs/roadmap.json) — define a lista de novo sem ela: ${DEV_SPEC} depend ${feature} ${args}`,
       unknown: (list) => `Cada dependência tem de ser uma feature existente — não encontrada(s): ${list}`,
     },
@@ -2123,7 +2123,7 @@ const msg = {
       },
     },
 
-    // 1.16 C — integração com o Claude Code (status line, ponte do plan mode, spec_import {text}, completion/complete).
+    // integração com o Claude Code (status line, ponte do plan mode, spec_import {text}, completion/complete).
     claudeCode: {
       statusLine: {
         head: (slug, kind) => `◆ ${slug}` + (kind === "bugfix" ? " (bugfix)" : kind === "spike" ? " (spike)" : ""),
@@ -2713,7 +2713,7 @@ const msg = {
       },
     },
 
-    // 1.14 B5 — vermelho → verde (_Expect: fail_), verificações do projeto (roadmap.json meta.checks) + a suite no fim, `dev-spec log`.
+    // vermelho → verde (_Expect: fail_), verificações do projeto (roadmap.json meta.checks) + a suite no fim, `dev-spec log`.
     redGreen: {
       passRefused: (n) => `A tarefa ${n} espera que o seu teste FALHE (_Expect: fail_), mas a execução passou (exit 0) — o teste ainda não falha, por isso não testa nada. Põe-no a falhar pela razão certa (uma asserção, "não implementado" — não um erro de escrita nem um import em falta) e regista essa execução. Não a marco como feita.`,
       passTicked: (n) => `A tarefa ${n} está marcada, mas espera que o seu teste FALHE (_Expect: fail_) e esta execução passou (exit 0) sem nenhuma execução vermelha registada antes — o teste não testa nada: registado; a tarefa passa a contar como não verificada até ser registada uma execução a falhar (vermelha).`,
@@ -2795,7 +2795,7 @@ const msg = {
     },
 
     stopGate: {
-      // 1.25.1: no bare verb or participle — "verifiquei", "concluí", "implementado" alone claimed "Verifiquei o ficheiro…", "Concluí
+      // no bare verb or participle — "verifiquei", "concluí", "implementado" alone claimed "Verifiquei o ficheiro…", "Concluí
       // que o problema…", "O método está implementado em src/pay.ts" (STOP_PT_* above, common.js stopLineClaim).
       claims: [
         // "A correção está concluída.", "Foi implementado e testado." — the clause ends there…
@@ -2817,10 +2817,10 @@ const msg = {
         String.raw`${STOP_PT_I}(?:\s+(?:já|agora|também))?(?:\s*(?:,|e)\s*${STOP_PT_I})*(?:\s+${STOP_PT_WORK}|${STOP_PT_END1})`,
         // …and "implementei" builds the work whatever its object ("Implementei a lógica de retry") — not "…que" / "…como"
         String.raw`(?:implementei|implement[áa]mos)(?=\s+(?!(?:que|se|como|porque|onde|quando|qual)(?![\p{L}\p{N}_]))[\p{L}\p{N}_])`,
-        // "Pronto para merge" (1.25.1 — it claimed nothing)
+        // "Pronto para merge" (it claimed nothing)
         String.raw`pront[oa]s?\s+(?:para|pra)\s+(?:(?:o|a|um|uma|fazer|fazer\s+o)\s+)?(?:merge|integrar|integra[çc][ãa]o|entrega|entregar|release|lan[çc]amento|deploy|produ[çc][ãa]o|revis[ãa]o|review|pr|pull\s+request)`,
       ],
-      // 1.25.1 — the words every claim above holds at least one of (see en.js): pt-BR's own claims (funcionando, passando, rodando)
+      // the words every claim above holds at least one of (see en.js): pt-BR's own claims (funcionando, passando, rodando)
       // included — pt-BR keeps pt's list raw.
       triggers: [String.raw`${STOP_PT_DONE}|${STOP_PT_I}|testad[oa]s?|verdes?|funciona|funcionar|funcionando|passam|passaram|passa|passou|passar|passando|rodando`],
       negators: ["não", "nunca", "nem", "nada", "sem", "falta", "faltam", "ser", "quando", "depois", "antes", "se", "até", "vou", "vamos", "irei",
@@ -2891,7 +2891,7 @@ const msg = {
       },
     },
 
-    // 1.14 C2 — registo de decisões (decisions.md, spec_decide) e o tipo spike (investigar → decidir).
+    // registo de decisões (decisions.md, spec_decide) e o tipo spike (investigar → decidir).
     decisions: {
       header: (name) => `# Decisões: ${name}
 
@@ -3066,7 +3066,7 @@ _Outcome: [go | no-go | pivot]_
       wUnknownAc: (story, task, list) => `${story}, '${task}': referência(s) de AC ${list} não correspondem a nenhum critério dessa história — mantidas como escritas`,
       wWorkflow: (list) => `registos de workflow do BMAD não importados (ficam no sítio): ${list}`,
     },
-    // 1.17 F — spec_import {tool: "fluidplan"} (ver o bloco EN).
+    // spec_import {tool: "fluidplan"} (ver o bloco EN).
     importFluidplan: {
       several: (dir, list) => `'${dir}' tem vários planos do fluidplan (${list}) — indica o que queres importar (a pasta, o plan.json ou o PLAN.md dele).`,
       notFluidplan: (file) => `'${file}' não é um PLAN.md nem um DECISIONS.md do fluidplan (sem título '<título> — execution plan' / '<título> — decisions', sem tarefa '### [ ] 1.1 <tarefa> · D1').`,
@@ -3113,7 +3113,7 @@ _Outcome: [go | no-go | pivot]_
     },
   };
 
-// 1.16 Q — spec quality: steering amendments (Q1), cross-feature acceptance criteria (Q2), the glossary (Q3). One group per
+// spec quality: steering amendments, cross-feature acceptance criteria, the glossary. One group per
 // language, merged into MSG (pt-BR derives from pt's). Check ids, reason codes and file names stay English.
 const quality = {
     steeringChange: { modified: "alterado", removed: "removido" },
@@ -3148,8 +3148,8 @@ const quality = {
     briefGlossaryOmitted: (list) => `Aplicam-se mais entradas (tamanho) — lê-as no .specs/steering/glossary.md: ${list}`,
   };
 
-// 1.17 A — every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
-// section state: missing · template · empty · few · filled) and spec_clarify's consistency nudge (A2). pt-BR derives from pt.
+// every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
+// section state: missing · template · empty · few · filled) and spec_clarify's consistency nudge. pt-BR derives from pt.
 const designWeigh = {
     "design-tradeoffs": {
       filled: (n) => (n ? `${n} opção(ões) ponderada(s)` : "escrita em prosa (sem lista de opções — as opções ponderadas num parágrafo, ou a razão de este design não ter nenhuma decisão-chave)"),
@@ -3165,7 +3165,7 @@ const designWeigh = {
       empty: () => "Riscos está vazia — um honesto 'nenhum risco relevante, porque X' serve; em branco não",
       few: () => "Riscos não lista nenhum risco",
     },
-    // 1.19 R1 — a secção Reutilização e Integração (os estados acima, mais `integration`: o integration-plan.md de uma feature
+    // a secção Reutilização e Integração (os estados acima, mais `integration`: o integration-plan.md de uma feature
     // brownfield → Pontos de Integração substitui-a).
     "design-reuse": {
       filled: (n) => (n ? `${n} item(ns) indicado(s) (reutilizado / estendido / novo)` : "escrita (sem linha nem item — 'projeto novo: ainda nada a reutilizar' conta)"),
@@ -3201,7 +3201,7 @@ const brief = {
     evals: "## Evals afetadas",
     metrics: "## Métricas a emitir",
     files: "## Ficheiros (_Implements:_)",
-    // 1.19 R2 — pesquisar antes de escrever: as entradas de Reutilização e Integração do design para esta tarefa, e os ficheiros ao lado dos seus
+    // pesquisar antes de escrever: as entradas de Reutilização e Integração do design para esta tarefa, e os ficheiros ao lado dos seus
     reuse: "## Reutilização — pesquisar antes de escrever",
     reuseRule: "Procura no código, pelo conceito e por sinónimos (references/code-reuse-and-quality.md), antes de escrever qualquer helper, componente, cliente, validador ou formatador: primeiro reutilizar, depois estender, só então criar. Uma unidade a estender fora dos ficheiros desta tarefa (_Implements:_) nunca é editada em silêncio — pede contexto (NEEDS_CONTEXT), ou cria localmente e indica-a no relatório. O bloco **Reuse** do teu relatório diz o que foi reutilizado, estendido ou criado, e porquê.",
     reuseEntries: "As entradas de Reutilização e Integração do design para esta tarefa — reutilizar ou estender isto antes de escrever algo novo:",

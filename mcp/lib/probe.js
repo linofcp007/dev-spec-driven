@@ -4,7 +4,7 @@
  * dev-spec-driven — the project probe: is this a dev-spec project, and where is it? Zero-dependency (Node core only, never the
  * engine), so a hook's or the status line's check runs before — and most of the time instead of — the engine's ~100 ms load.
  *
- * ONE rule for every surface (1.27): the hooks' pre-checks (hooks/*.js, hooks/hook-utils.js), the CLI's engine-free walks
+ * ONE rule for every surface: the hooks' pre-checks (hooks/*.js, hooks/hook-utils.js), the CLI's engine-free walks
  * (cli/completion.js — the status line's probe and the shell completion) and the engine itself (engine/doctor.js isDevSpecDir is
  * this rule and engine/files.js nearestProject this walk, both read through the engine's view of the disk — files.js PROBE_IO, a
  * dry run's folders seen as made) — so a hook, the status line and the engine can never disagree on which
@@ -74,7 +74,7 @@ function isNetwork(p) {
 
 // ---- a file as the engine reads it -----------------------------------------------------------------------------------------
 // Bytes → text: a UTF-16 BOM decides (LE / BE; an odd trailing byte dropped), anything else is UTF-8 (Windows PowerShell 5.1's
-// Out-File and `>` write UTF-16 — 1.24 review 6, C3).
+// Out-File and `>` write UTF-16).
 function utf16OrUtf8(buf) {
   if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString("utf16le", 0, buf.length - (buf.length % 2));
   if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return Buffer.from(buf.subarray(0, buf.length - (buf.length % 2))).swap16().toString("utf16le");

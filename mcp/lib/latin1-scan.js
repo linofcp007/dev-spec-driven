@@ -6,7 +6,7 @@
  *
  * V8 compiles a regex for a one-byte (Latin-1) subject and for a two-byte one apart, and the two-byte code of a Unicode property
  * class is large: [\p{L}\p{N}_] — the claim scan's word boundary, twice in each of ~60 patterns — costs ~0.5 ms a use against ~0.1 ms
- * (Node 26, Windows), so one em dash, curly quote or emoji in a closing message made stopClaims ~110 ms slower (1.26). A text holding a
+ * (Node 26, Windows), so one em dash, curly quote or emoji in a closing message made stopClaims ~110 ms slower. A text holding a
  * character past U+00FF is scanned as its PROJECTION instead: one Latin-1 character per code point (an index map leads each match
  * back to the original text), each chosen so that every scan regex — rewritten once — answers exactly as the original on the original:
  *   - a code point a pattern names (an em dash, ’, ✓, U+FE0F…) → a C1 control of its own, put in the rewritten patterns where the

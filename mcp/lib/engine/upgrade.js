@@ -26,14 +26,14 @@ function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE,
   unverifiedLabel, verificationStatus, withFeatureLock, withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot } = E); }
 
 // ---------------------------------------------------------------------------
-// Upgrade (1.13) — after the plugin is updated. roadmap.json meta.specVersion records the dev-spec version that last
+// Upgrade — after the plugin is updated. roadmap.json meta.specVersion records the dev-spec version that last
 // upgraded or created the project; spec_upgrade / `dev-spec upgrade [--apply]` / `/spec-upgrade` audits every active
 // feature against the current rules and (apply) runs the safe migrations; SessionStart prints one line while the stamp is
 // absent or older than the engine.
 // ---------------------------------------------------------------------------
 
 // The engine's own version: package.json at the repo root (mcp/lib/engine → ../../../package.json), read ONCE — as the engine
-// loads (the call below the function, 1.20 review): a long-lived process (the MCP server) reports, stamps and compares the
+// loads (the call below the function): a long-lived process (the MCP server) reports, stamps and compares the
 // corpus stamp with (markdown.js) the version it LOADED, never one a `git pull` wrote under it since. null when it can't be
 // read or isn't x.y.z — then nothing is stamped and no notice is shown (never a guessed version).
 let ENGINE_VERSION = undefined; // undefined: not read yet — initialized, so it never reads as a linked name (mcp/test.js)
@@ -110,7 +110,7 @@ function missingIgnoreLines(specsDir) {
 // The last approvalHistory record of a phase (null when none).
 function lastRecord(hist, phase) {
   let r = null;
-  for (const h of hist) if (isApprovalRecord(h) && h.phase === phase) r = h; // a partial role sign-off (1.14) or a revocation (1.16) approved nothing
+  for (const h of hist) if (isApprovalRecord(h) && h.phase === phase) r = h; // a partial role sign-off or a revocation approved nothing
   return r;
 }
 
@@ -182,7 +182,7 @@ function applyUpgradePlan(dir, st, plan) {
 
 // The phases a feature's status can be `not-started` in: nothing written beyond the classification.
 const NOT_STARTED_PHASES = new Set(["empty", "classified", "requirements"]);
-const shortDetail = (s) => { const t = String(s == null ? "" : s).replace(/\s+/g, " ").trim(); return t.length > 110 ? cutText(t, 109) + "…" : t; }; // cutText: never half an emoji (1.23 review 5)
+const shortDetail = (s) => { const t = String(s == null ? "" : s).replace(/\s+/g, " ").trim(); return t.length > 110 ? cutText(t, 109) + "…" : t; }; // cutText: never half an emoji
 // One active feature, audited against the current rules — every verdict comes from the engine's own checks (doctor,
 // next_action, verificationStatus, changedSinceApproval, the finish baseline), computed once (ctx.scan: one test-code walk
 // shared by every feature, only when one needs it).
@@ -203,7 +203,7 @@ function upgradeFeature(projectDir, s, ctx) {
   const legacyApprovals = Object.keys(PHASE_FILE).filter((ph) => isRecord(approvals[ph]) && !approvals[ph].fingerprint && phaseActive(ph, tracks));
   const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
   const status = phase === "complete" ? (fin ? "finished" : "complete") : phase === "executing" ? "executing"
-    : NOT_STARTED_PHASES.has(positionPhase(phase, flowOfState(st))) && !Object.keys(approvals).length ? "not-started" : "planning"; // C3: a design-first feature starts at its design
+    : NOT_STARTED_PHASES.has(positionPhase(phase, flowOfState(st))) && !Object.keys(approvals).length ? "not-started" : "planning"; // a design-first feature starts at its design
   // Complete / finished: nothing to review beyond the drift since the finish (next_action's hash when it computed one).
   let drift = null;
   if (fin && phase === "complete") {
@@ -227,19 +227,19 @@ function upgradeFeature(projectDir, s, ctx) {
   if (vs.unverified.length) attention.push("unverified");
   if (drift && drift.drifted) attention.push("drift");
   if (drift && drift.stale) attention.push("stale-finish");
-  // 1.17 D review: a track pack from before 1.17 whose name is reserved now ('dist', 'kafka', 'consistency'…) — named, with the way out
+  // a track pack from before 1.17 whose name is reserved now ('dist', 'kafka', 'consistency'…) — named, with the way out
   const rawSt = readJson(statePath(s.dir)).data;
   const missingPacks = missingPackTracks(s.dir);
   const reservedPacks = missingPacks.filter((n) => legacyPackName(rawSt, n));
-  // 1.19 T review: a pack whose MARKER is a built-in track's now ('webui' with [UI]) — { name, marker, track }
+  // a pack whose MARKER is a built-in track's now ('webui' with [UI]) — { name, marker, track }
   const reservedMarkers = missingPacks.filter((n) => !legacyPackName(rawSt, n) && legacyPackMarkerTrack(rawSt, n))
     .map((n) => ({ name: n, marker: rawSt.packMarkers[n], track: legacyPackMarkerTrack(rawSt, n) }));
   if (reservedPacks.length || reservedMarkers.length) attention.push("track-pack-reserved");
-  // 1.22 review 2: criteria numbered with bare AC-n IDs (approved before 1.22: doctor's ears / traceability fail on them now) —
+  // criteria numbered with bare AC-n IDs (approved before 1.22: doctor's ears / traceability fail on them now) —
   // renumber them US-<story>.AC-<n>, their references too, then re-approve. Never edited here: the audit names them.
   const bareAcIds = criteriaBareIds(criteriaText(s.dir) || "", s.dir);
   if (bareAcIds.length) attention.push("bare-ac-ids");
-  // 1.17 A review 3: the design weigh warns (design-tradeoffs / design-risks) are listed, never an upgrade to-do on their own.
+  // the design weigh warns (design-tradeoffs / design-risks) are listed, never an upgrade to-do on their own.
   if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id))) attention.push("warnings");
   const res = {
     name: s.slug, kind, tracks: trackLabel(tracks), tracksSource: savedTracks(st) ? "state" : "inferred", tracksPending: !!plan.tracks,
@@ -326,11 +326,11 @@ function specUpgrade(projectDir, opts = {}) {
     if (!migrations.changed) migrations.report = { file, written: false };
     else if (!isGeneratedOrAbsent(file)) migrations.report = { file, written: false, error: i18n.msg(lang).err.notGenerated("UPGRADE.md") };
     else {
-      writeFileAtomic(file, i18n.portableCli(renderUpgradeMd(res, lang, path.basename(path.resolve(projectDir))))); // committed (1.21 F3)
+      writeFileAtomic(file, i18n.portableCli(renderUpgradeMd(res, lang, path.basename(path.resolve(projectDir))))); // committed
       migrations.report = { file, written: true };
     }
   }
-  // 1.26: no `lines` in the result — the human report is upgradeLines(res, res.lang), rendered by the CLI from this very structure
+  // no `lines` in the result — the human report is upgradeLines(res, res.lang), rendered by the CLI from this very structure
   // (it doubled the reply an agent reads: ~3k of ~7k characters for three features)
   return res;
 }

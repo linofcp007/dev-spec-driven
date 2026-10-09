@@ -6,7 +6,7 @@
  * on the first pt-BR read (a table's pt-BR entry, toPtBr, derivePtBr).
  */
 // ===========================================================================
-// pt-BR — Brazilian Portuguese as a DERIVED locale (1.14 D1). `pt` stays European Portuguese (the default for pt /
+// pt-BR — Brazilian Portuguese as a DERIVED locale. `pt` stays European Portuguese (the default for pt /
 // pt-PT); every pt-BR string is toPtBr(the pt string), so a pt template or message edit reaches pt-BR with nothing else
 // to change. toPtBr, in order:
 //   0. protect what is never prose — code spans, `_Marker: …_` tokens, URLs, CLI flags, paths / file names, {json}
@@ -34,13 +34,13 @@
 // A clause-start 3rd person read as an order ("— liberta o nome" → "libere") goes into RE_PTBR_NOT_IMPERATIVE; a word the
 // maps miss into PTBR_WORDS / PTBR_PHRASES; anything else into PTBR_OVERRIDES. mcp/test.js (pD1) lints every string.
 // ===========================================================================
-const { DEV_SPEC, MARKER_TRACK_ORDER } = require("./common.js"); // load time \u2014 the runnable CLI line (1.21 F3), protected whole in stage 0; the track tags (RE_PTBR_CLAUSE)
+const { DEV_SPEC, MARKER_TRACK_ORDER } = require("./common.js"); // load time \u2014 the runnable CLI line, protected whole in stage 0; the track tags (RE_PTBR_CLAUSE)
 const PTBR_KEEP = "\uE000", PTBR_END = "\uE001"; // private-use sentinels around a protected segment's index
 const PTBR_W = "\\p{L}\\p{N}_"; // word characters
 
 // 0. Exact European fragments the rules would get wrong → Brazilian (case-sensitive, applied first, then protected).
 const PTBR_OVERRIDES = [
-  // +dist (1.17 D): a race condition is a "condição de corrida" in Brazil too — never the "corrida" (a run) → "executada" rule
+  // +dist: a race condition is a "condição de corrida" in Brazil too — never the "corrida" (a run) → "executada" rule
   ["Condições de corrida", "Condições de corrida"], ["condições de corrida", "condições de corrida"], ["condição de corrida", "condição de corrida"],
   ["caminho/ficheiro.test.js", "caminho/arquivo.test.js"], // an example path inside a _Verify:_ placeholder
   ["<ficheiro>", "<arquivo>"], ["<artefacto>", "<artefato>"], // placeholders inside a path / URI
@@ -56,17 +56,17 @@ const PTBR_OVERRIDES = [
   ["O que correu bem", "O que deu certo"],
   ["decidas o que decidires, volta", "decida o que decidir, volte"],
   ["decidas o que decidires", "decida o que decidir"],
-  // full review Pb7 — the LGPD's name for the DPIA (a masculine report) and its article; the heading stays matched by the
+  // the LGPD's name for the DPIA (a masculine report) and its article; the heading stays matched by the
   // DPIA section's synonyms ("ripd").
   ["AIPD (quando obrigatória — art. 35.º)", "RIPD (quando obrigatório — LGPD art. 38)"],
   ["o controlador pára para revisão", "o controlador faz uma pausa para revisão"],
   ["— lê de outra forma", "— lê de outra forma"], // cmd.exe "reads it differently": a 3rd person after a parenthetical dash
   ["; aceita uma lista", "; aceita uma lista"], // a glob syntax note: "accepts a list"
-  // +obs (1.19 T review): in Brazil a "ligação" is a phone call — the runbook gets a link, the on-call person is "de plantão"
+  // +obs: in Brazil a "ligação" is a phone call — the runbook gets a link, the on-call person is "de plantão"
   ["dispara e chama com a ligação ao runbook", "dispara e aciona o plantão com o link para o runbook"],
-  // review 5 — a symlink is a "link" in Brazil (the phrase table misses this one: its "symlink / junction" reads as a path)
+  // a symlink is a "link" in Brazil (the phrase table misses this one: its "symlink / junction" reads as a path)
   ["uma ligação (symlink / junction)", "um link (symlink / junction)"],
-  // 1.25.1 review — enclisis mid-sentence reads European (the phrase table can't see it: tasks.md is held as a file name first)
+  // enclisis mid-sentence reads European (the phrase table can't see it: tasks.md is held as a file name first)
   ["uma alteração ao tasks.md revê-se e volta a aprovar-se", "uma alteração no tasks.md é revisada e aprovada de novo"],
 ];
 
@@ -110,7 +110,7 @@ const PTBR_PHRASES = {
   "efeitos secundários": "efeitos colaterais", "batem sempre certo": "sempre fecham", "porque se aplica": "por que se aplica",
   "porque importa": "por que importa", "porque é preciso": "por que é preciso", // the interrogative "why" is two words in Brazil
   "porque é só isso": "por que é só isso",
-  // review 6 (H8) — "tela" is feminine where "ecrã" is masculine: the article, contraction or possessive before it changes along
+  // "tela" is feminine where "ecrã" is masculine: the article, contraction or possessive before it changes along
   // (the bare word is PTBR_WORDS'; "leitor de ecrã" → "leitor de tela" needs no article)
   "o ecrã": "a tela", "os ecrãs": "as telas", "do ecrã": "da tela", "dos ecrãs": "das telas", "no ecrã": "na tela", "nos ecrãs": "nas telas",
   "ao ecrã": "à tela", "aos ecrãs": "às telas", "pelo ecrã": "pela tela", "pelos ecrãs": "pelas telas", "um ecrã": "uma tela", "uns ecrãs": "umas telas",
@@ -126,38 +126,38 @@ const PTBR_PHRASES = {
   "pela monitorização": "pelo monitoramento", "uma monitorização": "um monitoramento", "o arranque": "a inicialização",
   "do arranque": "da inicialização", "no arranque": "na inicialização", "ao arranque": "à inicialização", "um arranque": "uma inicialização",
   "uma gralha": "um erro de digitação", "a gralha": "o erro de digitação", "as gralhas": "os erros de digitação",
-  // full review Pb7 — "ter de" + infinitive is "ter que" in Brazil; enclisis after a verb reads European (mantém-se → se mantém,
+  // "ter de" + infinitive is "ter que" in Brazil; enclisis after a verb reads European (mantém-se → se mantém,
   // lê-se como → é lido como); acessar takes a direct object (never "lhe pode acessar").
   "tem de": "tem que", "têm de": "têm que", "temos de": "temos que", "tenho de": "tenho que", "tens de": "tens que",
   "terá de": "terá que", "terão de": "terão que", "teria de": "teria que", "teriam de": "teriam que", "ter de": "ter que",
   "tinha de": "tinha que", "tenha de": "tenha que", "tenham de": "tenham que", "tiver de": "tiver que",
   "mantém-se": "se mantém", "mantêm-se": "se mantêm", "lê-se como": "é lido como", "quem lhe pode aceder": "quem pode acessá-lo",
-  // LGPD vocabulary (full review Pb7): the processor is the "operador", the DPIA the RIPD (a masculine report) — the
+  // LGPD vocabulary: the processor is the "operador", the DPIA the RIPD (a masculine report) — the
   // section synonyms (tracks.js PRIVACY_SECTIONS) read the Brazilian headings
   "subcontratantes ulteriores": "suboperadores", "conservação e eliminação": "retenção e eliminação",
   "a aipd": "o RIPD", "da aipd": "do RIPD", "na aipd": "no RIPD", "à aipd": "ao RIPD", "pela aipd": "pelo RIPD", "uma aipd": "um RIPD",
-  // +obs (1.19 T review): the on-call person is "de plantão", and a runbook gets a link (a "ligação" is a phone call in Brazil)
+  // +obs: the on-call person is "de plantão", and a runbook gets a link (a "ligação" is a phone call in Brazil)
   "pessoa de serviço": "pessoa de plantão", "uma ligação para o runbook": "um link para o runbook", "a ligação ao runbook": "o link para o runbook",
   "os rápidos chamam": "os rápidos acionam o plantão",
-  // (1.19 verify 4) the [OBS] Alerting guidance and the observability.md heading: whoever is paged is "acionado", each alert points
+  // the [OBS] Alerting guidance and the observability.md heading: whoever is paged is "acionado", each alert points
   // to its runbook ("ligar" / "chamada" read as a phone call in Brazil)
   "quem é chamado": "quem é acionado", "cada chamada liga a um runbook": "cada alerta aponta para um runbook",
   "o que é um ticket e não uma chamada": "o que vira um ticket e não aciona o plantão",
   "a que os alertas ligam": "para os quais os alertas apontam", "cada um liga a um runbook": "cada um com um link para o runbook",
-  // review 5 — "à espera (de)" is European; Brazil says "aguardando" (the article stays with its noun)
+  // "à espera (de)" is European; Brazil says "aguardando" (the article stays with its noun)
   "à espera de": "aguardando", "à espera do": "aguardando o", "à espera da": "aguardando a", "à espera dos": "aguardando os",
   "à espera das": "aguardando as", "à espera": "aguardando",
-  // review 5 — a symlink is a "link" in Brazil (a "ligação" is a phone call); a connection to the harness, an integration
+  // a symlink is a "link" in Brazil (a "ligação" is a phone call); a connection to the harness, an integration
   "é uma ligação simbólica": "é um link simbólico", "uma ligação (simbólica, ou uma junction)": "um link (simbólico ou junction)",
   "uma ligação (link simbólico, junction)": "um link (simbólico ou junction)",
   "é uma ligação ou uma pasta": "é um link ou uma pasta", "uma ligação para fora do projeto": "um link simbólico para fora do projeto",
   "repõe a ligação": "restaura o vínculo", "ligação ao harness": "integração com o harness",
-  // 1.25.1 review — a link is a "link" (a "ligação" is a phone call, "liga-o" reads "call him / turn it on")
+  // a link is a "link" (a "ligação" is a phone call, "liga-o" reads "call him / turn it on")
   "uma ligação (link simbólico)": "um link simbólico", "apaga só a ligação": "apaga só o link", "remover a ligação": "remover o link",
   "liga-o em": "coloque o link em", "liga-o aqui": "coloque o link aqui",
   "é uma ligação ou não é um ficheiro normal": "é um link ou não é um arquivo normal", // merge-state's linked .gitattributes
   "liga-o —": "ative-o —", // observed.unguarded: "turn the approval guard on" (keys are lower case; the case follows the source)
-  // 1.25.1 review — enclisis after a subject or mid-sentence reads European: Brazil puts the pronoun first, says it in the
+  // enclisis after a subject or mid-sentence reads European: Brazil puts the pronoun first, says it in the
   // passive, or (an instruction) uses the você imperative
   "aplica-se": "se aplica", "aplicam-se mais entradas": "há mais entradas aplicáveis", "perder-se-ia": "se perderia",
   "cria-se sem tamanho (o prazo limita-o)": "é criado sem tamanho (o prazo o limita)", "cria-se uma feature": "crie uma feature",
@@ -246,11 +246,11 @@ const RE_PTBR_NOT_IMPERATIVE = [
   /^cumpre[ \t]*(?:\n|$)/iu, // the Constitution Check's status: "[Principle 1] — complies"
   /^lista[ \t]+(?:de|dos|das|do|da)(?![\p{L}])/iu, // the noun: "Lista de recursos…"
   /^planeia (?:os mesmos|ficheiros|\uE000)/iu, // a doctor overlap line: "(this feature) plans the same files as …"
-  /^começa por(?![\p{L}])/iu, // a description: "(the command) starts with _ or *" — never "comece por" (1.25.1)
+  /^começa por(?![\p{L}])/iu, // a description: "(the command) starts with _ or *" — never "comece por"
 ];
 // The tags a task line carries before its text: the story / parallel tags, every built-in track's marker (MARKER_TRACK_ORDER —
 // [SaaS] … [DATA]; mcp/tests/03-languages.js checks the list against the engine's TRACK_MARKER) and a track pack's (an
-// upper-case token of 2–12, engine/packs.js RE_PACK_MARKER). 1.25.1: the list stopped at [PRIVACY], so "[API] Escreve …"
+// upper-case token of 2–12, engine/packs.js RE_PACK_MARKER). The list stopped at [PRIVACY], so "[API] Escreve …"
 // kept its European imperative.
 const PTBR_TRACK_TAGS = MARKER_TRACK_ORDER.map((t) => (t === "saas" ? "SaaS" : t.toUpperCase()));
 // Where a clause starts: a line (after its list marker / checkbox / number / [tags] / bold), after . ! ? : ; — – → ( “ «.
@@ -260,7 +260,7 @@ const RE_PTBR_CLAUSE = new RegExp(String.raw`(?:^|\n)[ \t]*(?:>[ \t]*)*(?:(?:[-*
 
 // 5. Single words (a key may carry a hyphen: palavra-passe). Verb forms not listed keep their spelling (it is shared).
 const PTBR_WORDS = {
-  atómico: "atômico", atómica: "atômica", atómicos: "atômicos", atómicas: "atômicas", // +dist (1.17 D)
+  atómico: "atômico", atómica: "atômica", atómicos: "atômicos", atómicas: "atômicas", // +dist
   utilizador: "usuário", utilizadores: "usuários", utilizadora: "usuária", utilizadoras: "usuárias", utente: "usuário", utentes: "usuários",
   ficheiro: "arquivo", ficheiros: "arquivos", ecrã: "tela", ecrãs: "telas", equipa: "equipe", equipas: "equipes",
   "palavra-passe": "senha", "palavras-passe": "senhas", telemóvel: "celular", telemóveis: "celulares",
@@ -306,9 +306,9 @@ const PTBR_WORDS = {
   num: "em um", numa: "em uma", nuns: "em uns", numas: "em umas", noutro: "em outro", noutra: "em outra", noutros: "em outros",
   noutras: "em outras", nalgum: "em algum", nalguma: "em alguma", nalguns: "em alguns", nalgumas: "em algumas", dum: "de um",
   duma: "de uma", duns: "de uns", dumas: "de umas", doutro: "de outro", doutra: "de outra", doutros: "de outros", doutras: "de outras",
-  // full review Pb7 — LGPD / Brazilian SaaS vocabulary (the section synonyms in tracks.js read these headings)
+  // LGPD / Brazilian SaaS vocabulary (the section synonyms in tracks.js read these headings)
   "multi-inquilino": "multilocatário", subcontratante: "operador", subcontratantes: "operadores", aipd: "RIPD",
-  // review 6 (H8): the participle of rever is "revisado" in Brazil ("revisto" reads European)
+  // the participle of rever is "revisado" in Brazil ("revisto" reads European)
   revisto: "revisado", revista: "revisada", revistos: "revisados", revistas: "revisadas",
 };
 
@@ -390,7 +390,7 @@ function ptbrProtect(text, masks, store) {
 }
 // Where a run of path characters stops being a file name: the end of its last "x.<ext>" not followed by a word character, or 0.
 // One overlapping scan of the run — the pattern /[\w.\/<>*-]*[\w>*-]\.(?:md|…)/ it replaces backtracked over the whole run from
-// every start: quadratic ("a" × 40 000 took a second — full review Pb6). Same matches: a run holds at most one, from its start.
+// every start: quadratic ("a" × 40 000 took a second). Same matches: a run holds at most one, from its start.
 const RE_PTBR_FILE_EXT = /[\w>*-]\.(?:md|json|jsonl|js|mjs|cjs|ts|tsx|jsx|py|sh|ps1|cmd|bat|html|yml|yaml|toml|txt|lock|exe|gitignore)(?![\w])/g;
 function ptbrFileEnd(run) {
   let end = 0, m;
@@ -613,7 +613,7 @@ const PTBR_STOP_EXTRA = {
     String.raw`[1-9]\d*\s+(?:testes?\s+)?falhando`,
     String.raw`testes?\s+(?:(?:ainda|estão)\s+)*falhando`,
   ],
-  passNow: [String.raw`agora\s+(?:est[ãa]o|est[áa])\s+passando`], // 1.22 review: "os 2 testes falhando agora estão passando"
+  passNow: [String.raw`agora\s+(?:est[ãa]o|est[áa])\s+passando`], // "os 2 testes falhando agora estão passando"
 };
 
 

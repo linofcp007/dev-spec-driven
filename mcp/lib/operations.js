@@ -1,18 +1,18 @@
 "use strict";
 
 /**
- * The operations (1.27) — what makes an MCP tool and a CLI command the SAME call, in ONE table both surfaces read: mcp/server.js
+ * The operations — what makes an MCP tool and a CLI command the SAME call, in ONE table both surfaces read: mcp/server.js
  * runs every tools/call through it (runTool), the CLI's handlers through `c.call(id, given)` (cli/main.js). It requires nothing — not
  * even the engine: the facade is what each surface hands to `call` (S). Each entry is one engine operation —
  *
  *   id          its name — what a CLI handler runs (c.call("create", …))
  *   tool        the MCP tool that runs it; for a tool that runs several, which one:
- *     mode      { key, values, fallback } — a folded tool's mode (1.26: spec_roadmap_edit {kind}, spec_export {format}, spec_scan
+ *     mode      { key, values, fallback } — a folded tool's mode (spec_roadmap_edit {kind}, spec_export {format}, spec_scan
  *               {coverage}): the call's args[key] (or the fallback when it leaves the key out) picks the entry. The server's
  *               ARG_MODES — the arguments each mode takes — is DERIVED from these entries (argModes())
  *     when(a)   …or a test of the call's arguments (spec_status: a name or none; ears_validate: a feature or a text; spec_tracks:
  *               action signals); the tool's entry without one runs otherwise
- *   legacy      the hidden aliases (1.26, server.js LEGACY_TOOLS) whose calls land here
+ *   legacy      the hidden aliases (server.js LEGACY_TOOLS) whose calls land here
  *   cli         the CLI commands that run it (a handler runs only an operation that lists its command)
  *   engine      the facade function (mcp/lib/spec.js) its `call` makes
  *   args        engine option → where each surface reads it, and how:
@@ -76,12 +76,12 @@ const OPERATIONS = [
       kind: { mcp: "kind", cli: "--kind", cmd: { bugfix: "bugfix", spike: "spike" } },
       size: { mcp: "size", cli: "--size" }, // 1.21 F5 (xs: a change — one change.md)
       flow: { mcp: "flow", cli: "--flow" }, // C3
-      question: { mcp: "question", cli: "--question" }, timebox: { mcp: "timebox", cli: "--timebox" }, // C2: a spike's
-      reproduction: { mcp: "reproduction", cli: "--reproduction" }, rootCause: { mcp: "rootCause", cli: "--root-cause" }, // 1.21 F3: the bugfix prefill
+      question: { mcp: "question", cli: "--question" }, timebox: { mcp: "timebox", cli: "--timebox" }, // a spike's
+      reproduction: { mcp: "reproduction", cli: "--reproduction" }, rootCause: { mcp: "rootCause", cli: "--root-cause" }, // the bugfix prefill
       condition: { mcp: "condition", cli: "--condition" }, behaviour: { mcp: "behaviour", cli: "--behaviour" },
       brownfield: SWITCH("brownfield", "--brownfield"),
       includeBody: SWITCH("includeBody", "--include-body"),
-      branch: { mcp: "branch", cli: "--branch", parsed: true }, // 1.25: a bare --branch is true; a spaced track word is refused
+      branch: { mcp: "branch", cli: "--branch", parsed: true }, // a bare --branch is true; a spaced track word is refused
     },
     // cli: a refusal names the flag (--root-cause), not the MCP key; git: what git said (the engine reads no git process)
     internal: { cli: ["cli", "git"] },
@@ -121,7 +121,7 @@ const OPERATIONS = [
     call: (S, dir, o) => S.completeTask(dir, o),
   },
   {
-    // evidence (B5): the project checks' runs — reported by the agent over MCP (the server never runs them), made by finish --run
+    // evidence: the project checks' runs — reported by the agent over MCP (the server never runs them), made by finish --run
     id: "finish", tool: "spec_finish", cli: ["finish"], engine: "finishFeature",
     args: { name: NAME, write: SWITCH("write", "--write"), includeBody: { mcp: "includeBody", cli: "--include-body", type: "bool" }, evidence: { mcp: "evidence", cli: "--run", parsed: true } },
     internal: { cli: ["ranBy", "runStart"] },
@@ -157,7 +157,7 @@ const OPERATIONS = [
       by: { mcp: "by", cli: "--by" }, force: SWITCH("force", "--force"), reason: { mcp: "reason", cli: "--reason" },
       expires: { mcp: "expires", cli: "--expires" }, revoke: SWITCH("revoke", "--revoke"),
     },
-    // 1.21 F1b: the elicitation's dry run, the user's confirmation, and (1.22 review) what that dry run judged
+    // the elicitation's dry run, the user's confirmation, and what that dry run judged
     internal: { mcp: ["dryRun", "confirmation", "preview"] },
     call: (S, dir, o) => S.approvePhase(dir, o.name, o.phase, o.by, { force: o.force, role: o.role, through: o.through, reason: o.reason,
       expires: o.expires, revoke: o.revoke, dryRun: o.dryRun, confirmation: o.confirmation, preview: o.preview }),
@@ -222,7 +222,7 @@ const OPERATIONS = [
     call: (S, dir, o) => S.addTrack(dir, o.name, o.track, { remove: o.remove }),
   },
   {
-    // remove needs confirm (the CLI's --yes); flow: action 'flow' (C3 — the CLI's third word is read as it too)
+    // remove needs confirm (the CLI's --yes); flow: action 'flow' (the CLI's third word is read as it too)
     id: "feature", tool: "spec_feature", cli: ["feature"], engine: "manageFeature",
     args: { action: { mcp: "action", pos: 0 }, name: { mcp: "name", pos: 1 }, newName: { mcp: "newName", pos: 2 }, flow: { mcp: "flow", cli: "--flow" }, confirm: SWITCH("confirm", "--yes") },
     internal: { mcp: ["preview"] }, // 1.23 (remove): the folder the user was asked about
@@ -283,7 +283,7 @@ const OPERATIONS = [
     call: (S, dir, o) => S.trackPacks(dir, o.action, { name: o.name, lang: o.lang }),
   },
   {
-    // 1.21 F2: the classifier's signal overrides — an action of spec_tracks, a command of its own
+    // the classifier's signal overrides — an action of spec_tracks, a command of its own
     id: "signals", tool: "spec_tracks", when: (a) => a.action != null && String(a.action).trim().toLowerCase() === "signals", cli: ["signals"], engine: "trackPacks",
     args: {
       op: { mcp: "op", pos: 0, parsed: true }, // the CLI's first word, case-folded (none: list)
@@ -326,13 +326,13 @@ const OPERATIONS = [
       affects: o.affects, supersedes: o.supersedes, kind: o.kind }),
   },
   {
-    // 1.16 U4: the Stop hook's decision — for MCP-only clients, and the CLI's (the message: --message, the words or stdin)
+    // the Stop hook's decision — for MCP-only clients, and the CLI's (the message: --message, the words or stdin)
     id: "stop-check", tool: "spec_stop_check", cli: ["stop-check"], engine: "stopCheck",
     args: { message: { mcp: "message", cli: "--message", parsed: true }, agent: { mcp: "agent", cli: "--agent" } },
     call: (S, dir, o) => S.stopCheck(dir, { message: o.message, agent: typeof o.agent === "string" ? o.agent : "" }),
   },
   {
-    // 1.16 U4: the git log TEXT — the client's (this server never runs git), the CLI's own git read (or stdin: -)
+    // the git log TEXT — the client's (this server never runs git), the CLI's own git read (or stdin: -)
     id: "log", tool: "spec_log", cli: ["log"], engine: "taskCommits",
     args: { name: NAME, gitLog: { mcp: "gitLog", pos: 1, parsed: true }, max: { mcp: "max", cli: "--max", type: "int" } },
     internal: { cli: ["since"] }, // the range the CLI read (null: the whole log on purpose); absent: the engine's own
@@ -366,7 +366,7 @@ function forTool(tool, args) {
   }
   return ops.find((op) => op.when && op.when(a)) || ops.find((op) => !op.when) || null;
 }
-// The server's ARG_MODES (1.26), derived: for each tool whose operations are picked by a mode — { key, fallback, modes: {value: [the
+// The server's ARG_MODES, derived: for each tool whose operations are picked by a mode — { key, fallback, modes: {value: [the
 // MCP arguments it takes, the mode key and projectDir aside]}, required?: {value: [the ones it requires]} }.
 function argModes() {
   const out = {};

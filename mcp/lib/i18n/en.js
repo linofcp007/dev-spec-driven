@@ -698,7 +698,7 @@ ${a.summary || "[one line: the bug being fixed]"}
       // Every bugfix, any size: two tasks — the red regression test, then the fix. No "reproduce" / "root cause" tasks: the
       // requirements gate already needs bug.md → Reproduction (check `reproduction`) and the design gate its Root Cause
       // (`root-cause`), both before the tasks can be approved, so after the tasks approval the next task is the red test (they
-      // were tasks 1–2 of every bugfix but an XS one — 1.21 F5 — and next_action named them for work already done and gated).
+      // were tasks 1–2 of every bugfix but an XS one — and next_action named them for work already done and gated).
       // The execution gate (bugfixGate) still lets only task 1 through while Root Cause is empty. The iron law holds. A tasks.md
       // scaffolded with the four tasks stays as it is and valid (markdown.js LEGACY_BUG_STEPS; bugfixGate's root-cause task).
       return `# Tasks: ${name}
@@ -775,7 +775,7 @@ Measured P50/P95/P99 ≤ budget at target throughput, error rate < [0.1]%.
       );
     },
 
-    // 1.21 F5 — a change (kind "change", size xs): ONE file holds the whole plan — summary, 1–3 EARS criteria, the approach and
+    // a change (kind "change", size xs): ONE file holds the whole plan — summary, 1–3 EARS criteria, the approach and
     // 1–3 tasks with _Verify:_. The engine reads it as the feature's requirements AND tasks (engine/files.js changeAlias).
     change(a) {
       return `# Change: ${a.name}
@@ -882,19 +882,19 @@ const steering = {
       "# Security Standards\n\n## Assurance Level\n- Target OWASP ASVS level: [L1 | L2 | L3] — why: []\n\n## Threat Modeling\n- Method: STRIDE per component and trust boundary, reviewed at every design change.\n- Where threat models live: each +sec feature's design.md → Threat Model.\n\n## Authentication & Authorization\n- Identity provider / session model: []\n- Authorization model (RBAC / ABAC / ownership checks), deny by default: []\n\n## Secrets & Cryptography\n- Secret store: [] — never in code, in committed config, in logs or in tickets.\n- Encryption at rest / in transit (TLS version, key rotation): []\n\n## Secure Coding Rules\n- Validate input at trust boundaries; encode output; parameterized queries only.\n- No secrets, tokens or stack traces in responses or logs.\n\n## Security Testing (local)\n- SAST: [] · dependency audit: [] · secret scan: [] · DAST (exposed services): []\n- Every material threat has an abuse-case test.\n\n## Vulnerability Handling\n- Fix deadlines per severity (critical / high / medium): [] · who triages: []\n",
     "privacy.md":
       "# Privacy Standards (GDPR)\n\n## Roles\n- Controller: [] · DPO / privacy contact: [] · supervisory authority: []\n\n## Principles (GDPR Art. 5)\n- Lawfulness, fairness and transparency · purpose limitation · data minimisation · accuracy · storage limitation · integrity and confidentiality · accountability.\n\n## Records of Processing (Art. 30)\n- Where the record of processing activities lives: []\n\n## Lawful Bases in Use (Art. 6)\n- [processing activity → lawful basis]\n\n## Retention Schedule\n| Data category | Retention period | Deletion method |\n|---|---|---|\n| | | |\n\n## Data Subject Requests\n- Channel · identity verification · one-month deadline (Art. 12(3)) · owner: []\n\n## Processors & Transfers\n- Approved processors (Art. 28 contracts): [] · transfers outside the EEA and their safeguard: []\n\n## Privacy by Design (Art. 25)\n- Defaults: collect the minimum, pseudonymize where possible, no personal data in logs.\n\n## Breach Response\n- Notify the supervisory authority within 72 hours (Art. 33) · runbook: []\n",
-    // 1.17 D — +dist: the team's defaults for delivery, cross-system writes, idempotency, retries, locking and consistency.
+    // +dist: the team's defaults for delivery, cross-system writes, idempotency, retries, locking and consistency.
     "distributed.md":
       "# Distributed Systems & Data Consistency Standards\n\n## Delivery Guarantee\n- Default: at-least-once — every consumer is idempotent. Exactly-once is an effect of idempotency, never a broker promise.\n- Ordering: per key (partition / message group) only where a feature says so: []\n\n## Cross-system Writes\n- A write that touches more than one system (DB + broker, DB + cache, DB + external API) goes through a transactional outbox (or CDC) — never \"commit, then publish\".\n- Business transactions across services: a saga with one compensation per step; orchestration or choreography: []\n\n## Idempotency\n- Idempotency key source (client header / message ID / natural key): [] · where processed keys live (inbox table / unique constraint) and for how long: []\n\n## Retry Policy (defaults)\n- Exponential backoff with jitter · max attempts: [] · per-call timeout: []\n- Never retried: a non-idempotent call without a key, a validation error (a 4xx — but 408 and 429 are retriable, honouring Retry-After) · poison messages → DLQ after [] attempts, with an alert.\n\n## Locking Policy\n- Default: optimistic locking (a version column); pessimistic (SELECT … FOR UPDATE) only for short, hot sections · lock timeout: []\n\n## Consistency Defaults\n- Default isolation level: [] · where eventual consistency is accepted and the maximum staleness: [] · read-your-writes for the user who wrote.\n\n## Observability\n- Outbox lag, consumer lag, DLQ depth and retry counts are metrics with alerts: []\n",
-    // 1.19 T — +api: the team's defaults for the contract, versioning, errors, pagination, idempotency and limits.
+    // +api: the team's defaults for the contract, versioning, errors, pagination, idempotency and limits.
     "api.md":
       "# API Standards\n\n## Style & Contract\n- Style: [REST | GraphQL | gRPC] · the contract lives in: [openapi.yaml | proto/ | schema.graphql] — written first, reviewed before the handlers.\n- Naming: plural nouns for collections · [snake_case | camelCase] fields · ISO 8601 UTC timestamps · IDs as strings.\n\n## Versioning & Compatibility\n- Strategy: [URL /v1 | header | date] · only additive changes within a version · a breaking change ships as a new version.\n- Deprecation: the Deprecation and Sunset headers, at least [6 months] of notice, a changelog entry, usage tracked per client.\n\n## Errors\n- application/problem+json (RFC 9457): type, title, status, detail, instance + a stable `code`; a validation error lists each field. No stack trace in a response.\n\n## Pagination, Idempotency & Concurrency\n- Cursor pagination (an opaque cursor, at most [100] items per page) · an Idempotency-Key on every non-idempotent create, kept for [24 h] · ETag / If-Match on updates (412 on a stale version).\n\n## Rate Limits\n- Per [API key | user | IP]: [N] requests per [window] · 429 with Retry-After and the RateLimit headers.\n\n## Checks (local)\n- Contract tests: [command] · breaking-change diff against the published contract: [command].\n",
-    // 1.19 T — +ui: the team's defaults for the design system, the states, accessibility, responsiveness / i18n and the performance budget.
+    // +ui: the team's defaults for the design system, the states, accessibility, responsiveness / i18n and the performance budget.
     "ui.md":
       "# UI Standards\n\n## Design System\n- Components: [library / Storybook URL] · tokens: [colour, spacing, type — where they live] · a new component enters the system first (documented, reviewed), never as a one-off.\n\n## States\n- Every view designs: loading · empty · error (with Retry) · partial · offline · permission denied · success.\n- Forms: inline errors + a summary, values kept on an error, the submit button never the only feedback.\n\n## Accessibility\n- Target: WCAG 2.2 AA · keyboard operable, visible focus · every control named · contrast 4.5:1 (text) / 3:1 (UI) · targets ≥ 24×24 px · prefers-reduced-motion honoured.\n- Checks: [axe / Lighthouse command] on every local run · a manual keyboard + screen-reader pass ([NVDA / VoiceOver]) per feature.\n\n## Responsiveness & i18n\n- Breakpoints: [360 / 768 / 1280 px] · text expansion +30–40 % · RTL: [yes / no] · dates, numbers and currency through the locale.\n\n## Performance Budget\n- Core Web Vitals (p75): LCP ≤ 2.5 s · INP ≤ 200 ms · CLS ≤ 0.1 · JS per route ≤ [170 KB gz] · measured by: [Lighthouse locally / RUM].\n",
-    // 1.21 F4 — +data: the team's defaults for data contracts, quality checks, idempotent loads and backfills, lineage, retention and cost.
+    // +data: the team's defaults for data contracts, quality checks, idempotent loads and backfills, lineage, retention and cost.
     "data.md":
       "# Data Pipeline Standards\n\n## Contracts & Schemas\n- Where schemas live: [dbt YAML | a schema registry | schemas/] · compatibility: additive changes only; a breaking change ships as a new version with [N weeks] of deprecation.\n- Naming: [snake_case] tables and columns · timestamps in UTC · the layers: [raw → staging → marts].\n\n## Data Quality\n- Every dataset: not-null and unique keys, accepted values and ranges, row-count anomaly checks · they run at ingestion and before publishing · a failure: [quarantine the rows | stop the load] and alert the owner.\n- Tool: [dbt tests | Great Expectations | SQL checks] · command: [command].\n\n## Idempotency & Backfills\n- Every job re-runnable for a partition: overwrite the partition or MERGE on a key — never a blind append · late-arriving data: a lookback window of [N days].\n- Backfills: a dry run first · at most [N] partitions in parallel · the cost estimated and approved by [role].\n\n## Lineage & Ownership\n- Every dataset has an owner and a freshness SLA · lineage lives in: [dbt docs | the data catalog] · consumers hear of a breaking change [N days] ahead.\n\n## Retention & Cost\n- Retention per layer: raw [N days] · curated [N months] — personal data per privacy.md · partitioned by [date], clustered by [key] · cost budget: [$ per month], with an alert at [N] %.\n",
-    // 1.16 Q3 — the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
+    // the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
     "glossary.md":
       "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
   };
@@ -911,7 +911,7 @@ const evalsReadme = "# Evals\n\n" +
     "Item shape: `{ id, input, expect: { type, value|rubric } }`. Grader types: contains | equals | regex | refuse | judge.\n" +
     "The system prompt is read from the latest `../prompts/vN.md` (its `## System` section).\n";
 
-// 1.25.1 — what the stop gate's claims (msg.stopGate.claims) are made of. A claim is about the WORK — a task, the feature, the fix,
+// what the stop gate's claims (msg.stopGate.claims) are made of. A claim is about the WORK — a task, the feature, the fix,
 // everything, the tests — never a bare verb: "I verified that the bug is in the parser", "the migration was completed in 2023", "The
 // pay() function is implemented in src/pay.ts" were sent back while any recent tick was unverified (one more round-trip a turn).
 const STOP_EN_DONE = String.raw`(?:done|finished|complete|completed|implemented|verified)`;
@@ -947,9 +947,9 @@ const msg = {
       failedTicked: (n, code) => `Task ${n} is already ticked, but its re-verification failed (exit ${code}) — recorded; it now counts as unverified until a passing run is recorded.`,
       badExit: (v) => `exitCode must be an integer (got '${v}').`,
       needsExit: "Evidence that names a command needs its exit code — or give only a summary for a manual check.",
-      // 1.24 r6 D7 — the failed-run refusal of a task whose _Expect:_ value is no `fail` (unknownExpect)
+      // the failed-run refusal of a task whose _Expect:_ value is no `fail` (unknownExpect)
       unknownExpect: (n, values) => `Task ${n} carries ${values.map((v) => "_Expect: " + v + "_").join(", ")} — the marker knows only \`fail\`, so as written the task must PASS. If its run must fail (a test written before its fix), write _Expect: fail_.`,
-      // 1.24 r6 D4 — spec_complete_task: a passing run whose summary shows no test ran (couldNotRun "no-tests")
+      // spec_complete_task: a passing run whose summary shows no test ran (couldNotRun "no-tests")
       noTests: (n, what) => `Task ${n}: the run passed, but its output shows no test ran (${what}) — a run that tests nothing proves nothing (a glob, a path or a filter that matches no test). Nothing was recorded; the task stays open. Fix the _Verify:_ command (or the test it names), then record a run that executes the test.`,
     },
     finish: {
@@ -978,25 +978,25 @@ const msg = {
       changedByDate: (list, slug) => `judged by file date only (approved before content fingerprints — a clone or copy resets file dates, so this may be no edit at all): ${list} — re-review, then re-approve to track it by content (/approve ${slug} <phase>)`,
       untrackedApproval: (list, slug) => `approved before change tracking — nothing about the signed-off file was recorded, so an edit can't be detected: ${list} — re-approve to start tracking it (/approve ${slug} design)`,
     },
-    // 1.21 F5 — right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.
+    // right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.
     sizes: {
       spikeNoSize: "A spike is timeboxed, not sized — create it without a size (its timebox bounds it).",
       changeSize: (size) => `kind "change" is size xs — for size ${size} create a feature: spec_create {kind: "feature", size: "${size}"}.`,
       changeTracks: (list) => `A change (size xs) is core-only — a track (${list}) makes it a feature of size s: spec_create {size: "s", tracks} (a short design with the tracks' sections, a task per criterion).`,
       changeNoTracks: (slug) => `'${slug}' is a change (size xs, core-only) — a track makes it a feature: create one of size s (spec_create {size: "s", tracks}) and archive this change (spec_feature {action: "archive"}).`,
-      // 1.21 review C9 — spec_create on an EXISTING change named with tracks: nothing is added, never silently
+      // spec_create on an EXISTING change named with tracks: nothing is added, never silently
       tracksIgnored: (list, slug) => `Tracks not added — ${list}: '${slug}' is a change (size xs, core-only); a track makes it a feature — create one of size s (spec_create {size: "s", tracks}) and archive this change (spec_feature {action: "archive"}).`,
       changeCreated: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call (spec_approve {name: "${slug}", through: "tasks"}); after the tasks, spec_finish and the execution sign-off.`,
-      // 1.24 r6: the same note on the CLI (createFeature {cli: true}) — the CLI's own approve / finish lines
+      // the same note on the CLI (createFeature {cli: true}) — the CLI's own approve / finish lines
       changeCreatedCli: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call: ${DEV_SPEC} approve ${slug} --through tasks; after the tasks, ${DEV_SPEC} finish ${slug} and the execution sign-off.`,
       sizeKept: (kept, asked) => `This feature's size is ${kept} — kept it (asked for ${asked}): a size is chosen once, when the feature is created.`,
       noGate: (phase, slug) => `'${slug}' is a change: its only approvals are the plan (phase tasks — change.md) and the execution sign-off — there is no ${phase} phase to approve.`,
       scope: (acs, tasks, maxAcs, maxTasks, extra) => `a change is XS — 1–${maxAcs} acceptance criteria and 1–${maxTasks} tasks, core only; change.md has ${acs} criteria and ${tasks} task(s)${extra ? ` and the track(s) ${extra}` : ""} — create it as a feature of size s instead (spec_create {size: "s"}) and archive this change`,
       scopeOk: (acs, tasks) => `XS: ${acs} criteria, ${tasks} task(s)`,
       approvePlan: (slug) => `Review & approve the plan (change.md: its criteria, approach and tasks) — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks).`,
-      // P3 — size XS / S: the whole plan filled, then ONE approval call (each gate still runs, in order)
+      // size XS / S: the whole plan filled, then ONE approval call (each gate still runs, in order)
       planFastForward: (slug, size, list) => `Size ${size}: fill the whole plan first — ${list} — then approve it in one call: spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks; CLI: ${DEV_SPEC} approve ${slug} --through tasks). Each phase's gate still runs, in order; the first that refuses stops it and says why.`,
-      // 1.21 review C3 — the Phase 4 tests gate (+tdd / +ai) needs work that comes AFTER the plan: the one call ends before it
+      // the Phase 4 tests gate (+tdd / +ai) needs work that comes AFTER the plan: the one call ends before it
       planFastForwardTests: (slug, size, list, through, what) => `Size ${size}: fill the whole plan first — ${list} — then approve it through ${through} in one call: spec_approve {name: "${slug}", through: "${through}"} (/approve ${slug} --through ${through}; CLI: ${DEV_SPEC} approve ${slug} --through ${through}). Each phase's gate still runs, in order. Then Phase 4, whose gate needs work that comes after the plan: ${({ tdd: "write the failing tests", ai: "write the eval harness and the feature's own eval sets", both: "write the failing tests and the feature's own eval sets" })[what] || "write the failing tests"} (/spec ${slug} tests), approve tests (/approve ${slug} tests), then the tasks (/approve ${slug} tasks).`,
       templateApproved: (list) => `only the template's guidance left in: ${list} — the design was approved before 1.21's stricter rule, so this warns; its next approval asks for your own text there (or one line "n/a — <why it does not apply>")`,
       sectionsPassSized: (filled, covered, optional) => `filled: ${filled}` + (covered ? ` · covered by another track's section: ${covered}` : "") + (optional ? ` · optional at this size, left out: ${optional}` : ""),
@@ -1018,14 +1018,14 @@ const msg = {
     },
     kindKept: (kept, asked) => `'${kept}' is already the kind of this feature — kept it (asked for '${asked}'). Start a new one for a different kind.`,
     langKept: (kept, asked) => `This feature is already in '${kept}' — kept it (asked for '${asked}'). One feature, one language.`,
-    // 1.23 review 5 — spec_create on an existing folder (a re-run) says so; a new feature whose slug an archived one holds too is noted.
+    // spec_create on an existing folder (a re-run) says so; a new feature whose slug an archived one holds too is noted.
     createExisted: (slug) => `'${slug}' already exists — nothing was re-created (its files were kept; a re-run only adds the tracks it lacks).`,
     createSummaryKept: "The summary given was not written: the feature's files already hold one.",
     createArchivedTwin: (slug) => `An archived feature is named '${slug}' too (.specs/_archive/${slug}) — to restore it later, rename one of them first.`,
-    // 1.21 F3 — spec_create {kind: "bugfix"} prefill: reproduction · rootCause · condition · behaviour (the input names stay English).
+    // spec_create {kind: "bugfix"} prefill: reproduction · rootCause · condition · behaviour (the input names stay English).
     bugPrefill: {
       bugOnly: (key) => `${key} is a bugfix's input — pass kind: "bugfix" (it prefills bug.md and the regression criterion).`,
-      // 1.21 review A8: the CLI names its flag (--root-cause, not the MCP key rootCause) and its own way to make a bugfix
+      // the CLI names its flag (--root-cause, not the MCP key rootCause) and its own way to make a bugfix
       bugOnlyCli: (flag) => `${flag} is a bugfix's input — create it as a bugfix: ${DEV_SPEC} bugfix "<name>" ${flag} "…" (or --kind bugfix); it prefills bug.md and the regression criterion.`,
       oneLine: (key, max) => `${key} must be one line of at most ${max} characters (it goes into the EARS criterion).`,
       skipped: (list) => `Not prefilled — ${list}: the file already existed or came from a project template (create-only); write those texts into it yourself.`,
@@ -1040,7 +1040,7 @@ const msg = {
       tasksMissing: (slug) => `tasks.md not found for '${slug}'`,
       requirementsMissing: (slug) => `requirements.md not found for '${slug}'`,
       taskNotFound: (n, file = "tasks.md") => `Task ${n} not found in ${file}`,
-      // review 5 (P3): a tasks.md whose bytes are not UTF-8 / UTF-16 text (Windows' ANSI code page) is never rewritten
+      // a tasks.md whose bytes are not UTF-8 / UTF-16 text (Windows' ANSI code page) is never rewritten
       tasksNotText: (file = "tasks.md") => `${file} is not saved as UTF-8 (its accented letters are in another encoding — Windows' ANSI code page, what Windows PowerShell 5.1's Set-Content / Add-Content write): nothing was changed, so those letters stay intact. Save ${file} as UTF-8 (VS Code: "Reopen with Encoding" → Windows 1252, then "Save with Encoding" → UTF-8) and retry.`,
       featureBusy: (slug, rel) => `Another dev-spec process is updating '${slug}' right now (${rel || `.specs/${slug}/.lock`}) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.`,
       roadmapBusy: "Another dev-spec process is updating .specs/roadmap.json right now (.specs/.roadmap.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.",
@@ -1061,7 +1061,7 @@ const msg = {
       noSpecs: (root) => `No .specs/ at ${root}`,
       notGenerated: (file) => `${file} exists and was not generated by dev-spec — left untouched.`,
       specsLinked: (rel) => `Refused to write into ${rel}: that folder is a link (a symbolic link, a junction) or resolves outside .specs/ — replace it with a plain folder, then retry. Nothing was written.`,
-      // 1.24 r6 — the write gate (engine/files.js specsWriteGate): a FILE that is a link, a path of the wrong kind
+      // the write gate (engine/files.js specsWriteGate): a FILE that is a link, a path of the wrong kind
       specsLinkedFile: (rel) => `Refused to write ${rel}: that file is a link (a symbolic link) or resolves outside .specs/ — replace it with a plain file, then retry. It was not written.`,
       specsNotFolder: (rel) => `${rel} is a file where dev-spec needs a folder — rename or move it, then retry. Nothing was written there.`,
       specsNotFile: (rel) => `${rel} is a folder where dev-spec writes a file — rename or move it, then retry. It was not written.`,
@@ -1088,14 +1088,14 @@ const msg = {
       substantial: "No track signals matched but the description is substantial — consider whether +tdd applies (correctness/edge cases).",
       weakOnly: (list) => `On from weak signals only — double-check: ${list}.`,
       possible: (t, sig) => `Possible +${t} — weak signal '${sig}' (needs corroboration; not auto-enabled).`,
-      // (1.19 T) what an anchor names, per track — +dist's wording unchanged
+      // what an anchor names, per track — +dist's wording unchanged
       genericOnly: (t, list) => `Possible +${t} — only app-level words (${list}): none names ${({ api: "an API contract (a public API, OpenAPI / GraphQL / gRPC, a breaking change…)",
         ui: "a UI concern of its own (a design system, accessibility, a UI component, an empty or loading state…)", obs: "an operability concern (an SLO, alerting, on-call, a runbook, a rollout…)",
         data: "a data pipeline concern (a warehouse, an ETL / ELT job, data-quality checks, a backfill, lineage…)" })[t] ||
         "a second system (a broker, another service, a webhook…)"}; not auto-enabled.`,
       keptOff: (t, kw) => `+${t} kept off — '${kw}' appeared negated.`,
       onAlthough: (t, quoted, list) => `+${t} is ON although ${quoted} appeared negated — enabled by: ${list}. Confirm this is intentional.`,
-      // 1.21 F2 — the project's signal overrides (.specs/classifier.json) and classify --explain
+      // the project's signal overrides (.specs/classifier.json) and classify --explain
       overridesApplied: (list) => `This project's signal overrides changed the reading (.specs/classifier.json): ${list.map((o) => `'${o.word}' for +${o.track} → ${({ off: "no signal", weak: "a weak signal", strong: "a strong signal" })[o.effect]}`).join(", ")} — ${DEV_SPEC} signals list shows them all.`,
       overridesInvalid: (code, n) => `.specs/classifier.json ${code === "invalid-entries" ? `holds ${n} invalid entr${n === 1 ? "y" : "ies"} (ignored)` : `is ignored (${({ "invalid-json": "not valid JSON", "invalid-shape": "no \"signals\" list", "too-big": "too big", "not-a-file": "not a regular file", unreadable: "unreadable" })[code] || code})`} — ${DEV_SPEC} signals list says what to fix.`,
       explainHead: "Matched keywords (track · keyword · table tier → final tier):",
@@ -1105,7 +1105,7 @@ const msg = {
       explainOverride: (o, min) => `  +${o.track} '${o.word}' → ${o.effect} · ${o.origin === "set" ? "set by hand" : `learned, ${o.count} correction(s)`}${o.active ? "" : ` · pending (${o.count} of ${min})`}${o.applied ? " · applied here" : ""}`,
       explainNoOverrides: "Project signal overrides: none (.specs/classifier.json).",
     },
-    // 1.21 F2 — spec_tracks {action: "signals"} / dev-spec signals, and what spec_create learns from a Phase 0 correction
+    // spec_tracks {action: "signals"} / dev-spec signals, and what spec_create learns from a Phase 0 correction
     signals: {
       learnedPending: (t, w, e, n, min) => `Phase 0 correction recorded: '${w}' ${e === "off" ? `suggested +${t} and you left it off` : `was only a hint for +${t} and you added it`} (${n} of ${min} — after ${min} consistent corrections it ${e === "off" ? `no longer suggests +${t}` : `becomes ${({ weak: "a weak", strong: "a strong" })[e]} +${t} signal`} in this project; ${DEV_SPEC} signals list).`,
       learnedActive: (t, w, e, n) => `Learned from ${n} consistent Phase 0 corrections: '${w}' ${e === "off" ? `no longer suggests +${t}` : `is ${({ weak: "a weak", strong: "a strong" })[e]} +${t} signal`} in this project (.specs/classifier.json — undo: ${DEV_SPEC} signals forget ${t} "${w}").`,
@@ -1127,7 +1127,7 @@ const msg = {
       fileWarning: (rel, code, n) => `${rel} ${code === "invalid-entries" ? `holds ${n} invalid entr${n === 1 ? "y" : "ies"} — they are ignored, and the file is never rewritten until you fix or remove them by hand` : `is ignored and never rewritten — ${({ "invalid-json": "it is not valid JSON", "invalid-shape": "it holds no \"signals\" list", "too-big": "it is too big (64 KB at most)", "not-a-file": "it is not a regular file", unreadable: "it can't be read" })[code] || code}; fix it by hand or delete it`}.`,
       problem: (i, code) => `  entry ${i + 1}: ${({ "invalid-entry": "invalid (track, word, effect off|weak|strong, count ≥ 1, origin learned|set)", duplicate: "a duplicate of an earlier entry", "too-many": "beyond the 200-override bound" })[code] || code}`,
     },
-    // (1.21 F5: template = only the scaffold's guidance left · na-short = an n/a without a reason of ≥ 4 words)
+    // (template = only the scaffold's guidance left · na-short = an n/a without a reason of ≥ 4 words)
     sectionStatus: { missing: "missing", unfilled: "unfilled", template: "only the template's guidance", "na-short": "n/a without a reason (4+ words)" },
     sectionNames: {},
     precommit: {
@@ -1146,8 +1146,8 @@ const msg = {
       steeringOk: "core steering present (incl. constitution)",
       requirementsMissing: "requirements.md missing",
       clarificationsOpen: (n) => `${n} unresolved [NEEDS CLARIFICATION] — resolve before design`,
-      clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change (1.21 verify V7)
-      clarificationsOpenBug: (n) => `${n} unresolved [NEEDS CLARIFICATION] in bug.md — resolve them before approving its Reproduction / Root Cause`, // a bugfix (r5 review)
+      clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change
+      clarificationsOpenBug: (n) => `${n} unresolved [NEEDS CLARIFICATION] in bug.md — resolve them before approving its Reproduction / Root Cause`, // a bugfix
       clarificationsNone: "none open",
       scPresent: "present",
       scMissing: "no measurable SC-### success criteria",
@@ -1178,11 +1178,11 @@ const msg = {
     next: {
       fixChecks: (ids, slug) => `Fix blocking checks (${ids}) — run /spec-doctor ${slug} for details.`,
       reReview: (files) => `Re-review: ${files} changed after the last approval — re-approve the affected phase.`,
-      // 1.22 review: an approved artifact that was deleted — nothing to re-approve until it is back
+      // an approved artifact that was deleted — nothing to re-approve until it is back
       approvedMissing: (files, slug, phase) => `${files} was approved but no longer exists — restore it (it was deleted after its approval) or, if it is gone for good, withdraw that approval: /approve ${slug} ${phase} --revoke.`,
-      // r5 review: .state.json doesn't parse / has the wrong shape (error: readState's localized message) — the one step
+      // .state.json doesn't parse / has the wrong shape (error: readState's localized message) — the one step
       stateInvalid: (error, slug) => `${error} Until it is repaired nothing can be approved, ticked or finished, and the approvals, ticks and evidence it holds can't be read — fix it by hand or restore it from git (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on), then /spec-doctor ${slug}.`,
-      // 1.24 review 6 (E4): roadmap.json doesn't parse / has the wrong shape (error: roadmapError's localized message) — the one step
+      // roadmap.json doesn't parse / has the wrong shape (error: roadmapError's localized message) — the one step
       roadmapInvalid: (error, slug) => `${error} Until it is repaired nothing can be approved, revoked or finished — the approval roles and project checks it holds can't be read. Fix it by hand or restore it from git (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on), then /spec-doctor ${slug}.`,
       approveRequirements: (slug) => `Review & approve requirements — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Review & approve design — /approve ${slug} design.`,
@@ -1200,7 +1200,7 @@ const msg = {
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). Decide: the spec is now wrong → /spec-change ${slug} impact (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
       // but predates a later change: re-confirm it — never "sign it off" as if there were none).
-      // signOff.role (1.14, meta.approvalRoles.execution): the role to sign as; signOff.missing / signed: the roles still missing / signed.
+      // signOff.role (meta.approvalRoles.execution): the role to sign as; signOff.missing / signed: the roles still missing / signed.
       finished: (slug, day, total, signOff) => `'${slug}' is finished (${day}) — its ${total} implementing file(s) are unchanged since.` +
         (!signOff ? ` Nothing left to do here — /spec-report drift ${slug} checks it after later changes.`
           : signOff.why ? ` Its execution sign-off (${signOff.at}) predates ${signOff.why} — re-confirm it: /approve ${slug} execution${signOff.role ? " --role " + signOff.role : ""}.`
@@ -1231,7 +1231,7 @@ const msg = {
       rateLimit: "Specify rate limits (per-user / per-tenant / global).",
       aiQuality: "Specify output-quality target and refusal behavior for the AI path.",
       aiCost: "Specify a cost ceiling per request ($/tokens).",
-      // 1.21 verify V6 — a change (one change.md) is asked only what its doctor checks
+      // a change (one change.md) is asked only what its doctor checks
       changeSummary: "Write the change's Summary in change.md: what changes and why, in one line.",
       changeCriteria: "Write 1–3 EARS acceptance criteria in change.md (1. **US-1.AC-1** — WHEN … THE SYSTEM SHALL …).",
       changeApproach: "Write the Approach in change.md: what the change touches, and why that is all of it.",
@@ -1267,20 +1267,20 @@ const msg = {
         "unexpected-pass": "run passed, but _Expect: fail_ needs a red run",
         unobserved: "run not observed by the harness", // 1.14 F1 (meta.evidence: observed)
         "command-mismatch": "the run recorded is not its _Verify:_ command" }, // 1.22 review
-      // 1.22 review — the run recorded for a task is not a run of its _Verify:_ command(s): it ticks, but proves nothing.
-      // review 2: several _Verify:_ commands → every one of them, in one run; a prefix the _Verify:_ holds is never dropped; an
-      // _Expect: fail_ task: the red run BEFORE the fix lands (review 3: a red run of another command never counts — with the fix in,
+      // the run recorded for a task is not a run of its _Verify:_ command(s): it ticks, but proves nothing.
+      // several _Verify:_ commands → every one of them, in one run; a prefix the _Verify:_ holds is never dropped; an
+      // _Expect: fail_ task: the red run BEFORE the fix lands (a red run of another command never counts — with the fix in,
       // it is set aside for the red run)
       commandMismatch: (n, slug, ran, verify, red) => `Task ${n}: the run recorded (\`${ran}\`) is not a run of its _Verify:_ command (${verify}) — it is ticked, but stays unverified until a ${red ? "FAILING " : ""}run of that command is recorded (the command as written — with several _Verify:_ commands, every one of them in ONE run joined with \` && \`; a \`cd <project root> &&\`, \`set -o pipefail;\` or VAR=value of your own in front is fine (a cd anywhere else is another run), but never drop one the _Verify:_ holds)` +
         (red ? ` — record it BEFORE the fix lands, while the test still fails: ${DEV_SPEC} done ${slug} ${n} --run (a red run of another command never counts; with the fix already in, set it aside — git stash push -- <the fix's files>, not a bare git stash: it would take tasks.md and .state.json too — for that run, then restore it).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
-      // 1.24 r6 D1 — doctor evidence-moved: a run recorded under a number whose task was renumbered
+      // doctor evidence-moved: a run recorded under a number whose task was renumbered
       evidenceMoved: (list, slug) => `runs recorded under a task number belong to a task that now has another number (renumbered): ${list} — evidence is kept by number, so neither task reads that run any more; record the moved task's own run: ${DEV_SPEC} done ${slug} <n> --run`,
     },
-    // 1.14 F1 — harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").
+    // harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").
     observed: {
       on: "Evidence mode OBSERVED — a task whose _Verify:_ holds a command is verified only by a passing run the harness saw (in Claude Code the plugin's observe hook logs every Bash run of a _Verify:_ or project-check command) or that dev-spec done --run / finish --run made itself; a project check's run likewise (roadmap.json meta.evidence). An MCP-only client has no such hook: record its runs with " + DEV_SPEC + " done <feature> <n> --run. With the PowerShell tool alone (Windows without Git Bash) a run is logged only when Claude Code reports its exit code — record the others with --run too.",
-      // 1.25.1 (review 7): observed evidence is only as strong as the approval guard
+      // observed evidence is only as strong as the approval guard
       unguarded: "Observed evidence is only as strong as the approval guard, and it is off (meta.approvalGuard): an agent appending one line to an .execution/observed.jsonl forges an observed run. Turn it on — " + DEV_SPEC + " init --approval-guard ask (or deny) — so writing that log is asked or refused.",
       off: "Evidence mode REPORTED — the runs an agent reports verify as given (roadmap.json meta.evidence); each record still says whether the harness observed it.",
       badValue: (v) => `--evidence takes reported or observed (got '${v}').`,
@@ -1308,7 +1308,7 @@ const msg = {
       bugfixNeedsTdd: "A bugfix is always test-first — +tdd can't be removed from it.",
       notActive: (list) => `Not active: ${list} — nothing to remove.`,
       removed: (list, slug) => `Removed ${list} from the active tracks. No file was deleted — the inactive artifacts stay in place and count again if you re-add the track. Re-run /spec-doctor ${slug}.`,
-      // 1.21 review C7 — a sized design's section the removed track covered, written back (heading + TODO + guidance)
+      // a sized design's section the removed track covered, written back (heading + TODO + guidance)
       restoredSections: (list) => `The removed track covered these sections of the remaining tracks — added back to design.md, to be filled: ${list}.`,
       addedOnCreate: (slug, list) => `'${slug}' already existed: added ${list} (artifacts, design sections, steering, tasks) — nothing was overwritten.`,
       designTitle: (name) => `# Design: ${name}`,
@@ -1330,28 +1330,28 @@ const msg = {
       arrayOf: (t) => `an array (each item ${t})`,
       oneOf: (list) => `one of: ${list}`,
       atLeast: (n) => `≥ ${n}`,
-      atMost: (n) => `≤ ${n}`, // 1.24 r6 A5: a schema `maximum`
-      between: (lo, hi) => `between ${lo} and ${hi}`, // 1.24 r6 A5: `minimum` and `maximum`
-      atLeastItems: (n) => `with at least ${n} item${n === 1 ? "" : "s"}`, // 1.25.1: a schema `minItems` (spec_append_tasks.tasks)
-      // 1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
+      atMost: (n) => `≤ ${n}`, // a schema `maximum`
+      between: (lo, hi) => `between ${lo} and ${hi}`, // `minimum` and `maximum`
+      atLeastItems: (n) => `with at least ${n} item${n === 1 ? "" : "s"}`, // a schema `minItems` (spec_append_tasks.tasks)
+      // a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
       unknownArgs: (tool, items, valid) => `Unknown argument${items.length > 1 ? "s" : ""} for ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (did you mean ${u.didYouMean}?)` : "")).join(", ")} — nothing was done. ${tool} takes: ${valid}.`,
-      // 1.26: an argument of another mode of a tool that folded several into one (spec_roadmap_edit kind, spec_export format, spec_scan coverage)
+      // an argument of another mode of a tool that folded several into one (spec_roadmap_edit kind, spec_export format, spec_scan coverage)
       inapplicable: (tool, mode, names, allowed) => `${tool} {${mode}} does not take ${names} — nothing was done. With ${mode} it takes: ${allowed || "no other argument"}.`,
       notObject: "arguments must be a JSON object.",
       dotdot: "projectDir must not contain '..' path segments.",
       network: (dir) => `projectDir must be a local folder — a network or device path (${dir}) is refused, so a tool call can never point this local server at another machine; open the project locally (or start the server with it as the working directory).`,
-      // 1.24 r6 A3: projectDir names an existing folder (the CLI's --project rule) — spec_init alone creates one
+      // projectDir names an existing folder (the CLI's --project rule) — spec_init alone creates one
       projectMissing: (dir) => `projectDir ${dir}: no such folder — check the path (only spec_init creates a project folder).`,
       projectNotDir: (dir) => `projectDir ${dir} is a file, not a folder.`,
-      // 1.25.1 (review 7): spec_import reads (and, dry, returns) the files its path names — only in the default project or a dev-spec one
+      // spec_import reads (and, dry, returns) the files its path names — only in the default project or a dev-spec one
       projectNoSpecs: (dir) => `projectDir ${dir} holds no dev-spec project (a .specs/ with roadmap.json, steering/ or a feature) — spec_import reads files only in the default project or one spec_init set up: run spec_init with this projectDir first.`,
       projectUri: (uri) => `projectDir ${uri} is not a local file:// URI of a folder (file:///C:/path on Windows, file:///path elsewhere).`,
-      // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params) — 1.14 full review S2.
+      // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params).
       unknownTool: (name) => `Unknown tool: ${name} — tools/list lists the tools this server provides.`,
       noTool: "tools/call needs params.name — the tool to call (tools/list lists them).",
-      // 1.23: a tool that threw (a file system error…) — the JSON result {ok: false, error, code}, like every other refusal
+      // a tool that threw (a file system error…) — the JSON result {ok: false, error, code}, like every other refusal
       toolFailed: (why) => `The tool failed: ${why}`,
-      // 1.23: an incoming line past the server's cap (JSON-RPC -32600, the line skipped, the server keeps running)
+      // an incoming line past the server's cap (JSON-RPC -32600, the line skipped, the server keeps running)
       tooLarge: (n, max) => `Invalid Request: a message of ${n}+ characters passes this server's limit of ${max} (DEV_SPEC_MCP_MAX_MESSAGE) — it was skipped.`,
     },
     // Valid JSON with the wrong shape (.specs/roadmap.json, .specs/<feature>/.state.json).
@@ -1374,7 +1374,7 @@ const msg = {
       unticks: "'unticks' must be an array", // 1.16 U1 (undone ticks)
     },
     depend: {
-      // 1.23 review 5 — ROADMAP.md / .html "Needs attention": a dependsOn naming no feature (a stale or hand-edited roadmap.json entry)
+      // ROADMAP.md / .html "Needs attention": a dependsOn naming no feature (a stale or hand-edited roadmap.json entry)
       roadmapStale: (feature, list, args) => `depends on ${list}, which is no feature (a stale or hand-edited .specs/roadmap.json entry) — set the list again without it: ${DEV_SPEC} depend ${feature} ${args}`,
       unknown: (list) => `Every dependency must be an existing feature — not found: ${list}`,
     },
@@ -1383,7 +1383,7 @@ const msg = {
       usage: "Usage: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
       noEvalsDir: (slug, dir) => `No evals/ dir for '${slug}' at ${dir}`,
       requireLive: "eval harness: ANTHROPIC_API_KEY is not set and --require-live was given — refusing to fall back to a dry run.",
-      // 1.23 review: a mistyped switch (--dryrun) or a stray word ran a LIVE, paid eval — refused before anything runs
+      // a mistyped switch (--dryrun) or a stray word ran a LIVE, paid eval — refused before anything runs
       unknownFlag: (flag, suggestion) => `eval harness: unknown option ${flag}` + (suggestion ? ` — did you mean ${suggestion}?` : "") + " Nothing ran.",
       extraArg: (word) => `eval harness: unexpected argument '${word}' — one feature per run. Nothing ran.`,
       header: (slug) => `dev-spec-driven evals — feature '${slug}'`,
@@ -1457,17 +1457,17 @@ const msg = {
     },
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Removing '${slug}' permanently deletes .specs/${slug}/ (${n} file(s)). Nothing was deleted — pass confirm: true to delete it, or archive it instead (reversible).`,
-      // 1.24 r6: a feature folder that is a link — remove deletes the link alone
+      // a feature folder that is a link — remove deletes the link alone
       removeNeedsConfirmLink: (slug) => `.specs/${slug}/ is a link (a symbolic link, a junction): removing '${slug}' deletes only the link — the folder it points at and its files are kept. Nothing was deleted — pass confirm: true to remove the link.`,
-      // 1.23: a remove the user confirmed over MCP whose folder is no longer the one they were shown (renamed into the name, edited)
+      // a remove the user confirmed over MCP whose folder is no longer the one they were shown (renamed into the name, edited)
       removeChangedSincePreview: (slug) => `Nothing deleted: .specs/${slug}/ changed after the user was asked to confirm its removal (another feature renamed into the name, or files edited while the question waited) — their confirmation covered the folder they were shown. Ask them again.`,
       backlogNotFound: (name, known) => `'${name}' is not in the backlog${known ? ` (backlog: ${known})` : " (the backlog is empty)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' already has a spec (.specs/${slug}/) — the backlog is for features without one yet (status: ${DEV_SPEC} status ${slug}).`,
-      // 1.19 R review 5: add of a name already in the backlog keeps its entry and appends the new note (exists: true, appended)
+      // add of a name already in the backlog keeps its entry and appends the new note (exists: true, appended)
       backlogAppended: (name) => `'${name}' is already in the backlog — the new note was appended to its note.`,
       backlogKept: (name) => `'${name}' is already in the backlog with that note — nothing changed.`,
       backlogNoteFull: (name, max) => `'${name}' is already in the backlog and its note would pass ${max} characters — the new note was not added: file it under another name.`,
-      // 1.19 verify 5: a NEW entry's note past the same cap
+      // a NEW entry's note past the same cap
       backlogNoteLong: (name, max) => `The note for '${name}' passes ${max} characters — nothing was added to the backlog: shorten the note.`,
     },
     // CLI human output (--json output is the structured result, never localized).
@@ -1532,24 +1532,24 @@ const msg = {
       usage: (syntax) => `usage: ${syntax}`,
       unknownCommand: (c) => `unknown command '${c}'. Run \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `unknown client '${c}'. Known: ${known}`,
-      // 1.22 review: --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
+      // --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
       noJson: (c) => `--json is not available for '${c}': it prints text only. Run it without --json.`,
-      // 1.23 review: each command takes its own options and arguments — one it doesn't read is an error, never silently ignored
+      // each command takes its own options and arguments — one it doesn't read is an error, never silently ignored
       flagNotFor: (flag, c, list) => `${flag} is not an option of '${c}'` + (list ? ` (its options: ${list})` : " (it takes none)") + `. Run \`${DEV_SPEC} help\`.`,
       extraArgs: (c, extra) => `'${c}' got unexpected argument(s): ${extra}. Run \`${DEV_SPEC} help\` for its syntax.`,
       needsRun: (flag) => `${flag} only applies with --run (how the commands run) — add --run, or leave ${flag} out.`,
       runOrEvidence: "--run records the run it makes; --evidence / --exit / --cmd report a run made elsewhere — pass one or the other.",
-      // 1.23 review: --project names an existing folder (init alone creates it)
+      // --project names an existing folder (init alone creates it)
       projectEmpty: "--project is empty — name the project folder, or leave --project out (the nearest folder above this one with a .specs/, else this one).",
       projectUnexpanded: (v) => `--project ${v} holds a variable that was never expanded — pass the folder itself.`,
       projectMissing: (dir) => `--project ${dir}: no such folder — check the path (only init creates a project folder).`,
       projectNotDir: (dir) => `--project ${dir} is a file, not a folder.`,
-      // 1.24 r6 B1: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked like --project when one of them chose the project
+      // SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked like --project when one of them chose the project
       projectEnvMissing: (name, dir) => `${name}=${dir}: no such folder — fix or unset the variable (only init creates a project folder).`,
       projectEnvNotDir: (name, dir) => `${name}=${dir} is a file, not a folder — fix or unset the variable.`,
-      // 1.24 r6 B7: a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
+      // a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
       projectIsSpecs: (label, parent) => `${label} is the .specs folder of the project ${parent} — name the project folder itself: ${parent}`,
-      // 1.24 r6 B-I1: `dev-spec version` / --version / -V (the codes — engine.source, bundle.skipped, project.source — stay English in --json)
+      // `dev-spec version` / --version / -V (the codes — engine.source, bundle.skipped, project.source — stay English in --json)
       version: {
         head: (v) => `dev-spec-driven ${v || "(unknown version)"}`,
         cli: (f) => `  CLI:      ${f}`,
@@ -1568,26 +1568,26 @@ const msg = {
           missing: "            the folder does not exist (init creates it)",
         },
       },
-      // 1.24 r6 B-I3: `<command> --help` / -h / help <command> — the frame around that command's lines of the help
+      // `<command> --help` / -h / help <command> — the frame around that command's lines of the help
       cmdHelp: {
         options: (list) => `  Its options: ${list}`,
         none: "  It takes no option of its own.",
         global: "  Every command: --json · --project <dir> · --help (-h) · --version (-V)",
         all: `  Every command and the details: ${DEV_SPEC} help`,
       },
-      // 1.24 r6 B-I9: an argument "-" read from a terminal (a TTY) — one stderr line before the CLI waits
+      // an argument "-" read from a terminal (a TTY) — one stderr line before the CLI waits
       stdinHint: "reading from the terminal — type or paste the text, then Ctrl+D on a line of its own (Windows: Ctrl+Z, then Enter).",
-      // 1.24 r6 B9: ears <path> naming no file (and no feature of that name)
+      // ears <path> naming no file (and no feature of that name)
       earsNoFile: (file) => `${file}: no such file — ears takes a feature name, a markdown file, --text "…" or - (stdin).`,
-      // 1.24 r6 B8: bundle --out onto an existing file that is no previous bundle
+      // bundle --out onto an existing file that is no previous bundle
       bundleNotOurs: (file) => `${file} exists and is not a dev-spec bundle — nothing was written. Choose another --out, or add --force to overwrite it.`,
-      // 1.24 r6 B5: a single-value flag given twice (the last value used to win silently)
+      // a single-value flag given twice (the last value used to win silently)
       flagTwice: (flag) => `${flag} was given more than once — it takes a single value: give it once.`,
-      // 1.24 r6 B6: a bounded integer flag's upper end, after args.atLeast (--timeout ≤ Node's timer limit)
+      // a bounded integer flag's upper end, after args.atLeast (--timeout ≤ Node's timer limit)
       atMost: (n) => `, at most ${n}`,
-      // 1.24 r6 B3: done --run / finish --run settled at the command's exit while a background process still held its output
+      // done --run / finish --run settled at the command's exit while a background process still held its output
       runHeldOpen: (code) => `⚠ the command exited (${code}), but a process it started in the background kept its output open — the run was recorded at that exit; what that process prints later is not in the evidence.`,
-      // 1.25 completion: the `dev-spec` a completion script defines finds no CLI any more (written into the script when it is generated)
+      // completion: the `dev-spec` a completion script defines finds no CLI any more (written into the script when it is generated)
       completionGone: (cli) => `${cli} is gone and no newer copy of the plugin was found — save the completion script again from the current CLI (its completion --help says how), or remove it from your shell profile.`,
     },
 
@@ -1608,9 +1608,9 @@ const msg = {
       approveUnreadable: (phase, slug, file) => `Nothing to approve: ${file} in '${slug}' can't be read (a folder of that name, no permission, or another program holding it) — make it a readable file, then approve '${phase}'.`, // r5 review
       approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
       phaseOrder: (list, slug, first) => `earlier phases are not approved yet: ${list} — approve them first, in order (/approve ${slug} ${first})`,
-      // 1.24 review 6 (E1): an earlier phase whose approved content changed since its approval
+      // an earlier phase whose approved content changed since its approval
       phaseOrderChanged: (list, slug, first) => `earlier phases changed since their approval: ${list} — re-review them (spec_impact) and re-approve them first, in order (/approve ${slug} ${first})`,
-      // 1.24 review 6 (E4): roadmap.json can't be read (detail: roadmapError's message) — approve / revoke / the fast-forward refuse
+      // roadmap.json can't be read (detail: roadmapError's message) — approve / revoke / the fast-forward refuse
       roadmapUnreadable: (detail) => `${detail} Nothing recorded: the approval roles and project checks this file holds can't be read — approvals, revocations and spec_finish refuse until it is repaired (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on).`,
       // …doctor's `roadmap` check and spec_finish's `roadmap` blocker
       roadmapCheck: (detail) => `${detail} The approval roles and project checks it holds can't be read: approvals, revocations and spec_finish refuse until it is repaired.`,
@@ -1650,9 +1650,9 @@ const msg = {
       evalSetsSample: "evals/golden.json is still the scaffold's sample set — write this feature's golden cases, run the harness and record the baseline",
       evalSetsMissing: "evals/golden.json is missing or holds no eval items ({\"items\": […]}) — write this feature's golden set first",
       testsGateChecks: (ids) => `(the approve gate checks this: ${ids})`,
-      // 1.22 review: a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan whose approval changed since) — pending again.
+      // a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan whose approval changed since) — pending again.
       testsStale: (day, missing, plans) => `The Phase 4 sign-off of ${day} no longer covers the plan (${[missing ? `planned since: ${missing}` : null, plans ? `approval changed since: ${plans}` : null].filter(Boolean).join("; ")}) — the tests phase is to be approved again.`,
-      // 1.22 review: an approval the user confirmed over MCP whose content (or, forced, its failing checks) changed after the question.
+      // an approval the user confirmed over MCP whose content (or, forced, its failing checks) changed after the question.
       changedSincePreview: (phase, slug, grown) => (grown
         ? `Nothing recorded: since the user was asked to confirm '${phase}' of '${slug}', its gate fails more checks (${grown}) than the question named — ask them again.`
         : `Nothing recorded: '${phase}' of '${slug}' changed after the user was asked to confirm it — their confirmation covered the version they were shown. Ask them again, so they confirm what is there now.`),
@@ -1689,7 +1689,7 @@ const msg = {
       pathRequired: "path required — the folder (or a file) of the spec to import.",
       outside: (p) => `'${p}' is outside the project — spec_import only reads inside the project directory.`,
       notFound: (p) => `'${p}' not found.`,
-      // 1.25.1 (review 7): never a hidden folder or file but the importers' own; a file named as the source is a document format
+      // never a hidden folder or file but the importers' own; a file named as the source is a document format
       hidden: (p, part) => `'${p}' is in a hidden folder or is a hidden file (${part}) — spec_import reads none but the importers' own: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
       notSource: (p) => `'${p}' is no spec source spec_import reads — name a .md / .markdown / .mdc / .txt / .json / .yaml / .yml file, or the source's folder.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
@@ -1730,18 +1730,18 @@ const msg = {
       wRemoved: (name) => `REMOVED requirement '${name}' was not imported`,
       wRenamed: (from, to) => `RENAMED requirement '${from}' → '${to}' (imported under the new name)`,
       wSkipped: (files) => `not imported (left in place): ${files}`,
-      // 1.24 r6 (G-I3): spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
+      // spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
       skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", quickstart: "Quickstart" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts, quickstart) without the plan`,
-      // 1.25.1: spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
+      // spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
       wUncoveredFr: (list) => `functional requirements no acceptance scenario covers — carried as prose under "Functional Requirements", so no task or test traces them: ${list}. Turn each into an EARS criterion with an AC ID (or cite it in one) before approving the requirements`,
       wUnreadable: (file) => `${file} points outside the project — skipped`,
       done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
     },
 
-    // 1.25 — spec_import kiro-steering / cursor-rules (another tool's steering → .specs/steering/), and the CLI's lines for both
+    // spec_import kiro-steering / cursor-rules (another tool's steering → .specs/steering/), and the CLI's lines for both
     // imports' --dry-run. The `skipped` reason codes (exists, duplicate, name, own, too-large, empty, outside, unreadable) stay English.
     importSteering: {
       note: (tool, rel, date) => `<!-- Imported from ${tool} ${rel} on ${date}. -->`,
@@ -1799,7 +1799,7 @@ const msg = {
       noTestPlan: (slug) => `makesGreen needs a test plan: .specs/${slug}/test-plan.md does not exist (add +tdd first). Nothing was written.`,
     },
 
-    // 1.14 F3 — task dependencies (`_Depends: 3, 5_`, English-stable) and execution waves: doctor task-deps, the "no task can
+    // task dependencies (`_Depends: 3, 5_`, English-stable) and execution waves: doctor task-deps, the "no task can
     // start" note (next_task / next_action / brief / complete_task), the early-tick warning, the brief's section,
     // spec_append_tasks `depends`, the CLI's next --waves lines. Task numbers and #n stay as written.
     taskDeps: {
@@ -1833,7 +1833,7 @@ const msg = {
     impact: {
       badPhase: (p, known) => `Unknown phase '${p}' for spec_impact. Known: ${known}.`,
       reopenTasks: "reopen applies to requirements, design, test-plan and eval-plan — a change to tasks.md is reviewed and re-approved; it reopens nothing.",
-      // 1.21 review C4 — a change: ONE approved artifact (change.md, its plan — phase tasks) holds its criteria and its tasks
+      // a change: ONE approved artifact (change.md, its plan — phase tasks) holds its criteria and its tasks
       changePhase: (phase, slug) => `'${slug}' is a change: its criteria and its tasks are one file, change.md, approved as the plan (phase tasks) — there is no ${phase} phase. spec_impact {name: "${slug}"} (phase tasks, the default) diffs both: the criteria by ID, the tasks by number.`,
       // --phase test-plan: a REMOVED planned test — its tasks still name its T-ID in _Makes green:_.
       retireTests: {
@@ -1881,7 +1881,7 @@ const msg = {
       nothingToVerify: "nothing to verify (no _Verify:_ command, nothing recorded)",
       staleSpec: "the spec changed since this evidence; spec_impact reopened the task",
       uncovered: (list) => `new, no task cites them yet: ${list}`,
-      // roles (1.14): the roles that haven't signed the changed content yet (meta.approvalRoles) — each signs again, the first named.
+      // roles: the roles that haven't signed the changed content yet (meta.approvalRoles) — each signs again, the first named.
       reReview: (slug, phase, roles) => `review the change, then re-approve: /approve ${slug} ${phase}` + (roles && roles.length ? ` --role ${roles[0]} (each role signs the new content: ${roles.join(", ")})` : ""),
     },
     // spec_metrics + the retrospective (retro.md). Durations use the same units everywhere (m/h/d).
@@ -2037,7 +2037,7 @@ const msg = {
       off: "Guard mode OFF — code edits are not gated.",
       badValue: (v) => `--guard takes on, off or scope (got '${v}').`,
     },
-    // 1.14 F2 — the human approval guard (hooks/approval-hook.js, PreToolUse · roadmap.json meta.approvalGuard off|ask|deny ·
+    // the human approval guard (hooks/approval-hook.js, PreToolUse · roadmap.json meta.approvalGuard off|ask|deny ·
     // spec_init {approvalGuard} · `dev-spec init --approval-guard`). `ask` is read by the USER (the permission prompt), `deny` by
     // the AGENT (+ `denyUser`, the line the user sees). The "dev-spec approval guard" prefix stays English, like "dev-spec guard".
     approvalGuard: {
@@ -2054,12 +2054,12 @@ const msg = {
         (command ? `Stop and ask the user to run it themselves, in their own terminal or in Claude Code with the ! prefix (it runs as the user, not as your tool call): ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
       denyUser: (list, command) => `dev-spec approval guard refused an agent's request to ${list}.` + (command ? ` To approve it yourself: ${command}` : " Make that change yourself if you want it."),
-      // 1.21 review A4 — the MCP server's refusal (a client outside Claude Code, without elicitation): the plain command, no `!`
+      // the MCP server's refusal (a client outside Claude Code, without elicitation): the plain command, no `!`
       denyMcp: (list, command) => `dev-spec approval guard: refused — approvals are the human's, and an agent may not ${list}. ` +
         (command ? `Stop and ask the user to run it themselves, in their own terminal: ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
     },
-    // 1.21 F1b — human approvals over MCP elicitation (mcp/server.js: spec_approve, spec_feature remove, spec_init lowering a guard,
+    // human approvals over MCP elicitation (mcp/server.js: spec_approve, spec_feature remove, spec_init lowering a guard,
     // while meta.approvalGuard is ask | deny and the MCP client can ask its user — elicitation/create). `message` and the field
     // titles are read by the USER (the client's dialog); the refusals by the AGENT. list = approvalGuard.action's text.
     elicit: {
@@ -2068,23 +2068,23 @@ const msg = {
       forced: (ids) => `⚠ FORCED: the phase's checks fail (${ids}) — it would be recorded as approved anyway.`,
       waiver: (reason, expires) => "Waiver: " + [reason ? `"${reason}"` : null, expires ? `until ${expires}` : null].filter(Boolean).join(" ") + ".",
       phases: (list) => `Phases to approve, in order: ${list}.`,
-      // 1.24 r6 A-I8: what a spec_feature remove deletes (remove's preview: wouldDelete.files)
+      // what a spec_feature remove deletes (remove's preview: wouldDelete.files)
       removeSize: (n, rel) => `This deletes ${rel} for good — ${n} file${n === 1 ? "" : "s"}.`,
       approveTitle: "Approve",
       approveDesc: "Tick it to record this; leave it unticked (or decline) to refuse.",
       noteTitle: "Note",
       noteDesc: "Optional — recorded with the approval (one line).",
       declined: (list) => `The user declined in the MCP client: nothing recorded (${list}). Do not retry it another way — ask the user what should change.`,
-      // 1.21 review A6: action "accept" without approve: true — the user answered, but did not tick Approve
+      // action "accept" without approve: true — the user answered, but did not tick Approve
       unapproved: (list) => `The user answered in the MCP client without ticking Approve: nothing recorded (${list}). Do not retry it another way — ask the user whether they approve it.`,
       cancelled: (list) => `The user dismissed the confirmation: nothing recorded (${list}). Ask the user before trying again.`,
       timedOut: (s, list) => `No answer from the user within ${s} s: nothing recorded (${list}). Ask the user to approve it themselves.`,
       failed: (why, list) => `The MCP client could not ask the user (${why}): nothing recorded (${list}). Ask the user to run the approval themselves.`,
       confirmed: "Confirmed by the user in the MCP client (elicitation).",
-      // 1.23: notifications/progress while the question waits (the call carried a progressToken)
+      // notifications/progress while the question waits (the call carried a progressToken)
       waiting: "Waiting for the user's answer in the MCP client…",
     },
-    // 1.21 F1a — git's merge driver for the spec state (`dev-spec merge-state`): doctor's merge-conflicts and the CLI's lines. The
+    // git's merge driver for the spec state (`dev-spec merge-state`): doctor's merge-conflicts and the CLI's lines. The
     // words ours / theirs / base and "mergeConflicts" stay English (git's and the file's own terms).
     mergeState: {
       doctor: (n, list) => `${n} merge conflict(s) the dev-spec merge driver left unresolved — ${list}. Each kept ours: pick the right value in the file (its "mergeConflicts" list shows base / ours / theirs), then delete "mergeConflicts".`,
@@ -2095,11 +2095,11 @@ const msg = {
       parseError: (side, why) => `dev-spec merge-state: ${side} is not valid JSON (${why}) — nothing merged, ours left as it is; merge the file by hand.`,
       unreadable: (file) => `cannot read ${file}.`,
       noGit: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --install writes that repository's own git config.`,
-      // 1.24 r6 B9: --uninstall's own words (it said what --install writes)
+      // --uninstall's own words (it said what --install writes)
       noGitUninstall: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --uninstall removes that repository's own git config and .gitattributes lines; there is nothing to remove here.`,
       attrsAdded: (file) => `${file}: the merge driver's lines added (commit it — the whole team gets them):`,
       attrsKept: (file) => `${file}: the merge driver's lines are already there.`,
-      // 1.25.1 (review 7): --install / --uninstall never write through a link
+      // --install / --uninstall never write through a link
       attrsNotFile: (file) => `${file} is a link or not a regular file — merge-state never writes through it (it would change the file it points at): replace it with a plain .gitattributes and run it again.`,
       attrsRemoved: (file) => `${file}: the merge driver's lines removed (commit it).`,
       attrsNone: (file) => `${file}: no merge driver line to remove.`,
@@ -2107,7 +2107,7 @@ const msg = {
       configRemoved: (key) => `git config: ${key} removed.`,
       configFailed: (why) => `git config failed: ${why}`,
       teamNote: `git config is per clone: every teammate runs ${DEV_SPEC} merge-state --install once — and again after each plugin update (git runs the driver by this plugin folder's path, which an update moves; ${DEV_SPEC} merge-state --check tells). Without it, git falls back to its text merge.`,
-      // 1.21 review A3 — merge-state --check (read only) and the SessionStart hook's line: is the configured driver still THIS clone's?
+      // merge-state --check (read only) and the SessionStart hook's line: is the configured driver still THIS clone's?
       checkOk: (script) => `The spec state's merge driver is installed and runs this clone's CLI (${script}).`,
       checkNone: `The spec state's merge driver is not installed here and .gitattributes doesn't name it — nothing to check (to install it: ${DEV_SPEC} merge-state --install).`,
       checkNotInstalled: (file) => `${file} names the dev-spec-state merge driver, but this clone's git config has none — git falls back to its text merge (a .state.json both branches changed conflicts). Install it: ${DEV_SPEC} merge-state --install`,
@@ -2169,9 +2169,9 @@ const msg = {
         drift: (n, slug) => `Decide on the drift: ${n} implementing file(s) changed since finish — ${DEV_SPEC} drift ${slug}`,
         stale: (slug) => `It changed after its finish — finish it again: /spec-finish ${slug}`,
         packReserved: (list, slug, since) => `Rename its track pack(s) from before ${since || "1.17"} — ${list}: the name is reserved now, so the track is inactive (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
-        // 1.19 T review: a pack whose marker is a built-in track's now
+        // a pack whose marker is a built-in track's now
         packMarkerReserved: (list, slug, since, tracks) => `Change the marker of its track pack(s) from before ${since || "1.19"} — ${list}: the marker is a built-in track's now, so the pack is inactive; or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${tracks} (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
-        // 1.22 review 2: criteria numbered with bare AC-n IDs (approved before 1.22) — renumber, then re-approve
+        // criteria numbered with bare AC-n IDs (approved before 1.22) — renumber, then re-approve
         bareAcIds: (list, slug, file = "requirements.md") => `Renumber the criteria ${file} numbers with bare IDs (${list}) as US-<story>.AC-<n> — and their references in ${file === "change.md" ? "its tasks' _Requirements:_ (in change.md too)" : "tasks.md and test-plan.md"} — then re-approve: since 1.22 a bare AC-n is no ID trace_check reads, so doctor (ears, traceability) fails and the approval is refused (details: ${DEV_SPEC} doctor ${slug})`,
         critic: (files) => `Review it with the spec-critic agent (read-only), phase by phase: ${files || "—"}`,
         converge: (files) => "Run the spec-reviewer converge pass (the done tasks against their ACs)" + (files ? `, then the spec-critic agent on ${files}` : ""),
@@ -2227,7 +2227,7 @@ const msg = {
         tplSteering: "A steering file: .specs/steering/{file} (a .md file).",
       },
       err: {
-        // 1.23: resources/list pages (nextCursor) — a cursor this server did not hand out (JSON-RPC -32602)
+        // resources/list pages (nextCursor) — a cursor this server did not hand out (JSON-RPC -32602)
         badCursor: "resources/list: invalid cursor — pass back the nextCursor of the previous page as it is.",
         noPromptName: "prompts/get needs the prompt `name` (a string).",
         badPromptArgs: 'prompts/get: `arguments` must be an object of strings, e.g. {"args": "login"}.',
@@ -2240,7 +2240,7 @@ const msg = {
       },
     },
 
-    // 1.16 C — Claude Code integration: the status line (`dev-spec statusline`), the plan-mode bridge (hooks/plan-hook.js),
+    // Claude Code integration: the status line (`dev-spec statusline`), the plan-mode bridge (hooks/plan-hook.js),
     // spec_import {text} and the MCP completion/complete errors. Phase names and step codes stay English-stable.
     claudeCode: {
       statusLine: {
@@ -2295,7 +2295,7 @@ const msg = {
       },
     },
 
-    // +sec / +privacy (1.14): what their tools report beyond the shared track messages.
+    // +sec / +privacy: what their tools report beyond the shared track messages.
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
       sectionNames: {},
@@ -2328,18 +2328,18 @@ const msg = {
       },
     },
 
-    // Marker-shaped text on a task line that yields no marker (doctor malformed-markers, 1.14 full review Pa1).
+    // Marker-shaped text on a task line that yields no marker (doctor malformed-markers).
     markerSyntax: {
-      // 1.22 review — checkbox lines the task scanner does not read as tasks (doctor unread-tasks).
+      // checkbox lines the task scanner does not read as tasks (doctor unread-tasks).
       unreadTasks: (list) => `checkbox lines that are not tasks: ${list} — a task line is "- [ ] N. text" (a -, * or + bullet, then its number); these are never ticked, briefed or verified. Number them (or make them sub-steps of a task); a line indented 4+ spaces after a blank line, outside a list, is a code block — unindent it.`,
       doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ / _Depends: 3_ (italics, the value inside).`,
-      // review 5 — a _Verify:_ value that looks garbled (doctor verify-suspicious)
+      // a _Verify:_ value that looks garbled (doctor verify-suspicious)
       suspiciousVerify: (list) => `a _Verify:_ command looks garbled: ${list} — it starts with _ or * (a marker's delimiter read into it), holds a code span inside it (two commands written as one: give each its own _Verify:_; a command substitution reads better as $(…)), or has a quote with no partner. done --run runs it exactly as written: fix the marker.`,
-      // 1.24 r6 D7 — an _Expect:_ value other than fail (doctor expect-value)
+      // an _Expect:_ value other than fail (doctor expect-value)
       expectValue: (list) => `an _Expect:_ value the tools don't know: ${list} — the only value is fail (_Expect: fail_: the task's run must FAIL, a test written before its fix); any other value leaves a task whose run must pass. Write _Expect: fail_, or drop the marker.`,
     },
     // A T-ID the test plan checks outside test code (load-test.md, evals/*.json) whose artifact is still the scaffold (doctor
-    // outside-code-artifacts, a spec_finish warning — 1.14 full review Pa6).
+    // outside-code-artifacts, a spec_finish warning).
     outsideCode: {
       doctor: (list) => `tests planned outside test code point at an artifact that is still a template: ${list} — fill it in (the real load run, the feature's own eval set) before calling them verified.`,
     },
@@ -2351,7 +2351,7 @@ const msg = {
       doctor: (list) => `a _Verify:_ command pipes into another one — a failing check can exit 0 (a pipeline reports its LAST command's code): ${list}. Drop the pipe or use \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Task ${n}: the recorded command pipes into another one (\`${cmd}\`) — its exit 0 is the LAST command's, so this pass may hide a failing check. Drop the pipe (or use \`set -o pipefail\` under bash) and re-run.`,
     },
-    // 1.25.1 (review 7): a _Verify:_ / project check command holding a control character (shown with \u escapes) — doctor fails
+    // a _Verify:_ / project check command holding a control character (shown with \u escapes) — doctor fails
     // verify-control; done --run / finish --run run nothing
     verifyControl: {
       doctor: (list) => `a command holds a control character (an escape sequence, a carriage return…) — a terminal shows another command than the one that runs: ${list}. Retype it as plain text; done --run / finish --run refuse it.`,
@@ -2404,7 +2404,7 @@ const msg = {
       },
     },
 
-    // Project-defined tracks (1.15) — track packs in .specs/tracks/<name>/: the blocks they scaffold, spec_tracks / `dev-spec tracks`,
+    // Project-defined tracks — track packs in .specs/tracks/<name>/: the blocks they scaffold, spec_tracks / `dev-spec tracks`,
     // doctor's track-pack-missing. The markers ([A11Y]), IDs, `> **TODO**` and the check codes stay English.
     trackPacks: {
       acHeading: "Acceptance Criteria (EARS)",
@@ -2421,9 +2421,9 @@ const msg = {
       missing: (list) => `track pack(s) not available: ${list} — the track is inactive for this feature until the pack is back (${DEV_SPEC} tracks check).`,
       missingAbsent: (name) => `+${name} (no .specs/tracks/${name}/ in this project)`,
       missingInvalid: (name, codes) => `+${name} (the pack is invalid: ${codes})`,
-      // 1.17 D review: a pack from before 1.17 whose name is reserved now
+      // a pack from before 1.17 whose name is reserved now
       missingReserved: (name, slug, builtIn, since) => `+${name} (a track pack from before ${since || "1.17"} — '${name}' is a reserved name now${builtIn ? `, and the built-in +${name} track is NOT applied to this feature` : ""}: rename .specs/tracks/${name}/ (and its marker, if that is reserved too), then ${DEV_SPEC} add-track ${slug} <new-name> and ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; to adopt the built-in track instead: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
-      // 1.19 T review: a pack from before 1.19 (1.17 for [DIST]) whose MARKER is a built-in track's now
+      // a pack from before 1.19 (1.17 for [DIST]) whose MARKER is a built-in track's now
       missingReservedMarker: (name, marker, track, slug, since) => `+${name} (a track pack from before ${since || "1.19"} — its marker ${marker} is the built-in +${track} track's now, so the pack is ignored and its ${marker} sections don't count as +${track}'s: change the marker in .specs/tracks/${name}/track.json and in this feature's ${marker} headings, or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${track} (its sections are appended, the pack leaves this feature); to drop the pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
       badAction: (a) => `Unknown tracks action '${a}' — one of: list, init, check, signals.`,
       nameRequired: "tracks init needs a name — " + DEV_SPEC + " tracks init <name> (spec_tracks {action: \"init\", name}).",
@@ -2560,7 +2560,7 @@ const msg = {
       taskStatus: { done: "✅ done", open: "☐ open" },
       verification: { verified: "verified", nothing: "nothing to verify", open: "—", unverified: (why) => "⚠ not verified" + (why ? ` (${why})` : "") },
       phases: { classification: "Classification", requirements: "Requirements", design: "Design", "test-plan": "Test plan", "eval-plan": "Eval plan", tests: "Tests (Phase 4)", tasks: "Tasks", execution: "Execution sign-off" },
-      planPhase: "Plan (change.md)", // a change's tasks phase: its whole plan (1.21 review C5)
+      planPhase: "Plan (change.md)", // a change's tasks phase: its whole plan
       criteria: "Acceptance criteria",
       forced: (ids) => `approved with --force (failing: ${ids})`,
       changedSince: "changed since this approval — to be re-reviewed",
@@ -2583,7 +2583,7 @@ const msg = {
       wrote: (file) => `✎ wrote ${file}`,
       exportsIsFeature: (dir) => `${dir} is a feature folder from before dev-spec reserved the name 'exports' (it holds requirements.md / .state.json) — move or rename that folder by hand, then export again.`,
       exportsLinked: (rel) => `Refused to write ${rel}: .specs/exports/ or that file is a link (a symbolic link, a junction) or resolves outside .specs/ — replace it with a plain folder / file, then export again. Nothing was written.`,
-      // 1.26: html / md without write — a preview, not the whole document (an agent paid ~18k characters for a template-only feature)
+      // html / md without write — a preview, not the whole document (an agent paid ~18k characters for a template-only feature)
       previewHint: (n, rel) => `A preview (the document's first ${n} characters, as markdown). write: true (--write) writes ${rel}; includeBody: true (--include-body) returns the whole document.`,
     },
     // Requirements traceability matrix (trace_check {matrix} / `dev-spec trace --matrix | --csv` / spec_export {format: "csv"}):
@@ -2621,7 +2621,7 @@ const msg = {
       projectLegend: "Requirement IDs (AC / EC / NFR / SC) per feature, by traceability status — each feature's export has its matrix.",
       approvedLine: (at, by, forced) => `Requirements approved ${at} by ${by}${forced ? " (with --force)" : ""}.`,
       notApproved: "Requirements not approved yet.",
-      // 1.21 review C5 — a change: its criteria are signed off with its plan (change.md, phase tasks)
+      // a change: its criteria are signed off with its plan (change.md, phase tasks)
       planApprovedLine: (at, by, forced) => `Plan (change.md) approved ${at} by ${by}${forced ? " (with --force)" : ""}.`,
       planNotApproved: "Plan (change.md) not approved yet.",
       changedSincePlan: "changed since the plan approval",
@@ -2658,7 +2658,7 @@ const msg = {
       badSince: (v) => `since: '${v}' is not an ISO date (YYYY-MM-DD, or a full ISO timestamp), 'last' or 'all'.`,
       noLast: "No release notes were written yet (roadmap.json meta.changelogAt is unset) — every change is listed.",
     },
-    // 1.16 E1 — Gherkin export (spec_export {format: "gherkin"}): the comment lines of the .feature file — the Gherkin keywords
+    // Gherkin export (spec_export {format: "gherkin"}): the comment lines of the .feature file — the Gherkin keywords
     // are Gherkin's own dialect (export.js GHERKIN_DIALECT), the steps the spec's EARS clauses.
     gherkin: {
       autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_export {format: \"gherkin\"} (dev-spec export <feature> --gherkin).",
@@ -2672,7 +2672,7 @@ const msg = {
       wroteMany: (n, scenarios) => `✎ wrote ${n} .feature file(s) — ${scenarios} scenario(s)`,
       noFeatures: "No active feature with acceptance criteria to export.",
     },
-    // 1.16 E2 — tracker CSV (spec_export {format: "jira" | "linear"}): the text dev-spec adds to the work items; the column
+    // tracker CSV (spec_export {format: "jira" | "linear"}): the text dev-spec adds to the work items; the column
     // names are the importers' own (English — never translated).
     trackerCsv: {
       autogen: "AUTO-GENERATED by dev-spec — do not edit by hand; leave this column unmapped. Regenerate: spec_export {format: \"jira\" | \"linear\"} (dev-spec export --tracker jira|linear).",
@@ -2681,7 +2681,7 @@ const msg = {
       taskLine: (rel, n) => `dev-spec task #${n} — ${rel}`,
       wrote: (file, n) => `✎ wrote ${file} — ${n} work item(s)`,
     },
-    // 1.25 — the decision log as Architecture Decision Records (spec_export {format: "adr"}): MADR's section headings and the
+    // the decision log as Architecture Decision Records (spec_export {format: "adr"}): MADR's section headings and the
     // labels around them. The front matter (status / date and their values), ADR numbers, D-n IDs and file names stay English.
     adr: {
       autogen: "AUTO-GENERATED by dev-spec from the decision log (.specs/<feature>/decisions.md) — record decisions there (spec_decide), never in this file. Regenerate: spec_export {format: \"adr\"} (dev-spec export --adr --write).",
@@ -2702,7 +2702,7 @@ const msg = {
       stale: (file) => `stale: ${file} — --write removes it (no decision backs it any more)`,
       summary: (n, w, u, r) => `ADRs: ${n} — ${w} file(s) written · ${u} unchanged · ${r} removed`,
     },
-    // 1.16 E3 — milestones (spec_roadmap_edit {kind: "milestone"}; roadmap.json meta.milestones): the status codes stay English (on-track · at-risk ·
+    // milestones (spec_roadmap_edit {kind: "milestone"}; roadmap.json meta.milestones): the status codes stay English (on-track · at-risk ·
     // late · done), these are their labels.
     milestone: {
       title: "Milestones",
@@ -2755,13 +2755,13 @@ const msg = {
       signedForced: (ids) => `Signed off with force — the failing checks are recorded with the sign-off: ${ids}.`,
       stillPending: (phase, missing) => `'${phase}' stays pending until every role has signed off its current content — ${missing}.`,
       approvedByRoles: (phase, roles) => `'${phase}' is approved — every role signed off the current content: ${roles}.`,
-      // r5 review: one person signing a phase for two required roles — a warning, never a refusal
+      // one person signing a phase for two required roles — a warning, never a refusal
       sameSigner: (by, phase, roles) => `Note: ${by} signed '${phase}' for several roles (${roles}) — role sign-offs are meant to come from different people.`,
       staleSignOffs: (list) => `sign-offs made before the artifact changed no longer count (re-sign the current content): ${list}`,
       resigning: (list) => `re-sign in progress (the phase stays approved as it was until every role has signed the new content): ${list}`,
       unsigned: (list) => `approved without the role sign-offs now required (approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign): ${list}`,
       approveRoles: (phase, slug, missing, signed, first) => `Review & sign off '${phase}' — ${missing}${signed ? ` (signed: ${signed})` : ""}: /approve ${slug} ${phase} --role ${first}.`,
-      // 1.21 review A1 — every required role signed the current content, yet the phase has no approval (the sign-offs were recorded
+      // every required role signed the current content, yet the phase has no approval (the sign-offs were recorded
       // apart: on two branches git merged, or before a role was dropped). Any of them signs again and the phase is approved.
       signedAll: (roles) => `every role signed: ${roles} — not approved yet`,
       signoffsComplete: (list, cmd) => `every role signed off, but the phase was never approved (the sign-offs were recorded apart — on two merged branches, or before a role was dropped): ${list} — one of those roles signs again to complete it: ${cmd}`,
@@ -2780,20 +2780,20 @@ const msg = {
       ffWhyRole: (roles, slug, phase, through, given) => (given ? `'${given}' is not a role that signs off '${phase}' (roles: ${roles})` : `'${phase}' is signed off per role (${roles})`) +
         ` — nothing was recorded for '${phase}'. Run the fast-forward again as the role you sign for: /approve ${slug} --through ${through} --role <role> (CLI: ${DEV_SPEC} approve ${slug} --through ${through} --role <role>); it resumes at '${phase}'.`,
       ffHint: (slug, list, role) => `Every planning artifact through tasks is filled and passes its gate — fast-forward: /approve ${slug} --through tasks${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through tasks${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate.`,
-      // 1.21 review C3 — a size xs / s plan whose Phase 4 tests gate is still ahead: the call ends before it
+      // a size xs / s plan whose Phase 4 tests gate is still ahead: the call ends before it
       ffHintTests: (slug, list, through, role) => `Every planning artifact through ${through} is filled and passes its gate — fast-forward: /approve ${slug} --through ${through}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through ${through}${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate. Then Phase 4: write the failing tests / eval sets (/spec ${slug} tests), approve tests, then the tasks.`,
       batch: (n) => `  batch approvals (fast-forward): ${n}`,
     },
 
-    // 1.16 U — undo a tick (spec_complete_task {undo} / `dev-spec undone`), revoke an approval (spec_approve {revoke} /
+    // undo a tick (spec_complete_task {undo} / `dev-spec undone`), revoke an approval (spec_approve {revoke} /
     // `approve --revoke`) and the waiver a forced approval carries (reason / expires).
     undo: {
       unticked: (n, slug, runnable, stale) => `Task ${n} is open again (unticked).` +
         (stale ? ` Its recorded evidence no longer counts — ticking it again needs ${runnable ? `a new run of its _Verify:_ command: ${DEV_SPEC} done ${slug} ${n} --run` : "new evidence"}.` : ""),
       alreadyOpen: (n) => `Task ${n} is not ticked — nothing to undo.`,
-      // 1.16 U review 1: an _Expect: fail_ task keeps its red run through an undo (the fix may already be in)
+      // an _Expect: fail_ task keeps its red run through an undo (the fix may already be in)
       redKept: (n, slug, day) => `Its red run of ${day} (the _Expect: fail_ proof) is kept: ticking it again needs a new run of its _Verify:_ command — once the fix is in, a passing run counts as the fix going green: ${DEV_SPEC} done ${slug} ${n} --run.`,
-      // 1.16 U review 2: several ticked tasks share the number — refused
+      // several ticked tasks share the number — refused
       duplicateTicked: (n, list) => `Several ticked tasks share number ${n} (${list}) — undo can't tell which tick was the mistake. Renumber them first so each number is unique (doctor: duplicate-tasks), then undo the one ticked by mistake. Nothing was changed.`,
       duplicateItem: (line, text) => `line ${line}: "${text}"`,
       reopened: (slug) => `'${slug}' was finished or signed off — once the task is done again, finish it again (/spec-finish ${slug}) and sign it off again (/approve ${slug} execution).`,
@@ -2814,15 +2814,15 @@ const msg = {
       signOffsToo: (roles) => `The role sign-offs waiting for it were withdrawn too: ${roles}.`,
       laterStay: (list, phase) => `Nothing cascades: the later phases stay approved (${list}); approving another phase is refused (phase-order) until '${phase}' is approved again.`,
       notApproved: (phase, slug) => `'${phase}' is not approved for ${slug} and no role sign-off is waiting for it — nothing to revoke.`,
-      // 1.24 review 6: a revoke confirmed over MCP whose approval / waiting sign-offs changed after the question (preview)
+      // a revoke confirmed over MCP whose approval / waiting sign-offs changed after the question (preview)
       changedSincePreview: (phase, slug) => `Nothing revoked: what '${phase}' of ${slug} holds changed after the user was asked to confirm revoking it (approved again, or revoked, meanwhile) — ask them again, so they confirm what is there now.`,
-      // r5 review: with approval roles configured for the phase, a revocation names a listed role; before the approval it withdraws that role's own sign-off
+      // with approval roles configured for the phase, a revocation names a listed role; before the approval it withdraws that role's own sign-off
       roleRequired: (phase, slug, roles) => `'${phase}' is signed off per role (${roles}) — a revocation names the role revoking it: /approve ${slug} ${phase} --revoke --role <role>. Nothing recorded.`,
       noSignOff: (role, phase, slug, waiting) => `'${role}' has no sign-off waiting for '${phase}' of ${slug} — nothing to withdraw (waiting: ${waiting}); a role withdraws only its own sign-off.`,
       phaseRequired: "Name the phase whose approval to revoke.",
       noThrough: "revoke takes one phase — not through (the fast-forward).",
       noForce: "revoke takes no force or expires — it removes an approval; reason says why.",
-      // 1.16 U review 3: a revocation after the finish / the execution sign-off (drift's stale line, next_action's sign-off step)
+      // a revocation after the finish / the execution sign-off (drift's stale line, next_action's sign-off step)
       driftWhy: (list) => `approval revoked: ${list} (approve it again before finishing again)`,
       signOffWhy: (list) => `the revocation of ${list}`,
     },
@@ -2862,7 +2862,7 @@ const msg = {
       },
     },
 
-    // 1.14 B5 — red → green (_Expect: fail_), project checks (roadmap.json meta.checks) + the finish suite run, `dev-spec log`.
+    // red → green (_Expect: fail_), project checks (roadmap.json meta.checks) + the finish suite run, `dev-spec log`.
     redGreen: {
       passRefused: (n) => `Task ${n} expects its test to FAIL (_Expect: fail_), but the run passed (exit 0) — the test doesn't fail yet, so it tests nothing. Make it fail for the right reason (an assertion, "not implemented" — not a typo or a missing import), then record that run. Not marking it done.`,
       passTicked: (n) => `Task ${n} is ticked, but it expects its test to FAIL (_Expect: fail_) and this run passed (exit 0) with no red run recorded before it — the test tests nothing: recorded; the task now counts as unverified until a failing (red) run is recorded.`,
@@ -2872,10 +2872,10 @@ const msg = {
       redRecorded: (n, code) => `  ✓ red run recorded for task ${n} (exit ${code}) — the test fails before its fix, as _Expect: fail_ expects.`,
       shellNotRed: (cmd) => `the default Windows shell (cmd.exe) could not run \`${cmd}\` as written — that is no red test (_Expect: fail_). Nothing was recorded; the task stays open.`,
       pwshNotRed: (cmd, what) => `PowerShell could not parse \`${cmd}\` (${what}) — the command never ran, so that is no red test (_Expect: fail_). Nothing was recorded; the task stays open. Windows PowerShell 5.1 has no && / || (use ; or pwsh 7).`,
-      // full review Ga2: a non-zero run whose output shows the test never ran (a missing test file, module or script…).
+      // a non-zero run whose output shows the test never ran (a missing test file, module or script…).
       cantRunOutput: (n, code, what, ticked) => `Task ${n}: the run exited ${code}, but its output shows the test never ran (${what}) — that is no red test (_Expect: fail_): a missing test file, module or script is not the right reason. Write the test so it fails on an assertion (or "not implemented"), then record that run. ` + (ticked ? "Recorded; the task now counts as unverified." : "Not marking it done."),
       notRed: (cmd, what) => `\`${cmd}\` failed, but its output shows the test never ran (${what}) — that is no red test (_Expect: fail_): a missing test file, module or script is not the right reason. Nothing was recorded; the task stays open. Write the test so it fails on an assertion (or "not implemented"); then run done --run again.`,
-      // 1.23 review: a crash (exit 128 + SIGSEGV / SIGABRT…, a Windows crash code such as 0xC0000005) is a failed run, never a red test
+      // a crash (exit 128 + SIGSEGV / SIGABRT…, a Windows crash code such as 0xC0000005) is a failed run, never a red test
       crashNotRed: (n, code, ticked) => `Task ${n}: the run crashed (exit ${code} — a signal such as SIGSEGV / SIGABRT, or a Windows crash code) — that is no red test (_Expect: fail_): a crash is not the test failing for the right reason. Make the test fail on an assertion (or "not implemented"), then record that run. ` + (ticked ? "Recorded; the task now counts as unverified." : "Not marking it done."),
       prRed: "the expected red run (_Expect: fail_)",
       prRedKept: (code, day) => `red run before the fix: exit ${code}${day ? " on " + day : ""}`,
@@ -2915,7 +2915,7 @@ const msg = {
       posixOnWindows: (name, cmd, kinds) => `the project check '${name}' (\`${cmd}\`) uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing. Nothing was run. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash), with --shell pwsh for a PowerShell command (or hand PowerShell the script in double quotes: pwsh -NoProfile -Command "…") — or --shell cmd to run it under cmd.exe anyway.`,
       pwshInPosix: (name, cmd, kinds, shell) => `the project check '${name}' (\`${cmd}\`) hands PowerShell a script holding ${kinds.map((k) => ({ variable: "$VARIABLES", backtick: "backticks" })[k] || k).join(" and ")} outside single quotes, but a POSIX shell (${shell}) runs the line and expands them first — \`exit $LASTEXITCODE\` becomes a bare \`exit\` (exit 0), so a failing check could be recorded as passing. Nothing was run. For a POSIX shell put the script in single quotes, or run the checks with --shell pwsh (or DEV_SPEC_SHELL=pwsh) and write the bare PowerShell.`,
     },
-    // full review Ga1 / Ga9 / Ga10 — `done --run` / `finish --run`: a command that could not run (the shell never started, a
+    // `done --run` / `finish --run`: a command that could not run (the shell never started, a
     // signal, --timeout, output over the buffer, WSL's bash launcher) is refused and NOTHING is recorded (never an exit 1).
     runGate: {
       taskRefused: (cmd, why) => `\`${cmd}\` could not run (${why}) — nothing was recorded; the task stays open.`,
@@ -2931,7 +2931,7 @@ const msg = {
       },
       wslBash: (p) => `--shell ${p} is WSL's bash.exe launcher: it runs the command inside a Linux distribution (or fails with "execvpe(/bin/bash) failed"), not in a shell on this machine — used as you asked; a run WSL can't start is not recorded. For a shell on this machine use Git Bash: --shell bash finds it (Git for Windows).`,
       wslExe: (p) => `--shell ${p} is wsl.exe, which is no shell (it rejects the -c every shell run uses) — refused, nothing was run. Name WSL's bash.exe by its path to run inside WSL, or use --shell bash for Git Bash.`,
-      // 1.24 r6 D4 — done --run: a command that passed without running a test (couldNotRun "no-tests")
+      // done --run: a command that passed without running a test (couldNotRun "no-tests")
       noTests: (cmd, what) => `\`${cmd}\` passed, but its output shows no test ran (${what}) — a run that tests nothing proves nothing (a glob, a path or a filter that matches no test). Nothing was recorded; the task stays open. Fix the _Verify:_ command (or the test it names), then run done --run again.`,
       noGitBash: "--shell bash: no Git Bash was found (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — a bash.exe in System32 or WindowsApps is WSL's launcher, which runs the command inside a Linux distribution, so it is never used. Nothing was run. Install Git for Windows, or pass --shell with the full path of a bash.exe.",
     },
@@ -2948,12 +2948,12 @@ const msg = {
       noGit: "git is not available here, or this is not a git repository with commits — dev-spec log reads `git log`. Or pipe a log in: git log --name-only --relative | " + DEV_SPEC + " log <feature> -",
     },
 
-    // 1.14 C1 — the evidence gate at the end of a turn (hooks/stop-hook.js on Stop / SubagentStop, `dev-spec stop-check`) and the
+    // the evidence gate at the end of a turn (hooks/stop-hook.js on Stop / SubagentStop, `dev-spec stop-check`) and the
     // scope guard (roadmap.json meta.guard = "scope"). claims / negators / admissions are regex sources the engine applies from
     // EVERY language (an agent may answer in another language than the project's) as whole words, case-insensitive. Conservative
     // on purpose: a claim counts only outside code and quotes, not in a question, and not after a negator or a condition.
     stopGate: {
-      // 1.25.1: no bare verb — "verified", "implemented", "completed" alone claimed "I verified that the bug is in the parser" and
+      // no bare verb — "verified", "implemented", "completed" alone claimed "I verified that the bug is in the parser" and
       // "the migration was completed in 2023" (STOP_EN_* above, common.js stopLineClaim).
       claims: [
         String.raw`all\s+(?:done|finished|complete|completed|implemented|verified|green)`,
@@ -2981,16 +2981,16 @@ const msg = {
         String.raw`[1-9]\d*\s*(?:\/\s*\d+\s+)?(?:tests?\s+)?(?:passing|passed)`,
         String.raw`(?:everything|it|all|this)\s+(?:now\s+)?works`,
         String.raw`(?:fully|thoroughly)\s+tested|tested\s+and\s+(?:working|verified)`,
-        // "Ready to merge.", "Good to go." (1.25.1 — "Work complete — ready to merge." claimed nothing)
+        // "Ready to merge.", "Good to go." ("Work complete — ready to merge." claimed nothing)
         String.raw`(?:ready|good)\s+(?:to\s+(?:merge|ship|release|deploy|go)|for\s+(?:(?:the|a)\s+)?(?:merge|merging|release|shipping|deploy(?:ment)?|review|pr|pull\s+request|production))`,
       ],
-      // 1.25.1 — the words every claim above holds at least one of (whole words, case-insensitive): a message holding none of a
+      // the words every claim above holds at least one of (whole words, case-insensitive): a message holding none of a
       // language's triggers runs none of its claim patterns (the engine's stopClaims, the Stop hook's pre-filter) — most closing messages
       // claim nothing, and compiling every pattern of every language cost each Stop ~35 ms. A new claim pattern adds its word here
       // (mcp/tests/10-guards-hooks-r7.js checks every claim test message is still read the same).
       triggers: [String.raw`done|finished|complete|completed|implemented|verified|tested|green|pass|passes|passed|passing|works|ready|good|status`],
       // Up to 3 words before a claim, in the same sentence: it is negated or only a condition / a plan ("not done", "once the
-      // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes). 1.25.1: "how" — "Here's how
+      // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes). "how" — "Here's how
       // the retry is implemented:" describes the code.
       negators: ["not", "never", "no", "nothing", "nor", "none", "without", "cannot", "will", "would", "should", "must", "need", "needs", "to",
         "going", "gonna", "can", "could", "may", "might", "until", "unless", "before", "once", "when", "whenever", "after", "if", "whether",
@@ -3007,7 +3007,7 @@ const msg = {
       // A failure named after (or before) one of these words is history, not an admission: "I fixed the 2 failing tests",
       // "Previously 4 tests failed", "the 3 failures from yesterday are fixed" (stopPastFailure — a negator before the word keeps it).
       fixed: ["fixed", "resolved", "repaired", "addressed", "previously", "formerly", "earlier"],
-      // 1.22 review — a count of ZERO right before an admission makes it none ("0 tests failing", "no tests fail", "none of the
+      // a count of ZERO right before an admission makes it none ("0 tests failing", "no tests fail", "none of the
       // tests fail", "zero tests failed"): it says nothing is failing. Regex sources, read just before the admission.
       zeroes: [String.raw`0|zero|no|none(?:\s+of(?:\s+(?:the|these|those|them|my|our))?)?`],
       // …and a failure that "now passes" in the same clause is one already fixed ("the 2 failing tests now pass").
@@ -3026,12 +3026,12 @@ const msg = {
         noRun: (file, cmds) => `its report (${file}) doesn't show the _Verify:_ run — the exact command and its exit code: ${cmds}.`,
         notPassing: (file, cmds) => `its report (${file}) shows no passing run (exit 0) of ${cmds} — a DONE task's _Verify:_ must pass.`,
         notFailing: (file, cmds) => `its report (${file}) shows no failing run (a non-zero exit code) of ${cmds} — the task is marked _Expect: fail_: its proof is the red run.`,
-        // 1.25.1 (review 7): the codes are read per run — the LAST run of each _Verify:_ command decides
+        // the codes are read per run — the LAST run of each _Verify:_ command decides
         lastNotPassing: (file, cmds) => `its report (${file}) ends on a failing run of ${cmds} — the last run of it the report shows exits non-zero; a DONE task's _Verify:_ must pass on the final code.`,
         lastNotFailing: (file, cmds) => `its report (${file}) ends on a passing run of ${cmds} — the task is marked _Expect: fail_: the last run of it the report shows must be the red one (a non-zero exit code).`,
         todo: "Run the command on the final code and put the command, its exit code and the last lines of its output in the report — or report BLOCKED / NEEDS_CONTEXT if it can't pass. (Evidence before claims: the controller ticks the task only with that run.)",
       },
-      // 1.22 — the spec-simplifier's DONE (SubagentStop): its report must end with the final passing runs.
+      // the spec-simplifier's DONE (SubagentStop): its report must end with the final passing runs.
       simplifier: {
         head: (slug) => `dev-spec evidence gate: you report the simplification pass of '${slug}' as DONE, but`,
         noReport: (file) => `its report (${file}) does not exist.`,
@@ -3071,7 +3071,7 @@ const msg = {
       },
     },
 
-    // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).
+    // the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).
     // IDs (D-n), the markers (_Kind:_ _Date:_ _Affects:_ _Supersedes:_ _Outcome:_) and their values stay English.
     decisions: {
       header: (name) => `# Decisions: ${name}
@@ -3152,7 +3152,7 @@ _Outcome: [go | no-go | pivot]_
 `,
       badTimebox: (v) => `timebox must be an end date (YYYY-MM-DD) or a duration from today (e.g. 3d, 2w, 8h) — got ${v}.`,
       spikeOnly: (arg) => `${arg} only applies to a spike (kind: "spike").`,
-      // 1.24 r6 B9: the CLI names its flag and its own way to make a spike (as bugPrefill.bugOnlyCli does)
+      // the CLI names its flag and its own way to make a spike (as bugPrefill.bugOnlyCli does)
       spikeOnlyCli: (flag) => `${flag} only applies to a spike — create it as one: ${DEV_SPEC} spike "<name>" ${flag} "…" (or --kind spike).`,
       tracksIgnored: (list) => `A spike is core-only — tracks ignored (${list}); give them to the feature you spec after a 'go'.`,
       noTracks: (slug) => `'${slug}' is a spike — it has no tracks. After a 'go', spec the real feature with its tracks (spec_create).`,
@@ -3203,7 +3203,7 @@ _Outcome: [go | no-go | pivot]_
       cliUntil: (d) => `  timebox: until ${d}`,
     },
 
-    // Flows (1.14 C3) — design-first. The flow values (requirements-first · design-first) and phase tokens stay English-stable.
+    // Flows — design-first. The flow values (requirements-first · design-first) and phase tokens stay English-stable.
     flow: {
       required: (slug, known) => `flow required — one of: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: ${DEV_SPEC} feature flow ${slug} <flow>).`,
       kindRefused: (slug, kind) => `'${slug}' is a ${kind}: it follows its own fixed phase order — the flow applies to features only.`,
@@ -3216,7 +3216,7 @@ _Outcome: [go | no-go | pivot]_
       nextNote: (order) => `(design-first flow: ${order})`,
       laterPhase: (detail) => `requirements.md is a later phase (design-first) — ${detail}`,
     },
-    // 1.25 — a feature's own git branch (spec_create {branch} / create --branch). Branch names, commands and git's own words stay as given.
+    // a feature's own git branch (spec_create {branch} / create --branch). Branch names, commands and git's own words stay as given.
     branch: {
       invalid: (name) => `'${name}' is not a branch name dev-spec can hand to git: letters, digits, '.', '_', '+', '-' and '/' only (no space, quote or shell character), no '..' or '//', no part starting with '.' or ending with '.lock', not starting with '-' or '/', not ending with '/' or '.', not HEAD — at most 200 characters.`,
       empty: "branch: give a name, or true for the default (feature/<slug> · fix/<slug> for a bugfix · spike/<slug> for a spike).",
@@ -3237,7 +3237,7 @@ _Outcome: [go | no-go | pivot]_
       cliFailed: (command, why) => `  ▲ ${command} failed${why ? `: ${why}` : ""} — the branch is recorded; run the command once that is fixed.`,
       cliTrackWord: (word) => `--branch ${word}: '${word}' is a track — put the tracks before --branch (create "<name>" ${word} --branch), or write --branch=${word} for a branch of that name.`,
     },
-    // spec_import plan · execplan · bmad (1.14 C3). Headings in the feature's language; IDs and markers stay English-stable.
+    // spec_import plan · execplan · bmad. Headings in the feature's language; IDs and markers stay English-stable.
     importPlans: {
       plansDir: "Claude Code plan mode keeps plans under plansDirectory (default ~/.claude/plans — outside the project): copy the plan into the project first, or set plansDirectory to a folder inside it.",
       several: (dir, list) => `'${dir}' holds several documents (${list}) — pass the one to import.`,
@@ -3251,7 +3251,7 @@ _Outcome: [go | no-go | pivot]_
       wUnknownAc: (story, task, list) => `${story}, '${task}': AC reference(s) ${list} match no criterion of that story — kept as written`,
       wWorkflow: (list) => `BMAD workflow records not imported (left in place): ${list}`,
     },
-    // 1.17 F — spec_import {tool: "fluidplan"}: the text the import writes (decisions.md entries, design.md, tasks.md bodies) and its
+    // spec_import {tool: "fluidplan"}: the text the import writes (decisions.md entries, design.md, tasks.md bodies) and its
     // warnings. fluidplan's own EN / FR labels are read by the engine (FP_SEC …), never here. [NEEDS CLARIFICATION], the D-n IDs and
     // the _Requirements:_ / _Implements:_ / _Verify:_ / _Depends:_ markers stay English-stable.
     importFluidplan: {
@@ -3300,7 +3300,7 @@ _Outcome: [go | no-go | pivot]_
     },
   };
 
-// 1.16 Q — spec quality: steering amendments (Q1), cross-feature acceptance criteria (Q2), the glossary (Q3). One group per
+// spec quality: steering amendments, cross-feature acceptance criteria, the glossary. One group per
 // language, merged into MSG (pt-BR derives from pt's). Check ids, reason codes and file names stay English.
 const quality = {
     steeringChange: { modified: "changed", removed: "removed" },
@@ -3335,8 +3335,8 @@ const quality = {
     briefGlossaryOmitted: (list) => `More entries apply (size) — read them in .specs/steering/glossary.md: ${list}`,
   };
 
-// 1.17 A — every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
-// section state: missing · template · empty · few · filled) and spec_clarify's consistency nudge (A2). pt-BR derives from pt.
+// every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
+// section state: missing · template · empty · few · filled) and spec_clarify's consistency nudge. pt-BR derives from pt.
 const designWeigh = {
     "design-tradeoffs": {
       filled: (n) => (n ? `${n} option(s) weighed` : "written as prose (no option list — the options weighed in a paragraph, or why this design has no key decision)"),
@@ -3352,7 +3352,7 @@ const designWeigh = {
       empty: () => "Risks is empty — an honest 'no material risk, because X' is fine; blank is not",
       few: () => "Risks lists no risk",
     },
-    // 1.19 R1 — the Reuse & Integration section (states as above, plus `integration`: a brownfield feature's integration-plan.md
+    // the Reuse & Integration section (states as above, plus `integration`: a brownfield feature's integration-plan.md
     // → Integration Points stands in for it).
     "design-reuse": {
       filled: (n) => (n ? `${n} item(s) named (reused / extended / new)` : "written (no row or bullet — 'greenfield: nothing to reuse yet' counts)"),
@@ -3388,7 +3388,7 @@ const brief = {
     evals: "## Evals affected",
     metrics: "## Metrics to emit",
     files: "## Files (_Implements:_)",
-    // 1.19 R2 — search before you write: the design's Reuse & Integration entries for this task, and the files next to its own
+    // search before you write: the design's Reuse & Integration entries for this task, and the files next to its own
     reuse: "## Reuse — search before you write",
     reuseRule: "Before writing any helper, component, client, validator or formatter, search the codebase by concept and synonyms (references/code-reuse-and-quality.md): reuse, then extend, then create. A unit to extend outside this task's files (_Implements:_) is never edited silently — stop and ask (NEEDS_CONTEXT), or create locally and name it in the report. Your report's **Reuse** block says what you reused, extended or created, and why.",
     reuseEntries: "The design's Reuse & Integration entries for this task — reuse or extend these before writing anything new:",
@@ -3432,7 +3432,7 @@ const brief = {
       ],
     },
     metricsRule: "Every metric listed above is actually emitted — show the evidence in the report.",
-    // full review Ga7: the definition of done of an _Expect: fail_ (red) task — replaces the loop's green-making rules.
+    // the definition of done of an _Expect: fail_ (red) task — replaces the loop's green-making rules.
     redRules: [
       "This is a RED task: write (or keep) the planned test(s) exactly as the test plan describes them — no production code and no fix in this task.",
       "Run them: they must FAIL for the right reason — an assertion or \"not implemented\". A missing test file, module or script, a typo or a command that doesn't run is no red test (it is refused as one).",

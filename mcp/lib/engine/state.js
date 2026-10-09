@@ -6,7 +6,7 @@
  * (resolveFeature / existingFeature), .state.json reads, the phases and their artifacts, content fingerprints; the
  * roadmap store (read / validate / write under the roadmap lock), feature dependencies, the backlog, the roadmap
  * language, the generated-file guard (RE_AUTOGEN) and the roadmap writers; the semantic 3-way merge of .state.json /
- * roadmap.json behind git's merge driver (1.21 F1a — mergeStateJson, pure).
+ * roadmap.json behind git's merge driver (mergeStateJson, pure).
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -40,7 +40,7 @@ function errs(projectDir, slug) {
 function slugify(name) {
   return slugifyFull(name).slice(0, 64).replace(/-+$/, "");
 }
-// The slug before slugify's 64-character cut — the same text when the name fits (1.23 review 5: two names that differ only
+// The slug before slugify's 64-character cut — the same text when the name fits (two names that differ only
 // past the cut reach one folder; spec_create tells them apart with it).
 function slugifyFull(name) {
   if (name == null) return ""; // never "undefined" — a missing name must not become a folder
@@ -63,9 +63,9 @@ function legacySlugify(name) {
 
 // Windows reserves these device names in every directory (`.specs\nul\` is unusable from most tools).
 const RE_WIN_RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)$/;
-const RESERVED_SLUGS = new Set(["steering", "exports", "templates", "tracks"]); // folders under .specs/ that are not features (1.14: exports/ holds spec_export's documents, templates/ the project's templates; 1.15: tracks/ the project's track packs)
-// Is this folder name under `root` (.specs/ or .specs/_archive/) reserved? "steering" always; "templates" / "exports" (1.14) and
-// "tracks" (1.15 — the track packs) unless that folder is a FEATURE created before them — it holds a .state.json: it stays a feature (listed,
+const RESERVED_SLUGS = new Set(["steering", "exports", "templates", "tracks"]); // folders under .specs/ that are not features (exports/ holds spec_export's documents, templates/ the project's templates; tracks/ the project's track packs)
+// Is this folder name under `root` (.specs/ or .specs/_archive/) reserved? "steering" always; "templates" / "exports" and
+// "tracks" (the track packs) unless that folder is a FEATURE created before them — it holds a .state.json: it stays a feature (listed,
 // reachable, renameable) and is never read as templates (templateFileList), so an upgrade never turns a filled spec into
 // every new feature's scaffold.
 function reservedSlug(name, root) {
@@ -172,7 +172,7 @@ function fingerprintText(raw, phase) {
   return phase === "tasks" ? uncheckTasks(text) : text;
 }
 const sha1Hex = (text) => require("crypto").createHash("sha1").update(text).digest("hex");
-// r5 review — the text a WHITESPACE-ONLY edit leaves unchanged: fingerprintText with each line's trailing whitespace and the blank lines
+// the text a WHITESPACE-ONLY edit leaves unchanged: fingerprintText with each line's trailing whitespace and the blank lines
 // at the end dropped (an editor's "trim trailing whitespace" / "insert final newline", a formatter). The recorded fingerprint keeps
 // its rule (every approval recorded so far stays valid, and two records of the same content still compare equal); this text is
 // compared with the approval's own .history snapshot when the fingerprint no longer matches (gates.js wsOnlyEdit) — linear: no
@@ -183,7 +183,7 @@ function wsText(raw, phase) {
   while (end > 0 && lines[end - 1] === "") end--;
   return lines.slice(0, end).join("\n");
 }
-// 1.24 review 6 (E-I5) — the fingerprint of wsText: recorded as `wsFingerprint` (`designWsFingerprint`) on every NEW approval, its
+// the fingerprint of wsText: recorded as `wsFingerprint` (`designWsFingerprint`) on every NEW approval, its
 // history record and each role sign-off, next to `fingerprint` (which keeps its rule). Two versions that differ only in trailing
 // whitespace / final blank lines share it — a waiting role sign-off (no snapshot of its own) of such a version still counts, and
 // changedSinceApproval needs no .history snapshot to tell a whitespace-only edit. Older records have none: the snapshot fallback.
@@ -204,17 +204,17 @@ function fingerprintMatches(raw, phase, stored) {
 }
 const BOM_CHAR = String.fromCharCode(0xfeff);
 // Checkbox state is not content. The indent is read within its line ([^\S\n\r\u2028\u2029], not \s): from each line start of a
-// long blank run \s* rescanned the whole run (1.17 H) — the lines above keep their text either way ($1 puts it back). Any GFM
-// bullet (1.22 review: `* [ ] 1.` / `+ [ ] 1.` are task lines too — the scanner reads them).
+// long blank run \s* rescanned the whole run — the lines above keep their text either way ($1 puts it back). Any GFM
+// bullet (`* [ ] 1.` / `+ [ ] 1.` are task lines too — the scanner reads them).
 const uncheckTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*[-*+]\s*\[)[xX](\])/gm, "$1 $2");
 const uncheckDashTasks = (text) => text.replace(/^([^\S\n\r\u2028\u2029]*-\s*\[)[xX](\])/gm, "$1 $2"); // the pre-1.22 rule (legacy fingerprints)
 // The artifact a phase's approval signs off: a bugfix has no design of its own — its design approval signs off bug.md
 // (the Root Cause the gate checks). approvePhase records it as `file` on the approval, so changedSinceApproval
 // compares the right file (an approval without `file` signed off PHASE_FILE's, as before).
-// 1.21 F5: a change's plan approval (its `tasks` phase) signs off change.md — the one file of a change.
+// a change's plan approval (its `tasks` phase) signs off change.md — the one file of a change.
 const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "bug.md" : phase === "tasks" && kind === "change" ? "change.md" : PHASE_FILE[phase]);
 
-// 1.21 F5 — feature sizes: spec_create {size: xs | s | m | l} stored in .state.json `size` (a plain value — git's merge driver
+// feature sizes: spec_create {size: xs | s | m | l} stored in .state.json `size` (a plain value — git's merge driver
 // needs no rule). xs = a change (one change.md) or an XS bugfix (its plan approved in one call — every bugfix's tasks.md is the
 // two-task form); s = one story, the track sections of the "core" tier (TRACK_SECTIONS tier "extended" optional), the three weigh
 // sections merged; m / l = the full chain with the duplicate sections merged (TRACK_OVERLAPS, CORE_SUPERSEDED_BY). No size
@@ -261,7 +261,7 @@ const PHASE_PERCENT = {
 };
 
 function phasePercent(phase, flow) {
-  phase = positionPhase(phase, flow); // C3: design-first walks design (8%) before requirements (16%) — the same run-up, in its own order
+  phase = positionPhase(phase, flow); // design-first walks design (8%) before requirements (16%) — the same run-up, in its own order
   return PHASE_PERCENT[phase] != null ? PHASE_PERCENT[phase] : 0;
 }
 
@@ -269,7 +269,7 @@ function phasePercent(phase, flow) {
 // PLANNING_CEILING → 100 in proportion to the tasks actually completed.
 // "complete" is the only phase that reaches 100; an in-flight "executing"
 // feature is capped at 99 so it can never masquerade as done.
-function featurePercent(phase, tasksDone, tasksTotal, flow) { // flow (C3): the feature's — design-first swaps the design / requirements steps
+function featurePercent(phase, tasksDone, tasksTotal, flow) { // flow: the feature's — design-first swaps the design / requirements steps
   if (phase === "complete") return 100;
   if (phase === "tasks-ready" || phase === "executing") {
     const total = Number(tasksTotal) || 0;
@@ -365,7 +365,7 @@ function findCycle(depsMap) {
   }
   return cycle;
 }
-// 1.24 r6 (G6) — EVERY dependency cycle (findCycle stops at the first: `a → a` hid `b ↔ c`): the strongly connected components
+// EVERY dependency cycle (findCycle stops at the first: `a → a` hid `b ↔ c`): the strongly connected components
 // with more than one feature, or one naming itself (Tarjan's, iterative — no recursion depth). → [{ members, path }] in the order
 // their first feature appears in the map; `path` a cycle through the component's first feature (`a → b → c → a`, the shortest one
 // its own edges give, closed on its start — as findCycle reports one), `members` every feature of it (a component can hold more
@@ -465,7 +465,7 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   const added = resolveDeps(edits.add);
   if (unknownNames.length) return { ok: false, error: D.unknown(unknownNames.join(", ")) };
   // order: a SAFE integer, as spec_roadmap_edit {kind: "depend"}'s schema ({type: "integer"} — no bound) — the CLI passes the raw word, and
-  // `--order 99999999999999999999` matched the digits and was stored as 1e20 (1.22 review). Refused with the MCP
+  // `--order 99999999999999999999` matched the digits and was stored as 1e20. Refused with the MCP
   // validator's own message (args), so both surfaces refuse the same values alike.
   const orderNum = order == null ? null : orderInput(order);
   if (order != null && orderNum === null) {
@@ -507,7 +507,7 @@ function roadmap(projectDir) {
   const pctByName = Object.create(null); // a dep named "constructor" must not read Object.prototype's
   const feats = list.features.map((f) => {
     const meta = rm.features[f.name] || {};
-    const pct = featurePercent(f.phase, f.tasksDone, f.tasks, f.flow); // C3: f.flow — a design-first feature's own order
+    const pct = featurePercent(f.phase, f.tasksDone, f.tasks, f.flow); // f.flow — a design-first feature's own order
     pctByName[f.name] = pct;
     return { name: f.name, kind: f.kind, tracks: f.tracks, phase: f.phase, percent: pct, dependsOn: meta.dependsOn || [], order: meta.order != null ? meta.order : 999 };
   });
@@ -517,7 +517,7 @@ function roadmap(projectDir) {
     f.blocked = f.unmetDeps.length > 0;
   }
   feats.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
-  // 1.24 r6 (G6): every cycle (`cycles`, one path each), `cycle` the first of them (as before: one path, or null)
+  // every cycle (`cycles`, one path each), `cycle` the first of them (as before: one path, or null)
   const cycles = findCycles(Object.fromEntries(feats.map((f) => [f.name, f.dependsOn]))).map((c) => c.path);
   const overall = feats.length ? Math.round(feats.reduce((s, f) => s + f.percent, 0) / feats.length) : 0;
   const backlog = readRoadmap(projectDir).backlog || [];
@@ -530,7 +530,7 @@ function roadmap(projectDir) {
 
 // One line: a line break in a backlog name or note became markdown structure (a heading) in ROADMAP.md and the export.
 const flatText = (s) => String(s || "").replace(/\s+/g, " ").trim();
-// 1.24 r6 (G4) — a feature NAME as a spec writes it (every title, a template's {{name}}): one line (flatText) and inert to HTML
+// a feature NAME as a spec writes it (every title, a template's {{name}}): one line (flatText) and inert to HTML
 // comments — "<!--" / "-->" as &lt;!-- / --&gt; (a name holding "<!--" opened a comment in its titles that hid every criterion
 // of the scaffold; the summary and an imported title were already made inert). The slug is the name's, as before.
 const specNameText = (s) => flatText(s).replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;");
@@ -546,10 +546,10 @@ function addBacklog(projectDir, name, note) {
   return r;
 }
 // A name already in the backlog (case-insensitive) keeps its entry and its spelling, and a NEW note is appended to its note
-// (1.19 R review 5 — add answered "added" and kept the old note, so a second refactor candidate filed under the same name was
+// (add answered "added" and kept the old note, so a second refactor candidate filed under the same name was
 // lost): joined with " · " on one line; a note the entry already holds (or none) changes nothing; the whole note stays within
 // BACKLOG_NOTE_MAX characters — past it nothing is appended and add is refused (file it under another name). Such a result
-// carries `exists: true`, `appended` and a localized `note`. A NEW entry's note (1.19 verify 5) has the same cap: past it the
+// carries `exists: true`, `appended` and a localized `note`. A NEW entry's note has the same cap: past it the
 // add is refused and nothing is written.
 const BACKLOG_NOTE_MAX = 2000;
 const BACKLOG_NOTE_SEP = " · ";
@@ -562,7 +562,7 @@ function addBacklogUnlocked(projectDir, nm, note) {
   const cur = rm.backlog.find((b) => b.name.toLowerCase() === nm.toLowerCase());
   const O = i18n.msg(projectLang(projectDir)).featureOps;
   if (!cur) {
-    // (1.19 verify 5) a new entry's note has the same cap (one line, BACKLOG_NOTE_MAX characters) — a first add stored any length
+    // a new entry's note has the same cap (one line, BACKLOG_NOTE_MAX characters) — a first add stored any length
     if (text.length > BACKLOG_NOTE_MAX) return { ok: false, backlog: rm.backlog, error: O.backlogNoteLong(nm, BACKLOG_NOTE_MAX) };
     rm.backlog.push({ name: nm, note: text });
     writeRoadmap(projectDir, rm);
@@ -614,7 +614,7 @@ function backlog(projectDir, action, name, note) {
     const A = i18n.msg(projectLang(projectDir)).args;
     return { ok: false, error: A.invalid(A.item("action", A.oneOf(BACKLOG_ACTIONS.join(", ")), JSON.stringify(String(action)))) };
   }
-  // 1.24 review 6 (E4): a roadmap.json that doesn't parse (or has the wrong shape) is an error, never "Backlog (0)" — milestone /
+  // a roadmap.json that doesn't parse (or has the wrong shape) is an error, never "Backlog (0)" — milestone /
   // depend's rule (its sanitized copy read as an empty backlog)
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -665,7 +665,7 @@ function writeRoadmapFile(projectDir, lang, data, name, render) {
   if (!fs.existsSync(root)) return { ok: false, error: errs(projectDir).noSpecs(root) };
   const file = path.join(root, name);
   if (!isGeneratedOrAbsent(file)) return { ok: false, skipped: true, file, error: errs(projectDir).notGenerated(name) };
-  // 1.23 review 5 — a roadmap.json that doesn't parse (or has the wrong shape) is read as its sanitized copy: rendered from it, the
+  // a roadmap.json that doesn't parse (or has the wrong shape) is read as its sanitized copy: rendered from it, the
   // file lost every dependency, backlog item and milestone while `roadmap --write` exited 0. The last good one is kept.
   const broken = roadmapError(projectDir);
   if (broken) return { ok: false, skipped: true, broken: true, file, error: errs(projectDir).roadmapNotWritten(name, broken) };
@@ -677,7 +677,7 @@ function writeRoadmapFile(projectDir, lang, data, name, render) {
     if (!saved.ok) return saved;
   }
   const d = data || roadmapData(projectDir);
-  writeFileAtomic(file, i18n.portableCli(render(projectDir, lang || roadmapChromeLang(projectDir), d))); // committed: `dev-spec`, never a machine path (1.21 F3)
+  writeFileAtomic(file, i18n.portableCli(render(projectDir, lang || roadmapChromeLang(projectDir), d))); // committed: `dev-spec`, never a machine path
   const rmv = d.rmv;
   return { ok: true, file, overallPercent: rmv.overallPercent, complete: rmv.complete, total: rmv.total };
 }
@@ -691,7 +691,7 @@ function maybeRefreshRoadmap(projectDir) {
     clearRoadmapStale(projectDir);
     const html = fs.existsSync(path.join(root, "ROADMAP.html"));
     // One computation for both files — none when neither may be written (hand-written ROADMAP.md, no HTML; a broken roadmap.json
-    // keeps them as they are — 1.23 review 5).
+    // keeps them as they are).
     if (!roadmapError(projectDir)) {
       const data = isGeneratedOrAbsent(path.join(root, "ROADMAP.md")) || (html && isGeneratedOrAbsent(path.join(root, "ROADMAP.html"))) ? roadmapData(projectDir) : undefined;
       writeRoadmapMd(projectDir, undefined, data);
@@ -703,7 +703,7 @@ function maybeRefreshRoadmap(projectDir) {
   }
 }
 
-// 1.24 r6 I-I1 — the save hook's DEFERRED refresh. A spec file saved through Claude Code's Write / Edit tool refreshed ROADMAP.md
+// the save hook's DEFERRED refresh. A spec file saved through Claude Code's Write / Edit tool refreshed ROADMAP.md
 // and SPECS.md on the spot (hooks/spec-hook.js, PostToolUse): every save recomputed every feature's row — ~75 % of the hook, 272 /
 // 423 / 725 ms per save at 10 / 50 / 150 features. The hook now leaves a STAMP, `.specs/.execution/roadmap-stale` (the project's
 // scratch folder, which git-ignores itself), and the refresh runs ONCE for all the saves since: at the end of the turn (the Stop /
@@ -771,7 +771,7 @@ function roadmapReport(projectDir, opts = {}) {
       if (h.ok) wrote.push(h.file); else if (!h.broken) warnings.push(h.error); // a broken roadmap.json: said once, by ROADMAP.md's error
     }
   } else {
-    // 1.23 review 5 — the view of a broken roadmap.json is its sanitized copy: say what it leaves out
+    // the view of a broken roadmap.json is its sanitized copy: say what it leaves out
     const broken = roadmapError(projectDir);
     if (broken) warnings.push(errs(projectDir).roadmapViewPartial(broken));
   }
@@ -815,7 +815,7 @@ function locateFeatures(projectDir, name) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.21 F1a — git's merge driver for the spec state: a SEMANTIC 3-way merge of .specs/<feature>/.state.json and
+// git's merge driver for the spec state: a SEMANTIC 3-way merge of .specs/<feature>/.state.json and
 // .specs/roadmap.json (`dev-spec merge-state %O %A %B %P`; `dev-spec merge-state --install` writes the .gitattributes lines
 // and the clone's git config). Two branches that both approve phases, tick tasks or record evidence used to conflict in these
 // JSON files — a text merge can't union two lists. PURE: JSON values in, the merged value and the real conflicts out; no file,
@@ -978,7 +978,7 @@ const mergeLaterTime = (b, o, t, p, ctx) => (typeof o === "string" && typeof t =
 const mergeEarlierTime = (b, o, t, p, ctx) => (typeof o === "string" && typeof t === "string" ? (mergeTime(t) < mergeTime(o) ? t : o) : mergeConflict(ctx, p, b, o, t));
 // evidence[n] / finishChecks[name]: the record whose latest run is the later; the same run on both sides → its annotations
 // merged (a note, a stale mark — an undo, a reopen); the runs of both histories, deduped, chronological, bounded.
-// r5 review: evidence[n] of two tasks that share the number n — a record carries its task's stamp (`task`) and the OTHER tasks'
+// evidence[n] of two tasks that share the number n — a record carries its task's stamp (`task`) and the OTHER tasks'
 // records in `others` (storeEvidence). The merge kept the winning side's record and `others` only: the other side's `others`, and its
 // own record when it was another task's, were lost (and that task's runs were merged into the winner's history). Now: the runs of
 // the SAME task (or of records without a stamp — v1.12 / finishChecks) merge as before; every other task's record is kept in
@@ -1016,7 +1016,7 @@ function mergeRunRecord(b, o, t, p, ctx) {
   }
   return rec;
 }
-// `branch` (1.25 — create --branch): recorded once, when the feature started on its own git branch. Two records (each side recorded
+// `branch` (create --branch): recorded once, when the feature started on its own git branch. Two records (each side recorded
 // one) → the EARLIER — its `at`: where the feature started first, as createdAt (a record without a time reads as the later one); the
 // same time → the same name is one record (ours' fields over theirs'), two names a conflict (ours kept).
 function mergeBranchRecord(b, o, t, p, ctx) {
@@ -1038,7 +1038,7 @@ function mergeFinished(b, o, t, p, ctx) {
   return win;
 }
 // The revocations that cut waiting sign-offs: { all: phase → time (an approval revoked, or a partial revocation that withdrew every
-// waiting sign-off — the rule before 1.23), byRole: phase → role → time (r5 review: a partial revocation flagged `roleOnly` withdrew the
+// waiting sign-off — the rule before 1.23), byRole: phase → role → time (a partial revocation flagged `roleOnly` withdrew the
 // sign-off of the role it names in `roles` — the others stayed, and a merge keeps them) }.
 function signoffRevocations(hist) {
   const all = Object.create(null), byRole = Object.create(null);
@@ -1080,7 +1080,7 @@ function mergeApprovals(hist) {
     return out;
   };
 }
-// approvals → without an approval older than a (non-partial) revocation of its phase — the same object when none is (r5 review).
+// approvals → without an approval older than a (non-partial) revocation of its phase — the same object when none is.
 function pruneRevokedApprovals(a, hist) {
   if (!isObj(a)) return a;
   const revokedAt = revocationTimes(hist, false);
@@ -1095,7 +1095,7 @@ function pruneRevokedApprovals(a, hist) {
 // signoffs[phase][role]: the later sign-off (per role; a deleted-vs-changed entry keeps the change). The drop rule is
 // pruneSignoffs', applied to the 3-way RESULT.
 const mergeSignoffs = mergeMapWith(mergeMapWith((b, o, t, p, ctx) => (isObj(o) && isObj(t) ? laterAt(o, t) : mergeConflict(ctx, p, b, o, t))));
-// The drop rule (1.21 review A1): a waiting sign-off no later than a revocation of its phase or than the phase's merged approval
+// The drop rule: a waiting sign-off no later than a revocation of its phase or than the phase's merged approval
 // is gone — run on whatever the 3-way gave, also when only ONE side changed signoffs (mergeThree hands that side back as it is:
 // its sign-off stayed next to the other side's later approval). → the signoffs (the same object when nothing drops), or undefined
 // once none is left. The driver never APPROVES anything: sign-offs of every role made on two branches stay waiting sign-offs —
@@ -1123,7 +1123,7 @@ function pruneSignoffs(m, hist, approvals) {
 function mergeFeatureState(b, o, t, ctx) {
   const H = mergeThree(ownVal(b, "approvalHistory"), o.approvalHistory, t.approvalHistory,
     () => mergeHistoryBy(HISTORY_ID)(ownVal(b, "approvalHistory"), o.approvalHistory, t.approvalHistory, ["approvalHistory"], ctx));
-  // (r5 review: "revocations win by time" on the 3-way RESULT — when only one side changed approvals, mergeThree handed that side back
+  // ("revocations win by time" on the 3-way RESULT — when only one side changed approvals, mergeThree handed that side back
   // unfiltered, so an approval older than a revocation the other side recorded survived)
   const A = pruneRevokedApprovals(mergeThree(ownVal(b, "approvals"), o.approvals, t.approvals, () => mergeApprovals(H)(ownVal(b, "approvals"), o.approvals, t.approvals, ["approvals"], ctx)), H);
   const SO = pruneSignoffs(mergeThree(ownVal(b, "signoffs"), o.signoffs, t.signoffs, () => mergeSignoffs(ownVal(b, "signoffs"), o.signoffs, t.signoffs, ["signoffs"], ctx)), H, A);
@@ -1147,20 +1147,20 @@ function mergeFeatureState(b, o, t, ctx) {
     if (lap === undefined) delete out.lastApprovedPhase;
     else setOwn(out, "lastApprovedPhase", lap);
   }
-  // approvals: always the filtered result (the same reason — r5 review).
+  // approvals: always the filtered result (the same reason).
   if ((own(o, "approvals") || own(t, "approvals")) && A !== undefined) setOwn(out, "approvals", A);
   // signoffs: always the pruned result (mergeObject's own 3-way hands back a side that alone changed them, unpruned).
   if (own(o, "signoffs") || own(t, "signoffs")) {
     if (SO === undefined) delete out.signoffs;
     else setOwn(out, "signoffs", SO);
   }
-  // 1.24 review 6 (E2): a run older than a reopen / an undo of its task that only ONE side recorded is stale in the result
+  // a run older than a reopen / an undo of its task that only ONE side recorded is stale in the result
   const ev = ownVal(out, "evidence");
   const evStale = staleMergedEvidence(o, t, ev);
   if (evStale !== ev) setOwn(out, "evidence", evStale);
   return out;
 }
-// 1.24 review 6 (E2) — the merge's post-pass over the evidence. A change request that reopened task n (`changes[].reopened`) or an
+// the merge's post-pass over the evidence. A change request that reopened task n (`changes[].reopened`) or an
 // undone tick of n (`unticks[]` {n, at}) recorded on ONE side never reached the other side's evidence: a run of that task the other
 // branch made BEFORE it won the merge (the later run, mergeRunRecord) with no stale mark, and a re-tick with no new run read
 // verified (finish and the execution sign-off passed). A merged record of slot n whose run is older than such an event is marked
@@ -1211,7 +1211,7 @@ function staleMergedEvidence(o, t, ev) {
   }
   return out;
 }
-// 1.24 review 6 (E5) — roadmap.json: dependency edges each side added alone can close a cycle together (alpha → beta on one branch,
+// roadmap.json: dependency edges each side added alone can close a cycle together (alpha → beta on one branch,
 // beta → alpha on the other): the merge was clean, wrote the cycle, and every later depend was refused on it. A cycle in the merged
 // features is a CONFLICT: the first edge on it ours doesn't hold (theirs brought it) is undone — ours kept at that feature's
 // dependsOn, {path: features.<slug>.dependsOn, base?, ours?, theirs?} reported — until no cycle is left; a cycle ours' own lists
@@ -1290,7 +1290,7 @@ function mergeStateJson(base, ours, theirs, kind) {
   const ctx = { conflicts: [] };
   if (!isObj(ours) || !isObj(theirs)) return { kind: k, merged: mergeThree(base, ours, theirs, () => mergeConflict(ctx, [], base, ours, theirs)), conflicts: ctx.conflicts };
   const b = isObj(base) ? base : undefined;
-  const merged = k === "roadmap" ? breakMergedCycles(b, ours, theirs, mergeObject(b, ours, theirs, [], ctx, (f) => (own(ROADMAP_FIELDS, f) ? ROADMAP_FIELDS[f] : null)), ctx) // 1.24 review 6 (E5)
+  const merged = k === "roadmap" ? breakMergedCycles(b, ours, theirs, mergeObject(b, ours, theirs, [], ctx, (f) => (own(ROADMAP_FIELDS, f) ? ROADMAP_FIELDS[f] : null)), ctx) // 1.24 review 6
     : mergeFeatureState(b, ours, theirs, ctx);
   return { kind: k, merged, conflicts: ctx.conflicts };
 }
@@ -1314,7 +1314,7 @@ function mergeStateText(baseText, oursText, theirsText, opts = {}) {
   let out = r.merged;
   if (r.conflicts.length && isObj(out)) {
     out = copyOwn(out);
-    // 1.21 review A7: a re-merge with the list still unresolved reports the same conflicts again — each is listed once
+    // a re-merge with the list still unresolved reports the same conflicts again — each is listed once
     // (mergeCanon: the same {path, base, ours, theirs}).
     const seen = new Set();
     const list = (Array.isArray(out[MERGE_CONFLICTS_KEY]) ? out[MERGE_CONFLICTS_KEY] : []).concat(r.conflicts)
@@ -1356,7 +1356,7 @@ function mergeConflictsCheck(projectDir, slug, state, lng) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.21 review A3 — is the installed merge driver still THIS clone's? `merge-state --install` writes git config
+// is the installed merge driver still THIS clone's? `merge-state --install` writes git config
 // merge.dev-spec-state.driver = `node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P`; a plugin install lives in a versioned
 // folder (plugins/cache/<marketplace>/dev-spec-driven/<version>/), so after an update that path is gone — git then reports a
 // content conflict, leaves ours without markers or a mergeConflicts list, and `git add` drops theirs' changes silently. Read
@@ -1515,7 +1515,7 @@ function mergeDriverStatus(projectDir, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.25 — a feature's own git branch (spec_create {branch} / `create --branch [<name>]`). `.state.json → branch` = { name, base,
+// a feature's own git branch (spec_create {branch} / `create --branch [<name>]`). `.state.json → branch` = { name, base,
 // commit, at }: the branch the feature started on, the branch HEAD named when it was recorded (null: a detached HEAD) and HEAD's
 // commit then (null: a repository without a commit yet). The engine never runs git: the repository is READ as files — HEAD, the
 // loose refs, packed-refs — as repoGitConfigText reads its config; the CLI hands what git itself says (createFeature's opts.git) and
@@ -1622,9 +1622,9 @@ module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugi
   writeRoadmap, findCycle, findCycles, setDependency, roadmap, flatText, specNameText, BACKLOG_ACTIONS, backlog,
   setRoadmapLang, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml, maybeRefreshRoadmap, ROADMAP_STALE_FILE,
   markRoadmapStale, roadmapStale, refreshStaleRoadmap, staleGeneratedText, roadmapReport, featureDirs, locateFeatures,
-  // 1.21 F1a — the spec state's git merge driver
+  // the spec state's git merge driver
   MERGE_DRIVER, MERGE_ATTRIBUTE_LINES, mergeStateJson, mergeStateText, mergeKindOfPath, mergeAttributes, mergeConflictsCheck,
-  // 1.21 review A3 — the installed driver still this clone's? (merge-state --check, the SessionStart hook)
+  // the installed driver still this clone's? (merge-state --check, the SessionStart hook)
   MERGE_DRIVER_KEY, gitConfigGet, mergeDriverScript, mergeDriverStatus,
-  // 1.25 — a feature's own git branch (create --branch): its name, the repository read as files, the record
+  // a feature's own git branch (create --branch): its name, the repository read as files, the record
   branchNameOk, defaultBranchName, gitRepoFacts, featureBranchRecord, branchView, featureBranch, __link };

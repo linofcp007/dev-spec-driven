@@ -13,17 +13,17 @@
  *     verified.
  *   - SubagentStop, matcher ^(dev-spec-driven:)?spec-(implementer|simplifier)$: the implementer never ticks tasks (the
  *     controller does, after review), so its DONE is checked against its report — the task's runnable _Verify:_ commands
- *     and an exit code must be in .specs/<feature>/.execution/task-N-report.md; the simplifier (1.22) rewrites code already
+ *     and an exit code must be in .specs/<feature>/.execution/task-N-report.md; the simplifier rewrites code already
  *     verified, so its DONE needs .specs/<feature>/.execution/simplify-report.md to end with the passing runs of the
  *     project checks. (Plugin subagents ignore `hooks` in their frontmatter, so the plugin's hooks.json is where this
  *     lives.)
  * The decision is the engine's (spec.stopCheck — `dev-spec stop-check` prints the same one).
- * First, whatever the gate says (1.24 r6 I-I1): ROADMAP.md / SPECS.md left stale by the turn's spec saves (the save hook's stamp)
+ * First, whatever the gate says: ROADMAP.md / SPECS.md left stale by the turn's spec saves (the save hook's stamp)
  * are refreshed, once — the save hook no longer refreshes them on every Write / Edit.
  *
  * It never sends a stop back twice in a row (`stop_hook_active`), is silent (exit 0, no output) when there is nothing to
  * say, when the project has no dev-spec .specs/ or when roadmap.json meta.stopCheck is false (spec_init {stopCheck: false} /
- * `dev-spec init --stop-check off`; 1.16: while it is unset, the user's DEV_SPEC_STOP_CHECK=off), and NEVER blocks on its own trouble: a malformed payload, an unreadable file or any
+ * `dev-spec init --stop-check off`; while it is unset, the user's DEV_SPEC_STOP_CHECK=off), and NEVER blocks on its own trouble: a malformed payload, an unreadable file or any
  * internal error exits 0 silently. Bounded: the message's tail, each feature's .state.json / tasks.md, one report file.
  */
 
@@ -31,7 +31,7 @@ const fs = require("fs");
 const path = require("path");
 
 // The project probe (mcp/lib/probe.js): the one dev-spec project rule, the session's candidate projects, a JSON file read as the engine
-// reads it (UTF-8, or UTF-16 with a BOM — 1.24 review 6, C3). Required once the event is a Stop / SubagentStop.
+// reads it (UTF-8, or UTF-16 with a BOM). Required once the event is a Stop / SubagentStop.
 let P = null;
 const probe = () => P || (P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
 
@@ -47,7 +47,7 @@ function finish(obj) {
   process.stdout.write(JSON.stringify(obj), () => process.exit(0));
 }
 
-// The user's default (1.16 — the environment variable DEV_SPEC_STOP_CHECK, e.g. from Claude Code's settings.json `env`) set to
+// The user's default (the environment variable DEV_SPEC_STOP_CHECK, e.g. from Claude Code's settings.json `env`) set to
 // off. The engine (spec.stopCheckEnabled) reads the same.
 function userStopCheckOff() {
   for (const n of ["DEV_SPEC_STOP_CHECK"]) {
@@ -69,7 +69,7 @@ function gateOff(dir) {
   }
 }
 
-// 1.22 review — the Stop event's cheap pre-filter, before the engine loads (it cost ~200 ms at the end of EVERY turn in a
+// the Stop event's cheap pre-filter, before the engine loads (it cost ~200 ms at the end of EVERY turn in a
 // dev-spec project): the gate can only send a turn back when some feature recorded activity within the last
 // STOP_RECENT_HOURS (spec.STOP_RECENT_HOURS — mcp/tests/10-guards-review.js checks they agree), stamped not more than
 // 5 minutes in the future (the engine's stopActivity). A superset of what the engine counts: ANY string value of a feature
@@ -98,13 +98,13 @@ function recentActivity(dir) {
     try { st = fs.statSync(file); } catch { continue; } // no state: no recorded activity
     if (st.size > 1024 * 1024) return true;
     let j;
-    try { j = probe().readJsonFile(file); } catch { continue; } // unreadable: the engine skips it too (UTF-16 with a BOM is read — 1.24 review 6, C3)
+    try { j = probe().readJsonFile(file); } catch { continue; } // unreadable: the engine skips it too (UTF-16 with a BOM is read)
     if (walk(j, 0)) return true;
   }
   return false;
 }
 
-// 1.24 r6 I-I1 — the end of the turn: a ROADMAP.md / SPECS.md left stale by spec saves (the save hook's stamp, spec.ROADMAP_STALE_FILE
+// the end of the turn: a ROADMAP.md / SPECS.md left stale by spec saves (the save hook's stamp, spec.ROADMAP_STALE_FILE
 // in .specs/.execution/) is refreshed ONCE here, whatever the gate then says (a second stop in a row, the gate off). One stat per
 // project; the engine loads only for a stamped one.
 const ROADMAP_STALE = path.join(".specs", ".execution", "roadmap-stale");
@@ -117,10 +117,10 @@ function refreshStale(dirs) {
   } catch { /* engine not found: nothing refreshed */ }
 }
 
-// 1.24 r6 I-I4 — the claim pre-filter (Stop only): the gate sends a turn back only when the closing message claims the work is done
+// the claim pre-filter (Stop only): the gate sends a turn back only when the closing message claims the work is done
 // or verified (stopCheck → stopClaims). hooks/stop-claims.generated.json (scripts/build.js) holds every language's claim patterns and
 // the engine's prose regexes; while every source it names still has the size it was built from (one stat each — no version since
-// 1.26: the filter is a function of those files alone, so a release that changes none of them keeps it), a message whose prose
+// the filter is a function of those files alone, so a release that changes none of them keeps it), a message whose prose
 // matches none of them — the engine's answer too: "no-claim" — ends the hook before the engine loads (~100 ms). Missing, broken,
 // stale, or any error → true: the engine decides, as before.
 function mayClaim(message) {
@@ -129,9 +129,9 @@ function mayClaim(message) {
     if (!f || !f.sources || typeof f.sources !== "object" || !Object.keys(f.sources).length || !Array.isArray(f.claims)) return true;
     for (const [rel, size] of Object.entries(f.sources)) if (fs.statSync(path.join(__dirname, "..", ...rel.split("/"))).size !== size) return true;
     const hu = require("./hook-utils.js");
-    // 1.25.1: only the claim patterns of the languages whose trigger words the prose holds (f.triggers — as stopClaims runs them):
+    // only the claim patterns of the languages whose trigger words the prose holds (f.triggers — as stopClaims runs them):
     // none → no claim, with nothing but the small trigger regexes compiled (every pattern of every language cost ~35 ms).
-    // 1.27: the claim patterns scan a one-byte text (hook-utils claimScan — a wide character made them ~30 ms slower to compile). The
+    // the claim patterns scan a one-byte text (hook-utils claimScan — a wide character made them ~30 ms slower to compile). The
     // few trigger regexes read the prose as it is (a one-byte copy when it holds nothing past U+00FF): on a wide one they cost less
     // than the projection's table, and most messages trigger nothing.
     const prose = hu.claimProse(message, f.prose);
@@ -196,11 +196,11 @@ function main(raw) {
 
   // The raw pre-check: the projects this stop may be about (probe.sessionProjects — the nearest dev-spec .specs/ at or above the
   // session's cwd: a cd'd subfolder, a worktree; the project dir Claude Code or the user exported) — with the gate on. The engine then
-  // picks THE project (spec.sessionProject, 1.23 review 5: a worktree's copy of .specs/ maps to the checkout the MCP server records in).
+  // picks THE project (spec.sessionProject: a worktree's copy of .specs/ maps to the checkout the MCP server records in).
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
   const anchors = probe().sessionAnchors();
   const projects = probe().sessionProjects({ cwd, anchors });
-  refreshStale(projects); // 1.24 r6 I-I1: the turn's spec saves → ROADMAP.md / SPECS.md, once
+  refreshStale(projects); // the turn's spec saves → ROADMAP.md / SPECS.md, once
   if (payload.stop_hook_active === true) return finish(); // already sent back once: never twice in a row
   const cands = projects.filter((d) => !gateOff(d));
   if (!cands.length) return finish();

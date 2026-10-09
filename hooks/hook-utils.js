@@ -3,18 +3,18 @@
 /**
  * dev-spec-driven — what the approval hook (and the guard hook's per-session note) share BEFORE the engine loads (zero-dependency:
  * Node core and mcp/lib/probe.js only; it never requires the engine, so a hook's cheap pre-check stays cheap). Not a hook itself:
- * hooks/hooks.json runs the hook scripts, which require this file — and (1.25.1) mcp/server.js, for the projectDir parser it shares
- * with the approval hook. Is a folder a dev-spec project, where is it, a file as the engine reads it (UTF-8 or UTF-16 — 1.24 review
- * 6, C3) and a network path: mcp/lib/probe.js (1.27 — ONE rule for the hooks, the status line and the engine), re-exported here
+ * hooks/hooks.json runs the hook scripts, which require this file — and mcp/server.js, for the projectDir parser it shares
+ * with the approval hook. Is a folder a dev-spec project, where is it, a file as the engine reads it (UTF-8 or UTF-16)
+ * and a network path: mcp/lib/probe.js (ONE rule for the hooks, the status line and the engine), re-exported here
  * under the names this file always had (readJson = probe.readJsonFile).
  *
- *   - editTargets — a Write / Edit target as the file system reads it, the engine's approvalEditTargets (C5; 1.25.1: its real path
+ *   - editTargets — a Write / Edit target as the file system reads it, the engine's approvalEditTargets (its real path
  *     on every platform — a folder linked to .specs/).
  *   - parseProjectDir / fileUriToPath / unexpandedVar — ONE reading of an MCP tool's projectDir (a path or a local file:// URI), the
- *     approval hook's and the MCP server's (1.25.1, review 7).
- *   - approvalProjects — the projects an approval-shaped tool call may act on, for the approval hook's raw level read (C4).
+ *     approval hook's and the MCP server's.
+ *   - approvalProjects — the projects an approval-shaped tool call may act on, for the approval hook's raw level read.
  *   - sessionFlagFile — a tiny per-session marker in the OS temp folder (the guard hook's forced-approval note, once a session).
- *   - claimProse / claimMatch — the stop gate's claim scan as the Stop hook's pre-filter (1.24 r6 I-I4), from the build's
+ *   - claimProse / claimMatch — the stop gate's claim scan as the Stop hook's pre-filter, from the build's
  *     hooks/stop-claims.generated.json.
  * mcp/tests/10-guards-review6.js checks the readings agree with the engine's.
  */
@@ -22,7 +22,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-// The project probe (1.27): the rule, the walks, the readers, isNetwork — Node core only, like this file.
+// The project probe: the rule, the walks, the readers, isNetwork — Node core only, like this file.
 const P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js"));
 const { utf16OrUtf8, textOf, jsonOf, readText, isUtf16, isNetwork, usable, expandHome, nearestSpecs, RE_UNEXPANDED_VAR, unexpandedVar } = P;
 const readJson = P.readJsonFile;
@@ -35,7 +35,7 @@ function shareOf(p) {
   return m ? ("\\\\" + m[1] + "\\" + m[2]).toLowerCase() : null;
 }
 
-// The engine's guardTargetPath (engine/guards.js — 1.23 review 5, L21), on win32 only: Git Bash's `/c/…` is `C:/…`, and an NTFS
+// The engine's guardTargetPath (engine/guards.js), on win32 only: Git Bash's `/c/…` is `C:/…`, and an NTFS
 // stream suffix on the last segment is dropped (`a.json::$DATA` IS a.json).
 function fsTargetPath(p, win = process.platform === "win32") {
   let s = String(p);
@@ -48,8 +48,8 @@ function fsTargetPath(p, win = process.platform === "win32") {
   return i > cut ? s.slice(0, i) : s;
 }
 // A Write / Edit target (absolute, or relative to cwd) → the paths the file system reads it as: [resolved] — `./`, `..` and a stream
-// suffix taken out — plus its real path (the file's, else its folder's + the name): an 8.3 short name (`ROADMA~1.JSO`) and (1.25.1,
-// review 7) a folder linked to .specs/ or to a feature folder (`ln -s .specs sx` → `sx/roadmap.json`). A network path is never resolved
+// suffix taken out — plus its real path (the file's, else its folder's + the name): an 8.3 short name (`ROADMA~1.JSO`) and
+// a folder linked to .specs/ or to a feature folder (`ln -s .specs sx` → `sx/roadmap.json`). A network path is never resolved
 // on the disk. The engine's approvalEditTargets. (The approval hook calls it only for a path naming .specs, a short name or one of the
 // guarded file names — RE_EDIT_MAYBE.)
 function editTargets(fp, cwd, win = process.platform === "win32") {
@@ -68,7 +68,7 @@ function editTargets(fp, cwd, win = process.platform === "win32") {
   if (real && real !== abs) out.push(real);
   return out;
 }
-// 1.25.1 (review 7, finding 5) — ONE reading of an MCP tool's projectDir, shared by the approval hook and mcp/server.js (it accepted a
+// ONE reading of an MCP tool's projectDir, shared by the approval hook and mcp/server.js (it accepted a
 // local file:// URI the hook read as a relative folder: spec_approve {projectDir: "file:///…/projA", force: true} went through at ask).
 // The engine's unexpanded-variable rule is the probe's (files.js unexpandedVar — mcp/tests/10-guards-review7.js checks they agree):
 // `${…}`, a leading `$NAME`, a `%NAME%`.
@@ -174,7 +174,7 @@ function sessionFlagFile(kind, sessionId) {
   return path.join(os.tmpdir(), "dev-spec-" + String(kind).replace(/[^a-z0-9-]/gi, "") + "-" + h + ".flag");
 }
 
-// 1.24 r6 I-I4 — the stop gate's claim scan as the Stop hook's pre-filter, BEFORE the engine loads. f: hooks/stop-claims.generated.json
+// the stop gate's claim scan as the Stop hook's pre-filter, BEFORE the engine loads. f: hooks/stop-claims.generated.json
 // (scripts/build.js: the engine's own claim patterns, word wrapper and prose regexes — guards.js stopClaimFilter). claimProse is the
 // engine's stopProse run with those regexes (the message's tail without fenced code, HTML comments — core.js replaceHtmlCommentSpans'
 // scan —, inline code and quoted lines); claimMatch: does any claim pattern, word-bounded as stopPatterns compiles it, match that prose?
@@ -195,7 +195,7 @@ function claimProse(message, p) {
   return (at ? out + unfenced.slice(at) : unfenced).replace(new RegExp(p.code.source, p.code.flags), " ")
     .split("\n").filter((l) => !quote.test(l)).join("\n");
 }
-// 1.27 — what the pre-filter's regexes scan, as the engine's stopScan: a prose holding a character past U+00FF → its exact one-byte
+// what the pre-filter's regexes scan, as the engine's stopScan: a prose holding a character past U+00FF → its exact one-byte
 // projection, each pattern source rewritten for it (mcp/lib/latin1-scan.js — the regexes' two-byte code cost ~30 ms more here);
 // else the prose as a one-byte copy (a wide character inside a code fence left it two-byte). → { text, source(src) → the source to
 // compile }. f: the generated filter (its wrapper, claims and triggers make the table).

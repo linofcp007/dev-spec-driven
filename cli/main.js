@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The dev-spec CLI's `main` (1.27) — one call: `main(argv, io)` → a promise of the exit code. cli/dev-spec.js (the entry point) calls
+ * The dev-spec CLI's `main` — one call: `main(argv, io)` → a promise of the exit code. cli/dev-spec.js (the entry point) calls
  * it with the process's own streams and exits once they have flushed; the CLI suite calls it in-process (cli/tests/harness.js
  * runIn) with captured ones. Nothing here exits the process or keeps state between calls: every call parses its own command line
  * into its own context (createContext), a refusal ends the call by throwing CliExit (main turns it into the exit code), and the
@@ -40,15 +40,15 @@ function parseArgs(args) {
   const flags = {};
   const pos = [];
   let cmdIdx = -1;
-  // 1.24 r6 B5 — how many times each VALUE flag was given (`--k v` and `--k=v`): the parser keeps the last value, so a second one of a
+  // how many times each VALUE flag was given (`--k v` and `--k=v`): the parser keeps the last value, so a second one of a
   // single-value flag dropped the first silently (`approve … --role tech --role product` signed for product alone) — main refuses it
   // (refuseRepeatedFlags); the flags a command collects every occurrence of are REPEATABLE_FLAGS.
   const flagCount = Object.create(null);
   const countFlag = (k) => { if (VALUE_FLAGS.has(k)) flagCount[k] = (flagCount[k] || 0) + 1; };
-  let versionAsked = false; // 1.24 r6 B-I1: --version / -V
-  let unknownShort = null; // 1.25.1: the first single-dash option given (-j) — refused in main (refuseUnknownFlags)
+  let versionAsked = false; // --version / -V
+  let unknownShort = null; // the first single-dash option given (-j) — refused in main (refuseUnknownFlags)
   let missingValue = null; // reported in main, once --project is known (message in the project language)
-  let branchSpaced = false; // 1.25: --branch's name was the next word (branchFlag refuses a track word there)
+  let branchSpaced = false; // --branch's name was the next word (branchFlag refuses a track word there)
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     // `--` ends the options (POSIX): every later token is positional (`create -- --odd-name`) — it used to become flags[""]. argv is
@@ -58,7 +58,7 @@ function parseArgs(args) {
     // anywhere, like --help: the version command, nothing else runs (`--version=true|false` as a switch — the help documents it)
     else if (a === "--version" || a === "-V" || /^--version=(?:true|1|yes|on)$/i.test(a)) versionAsked = true;
     else if (/^--version=(?:false|0|no|off)$/i.test(a)) { /* off */ }
-    else if (a === "-h") flags.help = true; // 1.24 r6 B-I3: = --help (`status -h` looked for a feature named "h")
+    else if (a === "-h") flags.help = true; // = --help (`status -h` looked for a feature named "h")
     else if (a.startsWith("--") && a.includes("=")) { const k = a.slice(2, a.indexOf("=")); flags[k] = a.slice(a.indexOf("=") + 1); countFlag(k); }
     else if (a.startsWith("--") && VALUE_FLAGS.has(a.slice(2))) {
       const k = a.slice(2);
@@ -71,23 +71,23 @@ function parseArgs(args) {
       else { flags[k] = argv[++i]; countFlag(k); if (k === "branch") branchSpaced = true; }
     }
     else if (a.startsWith("--")) flags[a.slice(2)] = true;
-    // 1.25.1 (review 7): a single-dash option (-j, -x…) is no positional — `status -j` looked for a feature "j". Refused like an unknown
+    // a single-dash option (-j, -x…) is no positional — `status -j` looked for a feature "j". Refused like an unknown
     // --flag (refuseUnknownFlags); -h / -V are handled above, a lone "-" (stdin) and "-1" (a number, refused by its command) stay words.
     else if (/^-[A-Za-z]/.test(a)) { if (unknownShort === null) unknownShort = a; }
     else { if (!pos.length) cmdIdx = i; pos.push(a); }
   }
   if (versionAsked && pos[0] !== "help") pos.splice(0, pos.length, "version"); // the words of another command are not run (its flags: printVersion ignores them)
   const cmd = pos.shift();
-  // 1.23 review (L14): Windows' `--project "C:\dir\"` reaches the CLI as `C:\dir"` (the backslash escapes the closing quote) — a double
+  // Windows' `--project "C:\dir\"` reaches the CLI as `C:\dir"` (the backslash escapes the closing quote) — a double
   // quote is never part of a Windows path, so a trailing one is dropped.
   if (process.platform === "win32" && typeof flags.project === "string") flags.project = flags.project.replace(/"+$/, "");
-  // 1.25.1 (review 7): a leading ~ is the home folder — Windows PowerShell 5.1 passes `~` to node as typed (`--project ~/zz` made a
+  // a leading ~ is the home folder — Windows PowerShell 5.1 passes `~` to node as typed (`--project ~/zz` made a
   // folder named "~" in the working folder). The engine's expandHome, mirrored without the engine in cli/completion.js.
   if (typeof flags.project === "string") flags.project = COMPLETION.expandHome(flags.project.trim());
   return { argv, ARGV0, flags, pos, cmd, cmdIdx, flagCount, versionAsked, unknownShort, missingValue, branchSpaced };
 }
 
-// ---- terminal-safe output (1.25.1, review 7) ----------------------------------------------------------------------------------
+// ---- terminal-safe output ----------------------------------------------------------------------------------
 // The human output prints spec text (task text, a _Verify:_ command, its run's output, names…) as it is written: an ESC / OSC sequence
 // or a lone carriage return in a cloned tasks.md could make `done --run` show `$ npm test` while it ran something else, retitle the
 // terminal or hide lines. Everything the CLI writes goes through c.write / c.writeErr: the human text loses every C0 control but tab
@@ -112,7 +112,7 @@ function guarded(chunk, json) {
 // console.log's text for what the CLI prints (strings, numbers, a missing note): the arguments joined by a space.
 const line = (args) => args.map((a) => (typeof a === "string" ? a : String(a))).join(" ") + "\n";
 
-// ---- the operations (1.27) ---------------------------------------------------------------------------------------------------
+// ---- the operations ---------------------------------------------------------------------------------------------------
 // The table both surfaces read (mcp/lib/operations.js) — loaded on the first c.call: the status line and the bare help never need it.
 let OPERATIONS_MODULE = null;
 const operations = () => OPERATIONS_MODULE || (OPERATIONS_MODULE = require(path.join(__dirname, "..", "mcp", "lib", "operations.js")));
@@ -148,7 +148,7 @@ function createContext(argv, io) {
   const cwd = io.cwd || process.cwd();
   const c = { ...p, io, env, cwd, exitCode: 0, entry: null };
 
-  // 1.25.1 (review 7) — the two runs that never load the engine up front: the status line's render (it loads the engine only once a
+  // the two runs that never load the engine up front: the status line's render (it loads the engine only once a
   // dev-spec project is found) and the bare help (`dev-spec`, `--help` / `-h` alone, `help` alone: helpText() is plain text). Anything
   // else on the line (a flag, an argument) takes the usual path.
   c.STATUSLINE_RENDER = cmd === "statusline" && !("print-config" in flags) && !("help" in flags);
@@ -158,7 +158,7 @@ function createContext(argv, io) {
   // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working folder with a dev-spec .specs/ > the
   // working folder — the same resolution as the MCP server (spec.resolveProjectDir). --project is checked in main (checkProject).
   c.projectDir = LIGHT ? null : spec.resolveProjectDir(flags.project);
-  // 1.24 r6 B1 — WHICH input chose it, read with resolveProjectDir's own precedence (a value that is empty or holds an unexpanded
+  // WHICH input chose it, read with resolveProjectDir's own precedence (a value that is empty or holds an unexpanded
   // variable falls through): "flag" (--project) · "SPEC_PROJECT_DIR" · "CLAUDE_PROJECT_DIR" · "nearest" (a folder above the working one
   // with a dev-spec .specs/) · "cwd" (the working folder). checkProject() checks a named one; `version` reports it.
   const usableDir = (v) => v != null && String(v).trim() !== "" && !spec.unexpandedVar(v);
@@ -168,7 +168,7 @@ function createContext(argv, io) {
     : path.resolve(cwd) === c.projectDir ? "cwd" : "nearest";
   // Where a PATH argument is read from (scan <path>, ears <file>, import <tool> <path>): the project folder when it was NAMED (--project,
   // SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR — as import always read it), else the working folder: a path typed in a subfolder of the
-  // project found by walking up is relative to that subfolder, as in git (1.23 review L12).
+  // project found by walking up is relative to that subfolder, as in git.
   c.projectNamed = typeof flags.project === "string" || c.PROJECT_SOURCE === "SPEC_PROJECT_DIR" || c.PROJECT_SOURCE === "CLAUDE_PROJECT_DIR";
   c.argPath = (q) => path.resolve(c.projectNamed ? c.projectDir : cwd, String(q));
 
@@ -199,9 +199,9 @@ function createContext(argv, io) {
     else if (typeof human === "function") human(obj);
     else c.log(typeof obj === "string" ? obj : JSON.stringify(obj, null, 2));
   };
-  // A CLI usage / argument error: the message on stderr, exit 1 — and (1.23 review) with --json also {ok: false, error, code, …} as the
+  // A CLI usage / argument error: the message on stderr, exit 1 — and with --json also {ok: false, error, code, …} as the
   // one JSON document on stdout, as a refusal prints (fail), so a script reads one shape. `text: true` (the --json-on-a-text-command
-  // error) keeps stdout empty. 1.25.1 (review 7): every such error carries a stable `code` — MCP's where MCP has the same error
+  // error) keeps stdout empty. Every such error carries a stable `code` — MCP's where MCP has the same error
   // (unknown-argument {unknown}, missing-arguments {missing}, invalid-arguments {invalid}, project-missing, project-not-dir), else the
   // CLI's own (usage, unknown-command, project-empty, project-unexpanded, project-is-specs…). opts: { text, code (default "usage"),
   // …fields the document carries (unknown, missing, invalid) }.
@@ -240,7 +240,7 @@ function createContext(argv, io) {
   // not writing): absent → undefined (the engine's default), else the explicit boolean — `--include-body=false` is false, as
   // spec_finish {includeBody: false}.
   c.boolFlag = (k) => (typeof flags[k] === "boolean" ? flags[k] : undefined);
-  // 1.26: a document the human output prints (export html / md, catalog's and changelog's markdown) — always there for the human
+  // a document the human output prints (export html / md, catalog's and changelog's markdown) — always there for the human
   // output; with --json only on --include-body, as spec_export {includeBody} (the MCP default leaves it out: --json = the MCP result).
   c.bodyWanted = () => (flags.json ? c.boolFlag("include-body") === true : true);
   // --cap / --max / --timeout: an integer ≥ 1, like the MCP schema ({type: integer, minimum: 1}) — and at most the command's bound
@@ -256,7 +256,7 @@ function createContext(argv, io) {
     return c.die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1) + most, JSON.stringify(String(flags[k])))), c.invalidArg("--" + k));
   };
   c.timeoutFlag = () => c.intFlag("timeout");
-  // done / finish: --shell and --timeout say how --run runs the commands — without --run they are a usage error (1.23 review: ignored).
+  // done / finish: --shell and --timeout say how --run runs the commands — without --run they are a usage error (ignored).
   c.runOnlyFlags = () => {
     if (c.on("run")) return;
     const k = ["shell", "timeout"].find((n) => flags[n] !== undefined);
@@ -280,7 +280,7 @@ function createContext(argv, io) {
   // "tdd,saas") — none may drop it silently.
   c.withTracksFlag = (list) => (typeof flags.tracks === "string" && flags.tracks.trim() ? list.concat([flags.tracks]) : list);
 
-  // ---- the operations (1.27, mcp/lib/operations.js): c.call(id, given) makes the engine call MCP makes for the same tool — each option
+  // ---- the operations (mcp/lib/operations.js): c.call(id, given) makes the engine call MCP makes for the same tool — each option
   // read from this command line as the table maps it (cliArg), `given` the handler's own (a value it parses in its own syntax, an option
   // only the CLI sets). A command runs only an operation that lists it (anything else is a programming error, thrown).
   c.call = (id, given) => {
@@ -291,10 +291,10 @@ function createContext(argv, io) {
     return OPS.run(op, spec, c.projectDir, "cli", (a) => cliArg(c, command, a), given);
   };
 
-  // ---- stdin. Read as BYTES and decoded as a file is (spec.decodeText: a UTF-16 BOM decides, else UTF-8) — 1.23 review: a UTF-16
+  // ---- stdin. Read as BYTES and decoded as a file is (spec.decodeText: a UTF-16 BOM decides, else UTF-8) — a UTF-16
   // document (what Windows PowerShell 5.1's `>` writes) piped into `ears -` read as "0 criteria, pass". From a stream asynchronously
   // (fs.readFileSync(0) is unreliable on Windows pipes — the hooks' rule): the handler's `cb` runs at its end, and readStdin returns a
-  // promise of it; a string / Buffer input (in-process) runs `cb` at once. 1.24 r6 B-I9: from a terminal (a TTY) the CLI seemed to
+  // promise of it; a string / Buffer input (in-process) runs `cb` at once. From a terminal (a TTY) the CLI seemed to
   // hang — one line on stderr says it reads the terminal and how to end it.
   c.readStdin = (cb) => {
     const s = io.stdin;
@@ -336,7 +336,7 @@ function createContext(argv, io) {
 // ---- the checks every command shares ---------------------------------------------------------------------------------------
 // An unknown --flag is a usage error, before anything runs: it used to be accepted as a silent boolean switch, so `done big 2 --rnu`
 // ticked the task with no evidence (exit 0). Known = VALUE_FLAGS ∪ BOOL_FLAGS, with a did-you-mean. `evals` forwards its flags
-// untouched to mcp/evals/run-evals.js, which refuses its own unknown ones (1.23 review: a mistyped --dryrun ran a LIVE, paid eval).
+// untouched to mcp/evals/run-evals.js, which refuses its own unknown ones (a mistyped --dryrun ran a LIVE, paid eval).
 // A KNOWN flag the command doesn't read is refused too (checkCommandArgs: COMMAND_OPTIONS), and so is an extra argument.
 function refuseUnknownFlags(c) {
   const { flags, cmd } = c;
@@ -345,7 +345,7 @@ function refuseUnknownFlags(c) {
   const keys = Object.keys(flags).filter((k) => !VALUE_FLAGS.has(k) && k !== "help" && k !== "json");
   if (c.unknownShort === null && !keys.length) return;
   const known = [...VALUE_FLAGS, ...BOOL_FLAGS()];
-  // 1.25.1 (review 7): a single-dash option — its did-you-mean: the long form of the same word (-json → --json), else the one flag the
+  // a single-dash option — its did-you-mean: the long form of the same word (-json → --json), else the one flag the
   // letters start (-j → --json)
   if (c.unknownShort !== null) {
     const w = c.unknownShort.slice(1).toLowerCase();
@@ -373,7 +373,7 @@ function refuseUnknownFlags(c) {
   }
   c.die(c.projectText().unknownFlag("--" + bad, best ? "--" + best.c : null), c.unknownArg("--" + bad, best ? "--" + best.c : null));
 }
-// 1.24 r6 B5 — a single-value flag given twice is a usage error, never last-wins (--role, --by, --cmd, --summary, --through, --phase,
+// a single-value flag given twice is a usage error, never last-wins (--role, --by, --cmd, --summary, --through, --phase,
 // --project, --lang… dropped the first value). REPEATABLE_FLAGS are the ones a command reads every occurrence of. append-tasks keeps
 // its own words for --task (one task per call) and --verify / --story / --heading / --size. `evals` is exempt (its flags are
 // run-evals.js's).
@@ -394,7 +394,7 @@ function normalizeBoolFlags(c) {
   if (!Object.keys(flags).some((k) => typeof flags[k] === "string" && !VALUE_FLAGS.has(k))) return; // no switch given a value: nothing to read
   for (const k of BOOL_FLAGS()) {
     if (typeof flags[k] !== "string") continue;
-    if (cmd === "evals" && k === "dry-run") continue; // 1.25: import's switch has the name of run-evals.js's own flag — evals hands it over unread
+    if (cmd === "evals" && k === "dry-run") continue; // import's switch has the name of run-evals.js's own flag — evals hands it over unread
     const v = flags[k].trim().toLowerCase();
     if (["true", "1", "yes", "on"].includes(v)) flags[k] = true;
     else if (["false", "0", "no", "off"].includes(v)) flags[k] = false;
@@ -404,7 +404,7 @@ function normalizeBoolFlags(c) {
     }
   }
 }
-// 1.23 review — the command's own options (COMMAND_OPTIONS, from its table entry) and the most arguments it takes: they were ignored
+// the command's own options (COMMAND_OPTIONS, from its table entry) and the most arguments it takes: they were ignored
 // silently — `approve <f> <phase> --remove` (meant --revoke) still approved, `done <f> 3 4` ticked task 3 alone.
 function checkCommandArgs(c) {
   const { flags, cmd, pos } = c;
@@ -415,11 +415,11 @@ function checkCommandArgs(c) {
   if (bad !== undefined) c.die(T.flagNotFor("--" + bad, cmd, own.options.map((f) => "--" + f).join(", ")), c.unknownArg("--" + bad));
   if (own.max !== undefined && pos.length > own.max) c.die(T.extraArgs(cmd, pos.slice(own.max).join(" ")), { code: "unknown-argument", unknown: pos.slice(own.max).map((w) => ({ argument: String(w) })) });
 }
-// 1.23 review (L14) — --project names an existing FOLDER: an empty value, a variable left unexpanded (`$HOME/x`, `%DIR%`, `${…}`) or a
+// --project names an existing FOLDER: an empty value, a variable left unexpanded (`$HOME/x`, `%DIR%`, `${…}`) or a
 // file is refused, and so is a folder that doesn't exist — except for init, which creates it (`create x --project <typo>` used to
-// create the whole mistyped tree). 1.24 r6 B1 — SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked the same way when one of them chose
+// create the whole mistyped tree). SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked the same way when one of them chose
 // the project (PROJECT_SOURCE), the message naming the variable. A folder without .specs/ is fine (CLAUDE_PROJECT_DIR is whatever
-// folder Claude Code opened). An empty or unexpanded value still falls through (resolveProjectDir's rule). B7 — a dev-spec project's
+// folder Claude Code opened). An empty or unexpanded value still falls through (resolveProjectDir's rule). A dev-spec project's
 // own .specs/ folder named as the project is refused with the folder to name: it created .specs/.specs/, which then won every walk-up.
 function checkProject(c) {
   const { flags, cmd } = c;
@@ -434,7 +434,7 @@ function checkProject(c) {
     v = String(c.env[c.PROJECT_SOURCE]).trim();
     src = c.PROJECT_SOURCE;
   } else return;
-  const abs = path.resolve(c.cwd, COMPLETION.expandHome(v)); // 1.25.1: SPEC_PROJECT_DIR=~/x too (a JSON config never expands it)
+  const abs = path.resolve(c.cwd, COMPLETION.expandHome(v)); // SPEC_PROJECT_DIR=~/x too (a JSON config never expands it)
   const flag = src === "--project";
   let st = null;
   try { st = fs.statSync(abs); } catch { st = null; }
@@ -444,7 +444,7 @@ function checkProject(c) {
   const specsName = process.platform === "win32" || process.platform === "darwin" ? /^\.specs$/i.test(base) : base === ".specs";
   if (st && specsName && spec.isDevSpecDir(path.dirname(abs))) c.die(T.projectIsSpecs(flag ? "--project " + abs : src + "=" + abs, path.dirname(abs)), { code: "project-is-specs" });
 }
-// 1.24 r6 B2 — stdout's reader went away (`export --md | head -1`, a pager quit): an EPIPE / EOF / ERR_STREAM_DESTROYED is the end of
+// stdout's reader went away (`export --md | head -1`, a pager quit): an EPIPE / EOF / ERR_STREAM_DESTROYED is the end of
 // the output, never a crash — the process ends at once, quietly, with the status the command set (the MCP server's rule since 1.22);
 // any other stdout error is one stderr line, exit 1. Installed after the status line's render path, which keeps its own (exit 0).
 function stdoutError(c, e) {
@@ -458,16 +458,16 @@ function stdoutError(c, e) {
 // The checks, in their order, then the command's handler (→ its result: nothing, or a promise when it waits).
 function dispatch(c) {
   const { flags, cmd, pos } = c;
-  // 1.16 C1: the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
+  // the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
   if (c.STATUSLINE_RENDER) return CMD.statusLineRender(c);
-  if (c.io.exit && typeof c.io.stdout.on === "function") c.io.stdout.on("error", (e) => stdoutError(c, e)); // 1.24 r6 B2: a reader that closed early ends the output quietly
+  if (c.io.exit && typeof c.io.stdout.on === "function") c.io.stdout.on("error", (e) => stdoutError(c, e)); // a reader that closed early ends the output quietly
   refuseUnknownFlags(c); // `--rnu` is an error (did you mean --run?), never a silent switch
-  // 1.21 review A3: `merge-state --check` is a switch there — `--check` is init's VALUE flag (init --check name="cmd"), so it can't join
+  // `merge-state --check` is a switch there — `--check` is init's VALUE flag (init --check name="cmd"), so it can't join
   // spec.CLI_SWITCHES (normalizeBoolFlags would refuse `init --check test="npm test"`, and the approval hook's lexer would read init's
   // value as the next word): a bare `--check` after merge-state reads as on.
   if (cmd === "merge-state" && c.missingValue === "check") { c.missingValue = null; flags.check = true; }
   if (c.missingValue) c.die(c.projectText().missingValue(c.missingValue), { code: "missing-arguments", missing: ["--" + c.missingValue] });
-  refuseRepeatedFlags(c); // 1.24 r6 B5: `--role tech --role product` is an error, never last-wins
+  refuseRepeatedFlags(c); // `--role tech --role product` is an error, never last-wins
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any command runs —
   // the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
   if (flags.lang !== undefined) {
@@ -480,20 +480,20 @@ function dispatch(c) {
     flags.lang = l;
   }
   normalizeBoolFlags(c); // `--run=false` is false, `--run=maybe` an error — before any command runs
-  // 1.22 review: --json on what prints text only — the help (`help`, no command, `--help` anywhere) and TEXT_ONLY_COMMANDS — is a usage
+  // --json on what prints text only — the help (`help`, no command, `--help` anywhere) and TEXT_ONLY_COMMANDS — is a usage
   // error, before anything runs: it printed the text on stdout with exit 0, and a script parsing it failed far away.
   const helpOnly = cmd === undefined || cmd === "help" || cmd === "-h" || cmd === "--help" || (c.on("help") && cmd !== "evals");
   if (c.on("json") && (helpOnly || TEXT_ONLY_COMMANDS.has(cmd))) c.die(c.projectText().noJson(helpOnly ? "help" : cmd), { text: true });
-  // `<command> --help` / `-h` prints the help and runs nothing — 1.24 r6 B-I3: that command's part of it and its options
+  // `<command> --help` / `-h` prints the help and runs nothing — that command's part of it and its options
   if (c.on("help") && cmd !== "evals") return c.log(CMD.helpFor(c, cmd));
-  // 1.24 r6 B-I1: --version / -V anywhere prints the version and runs nothing (the other command's words and flags unread); the
+  // --version / -V anywhere prints the version and runs nothing (the other command's words and flags unread); the
   // `version` command reports the project it resolves — never refuses it (a missing one reads exists: false).
   if (c.versionAsked && cmd === "version") return CMD.printVersion(c);
   if (!helpOnly) {
-    // 1.23 review L14: an existing folder (init alone may create it) — 1.24 r6 B1: the environment too. `version` reports the project and
+    // an existing folder (init alone may create it) — the environment too. `version` reports the project and
     // `completion` reads none (it runs from a shell profile, wherever that starts): neither refuses it.
     if (cmd !== "version" && cmd !== "completion") checkProject(c);
-    checkCommandArgs(c); // 1.23 review: the command's own options, at most its own arguments
+    checkCommandArgs(c); // the command's own options, at most its own arguments
   }
   if (cmd === undefined || cmd === "-h" || cmd === "--help") return c.log(CMD.helpText()); // (`-- --help`: the word itself)
   c.entry = CMD.commandFor(cmd);
@@ -536,7 +536,7 @@ function main(argv, io) {
       try { io.stderr.write("dev-spec: " + (e && e.message ? e.message : String(e)) + "\n"); } catch { /* stderr gone */ }
       code = 1;
     } else {
-      // Engine guards (e.g. an unreadable roadmap.json) surface as a one-line error, not a stack trace — with --json (1.23 review L24)
+      // Engine guards (e.g. an unreadable roadmap.json) surface as a one-line error, not a stack trace — with --json
       // also as {ok: false, error, code} on stdout (code: the system error's, e.g. ENOTDIR, else "exception").
       try { c.die(e && e.message ? e.message : String(e), { code: e && typeof e.code === "string" && e.code ? e.code : "exception" }); } catch (x) { code = x instanceof CliExit ? x.code : 1; }
     }

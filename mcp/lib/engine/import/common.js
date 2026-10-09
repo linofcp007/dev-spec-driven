@@ -32,7 +32,7 @@ function inertOutsideCode(text, closers) {
   }).join("\n");
 }
 
-// Headings outside fenced code and HTML comments: [{ i, level, text }] — the ONE heading reader's (1.25.1 — headingEntries: a SETEXT
+// Headings outside fenced code and HTML comments: [{ i, level, text }] — the ONE heading reader's (headingEntries: a SETEXT
 // heading and an ATX one indented 1–3 spaces too; the importers read only margin ATX headings, so "Requirements\n============" or
 // "  ## Story 1" imported as prose). A setext heading is normalized IN PLACE — its line rewritten as the ATX heading it is, its
 // underline blanked — so every parser's [h.i + 1, …) ranges, used-line marks and carried lines read it as an ATX one (the
@@ -45,7 +45,7 @@ function mdHeadings(lines) {
   });
 }
 // "## Title ##" → { level, text }: what /^(#{1,6})\s+(.*?)\s*#*\s*$/ captured (text trimmed), read by a scan — that pattern
-// backtracked cubically on a heading holding a long run of spaces (a 3,000-space heading took 10 s; 1.17 F review). The line
+// backtracked cubically on a heading holding a long run of spaces (a 3,000-space heading took 10 s). The line
 // is one headingIndex() accepts (1–6 '#' then whitespace). The closing sequence is the longest suffix whitespace · '#'s ·
 // whitespace.
 const isWs = (c) => c !== undefined && c.trim() === "";
@@ -63,7 +63,7 @@ function mdHeadingParts(line) {
 // [lo, hi) of the lines under heading hs[k], up to the next heading of the same or a higher level.
 function mdRange(lines, hs, k) {
   const h = hs[k];
-  let next = null; // a scan, no slice: copying the rest of the headings for each one was quadratic on a long PLAN.md (1.17 F review)
+  let next = null; // a scan, no slice: copying the rest of the headings for each one was quadratic on a long PLAN.md
   for (let j = k + 1; j < hs.length && !next; j++) if (hs[j].level <= h.level) next = hs[j];
   return [h.i + 1, next ? next.i : lines.length];
 }
@@ -107,7 +107,7 @@ function mdListItems(lines, numberedOnly) {
     const f = l.match(RE_FENCE);
     if (f) { fence = f[1]; cur = null; return; }
     const ind = indentOf(l);
-    // /^\s*(\d+)[.)]\s+(.*)$/ (or with a bullet too), the text read by headRest (1.17 H)
+    // /^\s*(\d+)[.)]\s+(.*)$/ (or with a bullet too), the text read by headRest
     const m = headRest(l, numberedOnly ? /^\s*(\d+)[.)]/ : /^\s*(?:(\d+)[.)]|[-*+])/, true);
     if (m && (!cur || ind <= cur.indent)) { cur = { n: m[1] ? +m[1] : null, text: m[2].trim(), indent: ind, at: [i] }; items.push(cur); return; }
     if (!l.trim() || /^\s*(?:#|>|\|)/.test(l) || RE_MD_HR.test(l)) { cur = null; return; }
@@ -149,7 +149,7 @@ const trimClause = (s) => stripEnd(String(s || "").trim(), wsOrUnitIn(",.;:")); 
 // Prose lines as written (trailing spaces dropped), blank runs folded, no blank edges.
 function tidyLines(lines) {
   const out = [];
-  for (const l of lines.map((x) => x.trimEnd())) if (l || (out.length && out[out.length - 1])) out.push(l); // trimEnd: /\s+$/ is quadratic on a long blank run (1.17 F)
+  for (const l of lines.map((x) => x.trimEnd())) if (l || (out.length && out[out.length - 1])) out.push(l); // trimEnd: /\s+$/ is quadratic on a long blank run
   while (out.length && !out[out.length - 1]) out.pop();
   return out;
 }
@@ -189,7 +189,7 @@ function earsFromClauses(cl, lng) {
   if (!then) return null;
   return [cl.given ? E.while + " " + trimClause(cl.given) + "," : null, cl.when ? E.when + " " + trimClause(cl.when) + "," : null, then].filter(Boolean).join(" ");
 }
-// 1.17 H — the importer's clause patterns, read by a scan. /^(?:given\s+(.+?)\s*,?\s+)?(?:when\s+(.+?)\s*,?\s+)?then\s+(.+)$/i
+// the importer's clause patterns, read by a scan. /^(?:given\s+(.+?)\s*,?\s+)?(?:when\s+(.+?)\s*,?\s+)?then\s+(.+)$/i
 // and /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i backtracked quadratically — Given/When/Then cubically — on a long
 // blank run, a long run of "when"s or a line break a capture can't cross. The scan tries the choices in the order the regex
 // engine does, so the first reading it finds is the engine's own, captures included (down to the one-blank capture the
@@ -312,7 +312,7 @@ function titleFromStory(prose) {
 }
 // The capture of /\bI want\s+(?:to\s+)?(.+?)(?:,|\s+so that\b|$)/i (and its PT / ES twin) by a scan: head / opt / closing are
 // its pieces (head global, opt / closing sticky). The lazy capture rescanned a long blank run at each step and every head
-// the text after it (1.17 H); here each position's "a clause ends here" is known once. Choices in the engine's order: the
+// the text after it; here each position's "a clause ends here" is known once. Choices in the engine's order: the
 // heads left to right; the optional word taken, its blanks given back one by one, not taken; the head's blanks given back.
 function wantClause(s, head, opt, closing) {
   const n = s.length;
@@ -341,7 +341,7 @@ function wantClause(s, head, opt, closing) {
   return null;
 }
 function newImportModel() {
-  // nameFallback (1.22 review): the name without the title (a file's or a folder's), for a title that slugifies to nothing
+  // nameFallback: the name without the title (a file's or a folder's), for a title that slugifies to nothing
   return { title: null, summary: null, nameHint: null, nameFallback: null, stories: [], extra: [], carried: [], design: null, tasks: null, skipped: [], warnings: [], mapping: {} };
 }
 // \s*[:.\-–—]?\s*(.*)$ (= \s*(?:[:.\-–—]\s*)?(.*)$) from i → the title | null

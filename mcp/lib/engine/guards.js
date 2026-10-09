@@ -22,7 +22,7 @@ let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
   decodeText, isNetworkPath, runProvesVerify, withinRoot;
-let approvedContentSame, proofIncomplete; // 1.25.1: gates.js (the guard's stale tasks approval) · evidence.js (an incomplete command runs nothing)
+let approvedContentSame, proofIncomplete; // gates.js (the guard's stale tasks approval) · evidence.js (an incomplete command runs nothing)
 function __link(E) { ({ approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
@@ -32,7 +32,7 @@ function __link(E) { ({ approvedContentSame, proofIncomplete, activeTasks, appro
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
   decodeText, isNetworkPath, runProvesVerify, withinRoot } = E); }
 
-// roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse): true, or "scope" (1.14 C1 — the
+// roadmap.json meta.guard — the opt-in guard mode read by hooks/guard-hook.js (PreToolUse): true, or "scope" (the
 // stricter level, guardLevel()).
 function guardEnabled(projectDir) {
   return guardLevel(projectDir) !== false;
@@ -56,9 +56,9 @@ function guardEnabled(projectDir) {
 // An approval covers only the tasks.md it signed off: when it carries a fingerprint and tasks.md no longer matches
 // it (tasks appended or edited after approval — ticking boxes is not an edit), the feature is `stale`, not covering:
 // "an approved spec that changed is not approved". An approval without a fingerprint (older state) still counts. "Changed" is
-// next_action's and finish's own test (approvedContentSame, gates.js — 1.25.1): trailing whitespace, final blank lines or a
+// next_action's and finish's own test (approvedContentSame, gates.js): trailing whitespace, final blank lines or a
 // "\r\r\n" file normalized to LF are no edit.
-// meta.guard "scope" (1.14 C1): once tasks are approved, a code file must also be in the plan — scopeGuardDecision.
+// meta.guard "scope": once tasks are approved, a code file must also be in the plan — scopeGuardDecision.
 function guardCheck(projectDir, filePath, cwd) {
   const pdir = path.resolve(projectDir);
   const level = guardLevel(pdir);
@@ -67,7 +67,7 @@ function guardCheck(projectDir, filePath, cwd) {
   const allow = (why, extra) => Object.assign({ guard: true, decision: "allow", why }, extra);
   if (typeof filePath !== "string" || !filePath.trim()) return allow("no-file");
   // Inside the project as text or through an alias of it (8.3 short name, junction, symlink — they were "outside" and
-  // allowed), spelled under pdir from here on. The path as the file system reads it first (guardTargetPath — 1.23 review 5:
+  // allowed), spelled under pdir from here on. The path as the file system reads it first (guardTargetPath — 
   // `a.ts::$DATA` and Git Bash's `/c/…` were allowed as no code / outside).
   const abs = insideDirAlias(pdir, path.resolve(cwd ? path.resolve(pdir, guardTargetPath(cwd)) : pdir, guardTargetPath(filePath)));
   if (!abs) return allow("outside");
@@ -118,7 +118,7 @@ function guardCheck(projectDir, filePath, cwd) {
   return { guard: true, decision: "ask", why: "no-approved-tasks", pending, stale, reason: G.ask(list(pending), list(stale)) };
 }
 
-// 1.23 review 5 (L21) — a Write / Edit target as the Windows file system reads it (win: process.platform === "win32" by default;
+// a Write / Edit target as the Windows file system reads it (win: process.platform === "win32" by default;
 // elsewhere ':' is a file name character and /c/ a folder): an NTFS stream suffix on the last segment is dropped — `a.ts::$DATA`
 // IS a.ts, `a.ts:x` / `a.ts:x:$DATA` a stream of it (an edit of it all the same) — and Git Bash's `/c/…` is `C:/…` (`//host`
 // untouched). Both were read as no code / outside the project and allowed with the guard on.
@@ -132,7 +132,7 @@ function guardTargetPath(p, win = process.platform === "win32") {
   const i = s.indexOf(":", cut + from);
   return i > cut ? s.slice(0, i) : s;
 }
-// 1.24 review 6 (C5) — a Write / Edit target (absolute, or relative to the payload's cwd) → the paths the file system reads it as:
+// a Write / Edit target (absolute, or relative to the payload's cwd) → the paths the file system reads it as:
 // [resolved] (`./`, `..` and a stream suffix taken out — `.specs/./roadmap.json`, `.specs/alpha/../roadmap.json`,
 // `roadmap.json::$DATA` were matched as text and allowed) plus, on Windows, when a segment looks like an 8.3 short name
 // (`ROADMA~1.JSO`, `STATE~1.JSO`), its real path (the file's, else its parent's + the name). Never a disk call on a network path;
@@ -147,7 +147,7 @@ function approvalEditTargets(fp, cwd, win = process.platform === "win32") {
   let abs;
   try { abs = path.resolve(base, s); } catch { return [s]; }
   const out = [abs];
-  // 1.25.1 (review 7): on every platform, the real path — a folder linked to .specs/ (`ln -s .specs sx`, a junction) or to a feature
+  // on every platform, the real path — a folder linked to .specs/ (`ln -s .specs sx`, a junction) or to a feature
   // folder: `sx/roadmap.json` IS .specs/roadmap.json — as well as an 8.3 short name (the file's, else its folder's + the name)
   let real = null;
   try { real = fs.realpathSync.native(abs); } catch {
@@ -158,7 +158,7 @@ function approvalEditTargets(fp, cwd, win = process.platform === "win32") {
 }
 
 // ---------------------------------------------------------------------------
-// 1.23 review 5 (M8) — the session's project, worktree-aware. The MCP server is pinned to SPEC_PROJECT_DIR = CLAUDE_PROJECT_DIR (the
+// the session's project, worktree-aware. The MCP server is pinned to SPEC_PROJECT_DIR = CLAUDE_PROJECT_DIR (the
 // folder Claude Code started in) and writes approvals / ticks / evidence there; the hooks used the payload's cwd first — in a git
 // worktree (EnterWorktree, a subagent cd'd into `.claude/worktrees/<n>` or a sibling checkout) that is the worktree's own copy of
 // .specs/, so the edit guard asked although the tasks were approved, the stop gate read no activity, and the SubagentStop gate looked
@@ -282,7 +282,7 @@ function setGuard(projectDir, on) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.14 F2 — the human approval guard (roadmap.json meta.approvalGuard: off | ask | deny; hooks/approval-hook.js, PreToolUse).
+// the human approval guard (roadmap.json meta.approvalGuard: off | ask | deny; hooks/approval-hook.js, PreToolUse).
 // An approval is the human's act, yet an agent can call spec_approve (force included) or run `dev-spec approve` itself. With the
 // guard on, an AGENT's approval — the spec_approve MCP tool under any server prefix, spec_feature {action: "remove", confirm: true},
 // `dev-spec approve …` / `dev-spec feature remove … --yes` run through the Bash / PowerShell tool (also inside `bash -c "…"`,
@@ -299,28 +299,28 @@ function setGuard(projectDir, on) {
 const APPROVAL_GUARD_LEVELS = ["off", "ask", "deny"]; // in order: a later level is stricter
 // The approve-shaped MCP tools, under any server prefix (Claude Code: mcp__plugin_dev-spec-driven_spec-driven__spec_approve;
 // a project server: mcp__spec-driven__spec_approve; any name a user registered the server under) or bare.
-const RE_APPROVAL_MCP = /^(?:mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track)$/; // spec_add_track: 1.24 review 6 (E3)
-// The tools that run a shell command (tool_input.command). 1.23 review 5 (P4): Monitor — it runs its command in the Bash tool's
+const RE_APPROVAL_MCP = /^(?:mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track)$/; // spec_add_track: 1.24 review 6
+// The tools that run a shell command (tool_input.command). Monitor — it runs its command in the Bash tool's
 // shell (with the Bash permission rules), and `node cli/dev-spec.js approve …` through it went past a deny-level guard.
 const APPROVAL_SHELL_TOOLS = new Set(["Bash", "PowerShell", "Monitor"]);
-// 1.23 review 5: the file-editing tools — a hand edit of a feature's approvals (.specs/**/.state.json) or of .specs/roadmap.json
+// the file-editing tools — a hand edit of a feature's approvals (.specs/**/.state.json) or of .specs/roadmap.json
 // (the guard's own level, the project's gates) is a guard-down action like a shell write of it. MultiEdit: an older tool name.
 const APPROVAL_EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]); // NotebookEdit (notebook_path): 1.25.1
-// 1.25.1 (review 7): another MCP server's file tools — filesystem's write_file / edit_file / move_file, Desktop Commander's write_file /
+// another MCP server's file tools — filesystem's write_file / edit_file / move_file, Desktop Commander's write_file /
 // edit_block, … — matched by the verb in the tool's name, never by the server (hooks/hooks.json's matcher is the same set); dev-spec's
 // own tools (spec_*, steering_scaffold, ears_validate, trace_check) are never one. Their path-like arguments are read as an Edit's path.
 const RE_MCP_FILE_TOOL = /^mcp__.+__[\w-]*?(?:write|edit|create|move|rename|delete|remove|copy|append|patch|replace|save|put|upload|mkdir|touch|truncate|unlink|insert)/i;
 const RE_DEVSPEC_MCP_TOOL = /__(?:spec_[a-z_]+|steering_scaffold|ears_validate|trace_check)$/;
 const RE_MCP_PATH_KEY = /path|file|source|src|dest|target|from|^to$|dir|folder|name|uri|location/i;
 // The `unreadable` reasons that ask at both levels (never refused outright — it may be no approval at all): a form the lexer can't
-// follow, a partial payload, a script fed to a shell out of sight, an unknown program run on .specs/ files (1.25.1), the hook's own
-// failure past its pre-check, a projectDir the hook can't read (1.25.1).
+// follow, a partial payload, a script fed to a shell out of sight, an unknown program run on .specs/ files, the hook's own
+// failure past its pre-check, a projectDir the hook can't read.
 const APPROVAL_ASK_WHYS = ["unparsed", "partial", "fed", "specs-arg", "error", "project"];
 const RE_STATE_FILE = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)+\.state\.json$/i;
-// 1.24 review 6 (C6): the harness-observed run log (hooks/observe-hook.js appends the runs Claude Code SAW: .specs/<f>/.execution/
+// the harness-observed run log (hooks/observe-hook.js appends the runs Claude Code SAW: .specs/<f>/.execution/
 // observed.jsonl, .specs/.execution/observed.jsonl for a project check) — an agent writing it forges observed evidence.
 const RE_OBSERVED_FILE = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)*\.execution[\\/]+observed\.jsonl$/i;
-// 1.24 review 6 (E3): the tracks that carry a gate of their own — +tdd (test-plan, Phase 4's failing tests), +ai (eval-plan, the eval
+// the tracks that carry a gate of their own — +tdd (test-plan, Phase 4's failing tests), +ai (eval-plan, the eval
 // harness): turning one off drops that gate (gates.js phaseActive). No other built-in track or a pack adds a phase.
 const APPROVAL_GATED_TRACKS = ["tdd", "ai"];
 const APPROVAL_COMMAND_MAX = 64 * 1024; // characters of a shell command read (the hook's payload may be anything)
@@ -330,20 +330,20 @@ const APPROVAL_LEX_DEPTH = 32; // $( … ) / `…` / heredoc scripts lexed at mo
 const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
   "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves",
   "print-config"]); // the CLI's BOOL_FLAGS ARE this list (print-config: 1.16 C1 — statusline --print-config)
-CLI_SWITCHES.add("revoke"); // 1.16 U2: approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
-CLI_SWITCHES.add("gherkin"); // 1.16 E1: export [f] --gherkin (= spec_export {format: "gherkin"})
-CLI_SWITCHES.add("install").add("uninstall"); // 1.21 F1a: merge-state --install / --uninstall (the git merge driver's setup)
-CLI_SWITCHES.add("explain"); // 1.21 F2: classify "<text>" --explain (= spec_classify {explain: true})
-CLI_SWITCHES.add("adr"); // 1.25: export [f] --adr (= spec_export {format: "adr"})
-CLI_SWITCHES.add("dry-run"); // 1.25: import … --dry-run (= spec_import {dryRun: true} — nothing written, the same result + a preview)
+CLI_SWITCHES.add("revoke"); // approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
+CLI_SWITCHES.add("gherkin"); // export [f] --gherkin (= spec_export {format: "gherkin"})
+CLI_SWITCHES.add("install").add("uninstall"); // merge-state --install / --uninstall (the git merge driver's setup)
+CLI_SWITCHES.add("explain"); // classify "<text>" --explain (= spec_classify {explain: true})
+CLI_SWITCHES.add("adr"); // export [f] --adr (= spec_export {format: "adr"})
+CLI_SWITCHES.add("dry-run"); // import … --dry-run (= spec_import {dryRun: true} — nothing written, the same result + a preview)
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
   "time", "exec", "command", "call", "start", "timeout", "nice", "ionice", "setsid", "stdbuf", "wsl", "xargs", "!", "if", "then", "else", "elif",
   "do", "while", "until", "winpty", "flock", // winpty, flock: 1.22 review
-  // 1.23 review 5 (L20): tracers, output buffers, bash's builtin / coproc, the TypeScript runners, nodemon, GNU parallel
+  // tracers, output buffers, bash's builtin / coproc, the TypeScript runners, nodemon, GNU parallel
   "strace", "ltrace", "unbuffer", "chronic", "builtin", "coproc", "tsx", "ts-node", "nodemon", "parallel", "valgrind", "caffeinate", "catchsegv"]);
-// Wrappers whose first N plain words are theirs, not the program: flock <lockfile> <command> (1.22 review).
+// Wrappers whose first N plain words are theirs, not the program: flock <lockfile> <command>.
 const APPROVAL_POSITIONALS = new Map([["flock", 1]]);
 // Launchers that run a package's bin through a subcommand only: npm exec / npm x, pnpm dlx / pnpm exec, yarn dlx / yarn exec,
 // bun x / bun run, deno run (`yarn dev-spec …` — the CLI named directly — is found as it is). Any other subcommand runs no bin.
@@ -388,7 +388,7 @@ const APPROVAL_PS_SHELLS = new Set(["powershell", "pwsh", "iex", "invoke-express
 const APPROVAL_STDIN_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish", "cmd", "powershell", "pwsh", "wsl", "su"]);
 const approvalShellMode = (prog) => (prog === "cmd" ? "cmd" : APPROVAL_PS_SHELLS.has(prog) ? "ps" : "bash");
 const RE_DEVSPEC_WORD = /(?:^|[\\/])dev-spec(?:\.(?:[cm]?js|cmd|ps1|exe))?$/i;
-// 1.23 review 5 (L20): a glob that names the CLI's script (`node cli/dev-sp?c.js approve …` — the shell expands it) — its last
+// a glob that names the CLI's script (`node cli/dev-sp?c.js approve …` — the shell expands it) — its last
 // path segment, read as a glob (* ? [set]), matches one of the script's names. Bounded: a word over 200 characters is no glob here.
 const DEVSPEC_NAMES = ["dev-spec", "dev-spec.js", "dev-spec.cjs", "dev-spec.mjs", "dev-spec.cmd", "dev-spec.ps1", "dev-spec.exe"];
 function devSpecGlob(word) {
@@ -413,13 +413,13 @@ function devSpecGlob(word) {
 const isDevSpecWord = (w) => RE_DEVSPEC_WORD.test(w) || devSpecGlob(w);
 // A word that is only a substitution or a variable ($(which node), `…`, $NODE, ${NODE}, $env:NODE, %NODE%): an unknown launcher.
 const RE_APPROVAL_VAR_WORD = /^(?:\$(?:\{[^{}]*\}|[A-Za-z_][\w:]*)|%\w+%)$/;
-// …except cmd.exe named through its variable: `& $env:ComSpec /c "…"`, `%ComSpec% /c …` (1.23 review 5).
+// …except cmd.exe named through its variable: `& $env:ComSpec /c "…"`, `%ComSpec% /c …`.
 const RE_COMSPEC_WORD = /^(?:\$env:comspec|\$\{env:comspec\}|%comspec%)$/i;
 // A shell command can run the CLI or write .specs/roadmap.json only if it names dev-spec or .specs — read with quotes, escapes and
 // line continuations taken out (`dev\-spec`, `d'e'v-spec`, `dev`-spec`), PowerShell's / JavaScript's string joints too
-// (`"cli/dev" + "-spec.js"` — 1.23 review 5). Or (1.23) a glob together with an approval word: the glob may name the CLI. The
+// (`"cli/dev" + "-spec.js"`). Or a glob together with an approval word: the glob may name the CLI. The
 // hook's own pre-check is the same test.
-// 1.25.1 (review 7): or the files the guard stands on by name (`find . -name roadmap.json -delete`), or a glob / brace expansion that
+// or the files the guard stands on by name (`find . -name roadmap.json -delete`), or a glob / brace expansion that
 // may name .specs (`.s*/road*.json`, `.spec?/…`) or stand beside a writer / remover (PowerShell's `Remove-Item * -Recurse` reaches
 // .specs/). The hook's pre-check (approval-hook.js candidate) is the same test — mcp/tests/10-guards-review7.js checks they agree.
 const RE_APPROVAL_CANDIDATE = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
@@ -442,7 +442,7 @@ const approvalCandidate = (text) => {
   }
   return false;
 };
-// 1.23 review 5 (L20, fail closed): the programs whose arguments are only text or files read — a simple command run by one of
+// fail closed: the programs whose arguments are only text or files read — a simple command run by one of
 // them never runs the CLI (`echo dev-spec approve x`, `git commit -m "…approve…"`, `grep -r "dev-spec.js approve" .`).
 const APPROVAL_TEXT_PROGRAMS = new Set(["echo", "printf", "print", "git", "gh", "grep", "egrep", "fgrep", "rg", "ag", "ack", "findstr",
   "select-string", "sls", "cat", "type", "gc", "get-content", "less", "more", "head", "tail", "bat", "write-host", "write-output",
@@ -452,10 +452,10 @@ const APPROVAL_TEXT_PROGRAMS = new Set(["echo", "printf", "print", "git", "gh", 
   "dirname", "test-path", "resolve-path", "get-item", "gi", "measure-object", "format-list", "fl", "format-table", "ft"]);
 // The JavaScript runtimes that read their script from stdin with `-` (`cat cli/dev-spec.js | node - approve …`).
 const APPROVAL_STDIN_RUNTIMES = new Set(["node", "nodejs", "bun"]);
-// .specs/roadmap.json as a write target (R1): a redirection's target, or the file a writer program names.
+// .specs/roadmap.json as a write target: a redirection's target, or the file a writer program names.
 const RE_ROADMAP_FILE = /(?:^|[\\/])\.specs[\\/]+roadmap\.json$/i;
 const RE_SPECS_DIR = /(?:^|[\\/])\.specs[\\/]*$/i;
-// The programs whose operands are written (each one) — 1.25.1 (review 7): + sponge, dos2unix / unix2dos (in place), the PowerShell
+// The programs whose operands are written (each one) — + sponge, dos2unix / unix2dos (in place), the PowerShell
 // file cmdlets read by their parameters (shellSegOps).
 const APPROVAL_WRITERS_ANY = new Set(["tee", "truncate", "rm", "unlink", "shred", "del", "erase", "remove-item", "ri", "set-content", "sc",
   "add-content", "ac", "out-file", "clear-content", "clc", "new-item", "ni", "mv", "move", "move-item", "mi", "ren", "rename", "rename-item",
@@ -465,14 +465,14 @@ const APPROVAL_REMOVERS = new Set(["rm", "rmdir", "rd", "del", "erase", "remove-
 const APPROVAL_MOVERS = new Set(["mv", "move", "move-item", "mi", "ren", "rename", "rename-item", "rni"]);
 const APPROVAL_WRITERS_TARGET =new Set(["cp", "copy", "copy-item", "cpi", "install", "ln", "rsync", "xcopy", "robocopy", "scp"]); // the LAST path is written
 const APPROVAL_WRITERS_INPLACE = new Set(["sed", "perl", "ruby"]); // with -i / --in-place
-// 1.25.1 (review 7): the other programs that write the files they name — editors run with their commands (ed, ex, vim -c …), awk -i
+// the other programs that write the files they name — editors run with their commands (ed, ex, vim -c …), awk -i
 // inplace, the downloaders' output files (curl -o, wget -O / -P), the archivers' extraction folders and members (tar -x -C, unzip -d,
 // 7z x -o, Expand-Archive), patch, sort -o, uniq's output, iconv -o, xxd's output, zip's archive — and the link makers (ln, mklink,
 // New-Item -ItemType SymbolicLink / Junction / HardLink, subst, junction, fsutil hardlink, mount --bind).
 const APPROVAL_WRITERS_OTHER = new Set(["ed", "red", "ex", "vi", "vim", "nvim", "view", "awk", "gawk", "mawk", "nawk", "curl", "wget", "tar", "bsdtar",
   "unzip", "7z", "7za", "7zr", "expand-archive", "patch", "sort", "uniq", "iconv", "xxd", "zip", "base64", "mklink", "subst", "junction", "fsutil",
   "mount", "git", "find", "cd", "chdir", "pushd", "popd", "sl", "set-location", "push-location", "pop-location"]);
-// 1.25.1 (review 7, fail closed): the programs known to only READ the files they name (beyond the text-only ones) — interpreters (their
+// fail closed: the programs known to only READ the files they name (beyond the text-only ones) — interpreters (their
 // inline scripts are a known limit), JSON / text tools, checksums, PowerShell's readers. Any OTHER program run on .specs/ itself,
 // roadmap.json, a .state.json or an observed log — a glob or a variable that may be one — asks (`unreadable`, why "specs-arg").
 const APPROVAL_READERS = new Set(["node", "nodejs", "bun", "deno", "python", "python3", "py", "pypy", "pypy3", "php", "lua", "jq", "yq", "gojq", "jless",
@@ -489,8 +489,8 @@ function approvalGuardInput(v) {
   return APPROVAL_GUARD_LEVELS.includes(s) ? s : undefined;
 }
 // A roadmap.json that exists but doesn't parse keeps the strictest meta.approvalGuard its raw text names (fail closed: appending
-// a byte to the file must not switch the guard off). Linear: one literal key, no nested quantifier. NULs are taken out first (1.24
-// review 6, A4): a BOM-less UTF-16 file read as UTF-8 is that text with a NUL after each ASCII character.
+// a byte to the file must not switch the guard off). Linear: one literal key, no nested quantifier. NULs are taken out first:
+// a BOM-less UTF-16 file read as UTF-8 is that text with a NUL after each ASCII character.
 const RE_RAW_APPROVAL_GUARD = /"approvalGuard"\s*:\s*"\s*(ask|deny)\s*"/gi;
 function rawApprovalGuard(text) {
   let lvl = 0;
@@ -505,7 +505,7 @@ function approvalGuardLevel(projectDir) {
   if (approvalRoadmapGone(projectDir)) return "ask";
   return (isObj(l.rm.meta) && approvalGuardInput(l.rm.meta.approvalGuard)) || "off";
 }
-// 1.25.1 (review 7): a .specs/ holding features (a feature folder with its .state.json) but no roadmap.json — every engine write that
+// a .specs/ holding features (a feature folder with its .state.json) but no roadmap.json — every engine write that
 // makes a feature writes roadmap.json, so it was deleted (a route the guard didn't see, or by hand): the approval guard's level is
 // unknown, and it FAILS CLOSED at ask (the hook reads it the same way) until roadmap.json is back. (The engine's next roadmap write
 // recreates it with the default meta — off: deleting it from the shell is itself a guard-down.)
@@ -605,7 +605,7 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
   const bash = mode === "bash", ps = mode === "ps", cmdm = mode === "cmd";
   let words = [], raws = [], redirs = [], herestrings = [], segDocs = [], writes = [], procs = [], stdinRedir = false;
   let cur = "", raw = "", has = false, quoted = false, redir = null, paren = 0, arith = 0; // arith: the paren level inside (( … ))
-  // 1.25.1 (review 7): the pipeline — the simple command a `|` feeds (pipeIn: the one before it, lastSeg: the last one this list ended)
+  // the pipeline — the simple command a `|` feeds (pipeIn: the one before it, lastSeg: the last one this list ended)
   let pipeIn = null, lastSeg = null;
   const heredocs = []; // bash: bodies waiting for the next newline — { delim, strip, quoted, shell, body }
   const add = (t, r) => { cur += t; raw += r === undefined ? t : r; has = true; };
@@ -615,7 +615,7 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       else if (redir && redir.startsWith("<<<")) herestrings.push(cur);
       else if (redir) {
         redirs.push(cur, raw);
-        // 1.25.1: an OUTPUT redirection's target (> >> >| &> 2> *> <>) is written; `2>&1` / `>&-` duplicate or close a descriptor
+        // an OUTPUT redirection's target (> >> >| &> 2> *> <>) is written; `2>&1` / `>&-` duplicate or close a descriptor
         if (redir.includes(">")) { if (!(/&$/.test(redir) && /^(?:\d+|-)?$/.test(cur))) writes.push(cur, raw); }
         else stdinRedir = true; // `< file`: the command reads its stdin from a file
       }
@@ -635,7 +635,7 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       const sh = segDocs.length || herestrings.length ? stdinShellMode(words, raws) : null;
       for (const h of segDocs) h.shell = sh;
       seg.stdinShell = sh;
-      // 1.25.1 (review 7): what the reader of writes and of fed scripts needs — the output redirections' targets, the heredocs (their
+      // what the reader of writes and of fed scripts needs — the output redirections' targets, the heredocs (their
       // bodies once read), the process substitutions <( … ) / >( … ) among the words, a `< file` stdin, and the command a `|` feeds in
       seg.writes = writes;
       seg.docs = segDocs;
@@ -672,7 +672,7 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
         if ((h.strip ? line.replace(/^\t+/, "") : line) === h.delim) { end = p; next = Math.min(e + 1, s.length); break; }
         p = e + 1;
       }
-      h.body = s.slice(pos, end); // 1.25.1: kept — `cat <<'EOF' | bash` feeds it to a shell
+      h.body = s.slice(pos, end); // kept — `cat <<'EOF' | bash` feeds it to a shell
       if (depth < APPROVAL_LEX_DEPTH && end > pos) {
         const body = h.body;
         if (h.shell) shellLexList(body, 0, h.shell, segs, false, depth + 1); // `bash <<'EOF'`: the body IS the script
@@ -777,7 +777,7 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       continue;
     }
     if (ps && c === "-" && !has && n === "-" && s[i + 2] === "%" && (i + 3 >= s.length || " \t\r\n|".includes(s[i + 3]))) {
-      // 1.24 review 6 (C1): PowerShell's stop-parsing token. The rest of the line — to a newline or a `|` outside "…" — goes to the
+      // PowerShell's stop-parsing token. The rest of the line — to a newline or a `|` outside "…" — goes to the
       // program as it is written: split at blanks, "…" grouping (the quotes dropped); ' ; $ ( ` are plain characters there. The
       // token itself is PowerShell's, never an argument (`node <cli> --% approve …` runs `approve`).
       let j = i + 3, w = "", any = false, inQ = false;
@@ -806,7 +806,7 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
     if (c === " " || c === "\t") { endWord(); continue; }
     if (bash && c === "&" && n === ">") continue; // &> / &>>: the redirection below
     if (bash && (c === "<" || c === ">") && n === "(") { // <( … ) / >( … ): a process substitution
-      // 1.25.1 (review 7): its commands are read as a nested list (they run), and the seg keeps its text — `bash <(echo '…')`,
+      // its commands are read as a nested list (they run), and the seg keeps its text — `bash <(echo '…')`,
       // `source <(…)` run that text as a script. It stands as a word ("") or as a redirection's target (`bash < <(…)`).
       const at = redir ? -1 : (endWord(), words.length);
       const e = subst(i + 2);
@@ -825,7 +825,7 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       else {
         op += c;
         k = i + 1;
-        if (c === "<" && s[k] === ">") { op += ">"; k++; } // <> opens the file for reading AND writing (1.25.1)
+        if (c === "<" && s[k] === ">") { op += ">"; k++; } // <> opens the file for reading AND writing
         else if (s[k] === c) { op += c; k++; }
         else if (c === ">" && s[k] === "|") { op += "|"; k++; }
         if (s[k] === "&") { op += "&"; k++; }
@@ -835,7 +835,7 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       continue;
     }
     if (c === "(") {
-      // 1.25.1 (review 7): a simple command ended by `(` — its next one is a ( … ) argument list (PowerShell: `New-Object X('…')`)
+      // a simple command ended by `(` — its next one is a ( … ) argument list (PowerShell: `New-Object X('…')`)
       const had = words.length > 0 || has;
       const sg = endSeg();
       if (had && sg) sg.openParen = true;
@@ -849,7 +849,7 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       if (paren < arith) arith = 0;
       continue;
     }
-    // 1.25.1 (review 7): in Bash `{` / `}` are reserved words only standing alone (`{ cmd; }`); inside a word they are brace expansion
+    // in Bash `{` / `}` are reserved words only standing alone (`{ cmd; }`); inside a word they are brace expansion
     // (`{approve,}`, `{.specs,x}/roadmap.json`, find's `{}`) — the word keeps them (it was cut there: `{approve,} …` read as no CLI call).
     if (bash && (c === "{" || c === "}") && (has || (n !== undefined && !/[\s;&|)]/.test(n)))) { add(c); continue; }
     if (c === "|") { // a pipe feeds the next simple command (`||` is no pipe; `|&` pipes stderr too)
@@ -889,7 +889,7 @@ function devSpecWordAt(words, raw) {
   const k = programAt(words, raw);
   return k >= 0 && (isDevSpecWord(words[k]) || isDevSpecWord((raw && raw[k]) || "")) ? k : -1;
 }
-// 1.24 review 6 (C5, C2) — a path as the file system reads it, for the guarded-file tests: a writer's option prefix (of=, -Path:,
+// a path as the file system reads it, for the guarded-file tests: a writer's option prefix (of=, -Path:,
 // -Destination:) dropped, an NTFS stream suffix and Git Bash's /c/ read as Windows reads them (guardTargetPath), `\` as `/`, the
 // `.` / `..` segments folded (`.specs/./roadmap.json`, `.specs/alpha/../roadmap.json` — written through, read past the guard).
 function approvalPathText(w) {
@@ -899,7 +899,7 @@ function approvalPathText(w) {
   return n === "." ? "" : n;
 }
 // The files the approval guard stands on → { setting, feature? } | null for a path: .specs/roadmap.json ("roadmap": the guard and the
-// project's gates), a feature's .state.json ("state": its approvals, evidence, history) and (1.24 review 6, C6) a harness-observed run
+// project's gates), a feature's .state.json ("state": its approvals, evidence, history) and a harness-observed run
 // log ("observed": .specs/<f>/.execution/observed.jsonl, or the project's .specs/.execution/observed.jsonl — feature null).
 function approvalGuardedFile(p) {
   const t = approvalPathText(p);
@@ -921,7 +921,7 @@ function approvalGuardedDir(p) {
   const m = /(?:^|\/)\.specs\/([^/]+)\/?$/i.exec(t);
   return m && !/^\./.test(m[1]) && !/\.(?:md|json|jsonl|html?|ya?ml|txt)$/i.test(m[1]) ? { setting: "state", feature: m[1] } : null;
 }
-// git's subcommands that rewrite files of the work tree they name (1.24 review 6, C2: `git checkout HEAD~1 -- .specs/roadmap.json`
+// git's subcommands that rewrite files of the work tree they name (`git checkout HEAD~1 -- .specs/roadmap.json`
 // brought back an older roadmap.json — approvalGuard off): checkout / restore (unless --staged alone: the index only) / merge-file
 // (its first file, unless -p) / rm (unless --cached) / mv. → the words they write. Read-only git (diff, log, show, add, commit…), and
 // the forms whose files can't be known from the command (apply, stash pop, reset --hard, a branch switch), name nothing.
@@ -949,19 +949,19 @@ function gitWriteTargets(words, k) {
   if (sub === "merge-file") return has("-p", "--stdout") ? [] : plain(["-L"]).slice(0, 1);
   if (sub === "rm") return has("--cached") ? [] : plain(["--pathspec-from-file"]);
   if (sub === "mv") return plain([]);
-  // 1.25.1 (review 7): `git clean -fdx .specs` deletes the untracked files it names (unless -n / --dry-run); `git stash push -- .specs`
+  // `git clean -fdx .specs` deletes the untracked files it names (unless -n / --dry-run); `git stash push -- .specs`
   // puts them back to HEAD (a pathspec — the other stash forms name no file: a known limit)
   if (sub === "clean") return has("-n", "--dry-run") || args.some((a) => /^-[A-Za-z]*n/.test(a) && !a.startsWith("--")) ? [] : plain(["-e", "--exclude"]);
   if (sub === "stash" && /^(?:push|save|-)/.test(String(args[0] || "-"))) return plain(["-m", "--message", "--pathspec-from-file"]).filter((a) => a !== "push" && a !== "save");
   return [];
 }
-// A simple command that writes a file the approval guard stands on → its guard-down actions ([] = none): .specs/roadmap.json (R1:
-// where the approval guard lives) and (1.24 review 6) a feature's .state.json and a harness-observed log — a redirection to it (> >>
+// A simple command that writes a file the approval guard stands on → its guard-down actions ([] = none): .specs/roadmap.json (
+// where the approval guard lives) and a feature's .state.json and a harness-observed log — a redirection to it (> >>
 // >| &> 2> *>), a writer naming it (tee, Set-Content, Out-File, Add-Content, rm / Remove-Item, mv / Move-Item / ren, truncate, dd
 // of=…), sed / perl -i on it, cp / Copy-Item / ln / install onto it (the last path, a -Destination / -t value, or a folder receiving
 // a file of that name), deleting or moving .specs/ away (roadmap.json with it), and git's in-place writers (gitWriteTargets). Reading
 // it (cat, jq, git show, cp FROM it) is no write. The paths are read as the file system reads them (approvalPathText).
-// 1.25.1 (review 7): read ONCE for both guards (shellSegOps → shellOpActions here; shellOpPaths for the edit guard's code files) — and
+// read ONCE for both guards (shellSegOps → shellOpActions here; shellOpPaths for the edit guard's code files) — and
 // beyond the exact paths: a target that is a glob, a brace expansion or a variable (`.specs/road*.json`, `.spec?/…`, `{.specs,x}/…`,
 // `D=.specs; cp t $D/roadmap.json`), a remover / mover on a folder or glob under .specs/ (`rm -rf .specs/<feature>`, `rm -rf .specs/*`,
 // `find .specs … -delete`, `git clean … .specs`), the extractors and copiers into .specs/ (rsync, tar -C, unzip -d, robocopy, xcopy, cp
@@ -977,7 +977,7 @@ function specsWriteActions(words, raw, ctx, mode, nextSeg) {
   return out.filter((a) => { const key = JSON.stringify(a); return !seen.has(key) && seen.add(key); });
 }
 
-// --- the shell's file operations (1.25.1, review 7) ---------------------------------------------------------------------------
+// --- the shell's file operations ---------------------------------------------------------------------------
 const SHELL_VAR = "\u0001"; // in a path: a variable left unresolved ($X, ${X}, $env:X, %X%) — it may hold anything but is never read as .specs
 const SHELL_ANY = "\u0002"; // in a path: any chain of folders, dot folders included (find descends into .specs/, a recursive listing)
 const GUARDED_NAMES = ["roadmap.json", ".state.json", "observed.jsonl"];
@@ -1539,7 +1539,7 @@ function approvalGatedTracks(list) {
 // The edit guard's strength (meta.guard): off < on < scope.
 const guardRank = (g) => (g === "scope" ? 2 : g === true ? 1 : 0);
 const guardName = (g) => (g === "scope" ? "scope" : g === true ? "on" : "off");
-// spec_init / `init` settings → the GUARD-DOWN actions among them (R10: what weakens a protection the approval guard stands for;
+// spec_init / `init` settings → the GUARD-DOWN actions among them (what weakens a protection the approval guard stands for;
 // raising or adding is never one). ch = { approvalGuard, evidence, stopCheck, guard, roles (a validated map), checks ({name:
 // command | ""}) } — the values the call would set; meta = the project's roadmap.json meta, or undefined when it can't be read
 // (then every change that COULD weaken counts — fail closed).
@@ -1607,14 +1607,14 @@ function cliApprovalAction(args, level, meta) {
     }
     // `feature remove <name>` without --yes only previews what it would delete.
     if (cmd === "feature" && String(pos[1] || "").toLowerCase() === "remove" && approvalTruthy(fl.yes)) return [Object.assign({ kind: "remove", feature: approvalStr(pos[2]) }, base)];
-    // 1.24 review 6 (C2): `merge-state <base> <ours> <theirs> [<path>]` — git's merge driver — writes its merge into <ours>: run by an
+    // `merge-state <base> <ours> <theirs> [<path>]` — git's merge driver — writes its merge into <ours>: run by an
     // agent on a .state.json (its approvals) or on .specs/roadmap.json (this guard), it is a hand edit of them. Git runs the driver
     // inside `git merge` on its own temp files (never through the Bash tool); --install / --uninstall / --check write no state.
     if (cmd === "merge-state" && pos.length >= 4 && fl.install === undefined && fl.uninstall === undefined && fl.check === undefined) {
       const h = approvalGuardedFile(pos[2]);
       if (h && h.setting !== "observed") return [Object.assign({ kind: "guard-down", setting: h.setting }, h.setting === "state" ? { feature: h.feature || null } : {}, base)];
     }
-    // 1.24 review 6 (E3): `add-track <feature> <track…> --remove` turning off +tdd / +ai drops the gates they carry.
+    // `add-track <feature> <track…> --remove` turning off +tdd / +ai drops the gates they carry.
     if (cmd === "add-track" && approvalTruthy(fl.remove)) {
       const tracks = approvalGatedTracks(pos.slice(2).concat(typeof fl.tracks === "string" ? [fl.tracks] : []));
       if (tracks.length) return [Object.assign({ kind: "guard-down", setting: "track", feature: approvalStr(pos[1]), tracks }, base)];
@@ -1635,12 +1635,12 @@ function cliApprovalAction(args, level, meta) {
 }
 // Every approval / guard-down action a shell command runs (each simple command; the scripts of bash -c / cmd /c / pwsh -Command
 // …, of a heredoc / here-string fed to a shell; a write to .specs/roadmap.json).
-// 1.22 review: + the UNQUOTED forms — `cmd /c node cli\dev-spec.js approve …`, `pwsh -Command node cli/dev-spec.js approve …`
+// + the UNQUOTED forms — `cmd /c node cli\dev-spec.js approve …`, `pwsh -Command node cli/dev-spec.js approve …`
 // (the words after cmd's /c /k /r or pwsh / powershell's -Command / -c, joined: restScript), `Start-Process node -ArgumentList
 // 'cli/dev-spec.js','approve',…` (startProcessLine), `find … -exec node cli/dev-spec.js approve … ;` (findExecActions), and the
 // wrappers winpty / flock (+ `flock … -c "…"`, `script -c "…"`) — all allowed at deny before. One simple command's nested
 // actions are deduplicated (a quoted script is read both as a word and as the joined rest).
-// 1.25.1 (review 7): ctx — { vars, cwd } — carries what the command set before each simple command (a variable assigned, a `cd`) into
+// ctx — { vars, cwd } — carries what the command set before each simple command (a variable assigned, a `cd`) into
 // the reading of its paths, and `collect` (shellWriteTargets — the edit guard) receives every file operation, nested scripts included
 // (read whatever they name). Text fed to a shell as its script (a pipe, a process substitution, xargs → sh -c) is read as that shell's
 // script when it is visible, else it is unreadable (why "fed": ask). PowerShell's `node <cli> @('approve', …)`: the array's elements.
@@ -1661,7 +1661,7 @@ function shellApprovalActions(command, level, depth, mode, meta, ctx) {
       }
       out.push(...cliApprovalAction(args, level, meta));
     }
-    // 1.23 review 5 (L20): the CLI fed to a JavaScript runtime on stdin — `cat cli/dev-spec.js | node - approve …`,
+    // the CLI fed to a JavaScript runtime on stdin — `cat cli/dev-spec.js | node - approve …`,
     // `node - approve … < cli/dev-spec.js` — when the command names the CLI somewhere.
     const sa = at < 0 && namesCli ? stdinScriptAt(words, raw) : -1;
     if (sa >= 0) out.push(...cliApprovalAction(words.slice(sa + 1), level, meta));
@@ -1679,7 +1679,7 @@ function shellApprovalActions(command, level, depth, mode, meta, ctx) {
     let shell = null, posix = false;
     for (let j = 0; j < end; j++) {
       if (shell && /\s/.test(words[j]) && want(words[j])) add(shellApprovalActions(words[j], level, depth + 1, shell, meta, c));
-      // 1.23 review 5 (L20): `sh -c 'node "$0" approve x tasks' cli/dev-spec.js` — a POSIX shell's -c script with its positional
+      // `sh -c 'node "$0" approve x tasks' cli/dev-spec.js` — a POSIX shell's -c script with its positional
       // parameters ($0 … $9, "$@", $*) taken from the words after it, then read as a script.
       if (posix && words[j] === "-c" && j + 1 < end && /\$(?:[0-9@*]|\{[0-9@*]\})/.test(words[j + 1])) lex(withPositionals(words[j + 1], raw.slice(j + 2, end)), "bash");
       const p = approvalProgram(words[j]);
@@ -1721,7 +1721,7 @@ function shellTrack(words, raw, mode, ctx) {
   if (!dir || dir === "-" || /^~/.test(dir) || dir.includes(SHELL_VAR)) { ctx.cwd = ""; return; }
   ctx.cwd = /^(?:[\\/]|[A-Za-z]:)/.test(dir) || !ctx.cwd ? dir : ctx.cwd + "/" + dir;
 }
-// Text fed to a shell as its script (1.25.1, review 7) — the simple command is a shell with no script of its own reading stdin (bash /
+// Text fed to a shell as its script — the simple command is a shell with no script of its own reading stdin (bash /
 // sh -s / no operand, cmd without /c, pwsh / powershell without -Command / -File or with `-Command -`, `iex` / Invoke-Expression without
 // an argument, xargs feeding `sh -c` its script) or `source` / `.` / a shell running a process substitution (`bash <(…)`). → { script,
 // mode } when the text is visible (piped from echo / printf / Write-Output / a PowerShell string / a heredoc to cat, or such a process
@@ -1816,7 +1816,7 @@ function shellProcText(text) {
   const parts = segs.map(shellProducedText);
   return parts.some((x) => x == null) ? null : parts.join("\n");
 }
-// 1.25.1 (review 7) — the edit guard on the shell (hooks/guard-hook.js, Bash / PowerShell / Monitor): the files a command writes, removes,
+// the edit guard on the shell (hooks/guard-hook.js, Bash / PowerShell / Monitor): the files a command writes, removes,
 // replaces or copies into (shellSegOps — the approval guard's own reader; nested scripts read too), as it names them (relative to its
 // cwd — and, after a `cd` in the command, to that folder too), `~` expanded; a path that starts with an unknown variable is left out
 // ($TMP/x.ts). Bounded: 64 paths. guardCheck decides which are code.
@@ -1828,7 +1828,7 @@ function shellWriteTargets(command, mode) {
 }
 // A word of a joined script: one holding whitespace is quoted again ("C:\My Tools\cli\dev-spec.js"), so the script keeps its words.
 const joinScriptWords = (list) => list.map((w) => (/\s/.test(w) && !w.includes('"') ? '"' + w + '"' : w)).join(" ");
-// 1.23 review 5 (L20) — the POSIX shells whose `-c script arg0 arg1 …` hands the script its positional parameters.
+// the POSIX shells whose `-c script arg0 arg1 …` hands the script its positional parameters.
 const APPROVAL_POSIX_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 // A -c script with $0 … $9, ${N}, "$@" / $@ / $* replaced by the words after it (arg0 is $0), each quoted when it holds whitespace.
 function withPositionals(script, args) {
@@ -1867,7 +1867,7 @@ function decodePwshEncoded(word) {
 // p): the rest of the words is the script, joined (the raw words: a Windows path keeps its backslashes). → { script, mode } | null
 function restScript(words, raw, j, p) {
   if (p === "cmd") {
-    // (`cmd //c …`: Git Bash's spelling of /c — MSYS turns // into / — 1.23 review 5)
+    // (`cmd //c …`: Git Bash's spelling of /c — MSYS turns // into /)
     for (let k = j + 1; k < words.length && /^\//.test(words[k]); k++) {
       if (/^\/\/?[ckr]$/i.test(words[k])) return k + 1 < words.length ? { script: joinScriptWords(raw.slice(k + 1)), mode: "cmd" } : null;
     }
@@ -1878,7 +1878,7 @@ function restScript(words, raw, j, p) {
     const w = words[k];
     if (/^[-/]/.test(w)) {
       const o = pwshOption(w);
-      // -EncodedCommand (-ec, -e…): its value is the script, base64 of UTF-16LE — decoded and read (1.23 review 5)
+      // -EncodedCommand (-ec, -e…): its value is the script, base64 of UTF-16LE — decoded and read
       const opt = w.slice(1).toLowerCase();
       if (o === "script" && (opt === "ec" || (opt[0] === "e" && "encodedcommand".startsWith(opt)))) {
         const s = k + 1 < words.length ? decodePwshEncoded(raw[k + 1]) : null;
@@ -1935,7 +1935,7 @@ function findExecActions(words, raw, level, meta) {
   }
   return out;
 }
-// 1.16 U: a revocation (revoke: true — the same gate as an approval: the approval record is the human's) and a waiver's reason /
+// a revocation (revoke: true — the same gate as an approval: the approval record is the human's) and a waiver's reason /
 // expiry (carried into the command the human runs) → the extra fields of an "approve" action (none when absent).
 function approvalExtras(revoke, reason, expires) {
   const out = {};
@@ -1952,7 +1952,7 @@ function mcpApprovalAction(tool, ti, level, meta) {
   }
   // spec_feature remove without confirm: true only previews what it would delete; archive / rename / restore / flow aren't approvals.
   if (tool === "spec_feature") return String(approvalStr(ti.action) || "").toLowerCase() === "remove" && ti.confirm === true ? [Object.assign({ kind: "remove", feature: approvalStr(ti.name) }, base)] : [];
-  // 1.24 review 6 (E3): spec_add_track {remove: true} turning off +tdd / +ai (the gates they carry); adding a track is never one.
+  // spec_add_track {remove: true} turning off +tdd / +ai (the gates they carry); adding a track is never one.
   if (tool === "spec_add_track") {
     // (`track`: the schema's string; an array, or a `tracks` key, read too — a superset)
     const tracks = ti.remove === true ? approvalGatedTracks([].concat(ti.track == null ? [] : ti.track, ti.tracks == null ? [] : ti.tracks)) : [];
@@ -1969,11 +1969,11 @@ function approvalCommand(a, cli) {
   const safe = (v, re) => (typeof v === "string" && re.test(v) ? v : null);
   const word = (v, ph) => safe(v, /^[\p{L}\p{N}_.-]{1,80}$/u) || ph;
   const name = (v) => { const s = safe(v, /^[\p{L}\p{N} _.@+,-]{1,120}$/u); return s ? (/\s/.test(s) ? '"' + s + '"' : s) : "<feature>"; };
-  if (a.kind === "unreadable") return null; // a command the guard can't read: there is no CLI line to suggest (1.23 review 5)
-  const words = [i18n.cliPrefix(cli)]; // 1.21 F3: `node "<cli>"`, quoted like every runnable CLI line (i18n/common.js cliQuote)
+  if (a.kind === "unreadable") return null; // a command the guard can't read: there is no CLI line to suggest
+  const words = [i18n.cliPrefix(cli)]; // `node "<cli>"`, quoted like every runnable CLI line (i18n/common.js cliQuote)
   if (a.kind === "remove") words.push("feature", "remove", name(a.feature), "--yes");
   else if (a.kind === "guard-down") {
-    // a write / edit of the file itself (1.24: or of the harness-observed log — evidence is recorded by the harness, never by hand):
+    // a write / edit of the file itself (or of the harness-observed log — evidence is recorded by the harness, never by hand):
     // the user makes it
     if (a.setting === "roadmap" || a.setting === "state" || a.setting === "observed" || a.setting === "specs" || a.setting === "link") return null;
     if (a.setting === "track") words.push("add-track", name(a.feature), ...(Array.isArray(a.tracks) ? a.tracks : []).map((t) => word(t, "<track>")), "--remove");
@@ -1992,9 +1992,9 @@ function approvalCommand(a, cli) {
     if (a.through) words.push("--through", word(a.through, "<phase>"));
     else words.push(word(a.phase, "<phase>"));
     if (a.role) words.push("--role", word(a.role, "<role>"));
-    if (a.revoke) words.push("--revoke"); // 1.16 U2: the human revokes — never an approve line in its place
+    if (a.revoke) words.push("--revoke"); // the human revokes — never an approve line in its place
     else if (a.force) words.push("--force");
-    // 1.16 U3 / U2: the reason (a waiver's, a revocation's) and the expiry go in only when plainly safe to paste, else a placeholder
+    // the reason (a waiver's, a revocation's) and the expiry go in only when plainly safe to paste, else a placeholder
     if (a.reason) words.push("--reason", "\"" + (safe(a.reason, /^[\p{L}\p{N} _.,:;@+()/-]{1,200}$/u) || "<reason>") + "\"");
     if (a.expires && !a.revoke) words.push("--expires", word(a.expires, "<YYYY-MM-DD>"));
   }
@@ -2011,7 +2011,7 @@ function approvalCommand(a, cli) {
 // runs, `!`-prefixed — opts.plain: without the `!`, for the MCP server; null when there is none), `reason` (localized — opts.lang:
 // the user reads it for ask, the agent for deny) and, for deny, `userNote` (the line the user sees). opts.cli: the CLI path shown (default: this clone's cli/dev-spec.js);
 // opts.meta: the project's roadmap.json meta (what a spec_init / `init` change is compared with — absent: unknown, fail closed).
-// opts.resolveFeature (1.23 — the MCP server): name → the slug the engine resolves it to, or null; a resolved action shows (and
+// opts.resolveFeature (the MCP server): name → the slug the engine resolves it to, or null; a resolved action shows (and
 // its command names) that slug, never the raw argument — slugify drops text in other scripts, which must not reach the question.
 function approvalGuardDecision(payload, level, opts = {}) {
   const lvl = approvalGuardInput(level) || "off";
@@ -2025,7 +2025,7 @@ function approvalGuardDecision(payload, level, opts = {}) {
   const meta = isObj(opts.meta) ? opts.meta : undefined;
   let actions = [];
   const m = RE_APPROVAL_MCP.exec(tool);
-  // 1.24 review 6 (C-I10): the approval hook got the payload only in part (stdin still open at its 2 s safety net) and that part names
+  // the approval hook got the payload only in part (stdin still open at its 2 s safety net) and that part names
   // dev-spec, .specs/ or an approval tool — what the call does can't be read: ask (never allowed, never refused).
   if (opts.partial === true) actions = [{ kind: "unreadable", why: "partial", source: "hook" }];
   else if (m) actions = mcpApprovalAction(m[1], ti, lvl, meta);
@@ -2033,23 +2033,23 @@ function approvalGuardDecision(payload, level, opts = {}) {
     const mode = tool === "PowerShell" ? "ps" : "bash"; // Monitor runs its command in the Bash tool's shell
     const head = ti.command.slice(0, APPROVAL_COMMAND_MAX);
     if (ti.command.length > APPROVAL_COMMAND_MAX && approvalCandidate(ti.command.slice(APPROVAL_COMMAND_MAX - 64))) {
-      // 1.23 review 5 (L20): past the read limit nothing was seen — an approval after the first 64 KB went through at deny. A
+      // past the read limit nothing was seen — an approval after the first 64 KB went through at deny. A
       // command whose unread tail names dev-spec (or .specs) is refused / asked as unreadable; an unread tail that names neither
       // runs nothing of dev-spec's, and the head is read as before.
       actions = [{ kind: "unreadable", why: "too-long", length: ti.command.length, source: "shell" }];
     } else if (approvalCandidate(head)) {
       actions = shellApprovalActions(head, lvl, 0, mode, meta);
-      // 1.23 review 5 (fail closed): the CLI named with an approval word, in a form the lexer can't follow (a launcher it doesn't
+      // fail closed: the CLI named with an approval word, in a form the lexer can't follow (a launcher it doesn't
       // know, a string built by concatenation, a glob, a variable) — the user is asked instead of the call being allowed.
       if (!actions.length && approvalUnparsed(head, mode)) actions = [{ kind: "unreadable", why: "unparsed", source: "shell" }];
     }
   } else if (APPROVAL_EDIT_TOOLS.has(tool) && (typeof ti.file_path === "string" || typeof ti.notebook_path === "string")) {
-    // 1.23 review 5: a hand edit of .specs/roadmap.json or of a feature's .state.json (its approvals, evidence, history); 1.24 review 6:
-    // of a harness-observed log (C6), the path read as the file system reads it — `./`, `..`, a stream, an 8.3 short name (C5) — and
-    // (1.25.1) through a link to .specs/ (the real path of its folder).
+    // a hand edit of .specs/roadmap.json or of a feature's .state.json (its approvals, evidence, history); 
+    // of a harness-observed log, the path read as the file system reads it — `./`, `..`, a stream, an 8.3 short name — and
+    // through a link to .specs/ (the real path of its folder).
     actions = approvalEditActions([typeof ti.file_path === "string" ? ti.file_path : ti.notebook_path], payload.cwd, false);
   } else if (RE_MCP_FILE_TOOL.test(tool) && !RE_DEVSPEC_MCP_TOOL.test(tool)) {
-    // 1.25.1 (review 7): another MCP server's file tool — each path-like argument read as an Edit's path; a move / rename / delete of
+    // another MCP server's file tool — each path-like argument read as an Edit's path; a move / rename / delete of
     // .specs/ itself, of a folder or a glob under it, too
     actions = approvalEditActions(approvalPathArgs(ti, opts.uriPath), payload.cwd, /(?:move|rename|delete|remove|unlink)/i.test(tool.replace(/^mcp__.+__/, "")));
   }
@@ -2072,13 +2072,13 @@ function approvalGuardDecision(payload, level, opts = {}) {
   const force = actions.some((a) => a.force);
   const cli = typeof opts.cli === "string" && opts.cli ? opts.cli : i18n.DEV_SPEC_SCRIPT;
   const commands = [...new Set(actions.map((a) => approvalCommand(a, cli)).filter(Boolean))];
-  // opts.plain (1.21 review A4 — the MCP server, for a client outside Claude Code): the command as a plain runnable line, without
+  // opts.plain (the MCP server, for a client outside Claude Code): the command as a plain runnable line, without
   // Claude Code's `!` prefix (a PowerShell or cmd.exe user can't run `! node …`), and a deny reason that never mentions it.
   const plain = opts.plain === true;
   const command = commands.length ? (plain ? "" : "! ") + commands.join(" && ") : null;
-  // summary (1.21 F1b): the actions as one localized line — what the MCP server's elicitation asks the user about.
+  // summary: the actions as one localized line — what the MCP server's elicitation asks the user about.
   // A command the guard could not follow (why: "unparsed") is never refused outright — it may be no approval at all: ask.
-  // (1.25.1: a script fed to a shell out of sight, an unknown program run on .specs/ files, the hook's own failure — the same)
+  // (a script fed to a shell out of sight, an unknown program run on .specs/ files, the hook's own failure — the same)
   const decision = actions.every((a) => a.kind === "unreadable" && APPROVAL_ASK_WHYS.includes(a.why)) ? "ask" : lvl;
   const res = { decision, why: "approval", level: lvl, tool, actions, force, command, summary: text,
     reason: decision === "deny" ? (plain ? A.denyMcp(text, command) : A.deny(text, command)) : A.ask(text, force) };
@@ -2123,7 +2123,7 @@ function approvalPathArgs(ti, uriPath) {
   walk(ti, false, 0);
   return out;
 }
-// 1.23 review 5 (fail closed) — a shell command that names the CLI (dev-spec, a glob that may be it, a string joined from pieces)
+// fail closed — a shell command that names the CLI (dev-spec, a glob that may be it, a string joined from pieces)
 // together with an approval word, in a simple command whose program is no text-only program (echo, git, grep, cat…), or a
 // JavaScript runtime whose script is a substitution / variable — when the lexer found no action in it. → true: ask the user.
 const RE_PS_STOP_AFTER_CLI = /dev-?spec[^\s|;]*\s+--%(?=\s|$)/i;
@@ -2143,7 +2143,7 @@ function cliSubcommandUnread(words, at, mode) {
   if (sub === undefined) return mode === "ps" || words.slice(0, at).some((w) => /^(?:xargs|parallel)$/.test(approvalProgram(w)));
   return sub === "" || RE_APPROVAL_VAR_WORD.test(sub) || /^\$(?:[@*#?!0-9]|\{[@*#0-9])/.test(sub) || /\$\(|`/.test(sub) || (mode === "ps" && /^@(?:[A-Za-z_]|$)/.test(sub));
 }
-// 1.25.1 (review 7): in Bash the CLI's subcommand word is a glob or a brace expansion (`{approve,}`, `appro?e`, `app[r]ove`,
+// in Bash the CLI's subcommand word is a glob or a brace expansion (`{approve,}`, `appro?e`, `app[r]ove`,
 // `appro{v,}e`) that may expand to a subcommand the guard stands on — the shell expands it (a glob, when a file of that name exists),
 // the guard can't know to what: unreadable, whatever approval word the text holds.
 const CLI_GUARDED_COMMANDS = ["approve", "feature", "init", "add-track", "merge-state"];
@@ -2178,11 +2178,11 @@ function approvalUnparsed(command, mode) {
     const raw = words.raw || words;
     const at = devSpecWordAt(words, raw);
     if (at >= 0) {
-      // 1.24 review 6 (C7): the CLI where it runs, its subcommand a value the guard can't read — a variable (`A=approve; node cli $A`,
+      // the CLI where it runs, its subcommand a value the guard can't read — a variable (`A=approve; node cli $A`,
       // PowerShell's `$s`), a substitution (`$(echo approve)`, backticks, `"$(printf approve)"`), `"$@"` / `${args[@]}`, a PowerShell
       // ( ) expression or @splat, or nothing at all under xargs (`echo approve a b | xargs node cli`): ask.
       if (cliSubcommandUnread(words, at, mode)) return true;
-      // (C1) PowerShell's --% right after the CLI: the rest reaches it raw — the lexer found no action in it, yet the text holds an
+      // PowerShell's --% right after the CLI: the rest reaches it raw — the lexer found no action in it, yet the text holds an
       // approval word (`node cli --% status "x" approve`): ask.
       if (mode === "ps" && RE_PS_STOP_AFTER_CLI.test(command)) return true;
       // the CLI read where it runs (`dev-spec status x`, `approve a b --help`, a preview): the lexer's answer stands
@@ -2202,7 +2202,7 @@ function approvalUnparsed(command, mode) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.14 C1 — "evidence before claims" at the END OF A TURN (hooks/stop-hook.js on Stop / SubagentStop; `dev-spec stop-check`)
+// "evidence before claims" at the END OF A TURN (hooks/stop-hook.js on Stop / SubagentStop; `dev-spec stop-check`)
 // and the scope guard (roadmap.json meta.guard = "scope": a code edit no open task plans in _Implements:_ asks).
 // ---------------------------------------------------------------------------
 
@@ -2213,7 +2213,7 @@ const STOP_TASKS_SHOWN = 8; // task numbers listed per feature in the reason
 const STOP_REPORT_MAX = 256 * 1024; // bytes of an implementer's report read
 const STOP_WINDOW = 3; // words before a claim, in its sentence, looked at for a negator / condition
 
-// roadmap.json meta.guard → false | true | "scope" (anything else: off); unset → the user's GUARD_DEFAULT (1.16 C2), else off.
+// roadmap.json meta.guard → false | true | "scope" (anything else: off); unset → the user's GUARD_DEFAULT, else off.
 // The user's default applies to a dev-spec project only (isDevSpecDir): roadmap.json without meta.guard, or no roadmap.json in a
 // .specs/ dev-spec owns (steering/, a generated ROADMAP.md or a feature folder with its .state.json or classification.md — a project
 // made before roadmap.json) — never a folder
@@ -2237,7 +2237,7 @@ function guardInput(v) {
   return s === "on" ? true : s === "off" ? false : s === "scope" ? "scope" : undefined;
 }
 // roadmap.json meta.stopCheck — the evidence gate is ON unless it is exactly false (spec_init {stopCheck} / `init --stop-check`);
-// not a boolean (unset) → the user's STOP_CHECK option (1.16 C2), else on. An unreadable roadmap.json: the user's option too, else
+// not a boolean (unset) → the user's STOP_CHECK option, else on. An unreadable roadmap.json: the user's option too, else
 // on (the gate itself never blocks on a file it can't read) — DEV_SPEC_STOP_CHECK=off was ignored while the file didn't parse.
 function stopCheckEnabled(projectDir) {
   const l = loadRoadmap(projectDir);
@@ -2260,10 +2260,10 @@ function setStopCheck(projectDir, on) {
 // The claim patterns of every language (i18n stopGate.claims / negators / admissions / fixed), compiled once: whole words
 // (unicode boundaries — JS \b never matched "concluído"), case-insensitive, ^/$ per line. Each claim pattern keeps the base
 // languages that list it (pt-BR is pt): the two negators the languages disagree on are read by language (stopNegates).
-// 1.24 r6 I-I4: the claim scan's parts the Stop hook's pre-filter reuses before the engine loads — scripts/build.js writes them, with
+// the claim scan's parts the Stop hook's pre-filter reuses before the engine loads — scripts/build.js writes them, with
 // every language's claim patterns (stopClaimSources), into hooks/stop-claims.generated.json (stopClaimFilter).
 const STOP_WORD = Object.freeze({ pre: "(?<![\\p{L}\\p{N}_])(?:", post: ")(?![\\p{L}\\p{N}_])", flags: "gimu" });
-// A claim pattern { source, flags, langs, re } whose RegExp is built on its first use (1.27): a message runs only the patterns of
+// A claim pattern { source, flags, langs, re } whose RegExp is built on its first use: a message runs only the patterns of
 // the languages it triggers (~18 of ~47), and each RegExp built parses its Unicode property classes (~0.2 ms).
 function stopLazyPattern(source, flags, langs) {
   let re = null;
@@ -2278,7 +2278,7 @@ function stopPatterns() {
     if (!langsOf.has(src)) langsOf.set(src, new Set());
     langsOf.get(src).add(i18n.baseLang(l));
   }
-  // 1.25.1 — each base language's trigger words (i18n stopGate.triggers; pt-BR's are pt's): a claim pattern of a language runs only
+  // each base language's trigger words (i18n stopGate.triggers; pt-BR's are pt's): a claim pattern of a language runs only
   // when the text holds one of its triggers — every pattern holds one, so the answer is the same, and a message that triggers no
   // language compiles none of the ~47 patterns (~35 ms of the first stopClaims in a process).
   const triggers = new Map();
@@ -2286,7 +2286,7 @@ function stopPatterns() {
     const b = i18n.baseLang(l), src = ((i18n.msg(l).stopGate || {}).triggers || []).join("|");
     if (src) triggers.set(b, triggers.has(b) ? triggers.get(b) + "|" + src : src);
   }
-  // triggers / admissions: built on first use too (1.27 — a text scanned as its one-byte projection runs rewritten copies of them)
+  // triggers / admissions: built on first use too (a text scanned as its one-byte projection runs rewritten copies of them)
   let trig = null, adm = null;
   STOP_PATTERNS = {
     claims: [...langsOf].map(([src, langs]) => stopLazyPattern(STOP_WORD.pre + src + STOP_WORD.post, STOP_WORD.flags, langs)),
@@ -2296,7 +2296,7 @@ function stopPatterns() {
     get admissions() { return adm || (adm = this.admissionSources.map((src) => new RegExp(src, STOP_WORD.flags))); },
     negators: new Set(all("negators").map((w) => w.toLowerCase())),
     fixed: new Set(all("fixed").map((w) => w.toLowerCase())),
-    // 1.22 review: a zero count right before an admission ("0 tests failing", "none of the tests fail") — read on the few
+    // a zero count right before an admission ("0 tests failing", "none of the tests fail") — read on the few
     // characters before it, so `\s+$` anchors it to the admission; "now pass(es)" after a failure in its clause (fixed).
     zero: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("zeroes").join("|") + ")\\s+$", "iu"),
     passNow: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("passNow").join("|") + ")(?![\\p{L}\\p{N}_])", "iu"),
@@ -2337,7 +2337,7 @@ function stopNegates(words, i, langs, lang) {
 // verbs and "previously" — never an auxiliary like "was" / "had", which any honest "2 tests failed and I was unable to fix
 // them" holds) among the 4 words before it in its clause, or the 4 words after it before the clause ends — and no negator
 // anywhere in that window ("I haven't fixed the 2 failing tests", "the 3 failing tests were not fixed").
-// 1.22 review: …or a "now pass(es)" (i18n stopGate.passNow) after it in its clause with no negator before it ("Fixed the bug;
+// …or a "now pass(es)" (i18n stopGate.passNow) after it in its clause with no negator before it ("Fixed the bug;
 // the 2 failing tests now pass" — the `;` cut the fixed word off, and it read as an admission).
 function stopPastFailure(text, start, end, wordsOf) {
   const P = stopPatterns();
@@ -2349,7 +2349,7 @@ function stopPastFailure(text, start, end, wordsOf) {
   const now = P.passNow.exec(tail);
   return fixedIn(before) || fixedIn(after) || (!!now && !wordsOf(tail.slice(0, now.index)).some((w) => neg(w.toLowerCase())));
 }
-// 1.22 review: is the admission at `start` counted as ZERO ("0 tests failing", "no tests fail", "none of the tests fail", PT
+// is the admission at `start` counted as ZERO ("0 tests failing", "no tests fail", "none of the tests fail", PT
 // "nenhum teste falha", ES "ninguna prueba falla")? A zero word (i18n stopGate.zeroes) right before it in its clause.
 function stopZeroCount(text, start) {
   const from = Math.max(stopClauseStart(text, start) + 1, start - 60);
@@ -2357,9 +2357,9 @@ function stopZeroCount(text, start) {
 }
 // The message as prose: its last STOP_MESSAGE_MAX characters without fenced code, inline code, HTML comments and quoted
 // lines (> …) — a pasted command output or a quoted instruction claims nothing.
-// (?=(…))\2: the fence opener taken whole, never backtracked (a line of 20,000 backticks was quadratic — 1.17 H); the comments by
+// (?=(…))\2: the fence opener taken whole, never backtracked (a line of 20,000 backticks was quadratic); the comments by
 // replaceHtmlCommentSpans (/<!--[\s\S]*?-->/g rescanned the rest from each unclosed "<!--"). The regexes are constants: the Stop
-// hook's pre-filter (hooks/hook-utils.js claimProse) runs the same ones from hooks/stop-claims.generated.json (1.24 r6 I-I4).
+// hook's pre-filter (hooks/hook-utils.js claimProse) runs the same ones from hooks/stop-claims.generated.json.
 const RE_STOP_FENCE = /(^|\n)[ \t]*(?=(`{3,}|~{3,}))\2[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[^\n]*(?=\n|$)|$)/g;
 const RE_STOP_CODE = /`[^`\n]*`/g;
 const RE_STOP_QUOTE = /^[ \t]*>/;
@@ -2370,7 +2370,7 @@ function stopProse(message) {
     .replace(RE_STOP_CODE, " ")
     .split("\n").filter((l) => !RE_STOP_QUOTE.test(l)).join("\n");
 }
-// 1.24 r6 I-I4 — every language's claim patterns (i18n stopGate.claims; pt-BR's are pt's plus its own), once each, in
+// every language's claim patterns (i18n stopGate.claims; pt-BR's are pt's plus its own), once each, in
 // stopPatterns' order.
 function stopClaimSources() {
   return [...new Set(i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {}).claims || []))];
@@ -2378,7 +2378,7 @@ function stopClaimSources() {
 // What the Stop hook's claim pre-filter needs to decide "no claim" before the engine loads (scripts/build.js →
 // hooks/stop-claims.generated.json): the claim patterns, the word wrapper stopPatterns compiles them with, and stopProse's
 // tail length and regexes. The hook answers "maybe" whenever any pattern matches the prose — a superset of stopClaims' claim
-// (negations and questions stay the engine's to judge). 1.25.1: `triggers` — per base language, its trigger words (`source`) and
+// (negations and questions stay the engine's to judge). `triggers` — per base language, its trigger words (`source`) and
 // the indexes in `claims` of its patterns: the hook compiles only the patterns of the languages whose triggers the prose holds
 // (none → no claim), as stopClaims runs them.
 function stopClaimFilter() {
@@ -2395,10 +2395,10 @@ function stopClaimFilter() {
     claims, ...(triggers.every((t) => t.source) ? { triggers } : {}) };
 }
 // The mcp/lib files that make that filter (the patterns, the wrapper, the prose) — the generated file stamps their sizes, and the
-// hook takes it only while every size still matches (else: the engine decides, as before). No version (1.26): a release that
+// hook takes it only while every size still matches (else: the engine decides, as before). No version: a release that
 // changes none of these files leaves the generated file as it was.
 const STOP_FILTER_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es.js", "i18n/pt-br.js", "i18n/pt.js", "engine/guards.js"];
-// 1.27 — the claim scan on a one-byte text (mcp/lib/latin1-scan.js). V8 compiles a regex for a one-byte and for a two-byte subject
+// the claim scan on a one-byte text (mcp/lib/latin1-scan.js). V8 compiles a regex for a one-byte and for a two-byte subject
 // apart, and the two-byte code of the patterns' [\p{L}\p{N}_] boundaries is large: one em dash, curly quote or emoji in the closing
 // message made stopClaims ~120 ms slower (one-byte ~18 ms, Node 26 on Windows). Such a text is scanned as its exact one-byte
 // projection with the patterns rewritten once for it (an index map leads every match back); a text without a character past U+00FF
@@ -2443,7 +2443,7 @@ function stopClaims(message, opts = {}) {
   const found = [];
   const wordsOf = (s) => s.split(/[^\p{L}\p{N}_'’]+/u).filter(Boolean);
   const hits = [];
-  // 1.25.1: only the patterns of a language whose trigger words the text holds (a language without triggers: always).
+  // only the patterns of a language whose trigger words the text holds (a language without triggers: always).
   const hot = new Map();
   const runs = (langs) => opts.allPatterns === true || [...langs].some((l) => {
     if (!hot.has(l)) { const t = P.triggers.get(l); hot.set(l, !t || t.test(scan.text)); }
@@ -2471,7 +2471,7 @@ function stopClaims(message, opts = {}) {
     if (found.length < 10) found.push(h.text.trim());
   }
   // An admission counts unless it names a failure already fixed ("I fixed the 2 failing tests", "Previously 4 tests failed",
-  // "the 2 failing tests now pass") or a count of zero ("0 tests failing", "none of the tests fail" — 1.22 review: those
+  // "the 2 failing tests now pass") or a count of zero ("0 tests failing", "none of the tests fail" — those
   // were read as admissions and the gate stayed silent on "All tasks done. 0 tests failing.").
   const admitted = P.admissions.some((re) => {
     re.lastIndex = 0;
@@ -2490,7 +2490,7 @@ function stopClaims(message, opts = {}) {
 // the records kept aside under `others` included) — only what the engine RECORDED. Never a file date: a fresh clone stamps
 // every tasks.md "now", and a repo someone else wrote then made the gate fire on unrelated work and hand the agent that repo's
 // _Verify:_ commands. A stamp in the future (a committed .state.json can hold any date) is ignored.
-// 1.22 review: + lastEditAt — tasks.md / change.md saved through the Write / Edit tool (recordSpecEdit, the PostToolUse spec-hook):
+// + lastEditAt — tasks.md / change.md saved through the Write / Edit tool (recordSpecEdit, the PostToolUse spec-hook):
 // a box ticked by hand never counted, so "All tasks done" after hand ticks read `no-recent`.
 function stopActivity(state) {
   let best = null;
@@ -2508,7 +2508,7 @@ function stopActivity(state) {
   }
   return best;
 }
-// 1.22 review — a feature's tasks.md (a change's change.md) saved through the Write / Edit tool is activity the stop gate sees:
+// a feature's tasks.md (a change's change.md) saved through the Write / Edit tool is activity the stop gate sees:
 // hooks/spec-hook.js (PostToolUse) stamps `lastEditAt` in the feature's .state.json — under its lock, with a short wait (a hook
 // has 10 s; busy → nothing stamped, never an error). What the engine RECORDS, never a file date (a fresh clone stamps every file
 // "now"). git's merge driver keeps the later stamp (state.js). → { ok: true, feature, at } | { ok: false, … }
@@ -2537,7 +2537,7 @@ function stopTaskLabel(d, lng) {
 // verificationStatus reports unverified (a failed run, a note on a runnable _Verify:_, stale evidence, an unexpected pass,
 // no evidence for a runnable _Verify:_…) or, every active task done, project checks without a passing run since the last
 // task activity (suiteStatus). opts: { message, agent (the subagent type — a spec-implementer is checked on its REPORT: it
-// never ticks tasks; 1.22: a spec-simplifier on its simplification report), stopHookActive (the hook already sent this
+// never ticks tasks; a spec-simplifier on its simplification report), stopHookActive (the hook already sent this
 // stop back once: never twice in a row) }. The reason is in the project language (a subagent's: its feature's). Read-only and bounded; a feature whose .state.json is unreadable
 // is skipped — the gate never blocks on its own trouble.
 // → { ok, block, why, lang, claims, features: [{feature, unverified: [{number, reason}], suite: [{name, status}]}], reason? }
@@ -2558,7 +2558,7 @@ function stopCheck(projectDir, opts = {}) {
   const since = Date.now() - STOP_RECENT_HOURS * 3600 * 1000;
   const features = [];
   const clean = [];
-  // 1.22 review: the activity of EVERY non-archived feature (one .state.json read each — cheap), then the STOP_MAX_FEATURES most
+  // the activity of EVERY non-archived feature (one .state.json read each — cheap), then the STOP_MAX_FEATURES most
   // recently active are checked (verificationStatus / suiteStatus — the costly part), in folder order. The cap used to apply
   // to the folders first: the 51st feature alphabetically ("zeta", ticked a minute ago) was never looked at — `no-recent`.
   const recent = [];
@@ -2577,7 +2577,7 @@ function stopCheck(projectDir, opts = {}) {
     // A spike has no project-check gate anywhere (spec_finish, doctor and next_action close it on its decision): never here either.
     const suite = state.kind !== "spike" && blocks.length && blocks.every((b) => b.done) ? suiteStatus(pdir, state, f.dir).missing : [];
     if (!vs.unverifiedDetail.length && !suite.length) { clean.push(f.slug); continue; }
-    features.push({ feature: f.slug, unverified: vs.unverifiedDetail, suite, file: phaseFile("tasks", state.kind) }); // a change's tasks are in change.md (1.21 review C10)
+    features.push({ feature: f.slug, unverified: vs.unverifiedDetail, suite, file: phaseFile("tasks", state.kind) }); // a change's tasks are in change.md
   }
   if (!features.length) return res(false, clean.length ? "verified" : "no-recent", { claims: cl.claims, verifiedFeatures: clean });
   const S = i18n.msg(lng).stopGate;
@@ -2613,11 +2613,11 @@ const STATUS_NOT_DONE_RE = /(?<![\p{L}_])status\W{0,8}(?:blocked|needs_context)(
 // (.specs/<feature>/.execution/task-N-report.md, named in the reply as the protocol asks) to carry each command and an exit
 // code. BLOCKED / NEEDS_CONTEXT, no report path in the reply, or no runnable _Verify:_ → allowed.
 function implementerStopCheck(pdir, message, cl, res) {
-  // 1.22 review: a status in backticks (`DONE`) is a status too — it used to read as no claim and skip the report
+  // a status in backticks (`DONE`) is a status too — it used to read as no claim and skip the report
   const prose = statusProse(message);
   if (STATUS_NOT_DONE_RE.test(prose)) return res(false, "not-done");
   if (!cl.claim && !STATUS_DONE_RE.test(prose)) return res(false, "no-claim");
-  // 1.22 review: the LAST task-N-report.md path the reply names (a report wins over a brief) — "Task 2 builds on task 1 (see
+  // the LAST task-N-report.md path the reply names (a report wins over a brief) — "Task 2 builds on task 1 (see
   // …/task-1-report.md). Report: …/task-2-report.md" was checked against task 1's report and passed.
   const tailText = message.slice(-STOP_MESSAGE_MAX);
   const paths = [...tailText.matchAll(/\.specs[\\/]+([^\\/\s`'"()<>]+)[\\/]+\.execution[\\/]+task-(\d+)-(report|brief)\.md/gi)];
@@ -2640,14 +2640,14 @@ function implementerStopCheck(pdir, message, cl, res) {
   if (report == null) problem = X.noReport(rel);
   else {
     const body = flat(report);
-    // 1.23 review 5 (M16): a _Verify:_ command is shown when the report holds its text, or a command it writes (a code span) that
+    // a _Verify:_ command is shown when the report holds its text, or a command it writes (a code span) that
     // IS a run of it by the evidence gate's matcher (runProvesVerify: `tests\x.test.js` = `tests/x.test.js`, quotes, a ` && ` join
     // of the task's commands) — the raw text compare bounced `node --test tests/login.test.js` for `_Verify: node --test tests\login.test.js_`.
     const spans = reportCommandSpans(report);
     const missing = verify.filter((c) => !body.includes(flat(c)) && !spans.some((s) => runProvesVerify({ command: s }, [c], pdir) || runProvesVerify({ command: s }, verify, pdir)));
     const list = (xs) => xs.map((c) => "`" + c + "`").join(", ");
-    // full review Ga5: the exit code must be the one the task needs — a must-pass _Verify:_ an exit 0 ("Status: DONE … exit
-    // code: 1" was allowed), an _Expect: fail_ one a non-zero exit (its red run). 1.25.1 (review 7): read per run — the codes of
+    // the exit code must be the one the task needs — a must-pass _Verify:_ an exit 0 ("Status: DONE … exit
+    // code: 1" was allowed), an _Expect: fail_ one a non-zero exit (its red run). Read per run — the codes of
     // each _Verify:_ command's OWN runs (verifyRunCodes), its LAST run deciding: any exit 0 anywhere passed "Ran `npm test` → exit
     // code: 1 … Ran `npm run lint` → exit code: 0". A +tdd report may show the red run and then the green one (the last is green).
     const xf = expectsFail(task);
@@ -2661,7 +2661,7 @@ function implementerStopCheck(pdir, message, cl, res) {
   if (!problem) return res(false, "report-ok", info);
   return res(true, "implementer-evidence", { ...info, report: rel, reason: [X.head(n, f.slug) + " " + problem, X.todo].join("\n") });
 }
-// 1.23 review 5 (M8) — the report file a subagent's reply names. `own`: the project's copy (.specs/<f>/.execution/<name>); `text` /
+// the report file a subagent's reply names. `own`: the project's copy (.specs/<f>/.execution/<name>); `text` /
 // `at`: the reply (its tail) and where the `.specs…` path it names starts. When that path is written out absolute — the controller
 // hands the implementer the report path in the MAIN checkout (subagent-execution.md, parallel mode), or a subagent in a worktree
 // writes its own copy — the file it names is read when it lies in the project or in another checkout of the project's repository
@@ -2690,7 +2690,7 @@ function stopReportFile(pdir, own, text, at, name) {
   }
   return own;
 }
-// 1.25.1 (review 7) — the exit codes of each _Verify:_ command's OWN runs in an implementer's report, in order → [[codes of verify[0]'s
+// the exit codes of each _Verify:_ command's OWN runs in an implementer's report, in order → [[codes of verify[0]'s
 // runs], [verify[1]'s], …]. Every other command a report shows (`npm run lint` → exit 0) has codes of its own: "Ran `npm test` → exit
 // code: 1 … Ran `npm run lint` → exit code: 0" passed as a green task (any exit 0 anywhere counted). Read line by line (the report as
 // written, each line's backticks dropped): a MENTION is a code span — a run of the _Verify:_ commands it proves by the evidence
@@ -2741,8 +2741,8 @@ function verifyRunCodes(report, verify, pdir) {
   }
   return per;
 }
-// The commands a report writes in code spans (`…` or ``…``) — what the implementer's gate matches against a _Verify:_ (1.23 review
-// 5, M16). Bounded: at most 500 spans, each ≤ 4000 characters (the evidence gate's command limit).
+// The commands a report writes in code spans (`…` or ``…``) — what the implementer's gate matches against a _Verify:_.
+// Bounded: at most 500 spans, each ≤ 4000 characters (the evidence gate's command limit).
 function reportCommandSpans(report) {
   const out = [];
   for (const m of String(report).matchAll(/``\s?([^`\n]+?)\s?``|`([^`\n]+)`/g)) {
@@ -2753,7 +2753,7 @@ function reportCommandSpans(report) {
   return out;
 }
 // A subagent's report, at most STOP_REPORT_MAX bytes of it (null when it can't be read) — the stop gates read one file
-// each: the implementer's from its start, the simplifier's from its END (`tail`), where its final runs are. 1.23 review 5 (L8): a
+// each: the implementer's from its start, the simplifier's from its END (`tail`), where its final runs are. A
 // UTF-16 report (a BOM — Windows PowerShell 5.1's `>` / Out-File write one) is decoded as such (decodeText), its tail read from an
 // even offset so the code units stay aligned; a leading BOM is dropped.
 function readStopReport(file, tail) {
@@ -2808,7 +2808,7 @@ function finalRuns(report) {
     const m = lines[i].match(/^(\s*)((?:[-*+]|\d+[.)])\s+)?(?:``\s?(.+?)\s?``|`([^`]+)`)(.*)$/);
     if (!m) continue;
     const code = (reportExitCodes(flatReport(m[5]))[0] || {}).code;
-    // indented, only a bullet + a command + its exit code is a run (one nested under a group bullet — review 3: a failing one
+    // indented, only a bullet + a command + its exit code is a run (one nested under a group bullet — a failing one
     // was skipped as output); any other indented line is output
     if (m[1] && !(m[2] && code !== undefined)) continue;
     const command = flatReport(m[3] !== undefined ? m[3] : m[4]);
@@ -2817,7 +2817,7 @@ function finalRuns(report) {
   }
   return [...runs].map(([command, code]) => ({ command, code }));
 }
-// 1.22 — a spec-simplifier's stop (SubagentStop): it rewrites code that is already reviewed and verified, so its DONE (or
+// a spec-simplifier's stop (SubagentStop): it rewrites code that is already reviewed and verified, so its DONE (or
 // DONE_WITH_CONCERNS) needs its report (.specs/<feature>/.execution/simplify-report.md, named in the reply) to END with the
 // proof — a "## Final runs" section (finalRuns) where every run exits 0 and, with project checks (meta.checks), each check's
 // command is one of them. A baseline run higher up never stands in, a failed run never hides behind a later passing one,
@@ -2847,7 +2847,7 @@ function simplifierStopCheck(pdir, message, cl, res) {
     if (!runs || !runs.length) problem = X.noFinal(rel);
     else {
       const list = (a) => a.map((c) => "`" + c + "`").join(", ");
-      // 1.23 review 5 (M16): a check's run is the run line that IS a run of its command by the evidence gate's matcher
+      // a check's run is the run line that IS a run of its command by the evidence gate's matcher
       // (runProvesVerify — `\` vs `/`, quotes, spacing), the same text first; the last such line wins (finalRuns keeps each
       // command's last line, in order). A longer command (`npm test -- t/x.test.js`) is still another run.
       const runOf = (c) => {
@@ -2879,7 +2879,7 @@ function scopeGuardDecision(pdir, abs, features, texts, allow, extra) {
   if (isTestFile(rel)) return allow("test-file", { level: "scope", covering: features, ...extra });
   const usable = (k) => !!k && k !== "." && !/^\[.*\]$/.test(k) && !/^(?:tbd|todo|n\/?a|none|-+|…|\.{3})$/i.test(k) && !k.split("/").includes("..");
   const open = [];
-  let scheduled = null; // 1.14 F3: the first feature's next task by next_task's rule (_Depends:_ all done)
+  let scheduled = null; // the first feature's next task by next_task's rule (_Depends:_ all done)
   for (const name of features) {
     const dir = path.join(specsRoot(pdir), name);
     const blocks = taskBlocks(activeTasks(texts.get(name) || "", detectTracks(dir)) || "");
@@ -2930,5 +2930,5 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, AP
   approvalGuardDecision, STOP_RECENT_HOURS, guardLevel, guardInput, stopCheckEnabled, setStopCheck, stopProse,
   stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, recordSpecEdit, stopCheck, devSpecGlob,
   guardTargetPath, SESSION_MAX_UP, worktreeProject, sessionProject, sessionPath, readStopReport, approvalEditTargets,
-  // 1.25.1 (review 7): the shell's file operations, fed scripts, MCP file tools, the edit guard on the shell
+  // the shell's file operations, fed scripts, MCP file tools, the edit guard on the shell
   APPROVAL_WRITERS_OTHER, braceExpand, PS_FILE_ALIASES, PS_FILE_CMDLETS, shellWriteTargets, __link };

@@ -60,7 +60,7 @@ function sweepStaleTmp(prefix) {
   }
 }
 
-// Hermetic chains (1.26). A chain never sees the shell the suite was started from: the variables that steer the plugin — the
+// Hermetic chains. A chain never sees the shell the suite was started from: the variables that steer the plugin — the
 // project (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR), the MCP server's switches (SPEC_MCP_*), Claude Code's plugin variables
 // (CLAUDE_PLUGIN_*), the user defaults and knobs (every DEV_SPEC_* but DEV_SPEC_TEST_* — the suites' own: the chain, its folder,
 // the shells to test) and the terminal width (COLUMNS) — are dropped, and its working folder is a fresh, empty temp folder. A test
@@ -225,7 +225,7 @@ function usageError(msg, usage) {
 }
 
 const secs = (ms) => (ms / 1000).toFixed(1) + " s";
-// The longest a chain may run (1.26): the slowest takes ~1 min idle, a few under load or on a slow mount — 30 min means hung.
+// The longest a chain may run: the slowest takes ~1 min idle, a few under load or on a slow mount — 30 min means hung.
 // DEV_SPEC_TEST_CHAIN_TIMEOUT_S overrides it (seconds — the runner's own test uses a few).
 const CHAIN_TIMEOUT_MS = (/^[1-9]\d*$/.test(String(process.env.DEV_SPEC_TEST_CHAIN_TIMEOUT_S || "")) ? +process.env.DEV_SPEC_TEST_CHAIN_TIMEOUT_S : 1800) * 1000;
 // Kill a chain and what it started: on Windows a process's children outlive it (taskkill /T takes the tree); elsewhere SIGKILL.
@@ -275,9 +275,9 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
   const t0 = Date.now();
   // out: stdout and stderr as they came (what is printed) · stdout alone: where the total is read — a Node warning a chain
   // writes to stderr after its total line never voids the count.
-  // Every chain is hermetic (1.26 — isolate() above): the host's steering variables dropped, a fresh empty temp folder as its
+  // Every chain is hermetic (isolate() above): the host's steering variables dropped, a fresh empty temp folder as its
   // working folder (removed once it closed).
-  // A loaded machine (1.26): spawn() THROWS when the OS refuses a process (spawn UNKNOWN / EAGAIN — memory or handle pressure),
+  // A loaded machine: spawn() THROWS when the OS refuses a process (spawn UNKNOWN / EAGAIN — memory or handle pressure),
   // and that crashed the whole run, every other chain's output lost (it is printed at the end); now it is tried once more a
   // second later, then the chain fails. A chain still running after CHAIN_TIMEOUT_MS (a hung child — a CLI process that never
   // exits) is killed with its process tree and fails ("without a clean total"), so the suite never hangs.
@@ -364,7 +364,7 @@ async function settle() {
   while (pending() && Date.now() - t0 < SETTLE_MAX_MS) await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
-// The assertion helpers (1.26) every file receives beside `ok`, built on ITS ok (one call = one assertion, so the totals stay
+// The assertion helpers every file receives beside `ok`, built on ITS ok (one call = one assertion, so the totals stay
 // comparable; a late one is a late assertion like any ok). A FAIL says what failed, not only that something did:
 //   all(label, conds)   ONE assertion over many conditions — `{ name: condition, … }` (the names are the keys) or
 //                       `[() => cond, …]` (each thunk's source is its name). A function is called (lazily, in order) and a
@@ -429,7 +429,7 @@ function assertHelpers(ok) {
   };
   return { all, eq, remeasure };
 }
-// remeasure(measure, holds, tries = 2) — for a timing-bound check (1.26; not an assertion): measure() → a sample (the times and
+// remeasure(measure, holds, tries = 2) — for a timing-bound check (not an assertion): measure() → a sample (the times and
 // whatever the check reads), holds(sample) → whether its time bound holds. On a miss it measures again (up to `tries` samples)
 // and returns the last one — a passing retry, or the last miss. A load spike on a shared machine fails one sample, not two; a
 // real regression (the linear scan gone quadratic, a wait come back) fails them all. Measure the baseline INSIDE measure()

@@ -20,7 +20,7 @@ function __link(E) { ({ DECISION_TITLE_MAX, dependencyCycles, earsFromPlanText, 
   tidyLines, toPosix } = E); }
 
 // ---------------------------------------------------------------------------
-// spec_import fluidplan (1.17 F) — a plan settled with fluidplan (github.com/morganhub/fluidplan, a Claude Code skill, MIT). The
+// spec_import fluidplan — a plan settled with fluidplan (github.com/morganhub/fluidplan, a Claude Code skill, MIT). The
 // formats were read at its commit 755d1b24ccb09aa8d3663774e0a83d99d24cdc4c (2026-09-26): engine/schema/plan.schema.json (plan
 // v2), references/schema.md + execution-plan.md, engine/public/js/model.js / export_plan.js / export_decisions.js (what PLAN.md
 // and DECISIONS.md hold) and engine/public/i18n/en.json + fr.json (their labels — a plan is written in English or French).
@@ -100,7 +100,7 @@ function fpPhaseHeading(text) {
   return title.trim() ? { n: +m[1], title: title.trim() } : null;
 }
 // An acceptance bullet → [line, text] | null — /^\s*[-*+]\s+(?:\[[ xX]\]\s+)?(.*)$/ with its text read by restAfterBlanks
-// (1.17 H): after the optional checkbox when it is there; a line terminator after the text → null either way.
+// after the optional checkbox when it is there; a line terminator after the text → null either way.
 function fpAcceptanceItem(l) {
   const h = /^\s*[-*+]/.exec(l);
   if (!h || !isWsUnit(l[h[0].length])) return null;
@@ -111,7 +111,7 @@ function fpAcceptanceItem(l) {
 }
 // "- **D3 · Logging** …" → [line, id, title, rest] | null — /^[-*][ \t]+\*\*([A-Za-z0-9][A-Za-z0-9_-]*)[ \t]+·[ \t]+(?![ \t])(.+?)\*\*(.*)$/
 // by a scan after its head: the title runs to the first "**" after it and nothing after it holds a line terminator (the lazy
-// title rescanned the rest of the line from each "**" — 1.17 H).
+// title rescanned the rest of the line from each "**").
 const RE_FP_DEC_HEAD = /^[-*][ \t]+\*\*([A-Za-z0-9][A-Za-z0-9_-]*)[ \t]+·[ \t]+(?![ \t])/;
 function fpDecLine(l) {
   const h = RE_FP_DEC_HEAD.exec(l);
@@ -137,20 +137,20 @@ const RE_FP_BREAKS = new RegExp("[\\n\\r" + FP_LS_PS + "]+", "g");
 const RE_FP_LINE_SPLIT = new RegExp("\\r\\n|[\\n\\r" + FP_LS_PS + "]");
 const RE_FP_VERIFY_BAD = new RegExp("[\\n\\r" + FP_LS_PS + "]|<!--|-->");
 // One line: every whitespace run holding a line break → one space (what /\s*\n\s*/g did — quadratic on a long space run
-// without a break, 80,000 spaces took 6 s; 1.17 F review), then trimmed. A lone CR / U+2028 / U+2029 is a line break too for a
+// without a break, 80,000 spaces took 6 s), then trimmed. A lone CR / U+2028 / U+2029 is a line break too for a
 // markdown reader (and ends a task line for the scanners): folded like "\n".
 const fpOneLine = (s) => String(s == null ? "" : s).split(RE_FP_BREAK).map((x) => x.trim()).filter(Boolean).join(" ");
 const fpList = (v) => (Array.isArray(v) ? v : []);
 const fpStr = (v) => (typeof v === "string" ? v : v == null ? "" : String(v));
-// Imported free text never becomes markup a tool reads (1.17 F review) — each escape renders the same in a markdown reader:
+// Imported free text never becomes markup a tool reads — each escape renders the same in a markdown reader:
 //   a comment opener / closer → `&lt;!--` / `--&gt;` (a title's `<!--` and a later `-->` hid the markers between them);
 //   a task / decision marker look-alike → its colon escaped, `_Verify\:` (taskMarkerSpans() needs the colon right after the
 //     label — a title `Clean up _Verify: rm -rf ~_` was a runnable _Verify:_; only fluidplan's own `verify` field makes one);
 //   an AC / T / EC / NFR / SC ID → `US-7\.AC-1`, `T\-01`, `NFR\-2` (extractAcIds & co. read the plain spelling only — a page
-//     intro's `US-7.AC-1` was a phantom criterion, a Do text's `T-01` a phantom test); 1.22 review 4: a bare `AC-1` → `AC\-1`
+//     intro's `US-7.AC-1` was a phantom criterion, a Do text's `T-01` a phantom test); a bare `AC-1` → `AC\-1`
 //     (the gates read one since 1.22 — a page intro's `1. **AC-1** — WHEN …` was an unidentified criterion: trace gaps-found).
 // Linear: fixed alternatives after a one-character lookbehind. Idempotent (an escaped form never matches again).
-// codeOk (1.17 verification N3): the comment escapes skip inline code spans (commentInert's rule) — only for text written into
+// codeOk: the comment escapes skip inline code spans (commentInert's rule) — only for text written into
 // requirements.md as a whole line or after the importer's backtick-free prefix (a criterion, a story's prose, Out of Scope):
 // its comment readers see code spans. Elsewhere a value is joined to others on its line (a code span's pairing could shift) or
 // lands in design.md / decisions.md, read by blankHtmlComments (no code spans) — escaped everywhere. The ID / marker escapes
@@ -164,7 +164,7 @@ function fpInert(s, codeOk) {
 }
 const fpV = (s) => fpInert(fpOneLine(s)); // a value written inside one line
 // A value written into a heading (a title): fpV with its whitespace runs folded — a markdown reader shows one space anyway, and the
-// heading readers downstream (the task scanner's /^#{1,6}\s+(.*?)\s*$/) are quadratic on a long space run (1.17 F review: an
+// heading readers downstream (the task scanner's /^#{1,6}\s+(.*?)\s*$/) are quadratic on a long space run (an
 // 80,000-space plan title took 15 s).
 const fpHead = (s) => fpV(s).replace(/\s+/g, " ");
 const fpTitle = (s) => fpV(s).replace(/^\[/, "\\["); // a task title: never a leading [P] / [US2] / [shared] tag run
@@ -304,7 +304,7 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
   const SL = FP_SRC_LABELS[lang] || FP_SRC_LABELS.en;
   const fp = fpEmpty();
   fp.title = fpFilled(plan.title) ? fpOneLine(plan.title) : null;
-  fp.subtitle = fpFilled(plan.subtitle) ? fpOneLine(plan.subtitle) : null; // 1.17 F review: carried (the summary, or design.md's Context)
+  fp.subtitle = fpFilled(plan.subtitle) ? fpOneLine(plan.subtitle) : null; // carried (the summary, or design.md's Context)
   fp.id = typeof plan.id === "string" && FP_PLAN_ID.test(plan.id) ? plan.id : null;
   fp.context = typeof plan.context === "string" ? tidyLines(plan.context.split(/\r?\n/)) : [];
   const srcPath = isObj(plan.source) && typeof plan.source.path === "string" ? plan.source.path : typeof plan.source === "string" ? plan.source : null;
@@ -352,7 +352,7 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
       items: fpList(d.items).filter(isObj).map((it) => ({ title: fpOneLine(it.title), tag: fpOneLine(it.tag), detail: fpOneLine(fpTextOf(a, `items/${it.id}/detail`, it.detail)),
         verdict: fpItemVerdict(a, it.id), comment: a && isObj(a.items) && own(a.items, it.id) && isObj(a.items[it.id]) && fpFilled(a.items[it.id].comment) ? fpOneLine(a.items[it.id].comment) : "" })),
     });
-    // 1.17 F review: what the reviewer and Claude said of it is carried — the revision note (Claude's, the latest round) in
+    // what the reviewer and Claude said of it is carried — the revision note (Claude's, the latest round) in
     // decisions.md's Context, and for a decision still open, its question / request and its unsettled items' remarks on the
     // Open decisions line (they were dropped without a warning).
     if (isObj(d.revision) && fpFilled(d.revision.note)) dec.revisionNote = P.revisionNote(Number.isInteger(d.revision.round) ? d.revision.round : "?", fpOneLine(d.revision.note));
@@ -380,7 +380,7 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
   const afterOf = (e) => fpList(e.task.after).filter((x) => typeof x === "string").map((x) => (x.includes("/") ? x : `${e.r.d.id}/${x}`));
   // fluidplan's order within a group: repeatedly the first entry (page order) whose in-group `after` are all placed — a cycle
   // (nothing ready) places the first remaining one. Kahn's walk with a min-heap of ready positions: the same order, linear-log
-  // (the findIndex + splice loop was quadratic — a reversed `after` chain of 8,000 tasks took 9 s; 1.17 F review).
+  // (the findIndex + splice loop was quadratic — a reversed `after` chain of 8,000 tasks took 9 s).
   const sortGroup = (group) => {
     const n = group.length;
     const inGroup = new Set(group.map((e) => e.ref));
@@ -456,7 +456,7 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
         files: fpList(e.task.files).filter((f) => isObj(f) && typeof f.path === "string").map((f) => ({ path: f.path, op: fpMap(FP_OPS, f.op) || "modify" })),
         doLines: e.task.do ? e.task.do.split(RE_FP_LINE_SPLIT) : [], acceptance: e.task.acceptance.map(fpOneLine).filter(Boolean), verify: e.task.verify, after, dangling,
         remark: first && fpFilled(a.comment) ? `“${fpOneLine(a.comment)}”` : null,
-        // An item kept as PLAN.md lists it: its verdict when not OK and the reviewer's remark (1.17 F review: the remark was dropped).
+        // An item kept as PLAN.md lists it: its verdict when not OK and the reviewer's remark (the remark was dropped).
         items: first ? dec.items.filter((it) => it.verdict !== "ko").map((it) => `- ${it.title}${it.tag ? ` (${it.tag})` : ""}${it.detail ? ` — ${it.detail}` : ""}` +
           (it.verdict !== "ok" ? ` (${P.verdict[it.verdict] || it.verdict}${it.comment ? `: “${it.comment}”` : ""})` : it.comment ? ` (“${it.comment}”)` : "")) : [],
         extra: [], summary: dec.choice, critical: dec.importance === "critical" });
@@ -467,7 +467,7 @@ function fpFromPlanJson(plan, answers, state, P, lang) {
   for (const { d } of rows) {
     const dec = fp.decisions.get(d.id);
     dec.hasTasks = withTasks.has(d.id);
-    // A rule has the shape PLAN.md's parser gives it (lines, state): fpImportModel reads r.lines (1.17 F review — a plan.json
+    // A rule has the shape PLAN.md's parser gives it (lines, state): fpImportModel reads r.lines (a plan.json
     // with an accepted decision and no task, a working rule, threw "Cannot read properties of undefined").
     if (dec.status === "ok" && !dec.hasTasks) fp.rules.push({ fid: d.id, title: dec.title, rest: [dec.choice ? ` — ${dec.choice}` : "", dec.proposal ? `. ${dec.proposal}` : ""].join(""), state: null, remark: dec.remarks[0] || null, lines: [] });
     if (dec.status === "ko") fp.outOfScope.push(`- **${d.id} · ${dec.title}** — ${SL.rejected}${dec.reason ? `: ${dec.reason}` : ""}`);
@@ -570,12 +570,12 @@ function fpTaskFromMd(th, body, group) {
     else if (f.key === "acceptance") {
       for (const l of f.lines) { const m = fpAcceptanceItem(l); if (m && m[1].trim()) t.acceptance.push(m[1].trim()); else if (l.trim() && t.acceptance.length) t.acceptance[t.acceptance.length - 1] += " " + l.trim(); }
     } else if (f.key === "verify") { for (const m of v.matchAll(/`([^`\n]+)`/g)) t.verify.push(m[1]); }
-    else if (f.key === "after") t.after.push(...(v.match(/(?<!\d)\d+\.\d+/g) || [])); // (?<!\d): a digit run read from its start (1.17 H)
+    else if (f.key === "after") t.after.push(...(v.match(/(?<!\d)\d+\.\d+/g) || [])); // (?<!\d): a digit run read from its start
     else if (f.key === "remark") t.remark = v || null;
     else if (f.key === "items") t.items.push(...f.lines.filter((l) => l.trim()).map((l) => l.trim()));
     else t.extra.push(f.raw.trim(), ...f.lines.filter((l) => l.trim()).map((l) => "  " + l.trim()));
   }
-  // An item kept "_(to change)_" (PLAN.md's mark): its decision waits for a revision — not settled (1.17 F review).
+  // An item kept "_(to change)_" (PLAN.md's mark): its decision waits for a revision — not settled.
   t.itemsToChange = t.items.filter((l) => fpShort(l) && [...l.matchAll(/_\(([^()\n]*)\)_/g)].some((m) => fpVerdictOfText(m[1]) === "modify"));
   return t;
 }
@@ -676,7 +676,7 @@ function fpParseDecisionsMd(text, fp) {
           else d.extra.push(f.raw.trim(), ...f.lines.map((l) => l.trim()).filter(Boolean));
         }
         // A list decision kept with an item still "To change" is not settled — fluidplan lists it with the accepted ones (its
-        // verdict is "mixed") while it waits for a revision (1.17 F review: it was imported as settled).
+        // verdict is "mixed") while it waits for a revision (it was imported as settled).
         const toChange = d.itemsTable.map(fpTableCells).filter((c) => c && c.length >= 3 && RE_FP_TO_CHANGE.test(c[2]));
         if (status === "ok" && toChange.length) { d.status = "open"; d.verdict = "mixed"; d.itemsToChange = toChange.map((c) => ({ label: c[0], remark: c[3] || "" })); }
         decisions.push(d);
@@ -742,7 +742,7 @@ function parseFluidplan(dir, read, W, src) {
   };
   // Where the plan is: its folder (plan.json) and / or its finalized documents.
   let planDir = null, planText = null, decText = null, sourceFile = null;
-  // A folder is listed only when its real path is inside the project (1.17 F review: a `.fluidplan` junction to a folder outside
+  // A folder is listed only when its real path is inside the project (a `.fluidplan` junction to a folder outside
   // was listed, and the "several plans" refusal named what it held); a plan folder is never a link.
   const realInside = (p) => { try { return isInsideDir(src.root, fs.realpathSync.native(p)); } catch { return false; } };
   const planSubdirs = (d) => (realInside(d) ? safeReaddir(d).filter((n) => FP_PLAN_ID.test(n) && isDirL(path.join(d, n)) && realInside(path.join(d, n)) && fs.existsSync(path.join(d, n, "plan.json"))).sort() : []);
@@ -795,7 +795,7 @@ function parseFluidplan(dir, read, W, src) {
     answers = json(path.join(planDir, "answers.json"));
     state = json(path.join(planDir, "state.json"));
     // The finalized documents: in the plan folder, else where fluidplan writes them (engine/lib/config.mjs outputPaths) — plan.json's
-    // `output`, else fluidplan.config.json's outputDir ("{plansDir}/{id}" by default; 1.17 F review: a finalized PLAN.md in
+    // `output`, else fluidplan.config.json's outputDir ("{plansDir}/{id}" by default; a finalized PLAN.md in
     // `docs/fp/{id}` wasn't found, and its ticks were lost). Inside the project only (read() checks the real path too).
     const planId = plan && typeof plan.id === "string" && FP_PLAN_ID.test(plan.id) ? plan.id : path.basename(planDir);
     const outputOf = (key, name) => {
@@ -894,7 +894,7 @@ function parseFluidplan(dir, read, W, src) {
     if (d && toChange && d.status === "open" && !d.itemsToChangeMd) d.itemsToChangeMd = t.itemsToChange;
   }
   for (const r of fp.rules) { const d = r.fid ? fp.decisions.get(r.fid) : null; if (d && r.state && d.status === "ok") { d.status = "open"; d.verdict = r.state; } }
-  // What an open decision's line carries besides its state (1.17 F review — dropped before): plan.json's view already holds it
+  // What an open decision's line carries besides its state (dropped before): plan.json's view already holds it
   // (fpFromPlanJson); a decision read from the exports gets its remarks (DECISIONS.md's "Remarks:" — a "Still open" line
   // quotes its own), its items not settled (plan.json's, else DECISIONS.md's table, else PLAN.md's marked lines) and the revision note.
   for (const d of fp.decisions.values()) {
@@ -908,7 +908,7 @@ function parseFluidplan(dir, read, W, src) {
   if (!fp.title && !fp.tasks.length && !fp.decisions.size) return null;
   const model = fpImportModel(fp, P, PP, W, src, warnings);
   model.sourceFile = sourceFile;
-  model.nameFallback = fp.id || path.basename(planDir || dir); // a title that slugifies to nothing (importSpec, 1.22 review)
+  model.nameFallback = fp.id || path.basename(planDir || dir); // a title that slugifies to nothing (importSpec)
   model.nameHint = model.title || model.nameFallback;
   const roundsDir = planDir ? path.join(planDir, "rounds") : null;
   if ((roundsDir && isDirL(roundsDir)) || (fp.round && fp.round > 1)) model.warnings.push(P.wRounds);
@@ -918,7 +918,7 @@ function parseFluidplan(dir, read, W, src) {
 // design.md, decisions.md, the Out of Scope / Open decisions sections, warnings and the mapping.
 function fpImportModel(fp, P, PP, W, src, warnings) {
   const model = newImportModel();
-  // Every value below comes from the plan: written through fpV (one line) / fpProse (line for line) — never markup (1.17 F review).
+  // Every value below comes from the plan: written through fpV (one line) / fpProse (line for line) — never markup.
   model.title = fp.title ? fpHead(fp.title) : null;
   const L = P.label;
   // D-1… for the settled decisions (accepted and rejected), in the plan's order.
@@ -983,7 +983,7 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     ruleLines.push(fpLine(`- ${dn.get(r.fid) || fpV(r.fid)} · ${fpV(r.title)}${fpInert(r.rest)}`), ...(r.remark ? [`  - ${L.remark}: ${fpV(r.remark)}`] : []),
       ...(r.lines || []).map((l) => fpLine("  " + fpInert(l))));
   }
-  // The dependencies (fluidplan's `after`, renumbered), then the cycles among them broken (1.17 F review): an `after` cycle became
+  // The dependencies (fluidplan's `after`, renumbered), then the cycles among them broken: an `after` cycle became
   // mutual _Depends:_ — no task of it could ever start, doctor's task-deps failed and the tasks approval was refused. In each
   // cycle (a strongly connected set, dependencyCycles) the edges against the plan's order — a task depending on a LATER one, the
   // `after` fluidplan's own numbering had to break — are dropped, each named in a warning.
@@ -1038,7 +1038,7 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     const open = dec && dec.status === "open";
     body.push(`  - ${L.decision}: ${ref(t.fid)}${!open && t.summary ? ` (${fpV(t.summary)})` : ""}${open ? ` — ${P.openMark(stateOf(dec))}` : ""}`);
     if (deletes.length) body.push(`  - ${L.deletes}: ${deletes.map((p) => "`" + p + "`").join(", ")}`);
-    // A refused path is shown in a code span, inert (1.17 F review: one holding `_, _Verify:` made a marker of the line).
+    // A refused path is shown in a code span, inert (one holding `_, _Verify:` made a marker of the line).
     if (untraced.length) body.push(`  - ${L.untraced}: ${untraced.map((f) => "`" + fpV(f.path).replace(/`/g, "'") + "` (" + f.op + ")").join(", ")}`);
     if (badVerify.length) body.push(`  - ${L.verify}: ${badVerify.map(fpV).join(" · ")}`);
     if (t.doLines.length) {
@@ -1050,7 +1050,7 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
     if (t.remark) body.push(`  - ${L.remark}: ${fpV(t.remark)}`);
     if (t.items.length) body.push(`  - ${L.itemsKept}:`, ...t.items.map((l) => "    " + fpInert(l)));
     body.push(...t.extra.map((l) => "  " + fpInert(l.trim())));
-    // Line by line (a value holding a line break is one line; 1.17 F review: only an entry's first line was checked), a body line
+    // Line by line (a value holding a line break is one line; only an entry's first line was checked), a body line
     // never reads as a task, a checkpoint or a heading of tasks.md.
     out.push(`- [${t.done ? "x" : " "}] ${n}. ${fpTitle(t.title)}`, ...body.map(fpLine));
   });
@@ -1099,7 +1099,7 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
       if (others.length) cons.push(`- ${L.others}:`, ...others.map((o) => `  - ${o.label}${optText(o) ? ` — ${optText(o)}` : ""}`));
     } else if (d.status === "ok" && d.othersText) cons.push(`- ${L.others}: ${d.othersText}`);
     if (cons.length && cons[0].startsWith("- ")) cons[0] = cons[0].slice(2);
-    // The title: one line, inert (1.17 F review: a `<!--` in it reached the heading — the import bypasses decisionInput — and a
+    // The title: one line, inert (a `<!--` in it reached the heading — the import bypasses decisionInput — and a
     // later `-->` hid the entry's markers).
     model.decisions.push({ id, title: fpHead(fpOneLine(d.title).replace(/\s+/g, " ").slice(0, DECISION_TITLE_MAX)), kind: "decision", at: at0, affects: d.status === "ok" ? acsList(fid) : [], supersedes: [],
       context: ctx.join("\n"), decision: decision.join("\n"), consequences: cons.join("\n") || null });
@@ -1137,7 +1137,7 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
   const sub = fp.subtitle && first ? [`${L.subtitle}: ${fpV(fp.subtitle)}`] : []; // the subtitle, when the summary is the context's
   const ctxLines = fpProse(ctxRest, false);
   section(P.context, [...sub, ...(sub.length && ctxLines.length ? [""] : []), ...ctxLines, ...(fp.sourceDoc ? [...(sub.length || ctxLines.length ? [""] : []), P.sourceDoc(fpV(fp.sourceDoc))] : [])]);
-  // A page no story carries (its tasks state no criterion, or it keeps none): its intro is said here (1.17 F review: dropped).
+  // A page no story carries (its tasks state no criterion, or it keeps none): its intro is said here (dropped).
   const storyPages = new Set([...stories.keys()].filter((k) => k.startsWith("p:")).map((k) => k.slice(2)));
   const themes = [];
   for (const [pid, pg] of fp.pages) if (!storyPages.has(pid) && pg.intro.length) themes.push(...(themes.length ? [""] : []), `### ${fpHead(pg.title)}`, "", ...fpProse(pg.intro, true));
@@ -1157,7 +1157,7 @@ function fpImportModel(fp, P, PP, W, src, warnings) {
   model.warnings.push(...warnings);
   return model;
 }
-// Package A's core design section (1.17): the heading is written in English in every language (its synonym table reads it).
+// Package A's core design section: the heading is written in English in every language (its synonym table reads it).
 const FP_TRADEOFFS_HEADING = "## Alternatives & Trade-offs";
 
 module.exports = { fpInert, parseFluidplan, __link };

@@ -41,7 +41,7 @@ function trackTokens(input) {
 }
 function parseTracks(input) {
   const tokens = trackTokens(input);
-  const valid = allTracks(); // the built-in tracks + the project's track packs (1.15)
+  const valid = allTracks(); // the built-in tracks + the project's track packs
   const named = [...new Set(tokens.filter((t) => valid.includes(t)))];
   const unknown = [...new Set(tokens.filter((t) => !valid.includes(t)))].map((token) => ({ token, suggestion: suggestTrack(token) }));
   const set = new Set([...named, "core"]); // core is always on
@@ -54,16 +54,16 @@ function normalizeTracks(tracks) {
 const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd", tests: "tdd", testing: "tdd", scale: "saas", scaling: "saas",
   security: "sec", secure: "sec", appsec: "sec", owasp: "sec", seguranca: "sec", "segurança": "sec", seguridad: "sec",
   priv: "privacy", gdpr: "privacy", rgpd: "privacy", lgpd: "privacy", pii: "privacy", privacidade: "privacy", privacidad: "privacy",
-  // +dist (1.17 D) — also names a pack can't take (packReservedName reads these keys)
+  // +dist — also names a pack can't take (packReservedName reads these keys)
   distributed: "dist", distribuido: "dist", "distribuído": "dist", distribuida: "dist", microservices: "dist", microservicos: "dist",
   microsservicos: "dist", microservicios: "dist", consistency: "dist", consistencia: "dist", "consistência": "dist", kafka: "dist",
-  // +api (1.19 T) — also names a pack can't take (a pre-1.19 pack of one of these names is the feature's missing pack: legacyPackName)
+  // +api — also names a pack can't take (a pre-1.19 pack of one of these names is the feature's missing pack: legacyPackName)
   apis: "api", rest: "api", restful: "api", openapi: "api", swagger: "api", graphql: "api", grpc: "api",
-  // +ui (1.19 T) — never "a11y" / "accessibility": a team's accessibility pack (the example of references/project-tracks.md) keeps its name
+  // +ui — never "a11y" / "accessibility": a team's accessibility pack (the example of references/project-tracks.md) keeps its name
   frontend: "ui", "front-end": "ui", ux: "ui", gui: "ui", wcag: "ui",
-  // +obs (1.19 T)
+  // +obs
   observability: "obs", o11y: "obs", monitoring: "obs", sre: "obs", telemetry: "obs", opentelemetry: "obs",
-  // +data (1.21 F4) — never "analytics": a team's product-analytics pack (a tracking plan, event names) is another concern and keeps its name
+  // +data — never "analytics": a team's product-analytics pack (a tracking plan, event names) is another concern and keeps its name
   etl: "data", elt: "data", pipeline: "data", pipelines: "data", warehouse: "data", datawarehouse: "data", lakehouse: "data", dbt: "data",
   dataquality: "data", dataeng: "data" };
 function suggestTrack(token) {
@@ -97,9 +97,9 @@ function trackSignalTable(tr) { if (Object.prototype.hasOwnProperty.call(SIGNALS
 // counts on a real markdown heading — a Mermaid node `X[AI]` or prose used to switch +ai on (doctor then
 // failed 10 "missing" AI sections and add_track said "already on +ai").
 function detectTracks(dir) {
-  useTemplateScopeOf(dir); // the project's track packs are tracks too (1.15) — a direct call knows its project by the folder
+  useTemplateScopeOf(dir); // the project's track packs are tracks too — a direct call knows its project by the folder
   const st = readJson(statePath(dir)).data;
-  noteGhostPacks(st); // a saved track pack the project lacks now: its sections are inactive (1.15)
+  noteGhostPacks(st); // a saved track pack the project lacks now: its sections are inactive
   const saved = savedTracks(st);
   if (saved) return saved;
   const t = ["core"];
@@ -115,20 +115,20 @@ function detectTracks(dir) {
 // files — detectTracks' fallback, and what spec_upgrade {apply} saves).
 function savedTracks(st) {
   const saved = st && typeof st === "object" && !Array.isArray(st) ? st.tracks : null;
-  // A track pack's name (1.15 — a valid pack now, or one the state recorded in packMarkers) is a saved track too, one the project
+  // A track pack's name (a valid pack now, or one the state recorded in packMarkers) is a saved track too, one the project
   // may lack now (inactive: normalizeTracks drops it, doctor warns track-pack-missing); any other unknown name → the files decide,
-  // as in 1.14 (savedPackName — F4 review R6). A pre-1.17 pack of a now reserved name (legacyPackName) is a missing pack — never
-  // the built-in track of that name (1.17 D review: a 1.16 pack 'dist' is not +dist).
+  // as in 1.14 (savedPackName). A pre-1.17 pack of a now reserved name (legacyPackName) is a missing pack — never
+  // the built-in track of that name (a 1.16 pack 'dist' is not +dist).
   return Array.isArray(saved) && saved.length && saved.every((x) => typeof x === "string" && (VALID_TRACKS.includes(x.toLowerCase()) || savedPackName(st, x.toLowerCase())))
     ? normalizeTracks(saved.filter((x) => !legacyPackName(st, x.toLowerCase()))) : null;
 }
 
 // A markdown heading (outside fenced code and HTML comments) carrying a track marker.
-// Track markers are English-stable, CASE-SENSITIVE tokens (C4): `[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]` exactly. A heading
+// Track markers are English-stable, CASE-SENSITIVE tokens: `[SaaS]`, `[AI]`, `[SEC]`, `[PRIVACY]` exactly. A heading
 // that merely ends in a lower-case "[sec]" / "[privacy]" (`### Timeout [sec]` — seconds) is no track section: matched
 // case-insensitively it was hidden while the track was off (inactiveMarkerLines) and made detectTracks infer +sec.
 function headingHasMarker(md, marker) {
-  return headingEntries(String(md).split(/\r?\n/)).some((h) => h.text.includes(marker)); // the ONE heading reader (review 5, M2)
+  return headingEntries(String(md).split(/\r?\n/)).some((h) => h.text.includes(marker)); // the ONE heading reader
 }
 
 // The tracks with mandatory design sections under a stable, English marker (the markers are matched literally, in any
@@ -142,8 +142,8 @@ function trackAcIds(reqText, tr) {
   const marker = trackMarker(tr);
   if (!marker || !reqText) return out;
   const inSection = inactiveMarkerLines(reqText, allTracks().filter((t) => t !== tr)); // exactly that track's sections
-  // … and only ITS lines: a missing pack's ghost sections (inactiveMarkerLines adds them) are no other track's criteria (F4 review R5)
-  for (const [id, e] of acIndex(reqText)) if (inSection.get(e.line - 1) === tr || e.text.includes(marker)) out.add(id); // case-sensitive marker (C4)
+  // … and only ITS lines: a missing pack's ghost sections (inactiveMarkerLines adds them) are no other track's criteria
+  for (const [id, e] of acIndex(reqText)) if (inSection.get(e.line - 1) === tr || e.text.includes(marker)) out.add(id); // case-sensitive marker
   return out;
 }
 // The heading of a track's template task block as it appears in tasks.md (in any language), or null.
@@ -161,7 +161,7 @@ function trackTaskHeadings(tr) {
   let set = TASK_HEADINGS.get(tr);
   if (!set) {
     // A built-in track's come from the pre-generated corpus when this process trusts it (builtinTaskHeadings): rendering them
-    // loads every language's file — pt.js, es.js and the derived pt-BR, 50–65 ms of an English `list` (1.22 review: a process
+    // loads every language's file — pt.js, es.js and the derived pt-BR, 50–65 ms of an English `list` (a process
     // pays only for the languages it speaks). Else, and for any other name, rendered.
     const built = VALID_TRACKS.includes(tr) ? builtinTaskHeadings(tr) : null;
     set = new Set(built || renderTrackTaskHeadings(tr));
@@ -169,7 +169,7 @@ function trackTaskHeadings(tr) {
   }
   return set;
 }
-// Is this tasks.md heading line a track's task block heading? A track pack's is any heading carrying its marker (1.15 — the
+// Is this tasks.md heading line a track's task block heading? A track pack's is any heading carrying its marker (the
 // marker is its stable token); a built-in track's is its template heading, in any language.
 function trackTaskHeadingIs(tr, line) {
   if (isPackTrack(tr)) return /^#{1,6}\s/.test(line) && line.includes(trackMarker(tr));
@@ -183,7 +183,7 @@ function trackTaskHeading(tr, tasksText) {
 // tasks.md minus the task blocks of tracks that were turned off — the same rule as activeDesign: the block stays
 // on disk (inactive) and counts again when the track is re-added. Progress, next task, phase, roadmap and finish
 // read this; completing, tracing and briefing a task read the whole file.
-// 1.24 r6 D3: split as the task scanner splits (scanTaskLines: at "\n", every trailing CR dropped — "\r\r\n" kept a "\r" here) —
+// split as the task scanner splits (scanTaskLines: at "\n", every trailing CR dropped — "\r\r\n" kept a "\r" here) —
 // the headings are read on those lines, the kept lines are written back as they are (their own line endings).
 function activeTasks(tasksText, tracks) {
   if (tasksText == null) return tasksText;
@@ -195,7 +195,7 @@ function activeTasks(tasksText, tracks) {
 // `owner` picks (a truthy value, e.g. the turned-off track), up to the next heading of the same or a higher level.
 // The ONE rule behind activeTasks / activeDesign, the gates (which need the real line numbers) and
 // spec_append_tasks (which must never land in a section the other tools hide, and names its track).
-// The headings are the ONE heading reader's (review 5, M2 — headingEntries: never one in a comment or a fence; a setext heading's
+// The headings are the ONE heading reader's (headingEntries: never one in a comment or a fence; a setext heading's
 // underline goes with it). owner reads the heading's line as written.
 function sectionDropLines(lines, owner) {
   const heads = headingEntries(lines);
@@ -210,7 +210,7 @@ function sectionDropLines(lines, owner) {
   return drop;
 }
 // tasks.md (text or lines): the template task blocks of tracks that are off (matched by their heading, in any language).
-// + the task blocks of a saved track pack the project lacks now (ghostMarkers — 1.15: inactive, as a removed track's).
+// + the task blocks of a saved track pack the project lacks now (ghostMarkers — inactive, as a removed track's).
 function inactiveTaskLines(tasks, tracks) {
   const off = markerTracks().filter((t) => !tracks.includes(t));
   const ghosts = ghostMarkers();
@@ -219,9 +219,9 @@ function inactiveTaskLines(tasks, tracks) {
   return sectionDropLines(lines, (l) => off.find((t) => trackTaskHeadingIs(t, l)) || ((ghosts.find(([, m]) => l.includes(m)) || [])[0]));
 }
 // design.md / requirements.md: the [SaaS] / [AI] / [SEC] / [PRIVACY] headed sections of tracks that are off (+ a track pack's
-// that is off, or saved by the feature but gone from the project — ghostMarkers, 1.15).
-// The marker is matched case-sensitively (C4, see headingHasMarker): `### Timeout [sec]` is never a [SEC] section.
-// 1.25.1: the marker must LEAD the heading (headingLeadMarkers) — the scaffold writes "#### [SEC] Acceptance Criteria (EARS)" /
+// that is off, or saved by the feature but gone from the project — ghostMarkers).
+// The marker is matched case-sensitively (see headingHasMarker): `### Timeout [sec]` is never a [SEC] section.
+// the marker must LEAD the heading (headingLeadMarkers) — the scaffold writes "#### [SEC] Acceptance Criteria (EARS)" /
 // "## [AI] 7. Fallback & Degradation"; a story heading that merely mentions one ("### US-2 (P1): API notes [API]") is the core's,
 // and its criteria were out of trace_check (doctor passed them untasked). trace_check names what this hides (inactiveAcs).
 function inactiveMarkerLines(md, tracks) {
@@ -235,7 +235,7 @@ function inactiveMarkerLines(md, tracks) {
 }
 // The [TOKEN] markers that LEAD a heading's text, in order — after the decoration headingTextMatches strips (emphasis, dashes,
 // numbering, "Section N:", an emoji): "[SEC] [PRIVACY] Data protection" → both; "5. [AI] Model Strategy" → [AI]; "US-2 (P1): API
-// notes [API]" → none. Case-sensitive tokens, as written (C4).
+// notes [API]" → none. Case-sensitive tokens, as written.
 const RE_MARKER_DECOR = /^(?:[\s*_—–:-]+|[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}]+|(?:section|sec[çc][ãa]o|se[çc][ãa]o|secci[óo]n)\s+\d+[.:)]?(?=\s|$)|\d+(?:\.\d+)*[.):]?(?=\s))/iu;
 const RE_MARKER_TOKEN = /^\[[A-Za-z][A-Za-z0-9]*\]/;
 function headingLeadMarkers(text) {
@@ -258,7 +258,7 @@ function headingLeadMarkers(text) {
 const RE_ACTIVE_TRACKS = /^#{1,6}\s+(?:active tracks|tracks ativos|tracks activos)\s*$/i;
 const trackRunSource = (names) => "^\\s*core(?:\\s+\\+(?:" + names.join("|") + "))*(?=\\s|$)";
 const RE_TRACK_RUN = new RegExp(trackRunSource(OPTIONAL_TRACKS), "i");
-// + the project's track packs (1.15): their names are ^[a-z][a-z0-9]{1,19}$ (validated), safe inside the alternation.
+// + the project's track packs: their names are ^[a-z][a-z0-9]{1,19}$ (validated), safe inside the alternation.
 let TRACK_RUN_PACKS = { key: "", re: RE_TRACK_RUN };
 function trackRunRe() {
   const p = packTracks();
@@ -274,7 +274,7 @@ const SAAS_SECTIONS = [
   { name: "Performance Budget", syn: ["performance budget", "orçamento de desempenho", "orcamento de desempenho", "orçamento de performance", "presupuesto de rendimiento"] },
   { name: "Scale Design", syn: ["scale design", "design de escala", "desenho de escala", "diseño de escala", "escalabilidade", "escalabilidad"] },
   { name: "Multi-tenancy", syn: ["multi-tenancy", "multitenancy", "multi-inquilino", "multiinquilino", "multi inquilino", "multitenant", "modelo multi-inquilino", "modelo multiinquilino", "modelo de multi-inquilino",
-    // pt-BR (full review Pb4 / Pb7): the Brazilian word for tenant — its scaffold writes "Modelo Multilocatário"
+    // pt-BR: the Brazilian word for tenant — its scaffold writes "Modelo Multilocatário"
     "multilocatário", "multilocatario", "multi-locatário", "multi-locatario", "modelo multilocatário", "modelo multilocatario", "modelo multi-locatário"] },
   { name: "Observability", syn: ["observability", "observabilidade", "observabilidad"], tier: "extended" },
   { name: "Cost Envelope", syn: ["cost envelope", "envelope de custo", "orçamento de custo", "sobre de coste", "presupuesto de coste"], tier: "extended" },
@@ -286,7 +286,7 @@ const AI_SECTIONS = [
   { name: "Latency Budget", syn: ["latency budget", "orçamento de latência", "presupuesto de latencia"], tier: "extended" },
   { name: "Eval Strategy", syn: ["eval strategy", "estratégia de eval", "estrategia de eval", "estratégia de avaliação", "estrategia de evaluación"] },
   { name: "Safety & Abuse", syn: ["safety & abuse", "safety and abuse", "segurança e abuso", "seguridad y abuso"] },
-  // 1.25.1: the bare words are ordinary design words (loose — on an [AI] heading or under one): an unmarked "## Fallbacks" (a payment
+  // the bare words are ordinary design words (loose — on an [AI] heading or under one): an unmarked "## Fallbacks" (a payment
   // retry, a CDN's) satisfied the deleted [AI] section; the whole name stays strict (the reference's "## Section 7: Fallback & Degradation")
   { name: "Fallback & Degradation", syn: ["fallback & degradation", "fallback and degradation", "fallback e degradação", "fallback e degradacao",
     "fallback y degradación", "fallback y degradacion", "fallback", "degradação", "degradación"], loose: ["fallback", "degradação", "degradación"] },
@@ -294,7 +294,7 @@ const AI_SECTIONS = [
   { name: "Model Lifecycle", syn: ["model lifecycle", "ciclo de vida do modelo", "ciclo de vida del modelo"], tier: "extended" },
   { name: "Multi-modality", syn: ["multi-modality", "multimodality", "multimodalidade", "multimodalidad"], tier: "extended" },
 ];
-// +sec (1.14) — never a bare "security" synonym: the core design's own "Security Considerations" is not a [SEC] section.
+// +sec — never a bare "security" synonym: the core design's own "Security Considerations" is not a [SEC] section.
 const SEC_SECTIONS = [
   { name: "Threat Model", syn: ["threat model", "modelo de ameaças", "modelo de ameacas", "modelação de ameaças", "modelacao de ameacas", "modelo de amenazas", "modelado de amenazas"] },
   { name: "Security Requirements", syn: ["security requirements", "requisitos de segurança", "requisitos de seguranca", "requisitos de seguridad"], tier: "extended" },
@@ -302,10 +302,10 @@ const SEC_SECTIONS = [
     "autenticação e autorização", "autenticacao e autorizacao", "autenticación y autorización", "autenticacion y autorizacion"] },
   { name: "Secrets & Key Management", syn: ["secrets & key management", "secrets and key management", "secrets management", "secret management", "key management",
     "gestão de segredos", "gestao de segredos", "gestão de chaves", "gestión de secretos", "gestion de secretos", "gestión de claves",
-    "gerenciamento de segredos", "gerenciamento de chaves"], tier: "extended" }, // pt-BR (full review Pb4)
+    "gerenciamento de segredos", "gerenciamento de chaves"], tier: "extended" }, // pt-BR
   { name: "Security Testing", syn: ["security testing", "security tests", "testes de segurança", "testes de seguranca", "pruebas de seguridad"], tier: "extended" },
 ];
-// +privacy (1.14) — GDPR / RGPD. `loose` (C4, see extractSection): the synonyms that are ordinary design words — they
+// +privacy — GDPR / RGPD. `loose` (see extractSection): the synonyms that are ordinary design words — they
 // count only on a [PRIVACY] heading or under one, never on a core heading ("## Processors and queues", "## Retention").
 const PRIVACY_SECTIONS = [
   { name: "Personal Data Inventory", syn: ["personal data inventory", "data inventory", "inventário de dados pessoais", "inventario de dados pessoais", "inventário de dados",
@@ -314,20 +314,20 @@ const PRIVACY_SECTIONS = [
     "base jurídica", "base juridica", "base legal", "base de legitimación", "base de legitimacion"] },
   { name: "Retention & Deletion", syn: ["retention & deletion", "retention and deletion", "retention", "data retention", "conservação e eliminação", "conservacao e eliminacao",
     "prazo de conservação", "conservação", "retenção", "retencao", "conservación y supresión", "conservacion y supresion", "plazo de conservación", "conservación", "retención", "retencion",
-    "retenção e eliminação", "retencao e eliminacao", "retenção e exclusão", "retencao e exclusao"], // pt-BR (full review Pb4 / Pb7)
+    "retenção e eliminação", "retencao e eliminacao", "retenção e exclusão", "retencao e exclusao"], // pt-BR
   loose: ["retention", "conservação", "retenção", "retencao", "conservación", "retención", "retencion"] },
   { name: "Data Subject Rights", syn: ["data subject rights", "direitos dos titulares", "direitos do titular", "derechos de los interesados", "derechos del interesado", "derechos arco"] },
-  // pt-BR / LGPD (full review Pb4 / Pb7): the processor is the "operador" — an ordinary word alone (loose), the whole heading strict.
+  // pt-BR / LGPD: the processor is the "operador" — an ordinary word alone (loose), the whole heading strict.
   { name: "Processors & International Transfers", syn: ["processors & international transfers", "processors and international transfers", "processors", "sub-processors",
     "international transfers", "subcontratantes", "transferências internacionais", "transferencias internacionais", "encargados del tratamiento", "transferencias internacionales",
     "operadores e transferências internacionais", "operadores e transferencias internacionais", "operadores", "suboperadores"],
   loose: ["processors", "sub-processors", "operadores", "suboperadores"], tier: "extended" },
-  // pt-BR / LGPD (full review Pb4 / Pb7): the RIPD (Relatório de Impacto à Proteção de Dados), art. 38.
+  // pt-BR / LGPD: the RIPD (Relatório de Impacto à Proteção de Dados), art. 38.
   { name: "DPIA", syn: ["dpia", "data protection impact assessment", "aipd", "avaliação de impacto", "avaliacao de impacto", "eipd", "evaluación de impacto", "evaluacion de impacto",
     "ripd", "relatório de impacto à proteção de dados", "relatorio de impacto a protecao de dados", "relatório de impacto", "relatorio de impacto"],
     loose: ["avaliação de impacto", "avaliacao de impacto", "evaluación de impacto", "evaluacion de impacto", "relatório de impacto", "relatorio de impacto"], tier: "extended" },
 ];
-// +dist (1.17 D) — distributed systems and data consistency. `loose`: the synonyms that are ordinary design words (a core
+// +dist — distributed systems and data consistency. `loose`: the synonyms that are ordinary design words (a core
 // "## Concurrency", "## Failure modes", "## Idempotency", "## Consistency") — they name a [DIST] section only on a heading
 // carrying the marker or nested under one. The cross-system writes names (dual writes) are unambiguous: strict.
 const DIST_SECTIONS = [
@@ -343,14 +343,14 @@ const DIST_SECTIONS = [
   { name: "Concurrency", syn: ["concurrency control", "concurrency", "controlo de concorrência", "controle de concorrência", "controle de concorrencia",
     "concorrência", "concorrencia", "control de concurrencia", "concurrencia"],
   loose: ["concurrency", "concorrência", "concorrencia", "concurrencia"], tier: "extended" },
-  // 1.17 D review: the section's own names (Failure Modes / Failure Handling — the core design's heading is "Error Handling")
+  // the section's own names (Failure Modes / Failure Handling — the core design's heading is "Error Handling")
   // are strict, as every other [DIST] section's are — a marker-less hand-written design with all five headings passes; the
   // singular is loose.
   { name: "Failure Modes", syn: ["failure modes", "failure mode", "failure handling", "modos de falha", "modo de falha", "modos de fallo", "modo de fallo",
     "modos de falla", "modo de falla"],
   loose: ["failure mode", "modo de falha", "modo de fallo", "modo de falla"], tier: "extended" },
 ];
-// +api (1.19 T) — API contracts. The core design already has "## API Contracts" (PT / ES "Contratos de API") and "## Error
+// +api — API contracts. The core design already has "## API Contracts" (PT / ES "Contratos de API") and "## Error
 // Handling": every ordinary name here is `loose` — it names an [API] section only on a heading carrying the marker or nested
 // under one, so deleting "## [API] API Contract" never lets the core heading stand in for it. The full compound names stay strict.
 const API_SECTIONS = [
@@ -371,7 +371,7 @@ const API_SECTIONS = [
     "limites de taxa e quotas", "limites de taxa e cotas", "limites de taxa", "cotas", "límites de tasa y cuotas", "límites de tasa", "cuotas"],
   loose: ["rate limits", "rate limiting", "quotas", "limites de taxa", "cotas", "límites de tasa", "cuotas"], tier: "extended" },
 ];
-// +ui (1.19 T) — user-facing UI. Every ordinary name is `loose` (marker-bound): a core "## Accessibility" or "## States" note, or
+// +ui — user-facing UI. Every ordinary name is `loose` (marker-bound): a core "## Accessibility" or "## States" note, or
 // +saas's "## [SaaS] Performance Budget", never stands in for a deleted [UI] section; the full names stay strict.
 const UI_SECTIONS = [
   { name: "Design System Usage", syn: ["design system usage", "design system", "component inventory", "uso do design system", "sistema de design",
@@ -390,7 +390,7 @@ const UI_SECTIONS = [
     "presupuesto de rendimiento"],
   loose: ["front-end performance", "frontend performance", "core web vitals", "performance budget", "orçamento de desempenho", "presupuesto de rendimiento"], tier: "extended" },
 ];
-// +obs (1.19 T) — observability & operability. No name is "Observability" (+saas's section); every ordinary name is `loose`
+// +obs — observability & operability. No name is "Observability" (+saas's section); every ordinary name is `loose`
 // (marker-bound) — a core "## Rollback" or "## Alerts" note never stands in for a deleted [OBS] section; the full names stay strict.
 const OBS_SECTIONS = [
   { name: "SLIs & SLOs", syn: ["slis & slos", "slis and slos", "sli & slo", "service level objectives", "slos", "slo", "error budget", "slis e slos",
@@ -409,7 +409,7 @@ const OBS_SECTIONS = [
     "capacidade", "salud y capacidad", "comprobaciones de salud", "capacidad"],
   loose: ["health checks", "capacity", "verificações de saúde", "capacidade", "comprobaciones de salud", "capacidad"], tier: "extended" },
 ];
-// +data (1.21 F4) — data pipelines & data quality. The ordinary names are `loose` (marker-bound): a core "## Retention" or
+// +data — data pipelines & data quality. The ordinary names are `loose` (marker-bound): a core "## Retention" or
 // "## Ownership" note, +privacy's "[PRIVACY] Retention & Deletion" or +saas's "[SaaS] Cost Envelope" never stand in for a deleted
 // [DATA] section; the full names and the unmistakable data terms (schema evolution, data quality, data lineage) stay strict.
 const DATA_SECTIONS = [
@@ -435,9 +435,9 @@ const DATA_SECTIONS = [
 // check read (a marker track = a TRACK_MARKER entry + its table here).
 const TRACK_SECTIONS = { saas: SAAS_SECTIONS, ai: AI_SECTIONS, sec: SEC_SECTIONS, privacy: PRIVACY_SECTIONS, dist: DIST_SECTIONS, api: API_SECTIONS, ui: UI_SECTIONS, obs: OBS_SECTIONS,
   data: DATA_SECTIONS };
-// A section's `tier` (1.21 F5 — DATA in the tables above): "core" (absent = core) is mandatory at every size; "extended" is
+// A section's `tier` (DATA in the tables above): "core" (absent = core) is mandatory at every size; "extended" is
 // optional at size S — absent, or answered by one "n/a — <reason>" line (sectionVerdict). A track pack's sections are all core.
-// 1.21 F5 P4 — sections two tracks both scaffold (DATA): when both tracks are on, a SIZED scaffold writes only the covering
+// sections two tracks both scaffold (DATA): when both tracks are on, a SIZED scaffold writes only the covering
 // section(s) (`by`, [track, section name]) and the gate reads the dropped one (`drop`) as answered by them — status "covered"
 // (trackSectionReport); a design that still holds the dropped heading is judged on it as ever. No size: never applied. A new
 // built-in track adds its pairs here, no code.
@@ -445,10 +445,10 @@ const TRACK_OVERLAPS = [
   { drop: ["saas", "Observability"], by: [["obs", "Telemetry"], ["obs", "Alerting & Runbooks"]] },
   { drop: ["saas", "Performance Budget"], by: [["obs", "SLIs & SLOs"]] },
 ];
-// (1.21 review C8: no +api / +dist entry — [API] Pagination, Idempotency & Concurrency asks what [DIST] Delivery & Idempotency /
+// (no +api / +dist entry — [API] Pagination, Idempotency & Concurrency asks what [DIST] Delivery & Idempotency /
 // Concurrency never do: cursor pagination, an Idempotency-Key, If-Match / 412, 202 + a status resource for a long-running
 // operation — those are about the API's callers, the [DIST] ones about messages and locks. Both sections stay.)
-// +data (1.21 F4) has no overlap entry: its sections (schema evolution, data quality, backfills, lineage, retention & cost) ask
+// +data has no overlap entry: its sections (schema evolution, data quality, backfills, lineage, retention & cost) ask
 // what no other track's do — [DIST] Delivery & Idempotency is about messages, not re-running a partition; [PRIVACY] retention is
 // about personal data, not storage tiers and query cost.
 // The template TASKS two tracks both scaffold (DATA): with the `by` track on, a sized scaffold leaves out the task at 1-based
@@ -458,7 +458,7 @@ const TRACK_TASK_OVERLAPS = [
 ];
 // [[track, sections, marker]] for the ACTIVE marker tracks, in track order.
 function activeSectionTracks(tracks) {
-  return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs (1.15)
+  return markerTracks().filter((t) => tracks.includes(t)).map((t) => [t, trackSectionTable(t), trackMarker(t)]); // + the track packs
 }
 
 // design.md minus the [SaaS]/[AI] sections of tracks that were turned off (their text stays, inactive).
@@ -475,16 +475,16 @@ function activeDesign(design, tracks) {
 //   strong   — turns the track on alone.
 //   weak     — an anchor that needs corroboration: two of them, or one beside a strong / generic word, turn the track on; alone
 //              it is only a "possible" note — it cuts false positives like "user-agent" → +ai or "data model" → +ai.
-//   generic  — app-level words (1.17 D review): they add to the score but never turn the track on without a strong or a weak
+//   generic  — app-level words: they add to the score but never turn the track on without a strong or a weak
 //              signal (two alone stay 'possible', named by the genericOnly note).
-//   context  — corroborating only (C4): evidence beside another (non-negated) strong / weak signal of the track; alone no
+//   context  — corroborating only: evidence beside another (non-negated) strong / weak signal of the track; alone no
 //              signal, no note at all ("file permission bits").
-//   concepts — { concept: [keywords] } (1.17 D review): one concept, one signal — the weak / generic keywords of a concept count
+//   concepts — { concept: [keywords] }: one concept, one signal — the weak / generic keywords of a concept count
 //              once ("deduplicate … dedupe them", "producers and consumers"), an anchor member first. Per track: a keyword may
 //              belong to a concept in one track only (+saas' 'worker' and 'background job' stay two signals there).
-//   hazards  — [keywords] (1.17 D review): a failure a requirement says must never happen, written negated by nature ("no lost
+//   hazards  — [keywords]: a failure a requirement says must never happen, written negated by nature ("no lost
 //              updates", "without breaking changes") — the negation is the requirement: never negated, no "kept off" note.
-//   cues     — [rules] (1.19 T review): a keyword whose tier depends on the words around it. Rules are tried in order and the
+//   cues     — [rules]: a keyword whose tier depends on the words around it. Rules are tried in order and the
 //              first that fires decides; `kind` names the generic mechanism (classify.js CUE_KINDS: near · sentence · text ·
 //              clause · ownership), `on` the keywords it reads (none: every keyword of the track), `ifTier` a hit of that tier
 //              only, `then` the new tier, "none" (no signal at all) or "keep" (unchanged, no later rule).
@@ -493,7 +493,7 @@ function activeDesign(design, tracks) {
 // gap keyword (≤ 3 words between, never across . ! ? ; : ,). Within a track the first keyword matching at a place wins it: list a
 // longer phrase before its prefix. A phrase may serve two tracks (equal spans are never shadowed). Track packs have their own
 // strong / weak / context keywords (packs.js), never concepts, hazards or cues.
-// +api (1.19 verify 2): breaking compatibility as a verb — "must not break compatibility", "não pode quebrar a compatibilidade da API
+// +api: breaking compatibility as a verb — "must not break compatibility", "não pode quebrar a compatibilidade da API
 // pública", "no puede romper la compatibilidad": weak, one concept with the compatibility nouns (api concepts.compat) and a hazard
 // (api hazards — the negation is the requirement), in the three languages alike.
 const API_BREAK_VERBS = ["break compatibility", "breaks compatibility", "breaking compatibility", "quebrar a compatibilidade",
@@ -504,7 +504,7 @@ const UI_PAGE_WORDS = ["landing page", "settings page", "settings screen", "admi
   "profile page", "account page", "página de definições", "página de configurações", "página de administração", "painel de administração",
   "página de gestão", "página de perfil", "ecrã de definições", "tela de configurações", "página de ajustes", "página de configuración",
   "panel de administración", "página de gestión", "pantalla de ajustes", "frontend", "front-end", "UI", "UX"];
-// +obs: the TECHNICAL TARGETS (1.19 T review) — context words, and one concept (obs concepts.target): a service, servers, a cron /
+// +obs: the TECHNICAL TARGETS — context words, and one concept (obs concepts.target): a service, servers, a cron /
 // batch / sync job, production, a cluster, an endpoint, the backend, the infrastructure, ops / SRE, a status page, disk / CPU /
 // queue depth — phrases where the bare word is also a business word (a sales pipeline, a production line, a job posting, a reefer
 // container, a restaurant's server)
@@ -538,7 +538,7 @@ const SIGNALS = {
       "autorização", "autorizacao", "migração", "migracao", "integridade", "dinheiro",
       "moeda", "mensalidade", "cobrança", "cobranca", "subscrição", "subscricao", "sessão", "sessao",
       "iniciar sessão", "iniciar sessao",
-      // pt-BR (1.14 D1)
+      // pt-BR
       "senha", "faturamento",
       // ES
       "facturación", "facturacion", "factura", "pago", "contraseña", "autenticación",
@@ -552,7 +552,7 @@ const SIGNALS = {
       "permissão", "permiso", "fuso horário", "fuso horario", "zona horaria",
       "concorrência", "concurrencia", "agendamento",
     ],
-    // CUES (1.25.1) — the everyday senses of three money / auth words: a photo's / a film's / a course's credits, who is "in charge of"
+    // CUES — the everyday senses of three money / auth words: a photo's / a film's / a course's credits, who is "in charge of"
     // something and a battery's charge, a therapy / training / jam session — no signal at all ("Add photo credits under each gallery
     // image", "Show who is in charge of each project", "Add a notes field to each therapy session"; a credit card, a late-payment charge
     // and a login session keep theirs)
@@ -578,20 +578,20 @@ const SIGNALS = {
   saas: {
     strong: [
       "multi-tenant", "multitenant", "multi tenant", "tenant isolation", "webhook", "cron",
-      "rate limit", "rate-limit", "pci", "soc2", "soc 2", "sla", // gdpr / rgpd / hipaa are +privacy signals (1.14)
+      "rate limit", "rate-limit", "pci", "soc2", "soc 2", "sla", // gdpr / rgpd / hipaa are +privacy signals
       "uptime", "observability", "idempoten", "circuit breaker", "sharding",
       "noisy neighbor", "row-level security", "rls", "dead letter", "dlq", "slo",
       "multi-region", "production-ready", "production grade", "production-grade",
       "enterprise", "high performance", "load test", "load-test", "egress",
       "horizontal scaling", "autoscale", "thousands of users", "millions of",
-      // 1.24 r6 F-I5: a tenant is as strong as its PT / ES twin "inquilino" ("Each tenant sees only its own invoices" was a hint while
+      // a tenant is as strong as its PT / ES twin "inquilino" ("Each tenant sees only its own invoices" was a hint while
       // "Cada inquilino vê apenas as suas faturas" was +saas) — the rental sense (rent, a landlord, a lease) is no signal (saas cues)
       "tenant",
       // PT
       "inquilino", "multi-inquilino", "multiinquilino", "limite de taxa", "tempo de atividade",
       "observabilidade", "alta disponibilidade", "pronto para produção", "pronto para producao",
       "teste de carga", "escalabilidade",
-      // pt-BR (1.14 D1): the Brazilian word for tenant
+      // pt-BR: the Brazilian word for tenant
       "locatário", "multilocatário", "multi-locatário", "multilocatario",
       // ES
       "límite de tasa", "tiempo de actividad", "observabilidad", "alta disponibilidad",
@@ -601,7 +601,7 @@ const SIGNALS = {
       "queue", "worker", "background job", "scheduled", "scheduled task",
       "public api", "scale", "throughput", "latency", "p95", "p99", "p50", "tps", "qps",
       "cdn", "cache", "partition",
-      // 1.17 D review: a message queue IS a queue — the phrase counts for +saas too (as 'exactly-once' does for +tdd and +dist):
+      // a message queue IS a queue — the phrase counts for +saas too (as 'exactly-once' does for +tdd and +dist):
       // listed here, its span equals +dist's strong one, so the +saas hint survives (1.16 parity: "a message queue and a worker").
       "message queue", "distributed cache",
       // PT/ES ("fila de mensagens" / "cola de mensajes" before "fila" / "cola": the first keyword matching at a place wins it)
@@ -609,7 +609,7 @@ const SIGNALS = {
       "fila", "agendado", "tarefa agendada", "desempenho", "latência", "cola", "programado",
       "rendimiento", "latencia", "escala", "caché",
     ],
-    // CUES (1.24 r6 F-I5) — a tenant / an inquilino / a locatário who rents a home is no SaaS tenant: in a sentence about rent, a landlord, a
+    // CUES — a tenant / an inquilino / a locatário who rents a home is no SaaS tenant: in a sentence about rent, a landlord, a
     // lease or an apartment the word is no signal at all ("Tenants pay their rent online", "Os inquilinos pagam a renda ao senhorio")
     cues: [
       { kind: "sentence", on: ["tenant", "inquilino", "locatário"], then: "none", edge: "letter",
@@ -617,7 +617,7 @@ const SIGNALS = {
           "property managers?", "property management", "evictions?", "rendas?", "senhori[oa]s?", "arrendamentos?", "arrendatári[oa]s?", "aluguel",
           "aluguer", "aluguéis", "alugueis", "imóve(?:l|is)", "apartamentos?", "condomínios?", "fiador(?:es)?", "despejos?", "alquiler(?:es)?",
           "caser[oa]s?", "arrendador(?:es)?", "pisos?", "inmuebles?", "fianzas?", "desahucios?"] },
-      // (1.25.1) a cron EXPRESSION helper — a parser, a validator, a builder, a describer — is a text utility, not a scheduled job ("Add
+      // a cron EXPRESSION helper — a parser, a validator, a builder, a describer — is a text utility, not a scheduled job ("Add
       // a cron expression helper", "Validate the cron syntax in the form"); "Run the purge as a cron job" keeps its signal
       { kind: "all", on: ["cron"], then: "none", rules: [
         { kind: "near", after: { words: ["expressions?", "syntax", "strings?", "patterns?", "format"], chars: 16 } },
@@ -629,14 +629,14 @@ const SIGNALS = {
   },
   ai: {
     strong: [
-      // 1.25.1: the product names that are everyday words in lower case are matched case-sensitively — "Claude" / "Gemini" / "Mistral" /
+      // the product names that are everyday words in lower case are matched case-sensitively — "Claude" / "Gemini" / "Mistral" /
       // "Copilot" / "RAG" (a claude monet print, a gemini zodiac page, the mistral wind, a copilot's seat, a rag rug are no AI; the
       // capitalised everyday senses are ai cues); 'tool use' is weak (a workshop's tool use log)
       "llm", "gpt", "Claude", "openai", "anthropic", "Gemini", "Mistral", "chatbot",
       "Copilot", "RAG", "fine-tune", "finetune", "fine tune", "hallucinat",
       "prompt injection", "ai feature", "ai product", "semantic search", "embedding",
       "embeddings", "function calling", "reranker", "guardrail", "multimodal",
-      // 1.25.1 — recall: the well-known AI products, frameworks and vector stores ("Add a ChatGPT plugin", "Run Ollama locally", "Index docs
+      // recall: the well-known AI products, frameworks and vector stores ("Add a ChatGPT plugin", "Run Ollama locally", "Index docs
       // with LlamaIndex", "Store vectors in pgvector"); "Cohere" / "Stable Diffusion" / "Pinecone" are everyday words in lower case
       "chatgpt", "ollama", "Cohere", "Stable Diffusion", "dall-e", "dall·e", "midjourney", "llamaindex", "langchain", "langgraph",
       "hugging face", "huggingface", "amazon bedrock", "aws bedrock", "pgvector", "qdrant", "weaviate", "milvus", "faiss", "chromadb", "Pinecone",
@@ -650,9 +650,9 @@ const SIGNALS = {
       "entren … modelo", "entren … clasificador", "modelo … entrenado", "reentren … modelo", "predecir … churn", "predicción de churn", "modelo predictivo",
       "vlm", "vector search", "vector database", "image generation", "text generation",
       "language model", "artificial intelligence",
-      // review 5: a trained model is an AI feature too (evals, drift) — "Detect fraud with a machine learning model"
+      // a trained model is an AI feature too (evals, drift) — "Detect fraud with a machine learning model"
       "machine learning", "machine-learning", "ml model", "deep learning", "neural network",
-      // 1.24 r6 F6 / F-I5 — recall: "AI" / "IA" written in capitals (case-sensitive: a lower-case "ai" / "ia" stays weak — PT "ia" is also
+      // recall: "AI" / "IA" written in capitals (case-sensitive: a lower-case "ai" / "ia" stays weak — PT "ia" is also
       // a verb form; "AI-generated", "AI-powered" through the adjective compounds; an English "IA" is information architecture — ai cues),
       // the perception and language tasks a model does (speech-to-text, OCR, computer vision, sentiment analysis, a vision model, RAG), an
       // agentic design, and the named models — "Whisper" / "LLaMA" / "Llama 3" only in their capitalised, versioned product spelling (a
@@ -675,30 +675,30 @@ const SIGNALS = {
       "alucina", "injeção de prompt", "injecao de prompt", "funcionalidade de ia",
       "produto de ia", "pesquisa semântica", "pesquisa semantica", "incorporação",
       "base de dados vetorial", "modelo de linguagem", "inteligência artificial", "inteligencia artificial",
-      "aprendizagem automática", "aprendizagem automatica", "aprendizagem de máquina", "modelo de ml", "rede neural", "redes neurais", // (review 5)
-      // pt-BR (1.14 D1)
+      "aprendizagem automática", "aprendizagem automatica", "aprendizagem de máquina", "modelo de ml", "rede neural", "redes neurais",
+      // pt-BR
       "banco de dados vetorial", "busca semântica", "busca semantica", "recurso de ia",
-      "aprendizado de máquina", "aprendizado de maquina", // (review 5)
+      "aprendizado de máquina", "aprendizado de maquina",
       // ES
       "inyección de prompt", "inyeccion de prompt", "función de ia", "producto de ia",
       "búsqueda semántica", "busqueda semantica", "incrustación", "base de datos vectorial",
       "modelo de lenguaje",
-      "aprendizaje automático", "aprendizaje automatico", "red neuronal", "redes neuronales", // (review 5)
+      "aprendizaje automático", "aprendizaje automatico", "red neuronal", "redes neuronales",
     ],
     weak: [
       "prompt", "agent", "model", "generation", "summariz", "completion", "inference",
       "tokens", "token cost", "assistant", "temperature", "context window", "retrieval",
       "moderation", "few-shot", "sampling", "ai", "generative",
-      // 1.25.1: an LLM's tool use (strong until 1.25 — "The tool use log for the workshop machines"), a classifier, a prediction
+      // an LLM's tool use (strong until 1.25 — "The tool use log for the workshop machines"), a classifier, a prediction
       "tool use", "classifier", "predict", "rerank", "classificador", "clasificador",
-      // 1.24 r6 F-I5: a transcription may be done by people ("transcribe the interview notes") — an anchor
+      // a transcription may be done by people ("transcribe the interview notes") — an anchor
       "transcription", "transcribe", "transcribing",
       // PT/ES
       "agente", "modelo", "geração", "resumo", "resumir", "assistente", "inferência", "custo de tokens",
       "generación", "resumen", "asistente", "coste de tokens", "ia", "generativo", "generativa",
       "transcrição", "transcrever", "transcripción", "transcribir",
     ],
-    // CUES (1.24 r6 F-I5) — an English "IA" is information architecture ("Information architecture (IA) review of the docs navigation"):
+    // CUES — an English "IA" is information architecture ("Information architecture (IA) review of the docs navigation"):
     // in a sentence about navigation, a sitemap or a taxonomy it is no signal at all; nor is an "AI" file (Adobe Illustrator) or a
     // meeting's action item, nor a game's / a chat's "Whisper" (a private message: "Whisper messages to other players")
     cues: [
@@ -710,7 +710,7 @@ const SIGNALS = {
         phrases: ["information architecture", "navigation", "sitemaps?", "site maps?", "taxonom(?:y|ies)", "card sorting", "wayfinding"] },
       { kind: "sentence", on: ["AI"], then: "none", edge: "letter",
         phrases: ["adobe illustrator", "illustrator", "action items?", "vector files?", "eps", "svg"] },
-      // (1.25.1) the capitalised everyday senses of the product names: the painter / composer Claude, the Gemini star sign, the Mistral
+      // the capitalised everyday senses of the product names: the painter / composer Claude, the Gemini star sign, the Mistral
       // wind, an aircraft's Copilot — and a workshop's "tool use", an e-mail / reset / API "token" (no LLM token)
       { kind: "near", on: ["Claude"], then: "none",
         after: { words: ["monet", "debussy", "shannon", "lorrain", "van damme", "rains", "lévi-strauss", "levi-strauss", "chabrol", "lelouch"], chars: 16 } },
@@ -729,7 +729,7 @@ const SIGNALS = {
           "payment", "card", "game", "loyalty", "bus", "transit", "arcade"], chars: 16, edge: "letter" } },
     ],
   },
-  // +sec (1.14). Auth words stay WEAK here (they are +tdd's strong signals): an auth feature is only "possibly"
+  // +sec. Auth words stay WEAK here (they are +tdd's strong signals): an auth feature is only "possibly"
   // +sec until a second signal corroborates it. Never a bare "injection" (dependency injection) or "https" (URLs).
   sec: {
     strong: [
@@ -739,10 +739,10 @@ const SIGNALS = {
       "security audit", "security review", "security test", "security hardening", "sast", "dast", "attack surface",
       "privilege escalation", "ssrf", "remote code execution", "brute force attack", "brute-force attack", "credential stuffing",
       "session hijack", "clickjacking", "zero trust", "zero-trust", "mtls", "content security policy",
-      // review 5: role-based access control is an authorization design (the bare "access control" / "rbac" stay weak — inside the
+      // role-based access control is an authorization design (the bare "access control" / "rbac" stay weak — inside the
       // phrase they are shadowed: one strong signal)
       "role-based access control", "role based access control",
-      // 1.24 r6 F6 / F-I5 — recall: card data (PCI scope), impersonating users, signed requests (HMAC, signature verification),
+      // recall: card data (PCI scope), impersonating users, signed requests (HMAC, signature verification),
       // password hashing, credential rotation, a public share link (anyone holding it gets in), unauthorized access (a hazard: "No
       // unauthorized / unauthenticated access to the reports" states the requirement — sec hazards)
       "card number", "credit card number", "cardholder data", "cardholder", "pci dss", "pci-dss", "pci compliance", "pci-compliance",
@@ -773,18 +773,18 @@ const SIGNALS = {
       "testes de penetração", "gestão de segredos", "gestão de secrets", "cifragem em repouso", "encriptação em repouso",
       "auditoria de segurança", "revisão de segurança", "superfície de ataque", "escalada de privilégios",
       "escalonamento de privilégios", "ataque de força bruta", "sequestro de sessão",
-      // C4 — aligned with the EN strong ones (encryption in transit / at rest, security test): they were weak here
+      // aligned with the EN strong ones (encryption in transit / at rest, security test): they were weak here
       "cifragem em trânsito", "cifragem em transito", "encriptação em trânsito", "criptografia em trânsito", "criptografia em repouso",
       "teste de segurança",
-      // pt-BR (1.14 D1)
+      // pt-BR
       "gerenciamento de segredos", "teste de invasão", "testes de invasão",
       // ES
       "modelo de amenazas", "modelado de amenazas", "inyección sql", "inyección de sql", "inyección de código",
       "inyección de comandos", "prueba de penetración", "pruebas de penetración", "prueba de intrusión", "pruebas de intrusión",
       "gestión de secretos", "cifrado en reposo", "auditoría de seguridad", "revisión de seguridad", "superficie de ataque",
       "escalada de privilegios", "escalamiento de privilegios", "ataque de fuerza bruta", "secuestro de sesión",
-      "control de acceso basado en roles", // (review 5)
-      // C4 — aligned with EN (encryption in transit / at rest, security test)
+      "control de acceso basado en roles",
+      // aligned with EN (encryption in transit / at rest, security test)
       "cifrado en tránsito", "cifrado en transito", "encriptación en tránsito", "encriptación en reposo", "prueba de seguridad",
     ],
     weak: [
@@ -792,17 +792,17 @@ const SIGNALS = {
       "api key", "credential", "encryption", "encrypt", "tls", "cors", "csp", "audit log", "audit trail", "sanitiz",
       "input validation", "security", "hardening", "least privilege", "mfa", "2fa", "two-factor", "multi-factor", "multifactor",
       "firewall", "secrets",
-      // review 5 — the credential and the federation protocols are auth words like the others (weak: "user authentication with email and
+      // the credential and the federation protocols are auth words like the others (weak: "user authentication with email and
       // password" is two of them — +sec on; a password reset alone is a hint). One concept each (sec.concepts): "SSO (single sign-on)".
       "password", "palavra-passe", "senha", "contraseña", "sso", "single sign-on", "oidc", "openid connect", "saml",
       "brute force", "brute-force", // weak: also an algorithm ("a brute-force search") — the attack phrase is strong
-      // 1.24 r6 F6 / F-I5 — anchors: a federated login ("Add login with Google (OAuth)" is two), a file upload, a public / share link (a
+      // anchors: a federated login ("Add login with Google (OAuth)" is two), a file upload, a public / share link (a
       // blog post's share button too — one concept), verifying a signature (a PDF form's too), user roles, a (valid / invalid / expired)
       // token — and the secrets word in PT / ES (EN "secrets" had no twin)
       "oauth", "login with google", "log in with google", "sign in with google", "sign-in with google", "sign in with apple", "social login",
       "file upload", "upload … file", "public link", "share link", "sharing link", "shareable link", "verify … signature", "verifies … signature",
       "user roles", "valid token", "invalid token", "expired token",
-      // C4: the STRIDE methodology only as the upper-case acronym (an upper-case keyword is matched case-sensitively, see
+      // the STRIDE methodology only as the upper-case acronym (an upper-case keyword is matched case-sensitively, see
       // classify): a lower-case "stride" is an array stride or a running stride. "STRIDE threat model" stays strong through
       // "threat model".
       "STRIDE",
@@ -810,10 +810,10 @@ const SIGNALS = {
       "autenticação", "autenticacao", "autorização", "autorizacao", "controlo de acesso", "controle de acesso",
       "token de acesso", "chave de api", "credencial", "credenciais", "encriptação", "cifragem", "criptografia", "segurança",
       "registo de auditoria", "trilho de auditoria", "registro de auditoria", "trilha de auditoria", "privilégio mínimo", "menor privilégio", "validação de entrada", "força bruta",
-      // 1.22 review — the two-factor / multi-factor signal (EN "two-factor", "multi-factor") in PT / ES too: "autenticação de dois fatores"
+      // the two-factor / multi-factor signal (EN "two-factor", "multi-factor") in PT / ES too: "autenticação de dois fatores"
       // is autenticação + dois fatores, two weak signals like "two-factor authentication" (never ONE phrase: it would shadow the second)
       "dois fatores", "multifator",
-      // 1.24 r6 (see EN)
+      // (see EN)
       "segredos", "login com google", "login com o google", "entrar com google", "entrar com o google", "sessão com google", "sessão com o google",
       "upload de ficheiros", "upload de arquivos", "carregamento de ficheiros", "link público", "link de partilha",
       "link de compartilhamento", "verificar … assinatura", "token válido", "token inválido",
@@ -822,26 +822,26 @@ const SIGNALS = {
       "autenticación", "autorización", "control de acceso", "token de acceso", "clave de api",
       "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada", "fuerza bruta",
       "dos factores", "doble factor", // (ES "multifactor" is the EN word above)
-      // 1.24 r6 (see EN)
+      // (see EN)
       "secretos", "sesión con google", "login con google", "subida de archivos", "carga de archivos", "enlace público",
       "enlace para compartir", "enlaces para compartir", "verificar … firma",
       "token caducado", "roles de usuario",
-      // full review Pb5 — the encryption VERBS, PT / pt-BR / ES (EN has "encrypt" + its inflections): encriptar, cifrar,
+      // the encryption VERBS, PT / pt-BR / ES (EN has "encrypt" + its inflections): encriptar, cifrar,
       // criptografar as VERB_STEMS — their conjugations only, one signal per verb (like encrypt / encryption). Never a bare
       // "cifra": PT/ES also a figure, an amount ("as cifras do trimestre").
       "encript", "cifr", "criptograf",
     ],
-    // C4: CORROBORATING-only — evidence for +sec only beside another +sec signal ("RBAC permissions"); alone it is no hint at
+    // CORROBORATING-only — evidence for +sec only beside another +sec signal ("RBAC permissions"); alone it is no hint at
     // all, not even a "possible" note (file permission bits, app permissions, "permiso" = a leave of absence).
-    // Full review Pb5: "at rest" / "in transit" (EN / PT / ES) the same way — beside "encrypt" they name data encryption
+    // "at rest" / "in transit" (EN / PT / ES) the same way — beside "encrypt" they name data encryption
     // ("Encrypt customer PII at rest and in transit"), alone they are a patient at rest or a parcel in transit.
     context: ["permission", "permissão", "permiso", "at rest", "in transit", "em repouso", "em trânsito", "em transito", "en reposo", "en tránsito", "en transito"],
-    // review 5: one concept, one signal — "SSO (single sign-on)" is one hint, "OIDC single sign-on" two
+    // one concept, one signal — "SSO (single sign-on)" is one hint, "OIDC single sign-on" two
     concepts: {
       sso: ["sso", "single sign-on"],
       oidc: ["oidc", "openid connect"],
       password: ["password", "palavra-passe", "senha", "contraseña"],
-      // 1.24 r6 — one concept each (EN / PT / ES)
+      // one concept each (EN / PT / ES)
       secrets: ["secrets", "segredos", "secretos"],
       federated: ["login with google", "log in with google", "sign in with google", "sign-in with google", "sign in with apple", "social login",
         "login com google", "login com o google", "entrar com google", "entrar com o google", "sessão com google", "sessão com o google",
@@ -852,21 +852,21 @@ const SIGNALS = {
         "enlace público", "enlace para compartir", "enlaces para compartir"],
       token: ["valid token", "invalid token", "expired token", "token válido", "token inválido", "token expirado", "token caducado"],
     },
-    // 1.24 r6: unauthorized access is the concern a negation states ("No unauthorized access to the reports" = the requirement)
+    // unauthorized access is the concern a negation states ("No unauthorized access to the reports" = the requirement)
     hazards: ["unauthorized access", "unauthorised access", "unauthenticated access", "acesso não autorizado",
       "acceso no autorizado", "accesos no autorizados"],
-    // CUES (1.22 review 2) — the 1.22 factor words count only as AUTHENTICATION: "depende de dois fatores", "depende de dos factores",
+    // CUES — the 1.22 factor words count only as AUTHENTICATION: "depende de dois fatores", "depende de dos factores",
     // "doble factor de ponderación", "a multi-factor risk model" were a weak +sec signal (one more weak word turned +sec on). Next
     // to an auth word — "autenticação de dois fatores", "login com dois fatores", "autenticación de doble factor", "doble factor de
     // autenticación", "multi-factor authentication", "multi-factor sign-in" — they stay weak (the auth word is the other signal, as
     // in English); anywhere else they are no signal at all. "two-factor", "2fa" and "mfa" (pre-1.22) keep their reading.
-    // Review 3 — the natural phrasings the auth-word list missed: the VERBS "iniciar sesión" / "iniciar sessão", "entrar", "log in" /
+    // the natural phrasings the auth-word list missed: the VERBS "iniciar sesión" / "iniciar sessão", "entrar", "log in" /
     // "sign in" ("Iniciar sesión con doble factor", "passam a entrar com dois fatores"), and the connectors "at" / PT "ao" / ES "al"
     // before one ("Require multifactor at login", "doble factor al iniciar sesión") — still only RIGHT NEXT to the factor word.
-    // Review 4 — PT / ES put the adjective AFTER the noun, between the auth word and the factor word ("autenticação forte de dois
+    // PT / ES put the adjective AFTER the noun, between the auth word and the factor word ("autenticação forte de dois
     // fatores", "autenticación obligatoria de doble factor" turned +sec off while "strong multi-factor authentication" kept it):
     // one optional adjective slot; and the auth verbs conjugated ("The user logs in with multi-factor", "inicia sesión con…").
-    // 1.24 r6 F5 / F-I5 — two rules come first (the first rule that fires decides):
+    // two rules come first (the first rule that fires decides):
     // (1) an ACCESS RULE — an auth word right after "without / sem / sin" in a sentence that denies (reject, block, deny, refuse, forbid,
     //     prevent, must not, cannot, never, nobody… + PT / ES) is an authentication requirement, strong: "Reject requests without a valid
     //     access token", "Users without MFA must not access the admin panel", "Rejeitar pedidos sem um token de acesso válido", "Los
@@ -918,14 +918,14 @@ const SIGNALS = {
             "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão", "inicio de sessao", "inicio de sesión", "inicio de sesion", "iniciar sessão",
             "iniciar sessao", "iniciar sesión", "iniciar sesion", "entrar", "acesso", "acceso"]]],
         chars: 48 } },
-      // … anywhere else, no signal: the catch-all — the hit's own sentence always holds the hit, so this rule always fires (review 4:
+      // … anywhere else, no signal: the catch-all — the hit's own sentence always holds the hit, so this rule always fires (
       // with every inflection the keyword matcher accepts — "multi-factored" / "multifactored" missed the phrases and kept a weak signal)
       { kind: "sentence", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "none",
         edge: "letter", phrases: ["dois fatores(?:e?s|ed|ing|d)?", "multifator(?:e?s|ed|ing|d)?", "dos factores(?:e?s|ed|ing|d)?", "doble factor(?:e?s|ed|ing|d)?",
           "multi-?factor(?:e?s|ed|ing|d)?"] },
     ],
   },
-  // +privacy (1.14): GDPR / RGPD. The regulation names moved here from +saas — one concept, one track.
+  // +privacy: GDPR / RGPD. The regulation names moved here from +saas — one concept, one track.
   privacy: {
     strong: [
       "gdpr", "rgpd", "lgpd", "ccpa", "cpra", "hipaa", "personal data", "personally identifiable", "pii", "dpia",
@@ -933,7 +933,7 @@ const SIGNALS = {
       "data retention", "anonymiz", "anonymis", "pseudonymiz",
       "pseudonymis", "data minimi", "data processing agreement", "privacy by design", "privacy policy", "privacy notice",
       "special category data", "data controller", "data processor", "international transfer", "standard contractual clauses",
-      // 1.24 r6 F6 / F-I5 — recall: health data about patients (special category), identity checks (KYC), national identifiers, a
+      // recall: health data about patients (special category), identity checks (KYC), national identifiers, a
       // passport number, a user's location (a person's location is personal data; a parcel's is not — "location tracking" is an anchor)
       "medical record", "health record", "patient record", "patient data", "clinical record", "medical history", "electronic health record",
       "protected health information", "PHI", "EHR", "kyc", "know your customer", "know-your-customer", "passport number", "social security number",
@@ -953,7 +953,7 @@ const SIGNALS = {
       "anonimiza", "pseudonimiza", "aipd", "cnpd", "categorias especiais de dados", "dados sensíveis", "subcontratante",
       "responsável pelo tratamento", "transferência internacional", "transferências internacionais",
       "política de privacidade", "minimização de dados", "aviso de privacidade",
-      // pt-BR (1.14 D1): LGPD vocabulary
+      // pt-BR: LGPD vocabulary
       "anpd", "ripd", "relatório de impacto à proteção de dados",
       // ES
       "datos personales", "dato personal", "protección de datos", "titular de los datos",
@@ -966,10 +966,10 @@ const SIGNALS = {
       "user data", "customer data", "user profile", "customer profile", "email address", "phone number", "date of birth",
       "cookie", "user tracking", "geolocation", "location data", "biometric", "health data", "contact details", "opt-out",
       "opt-in", "unsubscribe", "privacy", "delete account", "account deletion", "data export", "dpa",
-      // C4: generic alone — an OAuth consent screen, a trash folder's retention period, an archive's retention policy are no
+      // generic alone — an OAuth consent screen, a trash folder's retention period, an archive's retention policy are no
       // personal-data processing. WEAK (EN / PT / ES alike): +privacy only once another privacy signal corroborates them.
       "consent", "retention period", "retention policy", "retention policies",
-      // 1.24 r6 F6 / F-I5 — anchors: an address, a birth date, location tracking, an ID document / passport / national tax number, a
+      // anchors: an address, a birth date, location tracking, an ID document / passport / national tax number, a
       // fingerprint, a face (facial recognition is +ai strong too), health information, a recorded call — each personal data only beside
       // another signal ("Track the parcel location", "Show the NIF on the invoice" stay hints)
       "home address", "postal address", "mailing address", "street address", "dates of birth", "birth date", "birthdate", "DOB",
@@ -991,7 +991,7 @@ const SIGNALS = {
       "número de telefone", "número de telemóvel", "data de nascimento", "geolocalização", "dados de saúde",
       "dados biométricos", "privacidade", "apagar conta", "eliminar conta", "exportar dados", "avaliação de impacto",
       "consentimento", "prazo de conservação", "período de retenção", "política de retenção", "política de conservação", // C4 (see EN)
-      // pt-BR (1.14 D1)
+      // pt-BR
       "dados do usuário", "dados dos usuários", "dados de usuário", "perfil do usuário", "perfil de usuário", "número de celular",
       "excluir conta", "exclusão de conta",
       // ES
@@ -1001,7 +1001,7 @@ const SIGNALS = {
       "consentimiento", "plazo de conservación", "periodo de retención", "período de retención", "política de retención", // C4 (see EN)
       "política de conservación",
     ],
-    // 1.24 r6: one concept, one signal — a recorded call, a tracked location (EN / PT / ES)
+    // one concept, one signal — a recorded call, a tracked location (EN / PT / ES)
     concepts: {
       call: ["call recording", "recorded calls", "record calls", "gravação de chamadas", "gravações de chamadas", "grabación de llamadas",
         "grabaciones de llamadas"],
@@ -1009,14 +1009,14 @@ const SIGNALS = {
         "histórico de localização", "seguimiento de ubicación", "historial de ubicación"],
     },
   },
-  // +dist (1.17 D): distributed systems and data consistency — a write that reaches more than one system (a database AND a
+  // +dist: distributed systems and data consistency — a write that reaches more than one system (a database AND a
   // broker, a cache, another service), delivery guarantees, idempotency, concurrency. STRONG: the named brokers / job and workflow
   // platforms and the patterns that only exist across systems (transactional outbox, saga pattern, dual write, eventual
   // consistency, two-phase commit, microservices, event sourcing, CQRS, change data capture, optimistic / pessimistic locking…).
   // WEAK — the cross-system ANCHORS, on only in pairs: webhooks, idempotency, delivery guarantees (at-least-once, duplicate
   // deliveries), other / another / downstream services, dead letters, circuit breakers, backoff, replication, cache invalidation,
   // concurrent updates, an event bus / stream / event-driven design, a bare "saga" (also a story series), "CDC" (also the health
-  // agency), Redis, a search index, gRPC. GENERIC (1.17 D review — app-level words: a print queue, a music player's retry, a
+  // agency), Redis, a search index, gRPC. GENERIC (app-level words: a print queue, a music player's retry, a
   // farmers' market's producers and consumers, a newsletter's subscribers, a nightly dedupe): weak evidence that turns the
   // track on only beside a strong or an anchor signal — two generic words alone stay 'possible'. Never a bare "event" (DOM,
   // calendar, analytics events), "lock" (an account lock), "stream" (video streaming) or "broker" (an insurance broker).
@@ -1026,11 +1026,11 @@ const SIGNALS = {
   // Shared spans: 'exactly-once' is +tdd strong too, 'idempoten' / 'webhook' / 'circuit breaker' / 'dead letter' +saas strong,
   // 'queue' / 'worker' / 'background job' / 'fila' / 'cola' +saas weak, 'race condition' +tdd weak — a keyword serves both tracks
   // (equal spans are never shadowed); "message queue" / "distributed cache" (and PT / ES) are listed in +saas weak too, so the
-  // +saas hint survives inside them (1.17 D review — 1.16 parity).
+  // +saas hint survives inside them (1.16 parity).
   dist: {
     strong: [
       "kafka", "rabbitmq", "activemq", "amqp", "amazon sqs", "sqs", "kinesis", "eventbridge", "service bus", "redis streams", "debezium",
-      // named platforms (1.17 D review). A common word is matched only in its capitalised product phrase (a keyword written with
+      // named platforms. A common word is matched only in its capitalised product phrase (a keyword written with
       // capitals is case-sensitive): "Temporal workflow" (PT / ES "temporal" is an adjective), "Celery task" (a vegetable),
       // "Pulsar topic" (a star), "NATS", "Event Hubs", "CDC pipeline".
       "google pub / sub", "cloud pub / sub", "pub / sub topic", "NATS", "apache pulsar", "Pulsar topic", "azure event hub", "Event Hubs",
@@ -1087,7 +1087,7 @@ const SIGNALS = {
       "servicio de notificaciones", "servicio de pagos", "servicio de facturación", "servicio de pedidos", "servicio de envíos",
       "servicio de inventario", "servicio de precios", "servicio de catálogo",
     ],
-    // GENERIC (1.17 D review): app-level words — evidence only beside a strong or an anchor signal (see above).
+    // GENERIC: app-level words — evidence only beside a strong or an anchor signal (see above).
     generic: [
       "queue", "consumer", "producer", "subscriber", "retry", "jitter", "deduplica", "dedup", "dedupe", "race condition",
       "pubsub", "pub-sub", "pub / sub", "publish-subscribe", "publish / subscribe", "publish … event", "publish … message",
@@ -1145,7 +1145,7 @@ const SIGNALS = {
       "duplicate delivery", "duplicate message", "duplicate event", "delivered twice", "delivered more than once", "entregue duas vezes",
       "entregado dos veces", "mensagens duplicadas", "eventos duplicados", "mensajes duplicados"],
   },
-  // +api (1.19 T): an API contract other code depends on — public, partner or internal. STRONG: contract-level words only (a
+  // +api: an API contract other code depends on — public, partner or internal. STRONG: contract-level words only (a
   // public / REST / HTTP API, OpenAPI / Swagger, GraphQL, gRPC / protobuf, API versioning, the contract itself, its consumers —
   // third-party developers, a developer portal —, the headers and formats a contract fixes: problem+json, Idempotency-Key,
   // rate-limit headers, Retry-After, Sunset). WEAK — the anchors, on only in pairs or beside a generic word: compatibility
@@ -1154,7 +1154,7 @@ const SIGNALS = {
   // route, request, pagination — every app has them; alone they are 'possible' at most ("call the Stripe API", "an API key
   // management page" — +sec's api key is no contract). HAZARDS: a breaking change is written negated by nature ("without
   // breaking changes") — the negation is the requirement.
-  // OWNERSHIP (1.19 T review — the cues below): an API someone ELSE owns is app-level for us. A keyword right after
+  // OWNERSHIP (the cues below): an API someone ELSE owns is app-level for us. A keyword right after
   // a third-party owner ("Stripe's REST API", "the payment provider's OpenAPI spec", "their Admin API version"; PT / ES "a API
   // REST do Stripe", "la API REST del banco") counts as a GENERIC word, and so does one after a consumer verb ("call", "integrate
   // with", "sync from", "through", "via", "the Salesforce REST API"; PT "integrar com", "chamar"; ES "integrar con", "llamar a")
@@ -1171,7 +1171,7 @@ const SIGNALS = {
       "external developers", "developer portal", "contract test", "consumer-driven contract",
       "application/problem+json", "problem+json", "rfc 9457", "rfc 7807", "idempotency-key", "rate limit headers",
       "ratelimit header", "x-ratelimit", "retry-after", "sunset header", "deprecation header",
-      // the rate-limit headers by name (1.19 T review: 'x-ratelimit' never matched "X-RateLimit-Remaining" — a '-<letter>'
+      // the rate-limit headers by name ('x-ratelimit' never matched "X-RateLimit-Remaining" — a '-<letter>'
       // compound ends no keyword)
       "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "ratelimit-limit", "ratelimit-remaining", "ratelimit-reset",
       "ratelimit-policy",
@@ -1189,14 +1189,14 @@ const SIGNALS = {
       // ownership-ambiguous (the cues' `ambiguous` — strong beside an own cue; one concept: "the public API is a REST API" is one hint)
       "public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "problem details",
       "api pública", "api rest", "versão da api", "versões da api", "versión de la api", "versiones de la api",
-      "rest endpoint", "endpoint rest", "endpoints rest", // (review 5) an API-kind name too — ownership decides, as for "a REST API"
+      "rest endpoint", "endpoint rest", "endpoints rest", // an API-kind name too — ownership decides, as for "a REST API"
       "breaking change", "backward compatible", "backwards compatible", "backward-compatible", "backwards-compatible",
       "backward compatibility", "backwards compatibility", "sdk", "client library", "client libraries", "etag", "if-match",
       "if-none-match", "status code", "http status", "json schema", "request schema", "response schema", "cursor pagination",
       "cursor-based pagination", "keyset pagination", "deprecation", "api gateway", "internal api", "api client",
       "api documentation", "api docs", "api reference", "content negotiation",
-      "management api", "admin api", // (1.19 T review) an API named by its role — "Management API for tenants"
-      ...API_BREAK_VERBS, // (1.19 verify 2) breaking compatibility as a verb, EN / PT / ES
+      "management api", "admin api", // an API named by its role — "Management API for tenants"
+      ...API_BREAK_VERBS, // breaking compatibility as a verb, EN / PT / ES
       // PT
       "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis", "mudança incompatível", "mudanças incompatíveis",
       "compatibilidade retroativa", "retrocompatível", "retrocompatíveis", "retrocompatibilidade", "compatível com versões anteriores",
@@ -1211,10 +1211,10 @@ const SIGNALS = {
       // PT / ES
       "rota", "requisição", "paginação", "ruta", "solicitud http", "petición http", "paginación",
     ],
-    // +api (1.19 T): compatibility is one concept ("no breaking change, stay backward compatible"), so are ETag / If-Match, the
+    // +api: compatibility is one concept ("no breaking change, stay backward compatible"), so are ETag / If-Match, the
     // status codes, the schemas, cursor pagination, a client library / SDK; the generic words (an endpoint and its route, a request).
     concepts: {
-      // (1.19 T review) the ownership-ambiguous names: one hint, whichever of them a text uses
+      // the ownership-ambiguous names: one hint, whichever of them a text uses
       kind: ["public api", "rest api", "http api", "web api", "json api", "partner api", "api version", "api pública", "api rest",
         "versão da api", "versões da api", "versión de la api", "versiones de la api", "rest endpoint", "endpoint rest", "endpoints rest"],
       role: ["management api", "admin api"],
@@ -1234,10 +1234,10 @@ const SIGNALS = {
       request: ["request", "requisição", "solicitud http", "petición http"],
       paging: ["pagination", "paginate", "paginação", "paginación"],
     },
-    // +api (1.19 T): "no breaking changes", "sem quebra de compatibilidade", "sin cambios incompatibles" state the contract concern.
+    // +api: "no breaking changes", "sem quebra de compatibilidade", "sin cambios incompatibles" state the contract concern.
     hazards: ["breaking change", "breaking api change", "quebra de compatibilidade", "alteração incompatível", "alterações incompatíveis",
       "mudança incompatível", "mudanças incompatíveis", "cambio incompatible", "cambios incompatibles", ...API_BREAK_VERBS],
-    // CUES — who owns the API (1.19 T review; the ownership kind in classify.js holds the algorithm, these are its words):
+    // CUES — who owns the API (the ownership kind in classify.js holds the algorithm, these are its words):
     // - a third party named at the API phrase makes it someone else's (GENERIC): "Stripe's REST API", "the provider's OpenAPI
     //   spec", "their API", a `possessives` word ≤ window.near words back, "<phrase> of / do / del <Owner>" (`ownerAfter`, ≤
     //   window.ownerReach characters) — an owner is a Titlecase word, a `thirdParty` noun or an ALL-CAPS organisation acronym
@@ -1252,7 +1252,7 @@ const SIGNALS = {
     //   article + ≤ window.adjectives lower-case adjectives ("REST API for the mobile app", "Add rate limiting to the public API").
     // Verb lists hold one whole lower-case word per entry — a word or a regex fragment ("publish(?:es|ed|ing)?").
     cues: [
-      // (1.21 F2) our own API + a new version of it in the sentence is contract work: "Our webhooks API needs a v2 …", "A nossa API
+      // our own API + a new version of it in the sentence is contract work: "Our webhooks API needs a v2 …", "A nossa API
       // de webhooks precisa de uma v2", "Nuestra API de pagos necesita una nueva versión" — the bare word "api" (generic) is strong
       // when an own word stands right before it (≤ 2 words between) AND the sentence names a version (v2, version 3, a new / major
       // version, versioning). Tried before the ownership rule (which decides every other hit).
@@ -1316,7 +1316,7 @@ const SIGNALS = {
       },
     ],
   },
-  // +ui (1.19 T): a user-facing interface — the screens, the design system, accessibility, the states every view needs, the
+  // +ui: a user-facing interface — the screens, the design system, accessibility, the states every view needs, the
   // front-end performance budget. STRONG: the design system and its parts (tokens, a component library, UI components), WCAG /
   // accessibility and its concrete words (a screen reader, keyboard navigation, focus order, contrast, alt text, ARIA, reduced
   // motion), responsive design, dark mode, Storybook / Figma, Core Web Vitals (LCP), visual regression, an empty state / skeleton
@@ -1327,11 +1327,11 @@ const SIGNALS = {
   // feature has them): screen, page, form, button, dialog, dashboard, menu, icon, widget, click, layout, theme — "add a button
   // to export" or "the log in form" is 'possible' at most. A dashboard is +ui's generic word only (never +obs: "a metrics
   // dashboard for sales" is a product screen); a monitoring / Grafana dashboard is +obs strong and shadows it.
-  // CUES (1.19 T review — the cues below): a page type (a settings / admin / profile page, an admin panel…) and the
+  // CUES (the cues below): a page type (a settings / admin / profile page, an admin panel…) and the
   // frontend / UI / UX words count as GENERIC in a CLAUSE that says the work is backend-only — a handler, an endpoint, the
   // backend, an API (never "API keys"), a data layer / repository / SQL, "the UI already exists" ("a PATCH handler that the
   // settings page calls", "the profile page backend should return…") — unless a negator governs the backend word ("no backend
-  // changes"), the page consumes it ("loads … from the CMS API") or the text says "frontend only" (1.19 verify 1; "the frontend
+  // changes"), the page consumes it ("loads … from the CMS API") or the text says "frontend only" ("the frontend
   // team" names a team: generic); an empty state is weak in a sentence about a state
   // machine ("the empty state blocks sales"). "accessibility" alone is weak (a venue's wheelchair accessibility): it needs a
   // digital co-signal — WCAG, a screen reader, a page, a form… (WCAG / a11y / screen reader stay strong).
@@ -1344,7 +1344,7 @@ const SIGNALS = {
       "storybook", "figma", "core web vitals", "largest contentful paint", "cumulative layout shift", "interaction to next paint", "LCP",
       "visual regression", "skeleton screen", "skeleton loader", "empty state", "right-to-left", "landing page", "settings page",
       "settings screen", "admin page", "admin panel", "admin ui", "management page", "profile page", "account page",
-      // 1.21 F2: the everyday UI components a text names by themselves — a confirm dialog, a toast notification, a snackbar (one
+      // the everyday UI components a text names by themselves — a confirm dialog, a toast notification, a snackbar (one
       // word: a "snack bar" is a food counter) — were anchors only ('possible' alone); they are UI work
       "confirm dialog", "confirmation dialog", "confirmation modal", "confirm modal", "modal dialog", "modal window",
       "toast notification", "toast message", "snackbar",
@@ -1364,13 +1364,13 @@ const SIGNALS = {
       "notificación toast", "notificaciones toast", "mensaje toast",
     ],
     weak: [
-      "accessibility", // (1.19 T review) weak: "wheelchair accessibility of each venue" — with a page / form / WCAG it is +ui
+      "accessibility", // weak: "wheelchair accessibility of each venue" — with a page / form / WCAG it is +ui
       "frontend", "front-end", "UI", "UX", "React", "Vue", "Angular", "Svelte", "tailwind", "css", "stylesheet", "modal", "dropdown", "tooltip",
       "navbar", "sidebar", "toast", "carousel", "spinner", "responsive", "i18n", "l10n", "RTL", "CLS", "INP", "loading state", "error state",
       "form validation", "wireframe", "mockup",
-      // 1.19 T review: a picker ("a language picker"), a swipe gesture, inline form errors (a confirm dialog is strong since 1.21)
+      // a picker ("a language picker"), a swipe gesture, inline form errors (a confirm dialog is strong since 1.21)
       "picker", "swipeable", "swipe", "inline error", "inline validation",
-      // 1.21 F2: a pop-up; errors shown next to each field (inline validation, one concept); a mobile-friendly screen (responsive)
+      // a pop-up; errors shown next to each field (inline validation, one concept); a mobile-friendly screen (responsive)
       "popup", "pop-up", "banner", "next to each field", "beside each field", "below each field", "under each field", "mobile-friendly", "mobile friendly",
       // PT
       "acessibilidade", "responsivo", "responsiva", "estado de carregamento", "estado de erro", "validação de formulário",
@@ -1386,10 +1386,10 @@ const SIGNALS = {
       "screen", "page", "form", "button", "dialog", "dashboard", "menu", "icon", "widget", "click", "layout", "theme",
       // PT
       "ecrã", "tela", "página", "formulário", "botão", "painel", "ícone",
-      // ES ("tablero" / "cuadro de mando": a dashboard — 1.19 T review)
+      // ES ("tablero" / "cuadro de mando": a dashboard)
       "pantalla", "formulario", "botón", "icono", "tablero", "cuadro de mando",
     ],
-    // +ui (1.19 T): a UI framework, the styling, i18n, a loading / error state, form validation, "responsive" are one concept each;
+    // +ui: a UI framework, the styling, i18n, a loading / error state, form validation, "responsive" are one concept each;
     // the generic words too (a screen is a page, a form, a button, a dashboard, an icon).
     concepts: {
       framework: ["React", "Vue", "Angular", "Svelte"],
@@ -1416,9 +1416,9 @@ const SIGNALS = {
       dashboard: ["dashboard", "painel", "tablero", "cuadro de mando"],
       icon: ["icon", "ícone", "icono"],
     },
-    // CUES (1.19 T review, verify 1) — rules tried in order, the first that fires decides (generic kinds in classify.js):
+    // CUES — rules tried in order, the first that fires decides (generic kinds in classify.js):
     cues: [
-      // (1.21 F2) a widget a display verb shows or opens is UI work: "Show a modal …", "display a tooltip", "open the date picker",
+      // a widget a display verb shows or opens is UI work: "Show a modal …", "display a tooltip", "open the date picker",
       // "Mostrar um popup", "muestra un spinner" — strong (alone the widget word stays an anchor: "modal split", "the modal verbs")
       { kind: "near", on: ["modal", "dropdown", "tooltip", "toast", "popup", "pop-up", "banner", "carousel", "sidebar", "navbar", "spinner", "picker", "dialog"],
         then: "strong",
@@ -1453,7 +1453,7 @@ const SIGNALS = {
           words: ["request handlers?", "route handlers?", "endpoints?", "back-?end", "data layer", "repositor(?:y|ies)", "sql",
             "server-side", "already exists?", "já existe", "ya existe", "camada de dados", "capa de datos"],
           requests: { methods: ["get", "post", "put", "patch", "delete"], targets: ["handlers?", "endpoints?", "routes?"] },
-          // (never an API key / token; 1.21 F2: never a PUBLIC API — a contract for outside consumers, not the backend of one page:
+          // (never an API key / token; never a PUBLIC API — a contract for outside consumers, not the backend of one page:
           // "Expose a public REST API for the mobile app's settings screen" builds the screen's consumer too, the mixed case)
           api: { words: ["apis?"], notAfter: [[["chaves?", "claves?"], ["de", "da", "del"]], "public", ["public", ["rest", "http", "json", "web"]]],
             notBefore: ["keys?", "tokens?", "públicas?", [["rest", "http", "json", "web"], "públicas?"]] },
@@ -1476,7 +1476,7 @@ const SIGNALS = {
           { optional: ["itself", "em si", "en sí"] }, ["already exists?", "já existe", "ya existe"]]] },
     ],
   },
-  // +obs (1.19 T): observability & operability — a feature the team can watch, alert on, roll out and roll back. STRONG: SLOs /
+  // +obs: observability & operability — a feature the team can watch, alert on, roll out and roll back. STRONG: SLOs /
   // SLIs / error budgets / burn rates, observability, OpenTelemetry, distributed tracing, runbooks, on-call, the alerting and
   // monitoring tools (PagerDuty, Opsgenie, Prometheus, Grafana, Datadog, Sentry…), structured logging, correlation / trace IDs,
   // incident response and postmortems, feature flags / kill switches, a canary release / blue-green / progressive / staged
@@ -1488,7 +1488,7 @@ const SIGNALS = {
   // sales" or "store the import logs" is 'possible' at most. Never a bare "log" ("log in"), "trace" or "dashboard" (+ui's word).
   // HAZARDS: "zero downtime", "without an outage" state the concern. Shared: observability / SLO / SLA / uptime are +saas strong
   // too (the 1.14 +saas hint survives — a phrase may serve two tracks), rollback +tdd weak, latency / p95 / p99 +saas weak.
-  // 1.19 T review — business monitoring is no operability: "monitor stock levels and send alerts to purchasing", "warehouse
+  // business monitoring is no operability: "monitor stock levels and send alerts to purchasing", "warehouse
   // temperature monitoring … alerts go to the shift manager", "price-drop alerts … monitor competitor prices", a support
   // incident within the SLA, a clinical health check. So: monitoring · monitor · alert(s) · alerting · an incident · a
   // postmortem · an SLA are ONE concept (concepts.watch — "monitoring and alerts" is one hint); an SLA, an incident
@@ -1519,7 +1519,7 @@ const SIGNALS = {
       "logs estruturados", "resposta a incidentes", "lançamento canário", "lançamento gradual", "lançamento progressivo", "plano de rollback",
       "plano de reversão", "painel de monitorização", "painel de monitoramento", "engenharia do caos", "injeção de falhas",
       "implantação canário", "implantação canária", "implantação gradual", "implantação progressiva", "reverter … implantação", "reverter … deploy",
-      // (1.19 verify 3) a health check endpoint, as in EN (PT / ES; the English noun too) — before the context words it shadows
+      // a health check endpoint, as in EN (PT / ES; the English noun too) — before the context words it shadows
       "endpoint de verificação de saúde", "endpoint de verificação do estado", "endpoint de health check", "endpoint de healthcheck",
       // ES
       "observabilidad", "presupuesto de error", "rastreo distribuido", "trazas distribuidas", "logs estructurados",
@@ -1532,7 +1532,7 @@ const SIGNALS = {
       "outage", "downtime", "rollback", "roll back", "rollout", "roll out", "canary", "telemetry", "instrumentation", "tracing", "APM",
       "error rate", "5xx", "on-call", "on call", "game day", "otel", "request id", "latency metrics", "request logs", "application logs",
       // PT
-      // (1.19 verify 3) the verbs "alertar" (PT / ES) and "avisar" (ES / PT) are the watch concept too: alone a hint, beside a
+      // the verbs "alertar" (PT / ES) and "avisar" (ES / PT) are the watch concept too: alone a hint, beside a
       // technical target +obs ("Alertar a equipa de operações quando a tarefa agendada … falhar", "Avisar … cuando falle la tarea
       // programada …"), a business watch stays 'possible' ("Avisar al encargado de la tienda cuando el stock baje")
       "alertar", "avisar",
@@ -1547,16 +1547,16 @@ const SIGNALS = {
       // PT / ES
       "métricas", "latência", "latencia", "implantação", "despliegue",
     ],
-    // CONTEXT (1.19 T review): evidence only beside another (non-negated) obs signal — the SLA / incident / health-check words of
+    // CONTEXT: evidence only beside another (non-negated) obs signal — the SLA / incident / health-check words of
     // support desks and clinics, and the technical targets that make a lone monitoring / rollback / error-rate word operability.
     context: [
       "sla", "incident", "incidente", "health check", "verificação de saúde", "verificações de saúde", "comprobación de salud",
       "comprobaciones de salud",
       ...OBS_TARGETS, // the technical targets (one concept: concepts.target)
     ],
-    // +obs (1.19 T): alerting, monitoring, health checks, a rollback, a rollout, an outage, telemetry, tracing, error rates, on-call and
+    // +obs: alerting, monitoring, health checks, a rollback, a rollout, an outage, telemetry, tracing, error rates, on-call and
     // availability are one concept each; the generic metrics / logs / latency / deploy words too.
-    // 1.19 T review: watching and alerting — monitoring, monitor, alert(s), an incident, a postmortem (+ PT / ES) — are ONE concept
+    // watching and alerting — monitoring, monitor, alert(s), an incident, a postmortem (+ PT / ES) — are ONE concept
     // ("monitor stock levels and send alerts" is one hint, never the two that turned +obs on); the technical targets are one too.
     concepts: {
       // (an SLA too: "tickets breaching the SLA … alerts to the supervisor" is a help desk's words, one hint)
@@ -1578,9 +1578,9 @@ const SIGNALS = {
       deploy: ["deploy", "implantação", "despliegue"],
       target: OBS_TARGETS,
     },
-    // +obs (1.19 T): "zero downtime", "without an outage", "sem indisponibilidade", "sin tiempo de inactividad" state the concern.
+    // +obs: "zero downtime", "without an outage", "sem indisponibilidade", "sin tiempo de inactividad" state the concern.
     hazards: ["downtime", "outage", "indisponibilidade", "tempo de inatividade", "caída del servicio", "tiempo de inactividad"],
-    // CUES (1.19 T review): "customer / room service", "service level", "serviço ao cliente", "servicio al cliente" are no
+    // CUES: "customer / room service", "service level", "serviço ao cliente", "servicio al cliente" are no
     // technical target — no signal at all. (The words before carry no left edge, as in 1.19: "bathroom service" is room service.)
     cues: [
       { kind: "near", on: ["service", "serviço", "servicio"], then: "none",
@@ -1588,7 +1588,7 @@ const SIGNALS = {
         after: { words: ["level", "ao cliente", "a clientes", "de atendimento", "al cliente", "de atención"], chars: 30, plural: true } },
     ],
   },
-  // +data (1.21 F4): data pipelines & data quality — data that moves between stores on a schedule or a stream (ETL / ELT, a warehouse or
+  // +data: data pipelines & data quality — data that moves between stores on a schedule or a stream (ETL / ELT, a warehouse or
   // a lake, dbt / Airflow / Spark jobs) and whose quality, freshness, lineage and history the feature owns. STRONG: ETL / ELT, a data
   // pipeline / warehouse / lake / mart, data quality, data contracts, lineage, a data catalog, schema evolution / a schema registry,
   // slowly changing dimensions, a star schema, fact / dimension tables, dbt models / tests, an Airflow DAG, Spark jobs, the platforms
@@ -1602,13 +1602,13 @@ const SIGNALS = {
   // "export orders as CSV" and "migrate the users table" stay core ('possible' at most). CONTEXT (corroborating only — one concept):
   // table, column, rows, SQL, query, schema — "a nightly job that loads the orders table into the warehouse" is +data, "migrate the
   // users table" is not. HAZARDS: duplicate rows, stale data, schema drift ("without duplicate rows" states the concern).
-  // 1.21 review B3 — words that mean something else in everyday text are tied to a data phrase or read by a cue: ELT only as a
+  // words that mean something else in everyday text are tied to a data phrase or read by a cue: ELT only as a
   // pipeline / job / tool / process ("ELT teachers" teach English); a bare lakehouse is an anchor (a lakehouse to rent), strong in a
   // sentence about data; a freshness check is an anchor (a kitchen's produce crate); PT / ES "carga incremental" an anchor (a
   // training plan's load); BI only with its tool / dashboard / report ("o número do BI" is the Portuguese ID card — "BI" matched
   // case-sensitively, the words around it not: "Relatório de BI", "BI Dashboard"); and the context words never back an anchor with an
   // everyday sense (everydayAnchors) — a table, a column or a query is on every screen ("in a table", "React Query"): beside a horse's
-  // lineage, SCD patient records, medication ingestion or duplicate rows in the users table they are no second hint (1.21 verify V3:
+  // lineage, SCD patient records, medication ingestion or duplicate rows in the users table they are no second hint (
   // beside a data-term anchor — a warehouse, a backfill, a BI dashboard, parquet — they still are).
   data: {
     strong: [
@@ -1662,7 +1662,7 @@ const SIGNALS = {
     // CONTEXT: the words of the tables a pipeline reads and writes — evidence only beside another (non-negated) strong / weak +data
     // signal, and one concept (concepts.sql): "the warehouse … the orders table" is two hints, "table … rows … columns" one.
     context: ["table", "column", "row", "sql", "query", "queries", "schema", "tabela", "coluna", "linhas", "tabla", "columna", "filas"],
-    // 1.21 review B3 / verify V3: the anchors that also have an everyday sense — a context word never backs them (classify.js — backedBy):
+    // the anchors that also have an everyday sense — a context word never backs them (classify.js — backedBy):
     // a table / a column / a query is on every screen, so "a horse's lineage in a table", "SCD patient records in the patients table",
     // "duplicate rows in the users table", "React Query never shows stale data" name no pipeline; a data-term anchor + a table still
     // does ("a BI dashboard over the orders table", "load the orders table into the warehouse", "backfill the orders table")
@@ -1696,7 +1696,7 @@ const SIGNALS = {
     // CUES — rules tried in order, the first that fires decides (generic kinds in classify.js):
     cues: [
       // a warehouse in a sentence about data (SQL, a load, dbt, a pipeline, a schema…) stays an anchor … — never for a table, a column or
-      // a query, which a stock screen shows too (1.21 review B4: "Show stock levels per warehouse in a table …" reaches the next rule)
+      // a query, which a stock screen shows too ("Show stock levels per warehouse in a table …" reaches the next rule)
       { kind: "sentence", on: ["warehouse"], then: "keep", edge: "letter",
         phrases: ["sql", "load(?:s|ed|ing)?[^\\S\\n]+into", "snapshots?", "schemas?", "dbt", "pipelines?", "etl", "elt",
           "partitions?", "ingest\\p{L}*", "analytics", "bi"] },
@@ -1725,7 +1725,7 @@ const SIGNALS = {
       { kind: "near", on: ["dbt"], then: "none",
         after: { words: ["therapy", "therapists?", "skills?", "diar(?:y|ies)", "sessions?", "groups?", "programm?e?s?"], chars: 24 },
         before: { words: ["dialectical behaviou?r therapy", "dialectical"], chars: 40, edge: "letter" } },
-      // 1.21 review B3 / 1.21 verify V3 — the data senses FIRST (the first rule that fires decides): a lakehouse, a freshness check or a
+      // the data senses FIRST (the first rule that fires decides): a lakehouse, a freshness check or a
       // lineage in a sentence about data is data work (strong) — "Load the bookkeeping entries into the lakehouse tables", "Add a
       // freshness check to the grocery orders pipeline", "the column lineage of each metric per product family" …
       { kind: "sentence", on: ["lakehouse"], then: "strong", edge: "letter",
@@ -1738,7 +1738,7 @@ const SIGNALS = {
       { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
         phrases: ["metrics?", "dashboards?", "columns?", "datasets?", "source tables?", "pipelines?", "kpis?", "métricas?", "indicadores?", "colunas?",
           "conjuntos? de dados", "tabelas de origem", "painéis?", "columnas?", "conjuntos? de datos", "tablas de origen", "cuadros? de mando"] },
-      // 1.21 verify N2: what is ingested named right next to the word — "water / medication ingestion", "ingestão (diária) de água", "ingesta
+      // what is ingested named right next to the word — "water / medication ingestion", "ingestão (diária) de água", "ingesta
       // de agua" — is the everyday sense even beside a CSV file (tried before the data sense)
       { kind: "near", on: ["ingestion", "ingestão", "ingesta"], then: "none",
         before: { words: ["water", "fluids?", "medications?", "medicines?", "drugs?", "pills?", "foods?", "calories", "calorie", "meals?", "alcohol",
@@ -1749,7 +1749,7 @@ const SIGNALS = {
             "alcohol", "cafeína", "caffeine", "vitaminas?", "vitamins?", "suplementos?", "supplements?", "sal", "salt", "proteínas?", "protein",
             "meals?", "refeições", "refeição", "comidas"]]],
         chars: 40 } },
-      // 1.21 verify R4: ingestion of files / feeds / batches / streams into a lake or a warehouse, a slowly changing dimension's type 2
+      // ingestion of files / feeds / batches / streams into a lake or a warehouse, a slowly changing dimension's type 2
       { kind: "sentence", on: ["ingestion", "ingestão", "ingesta"], then: "strong", edge: "letter",
         phrases: ["csv", "json", "xml", "parquet", "avro", "files?", "ficheiros?", "arquivos?", "ficheros?", "archivos?", "feeds?", "pipelines?",
           "batch(?:es)?", "lotes?", "streams?", "streaming", "lakes?", "lakehouse", "warehouse", "buckets?", "s3", "topics?", "kafka",
@@ -1774,7 +1774,7 @@ const SIGNALS = {
         phrases: ["horses?", "dogs?", "cats?", "breed\\p{L}*", "pedigrees?", "cattle", "livestock", "famil(?:y|ies)", "ancestors?", "ancestry",
           "genealog\\p{L}*", "royal", "dynast\\p{L}*", "cavalos?", "cães", "cão", "gatos?", "raças?", "gado", "família", "famílias", "antepassados?",
           "caballos?", "perros?", "razas?", "ganado", "familias?", "antepasados?"] },
-      // 1.21 verify R3: a lineage of reports, fields or models is data work too — tried AFTER the animals / families ("a horse's lineage in
+      // a lineage of reports, fields or models is data work too — tried AFTER the animals / families ("a horse's lineage in
       // the report" stays none), never among the first data words (a report is everyday text)
       { kind: "sentence", on: ["lineage", "linhagem", "linaje"], then: "strong", edge: "letter",
         phrases: ["reports?", "fields?", "models?", "relatórios?", "campos?", "modelos?", "informes?", "reportes?"] },

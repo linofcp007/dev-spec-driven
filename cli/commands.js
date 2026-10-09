@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The dev-spec CLI's commands (1.27) — ONE table, `COMMANDS`: each entry is a whole command —
+ * The dev-spec CLI's commands — ONE table, `COMMANDS`: each entry is a whole command —
  *
  *   name, aliases      the word that runs it (`na` → next-action, `milestones` → milestone)
  *   options            the flags it reads, in its help's order (a flag every command knows aside: GLOBAL_OPTIONS). A VALUE flag
@@ -31,11 +31,11 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const COMPLETION = require(path.join(__dirname, "completion.js")); // 1.25: `completion <shell>` (and the hidden __complete)
+const COMPLETION = require(path.join(__dirname, "completion.js")); // `completion <shell>` (and the hidden __complete)
 const RUN = require(path.join(__dirname, "run.js")); // done --run / finish --run: the user's commands, their process tree
 const GIT = require(path.join(__dirname, "git.js")); // every git call the CLI makes
 
-// 1.25.1 (review 7): the engine (~36 modules — ~80 ms of a ~140 ms run) loads on its first use, never at load: the status line
+// the engine (~36 modules — ~80 ms of a ~140 ms run) loads on its first use, never at load: the status line
 // outside a dev-spec project (Claude Code runs it after every message, in every folder, once it is installed user-wide) and the
 // bare help print without it. `spec.x` reads through this proxy; the first read loads the facade.
 let SPEC = null;
@@ -47,10 +47,10 @@ const CLI_PATH = CLI_FILE.replace(/\\/g, "/"); // forward slashes (the help's co
 const SERVER = path.resolve(__dirname, "..", "mcp", "server.js");
 const EVALS = path.resolve(__dirname, "..", "mcp", "evals", "run-evals.js");
 
-// 1.24 r6 B6 — done --run / finish --run --timeout <seconds>: at most Node's timer limit (2^31 - 1 ms) — a larger value became a
+// done --run / finish --run --timeout <seconds>: at most Node's timer limit (2^31 - 1 ms) — a larger value became a
 // TimeoutOverflowWarning and a timer of 1 ms: the run was refused as "did not finish within --timeout 9999999 s".
 const TIMEOUT_MAX_S = Math.floor(2147483647 / 1000);
-// 1.25.1 (review 7): next --max — spec_next_task's schema maximum (8): --max 50 exited 0 and the engine clamped it to 8 silently,
+// next --max — spec_next_task's schema maximum (8): --max 50 exited 0 and the engine clamped it to 8 silently,
 // where MCP refuses max: 9.
 const NEXT_MAX = 8;
 
@@ -59,7 +59,7 @@ const NEXT_MAX = 8;
 // longer turns "3" into a dependency). A value flag takes ONE word and never swallows the next flag (`--order --json` is a missing
 // value). In this order (the did-you-mean of an unknown flag prefers the first of equally near ones). Each: `values` — what shell
 // completion offers after it for every command (a command's own: its entry's `values`); `repeatable` — a command reads EVERY
-// occurrence (any other given twice is a usage error, 1.24 r6 B5); `optional` — its value may be left out (1.25 create / bugfix /
+// occurrence (any other given twice is a usage error); `optional` — its value may be left out (1.25 create / bugfix /
 // spike --branch [<name>]: a bare --branch, the last word or a flag after it, is true — the default name).
 const VALUE_FLAG_SPECS = [
   ["project", { values: "@dir" }], ["lang", { values: "@lang" }], ["order"], ["cap"], ["by"], ["summary"], ["kind"], ["max"], ["evidence"], ["exit"], ["cmd"],
@@ -73,24 +73,24 @@ const VALUE_FLAG_SPECS = [
   ["tracks", { values: "@track" }],
   // append-tasks <f> --task "<text>" [--req ids] [--implements paths] [--verify "<cmd>"] [--makes-green T-01] [--size M] [--story US1] [--heading "<phase>"]
   ["task"], ["req", { repeatable: true }], ["implements", { repeatable: true }], ["verify"], ["story"], ["heading"], ["makes-green", { repeatable: true }], ["size"],
-  ["timeout"], // done --run / finish --run --timeout <seconds> (full review Ga10): a run past it is could-not-run, nothing recorded
-  ["phase", { values: "requirements design test-plan eval-plan tasks steering" }], // impact [f] --phase … (1.16: steering needs no feature)
+  ["timeout"], // done --run / finish --run --timeout <seconds>: a run past it is could-not-run, nothing recorded
+  ["phase", { values: "requirements design test-plan eval-plan tasks steering" }], // impact [f] --phase … (steering needs no feature)
   ["guard", { values: "on off scope" }], // init --guard on|off|scope (= spec_init {guard: true|false|"scope"})
-  ["stop-check", { values: "on off" }], ["message"], ["agent"], // 1.14 C1: init --stop-check on|off · stop-check --message "…" --agent <type>
+  ["stop-check", { values: "on off" }], ["message"], ["agent"], // init --stop-check on|off · stop-check --message "…" --agent <type>
   ["check", { repeatable: true }], // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
-  ["approval-guard", { values: "@approval-guard" }], // 1.14 F2: init --approval-guard off|ask|deny (= spec_init {approvalGuard})
+  ["approval-guard", { values: "@approval-guard" }], // init --approval-guard off|ask|deny (= spec_init {approvalGuard})
   ["roles"], ["role"], ["through", { values: "@through" }], // init --roles …, approve --role <role> / --through <phase>
   ["since", { values: "last all" }], // changelog --since <ISO date|last|all>
-  ["tracker", { values: "@tracker" }], // 1.16 E2: export [f] --tracker jira|linear
-  ["milestone"], // 1.16 E3: changelog --milestone <name>
-  ["flow", { values: "@flow" }], // create --flow design-first · feature flow <name> --flow <flow> (C3)
-  // 1.14 C2: spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
+  ["tracker", { values: "@tracker" }], // export [f] --tracker jira|linear
+  ["milestone"], // changelog --milestone <name>
+  ["flow", { values: "@flow" }], // create --flow design-first · feature flow <name> --flow <flow>
+  // spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
   ["question"], ["timebox"], ["title"], ["decision"], ["context"], ["consequences"], ["affects", { repeatable: true }], ["supersedes", { repeatable: true }],
-  ["depends", { repeatable: true }], // 1.14 F3: append-tasks --depends 3,5 (repeatable)
-  ["reason"], ["expires"], // 1.16 U: undone --reason · approve --revoke --reason · approve --force --reason --expires
-  ["out", { values: "@file" }], // 1.20: bundle --out <file.js>
-  ["reproduction"], ["root-cause"], ["condition"], ["behaviour"], // 1.21 F3: bugfix <name> --reproduction "…" … (= spec_create's bugfix prefill)
-  // 1.25: create / bugfix / spike --branch [<name>] (= spec_create {branch}) — --branch=<name> / --branch <name> names it; a spaced name
+  ["depends", { repeatable: true }], // append-tasks --depends 3,5 (repeatable)
+  ["reason"], ["expires"], // undone --reason · approve --revoke --reason · approve --force --reason --expires
+  ["out", { values: "@file" }], // bundle --out <file.js>
+  ["reproduction"], ["root-cause"], ["condition"], ["behaviour"], // bugfix <name> --reproduction "…" … (= spec_create's bugfix prefill)
+  // create / bugfix / spike --branch [<name>] (= spec_create {branch}) — --branch=<name> / --branch <name> names it; a spaced name
   // that is a track word (`create x --branch tdd`) is refused as ambiguous (branchFlag)
   ["branch", { optional: true }],
 ];
@@ -100,7 +100,7 @@ const REPEATABLE_FLAGS = new Set(VALUE_FLAG_SPECS.filter(([, o]) => o && o.repea
 const OPTIONAL_VALUE_FLAGS = new Set(VALUE_FLAG_SPECS.filter(([, o]) => o && o.optional).map(([k]) => k));
 // A flag every command knows (its own options aside).
 const GLOBAL_OPTIONS = ["json", "project", "help"];
-// `dev-spec evals` (1.23 review P1): the flags run-evals.js reads — its value flags (they take the next word unless it is a flag) and its
+// `dev-spec evals`: the flags run-evals.js reads — its value flags (they take the next word unless it is a flag) and its
 // switches — for evalsArgs and the completion script.
 const EVALS_VALUE_FLAGS = new Set(["project", "model", "prompt", "max-items"]);
 const EVALS_SWITCHES = ["dry-run", "set-baseline", "require-live"];
@@ -146,7 +146,7 @@ function main2list(c) {
   });
 }
 
-// full review Ga9: the shell of done --run / finish --run — --shell > DEV_SPEC_SHELL > the platform default, resolved by the engine
+// the shell of done --run / finish --run — --shell > DEV_SPEC_SHELL > the platform default, resolved by the engine
 // (a bare `bash` on Windows → Git Bash, found through `git --exec-path` (read-only), %ProgramFiles% or PATH; WSL's bash.exe launcher
 // only when named by its path; wsl.exe refused — wsl-exe). → spec.resolveRunShell's result. --timeout is checked first.
 function runShell(c) {
@@ -170,7 +170,7 @@ function checksFlag(c) {
   return checks;
 }
 
-// ---- create / bugfix / spike --branch [<name>] (1.25) ------------------------------------------------------------------------
+// ---- create / bugfix / spike --branch [<name>] ------------------------------------------------------------------------
 // The feature's own git branch (= spec_create {branch}). The engine never runs git: it validates the name, decides and RECORDS
 // `.state.json → branch` {name, base, commit, at}; this CLI reads what git says BEFORE that (cli/git.js branchFacts — inside a work
 // tree? the base branch and commit, does the name exist?) and runs the engine's `branch.command` AFTER it (branchSwitch: `git switch
@@ -219,14 +219,14 @@ function branchSwitch(c, r, git) {
   return b.created ? B.cliCreated(b.name, b.base, b.commit ? b.commit.slice(0, 7) : null) : B.cliSwitched(b.name);
 }
 
-// 1.14 F5 — `trace <f> --matrix`: the requirements traceability matrix as a table (localized headers and notes; IDs as written).
+// `trace <f> --matrix`: the requirements traceability matrix as a table (localized headers and notes; IDs as written).
 function printMatrix(c, feature, mx, lang) {
   const R = spec.msg(lang).rtm;
   const C = R.cli;
   c.log(C.head(feature, mx.tracks, mx.counts));
   const a = mx.approval;
   const when = (iso) => (typeof iso === "string" && iso.length >= 16 ? iso.slice(0, 16).replace("T", " ") + " UTC" : "—");
-  const plan = mx.kind === "change"; // 1.21 review C5: a change's criteria are signed off with its plan (change.md)
+  const plan = mx.kind === "change"; // a change's criteria are signed off with its plan (change.md)
   c.log("  " + (a ? (plan ? C.planApproved : C.approved)(when(a.at), a.by == null ? "—" : a.by, a.forced) : plan ? C.planNotApproved : C.notApproved));
   if (!mx.rows.length) return c.log("  " + R.none);
   const len = (s) => [...s].length;
@@ -236,7 +236,7 @@ function printMatrix(c, feature, mx, lang) {
   const rows = mx.rows.map((r) => {
     const notes = r.gaps.map((g) => R.gap[g === "no-coverage" && r.kind === "sc" ? "no-coverage-sc" : g] || g);
     if (r.template) notes.push(C.notes.template);
-    if (r.supersededBy.length) notes.push(r.supersedePending ? R.toBeSupersededBy(r.supersededBy.join(", ")) : C.notes.superseded(r.supersededBy.join(", "))); // 1.15: a draft's is pending
+    if (r.supersededBy.length) notes.push(r.supersedePending ? R.toBeSupersededBy(r.supersededBy.join(", ")) : C.notes.superseded(r.supersededBy.join(", "))); // a draft's is pending
     if (r.approval && r.approval.changed === true) notes.push(C.notes.changed);
     return [r.id, R.status[r.status] || r.status, r.tasks.map(task).join(" ") || "—", r.tests.map(test).join(" ") || "—",
       r.decisions.map((d) => d.id).join(" ") || "—", (notes.length ? "[" + notes.join("; ") + "] " : "") + r.text];
@@ -249,7 +249,7 @@ function printMatrix(c, feature, mx, lang) {
   c.log("  " + C.legend + (mx.code ? " · " + C.codeLegend : ""));
 }
 
-// ---- merge-state (1.21 F1a) -------------------------------------------------------------------------------------------------
+// ---- merge-state -------------------------------------------------------------------------------------------------
 // The driver git runs on a .state.json / roadmap.json both branches changed (and on the generated overviews): the three files git
 // hands it (%O %A %B, relative to its cwd — the top of the work tree), the merge written into <ours>. Messages in the project
 // language; stdout stays empty unless --json (git shows a driver's output as it runs).
@@ -267,12 +267,12 @@ function mergeStateRun(c, baseF, oursF, theirsF, rel) {
     const g = GIT.gitRun(["merge-file", "-L", "ours", "-L", "base", "-L", "theirs", oursF, baseF, theirsF], { cwd: c.cwd });
     const ran = !g.error && Number.isInteger(g.status) && g.status >= 0;
     c.exitCode = ran && g.status === 0 ? 0 : 1;
-    // 1.23 review (L13): --json printed nothing here — the result of git's text merge (conflicts = its count of conflict hunks)
+    // --json printed nothing here — the result of git's text merge (conflicts = its count of conflict hunks)
     if (flags.json) c.log(JSON.stringify(ran ? { ok: true, kind: r.kind, merged: "text", clean: g.status === 0, conflicts: g.status }
       : { ok: false, kind: r.kind, merged: "text", error: String((g.error && g.error.message) || "git merge-file: exit " + g.status) }, null, 2));
     return;
   }
-  if (!r.ok) { // ours left as it is — with --json (1.23 review L13) the refusal is the JSON document on stdout too
+  if (!r.ok) { // ours left as it is — with --json the refusal is the JSON document on stdout too
     const msg = M.parseError(r.parseError, r.error);
     c.err(msg);
     if (flags.json) c.log(JSON.stringify({ ok: false, kind: r.kind, parseError: r.parseError, error: msg }, null, 2));
@@ -300,9 +300,9 @@ function mergeDriverSetup(c, uninstall) {
   const M = spec.msg(spec.projectLang(projectDir)).mergeState;
   const git = (args) => GIT.gitRun(args, { cwd: projectDir });
   const top = git(["rev-parse", "--show-toplevel"]);
-  if (!top.ok) return c.fail({ ok: false, error: uninstall ? M.noGitUninstall(projectDir) : M.noGit(projectDir) }); // 1.24 r6 B9: each names its own switch
+  if (!top.ok) return c.fail({ ok: false, error: uninstall ? M.noGitUninstall(projectDir) : M.noGit(projectDir) }); // each names its own switch
   const file = path.join(projectDir, ".gitattributes");
-  // 1.25.1 (review 7): never through a link — a .gitattributes that is a symbolic link (a cloned repository's) made --install write the
+  // never through a link — a .gitattributes that is a symbolic link (a cloned repository's) made --install write the
   // driver's lines into the file it points at, and --uninstall rewrite or delete it; a folder (or any other kind) there neither.
   let lst = null;
   try { lst = fs.lstatSync(file); } catch { lst = null; }
@@ -344,7 +344,7 @@ function mergeDriverSetup(c, uninstall) {
 function mergeDriverCommand() {
   return "node '" + CLI_PATH.replace(/'/g, "'\\''") + "' merge-state %O %A %B %P";
 }
-// merge-state --check (1.21 review A3): the configured driver (`git config --get merge.dev-spec-state.driver`, read only) against
+// merge-state --check: the configured driver (`git config --get merge.dev-spec-state.driver`, read only) against
 // THIS clone's CLI and the project's .gitattributes (spec.mergeDriverStatus). Exit 0: it runs this clone's CLI, or nothing names
 // the driver (nothing to check) · 1: it runs another or a missing script (a plugin update moved the plugin — git then drops
 // theirs' changes), .gitattributes names it while this clone has none, or not inside a git repository.
@@ -368,7 +368,7 @@ function mergeDriverCheck(c) {
   });
 }
 
-// ---- statusline (1.16 C1) ----------------------------------------------------
+// ---- statusline ----------------------------------------------------
 // Claude Code runs the settings.json "statusLine" command after every assistant message (debounced, cancelled when a newer update
 // starts) with its session JSON on stdin, and shows what it prints — a non-zero exit or no output blanks the line. So the render path
 // never fails: no flag refusal, no usage error, bounded stdin, every error swallowed, exit 0 always, nothing printed outside a
@@ -389,7 +389,7 @@ function statusLineRender(c) {
       const given = typeof flags.project === "string" ? [flags.project] : [];
       const cands = payload ? given.concat([ws.current_dir, payload.cwd, ws.project_dir])
         : given.concat([c.env.SPEC_PROJECT_DIR, c.env.CLAUDE_PROJECT_DIR, c.cwd]);
-      // 1.25.1 (review 7): the engine-free walk first (cli/completion.js statusProbe, statusLineProject's null rule) — outside a
+      // the engine-free walk first (cli/completion.js statusProbe, statusLineProject's null rule) — outside a
       // dev-spec project the line is empty without loading the engine (136–220 ms per render in any folder, user-wide)
       const pdir = COMPLETION.statusProbe(cands) ? spec.statusLineProject(cands) : null;
       const cols = parseInt(c.env.COLUMNS, 10);
@@ -404,7 +404,7 @@ function statusLineRender(c) {
   return c.readInput({ max: STATUS_STDIN_MAX, waitMs: 1500, tty: "none" }, render);
 }
 // `statusline --print-config`: the settings.json snippet with THIS clone's absolute path (never committed — like mcp-config).
-// 1.25.1 (review 7): in a plugin's versioned folder the command finds the newest installed version at each run (cli/completion.js
+// in a plugin's versioned folder the command finds the newest installed version at each run (cli/completion.js
 // statuslineCommand — the completion scripts' rule): the plain path broke at the first plugin update.
 function statusLineConfig(c) {
   const { command, follows } = COMPLETION.statuslineCommand(CLI_PATH);
@@ -419,7 +419,7 @@ function statusLineConfig(c) {
   c.log(C.tryIt(command));
 }
 
-// 1.24 r6 B-I1 — `dev-spec version` / --version / -V: what a bug report needs — the version, this CLI's path, Node, where the engine
+// `dev-spec version` / --version / -V: what a bug report needs — the version, this CLI's path, Node, where the engine
 // loaded from (its modules, or the bundle; a requested bundle that was skipped and why — spec.engineSource), the project the
 // commands work in, which input chose it (PROJECT_SOURCE) and its language. --json: the same as data (stable keys and codes).
 function printVersion(c) {
@@ -449,7 +449,7 @@ function printVersion(c) {
   });
 }
 
-// `dev-spec evals` (1.23 review P1): the words of the command line but the command, read with run-evals.js's own rules — its value
+// `dev-spec evals`: the words of the command line but the command, read with run-evals.js's own rules — its value
 // flags (EVALS_VALUE_FLAGS) take the next word unless it is a flag; the first plain word is the feature, any other goes on (the
 // harness refuses it). --project and its value are left out: the CLI passes its resolved project.
 function evalsArgs(c) {
@@ -458,7 +458,7 @@ function evalsArgs(c) {
   const rest = [];
   for (let i = 0; i < toks.length; i++) {
     const a = toks[i];
-    if (a === "-h") { help = true; rest.push("--help"); continue; } // 1.24 r6 B-I3: -h = --help (the harness's usage)
+    if (a === "-h") { help = true; rest.push("--help"); continue; } // -h = --help (the harness's usage)
     if (!a.startsWith("--")) { if (feature === null) feature = a; else rest.push(a); continue; }
     const eq = a.indexOf("=");
     const key = eq === -1 ? a.slice(2) : a.slice(2, eq);
@@ -474,13 +474,13 @@ function evalsArgs(c) {
 // create / bugfix (each its own entry: options, help) — one handler.
 function createCommand(c) {
   const { pos, out, fail, usage, log } = c;
-  // 1.24 r6 B9: each its own usage (`bugfix` without a name printed create's)
+  // each its own usage (`bugfix` without a name printed create's)
   if (!pos[0]) usage(c.cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--branch [<name>]] [--lang en|pt|pt-BR|es]'
     : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
-  const branch = branchFlag(c); // 1.25: --branch [<name>] — what git says is read BEFORE the engine records anything
+  const branch = branchFlag(c); // --branch [<name>] — what git says is read BEFORE the engine records anything
   const git = branch ? branchGitFacts(c) : undefined;
   // The operation's flags and words as mcp/lib/operations.js maps them; cli: a refusal names the flag (--root-cause), not the MCP key
-  // (1.21 review A8); git: what git said here (the engine reads no git process — MCP: the repository's files)
+  // git: what git said here (the engine reads no git process — MCP: the repository's files)
   const r = c.call("create", { branch, git, cli: true });
   if (!r.ok) return fail(r);
   const switched = branch ? branchSwitch(c, r, git) : null; // runs `git switch -c <name>` — the engine never does
@@ -508,12 +508,12 @@ const COMMANDS = [
       return out(r, (r) => {
         const T = c.cliText(r.lang); // the language the reasoning was written in
         const C = spec.msg(r.lang).classify;
-        log(T.tracks(r.label, Object.keys(r.confidence).map((t) => t + "=" + (C.conf[r.confidence[t]] || r.confidence[t])).join(", "))); // + the project's track packs (1.15)
+        log(T.tracks(r.label, Object.keys(r.confidence).map((t) => t + "=" + (C.conf[r.confidence[t]] || r.confidence[t])).join(", "))); // + the project's track packs
         log(r.reasoning);
         if (r.note) log(T.note(r.note));
-        if (r.sizeNote) log(r.sizeNote); // 1.21 F5: the suggested size (spec_create --size)
-        if (r.langHint) log(T.langHint(r.langHint)); // 1.24 r6 H-I4: Brazilian wording — create / init with --lang pt-BR
-        if (r.explain) { // 1.21 F2: every keyword match and the project's signal overrides (.specs/classifier.json)
+        if (r.sizeNote) log(r.sizeNote); // the suggested size (spec_create --size)
+        if (r.langHint) log(T.langHint(r.langHint)); // Brazilian wording — create / init with --lang pt-BR
+        if (r.explain) { // every keyword match and the project's signal overrides (.specs/classifier.json)
           log(r.explain.matches.length ? C.explainHead : C.explainNone);
           r.explain.matches.forEach((m) => log(C.explainMatch(m)));
           if (!r.explain.overrides.length) log(C.explainNoOverrides);
@@ -548,10 +548,10 @@ const COMMANDS = [
         const g = String(flags.guard).trim().toLowerCase();
         if (["on", "true", "yes", "1"].includes(g)) guard = true;
         else if (["off", "false", "no", "0"].includes(g)) guard = false;
-        else if (g === "scope") guard = "scope"; // 1.14 C1 — the scope guard
+        else if (g === "scope") guard = "scope"; // the scope guard
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).guardMode.badValue(flags.guard), c.invalidArg("--guard"));
       }
-      // 1.14 C1: --stop-check on|off = spec_init {stopCheck: true|false}; absent leaves the evidence gate as it is.
+      // --stop-check on|off = spec_init {stopCheck: true|false}; absent leaves the evidence gate as it is.
       let stopCheck;
       if (flags["stop-check"] !== undefined) {
         const v = String(flags["stop-check"]).trim().toLowerCase();
@@ -559,21 +559,21 @@ const COMMANDS = [
         else if (["off", "false", "no", "0"].includes(v)) stopCheck = false;
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).stopGate.badValue(flags["stop-check"]), c.invalidArg("--stop-check"));
       }
-      const checks = checksFlag(c); // B5: --check name="cmd" (repeatable; name= removes) = spec_init {checks}
-      // 1.14 F2: --approval-guard off|ask|deny = spec_init {approvalGuard}; absent leaves the human approval guard as it is.
+      const checks = checksFlag(c); // --check name="cmd" (repeatable; name= removes) = spec_init {checks}
+      // --approval-guard off|ask|deny = spec_init {approvalGuard}; absent leaves the human approval guard as it is.
       let approvalGuard;
       if (flags["approval-guard"] !== undefined) {
         approvalGuard = String(flags["approval-guard"]).trim().toLowerCase();
         if (!spec.APPROVAL_GUARD_LEVELS.includes(approvalGuard)) die(spec.msg(flags.lang || spec.projectLang(projectDir)).approvalGuard.badValue(flags["approval-guard"]), c.invalidArg("--approval-guard"));
       }
-      // 1.14 F1: --evidence reported|observed = spec_init {evidence} (roadmap.json meta.evidence); absent leaves it as it is.
+      // --evidence reported|observed = spec_init {evidence} (roadmap.json meta.evidence); absent leaves it as it is.
       let evidenceMode;
       if (flags.evidence !== undefined) {
         const v = String(flags.evidence).trim().toLowerCase();
         if (v === "reported" || v === "observed") evidenceMode = v;
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).observed.badValue(flags.evidence), c.invalidArg("--evidence"));
       }
-      // --roles requirements=product,design=tech+security | none = spec_init {approvalRoles} (1.14 B3); absent leaves them as they are.
+      // --roles requirements=product,design=tech+security | none = spec_init {approvalRoles}; absent leaves them as they are.
       let approvalRoles;
       if (flags.roles !== undefined) {
         approvalRoles = spec.parseApprovalRolesText(flags.roles, flags.lang || spec.projectLang(projectDir));
@@ -589,7 +589,7 @@ const COMMANDS = [
         if (checks) log("  " + spec.msg(r.lang).projectChecks.initLine(Object.entries(r.checks || {}).map(([k, v]) => k + " → " + v).join(" · ") || "—"));
         if (r.rolesNote) log("  " + r.rolesNote);
         if (r.approvalGuardNote) log("  " + r.approvalGuardNote);
-        if (r.observedWarning) log("  " + r.observedWarning); // 1.25.1 (review 7): observed evidence without the approval guard
+        if (r.observedWarning) log("  " + r.observedWarning); // observed evidence without the approval guard
       });
     },
   },
@@ -625,7 +625,7 @@ const COMMANDS = [
       const r = c.call("templates");
       if (!r.ok) return fail(r);
       if (r.action === "check" && r.errors) c.exitCode = 1;
-      return out(r, (r) => spec.templatesLines(r).forEach((l) => log(l))); // 1.26: rendered from the result (it carries no lines)
+      return out(r, (r) => spec.templatesLines(r).forEach((l) => log(l))); // rendered from the result (it carries no lines)
     },
   },
   {
@@ -703,7 +703,7 @@ const COMMANDS = [
       // (spec_create {kind: "spike"} — the operation's `cmd`; `create "<name>" --kind spike` is the same call).
       const { pos, out, fail, usage, log } = c;
       if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
-      const branch = branchFlag(c); // 1.25: --branch [<name>] (spike/<slug> by default), as create
+      const branch = branchFlag(c); // --branch [<name>] (spike/<slug> by default), as create
       const git = branch ? branchGitFacts(c) : undefined;
       const r = c.call("create", { branch, git, cli: true }); // a flow gets its note; cli: a refusal names the flag
       if (!r.ok) return fail(r);
@@ -767,7 +767,7 @@ const COMMANDS = [
         // ✓ only when FILLED (the doctor's rule): ◐ present but still a TODO/empty, ✗ missing — in the feature language.
         const fm = spec.msg(spec.featureLang(projectDir, r.feature));
         if (r.branch) log(fm.branch.statusLine(r.branch.name, r.branch.base, r.branch.commit ? r.branch.commit.slice(0, 7) : null, r.branch.current)); // 1.25
-        // 1.21 F5: a sized feature's rows carry `status` — ○ an optional section left out (size s), ✓ one another track covers,
+        // a sized feature's rows carry `status` — ○ an optional section left out (size s), ✓ one another track covers,
         // the template-only / short n/a states named
         const marks = (list) => list.map((s) => (s.filled ? (s.status === "missing" ? "○ " : "✓ ") : s.present ? "◐ " : "✗ ") + (fm.sectionNames[s.section] || s.section) +
           (s.filled ? (s.status === "missing" ? " (" + fm.sizes.optionalMark + ")" : s.status === "covered" ? " (" + fm.sizes.coveredMark + ")" : "")
@@ -775,7 +775,7 @@ const COMMANDS = [
         if (r.scaleSections) log(T.scaleSections(marks(r.scaleSections)));
         if (r.aiSections && r.aiSections.sections) log(T.aiSections(marks(r.aiSections.sections)));
         for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data"]) if (r[tr + "Sections"]) log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
-        for (const p of Object.values(r.packSections || {})) log(fm.trackPacks.statusSections(p.marker, marks(p.sections))); // track packs (1.15)
+        for (const p of Object.values(r.packSections || {})) log(fm.trackPacks.statusSections(p.marker, marks(p.sections))); // track packs
         if (r.missingPacks) log(fm.trackPacks.missing(r.missingPacks.map((n) => "+" + n).join(", ")));
       });
     },
@@ -810,7 +810,7 @@ const COMMANDS = [
     run(c) {
       const { flags, pos, projectDir, on, out, fail, usage, log, write } = c;
       if (!pos[0]) usage("dev-spec trace <feature> [--code] [--matrix] [--csv]");
-      const r = c.call("trace"); // 1.14 F5: --csv prints the matrix as CSV (the operation's matrix is on with it)
+      const r = c.call("trace"); // --csv prints the matrix as CSV (the operation's matrix is on with it)
       if (!r.ok) return fail(r);
       if (r.verdict !== "pass") c.exitCode = 1; // scriptable: gaps → non-zero (warnings never change it)
       const lang = spec.featureLang(projectDir, r.feature);
@@ -829,7 +829,7 @@ const COMMANDS = [
           log(spec.msg(lang).deepTrace.codeSummary(expected - r.code.plannedNotInCode.length, expected, r.code.scanned, r.code.truncated, outside.join(", ")));
         }
         spec.supersedesWarnings(r, lang).forEach((l) => log("  ⚠ " + l)); // warnings, not gaps (exit code unchanged)
-        spec.affectsWarnings(r, lang).forEach((l) => log("  ⚠ " + l)); // 1.14 C2: decisions.md _Affects:_ naming nothing — warnings too
+        spec.affectsWarnings(r, lang).forEach((l) => log("  ⚠ " + l)); // decisions.md _Affects:_ naming nothing — warnings too
       });
     },
   },
@@ -847,7 +847,7 @@ const COMMANDS = [
       return out(r, (r) => {
         log(T.clarify(r.feature, r.tracks, T.word(r.verdict), r.gapCount));
         r.questions.forEach((q, i) => log("  " + (i + 1) + ". " + q));
-        if (r.glossaryNote) log("  ⚠ " + r.glossaryNote); // 1.16 Q review: a glossary read only in part says so
+        if (r.glossaryNote) log("  ⚠ " + r.glossaryNote); // a glossary read only in part says so
       });
     },
   },
@@ -874,11 +874,11 @@ const COMMANDS = [
       };
       if (typeof flags.text === "string") return report(lint(flags.text), c.cliText(textLang));
       if (pos[0] === "-") return c.readStdin((txt) => report(lint(txt), c.cliText(textLang)));
-      // A file path is read from the project when it was named (--project / the env), else from the working folder (argPath, L12).
+      // A file path is read from the project when it was named (--project / the env), else from the working folder (argPath).
       const file = c.argPath(pos[0]);
       const isFile = fs.existsSync(file) && fs.statSync(file).isFile();
       if (isFile) return report(lint(spec.decodeText(fs.readFileSync(file))), c.cliText(textLang)); // UTF-16 too
-      // 1.24 r6 B9: a word that reads as a PATH (a separator, or a .md / .markdown / .txt name) and is no file — nor a feature of that
+      // a word that reads as a PATH (a separator, or a .md / .markdown / .txt name) and is no file — nor a feature of that
       // name — is "no such file", never "Feature 'missing-md' not found" (its slug).
       if ((/[\\/]/.test(String(pos[0])) || /\.(?:md|markdown|txt)$/i.test(String(pos[0]))) && !spec.existingFeature(projectDir, pos[0]).ok) {
         return fail({ ok: false, error: c.projectText().earsNoFile(file) });
@@ -946,7 +946,7 @@ const COMMANDS = [
       // dev-spec brief <feature> [n] [--write]  — self-contained brief for one task (default: next open)
       const { pos, projectDir, out, fail, usage, log, err } = c;
       if (!pos[0]) usage("dev-spec brief <feature> [task-number] [--write]");
-      // A task number GIVEN is an integer ≥ 0, as done checks it (1.23 review L11: an empty word briefed — and with --write wrote —
+      // A task number GIVEN is an integer ≥ 0, as done checks it (an empty word briefed — and with --write wrote —
       // the NEXT task, where spec_task_brief {number: ""} is refused by its schema). No number at all: the next task.
       if (pos[1] != null && !/^\s*\d+\s*$/.test(String(pos[1]))) {
         const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
@@ -984,30 +984,30 @@ const COMMANDS = [
       const D = spec.msg(spec.featureLang(projectDir, pos[0])).taskDone; // human output in the feature's language
       // The task number: an integer ≥ 0 (spec_complete_task's schema; a hand-written "0." task is one next can serve) — refused
       // BEFORE anything runs (an empty word would brief the NEXT task and run its _Verify:_), in the MCP validator's words, as the
-      // engine refuses it for undone / brief (1.22 review: `-1` read "must be an integer"). --json prints the refusal on stdout.
+      // engine refuses it for undone / brief (`-1` read "must be an integer"). --json prints the refusal on stdout.
       if (!/^\s*\d+\s*$/.test(String(pos[1])) || !(Number(pos[1]) >= 0)) {
         const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
         return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))), code: "invalid-arguments", invalid: ["number"] });
       }
-      // 1.23 review: --shell / --timeout need --run, and --run (a run made here) excludes --evidence / --exit / --cmd (a run made
+      // --shell / --timeout need --run, and --run (a run made here) excludes --evidence / --exit / --cmd (a run made
       // elsewhere) — each was ignored silently.
       c.runOnlyFlags();
       if (on("run") && (flags.evidence !== undefined || flags.exit !== undefined || flags.cmd !== undefined)) die(c.projectText().runOrEvidence, c.invalidArg("--run"));
       const say = c.say; // --json keeps stdout one JSON document
       let evidence;
       let hint = null;
-      let runStartedAt = null, ranVerify = null; // 1.22 review: the stamps taken BEFORE the run (its start, the _Verify:_ it ran)
+      let runStartedAt = null, ranVerify = null; // the stamps taken BEFORE the run (its start, the _Verify:_ it ran)
       // The tick, once the evidence is known (after --run's commands, or at once).
       const tick = () => {
-        // 1.14 F1: a run --run made is observed by the CLI itself (observed: "cli"); a reported one is looked up in the harness's log.
+        // a run --run made is observed by the CLI itself (observed: "cli"); a reported one is looked up in the harness's log.
         // --reason: only undone takes it (the engine refuses it here, as over MCP)
         const r = c.call("complete", { evidence, ...(on("run") ? { ranBy: "cli", startedAt: runStartedAt, ranVerify } : {}) });
         if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
         return out(r, (r) => {
           // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked
-          // "all done" only when no task is open (1.14 F3: open tasks none of which can start are named by the note)
+          // "all done" only when no task is open (open tasks none of which can start are named by the note)
           log((r.alreadyDone ? D.already : D.done)(r.completed, r.verified && !r.nothingToVerify, r.done, r.total) + (r.next ? D.next(r.next.number, r.next.text) : r.done < r.total ? "" : D.allDone));
-          if (r.redRecorded) log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // B5: _Expect: fail_
+          if (r.redRecorded) log(spec.msg(spec.featureLang(projectDir, r.feature)).redGreen.redRecorded(r.completed, evidence.exitCode)); // _Expect: fail_
           if (r.note) log("  ⚠ " + r.note);
         });
       };
@@ -1021,7 +1021,7 @@ const COMMANDS = [
         const cmds = b.verify.filter((x) => !/^\[.*\]$/.test(x.trim()));
         if (!cmds.length) return fail({ ok: false, error: D.noRunnable(b.task.number) });
         const M = spec.msg(spec.featureLang(projectDir, pos[0]));
-        // 1.25.1 (review 7): a _Verify:_ holding a control character (an ESC / OSC sequence, a lone CR…) shows a terminal another
+        // a _Verify:_ holding a control character (an ESC / OSC sequence, a lone CR…) shows a terminal another
         // command than the one that runs — refused before anything runs (doctor fails verify-control).
         const ctl = cmds.find((x) => spec.commandHasControl(x));
         if (ctl !== undefined) return fail({ ok: false, code: "control-chars", error: M.verifyControl.run(b.task.number, spec.controlVisible(ctl)) });
@@ -1029,14 +1029,14 @@ const COMMANDS = [
         // never WSL's launcher unless named by its path: runShell). A shell that can't be found is refused before anything runs.
         const sh = runShell(c);
         if (sh.error) return fail({ ok: false, couldNotRun: sh.error, error: sh.error === "wsl-exe" ? M.runGate.wslExe(sh.path) : M.runGate.noGitBash });
-        if (sh.wsl) say(M.runGate.wslBash(sh.shell)); // 1.15: an explicit WSL launcher is used as given — said once
+        if (sh.wsl) say(M.runGate.wslBash(sh.shell)); // an explicit WSL launcher is used as given — said once
         // cmd.exe misreads POSIX quoting / $VAR — often without failing (`node -e 'process.exit(1)'` exits 0): a command written for
         // a POSIX shell is refused before anything runs unless a shell was chosen (--shell cmd: cmd.exe anyway).
         if (process.platform === "win32" && sh.shell === true) {
           const posix = cmds.map((x) => [x, spec.posixShellSyntax(x)]).find(([, k]) => k.length);
           if (posix) return fail({ ok: false, error: D.posixOnWindows(posix[0], posix[1]) });
         }
-        // 1.21.1 review — the mirror: a POSIX shell (/bin/sh, bash, Git Bash…) expands `$…` / backticks in a pwsh script outside
+        // the mirror: a POSIX shell (/bin/sh, bash, Git Bash…) expands `$…` / backticks in a pwsh script outside
         // single quotes before PowerShell sees it (`exit $LASTEXITCODE` → `exit` → 0: a failing check recorded as passing) —
         // refused before anything runs.
         if (sh.posix) {
@@ -1045,17 +1045,17 @@ const COMMANDS = [
         }
         // A pipe masks the check's exit code (a pipeline reports its LAST command's): one hint line — it still runs.
         cmds.filter(spec.verifyPipeMasked).forEach((x) => say(M.verifyPipe.runHint(x)));
-        const git = GIT.gitState(projectDir); // B5: the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it
-        runStartedAt = new Date().toISOString(); // 1.22 review: the run's `at` is when it STARTED (an edit made meanwhile isn't tested)
+        const git = GIT.gitState(projectDir); // the commit the run is made on (+ dirty outside .specs/) — read-only git, skipped without it
+        runStartedAt = new Date().toISOString(); // the run's `at` is when it STARTED (an edit made meanwhile isn't tested)
         ranVerify = b.verify.slice(); // …and its verify stamp the _Verify:_ as it was then (edited meanwhile → stale-evidence)
-        const passed = []; // 1.23 review: each passing command's output — the record keeps one summary per command, not the last one's
-        return (async () => { // the commands run one after another — a timer of their own (1.23 review M13)
+        const passed = []; // each passing command's output — the record keeps one summary per command, not the last one's
+        return (async () => { // the commands run one after another — a timer of their own
           for (const cmd of cmds) {
             say("$ " + cmd);
             const x = await RUN.runCommand(cmd, sh, M, c.execOpts());
             if (x.summary) say(x.summary.replace(/^/gm, "  "));
-            if (x.heldOpen && !x.cantRun) say("  " + M.cliOutput.runHeldOpen(x.code)); // 1.24 r6 B3: settled at its exit
-            // full review Ga1 / Ga9 / Ga10: a command that could not run (the shell never started, a signal, --timeout, output over
+            if (x.heldOpen && !x.cantRun) say("  " + M.cliOutput.runHeldOpen(x.code)); // settled at its exit
+            // a command that could not run (the shell never started, a signal, --timeout, output over
             // the buffer, WSL's launcher) is refused and NOTHING is recorded — it used to be recorded as exit 1 (an _Expect: fail_
             // task was then ticked on a red run that never happened; a passing check recorded as failed).
             if (x.cantRun) return fail({ ok: false, couldNotRun: x.cantRun.code, error: M.runGate.taskRefused(cmd, x.cantRun.why) });
@@ -1063,16 +1063,16 @@ const COMMANDS = [
             if (x.crashed && b.expect === "fail") return fail({ ok: false, couldNotRun: "signal", error: M.runGate.taskRefused(cmd, M.runGate.why.signal(x.crashed)) });
             const code = x.code;
             if (code !== 0) {
-              // B5: an _Expect: fail_ task needs a run that FAILS — but cmd.exe failing to run the line at all (a path it can't find,
+              // an _Expect: fail_ task needs a run that FAILS — but cmd.exe failing to run the line at all (a path it can't find,
               // its syntax error; exit 1) is no red test: refused, nothing recorded — whenever cmd.exe is the shell (the default or
-              // --shell cmd, full review Ga10). (9009 goes to the engine: a failed run.)
+              // --shell cmd). (9009 goes to the engine: a failed run.)
               if (b.expect === "fail" && code !== 9009 && sh.cmd && spec.windowsShellFailure(x.output, code)) {
                 return fail({ ok: false, expected: "fail", couldNotRun: "cmd", error: M.redGreen.shellNotRed(cmd) }, D.shellHint);
               }
-              // full review Ga2: …nor is a run whose output shows the test never ran (a missing test file, module or script).
+              // …nor is a run whose output shows the test never ran (a missing test file, module or script).
               const notRun = b.expect === "fail" ? spec.couldNotRunOutput(x.output) : null;
               if (notRun) return fail({ ok: false, expected: "fail", couldNotRun: "output", error: M.redGreen.notRed(cmd, notRun.text) });
-              // 1.21.1 review — nor is PowerShell's own parse error (the script never ran: 5.1's "'&&' is not a valid statement
+              // nor is PowerShell's own parse error (the script never ran: 5.1's "'&&' is not a valid statement
               // separator"), whenever PowerShell runs the line (--shell pwsh / powershell, or a pwsh program in it). After the
               // could-not-run output: a Pester test file that doesn't parse is named as such ("[-] Discovery in … failed").
               const parse = b.expect === "fail" && (sh.pwsh || spec.runsPwsh(cmd)) ? spec.pwshParseFailure(x.output) : null;
@@ -1083,7 +1083,7 @@ const COMMANDS = [
               if (sh.cmd && spec.windowsShellFailure(x.output, code)) hint = D.shellHint;
               break;
             }
-            // 1.24 r6 D4: a pass whose output shows no test ran (node --test "tests 0", go "[no tests to run]"…) proves nothing — refused,
+            // a pass whose output shows no test ran (node --test "tests 0", go "[no tests to run]"…) proves nothing — refused,
             // nothing recorded (couldNotRun "no-tests"; the engine refuses a reported summary that shows it the same way).
             const none = spec.vacuousRun(x.output);
             if (none) return fail({ ok: false, couldNotRun: "no-tests", error: M.runGate.noTests(cmd, none.text) });
@@ -1105,14 +1105,14 @@ const COMMANDS = [
     help: `  undone <feature> <n> [--reason "…"]   Untick task n (ticked by mistake, or its work turned out incomplete): its evidence turns
                                   stale (a re-tick needs a new run), ticks[n] is dropped, .state.json unticks records it`,
     run(c) {
-      // 1.16 U1 — dev-spec undone <feature> <n> [--reason "…"] = spec_complete_task {undo: true, reason}: untick a task ticked by
+      // dev-spec undone <feature> <n> [--reason "…"] = spec_complete_task {undo: true, reason}: untick a task ticked by
       // mistake — its evidence turns stale (a re-tick needs a new run), ticks[n] is dropped, .state.json unticks records it.
       const { flags, pos, projectDir, on, out, fail, usage, log } = c;
       if (!pos[0] || pos[1] == null) usage("dev-spec undone <feature> <task-number> [--reason \"…\"]");
       const M = spec.msg(spec.featureLang(projectDir, pos[0])); // human output in the feature's language
-      // 1.16 U review 5: done's evidence flags (--evidence / --exit / --cmd / --run) are refused, as spec_complete_task refuses
+      // done's evidence flags (--evidence / --exit / --cmd / --run) are refused, as spec_complete_task refuses
       // {undo, evidence} — they were silently ignored (the user believed a run had been recorded). Nothing runs, nothing changes.
-      // (1.23 review: --shell / --timeout — how --run would run — too, never ignored)
+      // (--shell / --timeout — how --run would run — too, never ignored)
       if (flags.evidence != null || flags.exit != null || flags.cmd != null || on("run") || flags.shell !== undefined || flags.timeout !== undefined) return fail({ ok: false, error: M.undo.noEvidence });
       const r = c.call("complete"); // undo: the command's (the operation's `cmd`)
       if (!r.ok) return fail(r);
@@ -1135,11 +1135,11 @@ const COMMANDS = [
       // dev-spec finish <feature> [--write] [--include-body] — readiness report + merge summary from the spec chain (no PRs)
       const { pos, projectDir, on, out, fail, usage, log, err } = c;
       if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|pwsh|<path>] [--timeout <s>]]");
-      // B5: --run executes the project checks (roadmap.json meta.checks) — only on this explicit flag — and records every run
+      // --run executes the project checks (roadmap.json meta.checks) — only on this explicit flag — and records every run
       // (= spec_finish {evidence}); without meta.checks it is an error, nothing runs.
-      c.runOnlyFlags(); // --shell / --timeout without --run: a usage error (1.23 review — they were ignored)
+      c.runOnlyFlags(); // --shell / --timeout without --run: a usage error (they were ignored)
       const report = (evidence, runStart) => {
-        const r = c.call("finish", { evidence, ...(on("run") ? { ranBy: "cli", runStart } : {}) }); // ranBy: the runs are observed by the CLI itself (1.14 F1)
+        const r = c.call("finish", { evidence, ...(on("run") ? { ranBy: "cli", runStart } : {}) }); // ranBy: the runs are observed by the CLI itself
         if (!r.ok) return fail(r);
         if (!r.readyToFinish) c.exitCode = 1; // scriptable: blockers → non-zero
         const T = c.featureText(r.feature);
@@ -1160,7 +1160,7 @@ const COMMANDS = [
         });
       };
       if (!on("run")) return report(undefined, undefined);
-      const runStart = spec.runStartStamp(projectDir, pos[0]); // 1.22 review: `at` and the code stamp BEFORE the checks run
+      const runStart = spec.runStartStamp(projectDir, pos[0]); // `at` and the code stamp BEFORE the checks run
       return RUN.runChecks(pos[0], { projectDir, resolveShell: () => runShell(c), say: c.say, warn: err, gitState: () => GIT.gitState(projectDir), execOpts: () => c.execOpts() })
         .then((rc) => (rc.ok ? report(rc.evidence, runStart) : fail(rc, rc.hint)));
     },
@@ -1182,7 +1182,7 @@ const COMMANDS = [
       // The shared parser keeps only the LAST value of a repeated flag, so `--req a --req b` silently dropped a: every occurrence is
       // collected (c.every). A second --task is a second task (one per call), a second --verify would drop the first check (the
       // evidence gate would never ask for it), a second --story / --heading / --size the first choice — each refused before
-      // anything runs, in append-tasks' own words (refuseRepeatedFlags, 1.24 r6 B5: every single-value flag now).
+      // anything runs, in append-tasks' own words (refuseRepeatedFlags: every single-value flag now).
       const task = { text: flags.task };
       const reqs = c.every("req"), impls = c.every("implements");
       if (reqs.length) task.requirements = reqs; // each may hold "a,b" — the engine splits it, same as over MCP
@@ -1190,12 +1190,12 @@ const COMMANDS = [
       if (typeof flags.verify === "string") task.verify = flags.verify;
       if (typeof flags.story === "string") task.story = flags.story;
       if (flags.parallel != null) task.parallel = on("parallel");
-      // full review Ga6: = the MCP task fields makesGreen / expectFail / size (repeatable --makes-green, "T-01,T-02" split by the engine)
+      // = the MCP task fields makesGreen / expectFail / size (repeatable --makes-green, "T-01,T-02" split by the engine)
       const greens = c.every("makes-green");
       if (greens.length) task.makesGreen = greens;
       if (flags["expect-fail"] != null) task.expectFail = on("expect-fail");
       if (typeof flags.size === "string") task.size = flags.size;
-      const deps = c.every("depends"); // 1.14 F3: = the MCP task field depends (repeatable, "3,5" / "#3" split by the engine)
+      const deps = c.every("depends"); // = the MCP task field depends (repeatable, "3,5" / "#3" split by the engine)
       if (deps.length) task.depends = deps;
       const r = c.call("append-tasks", { tasks: [task] });
       if (!r.ok) return fail(r);
@@ -1219,7 +1219,7 @@ const COMMANDS = [
   approve <feature> --through <phase>  Fast-forward (/approve --through): approve every active phase up to <phase>, in order, each through its
                                   own gate — stops at the first refused gate (exit 1) or a phase still waiting for another role`,
     run(c) {
-      // --through <phase>: the fast-forward; --role <role>: the sign-off's role; --revoke / --reason / --expires (1.16 U2 / U3).
+      // --through <phase>: the fast-forward; --role <role>: the sign-off's role; --revoke / --reason / --expires.
       const { flags, pos, projectDir, out, fail, usage, log } = c;
       if (!pos[0] || (!pos[1] && typeof flags.through !== "string")) usage("dev-spec approve <feature> <phase> [--force [--reason \"…\"] [--expires YYYY-MM-DD|Nd]] [--by NAME] [--role ROLE] | dev-spec approve <feature> <phase> --revoke [--reason \"…\"] | dev-spec approve <feature> --through <phase>");
       // Default approver: the engine's. A refusal exits 1 listing the failing checks.
@@ -1227,7 +1227,7 @@ const COMMANDS = [
       if (!r.ok) return fail(r); // a fast-forward stopped at a refused gate: its error names what was approved before it
       const GV = spec.msg(spec.featureLang(projectDir, r.feature)).governance;
       return out(r, (r) => {
-        if (r.revoked) return log(r.message); // 1.16 U2: what was revoked, and that nothing cascades
+        if (r.revoked) return log(r.message); // what was revoked, and that nothing cascades
         if (r.through) { // the fast-forward: its summary, then one line per phase it reached
           log(r.message);
           (r.steps || []).forEach((s) => log("  " + (s.approved ? "✓" : "◐") + " " + s.phase + (s.role ? " [" + s.role + "]" : "") +
@@ -1253,7 +1253,7 @@ const COMMANDS = [
                                   since — read-only; re-review, then re-approve (the approval records the current steering)`,
     run(c) {
       // dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] — the same engine call as spec_impact;
-      // 1.16 Q1: `impact [feature] --phase steering` — the features approved under steering that changed since (no feature = all)
+      // `impact [feature] --phase steering` — the features approved under steering that changed since (no feature = all)
       const { flags, pos, out, fail, usage, log } = c;
       const steeringPhase = String(flags.phase == null ? "" : flags.phase).trim().toLowerCase() === "steering";
       if (!pos[0] && !steeringPhase) usage("dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] · dev-spec impact [feature] --phase steering");
@@ -1300,7 +1300,7 @@ const COMMANDS = [
   },
   {
     name: "feature",
-    options: ["yes", "flow"], // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its handler (1.24 r6 B4)
+    options: ["yes", "flow"], // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its handler
     args: ["remove archive rename restore flow"],
     sub: { remove: [null, "@feature"], archive: [null, "@feature"], rename: [null, "@feature"], restore: [null, "@archived"], flow: [null, "@feature", "@flow"] },
     help: `  feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
@@ -1308,10 +1308,10 @@ const COMMANDS = [
   feature flow <name> <requirements-first|design-first>   Set a feature's phase order (a bugfix keeps its own)`,
     run(c) {
       // dev-spec feature <remove|archive|rename|restore|flow> <name> [new-name|flow] — remove needs --yes (= spec_feature confirm:true);
-      // flow <name> <requirements-first|design-first> (or --flow) = spec_feature {action: "flow", flow} (C3)
+      // flow <name> <requirements-first|design-first> (or --flow) = spec_feature {action: "flow", flow}
       const { flags, pos, projectDir, on, out, fail, usage, die, log } = c;
       if (!pos[0] || !pos[1]) usage("dev-spec feature <remove|archive|rename|restore|flow> <name> [new-name|requirements-first|design-first] [--yes]");
-      // 1.24 r6 B4: each action reads its own arguments — remove / archive / restore the name, rename + the new name, flow + the
+      // each action reads its own arguments — remove / archive / restore the name, rename + the new name, flow + the
       // flow (or --flow, never both) — and --flow only on flow: a word past them (or --flow elsewhere) was ignored silently.
       const act = String(pos[0]).trim().toLowerCase();
       const most = { remove: 2, archive: 2, restore: 2, rename: 3, flow: flags.flow !== undefined ? 2 : 3 }[act];
@@ -1323,7 +1323,7 @@ const COMMANDS = [
         // Without --yes: show what would be deleted, delete nothing, exit 1.
         c.exitCode = 1;
         return out(r, (r) => {
-          // 1.24 r6: a linked feature folder — only the link goes (the engine's message says so), never "0 file(s)"
+          // a linked feature folder — only the link goes (the engine's message says so), never "0 file(s)"
           if (r.link) log(r.error);
           else log(T.wouldRemove(r.feature, r.wouldDelete.dir, r.wouldDelete.files, r.wouldDelete.entries.join(", ")));
           log(T.confirmHint(r.feature));
@@ -1340,7 +1340,7 @@ const COMMANDS = [
           // the dependents whose dependsOn the archive pruned — a warning when the archived work was never finished
           if (r.note) log((r.incompleteDependency ? "  ⚠ " : "  ") + r.note);
         }
-        else if (r.action === "flow") log(r.note); // C3: the flow, the phase order (and the phases that stay approved)
+        else if (r.action === "flow") log(r.note); // the flow, the phase order (and the phases that stay approved)
         else if (r.action === "restore") {
           const RT = spec.msg(spec.featureLang(projectDir, r.feature)).restore; // back in place: its own language
           log(RT.done(r.feature));
@@ -1409,7 +1409,7 @@ const COMMANDS = [
       const M = spec.msg(r.lang);
       const relOut = (f) => path.relative(projectDir, f).split(path.sep).join("/");
       return out(r, (r) => {
-        if (r.format === "adr") { // 1.25: one MADR file per decision + the indexes — written (and the stale ones removed), or each printed under its path
+        if (r.format === "adr") { // one MADR file per decision + the indexes — written (and the stale ones removed), or each printed under its path
           const A = M.adr;
           if (r.written) { // --write
             r.written.forEach((f) => log(M.stakeholderExport.wrote(f)));
@@ -1491,7 +1491,7 @@ const COMMANDS = [
       if (!r.ok) return fail(r);
       if (r.drifted.length || r.stale.length || (r.errors && r.errors.length)) c.exitCode = 1;
       const D = spec.msg(r.lang).drift;
-      const day = spec.dayOf; // 1.25.1: the local calendar date
+      const day = spec.dayOf; // the local calendar date
       return out(r, (r) => {
         if (r.note) log(r.note);
         for (const f of r.features) {
@@ -1532,7 +1532,7 @@ const COMMANDS = [
         }
         c.exitCode = r.block ? 1 : 0;
       };
-      // 1.24 r6 B4: the message is --message OR the words after the command (or a lone - : stdin) — both given, the words were dropped
+      // the message is --message OR the words after the command (or a lone - : stdin) — both given, the words were dropped
       if (flags.message !== undefined && pos.length) usage('dev-spec stop-check [--message "<text>" | <words…> | -] [--agent <type>]');
       if (flags.message === "-" || (flags.message === undefined && pos.length === 1 && pos[0] === "-")) return c.readStdin(runCheck);
       return runCheck(typeof flags.message === "string" ? flags.message : pos.join(" "));
@@ -1564,7 +1564,7 @@ const COMMANDS = [
       if (pos[1] === "-") return c.readStdin((text) => report(text, {})); // --max: the window the piped log was read with (= spec_log {max})
       const logArgs = ["-c", "core.quotePath=false", "-c", "log.showSignature=false", "log", "--no-color", "--no-decorate", "--no-abbrev-commit",
         "--pretty=medium", "--date=iso-strict", "--name-only", "--relative", "--max-count=" + max];
-      // 1.25: a feature started on its own branch (create --branch) recorded the commit it started from — the log is read from there
+      // a feature started on its own branch (create --branch) recorded the commit it started from — the log is read from there
       // (`<commit>..HEAD`: older commits are no work of this feature); a commit git no longer knows → the whole log, as before.
       const fb = spec.featureBranch(projectDir, fx.slug);
       const since = fb && fb.commit ? { base: fb.base, commit: fb.commit } : null;
@@ -1590,18 +1590,18 @@ const COMMANDS = [
                                   set differently) exits 1 with ours kept and the file listing it under "mergeConflicts" (valid
                                   JSON; doctor fails merge-conflicts until it is resolved); ROADMAP.md / SPECS.md keep ours`,
     run(c) {
-      // 1.21 F1a — git's merge driver for the spec state: merge-state <base> <ours> <theirs> [<path>] (git's %O %A %B %P) merges
+      // git's merge driver for the spec state: merge-state <base> <ours> <theirs> [<path>] (git's %O %A %B %P) merges
       // .state.json / roadmap.json SEMANTICALLY (spec.mergeStateText) and writes the result to <ours> — exit 0 merged, 1 a real
       // conflict (ours kept at each, listed in the file as "mergeConflicts" — valid JSON, doctor fails merge-conflicts). The generated
       // overviews (ROADMAP.md / .html, SPECS.md) keep ours. --install / --uninstall: .gitattributes + this clone's git config
       // (merge.dev-spec-state.*) — the only git this command runs besides `git merge-file` for a hand-written overview.
-      // --check (1.21 review A3): read-only — does git config's driver still run THIS clone's CLI? (a plugin update moves it)
+      // --check: read-only — does git config's driver still run THIS clone's CLI? (a plugin update moves it)
       const { flags, pos, on, usage } = c;
       const msUsage = "dev-spec merge-state <base> <ours> <theirs> [<path>] · dev-spec merge-state --install | --uninstall | --check [--project <dir>]";
       const check = flags.check === true || /^(?:true|1|yes|on)$/i.test(String(flags.check === undefined ? "" : flags.check));
       if (flags.check !== undefined && !check && !/^(?:false|0|no|off)$/i.test(String(flags.check))) usage(msUsage);
       if (check) { if (pos.length || on("install") || on("uninstall")) usage(msUsage); return mergeDriverCheck(c); }
-      // 1.24 r6 B4: --install / --uninstall take no file arguments, and not both (the file arguments, or --install, were ignored)
+      // --install / --uninstall take no file arguments, and not both (the file arguments, or --install, were ignored)
       if ((on("install") || on("uninstall")) && (pos.length || (on("install") && on("uninstall")))) usage(msUsage);
       if (on("install") || on("uninstall")) return mergeDriverSetup(c, on("uninstall"));
       if (pos.length < 3 || pos.length > 4) usage(msUsage);
@@ -1622,7 +1622,7 @@ const COMMANDS = [
       const r = c.call("upgrade");
       if (!r.ok) return fail(r);
       if (r.migrations && r.migrations.errors.length) c.exitCode = 1;
-      return out(r, (r) => spec.upgradeLines(r).forEach((l) => log(l))); // 1.26: rendered from the result (it carries no lines)
+      return out(r, (r) => spec.upgradeLines(r).forEach((l) => log(l))); // rendered from the result (it carries no lines)
     },
   },
   {
@@ -1662,7 +1662,7 @@ const COMMANDS = [
     run(c) {
       const { pos, on, out, fail, usage, log } = c;
       const syntax = "dev-spec depend <feature> [dep1 dep2 ...] [--add x[,y]] [--rm x[,y]] [--order N] [--clear]";
-      // 1.24 r6 B4: deps (they REPLACE the list) and --clear (it empties it) contradict each other — the deps won silently
+      // deps (they REPLACE the list) and --clear (it empties it) contradict each other — the deps won silently
       if (!pos[0] || (on("clear") && pos.length > 1)) usage(syntax);
       // The shared parser keeps only the LAST value of a repeated flag, so `--add b --add c` silently added c alone: every occurrence
       // is collected (c.every).
@@ -1686,14 +1686,14 @@ const COMMANDS = [
       const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase(); // case-folded, like the engine and the MCP enum
       // No action lists; an unknown one (delete, ad…) is an error from the engine, as over MCP — it used to just list.
       const action = a0 || "list";
-      // add <name> [note words…] reads every word; rm|remove <name> and list read no more (1.23 review: extra words were ignored)
+      // add <name> [note words…] reads every word; rm|remove <name> and list read no more (extra words were ignored)
       const most = action === "list" ? 1 : action === "rm" || action === "remove" ? 2 : Infinity;
       if (pos.length > most) die(c.projectText().extraArgs("backlog " + action, pos.slice(most).join(" ")), c.unknownArg(String(pos[most])));
       const r = c.call("backlog", { action }); // add: the words after the name are its note
       if (!r.ok) return fail(r); // e.g. rm of a name that isn't in the backlog
       const T = c.projectText();
       return out(r, (r) => {
-        // 1.19 R review 5: a name already in the backlog — its note was appended to (or already held it): the engine's localized note
+        // a name already in the backlog — its note was appended to (or already held it): the engine's localized note
         if (action === "add" && r.exists) log(r.note);
         else if (action === "add") log(T.backlogAdded(String(pos[1]).trim()));
         else if (action === "rm" || action === "remove") log(T.backlogRemoved(String(pos[1]).trim()));
@@ -1709,12 +1709,12 @@ const COMMANDS = [
     help: `  scan [path]                     Brownfield: inventory an existing codebase (stack, frameworks, routes with file:line,
                                   tests, entrypoints, env var names, migrations)`,
     run(c) {
-      // 1.23 review (L12): <path> is read from the project when it was named (--project / the env), else from the working folder
+      // <path> is read from the project when it was named (--project / the env), else from the working folder
       // (argPath) — it was always the working folder; and the report is in the PROJECT's language (a subfolder has no .specs/).
       const { pos, projectDir, out, fail, log } = c;
       const lang = spec.projectLang(projectDir);
       const r = c.call("scan", { path: pos[0] ? c.argPath(pos[0]) : undefined }); // no path: the project
-      if (!r.ok) return fail(r); // a path that is no folder (1.22 review): exit 1, never an empty codebase
+      if (!r.ok) return fail(r); // a path that is no folder: exit 1, never an empty codebase
       const T = c.cliText(lang); // same language as the engine's note
       const B = spec.msg(lang).brownfield;
       return out(r, (r) => {
@@ -1775,9 +1775,9 @@ const COMMANDS = [
     run(c) {
       // dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …] — <path> resolves
       // against the project root and must stay inside it.
-      // 1.16 C4: `import plan|execplan|fluidplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
+      // `import plan|execplan|fluidplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
       // (= spec_import {tool, text} — a plan kept outside the project, e.g. Claude Code's ~/.claude/plans).
-      // 1.25: `import kiro-steering|cursor-rules [<path>]` (= spec_import {tool}: another tool's steering → .specs/steering/; no path →
+      // `import kiro-steering|cursor-rules [<path>]` (= spec_import {tool}: another tool's steering → .specs/steering/; no path →
       // the tool's own folder) and `--dry-run` on every form (= spec_import {dryRun: true}: nothing written, the same result + preview).
       const { flags, pos, projectDir, out, fail, usage, log } = c;
       const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data] [--dry-run] · import <plan|execplan|fluidplan> - | --text \"<markdown>\" · import <kiro-steering|cursor-rules> [<path>] [--dry-run]";
@@ -1789,7 +1789,7 @@ const COMMANDS = [
       // list next to --text is a path given with it: passed as the source, so the engine answers its "path or text, not both" (as
       // spec_import {path, text} does) — never "Unknown track: 'plans/x.md'".
       const pathWithText = hasText && !!pos[1] && spec.parseTracks(pos[1]).unknown.length > 0;
-      // 1.23 review: run from a subfolder of the project (found by walking up), <path> is relative to that subfolder (argPath) — handed
+      // run from a subfolder of the project (found by walking up), <path> is relative to that subfolder (argPath) — handed
       // to the engine relative to the project, which still refuses one outside it.
       const source = (p) => (p == null || c.projectNamed || path.resolve(c.cwd) === projectDir ? p
         : path.relative(projectDir, c.argPath(p)).split(path.sep).join("/") || ".");
@@ -1800,7 +1800,7 @@ const COMMANDS = [
           const B = spec.msg(r.lang).importSpec;
           const D = spec.msg(r.lang).importSteering;
           if (r.dryRun) log(D.dryRun);
-          if (r.kind === "steering") { // 1.25: the steering files written (or that would be), each with its mode
+          if (r.kind === "steering") { // the steering files written (or that would be), each with its mode
             log((r.dryRun ? D.wouldSteering : D.done)(r.toolName, r.imported.length, r.skipped.length));
             r.imported.forEach((x) => log(D.line(x.file, x.from, x.inclusion, (x.patterns || []).join(", "))));
           } else {
@@ -1837,7 +1837,7 @@ const COMMANDS = [
                                   stands (--set-baseline, --require-live, --model ID, --prompt FILE, --max-items N); an unknown
                                   one or a second word exits 2 with nothing run; evals --help prints the harness's usage`,
     run(c) {
-      // 1.23 review (P1): every flag goes to run-evals.js WHEREVER it stands — `evals --dry-run <f>` dropped the flag before the feature
+      // every flag goes to run-evals.js WHEREVER it stands — `evals --dry-run <f>` dropped the flag before the feature
       // and ran the eval LIVE (paid API calls) — read with the harness's own rules (evalsArgs). The harness refuses an unknown flag
       // (--dryrun), prints its usage on --help and refuses a second word; --project is the CLI's resolved project.
       const { projectDir, usage, err } = c;
@@ -1848,7 +1848,7 @@ const COMMANDS = [
       const inherit = c.io.stdout === process.stdout && c.io.stderr === process.stderr;
       const res = spawnSync(process.execPath, args, inherit ? { stdio: "inherit" } : { encoding: "utf8", input: "", maxBuffer: 64 * 1024 * 1024 });
       if (!inherit) { if (res.stdout) c.write(res.stdout); if (res.stderr) c.writeErr(res.stderr); }
-      // A harness that never ran (spawn error) or was killed by a signal has no status — that is a failure, never exit 0 (1.22 review:
+      // A harness that never ran (spawn error) or was killed by a signal has no status — that is a failure, never exit 0 (
       // `res.status || 0` passed a killed run).
       if (res.error) err("dev-spec: " + res.error.message);
       c.exitCode = res.error || res.status == null ? 1 : res.status;
@@ -1886,7 +1886,7 @@ const COMMANDS = [
       // Own keys only: `constructor`/`__proto__` would pass a plain lookup and crash path.join.
       if (!Object.prototype.hasOwnProperty.call(RULE_FILES, tool)) die(c.projectText().unknownRules(pos[0], Object.keys(RULE_FILES).join(", ")), c.invalidArg("tool"));
       const ROOT = path.resolve(__dirname, "..").replace(/\\/g, "/"); // forward slashes: valid in markdown and on Windows
-      // 1.26: the clone's note "Paths in this file point into the dev-spec-driven clone. `… rules <tool>` prints this file…" is about
+      // the clone's note "Paths in this file point into the dev-spec-driven clone. `… rules <tool>` prints this file…" is about
       // the clone's copy — in the printed copy it would describe itself: it is dropped (with the blank line after it).
       const raw = fs.readFileSync(path.join(__dirname, "..", RULE_FILES[tool]), "utf8")
         .replace(/^> Paths in this file point into the dev-spec-driven clone\.[^\n]*\n(?:\r?\n)?/m, "");
@@ -1930,13 +1930,13 @@ const COMMANDS = [
   },
   {
     name: "bundle",
-    options: ["out", "force"], // --force: overwrite an --out that is no previous bundle (1.24 r6 B8)
+    options: ["out", "force"], // --force: overwrite an --out that is no previous bundle
     help: `  bundle [--out <file.js>]        Build this clone's engine as ONE file (mcp/lib/spec.bundle.js, git-ignored) for a slow file
                                   system (Docker bind mount, network drive, WSL /mnt/c): set DEV_SPEC_BUNDLE=1 (with --out, also
                                   DEV_SPEC_BUNDLE_PATH=<file>); rebuild after every plugin update — a stale bundle is ignored;
                                   an existing --out that is no previous bundle is left alone unless --force`,
     run(c) {
-      // 1.20: dev-spec bundle [--out <file.js>] — THIS clone's engine as one file (scripts/build.js --bundle), for a slow file system:
+      // dev-spec bundle [--out <file.js>] — THIS clone's engine as one file (scripts/build.js --bundle), for a slow file system:
       // loaded only with DEV_SPEC_BUNDLE=1 (DEV_SPEC_BUNDLE_PATH=<file> for --out) and while it is current — rebuild after every
       // plugin update. Needs no project; never committed (git-ignored).
       const { flags, pos, on, out, usage, die, log } = c;
@@ -1944,7 +1944,7 @@ const COMMANDS = [
       if (pos.length || (outFile && !/\.js$/i.test(outFile))) usage("dev-spec bundle [--out <file.js>] [--force]");
       const B = require(path.join(__dirname, "..", "scripts", "build.js"));
       const T = c.projectText();
-      // 1.24 r6 B8: --out overwrote ANY file (`--out src/app.js` replaced the user's code). An existing file is replaced only when it is
+      // --out overwrote ANY file (`--out src/app.js` replaced the user's code). An existing file is replaced only when it is
       // a previous bundle (its first lines: build.js's header) — or with --force.
       const target = outFile || B.BUNDLE_PATH;
       if (!on("force") && fs.existsSync(target)) {
@@ -1972,7 +1972,7 @@ const COMMANDS = [
   {
     name: "completion",
     text: true,
-    options: [], max: 1, // 1.25: completion <powershell|bash|zsh|fish>
+    options: [], max: 1, // completion <powershell|bash|zsh|fish>
     args: ["@shell"],
     help: `  completion <powershell|bash|zsh|fish>   Print the shell's completion script on stdout: the commands, their flags, the values
                                   they take (--lang, --flow, --size, phases, tracks…) and the project's feature names (read from
@@ -1987,7 +1987,7 @@ const COMMANDS = [
                                   folder it follows an update to the newest installed version — save it again then to complete the
                                   new version's commands and flags`,
     run(c) {
-      // 1.25 — dev-spec completion <powershell|bash|zsh|fish>: the shell's completion script on stdout, nothing else (it is saved to a
+      // dev-spec completion <powershell|bash|zsh|fish>: the shell's completion script on stdout, nothing else (it is saved to a
       // file or evaluated as it is) — built from this table (completionModel). How to install it: completion --help.
       const { pos, projectDir, usage, die, write } = c;
       const syntax = "dev-spec completion <" + COMPLETION.SHELLS.join("|") + ">";
@@ -2001,7 +2001,7 @@ const COMMANDS = [
     },
   },
   {
-    name: "help", // `help <command>`: that command's help (1.24 r6 B-I3); no command — the whole help. It has no block of its own.
+    name: "help", // `help <command>`: that command's help; no command — the whole help. It has no block of its own.
     args: ["@command"],
     run: (c) => c.log(c.pos[0] != null ? helpFor(c, String(c.pos[0])) : helpText()),
   },
@@ -2012,14 +2012,14 @@ const COMMANDS = [
 const COMMAND_INDEX = new Map();
 for (const e of COMMANDS) for (const n of [e.name, ...(e.aliases || [])]) COMMAND_INDEX.set(n, e);
 const commandFor = (name) => (typeof name === "string" && COMMAND_INDEX.has(name) ? COMMAND_INDEX.get(name) : null);
-// 1.24 r6 B-I3: an alias's help is its command's (na → next-action, milestones → milestone).
+// an alias's help is its command's (na → next-action, milestones → milestone).
 const HELP_ALIASES = {};
 for (const e of COMMANDS) for (const a of e.aliases || []) HELP_ALIASES[a] = e.name;
-// 1.23 review — each command's own options and the most arguments it takes (main's checkCommandArgs: another known flag, or an
+// each command's own options and the most arguments it takes (main's checkCommandArgs: another known flag, or an
 // argument past its last one, is a usage error). Not listed: evals (its flags are run-evals.js's) and help.
 const COMMAND_OPTIONS = {};
 for (const [n, e] of COMMAND_INDEX) if (e.options) COMMAND_OPTIONS[n] = e.max === undefined ? { options: e.options } : { options: e.options, max: e.max };
-// 1.25 — shell completion: a command's positionals ("<cmd>", and "<cmd> <word>" for the positions a first word picks) and the values
+// shell completion: a command's positionals ("<cmd>", and "<cmd> <word>" for the positions a first word picks) and the values
 // of a value flag ("<flag>" for every command — VALUE_FLAG_SPECS' own —, "<cmd> --<flag>" where commands differ).
 const COMMAND_ARGS = {};
 for (const e of COMMANDS) {
@@ -2032,7 +2032,7 @@ for (const e of COMMANDS) for (const [k, v] of Object.entries(e.values || {})) F
 // The commands whose output is text only — no structured result — so --json is refused there (main; the help too).
 const TEXT_ONLY_COMMANDS = new Set(COMMANDS.filter((e) => e.text).map((e) => e.name));
 // Boolean switches: ONE list, spec.CLI_SWITCHES (the approval hook parses `dev-spec approve …` with it): add a new switch THERE. A
-// function (1.25.1): read on use — the engine's list (an unknown flag, a switch given a value), never at load.
+// function: read on use — the engine's list (an unknown flag, a switch given a value), never at load.
 const BOOL_FLAGS = () => [...spec.CLI_SWITCHES];
 
 // ---- the help ----------------------------------------------------------------------------------------------------------------
@@ -2074,7 +2074,7 @@ const HELP_FOOT = `  The project: --project <dir> (an existing folder — only i
 function helpText() {
   return HELP_HEAD + "\n\n" + COMMANDS.filter((e) => e.help).map((e) => e.help).join("\n") + "\n\n" + HELP_FOOT;
 }
-// 1.24 r6 B-I3 — one command's help: its lines of helpText() (an alias's: its command's) + its options (a value flag shows "…") + the
+// one command's help: its lines of helpText() (an alias's: its command's) + its options (a value flag shows "…") + the
 // global ones + where the whole help is. No block (help, an unknown word): the whole help. The lines stay the one help text (English,
 // like the rest of it); the frame lines are in the project language.
 function helpFor(c, word) {
@@ -2089,7 +2089,7 @@ function helpFor(c, word) {
   return lines.join("\n");
 }
 
-// 1.25 — what `completion <shell>` fills its script with (cli/completion.js): every command (and alias) and its flags (+ --json
+// what `completion <shell>` fills its script with (cli/completion.js): every command (and alias) and its flags (+ --json
 // --project --help), the flags that take a value, COMMAND_ARGS and FLAG_VALUES (an alias reads its command's), and the value lists
 // their @sources name — from the facade where it has them, so a new command, flag or value completes with nothing else to touch.
 // `cli`: this CLI, which the script runs for feature names (and as `dev-spec` without one on PATH).

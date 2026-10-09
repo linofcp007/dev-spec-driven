@@ -2,17 +2,17 @@
 "use strict";
 
 /**
- * dev-spec-driven — the build (1.20). Node core only.
+ * dev-spec-driven — the build. Node core only.
  *
  *   node scripts/build.js            (npm run build) writes the committed mcp/lib/engine/corpus.generated.json — the
  *                                    built-in placeholder corpus, rendered by the engine itself (markdown.js renderCorpusData),
  *                                    stamped with the hash of the sources it was rendered from (CORPUS_SOURCES); every process
  *                                    reads it instead of rendering ~1,165 templates, and renders them as before when the stamp
  *                                    doesn't match
- *                                    — and the committed hooks/stop-claims.generated.json (1.24 r6 I-I4): every language's claim
+ *                                    — and the committed hooks/stop-claims.generated.json: every language's claim
  *                                    patterns and the prose regexes of the stop gate (guards.js stopClaimFilter), stamped with
  *                                    the sizes of the files they come from (STOP_FILTER_SOURCES) — the Stop hook's pre-filter,
- *                                    read before the engine loads. Neither carries the version (1.26): what they hold is a
+ *                                    read before the engine loads. Neither carries the version: what they hold is a
  *                                    function of their sources alone, so a release that changes no source leaves both unchanged
  *   node scripts/build.js --check    (npm run check) writes nothing; exit 1 when either committed file differs from a fresh build
  *   node scripts/build.js --bundle [--out <file.js>]   (npm run build:bundle; also `dev-spec bundle`) writes the engine
@@ -35,7 +35,7 @@ const ROOT = path.join(__dirname, "..");
 const LIB = path.join(ROOT, "mcp", "lib");
 const CORPUS_PATH = path.join(LIB, "engine", "corpus.generated.json");
 const BUNDLE_PATH = path.join(LIB, "spec.bundle.js"); // the default place — .gitignore'd
-const STOP_CLAIMS_PATH = path.join(ROOT, "hooks", "stop-claims.generated.json"); // 1.24 r6 I-I4 — committed (a clone without hooks/: none)
+const STOP_CLAIMS_PATH = path.join(ROOT, "hooks", "stop-claims.generated.json"); // committed (a clone without hooks/: none)
 
 // The bundled modules of an mcp/lib folder: every .js file of engine/ (folders included) and i18n/, the i18n.js facade and the
 // zero-dependency helpers the engine requires (ENGINE_HELPERS: doctor.js and files.js load probe.js, guards.js latin1-scan.js on
@@ -57,7 +57,7 @@ function bundledFiles(lib = LIB) {
 }
 
 // The corpus file's text (JSON, one list item per line — a template change is a readable diff). E: the engine of `lib`.
-// Stamped with the sources hash only (1.26): the render runs through CORPUS_SOURCES alone (mcp/tests/16-conventions-build.js
+// Stamped with the sources hash only: the render runs through CORPUS_SOURCES alone (mcp/tests/16-conventions-build.js
 // proves the list with V8 coverage — engineVersion's upgrade.js is not in it), so the hash says everything the version could; the
 // version stamp only made every release rewrite the file with the same corpus.
 function buildCorpus(E, lib = LIB) {
@@ -66,9 +66,9 @@ function buildCorpus(E, lib = LIB) {
   return JSON.stringify(data, null, 1) + "\n";
 }
 
-// 1.24 r6 I-I4 — the stop-claim filter's text: the Stop hook reads it (hooks/stop-claims.generated.json) to send a message holding no
+// the stop-claim filter's text: the Stop hook reads it (hooks/stop-claims.generated.json) to send a message holding no
 // claim pattern away before the engine loads. Stamped with each STOP_FILTER_SOURCES file's size as git checks it out (LF, no BOM):
-// the hook takes it only while every size matches. No version (1.26): the filter is a function of those files alone, and the
+// the hook takes it only while every size matches. No version: the filter is a function of those files alone, and the
 // version never caught what the sizes miss (an edit that keeps every size — that one only a rebuild sees: `npm run check`, the
 // suite). E: the engine of `lib`.
 function buildStopClaims(E, lib = LIB) {

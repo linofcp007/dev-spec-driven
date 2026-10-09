@@ -37,7 +37,7 @@ const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests
 // that never meets pt-BR (most hooks) doesn't load it.
 let PTBR = null;
 const ptbr = () => PTBR || ((PTBR = require("./i18n/pt-br.js")), localeFileLoaded("i18n/pt-br.js"), PTBR);
-// 1.20 review — the engine's corpus check (engine/markdown.js) is told of every language file loaded on demand
+// the engine's corpus check (engine/markdown.js) is told of every language file loaded on demand
 // (onLocaleLoad(fn): fn("i18n/<file>.js") once it has loaded): a file that changed on disk after the engine loaded (a
 // `git pull` under a long-lived MCP server) must not run under a corpus stamped for the old one. A listener never breaks
 // a load.
@@ -56,10 +56,10 @@ const STEERING = {};
 const EVALS_README = {};
 // Human-readable tool messages (doctor / clarify / next-action / add-track / init notes / hook output).
 const MSG = {};
-// 1.16 Q — spec quality (Q1 steering amendments, Q2 cross-feature acceptance criteria, Q3 the glossary): one group per
+// spec quality (Q1 steering amendments, Q2 cross-feature acceptance criteria, Q3 the glossary): one group per
 // language, merged into MSG (pt-BR derives from pt's).
 const QUALITY_MSG = {};
-// 1.17 A — doctor's design-tradeoffs / design-risks details and spec_clarify's consistency nudge, merged into MSG.
+// doctor's design-tradeoffs / design-risks details and spec_clarify's consistency nudge, merged into MSG.
 const DESIGN_WEIGH_MSG = {};
 // Task brief (spec_task_brief) labels and loop rules per language; renderBrief() owns the layout.
 const BRIEF = {};
@@ -99,7 +99,7 @@ function renderBrief(d, lang) {
   if (d.inlineOnly) push("", t.inlineOnly);
 
   push("", t.task, `${task.number}. ${task.text}`, ...task.body.map((l) => "   " + l));
-  if ((d.dependsOn || []).length) { // 1.14 F3: the task's _Depends:_ and where each stands
+  if ((d.dependsOn || []).length) { // the task's _Depends:_ and where each stands
     const TD = MSG[normalizeLang(lang)].taskDeps;
     const mark = { done: "✓", open: "○", missing: "✗" };
     push("", TD.briefHeading, ...d.dependsOn.map((x) => `- #${x.number} ${mark[x.status]} ${TD.briefStatus[x.status]}${x.text ? " — " + x.text : ""}`));
@@ -116,7 +116,7 @@ function renderBrief(d, lang) {
   push("", t.acs);
   if (d.acceptanceCriteria.length) d.acceptanceCriteria.forEach((a) => push("- " + a.text));
   else push(t.acsNone);
-  // 1.16 Q3: the glossary entries this task's text and criteria use (bounded) — the words to use, and the ones to avoid
+  // the glossary entries this task's text and criteria use (bounded) — the words to use, and the ones to avoid
   if ((d.glossary || []).length) {
     const Q = MSG[normalizeLang(lang)].quality;
     push("", Q.briefGlossaryHeading, Q.briefGlossaryIntro);
@@ -125,7 +125,7 @@ function renderBrief(d, lang) {
   }
 
   if (d.tests.length) {
-    push("", d.expectFail ? t.testsRed : t.tests); // full review Ga7: a red task writes the tests; it never makes them green
+    push("", d.expectFail ? t.testsRed : t.tests); // a red task writes the tests; it never makes them green
     let lastHeader;
     for (const r of d.tests) {
       if (r.header && r.header !== lastHeader) {
@@ -138,7 +138,7 @@ function renderBrief(d, lang) {
   if (d.evals.length) push("", t.evals, ...d.evals.map((e) => "- " + e));
   if (d.metrics.length) push("", t.metrics, ...d.metrics.map((m) => "- `" + m + "`"));
   if (d.implements.length) push("", t.files, ...d.implements.map((f) => "- `" + f + "`"));
-  // 1.19 R2 — search before you write: the design's Reuse & Integration entries for this task (a table row's cells joined by
+  // search before you write: the design's Reuse & Integration entries for this task (a table row's cells joined by
   // " · ", a list item without its bullet) and the existing source files next to the task's own (bounded by the engine)
   if (d.reuse) {
     const r = d.reuse;
@@ -154,7 +154,7 @@ function renderBrief(d, lang) {
   const verify = d.verify || [];
   if (verify.length) push("", t.verification, ...verify.map((c) => "- `" + c + "`"));
   if ((d.verifyPipes || []).length) push("", MSG[normalizeLang(lang)].verifyPipe.brief(d.verifyPipes));
-  // B5: _Expect: fail_ — the Verification section says the run must fail (the heading too when the task has no _Verify:_)
+  // _Expect: fail_ — the Verification section says the run must fail (the heading too when the task has no _Verify:_)
   if (d.expectFail) push(...(verify.length ? [] : ["", t.verification]), "", MSG[normalizeLang(lang)].redGreen.briefExpect);
 
   if (d.design.toc.length) {
@@ -162,7 +162,7 @@ function renderBrief(d, lang) {
     d.design.included.forEach((s) => push("", "### " + s.title, s.body));
     if (d.design.omitted.length) push("", t.designOmitted + " " + d.design.omitted.join(" · "));
   }
-  // 1.14 C2: the decisions.md entries that cite this task's ACs / T-IDs (bounded; superseded ones left out)
+  // the decisions.md entries that cite this task's ACs / T-IDs (bounded; superseded ones left out)
   if ((d.decisions || []).length) {
     const D = MSG[normalizeLang(lang)].decisions;
     push("", D.briefHeading, D.briefIntro);
@@ -189,7 +189,7 @@ function renderBrief(d, lang) {
     push("", t.unresolved, t.unresolvedNote, ...[...d.unresolved.acs, ...d.unresolved.tests].map((id) => "- " + id));
   }
 
-  // full review Ga7: an _Expect: fail_ task's definition of done is the red task's (write the test, it must FAIL for the right
+  // an _Expect: fail_ task's definition of done is the red task's (write the test, it must FAIL for the right
   // reason, no production code) — the loop's "make the target tests green" / "nothing that passed may fail" contradicted it.
   const rules = d.expectFail ? t.redRules : t.loopRules[d.loop];
   push("", t.dod, ...rules.map((r, i) => `${i + 1}. ${r}`));
@@ -197,7 +197,7 @@ function renderBrief(d, lang) {
   if (d.metrics.length) push(`${++extra}. ${t.metricsRule}`);
   if (d.evals.length && d.loop !== "ai-prompt") push(`${++extra}. ${t.evalsRule}`);
   if (verify.length) push(`${++extra}. ${t.verifyRule}`);
-  const B5 = MSG[normalizeLang(lang)]; // B5: the red run, then the project checks (roadmap.json meta.checks)
+  const B5 = MSG[normalizeLang(lang)]; // the red run, then the project checks (roadmap.json meta.checks)
   if (d.expectFail) push(`${++extra}. ${B5.redGreen.dodExpect}`);
   if ((d.projectChecks || []).length) push(`${++extra}. ${B5.projectChecks[d.expectFail ? "briefDodRed" : "briefDod"](d.projectChecks.map((c) => "`" + c.command + "` (" + c.name + ")").join(" · "))}`);
   if (task.checkpoint) push("", t.checkpoint, "**Checkpoint:** " + task.checkpoint);
@@ -237,7 +237,7 @@ function renderRetro(T, P, m, fmt) {
 }
 
 // ===========================================================================
-// Artifact layouts (1.27) — the STRUCTURE every language's scaffolds share: which sections, in which order, under which
+// Artifact layouts — the STRUCTURE every language's scaffolds share: which sections, in which order, under which
 // track or size; the IDs, markers, numbering and fixed annotation lines. A language's file holds only what they SAY: its
 // `text` block (strings — a function where a value sits inside a sentence). loadLocale binds each layout to a language's
 // text as BUILD[lang].<name>, beside the builders a language still writes whole (one template each, no structure to share);
@@ -285,7 +285,7 @@ const LAYOUTS = {
   },
 
   // design.md: the core sections, then the active tracks' (trackDesignBlock, +tdd first), then the footer. No size: the 1.20
-  // design. A SIZED feature (1.21 F5 — s | m | l; xs is a change, no design): Error Handling points at the IF…THEN criteria (never
+  // design. A SIZED feature (s | m | l; xs is a change, no design): Error Handling points at the IF…THEN criteria (never
   // asked twice), Complexity Tracking has no example row (the placeholder gate refused it), and a core section a track's own
   // sections supersede is left out (CORE_SUPERSEDED_BY). M / L: Reuse & Integration with one example row. S: the three weigh
   // sections merged into ONE "Decisions, reuse & risks" (designWeighChecks reads it), no Data Models / API Contracts / Security
@@ -314,7 +314,7 @@ const LAYOUTS = {
   },
 
   // tasks.md, organized by user story: Setup, Foundational, US-1 (its core task and a parallel one), the active tracks' task blocks
-  // (trackTasks, numbered on), US-2, Polish. Size S (1.21 F5): one core task (US-1's two criteria), then the track blocks (the
+  // (trackTasks, numbered on), US-2, Polish. Size S: one core task (US-1's two criteria), then the track blocks (the
   // engine keeps, per track, the tasks that implement a criterion — engine/scaffold.js trimTrackTasks); no setup / foundational /
   // US-2 / polish phases. +tdd: each template test made green by one task (_Makes green:_, templateTests of the tracks and size);
   // +saas: the latency metric on the first task that carries it; +ai: the golden baseline on the core task.
@@ -401,8 +401,8 @@ const LAYOUTS = {
 
 // What the approval guard tells the user an agent wants to do (msg.approvalGuard.action — the hook's ask / deny lines and
 // spec_approve's elicitation quote it): the case of `a` → one sentence of X (text.approvalActions). kind "remove" (a feature's
-// removal); "unreadable" (1.23 review 5 — a shell command the guard can't read: too long (a.length characters) or in a form it
-// can't follow; 1.24 review 6 — a tool call received only in part; 1.25.1 review 7 — a script fed to a shell out of sight, an
+// removal); "unreadable" (a shell command the guard can't read: too long (a.length characters) or in a form it
+// can't follow; a tool call received only in part; a script fed to a shell out of sight, an
 // unknown program on .specs/ files, the hook's own failure, a projectDir it can't read); "guard-down" (lowering this guard, or
 // weakening what it stands for — a.setting: the spec_init / `init` setting, a shell write of roadmap.json, a hand edit with the
 // Write / Edit tool — a.source "edit", the harness-observed run log, a gated track turned off, a .specs/ link); else an approval
@@ -441,7 +441,7 @@ function approvalAction(X, a) {
   return (a.through ? X.approveThrough(f, a.through) : X.approve(a.phase || "?", f)) + who + (a.force ? X.forced : "");
 }
 
-// pt-BR (1.14 D1) — every table's pt-BR twin, derived lazily from pt (i18n/pt-br.js, loaded by the first read of one).
+// pt-BR — every table's pt-BR twin, derived lazily from pt (i18n/pt-br.js, loaded by the first read of one).
 const defineDerivedLocale = (table, raw, patch) => Object.defineProperty(table, "pt-BR", { enumerable: true, configurable: true,
   get() { ptbr().defineDerivedLocale(table, raw, patch); return table["pt-BR"]; } });
 defineDerivedLocale(BUILD);
@@ -466,12 +466,12 @@ module.exports = {
   normalizeLang,
   canonicalLang,
   baseLang,
-  DEV_SPEC, // 1.21 F3: `node "<clone>/cli/dev-spec.js"` — the runnable CLI line every message prints (i18n/common.js)
+  DEV_SPEC, // `node "<clone>/cli/dev-spec.js"` — the runnable CLI line every message prints (i18n/common.js)
   DEV_SPEC_SCRIPT, // this clone's cli/dev-spec.js (forward slashes)
   cliPrefix, // (script?) → `node "<script>"`, quoted to paste into bash and PowerShell
   portableCli, // text for a committed file: the runnable line → `dev-spec`
-  onLocaleLoad, // (fn) fn("i18n/<file>.js") after each language file loads on demand — the engine's corpus check (1.20 review)
-  toPtBr: (text, masks) => ptbr().toPtBr(text, masks), // (text, masks?) European → Brazilian Portuguese (the pt-BR derivation, 1.14 D1)
+  onLocaleLoad, // (fn) fn("i18n/<file>.js") after each language file loads on demand — the engine's corpus check
+  toPtBr: (text, masks) => ptbr().toPtBr(text, masks), // (text, masks?) European → Brazilian Portuguese (the pt-BR derivation)
   derivePtBr: (value, raw) => ptbr().derivePtBr(value, raw || null, null, value), // a pt table (roadmap-md.js's roadmap chrome) → its pt-BR twin
   // artifact builders
   classification: (a, lang) => L(lang).classification(a),
@@ -479,10 +479,10 @@ module.exports = {
   trackDesignBlock: (track, lang) => L(lang).trackDesignBlock(track),
   design: (a, lang) => L(lang).design(a),
   tasks: (a, lang) => L(lang).tasks(a),
-  testPlan: (name, lang, tracks, acs, size) => L(lang).testPlan(name, tracks, acs, size), // tracks: which template ACs get a planned test; acs: the real AC IDs instead (one generic row each); size (1.21 F5): S plans its two core criteria
+  testPlan: (name, lang, tracks, acs, size) => L(lang).testPlan(name, tracks, acs, size), // tracks: which template ACs get a planned test; acs: the real AC IDs instead (one generic row each); size: S plans its two core criteria
   templateAcIds: (tracks, size) => Object.keys(templateTests(tracks, size)), // the template AC IDs a test plan scaffolded for these tracks (and size) covers
-  change: (a, lang) => L(lang).change(a), // 1.21 F5: a change's one file (kind "change", size xs)
-  FEATURE_SIZES, // 1.21 F5: xs · s · m · l (i18n/common.js)
+  change: (a, lang) => L(lang).change(a), // a change's one file (kind "change", size xs)
+  FEATURE_SIZES, // xs · s · m · l (i18n/common.js)
   evalPlan: (name, lang) => L(lang).evalPlan(name),
   loadTest: (name, lang) => L(lang).loadTest(name),
   quickstart: (name, lang) => L(lang).quickstart(name),
