@@ -170,6 +170,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
     const EU_RESIDUE = /(?<![\p{L}])(?:ligaç(?:ão|ões)|liga-[oa]s?|ligue-[oa]s?|\p{L}+-se-ia|(?:cria|aplica|aplicam|arquiva|escolhe|revê|regista|registra|escrevem|parecem|comporta|torna|importa|acrescenta|responde)-se|tires|porque foi)(?![\p{L}])/iu;
     const residueLeft = brPairs.filter(([, , b]) => typeof b === "string" && EU_RESIDUE.test(b)).map(([w, , b]) => w + ": " + b.match(EU_RESIDUE)[0]);
     ok(residueLeft.length === 0, "1.25.1 review: lint — no pt-BR string keeps a European 'ligação' / 'liga-o', an enclitic '-se' after its subject or 'porque' asking why (" + residueLeft.slice(0, 6).join(" · ") + ")");
+    // 1.25.1 review — template variables ({{…}}) are English-stable: the PT prompt stub wrote {{variáveis}}. Every artifact
+    // builder (every track) and steering stub names the same variables, in the same order, in each language.
+    const varsOf = (s) => (String(s).match(/\{\{[^{}\n]*\}\}/g) || []).join(" ");
+    const varText = (l) => [...["classification", "requirements", "design", "tasks", "checklist"].map((b) => I[b]({ name: "n", tracks: ["core", ...allTr], label: "core", slug: "n", summary: "", signals: {} }, l)),
+      ...["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"].map((b) => I[b]("n", l)), I.testPlan("n", l, ["core", ...allTr]),
+      ...I.steeringKnownFiles().map((n) => I.steeringStub(n, l))].map(varsOf);
+    const enVars = varText("en");
+    ok(enVars.join(" ").includes("{{variables}}") && ["pt", "es", "pt-BR"].every((l) => JSON.stringify(varText(l)) === JSON.stringify(enVars)),
+      "1.25.1 review: {{template variables}} are English-stable — every builder and steering stub names the same ones in PT / ES / pt-BR as in EN (got pt " + JSON.stringify(varsOf(I.promptStub("n", "pt"))) + ")");
 
     // 4. the classifier: Brazilian words still read as Portuguese ('no' = em+o, never a negator); an explicit pt-BR answers in pt-BR
     // (only Brazilian markers here — cadastro, usuário, senha, arquivo, tela: before D1 this read as English and "no LLM" negated +ai)
