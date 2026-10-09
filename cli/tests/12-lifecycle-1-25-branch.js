@@ -5,14 +5,18 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, tmp, CLI }) => {
+exports.run = ({ ok, all, spawnIn, tmp, CLI }) => {
   const js = JSON.stringify;
   // git isolated from the user's config (no global hooks, signing or default branch), the CLI with the same environment
   const cfg = path.join(tmp, "br-gitconfig");
   fs.writeFileSync(cfg, "");
   const env = { ...process.env, SPEC_PROJECT_DIR: tmp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: cfg, HOME: tmp, XDG_CONFIG_HOME: tmp, GIT_TERMINAL_PROMPT: "0",
     GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
-  const cli = (args, e) => { const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: e || env }); return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status }; };
+  const cli = (args, e) => { // in-process (1.27), but a --run — it waits for its commands: spawned
+    const o = { encoding: "utf8", env: e || env };
+    const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...args], o) : spawnIn(args, o);
+    return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
+  };
   const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env });
   const hasGit = (() => { const g = git(tmp, "--version"); return !g.error && g.status === 0; })();
   const st = (p, slug) => JSON.parse(fs.readFileSync(path.join(p, ".specs", slug, ".state.json"), "utf8"));

@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
 // B5 — `done --run` honours _Expect: fail_ (+ records the git commit), `init --check` / `finish --run` (meta.checks), `dev-spec log`.
 // Commands run in cmd.exe and sh alike (node -e "…" in double quotes); git runs isolated from the user's config and is optional.
 const Sb5 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -13,8 +13,8 @@ const b5cfg = path.join(tmp, "b5-gitconfig");
 fs.writeFileSync(b5cfg, "");
 const b5Env = { ...process.env, SPEC_PROJECT_DIR: tmp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: b5cfg, HOME: tmp, XDG_CONFIG_HOME: tmp,
   GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
-const rb5 = (args, input) => {
-  const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: b5Env, input });
+const rb5 = (args, input) => { // in-process (1.27), but a --run — it waits for its commands: spawned
+  const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: b5Env, input }) : spawnIn(args, { env: b5Env, input });
   return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", stderr: r.stderr || "", code: r.status };
 };
 const gitB5 = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: b5Env });

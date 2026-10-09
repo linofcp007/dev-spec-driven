@@ -6,17 +6,17 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI }) => {
   const tmpsIn = (d) => { try { return fs.readdirSync(d).filter((x) => /\.tmp$/i.test(x)); } catch { return ["<unreadable>"]; } };
   // roadmap --write where ROADMAP.md can't be replaced (a folder): an error, and no ROADMAP.md.<pid>.<ts>.tmp left behind.
   const t14 = path.join(tmp, "wp14-tmp");
-  run(["init", "--project", t14]);
-  run(["create", "Alpha", "core", "--project", t14]);
+  runIn(["init", "--project", t14]);
+  runIn(["create", "Alpha", "core", "--project", t14]);
   const specs14 = path.join(t14, ".specs");
   fs.rmSync(path.join(specs14, "ROADMAP.md"), { force: true });
   fs.mkdirSync(path.join(specs14, "ROADMAP.md"));
-  const rw14 = run(["roadmap", "--write", "--project", t14]);
-  const bl14 = run(["backlog", "add", "Later", "--project", t14]);
+  const rw14 = runIn(["roadmap", "--write", "--project", t14]);
+  const bl14 = runIn(["backlog", "add", "Later", "--project", t14]);
   ok(rw14.code === 1 && /dev-spec: /.test(rw14.out) && bl14.code === 0 && tmpsIn(specs14).length === 0,
     "roadmap --write fails cleanly when ROADMAP.md can't be replaced and neither it nor backlog add leaves a .tmp in .specs/ (left: " + tmpsIn(specs14).join(", ") + ")");
 
@@ -24,7 +24,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   // prints the refusal) with nothing ticked or recorded — MCP's spec_complete_task answers the same.
   const k14 = path.join(tmp, "wp14-lock");
   fs.mkdirSync(k14, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
-  run(["create", "Race", "core", "--project", k14]);
+  runIn(["create", "Race", "core", "--project", k14]);
   const kDir14 = path.join(k14, ".specs", "race");
   fs.writeFileSync(path.join(kDir14, "tasks.md"), "- [ ] 1. a\n- [ ] 2. b\n");
   const lock14 = path.join(kDir14, ".lock");
@@ -36,7 +36,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   try { bj14 = JSON.parse(busyJson14.stdout); } catch { /* stays {} */ }
   const untouched14 = /- \[ \] 1\./.test(fs.readFileSync(path.join(kDir14, "tasks.md"), "utf8")) && !(JSON.parse(fs.readFileSync(path.join(kDir14, ".state.json"), "utf8")).evidence || {})["1"];
   fs.rmSync(lock14, { force: true });
-  const free14 = run(["done", "race", "1", "--project", k14]);
+  const free14 = runIn(["done", "race", "1", "--project", k14]);
   ok(busy14.code === 1 && /Another dev-spec process is updating 'race' right now \(\.specs\/race\/\.lock\)/.test(busy14.out) && busyJson14.code === 1 && bj14.ok === false && bj14.busy === true &&
     untouched14 && free14.code === 0 && !fs.existsSync(lock14),
     "done under another process's feature lock: exit 1 with the busy error (--json prints {ok:false, busy:true}), nothing ticked; once released it ticks and leaves no .lock");
@@ -50,7 +50,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   fs.rmSync(lock14, { force: true });
   fs.rmSync(rlock14, { force: true });
   const kept14 = fs.existsSync(kDir14) && !fs.existsSync(path.join(kDir14, "load-test.md")) && !fs.existsSync(path.join(k14, ".specs", "sprint"));
-  const rnFree14 = run(["feature", "rename", "race", "sprint", "--project", k14]);
+  const rnFree14 = runIn(["feature", "rename", "race", "sprint", "--project", k14]);
   ok(rn14.code === 1 && /Another dev-spec process is updating 'race' right now/.test(rn14.out) && cr14.code === 1 && /updating 'race' right now/.test(cr14.out) &&
     bl14r.code === 1 && /updating \.specs\/roadmap\.json right now \(\.specs\/\.roadmap\.lock\)/.test(bl14r.out) && kept14 && rnFree14.code === 0 && !fs.existsSync(path.join(k14, ".specs", "sprint", ".lock")) && !fs.existsSync(kDir14),
     "feature rename / create on a held feature lock and backlog add on a held roadmap lock: exit 1, busy, nothing changed; once free the rename moves the folder and leaves no .lock (got " +
@@ -75,7 +75,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   // its pre-lock "the feature exists" read was stale, and its write recreated a zombie .specs/<slug>/.
   const lr14 = path.join(tmp, "wp14-lock-race");
   fs.mkdirSync(lr14, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
-  run(["create", "Imp", "core", "--project", lr14]);
+  runIn(["create", "Imp", "core", "--project", lr14]);
   const imp14 = path.join(lr14, ".specs", "imp");
   fs.writeFileSync(path.join(imp14, ".lock"), JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "held-by-test" })); // a live holder
   const race14 = path.join(tmp, "wp14-lock-race.js");

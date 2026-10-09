@@ -5,12 +5,13 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
 // C2 — `dev-spec decide` (= spec_decide) and `dev-spec spike` / `create --kind spike` (= spec_create {kind: "spike"}), EN / PT.
 const Sc2 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const jsonC2 = (s) => { try { return JSON.parse(s); } catch { return null; } };
-const rc2 = (args) => {
-  const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } });
+const rc2 = (args) => { // in-process (1.27), but a --run — it waits for its commands: spawned
+  const o = { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } };
+  const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...args], o) : spawnIn(args, o);
   return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
 };
 

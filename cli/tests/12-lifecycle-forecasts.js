@@ -4,14 +4,14 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   // Forecasts (done records ticks → velocity → ETA) and cross-feature overlaps on the CLI = the engine (spec_roadmap / spec_metrics
   // / spec_doctor), EN and PT; a project with no completed task prints nothing new.
   const Sb4 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const jsonB4 = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
   const pb4 = path.join(tmp, "pb4-proj");
-  const rb4 = (args) => run([...args, "--project", pb4]);
-  run(["init", "--lang", "en", "--project", pb4]);
+  const rb4 = (args) => runIn([...args, "--project", pb4]);
+  runIn(["init", "--lang", "en", "--project", pb4]);
   const apiB4 = Sb4.createFeature(pb4, "Api", ["core"], "", undefined, "en");
   const webB4 = Sb4.createFeature(pb4, "Web", ["core"], "", undefined, "en");
   fs.writeFileSync(path.join(apiB4.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Routes\n  - _Size: S_\n  - _Implements: src/api/routes.js_\n- [ ] 2. [US1] Auth\n  - _Size: S_\n" +
@@ -50,20 +50,20 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     "roadmap --write: ROADMAP.md carries the ETA column and the overlap under Needs attention");
 
   const ptB4 = path.join(tmp, "pb4-pt");
-  run(["init", "--lang", "pt", "--project", ptB4]);
+  runIn(["init", "--lang", "pt", "--project", ptB4]);
   const agoraB4 = Sb4.createFeature(ptB4, "Agora", ["core"], "", undefined, "pt");
   const depoisB4 = Sb4.createFeature(ptB4, "Depois", ["core"], "", undefined, "pt");
   fs.writeFileSync(path.join(agoraB4.dir, "tasks.md"), "# Tarefas\n\n- [ ] 1. [US1] A\n- [ ] 2. [US1] B\n- [ ] 3. [US1] C\n- [ ] 4. [US1] D\n  - _Implements: src/x.js_\n");
   fs.writeFileSync(path.join(depoisB4.dir, "tasks.md"), "# Tarefas\n\n- [ ] 1. [US1] E\n  - _Implements: src/x.js:3_\n");
-  [1, 2, 3].forEach((n) => run(["done", "agora", String(n), "--project", ptB4]));
-  const ptRmB4 = run(["roadmap", "--project", ptB4]);
-  const ptMetB4 = run(["metrics", "agora", "--project", ptB4]);
-  const ptDocB4 = run(["doctor", "depois", "--project", ptB4]);
+  [1, 2, 3].forEach((n) => runIn(["done", "agora", String(n), "--project", ptB4]));
+  const ptRmB4 = runIn(["roadmap", "--project", ptB4]);
+  const ptMetB4 = runIn(["metrics", "agora", "--project", ptB4]);
+  const ptDocB4 = runIn(["doctor", "depois", "--project", ptB4]);
   ok(/^ {5}agora .*  · previsão \d{4}-\d{2}-\d{2}/m.test(ptRmB4.out) && /^Velocidade: .* ponto\(s\)\/dia útil — 3 tarefa\(s\)/m.test(ptRmB4.out) &&
     /^⚠ 1 sobreposição\(ões\) de ficheiros entre features:\n {2}agora ↔ depois: src\/x\.js$/m.test(ptRmB4.out) && /^ {2}velocidade: .* ponto\(s\)\/dia útil/m.test(ptMetB4.out) &&
     /▲ cross-feature-overlap — há tarefas por fazer que planeiam os mesmos ficheiros que outra feature ativa — agora \(src\/x\.js\)/.test(ptDocB4.out),
     "PT project: roadmap's previsão / Velocidade / sobreposição lines, metrics' velocidade and doctor's overlap detail in European Portuguese (got " + JSON.stringify(ptRmB4.out.slice(0, 500)) + ")");
-  const helpB4 = run(["help"]).out;
+  const helpB4 = runIn(["help"]).out;
   const docblockB4 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(/roadmap \[--write\]\[--html\]\[--lang\] +Roadmap: .*ETA per feature \(velocity from ticked tasks, _Size: XS\|S\|M\|L\|XL_\), cross-feature file overlaps/.test(helpB4) &&
     /metrics \[feature\] \[--write\] +Lead times.*velocity/.test(helpB4),
@@ -73,14 +73,14 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   // (a → a hid b ↔ c).
   {
     const pc = path.join(tmp, "r6-cycles");
-    run(["init", "--lang", "en", "--project", pc]);
+    runIn(["init", "--lang", "en", "--project", pc]);
     for (const n of ["a", "b", "c"]) Sb4.createFeature(pc, n, ["core"], "", undefined, "en");
     const rmf = path.join(pc, ".specs", "roadmap.json");
     const rm = JSON.parse(fs.readFileSync(rmf, "utf8"));
     Object.assign(rm.features, { a: { dependsOn: ["a"] }, b: { dependsOn: ["c"] }, c: { dependsOn: ["b"] } });
     fs.writeFileSync(rmf, JSON.stringify(rm, null, 2));
-    const r = run(["roadmap", "--project", pc]);
-    const j = jsonB4(run(["roadmap", "--json", "--project", pc]));
+    const r = runIn(["roadmap", "--project", pc]);
+    const j = jsonB4(runIn(["roadmap", "--json", "--project", pc]));
     ok(r.code === 0 && /CYCLE: a → a/.test(r.out) && /⚠ Circular dependency: b → c → b/.test(r.out) && j && j.cycles && j.cycles.length === 2,
       "1.24 r6 G6: `dev-spec roadmap` names every cycle (the head line's first, a line per other one); --json carries `cycles` (got " + JSON.stringify(r.out.slice(0, 300)) + ")");
   }

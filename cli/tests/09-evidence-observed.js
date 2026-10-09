@@ -5,12 +5,13 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   const Sob = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const HOOK = path.join(__dirname, "..", "hooks", "observe-hook.js");
   const jsonOb = (s) => { try { return JSON.parse(s); } catch { return null; } };
-  const rob = (proj, args) => {
-    const r = spawnSync(process.execPath, [CLI, ...args, "--project", proj], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
+  const rob = (proj, args) => { // in-process (1.27), but a --run — it waits for its commands: spawned
+    const a = [...args, "--project", proj], opts = { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } };
+    const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...a], opts) : spawnIn(a, opts);
     return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
   };
   const stOb = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
@@ -64,7 +65,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   // Back to reported: the same records verify (today's rule); help and the command table document --evidence.
   rob(po, ["init", "--evidence", "reported"]);
   const docR = rob(po, ["doctor", fo.slug]);
-  const help = run(["--help"]).out;
+  const help = runIn(["--help"]).out;
   const docblock = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(!/not observed by the harness/.test(docR.out) && help.includes("--evidence reported|observed") && docblock.includes("--evidence reported|observed"),
     "feature F1: back to meta.evidence reported the unobserved run verifies again; --help and the command table document init --evidence reported|observed");

@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
 // B2.1 `dev-spec export [feature] [--md] [--write]` = spec_export; B2.2 `dev-spec changelog [--since …] [--write]` = spec_changelog.
 const Sb2 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const pb2 = path.join(tmp, "pb2-proj");
@@ -14,7 +14,7 @@ const fb2 = Sb2.createFeature(pb2, "Checkout", ["core"], "", undefined, "en");
 fs.writeFileSync(path.join(fb2.dir, "requirements.md"), "# Feature: Checkout\n\n## Summary\nPay for the cart in one step.\n\n### US-1 (P1): Pay\n" +
   "1. **US-1.AC-1** — WHEN the shopper pays THE SYSTEM SHALL show the receipt <script>alert(1)</script>\n");
 fs.writeFileSync(path.join(fb2.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Charge the card\n  - _Requirements: US-1.AC-1_\n");
-const rb2 = (args) => run([...args, "--project", pb2]);
+const rb2 = (args) => runIn([...args, "--project", pb2]);
 const jb2 = (args) => { const r = spawnSync(process.execPath, [CLI, ...args, "--json", "--project", pb2], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } }); let j = null; try { j = JSON.parse(r.stdout); } catch { /* not JSON */ } return { code: r.status, j, err: r.stderr }; };
 const noDateB2 = (s) => String(s).replace(/\d{4}-\d{2}-\d{2}/g, "D");
 const eHtml = rb2(["export", "checkout"]);
@@ -59,7 +59,7 @@ ok(cMd.code === 0 && /^# Release notes — pb2-proj\n/.test(cMd.out) && /\n## Ad
   "changelog --since <date>: the release notes on stdout (Added · Changed · Fixed); --json = spec_changelog's result");
 const cBad = rb2(["changelog", "--since", "soon"]);
 const cNoVal = rb2(["changelog", "--since"]);
-const cLast = run(["changelog", "--since", "last", "--project", pb2]);
+const cLast = runIn(["changelog", "--since", "last", "--project", pb2]);
 ok(cBad.code === 1 && /since: 'soon' is not an ISO date/.test(cBad.out) && cNoVal.code === 1 && /since/.test(cNoVal.out) &&
   cLast.code === 0 && /No release notes were written yet/.test(cLast.out) && /^# Release notes/m.test(cLast.out),
   "changelog: a bad --since exits 1 (localized), --since without a value is refused; --since last without a stamp notes it on stderr and lists everything");
@@ -81,9 +81,9 @@ const pt2 = path.join(tmp, "pb2-pt");
 Sb2.initProject(pt2, ["core"], "pt");
 const fpt2 = Sb2.createFeature(pt2, "Pagamento", ["core"], "Pagar o carrinho.", undefined, "pt");
 setState(fpt2.dir, { finished: { at: "2026-06-01T00:00:00.000Z", files: {} } });
-const ptE = run(["export", "pagamento", "--md", "--project", pt2]);
-const ptC = run(["changelog", "--project", pt2]);
-const ptW = run(["export", "pagamento", "--write", "--project", pt2]);
+const ptE = runIn(["export", "pagamento", "--md", "--project", pt2]);
+const ptC = runIn(["changelog", "--project", pt2]);
+const ptW = runIn(["export", "pagamento", "--write", "--project", pt2]);
 ok(ptE.code === 0 && /_Especificação da feature · gerado a /.test(ptE.out) && /\n## Resumo\n\nPagar o carrinho\.\n/.test(ptE.out) && /\n## Histórias de utilizador e critérios de aceitação\n/.test(ptE.out) &&
   ptC.code === 0 && /^# Notas de versão — pb2-pt\n/.test(ptC.out) && /\n## Adicionado\n/.test(ptC.out) && /\n## Corrigido\n\n_Nada\._/.test(ptC.out) &&
   ptW.code === 0 && /^✎ gerado .*pagamento\.html/.test(ptW.out),

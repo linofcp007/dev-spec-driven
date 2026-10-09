@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const SF = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = (v) => JSON.stringify(v);
   const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, typeof s === "string" ? s : JSON.stringify(s, null, 2)); };
@@ -24,9 +24,9 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
       { id: "D2", title: "The time to live", phase: "p1", control: { kind: "number", min: 5, max: 120, step: 5, default: 30, unit: "min" },
         tasks: [{ id: "ttl", title: "TTL of {{value}} {{unit}}", do: "Set the expiry to {{value}} {{unit}}.", after: ["D1/lru"], acceptance: ["A session expires after {{value}} {{unit}}"] }] }] }] };
   const answers = { D1: { status: "ok" }, D2: { status: "ok", value: 20, comment: "Shorter in staging" } };
-  const mk = (name) => { const p = path.join(tmp, name); run(["init", "core", "--project", p]); put(p, ".fluidplan/cache/plan.json", plan); put(p, ".fluidplan/cache/answers.json", answers); return p; };
+  const mk = (name) => { const p = path.join(tmp, name); runIn(["init", "core", "--project", p]); put(p, ".fluidplan/cache/plan.json", plan); put(p, ".fluidplan/cache/answers.json", answers); return p; };
   const fa = mk("p17f-a"), fb = mk("p17f-b"), fc = mk("p17f-c");
-  const im = run(["import", "fluidplan", ".fluidplan/cache", "core", "--project", fa]);
+  const im = runIn(["import", "fluidplan", ".fluidplan/cache", "core", "--project", fa]);
   const tA = rd(fa, ".specs", "session-cache", "tasks.md"), rA = rd(fa, ".specs", "session-cache", "requirements.md");
   const logA = SF.decisionLog(rd(fa, ".specs", "session-cache", "decisions.md"));
   ok(im.code === 0 && /^Imported fluidplan \.fluidplan\/cache → feature 'session-cache' \[core\] \(en\)\n/.test(im.out) && /mapping: \d+ ID\(s\) — page storage → US-1, task 1\.1 \/ acceptance 1 → US-1\.AC-1/.test(im.out) &&
@@ -35,7 +35,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     /- \[ \] 2\. TTL of 20 min\n  - _Requirements: US-1\.AC-2_\n  - _Depends: 1_\n  - Decision: D-2 — The time to live \(20 min\)\n  - Do: Set the expiry to 20 min\.\n  - Remark: “Shorter in staging”/.test(tA) &&
     js(logA.map((e) => [e.id, e.title, e.decision.split("\n")[0]])) === js([["D-1", "The cache engine", "In-process memory"], ["D-2", "The time to live", "20 min"]]),
     "1.17 F (CLI): import fluidplan <plan folder> [tracks] — plan.json + answers.json alone: the kept option's task and the filled template, after → _Depends:_, the criteria, decisions.md (D-1, D-2); the summary line, mapping and warnings printed (got " + js(im.out) + ")");
-  const jB = (() => { try { return JSON.parse(run(["import", "fluidplan", ".fluidplan/cache", "core", "--json", "--project", fb]).out); } catch { return null; } })();
+  const jB = (() => { try { return JSON.parse(runIn(["import", "fluidplan", ".fluidplan/cache", "core", "--json", "--project", fb]).out); } catch { return null; } })();
   const eC = SF.importSpec(fc, "fluidplan", ".fluidplan/cache", { tracks: ["core"] });
   ok(jB && jB.ok === true && jB.tool === "fluidplan" && eC.ok && js(jB.mapping) === js(eC.mapping) && js(jB.warnings) === js(eC.warnings) && js(jB.imported) === js(eC.imported) &&
     rd(fb, ".specs", "session-cache", "decisions.md").replace(/\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z)?/g, "D") === rd(fc, ".specs", "session-cache", "decisions.md").replace(/\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z)?/g, "D"),
@@ -56,13 +56,13 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     "1.17 F (CLI): import fluidplan - reads a PLAN.md from stdin (a ticked task stays ticked, After → _Depends:_); --json = spec_import {text} (inline, source null, the PLAN.md-only warning) (got " + js([st.out, stJ.out.slice(0, 200)]) + ")");
   put(fa, ".fluidplan/other/plan.json", { ...plan, id: "other", title: "Other" });
   put(fa, "notes/todo.md", "# Todo\n\n- buy milk\n");
-  const sev = run(["import", "fluidplan", ".fluidplan", "--json", "--project", fa]);
+  const sev = runIn(["import", "fluidplan", ".fluidplan", "--json", "--project", fa]);
   let sevJ = null;
   try { sevJ = JSON.parse(sev.out); } catch { /* not JSON */ }
-  const outside = run(["import", "fluidplan", "../p17f-b/.fluidplan/cache", "--project", fa]);
-  const notFp = run(["import", "fluidplan", "notes/todo.md", "--project", fa]);
-  const pt = run(["import", "fluidplan", ".fluidplan/cache", "core", "--lang", "pt", "--name", "Cache PT", "--project", fa]);
-  const help = run(["help"]).out;
+  const outside = runIn(["import", "fluidplan", "../p17f-b/.fluidplan/cache", "--project", fa]);
+  const notFp = runIn(["import", "fluidplan", "notes/todo.md", "--project", fa]);
+  const pt = runIn(["import", "fluidplan", ".fluidplan/cache", "core", "--lang", "pt", "--name", "Cache PT", "--project", fa]);
+  const help = runIn(["help"]).out;
   ok(sev.code === 1 && sevJ && sevJ.ok === false && /'\.fluidplan' holds several fluidplan plans \(cache, other\)/.test(sevJ.error) && outside.code === 1 && /outside the project/.test(outside.out) &&
     notFp.code === 1 && /is not a fluidplan PLAN\.md or DECISIONS\.md/.test(notFp.out) && pt.code === 0 && /^Importado de fluidplan \.fluidplan\/cache → feature 'cache-pt'/.test(pt.out) &&
     /^> Importado de fluidplan `\.fluidplan\/cache` em /m.test(rd(fa, ".specs", "cache-pt", "tasks.md")) && /  - Decisão: D-2 — The time to live \(20 min\)/.test(rd(fa, ".specs", "cache-pt", "tasks.md")) &&

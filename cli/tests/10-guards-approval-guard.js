@@ -5,33 +5,33 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const SF = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
   const meta = (p) => { try { return JSON.parse(fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8")).meta || {}; } catch { return {}; } };
   const pg = path.join(tmp, "ffgate-en");
   // init --approval-guard off|ask|deny = spec_init {approvalGuard}: stored, noted, always reported; anything else refused.
-  const i1 = run(["init", "core", "--approval-guard", "deny", "--project", pg]);
-  const i2 = jsonOf(run(["init", "--json", "--project", pg]));
-  const i3 = run(["init", "--approval-guard", "maybe", "--project", pg]);
-  const i4 = run(["init", "--approval-guard", "--json", "--project", pg]);
-  const i5 = jsonOf(run(["init", "--approval-guard=ASK", "--json", "--project", pg]));
+  const i1 = runIn(["init", "core", "--approval-guard", "deny", "--project", pg]);
+  const i2 = jsonOf(runIn(["init", "--json", "--project", pg]));
+  const i3 = runIn(["init", "--approval-guard", "maybe", "--project", pg]);
+  const i4 = runIn(["init", "--approval-guard", "--json", "--project", pg]);
+  const i5 = jsonOf(runIn(["init", "--approval-guard=ASK", "--json", "--project", pg]));
   ok(i1.code === 0 && /Approval guard DENY — an agent's approval/.test(i1.out) && meta(pg).approvalGuard === "ask" && i2 && i2.approvalGuard === "deny" && i2.approvalGuardNote === undefined &&
     i3.code === 1 && /--approval-guard takes off, ask or deny \(got 'maybe'\)/.test(i3.out) && i4.code === 1 &&
-    i5 && i5.approvalGuard === "ask" && /^Approval guard ASK/.test(i5.approvalGuardNote) && /--approval-guard off\|ask\|deny/.test(run(["help"]).out),
+    i5 && i5.approvalGuard === "ask" && /^Approval guard ASK/.test(i5.approvalGuardNote) && /--approval-guard off\|ask\|deny/.test(runIn(["help"]).out),
     "feature F2: init --approval-guard deny / =ASK stores meta.approvalGuard with a note; init --json always reports it; 'maybe' or a missing value is refused (exit 1); help documents it (got " +
     JSON.stringify([i1.code, i2 && i2.approvalGuard, i3.out.trim(), i4.code, i5 && i5.approvalGuard, meta(pg).approvalGuard]) + ")");
   const pp = path.join(tmp, "ffgate-pt");
-  const p1 = run(["init", "--lang", "pt", "--approval-guard", "deny", "--project", pp]);
-  const p2 = run(["init", "--approval-guard", "talvez", "--project", pp]);
+  const p1 = runIn(["init", "--lang", "pt", "--approval-guard", "deny", "--project", pp]);
+  const p2 = runIn(["init", "--approval-guard", "talvez", "--project", pp]);
   ok(p1.code === 0 && /O guarda de aprovações está em DENY/.test(p1.out) && p2.code === 1 && /--approval-guard aceita off, ask ou deny \(recebido 'talvez'\)/.test(p2.out),
     "feature F2: the init note and the bad-value error are in the project language (PT) (got " + JSON.stringify([p1.out.trim().split(/\r?\n/).pop(), p2.out.trim()]) + ")");
 
   // End to end: an agent's Bash `dev-spec approve … --force` in a deny project is refused by the hook; the command the reason
   // gives the human runs as is (the CLI itself is never gated — the human's own run records the approval).
   const pd = path.join(tmp, "ffgate-deny");
-  run(["init", "core", "--approval-guard", "deny", "--project", pd]);
-  run(["create", "Checkout", "core", "--project", pd]);
+  runIn(["init", "core", "--approval-guard", "deny", "--project", pd]);
+  runIn(["create", "Checkout", "core", "--project", pd]);
   const hook = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "approval-hook.js")], { encoding: "utf8",
     input: JSON.stringify({ hook_event_name: "PreToolUse", cwd: pd, tool_name: "Bash", tool_input: { command: 'node "' + CLI + '" approve checkout requirements --force' } }),
     env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
@@ -58,7 +58,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   };
   const q = JSON.stringify(CLI);
   const pr = path.join(tmp, "ffgate-r10");
-  const r0 = run(["init", "core", "--approval-guard", "deny", "--evidence", "observed", "--check", 'test=node -e "process.exit(0)"', "--roles", "design=tech", "--stop-check", "on", "--project", pr]);
+  const r0 = runIn(["init", "core", "--approval-guard", "deny", "--evidence", "observed", "--check", 'test=node -e "process.exit(0)"', "--roles", "design=tech", "--stop-check", "on", "--project", pr]);
   const hEv = hookRun(pr, "Bash", "node " + q + " init --evidence reported");
   const hChk = hookRun(pr, "Bash", "node " + q + " init --check test=");
   const hRoles = hookRun(pr, "PowerShell", "node " + q + " init --roles none");
@@ -83,7 +83,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const hW = hookRun(pr, "Bash", "echo x >> .specs/roadmap.json");
   fs.appendFileSync(path.join(pr, ".specs", "roadmap.json"), "x");
   const hAfter = hookRun(pr, "Bash", "node " + q + " approve checkout requirements");
-  const offTry = run(["init", "--approval-guard", "off", "--project", pr]);
+  const offTry = runIn(["init", "--approval-guard", "off", "--project", pr]);
   ok(hW.decision === "deny" && /Make that change yourself/.test(hW.note) && SF.approvalGuardLevel(pr) === "deny" && hAfter.decision === "deny" && hAfter.status === 0 && offTry.code === 1,
     "feature F2 review R1: a Bash write of .specs/roadmap.json is refused; after `echo x >> .specs/roadmap.json` the guard still reads deny (engine and hook) and init --approval-guard off can't write over the broken file (got " +
     JSON.stringify([hW.decision, SF.approvalGuardLevel(pr), hAfter.decision, offTry.code, offTry.out.trim().slice(0, 120)]) + ")");

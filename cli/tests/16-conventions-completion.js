@@ -53,7 +53,7 @@ function readScript(text, shell) {
 // A shell that runs: the first of the candidates that answers --version.
 const probe = (cands) => cands.filter(Boolean).find((b) => { try { return spawnSync(b, ["--version"], { encoding: "utf8", timeout: 20000 }).status === 0; } catch { return false; } });
 
-exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
+exports.run = async ({ ok, all, remeasure, run, runIn, tmp, CLI }) => {
   const ROOT = path.join(path.dirname(CLI), "..");
   const S = require(path.join(ROOT, "mcp", "lib", "spec.js"));
   const C = require(path.join(ROOT, "cli", "completion.js"));
@@ -115,9 +115,9 @@ exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
   // with nothing on stdout (text only); pwsh = powershell; it reads no project (a mistyped SPEC_PROJECT_DIR in a profile's
   // environment refuses nothing); `completion --help` gives the install lines with this CLI's path, PowerShell first.
   {
-    const none = run(["completion"]), bad = run(["completion", "tcsh"]), j = spawnSync(process.execPath, [CLI, "completion", "bash", "--json"], { encoding: "utf8", env: cleanEnv() });
+    const none = runIn(["completion"]), bad = runIn(["completion", "tcsh"]), j = spawnSync(process.execPath, [CLI, "completion", "bash", "--json"], { encoding: "utf8", env: cleanEnv() });
     const pw = gen("pwsh"), env = gen("bash", { ...cleanEnv(), SPEC_PROJECT_DIR: path.join(tmp, "c125-nope") });
-    const help = run(["completion", "--help"]);
+    const help = runIn(["completion", "--help"]);
     all("1.25 completion: `completion` needs a shell (usage, exit 1), refuses another (naming powershell, bash, zsh, fish), refuses --json (stdout empty), takes pwsh for powershell, ignores a mistyped SPEC_PROJECT_DIR, and its --help gives the install lines with this CLI's path — PowerShell first (got " +
       JSON.stringify([none.code, none.out.slice(0, 120), bad.code, bad.out.slice(0, 160), j.status, j.stdout, pw.status, env.status, env.stderr, help.out.slice(0, 400)]) + ")", [
       () => none.code === 1, () => /completion <powershell\|bash\|zsh\|fish>/.test(none.out), () => bad.code === 1, () => /tcsh/.test(bad.out),
@@ -144,9 +144,9 @@ exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
 
   // A project with active, archived, hidden, reserved and hand-made folders.
   const p = path.join(tmp, "c125-proj");
-  run(["init", "--project", p]);
-  for (const n of ["Login", "Logout", "Billing", "Reports"]) run(["create", n, "--project", p]);
-  run(["feature", "archive", "billing", "--project", p]);
+  runIn(["init", "--project", p]);
+  for (const n of ["Login", "Logout", "Billing", "Reports"]) runIn(["create", n, "--project", p]);
+  runIn(["feature", "archive", "billing", "--project", p]);
   const sp = path.join(p, ".specs");
   for (const d of [".hidden", "_tmp", "My Notes", "exports", path.join("templates"), path.join("_archive", "old-thing"), path.join("_archive", ".x")]) fs.mkdirSync(path.join(sp, d), { recursive: true });
   fs.writeFileSync(path.join(sp, "templates", ".state.json"), "{}"); // a feature made before "templates" was reserved stays one

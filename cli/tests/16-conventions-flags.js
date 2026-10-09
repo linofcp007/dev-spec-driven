@@ -5,59 +5,59 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   const b13 = path.join(tmp, "wp13-bool");
-  run(["init", "core", "--project", b13]);
-  run(["create", "Billing", "tdd", "--project", b13]);
-  run(["create", "Other", "core", "--project", b13]);
+  runIn(["init", "core", "--project", b13]);
+  runIn(["create", "Billing", "tdd", "--project", b13]);
+  runIn(["create", "Other", "core", "--project", b13]);
   const t13 = path.join(b13, ".specs", "billing", "tasks.md");
   const ex13 = path.join(b13, ".specs", "billing", ".execution");
   fs.writeFileSync(t13, "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] First\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Second\n- [ ] 3. [US1] Third\n- [ ] 4. [US1] Fourth\n");
   const st13 = () => { try { return JSON.parse(fs.readFileSync(path.join(b13, ".specs", "billing", ".state.json"), "utf8")); } catch { return {}; } };
-  const noRun13 = run(["done", "billing", "1", "--run=false", "--project", b13]);
+  const noRun13 = runIn(["done", "billing", "1", "--run=false", "--project", b13]);
   ok(noRun13.code === 0 && !/\$ node/.test(noRun13.out) && !(st13().evidence || {})["1"] && /Task 1 done\./.test(noRun13.out) && !/verified/.test(noRun13.out),
     "done --run=false runs no _Verify:_ command (a plain tick, no evidence recorded) — the string 'false' is not a switch");
-  const addNoRm13 = run(["add-track", "other", "tdd", "--remove=false", "--project", b13]);
+  const addNoRm13 = runIn(["add-track", "other", "tdd", "--remove=false", "--project", b13]);
   ok(addNoRm13.code === 0 && /'other' now \[core \+tdd\]/.test(addNoRm13.out), "add-track --remove=false adds the track (removes nothing)");
-  const briefNo13 = run(["brief", "billing", "--write=false", "--project", b13]);
-  const finNo13 = run(["finish", "billing", "--write=false", "--project", b13]);
-  const rmNo13 = run(["roadmap", "--write=false", "--html=false", "--project", b13]);
+  const briefNo13 = runIn(["brief", "billing", "--write=false", "--project", b13]);
+  const finNo13 = runIn(["finish", "billing", "--write=false", "--project", b13]);
+  const rmNo13 = runIn(["roadmap", "--write=false", "--html=false", "--project", b13]);
   let nb13 = null;
-  try { nb13 = JSON.parse(run(["next", "billing", "--batch=false", "--json", "--project", b13]).out); } catch { /* not JSON */ }
+  try { nb13 = JSON.parse(runIn(["next", "billing", "--batch=false", "--json", "--project", b13]).out); } catch { /* not JSON */ }
   ok(briefNo13.code === 0 && !/Brief →/.test(briefNo13.out) && !/merge-summary/.test(finNo13.out) && !fs.existsSync(ex13) &&
     !/wrote/.test(rmNo13.out) && !fs.existsSync(path.join(b13, ".specs", "ROADMAP.html")) && nb13 && nb13.ok === true && !("batch" in nb13) &&
-    /^Feature: billing/m.test(run(["status", "billing", "--json=false", "--project", b13]).out),
+    /^Feature: billing/m.test(runIn(["status", "billing", "--json=false", "--project", b13]).out),
     "--write=false (brief, finish, roadmap), --html=false, --batch=false and --json=false are false, as over MCP");
-  const maybe13 = run(["done", "billing", "2", "--run=maybe", "--project", b13]);
-  const yes13 = run(["brief", "billing", "2", "--write=true", "--project", b13]);
+  const maybe13 = runIn(["done", "billing", "2", "--run=maybe", "--project", b13]);
+  const yes13 = runIn(["brief", "billing", "2", "--write=true", "--project", b13]);
   ok(maybe13.code === 1 && /--run must be a boolean \(true\/false\) \(got "maybe"\)/.test(maybe13.out) && !/- \[x\] 2\./.test(fs.readFileSync(t13, "utf8")) &&
     yes13.code === 0 && fs.existsSync(path.join(ex13, "task-2-brief.md")),
     "a boolean switch with any other =value (--run=maybe) exits 1 and ticks nothing; --write=true still writes");
   // The CLI refuses what MCP refuses: task numbers, --cap, --max, --kind, backlog actions.
-  const br13 = [run(["brief", "billing", "3.9", "--write", "--project", b13]), run(["brief", "billing", "3abc", "--project", b13]), run(["brief", "billing", "1e21", "--project", b13])];
+  const br13 = [runIn(["brief", "billing", "3.9", "--write", "--project", b13]), runIn(["brief", "billing", "3abc", "--project", b13]), runIn(["brief", "billing", "1e21", "--project", b13])];
   ok(br13.every((r) => r.code === 1 && /number must be an integer/.test(r.out)) && !fs.existsSync(path.join(ex13, "task-3-brief.md")),
     "brief 3.9 / 3abc / 1e21 exit 1 (never task 3 or 1), like spec_task_brief — no brief written");
   fs.mkdirSync(path.join(b13, "src"), { recursive: true });
   fs.writeFileSync(path.join(b13, "src", "a.js"), "x\n");
-  const cap13 = ["-3", "0", "abc", "2.9"].map((c) => run(["scan", "--cap", c, "--project", b13])).concat([run(["scan", "--cap=-3", "--project", b13])]);
-  ok(cap13.every((r) => r.code === 1 && /--cap must be an integer ≥ 1/.test(r.out) && !/files:/.test(r.out)) && run(["scan", "--cap", "5", "--project", b13]).code === 0,
+  const cap13 = ["-3", "0", "abc", "2.9"].map((c) => runIn(["scan", "--cap", c, "--project", b13])).concat([runIn(["scan", "--cap=-3", "--project", b13])]);
+  ok(cap13.every((r) => r.code === 1 && /--cap must be an integer ≥ 1/.test(r.out) && !/files:/.test(r.out)) && runIn(["scan", "--cap", "5", "--project", b13]).code === 0,
     "scan --cap -3 / 0 / abc / 2.9 (and --cap=-3) exit 1 like spec_scan (cap ≥ 1); --cap 5 scans");
-  const max13 = ["1.5", "0", "abc"].map((m) => run(["next", "billing", "--batch", "--max", m, "--project", b13]));
-  ok(max13.every((r) => r.code === 1 && /--max must be an integer ≥ 1/.test(r.out)) && run(["next", "billing", "--batch", "--max", "2", "--project", b13]).code === 0,
+  const max13 = ["1.5", "0", "abc"].map((m) => runIn(["next", "billing", "--batch", "--max", m, "--project", b13]));
+  ok(max13.every((r) => r.code === 1 && /--max must be an integer ≥ 1/.test(r.out)) && runIn(["next", "billing", "--batch", "--max", "2", "--project", b13]).code === 0,
     "next --max 1.5 / 0 / abc exit 1 (spec_next_task: max is an integer ≥ 1)");
-  const kind13 = run(["create", "Zed", "--kind", "bugfx", "--project", b13]);
-  const kindOk13 = run(["create", "Zed", "--kind", "Bugfix", "--project", b13]);
+  const kind13 = runIn(["create", "Zed", "--kind", "bugfx", "--project", b13]);
+  const kindOk13 = runIn(["create", "Zed", "--kind", "Bugfix", "--project", b13]);
   let zedKind = null;
   try { zedKind = JSON.parse(fs.readFileSync(path.join(b13, ".specs", "zed", ".state.json"), "utf8")).kind; } catch { /* missing */ }
   ok(kind13.code === 1 && /kind must be one of: feature, bugfix, spike, change \(got "bugfx"\)/.test(kind13.out) && kindOk13.code === 0 && zedKind === "bugfix",
     "create --kind bugfx exits 1 and scaffolds nothing (a typo can no longer fix the kind for good); --kind Bugfix works");
-  const bl13 = run(["backlog", "delete", "Pay", "--project", b13]);
+  const bl13 = runIn(["backlog", "delete", "Pay", "--project", b13]);
   // (1.14 full review S7: the list now names rm's alias remove — the spec_backlog enum.)
-  ok(bl13.code === 1 && /action must be one of: add, rm, remove, list \(got "delete"\)/.test(bl13.out) && run(["backlog", "--project", b13]).code === 0 && run(["backlog", "list", "--project", b13]).code === 0,
+  ok(bl13.code === 1 && /action must be one of: add, rm, remove, list \(got "delete"\)/.test(bl13.out) && runIn(["backlog", "--project", b13]).code === 0 && runIn(["backlog", "list", "--project", b13]).code === 0,
     "backlog delete (an unknown action) exits 1 like spec_backlog; a bare backlog / backlog list still list");
   // --json on a refusal: the engine result on stdout (= the MCP tool's), exit 1.
   const runJ = (args) => {
-    const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } });
+    const r = spawnIn(args, { env: { ...process.env, SPEC_PROJECT_DIR: tmp } });
     let j = null;
     try { j = JSON.parse(r.stdout); } catch { /* not JSON */ }
     return { j, code: r.status };
@@ -73,12 +73,12 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   // 1.22 review: --json where the output is text only — the help (help, no command, --help anywhere), rules, mcp-config, evals —
   // is a usage error (exit 1, nothing on stdout, localized): it printed the text on stdout with exit 0 (evals handed it on to
   // run-evals.js, which took it silently). --json=false still prints them.
-  const raw22 = (args, project = b13) => spawnSync(process.execPath, [CLI, ...args, "--project", project], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } });
+  const raw22 = (args, project = b13) => spawnIn([...args, "--project", project], { env: { ...process.env, SPEC_PROJECT_DIR: tmp } });
   const txt22 = [["help", "--json"], ["--json"], ["status", "--help", "--json"], ["rules", "agents", "--json"], ["mcp-config", "cursor", "--json"],
     ["evals", "billing", "--json"], ["evals", "--json", "billing"]].map((a) => raw22(a));
   const what22 = ["help", "help", "help", "rules", "mcp-config", "evals", "evals"];
   const pj22 = path.join(tmp, "wp22-json-pt");
-  run(["init", "--lang", "pt", "--project", pj22]);
+  runIn(["init", "--lang", "pt", "--project", pj22]);
   const ptTxt22 = raw22(["mcp-config", "--json"], pj22);
   const off22 = [raw22(["help", "--json=false"]), raw22(["rules", "agents", "--json=false"]), raw22(["mcp-config", "cursor", "--json=false"])];
   ok(txt22.every((r, i) => r.status === 1 && r.stdout === "" && r.stderr.trim() === "dev-spec: --json is not available for '" + what22[i] + "': it prints text only. Run it without --json.") &&
@@ -109,7 +109,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   // 1.22 review: a task number is an integer ≥ 0 (spec_task_brief / spec_complete_task's schema minimum; a hand-written "0."
   // task is one next serves) — done / undone / brief refuse -1 / 1.5 in the MCP validator's words, before anything runs.
   const num22 = [["done", "billing", "-1", "--run"], ["done", "billing", "1.5"], ["undone", "billing", "-1"], ["brief", "billing", "-1", "--write"], ["brief", "billing", "x"]]
-    .map((a) => run([...a, "--project", b13]));
+    .map((a) => runIn([...a, "--project", b13]));
   const numJ22 = runJ(["done", "billing", "-1", "--json", "--project", b13]);
   ok(num22.every((r) => r.code === 1 && /Invalid argument\(s\): number must be an integer ≥ 0 \(got "(?:-1|1\.5|x)"\)/.test(r.out) && !/^\$ /m.test(r.out)) &&
     !fs.existsSync(path.join(ex13, "task--1-brief.md")) && numJ22.code === 1 && numJ22.j && numJ22.j.ok === false && /≥ 0 \(got "-1"\)/.test(numJ22.j.error),
@@ -117,30 +117,30 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
     JSON.stringify(num22.map((r) => [r.code, r.out.trim().slice(0, 80)])) + ")");
   // PT / ES: every line of status, doctor, depend, add-track, ears, usage and unknown command in the project/feature language.
   const pt13 = path.join(tmp, "wp13-pt");
-  run(["init", "--lang", "pt", "--project", pt13]);
-  run(["create", "Login", "tdd", "saas", "ai", "--project", pt13]);
-  run(["create", "Other", "--project", pt13]);
-  const ptSt13 = run(["status", "login", "--project", pt13]).out;
-  const ptDoc13 = run(["doctor", "login", "--project", pt13]).out;
-  const ptDep13 = run(["depend", "login", "other", "--order", "2", "--project", pt13]).out;
-  const ptDep0 = run(["depend", "other", "--project", pt13]).out;
-  const ptAdd13 = run(["add-track", "other", "tdd", "--project", pt13]).out;
-  const ptEars13 = run(["ears", "login", "--project", pt13]).out;
+  runIn(["init", "--lang", "pt", "--project", pt13]);
+  runIn(["create", "Login", "tdd", "saas", "ai", "--project", pt13]);
+  runIn(["create", "Other", "--project", pt13]);
+  const ptSt13 = runIn(["status", "login", "--project", pt13]).out;
+  const ptDoc13 = runIn(["doctor", "login", "--project", pt13]).out;
+  const ptDep13 = runIn(["depend", "login", "other", "--order", "2", "--project", pt13]).out;
+  const ptDep0 = runIn(["depend", "other", "--project", pt13]).out;
+  const ptAdd13 = runIn(["add-track", "other", "tdd", "--project", pt13]).out;
+  const ptEars13 = runIn(["ears", "login", "--project", pt13]).out;
   ok(/Secções de escala: /.test(ptSt13) && /Secções de IA: /.test(ptSt13) && !/Scale sections|AI sections/.test(ptSt13) &&
     /ears — critérios=\d+, erros=\d+, avisos=\d+/.test(ptDoc13) && !/criteria=/.test(ptDoc13) &&
     /login depende de: other {2}ordem=2/.test(ptDep13) && /other depende de: \(nenhuma\)/.test(ptDep0) &&
     /'other' agora \[core \+tdd\]/.test(ptAdd13) && /classification\.md \(Tracks Ativos\)/.test(ptAdd13) && !/now \[|Active Tracks|\+sections/.test(ptAdd13) &&
     /\[aviso\]/.test(ptEars13) && !/\[warn\]/.test(ptEars13),
     "PT: status section labels, doctor's ears detail, depend, add-track (+ its 'added' entries) and ears severities are Portuguese");
-  const ptUse13 = run(["doctor", "--project", pt13]);
-  const ptUnk13 = run(["wat", "--project", pt13]);
-  ok(ptUse13.code === 1 && /uso: dev-spec doctor <feature>/.test(ptUse13.out) && ptUnk13.code === 1 && /comando desconhecido 'wat'/.test(ptUnk13.out) && /usage: dev-spec doctor <feature>/.test(run(["doctor", "--project", b13]).out),
+  const ptUse13 = runIn(["doctor", "--project", pt13]);
+  const ptUnk13 = runIn(["wat", "--project", pt13]);
+  ok(ptUse13.code === 1 && /uso: dev-spec doctor <feature>/.test(ptUse13.out) && ptUnk13.code === 1 && /comando desconhecido 'wat'/.test(ptUnk13.out) && /usage: dev-spec doctor <feature>/.test(runIn(["doctor", "--project", b13]).out),
     "PT: the usage prefix and 'unknown command' are Portuguese (the syntax stays as typed; EN unchanged)");
   const es13 = path.join(tmp, "wp13-es");
-  run(["init", "--lang", "es", "--project", es13]);
-  run(["create", "Pago", "saas", "--project", es13]);
-  const esSt13 = run(["status", "pago", "--project", es13]).out;
-  run(["roadmap", "--write", "--html", "--project", es13]);
+  runIn(["init", "--lang", "es", "--project", es13]);
+  runIn(["create", "Pago", "saas", "--project", es13]);
+  const esSt13 = runIn(["status", "pago", "--project", es13]).out;
+  runIn(["roadmap", "--write", "--html", "--project", es13]);
   let esMd13 = "", esHtml13 = "";
   try { esMd13 = fs.readFileSync(path.join(es13, ".specs", "ROADMAP.md"), "utf8"); esHtml13 = fs.readFileSync(path.join(es13, ".specs", "ROADMAP.html"), "utf8"); } catch { /* missing */ }
   ok(/Secciones de escala: /.test(esSt13) && /\| requisitos \|/.test(esMd13) && !/\| requirements \|/.test(esMd13) && /<td>requisitos<\/td>/.test(esHtml13),
@@ -150,14 +150,14 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   // --shell / --timeout without --run and --run with --evidence are usage errors (they were ignored: `approve … --remove` meant
   // --revoke and approved, `done <f> 3 4` ticked 3 alone); nothing runs or changes. --json answers a usage error in JSON too.
   const p23 = path.join(tmp, "wp23-strict");
-  run(["init", "--project", p23]);
-  run(["create", "Login", "--project", p23]);
+  runIn(["init", "--project", p23]);
+  runIn(["create", "Login", "--project", p23]);
   const t23 = path.join(p23, ".specs", "login", "tasks.md");
   fs.writeFileSync(t23, "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] First\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Second\n");
   const before23 = fs.readFileSync(t23, "utf8") + fs.readFileSync(path.join(p23, ".specs", "login", ".state.json"), "utf8");
   const u23 = [["approve", "login", "classification", "--remove", "--force"], ["done", "login", "1", "2"], ["done", "login", "1", "--timeout", "5"],
     ["finish", "login", "--shell", "bash"], ["done", "login", "1", "--run", "--evidence", "ok"], ["status", "login", "--lang", "pt"], ["list", "extra"],
-    ["backlog", "rm", "a", "b"], ["log", "login", "x"], ["brief", "login", ""]].map((a) => run([...a, "--project", p23]));
+    ["backlog", "rm", "a", "b"], ["log", "login", "x"], ["brief", "login", ""]].map((a) => runIn([...a, "--project", p23]));
   const after23 = fs.readFileSync(t23, "utf8") + fs.readFileSync(path.join(p23, ".specs", "login", ".state.json"), "utf8");
   const want23 = [/--remove is not an option of 'approve' \(its options: --by, --force, --role, --through, --reason, --expires, --revoke\)/, /'done' got unexpected argument\(s\): 2\./,
     /--timeout only applies with --run/, /--shell only applies with --run/, /--run records the run it makes; --evidence \/ --exit \/ --cmd report a run made elsewhere/,
@@ -165,8 +165,8 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
     /usage: dev-spec log <feature> \[--max N\] \[-\]/, /number must be an integer ≥ 0 \(got ""\)/];
   const j23 = runJ(["list", "extra", "--json", "--project", p23]), jMax23 = runJ(["next", "login", "--max", "0", "--json", "--project", p23]), jCmd23 = runJ(["frobnicate", "--json"]);
   const pt23 = path.join(tmp, "wp23-strict-pt");
-  run(["init", "--lang", "pt", "--project", pt23]);
-  const ptU23 = run(["roadmap", "--force", "--project", pt23]);
+  runIn(["init", "--lang", "pt", "--project", pt23]);
+  const ptU23 = runIn(["roadmap", "--force", "--project", pt23]);
   ok(u23.every((r, i) => r.code === 1 && want23[i].test(r.out) && !/^\$ /m.test(r.out)) && after23 === before23 &&
     j23.code === 1 && j23.j && j23.j.ok === false && /'list' got unexpected argument/.test(j23.j.error) && jMax23.j && jMax23.j.ok === false && /--max must be an integer ≥ 1/.test(jMax23.j.error) &&
     jCmd23.j && jCmd23.j.ok === false && /unknown command 'frobnicate'/.test(jCmd23.j.error) && ptU23.code === 1 && /--force não é uma opção de 'roadmap'/.test(ptU23.out),
@@ -180,8 +180,8 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   const pj23 = [["create", "X", "--project", miss23], ["list", "--project", fileP23], ["list", "--project="], ["list", "--project", "$HOME/x"], ["create", "X", "--project", "%APPDATA%\\x"]].map(run);
   const pjJ23 = runJ(["create", "X", "--json", "--project", miss23]);
   const newP23 = path.join(tmp, "wp23-new-by-init");
-  const init23 = run(["init", "--project", newP23]);
-  const quote23 = process.platform === "win32" ? run(["list", "--project", p23 + "\""]) : { code: 0, out: "login" };
+  const init23 = runIn(["init", "--project", newP23]);
+  const quote23 = process.platform === "win32" ? runIn(["list", "--project", p23 + "\""]) : { code: 0, out: "login" };
   all("1.23 review: --project missing / a file / empty / $VAR / %VAR% exits 1 (localized, --json: ok false) and creates nothing; init --project <new> creates it; a trailing \" (Windows quoting) is dropped (got " +
     JSON.stringify(pj23.map((r) => [r.code, r.out.trim().slice(0, 90)]).concat([[init23.code], [quote23.code, quote23.out.slice(0, 40)]])) + ")", [
     () => pj23[0].code === 1, () => /--project .*deeper: no such folder — check the path \(only init creates a project folder\)/.test(pj23[0].out),
@@ -197,7 +197,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   const ex23 = path.join(tmp, "wp23-exception");
   fs.mkdirSync(ex23, { recursive: true });
   fs.writeFileSync(path.join(ex23, ".specs"), "a file where the .specs folder goes");
-  const exH23 = run(["create", "X", "--project", ex23]), exJ23 = runJ(["create", "X", "--json", "--project", ex23]);
+  const exH23 = runIn(["create", "X", "--project", ex23]), exJ23 = runJ(["create", "X", "--json", "--project", ex23]);
   // 1.24 r6 G7: that FILE is no exception any more — the write gate answers it as a localized refusal ({ok: false, wrongKind: true,
   // path}) — still one stderr line and exit 1, the same {ok: false, error} document with --json.
   ok(exH23.code === 1 && /^dev-spec: \.specs is a file where dev-spec needs a folder/m.test(exH23.out) && !/E[A-Z]+:/.test(exH23.out) &&
@@ -211,11 +211,11 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   delete env23.SPEC_PROJECT_DIR;
   delete env23.CLAUDE_PROJECT_DIR;
   const inDir = (cwd, args, input) => {
-    const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", cwd, env: env23, input });
+    const r = spawnIn(args, { cwd, env: env23, input });
     return { code: r.status, out: (r.stdout || "") + (r.stderr || "") };
   };
   const w23 = path.join(tmp, "wp23-walkup");
-  run(["init", "--lang", "pt", "--project", w23]);
+  runIn(["init", "--lang", "pt", "--project", w23]);
   const sub23 = path.join(w23, "src", "deep");
   fs.mkdirSync(sub23, { recursive: true });
   fs.mkdirSync(path.join(w23, "docs"), { recursive: true });
@@ -249,7 +249,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
       const e = { ...process.env };
       delete e.SPEC_PROJECT_DIR;
       delete e.CLAUDE_PROJECT_DIR;
-      const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", cwd: neutral, env: { ...e, ...env } });
+      const r = spawnIn(args, { cwd: neutral, env: { ...e, ...env } });
       let j = null;
       try { j = JSON.parse(r.stdout); } catch { /* not JSON */ }
       return { code: r.status, out: (r.stdout || "") + (r.stderr || ""), j };
@@ -267,7 +267,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
     const newInit = path.join(tmp, "r6b1-new-by-init");
     const okInit = envRun({ SPEC_PROJECT_DIR: newInit }, ["init"]);
     const ptP = path.join(tmp, "r6b1-pt");
-    run(["init", "--lang", "pt", "--project", ptP]);
+    runIn(["init", "--lang", "pt", "--project", ptP]);
     const ptMiss = envRun({ SPEC_PROJECT_DIR: path.join(ptP, "nope"), CLAUDE_PROJECT_DIR: ptP }, ["list"]);
     all("1.24 r6 B1: a SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR that chose the project is checked like --project — a missing folder or a file exits 1 naming the variable (--json: ok false), nothing created; a folder without .specs/, --project over it, an unexpanded value falling through and init (creates it) work (got " +
       JSON.stringify(r.map((x) => [x.code, x.out.trim().slice(0, 90)]).concat([[okBare.code, okFlag.code, okFall.code, okInit.code, createdTypo], [ptMiss.code, ptMiss.out.trim().slice(0, 80)]])) + ")", [
@@ -285,12 +285,12 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   // created .specs/.specs/, which then won the walk-up.
   {
     const proj = path.join(tmp, "r6b7-proj");
-    run(["init", "--project", proj]);
+    runIn(["init", "--project", proj]);
     const inner = path.join(proj, ".specs");
     const e = { ...process.env, SPEC_PROJECT_DIR: inner };
     delete e.CLAUDE_PROJECT_DIR;
-    const viaEnv = spawnSync(process.execPath, [CLI, "create", "X"], { encoding: "utf8", env: e });
-    const r = [run(["create", "X", "--project", inner]), run(["init", "--project", inner]), run(["list", "--project", inner + path.sep])];
+    const viaEnv = spawnIn(["create", "X"], { env: e });
+    const r = [runIn(["create", "X", "--project", inner]), runIn(["init", "--project", inner]), runIn(["list", "--project", inner + path.sep])];
     ok(r.every((x) => x.code === 1 && x.out.includes(proj) && /the \.specs folder of the project/.test(x.out)) && viaEnv.status === 1 && /SPEC_PROJECT_DIR/.test(viaEnv.stderr) &&
       !fs.existsSync(path.join(inner, ".specs")) && !fs.existsSync(path.join(inner, "x")),
       "1.24 r6 B7: --project / SPEC_PROJECT_DIR naming a dev-spec project's .specs/ exits 1 with the project folder to name instead; no .specs/.specs/ (got " +
@@ -303,10 +303,10 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   // are usage errors; nothing changes.
   {
     const p = path.join(tmp, "r6b4-extra");
-    run(["init", "--project", p]);
-    run(["create", "Login", "--project", p]);
-    run(["create", "Other", "--project", p]);
-    run(["depend", "login", "other", "--project", p]);
+    runIn(["init", "--project", p]);
+    runIn(["create", "Login", "--project", p]);
+    runIn(["create", "Other", "--project", p]);
+    runIn(["depend", "login", "other", "--project", p]);
     const snap = () => fs.readdirSync(path.join(p, ".specs")).sort().join(",") + "|" + fs.readFileSync(path.join(p, ".specs", "roadmap.json"), "utf8");
     const before = snap();
     const cases = [
@@ -321,10 +321,10 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
       [["merge-state", "--install", "--uninstall"], /usage: dev-spec merge-state/],
       [["depend", "login", "other", "--clear"], /usage: dev-spec depend/],
       [["stop-check", "all", "done", "--message", "done"], /usage: dev-spec stop-check/],
-    ].map(([a, re]) => [run([...a, "--project", p]), re, a.join(" ")]);
+    ].map(([a, re]) => [runIn([...a, "--project", p]), re, a.join(" ")]);
     const after = snap();
-    const ok2 = run(["feature", "flow", "other", "--flow", "design-first", "--project", p]);
-    const okClear = run(["depend", "login", "--clear", "--project", p]);
+    const ok2 = runIn(["feature", "flow", "other", "--flow", "design-first", "--project", p]);
+    const okClear = runIn(["depend", "login", "--clear", "--project", p]);
     ok(cases.every(([r, re]) => r.code === 1 && re.test(r.out)) && after === before && ok2.code === 0 && okClear.code === 0 && /login depends on: \(none\)/.test(okClear.out),
       "1.24 r6 B4: feature archive/remove/restore/rename/flow past their arguments, a flow given twice or on another action, merge-state files with --install / both switches, depend deps + --clear and stop-check --message + words exit 1, nothing changed; feature flow --flow and depend --clear alone still work (got " +
       JSON.stringify(cases.filter(([r, re]) => !(r.code === 1 && re.test(r.out))).map(([r, , a]) => [a, r.code, r.out.trim().slice(0, 90)]).concat([[ok2.code, okClear.code]])) + ")");
@@ -335,23 +335,23 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   // init --check, append-tasks --req / --implements / --makes-green / --depends, decide --affects / --supersedes) still add up.
   {
     const p = path.join(tmp, "r6b5-twice");
-    run(["init", "--project", p]);
-    run(["create", "Login", "--project", p]);
-    run(["create", "Other", "--project", p]);
-    run(["create", "Third", "--project", p]);
+    runIn(["init", "--project", p]);
+    runIn(["create", "Login", "--project", p]);
+    runIn(["create", "Other", "--project", p]);
+    runIn(["create", "Third", "--project", p]);
     const st = () => fs.readFileSync(path.join(p, ".specs", "login", ".state.json"), "utf8");
     const before = st();
     const cases = [["approve", "login", "classification", "--role", "tech", "--role", "product"], ["approve", "login", "classification", "--by", "a", "--by=b"],
       ["create", "Zed", "--summary", "a", "--summary", "b"], ["done", "login", "1", "--cmd", "a", "--cmd", "b", "--exit", "0"],
       ["impact", "login", "--phase", "design", "--phase", "tasks"], ["approve", "login", "--through", "design", "--through", "tasks"],
-      ["list", "--project", p]].map((a) => [run([...a, "--project", p]), a.find((x) => x.startsWith("--")).replace(/=.*/, "")]);
+      ["list", "--project", p]].map((a) => [runIn([...a, "--project", p]), a.find((x) => x.startsWith("--")).replace(/=.*/, "")]);
     const pt = path.join(tmp, "r6b5-pt");
-    run(["init", "--lang", "pt", "--project", pt]);
-    const ptTwice = run(["roadmap", "--lang", "pt", "--lang", "es", "--project", pt]);
-    const atTwice = run(["append-tasks", "login", "--task", "a", "--size", "S", "--size", "M", "--project", p]);
-    const at2Tasks = run(["append-tasks", "login", "--task", "a", "--task", "b", "--project", p]);
-    const dep = run(["depend", "login", "--add", "other", "--add", "third", "--project", p]);
-    const reqs = run(["append-tasks", "login", "--task", "Wire it", "--implements", "src/a.js", "--implements", "src/b.js", "--json", "--project", p]);
+    runIn(["init", "--lang", "pt", "--project", pt]);
+    const ptTwice = runIn(["roadmap", "--lang", "pt", "--lang", "es", "--project", pt]);
+    const atTwice = runIn(["append-tasks", "login", "--task", "a", "--size", "S", "--size", "M", "--project", p]);
+    const at2Tasks = runIn(["append-tasks", "login", "--task", "a", "--task", "b", "--project", p]);
+    const dep = runIn(["depend", "login", "--add", "other", "--add", "third", "--project", p]);
+    const reqs = runIn(["append-tasks", "login", "--task", "Wire it", "--implements", "src/a.js", "--implements", "src/b.js", "--json", "--project", p]);
     let rj = null;
     try { rj = JSON.parse(reqs.out); } catch { /* not JSON */ }
     ok(cases.every(([r, f]) => r.code === 1 && new RegExp(f + " was given more than once").test(r.out)) && st() === before && !fs.existsSync(path.join(p, ".specs", "zed")) &&
@@ -367,15 +367,15 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   // the flag; and a change's create note gave only spec_approve {through} — the CLI user now gets the CLI line.
   {
     const p = path.join(tmp, "r6b9-msgs");
-    run(["init", "--project", p]);
-    run(["create", "Login", "--project", p]);
+    runIn(["init", "--project", p]);
+    runIn(["create", "Login", "--project", p]);
     const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
-    const bug = run(["bugfix", "--project", p]);
-    const ears = [run(["ears", "missing.md", "--project", p]), run(["ears", "docs/nope.md", "--project", p])];
-    const earsJ = (() => { try { const o = run(["ears", "missing.md", "--json", "--project", p]).out; return JSON.parse(o.slice(0, o.lastIndexOf("}") + 1)); } catch { return null; } })();
-    const earsFeature = run(["ears", "login", "--project", p]);
-    const q = run(["create", "Zed", "--question", "Is it fast?", "--project", p]), tb = run(["create", "Zed", "--timebox", "3d", "--project", p]);
-    const ch = run(["create", "Tiny fix", "--kind", "change", "--project", p]);
+    const bug = runIn(["bugfix", "--project", p]);
+    const ears = [runIn(["ears", "missing.md", "--project", p]), runIn(["ears", "docs/nope.md", "--project", p])];
+    const earsJ = (() => { try { const o = runIn(["ears", "missing.md", "--json", "--project", p]).out; return JSON.parse(o.slice(0, o.lastIndexOf("}") + 1)); } catch { return null; } })();
+    const earsFeature = runIn(["ears", "login", "--project", p]);
+    const q = runIn(["create", "Zed", "--question", "Is it fast?", "--project", p]), tb = runIn(["create", "Zed", "--timebox", "3d", "--project", p]);
+    const ch = runIn(["create", "Tiny fix", "--kind", "change", "--project", p]);
     const chMcp = S.createFeature(p, "Tiny two", undefined, undefined, undefined, undefined, "change", {});
     all("1.24 r6 B9: bugfix's own usage; ears <missing file> says no such file (--json ok false; a feature name still works); create --question / --timebox name the flag and the spike command; a change's create note gives the CLI approve line on the CLI (spec_approve over MCP) (got " +
       JSON.stringify([bug.out.trim().slice(0, 80), ears.map((r) => r.out.trim().slice(0, 80)), q.out.trim().slice(0, 140), tb.out.trim().slice(0, 80), ch.out.slice(0, 400)]) + ")", [
@@ -392,7 +392,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   // 1.25.1 (review 7) — the CLI's own options. A process with its own env and cwd: { out, stdout, code }.
   const cliIn = (args, env, cwd) => {
     const e = { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "", ...(env || {}) };
-    const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: e, cwd: cwd || tmp });
+    const r = spawnIn(args, { env: e, cwd: cwd || tmp });
     return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
   };
   const jsonOf = (s) => { try { return JSON.parse(s); } catch { return null; } };
@@ -420,8 +420,8 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   // (`status -j` looked for a feature "j"), a lone "-" still reads stdin.
   {
     const p = path.join(tmp, "r7-cli-codes");
-    run(["init", "--project", p]);
-    run(["create", "Alpha", "core", "--project", p]);
+    runIn(["init", "--project", p]);
+    runIn(["create", "Alpha", "core", "--project", p]);
     const j = (args) => { const r = cliIn([...args, "--json"], { SPEC_PROJECT_DIR: p }); return { code: r.code, doc: jsonOf(r.stdout), out: r.out }; };
     const max50 = j(["next", "alpha", "--batch", "--max", "50"]), max8 = j(["next", "alpha", "--batch", "--max", "8"]);
     const cases = {
@@ -443,7 +443,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
       notFound: "feature-not-found" };
     const wrong = Object.entries(want).filter(([k, c]) => !(cases[k].code === 1 && cases[k].doc && cases[k].doc.ok === false && cases[k].doc.code === c)).map(([k]) => [k, cases[k].doc]);
     const shortHuman = cliIn(["status", "-j"], { SPEC_PROJECT_DIR: p });
-    const stdinDash = spawnSync(process.execPath, [CLI, "ears", "-", "--project", p], { encoding: "utf8", input: "- **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL open a session\n" });
+    const stdinDash = spawnIn(["ears", "-", "--project", p], { input: "- **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL open a session\n" });
     all("1.25.1 r7: next --max 9+ is refused (≤ 8, as spec_next_task); --json usage errors carry a stable code (project-missing, project-not-dir, unknown-argument {unknown}, missing-arguments {missing}, invalid-arguments {invalid}, usage, unknown-command, feature-not-found); -j is an unknown option (did you mean --json?), a lone - is still stdin (got " +
       JSON.stringify([max50.code, max50.doc, max8.code, wrong, cases.short.doc, shortHuman.out.slice(0, 120)]).slice(0, 900) + ")", [
       () => max50.code === 1, () => max50.doc, () => max50.doc.code === "invalid-arguments", () => /--max/.test(max50.doc.error),

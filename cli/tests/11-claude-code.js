@@ -6,17 +6,19 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   const S16 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = JSON.stringify;
   const OPTS = ["DEV_SPEC_DEFAULT_LANG", "CLAUDE_PLUGIN_OPTION_DEFAULT_LANG", "DEV_SPEC_STOP_CHECK", "CLAUDE_PLUGIN_OPTION_STOP_CHECK",
     "DEV_SPEC_GUARD_DEFAULT", "CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT"];
-  // A CLI run with stdin (closed at once when none is given), no DEV_SPEC_* default and no project folder from this process.
+  // A CLI run with stdin (closed at once when none is given), no DEV_SPEC_* default and no project folder from this process —
+  // in-process (1.27), or a process of its own with o.spawn (a time "for the whole process").
   const cli = (args, o = {}) => {
     const env = { ...process.env };
     for (const k of OPTS.concat(["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "COLUMNS"])) delete env[k];
     const t0 = Date.now();
-    const r = spawnSync(process.execPath, [CLI, ...args], { input: o.input == null ? "" : o.input, encoding: "utf8", env: { ...env, ...(o.env || {}) }, cwd: o.cwd || tmp, timeout: 30000 });
+    const opts = { input: o.input == null ? "" : o.input, encoding: "utf8", env: { ...env, ...(o.env || {}) }, cwd: o.cwd || tmp, timeout: 30000 };
+    const r = o.spawn ? spawnSync(process.execPath, [CLI, ...args], opts) : spawnIn(args, opts);
     return { out: r.stdout || "", err: r.stderr || "", code: r.status, ms: Date.now() - t0 };
   };
   const none = fs.mkdtempSync(path.join(os.tmpdir(), "p16c-cli-none-")); // no .specs/ at or above it
@@ -86,7 +88,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   for (let i = 1; i < 50; i++) fs.cpSync(path.join(s50, ".specs", "feature-0"), path.join(s50, ".specs", "feature-" + i), { recursive: true });
   // The bound: 8 s, or 4× the same process on the 1-feature project run just before it (the machine is shared with the parallel
   // runner — 1.20 review); a timing-only miss is measured once more.
-  const measure50 = () => { const base = cli(["statusline", "--json"], { input: js({ cwd: sp }) }).ms; return { r: cli(["statusline", "--json"], { input: js({ cwd: s50 }) }), base }; };
+  const measure50 = () => { const base = cli(["statusline", "--json"], { input: js({ cwd: sp }), spawn: true }).ms; return { r: cli(["statusline", "--json"], { input: js({ cwd: s50 }), spawn: true }), base }; };
   let m50 = measure50();
   if (m50.r.code === 0 && m50.r.ms >= Math.max(8000, 4 * m50.base)) m50 = measure50();
   const r50 = m50.r;
@@ -136,7 +138,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
     () => im[4].code === 1, () => /The plan text is empty/.test(im[4].err), () => imj, () => imj.ok === true, () => imj.inline === true,
     () => imj.source === null, () => imj.feature === "json-mode",
   ]);
-  const help16 = run(["help"]).out;
+  const help16 = runIn(["help"]).out;
   // 1.27: the help IS the command table's (cli/commands.js) — the entries of statusline and import hold those lines
   const T16 = require(path.join(__dirname, "commands.js"));
   const doc16 = ["statusline", "import"].map((n) => T16.commandFor(n).help).join("\n");

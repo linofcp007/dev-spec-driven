@@ -6,11 +6,11 @@ const path = require("path");
 
 // 1.15 feature (F4) — project-defined tracks: `dev-spec tracks [list|init <name>|check]` and a pack used by classify / create /
 // status / doctor / add-track, as spec_tracks and the MCP tools do.
-exports.run = ({ ok, run, tmp, CLI }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI }) => {
   const f4 = path.join(tmp, "f4-tracks");
   const js = (x) => JSON.stringify(x);
-  const r = (args) => run([...args, "--project", f4]);
-  run(["init", "--lang", "en", "--project", f4]);
+  const r = (args) => runIn([...args, "--project", f4]);
+  runIn(["init", "--lang", "en", "--project", f4]);
   const i1 = r(["tracks", "init", "a11y"]);
   const i2 = r(["tracks", "init", "a11y"]);
   const iBad = r(["tracks", "init", "sec"]);
@@ -66,7 +66,7 @@ exports.run = ({ ok, run, tmp, CLI }) => {
     "feature F4: a deleted pack — status names it, doctor warns track-pack-missing and requires none of its sections");
   // Localized: tracks init --lang pt writes Portuguese comments and speaks Portuguese; the help documents the command.
   const ip = r(["tracks", "init", "mobile", "--lang", "pt"]);
-  const help = run(["help"]).out;
+  const help = runIn(["help"]).out;
   const doc = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   const mj = path.join(f4, ".specs", "tracks", "mobile", "track.json");
   ok(ip.code === 0 && /Track pack \+mobile criado/.test(ip.out) && fs.existsSync(mj) && /um track definido pelo projeto/.test(fs.readFileSync(mj, "utf8")) &&

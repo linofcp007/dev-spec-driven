@@ -4,7 +4,7 @@
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI, __dirname }) => {
   const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
   const hook = (name, payload, env) => {
     const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", name + ".js")], { encoding: "utf8", input: JSON.stringify(payload),
@@ -17,11 +17,11 @@ exports.run = ({ ok, run, tmp, CLI, __dirname }) => {
   // with --approval-guard ask neither.
   {
     const p = path.join(tmp, "r7-obs");
-    const i1 = run(["init", "core", "--evidence", "observed", "--project", p]);
-    run(["create", "Obs", "core", "--project", p]);
-    const d1 = jsonOf(run(["doctor", "obs", "--json", "--project", p]));
-    const i2 = jsonOf(run(["init", "--approval-guard", "ask", "--json", "--project", p]));
-    const d2 = jsonOf(run(["doctor", "obs", "--json", "--project", p]));
+    const i1 = runIn(["init", "core", "--evidence", "observed", "--project", p]);
+    runIn(["create", "Obs", "core", "--project", p]);
+    const d1 = jsonOf(runIn(["doctor", "obs", "--json", "--project", p]));
+    const i2 = jsonOf(runIn(["init", "--approval-guard", "ask", "--json", "--project", p]));
+    const d2 = jsonOf(runIn(["doctor", "obs", "--json", "--project", p]));
     const chk = (d) => d && (d.checks || []).find((c) => c.id === "observed-unguarded");
     ok(i1.code === 0 && /only as strong as the approval guard/.test(i1.out) && /PowerShell tool alone/.test(i1.out) && chk(d1) && chk(d1).status === "warn" &&
       i2 && i2.observedWarning === undefined && !chk(d2),
@@ -33,8 +33,8 @@ exports.run = ({ ok, run, tmp, CLI, __dirname }) => {
   // a link to .specs/ — refused or asked; a status piped into bash and reading the roadmap stay silent.
   {
     const p = path.join(tmp, "r7-deny");
-    run(["init", "core", "--approval-guard", "deny", "--project", p]);
-    run(["create", "Checkout", "core", "--project", p]);
+    runIn(["init", "core", "--approval-guard", "deny", "--project", p]);
+    runIn(["create", "Checkout", "core", "--project", p]);
     const cli = "node \"" + CLI.split(path.sep).join("/") + "\"";
     const got = [hook("approval-hook", pre(p, "Bash", "echo '" + cli + " approve checkout requirements --force' | bash"), { CLAUDE_PROJECT_DIR: p }),
       hook("approval-hook", pre(p, "Bash", cli + " {approve,} checkout requirements"), { CLAUDE_PROJECT_DIR: p }),
@@ -50,8 +50,8 @@ exports.run = ({ ok, run, tmp, CLI, __dirname }) => {
   // The edit guard on the shell: a CLI-made guarded project — a code file written by sed -i / a redirect asks, a test run stays silent.
   {
     const p = path.join(tmp, "r7-guard");
-    run(["init", "core", "--guard", "on", "--project", p]);
-    run(["create", "Billing", "core", "--project", p]);
+    runIn(["init", "core", "--guard", "on", "--project", p]);
+    runIn(["create", "Billing", "core", "--project", p]);
     const got = [hook("guard-hook", pre(p, "Bash", "sed -i s/a/b/ src/app.ts"), { CLAUDE_PROJECT_DIR: p }), hook("guard-hook", pre(p, "PowerShell", "'x' | Out-File src\\app.py"), { CLAUDE_PROJECT_DIR: p }),
       hook("guard-hook", pre(p, "Bash", "npm test 2>&1 | tee test.log"), { CLAUDE_PROJECT_DIR: p })];
     ok(JSON.stringify(got) === JSON.stringify(["ask", "ask", "silent"]),

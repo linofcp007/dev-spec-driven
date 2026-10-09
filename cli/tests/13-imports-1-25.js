@@ -4,11 +4,11 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, all, run, tmp, require, __dirname }) => {
+exports.run = ({ ok, all, run, runIn, tmp, require, __dirname }) => {
   const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = JSON.stringify;
   const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
-  const json = (args) => { const r = run(args); try { return { code: r.code, j: JSON.parse(r.out) }; } catch { return { code: r.code, j: null, out: r.out }; } };
+  const json = (args) => { const r = runIn(args); try { return { code: r.code, j: JSON.parse(r.out) }; } catch { return { code: r.code, j: null, out: r.out }; } };
   // A folder's entries — path, kind, bytes, mtime: what --dry-run must leave as it found it.
   const snap = (dir) => {
     const out = [];
@@ -29,19 +29,19 @@ exports.run = ({ ok, all, run, tmp, require, __dirname }) => {
     put(p, ".cursor/rules/ts.mdc", "---\ndescription: TypeScript\nglobs: *.ts\nalwaysApply: false\n---\nUse strict mode.\n");
     put(p, ".cursorrules", "Answer tersely.\n");
   };
-  const project = (n) => { const p = path.join(tmp, "imp125-" + n); run(["init", "core", "--project", p]); steering(p); return p; };
+  const project = (n) => { const p = path.join(tmp, "imp125-" + n); runIn(["init", "core", "--project", p]); steering(p); return p; };
 
   // 1.25 import kiro-steering (no path: .kiro/steering/) — the human lines name each file and its mode; --json is the engine's answer
   // (spec_import's), compared on a twin project; a second run skips every file (exit 0, nothing written).
   {
     const p = project("kiro");
     const twin = project("kiro-twin");
-    const h = run(["import", "kiro-steering", "--project", p]);
+    const h = runIn(["import", "kiro-steering", "--project", p]);
     const j = json(["import", "kiro-steering", "--json", "--project", twin]);
     const engine = (() => { const e = path.join(tmp, "imp125-kiro-engine"); fs.mkdirSync(e, { recursive: true }); S.initProject(e, ["core"]); steering(e); return S.importSpec(e, "kiro-steering"); })();
     const pick = (r) => js(r && { ok: r.ok, kind: r.kind, sources: r.sources, imported: r.imported, skipped: r.skipped, warnings: r.warnings });
     const st0 = snap(path.join(p, ".specs"));
-    const again = run(["import", "kiro-steering", ".kiro/steering", "--project", p]);
+    const again = runIn(["import", "kiro-steering", ".kiro/steering", "--project", p]);
     ok(h.code === 0 && /Imported Kiro steering → 2 steering file\(s\) in \.specs\/steering\//.test(h.out) &&
       /  api\.md ← \.kiro\/steering\/api\.md \(fileMatch: src\/api\/\*\*\)/.test(h.out) && /  voice\.md ← \.kiro\/steering\/voice\.md \(always\)/.test(h.out) &&
       j.code === 0 && j.j && pick(j.j) === pick(engine) && fs.existsSync(path.join(p, ".specs", "steering", "api.md")) &&
@@ -55,7 +55,7 @@ exports.run = ({ ok, all, run, tmp, require, __dirname }) => {
     const p = project("cursor");
     const t0 = snap(p);
     const d = json(["import", "cursor-rules", "--dry-run", "--json", "--project", p]);
-    const h = run(["import", "cursor-rules", "--dry-run", "--project", p]);
+    const h = runIn(["import", "cursor-rules", "--dry-run", "--project", p]);
     const unchanged = snap(p) === t0;
     const real = json(["import", "cursor-rules", "--json", "--project", p]);
     const prev = d.j && d.j.preview ? d.j.preview : [];
@@ -74,7 +74,7 @@ exports.run = ({ ok, all, run, tmp, require, __dirname }) => {
     put(p, ".kiro/specs/login/requirements.md", "# Requirements Document\n\n## Introduction\n\nUsers log in.\n\n## Requirements\n\n### Requirement 1: Login\n\n#### Acceptance Criteria\n\n1. WHEN the user submits valid credentials THEN the system SHALL open the dashboard\n2. IF the password is wrong THEN the system SHALL show an error\n");
     put(p, ".kiro/specs/login/tasks.md", "# Implementation Plan\n\n- [ ] 1. Build the form\n  - _Requirements: 1.1_\n- [x] 2. Validate\n  - _Requirements: 1.2_\n");
     const t0 = snap(p);
-    const h = run(["import", "kiro", ".kiro/specs/login", "--dry-run", "--project", p]);
+    const h = runIn(["import", "kiro", ".kiro/specs/login", "--dry-run", "--project", p]);
     const d = json(["import", "kiro", ".kiro/specs/login", "--dry-run", "--json", "--project", p]);
     const t = json(["import", "plan", "--text", "# Plan: Dark mode\n\n## Goals\n- When the user clicks the toggle, the theme switches\n", "--dry-run", "--json", "--project", p]);
     const engine = S.importSpec(p, "kiro", ".kiro/specs/login", { dryRun: true }); // the same project: a dry run writes nothing
@@ -97,11 +97,11 @@ exports.run = ({ ok, all, run, tmp, require, __dirname }) => {
   {
     const p = project("guards");
     const st0 = snap(path.join(p, ".specs"));
-    const named = run(["import", "cursor-rules", "--name", "x", "--project", p]);
-    const tracked = run(["import", "kiro-steering", "--tracks", "tdd", "--project", p]);
-    const outside = run(["import", "kiro-steering", "../elsewhere", "--project", p]);
-    const other = run(["status", "--dry-run", "--project", p]);
-    const noPath = run(["import", "kiro", "--project", p]);
+    const named = runIn(["import", "cursor-rules", "--name", "x", "--project", p]);
+    const tracked = runIn(["import", "kiro-steering", "--tracks", "tdd", "--project", p]);
+    const outside = runIn(["import", "kiro-steering", "../elsewhere", "--project", p]);
+    const other = runIn(["status", "--dry-run", "--project", p]);
+    const noPath = runIn(["import", "kiro", "--project", p]);
     ok(named.code === 1 && /name: a Cursor rules import writes \.specs\/steering\/ files, not a feature/.test(named.out) &&
       tracked.code === 1 && /tracks: a Kiro steering import/.test(tracked.out) && outside.code === 1 && /outside the project/.test(outside.out) &&
       other.code === 1 && /--dry-run is not an option of 'status'/.test(other.out) && noPath.code === 1 && /import <kiro-steering\|cursor-rules> \[<path>\] \[--dry-run\]/.test(noPath.out) &&
