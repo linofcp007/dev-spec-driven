@@ -156,6 +156,7 @@ const PTBR_PHRASES = {
   "uma ligação (link simbólico)": "um link simbólico", "apaga só a ligação": "apaga só o link", "remover a ligação": "remover o link",
   "liga-o em": "coloque o link em", "liga-o aqui": "coloque o link aqui",
   "é uma ligação ou não é um ficheiro normal": "é um link ou não é um arquivo normal", // merge-state's linked .gitattributes
+  "liga-o —": "ative-o —", // observed.unguarded: "turn the approval guard on" (keys are lower case; the case follows the source)
   // 1.25.1 review — enclisis after a subject or mid-sentence reads European: Brazil puts the pronoun first, says it in the
   // passive, or (an instruction) uses the você imperative
   "aplica-se": "se aplica", "aplicam-se mais entradas": "há mais entradas aplicáveis", "perder-se-ia": "se perderia",
