@@ -19,22 +19,24 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
 - Specs always live in `.specs/` (no alternate directory detection).
 
 ## Topic map
-Read the file BEFORE you change its area (a section name another note cites — "see Gates" — is listed here too):
+Read the file BEFORE you change its area (a section name another note cites — "see Gates" — is listed here too). Each
+file states the CURRENT rules first; its `## History` at the end keeps how they came to be — grep a release or a finding id there:
 - **`docs/maintainers/architecture.md`** — before adding or splitting an engine module, changing what a surface requires,
-  the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) · The module rule
-  (1.18) · The build (1.20) · Config paths.
+  the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) ·
+  The module rule · The build · Config paths.
 - **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs, +data) or
-  track packs: The track model · Project-defined tracks (1.15) · Classifier gotchas · The classifier's signal rules, track
-  by track.
+  track packs: The track model · Project-defined tracks · Classifier gotchas · The classifier's signal rules, track by track.
 - **`docs/maintainers/languages.md`** — before adding or rewording ANY user-facing string, a translated heading or a
   language: Languages (EN / PT-PT / PT-BR / ES) · Localization gotchas.
 - **`docs/maintainers/mcp.md`** — before changing a tool's schema or description, a capability (prompts, resources,
-  completions), argument validation, the stdio framing or the elicitation path: MCP tools · Capabilities · Human approvals over
-  MCP elicitation (1.21) · Argument validation · Protocol (server-initiated requests).
+  completions), argument validation, the operations table, the stdio framing or the elicitation path: MCP tools (The
+  operations · Folded tools · Hidden aliases · The description budget) · Capabilities · Human approvals over MCP elicitation ·
+  Argument validation · Protocol (server-initiated requests).
 - **`docs/maintainers/gates-and-approvals.md`** — before changing an approval gate, next_action's steps, placeholders,
   spec_impact / the approval history, roles, undo / revoke / waivers, flows, the bugfix kind or feature sizes / the change
-  kind / the track sections' filled rule: Gates (1.13) · Approval fingerprints and pending gates · Change history · Team
-  governance · Undo, revoke, waivers, MCP-only gates · Flows · Right-sized rigor (1.21 F5) · Bugfix and finish.
+  kind / the track sections' filled rule: Gates (the check registry) · Approval fingerprints and pending gates · Change
+  history · Team governance · Undo, revoke, waivers, MCP-only gates · Approvals the user confirmed over MCP, and the dry run ·
+  Flows · Right-sized rigor · Bugfix and finish.
 - **`docs/maintainers/tasks-and-evidence.md`** — before changing tasks.md parsing, the task brief, `_Verify:_` / evidence /
   `done --run`, `_Depends:_`, the stop gate, the scope guard or observed evidence: Subagent-driven execution · Evidence ·
   Task dependencies and execution waves · Tasks: ONE scanner · End-of-turn evidence gate and scope guard ·
@@ -52,12 +54,13 @@ Read the file BEFORE you change its area (a section name another note cites — 
   design's trade-offs / risks / reuse checks, the constraint nudge or the brief's Reuse section: Spec quality · Design
   trade-offs and risks · Reuse & Integration and clean code.
 - **`docs/maintainers/claude-code-integration.md`** — before changing a hook, a command name, guard mode, the approval
-  guard, the status line, user defaults or the plan-mode bridge: Hooks and commands · Guard mode · Human approval guard ·
-  Claude Code integration (1.16 C).
+  guard, the status line, user defaults, the dev-spec project probe or the plan-mode bridge: Hooks and commands · Guard
+  mode · Human approval guard · Claude Code integration.
 - **`docs/maintainers/conventions.md`** — before touching feature folders, `.state.json` / roadmap.json writes (or adding a key
-  to them — the merge driver must know it), any write under .specs/ (the write gate, the 1.25 dry-run sink), the locks, process I/O or CLI flags / exit codes:
-  Conventions & gotchas (resolver, the write gate, JSON state, merging the spec state — git's merge driver, 1.21 —, locks,
-  rename, stdout, the CLI).
+  to them — the merge driver must know it), any write under .specs/ (the write gate, the dry-run sink), the locks, process
+  I/O or the CLI's table, flags and exit codes: Conventions & gotchas — Feature folders · The project folder · The write
+  gate · The dry-run sink · JSON state · Merging the spec state · The locks · Flush stdout before exiting · Calendar dates ·
+  The CLI is one table and one call · CLI boolean switches · Shell completion.
 - **`docs/maintainers/testing.md`** — before adding a test (which file of `mcp/tests/` / `cli/tests/`), writing one that
   runs a command or depends on the file system, or running a part of a suite or the Linux / plugin-eval suites: The
   suites (files, runner, `--only`) · Tests (continued) — Docker, plugin evals, Windows AND Linux, the eval harness.
@@ -133,13 +136,19 @@ written by hand. IDs and markers stay English-stable (languages.md). The one Eng
 mcp/server.js                  the MCP stdio server: tools, prompts, resources, argument validation
 mcp/servers.json               the plugin's MCP registration (plugin.json → mcpServers; never a root .mcp.json)
 mcp/lib/spec.js                the engine's FACADE — every surface requires it, never an engine module directly
+mcp/lib/operations.js          THE operations table: each operation's MCP tool, CLI command(s), arguments and engine call, once
+mcp/lib/probe.js               THE dev-spec project rule + walks (Node core only): hooks, status line, completion, the engine
+mcp/lib/latin1-scan.js         the stop gate's claim scan on a one-byte projection of a wide text (Node core only)
 mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): the engine in one file — DEV_SPEC_BUNDLE=1 only
 mcp/lib/engine/                ALL domain logic, one module per concern (index.js loads MODULES; ctx.js holds CTX; import/;
                                corpus.generated.json — GENERATED: the built-in placeholder corpus)
 mcp/lib/i18n.js · i18n/        the localized content: en.js · pt.js · es.js · common.js · pt-br.js (the derivation)
 mcp/lib/prompts-resources.js   MCP prompts (= commands/*.md) + specs:// resources
-cli/dev-spec.js                the universal CLI's entry point over the same facade (the same defaults as MCP) — its commands:
-                               cli/commands.js (ONE table: options, args, help, handler) · main(argv, io): cli/main.js
+cli/dev-spec.js                the CLI's entry point alone (bin, printed CLI lines, git's merge driver, the status line)
+cli/main.js · cli/commands.js  main(argv, io) — parse, shared checks, dispatch, c.call · THE command table (options, args, help,
+                               completion, handler — everything else derives from it)
+cli/run.js · cli/git.js        done --run / finish --run's runs (process tree, verdict) · every git call (one gitRun)
+cli/completion.js              shell completion + the hidden __complete and the status line's pre-check (no engine)
 hooks/                         hooks.json (auto-loaded) + guard / approval / observe / spec / stop / plan hooks + pre-commit
 commands/ · agents/            the 22 slash commands (also the MCP prompts) · the 5 plugin subagents
 skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) + references/ (read on demand)

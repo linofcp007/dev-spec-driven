@@ -2,323 +2,287 @@
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 What happens to a feature after its tasks: the catalog, `_Supersedes:_`, the finish baseline and drift, archive /
-restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap files.
+restore, a feature's git branch, spec_upgrade, decisions and spikes, forecasts, the generated roadmap files. The rules come
+first; how they came to be — the releases and review findings — is in History at the end.
 
-## Catalog, drift, restore, guard, steering (1.13)
-- **`SPECS.md` is AUTO-GENERATED** like the roadmap: `spec_export {format: "catalog", write}` and `maybeRefreshCatalog()` use
-  the same `RE_AUTOGEN` / `isGeneratedOrAbsent()` guard, so a hand-written `.specs/SPECS.md` is never
-  overwritten; once it exists, every roadmap refresh refreshes it too (a hand edit's: at the end of the turn — Roadmap files).
-- **`_Supersedes: <feature>/US-n.AC-m[, …]_`** on a criterion (same line, a sub-line or its table row) marks
-  the older AC as replaced. `stripSupersedes()` runs before own-AC extraction (trace, acIndex), so the foreign
-  ID is never one of this feature's ACs; unresolvable references are `phantomSupersedes` (never a gap). **Only a
-  SHIPPED declaring feature retires the older AC** (1.15 — `featureShipped()`: a finish recorded, or the execution signed
-  off: the release notes' rule) in the catalog, the export and the matrix: a draft's declaration keeps `supersededBy` but
-  adds `supersedePending: true` — rendered "to be superseded by … (not shipped yet)" (catalog, export, the matrix's
-  markdown / CSV cell / `trace --matrix` notes), never struck, still current; `totals` {current, superseded (retired),
-  pending — a subset of current: "N current (P to be superseded), S superseded"}; the matrix `counts.supersedePending`. A
-  retired AC names its SHIPPED declarers only (never a draft that also plans it). A shipped feature counts only the
-  declarations it shipped with: `shippedSupersedeKeys()` — when requirements.md changed since the requirements snapshot
-  approved at or before the latest ship (a finish / an execution sign-off), a declaration that snapshot lacks (a change
-  request's edit) is pending until the feature ships again; no such snapshot (pre-1.13) → every declaration trusted. A
-  feature archived without ever shipping (abandoned) declares nothing, and its own ACs are not counted as current.
-  `supersededByIndex()` (the matrix: `.live`, `.liveBy`) and `catalogData()` (`supLiveBy`) apply the same rule.
-- **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished`
-  `{at, files: {rel: sha1|null}}` (CRLF-normalized, `_Implements:_` files, folders expanded, inside the project
-  only). `fileHash()` reads a file in `FILE_HASH_CHUNK` (1 MiB) pieces with `readSync` and drops each 0x0D that precedes a
-  0x0A, a CR ending a piece carried to the next (1.22 review: `readFileSync().toString("latin1")` returned null at 512 MiB —
-  recorded "missing", then "unchanged" forever — and held every file twice in memory); its digests are the old function's
-  byte for byte (mcp/tests/12-lifecycle.js checks pieces of 1–64 bytes against it). `spec_drift` hashes only those files (never walks the tree); a baselined feature with open tasks is
-  `reopened`, one changed since its finish (`staleFinish()`) is `stale` (verdict `stale`, CLI exit 1 — finish it
-  again; the catalog calls it `complete`) but its recorded files are STILL hashed: one that drifted puts it in
-  `features` (`stale: true`) and `drifted` (verdict `drift`) — a stale baseline must never hide a changed file
-  (a new file under an implemented folder used to make another file's drift vanish, and the re-finish accepted it).
-  An unreadable state is verdict `error` — never "clean". The catalog's `finished` is next_action's / finish's: it also
-  needs every tick verified (`verificationStatus`), no artifact changed since its approval BY CONTENT
-  (`changedSinceApproval` minus `byDate`, as finish) and no new `_Implements:_` file (the walk runs last, only for a
-  feature still finished; `baselineFiles(…, known)` skips the realpath check for files the baseline already has — it
-  was the whole cost). An ARCHIVED feature is never walked for new files (drift and catalog): it can't be finished
-  where it is; the CLI stale line for an archived one says restore → finish → archive again, and `existingFeature`'s
-  not-found error names an archived folder of that name (`err.archivedHint`).
-  SessionStart adds one line per drifted ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
-- **Archive → restore:** archive records `archived: {at, entry, dependents}` in the archived `.state.json`
-  BEFORE pruning roadmap.json; restore moves the folder back, re-adds the entry and the dependents' `dependsOn`
-  in their old position (only for features that still exist; a now-circular edge is skipped and reported). An edge to a
-  feature that is ARCHIVED too is handed to that feature's own archive record (reason `archived`), so its restore puts it
-  back — in either order (it was dropped as "gone" for good). The
-  archive result names what the prune did — `dependentsPruned` (always), plus `incompleteDependency: true` and a
-  warning `note` when the archived feature wasn't complete (its dependents now read as unblocked; the roadmap
-  meets a dep at 100%). `rename` rewrites archived records too (`renamePlan()`), so restore finds the new slug.
-  **Never through a link (1.24 r6):** archive into a `.specs/_archive/` that is a link (or resolves outside .specs/) moved the
-  whole feature there, and restore pulled any folder the link's target held into .specs/; both are refused now by the write gate
-  (conventions.md → The write gate: the archive's `ensureDir(_archive)`, the restore's lock at `_archive/<slug>/.lock`, a linked
-  `_archive/<slug>` too) — `linked: true`, nothing moved. A `_archive` that is a FILE is a localized `wrongKind` refusal.
-  **One slug active AND archived (1.23 review 5):** archive refuses (`err.alreadyArchived`) and restore refuses
-  (`restore.activeExists`) — each used to advise the other's refused step ("archive it", "Remove it there first", with no command
-  for either); both now name the one way out, a rename of the active feature (the runnable `feature rename` line). The state is not
-  made by rename any more: a rename onto a slug `_archive/` holds is refused (`err.renameArchived`, `archivedName: true`, nothing
-  moved). `spec_create` of a NEW feature whose slug an archived one holds is allowed (a name may be planned again) and says so
-  (`archivedTwin: true` + `createArchivedTwin`; spec_import puts it in `warnings`).
-- (The section's other two bullets moved: **Guard mode** → claude-code-integration.md, **Scoped steering** →
-  templates-imports-exports.md.)
+## Catalog, drift, restore
+- **`SPECS.md` is generated** (`spec_export {format: "catalog", write}`, `maybeRefreshCatalog()`) behind the `RE_AUTOGEN` /
+  `isGeneratedOrAbsent()` guard — a hand-written one is never overwritten; once it exists, every roadmap refresh refreshes it
+  (Roadmap files).
+- **`_Supersedes: <feature>/US-n.AC-m[, …]_`** on a criterion (its line, a sub-line or its table row) marks the older AC
+  replaced. `stripSupersedes()` runs before own-AC extraction, so the foreign ID is never this feature's AC; an unresolvable one
+  is `phantomSupersedes`, never a gap.
+- **Only a SHIPPED declarer retires an AC** (`featureShipped()`: finished or execution signed off — the release notes' rule). A
+  draft's declaration is `supersedePending: true` — "to be superseded by … (not shipped yet)", still current (`totals` pending ⊂
+  current; `counts.supersedePending`); a retired AC names only its shipped declarers. A shipped feature counts only the
+  declarations of its requirements snapshot approved at or before its latest ship (`shippedSupersedeKeys()`; no snapshot → all);
+  one archived without shipping declares nothing and its ACs are not current. `supersededByIndex()` (`.live`, `.liveBy`) and
+  `catalogData()` (`supLiveBy`) share the rule.
+- **Drift baseline:** `spec_finish {write}` on a READY feature records `.state.json → finished` `{at, files: {rel: sha1|null}}`
+  over its `_Implements:_` files (folders expanded, inside the project). `fileHash()` reads `FILE_HASH_CHUNK` (1 MiB) pieces
+  (`readSync`), CRLF-normalized across pieces — never a whole-file read; mcp/tests/12-lifecycle.js pins its digests.
+- **`spec_drift`** hashes only those files. Open tasks → `reopened`; changed since its finish (`staleFinish()`) → `stale` (CLI
+  exit 1; the catalog says `complete`), yet still hashed: a drifted file gives verdict `drift` — a stale baseline never hides a
+  change. An unreadable state is `error`. SessionStart: one line per drifted ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
+- **The catalog's `finished`** is finish's: ticks verified (`verificationStatus`), nothing changed BY CONTENT since approval
+  (`changedSinceApproval` minus `byDate`), no new `_Implements:_` file (walked last; `baselineFiles(…, known)` skips the realpath
+  check for known files — the whole cost). An ARCHIVED feature is never walked for new files: its stale line says restore →
+  finish → archive; `existingFeature`'s not-found error names an archived twin (`err.archivedHint`).
+- **Archive → restore:** archive writes `archived: {at, entry, dependents}` into the archived `.state.json` BEFORE pruning
+  roadmap.json; restore re-adds the entry and the dependents' `dependsOn` in place (live features; a now-circular edge is skipped
+  and reported). An edge to a feature archived too moves into its record (reason `archived`, else `gone`) — either restore order
+  rebuilds it. The result has `dependentsPruned`, plus `incompleteDependency: true` and a warning `note` for an incomplete
+  feature. `rename` rewrites archived records (`renamePlan()`).
+- **Never through a link:** a linked (or escaping) `_archive/` or `_archive/<slug>` is refused by the write gate (conventions.md →
+  The write gate: `ensureDir(_archive)`, the restore's `_archive/<slug>/.lock`) — `linked: true`, nothing moved; a `_archive`
+  FILE → `wrongKind`.
+- **One slug active AND archived:** archive (`err.alreadyArchived`) and restore (`restore.activeExists`) refuse, naming the
+  runnable `feature rename`; a rename onto an archived slug is refused (`err.renameArchived`, `archivedName: true`). `spec_create`
+  of a new feature with an archived twin's slug is allowed and says so (`archivedTwin: true`, `createArchivedTwin`).
 
-## A feature's own git branch (1.25 — `create --branch`, `spec_create {branch}`)
-- **What it records.** `.state.json → branch` = `{name, base, commit, at}`: the branch the feature started on, the branch HEAD
-  named then (`base`; null on a detached HEAD) and HEAD's commit (null in a repository without a commit); `at` = the feature's
-  `createdAt` (a re-run that records one later: that time). Only when asked and recorded — a feature without one has no key (the
-  1.24 state, byte for byte). `featureBranchRecord()` (state.js) is THE reader: a record whose name is no usable branch (a hand
-  edit) reads as none.
-- **The name** (`branchInput()`, scaffold.js): `true` / `"true"` → `defaultBranchName(kind, slug)` — `feature/<slug>` (a feature,
-  a change), `fix/<slug>` (a bugfix — finish's `fix(...)` title), `spike/<slug>`; a string → itself, trimmed; `false` / `"false"`
-  → none. `branchNameOk()` (state.js): letters, digits, `.` `_` `+` `-` `/` only — the command is handed out UNQUOTED (one line
-  that reads the same in sh, PowerShell and cmd.exe; a name with a space, a quote, `$ ; | & , ( )` would need a shell's own quoting)
-  — then git's rules (check-ref-format --branch): no `..` / `//`, no part starting with `.` or ending with `.lock`, no leading `-`
-  / `/`, no trailing `/` / `.`, not `HEAD`, ≤ 200 characters. Refused (`branch.invalid`, `branch.empty`) BEFORE anything is
-  written, like size / kind.
-- **The engine never runs git** (the hard rule): `gitRepoFacts()` (state.js) READS the repository as files — the nearest `.git`
-  up from the project (a folder, or a worktree's / submodule's `.git` FILE → its gitdir; the branches live in `commondir`, HEAD
-  in the worktree's own gitdir — `gitDirsOf()`), HEAD (`ref: refs/heads/<x>` → base, a bare sha → detached), the loose ref or
-  its packed-refs line (the commit; does a branch exist). A reftable repository (`<commondir>/reftable/`) can't be read that way:
-  base / commit / exists are null (unknown). The CLI hands what git ITSELF says instead (`createFeature(…, {git})` — `{repo,
-  base, commit, current, exists(name)}` from `rev-parse --is-inside-work-tree`, `symbolic-ref --short HEAD`, `rev-parse --verify
-  HEAD^{commit}`, `rev-parse --verify refs/heads/<name>`; `{repo: false}` outside a work tree; nothing when git can't run — then
-  the files). `planBranch()` decides: no repository → not recorded (`reason: "no-git"`); a branch of that name that EXISTS →
-  not recorded, no command (`reason: "exists"` — it may hold other work: never adopted, never switched onto silently); else
-  recorded, with `command` (`git switch -c <name>`) and `args` (git's arguments — the CLI runs them without a shell). A re-run
-  keeps the recorded branch (`kept: true`; another name asked is noted, never recorded) and hands out the way onto it — `git
-  switch <name>` (`-c` while the branch isn't there yet), nothing when HEAD is on it. An existing feature without one gets it on
-  a re-run (`storeFeatureBranch`, under the feature lock createFeature's re-run holds). Over MCP the result's `note` says to run
-  the command (`branch.run`; the CLI runs it itself, so not there).
-- **The CLI** (`create` / `bugfix` / `spike --branch [<name>]`): git read first (`branchGitFacts`), the engine records, then
-  `branchSwitch` runs `branch.args` and adds `switched` / `created` / `current` / `error` to the result (`--json`). It switches only
-  onto a branch it creates or the feature's OWN recorded one. **Exit 1 whenever the feature does not end up on its branch** — no
-  repository, the name taken, git missing (the record made from the files stays; the line names the command), `git switch`
-  refused (e.g. `refs/heads/zz` exists, so `zz/x` can't — the record stays: a re-run tries again) — the feature itself is created
-  all the same (partial success = 1, as `upgrade --apply`). `--branch` is a value flag whose value is OPTIONAL (bare = the
-  default name — conventions.md → CLI); a track word as its spaced value (`create x --branch tdd`) is refused as ambiguous.
-- **The readers.** `spec_status` / `spec_next_action` / `spec_finish` carry `branch` (`branchView()`: the record + `current`, the
-  branch HEAD names now, and `exists` — from the files, per call). next_action appends `branch.notOn` (`git switch <name>` first)
-  to the step's recommendation while HEAD is on another branch and the phase isn't complete — the step itself never changes.
-  finish: a line in the merge summary (`branch.summary`, under the Summary paragraph) and, ready, the two local options with the
-  names in `message` (`finishBranchLine` — a base no shell could take unquoted is left out of the command); a spike's finish /
-  next_action carry `branch` too (its merge summary has no line — decisions.js untouched). `dev-spec log` reads `git log
-  <commit>..HEAD` from the recorded commit (older commits are no work of this feature; a commit git no longer knows → the whole
-  log) and says so (`since` + `branch.logSince`). `spec_log` / `log -` (1.25.1, review 7 — "the same result as `dev-spec log
-  --json`" did not hold: they read the whole text they were given) take the same range: spec_log's description names `git log
-  <branch.commit>..HEAD`, and `taskCommits` — when its caller says nothing (`opts.since` undefined; the CLI passes the range it read,
-  or `null` for its whole-log fallback) — reads the branch record, cuts a log that holds the start commit there (it and the older
-  commits after it) and labels `since`. Drift needs no
-  start: it compares against the finish baseline. No hook reads the record.
-- **Merging it** (conventions.md → Merging the spec state): `branch` → the EARLIER record (`mergeBranchRecord`).
+## A feature's own git branch
+- **The record** (`create` / `bugfix` / `spike --branch`, `spec_create {branch}`): `.state.json → branch` = `{name, base, commit,
+  at}` — `base` the branch HEAD named (null when detached), `commit` HEAD's (null without one), `at` = `createdAt` or the later
+  re-run's time; no key unless recorded. `featureBranchRecord()` (state.js) is THE reader — an unusable name reads as none.
+- **The name** (`branchInput()`, scaffold.js): `true` → `defaultBranchName(kind, slug)` (`feature/`, `fix/` for a bugfix,
+  `spike/`); a string → itself, trimmed; `false` → none. `branchNameOk()` (state.js): letters, digits, `.` `_` `+` `-` `/` only —
+  the command is handed out UNQUOTED, one line for sh, PowerShell and cmd.exe — then git's check-ref-format rules, ≤ 200
+  characters; `branch.invalid` / `branch.empty` refuse before any write.
+- **The engine never runs git.** `gitRepoFacts()` (state.js) reads the repository's files: the nearest `.git` (a worktree's
+  gitdir and `commondir` via `gitDirsOf()`), HEAD, loose and packed refs; a reftable repository reads as unknown. The CLI passes
+  git's own answer instead: `createFeature`'s `opts.git` = `{repo, base, commit, current, exists(name)}` from cli/git.js
+  `branchFacts` (undefined when git can't run → the files).
+- **`planBranch()`:** no repository (`reason: "no-git"`) or a branch of that name that EXISTS (`reason: "exists"` — it may hold
+  other work: never adopted or switched onto) → not recorded, no command. Else recorded with `command` (`git switch -c <name>`)
+  and `args` (run without a shell). A re-run keeps the record (`kept: true`; another name is only noted) and hands out `git
+  switch [-c] <name>` unless HEAD is on it; a feature without one gets it (`storeFeatureBranch`, under the feature lock). Over
+  MCP the `note` says to run it (`branch.run`).
+- **The CLI** (cli/commands.js): `branchGitFacts`, the engine, then `branchSwitch` runs `branch.args` through cli/git.js `gitRun`
+  (+ `switched` / `created` / `current` / `error`), only onto a branch it creates or the feature's own. **Exit 1 whenever the
+  feature does not end up on its branch** (no repository, the name taken, no git, `git switch` refused); the feature and the
+  record stay, so a re-run retries. `--branch` takes an OPTIONAL value (conventions.md → CLI arguments); a track word as its spaced value
+  (`create x --branch tdd`) is refused as ambiguous.
+- **The readers:** `spec_status` / `spec_next_action` / `spec_finish` carry `branch` (`branchView()`: + `current`, `exists`).
+  next_action appends `branch.notOn` while HEAD is elsewhere and the phase is open — the step never changes. finish adds
+  `branch.summary` and, ready, the two local options (`finishBranchLine`; a base no shell takes unquoted is left out); a spike's
+  summary has no line. Drift and the hooks never read the record.
+- **The log range:** `dev-spec log` reads `git log <commit>..HEAD` (an unknown commit → the whole log; `since`,
+  `branch.logSince`); `taskCommits` cuts a handed-in log (`spec_log`, `log -`) at the recorded commit when `opts.since` is
+  undefined (the CLI passes its range, or `null`), so every surface gives the same result.
+- **Merging it** (conventions.md → Merging the spec state): the EARLIER record wins (`mergeBranchRecord`).
 
-## Upgrade (1.13) — `meta.specVersion` and `spec_upgrade`
-- **The engine's version** is `engineVersion()`: `package.json` at the clone's root (three levels above `engine/upgrade.js`), read once; not readable or not
-  x.y.z → `null`, and then nothing is stamped and no notice is shown (never a guessed version). Versions are compared by
-  `compareSemver()` — numerically (1.9.0 < 1.13.0), a pre-release before its release; never a string compare.
-- **`roadmap.json → meta.specVersion`** = the dev-spec version that last upgraded or created the project (`stampOf()`: a
-  string that parses, else absent). `stampSpecVersion()` writes it under the roadmap lock, never lowers it and never writes
-  over a broken roadmap.json. Three writers only: `spec_init` and `spec_create` when the project had NO feature before the
-  call (`featureDirs()` — active or archived — counted BEFORE anything is written; best-effort), and `spec_upgrade {apply}`
-  (last, and only once every feature migrated — a busy or broken feature keeps the notice until a retry). A brand-new
-  project must never get the upgrade notice; a legacy project must never be stamped by creating one feature or re-running init.
-- **SessionStart** adds ONE line (`msg.upgrade.hookLine`) while `specVersionStatus().behind` (no stamp, or an older one) —
-  roadmap.json is already read for the language; wrapped in try/catch. The PostToolUse hook treats `.specs/UPGRADE.md` as a
-  generated file (no roadmap refresh on its edits).
-- **The audit** (`specUpgrade`, default, read-only) reuses the engine's verdicts per ACTIVE feature (archived ones are counted
-  in `archived`): `specDoctor` once (`nextAction(…, {doctor})` reuses it — never run twice), `verificationStatus`,
-  `changedSinceApproval` (via next_action), the finish baseline (`baselineDrift`, `staleFinish` state-only). One test-code walk
-  for the whole call: `traceTestCode()` accepts a function for `scan`, called only when a feature needs it. Stable codes (never
-  localized): `status` not-started · planning · executing · complete · finished (= phase complete + a finish baseline),
-  `review` critic (no task ticked) · converge (some done, some open) · none, `group` blocked (doctor fail) · attention · ok,
-  `attention` codes, history skip `reason`s. **Bare AC-n IDs (1.22 review 2):** a feature approved before 1.22 with criteria
-  numbered `AC-1`, `AC-2` fails doctor's `ears` / `traceability` now (a bare ID is no ID trace_check reads); the audit lists them
-  (`bareAcIds` — `criteriaBareIds()` over the criteria, a change's change.md included — and `criteriaFile`), attention
-  `bare-ac-ids`, and an item (`upgrade.item.bareAcIds`, EN / PT / ES, in UPGRADE.md too): renumber them US-<story>.AC-<n>, their
-  references in tasks.md / test-plan.md too (review 3: a change has neither — the item names its tasks' `_Requirements:_` in
-  change.md), then re-approve. It never renumbers anything itself (the audit edits no spec).
-  `lines` (and UPGRADE.md) are rendered in the PROJECT language by
-  `upgradeLines()` / `renderUpgradeMd()` over one item list (`upgradeItems()`); next_action's recommendation stays in the
-  feature's language, as everywhere.
+## Upgrade — `meta.specVersion` and `spec_upgrade`
+- **The engine's version:** `engineVersion()` reads `package.json` at the clone's root (three levels above
+  `engine/upgrade.js`) once; unreadable or not x.y.z → `null` — nothing stamped, no notice, never a guess. `compareSemver()`
+  compares numerically (1.9.0 < 1.13.0), a pre-release before its release — never as strings.
+- **`roadmap.json → meta.specVersion`** (`stampOf()`) = the version that last created or upgraded the project.
+  `stampSpecVersion()` writes it under the roadmap lock, never lowers it, never over a broken roadmap.json. Writers: `spec_init` /
+  `spec_create` only when the project had NO feature, active or archived (`featureDirs()`, counted before any write), and
+  `spec_upgrade {apply}`, last, once every feature migrated — a new project never gets the notice, a legacy one is never stamped
+  by init or a create. SessionStart adds ONE line (`msg.upgrade.hookLine`) while `specVersionStatus().behind`.
+- **The audit** (`specUpgrade`, read-only, ACTIVE features; archived ones counted) reuses the engine's verdicts: `specDoctor`
+  once (`nextAction(…, {doctor})`), `verificationStatus`, `changedSinceApproval`, `baselineDrift` / `staleFinish`; one test-code
+  walk per call (`traceTestCode()` takes a lazy `scan`). Stable codes, never localized: `status` not-started · planning ·
+  executing · complete · finished, `review` critic · converge · none, `group` blocked · attention · ok, the `attention` codes,
+  the skip `reason`s. `lines` and UPGRADE.md are in the PROJECT language (`upgradeLines()` / `renderUpgradeMd()` over
+  `upgradeItems()`).
+- **Bare AC-n IDs** (`AC-1`) fail doctor's `ears` / `traceability`; the audit lists them (`bareAcIds` via `criteriaBareIds()`, a
+  change's change.md too; `criteriaFile`; attention `bare-ac-ids`) with `upgrade.item.bareAcIds`: renumber to
+  US-<story>.AC-<n> with their references, then re-approve. The audit edits no spec.
 - **The migrations** (`apply: true`) never edit an artifact, approve, tick, untick or delete. Per feature, under its lock,
-  `upgradePlan()` → `applyUpgradePlan()` writes `.state.json` once: `tracks` only when absent (`undefined` or `[]` — a
-  malformed list is left alone), the approvals whose latest version isn't in `approvalHistory` as `legacy` records
-  (`legacyRecord()`, the builder `approvePhase` seeds with), and for an approval WITHOUT a snapshot whose recorded fingerprint
-  still matches its artifact (`fingerprintMatches`) that artifact saved through `writeSnapshot()` (next free
-  `.history/<phase>@<n>.md`, never a renumber; a bugfix design approval's design.md too when its `designFingerprint` matches)
-  on that very record, stamped `seededAt`. Skipped with a stable reason: `no-fingerprint` (date-only), `changed`, `missing`,
-  `untracked` (a 1.12 bugfix design approval — `file` absent, so any fingerprint is design.md's), `snapshot-missing`. Then
-  `.specs/.gitignore` (`missingIgnoreLines()` computed BEFORE any lock — every lock ensures it), the stamp, a roadmap refresh,
-  the audit of the result and `.specs/UPGRADE.md` (the `RE_AUTOGEN` marker family, `isGeneratedOrAbsent` — a hand-written one
-  is reported, never overwritten). **Idempotent:** UPGRADE.md is written only when something migrated, and it carries no
-  date, so a second apply writes nothing at all and says so (`migrations.changed: false`).
-- CLI `dev-spec upgrade [--apply] [--json]` prints `lines`; exit 0 with a report, 1 on an error (no .specs/, a broken
-  roadmap.json, a feature that couldn't be migrated).
+  `upgradePlan()` → `applyUpgradePlan()` writes `.state.json` once: `tracks` when absent (a malformed list left alone);
+  approvals missing from `approvalHistory` as `legacy` records (`legacyRecord()`, as `approvePhase` seeds); for a snapshot-less
+  approval whose fingerprint still matches (`fingerprintMatches`, a bugfix's `designFingerprint`), the artifact via
+  `writeSnapshot()` (the next free `.history/<phase>@<n>.md`, never a renumber), stamped `seededAt`. Skips: `no-fingerprint`,
+  `changed`, `missing`, `untracked` (a legacy bugfix design approval without `file`), `snapshot-missing`. Then
+  `.specs/.gitignore` (`missingIgnoreLines()`, before any lock), the stamp, a roadmap refresh, the re-audit and UPGRADE.md
+  (`isGeneratedOrAbsent`). **Idempotent:** UPGRADE.md has no date and is written only when something migrated
+  (`migrations.changed: false` otherwise). CLI `dev-spec upgrade [--apply] [--json]` exits 1 on an error (no .specs/, a broken
+  roadmap.json, a feature not migrated).
 
-## Decisions and spikes (1.14)
-- **`decisions.md`** (committed with the spec — `.execution/` is the scratch area): a localized header, then per entry
-  ```
-  ## D-<n> — <title>
-  - _Kind: decision | discovery_
-  - _Date: <ISO timestamp>_
-  - _Affects: US-1.AC-2, T-03, <design section>_      (optional)
-  - _Supersedes: D-1_                                 (optional)
-  **Context:** …  **Decision:** (or **Discovery:**) …  **Consequences:** …   (localized labels; any EN/PT/ES spelling read)
-  ```
-  The IDs and markers are English-stable; markers are read only between the heading and the first label; HTML comments
-  and fenced code never hold an entry. `spec_decide` appends under the feature lock: numbered after the highest D-n, the
-  existing bytes never rewritten (a BOM and CRLF kept — the entry follows the file's line ends; a code fence left open at
-  the end is closed first, by appending its closer — the entry was written unreadable and its D-n handed out again; since 1.23
-  review 5 this is `appendSpecText()` (decisions.js), THE append of every spec writer: spec_add_track's design sections and task
-  block, the covered sections a track removal restores (`restoreCoveredSections`) and the importer's design body + track blocks —
-  their `opts.trim` join; add_track's sections landed inside an open fence, read 'missing', and a re-add wrote them twice.
-  `appendTasks` (tasks.js) does not use it yet); title ≤ 200 and texts ≤
-  20 000 characters. `_Affects:_` is validated when written (an AC defined in requirements.md, a T-ID planned in
-  test-plan.md, an EC/NFR/SC ID written in requirements.md, anything else a design.md section heading — bug.md /
-  design.md for a bugfix, spike.md for a spike; unknown → error `unknownAffects`, nothing written). **A heading holding "," /
-  ";"** (1.22 review — the size-S "Decisions, reuse & risks" and its PT / ES twins, "[API] Pagination, Idempotency &
-  Concurrency"): the value is split OUTSIDE backtick-quoted spans (`affectPieces()` / `splitRefs()`), the entry writes such a
-  reference `quoted` (`quoteRef`), and a piece that names nothing is joined with the ones after it (at most
-  `AFFECTS_JOIN_MAX`, the longest first) when together they name something — `affectsRefs()` over the value's own separators
-  for spec_decide (the unquoted CLI `--affects "Decisions, reuse & risks"`), `entryRefs()` with ", " for a logged entry
-  (trace's phantomAffects, doctor's decision-affects-approved). `_Supersedes:_ D-n`
-  must name existing entries; a superseded entry is retired (the brief and `decision-affects-approved` skip it, the catalog
-  marks it). Readers: the brief (bounded), finish's merge summary, spec_export, spec_export {format: "catalog"} (count + titles),
-  trace_check (`phantomAffects`, warnings — never a gap), doctor (`decision-affects`, and `decision-affects-approved` for
-  a current decision recorded AFTER the approval of the requirements / design it names), and (1.25) the ADR export —
-  `spec_export {format: "adr"}` (`exportAdr`, decisions.js): one MADR file per decision whose ADR number IS its D-number
-  (one more reason the log never renumbers), superseded ↔ supersedes linked, discoveries left out —
-  templates-imports-exports.md → Exports and planning has the rules.
-- **Spike kind** (`kind: "spike"`, `question`, `timebox` `YYYY-MM-DD` | `3d`): spike.md (Question · Timebox · Options
-  considered · Evidence · Decision + `_Outcome: go | no-go | pivot_` · Follow-up — localized headings matched by
-  `SPIKE_SYN`; `_Outcome:_` also reads the PT/ES words and yes/no) + investigation tasks; core-only; `gateWalk`,
-  `pendingGateList` and `chainArtifacts` are empty for it, approve refuses every phase but the execution sign-off and
-  add_track refuses it. Own doctor (`spikeDoctor`: question; decision — FAIL until written, prose outside the brackets,
-  the `_Outcome:_` line alone is no rationale —; timebox — warn once past with no decision), next_action (question →
-  investigate → decide → go: spec the real feature seeded from question + decision and archive the spike · no-go: archive
-  · pivot: a new spike), finish (ready once decided and every task ticked — no suite / evidence gates) and detectPhase
-  (requirements → tasks-ready → executing → complete). Roadmap (🔬, timebox attention), catalog, export and resources know
-  it; the changelog never lists one. Prototype code lives outside `.specs/`.
+## Decisions and spikes
+- **`decisions.md`** (committed; `.execution/` is scratch): a localized header, then entries `## D-<n> — <title>` with the
+  markers `_Kind: decision | discovery_`, `_Date:_` and the optional `_Affects:_` / `_Supersedes: D-m_`, then **Context** /
+  **Decision** (or **Discovery**) / **Consequences** (localized; any EN/PT/ES label read). IDs and markers are English-stable,
+  read only between the heading and the first label; HTML comments and fenced code never hold an entry.
+- **`spec_decide`** appends under the feature lock after the highest D-n, the existing bytes untouched (BOM, CRLF kept); title ≤
+  200, texts ≤ 20 000 characters.
+- **`appendSpecText()` (decisions.js) is THE append of every spec writer** (spec_decide, spec_add_track,
+  `restoreCoveredSections`, the importer): a code fence left open at the end is closed first, else the addition lands inside it,
+  reads as missing and is written again. `appendTasks` (tasks.js) inserts inside a phase instead.
+- **`_Affects:_`** must name an AC, a planned T-ID, an EC/NFR/SC ID or a design heading (bug.md for a bugfix, spike.md for a
+  spike) — else `unknownAffects`, nothing written. A heading holding "," / ";" ("Decisions, reuse & risks") is split OUTSIDE
+  backtick spans (`affectPieces()`, `splitRefs()`), written `quoted` (`quoteRef`), and a piece naming nothing joins the next ones
+  (≤ `AFFECTS_JOIN_MAX`) — `affectsRefs()` for spec_decide, `entryRefs()` for a logged entry.
+- **`_Supersedes:_ D-n`** names existing entries; a superseded entry is retired (skipped by the brief and
+  `decision-affects-approved`, marked in the catalog).
+- **Readers:** the brief (bounded), finish's merge summary, spec_export and the catalog, trace_check (`phantomAffects`, warnings),
+  doctor (`decision-affects`; `decision-affects-approved` for a decision recorded AFTER the approval it names), the ADR export
+  (`exportAdr`: ADR number = D-number, so the log never renumbers — templates-imports-exports.md → Exports and planning).
+- **Spike kind** (`kind: "spike"`, `question`, `timebox` `YYYY-MM-DD` | `3d`): spike.md (Question · Timebox · Options considered ·
+  Evidence · Decision + `_Outcome: go | no-go | pivot_` · Follow-up; `SPIKE_SYN`; `_Outcome:_` also reads PT/ES and yes/no) +
+  investigation tasks; core-only, no gates (`gateWalk`, `pendingGateList`, `chainArtifacts` empty; approve takes only the
+  execution sign-off; add_track refuses it). `spikeDoctor`: the decision FAILs until written with prose (the `_Outcome:_` line
+  alone is no rationale); the timebox warns once past. next_action: investigate → decide → go (spec the real feature from it,
+  archive the spike) · no-go (archive) · pivot (a new spike). finish: decided + every task ticked, no suite / evidence gates.
+  detectPhase: requirements → tasks-ready → executing → complete. Roadmap (🔬, timebox attention), catalog, export and resources
+  know it; the changelog never lists one; prototype code lives outside `.specs/`.
 
-## Forecasts and cross-feature overlap (1.14)
-- **Sizes:** `_Size: XS|S|M|L|XL_` (English-stable; its line or a sub-line, never fenced code) = 1/2/3/5/8 points
-  (`SIZE_POINTS`); an unsized task counts as its feature's median sized task, else M.
-- **Ticks:** `spec_complete_task` records `.state.json → ticks[n]` = ISO, written BEFORE the tick (`recordTick`; a
-  non-object `ticks` is left alone). A task ticked before 1.14 falls back to its first passing evidence run, else the
-  record's time (`taskCompletedAt`); a box ticked by hand has no time and is not counted.
-- **Velocity** = points per WORKING day (Mon–Fri, local calendar days — 1.25.1: they were UTC days, conventions.md → Calendar
-  dates) over the last `FORECAST_WINDOW_DAYS` = 28 calendar days,
-  counted from the day of the window's first completion through today — project-wide, and per feature once it has
-  `FORECAST_MIN_TASKS` = 3 completions of its own in the window. **The project rate counts the ARCHIVED features' completions
-  too (1.24 r6 G3, `archivedCompletions()`):** their ticks happened — archiving a feature shipped this week wiped the velocity
-  (roadmap, spec_metrics) and turned every other feature's ETA into `not-enough-data`. An archived folder whose mtime is older
-  than the window (archiving writes its .state.json there, after every tick) is skipped unread; with `opts.now` fixed (tests)
-  every archived folder is read. **ETA** = open points ÷ velocity, in working days from
-  today or from the working day after each unfinished dependency's ETA, with a ±`FORECAST_SPREAD` (25%) range (low/high
-  chain off the dependencies' low/high). No ETA → `eta: null` + a stable `reason`: `not-enough-data` (< 3 completions in
-  the window) · `no-tasks` · `dependency` · `cycle` · `done`. Surfaces: `spec_roadmap` (`velocity`, each feature's
-  `forecast`), the ROADMAP.md / .html ETA column ('—' without one) + velocity line, `spec_metrics.velocity`, the CLI
-  roadmap. Pure reads of tasks.md + .state.json.
-- **Every dependency cycle (1.24 r6 G6).** `findCycles()` (state.js — Tarjan's strongly connected components, iterative; a
-  component of more than one feature, or one naming itself) → `{members, path}`; roadmap() returns `cycles` (each one's path,
-  `a → b → a`, the shortest through the component's first feature) and `cycle` = the first (as before). ROADMAP.md / .html write
-  one "Circular dependency" line per cycle, the CLI roadmap names the first in its head line and the others in
-  `roadmapTailLines`. `forecastData()` computes the components itself from the features' dependsOn: every member gets reason
-  `cycle` — only `findCycle`'s first cycle used to (a → a hid b ↔ c), and a member the walk met second was overwritten with
-  `dependency`. `findCycle` stays the refusal's check (spec_roadmap_edit {kind: "depend"}, restore). **A dependency done but not signed off**
-  (review 6 G-I6) needs nothing: every task ticked IS phase `complete` (100%, detectPhase — the execution sign-off is finish's
-  business), so its dependents are unblocked and chain their ETA from today (a test pins it).
-- **Overlaps** (`featureOverlaps()`): two ACTIVE features whose OPEN tasks plan the same files (`implementsKey`; a folder
-  covers the files under it, a glob what it matches and its literal folder), or an active feature planning a file a
-  FINISHED feature recorded in its drift baseline. Not an overlap: features ordered by a dependency (either way,
-  transitively — a finished pair included) or one declaring `_Supersedes:_` of the other's criteria. Bounded (`OVERLAP_MAX_KEYS` 500,
-  `OVERLAP_MAX_GLOB_CHECKS`, `OVERLAP_MAX_PAIRS` 50), text reads only — nothing hashed, since SessionStart runs it.
-  Surfaces: ROADMAP.md "Needs attention" (each pair once), doctor warn `cross-feature-overlap` (fix with spec_roadmap_edit {kind: "depend"} or
-  `_Supersedes:_`), one SessionStart line. Doctor runs `featureOverlaps(…, {only})` (a whole roadmap() walk) only when an
-  OPEN active task of the feature has an `_Implements:_` — a pair needs one on its active side (1.22 review, a 30 features ×
-  40 tasks project, a feature with none: doctor 236 → 64 ms, next_action 336 → 96 ms, spec_finish 257 → 75 ms); the answer is
-  the walk's. **The walk is light (1.24 r6 I-I3):** without a feature list (doctor, SessionStart — the roadmap renderer passes its
-  own) `featureOverlaps` reads `overlapFeatures()` — per active feature only what it uses: the name, complete or not (detectPhase's
-  rule: every active task ticked; a spike: `spikePhase` says complete) and roadmap.json's dependsOn, in roadmap()'s order (meta.order,
-  then the name) — tasks.md, .state.json and roadmap.json, never detectPhase's planning chain (a planned feature's requirements /
-  design / test plan and the placeholder corpus). The same pairs (mcp/tests/12-lifecycle-review6.js "I-I3", and the review's
-  overlap-exp.js). featureOverlaps in one process, warm, per call (the reviewer's 10 / 52 / ~150-feature projects): 9 / 45 / 126 →
-  6 / 20 / 55 ms; fresh processes (p50 of 11 interleaved): SessionStart 254 / 390 → 248 / 342 ms at 52 / 150, `dev-spec doctor`
-  332 / 477 → 310 / 410, `dev-spec next-action` 282 / 383 → 252 / 288. No cache across calls in the MCP server (the decision
-  above, Roadmap files): every call reads the files again.
+## Forecasts and cross-feature overlap
+- **Sizes:** `_Size: XS|S|M|L|XL_` (English-stable, never in fenced code) = 1/2/3/5/8 points (`SIZE_POINTS`); an unsized task
+  counts as its feature's median sized task, else M.
+- **Ticks:** `completeTask` (tasks.js) records `ticks[n]` = ISO in its one `.state.json` write BEFORE the tick (a non-object
+  `ticks` is left alone). No tick time → the first passing evidence run, else the record's time (`taskCompletedAt`); a box
+  ticked by hand never counts.
+- **Velocity** = points per WORKING day (Mon–Fri, LOCAL days — conventions.md → Calendar dates) over the last
+  `FORECAST_WINDOW_DAYS` (28), from the window's first completion through today; per feature once it has `FORECAST_MIN_TASKS` (3)
+  completions. The project rate counts ARCHIVED features' completions (`archivedCompletions()`; an archived folder whose mtime
+  predates the window is skipped unread, unless `opts.now` is fixed).
+- **ETA** = open points ÷ velocity, in working days from today or from the day after each unfinished dependency's ETA,
+  ±`FORECAST_SPREAD` (25%). None → `eta: null` + a stable `reason` (`not-enough-data` · `no-tasks` · `dependency` · `cycle` ·
+  `done`). Pure reads of tasks.md + .state.json.
+- **Every dependency cycle:** `findCycles()` (state.js, iterative Tarjan) → roadmap()'s `cycles` (one path each; `cycle` = the
+  first), one ROADMAP line each, the CLI's extras in `roadmapTailLines`; `forecastData()` gives every member reason `cycle`.
+  `findCycle` stays the refusal's check (depend, restore).
+- **A dependency done but not signed off** is phase `complete` (detectPhase): its dependents are unblocked (a test pins it).
+- **Overlaps** (`featureOverlaps()`): ACTIVE features whose OPEN tasks plan the same files (`implementsKey`; folders and globs
+  cover what they hold), or a file a FINISHED feature's baseline holds — never between features ordered by a dependency
+  (transitively) or one superseding the other. Bounded (`OVERLAP_MAX_KEYS` 500, `OVERLAP_MAX_GLOB_CHECKS`, `OVERLAP_MAX_PAIRS`
+  50), text reads only — SessionStart runs it; doctor warns `cross-feature-overlap`.
+- **The walk's cost:** doctor runs `featureOverlaps(…, {only})` only when an OPEN task has an `_Implements:_`; without a feature
+  list it reads `overlapFeatures()` (name, complete or not — `spikePhase` for a spike —, dependsOn), never detectPhase's planning
+  chain (mcp/tests/12-lifecycle-write-gate.js "I-I3"). No cache across calls (Roadmap files).
 
-## Roadmap files and dependencies (from Conventions & gotchas)
-- **Generated roadmap files carry the `AUTO-GENERATED by dev-spec` marker (EN/PT/ES, `RE_AUTOGEN`)**.
-  `writeRoadmapMd/Html` skip a same-named file without it — the hooks run in every project; `spec_roadmap`
-  returns a refused ROADMAP.md write as an error (a kept hand-written ROADMAP.html is a warning). The
-  roadmap chrome language is `meta.roadmapLang`; `meta.lang` is the project language and only `spec_init`
-  sets it. The other generated files — `SPECS.md`, `UPGRADE.md`, `RELEASE-NOTES.md`, `.specs/exports/*` — use the same
-  marker family and `isGeneratedOrAbsent()`: a hand-written file of that name is never overwritten.
-  **A broken roadmap.json (1.23 review 5)** — one that doesn't parse or has the wrong shape (`roadmapError()`) — is read by
-  everyone as its sanitized copy; rendered from it, ROADMAP.md lost every dependency, backlog item and milestone while `roadmap
-  --write` exited 0. `writeRoadmapFile()` now refuses (`broken: true`, `err.roadmapNotWritten` after the roadmap.json error) and
-  keeps the last good file; `roadmapReport {write}` is then an error (MCP isError, CLI exit 1 — ROADMAP.html's refusal is not
-  repeated), its read-only view a warning (`err.roadmapViewPartial`), and `maybeRefreshRoadmap` skips both files.
-- **`spec_roadmap_edit {kind: "depend"}`**: `dependsOn` REPLACES the list (`[]` / CLI `--clear` clears), `add`/`remove` (CLI
-  `--add`/`--rm`, repeatable) edit it, `name` alone is a read (a bare `dev-spec depend <f>` used to clear the
-  deps). Every dependency must be an existing feature.
-- **Roadmap files are generated, never hand-edited.** Default is **`ROADMAP.md`** (git-friendly,
-  keeps the Mermaid graph); `ROADMAP.html` is opt-in (`html:true`, self-contained, zero-dep, brand
-  palette + system-default light/dark toggle). `roadmapData()` is the shared computation;
-  `renderRoadmapMd`/`renderRoadmapHtml` (both take `lang`) build the output; `ROADMAP_I18N` holds
-  EN/PT/ES chrome; `meta.roadmapLang` (else `meta.lang`) in `roadmap.json` persists the language for auto-refresh.
-  `maybeRefreshRoadmap` (in every mutator) writes MD always + HTML if it exists + SPECS.md if it exists —
-  best-effort (a hand edit through Claude Code: once a turn — below). **The refresh's cost (1.22 review):** every tick recomputed every feature's row (30 features × 40 tasks: 313
-  ms a tick against 13.8 without the refresh). `roadmapRow()` results are cached IN PROCESS (`ROW_CACHE`, ≤ 500 — the MCP
-  server; a one-shot CLI / hook never calls twice, so the first `roadmapData` of a process signs nothing), keyed on every
-  input the row reads: each entry of the feature folder (size, mtime, ctime, inode; `.history/` one level down; `.execution/`,
-  the lock and temp files skipped), roadmap.json and the steering / templates / tracks folders (two levels), the row's
-  `f` and its overlaps. git's racy rule: a file stamped within `ROW_OPTS.racyMs` (3 s) of now is never trusted (a coarse
-  clock can give two same-size writes one stamp), and a spike's row or one with a waiver (date-dependent) is never stored.
-  The marker readers are memoized by text (`taskMarkerSpans` by line — frozen, shared; `taskMarkers` by the block's prose —
-  copies; bounded). Measured on 30 × 40, in process: a tick with its refresh ~185 → ~65 ms (no refresh: ~10), roadmapData
-  ~180 → ~58; a one-shot `done` / tasks.md save ~470 → ~440. mcp/tests/08-tasks.js renders ROADMAP.md after each kind of
-  change from the cache and fresh and compares them byte for byte. HTML must stay **offline** — no CDN/external URLs (test asserts it).
-- **A hand edit refreshes them ONCE A TURN, not on every save (1.24 r6 I-I1).** The PostToolUse save hook used to refresh ROADMAP.md
-  + SPECS.md on every Write / Edit of a spec file — a one-shot process, so no `ROW_CACHE`: every feature's row each time, ~75 % of
-  the hook. It now lints as before and leaves a STAMP, `.specs/.execution/roadmap-stale` (`markRoadmapStale()`, state.js — create-only
-  through the write gate; the project's `.execution/` git-ignores itself, so no `.specs/.gitignore` line, no upgrade item); a save of
-  a generated file (`ROADMAP.*`, SPECS.md, UPGRADE.md at the root) stamps nothing, and a file with nothing to lint (classification.md,
-  a test plan, steering) is now silent — its "Roadmap updated → N%" line went with the refresh (`hook.roadmapUpdated` is unused).
-  `refreshStaleRoadmap()` — a stat, then `maybeRefreshRoadmap()` (MD + an existing HTML + SPECS.md) — runs where a turn's saves end:
-  the **Stop / SubagentStop hook** (before the gate, whatever it says — a second stop in a row and the gate off included; the
-  projects it already finds: the nearest dev-spec folder at or above the payload cwd and the anchors — one stat each, the engine
-  loads only for a stamped one), **SessionStart** (a session that ended before its Stop), **every engine mutation**
-  (`maybeRefreshRoadmap` clears the stamp first — a save while it runs stamps again) and the **pre-commit check**
-  (hooks/precommit-check.js: the root's `.specs/` and every nested one a staged path names; a generated file that was STAGED is
-  `git add`ed again so the commit holds the fresh one — an unstaged one stays unstaged). **The lag and why it is safe:** ROADMAP.md /
-  SPECS.md / ROADMAP.html are at most one turn behind the specs (a project another agent tool edits never had the hook). Nothing
-  reads them for a decision: approvals fingerprint a feature's own artifacts (`textFingerprint` over requirements / design /
-  test-plan / tasks… — never a generated file); spec_roadmap, the catalog, next_action, doctor, the status line and the stop gate
-  compute from the specs; export.js only asks whether SPECS.md exists; the hooks read ROADMAP.md for its AUTO-GENERATED marker
-  only (`isDevSpecProject`). The one reader that served the file — the `specs://roadmap` / `specs://catalog` resources — serves
-  `staleGeneratedText()` while the stamp is there (the refresh's text, rendered in memory — a hand-written file or a broken
-  roadmap.json: the file, as the refresh would keep it). What can still see the old text: a commit made INSIDE the turn without the
-  pre-commit check installed (the next turn's Stop shows the file modified), and a stamp left in a project the session never
-  stops in (a spec file of ANOTHER project edited through the session) — refreshed by that project's next mutation or session.
-  Measured (p50 of 11 interleaved fresh processes, Windows 11, Node 24; the reviewer's 10 / 52 / ~150-feature projects): a save of
-  tasks.md 243 / 384 / 661 → 169 / 172 / 182 ms, requirements.md 232 / 352 / 645 → 134 / 136 / 158, design.md 219 / 337 / 626 →
-  148 / 148 / 149, classification.md 215 / 350 / 628 → 118 / 132 / 129; the Stop hook that refreshes (once a turn) 163 / 164 /
-  168 → 251 / 383 / 652, without a stamp unchanged; SessionStart unchanged. mcp/tests/10-guards-review6.js ("I-I1") covers the
-  stamp, each refresh point, the resources and the pre-commit re-stage.
-- **The backlog** lives in `roadmap.json` `backlog: [{name,note}]`; `spec_create` (and restore, and a rename onto that name — 1.24 r6) drops the backlog item with the same slug. Name and note are one
-  line (`flatText()` on add and when rendered — a line break became a heading in ROADMAP.md); a name an ACTIVE feature
-  already holds is refused (`backlogIsFeature`); `remove` is an alias of `rm` on every surface (`BACKLOG_ACTIONS`).
-- **What reaches ROADMAP.* from roadmap.json (1.23 review 5).** `dependsOn` is only shape-checked (a list of strings): the
-  Mermaid graph draws edges between EXISTING features only, node ids prefixed (`mid()` → `f_<slug>` — a slug `end`, `graph` or
-  `subgraph` is a flowchart keyword that broke the graph) and labels without a raw quote (`mlabel`); every other place shows a
-  dependency through `depShown()` (a slug as it is; anything else quoted, one line, without `< > \` |`). A dependency no active
-  feature answers to (stale or hand-edited) is a "Needs attention" line (`depend.roadmapStale`) with the command that sets the
-  list again from the deps that exist (`depend <f> <deps…>`, `--clear` when none — `--rm` can't name an entry holding a space);
-  it still counts as unmet. A row's next task is read through `readContained` (a tasks.md linked outside `.specs/` reads as
-  absent — its lines were copied into the committed file) and every display truncation (the next-task cell's 42 / 60 units,
-  UPGRADE.md's details, the release notes' one-liners) goes through `cutText()` — never half a surrogate pair (an emoji cut at
-  the boundary wrote U+FFFD). `spec_import` refreshes the roadmap once, after its files (`createFeature(…, { refresh: false })`).
-  **What a refresh costs, measured (1.23.1, Windows 11, 86 features):** ~400 ms — one import, one create, one `roadmap --write`
-  alike — and it is the four reads per feature (.state.json, tasks.md, requirements.md, design.md), each ONCE per call already
-  (the facade's read-cache scope: 381 opens, no file twice); ~1 ms an open on Windows, the scan itself ~60 ms. Going below would
-  need a cache that outlives the call (keyed by mtime / size in the long-lived MCP server) — not done on purpose: a file
-  rewritten in the same tick with the same size would read stale, and these are the files approvals fingerprint.
+## Roadmap files and dependencies
+- **Generated roadmap files carry the `AUTO-GENERATED by dev-spec` marker (EN/PT/ES, `RE_AUTOGEN`)**: `writeRoadmapMd/Html`
+  never overwrite a file without it (the hooks run in every project); `spec_roadmap` reports a refused ROADMAP.md as an error.
+  `SPECS.md`, `UPGRADE.md`, `RELEASE-NOTES.md` and `.specs/exports/*` share the family (`isGeneratedOrAbsent()`). The chrome
+  language is `meta.roadmapLang`, else `meta.lang` (only `spec_init` sets it).
+- **Roadmap files are generated, never hand-edited:** `ROADMAP.md` by default (Mermaid); `ROADMAP.html` opt-in (`html:true`),
+  self-contained and **offline** — no external URL (a test asserts it). `roadmapData()` computes, `renderRoadmapMd` /
+  `renderRoadmapHtml` render; `maybeRefreshRoadmap` (every mutator) rewrites MD + an existing HTML + an existing SPECS.md,
+  best-effort.
+- **A broken roadmap.json** (`roadmapError()`) is read as its sanitized copy and never rendered: `writeRoadmapFile()` refuses
+  (`broken: true`, `err.roadmapNotWritten`), keeping the last good file; `roadmapReport {write}` is an error (CLI exit 1), its
+  view a warning (`err.roadmapViewPartial`).
+- **`spec_roadmap_edit {kind: "depend"}`**: `dependsOn` REPLACES the list (`[]` / `--clear`), `add` / `remove` edit it, `name`
+  alone is a read; every dependency must exist.
+- **The row cache:** `roadmapRow()` results are cached in process (`ROW_CACHE`, ≤ 500 — for the MCP server), keyed on every
+  input's stats (each feature-folder entry's size, mtime, ctime, inode — `.execution/`, the lock and temp files skipped —,
+  roadmap.json, steering / templates / tracks) plus the row's `f` and overlaps — a row that reads a new input must add it to the
+  key. git's racy rule: a stamp within `ROW_OPTS.racyMs` (3 s) of now is never trusted; a date-dependent row (a spike, a waiver)
+  is never stored. `taskMarkerSpans` (frozen, shared) and `taskMarkers` (copies) are memoized. mcp/tests/08-tasks.js compares
+  cached and fresh output byte for byte.
+- **No file content is cached across calls**, on purpose: `withReadCache` reads each file once per call (~1 ms an open on
+  Windows), and a cross-call cache would serve a same-tick, same-size rewrite stale — the files approvals fingerprint.
+- **A hand edit refreshes them ONCE A TURN.** The PostToolUse save hook only lints and stamps
+  `.specs/.execution/roadmap-stale` (`markRoadmapStale()`, git-ignored with `.execution/`; a save of `ROADMAP.*` or the root
+  SPECS.md / UPGRADE.md stamps nothing). `refreshStaleRoadmap()` runs at the **Stop / SubagentStop hook** (before the gate,
+  whatever it says; the engine loaded only for a stamped project), **SessionStart**, **every engine mutation** (the stamp cleared
+  first — a save meanwhile stamps again) and the **pre-commit check** (hooks/precommit-check.js, which re-adds a STAGED generated
+  file). mcp/tests/10-guards-guard-downs.js ("I-I1") covers each.
+- **The lag is safe:** at most one turn, and nothing decides from these files — approvals fingerprint a feature's own artifacts
+  (`textFingerprint`), every verdict computes from the specs, and the project probe (mcp/lib/probe.js `isDevSpecProject`) reads
+  only ROADMAP.md's marker. The `specs://roadmap` / `specs://catalog` resources serve `staleGeneratedText()` while stamped. Still
+  stale: a commit inside the turn without the pre-commit check, a stamp in a project the session never stops in.
+- **The backlog:** `roadmap.json` `backlog: [{name,note}]`, one line each (`flatText()`); `spec_create`, restore and a rename
+  onto the name drop the item; an ACTIVE feature's name is refused (`backlogIsFeature`). `remove` is a documented alias of `rm`
+  on both surfaces — the engine and the `spec_roadmap_edit {kind: "backlog"}` enum (and the legacy `spec_backlog`) accept it
+  (`BACKLOG_ACTIONS`).
+- **What reaches ROADMAP.* from roadmap.json:** `dependsOn` is only shape-checked. Mermaid edges join EXISTING features only,
+  ids prefixed (`mid()` → `f_<slug>`: `end`, `graph`, `subgraph` are keywords), labels without a raw quote (`mlabel`); elsewhere
+  `depShown()`. A dependency no active feature answers to is a "Needs attention" line (`depend.roadmapStale`, with the `depend`
+  command that resets the list) — still unmet. The next task is read through `readContained` (a linked tasks.md reads as
+  absent); every display cut goes through `cutText()` (never half a surrogate pair). `spec_import` refreshes once, after its
+  files (`createFeature` with `refresh: false`).
+
+## History
+How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
+
+### Catalog, drift, restore
+- **1.13** — `SPECS.md` became a generated catalog guarded like the roadmap; `_Supersedes:_`; the finish drift baseline and
+  `spec_drift`; archive → restore through the archive record. Fixes of the release: a stale baseline still hashes its recorded
+  files (a new file under an implemented folder made another file's drift vanish, and the re-finish accepted it); the catalog's
+  `finished` matches next_action / finish (`baselineFiles` skips the realpath check for recorded files); drift never walks an
+  archived feature, its stale line says restore first and a not-found archived name says so; archive names the dependents it
+  unblocks. A feature approved before 1.13 has no requirements snapshot, so all its `_Supersedes:_` declarations are trusted. The
+  section also held Guard mode (now claude-code-integration.md) and Scoped steering (templates-imports-exports.md).
+- **1.14** — an edge to a feature archived too goes to that feature's archive record, so restore brings it back in either order
+  (it was dropped as "gone" for good).
+- **1.15** — only a SHIPPED declaring feature retires the older AC (`featureShipped()`); a draft's declaration became
+  `supersedePending`, and `shippedSupersedeKeys()` keeps a change request's declaration pending until the feature ships again.
+- **1.22 review** — `fileHash()` read whole files with `readFileSync().toString("latin1")`, which returned null at 512 MiB (recorded
+  "missing", then "unchanged" forever) and held every file twice in memory; it reads 1 MiB pieces now, with the old digests
+  (the test checks pieces of 1–64 bytes against the old function).
+- **1.23 review 5** — one slug active AND archived: each refusal advised the other's refused step ("archive it", "Remove it there
+  first", with no command for either); both now name the rename, and a rename onto an archived slug is refused, so rename no
+  longer makes that state. `spec_create` of an archived twin says so (`archivedTwin`).
+- **1.24 r6** — an archive into a `.specs/_archive/` that was a link moved the whole feature there, and restore pulled any folder
+  the link's target held into .specs/; both refused by the write gate since.
+
+### A feature's own git branch
+- **1.25** — `create --branch` / `spec_create {branch}`: the record, the name rules, the engine reading the repository as files,
+  the CLI's switch and exit 1, the readers and the merge rule. A feature without a branch kept the 1.24 state byte for byte.
+- **1.25.1 review 7** — `spec_log` / `log -` read the whole text they were given, so "the same result as `dev-spec log --json`"
+  did not hold; `taskCommits` now cuts a handed-in log at the recorded commit.
+- **1.27** — the CLI became one command table (cli/main.js, cli/commands.js, cli/run.js) with one git runner, cli/git.js `gitRun`;
+  the branch facts are its `branchFacts`. `createFeature` takes an options object (git's facts are `opts.git`).
+
+### Upgrade
+- **1.12** — a bugfix's design approval recorded no `file`; the migrations skip it as `untracked`.
+- **1.13** — `meta.specVersion`, the SessionStart notice and `spec_upgrade` (the read-only audit, the safe migrations,
+  UPGRADE.md).
+- **1.22 review 2** — doctor's `ears` / `traceability` started failing a feature approved before 1.22 with bare `AC-1`, `AC-2`
+  criteria; the audit lists them (`bareAcIds`) with the renumber item. **1.22 review 3** — a change has no tasks.md / test-plan.md:
+  the item names its tasks' `_Requirements:_` in change.md.
+
+### Decisions and spikes
+- **1.14** — `decisions.md`, `spec_decide` and the spike kind.
+- **1.22 review** — `_Affects:_` naming a heading that holds "," / ";" (the size-S "Decisions, reuse & risks" and its PT / ES
+  twins, "[API] Pagination, Idempotency & Concurrency") was split into pieces that named nothing; the quoted references and the
+  joining of pieces (`AFFECTS_JOIN_MAX`).
+- **1.23 review 5** — a `decisions.md` ending inside an open code fence got its entry written unreadable and the D-n handed out
+  again; add_track's sections landed inside an open fence, read "missing", and a re-add wrote them twice. `appendSpecText()`
+  became the one append of every spec writer.
+- **1.25** — the ADR export (`spec_export {format: "adr"}`).
+
+### Forecasts and cross-feature overlap
+- **1.14** — sizes, tick times, velocity, ETAs and the cross-feature overlaps. Tasks ticked before 1.14 have no tick time (the
+  evidence fallback).
+- **1.22 review** — doctor ran the overlap walk for every feature; now only with an open `_Implements:_` task (30 features × 40
+  tasks, a feature with none: doctor 236 → 64 ms, next_action 336 → 96 ms, spec_finish 257 → 75 ms).
+- **1.24 r6 G3** — archiving a feature shipped this week wiped the velocity (roadmap, spec_metrics) and turned every other
+  feature's ETA into `not-enough-data`; the project rate counts archived completions (`archivedCompletions()`).
+- **1.24 r6 G6** — only `findCycle`'s first cycle got reason `cycle` (a → a hid b ↔ c), and a member the walk met second was
+  overwritten with `dependency`; `findCycles()` reports every cycle (`cycles`; `cycle` stays the first).
+- **1.24 review 6 (G-I6)** — a dependency done but not signed off was checked: it needs nothing (a test pins it).
+- **1.24 r6 I-I3** — the overlap walk went through detectPhase's planning chain for every feature; `overlapFeatures()` reads
+  only what it uses (the same pairs — the review's overlap-exp.js). featureOverlaps warm, per call, at 10 / 52 / ~150 features:
+  9 / 45 / 126 → 6 / 20 / 55 ms; fresh processes (p50 of 11): SessionStart 390 → 342 ms, `dev-spec doctor` 477 → 410,
+  `dev-spec next-action` 383 → 288 at 150.
+- **1.25.1 review 7** — velocity days are LOCAL calendar days; they were UTC days (a task ticked at 00:30 in Lisbon counted the
+  day before).
+
+### Roadmap files and dependencies
+- **1.13** — a bare `dev-spec depend <f>` cleared the deps; `name` alone became a read.
+- **1.14** — backlog names and notes are one line (`flatText()`: a line break became a heading in ROADMAP.md); a name an active
+  feature holds is refused. **1.14 full review (S7)** — `backlog remove` became a documented alias of `rm` on both surfaces.
+- **1.22 review** — every tick recomputed every feature's row (30 features × 40 tasks: 313 ms a tick against 13.8 without the
+  refresh); `ROW_CACHE` and the memoized marker readers: a tick with its refresh ~185 → ~65 ms (no refresh ~10), roadmapData ~180
+  → ~58, a one-shot `done` / tasks.md save ~470 → ~440.
+- **1.23 review 5** — a broken roadmap.json rendered from its sanitized copy lost every dependency, backlog item and milestone
+  from ROADMAP.md while `roadmap --write` exited 0; `writeRoadmapFile()` refuses since. What reaches ROADMAP.* was hardened: a slug
+  `end` / `graph` / `subgraph` broke the Mermaid graph (`mid()`), a tasks.md linked outside `.specs/` had its lines copied into the
+  committed file (`readContained`), an emoji cut at the boundary wrote U+FFFD (`cutText()`).
+- **1.23.1** — a refresh measured (Windows 11, 86 features): ~400 ms for one import, one create or one `roadmap --write` alike —
+  the four reads per feature, 381 opens, no file twice; the scan itself ~60 ms. A cross-call file cache was rejected (the rule
+  above).
+- **1.24 r6** — restore and a rename onto a backlog name drop the backlog item too, like `spec_create`.
+- **1.24 r6 I-I1** — the save hook refreshed ROADMAP.md + SPECS.md on every Write / Edit of a spec file — a one-shot process, no
+  `ROW_CACHE`, ~75 % of the hook; it now leaves the stamp, and the "Roadmap updated → N%" line (`hook.roadmapUpdated`) went with
+  the refresh. Measured (p50 of 11 fresh processes, Windows 11, Node 24; 10 / 52 / ~150 features): a tasks.md save 243 / 384 /
+  661 → 169 / 172 / 182 ms, requirements.md 232 / 352 / 645 → 134 / 136 / 158, design.md 219 / 337 / 626 → 148 / 148 / 149,
+  classification.md 215 / 350 / 628 → 118 / 132 / 129; the Stop hook that refreshes (once a turn) 163 / 164 / 168 → 251 / 383 /
+  652, without a stamp unchanged; SessionStart unchanged.
+- **1.27** — one dev-spec project probe (mcp/lib/probe.js `isDevSpecProject`) for the hooks, the status line, the CLI and the
+  engine; a generated ROADMAP.md is one of its signals.
