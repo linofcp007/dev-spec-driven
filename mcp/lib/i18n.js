@@ -14,7 +14,7 @@
  *
  * Language model: a project picks ONE language (persisted in `.specs/roadmap.json` meta.lang —
  * the single source of truth), inherited by every new feature and overridable per feature
- * (persisted in `.specs/<feature>/.state.json` lang). `spec.js` resolves the lang and passes it.
+ * (persisted in `.specs/<feature>/.state.json` lang). The engine (engine/state.js) resolves the lang and passes it.
  *
  * STABLE TOKENS — never translated, the tooling matches them literally:
  *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), every marker track's section marker ([SaaS], [AI], [SEC],
@@ -472,7 +472,7 @@ module.exports = {
   portableCli, // text for a committed file: the runnable line → `dev-spec`
   onLocaleLoad, // (fn) fn("i18n/<file>.js") after each language file loads on demand — the engine's corpus check (1.20 review)
   toPtBr: (text, masks) => ptbr().toPtBr(text, masks), // (text, masks?) European → Brazilian Portuguese (the pt-BR derivation, 1.14 D1)
-  derivePtBr: (value, raw) => ptbr().derivePtBr(value, raw || null, null, value), // a pt table (spec.js's roadmap chrome) → its pt-BR twin
+  derivePtBr: (value, raw) => ptbr().derivePtBr(value, raw || null, null, value), // a pt table (roadmap-md.js's roadmap chrome) → its pt-BR twin
   // artifact builders
   classification: (a, lang) => L(lang).classification(a),
   requirements: (a, lang) => L(lang).requirements(a),

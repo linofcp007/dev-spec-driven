@@ -93,7 +93,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   withReadCache, writeFileAtomic, writeRoadmapHtml, writeRoadmapMd } = engine;
 
 module.exports = {
-  CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)
+  CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/commands.js BOOL_FLAGS, the approval hook's lexer)
   DEV_SPEC: i18n.DEV_SPEC, // 1.21 F3: `node "<clone>/cli/dev-spec.js"` — the runnable CLI line (tool descriptions, messages)
   portableCli: i18n.portableCli, // the runnable line → `dev-spec`, for text meant to be committed
   engineSource: Object.freeze({ ...ENGINE_SOURCE }), // 1.24 r6 B-I1: modules or the bundle, and why a requested bundle was skipped (`dev-spec version`)

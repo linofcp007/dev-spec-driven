@@ -1261,7 +1261,7 @@ function doctorRun(projectDir, name, opts = {}) {
 const STATUS_MAX_FEATURES = 200; // feature folders a status line reads, at most (sorted by name)
 const STATUS_MAX_UP = 40; // folders walked up from a status line's cwd looking for a dev-spec .specs/
 const STATUS_TEST_FILES = 20; // test files the status line reads for Phase 4's gate, at most (statusTestsGate)
-// (STATUS_DOCTOR_WARNS — the approve-gate checks the doctor only warns about — is the check registry's `warnsOnly`.)
+// (STATUS_DOCTOR_WARNS, the approve-gate checks the doctor only warns about, is derived from the check registry's `warnsOnly`.)
 // A folder whose .specs/ dev-spec owns: roadmap.json, steering/, a generated ROADMAP.md (a v1.8-era project) or a feature folder (no
 // "." prefix) with its .state.json or classification.md — THE rule, mcp/lib/probe.js isDevSpecProject (the hooks, the status
 // line's probe and the CLI's completion read the same one), here through the engine's reads (files.js PROBE_IO: a dry run's folders
@@ -1367,7 +1367,8 @@ function statusTestsGate(pdir, dir, tracks) {
 //     activity (suiteStatus without the code hash) → verify · the execution sign-off missing or older than a change → sign-off ·
 //     else finished — the drift of the recorded files is NOT checked (next_action's `drift`), so the line never says "clean".
 // → { step, … } with stable step codes: re-review · fill · fix · approve · tests · tasks · implement · blocked · verify · decide ·
-// promote · archive · pivot · finish · sign-off · finished. The parity with spec_next_action's `step` (mcp/test.js "1.16 C review"):
+// promote · archive · pivot · finish · sign-off · finished. The parity with spec_next_action's `step` (mcp/tests/11-claude-code.js
+// "1.16 C review (parity)"):
 // blocked → fix; tests → fix | approve; sign-off / finished → finished; every other code is next_action's own — and any end state
 // (finish · verify of the checks · sign-off · finished) may be next_action's `drift`.
 function statusNext(pdir, f, kind, lng, unverified) {

@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Running the user's own commands (1.27 — was cli/dev-spec.js's b5Exec / b5Verdict / b5RunChecks): a `_Verify:_` command
+ * Running the user's own commands: a `_Verify:_` command
  * (`done --run`) or a project check of roadmap.json meta.checks (`finish --run`), only on that explicit flag — the same trust as an
  * npm script; a shell is the point, each is a shell command line. The CLI is the only surface that runs them (MCP records a run
  * reported to it); the engine judges the output (summarizeRunOutput, couldNotRunOutput…) and records the evidence.

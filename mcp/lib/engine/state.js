@@ -23,7 +23,7 @@ function __link(E) { ({ catalogData, compareSemver, EVIDENCE_HISTORY, EVIDENCE_O
 
 // Language resolution. The project's language is the single source of truth, persisted in
 // .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
-// .specs/<feature>/.state.json lang. spec.js resolves the lang and hands it to i18n builders.
+// .specs/<feature>/.state.json lang. The engine resolves the lang here and hands it to i18n builders.
 const normalizeLang = i18n.normalizeLang;
 function projectLang(projectDir) {
   return normalizeLang(roadmapLang(projectDir)); // roadmapLang reads meta.lang (hoisted below)
@@ -124,7 +124,7 @@ function isFeatureFolder(name, root) {
 }
 
 // ---------------------------------------------------------------------------
-// State (.state.json) — the approval gates themselves are in gates.js
+// State (.state.json) — the approval gates themselves are in gates.js (their checks: doctor.js's registry, approvalChecks)
 // ---------------------------------------------------------------------------
 
 const PHASES = ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"];

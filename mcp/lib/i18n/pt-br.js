@@ -133,7 +133,7 @@ const PTBR_PHRASES = {
   "tinha de": "tinha que", "tenha de": "tenha que", "tenham de": "tenham que", "tiver de": "tiver que",
   "mantém-se": "se mantém", "mantêm-se": "se mantêm", "lê-se como": "é lido como", "quem lhe pode aceder": "quem pode acessá-lo",
   // LGPD vocabulary (full review Pb7): the processor is the "operador", the DPIA the RIPD (a masculine report) — the
-  // section synonyms (spec.js PRIVACY_SECTIONS) read the Brazilian headings
+  // section synonyms (tracks.js PRIVACY_SECTIONS) read the Brazilian headings
   "subcontratantes ulteriores": "suboperadores", "conservação e eliminação": "retenção e eliminação",
   "a aipd": "o RIPD", "da aipd": "do RIPD", "na aipd": "no RIPD", "à aipd": "ao RIPD", "pela aipd": "pelo RIPD", "uma aipd": "um RIPD",
   // +obs (1.19 T review): the on-call person is "de plantão", and a runbook gets a link (a "ligação" is a phone call in Brazil)
@@ -306,7 +306,7 @@ const PTBR_WORDS = {
   num: "em um", numa: "em uma", nuns: "em uns", numas: "em umas", noutro: "em outro", noutra: "em outra", noutros: "em outros",
   noutras: "em outras", nalgum: "em algum", nalguma: "em alguma", nalguns: "em alguns", nalgumas: "em algumas", dum: "de um",
   duma: "de uma", duns: "de uns", dumas: "de umas", doutro: "de outro", doutra: "de outra", doutros: "de outros", doutras: "de outras",
-  // full review Pb7 — LGPD / Brazilian SaaS vocabulary (the section synonyms in spec.js read these headings)
+  // full review Pb7 — LGPD / Brazilian SaaS vocabulary (the section synonyms in tracks.js read these headings)
   "multi-inquilino": "multilocatário", subcontratante: "operador", subcontratantes: "operadores", aipd: "RIPD",
   // review 6 (H8): the participle of rever is "revisado" in Brazil ("revisto" reads European)
   revisto: "revisado", revista: "revisada", revistos: "revisados", revistas: "revisadas",

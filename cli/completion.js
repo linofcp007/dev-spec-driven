@@ -11,7 +11,7 @@
  *                         cli/tests/16-conventions-completion.js checks that they agree on several layouts and that no engine
  *                         module is loaded. It costs about Node's own startup (it runs on every Tab).
  *   script(shell, model)  the completion script `dev-spec completion <shell>` prints — the template in cli/completion/ filled
- *                         with the CLI's own tables (the model cli/dev-spec.js builds from COMMAND_OPTIONS, COMMAND_ARGS,
+ *                         with the CLI's own tables (the model cli/commands.js builds from COMMAND_OPTIONS, COMMAND_ARGS,
  *                         FLAG_VALUES and the facade's value lists): commands, their flags, flag values, positional values.
  *
  * Specs (a positional or a flag value): words to offer, space-separated, or a source the SCRIPT resolves on Tab — @feature /
