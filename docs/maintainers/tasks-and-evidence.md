@@ -711,7 +711,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   dropped, npm's aliases of `npm test` read as it; mcp/tests/09-evidence-matcher.js checks the probes) each appear in some feature's tasks.md read the same way (≤ 2 MB each, dot / `_` folders skipped) or in a
   meta.checks command — a SUPERSET of the matcher (each step keeps a body a substring of its `_Verify:_`'s normalized text),
   as cheap as the flat-text test it replaced; observeRun runs the same test before it parses a tasks.md; it prints nothing, reads stdin asynchronously (≤ 4 MB, else
-  ignored), and exits 0 on any error.
+  ignored), and exits 0 on any error. **1.25.1 (review 7):** a WHOLE bracketed `_Verify:_` value (`RE_VERIFY_PLACEHOLDER`,
+  backticks around it allowed — the scaffold's untouched `_Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_`)
+  is taken out of the tasks text before the match: it named `npm test`, so every `npm test` loaded the engine to log nothing (170 →
+  64 ms a Bash call, median of 15 on Windows — `node -e 0` 54). The engine never runs such a value either (tasks.js `scanTaskMarkers`: `^\[.*\]$`); a value
+  that only starts with a bracket (`[ -f a ] && npm test`) stays, so the filter is still a superset.
 - **The stamp.** `observedRun(projectDir, slug | null, command, exitCode, {expected, root})` → `{observed, at?}`: true when the
   LATEST logged run within `OBSERVED_WINDOW_MS` (24 h; a stamp more than 5 min in the future ignored) that is itself a run of
   the expected commands (review 3: `runProvesVerify` from the project root, the matcher of the verdict — it used to need the

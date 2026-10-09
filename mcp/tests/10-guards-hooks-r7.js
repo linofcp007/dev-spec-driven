@@ -134,4 +134,30 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
       "1.25.1 (r7 findings 4 + 6): SessionStart in a folder without a dev-spec .specs/ (none, another tool's) exits before the engine loads; a project 3 folders above the cwd or named by CLAUDE_PROJECT_DIR still gets its status; the walk is SESSION_MAX_UP; 25 features print ≤ 20 lines + '+5 more' (got " +
       js({ none: r.none, other: r.other, noCwd: r.noCwd.stdout, deep: [r.deep.engine, ctx(r.deep).slice(0, 60)], anchor: r.anchor.engine, bound, big: bigLines.length }) + ")");
   }
+
+  // Finding 5 — the observe hook's pre-filter read a scaffold's untouched `_Verify: [command that proves it, e.g. npm test -- …]_`:
+  // every `npm test` loaded the engine (152 vs 59 ms) to log nothing. A whole bracketed _Verify:_ value is a placeholder — out of the
+  // text before the match; a real command (`[ -f a ] && npm test`, `npm test`) still passes it.
+  {
+    const p = project("r7-obs");
+    const f = S.createFeature(p, "Login", ["core", "tdd"]); // the scaffold: _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
+    const tasksFile = path.join(f.dir, "tasks.md");
+    const scaffold = fs.readFileSync(tasksFile, "utf8");
+    const log = path.join(f.dir, ".execution", "observed.jsonl");
+    const run = (cmd) => probed("observe-hook", { session_id: "s", cwd: p, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: cmd },
+      tool_response: { stdout: "ok", stderr: "", exit_code: 0 } });
+    const lines = () => { try { return fs.readFileSync(log, "utf8").split("\n").filter(Boolean).length; } catch { return 0; } };
+    const placeholder = run("npm test");
+    fs.writeFileSync(tasksFile, scaffold + "\n- [ ] 9. [US1] Backticked placeholder\n  - _Verify: `[npm test]`_\n");
+    const backticked = run("npm test");
+    fs.writeFileSync(tasksFile, scaffold + "\n- [ ] 9. [US1] Shell test\n  - _Verify: [ -f package.json ] && npm test_\n");
+    const shellTest = run("npm test");
+    fs.writeFileSync(tasksFile, scaffold + "\n- [ ] 9. [US1] Real\n  - _Verify: npm test_\n");
+    const before = lines();
+    const real = run("npm test");
+    ok(!/npm test/.test(scaffold.replace(/_Verify:[ \t]*`*[ \t]*\[[^\n]*?\][ \t]*`*[ \t]*_/gi, " ")) && /_Verify: \[[^\]\n]*npm test/.test(scaffold) &&
+      [placeholder, backticked].every((x) => x.status === 0 && x.engine === false) && shellTest.engine === true && real.engine === true && lines() === before + 1,
+      "1.25.1 (r7 finding 5): the observe hook's pre-filter skips a placeholder _Verify: [ … npm test … ]_ (bare or backticked) — the engine isn't loaded; `[ -f a ] && npm test` and a real `_Verify: npm test_` still pass it, and the real one is logged (got " +
+      js({ placeholder: placeholder.engine, backticked: backticked.engine, shellTest: shellTest.engine, real: real.engine, logged: lines() - before }) + ")");
+  }
 };
