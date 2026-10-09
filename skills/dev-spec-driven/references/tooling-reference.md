@@ -25,7 +25,7 @@ Results are compact JSON.
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: `list` (built-in vs project per artifact) · `init` (copy the built-in ones to edit) · `check` (validate them) |
 | `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md`; `signals` (1.21) — the classifier's signal overrides of this project (`op` list / set / forget; learned by `spec_create` from Phase 0 corrections, applied after 2 consistent ones) |
 | `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`; with `tracks` AND a `summary`, a choice that differs from the summary's classification is recorded as a Phase 0 correction — `signalOverrides`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `size` (1.21: xs · s · m · l — xs = `kind: "change"`, one `change.md`; s = one story, merged weigh sections, core-tier track sections; m / l = the full chain, duplicate track sections merged — `references/workflows.md` → Sizes); `brownfield: true` → + `integration-plan.md`; `flow: "design-first"` |
-| `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan, BMAD docs or a fluidplan plan (path inside the project — or, for a plan / ExecPlan / fluidplan PLAN.md, its markdown as `text`: plan mode keeps plans in `~/.claude/plans`) as a NEW feature — IDs remapped (`mapping`), `warnings` listed, source untouched; a fluidplan plan's settled decisions → `decisions.md` |
+| `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan, BMAD docs or a fluidplan plan (path inside the project — or, for a plan / ExecPlan / fluidplan PLAN.md, its markdown as `text`: plan mode keeps plans in `~/.claude/plans`) as a NEW feature — IDs remapped (`mapping`), `counts`, `warnings` listed, source untouched; a fluidplan plan's settled decisions → `decisions.md`. 1.25: `kiro-steering` (`.kiro/steering/*.md`, front matter kept) / `cursor-rules` (`.cursor/rules/*.mdc` — `alwaysApply` → always, `globs` → fileMatch, else manual — and `.cursorrules`) → `.specs/steering/<name>.md` files, `path` optional, an existing file never overwritten (`skipped` with its `reason`); `dryRun: true` → the whole import, nothing written: the same answer + `preview` (each file, bounded) |
 | `spec_list` | List all features with track set, phase, and task progress |
 | `spec_status` | One feature: kind (feature / bugfix / spike / change), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections`, `distSections` …), eval state |
 | `spec_next_action` | "You are here → do this next": one `step`, phase by phase (re-review → for the first unapproved phase: fill → fix → approve, the next phase only after that approval → fix → implement → verify → finish → finished / drift; a spike: fill → implement → decide → promote / archive / pivot) + `changedSinceApproval`; suggests `/spec-ff` when every planning artifact passes its gate |
@@ -189,8 +189,9 @@ tracks [list|init <name>|check] [name] [--lang]
 signals [list | set <track> <word> off|weak|strong | forget <track> <word>] [--lang]
 create "<name>" [tracks...] [--summary] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--lang] [--brownfield] [--flow design-first]
 bugfix "<name>" [--summary]              spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]
-import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …]
+import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …] [--dry-run]
 import <plan|execplan|fluidplan> - | --text "<markdown>"   (the document from stdin / inline — a plan outside the project)
+import <kiro-steering|cursor-rules> [path] [--dry-run]   (Kiro steering / Cursor rules → .specs/steering/; never over a file)
 list · status [feature]                  doctor <feature> · clarify <feature>
 ears <feature|path> | --text "…" | -     trace <feature> [--code] [--matrix | --csv]
 next <feature> [--batch] [--max N] [--waves]    brief <feature> [n] [--write] [--include-brief]
@@ -435,7 +436,7 @@ marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chr
 | `/scan` | brownfield | Inventory an existing codebase (uses `spec_scan`) |
 | `/reverse` | brownfield | Reverse-engineer steering + specs from existing code |
 | `/coverage` | brownfield | Spec coverage of existing code via `_Implements:_` (uses `spec_coverage`) |
-| `/spec-import` | brownfield | Import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan, BMAD docs or a fluidplan plan as a new feature (uses `spec_import`) |
+| `/spec-import` | brownfield | Import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan, BMAD docs or a fluidplan plan as a new feature — or Kiro steering / Cursor rules as steering files; `--dry-run` writes nothing (uses `spec_import`) |
 | `/spec-bugfix` | bugfix | Reproduce → root cause (with evidence) → approval → failing regression test (`_Expect: fail_`) → fix → verify (uses `spec_create {kind:"bugfix"}`) |
 | `/spec-simplify` | close | Optional, before `/spec-finish`: behaviour-preserving cleanups of the feature's own lines, one commit each, proven by the tests and reviewed; `--subagents` → the `spec-simplifier` agent |
 | `/spec-finish` | close | Blockers + warnings + fresh checks + a merge summary from the spec chain; then merge locally / keep (uses `spec_finish`) |

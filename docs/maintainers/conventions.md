@@ -53,6 +53,19 @@ and U+FEFF gotchas are in CLAUDE.md.
   the appends followed file links; `writeFileAtomic`'s rename replaced a file link but wrote through a folder link). Known
   limit: a write after another in one call can still be refused (a tasks.md that is itself a link: `done` records its
   evidence in .state.json, then the tick is refused) — nothing is ever written THROUGH a link.
+- **The dry-run sink (1.25 — `withDryRun(fn)`, engine/files.js).** Because every write goes through the primitives above, a dry
+  run is ONE switch there: while `CTX.DRY_RUN` is set, `writeFileAtomic` / `writeIfAbsent` / `ensureDir` / `specWrite` /
+  `removeSpecFile` record what they would write (`dryPut`: the text, in its first write's place; a folder; a removal) instead of
+  touching the disk — after the gate, so a dry run meets the real refusals — and the readers `readRaw` (readIfExists, readJson),
+  `existsRaw` (existsCached), `readDirCached`, `safeReaddir` and `isDirSafe` see those records over the disk (`dryEntry` /
+  `dryListing`), so the operation reads back what it "wrote" and computes exactly what the real call would. `withLockFile`
+  runs fn without a lock (no lock file), `ensureLockIgnore` returns at once (its raw writes would bypass the sink), and a
+  folder move or a link's removal — which have no record — throws `EDRYRUN` (`dryRunRefused`). Nothing reaches the disk BY
+  CONSTRUCTION (the raw-write source guard keeps it true). Its only caller is `spec_import {dryRun}` (import/index.js
+  `importSpec` → `dryRunResult`, which also skips the roadmap refresh: `isDryRun()`); the sink lives in CTX (cleared by
+  withDryRun itself, never by withReadCache). A reader outside files.js that reads with a raw fs call does NOT see the sink —
+  an operation made dry-runnable must read what it wrote through these readers (the import's parity test compares every
+  previewed file with the real import's).
 - **The project folder: `resolveProjectDir()` (files.js) — every surface's default.** The explicit argument (CLI `--project`, a
   tool's `projectDir`) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > **the nearest folder at or above the working folder that
   holds a dev-spec .specs/** (`nearestProject()`: `isDevSpecDir` — roadmap.json, steering/ or a feature's .state.json — the
@@ -327,7 +340,8 @@ and U+FEFF gotchas are in CLAUDE.md.
   word with no block → the whole help. A new command gets its block in `helpText()` starting `  <name> ` at two spaces. An explicit
   `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
-  switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).
+  switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise). 1.25: `dry-run` is a CLI switch too (`import
+  --dry-run`), so `normalizeBoolFlags()` skips it under `evals` — the harness reads its own `--dry-run=maybe` (exit 2).
   Numeric flags that MCP bounds (`--cap`, `--max`) and the CLI-only `--timeout` go through `intFlag()` (integer ≥ 1; `--timeout`
   also ≤ 2147483 — `timeoutFlag()`, Node's timer limit, 1.24 r6 B6: `cliOutput.atMost`).
   The engine refuses what the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not

@@ -78,6 +78,12 @@ name (`nul.md`, `com1.md`) — with a `fileMatch` front matter and guidance in a
 and the bracketed lines. Good candidates: API conventions, UI component rules, migration rules, a module's
 invariants. Keep each one short; it is quoted into briefs.
 
+**From Kiro or Cursor (1.25).** `spec_import {tool: "kiro-steering"}` copies `.kiro/steering/*.md` here with their
+front matter (it is this format); `{tool: "cursor-rules"}` maps `.cursor/rules/*.mdc` — `alwaysApply: true` → `always`,
+`globs` → `fileMatch` (`*.tsx` → `**/*.tsx`), else `manual` — and `.cursorrules` → `cursorrules.md` (`always`). An existing
+steering file is never overwritten (skipped, reported); `dryRun: true` previews it all. Details:
+`references/brownfield.md` → Steering from Kiro and Cursor.
+
 ---
 
 ## `constitution.md` (core)

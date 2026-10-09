@@ -143,8 +143,8 @@ evidence, the iron law and the finish gate. `references/workflows.md`.
 No `.specs/` yet, or "spec our existing app": `/scan` → steering + a constitution that acknowledges the existing
 patterns → `/reverse` (specs of what the code does *today*) → `/coverage` → new features integration-aware
 (`spec_create {brownfield: true}` → `integration-plan.md`, `_Implements:_`). Specs or plans written elsewhere (Kiro,
-spec-kit, OpenSpec, a Claude Code / Cursor plan, a Codex ExecPlan, fluidplan, BMAD): `/spec-import`.
-`references/brownfield.md`.
+spec-kit, OpenSpec, a Claude Code / Cursor plan, a Codex ExecPlan, fluidplan, BMAD): `/spec-import` — Kiro steering
+and Cursor rules too (into `.specs/steering/`); `--dry-run` shows what it would write first. `references/brownfield.md`.
 
 ## Directory Structure and Steering
 

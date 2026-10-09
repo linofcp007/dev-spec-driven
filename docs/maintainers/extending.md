@@ -44,7 +44,13 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
 - New import source → a parser module `engine/import/<tool>.js` (returns the import model — `newImportModel()`,
   `import/common.js` — from the source's text; reuse the shared readers there and plan.js's plan-text helpers), listed in
   `MODULES`; in `engine/import/index.js` its entry in `IMPORT_TOOLS` and `C3_PARSERS` (+ `TEXT_IMPORT_TOOLS` when it
-  reads a single document); the `tool` enum of `spec_import` in `mcp/server.js`, the CLI's `import` usage, and tests.
+  reads a single document); the `tool` enum of `spec_import` in `mcp/server.js`, the CLI's `import` usage, and tests. A source
+  that is no feature (1.25: steering — `STEERING_IMPORT_TOOLS`, import/steering.js) is dispatched by `importRun` before the
+  feature path; it reads through `importSourceAt` too. Every import is dry-runnable for free (`withDryRun`) as long as it
+  writes and reads back through the files.js primitives.
+- A dry run of another operation → wrap it in `withDryRun` (engine/files.js — conventions.md → The dry-run sink) and make every
+  read of what it wrote go through readRaw / existsRaw / readDirCached / safeReaddir / isDirSafe; add a parity test (dry answer
+  = the real call's, the tree byte-identical) — a raw fs read of a file it wrote would see the disk, not the sink.
 - A new reader of the track registries → the accessor functions (`allTracks()` / `optionalTracks()` / `markerTracks()` /
   `trackMarker()` / `trackSectionTable()` / `trackSteeringFiles()` / `trackSignalTable()`), never the built-in constants —
   those miss the project's track packs (only the process-wide template corpus and the built-in lists of `spec_tracks list`

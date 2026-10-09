@@ -65,6 +65,7 @@ dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → ro
 dev-spec spike "<name>" [--question "…"] [--timebox 3d]   # a timeboxed investigation that ends in a decision (go / no-go / pivot)
 dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name "<feature>"] [--tracks …]   # another tool's spec, a plan, an ExecPlan, BMAD docs or a fluidplan plan → a NEW feature (IDs remapped)
 dev-spec import <plan|execplan|fluidplan> - | --text "<markdown>"   # the same from the plan's text (stdin or inline) — a plan kept outside the project
+dev-spec import <kiro-steering|cursor-rules> [path]   # Kiro steering / Cursor rules → .specs/steering/ files (never over an existing one); any import: --dry-run writes nothing
 dev-spec status [feature] | list               # progress, phase, tracks, sections filled vs present
 dev-spec clarify <feature>                      # surface requirement gaps before design
 dev-spec doctor <feature>                      # health-check → ready to advance? (exit 1 on FAIL — scriptable)
@@ -251,7 +252,9 @@ next, `dev-spec next-action <feature>` names the single next step.
   — or a Claude Code / Cursor plan, a Codex ExecPlan, BMAD docs, a fluidplan plan (its settled decisions → `decisions.md`) — into a new feature: criteria become `US-N.AC-M` (EARS
   where possible, else `[NEEDS CLARIFICATION]`), tasks are renumbered keeping their checkbox state. The source must be
   inside the project and is never modified (a Claude Code plan lives under `~/.claude/plans` — pass its text instead:
-  `dev-spec import plan - < plan.md`, or `--text "…"`).
+  `dev-spec import plan - < plan.md`, or `--text "…"`). `dev-spec import kiro-steering|cursor-rules [path]` brings Kiro's
+  `.kiro/steering/` / Cursor's `.cursor/rules/*.mdc` and `.cursorrules` in as `.specs/steering/` files with their inclusion
+  mode (never over an existing file). `--dry-run` on any import writes nothing and shows what it would create.
 - **Spikes.** `dev-spec spike "<name>" --question "…" --timebox 3d` scaffolds `spike.md` + investigation tasks, with no
   requirements / design gates: investigate, then write the Decision (`_Outcome: go | no-go | pivot_` + the rationale).
   Go → spec the real feature; no-go → archive the spike. Prototype code stays outside `.specs/`.
