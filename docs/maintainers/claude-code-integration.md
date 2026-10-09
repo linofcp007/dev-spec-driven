@@ -49,8 +49,10 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   Folders are compared by text, then by real path (`sessionSame()`: git writes gitdir / commondir with long names, the payload
   may carry an 8.3 short name). No dev-spec folder near cwd → the first dev-spec anchor. → `{project, root, worktree}`;
   `sessionPath(s, p, cwd)` spells a payload path under `project` when it lies in `root` (the worktree's checkout). The guard,
-  stop and observe hooks keep a raw pre-check over the nearest `.specs/` above cwd and the anchors (a superset; the engine
-  loads only when it passes) and then ask the engine; the spec-hook stamps `lastEditAt` of a worktree's tasks.md save in the
+  stop and observe hooks keep a raw pre-check over the nearest `.specs/` above cwd (≤ `SESSION_MAX_UP` levels each — 1.24 r6 I2:
+  the observe hook's walk stopped at 12, and a `_Verify:_` run deeper below a nested project was never logged; inline, not
+  hook-utils.js's `nearestSpecs`, so its hot path requires nothing; mcp/tests/10-guards-review6.js checks every bound) and the
+  anchors (a superset; the engine loads only when it passes) and then ask the engine; the spec-hook stamps `lastEditAt` of a worktree's tasks.md save in the
   mapped project (its own state when that feature isn't there) and SessionStart reports the mapped project; the status line's
   `statusLineProject()` maps what it found the same way (`worktreeProject(dir, candidates)`).
 - **What the hooks share before the engine loads — `hooks/hook-utils.js` (1.24 review 6).** Not a hook (hooks.json never runs

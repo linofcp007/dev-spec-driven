@@ -460,4 +460,34 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
       "1.24 r6 I-I4: the Stop hook sends a message with no claim away before the engine loads, and blocks a claim as the engine does; a copy of the clone reads its own filter; a filter of another version, stamped with another source size or missing → the engine decides, with the same answers (got " +
       js({ real, variants }) + ")");
   }
+
+  // 1.24 r6 I2: the observe hook walked up only 12 folders from the payload cwd to the nearest .specs/ (the guard and stop hooks, the
+  // approval hook's candidates and the engine's sessionProject: 40) — a _Verify:_ run 13+ levels below a nested project, with
+  // CLAUDE_PROJECT_DIR the outer repository, was never logged as observed. Every hook's walk is SESSION_MAX_UP now.
+  {
+    const outer = path.join(tmp, "r6-i2-outer");
+    const proj = path.join(outer, "services", "billing");
+    fs.mkdirSync(proj, { recursive: true });
+    S.initProject(proj, ["core"], "en");
+    const f = S.createFeature(proj, "Probe", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. Do it\n  - _Verify: `node --version`_\n");
+    const log = path.join(f.dir, ".execution", "observed.jsonl");
+    const runAt = (depth) => {
+      let cwd = proj;
+      for (let i = 0; i < depth; i++) cwd = path.join(cwd, "d" + i);
+      fs.mkdirSync(cwd, { recursive: true });
+      fs.rmSync(log, { force: true });
+      hookOut("observe-hook", { session_id: "s", hook_event_name: "PostToolUse", tool_name: "Bash", cwd, tool_input: { command: "node --version" },
+        tool_response: { stdout: "v24", exit_code: 0 } }, { CLAUDE_PROJECT_DIR: outer });
+      return fs.existsSync(log);
+    };
+    const logged = [5, 12, 13, 20].map(runAt);
+    const src = (h) => fs.readFileSync(path.join(__dirname, "..", "hooks", h), "utf8");
+    const bounds = { guard: /for \(let i = 0; i < (\d+); i\+\+\)/.exec(src("guard-hook.js")), stop: /for \(let i = 0; i < (\d+); i\+\+\) \{\s*if \(isDevSpecProject/.exec(src("stop-hook.js")),
+      observe: /const MAX_UP = (\d+);/.exec(src("observe-hook.js")), utils: /const MAX_UP = (\d+);/.exec(src("hook-utils.js")) };
+    const nums = Object.fromEntries(Object.entries(bounds).map(([k, m]) => [k, m ? Number(m[1]) : null]));
+    ok(js(logged) === js([true, true, true, true]) && Object.values(nums).every((n) => n === E.SESSION_MAX_UP),
+      "1.24 r6 I2: the observe hook finds the project from a cwd 13 and 20 levels below it (it stopped at 12) — every hook walks up SESSION_MAX_UP (" + E.SESSION_MAX_UP + ") folders (got " +
+      js({ logged, nums }) + ")");
+  }
 };
