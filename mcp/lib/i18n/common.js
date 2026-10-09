@@ -84,6 +84,8 @@ const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4"
   data: ["US-1.AC-32", "US-1.AC-33", "US-1.AC-34", "US-1.AC-35"] }; // +data (1.21 F4)
 // The optional tracks whose template criteria / tasks / sections follow the core ones, in track order.
 const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
+// Each one's section marker as the templates write it — [SaaS], [AI], [SEC] … (English-stable; engine/tracks.js TRACK_MARKER).
+const MARKER_TAG = Object.fromEntries(MARKER_TRACK_ORDER.map((t) => [t, "[" + (t === "saas" ? "SaaS" : t.toUpperCase()) + "]"]));
 // The tracks classification.md lists signals for: +tdd, the built-in marker tracks, then a project's track packs (1.15 — any
 // other name in the feature's track list), in its order.
 function signalTracks(tracks) {
@@ -184,5 +186,5 @@ function stopLineClaim(words, tested, work) {
     String.raw`|(?=[ \t]*[.,!:—–-][^\n]*?(?<![\p{L}\p{N}_])${tested}(?![\p{L}\p{N}_]))|\s+${work})`;
 }
 
-module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, signalTracks, templateTests, greenLine, templateTestRows,
+module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, signalTracks, templateTests, greenLine, templateTestRows,
   cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli, FEATURE_SIZES, SIZE_CORE_ACS, coreTemplateAcs, CORE_SUPERSEDED_BY, coreSuperseded, stopLineClaim };

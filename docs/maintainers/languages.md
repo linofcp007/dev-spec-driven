@@ -8,7 +8,21 @@ Where localized text lives, the English-stable tokens, the synonyms that keep PT
 messages, CLI and hook output — one set per language; since 1.18 each language's blocks are in `mcp/lib/i18n/en.js`,
 `pt.js`, `es.js`, assembled by `i18n.js` — see the module rule). The engine keeps the logic and delegates: each
 template function is a one-line call into `i18n.<builder>(args, lang)`. EN is the canonical reference;
-PT and ES mirror its structure (same sections, IDs, markers and slots). **pt-BR (1.14) is a DERIVED locale**
+PT and ES mirror its structure (same sections, IDs, markers and slots). **Where the builders live (1.27):** a builder whose
+STRUCTURE every language shares — its sections, their order, the track / size conditions, IDs, markers, numbering, the fixed
+annotation lines — is written ONCE in `i18n.js`: `LAYOUTS` (classification, requirements, design with its sized variants, tasks,
+the track design blocks and task blocks — `TRACK_TASK_PLAN` holds each track task's criteria, _Makes green:_ and fixed markers —,
+test plan, checklist) and `approvalAction` (msg.approvalGuard.action's decision tree). `loadLocale` binds them to a language as
+`BUILD[lang].<name>` / `MSG[lang].approvalGuard.action`, reading that language's **`text` block** — strings only, a function
+only where a value sits inside a sentence (a name, a count, a label) or grammar differs (plural forms, word order). What stays
+in a language's `build` block are single templates with nothing to share (bugReport, bugTasks, evalPlan, quickstart…), and
+`msg` keeps its messages (one-line functions are its grammar). So a structural change is made once, in the layout; a wording
+change in each language's `text`. The `text` block is not a table: pt-BR derives from pt's BOUND builders (toPtBr over each
+whole output, as before), never from `text` itself — a pt string there reaches pt-BR through the scaffolds it renders.
+`mcp/tests/03-languages.js` (1.27) holds en.js / pt.js / es.js to ONE key tree — every authored block, the same value kinds,
+function arities and list lengths (the layouts read `text`'s lists by position) — with two listed exceptions: the identity
+maps EN leaves empty (`msg.sectionNames`, `msg.secPrivacy.sectionNames`, `msg.cliOutput.words`) and the stop gate's
+pattern lists (`msg.stopGate.claims` / `negators` / `admissions` / `fixed`). **pt-BR (1.14) is a DERIVED locale**
 (`lang: "pt-BR"`; `pt_BR` / `pt-br` / `ptbr` fold to it via `canonicalLang()`, `pt` / `pt-PT` stay European): every
 pt-BR string is `toPtBr(<the pt string>)` — protected tokens (code spans, `_Marker:_`s, paths, the caller's arguments),
 then `PTBR_OVERRIDES`, the progressive (`está a correr` → `está rodando`), `PTBR_PHRASES`, the second person (`tens` →
@@ -31,7 +45,8 @@ at ≥ 2 points and more than the European count). The agent then passes `lang: 
 Language; /spec's Phase 0 — commands/spec.md). Project templates for it live in `.specs/templates/pt-BR/`.
 The EN templates are **not** frozen: 1.13 changed them on purpose (every template AC planned + tasked, track ACs under
 `[SaaS]`/`[AI]` headings, the test plan's Kind column…). When you change a template, change EN / PT / ES together
-(and pt-BR where it overrides that text) and keep the tests that round-trip a PT and an ES scaffold through doctor green.
+(and pt-BR where it overrides that text) and keep the tests that round-trip a PT and an ES scaffold through doctor green —
+its structure in the layout (once), its words in each language's `text`.
 - **Language resolution (single source of truth + per-feature override).** The PROJECT language lives
   in `.specs/roadmap.json` `meta.lang`, seeded by `spec_init {lang}` (read via `projectLang()`). Each
   FEATURE may override it; the resolved feature language is persisted in `.specs/<feature>/.state.json`
@@ -69,8 +84,10 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   — and the PR/CI prose guard reads `README.pt.md` as Portuguese. What changed in a release goes into CHANGELOG.md, never
   into a README.
 - **Adding a language:** a regional variant of an existing one derives from it, as pt-BR does from pt-PT (only the
-  overrides). A new language adds a file `mcp/lib/i18n/<lang>.js` holding every table's block (`build`, `steering`,
-  `evalsReadme`, `msg`, `quality`, `designWeigh`, `brief` — as `en.js` does), wires it into `i18n.js`'s `LOCALE_FILES`
+  overrides). A new language adds a file `mcp/lib/i18n/<lang>.js` holding every block `en.js` has (`text` — the layouts'
+  strings, no structure to re-implement —, `build`, `steering`, `evalsReadme`, `msg`, `quality`, `designWeigh`, `brief`): `en.js`
+  copied with its strings translated, every key, list length and function arity kept (the parity test in
+  `mcp/tests/03-languages.js` names what differs from EN). It wires that file into `i18n.js`'s `LOCALE_FILES`
   (each table's getter for it loads that file on first use), adds it to `BASE_LANGS` (`i18n/common.js` — `LANGS`, the
   strict `canonicalLang()` reading every surface validates with, and the MCP schemas' `lang` enum, `LANG_ENUM` in
   `mcp/server.js`, all derive from it: no enum to edit by hand), extends the classifier `SIGNALS` (`engine/tracks.js`;
