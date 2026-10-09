@@ -31,8 +31,8 @@ reason}`.
 **`--subagents`** — `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md`: its preconditions
 (doctor ready, tasks approved, not on the default branch, `trace_check` passing, baseline green), then per task
 `spec_task_brief {write: true}` → `dev-spec-driven:spec-implementer` → `dev-spec-driven:spec-reviewer` (each Critical /
-Important finding checked by a verify-mode reviewer first — 80 or more opens a fix round; a new unit that is a
-duplicate in the existing codebase is Important) → `spec_complete_task` after a clean review. Stop at every `**Checkpoint:**`;
+Important finding and each ❌ checked first by one `dev-spec-driven:spec-verifier` per finding — 80 or more opens a fix round;
+a new unit that is a duplicate in the existing codebase is Important) → `spec_complete_task` after a clean review. Stop at every `**Checkpoint:**`;
 `inlineOnly` tasks run inline; `spec_next_task {waves: true}` plans parallel waves.
 
 **`commit [note]`** — draft a conventional commit (`type(scope): summary`) whose body cites the chain: `Part of

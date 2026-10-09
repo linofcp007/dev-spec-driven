@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, require, __dirname }) => {
   const I = require("./lib/i18n.js");
   const js = (v) => JSON.stringify(v);
   const rd = (...p) => fs.readFileSync(path.join(...p), "utf8");
@@ -90,13 +90,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
     const rm = S.removeTrack(at, plain.slug, "data");
     const docRm = S.specDoctor(at, plain.slug), stRm = S.statusFeature(at, plain.slug);
     const reAdd = S.addTrack(at, plain.slug, "data");
-    ok(add.ok && add.tracks === "core +data" && (add.added || []).join("|").includes("steering/data.md") && rd(plain.dir, "design.md").includes("## [DATA] Data Contracts & Schema Evolution") &&
-      pTasks.includes("## Story US-1 — Data Pipeline") && pTasks.includes("_Requirements: [the +data criterion this task proves]_") && chk(docAdd, "data-sections").status === "fail" &&
-      tAdded === tBefore + 5 && rm.ok && rm.tracks === "core" && rm.inactive.includes("design.md ([DATA] sections)") && rm.inactive.includes("tasks.md (Story US-1 — Data Pipeline)") &&
-      !chk(docRm, "data-sections").status && stRm.dataSections === null && stRm.tasks.total === tBefore && reAdd.ok && reAdd.tracks === "core +data" &&
-      rd(plain.dir, "tasks.md").split("## Story US-1 — Data Pipeline").length === 2 && S.statusFeature(at, plain.slug).tasks.total === tBefore + 5,
-      "1.21 F4: add_track data (sections, steering/data.md, 5 template tasks with placeholder ACs, data-sections fails); --remove is non-destructive (inactive, no check, dataSections null, tasks not counted); re-adding duplicates nothing (got " +
-      js([add.added, rm.inactive, tBefore, tAdded]) + ")");
+    all("1.21 F4: add_track data (sections, steering/data.md, 5 template tasks with placeholder ACs, data-sections fails); --remove is non-destructive (inactive, no check, dataSections null, tasks not counted); re-adding duplicates nothing (got " +
+      js([add.added, rm.inactive, tBefore, tAdded]) + ")", [
+      () => add.ok, () => add.tracks === "core +data", () => (add.added || []).join("|").includes("steering/data.md"),
+      () => rd(plain.dir, "design.md").includes("## [DATA] Data Contracts & Schema Evolution"),
+      () => pTasks.includes("## Story US-1 — Data Pipeline"), () => pTasks.includes("_Requirements: [the +data criterion this task proves]_"),
+      () => chk(docAdd, "data-sections").status === "fail", () => tAdded === tBefore + 5, () => rm.ok, () => rm.tracks === "core",
+      () => rm.inactive.includes("design.md ([DATA] sections)"), () => rm.inactive.includes("tasks.md (Story US-1 — Data Pipeline)"),
+      () => !chk(docRm, "data-sections").status, () => stRm.dataSections === null, () => stRm.tasks.total === tBefore, () => reAdd.ok,
+      () => reAdd.tracks === "core +data", () => rd(plain.dir, "tasks.md").split("## Story US-1 — Data Pipeline").length === 2,
+      () => S.statusFeature(at, plain.slug).tasks.total === tBefore + 5,
+    ]);
 
     // --- markers are case-sensitive; the loose (ordinary) names count only in the track's context — a core "## Ownership" note, +privacy's
     // "[PRIVACY] Retention & Deletion" never stand in for a deleted [DATA] section; [DATA] is a stable bracket, not a slot
@@ -170,14 +174,19 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
     const lpDoc = S.specDoctor(lp, "f-data"), lpDocA = S.specDoctor(lp, "f-etl"), lpSt = S.statusFeature(lp, "f-data");
     const lpUp = S.specUpgrade(lp), lpUpF = lpUp.features.find((x) => x.name === "f-data") || {};
     const adopt = S.addTrack(lp, "f-data", "data"), drop = S.addTrack(lp, "f-etl", "etl", { remove: true });
-    ok(lpSt.tracks === "core" && js(lpSt.missingPacks) === js(["data"]) && !chk(lpDoc, "data-sections").status && chk(lpDoc, "track-pack-missing").status === "warn" &&
-      /\+data \(a track pack from before 1\.21 — 'data' is a reserved name now, and the built-in \+data track is NOT applied/.test(chk(lpDoc, "track-pack-missing").detail) &&
-      /'etl' is a reserved name now: rename/.test(chk(lpDocA, "track-pack-missing").detail) && (lpUpF.attention || []).includes("track-pack-reserved") &&
-      S.upgradeLines(lpUp).some((l) => /Rename its track pack\(s\) from before 1\.21 — /.test(l)) && adopt.ok && js(adopt.adopted) === js(["data"]) && adopt.tracks === "core +data" &&
-      rd(lpMain.dir, "design.md").includes("## [DATA] Data Contracts & Schema Evolution") && chk(S.specDoctor(lp, "f-data"), "data-sections").status === "fail" &&
-      drop.ok && js(drop.removedTracks) === js(["etl"]) && js(JSON.parse(rd(lpAlias.dir, ".state.json")).tracks) === js(["core"]),
-      "1.21 F4: a pre-1.21 pack named 'data' / 'etl' is the feature's missing pack (tracks read core, the built-in +data is NOT applied, doctor and spec_upgrade say 'from before 1.21'); add-track data adopts the built-in track, --remove drops the alias pack (got " +
-      js([lpSt.tracks, lpSt.missingPacks, chk(lpDoc, "track-pack-missing").detail, chk(lpDocA, "track-pack-missing").detail, adopt.adopted, drop.error]) + ")");
+    all("1.21 F4: a pre-1.21 pack named 'data' / 'etl' is the feature's missing pack (tracks read core, the built-in +data is NOT applied, doctor and spec_upgrade say 'from before 1.21'); add-track data adopts the built-in track, --remove drops the alias pack (got " +
+      js([lpSt.tracks, lpSt.missingPacks, chk(lpDoc, "track-pack-missing").detail, chk(lpDocA, "track-pack-missing").detail, adopt.adopted, drop.error]) + ")", [
+      () => lpSt.tracks === "core", () => js(lpSt.missingPacks) === js(["data"]), () => !chk(lpDoc, "data-sections").status,
+      () => chk(lpDoc, "track-pack-missing").status === "warn",
+      () => /\+data \(a track pack from before 1\.21 — 'data' is a reserved name now, and the built-in \+data track is NOT applied/.test(chk(lpDoc, "track-pack-missing").detail),
+      () => /'etl' is a reserved name now: rename/.test(chk(lpDocA, "track-pack-missing").detail),
+      () => (lpUpF.attention || []).includes("track-pack-reserved"),
+      () => S.upgradeLines(lpUp).some((l) => /Rename its track pack\(s\) from before 1\.21 — /.test(l)), () => adopt.ok,
+      () => js(adopt.adopted) === js(["data"]), () => adopt.tracks === "core +data",
+      () => rd(lpMain.dir, "design.md").includes("## [DATA] Data Contracts & Schema Evolution"),
+      () => chk(S.specDoctor(lp, "f-data"), "data-sections").status === "fail", () => drop.ok, () => js(drop.removedTracks) === js(["etl"]),
+      () => js(JSON.parse(rd(lpAlias.dir, ".state.json")).tracks) === js(["core"]),
+    ]);
 
     // --- views: the test rows, status, spec_finish checks, the brief's and the matrix's [DATA] sections, the Gherkin tag, spec_import, steering
     const vw = d("views");
@@ -194,13 +203,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
       /\| T-\d+ \| integration \| property \| a partition re-run or backfilled twice leaves the same rows as one run — no duplicate, no gap \| US-1\.AC-33 \|/,
       /\| T-\d+ \| contract \| example \| schema-change compatibility: an added optional column passes, a removed \/ renamed column or a narrowed type is rejected before the load \| US-1\.AC-35 \|/];
     const steeringHead = { en: /^# Data Pipeline Standards/, pt: /^# Padrões de Pipelines de Dados/, es: /^# Estándares de Pipelines de Datos/, "pt-BR": /^# Padrões de Pipelines de Dados/ };
-    ok(plan.every((re) => re.test(vPlan)) && !vTr.uncoveredByTasks.length && !vTr.uncoveredByTests.length && !vTr.phantomAcsInTasks.length && !(vTr.testsNotMappedToTasks || []).length &&
-      Array.isArray(vSt.dataSections) && vSt.dataSections.length === 5 && vSt.dataSections.every((s) => s.filled) && vFin.checks.some((c) => /^\+data: the data-quality checks/.test(c)) &&
-      vBrief.ok && vBrief.designSections.includes("[DATA] Data Quality") && (vRow.design || []).includes("[DATA] Pipeline Idempotency & Backfills") &&
-      /(^|\s)@DATA(\s|$)/m.test(vGk.content || "") && initV.created.includes("data.md") && I.steeringKnownFiles().includes("data.md") &&
-      ["en", "pt", "es", "pt-BR"].every((l) => steeringHead[l].test(I.steeringStub("data.md", l) || "")) && (chk(S.specDoctor(vw, vf.slug), "steering").detail || "").includes("data.md"),
-      "1.21 F4: +data views — its test rows are planned and traced, spec_status dataSections, spec_finish's +data checks, the brief and the matrix link a [DATA] criterion to its sections, Gherkin @DATA, steering/data.md in EN / PT / ES / pt-BR (got " +
-      js([vPlan.split("\n").filter((l) => IDS.some((i) => l.includes("US-1.AC-" + i))), vSt.dataSections, vBrief.designSections, vRow.design, (vGk.content || "").split("\n")[0]]) + ")");
+    all("1.21 F4: +data views — its test rows are planned and traced, spec_status dataSections, spec_finish's +data checks, the brief and the matrix link a [DATA] criterion to its sections, Gherkin @DATA, steering/data.md in EN / PT / ES / pt-BR (got " +
+      js([vPlan.split("\n").filter((l) => IDS.some((i) => l.includes("US-1.AC-" + i))), vSt.dataSections, vBrief.designSections, vRow.design, (vGk.content || "").split("\n")[0]]) + ")", [
+      () => plan.every((re) => re.test(vPlan)), () => !vTr.uncoveredByTasks.length, () => !vTr.uncoveredByTests.length,
+      () => !vTr.phantomAcsInTasks.length, () => !(vTr.testsNotMappedToTasks || []).length, () => Array.isArray(vSt.dataSections),
+      () => vSt.dataSections.length === 5, () => vSt.dataSections.every((s) => s.filled),
+      () => vFin.checks.some((c) => /^\+data: the data-quality checks/.test(c)), () => vBrief.ok,
+      () => vBrief.designSections.includes("[DATA] Data Quality"), () => (vRow.design || []).includes("[DATA] Pipeline Idempotency & Backfills"),
+      () => /(^|\s)@DATA(\s|$)/m.test(vGk.content || ""), () => initV.created.includes("data.md"), () => I.steeringKnownFiles().includes("data.md"),
+      () => ["en", "pt", "es", "pt-BR"].every((l) => steeringHead[l].test(I.steeringStub("data.md", l) || "")),
+      () => (chk(S.specDoctor(vw, vf.slug), "steering").detail || "").includes("data.md"),
+    ]);
     const im = d("import");
     fs.mkdirSync(path.join(im, ".kiro", "specs", "orders"), { recursive: true });
     fs.writeFileSync(path.join(im, ".kiro", "specs", "orders", "requirements.md"), "### Requirement 1\n\n**User Story:** As an analyst, I want the orders.\n\n#### Acceptance Criteria\n\n1. WHEN the nightly ETL job re-runs a partition THEN the system SHALL replace it in the data warehouse without duplicate rows\n");
@@ -373,14 +386,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
     const snow = cls("Replicate the CRM contacts into Snowflake every hour."), icon = cls("Add a Snowflake icon to the winter theme.");
     const role = cls("The data engineer wants a new column in the users table."), tbl = cls("Migrate the users table.");
     const ana = cls("Analytics events for the signup funnel.");
-    ok(!(wh.signals.data || []).length && whData.tracks.includes("data") && !mig.tracks.includes("data") && mig.possible.some((p) => p.track === "data") && mig.tracks.includes("tdd") &&
-      bf.tracks.includes("data") && snow.tracks.includes("data") && !icon.signals.data.length && !cls("DBT skills diary for the therapy app.").signals.data.length &&
-      !cls("Measure the Airflow readings of each vent.").signals.data.length && !cls("Redshift of each galaxy in the survey.").signals.data.length &&
-      !role.tracks.includes("data") && role.possible.some((p) => p.track === "data") && !tbl.signals.data.length && !ana.tracks.includes("data") &&
-      ana.notes.some((n) => /none names a data pipeline concern/.test(n) || /Possible \+data/.test(n)) && S.signalConcept("data", "row") === "sql" &&
-      S.signalConcept("data", "table") === "sql" && S.signalConcept("data", "looker") === "bi",
-      "1.21 F4: +data cues — a warehouse among stock / temperature / shifts is no signal, among data words an anchor; a migration's backfill is app-level ('possible' at most), a pipeline's backfill is data; 'into Snowflake' is the product, a Snowflake icon / DBT therapy / a vent's Airflow / a galaxy's Redshift are not; a data engineer or a table alone name no pipeline; analytics alone is 'possible' at most (got " +
-      js([wh.signals.data, mig.signals.data, mig.label, snow.signals.data, role.signals.data, ana.possible]) + ")");
+    all("1.21 F4: +data cues — a warehouse among stock / temperature / shifts is no signal, among data words an anchor; a migration's backfill is app-level ('possible' at most), a pipeline's backfill is data; 'into Snowflake' is the product, a Snowflake icon / DBT therapy / a vent's Airflow / a galaxy's Redshift are not; a data engineer or a table alone name no pipeline; analytics alone is 'possible' at most (got " +
+      js([wh.signals.data, mig.signals.data, mig.label, snow.signals.data, role.signals.data, ana.possible]) + ")", [
+      () => !(wh.signals.data || []).length, () => whData.tracks.includes("data"), () => !mig.tracks.includes("data"),
+      () => mig.possible.some((p) => p.track === "data"), () => mig.tracks.includes("tdd"), () => bf.tracks.includes("data"),
+      () => snow.tracks.includes("data"), () => !icon.signals.data.length, () => !cls("DBT skills diary for the therapy app.").signals.data.length,
+      () => !cls("Measure the Airflow readings of each vent.").signals.data.length,
+      () => !cls("Redshift of each galaxy in the survey.").signals.data.length, () => !role.tracks.includes("data"),
+      () => role.possible.some((p) => p.track === "data"), () => !tbl.signals.data.length, () => !ana.tracks.includes("data"),
+      () => ana.notes.some((n) => /none names a data pipeline concern/.test(n) || /Possible \+data/.test(n)),
+      () => S.signalConcept("data", "row") === "sql", () => S.signalConcept("data", "table") === "sql",
+      () => S.signalConcept("data", "looker") === "bi",
+    ]);
     // the older tracks keep their decisions on shared phrases: an ETL job stays an +obs technical target, CDC stays +dist, data retention +privacy
     const etlObs = cls("Monitor the ETL job and alert the on-call engineer when it fails."), cdc = cls("Stream changes from Postgres to the data warehouse with a CDC pipeline.");
     const ret = cls("Data retention: delete the personal data of closed accounts after 30 days.");
@@ -411,17 +428,22 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
     const pt = S.createFeature(mp, "Pedidos offline", ["mobile"], "", undefined, "pt"), es = S.createFeature(mp, "Pedidos sin conexion", ["mobile"], "", undefined, "es");
     const ptReq = rd(pt.dir, "requirements.md"), esReq = rd(es.dir, "requirements.md"), ptTasks = rd(pt.dir, "tasks.md");
     const c = S.classify("An offline-first mobile app for field technicians, with push notifications.", { projectDir: mp });
-    ok(chkM.ok && chkM.verdict === "pass" && chkM.errors === 0 && chkM.warnings === 0 && row.valid && row.marker === "[MOBILE]" && row.sections.length === 5 && row.steering === "mobile.md" &&
-      f.ok && f.label === "core +tdd +mobile" && /#### \[MOBILE\] Mobile App — Acceptance Criteria \(EARS\)/.test(reqs) && ["5", "6", "7", "8", "9"].every((n) => reqs.includes("US-1.AC-" + n)) &&
-      (design.match(/^## \[MOBILE\] /gm) || []).length === 5 && /## Story US-1 — \[MOBILE\] Mobile App/.test(tasks) && /Offline store and sync queue for Offline orders/.test(tasks) &&
-      /## \[MOBILE\] Traceability Matrix/.test(plan) && /- \[ \] MOBILE: Airplane-mode walk-through done/.test(list) && fs.existsSync(path.join(mp, ".specs", "steering", "mobile.md")) &&
-      chk(doc, "mobile-sections").status === "fail" && !refused.ok && refused.failing.includes("mobile-sections") && after.status === "pass" &&
-      !tr.uncoveredByTasks.length && !tr.uncoveredByTests.length && !tr.phantomAcsInTasks.length &&
-      /#### \[MOBILE\] Aplicação Móvel — Critérios de Aceitação/.test(ptReq) && /QUANDO o dispositivo estiver offline O SISTEMA DEVE/.test(ptReq) && /Armazenamento offline e fila de sincronização/.test(ptTasks) &&
-      /#### \[MOBILE\] Aplicación Móvil — Criterios de Aceptación/.test(esReq) && /CUANDO el dispositivo esté sin conexión EL SISTEMA DEBE/.test(esReq) &&
-      c.tracks.includes("mobile"),
-      "1.21 F4: examples/track-packs/mobile copied into .specs/tracks/mobile/ is a valid pack (tracks check: pass, 0 errors, 0 warnings — [MOBILE], 5 sections, steering mobile.md); a +tdd +mobile feature gets US-1.AC-5..9, five [MOBILE] sections, the task block, test rows and checklist items, and mobile-sections gates the design until filled; PT / ES features read pt/ and es/; the classifier turns +mobile on; 'mobile' is no reserved name (got " +
-      js([chkM.verdict, chkM.problems, row, doc.checks.filter((x) => x.status === "fail").map((x) => x.id), after.detail, c.label]) + ")");
+    all("1.21 F4: examples/track-packs/mobile copied into .specs/tracks/mobile/ is a valid pack (tracks check: pass, 0 errors, 0 warnings — [MOBILE], 5 sections, steering mobile.md); a +tdd +mobile feature gets US-1.AC-5..9, five [MOBILE] sections, the task block, test rows and checklist items, and mobile-sections gates the design until filled; PT / ES features read pt/ and es/; the classifier turns +mobile on; 'mobile' is no reserved name (got " +
+      js([chkM.verdict, chkM.problems, row, doc.checks.filter((x) => x.status === "fail").map((x) => x.id), after.detail, c.label]) + ")", [
+      () => chkM.ok, () => chkM.verdict === "pass", () => chkM.errors === 0, () => chkM.warnings === 0, () => row.valid,
+      () => row.marker === "[MOBILE]", () => row.sections.length === 5, () => row.steering === "mobile.md", () => f.ok,
+      () => f.label === "core +tdd +mobile", () => /#### \[MOBILE\] Mobile App — Acceptance Criteria \(EARS\)/.test(reqs),
+      () => ["5", "6", "7", "8", "9"].every((n) => reqs.includes("US-1.AC-" + n)), () => (design.match(/^## \[MOBILE\] /gm) || []).length === 5,
+      () => /## Story US-1 — \[MOBILE\] Mobile App/.test(tasks), () => /Offline store and sync queue for Offline orders/.test(tasks),
+      () => /## \[MOBILE\] Traceability Matrix/.test(plan), () => /- \[ \] MOBILE: Airplane-mode walk-through done/.test(list),
+      () => fs.existsSync(path.join(mp, ".specs", "steering", "mobile.md")), () => chk(doc, "mobile-sections").status === "fail", () => !refused.ok,
+      () => refused.failing.includes("mobile-sections"), () => after.status === "pass", () => !tr.uncoveredByTasks.length,
+      () => !tr.uncoveredByTests.length, () => !tr.phantomAcsInTasks.length,
+      () => /#### \[MOBILE\] Aplicação Móvel — Critérios de Aceitação/.test(ptReq),
+      () => /QUANDO o dispositivo estiver offline O SISTEMA DEVE/.test(ptReq), () => /Armazenamento offline e fila de sincronização/.test(ptTasks),
+      () => /#### \[MOBILE\] Aplicación Móvil — Criterios de Aceptación/.test(esReq),
+      () => /CUANDO el dispositivo esté sin conexión EL SISTEMA DEBE/.test(esReq), () => c.tracks.includes("mobile"),
+    ]);
     // 1.21 review B6: the pack is localized whole — a PT / pt-BR / ES +tdd +mobile feature (a fresh project each: the steering file is the
     // first feature's) gets its test rows and steering/mobile.md in its language (pt-BR reads pt/, the folder chain); check stays clean
     const locRows = { pt: [/## \[MOBILE\] Matriz de Rastreabilidade/, /\| T-\d+ \| e2e \| example \| modo de avião: as ações principais continuam disponíveis/],

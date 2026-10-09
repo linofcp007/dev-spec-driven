@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI }) => {
+exports.run = ({ ok, all, run, tmp, CLI }) => {
   const js = JSON.stringify;
   const parse = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
   const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
@@ -95,12 +95,16 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   const u1 = run(["merge-state", "--uninstall", "--project", repo]);
   const attrsU = fs.readFileSync(path.join(repo, ".gitattributes"), "utf8");
   const drvU = git(repo, "config", "merge.dev-spec-state.driver");
-  ok(iNo.code === 1 && /is not inside a git repository/.test(iNo.out) && i1.code === 0 && /\.gitattributes: the merge driver's lines added/.test(i1.out) && /every teammate runs node "[^"]+\/cli\/dev-spec\.js" merge-state --install once — and again after each plugin update/.test(i1.out) &&
-    attrs.startsWith("*.png binary\n") && /^\.specs\/\*\*\/\.state\.json merge=dev-spec-state$/m.test(attrs) && /^\.specs\/roadmap\.json merge=dev-spec-state$/m.test(attrs) &&
-    drv === "node '" + cliPosix + "' merge-state %O %A %B %P" && i2 && i2.ok === true && i2.attributes.changed === false && i2.config.length === 2 &&
-    u1.code === 0 && /the merge driver's lines removed/.test(u1.out) && attrsU === "*.png binary\n" && drvU.status !== 0,
-    "1.21 F1a: merge-state --install writes the .gitattributes lines (other lines kept, idempotent) and this clone's git config (merge.dev-spec-state.driver = node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P); --uninstall removes both; outside a repository it refuses (got " +
-    js([iNo.out.slice(0, 120), i1.out.slice(0, 300), drv, u1.out.slice(0, 200)]) + ")");
+  all("1.21 F1a: merge-state --install writes the .gitattributes lines (other lines kept, idempotent) and this clone's git config (merge.dev-spec-state.driver = node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P); --uninstall removes both; outside a repository it refuses (got " +
+    js([iNo.out.slice(0, 120), i1.out.slice(0, 300), drv, u1.out.slice(0, 200)]) + ")", [
+    () => iNo.code === 1, () => /is not inside a git repository/.test(iNo.out), () => i1.code === 0,
+    () => /\.gitattributes: the merge driver's lines added/.test(i1.out),
+    () => /every teammate runs node "[^"]+\/cli\/dev-spec\.js" merge-state --install once — and again after each plugin update/.test(i1.out),
+    () => attrs.startsWith("*.png binary\n"), () => /^\.specs\/\*\*\/\.state\.json merge=dev-spec-state$/m.test(attrs),
+    () => /^\.specs\/roadmap\.json merge=dev-spec-state$/m.test(attrs), () => drv === "node '" + cliPosix + "' merge-state %O %A %B %P", () => i2,
+    () => i2.ok === true, () => i2.attributes.changed === false, () => i2.config.length === 2, () => u1.code === 0,
+    () => /the merge driver's lines removed/.test(u1.out), () => attrsU === "*.png binary\n", () => drvU.status !== 0,
+  ]);
 
   // 1.24 r6 B9: --uninstall outside a repository said what --install writes — it names --uninstall (nothing to remove there)
   {
@@ -179,13 +183,17 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   const statRun = run(["status", "invoice-export", "--json", ...P]);
   const stat = jsonOf(statRun);
   const markers = git(repo, "grep", "-l", "-e", "^<<<<<<< ", "--", ".specs").stdout.trim();
-  ok(ap.every((r) => r.code === 0) && aTasks.code === 0 && aDone.code === 0 && bDone.code === 0 && mg.status === 0 && unmerged === "" && markers === "" &&
-    st && js(Object.keys(st.approvals).sort()) === '["classification","design","requirements","tasks"]' && st.evidence && st.evidence[1] && st.evidence[2] && st.ticks && st.ticks[1] && st.ticks[2] &&
-    st.approvalHistory.length === 4 && !("mergeConflicts" in st) && /- \[x\] 1\./.test(tasksMd) && /- \[x\] 2\./.test(tasksMd) &&
-    rm && js((rm.backlog || []).map((x) => x.name)) === '["PDF export","XLSX export"]' && js(rm.features["invoice-export"].dependsOn) === '["audit-log"]' && !("mergeConflicts" in rm) &&
-    doc && doc.ok === true && !doc.checks.some((c) => c.id === "merge-conflicts" || c.status === "fail") && stat && stat.tasks && stat.tasks.done === 2,
-    "1.21 F1a end to end: two branches — one approves the tasks and ticks task 1, the other ticks task 2 — plus a backlog item each and a dependency merge CLEANLY with the driver installed (no conflict, no marker): .state.json and roadmap.json hold both branches' work, valid JSON, doctor happy (got " +
-    js([mg.status, mg.stderr, unmerged, st && Object.keys(st.approvals), st && Object.keys(st.evidence || {}), rm && rm.backlog, doc && doc.checks.filter((c) => c.status === "fail"), stat ? stat.tasks.done : statRun.out.slice(0, 300)]) + ")");
+  all("1.21 F1a end to end: two branches — one approves the tasks and ticks task 1, the other ticks task 2 — plus a backlog item each and a dependency merge CLEANLY with the driver installed (no conflict, no marker): .state.json and roadmap.json hold both branches' work, valid JSON, doctor happy (got " +
+    js([mg.status, mg.stderr, unmerged, st && Object.keys(st.approvals), st && Object.keys(st.evidence || {}), rm && rm.backlog, doc && doc.checks.filter((c) => c.status === "fail"), stat ? stat.tasks.done : statRun.out.slice(0, 300)]) + ")", [
+    () => ap.every((r) => r.code === 0), () => aTasks.code === 0, () => aDone.code === 0, () => bDone.code === 0, () => mg.status === 0,
+    () => unmerged === "", () => markers === "", () => st,
+    () => js(Object.keys(st.approvals).sort()) === '["classification","design","requirements","tasks"]', () => st.evidence, () => st.evidence[1],
+    () => st.evidence[2], () => st.ticks, () => st.ticks[1], () => st.ticks[2], () => st.approvalHistory.length === 4,
+    () => !("mergeConflicts" in st), () => /- \[x\] 1\./.test(tasksMd), () => /- \[x\] 2\./.test(tasksMd), () => rm,
+    () => js((rm.backlog || []).map((x) => x.name)) === '["PDF export","XLSX export"]',
+    () => js(rm.features["invoice-export"].dependsOn) === '["audit-log"]', () => !("mergeConflicts" in rm), () => doc, () => doc.ok === true,
+    () => !doc.checks.some((c) => c.id === "merge-conflicts" || c.status === "fail"), () => stat, () => stat.tasks, () => stat.tasks.done === 2,
+  ]);
 
   // 1.21 review A3 — merge-state --check (read-only, git config --get): exit 0 while the driver runs THIS clone's CLI; 1 once it runs a
   // script that no longer exists (a plugin update moved the versioned folder) or another copy, or .gitattributes names the driver and
@@ -215,12 +223,15 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   const cPlain = jsonOf(run(["merge-state", "--check", "--json", "--project", bare]));
   const cNoRepo = noRepo ? run(["merge-state", "--check", "--project", outside]) : { code: 1 };
   const cUsage = run(["merge-state", "--check", "x", ...P]);
-  ok(cOk.code === 0 && /installed and runs this clone's CLI/.test(cOk.out) && cOkJ && cOkJ.status === "ok" && cOkJ.current === true && cOkJ.named === true && hOk.length === 0 &&
-    cGone.code === 1 && cGone.out.includes(gone) && /which no longer exists/.test(cGone.out) && /merge-state --install/.test(cGone.out) && cGoneJ && cGoneJ.status === "missing" && cGoneJ.script === gone &&
-    hGone.length === 1 && hGone[0].includes(gone) &&
-    cOther.code === 1 && /not from this clone's CLI/.test(cOther.out) && hOther.length === 1 &&
-    cNone.code === 1 && /names the dev-spec-state merge driver, but this clone's git config has none/.test(cNone.out) && hNone.length === 0 &&
-    reinstall.code === 0 && cBack.code === 0 && cPlain && cPlain.status === "none" && cNoRepo.code === 1 && cUsage.code === 1 && /--check/.test(cUsage.out),
-    "1.21 review A3: merge-state --check exits 0 while git's driver runs this clone's CLI and 1 when it runs a missing script (a plugin update) or another copy, or when .gitattributes names the driver and the clone has none — naming the path and the re-install line; the SessionStart hook adds one line for the missing / other script only; re-running --install fixes it (got " +
-    js([cOk.out, cGone.out, cOther.out, cNone.out, hGone, hOther, cPlain, cUsage.out.slice(0, 160)]) + ")");
+  all("1.21 review A3: merge-state --check exits 0 while git's driver runs this clone's CLI and 1 when it runs a missing script (a plugin update) or another copy, or when .gitattributes names the driver and the clone has none — naming the path and the re-install line; the SessionStart hook adds one line for the missing / other script only; re-running --install fixes it (got " +
+    js([cOk.out, cGone.out, cOther.out, cNone.out, hGone, hOther, cPlain, cUsage.out.slice(0, 160)]) + ")", [
+    () => cOk.code === 0, () => /installed and runs this clone's CLI/.test(cOk.out), () => cOkJ, () => cOkJ.status === "ok",
+    () => cOkJ.current === true, () => cOkJ.named === true, () => hOk.length === 0, () => cGone.code === 1, () => cGone.out.includes(gone),
+    () => /which no longer exists/.test(cGone.out), () => /merge-state --install/.test(cGone.out), () => cGoneJ, () => cGoneJ.status === "missing",
+    () => cGoneJ.script === gone, () => hGone.length === 1, () => hGone[0].includes(gone), () => cOther.code === 1,
+    () => /not from this clone's CLI/.test(cOther.out), () => hOther.length === 1, () => cNone.code === 1,
+    () => /names the dev-spec-state merge driver, but this clone's git config has none/.test(cNone.out), () => hNone.length === 0,
+    () => reinstall.code === 0, () => cBack.code === 0, () => cPlain, () => cPlain.status === "none", () => cNoRepo.code === 1,
+    () => cUsage.code === 1, () => /--check/.test(cUsage.out),
+  ]);
 };

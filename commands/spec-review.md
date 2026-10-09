@@ -16,12 +16,14 @@ brought back is Critical. **Verify before you report.** Each Critical / Importan
 this branch introduce it, is it not what an AC or `decisions.md` asks for? Rate each 0–100: **0** not real or pre-existing ·
 **25** might be real, unverified · **50** verified but minor · **75** verified and likely hit · **100** direct evidence.
 With a subagent tool, write the diff to `.specs/<feature>/.execution/review.diff` and dispatch one
-`dev-spec-driven:spec-reviewer` in verify mode per finding. Report the findings rated 80 or more by severity, the rest one
+`dev-spec-driven:spec-verifier` per finding (the finding verbatim, the diff, the merge base and HEAD, the feature folder) —
+in parallel; without one, check each yourself and say so. Report the findings rated 80 or more by severity, the rest one
 line each under "Unconfirmed (below 80)"; then `trace_check {name}` (`matrix: true` for the traceability matrix).
 
 **converge** — the feature AC by AC against the code: `spec_status` + `trace_check {name, code: true}`, then
 `dev-spec-driven:spec-reviewer` in converge mode (inline without subagents): per AC implemented (file:line)? tested
-(T-ID)? → ✅ / ❌ / ⚠️, with proposed tasks. A gap that needs another AC, design decision or test is no task:
+(T-ID)? → ✅ / ❌ / ⚠️, with proposed tasks (an ❌ checked by a `dev-spec-driven:spec-verifier` before it costs a task).
+A gap that needs another AC, design decision or test is no task:
 `/spec-change <feature> impact`. Append only the tasks the user approves — `spec_append_tasks {name, tasks}` — then, on
 their yes, re-approve `tasks` with `spec_approve`.
 

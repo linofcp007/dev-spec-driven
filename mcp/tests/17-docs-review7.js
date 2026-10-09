@@ -97,7 +97,7 @@ exports.run = async ({ ok, root, require }) => {
     const cmdTexts = fs.readdirSync(path.join(root, "commands")).filter((n) => n.endsWith(".md") && !/^disable-model-invocation: true$/m.test(fm(n))).map((n) => [n, ws(rd("commands", n))]);
     const offenders = [["SKILL.md", skill], ...cmdTexts].filter(([, t]) => runsUserOnly(t)).map(([n]) => n);
     ok(userOnly.includes("/approve") && userOnly.length >= 20 && !offenders.length &&
-      /record it with `spec_approve \{name, phase\}`/.test(skill) && /`\/approve`(?: and `\/spec-ff` are| is) the user's own command/.test(skill) &&
+      /record it with `spec_approve \{name, phase\}`/.test(skill) && /`\/approve` is the user's own command/.test(skill) &&
       /On the user's yes, record it with `spec_approve`/.test(bug) && /`spec_approve \{through: "tasks"\}` once they said so/.test(bug) && !/On the user's yes, `\/approve`/.test(bug),
       "1.25.1 review: SKILL.md and the model-run commands record an approval with spec_approve on the user's yes — never by running the user-only /approve or /spec-ff (" + js(offenders) + ")");
     const reserved = require("./lib/engine/index.js").RE_PACK_MARKER_RESERVED;

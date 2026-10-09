@@ -118,7 +118,8 @@ written by hand. IDs and markers stay English-stable (languages.md). The one Eng
 - **Changed templates / tracks / i18n — the corpus? Run `npm run build`** and commit the regenerated
   `mcp/lib/engine/corpus.generated.json` (the built-in placeholder corpus). Precisely: after changing a file of
   `CORPUS_SOURCES` — `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` /
-  `tracks.js` — or package.json's version; mcp/test.js fails until then. The same build writes the committed
+  `tracks.js` (never for a version bump alone — 1.26: neither generated file carries the version); mcp/test.js fails until
+  then, `npm run check` says whether both are current. The same build writes the committed
   `hooks/stop-claims.generated.json` (the Stop hook's claim pre-filter): rebuild after changing an i18n file or `engine/guards.js`
   too. Never edit either by hand. The one-file engine
   (`mcp/lib/spec.bundle.js`) is git-ignored and built on demand (`dev-spec bundle`) — never commit it (architecture.md → The build).
@@ -161,5 +162,7 @@ U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's p
 engine/files.js — the write gate, conventions.md) read every `mcp/lib` source
 — the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone; never a built bundle
 (its registry comes from scripts/build.js, which they read). Both suites run on the modules (the harnesses drop
-`DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp.
+`DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp. Every chain is hermetic (1.26): a fresh empty temp folder as its
+cwd, none of the shell's `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `DEV_SPEC_*` (but `DEV_SPEC_TEST_*`) — a test sets what it
+needs for the process it starts, and never reads a path from `process.cwd()` (testing.md → Hermetic chains).
 Linux containers (`npm run test:docker`), plugin evals and the cross-platform test rules: docs/maintainers/testing.md.

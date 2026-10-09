@@ -4,6 +4,8 @@ Read on demand — never preload everything. `SKILL.md` names the file a phase n
 the whole library.
 
 **Workflow and tooling**
+- `references/phase-guide.md` — the detail behind SKILL.md's pipeline: `.specs/` and steering, what each phase's artifact
+  holds, the steps, the Phase 4 gate, the task markers, what to present at a gate, `spec_next_action`'s order
 - `references/tool-catalog.md` — which MCP tool when (start · gates · execute · change · project), the runnable CLI line
 - `references/tooling-reference.md` — the MCP tools, prompts + resources, the CLI, the hooks, doctor checks, command
   table, annotated `.specs/` tree, roadmap, commit format
@@ -12,8 +14,9 @@ the whole library.
   exports) and the local automation
 - `references/track-checklists.md` — per active track: the acceptance criteria to consider, the mandatory design
   sections, the test / eval plan additions, the task markers and the "done" checks before finishing
-- `references/classification-matrix.md` — track-routing brain (the decision procedure, every track's signals); worked
-  examples: `references/classification-examples-saas.md` / `references/classification-examples-ai.md`
+- `references/classification-matrix.md` — Phase 0: the decision procedure, each track's "turn it on if" table, the
+  `classification.md` format; worked examples: `references/classification-examples-saas.md` /
+  `references/classification-examples-ai.md`
 - `references/project-tracks.md` — a team's own track pack in `.specs/tracks/<name>/`
 
 **Modes and flows**

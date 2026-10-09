@@ -92,7 +92,7 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   bare `dev-spec <command>`; text written into a committed file goes through `i18n.portableCli()` (languages.md →
   Runnable CLI lines). A command file that hands the user a CLI line writes `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" …`.
 - A change to a file of `CORPUS_SOURCES` — `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js` (a template, a string), `engine/core.js`,
-  `markdown.js`, `packs.js`, `tasks.js`, `tracks.js` (a track) — or to package.json's version → `npm run build`, and commit
+  `markdown.js`, `packs.js`, `tasks.js`, `tracks.js` (a track) — never a version bump alone (1.26) → `npm run build`, and commit
   the regenerated `mcp/lib/engine/corpus.generated.json` with it (architecture.md → The build; mcp/test.js fails until you
   do). A module that the corpus render starts to run through goes into `CORPUS_SOURCES` (the V8-coverage test names it).
   Never commit `mcp/lib/spec.bundle.js` (git-ignored, built on demand).

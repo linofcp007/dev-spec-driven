@@ -84,7 +84,7 @@ test files, and `spec_finish {write: true}` records the implementing files so `s
 
 Specs and plans already written for another tool become dev-spec features with `spec_import {tool, path, name?,
 tracks?, lang?, dryRun?}` (CLI `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--tracks …]
-[--lang pt] [--dry-run]`; `/spec-import`). The path must be inside the project; the source is only read; the result is always a
+[--lang pt] [--dry-run]`; the user's `/spec-adopt import`). The path must be inside the project; the source is only read; the result is always a
 NEW feature (an existing slug is an error). `dryRun: true` (1.25) runs the whole import and writes nothing — no file, folder,
 lock or roadmap refresh: the same answer plus `preview` (each file it would write, its size and first characters), `counts`
 (stories, criteria, tasks, decisions), the tracks it would classify, `mapping` and `warnings`; every refusal is the real one's.

@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname }) => {
 
   { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
     const call9 = async (args) => payload(await rpc("tools/call", { name: "trace_check", arguments: args }));
@@ -1039,12 +1039,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     const t1 = row("US-1.AC-1").tasks[0] || {};
     const t2 = row("US-1.AC-2").tasks[0] || {};
     const t5 = row("US-2.AC-1").tasks[0] || {};
-    ok(t1.number === 1 && t1.done && t1.verified && t1.reason === null && JSON.stringify(t1.cites) === '["US-1.AC-1","T-01"]' &&
-      t1.evidence && t1.evidence.command === 'node -e "process.exit(0)"' && t1.evidence.exitCode === 0 && typeof t1.evidence.at === "string" && t1.evidence.commit === "abcdef1234567" && t1.evidence.dirty === false &&
-      t2.number === 2 && t2.done && !t2.verified && t2.reason === "manual-note-on-runnable-verify" && t2.evidence && t2.evidence.note === "checked by hand" && t2.evidence.exitCode === undefined &&
-      t5.verified && t5.nothingToVerify === true && JSON.stringify(row("SC-001").tasks.map((t) => [t.number, t.done, t.cites])) === '[[4,false,["T-03"]]]' &&
-      JSON.stringify(row("US-1.AC-4").tasks.map((t) => t.number)) === "[3]" && row("US-1.AC-3").tasks.length === 0,
-      "feature F5: the linked tasks — citing the ID or one of its planned T-IDs (cites), done / verified with the ONE verdict's stable reason, and the latest evidence (command, exitCode, at, commit / dirty; a note as note) (got " + JSON.stringify([t1, t2.reason, t5.nothingToVerify]) + ")");
+    all("feature F5: the linked tasks — citing the ID or one of its planned T-IDs (cites), done / verified with the ONE verdict's stable reason, and the latest evidence (command, exitCode, at, commit / dirty; a note as note) (got " + JSON.stringify([t1, t2.reason, t5.nothingToVerify]) + ")", [
+      () => t1.number === 1, () => t1.done, () => t1.verified, () => t1.reason === null, () => JSON.stringify(t1.cites) === '["US-1.AC-1","T-01"]',
+      () => t1.evidence, () => t1.evidence.command === 'node -e "process.exit(0)"', () => t1.evidence.exitCode === 0,
+      () => typeof t1.evidence.at === "string", () => t1.evidence.commit === "abcdef1234567", () => t1.evidence.dirty === false,
+      () => t2.number === 2, () => t2.done, () => !t2.verified, () => t2.reason === "manual-note-on-runnable-verify", () => t2.evidence,
+      () => t2.evidence.note === "checked by hand", () => t2.evidence.exitCode === undefined, () => t5.verified, () => t5.nothingToVerify === true,
+      () => JSON.stringify(row("SC-001").tasks.map((t) => [t.number, t.done, t.cites])) === '[[4,false,["T-03"]]]',
+      () => JSON.stringify(row("US-1.AC-4").tasks.map((t) => t.number)) === "[3]", () => row("US-1.AC-3").tasks.length === 0,
+    ]);
     ok(JSON.stringify(row("US-1.AC-1").tests) === '[{"id":"T-01","files":["test/charge.test.js"]}]' && JSON.stringify(row("US-1.AC-2").tests) === '[{"id":"T-02","files":[]}]' &&
       JSON.stringify(row("SC-001").tests) === '[{"id":"T-03","outsideCode":true}]' && JSON.stringify(row("EC-1").tests.map((t) => t.id)) === '["T-02"]' &&
       JSON.stringify(mx.code) === JSON.stringify({ scanned: 1, truncated: false }) && JSON.stringify(S.traceMatrix(rp, "checkout").rows[0].tests) === '[{"id":"T-01"}]' &&
@@ -1088,17 +1091,25 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     const hdr = recs[0] || [];
     const col = (name) => hdr.indexOf(name);
     const rec = (id) => recs.find((r) => r[1] === id) || [];
-    ok(csv.charCodeAt(0) !== 0xfeff && csv.endsWith("\r\n") && !/[^\r]\n/.test(csv) && recs.length === 11 && recs.every((r) => r.length === hdr.length) &&
-      hdr.join(",") === "Feature,ID,Kind,Requirement,Status,Gaps,Template,Design sections,Tasks,Tests,Test files,Latest evidence,Decisions,Supersedes,Superseded by,Requirements approved,Approved by,Changed since approval" &&
-      csv.includes('"WHEN the shopper pays THE SYSTEM SHALL charge ""the total"", in cents <script>alert(1)</script>"') && rec("US-1.AC-1")[col("Requirement")] === row("US-1.AC-1").text &&
-      rec("US-1.AC-4")[col("Requirement")] === "'" + row("US-1.AC-4").text && csv.includes('"\'=HYPERLINK(""evil"") THE SYSTEM SHALL log the attempt"') &&
-      rec("US-1.AC-2")[col("Tasks")] === "#2 done, not verified (note only, _Verify:_ command not run)" && rec("US-2.AC-1")[col("Tasks")] === "#5 done (nothing to verify)" &&
-      /^#1: node -e "process\.exit\(0\)" → exit 0 @abcdef123456 · \d{4}-/.test(rec("US-1.AC-1")[col("Latest evidence")]) && rec("US-1.AC-1")[col("Decisions")] === "D-1 Stripe, as the PSP" &&
-      rec("SC-001")[col("Test files")] === "T-03: run outside test code" && rec("US-1.AC-2")[col("Test files")] === "T-02: in no test file" &&
-      rec("US-1.AC-3")[col("Gaps")] === "no task cites it; no test-plan row covers it" && rec("SC-002")[col("Gaps")] === "no test-plan row or quickstart line covers it" &&
-      rec("US-1.AC-2")[col("Superseded by")] === "sso/US-1.AC-1" && rec("NFR-2")[col("Changed since approval")] === "yes" && rec("US-1.AC-1")[col("Changed since approval")] === "no" &&
-      rec("US-1.AC-1")[col("Approved by")] === "alice (forced)" && rec("US-1.AC-3")[col("Template")] === "yes" && rec("EC-1")[col("Kind")] === "EC",
-      "feature F5: matrixCsv — RFC 4180 (CRLF records, every record as wide as the header, a field with a comma / quote quoted and its quotes doubled), a criterion starting with '=' neutralized with an apostrophe; tasks, evidence, gaps, supersession, approval in words (got " + JSON.stringify(recs.slice(0, 2)) + ")");
+    all("feature F5: matrixCsv — RFC 4180 (CRLF records, every record as wide as the header, a field with a comma / quote quoted and its quotes doubled), a criterion starting with '=' neutralized with an apostrophe; tasks, evidence, gaps, supersession, approval in words (got " + JSON.stringify(recs.slice(0, 2)) + ")", [
+      () => csv.charCodeAt(0) !== 0xfeff, () => csv.endsWith("\r\n"), () => !/[^\r]\n/.test(csv), () => recs.length === 11,
+      () => recs.every((r) => r.length === hdr.length),
+      () => hdr.join(",") === "Feature,ID,Kind,Requirement,Status,Gaps,Template,Design sections,Tasks,Tests,Test files,Latest evidence,Decisions,Supersedes,Superseded by,Requirements approved,Approved by,Changed since approval",
+      () => csv.includes('"WHEN the shopper pays THE SYSTEM SHALL charge ""the total"", in cents <script>alert(1)</script>"'),
+      () => rec("US-1.AC-1")[col("Requirement")] === row("US-1.AC-1").text,
+      () => rec("US-1.AC-4")[col("Requirement")] === "'" + row("US-1.AC-4").text,
+      () => csv.includes('"\'=HYPERLINK(""evil"") THE SYSTEM SHALL log the attempt"'),
+      () => rec("US-1.AC-2")[col("Tasks")] === "#2 done, not verified (note only, _Verify:_ command not run)",
+      () => rec("US-2.AC-1")[col("Tasks")] === "#5 done (nothing to verify)",
+      () => /^#1: node -e "process\.exit\(0\)" → exit 0 @abcdef123456 · \d{4}-/.test(rec("US-1.AC-1")[col("Latest evidence")]),
+      () => rec("US-1.AC-1")[col("Decisions")] === "D-1 Stripe, as the PSP", () => rec("SC-001")[col("Test files")] === "T-03: run outside test code",
+      () => rec("US-1.AC-2")[col("Test files")] === "T-02: in no test file",
+      () => rec("US-1.AC-3")[col("Gaps")] === "no task cites it; no test-plan row covers it",
+      () => rec("SC-002")[col("Gaps")] === "no test-plan row or quickstart line covers it",
+      () => rec("US-1.AC-2")[col("Superseded by")] === "sso/US-1.AC-1", () => rec("NFR-2")[col("Changed since approval")] === "yes",
+      () => rec("US-1.AC-1")[col("Changed since approval")] === "no", () => rec("US-1.AC-1")[col("Approved by")] === "alice (forced)",
+      () => rec("US-1.AC-3")[col("Template")] === "yes", () => rec("EC-1")[col("Kind")] === "EC",
+    ]);
     ok(S.csvCell("plain") === "plain" && S.csvCell(null) === "" && S.csvCell('a,"b"') === '"a,""b"""' && S.csvCell("a\nb") === '"a\nb"' && S.csvCell("a\r\nb") === '"a\r\nb"' &&
       S.csvCell("=1+1") === "'=1+1" && S.csvCell("+1") === "'+1" && S.csvCell("-1") === "'-1" && S.csvCell("@SUM(A1)") === "'@SUM(A1)" && S.csvCell("\tx") === "'\tx" &&
       S.csvCell("\rx") === "\"'\rx\"" && S.csvCell(" =x") === " =x" && S.csvCell("x=1") === "x=1" && S.csvCell(-3) === "'-3",
@@ -1120,11 +1131,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     const handCsv = path.join(rp, ".specs", "exports", "checkout.rtm.csv");
     fs.writeFileSync(handCsv, "ID,Owner\r\nUS-1.AC-1,alice\r\n");
     const exH = S.exportSpecs(rp, { name: "checkout", format: "csv", write: true });
-    ok(exW.ok && exW.wrote === true && exW.content === undefined && exW.bytes > 500 && exW2.ok && exW2.wrote && pw.ok && pw.file === path.join(rp, ".specs", "exports", "project.rtm.csv") &&
-      JSON.stringify(pw.features) === '["checkout","sso"]' && pRecs.filter((r) => r[0] === "checkout").length === 10 && pRecs.some((r) => r[0] === "sso" && r[1] === "US-1.AC-1") &&
-      exH.ok === false && exH.skipped === true && /\.specs\/exports\/checkout\.rtm\.csv exists and was not generated by dev-spec/.test(exH.error) &&
-      fs.readFileSync(handCsv, "utf8") === "ID,Owner\r\nUS-1.AC-1,alice\r\n" && !S.listFeatures(rp).features.some((f) => f.name === "exports"),
-      "feature F5: spec_export csv {write} — .specs/exports/checkout.rtm.csv, rewritten next time (its marker record); the project: project.rtm.csv with every active feature's rows; a hand-written .rtm.csv is never overwritten (error, file unchanged)");
+    all("feature F5: spec_export csv {write} — .specs/exports/checkout.rtm.csv, rewritten next time (its marker record); the project: project.rtm.csv with every active feature's rows; a hand-written .rtm.csv is never overwritten (error, file unchanged)", [
+      () => exW.ok, () => exW.wrote === true, () => exW.content === undefined, () => exW.bytes > 500, () => exW2.ok, () => exW2.wrote, () => pw.ok,
+      () => pw.file === path.join(rp, ".specs", "exports", "project.rtm.csv"), () => JSON.stringify(pw.features) === '["checkout","sso"]',
+      () => pRecs.filter((r) => r[0] === "checkout").length === 10, () => pRecs.some((r) => r[0] === "sso" && r[1] === "US-1.AC-1"),
+      () => exH.ok === false, () => exH.skipped === true,
+      () => /\.specs\/exports\/checkout\.rtm\.csv exists and was not generated by dev-spec/.test(exH.error),
+      () => fs.readFileSync(handCsv, "utf8") === "ID,Owner\r\nUS-1.AC-1,alice\r\n",
+      () => !S.listFeatures(rp).features.some((f) => f.name === "exports"),
+    ]);
 
     // The HTML / md feature document gains the matrix; every cell escaped; the project document gets the counts.
     const html = S.exportSpecs(rp, { name: "checkout" }).content || "";
@@ -1294,9 +1309,11 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     const want = ["test/deploy.bats", "src/codec_test.cc", "lua/codec_spec.lua", "R/test-codec.R", "src/Codec.Tests.ps1", "t/basic.t", "src/codec_tests.erl", "test/CodecSpec.hs", "src/core_test.clj", "", "", "",
       "", "", "tests/test_schema.sql"];
     const got = want.map((_, i) => where(i + 1));
-    const t0 = Date.now();
-    const lin = [S.isTestFile("test_" + "a.".repeat(100000) + "x"), S.isTestFile("x" + "_test".repeat(20000) + ".q"), S.isTestFile(".test".repeat(20000) + "."), S.isTestFile("t/" + "x".repeat(100000) + ".tests.ps1q")];
-    const linMs = Date.now() - t0;
+    const { linMs, lin } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      const lin = [S.isTestFile("test_" + "a.".repeat(100000) + "x"), S.isTestFile("x" + "_test".repeat(20000) + ".q"), S.isTestFile(".test".repeat(20000) + "."), S.isTestFile("t/" + "x".repeat(100000) + ".tests.ps1q")];
+      return { linMs: Date.now() - t0, lin };
+    }, (s) => s.linMs < 3000);
     ok(js(got) === js(want) && sc.scanned === 10 && !sc.truncated && lin.join() === "false,false,false,false" && linMs < 3000,
       "1.21.1 languages: scanTestCode finds T-IDs in a .bats suite, a _test.cc (T02_…), a _spec.lua, a test-x.R, a *.Tests.ps1 outside tests/, Perl's t/basic.t, a _tests.erl, test/*Spec.hs, a _test.clj and a pgTAP tests/test_*.sql — never in notes.t, src/DevSpec.hs, a source file or a tests/fixtures/*.sql fixture; the test-name rule stays linear on 100,000-character names (got " +
       js([got, sc.scanned, linMs]) + ")");
@@ -1444,15 +1461,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, approveBefore, shipFeature, __d
     put(good.dir, "tasks.md", tasksOf("US-1.AC-1"));
     const trG = S.traceCheck(d, good.slug);
     const noId = eB.issues.filter((i) => i.code === "no-id");
-    ok(noId.length === 2 && /'AC-1' is not a stable ID trace_check reads — write US-<story>\.AC-<n> \(e\.g\., US-1\.AC-1\)/.test(noId[0].msg) && eB.summary.withStableId === 0 &&
-      trB.totalAcs === 0 && trB.verdict === "gaps-found" && js(trB.unidentifiedCriteria) === '["AC-1","AC-2"]' &&
-      S.traceGapLines(trB, "en").some((l) => /^criteria with no US-<story>\.AC-<n> ID \(traceability counts none\): AC-1, AC-2$/.test(l)) &&
-      chk(docB, "ears").status === "fail" && /has criteria \(AC-1, AC-2\) with no AC ID trace_check reads/.test(chk(docB, "ears").detail) &&
-      chk(docB, "traceability").status === "fail" && apB.refused === true && (apB.failing || []).includes("ears") &&
-      trN.verdict === "gaps-found" && js(trN.unidentifiedCriteria) === '["L5"]' &&
-      trG.verdict === "pass" && trG.totalAcs === 1 && !("unidentifiedCriteria" in trG),
-      "1.22 review: bare AC-n IDs — EARS no-id names US-<story>.AC-<n>; trace_check fails (unidentifiedCriteria AC-1, AC-2 — no ID at all: L5) instead of 'all 0 ACs covered'; doctor ears + traceability fail; the requirements approval is refused; a US-n.AC-m spec is unchanged (got " +
-      js([noId.map((i) => i.msg), trB.verdict, trB.unidentifiedCriteria, chk(docB, "ears"), chk(docB, "traceability").status, apB.refused, apB.failing, trN.unidentifiedCriteria, trG.verdict, Object.keys(trG)]) + ")");
+    all("1.22 review: bare AC-n IDs — EARS no-id names US-<story>.AC-<n>; trace_check fails (unidentifiedCriteria AC-1, AC-2 — no ID at all: L5) instead of 'all 0 ACs covered'; doctor ears + traceability fail; the requirements approval is refused; a US-n.AC-m spec is unchanged (got " +
+      js([noId.map((i) => i.msg), trB.verdict, trB.unidentifiedCriteria, chk(docB, "ears"), chk(docB, "traceability").status, apB.refused, apB.failing, trN.unidentifiedCriteria, trG.verdict, Object.keys(trG)]) + ")", [
+      () => noId.length === 2,
+      () => /'AC-1' is not a stable ID trace_check reads — write US-<story>\.AC-<n> \(e\.g\., US-1\.AC-1\)/.test(noId[0].msg),
+      () => eB.summary.withStableId === 0, () => trB.totalAcs === 0, () => trB.verdict === "gaps-found",
+      () => js(trB.unidentifiedCriteria) === '["AC-1","AC-2"]',
+      () => S.traceGapLines(trB, "en").some((l) => /^criteria with no US-<story>\.AC-<n> ID \(traceability counts none\): AC-1, AC-2$/.test(l)),
+      () => chk(docB, "ears").status === "fail", () => /has criteria \(AC-1, AC-2\) with no AC ID trace_check reads/.test(chk(docB, "ears").detail),
+      () => chk(docB, "traceability").status === "fail", () => apB.refused === true, () => (apB.failing || []).includes("ears"),
+      () => trN.verdict === "gaps-found", () => js(trN.unidentifiedCriteria) === '["L5"]', () => trG.verdict === "pass", () => trG.totalAcs === 1,
+      () => !("unidentifiedCriteria" in trG),
+    ]);
     // the pre-commit check names them too — never "traceability clean (0 ACs)"
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.22 review: pre-commit — skipped: no git");
     else {

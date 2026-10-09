@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, require, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, require, __dirname }) => {
 
   // --- 1.13 WP10: living catalog (SPECS.md, _Supersedes:_), archive → restore round-trip, drift since finish ---
   {
@@ -415,25 +415,31 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     // files — the drift and its decision come first (it said only "finish it again", and the re-finish accepted the drift).
     const naSD10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
     const drSD10 = S.drift(w10d, "login-loop");
-    ok(naSD10.step === "drift" && naSD10.staleBaseline && naSD10.staleBaseline.newFiles.join() === "src/audit.js" && naSD10.drift && naSD10.drift.changed.join() === "src/auth.js" &&
-      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 1 of 2 implementing file\(s\) changed since: src\/auth\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naSD10.recommendation) &&
-      /It also changed since that finish \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\): whichever you decide, finish it again afterwards/.test(naSD10.recommendation) &&
-      drSD10.verdict === "drift" && drSD10.drifted.join() === "login-loop" && drSD10.features.length === 1 && drSD10.features[0].stale === true && drSD10.features[0].changed.join() === "src/auth.js" &&
-      drSD10.stale.length === 1 && drSD10.stale[0].drifted === true && / {2}⚠ login-loop: 1 implementing file\(s\) changed since finish/.test(hook10(w10d)),
-      "a stale baseline (tasks re-approved, a new _Implements:_ file) whose recorded src/auth.js also changed: next_action → drift (the decision, then finish again; drift + staleBaseline), spec_drift → drift (features[].stale, stale[].drifted), SessionStart agrees (got " +
-      JSON.stringify([naSD10.step, naSD10.drift && naSD10.drift.changed, drSD10.verdict, drSD10.features.map((f) => f.feature)]) + ")");
+    all("a stale baseline (tasks re-approved, a new _Implements:_ file) whose recorded src/auth.js also changed: next_action → drift (the decision, then finish again; drift + staleBaseline), spec_drift → drift (features[].stale, stale[].drifted), SessionStart agrees (got " +
+      JSON.stringify([naSD10.step, naSD10.drift && naSD10.drift.changed, drSD10.verdict, drSD10.features.map((f) => f.feature)]) + ")", [
+      () => naSD10.step === "drift", () => naSD10.staleBaseline, () => naSD10.staleBaseline.newFiles.join() === "src/audit.js", () => naSD10.drift,
+      () => naSD10.drift.changed.join() === "src/auth.js",
+      () => /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 1 of 2 implementing file\(s\) changed since: src\/auth\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naSD10.recommendation),
+      () => /It also changed since that finish \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\): whichever you decide, finish it again afterwards/.test(naSD10.recommendation),
+      () => drSD10.verdict === "drift", () => drSD10.drifted.join() === "login-loop", () => drSD10.features.length === 1,
+      () => drSD10.features[0].stale === true, () => drSD10.features[0].changed.join() === "src/auth.js", () => drSD10.stale.length === 1,
+      () => drSD10.stale[0].drifted === true, () => / {2}⚠ login-loop: 1 implementing file\(s\) changed since finish/.test(hook10(w10d)),
+    ]);
     fs.writeFileSync(path.join(w10d, "src", "auth.js"), "a\nc\n"); // back to what the baseline recorded: only stale now
     const naS10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
     const drS10 = S.drift(w10d, "login-loop");
     const catS10 = S.catalog(w10d).features.find((f) => f.feature === "login-loop");
-    ok(apT10.ok && naS10.step === "finish" && naS10.staleBaseline && naS10.staleBaseline.newFiles.join() === "src/audit.js" &&
-      naS10.staleBaseline.since.some((x) => x.kind === "approval" && x.phase === "tasks") && !/Nothing left to do/.test(naS10.recommendation) &&
-      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and all its tasks are done — finish it again: \/spec-finish login-loop/.test(naS10.recommendation) &&
-      JSON.stringify(naS10) === JSON.stringify(S.nextAction(w10d, "login-loop")) && naS10.drift && naS10.drift.drifted === false &&
-      drS10.verdict === "stale" && drS10.features.length === 0 && drS10.stale.map((x) => x.feature).join() === "login-loop" && drS10.stale[0].newFiles.join() === "src/audit.js" && drS10.stale[0].drifted === false &&
-      catS10.status === "complete" && catS10.finishedAt === undefined,
-      "a finished feature changed since (tasks re-approved, a new _Implements:_ file) and done again: next_action → finish again (staleBaseline {since, newFiles}, drift clean; MCP = engine), drift → `stale`, the catalog → complete (got " +
-      JSON.stringify([naS10.step, naS10.staleBaseline, drS10.verdict, catS10.status]) + ")");
+    all("a finished feature changed since (tasks re-approved, a new _Implements:_ file) and done again: next_action → finish again (staleBaseline {since, newFiles}, drift clean; MCP = engine), drift → `stale`, the catalog → complete (got " +
+      JSON.stringify([naS10.step, naS10.staleBaseline, drS10.verdict, catS10.status]) + ")", [
+      () => apT10.ok, () => naS10.step === "finish", () => naS10.staleBaseline, () => naS10.staleBaseline.newFiles.join() === "src/audit.js",
+      () => naS10.staleBaseline.since.some((x) => x.kind === "approval" && x.phase === "tasks"),
+      () => !/Nothing left to do/.test(naS10.recommendation),
+      () => /^'login-loop' was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and all its tasks are done — finish it again: \/spec-finish login-loop/.test(naS10.recommendation),
+      () => JSON.stringify(naS10) === JSON.stringify(S.nextAction(w10d, "login-loop")), () => naS10.drift, () => naS10.drift.drifted === false,
+      () => drS10.verdict === "stale", () => drS10.features.length === 0, () => drS10.stale.map((x) => x.feature).join() === "login-loop",
+      () => drS10.stale[0].newFiles.join() === "src/audit.js", () => drS10.stale[0].drifted === false, () => catS10.status === "complete",
+      () => catS10.finishedAt === undefined,
+    ]);
     const reFin10 = S.finishFeature(w10d, "login-loop", { write: true });
     const naR10 = S.nextAction(w10d, "login-loop");
     const apR10 = S.approvePhase(w10d, "login-loop", "execution");
@@ -538,15 +544,17 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     fs.writeFileSync(arSt10, arKeep10);
     const finAr10 = S.finishFeature(w10d, "login-loop", { write: true });
     const staleLine10 = (l, a) => S.msg(l).drift.stale("login-loop", "2026-01-01", "why", a);
-    ok(drAr10.ok && drAr10.stale.length === 0 && drAr10.verdict === "clean" && drAr10.features.some((f) => f.feature === "login-loop" && f.archived && !f.drifted) &&
-      drArNamed10.verdict === "clean" && drArNamed10.stale.length === 0 &&
-      drArCr10.verdict === "stale" && drArCr10.stale.length === 1 && drArCr10.stale[0].archived === true && drArCr10.stale[0].newFiles.length === 0 &&
-      finAr10.ok === false && /not found/.test(finAr10.error) && /it is archived \(\.specs\/_archive\/login-loop\): restore it first \(node "[^"]*dev-spec\.js" feature restore login-loop\)/.test(finAr10.error) &&
-      ["en", "pt", "es"].every((l) => staleLine10(l, true).includes("" + S.DEV_SPEC + " feature restore login-loop") && staleLine10(l, true).includes("" + S.DEV_SPEC + " finish login-loop --write") &&
-        !staleLine10(l, false).includes("feature restore")) &&
-      ["pt", "es"].every((l) => S.msg(l).err.archivedHint("x").includes("" + S.DEV_SPEC + " feature restore x")),
-      "an archived finished feature: a later file under its implemented folder is no stale baseline (drift clean, exit 0); a change request after its finish is (stale, archived) and the line says restore → finish → archive (EN/PT/ES); finish of an archived feature names the archive and the restore (got " +
-      JSON.stringify([drAr10.verdict, drAr10.stale.map((x) => x.feature), drArCr10.verdict, finAr10.error]) + ")");
+    all("an archived finished feature: a later file under its implemented folder is no stale baseline (drift clean, exit 0); a change request after its finish is (stale, archived) and the line says restore → finish → archive (EN/PT/ES); finish of an archived feature names the archive and the restore (got " +
+      JSON.stringify([drAr10.verdict, drAr10.stale.map((x) => x.feature), drArCr10.verdict, finAr10.error]) + ")", [
+      () => drAr10.ok, () => drAr10.stale.length === 0, () => drAr10.verdict === "clean",
+      () => drAr10.features.some((f) => f.feature === "login-loop" && f.archived && !f.drifted), () => drArNamed10.verdict === "clean",
+      () => drArNamed10.stale.length === 0, () => drArCr10.verdict === "stale", () => drArCr10.stale.length === 1,
+      () => drArCr10.stale[0].archived === true, () => drArCr10.stale[0].newFiles.length === 0, () => finAr10.ok === false,
+      () => /not found/.test(finAr10.error),
+      () => /it is archived \(\.specs\/_archive\/login-loop\): restore it first \(node "[^"]*dev-spec\.js" feature restore login-loop\)/.test(finAr10.error),
+      () => ["en", "pt", "es"].every((l) => staleLine10(l, true).includes("" + S.DEV_SPEC + " feature restore login-loop") && staleLine10(l, true).includes("" + S.DEV_SPEC + " finish login-loop --write") && !staleLine10(l, false).includes("feature restore")),
+      () => ["pt", "es"].every((l) => S.msg(l).err.archivedHint("x").includes("" + S.DEV_SPEC + " feature restore x")),
+    ]);
     fs.unlinkSync(zArch10);
     S.manageFeature(w10d, "restore", "login-loop");
 
@@ -663,17 +671,20 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
       "spec_upgrade audit of a legacy .specs/ (no meta.specVersion): from null → " + ENGINE + ", needsUpgrade, the archived feature counted apart, nothing written, MCP = engine; SessionStart prints the one-line notice (got " +
       JSON.stringify([au16.from, au16.to, au16.archived, au16.features.map((f) => f.name)]) + ")");
     const d16 = f16(au16, "draft"), h16 = f16(au16, "half"), dn16 = f16(au16, "done"), b16 = f16(au16, "bug");
-    ok(d16.status === "not-started" && d16.review === "critic" && d16.group === "blocked" && d16.tracksSource === "inferred" && d16.reviewArtifacts.includes("requirements.md") &&
-      h16.status === "executing" && h16.review === "converge" && h16.tracks === "core +tdd" && (h16.history.seed || []).join() === "requirements" &&
-      JSON.stringify(h16.history.skip) === JSON.stringify([{ phase: "design", reason: "changed" }, { phase: "tasks", reason: "no-fingerprint" }]) &&
-      h16.legacyApprovals.join() === "tasks" && h16.changedSinceApproval.includes("design.md") && h16.attention.includes("re-approve") && h16.next && typeof h16.next.step === "string" &&
-      dn16.status === "finished" && dn16.review === "none" && dn16.drift && dn16.drift.drifted === false &&
-      b16.kind === "bugfix" && (b16.history.skip || []).some((x) => x.phase === "design" && x.reason === "untracked") &&
-      au16.plan.tracks.length === 4 && au16.plan.specVersion.stamp === true && au16.plan.history.records === 4 &&
-      JSON.stringify(au16.plan.history.seed) === JSON.stringify([{ feature: "half", phase: "requirements" }]) &&
-      au16.summary.blocked + au16.summary.attention + au16.summary.ok === 4 && S.upgradeLines(au16).some((l) => /^Apply would change/.test(l)),
-      "audit per feature: a template-only feature → not-started + review critic; a half-executed one → executing + converge, its matching approval seedable, the changed / date-only ones skipped; a finished one → none; a 1.12 bugfix design approval → untracked (got " +
-      JSON.stringify([d16.status, d16.review, h16.status, h16.review, h16.history, dn16.status, dn16.review, b16.history]) + ")");
+    all("audit per feature: a template-only feature → not-started + review critic; a half-executed one → executing + converge, its matching approval seedable, the changed / date-only ones skipped; a finished one → none; a 1.12 bugfix design approval → untracked (got " +
+      JSON.stringify([d16.status, d16.review, h16.status, h16.review, h16.history, dn16.status, dn16.review, b16.history]) + ")", [
+      () => d16.status === "not-started", () => d16.review === "critic", () => d16.group === "blocked", () => d16.tracksSource === "inferred",
+      () => d16.reviewArtifacts.includes("requirements.md"), () => h16.status === "executing", () => h16.review === "converge",
+      () => h16.tracks === "core +tdd", () => (h16.history.seed || []).join() === "requirements",
+      () => JSON.stringify(h16.history.skip) === JSON.stringify([{ phase: "design", reason: "changed" }, { phase: "tasks", reason: "no-fingerprint" }]),
+      () => h16.legacyApprovals.join() === "tasks", () => h16.changedSinceApproval.includes("design.md"), () => h16.attention.includes("re-approve"),
+      () => h16.next, () => typeof h16.next.step === "string", () => dn16.status === "finished", () => dn16.review === "none", () => dn16.drift,
+      () => dn16.drift.drifted === false, () => b16.kind === "bugfix",
+      () => (b16.history.skip || []).some((x) => x.phase === "design" && x.reason === "untracked"), () => au16.plan.tracks.length === 4,
+      () => au16.plan.specVersion.stamp === true, () => au16.plan.history.records === 4,
+      () => JSON.stringify(au16.plan.history.seed) === JSON.stringify([{ feature: "half", phase: "requirements" }]),
+      () => au16.summary.blocked + au16.summary.attention + au16.summary.ok === 4, () => S.upgradeLines(au16).some((l) => /^Apply would change/.test(l)),
+    ]);
 
     // 3. apply: the safe migrations — never an artifact, an approval or a tick — then UPGRADE.md; the notice goes away.
     const stHalfBefore = readJ(path.join(L16.half.dir, ".state.json"));
@@ -684,17 +695,22 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const m16 = ap16.migrations || { history: {}, specVersion: {}, tracks: [], report: {} };
     const stHalf = readJ(path.join(L16.half.dir, ".state.json"));
     const recs16 = (ph) => (stHalf.approvalHistory || []).filter((h) => h.phase === ph);
-    ok(ap16.ok && m16.changed === true && m16.specVersion.stamped === true && m16.specVersion.from === null && m16.specVersion.to === ENGINE && S.readRoadmap(p16).meta.specVersion === ENGINE &&
-      m16.tracks.length === 4 && ["draft", "half", "done", "bug"].every((n) => Array.isArray(readJ(path.join(p16, ".specs", n, ".state.json")).tracks)) &&
-      JSON.stringify(m16.history.seeded) === JSON.stringify([{ feature: "half", phase: "requirements", snapshot: ".history/requirements@1.md" }]) &&
-      fs.readFileSync(path.join(L16.half.dir, ".history", "requirements@1.md"), "utf8") === reqHalf &&
-      recs16("requirements").length === 1 && recs16("requirements")[0].snapshot === ".history/requirements@1.md" && recs16("requirements")[0].legacy === true && !!recs16("requirements")[0].seededAt &&
-      recs16("design").length === 1 && recs16("design")[0].snapshot === undefined && recs16("tasks").length === 1 && !fs.existsSync(path.join(L16.half.dir, ".history", "design@1.md")) &&
-      JSON.stringify(stHalf.approvals) === JSON.stringify(stHalfBefore.approvals) && fs.readFileSync(path.join(L16.half.dir, "tasks.md"), "utf8") === tasksHalfBefore &&
-      fs.readFileSync(path.join(L16.half.dir, "design.md"), "utf8") === designHalf &&
-      m16.history.skipped.some((x) => x.feature === "half" && x.phase === "design" && x.reason === "changed") && m16.history.records === 4 && m16.report.written === true,
-      "spec_upgrade {apply}: tracks saved, the matching approval gets .history/requirements@1.md (legacy record + seededAt), the changed / date-only ones are recorded without a snapshot, approvals / ticks / artifacts untouched, meta.specVersion stamped (got " +
-      JSON.stringify([m16.changed, m16.specVersion, m16.history.seeded, m16.history.records]) + ")");
+    all("spec_upgrade {apply}: tracks saved, the matching approval gets .history/requirements@1.md (legacy record + seededAt), the changed / date-only ones are recorded without a snapshot, approvals / ticks / artifacts untouched, meta.specVersion stamped (got " +
+      JSON.stringify([m16.changed, m16.specVersion, m16.history.seeded, m16.history.records]) + ")", [
+      () => ap16.ok, () => m16.changed === true, () => m16.specVersion.stamped === true, () => m16.specVersion.from === null,
+      () => m16.specVersion.to === ENGINE, () => S.readRoadmap(p16).meta.specVersion === ENGINE, () => m16.tracks.length === 4,
+      () => ["draft", "half", "done", "bug"].every((n) => Array.isArray(readJ(path.join(p16, ".specs", n, ".state.json")).tracks)),
+      () => JSON.stringify(m16.history.seeded) === JSON.stringify([{ feature: "half", phase: "requirements", snapshot: ".history/requirements@1.md" }]),
+      () => fs.readFileSync(path.join(L16.half.dir, ".history", "requirements@1.md"), "utf8") === reqHalf, () => recs16("requirements").length === 1,
+      () => recs16("requirements")[0].snapshot === ".history/requirements@1.md", () => recs16("requirements")[0].legacy === true,
+      () => !!recs16("requirements")[0].seededAt, () => recs16("design").length === 1, () => recs16("design")[0].snapshot === undefined,
+      () => recs16("tasks").length === 1, () => !fs.existsSync(path.join(L16.half.dir, ".history", "design@1.md")),
+      () => JSON.stringify(stHalf.approvals) === JSON.stringify(stHalfBefore.approvals),
+      () => fs.readFileSync(path.join(L16.half.dir, "tasks.md"), "utf8") === tasksHalfBefore,
+      () => fs.readFileSync(path.join(L16.half.dir, "design.md"), "utf8") === designHalf,
+      () => m16.history.skipped.some((x) => x.feature === "half" && x.phase === "design" && x.reason === "changed"), () => m16.history.records === 4,
+      () => m16.report.written === true,
+    ]);
     const imp16 = S.impactReport(p16, "half", { phase: "requirements" });
     const upMd16 = fs.readFileSync(path.join(p16, ".specs", "UPGRADE.md"), "utf8");
     const hookAfter16 = sess(p16);
@@ -1067,15 +1083,20 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const dec2 = S.decide(d1, "auth", { title: "  Clock skew\n tolerated ", decision: "Tokens accept 30 s of skew.", kind: "discovery", supersedes: "D-1" });
     const log2 = c2Read(f1, "decisions.md");
     const parsed = S.decisionLog(log2);
-    ok(dec1.ok && dec1.id === "D-1" && dec1.n === 1 && dec1.created === true && dec1.file === ".specs/auth/decisions.md" && dec1.kind === "decision" &&
-      JSON.stringify(dec1.affects) === '["US-1.AC-2","T-2","Data Models"]' && /^Recorded D-1 \(decision\) in \.specs\/auth\/decisions\.md\.$/.test(dec1.message) &&
-      /^# Decisions: Auth\n\n<!-- Decision log — append-only/.test(log1) && /\n## D-1 — JWT sessions\n\n- _Kind: decision_\n- _Date: \d{4}-\d\d-\d\dT[\d:.]+Z_\n- _Affects: US-1\.AC-2, T-2, Data Models_\n\n\*\*Context:\*\* The API is stateless\.\n\n\*\*Decision:\*\* Use JWT with a 15 min expiry\.\nRefresh tokens rotate\.\n\n\*\*Consequences:\*\* A refresh endpoint is needed\.\n$/.test(log1) &&
-      dec2.ok && dec2.id === "D-2" && dec2.created === false && dec2.title === "Clock skew tolerated" && JSON.stringify(dec2.supersedes) === '["D-1"]' && log2.startsWith(log1) &&
-      /\n## D-2 — Clock skew tolerated\n\n- _Kind: discovery_\n- _Date: [^_]+_\n- _Supersedes: D-1_\n\n\*\*Discovery:\*\* Tokens accept 30 s of skew\.\n$/.test(log2) &&
-      parsed.length === 2 && parsed[0].decision === "Use JWT with a 15 min expiry.\nRefresh tokens rotate." && parsed[0].context === "The API is stateless." &&
-      parsed[1].kind === "discovery" && parsed[1].at > parsed[0].at && JSON.stringify(parsed[1].supersedes) === '["D-1"]',
-      "C2 spec_decide appends D-1, D-2 to decisions.md (localized header on creation; markers _Kind/_Date/_Affects/_Supersedes; Context / Decision (Discovery) / Consequences); refs canonical (US-1.AC-2, T-2, the heading 'Data Models'); the old bytes kept; decisionLog reads it back (got " +
-      JSON.stringify([dec1.affects, dec2.title, log1.slice(0, 80)]) + ")");
+    all("C2 spec_decide appends D-1, D-2 to decisions.md (localized header on creation; markers _Kind/_Date/_Affects/_Supersedes; Context / Decision (Discovery) / Consequences); refs canonical (US-1.AC-2, T-2, the heading 'Data Models'); the old bytes kept; decisionLog reads it back (got " +
+      JSON.stringify([dec1.affects, dec2.title, log1.slice(0, 80)]) + ")", [
+      () => dec1.ok, () => dec1.id === "D-1", () => dec1.n === 1, () => dec1.created === true, () => dec1.file === ".specs/auth/decisions.md",
+      () => dec1.kind === "decision", () => JSON.stringify(dec1.affects) === '["US-1.AC-2","T-2","Data Models"]',
+      () => /^Recorded D-1 \(decision\) in \.specs\/auth\/decisions\.md\.$/.test(dec1.message),
+      () => /^# Decisions: Auth\n\n<!-- Decision log — append-only/.test(log1),
+      () => /\n## D-1 — JWT sessions\n\n- _Kind: decision_\n- _Date: \d{4}-\d\d-\d\dT[\d:.]+Z_\n- _Affects: US-1\.AC-2, T-2, Data Models_\n\n\*\*Context:\*\* The API is stateless\.\n\n\*\*Decision:\*\* Use JWT with a 15 min expiry\.\nRefresh tokens rotate\.\n\n\*\*Consequences:\*\* A refresh endpoint is needed\.\n$/.test(log1),
+      () => dec2.ok, () => dec2.id === "D-2", () => dec2.created === false, () => dec2.title === "Clock skew tolerated",
+      () => JSON.stringify(dec2.supersedes) === '["D-1"]', () => log2.startsWith(log1),
+      () => /\n## D-2 — Clock skew tolerated\n\n- _Kind: discovery_\n- _Date: [^_]+_\n- _Supersedes: D-1_\n\n\*\*Discovery:\*\* Tokens accept 30 s of skew\.\n$/.test(log2),
+      () => parsed.length === 2, () => parsed[0].decision === "Use JWT with a 15 min expiry.\nRefresh tokens rotate.",
+      () => parsed[0].context === "The API is stateless.", () => parsed[1].kind === "discovery", () => parsed[1].at > parsed[0].at,
+      () => JSON.stringify(parsed[1].supersedes) === '["D-1"]',
+    ]);
 
     // Append-only: after a hand-written D-7 → D-8; an entry in an HTML comment or a fenced block is none; CRLF + BOM kept.
     const d2 = c2Dir("crlf");
@@ -1110,13 +1131,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     S.initProject(d1b, ["core"], "en");
     const f1b = S.createFeature(d1b, "Nolog", ["core"], "", undefined, "en");
     const bad8 = S.decide(d1b, "nolog", { title: "t", decision: "d", affects: "T-01" });
-    ok(bad1.ok === false && JSON.stringify(bad1.unknownAffects) === '["US-9.AC-9","T-99","SC-042","Nowhere Section"]' && /^unknown _Affects:_ reference\(s\): US-9\.AC-9, T-99, SC-042, Nowhere Section — .*Nothing was written\.$/.test(bad1.error) &&
-      bad2.ok === false && /_Supersedes:_ must name decisions already in this log \(D-n\): D-9, X-1/.test(bad2.error) &&
-      bad3.ok === false && /needs a title/.test(bad3.error) && bad4.ok === false && /needs its text/.test(bad4.error) && bad5.ok === false && /kind must be decision or discovery \(got "idea"\)/.test(bad5.error) &&
-      bad6.ok === false && /Missing required argument\(s\): title/.test(bad6.error) && bad7.result && bad7.result.isError === true &&
-      c2Read(f1, "decisions.md") === before1 && bad8.ok === false && !fs.existsSync(path.join(f1b.dir, "decisions.md")),
-      "C2 spec_decide validates before writing: unknown AC / T-ID / SC / section in _Affects:_ (listed, unknownAffects), unknown _Supersedes:_, no title / decision, a bad kind, a non-array affects over MCP — nothing written, no file created (got " +
-      JSON.stringify([bad1.error, bad6.error]).slice(0, 300) + ")");
+    all("C2 spec_decide validates before writing: unknown AC / T-ID / SC / section in _Affects:_ (listed, unknownAffects), unknown _Supersedes:_, no title / decision, a bad kind, a non-array affects over MCP — nothing written, no file created (got " +
+      JSON.stringify([bad1.error, bad6.error]).slice(0, 300) + ")", [
+      () => bad1.ok === false, () => JSON.stringify(bad1.unknownAffects) === '["US-9.AC-9","T-99","SC-042","Nowhere Section"]',
+      () => /^unknown _Affects:_ reference\(s\): US-9\.AC-9, T-99, SC-042, Nowhere Section — .*Nothing was written\.$/.test(bad1.error),
+      () => bad2.ok === false, () => /_Supersedes:_ must name decisions already in this log \(D-n\): D-9, X-1/.test(bad2.error),
+      () => bad3.ok === false, () => /needs a title/.test(bad3.error), () => bad4.ok === false, () => /needs its text/.test(bad4.error),
+      () => bad5.ok === false, () => /kind must be decision or discovery \(got "idea"\)/.test(bad5.error), () => bad6.ok === false,
+      () => /Missing required argument\(s\): title/.test(bad6.error), () => bad7.result, () => bad7.result.isError === true,
+      () => c2Read(f1, "decisions.md") === before1, () => bad8.ok === false, () => !fs.existsSync(path.join(f1b.dir, "decisions.md")),
+    ]);
 
     // Text can't fake entries: a heading, a marker line, an HTML comment and an unclosed fence in the user's text are neutralized.
     const tricky = S.decide(d1, "auth", { title: "Tricky <!-- x", decision: "## D-40 — fake\n- _Affects: US-9.AC-9_\n<!-- hide the rest\n```js\nconst a = 1;" });
@@ -1236,14 +1260,17 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const spMd = fs.readFileSync(path.join(spDir, "spike.md"), "utf8");
     const spSt = JSON.parse(fs.readFileSync(path.join(spDir, ".state.json"), "utf8"));
     const in3 = S.today(Date.now() + 3 * 864e5); // the local calendar date (1.25.1)
-    ok(sp1.ok && sp1.kind === "spike" && sp1.label === "core" && JSON.stringify(sp1.created) === '["spike.md","tasks.md"]' && sp1.timebox === in3 &&
-      /A spike is core-only — tracks ignored \(\+saas\)/.test(sp1.note) && spSt.kind === "spike" && JSON.stringify(spSt.tracks) === '["core"]' &&
-      !fs.existsSync(path.join(spDir, "requirements.md")) && !fs.existsSync(path.join(spDir, "design.md")) &&
-      /^# Spike: Cache spike\n/.test(spMd) && /\n## Question\nCan Redis hold the sessions under 5 ms p95\?\n\n## Timebox\n\*\*Until:\*\* \d{4}-\d\d-\d\d \(3d\)\n\n## Options considered\n/.test(spMd) &&
-      /\n## Evidence\n/.test(spMd) && /\n## Decision\n> \*\*TODO\*\*/.test(spMd) && /_Outcome: \[go \| no-go \| pivot\]_/.test(spMd) && /\n## Follow-up\n/.test(spMd) &&
-      /## Phase: Investigate\n- \[ \] 1\. \[shared\] Sharpen the question/.test(fs.readFileSync(path.join(spDir, "tasks.md"), "utf8")),
-      "C2 spec_create {kind: 'spike'} scaffolds spike.md (Question · Timebox Until · Options · Evidence · Decision + _Outcome:_ · Follow-up) + investigation tasks — core-only (tracks ignored, noted), no requirements / design (got " +
-      JSON.stringify([sp1.created, sp1.note, sp1.timebox]) + ")");
+    all("C2 spec_create {kind: 'spike'} scaffolds spike.md (Question · Timebox Until · Options · Evidence · Decision + _Outcome:_ · Follow-up) + investigation tasks — core-only (tracks ignored, noted), no requirements / design (got " +
+      JSON.stringify([sp1.created, sp1.note, sp1.timebox]) + ")", [
+      () => sp1.ok, () => sp1.kind === "spike", () => sp1.label === "core", () => JSON.stringify(sp1.created) === '["spike.md","tasks.md"]',
+      () => sp1.timebox === in3, () => /A spike is core-only — tracks ignored \(\+saas\)/.test(sp1.note), () => spSt.kind === "spike",
+      () => JSON.stringify(spSt.tracks) === '["core"]', () => !fs.existsSync(path.join(spDir, "requirements.md")),
+      () => !fs.existsSync(path.join(spDir, "design.md")), () => /^# Spike: Cache spike\n/.test(spMd),
+      () => /\n## Question\nCan Redis hold the sessions under 5 ms p95\?\n\n## Timebox\n\*\*Until:\*\* \d{4}-\d\d-\d\d \(3d\)\n\n## Options considered\n/.test(spMd),
+      () => /\n## Evidence\n/.test(spMd), () => /\n## Decision\n> \*\*TODO\*\*/.test(spMd), () => /_Outcome: \[go \| no-go \| pivot\]_/.test(spMd),
+      () => /\n## Follow-up\n/.test(spMd),
+      () => /## Phase: Investigate\n- \[ \] 1\. \[shared\] Sharpen the question/.test(fs.readFileSync(path.join(spDir, "tasks.md"), "utf8")),
+    ]);
     const spPt = S.createFeature(d6, "Pesquisa fila", undefined, "Kafka ou RabbitMQ?", undefined, "pt", "spike");
     const spEs = S.createFeature(d6, "Investigar colas", undefined, "", undefined, "es", "spike", { timebox: "2026-10-30" });
     const mdPt = fs.readFileSync(path.join(spPt.dir, "spike.md"), "utf8");
@@ -1301,16 +1328,20 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     setSp((t) => t.replace("_Outcome: [go | no-go | pivot]_", "_Outcome: go_"));
     const naGo = await c2Call("spec_next_action", { projectDir: d6, name: "cache-spike" });
     const docGo = S.specDoctor(d6, "cache-spike");
-    ok(spBare.ok && naQ.step === "fill" && naQ.file === "spike.md" && /Write the question this spike answers/.test(naQ.recommendation) && S.detectPhase(spBare.dir, ["core"]) === "requirements" &&
-      naT.step === "implement" && /^Investigate — task #1: Sharpen the question/.test(naT.recommendation) &&
-      naD.step === "decide" && naD.phase === "executing" && phD === "executing" && /Record the decision in spike\.md → Decision/.test(naD.recommendation) && /\/spec-change cache-spike decide/.test(naD.recommendation) &&
-      naO.step === "decide" && /State the outcome/.test(naO.recommendation) && c2Chk(docO, "decision").status === "warn" &&
-      naGo.step === "promote" && naGo.outcome === "go" && naGo.phase === "complete" && naGo.seed.name === "cache" &&
-      naGo.seed.summary === "Can Redis hold the sessions under 5 ms p95? — Redis held 2 ms p95 under a 5k rps load run." &&
-      /^Decision: go\. Spec the real feature — spec_create \{name: "cache", summary: "Can Redis/.test(naGo.recommendation) && /then archive the spike: \/feature archive cache-spike\.$/.test(naGo.recommendation) &&
-      docGo.verdict === "pass" && c2Chk(docGo, "timebox").status === "pass" && c2Chk(docGo, "decision").detail === "decision recorded (_Outcome: go_)",
-      "C2 spike next_action: fill the question → investigate #1 → (all ticked) record the decision → state the outcome → go: spec the real feature (seed name 'cache', summary = question — decision) and archive the spike; doctor passes once decided (got " +
-      JSON.stringify([naQ.step, naT.step, naD.step, naO.step, naGo.step, naGo.seed]) + ")");
+    all("C2 spike next_action: fill the question → investigate #1 → (all ticked) record the decision → state the outcome → go: spec the real feature (seed name 'cache', summary = question — decision) and archive the spike; doctor passes once decided (got " +
+      JSON.stringify([naQ.step, naT.step, naD.step, naO.step, naGo.step, naGo.seed]) + ")", [
+      () => spBare.ok, () => naQ.step === "fill", () => naQ.file === "spike.md",
+      () => /Write the question this spike answers/.test(naQ.recommendation), () => S.detectPhase(spBare.dir, ["core"]) === "requirements",
+      () => naT.step === "implement", () => /^Investigate — task #1: Sharpen the question/.test(naT.recommendation), () => naD.step === "decide",
+      () => naD.phase === "executing", () => phD === "executing", () => /Record the decision in spike\.md → Decision/.test(naD.recommendation),
+      () => /\/spec-change cache-spike decide/.test(naD.recommendation), () => naO.step === "decide", () => /State the outcome/.test(naO.recommendation),
+      () => c2Chk(docO, "decision").status === "warn", () => naGo.step === "promote", () => naGo.outcome === "go", () => naGo.phase === "complete",
+      () => naGo.seed.name === "cache",
+      () => naGo.seed.summary === "Can Redis hold the sessions under 5 ms p95? — Redis held 2 ms p95 under a 5k rps load run.",
+      () => /^Decision: go\. Spec the real feature — spec_create \{name: "cache", summary: "Can Redis/.test(naGo.recommendation),
+      () => /then archive the spike: \/feature archive cache-spike\.$/.test(naGo.recommendation), () => docGo.verdict === "pass",
+      () => c2Chk(docGo, "timebox").status === "pass", () => c2Chk(docGo, "decision").detail === "decision recorded (_Outcome: go_)",
+    ]);
     // no-go / pivot, and a spike whose name has no "spike" word (archive first — it frees the name).
     const spNo = S.createFeature(d6, "Redis eval", undefined, "Is Redis worth it?", undefined, "en", "spike");
     const noFile = path.join(spNo.dir, "spike.md");
@@ -1344,14 +1375,19 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const stGo = JSON.parse(fs.readFileSync(path.join(spDir, ".state.json"), "utf8"));
     const apEx = S.approvePhase(d6, "cache-spike", "execution", "t");
     const apExQ = S.approvePhase(d6, "queue-spike", "execution", "t");
-    ok(finQ.ok && finQ.readyToFinish === false && finQ.kind === "spike" && finQ.blockers.some((b) => /Decision is not written yet/.test(b)) && finQ.blockers.some((b) => /^open tasks: #1, #2, #3, #4$/.test(b)) &&
-      finGo.readyToFinish === true && finGo.outcome === "go" && finGo.mergeTitle === "docs(cache-spike): spike go — Can Redis hold the sessions under 5 ms…" /* 1.21 F3: ≤ 72 */ &&
-      /^## Question\nCan Redis hold the sessions under 5 ms p95\?\n\n## Decision — go\nRedis held 2 ms p95 under a 5k rps load run\.\n\n## Tasks\n- \[x\] 1\. /.test(finGo.mergeSummary) &&
-      /## Checks before merge\n- \[ \] The decision is shared with the people it affects\./.test(finGo.mergeSummary) && !/## Acceptance criteria|## Tests/.test(finGo.mergeSummary) &&
-      finGo.suiteChecks === undefined && finGo.baseline && finGo.baseline.recorded === true && stGo.finished && typeof stGo.finished.at === "string" &&
-      fs.existsSync(path.join(spDir, ".execution", "merge-summary.md")) && apEx.ok === true && apExQ.ok === false && apExQ.refused === true,
-      "C2 spike finish: blocked while the decision is unwritten / tasks open; ready once decided — merge summary from spike.md (question, decision, checks), the finish baseline recorded, the execution sign-off follows the same gate (got " +
-      JSON.stringify([finQ.blockers, finGo.mergeTitle]).slice(0, 300) + ")");
+    all("C2 spike finish: blocked while the decision is unwritten / tasks open; ready once decided — merge summary from spike.md (question, decision, checks), the finish baseline recorded, the execution sign-off follows the same gate (got " +
+      JSON.stringify([finQ.blockers, finGo.mergeTitle]).slice(0, 300) + ")", [
+      () => finQ.ok, () => finQ.readyToFinish === false, () => finQ.kind === "spike",
+      () => finQ.blockers.some((b) => /Decision is not written yet/.test(b)), () => finQ.blockers.some((b) => /^open tasks: #1, #2, #3, #4$/.test(b)),
+      () => finGo.readyToFinish === true, () => finGo.outcome === "go",
+      () => finGo.mergeTitle === "docs(cache-spike): spike go — Can Redis hold the sessions under 5 ms…" /* 1.21 F3: ≤ 72 */,
+      () => /^## Question\nCan Redis hold the sessions under 5 ms p95\?\n\n## Decision — go\nRedis held 2 ms p95 under a 5k rps load run\.\n\n## Tasks\n- \[x\] 1\. /.test(finGo.mergeSummary),
+      () => /## Checks before merge\n- \[ \] The decision is shared with the people it affects\./.test(finGo.mergeSummary),
+      () => !/## Acceptance criteria|## Tests/.test(finGo.mergeSummary), () => finGo.suiteChecks === undefined, () => finGo.baseline,
+      () => finGo.baseline.recorded === true, () => stGo.finished, () => typeof stGo.finished.at === "string",
+      () => fs.existsSync(path.join(spDir, ".execution", "merge-summary.md")), () => apEx.ok === true, () => apExQ.ok === false,
+      () => apExQ.refused === true,
+    ]);
     // spec_decide on a spike: its sections are the affectable ones.
     const decSp = S.decide(d6, "cache-spike", { title: "Go with Redis", decision: "Redis 7 cluster.", affects: "Evidence, decision" });
     const decSpBad = S.decide(d6, "cache-spike", { title: "x", decision: "y", affects: "US-1.AC-1" });
@@ -1368,15 +1404,18 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const expSp = S.exportSpecs(d6, { name: "cache-spike", format: "md" });
     const chSp = S.changelog(d6, { since: "all" });
     const expProj = S.exportSpecs(d6, { format: "md" });
-    ok(/\| \[cache-spike\]\(\.\/cache-spike\/spike\.md\) 🔬 spike \| core \|/.test(rmMd) && /\[queue-spike\]\(\.\/queue-spike\/spike\.md\) 🔬 spike/.test(rmMd) &&
-      /<a href="\.\/cache-spike\/spike\.md">cache-spike<\/a> <span class="tracks">🔬 spike<\/span>/.test(rmHtml) &&
-      cSp.kind === "spike" && cSp.status === "finished" && cSp.spike.outcome === "go" && cSp.spike.question === "Can Redis hold the sessions under 5 ms p95?" &&
-      /## ✅ cache-spike — finished · 🔬 spike\n\n_core · finished \d{4}-\d\d-\d\d_\n\n- Question: Can Redis hold the sessions under 5 ms p95\?\n- Decision: go\n- 📝 Decisions \(1\): D-1 Go with Redis\n/.test(catSp.markdown) &&
-      !/cache-spike — finished · 🔬 spike[\s\S]{0,300}No acceptance criteria yet/.test(catSp.markdown) &&
-      expSp.ok && /_Spike \(investigation\) · /.test(expSp.content) && /- \*\*Kind:\*\* spike/.test(expSp.content) && /\n## Spike\n\n### Question\n/.test(expSp.content) && !/## User stories/.test(expSp.content) &&
-      chSp.ok && !chSp.added.some((a) => a.feature === "cache-spike") &&
-      expProj.ok && /\n## cache-spike\n\n_spike · core · [^\n]*_\n\nCan Redis hold the sessions under 5 ms p95\?\n\n## /.test(expProj.content),
-      "C2 spikes read apart: ROADMAP.md / .html (🔬 spike, linked to spike.md), the catalog (kind, question + decision, no 'no ACs' line), the export (Spike kicker + spike.md body), never in the release notes");
+    all("C2 spikes read apart: ROADMAP.md / .html (🔬 spike, linked to spike.md), the catalog (kind, question + decision, no 'no ACs' line), the export (Spike kicker + spike.md body), never in the release notes", [
+      () => /\| \[cache-spike\]\(\.\/cache-spike\/spike\.md\) 🔬 spike \| core \|/.test(rmMd),
+      () => /\[queue-spike\]\(\.\/queue-spike\/spike\.md\) 🔬 spike/.test(rmMd),
+      () => /<a href="\.\/cache-spike\/spike\.md">cache-spike<\/a> <span class="tracks">🔬 spike<\/span>/.test(rmHtml), () => cSp.kind === "spike",
+      () => cSp.status === "finished", () => cSp.spike.outcome === "go", () => cSp.spike.question === "Can Redis hold the sessions under 5 ms p95?",
+      () => /## ✅ cache-spike — finished · 🔬 spike\n\n_core · finished \d{4}-\d\d-\d\d_\n\n- Question: Can Redis hold the sessions under 5 ms p95\?\n- Decision: go\n- 📝 Decisions \(1\): D-1 Go with Redis\n/.test(catSp.markdown),
+      () => !/cache-spike — finished · 🔬 spike[\s\S]{0,300}No acceptance criteria yet/.test(catSp.markdown), () => expSp.ok,
+      () => /_Spike \(investigation\) · /.test(expSp.content), () => /- \*\*Kind:\*\* spike/.test(expSp.content),
+      () => /\n## Spike\n\n### Question\n/.test(expSp.content), () => !/## User stories/.test(expSp.content), () => chSp.ok,
+      () => !chSp.added.some((a) => a.feature === "cache-spike"), () => expProj.ok,
+      () => /\n## cache-spike\n\n_spike · core · [^\n]*_\n\nCan Redis hold the sessions under 5 ms p95\?\n\n## /.test(expProj.content),
+    ]);
     // Roadmap attention: a spike past its timebox with no decision.
     const spLate = S.createFeature(d6, "Late spike", undefined, "Which ORM?", undefined, "en", "spike", { timebox: "2020-03-01" });
     const rmLate = S.roadmapReport(d6, { write: true });

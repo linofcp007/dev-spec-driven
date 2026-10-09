@@ -22,7 +22,7 @@ an architecture spike that ended in `go`. Writing EARS criteria first would mean
 - **What the gates read:** the design gate never reads `requirements.md`, and `spec_doctor` defers the AC
   traceability and the requirements' own checks while `requirements.md` is still a later phase's template. Once
   you write the requirements, they are checked like any other — and they must match the approved design: a
-  criterion that needs a different design sends you back to the design (edit, `/spec-impact`, re-approve).
+  criterion that needs a different design sends you back to the design (edit, `spec_impact`, re-approve).
 - **Tasks and tests** still trace to AC IDs: write the requirements before the test plan and the tasks, as usual.
 
 Design-first is not "skip the requirements". It changes which artifact is the source for the other; both are
@@ -49,7 +49,7 @@ library fast enough — not in production code and not in made-up acceptance cri
   - `pivot` → `step: "pivot"` — a new spike for the new direction, then archive this one.
 - **Prototype code stays outside `.specs/`** (a scratch folder or a branch); link it, the measurements and the
   sources under Evidence. The real feature rewrites what it keeps as its own tasks.
-- **Log the decision** with `spec_decide` (`/spec-decide`, usually `D-1`), so it shows up in the catalog and the
+- **Log the decision** with `spec_decide` (usually `D-1`), so it shows up in the catalog and the
   export. `spec_finish` is ready once the decision is written and every task ticked; its merge summary carries the
   question, the decision and the evidence. Spikes show apart in the roadmap (🔬), the catalog and the export; the
   release notes never list one.

@@ -16,7 +16,7 @@ function closedEarly(CLI, args, env) {
   });
 }
 
-exports.run = async ({ ok, run, tmp, CLI }) => {
+exports.run = async ({ ok, all, run, tmp, CLI }) => {
   // 1.24 r6 B2: a stdout reader that stops early (`export --md | head -1`) ended in an unhandled 'error' (EPIPE) with a stack
   // trace and exit 1 — the CLI now ends quietly with the status the command set (as the MCP server does since 1.22).
   {
@@ -59,15 +59,17 @@ exports.run = async ({ ok, run, tmp, CLI }) => {
     const envJ = v(["--version", "--json"], { SPEC_PROJECT_DIR: pt }).j, cwdJ = v(["version", "--json"]).j;
     const missJ = v(["version", "--json"], { SPEC_PROJECT_DIR: path.join(tmp, "r6i1-nope") });
     const anywhere = v(["status", "login", "--version", "--project", pt]);
-    ok(human.code === 0 && human.out.includes(pkgVersion) && human.out.includes(path.resolve(CLI).replace(/\\/g, "/")) && /módulos/.test(human.out) && /--project/.test(human.out) &&
-      dash.stdout === human.stdout && short.stdout === human.stdout && anywhere.code === 0 && anywhere.stdout === human.stdout &&
-      j && j.ok === true && j.version === pkgVersion && j.cli === path.resolve(CLI).replace(/\\/g, "/") && j.node === process.version &&
-      j.engine.source === "modules" && j.engine.bundle.requested === false && j.project.dir === path.resolve(pt) && j.project.source === "flag" &&
-      j.project.exists === true && j.project.devSpec === true && j.project.lang === "pt" &&
-      envJ && envJ.project.source === "SPEC_PROJECT_DIR" && cwdJ && cwdJ.project.source === "cwd" && cwdJ.project.devSpec === false &&
-      missJ.code === 0 && missJ.j && missJ.j.project.exists === false && missJ.j.project.source === "SPEC_PROJECT_DIR",
-      "1.24 r6 B-I1: version / --version / -V (anywhere) print the version, the CLI path, Node, the engine (modules), the project, its source and language (PT); --json the same as data; a missing project is reported, not refused (got " +
-      JSON.stringify([human.code, human.out.slice(0, 400), j, envJ && envJ.project, cwdJ && cwdJ.project, missJ.code, missJ.j && missJ.j.project, anywhere.code]) + ")");
+    all("1.24 r6 B-I1: version / --version / -V (anywhere) print the version, the CLI path, Node, the engine (modules), the project, its source and language (PT); --json the same as data; a missing project is reported, not refused (got " +
+      JSON.stringify([human.code, human.out.slice(0, 400), j, envJ && envJ.project, cwdJ && cwdJ.project, missJ.code, missJ.j && missJ.j.project, anywhere.code]) + ")", [
+      () => human.code === 0, () => human.out.includes(pkgVersion), () => human.out.includes(path.resolve(CLI).replace(/\\/g, "/")),
+      () => /módulos/.test(human.out), () => /--project/.test(human.out), () => dash.stdout === human.stdout, () => short.stdout === human.stdout,
+      () => anywhere.code === 0, () => anywhere.stdout === human.stdout, () => j, () => j.ok === true, () => j.version === pkgVersion,
+      () => j.cli === path.resolve(CLI).replace(/\\/g, "/"), () => j.node === process.version, () => j.engine.source === "modules",
+      () => j.engine.bundle.requested === false, () => j.project.dir === path.resolve(pt), () => j.project.source === "flag",
+      () => j.project.exists === true, () => j.project.devSpec === true, () => j.project.lang === "pt", () => envJ,
+      () => envJ.project.source === "SPEC_PROJECT_DIR", () => cwdJ, () => cwdJ.project.source === "cwd", () => cwdJ.project.devSpec === false,
+      () => missJ.code === 0, () => missJ.j, () => missJ.j.project.exists === false, () => missJ.j.project.source === "SPEC_PROJECT_DIR",
+    ]);
 
     // The bundle: used when current, else skipped with the reason — missing, another version, broken.
     const bfile = path.join(tmp, "r6i1-bundle", "spec.bundle.js");
@@ -96,14 +98,16 @@ exports.run = async ({ ok, run, tmp, CLI }) => {
     const st = h(["status", "--help"]), stH = h(["status", "-h"]), done = h(["done", "login", "1", "-h"]), ap = h(["approve", "--help"]), apHelp = h(["help", "approve"]);
     const na = h(["na", "-h"]), whole = h(["-h"]), unknown = h(["frobnicate", "--help"]);
     const tasks = fs.readFileSync(path.join(p, ".specs", "login", "tasks.md"), "utf8");
-    ok(st.code === 0 && /^ {2}status \[feature\]/m.test(st.out) && !/universal spec-driven CLI/.test(st.out) && !/^ {2}doctor/m.test(st.out) && /--json/.test(st.out) &&
-      stH.code === 0 && stH.out === st.out && !/'h'/.test(stH.out) &&
-      done.code === 0 && /^ {2}done <feature> <n>/m.test(done.out) && /--run/.test(done.out) && /--timeout …/.test(done.out) && !/- \[x\] 1\./.test(tasks) &&
-      ap.code === 0 && (ap.out.match(/^ {2}approve /gm) || []).length === 3 && /--revoke/.test(ap.out) && apHelp.out === ap.out &&
-      na.code === 0 && /^ {2}next-action <feature>/m.test(na.out) && whole.code === 0 && /universal spec-driven CLI/.test(whole.out) &&
-      unknown.code === 0 && /universal spec-driven CLI/.test(unknown.out),
-      "1.24 r6 B-I3: <command> --help / -h / help <command> print that command's help and its options (aliases too); status -h looks for no feature 'h'; -h alone and an unknown command still print the whole help (got " +
-      JSON.stringify([st.out.slice(0, 300), stH.out === st.out, done.out.slice(0, 200), ap.out.slice(0, 200), na.out.slice(0, 120), whole.code]) + ")");
+    all("1.24 r6 B-I3: <command> --help / -h / help <command> print that command's help and its options (aliases too); status -h looks for no feature 'h'; -h alone and an unknown command still print the whole help (got " +
+      JSON.stringify([st.out.slice(0, 300), stH.out === st.out, done.out.slice(0, 200), ap.out.slice(0, 200), na.out.slice(0, 120), whole.code]) + ")", [
+      () => st.code === 0, () => /^ {2}status \[feature\]/m.test(st.out), () => !/universal spec-driven CLI/.test(st.out),
+      () => !/^ {2}doctor/m.test(st.out), () => /--json/.test(st.out), () => stH.code === 0, () => stH.out === st.out, () => !/'h'/.test(stH.out),
+      () => done.code === 0, () => /^ {2}done <feature> <n>/m.test(done.out), () => /--run/.test(done.out), () => /--timeout …/.test(done.out),
+      () => !/- \[x\] 1\./.test(tasks), () => ap.code === 0, () => (ap.out.match(/^ {2}approve /gm) || []).length === 3,
+      () => /--revoke/.test(ap.out), () => apHelp.out === ap.out, () => na.code === 0, () => /^ {2}next-action <feature>/m.test(na.out),
+      () => whole.code === 0, () => /universal spec-driven CLI/.test(whole.out), () => unknown.code === 0,
+      () => /universal spec-driven CLI/.test(unknown.out),
+    ]);
   }
 
   // 1.24 r6 B-I9: an argument `-` reads stdin — from a terminal (a TTY) a one-line hint goes to stderr (type, then Ctrl+D /
@@ -154,13 +158,15 @@ exports.run = async ({ ok, run, tmp, CLI }) => {
     let fj = null;
     try { fj = JSON.parse(fin.stdout); } catch { fj = null; }
     const S = require(path.join(path.dirname(CLI), "..", "mcp", "lib", "i18n.js"));
-    ok(done.status === 1 && dj && dj.code === "control-chars" && /\\u001b/.test(dj.error) && !fs.existsSync(path.join(p, "ran.txt")) &&
-      status.status === 0 && /Title/.test(status.stdout) && raw(status.stdout + status.stderr) === 0 && !/\r(?!\n)/.test(status.stdout) &&
-      nj && nj.next && nj.next.text.includes(ESC) && nj.next.text.includes(CSI1) && raw(next.stdout) === 0 && /\\u009b/.test(next.stdout) &&
-      vc && vc.status === "fail" && /\\u001b/.test(vc.detail) && raw(doc.stdout) === 0 &&
-      initBad.status === 1 && fin.status === 1 && fj && fj.code === "control-chars" && /meta|test/.test(fj.error) && !fs.existsSync(path.join(p, "ran2.txt")) &&
-      ["pt", "es"].every((l) => /#1/.test(S.msg(l).verifyControl.doctor("#1")) && /x/.test(S.msg(l).verifyControl.run(1, "x")) && /t1/.test(S.msg(l).verifyControl.checks("t1"))),
-      "1.25.1 r7: no raw control character reaches the terminal — status prints the task text without ESC / OSC / C1 bytes, next --json keeps the value (C1 as \\u009b); done --run and finish --run refuse a command holding one (code control-chars, nothing ran), init --check refuses one, doctor fails verify-control (got " +
-      JSON.stringify([done.status, dj && dj.code, fs.existsSync(path.join(p, "ran.txt")), raw(status.stdout + status.stderr), nj && raw(next.stdout), vc, initBad.status, fin.status, fj && fj.code]).slice(0, 600) + ")");
+    all("1.25.1 r7: no raw control character reaches the terminal — status prints the task text without ESC / OSC / C1 bytes, next --json keeps the value (C1 as \\u009b); done --run and finish --run refuse a command holding one (code control-chars, nothing ran), init --check refuses one, doctor fails verify-control (got " +
+      JSON.stringify([done.status, dj && dj.code, fs.existsSync(path.join(p, "ran.txt")), raw(status.stdout + status.stderr), nj && raw(next.stdout), vc, initBad.status, fin.status, fj && fj.code]).slice(0, 600) + ")", [
+      () => done.status === 1, () => dj, () => dj.code === "control-chars", () => /\\u001b/.test(dj.error),
+      () => !fs.existsSync(path.join(p, "ran.txt")), () => status.status === 0, () => /Title/.test(status.stdout),
+      () => raw(status.stdout + status.stderr) === 0, () => !/\r(?!\n)/.test(status.stdout), () => nj, () => nj.next,
+      () => nj.next.text.includes(ESC), () => nj.next.text.includes(CSI1), () => raw(next.stdout) === 0, () => /\\u009b/.test(next.stdout), () => vc,
+      () => vc.status === "fail", () => /\\u001b/.test(vc.detail), () => raw(doc.stdout) === 0, () => initBad.status === 1, () => fin.status === 1,
+      () => fj, () => fj.code === "control-chars", () => /meta|test/.test(fj.error), () => !fs.existsSync(path.join(p, "ran2.txt")),
+      () => ["pt", "es"].every((l) => /#1/.test(S.msg(l).verifyControl.doctor("#1")) && /x/.test(S.msg(l).verifyControl.run(1, "x")) && /t1/.test(S.msg(l).verifyControl.checks("t1"))),
+    ]);
   }
 };

@@ -94,7 +94,7 @@ edit an approved artifact
   → redo the reopened tasks with fresh evidence
 ```
 
-New tasks go in through **`spec_append_tasks`** (the converge pass, `/spec-converge`): appended under "Phase:
+New tasks go in through **`spec_append_tasks`** (the converge pass — the user's `/spec-review converge`): appended under "Phase:
 Convergence", numbered after the highest task, existing tasks never renumbered; the result says
 `needsReapproval` — re-approve the tasks phase.
 
@@ -219,7 +219,7 @@ nothing). While it is absent or older than the engine, the SessionStart hook pri
 Decisions and discoveries made while planning or implementing get lost in chat and in the self-ignored
 `.execution/ledger.md`. `spec_decide {name, title, decision, context?, consequences?, affects?, supersedes?, kind?}`
 (CLI `dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects
-US-1.AC-2,T-03,"Data Models"] [--supersedes D-1] [--discovery]`; `/spec-decide`) appends ONE entry to
+US-1.AC-2,T-03,"Data Models"] [--supersedes D-1] [--discovery]`; the user's `/spec-change decide`) appends ONE entry to
 `.specs/<feature>/decisions.md` — committed with the spec, created with a localized header when absent:
 
 ```markdown
@@ -275,7 +275,7 @@ or `{}` clears it) stores `roadmap.json → meta.approvalRoles`. A listed phase 
   be read (a merge's conflict markers) hides the roles: approvals and revocations refuse (`roadmap-invalid`) and doctor
   fails `roadmap` until it is repaired.
 
-**Fast-forward (`/spec-ff`).** `spec_approve {name, through: "tasks"}` (CLI `dev-spec approve <feature> --through
+**Fast-forward (the user's `/approve --through`).** `spec_approve {name, through: "tasks"}` (CLI `dev-spec approve <feature> --through
 tasks`) approves the active phases **in order** from the first unapproved one up to `through` — each through its own
 gate, each snapshotted and recorded like a normal approval, flagged `batch: true` (`spec_metrics` counts batch
 approvals). It stops at the first refused gate (`ok: false`, `refused`, `stoppedAt`, `failing`, `checks` — the phases
@@ -287,7 +287,7 @@ agreed to approve those phases: a fast-forward is still the human's approval, re
 
 ## 13. Stakeholder export and release notes
 
-**Export (`/spec-export`).** `spec_export {name?, format?, write?}` (CLI `dev-spec export [feature] [--md] [--write]`)
+**Export (`/spec-report export`).** `spec_export {name?, format?, write?}` (CLI `dev-spec export [feature] [--md] [--write]`)
 builds ONE self-contained, offline, printable document for people who don't read markdown folders:
 
 - **a feature**, in its language — summary, stories with their EARS criteria and stable IDs (a criterion a SHIPPED
@@ -302,7 +302,7 @@ http(s)/mailto, nothing external loaded) or `md`. `write: true` writes `.specs/e
 `project.<format>`) with the AUTO-GENERATED marker; a same-named hand-written file is never overwritten. It is a
 snapshot — regenerate it after the spec changes, never edit it.
 
-**Release notes (`/spec-changelog`).** `spec_export {format: "changelog", since?, write?}` (CLI `dev-spec changelog [--since <ISO
+**Release notes (`/spec-report changelog`).** `spec_export {format: "changelog", since?, write?}` (CLI `dev-spec changelog [--since <ISO
 date|last|all>] [--write]`) builds release notes from the spec data alone — no model, no git log:
 
 - **Added** — features shipped since `since` (a finish baseline recorded, or the `execution` sign-off approved), each
@@ -396,7 +396,7 @@ recorded patterns or its current ones). Only those few files are hashed (CRLF an
 
 ## 15. Milestones
 
-`/spec-milestone` — `spec_roadmap_edit {kind: "milestone", action, name?, date?, features?}` (CLI `dev-spec milestone [add <name>
+`/roadmap milestone` — `spec_roadmap_edit {kind: "milestone", action, name?, date?, features?}` (CLI `dev-spec milestone [add <name>
 <YYYY-MM-DD> <features…> | rm <name> | list]`) keeps named target dates for sets of features in `roadmap.json →
 meta.milestones` (under the roadmap lock). `add` needs a name (letters of any script, digits, spaces, `. _ : # ( ) + -`,
 ≤ 60 characters), a real `YYYY-MM-DD` day and existing active features (a list's items are feature names — `User Login`

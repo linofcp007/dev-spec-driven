@@ -15,7 +15,7 @@ phase. Adapted from the rationalization tables of [obra/superpowers](https://git
 
 | Thought | Reality |
 |---|---|
-| "The requirements are obvious" | Then writing them takes five minutes, and `/grill` finds the one that wasn't. |
+| "The requirements are obvious" | Then writing them takes five minutes, and the grill (`spec_clarify`, `/clarify --grill`) finds the one that wasn't. |
 | "We'll handle errors later" | The unwanted-behaviour criteria (IF…THEN) are where the bugs live. Write them now. |
 | "'Fast' is clear enough" | Vague words are untestable. Put a number on it. |
 
@@ -64,10 +64,10 @@ one behaviour at a time, red for the right reason, minimal code, green, refactor
 | Thought | Reality |
 |---|---|
 | "The approval was refused — I'll just `--force` it" | Force is the human's call, over named failures, and it stays flagged. Fix the checks or ask. |
-| "Everything is filled, I'll `/spec-ff` it myself" | A fast-forward is still the human's approval of every phase it records. Ask first. |
-| "We decided that in chat, no need to write it down" | Decisions in chat are lost at the next compaction. `/spec-decide` — `decisions.md` travels with the spec. |
-| "It's a small edit to an approved requirement, no need to re-approve" | An approved spec that changed is not approved. `/spec-impact`, then re-approve. |
-| "I'll add the missing tasks myself" | Follow-up work goes through `/spec-converge`: the human approves the list first. |
+| "Everything is filled, I'll fast-forward it myself" | A fast-forward is still the human's approval of every phase it records. Ask first. |
+| "We decided that in chat, no need to write it down" | Decisions in chat are lost at the next compaction. `spec_decide` — `decisions.md` travels with the spec. |
+| "It's a small edit to an approved requirement, no need to re-approve" | An approved spec that changed is not approved. `spec_impact`, then re-approve. |
+| "I'll add the missing tasks myself" | Follow-up work goes through a converge pass: the human approves the list first (`spec_append_tasks`). |
 | "The finished feature's spec is stale, I'll rewrite it" | Write the new behaviour in a new feature with `_Supersedes:_`; keep history. |
 
 ## Verification & finishing

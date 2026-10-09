@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp, require, __dirname }) => {
+exports.run = ({ ok, all, run, tmp, require, __dirname }) => {
   const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = JSON.stringify;
   const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
@@ -81,13 +81,15 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     const unchanged = snap(p) === t0;
     S.createFeature(p, "Login", ["core"]);
     const exists = json(["import", "kiro", ".kiro/specs/login", "--dry-run", "--json", "--project", p]);
-    ok(h.code === 0 && /^Dry run — nothing was written\.\nWould import Kiro \.kiro\/specs\/login → feature 'login' \[/.test(h.out) &&
-      /  requirements\.md — \d+ characters/.test(h.out) && /  1 story\(ies\), 2 criterion\(a\), 2 task\(s\), 0 decision\(s\)/.test(h.out) && /mapping: \d+ ID\(s\)/.test(h.out) &&
-      d.code === 0 && d.j.dryRun === true && d.j.feature === "login" && js(d.j.counts) === js({ stories: 1, criteria: 2, tasks: 2, decisions: 0 }) && js(d.j) === js(engine) &&
-      d.j.preview.some((x) => x.file === "requirements.md" && /\*\*US-1\.AC-1\*\*/.test(x.content)) &&
-      t.code === 0 && t.j.dryRun === true && t.j.inline === true && t.j.feature === "dark-mode" && unchanged &&
-      exists.code === 1 && exists.j && exists.j.ok === false && exists.j.dryRun === true && /already exists/.test(exists.j.error),
-      "1.25 import kiro / plan --text --dry-run: no feature folder, the files with their sizes, the counts and the mapping; --json previews the content (= spec_import {dryRun}'s answer); a refusal still exits 1, its JSON says dryRun (got " + h.out.slice(0, 400) + ")");
+    all("1.25 import kiro / plan --text --dry-run: no feature folder, the files with their sizes, the counts and the mapping; --json previews the content (= spec_import {dryRun}'s answer); a refusal still exits 1, its JSON says dryRun (got " + h.out.slice(0, 400) + ")", [
+      () => h.code === 0, () => /^Dry run — nothing was written\.\nWould import Kiro \.kiro\/specs\/login → feature 'login' \[/.test(h.out),
+      () => /  requirements\.md — \d+ characters/.test(h.out), () => /  1 story\(ies\), 2 criterion\(a\), 2 task\(s\), 0 decision\(s\)/.test(h.out),
+      () => /mapping: \d+ ID\(s\)/.test(h.out), () => d.code === 0, () => d.j.dryRun === true, () => d.j.feature === "login",
+      () => js(d.j.counts) === js({ stories: 1, criteria: 2, tasks: 2, decisions: 0 }), () => js(d.j) === js(engine),
+      () => d.j.preview.some((x) => x.file === "requirements.md" && /\*\*US-1\.AC-1\*\*/.test(x.content)), () => t.code === 0,
+      () => t.j.dryRun === true, () => t.j.inline === true, () => t.j.feature === "dark-mode", () => unchanged, () => exists.code === 1,
+      () => exists.j, () => exists.j.ok === false, () => exists.j.dryRun === true, () => /already exists/.test(exists.j.error),
+    ]);
   }
 
   // 1.25 the CLI's guards: a steering import with a feature's options (--name / --tracks), a path outside the project, --dry-run on

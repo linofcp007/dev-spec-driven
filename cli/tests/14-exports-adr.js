@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   const SE = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = (v) => JSON.stringify(v);
   const p = path.join(tmp, "p125-adr-proj");
@@ -29,14 +29,17 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   try { pjr = JSON.parse(pj.stdout); } catch { /* stays null */ }
   const w = run(["export", "checkout", "--adr", "--write", "--project", p]);
   const w2 = run(["export", "checkout", "--adr", "--write", "--project", p]);
-  ok(pv.code === 0 && pv.stdout === want && pv.stdout.startsWith("<!-- ── .specs/exports/adr/checkout/0001-use-paypal.md ── -->\n---\nstatus: superseded by ADR-0003\n") &&
-    pv.stdout.includes("<!-- ── .specs/exports/adr/checkout/0003-use-stripe.md ── -->\n") && pv.stdout.includes("<!-- ── .specs/exports/adr/checkout/index.md ── -->\n") &&
-    pj.code === 0 && pjr && js(pjr) === js(eng) &&
-    w.code === 0 && w.out.includes("✎ wrote " + path.join(adrDir, "0001-use-paypal.md")) && w.out.includes("✎ wrote " + path.join(adrDir, "index.md")) &&
-    /ADRs: 2 — 3 file\(s\) written · 0 unchanged · 0 removed/.test(w.out) && fs.readFileSync(path.join(adrDir, "0003-use-stripe.md"), "utf8") === eng.documents[1].content &&
-    w2.code === 0 && /ADRs: 2 — 0 file\(s\) written · 3 unchanged · 0 removed/.test(w2.out) && !w2.out.includes("✎ wrote"),
-    "1.25 ADR (CLI): export <f> --adr prints each MADR document under its path; --json = the MCP result; --write writes them (✎ wrote …, a summary); a re-run writes nothing (got " +
-    js([pv.code, pv.stdout.slice(0, 200), pv.stderr, w.out, w2.out]) + ")");
+  all("1.25 ADR (CLI): export <f> --adr prints each MADR document under its path; --json = the MCP result; --write writes them (✎ wrote …, a summary); a re-run writes nothing (got " +
+    js([pv.code, pv.stdout.slice(0, 200), pv.stderr, w.out, w2.out]) + ")", [
+    () => pv.code === 0, () => pv.stdout === want,
+    () => pv.stdout.startsWith("<!-- ── .specs/exports/adr/checkout/0001-use-paypal.md ── -->\n---\nstatus: superseded by ADR-0003\n"),
+    () => pv.stdout.includes("<!-- ── .specs/exports/adr/checkout/0003-use-stripe.md ── -->\n"),
+    () => pv.stdout.includes("<!-- ── .specs/exports/adr/checkout/index.md ── -->\n"), () => pj.code === 0, () => pjr, () => js(pjr) === js(eng),
+    () => w.code === 0, () => w.out.includes("✎ wrote " + path.join(adrDir, "0001-use-paypal.md")),
+    () => w.out.includes("✎ wrote " + path.join(adrDir, "index.md")), () => /ADRs: 2 — 3 file\(s\) written · 0 unchanged · 0 removed/.test(w.out),
+    () => fs.readFileSync(path.join(adrDir, "0003-use-stripe.md"), "utf8") === eng.documents[1].content, () => w2.code === 0,
+    () => /ADRs: 2 — 0 file\(s\) written · 3 unchanged · 0 removed/.test(w2.out), () => !w2.out.includes("✎ wrote"),
+  ]);
 
   // stale: a decision retitled by hand → the preview names the old file on stderr (stdout stays the documents), --write removes it.
   const dp = path.join(f.dir, "decisions.md");

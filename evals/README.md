@@ -5,7 +5,7 @@ skill under pressure" idea from obra/superpowers' *writing-skills*. Two suites s
 
 - **Triggering** (tags `triggering` / `negative`): the workflow **triggers** on planning, bug-fix and upgrade
   requests in English, Portuguese and Spanish, and **stays silent** on an unrelated question and on near-misses
-  that only share a keyword (`requirements.txt`, `eval()`, one LLM call).
+  that only share a keyword (`requirements.txt`, `eval()`, one LLM call) or ask for a trivial fix (a typo in a label).
 - **Behavioural** (tag `behavior`): once it fires, the agent **respects the workflow** — it plans before coding,
   takes the bugfix flow, records evidence instead of a bare tick, integrates locally, reports a refused gate
   instead of forcing it, and audits before upgrading. These cases load a fixture project and use the plugin's
@@ -21,7 +21,7 @@ These are not the `+ai` feature evals of a user's project (those live in `mcp/ev
 | `trigger-bugfix-en` | it fires on a defect report asking for a proper fix |
 | `trigger-upgrade-pt` | it fires on "I updated the plugin — update this project's specs and review what isn't implemented" (PT) |
 | `no-trigger-unrelated` | nothing from the plugin fires on a general-knowledge question |
-| `no-trigger-requirements-txt` / `-eval-call` / `-llm-call` | near-misses (tag `near-miss`): pinning a package in `requirements.txt`, replacing an `eval()` call, adding one LLM API call — trivial edits the description excludes |
+| `no-trigger-requirements-txt` / `-eval-call` / `-llm-call` / `-trivial-fix` | near-misses (tag `near-miss`): pinning a package in `requirements.txt`, replacing an `eval()` call, adding one LLM API call, fixing a typo in a button label ("fix" alone is no bug report) — trivial edits the description excludes |
 
 ## Behavioural cases
 
@@ -56,7 +56,7 @@ MCP tool a grader names exists — fix a fixture there, not after a paid run.
 | Tag | Cases |
 |---|---|
 | `triggering` | the five cases that must fire the workflow |
-| `negative` · `near-miss` | the cases that must stay silent (`near-miss`: only the three keyword near-misses) |
+| `negative` · `near-miss` | the cases that must stay silent (`near-miss`: only the four near-misses) |
 | `behavior` | the seven behavioural cases (need `--scaffold` and the real MCP server — below) |
 | `evidence` · `bugfix` · `gates` · `finish` · `upgrade` | one workflow rule: `evidence` = the two evidence cases, `bugfix` = the bugfix trigger + behaviour cases, `upgrade` = the upgrade trigger + behaviour cases |
 | `en` · `pt` · `es` | every case in that language (triggering and behavioural mixed) |
@@ -165,5 +165,7 @@ $claude = (Get-ChildItem "$env:USERPROFILE\.vscode\extensions\anthropic.claude-c
 & $claude plugin eval . --ablation none --tag triggering negative --trust-plugin --no-publish --max-cost-usd 5
 ```
 
-When you change the skill's `description`, add a case for any new trigger phrase before relying on it. When you
+When you change the skill's `description`, add a case for any new trigger phrase before relying on it. (1.26: the description is intent-based and says it works in English, Portuguese
+and Spanish instead of listing PT / ES phrases — the `-pt` / `-es` cases are what checks that it still fires in those
+languages; `no-trigger-trivial-fix` checks the "Not for trivial edits" exclusion beside the new "fix a reported bug".) When you
 change a workflow rule (a gate, the evidence rule, finish, upgrade), check the behavioural case that covers it.

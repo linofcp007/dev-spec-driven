@@ -170,7 +170,7 @@ plugin: each issue rated by a separate agent, only the confident ones kept.)
 - **What goes through:** every ❌ and every Critical / Important finding — and, later, each piece of new breakage a
   re-review reports. **What doesn't:** the facts the report or the diff settle by themselves — a `_Verify:_` run
   missing, a non-zero exit, a piped exit code with no unpiped run, a planned test's expectation changed.
-- **How:** one `dev-spec-driven:spec-reviewer` in **verify** mode per finding, all dispatched in one message (they are
+- **How:** one **`dev-spec-driven:spec-verifier`** per finding, all dispatched in one message (they are
   independent), on the cheapest tier — standard for a security, concurrency or data-loss finding — with the finding
   verbatim, the package path, BASE/HEAD, the brief path (the feature folder in the final review and the simplification
   pass) and the report path (the implementer's, or the simplifier's). Never the first review's reasoning, never the
@@ -217,7 +217,7 @@ ledger `Task N: refactor candidate filed: refactor-<topic>`. One name per candid
 of a name already in the backlog appends its note to that entry (`exists: true`, `appended`) — right for the same
 candidate found again, wrong for a different one. A candidate becomes an improvement spec later
 (`references/improvement-specs.md`: characterization tests first, the refactor on green); one the task can't be done
-without is a preparatory task — `/spec-converge` and the human's approval, not the current diff.
+without is a preparatory task — a converge pass (below) and the human's approval, not the current diff.
 
 ## Parallel mode (optional): `[P]` tasks in separate worktrees
 
@@ -282,7 +282,7 @@ human **only** for:
    and the next story. Continue on
    approval; ledger `Checkpoint USn: presented → approved`.
 2. **A spec change.** Any finding or blocker that requires changing an AC, a design decision, or a
-   planned test's expectation. Go back to that phase (`/createSpec`, `/design`, `/testPlan`) — never
+   planned test's expectation. Go back to that phase (requirements, design or test plan) — never
    rule on it, never let an implementer "fix" a test to pass.
 3. An irreversible or destructive operation, a security-sensitive action, or a side effect outside the
    working tree that norms say to ask about (merge, push to a shared branch, publish, deploy).
@@ -323,18 +323,19 @@ After the last task: package `MERGE_BASE..HEAD` (`git merge-base <default-branch
 `dev-spec-driven:spec-reviewer` in **final** mode on the most capable model, with the package path, the feature folder,
 the ledger, the active tracks, the references folder path and, on +tdd, the `spec_log {name, gitLog}` output (you run
 `git log --name-only --relative` and pass its text — the server never runs git; the reviewer can't call MCP tools) — it
-runs the `/prReview` checklist
+runs the branch-review checklist
 (track-aware: spec compliance, red-first evidence, tenant isolation, eval deltas, security, the project's written rules
 and the history of rewritten lines) and triages the ledger's deferred minors, unconfirmed and parked findings. If it
 returns findings: verify each Critical / Important one (§6), then ONE fix dispatch with the confirmed list, ONE scoped
 re-review, then adjudicate residuals as in the breaker. No second wave — residual load-bearing findings go to the human.
 
-## The simplification pass (optional, before `/spec-finish`)
+## The simplification pass (optional, before finishing)
 
 With every task done and the final review's fixes in, the code the feature added can often be simpler than the
-task-by-task loop left it — the smells the reviews deferred as Minor are still there. **`/spec-simplify <feature>
---subagents`** cleans them up without changing behaviour, and proves it (adapted from Anthropic's `code-simplifier`
-plugin — with the proof added: its own tests after every change, one commit each, a review of the pass):
+task-by-task loop left it — the smells the reviews deferred as Minor are still there. **The simplification pass** (the
+user's `/spec-review <feature> simplify`; with subagents as below) cleans them up without changing behaviour, and proves
+it (adapted from Anthropic's `code-simplifier` plugin — with the proof added: its own tests after every change, one
+commit each, a review of the pass):
 
 1. Record `SIMPLIFY_BASE = git rev-parse HEAD` and `MERGE_BASE` (as for the final review). No `.execution/` yet (the
    feature ran inline)? Create it with a `.gitignore` holding `*` — the folder ignores itself. Dispatch
@@ -367,7 +368,7 @@ Skip it for a small feature or a review with no deferred smells. `NO_CHANGES` is
 
 ## Closing
 
-Then close with **`/spec-finish`** (`spec_finish {name, write: true}`): it lists any blocker (doctor
+Then close with **`spec_finish {name, write: true}`** (the user's `/spec-finish`): it lists any blocker (doctor
 fails, open tasks, tasks without a passing run, project checks without a passing run since the last tick (on the
 current code), pending
 approvals, artifacts changed since approval, template placeholders, a bugfix's missing root cause) and non-blocking
@@ -380,9 +381,9 @@ data subject rights), writes a merge summary built from the spec chain (with the
 
 ## Converge mode (whole feature, AC by AC)
 
-`/spec-converge` asks a different question from the task loop: not "is this diff right?" but "does the code, as it
-stands, deliver every AC?". Use it when implementation drifted from the plan, after a review found follow-up
-work, or before `/spec-finish` when every task is ticked but you doubt the feature is complete. It works on any
+The converge pass (the user's `/spec-review <feature> converge`) asks a different question from the task loop: not "is
+this diff right?" but "does the code, as it stands, deliver every AC?". Use it when implementation drifted from the plan, after a review found follow-up
+work, or before finishing when every task is ticked but you doubt the feature is complete. It works on any
 feature, inline-executed or not.
 
 1. **Gather.** `spec_status` and `trace_check {name, code: true}` (T-IDs and AC IDs named in the test files,
@@ -394,7 +395,7 @@ feature, inline-executed or not.
    returns — in its reply — the missing work as **proposed tasks** shaped for `spec_append_tasks`.
 3. **Triage the proposals yourself.** A gap fixable within the approved ACs and design is a task. A gap that
    needs a different AC, design decision or test expectation is a **spec change** — back to its phase
-   (`/spec-impact` after the edit), never a task.
+   (`spec_impact` after the edit), never a task.
 4. **Human approves** the list (edited as needed) → `spec_append_tasks {name, tasks: [{text, requirements,
    implements, verify, makesGreen, expectFail, size, story, parallel}]}`: appended under "Phase: Convergence",
    numbered after the highest task, existing tasks untouched, an unknown AC ID (or a `makesGreen` T-ID test-plan.md
@@ -407,9 +408,10 @@ tasks. Either way, never append a task the human hasn't approved.
 
 ## Model selection
 
-Pass `model` explicitly on every dispatch. The four plugin agents declare `model: sonnet` in their
-frontmatter, so an omitted `model` runs them on `sonnet` — right for most implementer and reviewer work,
-wrong for the cheap transcription tasks and the final review below.
+Pass `model` explicitly on every dispatch. The implementer, the reviewer, the verifier and the simplifier declare
+`model: sonnet` in their frontmatter, so an omitted `model` runs them on `sonnet` — right for most implementer and
+reviewer work, wrong for the cheap transcription tasks, most verify passes and the final review below. (The critic
+declares `model: inherit`: one semantic review per gate, on the session's own model.)
 
 | Role | Tier (Claude Code alias) |
 |---|---|
@@ -439,6 +441,6 @@ Turn count beats token price: the cheapest models take 2–3× the turns on mult
 | "The SubagentStop hook let it through, so it passed" | The gate reads the report's text — each `_Verify:_` command with the exit code the task needs — it never ran anything. Read it; record the run with `spec_complete_task`. |
 | "The implementer found a good refactor — let it do it in this task" | File it: `spec_roadmap_edit {kind: "backlog"} add` with a `refactor:` note. A refactor folded into a feature task makes the diff bigger and a regression unattributable. |
 | "The new helper is tiny, no need to look for an existing one" | Tiny duplicates are how a codebase ends up with four retry wrappers. No **Reuse** block with the search in the report → send it back. |
-| "The reviewer is sure — skip the verify pass" | A reviewer's certainty is a claim. One cheap verify per finding costs less than one fix round spent on a false positive. |
+| "The reviewer is sure — skip the verifier" | A reviewer's certainty is a claim. One cheap verify per finding costs less than one fix round spent on a false positive. |
 | "Unconfirmed means wrong — drop it" | Unconfirmed means not proven. It skips the fix loop, not the ledger: the checkpoint shows it and the final review triages it. |
 | "The simplification broke a test — adjust the test" | The tests are the proof that behaviour didn't change. Revert the simplification. |

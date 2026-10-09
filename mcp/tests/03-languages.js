@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
+exports.run = async ({ ok, remeasure, rpc, payload, S, tmp, list, require }) => {
 
   // --- 1.14 D1: Brazilian Portuguese (pt-BR) — a fourth locale, DERIVED from European pt (i18n.js toPtBr) ---
   {
@@ -339,8 +339,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
     // Pb6: linear scans — a long run of '[' / ')' / word characters (the old patterns took seconds at 80 000 characters).
     const timed = (f) => { const t0 = Date.now(); f(); return Date.now() - t0; };
     const n6 = 80000;
-    const t6 = [timed(() => S.planPaths("[".repeat(n6))), timed(() => S.planPaths(")".repeat(n6) + "a/b.ts")), timed(() => S.planPaths("[](a".repeat(n6 / 4))),
-      timed(() => S.markdownToHtml("[".repeat(n6))), timed(() => S.markdownToHtml("![".repeat(n6 / 2))), timed(() => I.toPtBr("a".repeat(n6))), timed(() => I.toPtBr("ab.".repeat(n6 / 3)))];
+    const t6 = remeasure(() => [timed(() => S.planPaths("[".repeat(n6))), timed(() => S.planPaths(")".repeat(n6) + "a/b.ts")), timed(() => S.planPaths("[](a".repeat(n6 / 4))),
+      timed(() => S.markdownToHtml("[".repeat(n6))), timed(() => S.markdownToHtml("![".repeat(n6 / 2))), timed(() => I.toPtBr("a".repeat(n6))), timed(() => I.toPtBr("ab.".repeat(n6 / 3)))],
+      (s) => s.every((ms) => ms < 1000)); // 1.26: measured once more on a timing-only miss
     ok(t6.every((ms) => ms < 1000) && JSON.stringify(S.planPaths("see [the store](src/theme.ts) and [[x](lib/y.js)")) === '["src/theme.ts","lib/y.js"]' &&
       I.toPtBr("O utilizador guarda o ficheiro tasks.md e src/a.test.js.") === "O usuário guarda o arquivo tasks.md e src/a.test.js." &&
       S.markdownToHtml("[[see](https://x.io)") === '<p>[<a href="https://x.io" rel="noopener noreferrer">see</a></p>',

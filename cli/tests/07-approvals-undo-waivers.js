@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   const SU = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = (x) => JSON.stringify(x);
   const RUN = 'node -e "process.exit(0)"';
@@ -66,12 +66,15 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const r6 = run(["approve", "login", "requirements", "--revok", "--project", pe]);
   const r7 = run(["approve", "login", "requirements", "--revoke", "--force", "--project", pe]);
   const hist = stOf(pe).approvalHistory;
-  ok(r1.code === 0 && /Waiver recorded: demo day \(expires \d{4}-\d{2}-\d{2}\)\./.test(r1.out) && r2.code === 1 && /go with force/.test(r2.out) &&
-    r3.code === 1 && /expires must be an ISO date/.test(r3.out) && r4.code === 0 && /^Revoked the approval of 'requirements' for login — the phase is pending again/.test(r4.out) &&
-    r5.code === 1 && /nothing to revoke/.test(r5.out) && r6.code === 1 && /did you mean --revoke\?/.test(r6.out) && r7.code === 1 && /revoke takes no force/.test(r7.out) &&
-    hist[hist.length - 1].revoked === true && hist[hist.length - 1].reason === "scope changed" && hist[hist.length - 2].waiver && hist[hist.length - 2].waiver.reason === "demo day",
-    "1.16 U2/U3: `approve --force --reason --expires` records the waiver; `--reason` without --force, a bad --expires, `--revoke` of an unapproved phase or with --force exit 1; `--revoke --reason` revokes (history: revoked + reason); `--revok` suggests --revoke (got " +
-    js([r1.out.trim(), r4.out.trim(), r6.out.trim()]) + ")");
+  all("1.16 U2/U3: `approve --force --reason --expires` records the waiver; `--reason` without --force, a bad --expires, `--revoke` of an unapproved phase or with --force exit 1; `--revoke --reason` revokes (history: revoked + reason); `--revok` suggests --revoke (got " +
+    js([r1.out.trim(), r4.out.trim(), r6.out.trim()]) + ")", [
+    () => r1.code === 0, () => /Waiver recorded: demo day \(expires \d{4}-\d{2}-\d{2}\)\./.test(r1.out), () => r2.code === 1,
+    () => /go with force/.test(r2.out), () => r3.code === 1, () => /expires must be an ISO date/.test(r3.out), () => r4.code === 0,
+    () => /^Revoked the approval of 'requirements' for login — the phase is pending again/.test(r4.out), () => r5.code === 1,
+    () => /nothing to revoke/.test(r5.out), () => r6.code === 1, () => /did you mean --revoke\?/.test(r6.out), () => r7.code === 1,
+    () => /revoke takes no force/.test(r7.out), () => hist[hist.length - 1].revoked === true, () => hist[hist.length - 1].reason === "scope changed",
+    () => hist[hist.length - 2].waiver, () => hist[hist.length - 2].waiver.reason === "demo day",
+  ]);
   const qa = mk("rev-a"), qb = mk("rev-b");
   [qa, qb].forEach((p) => run(["approve", "login", "classification", "--force", "--project", p]));
   const cr = runJ(["approve", "login", "classification", "--revoke", "--reason", "oops", "--by", "ana", "--json", "--project", qa]);

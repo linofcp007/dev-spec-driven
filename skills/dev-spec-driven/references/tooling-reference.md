@@ -297,7 +297,7 @@ its evidence turns stale, so a re-tick needs a new run. `statusline` prints one 
 feature with work under way, its tasks, unverified ticks and the next step, in the project language; nothing outside a
 dev-spec project; exit 0 always; it reads the session JSON on stdin and walks up from its folder to the nearest
 `.specs/`) — `--print-config` prints the `settings.json` `statusLine` entry with this clone's absolute path
-(`/spec-statusline` installs it). `rules <tool>` prints a rule file with this
+(`/spec-setup statusline` installs it). `rules <tool>` prints a rule file with this
 clone's absolute paths, to paste into another project; `mcp-config <client>` prints a ready MCP config.
 
 ## Hooks (Claude Code, local — never block on their own errors)
@@ -397,7 +397,7 @@ Stop hook regenerates it once, at the end of the turn (SessionStart, the next mu
 the pre-commit check stages it again when it was staged).
 As a backstop, call `spec_roadmap` with `write: true` (CLI: `dev-spec roadmap --write [--html]`). **Pass the
 user's language** (`lang` / `--lang pt`) so the roadmap chrome matches — it's stored and reused on
-auto-refresh. Track future work with `spec_roadmap_edit {kind: "backlog"}` (`/backlog add "name"`). The files are
+auto-refresh. Track future work with `spec_roadmap_edit {kind: "backlog"}` (`/roadmap backlog add "name"`). The files are
 auto-generated — never hand-edit them. Spikes are listed apart (🔬, with their timebox).
 
 **Forecasts.** A task's `_Size: XS|S|M|L|XL_` marker is worth 1 / 2 / 3 / 5 / 8 points (an unsized task counts as its
@@ -423,69 +423,39 @@ A `ROADMAP.md`/`ROADMAP.html` that dev-spec did **not** generate (no `AUTO-GENER
 marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chrome language
 (`meta.roadmapLang`); the project language (`meta.lang`) is set by `spec_init`.
 
-## Command reference (55 commands)
+## Command reference
+
+`/spec` and `/spec-bugfix` are the model's too; every other command is the user's to type (the model calls the tool it
+wraps). Subcommands and flags are listed in each command's `argument-hint` and body.
 
 | Command | Phase | What it does |
 |---|---|---|
-| `/spec` | entry | Start/resume the whole workflow for a feature — picks mode + tracks, then runs the pipeline (uses `spec_classify`/`spec_next_action`) |
-| `/spec-tour` | entry | A guided ~10-minute tour on the user's own repo: one tiny real change through every gate, then keep / archive / remove it |
-| `/spec-init` | setup | Scaffold `.specs/steering/` for the active tracks; `--lang`, `--guard`, `--check`, `--roles`, `--stop-check` (uses `spec_init`) |
-| `/spec-guard` | setup | Guard mode on / off / scope: code edits ask while no feature has approved tasks (not Phase 4 test files, nor a spike's prototype) — scope: also outside the plan's files (uses `spec_init {guard}`) |
-| `/spec-templates` | setup | The team's own scaffolds in `.specs/templates/`: list / init / check (uses `spec_templates`) |
-| `/spec-tracks` | setup | The team's own tracks — packs in `.specs/tracks/<name>/`: list / init / check (uses `spec_tracks`) |
-| `/spec-superpowers` | setup | With superpowers installed too: a marked precedence block in CLAUDE.md (project or `--user`) routes feature work here; `--remove` |
-| `/spec-upgrade` | setup | After a plugin update: audit `.specs/` against the new rules, apply the safe migrations after an OK, then the critic / converge reviews it recommends (uses `spec_upgrade`) |
-| `/classify` | 0 | Pick mode + composable tracks; write classification.md (uses `spec_classify`) |
+| `/spec [idea \| feature] [phase]` | entry · 0–5 | Start or resume a feature — mode, tracks and size (`spec_classify`), then the phase named or the one `spec_next_action` names: requirements, design, test / eval plan, failing tests, tasks |
+| `/spec-bugfix` | bugfix | Reproduce → root cause (with evidence) → approval → failing regression test (`_Expect: fail_`) → fix → verify (uses `spec_create {kind: "bugfix"}`) |
 | `/spec-spike` | 0 | A timeboxed investigation that ends in a decision (go / no-go / pivot) (uses `spec_create {kind: "spike"}`) |
-| `/createSpec` | 1 | Requirements in EARS with stable AC IDs (uses `ears_validate`) |
-| `/clarify` | 1 | Surface requirement ambiguities/gaps before design (uses `spec_clarify`) |
-| `/grill` | 1 | Interrogate your understanding of the requirements before design, and fold the answers into requirements.md |
-| `/design` | 2 | Design with base + active-track mandatory sections |
-| `/testPlan` | 3 | (+tdd) enumerate tests, map to AC IDs, choose layers and Kind (example / property) |
-| `/evalPlan` | 3 | (+ai) golden/adversarial/regression sets, graders, thresholds, baseline |
-| `/writeTests` | 4 | (+tdd/+ai) failing tests (T-IDs in test names, `trace --code`) + eval harness; the hard gate |
-| `/createTask` | 5 | Traceable, ordered tasks with `_Verify:_`, `_Expect: fail_`, `_Size:_` (uses `trace_check`) |
-| `/executeTask` | 6 | Implement: core / red-green-refactor / prompt-iteration per task; `--subagents` → implementer + reviewer per task (uses `spec_task_brief`) |
-| `/spec-converge` | 6 | Whole feature AC by AC vs the code (reviewer in converge mode) → approved follow-up tasks (uses `spec_append_tasks`) |
-| `/spec-doctor` | gate | Health-check a feature; returns readyToAdvance + gate status (uses `spec_doctor`); `--deep` adds the `spec-critic` semantic review |
-| `/approve` | gate | Record a phase approval — refused while its checks fail, `--force` records it as forced (`--reason` / `--expires` = its waiver), `--role` signs as a role, `--revoke` withdraws an approval (uses `spec_approve`) |
-| `/spec-ff` | gate | Fast-forward: approve every filled planning phase in order, each through its own gate (uses `spec_approve {through}`) |
-| `/next-action` | any | "You are here → do this next" + what changed since approval (uses `spec_next_action`) |
-| `/spec-impact` | change | What an edit after approval touches; `--reopen` with the user's OK; then re-approve (uses `spec_impact`) |
-| `/spec-decide` | change | Record a decision or discovery in `decisions.md` (D-n, `_Affects:_`) (uses `spec_decide`) |
-| `/add-track` | any | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data, additive; `--remove` takes a track off without deleting files (uses `spec_add_track`) |
-| `/feature` | any | Archive / restore / rename / remove a feature, deps kept consistent; `flow` switches design-first; remove needs `confirm: true` (CLI `--yes`) (uses `spec_feature`) |
-| `/eval` | +ai | Run the local eval harness (golden/adversarial/regression) with your API key |
-| `/roadmap` | any | Multi-feature roadmap: %, deps, blocked, cycles, ETA, overlaps, needs attention; writes `.specs/ROADMAP.md` (uses `spec_roadmap`) |
-| `/depend` | any | Show / set / edit feature dependencies and order, cycle-checked; CLI `--add` / `--rm` / `--clear` (uses `spec_roadmap_edit {kind: "depend"}`) |
-| `/backlog` | any | Add/remove planned features shown in ROADMAP.md (uses `spec_roadmap_edit {kind: "backlog"}`) |
-| `/spec-catalog` | any | Living catalog of every feature + AC, superseded ones marked → `.specs/SPECS.md` (uses `spec_export {format: "catalog"}`) |
-| `/spec-export` | any | One offline, printable document of a feature or the project for stakeholders; `--csv` the traceability matrix, `--gherkin` BDD `.feature` files, `--tracker jira` · `--tracker linear` a tracker import CSV, `--adr` the decision log as MADR files (uses `spec_export`) |
-| `/spec-changelog` | after | Release notes (Added · Changed · Fixed) from the specs → `.specs/RELEASE-NOTES.md`; `--milestone <name>` scopes them (uses `spec_export {format: "changelog"}`) |
-| `/spec-milestone` | any | Milestones: a target date for a set of features vs their ETAs → on-track · at-risk · late · done (uses `spec_roadmap_edit {kind: "milestone"}`) |
-| `/scan` | brownfield | Inventory an existing codebase (uses `spec_scan`) |
-| `/reverse` | brownfield | Reverse-engineer steering + specs from existing code |
-| `/coverage` | brownfield | Spec coverage of existing code via `_Implements:_` (uses `spec_scan {coverage: true}`) |
-| `/spec-import` | brownfield | Import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan, BMAD docs or a fluidplan plan as a new feature — or Kiro steering / Cursor rules as steering files; `--dry-run` writes nothing (uses `spec_import`) |
-| `/spec-bugfix` | bugfix | Reproduce → root cause (with evidence) → approval → failing regression test (`_Expect: fail_`) → fix → verify (uses `spec_create {kind:"bugfix"}`) |
-| `/spec-simplify` | close | Optional, before `/spec-finish`: behaviour-preserving cleanups of the feature's own lines, one commit each, proven by the tests and reviewed; `--subagents` → the `spec-simplifier` agent |
+| `/clarify [--grill]` | 1 | Requirement ambiguities / gaps before design (`spec_clarify`); `--grill` interrogates one question at a time and folds the answers into requirements.md |
+| `/approve [phase \| --through p] [--force \| --revoke]` | gate | The user's sign-off: refused while the phase's checks fail; `--through` fast-forwards the filled phases, each through its own gate; `--force` (`--reason` / `--expires` = its waiver), `--role`, `--revoke` (uses `spec_approve`) |
+| `/spec-doctor [--deep]` | gate | Health-check a feature: readyToAdvance + gate status (`spec_doctor`); `--deep` adds the `spec-critic` semantic review |
+| `/executeTask [n] [--subagents] \| commit` | 6 | Implement: core / red-green-refactor / prompt-iteration per task; `--subagents` → implementer + reviewer (+ a verifier per finding) per task (uses `spec_task_brief`); `commit` writes the spec-referencing commit message (format below) |
+| `/spec-review branch \| converge \| simplify \| feedback \| prompt` | 6 · close | `branch`: the track-aware local pre-merge review against the full chain, the written rules and the history of rewritten lines, each finding verified (80+) · `converge`: the whole feature AC by AC → approved follow-up tasks (`spec_append_tasks`) · `simplify`: optional behaviour-preserving cleanups of the feature's own lines, one commit each, proven by the tests · `feedback`: review comments against the spec · `prompt` (+ai): a prompt change gated on eval / cost / version |
 | `/spec-finish` | close | Blockers + warnings + fresh checks + a merge summary from the spec chain; then merge locally / keep (uses `spec_finish`) |
-| `/spec-drift` | after | Implementing files changed since finish, and what to do about it (uses `spec_drift`) |
-| `/spec-metrics` | after | Lead times, rework, forced approvals, change requests, pass rate, velocity; `--write` → retro.md (uses `spec_metrics`) |
-| `/spec-review-feedback` | support | Classify review comments against the spec: fix AC violations, route spec changes, push back on out-of-scope |
-| `/spec-commit` | support | Conventional commits referencing spec + tests + evals (format below) |
-| `/prReview` | support | Track-aware local pre-merge review against the full chain, the project's written rules and the history of rewritten lines; each finding verified (confidence 80+) before it is reported |
-| `/promptReview` | support | (+ai) gate prompt changes on eval/cost/version |
-| `/migrateModel` | support | (+ai) eval-gated model migration |
-| `/spec-status` | any | Mode, tracks, phase, task/test/eval state (uses `spec_status`) |
-| `/spec-statusline` | setup | Claude Code status line: the active feature, tasks, unverified ticks, next step — writes the `settings.json` entry after you confirm (uses `dev-spec statusline`) |
+| `/spec-change impact \| decide \| track ±x` | change | `impact`: what an edit after approval touches, `--reopen` with the user's OK, then re-approve (`spec_impact`) · `decide`: a D-n entry in decisions.md (`spec_decide`) · `track +x` / `-x`: add a track, additive, or take one off without deleting files (`spec_add_track`) |
+| `/spec-status` | any | Mode, tracks, phase, task / test / eval state (uses `spec_status`) |
+| `/roadmap [--write \| --html] \| depend \| backlog \| milestone` | any | The roadmap: %, deps, blocked, cycles, ETA, overlaps, needs attention → `.specs/ROADMAP.md` (`spec_roadmap`) · `depend`: dependencies and order, cycle-checked · `backlog`: planned-but-unspecced features · `milestone`: target dates vs ETAs (`spec_roadmap_edit {kind}`) |
+| `/feature` | any | Archive / restore / rename / remove a feature, deps kept consistent; `flow` switches design-first; remove needs `confirm: true` (CLI `--yes`) (uses `spec_feature`) |
+| `/spec-report catalog \| drift \| metrics \| changelog \| export` | after | The living catalog → `.specs/SPECS.md` · drift since finish · metrics and retro · release notes → `.specs/RELEASE-NOTES.md` · the stakeholder export (HTML / md, `--csv`, `--gherkin`, `--tracker jira \| linear`, `--adr`) (`spec_export`, `spec_drift`, `spec_metrics`) |
+| `/spec-adopt scan \| reverse \| coverage \| import` | brownfield | Inventory an existing codebase (`spec_scan`), reverse-engineer steering + specs, spec coverage via `_Implements:_` (`spec_scan {coverage: true}`), import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan, BMAD docs, a fluidplan plan — or Kiro steering / Cursor rules (`spec_import`; `--dry-run` writes nothing) |
+| `/spec-setup init \| guard \| statusline \| superpowers \| templates \| tracks` | setup | `.specs/steering/` for the tracks (`spec_init`: `--lang`, `--check`, `--roles`, `--stop-check`) · guard mode on / off / scope (`spec_init {guard}`) · the Claude Code status line (`dev-spec statusline`) · the superpowers precedence block in CLAUDE.md · the team's scaffolds in `.specs/templates/` (`spec_templates`) · the team's track packs in `.specs/tracks/<name>/` (`spec_tracks`) |
+| `/spec-upgrade` | setup | After a plugin update: audit `.specs/` against the new rules, apply the safe migrations after an OK, then the critic / converge reviews it recommends (uses `spec_upgrade`) |
+| `/eval run \| baseline \| migrate` | +ai | Run the local eval harness (golden / adversarial / regression) with your API key, record a baseline, migrate to another model only on an equal-or-better eval |
+| `/spec-tour` | entry | A guided ~10-minute tour on the user's own repo: one tiny real change through every gate, then keep / archive / remove it |
 
-**Aliases:** `/ds` → `/spec` · `/dsx` → `/executeTask` · `/dss` → `/spec-status`. (As a plugin, all
-commands are namespaced, e.g. `/dev-spec-driven:spec-doctor`. The `spec-` prefix on `/spec-init`, `/spec-status`,
-`/spec-doctor` and `/spec-commit` keeps them from colliding with Claude Code's built-in `/init`, `/status`,
-`/doctor` and `/commit`. Other MCP clients get the same commands as MCP prompts.)
+**Aliases:** `/ds` → `/spec` · `/dsx` → `/executeTask` · `/dss` → `/spec-status`. (As a plugin, all commands are
+namespaced, e.g. `/dev-spec-driven:spec-doctor`. The `spec-` prefix on `/spec-setup`, `/spec-status` and
+`/spec-doctor` keeps them from colliding with Claude Code's built-in `/init`, `/status` and `/doctor`. Other MCP clients
+get the same commands as MCP prompts.)
 
-## Commit messages (`/spec-commit`)
+## Commit messages (`/executeTask commit`)
 
 Conventional commits whose body references the spec chain:
 

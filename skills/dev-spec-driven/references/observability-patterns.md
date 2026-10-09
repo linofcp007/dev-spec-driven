@@ -285,7 +285,7 @@ Martin Fowler's site (Pete Hodgson) names four kinds, and they are managed diffe
 - **Safe defaults**: when the flag service is unreachable, the code falls back to a value written in the code — for
   a release flag, *off*.
 - **Test both paths** of every flag while both exist; a flag nobody has turned off in months has an untested path.
-- **Flag debt is real**: a release flag gets a removal task when it's created (`/spec-converge` or a task in the
+- **Flag debt is real**: a release flag gets a removal task when it's created (a converge task or a task in the
   same feature), an owner and an expiry date. Some teams add a test that fails once a flag is past its date, or cap
   the number of live flags.
 - **Flags are not authorization** — a permissioning flag decides what the UI offers; the server still checks
@@ -351,7 +351,7 @@ the new → stop writing the old → drop it, each step its own deploy with a ro
 - **Keep a timeline** as you go (times, observations, actions); it is the backbone of the review.
 - **Blameless review** for every SEV1 / SEV2 and any large budget spend: what happened, impact, timeline,
   contributing factors (systems, not people), what went well, action items with owners. Each action item is a
-  spec — a bugfix (`/spec-bugfix`) or follow-up tasks (`/spec-converge`) — so it is tracked, not remembered.
+  spec — a bugfix (`/spec-bugfix`) or follow-up tasks (a converge pass, `spec_append_tasks`) — so it is tracked, not remembered.
 
 ---
 

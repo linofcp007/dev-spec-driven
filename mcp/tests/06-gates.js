@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname }) => {
 
   { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
     const w5 = path.join(tmp, "proj-wp5");
@@ -114,12 +114,14 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const before2 = stateOf(f2).approvals;
     const exF2 = S.approvePhase(w5, f2.slug, "execution", undefined, { force: true });
     const m2 = S.metrics(w5, f2.slug);
-    ok(ex2.ok === false && ex2.refused && ["placeholders", "open-tasks", "approval-gates"].every((id) => ex2.failing.includes(id)) && /✗ open-tasks — /.test(ex2.error) &&
-      exMcp2.ok === false && exMcp2.failing.join() === ex2.failing.join() && !before2.execution && !before2.tests &&
-      noTests2.ok === false && noTests2.nothingToApprove && /Nothing to approve: 'tests'/.test(noTests2.error) &&
-      exF2.ok && exF2.forced && stateOf(f2).approvals.execution.forced === true && stateOf(f2).approvals.execution.failing.includes("open-tasks") &&
-      m2.forcedApprovals >= 1 && m2.leadTime.finished != null,
-      "approve execution runs spec_finish's blockers (open-tasks, placeholders, approval-gates… — same on MCP) and is refused on an unfinished feature; --force records it as forced; tests on a core-only feature: nothing to approve (got " + ex2.failing + ")");
+    all("approve execution runs spec_finish's blockers (open-tasks, placeholders, approval-gates… — same on MCP) and is refused on an unfinished feature; --force records it as forced; tests on a core-only feature: nothing to approve (got " + ex2.failing + ")", [
+      () => ex2.ok === false, () => ex2.refused, () => ["placeholders", "open-tasks", "approval-gates"].every((id) => ex2.failing.includes(id)),
+      () => /✗ open-tasks — /.test(ex2.error), () => exMcp2.ok === false, () => exMcp2.failing.join() === ex2.failing.join(),
+      () => !before2.execution, () => !before2.tests, () => noTests2.ok === false, () => noTests2.nothingToApprove,
+      () => /Nothing to approve: 'tests'/.test(noTests2.error), () => exF2.ok, () => exF2.forced,
+      () => stateOf(f2).approvals.execution.forced === true, () => stateOf(f2).approvals.execution.failing.includes("open-tasks"),
+      () => m2.forcedApprovals >= 1, () => m2.leadTime.finished != null,
+    ]);
     // A core-only classification.md: the Signals line is the tool's own final answer ("- none beyond core", no brackets)
     // — filling the real slots (Blast Radius, Compliance) is enough to approve it; a pre-1.13 file's bracketed
     // "- [none beyond core]" is no placeholder either (EN/PT/ES).
@@ -328,16 +330,19 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const rbPt = redBug(w5pt, "pt");
     const rbPtRun = S.completeTask(w5pt, rbPt.slug, 1, { command: "node tests/t01.test.js", exitCode: 1 });
     const plain = S.completeTask(w5, rb.slug, 2, { command: "npm test", exitCode: 1 });
-    ok(rbRun.ok === false && rbRun.redPhaseVerify === true && /verification failed \(exit 1\).*Task 1 writes a test that must FAIL \(the red phase\)/.test(rbRun.error) &&
-      /Mark task 1 with _Expect: fail_ — a run that FAILS is then its proof \(T-01 fails before the fix\)/.test(rbRun.error) &&
-      /node "[^"]*dev-spec\.js" done red-loop-en 1 --run\. Or move the command to the task that makes it green/.test(rbRun.error) &&
-      rbNote.ok && rbNote.unverifiedReason === "failed-run" && rbNote.redPhaseVerify === true && / — Task 1 writes a test that must FAIL/.test(rbNote.note) &&
-      rbNext.step === "verify" && /Task 1 writes a test that must FAIL/.test(rbNext.recommendation) &&
-      rbPtRun.redPhaseVerify === true && /A tarefa 1 escreve um teste que tem de FALHAR \(a fase vermelha\)/.test(rbPtRun.error) &&
-      plain.ok === false && !plain.redPhaseVerify && !/red phase/.test(plain.error) &&
-      /Task 1 is red by design/.test(read5(rb, "tasks.md")) && /A tarefa 1 é vermelha por natureza/.test(read5(rbPt, "tasks.md")),
-      "a red-phase task with a must-pass _Verify:_: its red run's refusal, its note and next_action's verify step explain the fix (mark it _Expect: fail_, or move the command to the fix task) — PT too; a normal failing task gets no such hint; the bugfix template says so (got " +
-      JSON.stringify([rbRun.error, rbNote.note, rbNext.step, plain.error].map((x) => String(x).slice(0, 90))) + ")");
+    all("a red-phase task with a must-pass _Verify:_: its red run's refusal, its note and next_action's verify step explain the fix (mark it _Expect: fail_, or move the command to the fix task) — PT too; a normal failing task gets no such hint; the bugfix template says so (got " +
+      JSON.stringify([rbRun.error, rbNote.note, rbNext.step, plain.error].map((x) => String(x).slice(0, 90))) + ")", [
+      () => rbRun.ok === false, () => rbRun.redPhaseVerify === true,
+      () => /verification failed \(exit 1\).*Task 1 writes a test that must FAIL \(the red phase\)/.test(rbRun.error),
+      () => /Mark task 1 with _Expect: fail_ — a run that FAILS is then its proof \(T-01 fails before the fix\)/.test(rbRun.error),
+      () => /node "[^"]*dev-spec\.js" done red-loop-en 1 --run\. Or move the command to the task that makes it green/.test(rbRun.error),
+      () => rbNote.ok, () => rbNote.unverifiedReason === "failed-run", () => rbNote.redPhaseVerify === true,
+      () => / — Task 1 writes a test that must FAIL/.test(rbNote.note), () => rbNext.step === "verify",
+      () => /Task 1 writes a test that must FAIL/.test(rbNext.recommendation), () => rbPtRun.redPhaseVerify === true,
+      () => /A tarefa 1 escreve um teste que tem de FALHAR \(a fase vermelha\)/.test(rbPtRun.error), () => plain.ok === false,
+      () => !plain.redPhaseVerify, () => !/red phase/.test(plain.error), () => /Task 1 is red by design/.test(read5(rb, "tasks.md")),
+      () => /A tarefa 1 é vermelha por natureza/.test(read5(rbPt, "tasks.md")),
+    ]);
 
     // Quoted evidence in bug.md is content, not a template slot: a Reproduction / Root Cause quoting `[object Object]`, a regex
     // class `[A-Z]` or a log tag `[WARN]` is documented (doctor, the requirements / design approvals, the root-cause gate,
@@ -399,13 +404,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const n6c2 = S.nextAction(w5, f6c.slug);
     write5(f6c, "tasks.md", "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3, US-1.AC-4, US-2.AC-1_\n");
     const n6d = S.nextAction(w5, f6c.slug);
-    ok(n6b.step === "fill" && n6b.file === "classification.md" && n6b2.step === "approve" && /\/approve order-core classification/.test(n6b2.recommendation) && !n6b2.refusedGate &&
-      n6b3.step === "approve" && /\/approve order-core requirements/.test(n6b3.recommendation) && n6b4.step === "fill" && n6b4.file === "design.md" &&
-      n6c.step === "approve" && /\/approve order-core design/.test(n6c.recommendation) &&
-      n6c2.step === "fix" && n6c2.refusedGate.phase === "tasks" && n6c2.refusedGate.failing.join() === "traceability" && /Before approving 'tasks'.*US-2\.AC-7/.test(n6c2.recommendation) &&
-      n6d.step === "approve" && /\/approve order-core tasks/.test(n6d.recommendation),
-      "next_action phase by phase: classification (fill → approve) → requirements approved BEFORE the design is asked for → design approved before the tasks' checks count → what the tasks gate refuses (traceability) → approve tasks (got " +
-      [n6b.step + ":" + n6b.file, n6b2.step, n6b3.step, n6b4.step + ":" + n6b4.file, n6c.step, n6c2.step, n6d.step].join(" · ") + ")");
+    all("next_action phase by phase: classification (fill → approve) → requirements approved BEFORE the design is asked for → design approved before the tasks' checks count → what the tasks gate refuses (traceability) → approve tasks (got " +
+      [n6b.step + ":" + n6b.file, n6b2.step, n6b3.step, n6b4.step + ":" + n6b4.file, n6c.step, n6c2.step, n6d.step].join(" · ") + ")", [
+      () => n6b.step === "fill", () => n6b.file === "classification.md", () => n6b2.step === "approve",
+      () => /\/approve order-core classification/.test(n6b2.recommendation), () => !n6b2.refusedGate, () => n6b3.step === "approve",
+      () => /\/approve order-core requirements/.test(n6b3.recommendation), () => n6b4.step === "fill", () => n6b4.file === "design.md",
+      () => n6c.step === "approve", () => /\/approve order-core design/.test(n6c.recommendation), () => n6c2.step === "fix",
+      () => n6c2.refusedGate.phase === "tasks", () => n6c2.refusedGate.failing.join() === "traceability",
+      () => /Before approving 'tasks'.*US-2\.AC-7/.test(n6c2.recommendation), () => n6d.step === "approve",
+      () => /\/approve order-core tasks/.test(n6d.recommendation),
+    ]);
     S.approvePhase(w5, f6c.slug, "tasks");
     const n6e = S.nextAction(w5, f6c.slug);
     S.completeTask(w5, f6c.slug, 1, "built and checked");
@@ -454,13 +462,17 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     ok(noCode6t.refused && noCode6t.failing.join() === "tests-in-code" && /planned tests no test file names yet: T-01, T-02, T-03, T-04, T-05/.test(noCode6t.error) &&
       part6t.refused && /names yet: T-05 —/.test(part6t.error) && ap6tT.ok && !ap6tT.forced,
       "approve tests (+tdd) is refused until every planned T-ID is named by a test file (tests-in-code, the missing ones listed); then approved unforced");
-    ok(d6t.pendingGates.join() === "tests,tasks" && d6t.gatesOk === false && n6t.step === "fix" && n6t.refusedGate.phase === "tests" && n6t.refusedGate.failing.join() === "tests-in-code" && /^Phase 4, the hard gate: write every planned test/.test(n6t.recommendation) &&
-      /\/spec order-tdd tests/.test(n6t.recommendation) && /\/approve order-tdd tests/.test(n6t.recommendation) && /\(the approve gate checks this: tests-in-code\)/.test(n6t.recommendation) &&
-      ap6t.ok === false && ap6t.failing.join() === "phase-order" && /earlier phases are not approved yet: tests/.test(ap6t.error) &&
-      n6t2.step === "fix" && n6t2.pendingGates.join() === "tests,tasks" && fin6t.blockers.some((b) => /tests/.test(b)) &&
-      ap6t3.ok && n6t3.step === "implement" && n6t3.gatesOk === true && !S.specDoctor(w5, f6c.slug).pendingGates.length &&
-      /^Fase 4, o gate rígido/.test(S.msg("pt").next.approveTests("x", "tdd")) && /harness de evals/.test(S.msg("es").next.approveTests("x", "ai")),
-      "+tdd: Phase 4 (`tests`) is a pending gate — next_action asks for the failing tests + /approve tests before implementing, the tasks can't be approved before it (phase-order), finish is blocked; approved → tasks → implement (got " + d6t.pendingGates.join() + " / " + n6t.step + " / " + n6t3.step + ")");
+    all("+tdd: Phase 4 (`tests`) is a pending gate — next_action asks for the failing tests + /approve tests before implementing, the tasks can't be approved before it (phase-order), finish is blocked; approved → tasks → implement (got " + d6t.pendingGates.join() + " / " + n6t.step + " / " + n6t3.step + ")", [
+      () => d6t.pendingGates.join() === "tests,tasks", () => d6t.gatesOk === false, () => n6t.step === "fix", () => n6t.refusedGate.phase === "tests",
+      () => n6t.refusedGate.failing.join() === "tests-in-code", () => /^Phase 4, the hard gate: write every planned test/.test(n6t.recommendation),
+      () => /\/spec order-tdd tests/.test(n6t.recommendation), () => /\/approve order-tdd tests/.test(n6t.recommendation),
+      () => /\(the approve gate checks this: tests-in-code\)/.test(n6t.recommendation), () => ap6t.ok === false,
+      () => ap6t.failing.join() === "phase-order", () => /earlier phases are not approved yet: tests/.test(ap6t.error), () => n6t2.step === "fix",
+      () => n6t2.pendingGates.join() === "tests,tasks", () => fin6t.blockers.some((b) => /tests/.test(b)), () => ap6t3.ok,
+      () => n6t3.step === "implement", () => n6t3.gatesOk === true, () => !S.specDoctor(w5, f6c.slug).pendingGates.length,
+      () => /^Fase 4, o gate rígido/.test(S.msg("pt").next.approveTests("x", "tdd")),
+      () => /harness de evals/.test(S.msg("es").next.approveTests("x", "ai")),
+    ]);
     ok(/\/spec-finish x \(spec_finish\)/.test(S.msg("pt").next.allDone("x")) && /\/spec-finish x/.test(S.msg("es").next.allDone("x")), "the all-done recommendation names /spec-finish in PT/ES too");
     // A feature whose tasks are already ticked (a 1.12 feature upgraded — it had no tests gate — or any executing one):
     // "write every planned test and confirm each fails … no implementation code until then" is impossible once the code
@@ -485,15 +497,18 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     S.completeTask(w5, f6l.slug, 2, "polished");
     write5(f6l, "tests/unit/order.test.js", ["T-01", "T-02", "T-03", "T-04", "T-05"].map((t) => `test("${t} builds it", () => {});`).join("\n") + "\n");
     const n6l2 = S.nextAction(w5, f6l.slug); // complete, tests named: approve (sign-off)
-    ok(/^Phase 4, the hard gate/.test(n6l0.recommendation) &&
-      n6l1.phase === "executing" && n6l1.step === "fix" && n6l1.refusedGate && n6l1.refusedGate.failing.join() === "tests-in-code" &&
-      /^Phase 4 sign-off: the implementation has already started/.test(n6l1.recommendation) && /T-ID in the test's name/.test(n6l1.recommendation) &&
-      /\/approve order-legacy tests/.test(n6l1.recommendation) && /\(the approve gate checks this: tests-in-code\)/.test(n6l1.recommendation) &&
-      n6l2.phase === "complete" && n6l2.step === "approve" && n6l2.pendingGates.join() === "tests" && /^Phase 4 sign-off/.test(n6l2.recommendation) &&
-      ![n6l1, n6l2].some((n) => /no implementation code|confirm each fails|\/writeTests|\/spec \S+ tests/.test(n.recommendation)) &&
-      /^Aprovação da Fase 4/.test(S.msg("pt").next.signOffTests("x", "tdd")) && /línea base \(\/eval x baseline\)/.test(S.msg("es").next.signOffTests("x", "ai")),
-      "next_action on an executing / complete +tdd feature with `tests` pending: a sign-off for the existing tests (T-IDs in test names, what the gate checks) — never 'write failing tests first, no implementation code' (got " +
-      JSON.stringify([n6l0.step, n6l1.phase, n6l1.step, n6l2.phase, n6l2.step, n6l2.recommendation.slice(0, 40)]) + ")");
+    all("next_action on an executing / complete +tdd feature with `tests` pending: a sign-off for the existing tests (T-IDs in test names, what the gate checks) — never 'write failing tests first, no implementation code' (got " +
+      JSON.stringify([n6l0.step, n6l1.phase, n6l1.step, n6l2.phase, n6l2.step, n6l2.recommendation.slice(0, 40)]) + ")", [
+      () => /^Phase 4, the hard gate/.test(n6l0.recommendation), () => n6l1.phase === "executing", () => n6l1.step === "fix", () => n6l1.refusedGate,
+      () => n6l1.refusedGate.failing.join() === "tests-in-code",
+      () => /^Phase 4 sign-off: the implementation has already started/.test(n6l1.recommendation),
+      () => /T-ID in the test's name/.test(n6l1.recommendation), () => /\/approve order-legacy tests/.test(n6l1.recommendation),
+      () => /\(the approve gate checks this: tests-in-code\)/.test(n6l1.recommendation), () => n6l2.phase === "complete",
+      () => n6l2.step === "approve", () => n6l2.pendingGates.join() === "tests", () => /^Phase 4 sign-off/.test(n6l2.recommendation),
+      () => ![n6l1, n6l2].some((n) => /no implementation code|confirm each fails|\/writeTests|\/spec \S+ tests/.test(n.recommendation)),
+      () => /^Aprovação da Fase 4/.test(S.msg("pt").next.signOffTests("x", "tdd")),
+      () => /línea base \(\/eval x baseline\)/.test(S.msg("es").next.signOffTests("x", "ai")),
+    ]);
     const tic = (r) => ((r.checks || []).find((c) => c.id === "tests-in-code") || {}).detail || "";
     ok(ap6l0.refused && /write each failing test/.test(tic(ap6l0)) &&
       ap6l1.refused && /implementation has already started/.test(tic(ap6l1)) && /T-ID in the test's name/.test(tic(ap6l1)) && !/failing/.test(tic(ap6l1)) && /T-01/.test(tic(ap6l1)) &&
@@ -847,15 +862,21 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const tpNext = S.nextAction(w8, pe8.slug);
     const tpDoc = S.specDoctor(w8, pe8.slug).checks.find((c) => c.id === "changed-since-approval");
     const tpLines = S.impactLines(tpIm).join("\n");
-    ok(tpAp.ok && tpIm.ok && tpIm.phase === "test-plan" && tpIm.file === "test-plan.md" && tpIm.baseline === "snapshot" &&
-      tpIm.added.map((x) => x.id).join() === "T-04" && tpIm.modified.map((x) => x.id).join() === "T-01" && tpIm.removed.map((x) => x.id).join() === "T-03" &&
-      tpIm.impacted.find((x) => x.id === "T-01").tasks.map((t) => t.number).join() === "1" && tpIm.affectedTasks.map((t) => t.number).join() === "1,3" &&
-      JSON.stringify(tpIm.retire) === JSON.stringify([{ id: "T-03", tasks: [3], tests: [] }]) && /Removed tests still made green by tasks — T-03 → tasks #3: don't redo those tasks/.test(tpIm.hint) &&
-      /--phase test-plan --reopen/.test(tpIm.hint) && /~ T-01 {2}unit \| example \| a saved plan is stored with its owner/.test(tpLines) && /T-03 \(removed\) — tasks: #3 \[x\]/.test(tpLines) &&
-      tpNext.step === "re-review" && /node "[^"]*dev-spec\.js" impact plan-edits --phase test-plan/.test(tpNext.recommendation) && tpNext.impact.phases.join() === "test-plan" &&
-      tpDoc && /\(node "[^"]*dev-spec\.js" impact plan-edits --phase test-plan\)/.test(tpDoc.detail),
-      "impact --phase test-plan: added / modified / removed T-IDs (re-padding is no change), the tasks making them green, a removed test in retire; next_action and doctor name --phase test-plan (got " +
-      JSON.stringify([tpIm.added, tpIm.modified, tpIm.removed, tpIm.retire, tpNext.recommendation]).slice(0, 400) + ")");
+    all("impact --phase test-plan: added / modified / removed T-IDs (re-padding is no change), the tasks making them green, a removed test in retire; next_action and doctor name --phase test-plan (got " +
+      JSON.stringify([tpIm.added, tpIm.modified, tpIm.removed, tpIm.retire, tpNext.recommendation]).slice(0, 400) + ")", [
+      () => tpAp.ok, () => tpIm.ok, () => tpIm.phase === "test-plan", () => tpIm.file === "test-plan.md", () => tpIm.baseline === "snapshot",
+      () => tpIm.added.map((x) => x.id).join() === "T-04", () => tpIm.modified.map((x) => x.id).join() === "T-01",
+      () => tpIm.removed.map((x) => x.id).join() === "T-03",
+      () => tpIm.impacted.find((x) => x.id === "T-01").tasks.map((t) => t.number).join() === "1",
+      () => tpIm.affectedTasks.map((t) => t.number).join() === "1,3",
+      () => JSON.stringify(tpIm.retire) === JSON.stringify([{ id: "T-03", tasks: [3], tests: [] }]),
+      () => /Removed tests still made green by tasks — T-03 → tasks #3: don't redo those tasks/.test(tpIm.hint),
+      () => /--phase test-plan --reopen/.test(tpIm.hint), () => /~ T-01 {2}unit \| example \| a saved plan is stored with its owner/.test(tpLines),
+      () => /T-03 \(removed\) — tasks: #3 \[x\]/.test(tpLines), () => tpNext.step === "re-review",
+      () => /node "[^"]*dev-spec\.js" impact plan-edits --phase test-plan/.test(tpNext.recommendation),
+      () => tpNext.impact.phases.join() === "test-plan", () => tpDoc,
+      () => /\(node "[^"]*dev-spec\.js" impact plan-edits --phase test-plan\)/.test(tpDoc.detail),
+    ]);
     const tpRo = S.impactReport(w8, pe8.slug, { phase: "test-plan", reopen: true });
     const tpSt = JSON.parse(fs.readFileSync(tpf(".state.json"), "utf8"));
     const tpTasks = fs.readFileSync(tpf("tasks.md"), "utf8");
@@ -987,11 +1008,13 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const old8 = S.createFeature(w8m, "Oldie", ["core"]);
     fs.writeFileSync(path.join(old8.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: { requirements: { at: "2026-02-01T00:00:00.000Z", by: "x" }, design: { at: "2026-02-03T00:00:00.000Z", by: "x", forced: true } } }));
     const om8 = S.metrics(w8m, "oldie");
-    ok(om8.ok && om8.createdAt === "2026-02-01T00:00:00.000Z" && om8.createdAtApproximate === true && om8.createdAtSource === "approval" && om8.leadTime.requirements.approximate === true &&
-      om8.leadTime.design.hours === 48 && om8.rework === null && om8.approvalsTotal === 2 && om8.legacyPhases.join() === "requirements,design" && om8.reworkLowerBound === false &&
-      om8.forcedApprovals === 1 && om8.changeRequests === 0 && om8.evidence.passRate === null &&
-      /rework: unknown/.test(S.metricsLines(om8).join("\n")) && /\(approximate: from the earliest approval\)/.test(S.metricsLines(om8)[0]),
-      "a legacy feature (no createdAt, no history): createdAt from the earliest approval (approximate), rework unknown (null) — never throws");
+    all("a legacy feature (no createdAt, no history): createdAt from the earliest approval (approximate), rework unknown (null) — never throws", [
+      () => om8.ok, () => om8.createdAt === "2026-02-01T00:00:00.000Z", () => om8.createdAtApproximate === true,
+      () => om8.createdAtSource === "approval", () => om8.leadTime.requirements.approximate === true, () => om8.leadTime.design.hours === 48,
+      () => om8.rework === null, () => om8.approvalsTotal === 2, () => om8.legacyPhases.join() === "requirements,design",
+      () => om8.reworkLowerBound === false, () => om8.forcedApprovals === 1, () => om8.changeRequests === 0, () => om8.evidence.passRate === null,
+      () => /rework: unknown/.test(S.metricsLines(om8).join("\n")), () => /\(approximate: from the earliest approval\)/.test(S.metricsLines(om8)[0]),
+    ]);
     const bare8 = S.createFeature(w8, "Bare", ["core"]);
     fs.writeFileSync(path.join(bare8.dir, ".state.json"), JSON.stringify({ lang: "en", approvals: {} }));
     const bm8 = S.metrics(w8, "bare");
@@ -1011,11 +1034,14 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     ok(lrm8.evidence.runs === 2 && lrm8.evidence.passing === 1 && lrm8.evidence.passRate === 50,
       "evidence pass rate: a bare exit code 0 (record or history entry) is not a passing run — only {command, exitCode: 0} is; a non-zero exit is a failed run");
     const pm8 = (await call8("spec_metrics", { projectDir: w8m })).p;
-    ok(pm8.ok && pm8.scope === "project" && pm8.features.map((x) => x.feature).join() === "metered,oldie" && pm8.aggregates.rework.n === 1 && pm8.aggregates.rework.avg === 1 &&
-      pm8.aggregates.leadTimeHours.requirements.avg === 6 && pm8.aggregates.leadTimeHours.requirements.median === 6 && pm8.aggregates.leadTimeHours.design.median === 48 &&
-      pm8.aggregates.forcedApprovals.avg === 1 && pm8.aggregates.evidencePassRate.n === 1 && pm8.totals.features === 2 && pm8.totals.changeRequests === 2 && pm8.totals.evidencePassRate === 50 &&
-      /^Metrics — 2 feature\(s\)/.test(S.metricsLines(pm8)[0]) && S.metricsLines(pm8).some((l) => /^ {2}median /.test(l)),
-      "spec_metrics without name: per-feature rows + averages/medians (nulls skipped) + totals");
+    all("spec_metrics without name: per-feature rows + averages/medians (nulls skipped) + totals", [
+      () => pm8.ok, () => pm8.scope === "project", () => pm8.features.map((x) => x.feature).join() === "metered,oldie",
+      () => pm8.aggregates.rework.n === 1, () => pm8.aggregates.rework.avg === 1, () => pm8.aggregates.leadTimeHours.requirements.avg === 6,
+      () => pm8.aggregates.leadTimeHours.requirements.median === 6, () => pm8.aggregates.leadTimeHours.design.median === 48,
+      () => pm8.aggregates.forcedApprovals.avg === 1, () => pm8.aggregates.evidencePassRate.n === 1, () => pm8.totals.features === 2,
+      () => pm8.totals.changeRequests === 2, () => pm8.totals.evidencePassRate === 50, () => /^Metrics — 2 feature\(s\)/.test(S.metricsLines(pm8)[0]),
+      () => S.metricsLines(pm8).some((l) => /^ {2}median /.test(l)),
+    ]);
 
     // 6. Retro: create-only, localized, pre-filled; never overwritten; needs a feature.
     const rw8 = S.metrics(w8m, "metered", { write: true });
@@ -1244,13 +1270,13 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const t4 = title("No boundary", "A very long summary without any clause boundary at all that goes on and on and on forever and ever");
     const t5 = title("An extremely long feature slug that eats the budget", "Short words fit in the floor budget of twenty four characters or so.");
     const t6 = title("Short one", "Short summary.", "bugfix");
-    const all = [t1, t2, t3, t4, t5];
+    const titles = [t1, t2, t3, t4, t5];
     ok(t1 === "feat(csv-export): Export the orders list as CSV from the command line" && t2 === "feat(key-rotation): Rotate every tenant API key daily" &&
       t3 === "feat(dash-title): Keep the old key valid during the grace period" && /^feat\(no-boundary\): A very long summary [^,;]*…$/.test(t4) && t4.length <= 72 &&
-      all.slice(0, 4).every((t) => t.length <= 72) && t5.length <= "feat(an-extremely-long-feature-slug-that-eats-the-budget): ".length + 24 && /…$|[a-z]$/.test(t5) &&
+      titles.slice(0, 4).every((t) => t.length <= 72) && t5.length <= "feat(an-extremely-long-feature-slug-that-eats-the-budget): ".length + 24 && /…$|[a-z]$/.test(t5) &&
       /^fix\(short-one\): /.test(t6) && !/Short summary\./.test(t6),
       "1.21 F3: the merge title is ≤ 72 characters in all — the summary cut at its last , ; — that fits (no ellipsis), else at a word with …; a very long slug keeps a 24-character floor (got " +
-      JSON.stringify(all.concat(t6).map((t) => [t, t.length])) + ")");
+      JSON.stringify(titles.concat(t6).map((t) => [t, t.length])) + ")");
     // 1.21 review A5 — the word-boundary fallback (no space: half the budget) used to cut an emoji in two, and a lone high surrogate
     // landed in merge-summary.md: the cut never splits a surrogate pair. "feat(emoji-cut): " leaves 55 → the fallback cuts at 27,
     // right inside the emoji at 26–27; one at 25–26 stays whole.
@@ -1348,12 +1374,15 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const gates = doc.checks.find((c) => c.id === "approval-gates") || {};
     const rTasks = S.approvePhase(p, "api-keys", "tasks", "u");
     const stale = /^The Phase 4 sign-off of \d{4}-\d\d-\d\d no longer covers the plan \(planned since: T-08; approval changed since: test-plan\) — the tests phase is to be approved again\. Phase 4, the hard gate/;
-    ok(rT.ok && stamp && js(stamp.tests) === js(["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07"]) && typeof stamp.plans["test-plan"] === "string" && js(histStamp.testsPlan) === js(stamp) &&
-      naIn.step === "implement" && reP.ok && na.step === "fix" && js(na.pendingGates) === '["tests"]' && na.refusedGate && na.refusedGate.phase === "tests" && js(na.refusedGate.failing) === '["tests-in-code"]' &&
-      stale.test(na.recommendation) && js(doc.pendingGates) === '["tests"]' && doc.verdict === "warn" && gates.status === "warn" && /no longer covers the plan \(planned since: T-08/.test(gates.detail) &&
-      rTasks.ok === false && js(rTasks.failing) === '["phase-order"]',
-      "1.22 review: a stamped tests approval (testsPlan {tests, plans}, on the approval and its history record) goes stale once the test plan gains T-08 and is re-approved — pendingGates [tests], next_action fix (refusedGate tests-in-code, the reason first), doctor warns, and the tasks can't be approved past it (phase-order) (got " +
-      js([stamp, na.step, na.pendingGates, na.recommendation, doc.pendingGates, gates.detail, rTasks.failing]) + ")");
+    all("1.22 review: a stamped tests approval (testsPlan {tests, plans}, on the approval and its history record) goes stale once the test plan gains T-08 and is re-approved — pendingGates [tests], next_action fix (refusedGate tests-in-code, the reason first), doctor warns, and the tasks can't be approved past it (phase-order) (got " +
+      js([stamp, na.step, na.pendingGates, na.recommendation, doc.pendingGates, gates.detail, rTasks.failing]) + ")", [
+      () => rT.ok, () => stamp, () => js(stamp.tests) === js(["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07"]),
+      () => typeof stamp.plans["test-plan"] === "string", () => js(histStamp.testsPlan) === js(stamp), () => naIn.step === "implement", () => reP.ok,
+      () => na.step === "fix", () => js(na.pendingGates) === '["tests"]', () => na.refusedGate, () => na.refusedGate.phase === "tests",
+      () => js(na.refusedGate.failing) === '["tests-in-code"]', () => stale.test(na.recommendation), () => js(doc.pendingGates) === '["tests"]',
+      () => doc.verdict === "warn", () => gates.status === "warn", () => /no longer covers the plan \(planned since: T-08/.test(gates.detail),
+      () => rTasks.ok === false, () => js(rTasks.failing) === '["phase-order"]',
+    ]);
     // The test written → approve; approved again → in force. Then, executing (a task ticked), Phase 4's sign-off wording.
     const tf = path.join(p, "tests", "unit", "create.test.ts");
     fs.writeFileSync(tf, fs.readFileSync(tf, "utf8") + '\ntest("T-08 a key prefix is unique per tenant", () => {});\n');
@@ -1390,13 +1419,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     const fin = S.finishFeature(p, "api-keys");
     const rv = S.approvePhase(p, "api-keys", "test-plan", "u", { revoke: true, reason: "the plan is gone for good" });
     const r2 = S.approvePhase(p, "api-keys", "tasks", "u");
-    ok(r.ok === false && js(r.failing) === '["phase-order"]' && /earlier phases are not approved yet: tests/.test(r.error) &&
-      na.step === "re-review" && js(na.changedSinceApproval) === '["test-plan.md"]' && js(na.missingApproved) === '["test-plan.md"]' && !na.impact &&
-      /^test-plan\.md was approved but no longer exists — restore it .* \/approve api-keys test-plan --revoke\./.test(na.recommendation) && !/^Re-review/.test(na.recommendation) &&
-      chg.status === "warn" && /test-plan\.md/.test(chg.detail) && js(doc.pendingGates) === '["tests","tasks"]' && fin.blockers.some((b) => /changed after their approval .*test-plan\.md/.test(b)) &&
-      rv.ok && r2.ok && r2.approved === "tasks",
-      "1.22 review: deleting an approved test-plan.md is a change since its approval (next_action re-review: restore it or revoke — no spec_impact on a missing file; doctor and finish name it) and Phase 4 stays due (tasks refused on phase-order); revoking the plan's approval is the way out (got " +
-      js([r.failing, na.step, na.changedSinceApproval, na.recommendation, doc.pendingGates, chg.detail, rv.ok, r2.ok]) + ")");
+    all("1.22 review: deleting an approved test-plan.md is a change since its approval (next_action re-review: restore it or revoke — no spec_impact on a missing file; doctor and finish name it) and Phase 4 stays due (tasks refused on phase-order); revoking the plan's approval is the way out (got " +
+      js([r.failing, na.step, na.changedSinceApproval, na.recommendation, doc.pendingGates, chg.detail, rv.ok, r2.ok]) + ")", [
+      () => r.ok === false, () => js(r.failing) === '["phase-order"]', () => /earlier phases are not approved yet: tests/.test(r.error),
+      () => na.step === "re-review", () => js(na.changedSinceApproval) === '["test-plan.md"]', () => js(na.missingApproved) === '["test-plan.md"]',
+      () => !na.impact,
+      () => /^test-plan\.md was approved but no longer exists — restore it .* \/approve api-keys test-plan --revoke\./.test(na.recommendation),
+      () => !/^Re-review/.test(na.recommendation), () => chg.status === "warn", () => /test-plan\.md/.test(chg.detail),
+      () => js(doc.pendingGates) === '["tests","tasks"]', () => fin.blockers.some((b) => /changed after their approval .*test-plan\.md/.test(b)),
+      () => rv.ok, () => r2.ok, () => r2.approved === "tasks",
+    ]);
     // The engine's rule: a deleted approved artifact counts (a plain feature's requirements.md, a bugfix's bug.md) — a bugfix's
     // deleted design.md does not (it only held a track's sections).
     const E = require(path.join(__dirname, "lib", "engine", "index.js"));
@@ -1466,14 +1498,17 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
     a.w(".state.json", JSON.stringify({ ...JSON.parse(good), approvals: [] })); // valid JSON, the wrong shape
     const naShape = S.nextAction(a.p, "widget");
     const stateCheck = docA.checks.find((c) => c.id === "state") || {};
-    ok(docA.verdict === "fail" && stateCheck.status === "fail" && /widget\/\.state\.json is not valid JSON/.test(stateCheck.detail) &&
-      naA.step === "fix" && naA.stateInvalid === true && /^widget\/\.state\.json is not valid JSON .* Until it is repaired nothing can be approved, ticked or finished/.test(naA.recommendation) &&
-      /merge-state --install/.test(naA.recommendation) && !naA.fastForward && js(naA.pendingGates) === "[]" &&
-      finA.readyToFinish === false && /not valid JSON/.test(finA.blockers[0]) && !finA.blockers.some((b) => /awaiting approval/.test(b)) && js(finA.pendingGates) === "[]" &&
-      js(slA.next) === '{"step":"fix","file":".state.json"}' && /next: repair \.state\.json \(it can't be read\)/.test(slA.line) &&
-      apA.ok === false && naShape.step === "fix" && /unexpected shape/.test(naShape.recommendation),
-      "r5 review M1: an unreadable / wrong-shaped .state.json → doctor fails `state` (naming the file), next_action's step is `fix` (stateInvalid, repair it — never 'approve' everything again), finish blocks on it first (no 'every phase awaiting approval'), the status line says repair (got " +
-      js([docA.verdict, stateCheck, naA.step, naA.recommendation.slice(0, 160), finA.blockers, slA.line, naShape.step]) + ")");
+    all("r5 review M1: an unreadable / wrong-shaped .state.json → doctor fails `state` (naming the file), next_action's step is `fix` (stateInvalid, repair it — never 'approve' everything again), finish blocks on it first (no 'every phase awaiting approval'), the status line says repair (got " +
+      js([docA.verdict, stateCheck, naA.step, naA.recommendation.slice(0, 160), finA.blockers, slA.line, naShape.step]) + ")", [
+      () => docA.verdict === "fail", () => stateCheck.status === "fail", () => /widget\/\.state\.json is not valid JSON/.test(stateCheck.detail),
+      () => naA.step === "fix", () => naA.stateInvalid === true,
+      () => /^widget\/\.state\.json is not valid JSON .* Until it is repaired nothing can be approved, ticked or finished/.test(naA.recommendation),
+      () => /merge-state --install/.test(naA.recommendation), () => !naA.fastForward, () => js(naA.pendingGates) === "[]",
+      () => finA.readyToFinish === false, () => /not valid JSON/.test(finA.blockers[0]),
+      () => !finA.blockers.some((b) => /awaiting approval/.test(b)), () => js(finA.pendingGates) === "[]",
+      () => js(slA.next) === '{"step":"fix","file":".state.json"}', () => /next: repair \.state\.json \(it can't be read\)/.test(slA.line),
+      () => apA.ok === false, () => naShape.step === "fix", () => /unexpected shape/.test(naShape.recommendation),
+    ]);
     // PT / ES wording
     const aPt = filled("state-pt");
     aPt.w(".state.json", "{");

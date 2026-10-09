@@ -1,5 +1,6 @@
 ---
-trigger: always_on
+trigger: model_decision
+description: Spec-driven development with dev-spec-driven — use when planning or speccing a non-trivial feature before coding, fixing a bug with its root cause and a failing regression test first, or working in a project that has a .specs/ folder (EARS requirements, design, tasks, approval gates, evidence).
 ---
 
 > Paths in this file point into the dev-spec-driven clone. `node cli/dev-spec.js rules windsurf` prints this file with those paths made absolute — the copy to use in your own project (re-run it if the clone moves).

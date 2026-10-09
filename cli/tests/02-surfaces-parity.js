@@ -102,17 +102,24 @@ const ROOT4 = path.resolve(__dirname, "..").replace(/\\/g, "/");
 const rulesOut = ["cursor", "windsurf", "copilot", "gemini", "agents"].map((t) => ({ t, r: run(["rules", t]) }));
 ok(rulesOut.every(({ r }) => r.code === 0 && r.out.includes(ROOT4 + "/") && !/(?<![\w./-])(?:\.\.\/)*(?:cli\/dev-spec\.js|mcp\/server\.js|AGENTS\.md|skills\/dev-spec-driven|agents\/[\w.-]+\.md|commands\/[\w.-]+\.md)/.test(r.out)),
   "rules <cursor|windsurf|copilot|gemini|agents> prints each rule file with absolute paths only");
-// 1.22 review: AGENTS.md cites the plugin's agents/ and commands/ files — `rules agents` makes them absolute too. (1.26: every one
-// AGENTS.md cites, whichever they are — the 55 commands became 22 — and agents/spec-reviewer.md among them)
-const citedA4 = [...new Set((fs.readFileSync(path.join(__dirname, "..", "AGENTS.md"), "utf8").match(/(?<![\w./-])(?:agents|commands)\/[\w.-]+\.md/g) || []))];
-ok(citedA4.includes("agents/spec-reviewer.md") && citedA4.every((p) => rulesOut[4].r.out.includes(ROOT4 + "/" + p)),
-  "rules agents: every agents/… and commands/… file AGENTS.md cites (" + citedA4.join(", ") + ") printed with this clone's absolute path");
+// 1.22 review: AGENTS.md cites the plugin's agents/ files and the skill's references — `rules agents` makes them absolute too.
+// 1.26: the clone's own note ("Paths in this file point into the dev-spec-driven clone. … prints this file") is not in a printed copy.
+ok(["agents/spec-verifier.md", "skills/dev-spec-driven/references/review-feedback.md", "skills/dev-spec-driven/references/phase-guide.md"].every((p) => rulesOut[4].r.out.includes(ROOT4 + "/" + p)) &&
+  rulesOut.every(({ r }) => !/Paths in this file point into the dev-spec-driven clone|prints this file with those paths/.test(r.out)),
+  "rules agents: agents/spec-verifier.md and the references it cites printed with this clone's absolute path; no printed copy carries the clone's self-referential note");
 // 1.22 review: the four short rule files write `dev-spec <command>` — each says what it stands for, and the copy names this clone.
 ok(rulesOut.slice(0, 4).every(({ r }) => r.out.includes("Below, `dev-spec <command>` stands for `node \"" + ROOT4 + "/cli/dev-spec.js\" <command>`") && /`spec_stop_check \{message\}`/.test(r.out)),
   "rules cursor|windsurf|copilot|gemini: `dev-spec <command>` is spelled out as this clone's `node \"…/cli/dev-spec.js\" <command>`; the stop-check names spec_stop_check over MCP");
 const rc4 = rulesOut[0].r.out;
-ok(rc4.includes('node "' + ROOT4 + '/cli/dev-spec.js"') && rc4.includes(ROOT4 + "/AGENTS.md") && !rc4.includes("../../") && /alwaysApply: true/.test(rc4) &&
+ok(rc4.includes('node "' + ROOT4 + '/cli/dev-spec.js"') && rc4.includes(ROOT4 + "/AGENTS.md") && !rc4.includes("../../") && /alwaysApply: false/.test(rc4) && /^description: .{80,}$/m.test(rc4) &&
   rulesOut[4].r.out.includes(ROOT4 + "/skills/dev-spec-driven/references/classification-matrix.md"), "rules: quoted node command, absolute AGENTS.md link, skill references resolved");
+// 1.26: AGENTS.md is a portable core — Codex reads at most 32 KiB of AGENTS.md by default across the global, repo and nested
+// files, so ours stays ≤ 16,000 bytes, and so does what `rules agents` prints (absolute paths make it longer: ≤ 16 KiB with
+// a clone path up to 100 characters; the rest of the copy's budget is the user's own instructions).
+const agentsBytes = Buffer.byteLength(fs.readFileSync(path.join(__dirname, "..", "AGENTS.md"), "utf8"));
+const printedBytes = Buffer.byteLength(rulesOut[4].r.out);
+ok(agentsBytes <= 16000 && (ROOT4.length > 100 || printedBytes <= 16384) && printedBytes < 32768,
+  "AGENTS.md ≤ 16,000 bytes (" + agentsBytes + ") and `rules agents` prints ≤ 16 KiB (" + printedBytes + ", clone path " + ROOT4.length + " chars) — half of Codex's 32 KiB default");
 const rbad = run(["rules", "vim"]);
 ok(rbad.code === 1 && /cursor, windsurf, copilot, gemini, agents/.test(rbad.out), "rules <unknown> exits 1 and lists the valid tools");
 

@@ -44,7 +44,7 @@ When in doubt, treat the API one row up: relaxing later is easy; recovering clie
 
 - **design.md** — the contract decisions: resource model, versioning strategy, error model, pagination,
   idempotency, concurrency, limits, and the compatibility policy. Record a versioning or deprecation choice as a
-  decision (`/spec-decide`) — it outlives the feature.
+  decision (`spec_decide`) — it outlives the feature.
 - **The contract file** (an OpenAPI document, `.proto` files, a GraphQL schema) is an artifact like code: name it
   in the tasks' `_Implements:_` so `trace_check` and the finish baseline track it.
 - **Checks** — the schema diff and the contract tests run as a task's `_Verify:_` and, project-wide, as a project
