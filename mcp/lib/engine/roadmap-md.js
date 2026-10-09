@@ -10,20 +10,20 @@
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval, clarificationMarkers,
+let activeDesign, activeTasks, chainPlaceholders, changedSinceApproval, clarificationMarkers,
   detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel, isImplementsGlob, isObj,
   isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine, milestoneStatuses, normalizeLang,
   ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readContained, readIfExists, readJson, readRoadmap, roadmap, roleWaitList,
-  round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats, supersedesTrace, taskBlocks,
+  round1, round2, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats, supersedesTrace, taskBlocks,
   taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf, unverifiedLabel, verificationStatus,
   waiverView,
   featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles, isSpikeDir, spikePhase;
 let today; // core.js — 1.25.1: the local calendar date (today / dayOf)
-function __link(E) { ({ today, activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval,
+function __link(E) { ({ today, activeDesign, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
   milestoneStatuses, normalizeLang, ownRecord, parseTasks, PHASE_PERCENT, phaseActive, PHASES, readContained, readIfExists, readJson,
-  readRoadmap, roadmap, roleWaitList, round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats,
+  readRoadmap, roadmap, roleWaitList, round1, round2, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats,
   supersedesTrace, taskBlocks, taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf,
   unverifiedLabel, verificationStatus, waiverView,
   featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles, isSpikeDir, spikePhase } = E); }
