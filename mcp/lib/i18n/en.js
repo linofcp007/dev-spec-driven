@@ -932,7 +932,6 @@ const STOP_EN_ING = String.raw`(?!\s+(?!implementing|fixing|building|wiring|writ
 // ===========================================================================
 const msg = {
     initNote: "Stubs are placeholders. The skill fills them with real content (see references/steering-templates.md).",
-    createNote: (lang) => null, // EN feature: no extra note
     addTrackNote: (tr, slug) => `Added +${tr}. Fill the new design sections, then re-run /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `already on +${tr}`,
     notes: {

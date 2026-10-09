@@ -931,7 +931,6 @@ const STOP_ES_I = String.raw`(?:terminé|completé|implementé|verifiqué|acabé
 // ===========================================================================
 const msg = {
     initNote: "Los stubs son placeholders. La skill los rellena con contenido real (ver references/steering-templates.md).",
-    createNote: () => null,
     addTrackNote: (tr, slug) => `+${tr} añadido. Rellena las nuevas secciones de diseño y vuelve a ejecutar /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `ya tiene +${tr}`,
     notes: {
