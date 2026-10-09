@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, require }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -60,13 +60,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const ptD = S.specDoctor(pp, "tubos").checks.find((c) => c.id === "verify-pipes"), esD = S.specDoctor(pp, "tuberias").checks.find((c) => c.id === "verify-pipes");
     const ptC = S.completeTask(pp, "tubos", 1, { command: "npm test | tee log", exitCode: 0 }), esC = S.completeTask(pp, "tuberias", 1, { command: "npm test | tee log", exitCode: 0 });
     const keysOf = (l) => Object.keys(S.msg(l).verifyPipe).sort().join();
-    ok(JSON.stringify(mb.verifyPipes) === '["npm test | tee test.log"]' && md.checks.some((c) => c.id === "verify-pipes" && c.status === "warn") && mc.ok && mc.pipeMasked === true &&
-      /encaminha a saída para outro comando \(pipe\)/.test(ptB.brief) && /redirige su salida a otro comando \(pipe\)/.test(esB.brief) &&
-      /um comando _Verify:_ encaminha a saída/.test(ptD.detail) && /un comando _Verify:_ redirige su salida/.test(esD.detail) &&
-      ptC.pipeMasked && /^Tarefa 1: o comando registado encaminha/.test(ptC.note) && esC.pipeMasked && /^Tarea 1: el comando registrado redirige/.test(esC.note) &&
-      keysOf("en") === "brief,completeNote,doctor,runHint" && keysOf("pt") === keysOf("en") && keysOf("es") === keysOf("en") &&
-      S.msg("pt").verifyPipe.runHint("a | b") !== S.msg("en").verifyPipe.runHint("a | b") && /cmd\.exe/.test(S.msg("es").verifyPipe.runHint("a | b")),
-      "MCP spec_task_brief / spec_doctor / spec_complete_task carry verifyPipes / verify-pipes / pipeMasked like the engine; the brief note, doctor detail and complete note are in PT / ES; the verifyPipe messages have the same keys in EN / PT / ES");
+    all("MCP spec_task_brief / spec_doctor / spec_complete_task carry verifyPipes / verify-pipes / pipeMasked like the engine; the brief note, doctor detail and complete note are in PT / ES; the verifyPipe messages have the same keys in EN / PT / ES", [
+      () => JSON.stringify(mb.verifyPipes) === '["npm test | tee test.log"]',
+      () => md.checks.some((c) => c.id === "verify-pipes" && c.status === "warn"), () => mc.ok, () => mc.pipeMasked === true,
+      () => /encaminha a saída para outro comando \(pipe\)/.test(ptB.brief), () => /redirige su salida a otro comando \(pipe\)/.test(esB.brief),
+      () => /um comando _Verify:_ encaminha a saída/.test(ptD.detail), () => /un comando _Verify:_ redirige su salida/.test(esD.detail),
+      () => ptC.pipeMasked, () => /^Tarefa 1: o comando registado encaminha/.test(ptC.note), () => esC.pipeMasked,
+      () => /^Tarea 1: el comando registrado redirige/.test(esC.note), () => keysOf("en") === "brief,completeNote,doctor,runHint",
+      () => keysOf("pt") === keysOf("en"), () => keysOf("es") === keysOf("en"),
+      () => S.msg("pt").verifyPipe.runHint("a | b") !== S.msg("en").verifyPipe.runHint("a | b"),
+      () => /cmd\.exe/.test(S.msg("es").verifyPipe.runHint("a | b")),
+    ]);
   }
 
   { // 1.14 B5 — evidence: red → green (_Expect: fail_), project checks (meta.checks) + the finish suite run, git-linked evidence
@@ -94,21 +98,27 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const st0 = b5State(f1).evidence["1"];
     const red1 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 1, evidence: { command: "node tests/t01.test.js", exitCode: 1, summary: "1 failing" } });
     const st1 = b5State(f1).evidence["1"];
-    ok(pass0.ok === false && pass0.recorded === true && pass0.unexpectedPass === true && pass0.expected === "fail" && /the test doesn't fail yet, so it tests nothing/.test(pass0.error) &&
-      st0.exitCode === 0 && st0.expected === "fail" && red1.ok === true && red1.completed === 1 && red1.verified === true && red1.redRecorded === true && red1.expected === "fail" &&
-      !red1.unverifiedReason && st1.exitCode === 1 && st1.expected === "fail" && st1.history.length === 2 && /- \[x\] 1\./.test(b5Read(f1, "tasks.md")),
-      "B5 spec_complete_task on an _Expect: fail_ task: a passing run is refused and recorded (unexpectedPass), then a FAILING run is the proof — ticked, verified, redRecorded, stored with expected: 'fail' (got " +
-      JSON.stringify([pass0.error, red1]).slice(0, 300) + ")");
+    all("B5 spec_complete_task on an _Expect: fail_ task: a passing run is refused and recorded (unexpectedPass), then a FAILING run is the proof — ticked, verified, redRecorded, stored with expected: 'fail' (got " +
+      JSON.stringify([pass0.error, red1]).slice(0, 300) + ")", [
+      () => pass0.ok === false, () => pass0.recorded === true, () => pass0.unexpectedPass === true, () => pass0.expected === "fail",
+      () => /the test doesn't fail yet, so it tests nothing/.test(pass0.error), () => st0.exitCode === 0, () => st0.expected === "fail",
+      () => red1.ok === true, () => red1.completed === 1, () => red1.verified === true, () => red1.redRecorded === true,
+      () => red1.expected === "fail", () => !red1.unverifiedReason, () => st1.exitCode === 1, () => st1.expected === "fail",
+      () => st1.history.length === 2, () => /- \[x\] 1\./.test(b5Read(f1, "tasks.md")),
+    ]);
     const green2 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 2, evidence: { command: "node tests/t01.test.js", exitCode: 0 } });
     const again1 = await b5Call("spec_complete_task", { projectDir: d1, name: "red-green", number: 1, evidence: { command: "node tests/t01.test.js", exitCode: 0, summary: "1 passing" } });
     const st1b = b5State(f1).evidence["1"];
     const met1 = S.metrics(d1, f1.slug).evidence;
-    ok(green2.ok && green2.verified && !green2.expected && again1.ok === true && again1.alreadyDone && again1.verified === true && again1.expected === "fail" && !again1.redRecorded &&
-      /its test passes now — expected once the fix is in; the red run recorded on \d{4}-\d{2}-\d{2} stays the proof/.test(again1.note) &&
-      st1b.exitCode === 0 && !st1b.expected && st1b.red && st1b.red.exitCode === 1 && st1b.red.command === "node tests/t01.test.js" &&
-      !S.verificationStatus(d1, f1.slug, f1.dir).unverified.length && met1.runs === 4 && met1.passing === 3,
-      "B5 after the fix: a passing re-run of the _Expect: fail_ task keeps the red run as its proof (red) — verified, with a note; metrics count the red run as a pass and the refused pass as a failure (got " +
-      JSON.stringify([again1.note, met1]) + ")");
+    all("B5 after the fix: a passing re-run of the _Expect: fail_ task keeps the red run as its proof (red) — verified, with a note; metrics count the red run as a pass and the refused pass as a failure (got " +
+      JSON.stringify([again1.note, met1]) + ")", [
+      () => green2.ok, () => green2.verified, () => !green2.expected, () => again1.ok === true, () => again1.alreadyDone,
+      () => again1.verified === true, () => again1.expected === "fail", () => !again1.redRecorded,
+      () => /its test passes now — expected once the fix is in; the red run recorded on \d{4}-\d{2}-\d{2} stays the proof/.test(again1.note),
+      () => st1b.exitCode === 0, () => !st1b.expected, () => st1b.red, () => st1b.red.exitCode === 1,
+      () => st1b.red.command === "node tests/t01.test.js", () => !S.verificationStatus(d1, f1.slug, f1.dir).unverified.length, () => met1.runs === 4,
+      () => met1.passing === 3,
+    ]);
 
     // Edges: a command that could not run, a note, a ticked task with no red run, no runnable _Verify:_, a stale red run.
     const d2 = b5Dir("edges");
@@ -122,13 +132,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const vs2 = S.verificationStatus(d2, f2.slug, f2.dir);
     const docV2 = S.specDoctor(d2, f2.slug).checks.find((c) => c.id === "verification");
     const none4 = S.completeTask(d2, f2.slug, 4);
-    ok(cant.ok === false && cant.recorded && !cant.unexpectedPass && /exit 127 means the command itself could not run/.test(cant.error) && /Not marking it done/.test(cant.error) &&
-      note2.ok && note2.verified === false && note2.unverifiedReason === "manual-note-on-runnable-verify" &&
-      tick3.ok === false && tick3.unexpectedPass && /is ticked, but it expects its test to FAIL/.test(tick3.error) &&
-      vs2.unverifiedDetail.some((x) => x.number === 3 && x.reason === "unexpected-pass") && /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(docV2.detail) &&
-      none4.ok && none4.verified && none4.nothingToVerify && none4.expected === "fail",
-      "B5 _Expect: fail_ edges: exit 127 is refused (no red test); a note never proves a runnable _Verify:_; a ticked task whose run passes with no red run before it becomes unverified (reason unexpected-pass, labelled in doctor); without a runnable _Verify:_ nothing recorded is nothingToVerify (got " +
-      JSON.stringify([cant.error, docV2.detail]).slice(0, 300) + ")");
+    all("B5 _Expect: fail_ edges: exit 127 is refused (no red test); a note never proves a runnable _Verify:_; a ticked task whose run passes with no red run before it becomes unverified (reason unexpected-pass, labelled in doctor); without a runnable _Verify:_ nothing recorded is nothingToVerify (got " +
+      JSON.stringify([cant.error, docV2.detail]).slice(0, 300) + ")", [
+      () => cant.ok === false, () => cant.recorded, () => !cant.unexpectedPass,
+      () => /exit 127 means the command itself could not run/.test(cant.error), () => /Not marking it done/.test(cant.error), () => note2.ok,
+      () => note2.verified === false, () => note2.unverifiedReason === "manual-note-on-runnable-verify", () => tick3.ok === false,
+      () => tick3.unexpectedPass, () => /is ticked, but it expects its test to FAIL/.test(tick3.error),
+      () => vs2.unverifiedDetail.some((x) => x.number === 3 && x.reason === "unexpected-pass"),
+      () => /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(docV2.detail), () => none4.ok, () => none4.verified,
+      () => none4.nothingToVerify, () => none4.expected === "fail",
+    ]);
     const st2 = b5State(f2);
     st2.evidence["1"] = { command: "node t.js", exitCode: 1, at: "2026-01-01T00:00:00.000Z", task: "[US1] Write T-01 red", verify: "node t.js", stale: true };
     fs.writeFileSync(path.join(f2.dir, ".state.json"), JSON.stringify(st2));
@@ -236,12 +249,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const many5 = {};
     for (let i = 0; i < 20; i++) many5["c" + i] = "x";
     const bad5 = S.initProject(d5, ["core"], undefined, { checks: many5 });
-    ok(i1.checks.test === "node -e \"process.exit(0)\"" && i1.checks.lint === "npm run lint" && JSON.stringify(i2.checks) === JSON.stringify({ test: "node -e \"process.exit(0)\"", typecheck: "npx tsc --noEmit" }) &&
-      JSON.stringify(JSON.parse(before5).meta.checks) === JSON.stringify(i2.checks) && JSON.stringify(i3.checks) === JSON.stringify(i2.checks) &&
-      bad1.ok === false && /nome de verificação inválido 'bad name'/.test(bad1.error) && bad2.ok === false && /must be one line of text/.test(bad2.error) &&
-      bad3.ok === false && /invalid check name '__proto__'/.test(bad3.error) && bad4.result.isError === true && /checks must be an object/.test(bad4.result.content[0].text) &&
-      bad5.ok === false && /at most 20 project checks/.test(bad5.error) && fs.readFileSync(rp5, "utf8") === before5 && JSON.parse(before5).meta.lang !== "pt",
-      "B5 spec_init {checks}: added / replaced / an empty command removes one, the result always reports them; a bad name (PT message), a multi-line command, '__proto__', a non-object (schema) or > 20 checks are refused before anything — the language included — is written");
+    all("B5 spec_init {checks}: added / replaced / an empty command removes one, the result always reports them; a bad name (PT message), a multi-line command, '__proto__', a non-object (schema) or > 20 checks are refused before anything — the language included — is written", [
+      () => i1.checks.test === "node -e \"process.exit(0)\"", () => i1.checks.lint === "npm run lint",
+      () => JSON.stringify(i2.checks) === JSON.stringify({ test: "node -e \"process.exit(0)\"", typecheck: "npx tsc --noEmit" }),
+      () => JSON.stringify(JSON.parse(before5).meta.checks) === JSON.stringify(i2.checks),
+      () => JSON.stringify(i3.checks) === JSON.stringify(i2.checks), () => bad1.ok === false,
+      () => /nome de verificação inválido 'bad name'/.test(bad1.error), () => bad2.ok === false, () => /must be one line of text/.test(bad2.error),
+      () => bad3.ok === false, () => /invalid check name '__proto__'/.test(bad3.error), () => bad4.result.isError === true,
+      () => /checks must be an object/.test(bad4.result.content[0].text), () => bad5.ok === false, () => /at most 20 project checks/.test(bad5.error),
+      () => fs.readFileSync(rp5, "utf8") === before5, () => JSON.parse(before5).meta.lang !== "pt",
+    ]);
     const d6 = b5Dir("badstored");
     S.initProject(d6, ["core"], "en");
     const rp6 = path.join(d6, ".specs", "roadmap.json");
@@ -370,13 +387,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const byTask = (r, n) => r.tasks.find((t) => t.number === n);
     const rf2 = tc9.redFirst.find((r) => r.task === 2);
     const rf4 = tc9.redFirst.find((r) => r.task === 4);
-    ok(tc9.ok && tc9.commits === 4 && tc9.citing === 3 && JSON.stringify(byTask(tc9, 1).commits.map((c) => c.short + ":" + c.via.join("+"))) === JSON.stringify(["ddddddd:T-01", "ccccccc:T-01", "aaaaaaa:US-1.AC-1"]) &&
-      JSON.stringify(byTask(tc9, 2).commits.map((c) => c.short + ":" + c.via.join("+"))) === JSON.stringify(["ddddddd:T-01", "ccccccc:#2+T-01", "aaaaaaa:US-1.AC-1"]) &&
-      !byTask(tc9, 3).commits.length && rf2.status === "impl-first" && rf2.taskCommit.short === "ccccccc" && rf2.testCommit.short === "ddddddd" && JSON.stringify(rf2.testFiles) === JSON.stringify(["tests/login.test.js"]) &&
-      rf4.status === "no-test-file" && tc9.warnings.length === 1 && /red-first: task 2 \(makes T-01 green\) was first committed in ccccccc, before any commit touching a test file that names T-01 \(tests\/login\.test\.js — first in ddddddd\)/.test(tc9.warnings[0]) &&
-      tc9.lines.some((l) => /\[ \] #3 Clean up — no commit cites it/.test(l)) && tc9.lines.some((l) => /▲ red-first: task 2/.test(l)),
-      "B5 taskCommits: a commit cites a task by 'task #N' with the feature name, or by the T-/AC IDs it names — never when it names another feature ('billing'), and 'task 3' without the feature name is no citation; red-first warns when the implementation was committed before its test (got " +
-      JSON.stringify([tc9.tasks.map((t) => t.commits.map((c) => c.short + ":" + c.via.join("+"))), tc9.redFirst.map((r) => r.status)]).slice(0, 400) + ")");
+    all("B5 taskCommits: a commit cites a task by 'task #N' with the feature name, or by the T-/AC IDs it names — never when it names another feature ('billing'), and 'task 3' without the feature name is no citation; red-first warns when the implementation was committed before its test (got " +
+      JSON.stringify([tc9.tasks.map((t) => t.commits.map((c) => c.short + ":" + c.via.join("+"))), tc9.redFirst.map((r) => r.status)]).slice(0, 400) + ")", [
+      () => tc9.ok, () => tc9.commits === 4, () => tc9.citing === 3,
+      () => JSON.stringify(byTask(tc9, 1).commits.map((c) => c.short + ":" + c.via.join("+"))) === JSON.stringify(["ddddddd:T-01", "ccccccc:T-01", "aaaaaaa:US-1.AC-1"]),
+      () => JSON.stringify(byTask(tc9, 2).commits.map((c) => c.short + ":" + c.via.join("+"))) === JSON.stringify(["ddddddd:T-01", "ccccccc:#2+T-01", "aaaaaaa:US-1.AC-1"]),
+      () => !byTask(tc9, 3).commits.length, () => rf2.status === "impl-first", () => rf2.taskCommit.short === "ccccccc",
+      () => rf2.testCommit.short === "ddddddd", () => JSON.stringify(rf2.testFiles) === JSON.stringify(["tests/login.test.js"]),
+      () => rf4.status === "no-test-file", () => tc9.warnings.length === 1,
+      () => /red-first: task 2 \(makes T-01 green\) was first committed in ccccccc, before any commit touching a test file that names T-01 \(tests\/login\.test\.js — first in ddddddd\)/.test(tc9.warnings[0]),
+      () => tc9.lines.some((l) => /\[ \] #3 Clean up — no commit cites it/.test(l)), () => tc9.lines.some((l) => /▲ red-first: task 2/.test(l)),
+    ]);
     const testFirstLog = [
       ...commit9("f", "2026-09-06", ["feat(login): implement — task #2"], ["src/login.js"]),
       ...commit9("e", "2026-09-05", ["test(login): T-01 fails for the right reason"], ["tests/login.test.js"]),
@@ -389,13 +410,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const fPt9 = S.createFeature(d9, "Entrar", ["tdd"], "", undefined, "pt");
     b5Tasks(fPt9, "- [ ] 1. [US1] Implementar\n  - _Makes green: T-01_\n");
     const tcPt = S.taskCommits(d9, "entrar", "abc1234 feat(entrar): tarefa 1\n");
-    ok(tcOk.redFirst.find((r) => r.task === 2).status === "ok" && !tcOk.warnings.length && tcOk.lines.some((l) => /red-first: task 2 \(T-01\) — the test was committed first ✓/.test(l)) &&
-      tcNever.redFirst.find((r) => r.task === 2).status === "test-not-committed" && /no commit read touches a test file that names T-01 \(tests\/login\.test\.js\) — commit the test first/.test(tcNever.warnings[0]) &&
-      tcWin.truncated === true && tcWin.redFirst.find((r) => r.task === 2).status === "outside-window" && !tcWin.warnings.length && /the window is full/.test(tcWin.lines[0]) &&
-      tcNone.citing === 0 && tcNone.lines.some((l) => /No commit cites a task of 'login'\. Conventions: .*"Part of \.specs\/login\/ task #N\."/.test(l)) &&
-      tcPt.ok && tcPt.tasks[0].commits.length === 1 && tcPt.tasks[0].commits[0].via[0] === "#1" && /^Commits: entrar — 1 commit\(s\) lido\(s\), 1 citam as suas tarefas/.test(tcPt.lines[0]) &&
-      S.taskCommits(d9, "nope", "").ok === false,
-      "B5 taskCommits red-first: the test committed first is ok; no commit touching it warns; a full log window makes the order unknown (outside-window, no warning); no citing commit prints the conventions; PT lines ('tarefa N'); an unknown feature is an error");
+    all("B5 taskCommits red-first: the test committed first is ok; no commit touching it warns; a full log window makes the order unknown (outside-window, no warning); no citing commit prints the conventions; PT lines ('tarefa N'); an unknown feature is an error", [
+      () => tcOk.redFirst.find((r) => r.task === 2).status === "ok", () => !tcOk.warnings.length,
+      () => tcOk.lines.some((l) => /red-first: task 2 \(T-01\) — the test was committed first ✓/.test(l)),
+      () => tcNever.redFirst.find((r) => r.task === 2).status === "test-not-committed",
+      () => /no commit read touches a test file that names T-01 \(tests\/login\.test\.js\) — commit the test first/.test(tcNever.warnings[0]),
+      () => tcWin.truncated === true, () => tcWin.redFirst.find((r) => r.task === 2).status === "outside-window", () => !tcWin.warnings.length,
+      () => /the window is full/.test(tcWin.lines[0]), () => tcNone.citing === 0,
+      () => tcNone.lines.some((l) => /No commit cites a task of 'login'\. Conventions: .*"Part of \.specs\/login\/ task #N\."/.test(l)),
+      () => tcPt.ok, () => tcPt.tasks[0].commits.length === 1, () => tcPt.tasks[0].commits[0].via[0] === "#1",
+      () => /^Commits: entrar — 1 commit\(s\) lido\(s\), 1 citam as suas tarefas/.test(tcPt.lines[0]),
+      () => S.taskCommits(d9, "nope", "").ok === false,
+    ]);
   }
 
   // 1.14 full review (Ga) — evidence, project checks, CLI runs.
@@ -477,13 +503,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     gaW(fCrPt.dir, "tasks.md", "- [ ] 1. [US1] Escrever T-01\n  - _Verify: " + CR_CMD + "_\n  - _Expect: fail_\n");
     const ptCr = S.completeTask(p2, fCrPt.slug, 1, { command: CR_CMD, exitCode: 3221225477 });
     const redCr = S.completeTask(p2, fCr.slug, 1, { command: CR_CMD, exitCode: 1, summary: "✖ T-01 (1.1ms)\nAssertionError [ERR_ASSERTION]: 'a' !== 'A'\nℹ fail 1" });
-    ok(crashes.every((c) => S.crashExit(c)) && !kills.some((c) => S.crashExit(c)) &&
-      segv.ok === false && segv.recorded === true && segv.couldNotRun === "crash" && /Task 1: the run crashed \(exit 139/.test(segv.error) &&
-      av.ok === false && av.couldNotRun === "crash" && /exit -1073741819/.test(av.error) && openCr &&
-      ptCr.ok === false && ptCr.couldNotRun === "crash" && /a execução crashou \(exit 3221225477/.test(ptCr.error) &&
-      redCr.ok === true && redCr.redRecorded === true && /- \[x\] 1\./.test(gaTasks(fCr)),
-      "1.23 review: a crash (exit 139, 0xC0000005 signed / unsigned…) is no red proof of an _Expect: fail_ task — refused (recorded, couldNotRun: crash; MCP and PT), the task stays open; an assertion failure is the red proof (got " +
-      JSON.stringify([segv.couldNotRun, av.couldNotRun, ptCr.couldNotRun, segv.error && segv.error.slice(0, 80), redCr.redRecorded]) + ")");
+    all("1.23 review: a crash (exit 139, 0xC0000005 signed / unsigned…) is no red proof of an _Expect: fail_ task — refused (recorded, couldNotRun: crash; MCP and PT), the task stays open; an assertion failure is the red proof (got " +
+      JSON.stringify([segv.couldNotRun, av.couldNotRun, ptCr.couldNotRun, segv.error && segv.error.slice(0, 80), redCr.redRecorded]) + ")", [
+      () => crashes.every((c) => S.crashExit(c)), () => !kills.some((c) => S.crashExit(c)), () => segv.ok === false, () => segv.recorded === true,
+      () => segv.couldNotRun === "crash", () => /Task 1: the run crashed \(exit 139/.test(segv.error), () => av.ok === false,
+      () => av.couldNotRun === "crash", () => /exit -1073741819/.test(av.error), () => openCr, () => ptCr.ok === false,
+      () => ptCr.couldNotRun === "crash", () => /a execução crashou \(exit 3221225477/.test(ptCr.error), () => redCr.ok === true,
+      () => redCr.redRecorded === true, () => /- \[x\] 1\./.test(gaTasks(fCr)),
+    ]);
 
     // Ga3: a project check run is stamped with the code it tested (a hash of the implementing files): code edited after the
     // run → suiteChecks status `code-changed` — a finish blocker, doctor's suite-evidence warn and the stop gate's suite line —
@@ -561,15 +588,19 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const ap6 = await call6({ tasks: [{ text: "Write the regression test", requirements: ["US-1.AC-1"], makesGreen: ["t-1"], expectFail: true, size: "s", verify: "npm test" }] });
     const blk6 = S.taskBlocks(gaTasks(f6)).find((b) => ap6.p.appended && b.number === ap6.p.appended[0].number);
     const noPlan = S.appendTasks(p2, f2.slug, [{ text: "x", makesGreen: ["T-01"] }]);
-    ok(props6.makesGreen && props6.makesGreen.type === "array" && props6.expectFail && props6.expectFail.type === "boolean" && props6.size && props6.size.type === "string" &&
-      bad6a.p.ok === false && /Unknown tests \(not planned in test-plan\.md\): T-99/.test(bad6a.p.error) && bad6b.p.ok === false && /size must be one of XS, S, M, L, XL \(got 'XXL'\)/.test(bad6b.p.error) &&
-      bad6c.isError && bad6d.p.ok === false && /makesGreen takes planned test IDs/.test(bad6d.p.error) && same6 &&
-      ap6.p.ok === true && JSON.stringify(ap6.p.appended[0].makesGreen) === '["T-01"]' && ap6.p.appended[0].expectFail === true && ap6.p.appended[0].size === "S" &&
-      blk6 && JSON.stringify(blk6.body.map((l) => l.replace(/^- /, ""))) === JSON.stringify(["_Requirements: US-1.AC-1_", "_Makes green: T-01_", "_Verify: npm test_", "_Expect: fail_", "_Size: S_"]) &&
-      S.expectsFail(blk6) && S.traceCheck(p6, f6.slug).phantomTestsInTasks.length === 0 &&
-      noPlan.ok === false && /makesGreen needs a test plan/.test(noPlan.error),
-      "full review Ga6: spec_append_tasks writes _Makes green:_ (as the test plan spells the T-ID) / _Expect: fail_ / _Size:_; an unplanned T-ID, a bad size or T-ID, a non-boolean expectFail or no test plan writes nothing (got " +
-      JSON.stringify([ap6.p.appended || ap6.p.error, blk6 && blk6.body, bad6a.p.error, bad6b.p.error]).slice(0, 500) + ")");
+    all("full review Ga6: spec_append_tasks writes _Makes green:_ (as the test plan spells the T-ID) / _Expect: fail_ / _Size:_; an unplanned T-ID, a bad size or T-ID, a non-boolean expectFail or no test plan writes nothing (got " +
+      JSON.stringify([ap6.p.appended || ap6.p.error, blk6 && blk6.body, bad6a.p.error, bad6b.p.error]).slice(0, 500) + ")", [
+      () => props6.makesGreen, () => props6.makesGreen.type === "array", () => props6.expectFail, () => props6.expectFail.type === "boolean",
+      () => props6.size, () => props6.size.type === "string", () => bad6a.p.ok === false,
+      () => /Unknown tests \(not planned in test-plan\.md\): T-99/.test(bad6a.p.error), () => bad6b.p.ok === false,
+      () => /size must be one of XS, S, M, L, XL \(got 'XXL'\)/.test(bad6b.p.error), () => bad6c.isError, () => bad6d.p.ok === false,
+      () => /makesGreen takes planned test IDs/.test(bad6d.p.error), () => same6, () => ap6.p.ok === true,
+      () => JSON.stringify(ap6.p.appended[0].makesGreen) === '["T-01"]', () => ap6.p.appended[0].expectFail === true,
+      () => ap6.p.appended[0].size === "S", () => blk6,
+      () => JSON.stringify(blk6.body.map((l) => l.replace(/^- /, ""))) === JSON.stringify(["_Requirements: US-1.AC-1_", "_Makes green: T-01_", "_Verify: npm test_", "_Expect: fail_", "_Size: S_"]),
+      () => S.expectsFail(blk6), () => S.traceCheck(p6, f6.slug).phantomTestsInTasks.length === 0, () => noPlan.ok === false,
+      () => /makesGreen needs a test plan/.test(noPlan.error),
+    ]);
 
     // Ga7: the brief of an _Expect: fail_ task is a red task's — its tests section and definition of done say write the test and
     // watch it FAIL (no production code), never "make the target tests green" / "nothing that passed before may fail".
@@ -627,16 +658,19 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
       def: S.resolveRunShell("", { platform: "win32" }), cmd: S.resolveRunShell("cmd", { platform: "win32" }), comspec: S.resolveRunShell(wp(sys32, "cmd.exe"), { platform: "win32" }),
       pwsh: S.resolveRunShell("pwsh", { platform: "win32" }), linuxBash: S.resolveRunShell("bash", { platform: "linux" }), linuxDef: S.resolveRunShell("", { platform: "linux" }),
     };
-    ok(r9.git.shell === gitBash && r9.git.cmd === false && r9.wslOnly.error === "no-git-bash" && r9.msys.shell === wp(msys, "bash.exe") && r9.progFiles.shell === gitBash &&
+    all("full review Ga9: resolveRunShell — a bare bash on Windows is Git Bash (git --exec-path / %ProgramFiles% / a non-WSL PATH bash), never WSL's launcher (only WSL there → no-git-bash); an explicit WSL path is used as given (wsl: true); cmd / ComSpec is cmd.exe; other platforms keep the shell as given (got " +
+      JSON.stringify(r9).slice(0, 500) + ")", [
+      () => r9.git.shell === gitBash, () => r9.git.cmd === false, () => r9.wslOnly.error === "no-git-bash",
+      () => r9.msys.shell === wp(msys, "bash.exe"), () => r9.progFiles.shell === gitBash,
       // 1.15: an EXPLICIT path to WSL's launcher is the user's choice — used as given, flagged wsl (1.14 refused it)
-      r9.sys32Path.shell === wp(sys32, "bash.exe") && r9.sys32Path.wsl === true && r9.appsPath.wsl === true && !r9.sys32Path.error &&
+      () => r9.sys32Path.shell === wp(sys32, "bash.exe"), () => r9.sys32Path.wsl === true, () => r9.appsPath.wsl === true, () => !r9.sys32Path.error,
       // wsl.exe is no shell (it rejects -c): refused, named or bare; a quoted path loses its quotes
-      r9.wslExe.error === "wsl-exe" && S.resolveRunShell("wsl", { platform: "win32" }).error === "wsl-exe" &&
-      S.resolveRunShell('"' + wp(sys32, "bash.exe") + '"', { platform: "win32" }).shell === wp(sys32, "bash.exe") &&
-      r9.def.shell === true && r9.def.cmd === true && r9.cmd.cmd === true && r9.comspec.cmd === true && r9.pwsh.shell === "pwsh" && r9.pwsh.cmd === false &&
-      r9.linuxBash.shell === "bash" && r9.linuxDef.shell === true && r9.linuxDef.cmd === false && S.isWslLauncher(wp(sys32, "bash.exe")) && !S.isWslLauncher(gitBash),
-      "full review Ga9: resolveRunShell — a bare bash on Windows is Git Bash (git --exec-path / %ProgramFiles% / a non-WSL PATH bash), never WSL's launcher (only WSL there → no-git-bash); an explicit WSL path is used as given (wsl: true); cmd / ComSpec is cmd.exe; other platforms keep the shell as given (got " +
-      JSON.stringify(r9).slice(0, 500) + ")");
+      () => r9.wslExe.error === "wsl-exe", () => S.resolveRunShell("wsl", { platform: "win32" }).error === "wsl-exe",
+      () => S.resolveRunShell('"' + wp(sys32, "bash.exe") + '"', { platform: "win32" }).shell === wp(sys32, "bash.exe"), () => r9.def.shell === true,
+      () => r9.def.cmd === true, () => r9.cmd.cmd === true, () => r9.comspec.cmd === true, () => r9.pwsh.shell === "pwsh",
+      () => r9.pwsh.cmd === false, () => r9.linuxBash.shell === "bash", () => r9.linuxDef.shell === true, () => r9.linuxDef.cmd === false,
+      () => S.isWslLauncher(wp(sys32, "bash.exe")), () => !S.isWslLauncher(gitBash),
+    ]);
   }
 
   // 1.14 feature (F1) — harness-observed evidence.
@@ -749,12 +783,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const c4 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 4 });
     const st1 = obsState(fO);
     const docR = S.specDoctor(pO, fO.slug).checks.find((c) => c.id === "verification");
-    ok(c2claim.p.ok === false && c2claim.p.code === "unknown-argument" && c2claim.p.unknown[0].argument === "evidence.observed" &&
-      c1.p.ok === false && c1.p.observed === true && c1b.p.ok && c1b.p.verified && c1b.p.observed === true && c2.p.ok && c2.p.verified === true && c2.p.observed === false &&
-      !c2.p.unverifiedReason && c4.p.ok && c4.p.observed === undefined && st1.evidence["1"].observed === true && st1.evidence["1"].history[0].observed === true &&
-      st1.evidence["2"].observed === false && S.evidenceMode(pO) === "reported" && docR.status === "pass",
-      "feature F1: default (meta.evidence reported) — the verdict is unchanged; every reported run is stamped observed true | false in its record and the result (a failed run too); a caller-given observed is ignored; no command → no stamp (got " +
-      JSON.stringify([c1.p.observed, c1b.p.observed, c2.p.observed, c2.p.verified, st1.evidence["2"].observed, docR.status]) + ")");
+    all("feature F1: default (meta.evidence reported) — the verdict is unchanged; every reported run is stamped observed true | false in its record and the result (a failed run too); a caller-given observed is ignored; no command → no stamp (got " +
+      JSON.stringify([c1.p.observed, c1b.p.observed, c2.p.observed, c2.p.verified, st1.evidence["2"].observed, docR.status]) + ")", [
+      () => c2claim.p.ok === false, () => c2claim.p.code === "unknown-argument", () => c2claim.p.unknown[0].argument === "evidence.observed",
+      () => c1.p.ok === false, () => c1.p.observed === true, () => c1b.p.ok, () => c1b.p.verified, () => c1b.p.observed === true, () => c2.p.ok,
+      () => c2.p.verified === true, () => c2.p.observed === false, () => !c2.p.unverifiedReason, () => c4.p.ok, () => c4.p.observed === undefined,
+      () => st1.evidence["1"].observed === true, () => st1.evidence["1"].history[0].observed === true, () => st1.evidence["2"].observed === false,
+      () => S.evidenceMode(pO) === "reported", () => docR.status === "pass",
+    ]);
 
     // spec_init {evidence}: folded, reported back; a bad value is refused by the schema.
     const i1 = await obsCall("spec_init", { projectDir: pO, evidence: "OBSERVED" });
@@ -808,12 +844,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     obsHook(pO, bash(pO, "node t2.js", { tool_response: { exit_code: 0 } }));
     const c2c = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0 } });
     const cCli = S.completeTask(pN, "solo", 1, { command: "node s.js", exitCode: 0 }, { ranBy: "cli" });
-    ok(c2b.p.ok && c2b.p.verified === false && c2b.p.unverifiedReason === "unobserved" && c2b.p.observed === false && /node "[^"]*dev-spec\.js" done auth 2 --run/.test(c2b.p.note) &&
-      !/No run was ever observed/.test(c2b.p.note) && cN.p.unverifiedReason === "unobserved" && /No run was ever observed in this project/.test(cN.p.note) &&
-      /MCP-only client has no hook/.test(cN.p.note) && c2c.p.verified === true && c2c.p.observed === true && !c2c.p.unverifiedReason &&
-      cCli.verified === true && cCli.observed === "cli" && obsState(fN).evidence["1"].observed === "cli",
-      "feature F1: meta.evidence observed — an unobserved report ticks but stays unverified (unverifiedReason unobserved + a note naming --run; the MCP-only line when nothing was ever observed there); once the hook saw the run it verifies; a CLI run (observed: \"cli\") verifies (got " +
-      JSON.stringify([c2b.p.unverifiedReason, cN.p.unverifiedReason, c2c.p.verified, cCli.observed]) + ")");
+    all("feature F1: meta.evidence observed — an unobserved report ticks but stays unverified (unverifiedReason unobserved + a note naming --run; the MCP-only line when nothing was ever observed there); once the hook saw the run it verifies; a CLI run (observed: \"cli\") verifies (got " +
+      JSON.stringify([c2b.p.unverifiedReason, cN.p.unverifiedReason, c2c.p.verified, cCli.observed]) + ")", [
+      () => c2b.p.ok, () => c2b.p.verified === false, () => c2b.p.unverifiedReason === "unobserved", () => c2b.p.observed === false,
+      () => /node "[^"]*dev-spec\.js" done auth 2 --run/.test(c2b.p.note), () => !/No run was ever observed/.test(c2b.p.note),
+      () => cN.p.unverifiedReason === "unobserved", () => /No run was ever observed in this project/.test(cN.p.note),
+      () => /MCP-only client has no hook/.test(cN.p.note), () => c2c.p.verified === true, () => c2c.p.observed === true,
+      () => !c2c.p.unverifiedReason, () => cCli.verified === true, () => cCli.observed === "cli", () => obsState(fN).evidence["1"].observed === "cli",
+    ]);
 
     // _Expect: fail_: the red run is the proof — it must be the observed one.
     const fR = S.createFeature(pO, "Red", ["core"], "", undefined, "en");
@@ -1023,12 +1061,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const cantWrong = CANT.map((s, i) => [i, cnr(s)]).filter(([, k]) => k !== "test");
     const redWrong = RED.map((s, i) => [i, cnr(s)]).filter(([, k]) => k !== null);
     const RA = E.RE_ASSERTION_RAN;
-    ok(!cantWrong.length && !redWrong.length && RA.test("  [-] T-01 greets 12ms") && RA.test("[-] a.b 1.02s (1s|20ms)") && !RA.test(" [-] Error occurred in Describe block 378ms") &&
-      !RA.test("[-] Discovery in C:/x/a.Tests.ps1 failed with:") && !RA.test("[-] C:/x/Ba.Tests.ps1 failed with:") && RA.test("Expected 3, but got 2.") && RA.test("   But was:  {Hello}") &&
-      RA.test("Expected string length 10 but was 5.") && !RA.test("Tests Passed: 0, Failed: 1") && E.pesterRan("Tests Passed: 0, Failed: 1, Skipped: 0") && !E.pesterRan("Tests Passed: 3, Failed: 0") &&
-      !E.pesterRan("Tests Passed: 0, Failed: 1\nContainer failed: 1") && E.pesterRan("Passed: 0 Failed: 2 Skipped: 0"),
-      "1.21.1 languages: couldNotRunOutput knows PowerShell's could-not-run outputs (an unknown command — pwsh 7, Windows PowerShell 5.1 wrapped, pt-BR, es; a missing module; the execution policy; an unsigned script; a -File path that isn't there; Pester's 'No test files were found'; a Pester container / Describe block that failed before its test ran) and never a Pester red run ('[-] … 12ms', 'Expected …, but got …', 'Tests Passed: 0, Failed: 1' — also when the failure quotes 'is not recognized'); ANSI colours read through (wrong: " +
-      js([cantWrong, redWrong]) + ")");
+    all("1.21.1 languages: couldNotRunOutput knows PowerShell's could-not-run outputs (an unknown command — pwsh 7, Windows PowerShell 5.1 wrapped, pt-BR, es; a missing module; the execution policy; an unsigned script; a -File path that isn't there; Pester's 'No test files were found'; a Pester container / Describe block that failed before its test ran) and never a Pester red run ('[-] … 12ms', 'Expected …, but got …', 'Tests Passed: 0, Failed: 1' — also when the failure quotes 'is not recognized'); ANSI colours read through (wrong: " +
+      js([cantWrong, redWrong]) + ")", [
+      () => !cantWrong.length, () => !redWrong.length, () => RA.test("  [-] T-01 greets 12ms"), () => RA.test("[-] a.b 1.02s (1s|20ms)"),
+      () => !RA.test(" [-] Error occurred in Describe block 378ms"), () => !RA.test("[-] Discovery in C:/x/a.Tests.ps1 failed with:"),
+      () => !RA.test("[-] C:/x/Ba.Tests.ps1 failed with:"), () => RA.test("Expected 3, but got 2."), () => RA.test("   But was:  {Hello}"),
+      () => RA.test("Expected string length 10 but was 5."), () => !RA.test("Tests Passed: 0, Failed: 1"),
+      () => E.pesterRan("Tests Passed: 0, Failed: 1, Skipped: 0"), () => !E.pesterRan("Tests Passed: 3, Failed: 0"),
+      () => !E.pesterRan("Tests Passed: 0, Failed: 1\nContainer failed: 1"), () => E.pesterRan("Passed: 0 Failed: 2 Skipped: 0"),
+    ]);
 
     // 4. What a run records and says: colour codes dropped from the summary; cmd.exe's hint never fires on PowerShell's own
     // messages; the pipe check reads a pwsh -Command script.
@@ -1094,12 +1135,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     ];
     const ppWrong = PP.filter(([c, want]) => pp(c) !== want).map(([c]) => c + " → " + pp(c));
     const rs = (req, platform) => S.resolveRunShell(req, { platform, env: {}, exists: () => false });
-    ok(!ppWrong.length && rs("", "linux").posix === true && rs("bash", "linux").posix === true && rs("/usr/bin/zsh", "darwin").posix === true && rs("fish", "linux").posix === true &&
-      rs("sh", "win32").posix === true && rs("C:/Program Files/Git/bin/bash.exe", "win32").posix === true && S.resolveRunShell("bash", { platform: "win32", env: {}, gitExecPath: "C:/Git/mingw64/libexec/git-core", exists: (p) => /bin[\\/]bash\.exe$/.test(p) }).posix === true &&
-      !rs("", "win32").posix && !rs("cmd", "win32").posix && !rs("pwsh", "linux").posix && !rs("nu", "linux").posix &&
-      S.runsPwsh('pwsh -NoProfile -Command "x"') && S.runsPwsh("npm test && powershell.exe -c x") && S.runsPwsh("FOO=1 pwsh -c x") && !S.runsPwsh("echo pwsh") && !S.runsPwsh("npm test"),
-      "1.21.1 languages (review): posixPwshScript flags `$…` / backticks a POSIX shell would expand in a pwsh script (double-quoted or bare, after a VAR= or env prefix, powershell's positional command) — never a single-quoted script, `\\$`, a -File argument or `$` outside PowerShell; resolveRunShell marks /bin/sh, bash, zsh, fish, sh and Git Bash posix (never cmd.exe, pwsh, an unknown shell); runsPwsh finds a pwsh program in the line (wrong: " +
-      js(ppWrong) + ")");
+    all("1.21.1 languages (review): posixPwshScript flags `$…` / backticks a POSIX shell would expand in a pwsh script (double-quoted or bare, after a VAR= or env prefix, powershell's positional command) — never a single-quoted script, `\\$`, a -File argument or `$` outside PowerShell; resolveRunShell marks /bin/sh, bash, zsh, fish, sh and Git Bash posix (never cmd.exe, pwsh, an unknown shell); runsPwsh finds a pwsh program in the line (wrong: " +
+      js(ppWrong) + ")", [
+      () => !ppWrong.length, () => rs("", "linux").posix === true, () => rs("bash", "linux").posix === true,
+      () => rs("/usr/bin/zsh", "darwin").posix === true, () => rs("fish", "linux").posix === true, () => rs("sh", "win32").posix === true,
+      () => rs("C:/Program Files/Git/bin/bash.exe", "win32").posix === true,
+      () => S.resolveRunShell("bash", { platform: "win32", env: {}, gitExecPath: "C:/Git/mingw64/libexec/git-core", exists: (p) => /bin[\\/]bash\.exe$/.test(p) }).posix === true,
+      () => !rs("", "win32").posix, () => !rs("cmd", "win32").posix, () => !rs("pwsh", "linux").posix, () => !rs("nu", "linux").posix,
+      () => S.runsPwsh('pwsh -NoProfile -Command "x"'), () => S.runsPwsh("npm test && powershell.exe -c x"), () => S.runsPwsh("FOO=1 pwsh -c x"),
+      () => !S.runsPwsh("echo pwsh"), () => !S.runsPwsh("npm test"),
+    ]);
 
     // 2. Pester blocks and files that failed BEFORE their tests are could-not-run, alone (outputs captured from Pester 3.4 /
     // 5.9.1 / 6.2.0): a Describe-level BeforeAll ("[-] Describe … failed" + "BeforeAll \ AfterAll failed: 1", no "Container
@@ -1336,11 +1381,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const r3 = S.completeTask(pM, "proof", 4, { command: "node -e \"process.exit(2)\"", exitCode: 2, summary: "1 failing" });
     const r4 = S.completeTask(pM, "proof", 4, { command: "node t01.js", exitCode: 0, summary: "ok 1 T-01" });
     const rec4 = JSON.parse(fs.readFileSync(path.join(fM.dir, ".state.json"), "utf8")).evidence["4"];
-    ok(r1.ok && r1.verified === false && r1.unverifiedReason === "command-mismatch" && !r1.redRecorded && /until a FAILING run of that command/.test(r1.note) &&
-      r2.ok && r2.verified === true && r2.redRecorded === true && r3.ok && r3.verified === true && !r3.redRecorded && r4.ok && r4.verified === true &&
-      rec4.red && rec4.red.command === "node t01.js",
-      "1.22 review: an _Expect: fail_ task — a red run of another command ticks it (command-mismatch, no redRecorded); the red run of its _Verify:_ is the proof, a later red run of another command never displaces it, and the fix's pass keeps it (got " +
-      js([r1.unverifiedReason, r2.verified, r3.verified, r4.verified, rec4.red]) + ")");
+    all("1.22 review: an _Expect: fail_ task — a red run of another command ticks it (command-mismatch, no redRecorded); the red run of its _Verify:_ is the proof, a later red run of another command never displaces it, and the fix's pass keeps it (got " +
+      js([r1.unverifiedReason, r2.verified, r3.verified, r4.verified, rec4.red]) + ")", [
+      () => r1.ok, () => r1.verified === false, () => r1.unverifiedReason === "command-mismatch", () => !r1.redRecorded,
+      () => /until a FAILING run of that command/.test(r1.note), () => r2.ok, () => r2.verified === true, () => r2.redRecorded === true, () => r3.ok,
+      () => r3.verified === true, () => !r3.redRecorded, () => r4.ok, () => r4.verified === true, () => rec4.red,
+      () => rec4.red.command === "node t01.js",
+    ]);
 
     // finish: a run of another command than the configured check reads `changed`; the check's own command (a cd prefix) passes.
     const fin1 = S.finishFeature(pM, "proof", { evidence: [{ name: "test", command: "echo ok", exitCode: 0 }] });
@@ -1427,12 +1474,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const unB = S.verificationStatus(pR, "upgrade", fB.dir).unverifiedDetail;
     const finB = S.finishFeature(pR, "upgrade").blockers.filter((b) => /without verification evidence/.test(b));
     const undoB = S.completeTask(pR, "upgrade", 1, undefined, { undo: true });
-    ok(b1.verified === false && b1.unverifiedReason === "command-mismatch" && b1g.ok && b1g.verified === true && !b1g.unverifiedReason && recB.red && recB.red.exitCode === 1 &&
-      b3g.ok && b3g.verified === true && b4x.ok === false && b4x.unexpectedPass === true && js(unB.map((d) => [d.number, d.reason])) === js([[4, "unexpected-pass"]]) &&
-      finB.length === 1 && /#4/.test(finB[0]) && !/#1|#3|#5/.test(finB[0]) && undoB.ok && undoB.redKept === true && b5c.ok === false && b5c.couldNotRun === "exit-code" &&
-      b5g.ok && b5g.verified === true,
-      "1.22 review 2 (1b): an _Expect: fail_ task whose red run is on record as another command is no longer stuck once the fix is in — the passing run of its _Verify:_ (done --run, or reported) is the fix going green and keeps that red run (an exit 127 in between doesn't drop it); a pass of another command is still unexpected-pass; undo keeps it (redKept) (got " +
-      js([b1.unverifiedReason, b1g.error || b1g.verified, recB.red, b3g.error || b3g.verified, b4x.unverifiedReason || b4x.error, unB, undoB.redKept, b5c.couldNotRun, b5g.error || b5g.verified]) + ")");
+    all("1.22 review 2 (1b): an _Expect: fail_ task whose red run is on record as another command is no longer stuck once the fix is in — the passing run of its _Verify:_ (done --run, or reported) is the fix going green and keeps that red run (an exit 127 in between doesn't drop it); a pass of another command is still unexpected-pass; undo keeps it (redKept) (got " +
+      js([b1.unverifiedReason, b1g.error || b1g.verified, recB.red, b3g.error || b3g.verified, b4x.unverifiedReason || b4x.error, unB, undoB.redKept, b5c.couldNotRun, b5g.error || b5g.verified]) + ")", [
+      () => b1.verified === false, () => b1.unverifiedReason === "command-mismatch", () => b1g.ok, () => b1g.verified === true,
+      () => !b1g.unverifiedReason, () => recB.red, () => recB.red.exitCode === 1, () => b3g.ok, () => b3g.verified === true, () => b4x.ok === false,
+      () => b4x.unexpectedPass === true, () => js(unB.map((d) => [d.number, d.reason])) === js([[4, "unexpected-pass"]]), () => finB.length === 1,
+      () => /#4/.test(finB[0]), () => !/#1|#3|#5/.test(finB[0]), () => undoB.ok, () => undoB.redKept === true, () => b5c.ok === false,
+      () => b5c.couldNotRun === "exit-code", () => b5g.ok, () => b5g.verified === true,
+    ]);
 
     // 1c — the _Expect: fail_ command-mismatch note: the red run BEFORE the fix lands; (review 3) a red run of another command never
     // counts — it no longer says "record the passing run … the red run on record then counts" (the grandfathering it advertised
@@ -1701,13 +1750,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const recAgain = JSON.parse(fs.readFileSync(stF, "utf8")).evidence["1"];
     const finAgain = S.finishFeature(pU, "legacy", { evidence: [{ name: "test", command: "npx jest", exitCode: 0 }] });
     const chkAgain = JSON.parse(fs.readFileSync(stF, "utf8")).finishChecks.test;
-    ok(js(pre) === js({ un: [], doc: "pass", finUnverified: false, suite: ["pass"], up: [], status: [true, true, true] }) && js(preObserved) === "[]" && js(preSuiteObserved) === '["pass"]' &&
-      js(ruled.un) === js([[1, "command-mismatch"], [2, "command-mismatch"], [3, "command-mismatch"]]) && ruled.doc === "warn" && ruled.finUnverified === true &&
-      js(ruled.suite) === '["changed"]' && js(ruled.up) === js(ruled.un) && js(ruled.status) === "[false,false,false]" &&
-      again.verified === false && again.unverifiedReason === "command-mismatch" && recAgain.cmdRule === 1 &&
-      finAgain.suiteChecks[0].status === "changed" && chkAgain.cmdRule === 1 && chkAgain.history[chkAgain.history.length - 1].cmdRule === 1,
-      "1.22 review 4 (0): records made before the command rule (no cmdRule stamp) whose commands differ from the _Verify:_ (`npx jest x`, `node tests\\y.test.js`, an _Expect: fail_ red run of another form) and a project check's run of another form keep their pre-1.22 verdict — verified / pass in status, doctor, finish, spec_upgrade, observed mode too; the same records stamped read command-mismatch / changed; a new run is stamped (task and finish check) and judged (got " +
-      js([pre, preObserved, preSuiteObserved, ruled, again.unverifiedReason, recAgain.cmdRule, finAgain.suiteChecks, chkAgain.cmdRule]) + ")");
+    all("1.22 review 4 (0): records made before the command rule (no cmdRule stamp) whose commands differ from the _Verify:_ (`npx jest x`, `node tests\\y.test.js`, an _Expect: fail_ red run of another form) and a project check's run of another form keep their pre-1.22 verdict — verified / pass in status, doctor, finish, spec_upgrade, observed mode too; the same records stamped read command-mismatch / changed; a new run is stamped (task and finish check) and judged (got " +
+      js([pre, preObserved, preSuiteObserved, ruled, again.unverifiedReason, recAgain.cmdRule, finAgain.suiteChecks, chkAgain.cmdRule]) + ")", [
+      () => js(pre) === js({ un: [], doc: "pass", finUnverified: false, suite: ["pass"], up: [], status: [true, true, true] }),
+      () => js(preObserved) === "[]", () => js(preSuiteObserved) === '["pass"]',
+      () => js(ruled.un) === js([[1, "command-mismatch"], [2, "command-mismatch"], [3, "command-mismatch"]]), () => ruled.doc === "warn",
+      () => ruled.finUnverified === true, () => js(ruled.suite) === '["changed"]', () => js(ruled.up) === js(ruled.un),
+      () => js(ruled.status) === "[false,false,false]", () => again.verified === false, () => again.unverifiedReason === "command-mismatch",
+      () => recAgain.cmdRule === 1, () => finAgain.suiteChecks[0].status === "changed", () => chkAgain.cmdRule === 1,
+      () => chkAgain.history[chkAgain.history.length - 1].cmdRule === 1,
+    ]);
   }
 
   // 1.22 review 3 (3) — observed mode sees the forms the matcher accepts: the observe hook's log (observeRun) and the lookup

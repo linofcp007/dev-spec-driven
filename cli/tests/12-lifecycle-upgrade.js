@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   const S17 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const readJ17 = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
   // A legacy project: made by this engine, then stripped of what 1.13 records (meta.specVersion, saved tracks); one feature
@@ -47,12 +47,15 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const ap17b = run(["upgrade", "--apply", "--project", u17]);
   let ap17j = null;
   try { ap17j = JSON.parse(run(["upgrade", "--apply", "--json", "--project", u17]).out); } catch { /* invalid JSON */ }
-  ok(ap17.code === 0 && /^Migrations applied/m.test(ap17.out) && /meta\.specVersion: none → /.test(ap17.out) && /approval baselines saved: half\/\.history\/requirements@1\.md/.test(ap17.out) &&
-    /^Report: \.specs\/UPGRADE\.md/m.test(ap17.out) && fs.existsSync(path.join(u17, ".specs", "UPGRADE.md")) && fs.existsSync(path.join(u17, ".specs", "half", ".history", "requirements@1.md")) &&
-    Array.isArray(st17.tracks) && S17.readRoadmap(u17).meta.specVersion === S17.engineVersion() &&
-    ap17b.code === 0 && /Nothing to migrate — \.specs\/ is already up to date; nothing was changed\./.test(ap17b.out) &&
-    ap17j && ap17j.ok === true && ap17j.migrations.changed === false && ap17j.from === S17.engineVersion(),
-    "upgrade --apply (CLI): the migrations done and the report path, exit 0; a second --apply says nothing to migrate; --json carries `migrations` (got " + ap17.out.slice(-300) + ")");
+  all("upgrade --apply (CLI): the migrations done and the report path, exit 0; a second --apply says nothing to migrate; --json carries `migrations` (got " + ap17.out.slice(-300) + ")", [
+    () => ap17.code === 0, () => /^Migrations applied/m.test(ap17.out), () => /meta\.specVersion: none → /.test(ap17.out),
+    () => /approval baselines saved: half\/\.history\/requirements@1\.md/.test(ap17.out), () => /^Report: \.specs\/UPGRADE\.md/m.test(ap17.out),
+    () => fs.existsSync(path.join(u17, ".specs", "UPGRADE.md")),
+    () => fs.existsSync(path.join(u17, ".specs", "half", ".history", "requirements@1.md")), () => Array.isArray(st17.tracks),
+    () => S17.readRoadmap(u17).meta.specVersion === S17.engineVersion(), () => ap17b.code === 0,
+    () => /Nothing to migrate — \.specs\/ is already up to date; nothing was changed\./.test(ap17b.out), () => ap17j, () => ap17j.ok === true,
+    () => ap17j.migrations.changed === false, () => ap17j.from === S17.engineVersion(),
+  ]);
 
   // Switches read strictly; no .specs/ is an error (exit 1); PT output.
   const bad17 = run(["upgrade", "--apply=maybe", "--project", u17]);

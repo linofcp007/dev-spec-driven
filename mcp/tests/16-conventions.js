@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources, require, __dirname }) => {
 
   { // --- 1.13 batch 4: localized roadmap phase / doctor ears detail / add-track entries, guard code types, numbers & enums refused on every surface ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -515,13 +515,15 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     const badArg = spawnSync(process.execPath, [dockerJs, "--suite", "nope"], { encoding: "utf8" });
     const noPathEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^path$/i.test(k)));
     const noDocker = spawnSync(process.execPath, [dockerJs], { encoding: "utf8", env: { ...noPathEnv, PATH: path.join(tmp, "no-such-bin-dir") } });
-    ok(mods.length && mods.every((m) => ["child_process", "fs", "os", "path"].includes(m)) && require(path.join(root, "package.json")).scripts["test:docker"] === "node scripts/test-docker.js" &&
-      help.status === 0 && /--network none/.test(help.stdout) && /read-only/.test(help.stdout) && /node:18-alpine/.test(help.stdout) &&
-      badArg.status === 2 && /unknown suite 'nope'/.test(badArg.stderr) &&
-      noDocker.status === 2 && /Docker is not available: the docker command was not found/.test(noDocker.stderr) && /npm test/.test(noDocker.stderr) &&
-      /"--network", "none"/.test(src) && /:\/repo:ro/.test(src) && !/\.github|workflow/i.test(src),
-      "scripts/test-docker.js: Node core only, wired as npm run test:docker; --help names the read-only mount, --network none and the default images; a bad argument and a missing docker exit 2 with a clear message (got " +
-      JSON.stringify([mods, help.status, badArg.status, noDocker.status, (noDocker.stderr || "").slice(0, 120)]) + ")");
+    all("scripts/test-docker.js: Node core only, wired as npm run test:docker; --help names the read-only mount, --network none and the default images; a bad argument and a missing docker exit 2 with a clear message (got " +
+      JSON.stringify([mods, help.status, badArg.status, noDocker.status, (noDocker.stderr || "").slice(0, 120)]) + ")", [
+      () => mods.length, () => mods.every((m) => ["child_process", "fs", "os", "path"].includes(m)),
+      () => require(path.join(root, "package.json")).scripts["test:docker"] === "node scripts/test-docker.js", () => help.status === 0,
+      () => /--network none/.test(help.stdout), () => /read-only/.test(help.stdout), () => /node:18-alpine/.test(help.stdout),
+      () => badArg.status === 2, () => /unknown suite 'nope'/.test(badArg.stderr), () => noDocker.status === 2,
+      () => /Docker is not available: the docker command was not found/.test(noDocker.stderr), () => /npm test/.test(noDocker.stderr),
+      () => /"--network", "none"/.test(src), () => /:\/repo:ro/.test(src), () => !/\.github|workflow/i.test(src),
+    ]);
   }
 
   // 1.17: no regex literal lost its backslashes (a heredoc'd edit once turned /^\s*status\s*:/i into /^s*statuss*:/i in
@@ -751,12 +753,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     rt.meta.checks.types = "npx tsc --noEmit"; rt.meta.approvalRoles.tasks = ["tech"]; rt.meta.milestones.push({ name: "ga", date: "2026-12-01", features: ["auth"] }); rt.meta.changelogAt = T(9);
     const m5 = M(rb, ro, rt, "roadmap");
     const f5 = m5.merged;
-    ok(!m5.conflicts.length && m5.kind === "roadmap" && js(f5.features.app.dependsOn) === '["billing"]' && f5.features.app.order === 2 && !!f5.features.billing &&
-      f5.backlog.length === 2 && f5.backlog[0].note === "csv · pdf · xlsx" && f5.backlog[1].name === "Search" && f5.backlog[1].note === "later" &&
-      js(Object.keys(f5.meta.checks)) === '["test","lint","types"]' && js(f5.meta.approvalRoles) === '{"design":["tech","security"],"tasks":["tech"]}' &&
-      js(f5.meta.milestones.map((m) => [m.name, m.features])) === '[["beta",["app","billing"]],["ga",["auth"]]]' && f5.meta.specVersion === "1.21.0" && f5.meta.changelogAt === T(9) &&
-      S.mergeStateJson(undefined, { meta: {} }, { meta: {} }).kind === "roadmap",
-      "1.21 F1a merge: roadmap.json — dependsOn a 3-way set merge (one side removed auth, the other added billing), features / backlog (case-insensitive names, notes joined) / milestones / checks / roles united by key, specVersion the higher, changelogAt the later; no conflict (got " + js(m5) + ")");
+    all("1.21 F1a merge: roadmap.json — dependsOn a 3-way set merge (one side removed auth, the other added billing), features / backlog (case-insensitive names, notes joined) / milestones / checks / roles united by key, specVersion the higher, changelogAt the later; no conflict (got " + js(m5) + ")", [
+      () => !m5.conflicts.length, () => m5.kind === "roadmap", () => js(f5.features.app.dependsOn) === '["billing"]',
+      () => f5.features.app.order === 2, () => !!f5.features.billing, () => f5.backlog.length === 2, () => f5.backlog[0].note === "csv · pdf · xlsx",
+      () => f5.backlog[1].name === "Search", () => f5.backlog[1].note === "later",
+      () => js(Object.keys(f5.meta.checks)) === '["test","lint","types"]',
+      () => js(f5.meta.approvalRoles) === '{"design":["tech","security"],"tasks":["tech"]}',
+      () => js(f5.meta.milestones.map((m) => [m.name, m.features])) === '[["beta",["app","billing"]],["ga",["auth"]]]',
+      () => f5.meta.specVersion === "1.21.0", () => f5.meta.changelogAt === T(9),
+      () => S.mergeStateJson(undefined, { meta: {} }, { meta: {} }).kind === "roadmap",
+    ]);
 
     // 6. a meta scalar both sides changed differently → a real conflict: ours kept, reported; written INTO the file as
     // mergeConflicts (valid JSON, ours' BOM / CRLF / final newline kept); an unknown key → 3-way per key
@@ -798,13 +804,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     const at2 = S.mergeAttributes(at1.text, false);
     const at3 = S.mergeAttributes(at1.text, true);
     const at4 = S.mergeAttributes(at3.text, true);
-    ok(bad.ok === false && bad.parseError === "theirs" && g1.kind === "generated" && g1.keepOurs === true && g2.keepOurs === false &&
-      added.ok && added.clean && js(JSON.parse(added.text).ticks) === js({ 1: T(1), 2: T(2) }) &&
-      S.mergeKindOfPath(".specs/a/.state.json") === "state" && S.mergeKindOfPath(".specs/roadmap.json") === "roadmap" && S.mergeKindOfPath("x/.specs/SPECS.md") === "generated" &&
-      at1.changed && at1.text.startsWith("*.png binary\r\n") && S.MERGE_ATTRIBUTE_LINES.every((l) => at1.text.includes(l + "\r\n")) &&
-      S.MERGE_ATTRIBUTE_LINES[0] === ".specs/**/.state.json merge=dev-spec-state" && !at2.changed && at3.changed && at3.text === "*.png binary\r\n" && !at4.changed,
-      "1.21 F1a merge: an unparseable side merges nothing (parseError); ROADMAP.md / SPECS.md keep ours only when both sides are dev-spec's output (a hand-written one is left to git's text merge); an empty base merges as added on both sides; .gitattributes gains / loses the driver's lines idempotently, other lines and CRLF kept (got " +
-      js([bad, g1, g2, at1.text]) + ")");
+    all("1.21 F1a merge: an unparseable side merges nothing (parseError); ROADMAP.md / SPECS.md keep ours only when both sides are dev-spec's output (a hand-written one is left to git's text merge); an empty base merges as added on both sides; .gitattributes gains / loses the driver's lines idempotently, other lines and CRLF kept (got " +
+      js([bad, g1, g2, at1.text]) + ")", [
+      () => bad.ok === false, () => bad.parseError === "theirs", () => g1.kind === "generated", () => g1.keepOurs === true,
+      () => g2.keepOurs === false, () => added.ok, () => added.clean, () => js(JSON.parse(added.text).ticks) === js({ 1: T(1), 2: T(2) }),
+      () => S.mergeKindOfPath(".specs/a/.state.json") === "state", () => S.mergeKindOfPath(".specs/roadmap.json") === "roadmap",
+      () => S.mergeKindOfPath("x/.specs/SPECS.md") === "generated", () => at1.changed, () => at1.text.startsWith("*.png binary\r\n"),
+      () => S.MERGE_ATTRIBUTE_LINES.every((l) => at1.text.includes(l + "\r\n")),
+      () => S.MERGE_ATTRIBUTE_LINES[0] === ".specs/**/.state.json merge=dev-spec-state", () => !at2.changed, () => at3.changed,
+      () => at3.text === "*.png binary\r\n", () => !at4.changed,
+    ]);
 
     // 9. doctor fails merge-conflicts while a conflicted merge's list is still in the feature's .state.json or in roadmap.json (PT)
     const mp = path.join(tmp, "proj-merge-doctor");

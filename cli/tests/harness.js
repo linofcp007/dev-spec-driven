@@ -5,7 +5,10 @@
  * (a chain, when a file needs another); the child requires this module and hands every file the same context:
  *
  *   ok(cond, label)   one assertion — "  ok   - <label>" / "  FAIL - <label>"
- *   run(args)         one `node cli/dev-spec.js <args>` → { out: stdout + stderr, code } — its default project is `tmp`
+ *   all(label, conds) · eq(actual, expected, label)   one assertion each: all() over many conditions ({ name: cond } or
+ *                     [() => cond, …] — a FAIL names the false ones), eq() a JSON deep equality (a FAIL shows the first
+ *                     difference) — scripts/test-runner.js assertHelpers; prefer all() beyond ~4 conditions
+ *   run(args)        one `node cli/dev-spec.js <args>` → { out: stdout + stderr, code } — its default project is `tmp`
  *                     (SPEC_PROJECT_DIR); a file makes its own projects under it (--project path.join(tmp, "…"))
  *   tmp · CLI         this process's temp dir · cli/dev-spec.js
  *   require · __dirname · __filename   cli/test-cli.js's, so the test code reads paths from cli/ —
@@ -20,7 +23,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createRequire } = require("module");
-const { exitFlushed, rmTmpDir, isolate } = require("../../scripts/test-runner.js");
+const { exitFlushed, rmTmpDir, isolate, assertHelpers } = require("../../scripts/test-runner.js");
 
 // Hermetic (1.26): no SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / DEV_SPEC_* … of the shell, and a fresh empty temp folder as the
 // working folder — what the runner already gave this chain (then a no-op), and the same when this harness is loaded any other
@@ -49,7 +52,7 @@ function end() {
 
 // One chain (scripts/test-runner.js): the context every file of it receives.
 function setup() {
-  const ctx = { ok, run, tmp, CLI, require: createRequire(CLI_TEST), __dirname: CLI_DIR, __filename: CLI_TEST };
+  const ctx = { ok, ...assertHelpers(ok), run, tmp, CLI, require: createRequire(CLI_TEST), __dirname: CLI_DIR, __filename: CLI_TEST };
   return { ctx, counts: () => ({ pass, fail }), fail: (label) => ok(false, label), end };
 }
 

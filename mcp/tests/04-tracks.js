@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, __dirname }) => {
 
   { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
   const w2 = path.join(tmp, "proj-wp2");
@@ -436,15 +436,18 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
     const req = rd(path.join(sd, "requirements.md")), des = rd(path.join(sd, "design.md")), tsk = rd(path.join(sd, "tasks.md"));
     const plan = rd(path.join(sd, "test-plan.md")), chl = rd(path.join(sd, "checklist.md")), cls = rd(path.join(sd, "classification.md"));
     const steer = rd(path.join(tp, ".specs", "steering", "accessibility.md"));
-    ok(cr.ok && cr.tracks.join() === "core,tdd,a11y" && /#### \[A11Y\] Accessibility — Acceptance Criteria \(EARS\)\n5\. \*\*US-1\.AC-5\*\* — WHEN a user navigates with the keyboard only/.test(req) &&
-      /6\. \*\*US-1\.AC-6\*\* — THE SYSTEM SHALL keep a text contrast ratio/.test(req) && req.indexOf("[A11Y]") < req.indexOf("### US-2") &&
-      /## \[A11Y\] Keyboard Navigation\n> \*\*TODO\*\* — replace with real values \(remove this line when done\)\.\nTab order, focus traps, shortcuts\./.test(des) &&
-      /## \[A11Y\] Screen Reader Support\n> \*\*TODO\*\*/.test(des) && /## \[A11Y\] Contrast\n> \*\*TODO\*\*/.test(des) &&
-      /## Story US-1 — \[A11Y\] Accessibility\n- \[ \] 7\. \[US1\] Keyboard walk-through of Settings\n  - _Requirements: US-1\.AC-5_\n  - _Makes green: T-06_\n- \[ \] 8\. \[US1\] Contrast audit\n  - _Requirements: US-1\.AC-6_\n  - _Makes green: T-07_/.test(tsk) &&
-      /## \[A11Y\] Traceability Matrix[\s\S]*\| T-06 \| e2e \| example \| keyboard-only walk-through reaches every control \| US-1\.AC-5 \|[\s\S]*\| T-07 \| unit \| property \|/.test(plan) &&
-      /\| T-05 \| integration \| example \| \[behavior\] \| US-2\.AC-1 \|/.test(plan) && /- \[ \] A11Y: axe-core reports no violation/.test(chl) &&
-      /## Active Tracks\ncore \+tdd \+a11y/.test(cls) && /\*\*\+a11y:\*\*/.test(cls) && /WCAG 2\.1 AA is the floor/.test(steer) && cr.created.includes("steering/accessibility.md"),
-      "feature F4: spec_create +tdd +a11y scaffolds the [A11Y] criteria (US-1.AC-5/6, before US-2), the 3 design sections with the > **TODO** sentinel, the task block (Requirements + Makes green), the T-06/T-07 rows after the template's, the checklist item, classification and the steering file (got " + js(cr.created) + ")");
+    all("feature F4: spec_create +tdd +a11y scaffolds the [A11Y] criteria (US-1.AC-5/6, before US-2), the 3 design sections with the > **TODO** sentinel, the task block (Requirements + Makes green), the T-06/T-07 rows after the template's, the checklist item, classification and the steering file (got " + js(cr.created) + ")", [
+      () => cr.ok, () => cr.tracks.join() === "core,tdd,a11y",
+      () => /#### \[A11Y\] Accessibility — Acceptance Criteria \(EARS\)\n5\. \*\*US-1\.AC-5\*\* — WHEN a user navigates with the keyboard only/.test(req),
+      () => /6\. \*\*US-1\.AC-6\*\* — THE SYSTEM SHALL keep a text contrast ratio/.test(req), () => req.indexOf("[A11Y]") < req.indexOf("### US-2"),
+      () => /## \[A11Y\] Keyboard Navigation\n> \*\*TODO\*\* — replace with real values \(remove this line when done\)\.\nTab order, focus traps, shortcuts\./.test(des),
+      () => /## \[A11Y\] Screen Reader Support\n> \*\*TODO\*\*/.test(des), () => /## \[A11Y\] Contrast\n> \*\*TODO\*\*/.test(des),
+      () => /## Story US-1 — \[A11Y\] Accessibility\n- \[ \] 7\. \[US1\] Keyboard walk-through of Settings\n  - _Requirements: US-1\.AC-5_\n  - _Makes green: T-06_\n- \[ \] 8\. \[US1\] Contrast audit\n  - _Requirements: US-1\.AC-6_\n  - _Makes green: T-07_/.test(tsk),
+      () => /## \[A11Y\] Traceability Matrix[\s\S]*\| T-06 \| e2e \| example \| keyboard-only walk-through reaches every control \| US-1\.AC-5 \|[\s\S]*\| T-07 \| unit \| property \|/.test(plan),
+      () => /\| T-05 \| integration \| example \| \[behavior\] \| US-2\.AC-1 \|/.test(plan),
+      () => /- \[ \] A11Y: axe-core reports no violation/.test(chl), () => /## Active Tracks\ncore \+tdd \+a11y/.test(cls),
+      () => /\*\*\+a11y:\*\*/.test(cls), () => /WCAG 2\.1 AA is the floor/.test(steer), () => cr.created.includes("steering/accessibility.md"),
+    ]);
     const st = S.statusFeature(tp, "settings");
     ok(st.tracks === "core +tdd +a11y" && st.packSections && st.packSections.a11y.marker === "[A11Y]" && st.packSections.a11y.sections.every((s) => s.present && !s.filled),
       "feature F4: spec_status reports the pack's sections (present, not filled) under packSections (got " + js(st.packSections) + ")");
@@ -553,10 +556,13 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
     const bl = S.trackPacks(tv, "list");
     const validNames = bl.packs.filter((p) => p.valid).map((p) => p.name);
     const bcr = S.createFeature(tv, "Thing", ["regexy"], "", undefined, "en");
-    ok(bc.ok && bc.verdict === "fail" && code("badjson", "json-invalid") && code("mismatch", "name-mismatch") && code("builtin", "marker-reserved") && code("beta", "marker-duplicate") &&
-      code("huge", "too-big") && code("regexy", "signal-invalid") && code("nosections", "field-invalid") && code("badrow", "fragment-row") && code("badref", "fragment-ref") &&
-      code("sec", "name-reserved") && code("Upper", "name-invalid") && js(validNames) === js(["alpha"]) && bcr.ok === false && /Unknown track/.test(bcr.error),
-      "feature F4: invalid packs — bad JSON, name ≠ folder, a built-in marker, a duplicate marker (the first by name keeps it), an oversized track.json, a regex-looking keyword, no sections, a malformed row, an {{ac3}} naming nothing, a reserved and an invalid name — each an error with its code, and ignored (only 'alpha' is a track; +regexy is an unknown track) (got " + js(validNames) + " / " + js(bc.problems.filter((p) => p.severity === "error").map((p) => p.pack + ":" + p.code)) + ")");
+    all("feature F4: invalid packs — bad JSON, name ≠ folder, a built-in marker, a duplicate marker (the first by name keeps it), an oversized track.json, a regex-looking keyword, no sections, a malformed row, an {{ac3}} naming nothing, a reserved and an invalid name — each an error with its code, and ignored (only 'alpha' is a track; +regexy is an unknown track) (got " + js(validNames) + " / " + js(bc.problems.filter((p) => p.severity === "error").map((p) => p.pack + ":" + p.code)) + ")", [
+      () => bc.ok, () => bc.verdict === "fail", () => code("badjson", "json-invalid"), () => code("mismatch", "name-mismatch"),
+      () => code("builtin", "marker-reserved"), () => code("beta", "marker-duplicate"), () => code("huge", "too-big"),
+      () => code("regexy", "signal-invalid"), () => code("nosections", "field-invalid"), () => code("badrow", "fragment-row"),
+      () => code("badref", "fragment-ref"), () => code("sec", "name-reserved"), () => code("Upper", "name-invalid"),
+      () => js(validNames) === js(["alpha"]), () => bcr.ok === false, () => /Unknown track/.test(bcr.error),
+    ]);
 
     // A pack folder that is a link (symlink / junction) out of .specs/ is never read.
     const tl = path.join(tmp, "proj-f4-link");
@@ -828,14 +834,17 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
       S.trackPacks(d3, "signals", { op: "forget", track: "ui", word: "nothing here" }), S.trackPacks(d3, "signals", { op: "purge" })];
     const fg = payload(await rpc("tools/call", { name: "spec_tracks", arguments: { action: "signals", op: "forget", track: "obs", word: "heartbeat check", projectDir: d3 } }));
     const listMcp = payload(await rpc("tools/call", { name: "spec_tracks", arguments: { action: "signals", projectDir: d3 } }));
-    ok(set1.ok && set1.override.origin === "set" && set1.override.active && hb.tracks.includes("obs") && hb.overrides[0].word === "heartbeat check" &&
-      setOff.ok && keepSet.overrides.find((o) => o.track === "ui").effect === "off" && keepSet.overrides.find((o) => o.track === "ui").origin === "set" && !learnSet.signalOverrides &&
-      bad.every((r) => r.ok === false && typeof r.error === "string") && /core is always on/.test(bad[0].error) && /No track 'uii'/.test(bad[1].error) &&
-      /not a signal word/.test(bad[2].error) && /Unknown effect 'loud'/.test(bad[3].error) && bad[4].notFound && /Unknown signals operation 'purge'/.test(bad[5].error) &&
-      fg.ok && fg.removed.word === "heartbeat check" && js(listMcp) === js(S.trackPacks(d3, "signals")) && listMcp.overrides.length === 1 &&
-      /^\{\n {2}"signals": \[\n {4}\{"track":"ui","word":"Dashboard","effect":"off","count":1,"origin":"set","lastAt":"[^"]+"\}\n {2}\]\n\}\n$/.test(readC(d3)),
-      "1.21 F2b: spec_tracks {action: 'signals'} sets (applies at once — a word no table has is a literal signal), forgets and lists overrides; learning never changes a word set by hand; core, an unknown track, a pattern-like word, an unknown effect / op and a missing override are refused; MCP = engine; the file is one record per line (got " +
-      js([set1, hb.tracks, bad.map((r) => r.error), readC(d3)]) + ")");
+    all("1.21 F2b: spec_tracks {action: 'signals'} sets (applies at once — a word no table has is a literal signal), forgets and lists overrides; learning never changes a word set by hand; core, an unknown track, a pattern-like word, an unknown effect / op and a missing override are refused; MCP = engine; the file is one record per line (got " +
+      js([set1, hb.tracks, bad.map((r) => r.error), readC(d3)]) + ")", [
+      () => set1.ok, () => set1.override.origin === "set", () => set1.override.active, () => hb.tracks.includes("obs"),
+      () => hb.overrides[0].word === "heartbeat check", () => setOff.ok, () => keepSet.overrides.find((o) => o.track === "ui").effect === "off",
+      () => keepSet.overrides.find((o) => o.track === "ui").origin === "set", () => !learnSet.signalOverrides,
+      () => bad.every((r) => r.ok === false && typeof r.error === "string"), () => /core is always on/.test(bad[0].error),
+      () => /No track 'uii'/.test(bad[1].error), () => /not a signal word/.test(bad[2].error), () => /Unknown effect 'loud'/.test(bad[3].error),
+      () => bad[4].notFound, () => /Unknown signals operation 'purge'/.test(bad[5].error), () => fg.ok, () => fg.removed.word === "heartbeat check",
+      () => js(listMcp) === js(S.trackPacks(d3, "signals")), () => listMcp.overrides.length === 1,
+      () => /^\{\n {2}"signals": \[\n {4}\{"track":"ui","word":"Dashboard","effect":"off","count":1,"origin":"set","lastAt":"[^"]+"\}\n {2}\]\n\}\n$/.test(readC(d3)),
+    ]);
     // (4) a project without overrides is byte-identical — no classifier.json written when the human keeps the suggestion, no new keys
     // in classify / create results; a file of pending corrections only changes nothing either
     const d4 = fdir("same"), d5 = fdir("pending");
@@ -862,13 +871,15 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, __dirname 
     const many = Array.from({ length: 201 }, (_, i) => ({ track: "ui", word: "word" + i, effect: "off", origin: "set" }));
     fs.writeFileSync(cfile(d6), js({ signals: [{ track: "ui", word: "a|b", effect: "off" }, { track: "ui", word: "admin panel", effect: "off", origin: "set" }, ...many] }));
     const w2 = S.classify("Admin panel for refunds", { projectDir: d6 }), w2list = S.trackPacks(d6, "signals");
-    ok(w1.tracks.includes("ui") && js(w1.overridesWarning) === js({ code: "invalid-json" }) && w1.notes.some((n) => /classifier\.json is ignored \(not valid JSON\)/.test(n)) &&
-      !w1set.ok && /never rewritten/.test(w1set.error) && w1raw === "{ nope" &&
-      w1learn.ok && w1learn.signalOverrides.error === "invalid-json" && /was not recorded/.test(w1learn.note) && w1list.ok && w1list.warning.code === "invalid-json" &&
-      !w2.tracks.includes("ui") && w2.overridesWarning.code === "invalid-entries" && w2list.overrides.length === 200 &&
-      w2list.problems.some((p) => p.index === 0 && p.code === "invalid-entry") && w2list.problems.some((p) => p.code === "too-many"),
-      "1.21 F2b: an unparseable classifier.json is ignored with a warning (classify answers, set and learning refuse to rewrite it, list says why); an invalid entry is skipped with a warning while the valid ones apply; at most 200 overrides (got " +
-      js([w1.overridesWarning, w1set.error, w1learn.signalOverrides, w2.overridesWarning, w2list.problems.slice(0, 2)]) + ")");
+    all("1.21 F2b: an unparseable classifier.json is ignored with a warning (classify answers, set and learning refuse to rewrite it, list says why); an invalid entry is skipped with a warning while the valid ones apply; at most 200 overrides (got " +
+      js([w1.overridesWarning, w1set.error, w1learn.signalOverrides, w2.overridesWarning, w2list.problems.slice(0, 2)]) + ")", [
+      () => w1.tracks.includes("ui"), () => js(w1.overridesWarning) === js({ code: "invalid-json" }),
+      () => w1.notes.some((n) => /classifier\.json is ignored \(not valid JSON\)/.test(n)), () => !w1set.ok,
+      () => /never rewritten/.test(w1set.error), () => w1raw === "{ nope", () => w1learn.ok, () => w1learn.signalOverrides.error === "invalid-json",
+      () => /was not recorded/.test(w1learn.note), () => w1list.ok, () => w1list.warning.code === "invalid-json", () => !w2.tracks.includes("ui"),
+      () => w2.overridesWarning.code === "invalid-entries", () => w2list.overrides.length === 200,
+      () => w2list.problems.some((p) => p.index === 0 && p.code === "invalid-entry"), () => w2list.problems.some((p) => p.code === "too-many"),
+    ]);
     // (6) explain: every match with its tiers, cue / override, negation — and the project's overrides with their state
     const ex = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "We will not add feature flags or canary releases; show a modal instead", explain: true, projectDir: d1 } }));
     const m = (kw) => ex.explain.matches.find((x) => x.keyword === kw) || {};

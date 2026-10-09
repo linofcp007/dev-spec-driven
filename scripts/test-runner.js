@@ -329,6 +329,71 @@ async function settle() {
   while (pending() && Date.now() - t0 < SETTLE_MAX_MS) await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
+// The assertion helpers (1.26) every file receives beside `ok`, built on ITS ok (one call = one assertion, so the totals stay
+// comparable; a late one is a late assertion like any ok). A FAIL says what failed, not only that something did:
+//   all(label, conds)   ONE assertion over many conditions — `{ name: condition, … }` (the names are the keys) or
+//                       `[() => cond, …]` (each thunk's source is its name). A function is called (lazily, in order) and a
+//                       throw counts as false with its message — so a condition guarded by an earlier one (`r && r.ok` →
+//                       `() => r.ok`) never aborts the file; a promise is false (await it first). Every condition is
+//                       evaluated — no short circuit — and the FAIL line is followed by one `false: <name>` line per false one.
+//   eq(actual, expected, label)   deep equality through JSON (as `js(a) === js(b)` — key order counts); a FAIL is followed by
+//                       the FIRST difference: its path ($.features[2].name), what was found and what was expected.
+// Prefer all() over `ok(a && b && …)` beyond ~4 conditions (docs/maintainers/testing.md → Adding a test).
+const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+const thunkSource = (fn) => String(fn).replace(/^\s*(?:async\s*)?\(\s*\)\s*=>\s*/, "").replace(/\s+/g, " ").trim();
+const show = (v) => (v === undefined ? "undefined" : clip(JSON.stringify(v), 160));
+const kindOf = (v) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v);
+// The first difference between two JSON values (already through JSON) → "at <path>: …", or null when they are the same text.
+function firstDiff(a, b, at) {
+  if (JSON.stringify(a) === JSON.stringify(b)) return null;
+  const ka = kindOf(a), kb = kindOf(b);
+  if (ka !== kb) return `at ${at}: got ${ka} ${show(a)} — expected ${kb} ${show(b)}`;
+  if (ka === "array") {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if (i >= a.length) return `at ${at}[${i}]: missing (got ${a.length} item(s), expected ${b.length}) — expected ${show(b[i])}`;
+      if (i >= b.length) return `at ${at}[${i}]: unexpected extra item (got ${a.length}, expected ${b.length}): ${show(a[i])}`;
+      const d = firstDiff(a[i], b[i], `${at}[${i}]`);
+      if (d) return d;
+    }
+  } else if (ka === "object") {
+    const key = (k) => (/^[A-Za-z_$][\w$]*$/.test(k) ? `${at}.${k}` : `${at}[${JSON.stringify(k)}]`);
+    for (const k of Object.keys(b)) if (!Object.prototype.hasOwnProperty.call(a, k)) return `at ${key(k)}: missing — expected ${show(b[k])}`;
+    for (const k of Object.keys(a)) if (!Object.prototype.hasOwnProperty.call(b, k)) return `at ${key(k)}: unexpected key — got ${show(a[k])}`;
+    for (const k of Object.keys(b)) { const d = firstDiff(a[k], b[k], key(k)); if (d) return d; }
+    return `at ${at}: the same keys in another order — got ${show(Object.keys(a))}, expected ${show(Object.keys(b))}`;
+  } else if (ka === "string") {
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    const around = (s) => (i > 30 ? "…" : "") + JSON.stringify(s.slice(Math.max(0, i - 30), i + 60)) + (s.length > i + 60 ? "…" : "");
+    return `at ${at} (character ${i}): got ${around(a)} — expected ${around(b)}`;
+  }
+  return `at ${at}: got ${show(a)} — expected ${show(b)}`;
+}
+function assertHelpers(ok) {
+  const all = (label, conds) => {
+    const entries = Array.isArray(conds) ? conds.map((c, i) => [typeof c === "function" ? thunkSource(c) : `#${i + 1}`, c])
+      : conds && typeof conds === "object" ? Object.entries(conds) : [];
+    if (!entries.length) { ok(false, `${label}\n      all(): no condition given`); return false; }
+    const bad = [];
+    for (const [name, c] of entries) {
+      let v;
+      try { v = typeof c === "function" ? c() : c; } catch (e) { bad.push(`${name} (threw: ${clip(String((e && e.message) || e), 160)})`); continue; }
+      if (v && typeof v.then === "function") bad.push(`${name} (a promise — await it first)`);
+      else if (!v) bad.push(name);
+    }
+    ok(!bad.length, bad.length ? `${label}\n${bad.map((n) => `      false: ${clip(n, 400)}`).join("\n")}` : label);
+    return !bad.length;
+  };
+  const eq = (actual, expected, label) => {
+    const through = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+    let d;
+    try { d = firstDiff(through(actual), through(expected), "$"); } catch (e) { d = `not comparable through JSON: ${clip(String((e && e.message) || e), 160)}`; }
+    ok(!d, d ? `${label}\n      ${d}` : label);
+    return !d;
+  };
+  return { all, eq };
+}
+
 // A child: run the files of one chain, in order, in this process. `setup(files)` → { ctx, counts(), fail(label), end() } —
 // the suite's harness (its server, its temp dir, its helpers); the runner reports each file, then hands over to end(),
 // which prints the total line and exits.
@@ -359,7 +424,7 @@ async function runChildChain(opts) {
     let open = true;
     const ok = (cond, label) => (open ? h.ctx.ok(cond, label) : late(f, label));
     try {
-      const left = await require(f.file).run({ ...h.ctx, ok });
+      const left = await require(f.file).run({ ...h.ctx, ok, ...assertHelpers(ok) });
       if (left && typeof left === "object") Object.assign(h.ctx, left); // values for the files that need this one
     } catch (e) {
       h.fail(`${f.stem} threw: ${(e && e.stack) || e}`);
@@ -380,4 +445,4 @@ function main(opts) {
 }
 
 module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, isolate, hermeticEnv,
-  CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_TEST_FILE };
+  assertHelpers, firstDiff, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_TEST_FILE };

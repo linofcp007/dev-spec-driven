@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, S, tmp, require }) => {
+exports.run = async ({ ok, all, S, tmp, require }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
   const REQ = "# Feature: x\n\n## Summary\nExport invoices as CSV.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n" +
@@ -62,13 +62,16 @@ exports.run = async ({ ok, S, tmp, require }) => {
     const f = S.createFeature(p, "Parser", ["core"]);
     fs.writeFileSync(path.join(f.dir, "tasks.md"), cases.noDot);
     const doc = (S.specDoctor(p, f.slug).checks.find((c) => c.id === "unread-tasks") || {});
-    ok(js(got.noDot.nums) === "[1,3]" && js(got.noDot.body1) === "[]" && js(got.noDot.unread) === "[5]" &&
-      js(got.paren.body1) === "[]" && js(got.paren.unread) === "[5]" && js(got.tilde.body1) === "[]" && js(got.tilde.unread) === "[5]" &&
-      js(got.dash.unread) === "[6]" && js(got.quoted.nums) === "[2]" && js(got.quoted.unread) === "[3]" &&
-      js(subB[0].body) === js(["- [ ] write the grammar first", "- _Verify: node -e \"process.exit(0)\"_"]) && js(E.unreadTaskLines(sub)) === "[]" &&
-      js(E.unreadTaskLines(link)) === "[]" && doc.status === "warn" && /L5 `- \[ \] 2 Build lexer`/.test(doc.detail || ""),
-      "1.25.1 review 7: a mistyped task line under a task (`- [ ] 2 B`, `2)`, `[~]`) is no longer its body — doctor's unread-tasks names it, like `- [-] 2.` and a quoted `> - [ ] 1.`; a deeper sub-step checkbox stays the task's body; a link is no box (got " +
-      js([got, subB[0].body, doc.status, doc.detail]) + ")");
+    all("1.25.1 review 7: a mistyped task line under a task (`- [ ] 2 B`, `2)`, `[~]`) is no longer its body — doctor's unread-tasks names it, like `- [-] 2.` and a quoted `> - [ ] 1.`; a deeper sub-step checkbox stays the task's body; a link is no box (got " +
+      js([got, subB[0].body, doc.status, doc.detail]) + ")", [
+      () => js(got.noDot.nums) === "[1,3]", () => js(got.noDot.body1) === "[]", () => js(got.noDot.unread) === "[5]",
+      () => js(got.paren.body1) === "[]", () => js(got.paren.unread) === "[5]", () => js(got.tilde.body1) === "[]",
+      () => js(got.tilde.unread) === "[5]", () => js(got.dash.unread) === "[6]", () => js(got.quoted.nums) === "[2]",
+      () => js(got.quoted.unread) === "[3]",
+      () => js(subB[0].body) === js(["- [ ] write the grammar first", "- _Verify: node -e \"process.exit(0)\"_"]),
+      () => js(E.unreadTaskLines(sub)) === "[]", () => js(E.unreadTaskLines(link)) === "[]", () => doc.status === "warn",
+      () => /L5 `- \[ \] 2 Build lexer`/.test(doc.detail || ""),
+    ]);
   }
 
   // Finding 7 — the scanner read ATX phase headings only while activeTasks and the section readers read setext ones too: every task's

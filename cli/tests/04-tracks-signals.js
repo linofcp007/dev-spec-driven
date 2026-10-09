@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp, require, __dirname }) => {
+exports.run = ({ ok, all, run, tmp, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
   const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const pd = path.join(tmp, "f2-signals");
@@ -41,13 +41,15 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const bad = [run(["signals", "set", "core", "x", "off", "--project", pd]), run(["signals", "set", "ui", "a|b", "strong", "--project", pd]),
     run(["signals", "set", "ui", "grid", "--project", pd]), run(["signals", "purge", "--project", pd])];
   const back = run(["classify", "Admin panel for refunds", "--project", pd]);
-  ok(set.code === 0 && /Set: 'heartbeat grid' → strong for \+ui/.test(set.out) && setJson.ok && setJson.override.effect === "weak" && setJson.override.origin === "set" &&
-    forget.code === 0 && /Forgotten: 'admin panel' → off for \+ui/.test(forget.out) && gone.code === 1 && /No override 'admin panel'/.test(gone.out) &&
-    bad.every((r) => r.code === 1) && /core is always on/.test(bad[0].out) && /not a signal word/.test(bad[1].out) && /Usage|usage/.test(bad[2].out) &&
-    /Unknown signals operation 'purge'/.test(bad[3].out) && /\+ui: ON/.test(back.out) &&
-    /signals \[list \| set <track> <word> off\|weak\|strong \| forget <track> <word>\]/.test(run(["help"]).out),
-    "1.21 F2 (CLI): signals set / forget (exit 1 on a refusal: core, a pattern-like word, a missing effect, an unknown op, a missing override); forgetting the override brings the built-in reading back; help names the command (got " +
-    js([set.out, setJson.override, gone.out, bad.map((r) => r.out.split("\n")[0])]) + ")");
+  all("1.21 F2 (CLI): signals set / forget (exit 1 on a refusal: core, a pattern-like word, a missing effect, an unknown op, a missing override); forgetting the override brings the built-in reading back; help names the command (got " +
+    js([set.out, setJson.override, gone.out, bad.map((r) => r.out.split("\n")[0])]) + ")", [
+    () => set.code === 0, () => /Set: 'heartbeat grid' → strong for \+ui/.test(set.out), () => setJson.ok, () => setJson.override.effect === "weak",
+    () => setJson.override.origin === "set", () => forget.code === 0, () => /Forgotten: 'admin panel' → off for \+ui/.test(forget.out),
+    () => gone.code === 1, () => /No override 'admin panel'/.test(gone.out), () => bad.every((r) => r.code === 1),
+    () => /core is always on/.test(bad[0].out), () => /not a signal word/.test(bad[1].out), () => /Usage|usage/.test(bad[2].out),
+    () => /Unknown signals operation 'purge'/.test(bad[3].out), () => /\+ui: ON/.test(back.out),
+    () => /signals \[list \| set <track> <word> off\|weak\|strong \| forget <track> <word>\]/.test(run(["help"]).out),
+  ]);
   const file = path.join(pd, ".specs", "classifier.json");
   fs.writeFileSync(file, "{ nope");
   const inv = run(["classify", "Admin panel for refunds", "--project", pd]), invList = run(["signals", "--project", pd]), invSet = run(["signals", "set", "ui", "grid", "off", "--project", pd]);

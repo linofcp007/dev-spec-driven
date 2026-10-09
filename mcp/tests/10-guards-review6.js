@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
+exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the lexer) — read through mcp/test.js's require
   let HU; // what the hooks share before the engine loads (hooks/hook-utils.js — no engine)
   try { HU = require("../hooks/hook-utils.js"); } catch { HU = { approvalProjects: () => [], editTargets: () => [], sessionFlagFile: () => path.join(os.tmpdir(), "none") }; }
@@ -49,12 +49,15 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     const net = dec("PowerShell", "node \"" + C + "\" --% status \"alpha\" approve");
     const bash = dec("Bash", "echo --% approve");
     const hk = hookOut("approval-hook", pre(p, "PowerShell", { command: "node '" + C + "' --% approve alpha classification --force" }), { CLAUDE_PROJECT_DIR: p });
-    ok(js(seg) === js([["node", "x", "a", "b c|d", ";", "%X%", "'e", "f'"], ["Select-Object", "-First", "1"], ["node", "y"]]) &&
-      a.decision === "deny" && a.actions[0].kind === "approve" && a.actions[0].feature === "alpha" && a.actions[0].phase === "classification" && a.force === true &&
-      rm.decision === "deny" && rm.actions[0].kind === "remove" && lower.decision === "deny" && lower.actions[0].setting === "approvalGuard" &&
-      pipe.decision === "allow" && next.decision === "deny" && net.decision === "ask" && net.actions[0].why === "unparsed" && bash.decision === "allow" && decisionOf(hk) === "deny",
-      "1.24 r6 C1: PowerShell's --% passes the rest of the line (to a newline or an unquoted |) as raw words — `node <cli> --% approve …`, `feature remove … --yes`, `init --approval-guard off` are refused at deny (engine and hook), a pipe after it ends it, and the CLI followed by --% with an approval word it can't read asks (got " +
-      js([seg, a.decision, rm.decision, lower.decision, pipe.decision, next.decision, net.decision, bash.decision, decisionOf(hk)]) + ")");
+    all("1.24 r6 C1: PowerShell's --% passes the rest of the line (to a newline or an unquoted |) as raw words — `node <cli> --% approve …`, `feature remove … --yes`, `init --approval-guard off` are refused at deny (engine and hook), a pipe after it ends it, and the CLI followed by --% with an approval word it can't read asks (got " +
+      js([seg, a.decision, rm.decision, lower.decision, pipe.decision, next.decision, net.decision, bash.decision, decisionOf(hk)]) + ")", [
+      () => js(seg) === js([["node", "x", "a", "b c|d", ";", "%X%", "'e", "f'"], ["Select-Object", "-First", "1"], ["node", "y"]]),
+      () => a.decision === "deny", () => a.actions[0].kind === "approve", () => a.actions[0].feature === "alpha",
+      () => a.actions[0].phase === "classification", () => a.force === true, () => rm.decision === "deny", () => rm.actions[0].kind === "remove",
+      () => lower.decision === "deny", () => lower.actions[0].setting === "approvalGuard", () => pipe.decision === "allow",
+      () => next.decision === "deny", () => net.decision === "ask", () => net.actions[0].why === "unparsed", () => bash.decision === "allow",
+      () => decisionOf(hk) === "deny",
+    ]);
   }
 
   // C7 — fail closed: the CLI found where it runs, its subcommand a variable / substitution / ( expression / "$@" / nothing under
@@ -240,13 +243,17 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     const ap = (cfg.PreToolUse || []).find((e) => e.hooks.some((h) => /approval-hook/.test([h.command, ...(h.args || [])].join(" "))));
     const p = project("r6-e3", "en", { approvalGuard: "deny" }, ["Export"]);
     const hk = hookOut("approval-hook", pre(p, "mcp__plugin_dev-spec-driven_spec-driven__spec_add_track", { name: "export", track: "tdd", remove: true }), { CLAUDE_PROJECT_DIR: p });
-    ok(r1.decision === "deny" && r1.actions[0].kind === "guard-down" && r1.actions[0].setting === "track" && js(r1.actions[0].tracks) === js(["tdd"]) && r1.actions[0].feature === "export" &&
-      /add-track export tdd --remove/.test(r1.command) && /turn off \+tdd on 'export'/.test(r1.reason) && js(r2.actions[0].tracks) === js(["ai"]) &&
-      js(allowed) === js(["allow", "allow", "allow"]) && cli.every((d) => d.decision === "deny" && d.actions[0].setting === "track") && js(cli[0].actions[0].tracks) === js(["tdd"]) &&
-      js(cliOk) === js(["allow", "allow", "allow"]) && ask.decision === "ask" && new RegExp(ap.matcher).test("mcp__plugin_dev-spec-driven_spec-driven__spec_add_track") &&
-      new RegExp(ap.matcher).test("spec_add_track") && decisionOf(hk) === "deny",
-      "1.24 r6 E3: removing +tdd / +ai (spec_add_track {remove: true}, add-track --remove / --tracks) is a guard-down with the CLI line the human runs; other tracks, adding, remove: false stay allowed; hooks.json's matcher covers spec_add_track (got " +
-      js([r1.decision, r1.actions, r1.command, r2.actions, allowed, cli.map((d) => d.decision), cliOk, ask.decision, decisionOf(hk)]) + ")");
+    all("1.24 r6 E3: removing +tdd / +ai (spec_add_track {remove: true}, add-track --remove / --tracks) is a guard-down with the CLI line the human runs; other tracks, adding, remove: false stay allowed; hooks.json's matcher covers spec_add_track (got " +
+      js([r1.decision, r1.actions, r1.command, r2.actions, allowed, cli.map((d) => d.decision), cliOk, ask.decision, decisionOf(hk)]) + ")", [
+      () => r1.decision === "deny", () => r1.actions[0].kind === "guard-down", () => r1.actions[0].setting === "track",
+      () => js(r1.actions[0].tracks) === js(["tdd"]), () => r1.actions[0].feature === "export",
+      () => /add-track export tdd --remove/.test(r1.command), () => /turn off \+tdd on 'export'/.test(r1.reason),
+      () => js(r2.actions[0].tracks) === js(["ai"]), () => js(allowed) === js(["allow", "allow", "allow"]),
+      () => cli.every((d) => d.decision === "deny" && d.actions[0].setting === "track"), () => js(cli[0].actions[0].tracks) === js(["tdd"]),
+      () => js(cliOk) === js(["allow", "allow", "allow"]), () => ask.decision === "ask",
+      () => new RegExp(ap.matcher).test("mcp__plugin_dev-spec-driven_spec-driven__spec_add_track"),
+      () => new RegExp(ap.matcher).test("spec_add_track"), () => decisionOf(hk) === "deny",
+    ]);
   }
 
   // C-I10 — the hook's 2 s stdin safety net fired on a partial payload: it used to exit 0 (allowed). Partial input naming dev-spec /
@@ -367,12 +374,14 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     const did = S.refreshStaleRoadmap(p);
     // the hooks stat the stamp raw, before the engine loads: the same name
     const raw = ["stop-hook.js", "precommit-check.js"].filter((h) => !fs.readFileSync(path.join(__dirname, "..", "hooks", h), "utf8").includes('"' + S.ROADMAP_STALE_FILE + '"'));
-    ok(linted && afterSave.roadmapKept && afterSave.catalogKept && afterSave.stamp && afterSave.ignore === "*\n" && afterSave.staleApi === true && afterSave.stale &&
-      cSave.status === 0 && cSave.stdout === "" && resFresh && afterStop.silent && !afterStop.stamp && afterStop.fresh &&
-      midSession.stamp && !midSession.fresh && afterSession.out && !afterSession.stamp && afterSession.fresh &&
-      afterMutation.marked === true && !afterMutation.stamp && afterMutation.fresh && noop.refreshed === false && did.refreshed === true && !raw.length,
-      "1.24 r6 I-I1: a spec save lints at once and leaves the stamp .specs/.execution/roadmap-stale (git-ignored) — ROADMAP.md / SPECS.md untouched; the Stop hook, SessionStart and the next mutation refresh them once and clear it; the specs:// resources render in memory meanwhile (got " +
-      js({ linted, afterSave, cSave: [cSave.status, cSave.stdout.slice(0, 60)], resFresh, afterStop, midSession, afterSession, afterMutation, noop, did, raw }) + ")");
+    all("1.24 r6 I-I1: a spec save lints at once and leaves the stamp .specs/.execution/roadmap-stale (git-ignored) — ROADMAP.md / SPECS.md untouched; the Stop hook, SessionStart and the next mutation refresh them once and clear it; the specs:// resources render in memory meanwhile (got " +
+      js({ linted, afterSave, cSave: [cSave.status, cSave.stdout.slice(0, 60)], resFresh, afterStop, midSession, afterSession, afterMutation, noop, did, raw }) + ")", [
+      () => linted, () => afterSave.roadmapKept, () => afterSave.catalogKept, () => afterSave.stamp, () => afterSave.ignore === "*\n",
+      () => afterSave.staleApi === true, () => afterSave.stale, () => cSave.status === 0, () => cSave.stdout === "", () => resFresh,
+      () => afterStop.silent, () => !afterStop.stamp, () => afterStop.fresh, () => midSession.stamp, () => !midSession.fresh, () => afterSession.out,
+      () => !afterSession.stamp, () => afterSession.fresh, () => afterMutation.marked === true, () => !afterMutation.stamp, () => afterMutation.fresh,
+      () => noop.refreshed === false, () => did.refreshed === true, () => !raw.length,
+    ]);
     // the pre-commit check: a stale roadmap is refreshed, and a generated file that was staged is staged again (the commit holds the fresh one)
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.24 r6 I-I1 pre-commit: skipped — git not available");
     else {
@@ -415,14 +424,14 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
       "\n", "\r\n", "```", "~~~", "`", "<!--", "-->", "> ", "**", "Status: ", "DONE", "✅", "everything works", "x", "I've finished", "a tarefa 1 está feita", "y"];
     const gen = [];
     for (let i = 0; i < 2500; i++) { let m = ""; const n = 1 + Math.floor(rnd() * 12); for (let k = 0; k < n; k++) m += frags[Math.floor(rnd() * frags.length)] + (rnd() < 0.5 ? " " : ""); gen.push(m); }
-    const all = hand.concat(gen);
-    const proseDiff = f ? all.filter((m) => HU.claimProse(m, f.prose) !== E.stopProse(m)) : ["no filter file"];
-    const missed = f ? all.filter((m) => E.stopClaims(m).claim && !HU.claimMatch(m, f)) : ["no filter file"];
-    const filtered = f ? all.filter((m) => !HU.claimMatch(m, f)).length : 0;
+    const msgs = hand.concat(gen);
+    const proseDiff = f ? msgs.filter((m) => HU.claimProse(m, f.prose) !== E.stopProse(m)) : ["no filter file"];
+    const missed = f ? msgs.filter((m) => E.stopClaims(m).claim && !HU.claimMatch(m, f)) : ["no filter file"];
+    const filtered = f ? msgs.filter((m) => !HU.claimMatch(m, f)).length : 0;
     const fresh = (() => { try { return require("../scripts/build.js").buildStopClaims(E) === fs.readFileSync(filterFile, "utf8").replace(/\r\n/g, "\n"); } catch { return false; } })();
     ok(!proseDiff.length && !missed.length && filtered > 100 && fresh && f && js(f.claims) === js(E.stopClaimSources()),
       "1.24 r6 I-I4: the Stop hook's pre-filter reads the message's prose exactly as the engine does and lets through every message the engine reads as a claim (" +
-      all.length + " messages, " + filtered + " sent away); hooks/stop-claims.generated.json is the build's (got " + js({ proseDiff: proseDiff.slice(0, 3), missed: missed.slice(0, 3), filtered, fresh }) + ")");
+      msgs.length + " messages, " + filtered + " sent away); hooks/stop-claims.generated.json is the build's (got " + js({ proseDiff: proseDiff.slice(0, 3), missed: missed.slice(0, 3), filtered, fresh }) + ")");
 
     // (b) the hook: no claim → silent without the engine; a claim → the engine's block. A copy of the clone whose filter is missing,
     // of another version or stamped with another source size → the engine decides (loaded) — the same answers.

@@ -76,6 +76,42 @@ exports.run = async ({ ok }) => { ok(true, "w on time"); process.emitWarning("a 
   ok(held.code === 0 && lastLine(held.stdout) === "1 passed, 0 failed" && left.length === 0,
     "1.20 review: a times file the runner can't replace leaves no dev-spec-test-times-<key>.json.<pid>.tmp behind (got " + js([held.code, left]) + ")");
 
+  // 1.26 — the assertion helpers every file receives beside ok: all(label, conds) and eq(actual, expected, label), one assertion
+  // each (the totals stay comparable), built on the file's own ok (a late one is a late assertion). A FAIL says WHAT failed: the
+  // names of the false conditions (an object's keys, a thunk's source; a throw or a promise is false, with why) — every condition
+  // evaluated, no short circuit — and eq's first difference (its path, what was found, what was expected).
+  {
+    w("tests/08-helpers.js", `// all() and eq(): one assertion each, a FAIL that says what failed
+exports.run = async ({ all, eq }) => {
+  const r = { ok: true, items: [1, 2, 3] }, none = undefined;
+  all("all passes", [() => r.ok, () => r.items.length === 3]);
+  all("all fails", { "r is ok": r.ok, "three items": r.items.length === 4, "none has a name": () => none.name === "x", "a promise": () => Promise.resolve(true) });
+  all("thunks fail", [() => r.items.includes(9), () => true, () => r.items.length > 5]);
+  eq({ a: [1, { b: "x" }] }, { a: [1, { b: "x" }] }, "eq passes");
+  eq({ a: [1, { b: "xyz" }] }, { a: [1, { b: "xYz" }] }, "eq string");
+  eq([1, 2], [1, 2, 3], "eq length");
+  eq({ a: 1, b: 2 }, { b: 2, a: 1 }, "eq order");
+  setTimeout(() => all("late all", [() => true]), 30);
+};
+`);
+    const h = fake("--only", "08");
+    const block = (label) => { const at = h.out.indexOf("  FAIL - " + label + "\n"); return at < 0 ? null : h.out.slice(at).split(/\r?\n/).slice(1).filter((l, i, xs) => xs.slice(0, i + 1).every((x) => /^ {6}\S/.test(x))); };
+    const want = {
+      allPasses: /\n {2}ok {3}- all passes\r?\n/.test(h.out) && /\n {2}ok {3}- eq passes\r?\n/.test(h.out),
+      allFails: ((b) => !!b && b.length === 3 && b[0] === "      false: three items" && /^ {6}false: none has a name \(threw: .+\)$/.test(b[1]) &&
+        b[2] === "      false: a promise (a promise — await it first)")(block("all fails")),
+      thunks: js(block("thunks fail")) === js(["      false: r.items.includes(9)", "      false: r.items.length > 5"]),
+      eqString: js(block("eq string")) === js(["      at $.a[1].b (character 1): got \"xyz\" — expected \"xYz\""]),
+      eqLength: js(block("eq length")) === js(["      at $[2]: missing (got 2 item(s), expected 3) — expected 3"]),
+      eqOrder: js(block("eq order")) === js(["      at $: the same keys in another order — got [\"a\",\"b\"], expected [\"b\",\"a\"]"]),
+      late: /FAIL - late assertion from 08-helpers — [^\n]*: late all/.test(h.out),
+      total: h.code === 1 && lastLine(h.stdout) === "2 passed, 6 failed",
+    };
+    ok(Object.values(want).every(Boolean),
+      "1.26: all() and eq() are one assertion each, on the file's own ok (a late one is a late assertion) — a FAIL lists every false condition by name (an object's key, a thunk's source; a throw or a promise counts as false, saying so) and eq's first difference with its path (got " +
+      js({ want, out: h.out.split(/\r?\n/).filter((l) => /FAIL|^ {6}|passed/.test(l)) }) + ")");
+  }
+
   // 1.26 — hermetic chains: a suite started from a folder holding a .specs/ (the maintainer's dogfood one at the repo root: lang
   // pt) with SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, DEV_SPEC_DEFAULT_LANG… exported runs every chain in a fresh, empty temp folder
   // of its own (removed afterwards) with none of those variables — the suites' own DEV_SPEC_TEST_* and any other variable kept.

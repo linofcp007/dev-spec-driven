@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirname }) => {
 
   {
   // --- 1.13 WP1: ONE task scanner, numeric task numbers, one duplicate resolver, the evidence gate ---
@@ -105,13 +105,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
   const lxOdd = S.completeTask(w1, "legacy-exit", 2); // a record with nothing in it, on a task with no _Verify:_
   const lxNote = S.completeTask(w1, "legacy-exit", 1, { summary: "exporter checked by hand" });
   const lxRec = JSON.parse(fs.readFileSync(path.join(lx.dir, ".state.json"), "utf8")).evidence["1"];
-  ok(!lxVs.unverified.includes(1) && !lxFin.unverified.includes(1) && !(lxFin.blockers || []).some((b) => /#1/.test(b)) &&
-    S.specDoctor(w1, "legacy-exit").checks.find((c) => c.id === "verification").status === "pass" &&
-    lxTask1 === "- [x] 1. Build the exporter — exit 0" && !/ — $/m.test(lxFin.mergeSummary) &&
-    lxNote.ok && lxNote.verified === true && lxRec.summary === "exporter checked by hand" && lxRec.note === undefined &&
-    lxOdd.ok && lxOdd.verified === true && lxOdd.nothingToVerify === true && lxOdd.unverifiedReason === undefined && lxOdd.note === undefined &&
-    !lxVs.unverified.includes(2) && S.statusFeature(w1, "legacy-exit").tasks.list.find((t) => t.number === 2).verified === true,
-    "a v1.12 bare {exitCode: 0} on a task without _Verify:_ verifies (doctor, finish, merge summary 'exit 0'); a note replaces it as the summary; an empty record on a no-_Verify:_ task is what doctor says: verified, nothing to verify");
+  all("a v1.12 bare {exitCode: 0} on a task without _Verify:_ verifies (doctor, finish, merge summary 'exit 0'); a note replaces it as the summary; an empty record on a no-_Verify:_ task is what doctor says: verified, nothing to verify", [
+    () => !lxVs.unverified.includes(1), () => !lxFin.unverified.includes(1), () => !(lxFin.blockers || []).some((b) => /#1/.test(b)),
+    () => S.specDoctor(w1, "legacy-exit").checks.find((c) => c.id === "verification").status === "pass",
+    () => lxTask1 === "- [x] 1. Build the exporter — exit 0", () => !/ — $/m.test(lxFin.mergeSummary), () => lxNote.ok,
+    () => lxNote.verified === true, () => lxRec.summary === "exporter checked by hand", () => lxRec.note === undefined, () => lxOdd.ok,
+    () => lxOdd.verified === true, () => lxOdd.nothingToVerify === true, () => lxOdd.unverifiedReason === undefined, () => lxOdd.note === undefined,
+    () => !lxVs.unverified.includes(2), () => S.statusFeature(w1, "legacy-exit").tasks.list.find((t) => t.number === 2).verified === true,
+  ]);
   // One verdict everywhere (taskVerification): a task with no runnable _Verify:_ and nothing recorded is verified — with
   // nothingToVerify, and no reason code — in spec_complete_task, spec_status, spec_impact, doctor and spec_finish alike
   // (complete_task used to answer verified:false with NO unverifiedReason while doctor/finish/roadmap passed it).
@@ -621,12 +622,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const aDoc = S.specDoctor(a.p, a.slug);
     const aDone = S.completeTask(a.p, a.slug, 2);
     const aBrief = S.taskBrief(a.p, a.slug);
-    ok(Object.keys(aNext).join() === "ok,feature,next,remaining,total,batch" && aNext.next.number === 2 && aNext.remaining === 4 && aNext.total === 5 &&
-      aNext.batch.map((b) => b.number).join() === "2,3" && js(aWaves.waves) === "[[2,3],[4],[5]]" && js(aWaves.cycles) === "[]" && js(aWaves.blocked) === "[]" &&
-      !aDoc.checks.some((c) => c.id === "task-deps") && aDone.ok && !("waitsOn" in aDone) && !("blocked" in aDone) && aDone.next.number === 3 &&
-      aBrief.task.number === 3 && !("dependsOn" in aBrief) && !/## Depends on/.test(aBrief.brief) && S.statusFeature(a.p, a.slug).tasks.next.number === 3,
-      "feature F3: a tasks.md without any _Depends:_ answers exactly as before — next = the first open task, the same result keys (no skipped / blocked), the [P] batch unchanged, no task-deps check, complete_task / brief / status unchanged; its waves follow tasks.md order (a [P] run together, split on a shared file, the task after the run behind all of it) (got " +
-      js([aNext, aWaves.waves]) + ")");
+    all("feature F3: a tasks.md without any _Depends:_ answers exactly as before — next = the first open task, the same result keys (no skipped / blocked), the [P] batch unchanged, no task-deps check, complete_task / brief / status unchanged; its waves follow tasks.md order (a [P] run together, split on a shared file, the task after the run behind all of it) (got " +
+      js([aNext, aWaves.waves]) + ")", [
+      () => Object.keys(aNext).join() === "ok,feature,next,remaining,total,batch", () => aNext.next.number === 2, () => aNext.remaining === 4,
+      () => aNext.total === 5, () => aNext.batch.map((b) => b.number).join() === "2,3", () => js(aWaves.waves) === "[[2,3],[4],[5]]",
+      () => js(aWaves.cycles) === "[]", () => js(aWaves.blocked) === "[]", () => !aDoc.checks.some((c) => c.id === "task-deps"), () => aDone.ok,
+      () => !("waitsOn" in aDone), () => !("blocked" in aDone), () => aDone.next.number === 3, () => aBrief.task.number === 3,
+      () => !("dependsOn" in aBrief), () => !/## Depends on/.test(aBrief.brief), () => S.statusFeature(a.p, a.slug).tasks.next.number === 3,
+    ]);
 
     // next skips a task whose dependencies are open; complete_task on such a task warns, never refuses.
     const b = mkF("skip");
@@ -720,15 +723,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const apType = await rpc("tools/call", { name: "spec_append_tasks", arguments: { name: ap.slug, tasks: [{ text: "Z", depends: ["x"] }], projectDir: ap.p } });
     const apTok = S.appendTasks(ap.p, ap.slug, [{ text: "Z", depends: "soon" }]);
     const apTyped = S.appendTasks(ap.p, ap.slug, [{ text: "Sneaky _Depends: 1_ in the text" }]);
-    ok(ap1.ok && ap1.appended.map((t) => t.number + ":" + t.depends.join("+")).join() === "2:1,3:1+2" && /- \[ \] 2\. Reader\n {2}- _Depends: 1_\n- \[ \] 3\. Glue\n {2}- _Depends: 1, 2_\n/.test(apText) &&
-      js(S.nextTask(ap.p, ap.slug, { waves: true }).waves) === "[[1],[2],[3]]" &&
-      apBad.ok === false && /Task 1: depends names no task: #9 — give the number of an active task, or of a task of this call \(numbered 4 here\)\. Nothing was written\./.test(apBad.error) && js(apBad.phantomDepends) === "[9]" &&
-      apSelf.ok === false && /Task 1 is numbered 4 here and would depend on itself/.test(apSelf.error) &&
-      apCycle.ok === false && /The dependencies would form a cycle: #4, #5\. Nothing was written\./.test(apCycle.error) && js(apCycle.cycles) === "[[4,5]]" &&
-      apType.result.isError === true && apTok.ok === false && /depends takes task numbers \(3 or #3\) \(got 'soon'\)/.test(apTok.error) &&
-      apTyped.ok === false && /_Depends:_ would not read back/.test(apTyped.error) && get(ap, "tasks.md") === apText,
-      "feature F3: spec_append_tasks {depends} writes _Depends:_ (an existing task, or a task of the same call by the number it gets) and the waves read it; a number naming no task (the error names the numbers the call takes), a self-dependency, a cycle, a non-number (schema or engine) or a _Depends:_ typed in the text writes nothing (got " +
-      js([ap1.appended, apBad.error, apSelf.error, apCycle.error, apTok.error, apTyped.error]) + ")");
+    all("feature F3: spec_append_tasks {depends} writes _Depends:_ (an existing task, or a task of the same call by the number it gets) and the waves read it; a number naming no task (the error names the numbers the call takes), a self-dependency, a cycle, a non-number (schema or engine) or a _Depends:_ typed in the text writes nothing (got " +
+      js([ap1.appended, apBad.error, apSelf.error, apCycle.error, apTok.error, apTyped.error]) + ")", [
+      () => ap1.ok, () => ap1.appended.map((t) => t.number + ":" + t.depends.join("+")).join() === "2:1,3:1+2",
+      () => /- \[ \] 2\. Reader\n {2}- _Depends: 1_\n- \[ \] 3\. Glue\n {2}- _Depends: 1, 2_\n/.test(apText),
+      () => js(S.nextTask(ap.p, ap.slug, { waves: true }).waves) === "[[1],[2],[3]]", () => apBad.ok === false,
+      () => /Task 1: depends names no task: #9 — give the number of an active task, or of a task of this call \(numbered 4 here\)\. Nothing was written\./.test(apBad.error),
+      () => js(apBad.phantomDepends) === "[9]", () => apSelf.ok === false,
+      () => /Task 1 is numbered 4 here and would depend on itself/.test(apSelf.error), () => apCycle.ok === false,
+      () => /The dependencies would form a cycle: #4, #5\. Nothing was written\./.test(apCycle.error), () => js(apCycle.cycles) === "[[4,5]]",
+      () => apType.result.isError === true, () => apTok.ok === false, () => /depends takes task numbers \(3 or #3\) \(got 'soon'\)/.test(apTok.error),
+      () => apTyped.ok === false, () => /_Depends:_ would not read back/.test(apTyped.error), () => get(ap, "tasks.md") === apText,
+    ]);
 
     // The bugfix gate keeps its precedence over the dependency warning (a refusal, nothing recorded).
     const bg = mkF("bug", "en", "bugfix");

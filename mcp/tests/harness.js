@@ -6,7 +6,10 @@
  * temp dir) for the whole chain, runs the handshake, and hands every file of the chain the same context:
  *
  *   ok(cond, label)          one assertion — "  ok   - <label>" / "  FAIL - <label>"
- *   rpc(method, params)      one JSON-RPC request → its reply (no reply within 15 s fails the run, never drains to exit 0)
+ *   all(label, conds)        one assertion over many conditions ({ name: cond } or [() => cond, …]): a FAIL names the false
+ *                            ones · eq(actual, expected, label): JSON deep equality, a FAIL shows the first difference
+ *                            (scripts/test-runner.js assertHelpers — prefer all() beyond ~4 conditions)
+ *   rpc(method, params)     one JSON-RPC request → its reply (no reply within 15 s fails the run, never drains to exit 0)
  *   rawOnce(line)            a raw line → the first id-null (or batch) reply — malformed-input tests
  *   notify(method, params)   a notification (no reply)
  *   payload(res)             a tools/call reply's JSON payload
@@ -31,7 +34,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createRequire } = require("module");
-const { exitFlushed, rmTmpDir, isolate } = require("../../scripts/test-runner.js");
+const { exitFlushed, rmTmpDir, isolate, assertHelpers } = require("../../scripts/test-runner.js");
 
 // Hermetic (1.26), before the engine loads: no SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / DEV_SPEC_* … of the shell, and a fresh
 // empty temp folder as the working folder — what the runner already gave this chain (then a no-op), and the same when this
@@ -195,7 +198,7 @@ async function setup(chain) {
     "spec_complete_task's description: a nothingToVerify task passes doctor / finish / ROADMAP.md; only an unverified task is listed with its reason");
   muted = false;
   const ctx = {
-    ok, rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature,
+    ok, ...assertHelpers(ok), rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature,
     child, abort, init, list, ctDesc, ntvSentence,
     require: createRequire(MCP_TEST), __dirname: MCP_DIR, __filename: MCP_TEST,
   };

@@ -68,7 +68,18 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   area or a file past ~1,500 lines: `NN-<area>-<topic>.js` whose first comment line says what it holds, exporting
   `run` (async in the MCP suite) — the runner picks it up. Make your projects under `tmp` (`path.join(tmp, "proj-<name>")`, a name no other file uses); the MCP
   server's default project (`tmp` itself) is 01-core's. A test that reads what another file built declares it in `deps`
-  — never rely on file order. Timing-bound assertions share the machine with the other processes: bound them relative to
+  — never rely on file order. **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
+  `eq(actual, expected, label)` (scripts/test-runner.js `assertHelpers`, built on the file's own `ok` — one call is ONE
+  assertion, so the totals stay comparable, and a late one is a late assertion). **Prefer `all()` over `ok(a && b && …)` for
+  more than ~4 conditions**: `ok()` with 15 conditions said only that one of them was false. `all(label, [() => a.ok, () =>
+  /x/.test(a.text), …])` names each false condition on its own `false: <the thunk's source>` line below the FAIL (an object
+  `{ name: cond, … }` names them by its keys); every condition is evaluated (no short circuit), a thunk runs lazily in order and
+  a throw is a false condition with its message — so `r && r.ok` becomes `() => r.ok` and never aborts the file — and a promise
+  is false (await it first). A prose check over many texts reads best as a table: `[[where, text, pattern], …]` mapped into
+  `all()`'s object (mcp/tests/15-quality.js, the 1.22 simplification-pass prose: 65 conditions, each FAIL names the file and the
+  sentence). `eq()` is `js(a) === js(b)` (key order counts) with the first difference printed: its path (`$.features[2].name`),
+  what was found, what was expected. The 1.26 conversion turned the 200 `ok()`s of 15 or more conditions into `all()` (not
+  02-mcp-server.js / 17-docs*.js). Timing-bound assertions share the machine with the other processes: bound them relative to
   a baseline measured in the same test (as the 1.17 H checks do), not with a figure tuned on an idle machine — keep the old
   figure as a floor (`Math.max(floor, k × baseline)`: an idle run is as strict as before) and measure once more on a
   timing-only miss (the statusline and flat-import checks since the 1.20 review).

@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
-exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, SERVER, child, require }) => {
+exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, SERVER, child, require }) => {
 
   { // 1.14 C4 — /spec-tour + the fixes from the independent review of the first 1.14 packages.
     const c4Root = path.join(tmp, "proj-c4");
@@ -20,13 +20,17 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, SERVER, child, r
     const tourMd = fs.readFileSync(path.join(root, "commands", "spec-tour.md"), "utf8");
     const tourFm = PRc4.parseFrontMatter(tourMd).data;
     const tourGet = PRc4.getPrompt("spec-tour", "add a length check to the signup name", { lang: "en" });
-    ok(/10-minute tour/.test(tourFm.description) && !/ PT - | ES - /.test(tourFm.description) && tourFm.description.length <= 150 && tourFm["disable-model-invocation"] === "true" && tourFm["argument-hint"] &&
-      ["spec_scan", "spec_classify", "spec_init", "spec_create", "ears_validate", "spec_doctor", "spec_approve", "spec_complete_task", "spec_next_action", "spec_finish", "spec_feature"].every((t) => tourMd.includes("`" + t)) &&
-      /1–2 EARS criteria/.test(tourMd) && /exactly \*\*2 tasks\*\*/.test(tourMd) && /real\*\*\s+`_Verify: <command>_`/.test(tourMd) && /each only after the user says yes\*\*; never approve on their behalf/.test(tourMd) &&
-      /evidence: \{command, exitCode, summary\}/.test(tourMd) && /confirm: true` only after the user\s+confirms/.test(tourMd) && /action: "archive"/.test(tourMd) &&
-      /in the user's language/.test(tourMd) && !/\b(?:PRs?|pull requests?|CI)\b/.test(tourMd) &&
-      tourGet.ok && /Change to take through the tour \(optional\): add a length check to the signup name/.test(tourGet.messages[0].content.text),
-      "C4.1 /spec-tour: a short EN description (no PT / ES tail), user-invoked only, scan → classify → 1–2 EARS → design → 2 tasks with real _Verify:_ → approvals only on the user's yes → one task with evidence → next_action → finish → keep/archive/remove (confirm); no PR/CI wording; served as a prompt");
+    all("C4.1 /spec-tour: a short EN description (no PT / ES tail), user-invoked only, scan → classify → 1–2 EARS → design → 2 tasks with real _Verify:_ → approvals only on the user's yes → one task with evidence → next_action → finish → keep/archive/remove (confirm); no PR/CI wording; served as a prompt", [
+      () => /10-minute tour/.test(tourFm.description), () => !/ PT - | ES - /.test(tourFm.description), () => tourFm.description.length <= 150,
+      () => tourFm["disable-model-invocation"] === "true", () => tourFm["argument-hint"],
+      () => ["spec_scan", "spec_classify", "spec_init", "spec_create", "ears_validate", "spec_doctor", "spec_approve", "spec_complete_task", "spec_next_action", "spec_finish", "spec_feature"].every((t) => tourMd.includes("`" + t)),
+      () => /1–2 EARS criteria/.test(tourMd), () => /exactly \*\*2 tasks\*\*/.test(tourMd), () => /real\*\*\s+`_Verify: <command>_`/.test(tourMd),
+      () => /each only after the user says yes\*\*; never approve on their behalf/.test(tourMd),
+      () => /evidence: \{command, exitCode, summary\}/.test(tourMd), () => /confirm: true` only after the user\s+confirms/.test(tourMd),
+      () => /action: "archive"/.test(tourMd), () => /in the user's language/.test(tourMd), () => !/\b(?:PRs?|pull requests?|CI)\b/.test(tourMd),
+      () => tourGet.ok,
+      () => /Change to take through the tour \(optional\): add a length check to the signup name/.test(tourGet.messages[0].content.text),
+    ]);
 
     // C4.2.1 — '-compliant' (and -compliance / -certified / -grade) compounds keep the keyword a signal; '-aware' does not.
     const gdprC = cls("A GDPR-compliant signup form"), hipaaC = cls("HIPAA-compliant storage"), socC = cls("SOC2-certified audit export"), gradeC = cls("enterprise-grade SSO");

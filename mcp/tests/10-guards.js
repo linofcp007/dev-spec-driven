@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }) => {
 
   // --- 1.13 WP11: guard mode (PreToolUse hook), scoped steering (front matter, custom files, brief, doctor), design.md save check ---
   {
@@ -142,11 +142,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const fmC = S.steeringFrontMatter("---\ntitle: x\n---\nb");
     const fmD = S.steeringFrontMatter("# Plain\n---\ninclusion: manual\n---\n");
     const fmE = S.steeringFrontMatter("---\nSome intro prose under a rule.\n\n---\n# Title\n");
-    ok(fmA.frontMatter && fmA.inclusion === "fileMatch" && fmA.patterns.join("|") === "src/api/**|lib/{a,b}/**" && fmA.body === "# Body\ntext" &&
-      fmB.inclusion === "manual" && fmB.patterns.join("|") === "a/**|b/**" && fmB.body === "body" && fmC.inclusion === "always" &&
-      S.steeringFrontMatter("---\ninclusion: auto\n---\nx").inclusion === "manual" && !fmD.frontMatter && fmD.inclusion === null && fmD.body.startsWith("# Plain") &&
-      !fmE.frontMatter && fmE.body.startsWith("---\nSome intro") && !S.steeringFrontMatter("---\n# Heading\n---\ntext").frontMatter,
-      "steeringFrontMatter: CRLF + BOM + quoted list (a comma inside {…} doesn't split), YAML '- item' lists, comments; no inclusion → always; unknown (auto) → manual; front matter only at the top, and only YAML-looking (a '---' rule over prose is not)");
+    all("steeringFrontMatter: CRLF + BOM + quoted list (a comma inside {…} doesn't split), YAML '- item' lists, comments; no inclusion → always; unknown (auto) → manual; front matter only at the top, and only YAML-looking (a '---' rule over prose is not)", [
+      () => fmA.frontMatter, () => fmA.inclusion === "fileMatch", () => fmA.patterns.join("|") === "src/api/**|lib/{a,b}/**",
+      () => fmA.body === "# Body\ntext", () => fmB.inclusion === "manual", () => fmB.patterns.join("|") === "a/**|b/**", () => fmB.body === "body",
+      () => fmC.inclusion === "always", () => S.steeringFrontMatter("---\ninclusion: auto\n---\nx").inclusion === "manual", () => !fmD.frontMatter,
+      () => fmD.inclusion === null, () => fmD.body.startsWith("# Plain"), () => !fmE.frontMatter, () => fmE.body.startsWith("---\nSome intro"),
+      () => !S.steeringFrontMatter("---\n# Heading\n---\ntext").frontMatter,
+    ]);
     // Block scalars / nested maps are valid YAML front matter: their indented lines are continuations, never keys.
     const fmF = S.steeringFrontMatter("---\ninclusion: manual\ndescription: |\n  API conventions. Use when\n  inclusion: always\nmeta:\n  owner: api-team\nfileMatchPattern:\n  - src/api/**\n---\n# Rules\n- Real rule.\n");
     ok(fmF.frontMatter && fmF.inclusion === "manual" && fmF.patterns.join() === "src/api/**" && fmF.body === "# Rules\n- Real rule.\n" &&
@@ -239,10 +241,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const csPt = (await call11("steering_scaffold", { file: "regras-ui.md", lang: "pt", projectDir: c11 })).p;
     const csPtText = fs.readFileSync(path.join(c11, ".specs", "steering", "regras-ui.md"), "utf8");
     const csKnown = (await call11("steering_scaffold", { file: "scale.md", projectDir: c11 })).p;
-    ok(cs1.ok && cs1.created && cs1.custom === true && csFm.inclusion === "fileMatch" && csFm.patterns.join() === "src/api/**" && /^# Api Conventions$/m.test(csText) &&
-      S.artifactState({ text: csFm.body }) === "placeholder" && cs2.ok && cs2.created === false && fs.readFileSync(path.join(c11, ".specs", "steering", "api-conventions.md"), "utf8") === csText &&
-      csPt.custom && /^## Regras$/m.test(csPtText) && /Steering com âmbito/.test(csPtText) && csKnown.custom === undefined && /# Scale Targets/.test(fs.readFileSync(csKnown.file, "utf8")),
-      "steering_scaffold: a custom name → a localized stub with front matter (inclusion: fileMatch + example pattern), never overwritten; known names keep their templates");
+    all("steering_scaffold: a custom name → a localized stub with front matter (inclusion: fileMatch + example pattern), never overwritten; known names keep their templates", [
+      () => cs1.ok, () => cs1.created, () => cs1.custom === true, () => csFm.inclusion === "fileMatch", () => csFm.patterns.join() === "src/api/**",
+      () => /^# Api Conventions$/m.test(csText), () => S.artifactState({ text: csFm.body }) === "placeholder", () => cs2.ok,
+      () => cs2.created === false, () => fs.readFileSync(path.join(c11, ".specs", "steering", "api-conventions.md"), "utf8") === csText,
+      () => csPt.custom, () => /^## Regras$/m.test(csPtText), () => /Steering com âmbito/.test(csPtText), () => csKnown.custom === undefined,
+      () => /# Scale Targets/.test(fs.readFileSync(csKnown.file, "utf8")),
+    ]);
     const rejects = [];
     for (const nm of ["nul.md", "com1.md", "constructor.md", "../evil.md", "a/b.md", "a\\b.md", "Api.md", "-lead.md", "notes.txt", "x".repeat(64) + ".md", "__proto__", "toString"]) {
       const r = await call11("steering_scaffold", { file: nm, projectDir: c11 });
@@ -366,15 +371,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const sNoClaim = S.stopCheck(pEn, { message: "I renamed the variable in src/billing.js." });
     const sActive = S.stopCheck(pEn, { message: claimMsg, stopHookActive: true });
     const sAdmit = S.stopCheck(pEn, { message: "Done, but task 1 is not verified yet." });
-    ok(sBlock.ok && sBlock.block === true && sBlock.why === "unverified" && sBlock.features.length === 1 && sBlock.features[0].feature === "billing" &&
-      JSON.stringify(sBlock.features[0].unverified) === JSON.stringify([{ number: 1, reason: "no-evidence" }]) &&
-      /^dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:\n {2}- billing: #1 \(no evidence\)\n/.test(sBlock.reason) &&
+    all("C1 stopCheck: a claim + a recently ticked task without evidence → block, naming the feature, the task and its reason and what to do (read the _Verify:_ in tasks.md, run it if safe, record it with spec_complete_task / say it plainly); no claim, stop_hook_active or an honest admission → allowed; the reason never hands over a `--run` command (got " +
+      JSON.stringify([sBlock.why, sBlock.features, sNoClaim.why, sActive.why, sAdmit.why]) + ")", [
+      () => sBlock.ok, () => sBlock.block === true, () => sBlock.why === "unverified", () => sBlock.features.length === 1,
+      () => sBlock.features[0].feature === "billing",
+      () => JSON.stringify(sBlock.features[0].unverified) === JSON.stringify([{ number: 1, reason: "no-evidence" }]),
+      () => /^dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:\n {2}- billing: #1 \(no evidence\)\n/.test(sBlock.reason),
       // (1.22 review 2: a task with several _Verify:_ commands is recorded as ONE run of all of them — the rule accepts nothing less)
-      /read each listed task's _Verify:_ command in \.specs\/billing\/tasks\.md \(task 1 first\) — a task with several: all of them, in ONE run joined with ` && ` —, run it on the final code only if it is safe to run/.test(sBlock.reason) && !/--run/.test(sBlock.reason) &&
-      /spec_complete_task \{name, number, evidence: \{command, exitCode, summary\}\}/.test(sBlock.reason) && /say plainly/.test(sBlock.reason) &&
-      sNoClaim.block === false && sNoClaim.why === "no-claim" && sActive.block === false && sActive.why === "stop-hook-active" && sAdmit.block === false && sAdmit.why === "admitted",
-      "C1 stopCheck: a claim + a recently ticked task without evidence → block, naming the feature, the task and its reason and what to do (read the _Verify:_ in tasks.md, run it if safe, record it with spec_complete_task / say it plainly); no claim, stop_hook_active or an honest admission → allowed; the reason never hands over a `--run` command (got " +
-      JSON.stringify([sBlock.why, sBlock.features, sNoClaim.why, sActive.why, sAdmit.why]) + ")");
+      () => /read each listed task's _Verify:_ command in \.specs\/billing\/tasks\.md \(task 1 first\) — a task with several: all of them, in ONE run joined with ` && ` —, run it on the final code only if it is safe to run/.test(sBlock.reason),
+      () => !/--run/.test(sBlock.reason), () => /spec_complete_task \{name, number, evidence: \{command, exitCode, summary\}\}/.test(sBlock.reason),
+      () => /say plainly/.test(sBlock.reason), () => sNoClaim.block === false, () => sNoClaim.why === "no-claim", () => sActive.block === false,
+      () => sActive.why === "stop-hook-active", () => sAdmit.block === false, () => sAdmit.why === "admitted",
+    ]);
     // Every reason verificationStatus reports: a failed run, a note on a runnable _Verify:_, an unexpected pass (_Expect: fail_), stale evidence.
     c1Tasks(fEn, "- [x] 1. [US1] Charge the card\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] Refund\n  - _Verify: node -e \"process.exit(0)\"_\n- [x] 3. [US1] Receipt\n" +
       "- [ ] 4. [US1] Write T-01 red\n  - _Verify: node t.js_\n  - _Expect: fail_\n- [ ] 5. [US1] Export\n  - _Verify: node e.js_\n");
@@ -560,13 +568,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const siTick = siW("## Final runs\n- `npm test` → exit code 1\n", "**Status:** `DONE`\nReport: .specs/checkout/.execution/simplify-report.md");
     fs.writeFileSync(siRep, "## Baseline\n- `npm test` → exit code 1\n## Changes\n" + "- a1b2c3d src/cart.js:12 Deep nesting → guard clauses\n".repeat(6000) + "## Final runs\n- `npm test` → exit 0\n");
     const siBig = si();
-    ok(siBaseOnly.block && /has no "## Final runs" section with a run in it/.test(siBaseOnly.reason) &&
-      siHidden.block && /fail: `npm test` — /.test(siHidden.reason) && !/cart\.test/.test(siHidden.reason) && siOutput.block && /fail: `npm test`/.test(siOutput.reason) &&
-      siNoCode.block && /doesn't show these runs with their exit code: `npm test`/.test(siNoCode.reason) &&
-      siQuoted.why === "simplify-ok" && siRevert.why === "simplify-ok" && siFenced.why === "simplify-ok" && siPt.why === "simplify-ok" &&
-      siTick.block && siTick.why === "simplifier-evidence" && siBig.why === "simplify-ok" && fs.statSync(siRep).size > 256 * 1024,
-      "1.22 review 1: a baseline-only report, a failed run hidden by a later passing one, a code quoted in output, a run line without its code → block; a code in a passing run's output, a revert round's later '## Final runs', a fenced block, PT headings, a status in backticks (a claim), a report past the 256 KB cap (read from its end) are read right (got " +
-      JSON.stringify([siBaseOnly.why, siHidden.why, siOutput.why, siNoCode.why, siQuoted.why, siRevert.why, siFenced.why, siPt.why, siTick.why, siBig.why]) + ")");
+    all("1.22 review 1: a baseline-only report, a failed run hidden by a later passing one, a code quoted in output, a run line without its code → block; a code in a passing run's output, a revert round's later '## Final runs', a fenced block, PT headings, a status in backticks (a claim), a report past the 256 KB cap (read from its end) are read right (got " +
+      JSON.stringify([siBaseOnly.why, siHidden.why, siOutput.why, siNoCode.why, siQuoted.why, siRevert.why, siFenced.why, siPt.why, siTick.why, siBig.why]) + ")", [
+      () => siBaseOnly.block, () => /has no "## Final runs" section with a run in it/.test(siBaseOnly.reason), () => siHidden.block,
+      () => /fail: `npm test` — /.test(siHidden.reason), () => !/cart\.test/.test(siHidden.reason), () => siOutput.block,
+      () => /fail: `npm test`/.test(siOutput.reason), () => siNoCode.block,
+      () => /doesn't show these runs with their exit code: `npm test`/.test(siNoCode.reason), () => siQuoted.why === "simplify-ok",
+      () => siRevert.why === "simplify-ok", () => siFenced.why === "simplify-ok", () => siPt.why === "simplify-ok", () => siTick.block,
+      () => siTick.why === "simplifier-evidence", () => siBig.why === "simplify-ok", () => fs.statSync(siRep).size > 256 * 1024,
+    ]);
     // with project checks: each must be one of the final runs, as a WHOLE command — a longer command that starts with it (a
     // re-run _Verify:_ `npm test -- t/x`, `npm run lint:css`) is another run, never its stand-in; one listed twice is named once.
     const pSim = c1Dir("simplify-checks");
@@ -639,11 +649,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const subCfg = ((hooksCfg.SubagentStop || [])[0] || {});
     const cmd = (h) => h.command === "node" && JSON.stringify(h.args) === JSON.stringify(["${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.js"]); // 1.25.1: exec form
     const re = new RegExp(subCfg.matcher || "^$");
-    ok(stopCfg.matcher === undefined && cmd(stopCfg.hooks[0]) && stopCfg.hooks[0].timeout === 10 && cmd(subCfg.hooks[0]) && subCfg.hooks[0].timeout === 10 &&
-      re.test("dev-spec-driven:spec-implementer") && re.test("spec-implementer") && re.test("dev-spec-driven:spec-simplifier") && re.test("spec-simplifier") &&
-      !re.test("dev-spec-driven:spec-reviewer") && !re.test("dev-spec-driven:spec-critic") && !re.test("spec-simplifier-x") && !re.test("Explore") && !re.test("general-purpose") &&
-      hooksCfg.PreToolUse && hooksCfg.PostToolUse && hooksCfg.SessionStart,
-      "C1 hooks.json: Stop (no matcher — it fires on every stop) and SubagentStop matching only the spec-implementer and the spec-simplifier (plugin-scoped or copied) run hooks/stop-hook.js (timeout 10), beside the existing hooks");
+    all("C1 hooks.json: Stop (no matcher — it fires on every stop) and SubagentStop matching only the spec-implementer and the spec-simplifier (plugin-scoped or copied) run hooks/stop-hook.js (timeout 10), beside the existing hooks", [
+      () => stopCfg.matcher === undefined, () => cmd(stopCfg.hooks[0]), () => stopCfg.hooks[0].timeout === 10, () => cmd(subCfg.hooks[0]),
+      () => subCfg.hooks[0].timeout === 10, () => re.test("dev-spec-driven:spec-implementer"), () => re.test("spec-implementer"),
+      () => re.test("dev-spec-driven:spec-simplifier"), () => re.test("spec-simplifier"), () => !re.test("dev-spec-driven:spec-reviewer"),
+      () => !re.test("dev-spec-driven:spec-critic"), () => !re.test("spec-simplifier-x"), () => !re.test("Explore"),
+      () => !re.test("general-purpose"), () => hooksCfg.PreToolUse, () => hooksCfg.PostToolUse, () => hooksCfg.SessionStart,
+    ]);
 
     // --- C1.2 the scope guard (meta.guard = "scope").
     const pSc = c1Dir("scope");
@@ -658,11 +670,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const gFolder = S.guardCheck(pSc, path.join(pSc, "src", "pay", "providers", "stripe.js"));
     const gGlob = S.guardCheck(pSc, "src/api/v1/users.ts", pSc);
     const gTest = S.guardCheck(pSc, "tests/pay.test.js", pSc);
-    ok(gi.p.guard === "scope" && /Guard mode SCOPE/.test(gi.p.guardNote) && S.readRoadmap(pSc).meta.guard === "scope" && S.guardEnabled(pSc) === true &&
-      gIn.decision === "allow" && gIn.why === "in-scope" && gIn.task.number === 2 && gFolder.why === "in-scope" && gFolder.task.number === 2 && gGlob.why === "in-scope" && gGlob.task.number === 3 &&
-      gTest.decision === "allow" && gTest.why === "test-file" && silent(runHook(guardJs, pre(path.join(pSc, "src", "pay", "pay.js")))) && silent(runHook(guardJs, pre(path.join(pSc, "src", "api", "x.ts")))),
-      "C1 scope guard: spec_init {guard: 'Scope'} stores meta.guard 'scope'; a file an open task names (anchored path, a folder above it, a glob) or a test file → allowed, the hook silent (got " +
-      JSON.stringify([gi.p.guard, gIn.why, gFolder.why, gGlob.why, gTest.why]) + ")");
+    all("C1 scope guard: spec_init {guard: 'Scope'} stores meta.guard 'scope'; a file an open task names (anchored path, a folder above it, a glob) or a test file → allowed, the hook silent (got " +
+      JSON.stringify([gi.p.guard, gIn.why, gFolder.why, gGlob.why, gTest.why]) + ")", [
+      () => gi.p.guard === "scope", () => /Guard mode SCOPE/.test(gi.p.guardNote), () => S.readRoadmap(pSc).meta.guard === "scope",
+      () => S.guardEnabled(pSc) === true, () => gIn.decision === "allow", () => gIn.why === "in-scope", () => gIn.task.number === 2,
+      () => gFolder.why === "in-scope", () => gFolder.task.number === 2, () => gGlob.why === "in-scope", () => gGlob.task.number === 3,
+      () => gTest.decision === "allow", () => gTest.why === "test-file", () => silent(runHook(guardJs, pre(path.join(pSc, "src", "pay", "pay.js")))),
+      () => silent(runHook(guardJs, pre(path.join(pSc, "src", "api", "x.ts")))),
+    ]);
     const gSame = S.guardCheck(pSc, "src/pay/refund.js", pSc);
     const hSame = asked(runHook(guardJs, pre(path.join(pSc, "src", "pay", "refund.js"))));
     const gDone = S.guardCheck(pSc, "src/cart/cart.js", pSc); // planned by a DONE task only
@@ -769,13 +784,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const po2 = S.approvePhase(p2, "login", "execution", "u", { role: "product" });
     const na2c = S.nextAction(p2, "login");
     const gates2 = (d) => d.checks.find((c) => c.id === "approval-gates");
-    ok(fin2.readyToFinish && na2a.step === "finished" && /Sign it off — missing roles: qa, product: \/approve login execution --role qa\./.test(na2a.recommendation) && JSON.stringify(na2a.missingRoles) === '["qa","product"]' &&
-      doc2a.pendingRoles.execution && JSON.stringify(doc2a.pendingRoles.execution.missing) === '["qa","product"]' && gates2(doc2a).status === "warn" &&
-      qa2.ok && qa2.complete === false && /--role product\./.test(na2b.recommendation) && /\(signed: qa\)/.test(na2b.recommendation) && JSON.stringify(na2b.missingRoles) === '["product"]' &&
-      /awaiting human approval: execution \(missing role: product\)/.test(gates2(doc2b).detail) && fin2b.readyToFinish === true && doc2b.gatesOk === true &&
-      po2.ok && po2.complete === true && na2c.step === "finished" && /Nothing left to do here/.test(na2c.recommendation) && na2c.missingRoles === undefined,
-      "full review Gb2: with execution roles, next_action names the role to sign as (--role qa, then --role product), doctor lists the pending execution sign-off (pendingRoles, approval-gates) once a finish is recorded — never a blocker of the finish itself (got " +
-      JSON.stringify([na2a.recommendation, na2b.recommendation, gates2(doc2b).detail, na2c.step]) + ")");
+    all("full review Gb2: with execution roles, next_action names the role to sign as (--role qa, then --role product), doctor lists the pending execution sign-off (pendingRoles, approval-gates) once a finish is recorded — never a blocker of the finish itself (got " +
+      JSON.stringify([na2a.recommendation, na2b.recommendation, gates2(doc2b).detail, na2c.step]) + ")", [
+      () => fin2.readyToFinish, () => na2a.step === "finished",
+      () => /Sign it off — missing roles: qa, product: \/approve login execution --role qa\./.test(na2a.recommendation),
+      () => JSON.stringify(na2a.missingRoles) === '["qa","product"]', () => doc2a.pendingRoles.execution,
+      () => JSON.stringify(doc2a.pendingRoles.execution.missing) === '["qa","product"]', () => gates2(doc2a).status === "warn", () => qa2.ok,
+      () => qa2.complete === false, () => /--role product\./.test(na2b.recommendation), () => /\(signed: qa\)/.test(na2b.recommendation),
+      () => JSON.stringify(na2b.missingRoles) === '["product"]',
+      () => /awaiting human approval: execution \(missing role: product\)/.test(gates2(doc2b).detail), () => fin2b.readyToFinish === true,
+      () => doc2b.gatesOk === true, () => po2.ok, () => po2.complete === true, () => na2c.step === "finished",
+      () => /Nothing left to do here/.test(na2c.recommendation), () => na2c.missingRoles === undefined,
+    ]);
 
     // Gb3: finished, then a task re-run after the project checks' run → next_action asks for the checks (verify), not "nothing left to do".
     const p3 = gbDir("finished-suite");
@@ -1101,12 +1121,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     S.initProject(pMcp, [], undefined, { approvalGuard: "ask" });
     const m5 = await rpc("tools/call", { name: "spec_init", arguments: { approvalGuard: "off", projectDir: pMcp, lang: "es" } });
     const r1 = payload(m1), r2 = payload(m2), r5 = payload(m5);
-    ok(ag.type === "string" && JSON.stringify(ag.enum) === '["off","ask","deny"]' && r1.approvalGuard === "deny" && /^Approval guard DENY/.test(r1.approvalGuardNote) &&
-      rmAfter1 === "deny" && r2.approvalGuard === "deny" && r2.approvalGuardNote === undefined &&
-      m3.result.isError === true && m4.result.isError === true && r5.approvalGuard === "off" && /^Guardia de aprobaciones DESACTIVADA/.test(r5.approvalGuardNote) &&
-      m5d.result.isError === true && r5d.humanRequired === true && r5d.approvalGuard === "deny" && stillDeny === "deny" && /init --approval-guard off/.test(r5d.command || ""),
-      "feature F2: spec_init {approvalGuard} — a string enum off | ask | deny (case-folded), stored in roadmap.json meta.approvalGuard, always reported (+ a localized note when set); another value or a boolean is refused; 1.21 F1b: lowering deny over MCP without elicitation is refused (got " +
-      JSON.stringify([ag, r1.approvalGuard, r2.approvalGuard, m3.result.isError, m4.result.isError, r5.approvalGuardNote, r5d.humanRequired, stillDeny]) + ")");
+    all("feature F2: spec_init {approvalGuard} — a string enum off | ask | deny (case-folded), stored in roadmap.json meta.approvalGuard, always reported (+ a localized note when set); another value or a boolean is refused; 1.21 F1b: lowering deny over MCP without elicitation is refused (got " +
+      JSON.stringify([ag, r1.approvalGuard, r2.approvalGuard, m3.result.isError, m4.result.isError, r5.approvalGuardNote, r5d.humanRequired, stillDeny]) + ")", [
+      () => ag.type === "string", () => JSON.stringify(ag.enum) === '["off","ask","deny"]', () => r1.approvalGuard === "deny",
+      () => /^Approval guard DENY/.test(r1.approvalGuardNote), () => rmAfter1 === "deny", () => r2.approvalGuard === "deny",
+      () => r2.approvalGuardNote === undefined, () => m3.result.isError === true, () => m4.result.isError === true, () => r5.approvalGuard === "off",
+      () => /^Guardia de aprobaciones DESACTIVADA/.test(r5.approvalGuardNote), () => m5d.result.isError === true, () => r5d.humanRequired === true,
+      () => r5d.approvalGuard === "deny", () => stillDeny === "deny", () => /init --approval-guard off/.test(r5d.command || ""),
+    ]);
   }
 
   // 1.14 feature (F2) — review fixes: the shell lexer reads the tool's shell (R3), heredoc bodies are data (R9), guard-down actions
@@ -1215,19 +1237,26 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const dCheck = init({ checks: { test: "" } });
     const dCheckCmd = init({ checks: { test: "rm -rf $HOME" } });
     const dMulti = cliInit("--approval-guard off --evidence reported --stop-check off");
-    ok(dEv.command === '! node "/clone/cli/dev-spec.js" init --evidence reported' && /may not switch the evidence mode \(meta\.evidence\) back to reported/.test(dEv.reason) &&
-      /drop required approval roles \(design=security\) from meta\.approvalRoles/.test(dRoles.reason) && dRoles.command === '! node "/clone/cli/dev-spec.js" init --roles "requirements=product,design=tech"' &&
-      /clear the approval roles/.test(dClear.reason) && dClear.command === '! node "/clone/cli/dev-spec.js" init --roles none' &&
-      /remove the project check 'test' \(meta\.checks\)/.test(dCheck.reason) && dCheck.command === '! node "/clone/cli/dev-spec.js" init --check "test="' &&
-      /change the command of the project check 'test'/.test(dCheckCmd.reason) && dCheckCmd.command === '! node "/clone/cli/dev-spec.js" init --check "test=<command>"' &&
-      dMulti.command === '! node "/clone/cli/dev-spec.js" init --approval-guard off && node "/clone/cli/dev-spec.js" init --evidence reported && node "/clone/cli/dev-spec.js" init --stop-check off' &&
-      /lower the approval guard from deny to off; switch the evidence mode .*; turn off the end-of-turn evidence gate/.test(dMulti.reason) &&
-      /voltar a pôr o modo de evidência \(meta\.evidence\) em reported/.test(init({ evidence: "reported" }, meta, "pt").reason) &&
-      /retirar papéis de aprovação exigidos \(design=security\)/.test(init({ approvalRoles: { design: ["tech"], requirements: ["product"] } }, meta, "pt-BR").reason) &&
-      /Peça ao usuário/.test(init({ stopCheck: false }, meta, "pt-BR").reason) && /volver a poner el modo de evidencia/.test(init({ evidence: "reported" }, meta, "es").reason) &&
-      /eliminar la verificación del proyecto 'test'/.test(cliInit("--check test=", meta, "es").reason) && /desligar o gate de evidência/.test(cliInit("--stop-check off", meta, "pt").reason),
-      "feature F2 review R10: a guard-down reason names what weakens (EN / PT / pt-BR / ES) and the human's command is the same init change (an unsafe check command → <command>); several at once are listed and chained (got " +
-      JSON.stringify([dEv.command, dRoles.command, dCheckCmd.command, dMulti.command]) + ")");
+    all("feature F2 review R10: a guard-down reason names what weakens (EN / PT / pt-BR / ES) and the human's command is the same init change (an unsafe check command → <command>); several at once are listed and chained (got " +
+      JSON.stringify([dEv.command, dRoles.command, dCheckCmd.command, dMulti.command]) + ")", [
+      () => dEv.command === '! node "/clone/cli/dev-spec.js" init --evidence reported',
+      () => /may not switch the evidence mode \(meta\.evidence\) back to reported/.test(dEv.reason),
+      () => /drop required approval roles \(design=security\) from meta\.approvalRoles/.test(dRoles.reason),
+      () => dRoles.command === '! node "/clone/cli/dev-spec.js" init --roles "requirements=product,design=tech"',
+      () => /clear the approval roles/.test(dClear.reason), () => dClear.command === '! node "/clone/cli/dev-spec.js" init --roles none',
+      () => /remove the project check 'test' \(meta\.checks\)/.test(dCheck.reason),
+      () => dCheck.command === '! node "/clone/cli/dev-spec.js" init --check "test="',
+      () => /change the command of the project check 'test'/.test(dCheckCmd.reason),
+      () => dCheckCmd.command === '! node "/clone/cli/dev-spec.js" init --check "test=<command>"',
+      () => dMulti.command === '! node "/clone/cli/dev-spec.js" init --approval-guard off && node "/clone/cli/dev-spec.js" init --evidence reported && node "/clone/cli/dev-spec.js" init --stop-check off',
+      () => /lower the approval guard from deny to off; switch the evidence mode .*; turn off the end-of-turn evidence gate/.test(dMulti.reason),
+      () => /voltar a pôr o modo de evidência \(meta\.evidence\) em reported/.test(init({ evidence: "reported" }, meta, "pt").reason),
+      () => /retirar papéis de aprovação exigidos \(design=security\)/.test(init({ approvalRoles: { design: ["tech"], requirements: ["product"] } }, meta, "pt-BR").reason),
+      () => /Peça ao usuário/.test(init({ stopCheck: false }, meta, "pt-BR").reason),
+      () => /volver a poner el modo de evidencia/.test(init({ evidence: "reported" }, meta, "es").reason),
+      () => /eliminar la verificación del proyecto 'test'/.test(cliInit("--check test=", meta, "es").reason),
+      () => /desligar o gate de evidência/.test(cliInit("--stop-check off", meta, "pt").reason),
+    ]);
 
     // R1: fail closed — a roadmap.json that exists but doesn't parse keeps the strictest level its text names; a shell command that
     // writes, moves or deletes .specs/roadmap.json (or .specs/ itself) is a guard-down action (no command to hand over).
