@@ -6,7 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, rpc, S, tmp, require }) => {
+exports.run = async ({ ok, all, rpc, S, tmp, require }) => {
   const js = JSON.stringify;
   const call = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
   const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
@@ -68,17 +68,20 @@ exports.run = async ({ ok, rpc, S, tmp, require }) => {
     const r = S.importSpec(p, "kiro-steering", undefined, {});
     const row = (f) => (r.imported || []).find((x) => x.file === f) || {};
     const skip = (f) => (r.skipped || []).find((x) => x.from === ".kiro/steering/" + f) || {};
-    ok(r.ok && r.kind === "steering" && r.tool === "kiro-steering" && r.toolName === "Kiro steering" && js(r.sources) === js([".kiro/steering"]) &&
-      js(r.imported.map((x) => x.file).sort()) === js(["api-standards.md", "brand-voice.md", "glossary.md", "release.md", "team-notes.md"]) &&
-      row("brand-voice.md").inclusion === "always" && row("api-standards.md").inclusion === "fileMatch" && js(row("api-standards.md").patterns) === js(["src/api/**"]) &&
-      row("release.md").inclusion === "manual" && row("glossary.md").inclusion === "manual" && row("team-notes.md").from === ".kiro/steering/Team Notes.md" &&
-      skip("product.md").reason === "exists" && skip("product.md").template === true && skip("empty.md").reason === "empty" &&
-      r.warnings.some((w) => /\.kiro\/steering\/glossary\.md: inclusion 'auto' has no dev-spec equivalent — read as manual/.test(w)) &&
-      r.warnings.some((w) => /not a steering file[^\n]*\.kiro\/steering\/old\//.test(w)) &&
-      r.warnings.some((w) => /product\.md: not imported — \.specs\/steering\/product\.md already exists — still the template spec_init wrote: delete it, then import again/.test(w)) &&
-      rd(p, ".specs", "steering", "product.md") === productBefore && snap(path.join(p, ".kiro")) === src0,
-      "1.25 kiro-steering: every .kiro/steering file → .specs/steering/ (always / fileMatch / manual as dev-spec reads them; Kiro's auto → manual, warned; 'Team Notes.md' → team-notes.md); an empty file and a sub-folder are named; spec_init's untouched product.md is never overwritten (skipped, template: true); the source untouched (got " +
-      js({ imported: r.imported, skipped: r.skipped, warnings: r.warnings }).slice(0, 900) + ")");
+    all("1.25 kiro-steering: every .kiro/steering file → .specs/steering/ (always / fileMatch / manual as dev-spec reads them; Kiro's auto → manual, warned; 'Team Notes.md' → team-notes.md); an empty file and a sub-folder are named; spec_init's untouched product.md is never overwritten (skipped, template: true); the source untouched (got " +
+      js({ imported: r.imported, skipped: r.skipped, warnings: r.warnings }).slice(0, 900) + ")", [
+      () => r.ok, () => r.kind === "steering", () => r.tool === "kiro-steering", () => r.toolName === "Kiro steering",
+      () => js(r.sources) === js([".kiro/steering"]),
+      () => js(r.imported.map((x) => x.file).sort()) === js(["api-standards.md", "brand-voice.md", "glossary.md", "release.md", "team-notes.md"]),
+      () => row("brand-voice.md").inclusion === "always", () => row("api-standards.md").inclusion === "fileMatch",
+      () => js(row("api-standards.md").patterns) === js(["src/api/**"]), () => row("release.md").inclusion === "manual",
+      () => row("glossary.md").inclusion === "manual", () => row("team-notes.md").from === ".kiro/steering/Team Notes.md",
+      () => skip("product.md").reason === "exists", () => skip("product.md").template === true, () => skip("empty.md").reason === "empty",
+      () => r.warnings.some((w) => /\.kiro\/steering\/glossary\.md: inclusion 'auto' has no dev-spec equivalent — read as manual/.test(w)),
+      () => r.warnings.some((w) => /not a steering file[^\n]*\.kiro\/steering\/old\//.test(w)),
+      () => r.warnings.some((w) => /product\.md: not imported — \.specs\/steering\/product\.md already exists — still the template spec_init wrote: delete it, then import again/.test(w)),
+      () => rd(p, ".specs", "steering", "product.md") === productBefore, () => snap(path.join(p, ".kiro")) === src0,
+    ]);
     ok(rd(p, ".specs", "steering", "api-standards.md") === "---\ninclusion: fileMatch\nfileMatchPattern: \"src/api/**\"\n---\n\n<!-- Imported from Kiro steering .kiro/steering/api-standards.md on " + today + ". -->\n\n# API standards\n\n- Every handler validates its input with zod.\n" &&
       rd(p, ".specs", "steering", "brand-voice.md") === "---\ninclusion: always\n---\n\n<!-- Imported from Kiro steering .kiro/steering/brand-voice.md on " + today + ". -->\n\n# Brand voice\n\nShort sentences. No jargon.\n" &&
       /^---\ninclusion: auto\ndescription: Domain terms\n---\n\n<!-- Imported from Kiro steering/.test(rd(p, ".specs", "steering", "glossary.md")),
@@ -100,14 +103,17 @@ exports.run = async ({ ok, rpc, S, tmp, require }) => {
     cursorRules(p);
     const r = (await call("spec_import", { tool: "cursor-rules", projectDir: p })).body;
     const row = (f) => (r.imported || []).find((x) => x.file === f) || {};
-    ok(r.ok && js(r.sources) === js([".cursor/rules", ".cursorrules"]) && r.imported.length === 7 &&
-      js(r.skipped) === js([{ file: "dev-spec-driven.md", from: ".cursor/rules/dev-spec-driven.mdc", reason: "own" }]) &&
-      row("house.md").inclusion === "always" && row("ts.md").inclusion === "fileMatch" && js(row("ts.md").patterns) === js(["**/*.ts", "src/**/*.{ts,tsx}"]) &&
-      js(row("docs.md").patterns) === js(["docs/**", "**/*.md"]) && js(row("scripts.md").patterns) === js(["lib/**", "scripts/*.sh"]) &&
-      row("ask.md").inclusion === "manual" && row("plain.md").inclusion === "manual" && row("cursorrules.md").inclusion === "always" && row("cursorrules.md").from === ".cursorrules" &&
-      r.warnings.length === 2 && /\.cursor\/rules\/README\.txt/.test(r.warnings[0]) && /dev-spec-driven\.mdc: not imported — it is dev-spec's own rule file/.test(r.warnings[1]),
-      "1.25 cursor-rules over MCP (no path: .cursor/rules/ and .cursorrules): alwaysApply → always; globs as a comma string / a YAML list / an inline list → fileMatch (*.ts → **/*.ts); neither → manual; .cursorrules → always; README.txt named; dev-spec's own rule file skipped (reason own) (got " +
-      js({ imported: r.imported, warnings: r.warnings, error: r.error }).slice(0, 700) + ")");
+    all("1.25 cursor-rules over MCP (no path: .cursor/rules/ and .cursorrules): alwaysApply → always; globs as a comma string / a YAML list / an inline list → fileMatch (*.ts → **/*.ts); neither → manual; .cursorrules → always; README.txt named; dev-spec's own rule file skipped (reason own) (got " +
+      js({ imported: r.imported, warnings: r.warnings, error: r.error }).slice(0, 700) + ")", [
+      () => r.ok, () => js(r.sources) === js([".cursor/rules", ".cursorrules"]), () => r.imported.length === 7,
+      () => js(r.skipped) === js([{ file: "dev-spec-driven.md", from: ".cursor/rules/dev-spec-driven.mdc", reason: "own" }]),
+      () => row("house.md").inclusion === "always", () => row("ts.md").inclusion === "fileMatch",
+      () => js(row("ts.md").patterns) === js(["**/*.ts", "src/**/*.{ts,tsx}"]), () => js(row("docs.md").patterns) === js(["docs/**", "**/*.md"]),
+      () => js(row("scripts.md").patterns) === js(["lib/**", "scripts/*.sh"]), () => row("ask.md").inclusion === "manual",
+      () => row("plain.md").inclusion === "manual", () => row("cursorrules.md").inclusion === "always",
+      () => row("cursorrules.md").from === ".cursorrules", () => r.warnings.length === 2, () => /\.cursor\/rules\/README\.txt/.test(r.warnings[0]),
+      () => /dev-spec-driven\.mdc: not imported — it is dev-spec's own rule file/.test(r.warnings[1]),
+    ]);
     ok(rd(p, ".specs", "steering", "ts.md") === "---\ninclusion: fileMatch\nfileMatchPattern: [\"**/*.ts\", \"src/**/*.{ts,tsx}\"]\ndescription: \"TypeScript\"\n---\n\n<!-- Imported from Cursor rules .cursor/rules/ts.mdc on " + today + ". -->\n\nUse strict mode.\n" &&
       rd(p, ".specs", "steering", "ask.md") === "---\ninclusion: manual\ndescription: \"Ask before a migration\"\n---\n\n<!-- Imported from Cursor rules .cursor/rules/ask.mdc on " + today + ". -->\n\nMigrations need a rollback.\n" &&
       rd(p, ".specs", "steering", "cursorrules.md") === "---\ninclusion: always\n---\n\n<!-- Imported from Cursor rules .cursorrules on " + today + ". -->\n\nAnswer tersely.\n" &&
@@ -150,13 +156,16 @@ exports.run = async ({ ok, rpc, S, tmp, require }) => {
     const none = S.importSpec(fresh("refuse-none"), "kiro-steering", undefined, {});
     const kiroNoPath = await call("spec_import", { tool: "kiro", projectDir: p });
     const mcpOut = await call("spec_import", { tool: "kiro-steering", path: "../elsewhere-125", projectDir: p });
-    ok(!rel.ok && /outside the project/.test(rel.error) && !abs.ok && /outside the project/.test(abs.error) && !home.ok && /outside the project/.test(home.error) &&
-      !named.ok && /^name: a Cursor rules import writes \.specs\/steering\/ files, not a feature/.test(named.error) && !tracked.ok && /^tracks: a Kiro steering import/.test(tracked.error) &&
-      !texted.ok && /`text` imports a single document/.test(texted.error) && !none.ok && /No Kiro steering files found in \.kiro\/steering\./.test(none.error) &&
-      kiroNoPath.isError && /path/.test(kiroNoPath.body.error || "") && mcpOut.isError && /outside the project/.test(mcpOut.body.error || "") &&
-      snap(path.join(p, ".specs")) === st0,
-      "1.25 steering refusals (nothing written): a path outside the project — relative, absolute, ~ — over the engine and MCP; name / tracks / text (a feature's arguments); no source in the default places; MCP still requires path or text for a feature tool (got " +
-      js([rel.error, named.error, tracked.error, texted.error, none.error, kiroNoPath.body.error]).slice(0, 700) + ")");
+    all("1.25 steering refusals (nothing written): a path outside the project — relative, absolute, ~ — over the engine and MCP; name / tracks / text (a feature's arguments); no source in the default places; MCP still requires path or text for a feature tool (got " +
+      js([rel.error, named.error, tracked.error, texted.error, none.error, kiroNoPath.body.error]).slice(0, 700) + ")", [
+      () => !rel.ok, () => /outside the project/.test(rel.error), () => !abs.ok, () => /outside the project/.test(abs.error), () => !home.ok,
+      () => /outside the project/.test(home.error), () => !named.ok,
+      () => /^name: a Cursor rules import writes \.specs\/steering\/ files, not a feature/.test(named.error), () => !tracked.ok,
+      () => /^tracks: a Kiro steering import/.test(tracked.error), () => !texted.ok, () => /`text` imports a single document/.test(texted.error),
+      () => !none.ok, () => /No Kiro steering files found in \.kiro\/steering\./.test(none.error), () => kiroNoPath.isError,
+      () => /path/.test(kiroNoPath.body.error || ""), () => mcpOut.isError, () => /outside the project/.test(mcpOut.body.error || ""),
+      () => snap(path.join(p, ".specs")) === st0,
+    ]);
   }
 
   // 1.25 dryRun: the whole pipeline of every import runs in the write gate's dry-run sink — the project tree stays byte-identical (no
@@ -271,15 +280,16 @@ exports.run = async ({ ok, rpc, S, tmp, require }) => {
     const cliSide = S.importSpec(p, "plan", ".aws/plan.md", { dryRun: true }); // the CLI's call: the same engine rule
     const leaked = [r1, r1b, r2, r3, r4, linked].filter(Boolean).some((r) => js(r.body).includes(SECRET)) || js(cliSide).includes(SECRET);
     const hp = E.importHiddenPart;
-    ok(r1.isError && r1.body.code === "project-no-specs" && /holds no dev-spec project/.test(r1.body.error) &&
-      r1b.isError && r1b.body.code === "project-no-specs" &&
-      r2.isError && r2.body.code === "import-hidden" && /\.aws/.test(r2.body.error) && r3.body.code === "import-hidden" &&
-      r4.isError && r4.body.code === "import-not-source" && r5.body.ok === true && r6.body.ok === true &&
-      (linked === null || linked.body.code === "import-hidden") && cliSide.ok === false && cliSide.code === "import-hidden" && !leaked &&
-      hp(".kiro/specs/a") === null && hp(".cursor/plans/x.plan.md") === null && hp(".cursorrules") === null && hp(".fluidplan/p1/plan.json") === null &&
-      hp(".claude/plans/x.md") === null && hp(".claude/settings.json") === ".claude" && hp("docs/.git/x.md") === ".git" && hp(".kiro/.secret/x.md") === ".secret" &&
-      ["pt", "es"].every((l) => /x\.md/.test(S.msg(l).importSpec.hidden("x.md", ".a")) && /x/.test(S.msg(l).importSpec.notSource("x")) && /dir-x/.test(S.msg(l).args.projectNoSpecs("dir-x"))),
-      "1.25.1 r7: spec_import never returns a file outside the project's documents — another projectDir must be a dev-spec project (project-no-specs), a hidden folder or file but .kiro/ .cursor/ .cursorrules .fluidplan/ .claude/plans/ is refused (import-hidden, a link into one too), a named file that is no document too (import-not-source); the CLI's engine call alike; nothing of the secret in any reply (got " +
-      js([r1.body.code, r1b.body.code, r2.body.code, r3.body.code, r4.body.code, r5.body.ok, r6.body.ok, linked && linked.body.code, cliSide.code, leaked]) + ")");
+    all("1.25.1 r7: spec_import never returns a file outside the project's documents — another projectDir must be a dev-spec project (project-no-specs), a hidden folder or file but .kiro/ .cursor/ .cursorrules .fluidplan/ .claude/plans/ is refused (import-hidden, a link into one too), a named file that is no document too (import-not-source); the CLI's engine call alike; nothing of the secret in any reply (got " +
+      js([r1.body.code, r1b.body.code, r2.body.code, r3.body.code, r4.body.code, r5.body.ok, r6.body.ok, linked && linked.body.code, cliSide.code, leaked]) + ")", [
+      () => r1.isError, () => r1.body.code === "project-no-specs", () => /holds no dev-spec project/.test(r1.body.error), () => r1b.isError,
+      () => r1b.body.code === "project-no-specs", () => r2.isError, () => r2.body.code === "import-hidden", () => /\.aws/.test(r2.body.error),
+      () => r3.body.code === "import-hidden", () => r4.isError, () => r4.body.code === "import-not-source", () => r5.body.ok === true,
+      () => r6.body.ok === true, () => (linked === null || linked.body.code === "import-hidden"), () => cliSide.ok === false,
+      () => cliSide.code === "import-hidden", () => !leaked, () => hp(".kiro/specs/a") === null, () => hp(".cursor/plans/x.plan.md") === null,
+      () => hp(".cursorrules") === null, () => hp(".fluidplan/p1/plan.json") === null, () => hp(".claude/plans/x.md") === null,
+      () => hp(".claude/settings.json") === ".claude", () => hp("docs/.git/x.md") === ".git", () => hp(".kiro/.secret/x.md") === ".secret",
+      () => ["pt", "es"].every((l) => /x\.md/.test(S.msg(l).importSpec.hidden("x.md", ".a")) && /x/.test(S.msg(l).importSpec.notSource("x")) && /dir-x/.test(S.msg(l).args.projectNoSpecs("dir-x"))),
+    ]);
   }
 };

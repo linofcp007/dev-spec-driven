@@ -13,7 +13,7 @@ feature task without losing it.
 
 See also: [improvement-specs.md](improvement-specs.md) (a refactor is its own spec, with characterization tests
 and a metric), [test-patterns.md](test-patterns.md) (refactor only on green; characterization tests),
-[brownfield.md](brownfield.md) (`spec_scan`, `spec_coverage`), [steering-templates.md](steering-templates.md)
+[brownfield.md](brownfield.md) (`spec_scan`, `spec_scan {coverage: true}`), [steering-templates.md](steering-templates.md)
 (`structure.md`, the constitution, `glossary.md`), [subagent-execution.md](subagent-execution.md) (the task report
 and the review), [red-flags.md](red-flags.md) ("while I'm here I'll also refactor X"),
 [ui-design-patterns.md](ui-design-patterns.md) (the design system: reuse for components),
@@ -30,7 +30,7 @@ and the review), [red-flags.md](red-flags.md) ("while I'm here I'll also refacto
 | Tasks | `_Implements:_` names the existing files a task extends, not only the new ones — the task brief's **Reuse** section quotes the design's entries for those files (or the task's criteria) and lists the existing source files next to them |
 | Implementation | search first; reuse or extend; report what was reused, extended or created, and why (below) |
 | Review | new code compared with the **existing codebase**: a new helper that duplicates one is a finding (below) |
-| Before finishing | the optional **simplification pass** (`/spec-simplify`) cleans up the smells the reviews deferred, in the feature's own lines only, proven by its tests (below) |
+| Before finishing | the optional **simplification pass** (`/spec-review simplify`) cleans up the smells the reviews deferred, in the feature's own lines only, proven by its tests (below) |
 | Afterwards | smells outside the task go to the refactor-candidate backlog, never into the task |
 
 ---
@@ -121,7 +121,7 @@ extend lies **outside** them, it is never edited silently:
 
 - in subagent execution the implementer reports **NEEDS_CONTEXT** naming the unit and the change; the controller adds a
   converge task for it (`spec_append_tasks` with that file in `_Implements:_` — a changed plan, approved again like any
-  other) or tells the implementer to go ahead; working inline, you do the same through `/spec-converge`;
+  other) or tells the implementer to go ahead; working inline, you do the same through a converge pass (`spec_append_tasks` once the user approves);
 - when the task can be done without it (create locally — the rule of three), do that and name the extension in the
   report's **Reuse** block, so it is filed as a refactor candidate.
 
@@ -308,7 +308,7 @@ A backlog entry later becomes an **improvement spec** ([improvement-specs.md](im
 feature, characterization tests first (they pin today's behaviour), a re-measurable metric as the acceptance
 criterion, and the refactor on green. If the feature task **can't** be done without a larger refactor, stop and
 report it (BLOCKED or NEEDS_CONTEXT in subagent execution): the plan needs a preparatory task, which goes through
-`/spec-converge` and the human's approval — not into the current diff.
+a converge pass and the human's approval — not into the current diff.
 
 ---
 
@@ -328,7 +328,7 @@ report) — also when nothing was reused, because the search itself is the evide
 ```
 
 The controller and the reviewer read it before the diff: it says where to look for a duplicate the implementer
-may have missed. The controller files each refactor candidate in the backlog (`spec_backlog add`, a `refactor:` note —
+may have missed. The controller files each refactor candidate in the backlog (`spec_roadmap_edit {kind: "backlog"} add`, a `refactor:` note —
 below) and ledgers it; the implementer never does the refactor in the task.
 
 ## What the reviewer checks
@@ -359,7 +359,7 @@ ship with a "we'll consolidate later".
 
 The task-by-task loop leaves its own residue: the smells the reviews deferred as Minor, a helper that only forwards,
 nesting that grew over fix rounds. Once every task is done — and **before** `/spec-finish`, which records the drift
-baseline and needs the project checks green on the final code — `/spec-simplify <feature>` cleans that up without
+baseline and needs the project checks green on the final code — the simplification pass (`/spec-review <feature> simplify`) cleans that up without
 changing behaviour, and proves it. (The idea comes from Anthropic's `code-simplifier` plugin; this pass adds the scope
 and the proof.)
 
@@ -368,7 +368,7 @@ and the proof.)
 | Only lines the feature's branch added or changed (`git diff MERGE_BASE..HEAD`) | code the feature didn't write is a refactor candidate — an improvement spec with characterization tests, not a side effect of finishing |
 | Never a test, fixture or snapshot | the tests are the proof; a test edited in the same pass proves nothing |
 | Never a contract — an exported signature, a route, a status or error code, a schema, a config key, user-facing text, a log line or metric something reads | that is a behaviour change for whoever depends on it |
-| No new dependency, no new shared file, no prompt file (+ai) | a shared helper is a design decision; a prompt change is eval-gated (`/promptReview`) |
+| No new dependency, no new shared file, no prompt file (+ai) | a shared helper is a design decision; a prompt change is eval-gated (`/spec-review prompt`) |
 | One simplification at a time: the covering tests, then its own commit (`refactor(<feature>): … — no behaviour change`) | a red test points at one change; any one can be reverted alone (Beck's *Tidy First?*: structure changes apart from behaviour changes) |
 | A red test → undo the change, never edit the test | a cleanup that isn't safe as written is dropped |
 | The baseline green first; the project checks (or the full suite) again at the end and recorded; each changed task's `_Verify:_` re-run | the claim "behaviour unchanged" needs the runs — and `/spec-finish`'s `code-changed` rule sees only the files the tasks implement |
@@ -392,7 +392,7 @@ code. With guard mode on, each edit of the pass asks the user (once every task i
 ## The refactor-candidate backlog
 
 - **One entry per candidate**, in the roadmap backlog (`dev-spec backlog add "refactor-<topic>" "refactor: <note>"`,
-  `spec_backlog {action: "add", name, note}`): the smell, the files, the evidence (a count, a metric, the feature that
+  `spec_roadmap_edit {kind: "backlog", action: "add", name, note}`): the smell, the files, the evidence (a count, a metric, the feature that
   tripped over it), and the refactoring you'd apply. The `refactor:` prefix tells a refactor candidate from a planned
   feature in ROADMAP.md. Give each candidate its **own name** (`refactor-pricing-switches`, `refactor-pricing-rounding`
   — the topic, not the area): an `add` with a name already in the backlog keeps that entry and appends the new note to

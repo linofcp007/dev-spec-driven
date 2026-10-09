@@ -6,6 +6,10 @@
  * temp dir) for the whole chain, runs the handshake, and hands every file of the chain the same context:
  *
  *   ok(cond, label)          one assertion — "  ok   - <label>" / "  FAIL - <label>"
+ *   all(label, conds)        one assertion over many conditions ({ name: cond } or [() => cond, …]): a FAIL names the false
+ *                            ones · eq(actual, expected, label): JSON deep equality, a FAIL shows the first difference
+ *                            (scripts/test-runner.js assertHelpers — prefer all() beyond ~4 conditions) · remeasure(measure,
+ *                            holds): a timing-bound check's sample, measured once more on a miss (no assertion)
  *   rpc(method, params)      one JSON-RPC request → its reply (no reply within 15 s fails the run, never drains to exit 0)
  *   rawOnce(line)            a raw line → the first id-null (or batch) reply — malformed-input tests
  *   notify(method, params)   a notification (no reply)
@@ -31,13 +35,15 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createRequire } = require("module");
-const { exitFlushed, rmTmpDir } = require("../../scripts/test-runner.js");
+const { exitFlushed, rmTmpDir, isolate, assertHelpers } = require("../../scripts/test-runner.js");
 
+// Hermetic (1.26), before the engine loads: no SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / DEV_SPEC_* … of the shell, and a fresh
+// empty temp folder as the working folder — what the runner already gave this chain (then a no-op), and the same when this
+// harness is loaded any other way. The suites run on the engine's MODULES (1.20): a DEV_SPEC_BUNDLE the user set goes with them
+// — the bundle's own tests set it for the processes they start.
+isolate("spec-test-");
 const MCP_DIR = path.join(__dirname, ".."); // mcp/ — where mcp/test.js lives: the tests' __dirname
 const MCP_TEST = path.join(MCP_DIR, "test.js");
-// The suites run on the engine's MODULES (1.20): a DEV_SPEC_BUNDLE the user set is dropped for this process and its children
-// — the bundle's own tests set it for the processes they start.
-delete process.env.DEV_SPEC_BUNDLE;
 const S = require("../lib/spec.js");
 const root = path.join(MCP_DIR, "..");
 // Every engine source file (1.18): the facades (mcp/lib/spec.js, i18n.js, prompts-resources.js) and their modules under
@@ -183,7 +189,7 @@ async function setup(chain) {
   notify("notifications/initialized", {});
 
   const list = await rpc("tools/list", {});
-  ok(list.result.tools.length === 38, "tools/list returns 38 tools (got " + list.result.tools.length + ")");
+  ok(list.result.tools.length === 32, "tools/list returns 32 tools (got " + list.result.tools.length + ")");
   // The advertised contract matches taskVerification(): a nothingToVerify task is verified — doctor / finish / ROADMAP.md
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
@@ -193,7 +199,7 @@ async function setup(chain) {
     "spec_complete_task's description: a nothingToVerify task passes doctor / finish / ROADMAP.md; only an unverified task is listed with its reason");
   muted = false;
   const ctx = {
-    ok, rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature,
+    ok, ...assertHelpers(ok), rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature,
     child, abort, init, list, ctDesc, ntvSentence,
     require: createRequire(MCP_TEST), __dirname: MCP_DIR, __filename: MCP_TEST,
   };

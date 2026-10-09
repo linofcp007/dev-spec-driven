@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, tmp, libSources, require, __dirname }) => {
+exports.run = async ({ ok, remeasure, S, tmp, libSources, require, __dirname }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
   const tmpsIn = (d) => fs.readdirSync(d).filter((x) => /\.tmp$/i.test(x));
@@ -67,18 +67,25 @@ exports.run = async ({ ok, S, tmp, libSources, require, __dirname }) => {
       "1.25.1 review 7: writeFileAtomic creates its temp file exclusively, fsyncs it BEFORE the rename, writes bytes exactly; a refused rename is thrown with the old content intact (no in-place write, no temp left); Windows retries a passing lock (EBUSY) with backoff (got " +
       js([ok1, buf, refused, afterRefused, retried, t1]) + ")");
 
-    // a read-only target on Windows: no wait fixes it — refused at once (the old fallback's plain write failed there too)
+    // a read-only target on Windows: no wait fixes it — refused at once (the old fallback's plain write failed there too). "At once"
+    // is counted, not timed (1.26 — `took < 1000` missed at 1,333 ms on a loaded machine): ONE rename attempt, no retry; the wall time
+    // stays a backstop under the ~1.6 s the retries cost, measured once more on a miss.
     if (win) {
       const ro = path.join(dir, "r7-readonly.json");
       fs.writeFileSync(ro, "KEEP\n");
       fs.chmodSync(ro, 0o444);
-      let code = null;
-      const s0 = Date.now();
-      try { E.writeFileAtomic(ro, "NO\n"); } catch (e) { code = e.code; }
-      const took = Date.now() - s0;
+      const realRename = fs.renameSync;
+      const attempt = () => {
+        let code = null, renames = 0;
+        fs.renameSync = function () { renames++; return realRename.apply(this, arguments); };
+        const s0 = Date.now();
+        try { E.writeFileAtomic(ro, "NO\n"); } catch (e) { code = e.code; } finally { fs.renameSync = realRename; }
+        return { code, renames, took: Date.now() - s0 };
+      };
+      const r = remeasure(attempt, (x) => x.took < 1000);
       fs.chmodSync(ro, 0o644);
-      ok(code && fs.readFileSync(ro, "utf8") === "KEEP\n" && took < 1000 && js(tmpsIn(dir)) === "[]",
-        "1.25.1 review 7: a read-only target is refused at once (no ~1.6 s of retries), its content kept, no temp file left (got " + js([code, took, tmpsIn(dir)]) + ")");
+      ok(r.code && r.renames === 1 && fs.readFileSync(ro, "utf8") === "KEEP\n" && r.took < 1000 && js(tmpsIn(dir)) === "[]",
+        "1.25.1 review 7: a read-only target is refused at once — one rename attempt, no retry (no ~1.6 s of retries) — its content kept, no temp file left (got " + js([r.code, r.renames, r.took, r.tries, tmpsIn(dir)]) + ")");
     } else ok(true, "1.25.1 review 7: read-only target — skipped (Windows only: a POSIX rename replaces a read-only file in a writable folder)");
   }
 

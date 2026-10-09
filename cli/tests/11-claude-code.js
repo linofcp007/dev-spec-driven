@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   const S16 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = JSON.stringify;
   const OPTS = ["DEV_SPEC_DEFAULT_LANG", "CLAUDE_PLUGIN_OPTION_DEFAULT_LANG", "DEV_SPEC_STOP_CHECK", "CLAUDE_PLUGIN_OPTION_STOP_CHECK",
@@ -128,12 +128,14 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   let imj = null;
   try { imj = JSON.parse(im[5].out); } catch { /* stays null */ }
   const req = (slug) => { try { return fs.readFileSync(path.join(pi, ".specs", slug, "requirements.md"), "utf8"); } catch { return ""; } };
-  ok(im[0].code === 0 && /\(inline text\)/.test(im[0].out) && /^> Imported from plan \(inline text\) on /m.test(req("dark-mode")) &&
-    im[1].code === 0 && JSON.parse(fs.readFileSync(path.join(pi, ".specs", "night-mode", ".state.json"), "utf8")).tracks.includes("tdd") &&
-    im[2].code === 1 && /imports a single document/.test(im[2].err) && im[3].code === 1 && /usage/i.test(im[3].err) && im[4].code === 1 && /The plan text is empty/.test(im[4].err) &&
-    imj && imj.ok === true && imj.inline === true && imj.source === null && imj.feature === "json-mode",
-    "1.16 C4: import plan - (stdin) and --text \"…\" (+ positional tracks) import a plan's text; a folder tool with text, no path nor text, an empty text are refused; --json = the MCP result (got " +
-    js(im.map((r) => [r.code, (r.out || r.err).slice(0, 70)])) + ")");
+  all("1.16 C4: import plan - (stdin) and --text \"…\" (+ positional tracks) import a plan's text; a folder tool with text, no path nor text, an empty text are refused; --json = the MCP result (got " +
+    js(im.map((r) => [r.code, (r.out || r.err).slice(0, 70)])) + ")", [
+    () => im[0].code === 0, () => /\(inline text\)/.test(im[0].out), () => /^> Imported from plan \(inline text\) on /m.test(req("dark-mode")),
+    () => im[1].code === 0, () => JSON.parse(fs.readFileSync(path.join(pi, ".specs", "night-mode", ".state.json"), "utf8")).tracks.includes("tdd"),
+    () => im[2].code === 1, () => /imports a single document/.test(im[2].err), () => im[3].code === 1, () => /usage/i.test(im[3].err),
+    () => im[4].code === 1, () => /The plan text is empty/.test(im[4].err), () => imj, () => imj.ok === true, () => imj.inline === true,
+    () => imj.source === null, () => imj.feature === "json-mode",
+  ]);
   const help16 = run(["help"]).out;
   const doc16 = fs.readFileSync(CLI, "utf8").split("*/")[0];
   ok([help16, doc16].every((t) => /statusline \[--print-config\]/.test(t) && /import <plan\|execplan\|fluidplan> - \| --text "<markdown>"/.test(t)) && S16.CLI_SWITCHES.has("print-config"),
@@ -236,7 +238,7 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     ok(r.follows === true && !/["$`%!\\]/.test(L) && viaShell.status === 0 && viaShell.stdout === "v1.10.0 statusline dev-spec.js" &&
       (!viaBash || (viaBash.status === 0 && viaBash.stdout === "v1.10.0 statusline dev-spec.js")) &&
       plain.follows === false && /^node ".*a clone\/cli\/dev-spec\.js" statusline$/.test(plain.command) && odd.follows === false &&
-      ["en", "pt", "es"].every((l) => /spec-statusline/.test(S16.msg(l).claudeCode.statusLine.config.cacheFollows)),
+      ["en", "pt", "es"].every((l) => /\/spec-setup statusline/.test(S16.msg(l).claudeCode.statusLine.config.cacheFollows)),
       "1.25.1 r7: statusline --print-config in a versioned plugin folder prints a command that runs the NEWEST installed version (1.10.0 over 1.2.0, numeric parts) even after the printed one is removed — the platform shell" +
       (viaBash ? " and bash" : " (bash: skipped)") + " alike; a clone (or a path holding $ % ! \" `) keeps the plain command (got " +
       js([r.follows, viaShell.status, viaShell.stdout, viaShell.stderr.slice(0, 200), viaBash && viaBash.stdout, plain.command]) + ")");

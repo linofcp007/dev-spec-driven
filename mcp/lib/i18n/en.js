@@ -1083,7 +1083,7 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
 // ===========================================================================
 const steering = {
     "constitution.md":
-      "# Constitution\n\nNon-negotiable principles every feature must obey. Keep these few, concrete, and testable.\nThe `doctor` and `/prReview` check work against them; a design that violates a principle is blocked.\n\n## Principles\n1. [e.g., Every write is idempotent or explicitly justified.]\n2. [e.g., No PII in logs; user IDs are pseudonymized.]\n3. [e.g., No breaking API change without a versioned migration path.]\n4. [e.g., Errors fail closed (deny) on the security path.]\n5. [e.g., Search before you write: extend an existing module before adding a new one.]\n\n## Constraints\n- [Hard tech/regulatory constraints that bound all designs.]\n\n## Decision Rules\n- [How to break ties — e.g., 'prefer boring/proven over clever'.]\n",
+      "# Constitution\n\nNon-negotiable principles every feature must obey. Keep these few, concrete, and testable.\nThe `doctor` and `/spec-review` check work against them; a design that violates a principle is blocked.\n\n## Principles\n1. [e.g., Every write is idempotent or explicitly justified.]\n2. [e.g., No PII in logs; user IDs are pseudonymized.]\n3. [e.g., No breaking API change without a versioned migration path.]\n4. [e.g., Errors fail closed (deny) on the security path.]\n5. [e.g., Search before you write: extend an existing module before adding a new one.]\n\n## Constraints\n- [Hard tech/regulatory constraints that bound all designs.]\n\n## Decision Rules\n- [How to break ties — e.g., 'prefer boring/proven over clever'.]\n",
     "product.md":
       "# Product\n\n## Vision\n[One sentence: what is this product and who is it for?]\n\n## Target Users\n- Primary: [who uses this daily?]\n- Secondary: [who else touches it?]\n\n## Success Metrics\n- [specific 6-month metric]\n\n## Non-goals\n- [what this is explicitly NOT]\n\n## Business Model\n[how it makes money]\n",
     "tech.md":
@@ -1216,11 +1216,11 @@ const msg = {
       noGate: (phase, slug) => `'${slug}' is a change: its only approvals are the plan (phase tasks — change.md) and the execution sign-off — there is no ${phase} phase to approve.`,
       scope: (acs, tasks, maxAcs, maxTasks, extra) => `a change is XS — 1–${maxAcs} acceptance criteria and 1–${maxTasks} tasks, core only; change.md has ${acs} criteria and ${tasks} task(s)${extra ? ` and the track(s) ${extra}` : ""} — create it as a feature of size s instead (spec_create {size: "s"}) and archive this change`,
       scopeOk: (acs, tasks) => `XS: ${acs} criteria, ${tasks} task(s)`,
-      approvePlan: (slug) => `Review & approve the plan (change.md: its criteria, approach and tasks) — spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}).`,
+      approvePlan: (slug) => `Review & approve the plan (change.md: its criteria, approach and tasks) — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks).`,
       // P3 — size XS / S: the whole plan filled, then ONE approval call (each gate still runs, in order)
-      planFastForward: (slug, size, list) => `Size ${size}: fill the whole plan first — ${list} — then approve it in one call: spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug}; CLI: ${DEV_SPEC} approve ${slug} --through tasks). Each phase's gate still runs, in order; the first that refuses stops it and says why.`,
+      planFastForward: (slug, size, list) => `Size ${size}: fill the whole plan first — ${list} — then approve it in one call: spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks; CLI: ${DEV_SPEC} approve ${slug} --through tasks). Each phase's gate still runs, in order; the first that refuses stops it and says why.`,
       // 1.21 review C3 — the Phase 4 tests gate (+tdd / +ai) needs work that comes AFTER the plan: the one call ends before it
-      planFastForwardTests: (slug, size, list, through, what) => `Size ${size}: fill the whole plan first — ${list} — then approve it through ${through} in one call: spec_approve {name: "${slug}", through: "${through}"} (/spec-ff ${slug} ${through}; CLI: ${DEV_SPEC} approve ${slug} --through ${through}). Each phase's gate still runs, in order. Then Phase 4, whose gate needs work that comes after the plan: ${({ tdd: "write the failing tests", ai: "write the eval harness and the feature's own eval sets", both: "write the failing tests and the feature's own eval sets" })[what] || "write the failing tests"} (/writeTests ${slug}), approve tests (/approve ${slug} tests), then the tasks (/approve ${slug} tasks).`,
+      planFastForwardTests: (slug, size, list, through, what) => `Size ${size}: fill the whole plan first — ${list} — then approve it through ${through} in one call: spec_approve {name: "${slug}", through: "${through}"} (/approve ${slug} --through ${through}; CLI: ${DEV_SPEC} approve ${slug} --through ${through}). Each phase's gate still runs, in order. Then Phase 4, whose gate needs work that comes after the plan: ${({ tdd: "write the failing tests", ai: "write the eval harness and the feature's own eval sets", both: "write the failing tests and the feature's own eval sets" })[what] || "write the failing tests"} (/spec ${slug} tests), approve tests (/approve ${slug} tests), then the tasks (/approve ${slug} tasks).`,
       templateApproved: (list) => `only the template's guidance left in: ${list} — the design was approved before 1.21's stricter rule, so this warns; its next approval asks for your own text there (or one line "n/a — <why it does not apply>")`,
       sectionsPassSized: (filled, covered, optional) => `filled: ${filled}` + (covered ? ` · covered by another track's section: ${covered}` : "") + (optional ? ` · optional at this size, left out: ${optional}` : ""),
       extendedComment: (marker, names) => `Size s: the other ${marker} sections — ${names} — are optional at this size. Add one when it applies (it must be filled then), or answer it in one line: "n/a — <why it does not apply>".`,
@@ -1415,17 +1415,17 @@ const msg = {
       approveBugDesign: (slug) => `Review & approve bug.md (Reproduction + Root Cause — a bugfix's design) — /approve ${slug} design.`,
       // Phase 4 on a feature whose implementation already started (tasks ticked — e.g. a 1.12 feature, which had no tests gate):
       // writing failing tests first is no longer possible — the gate is a sign-off for the tests that exist.
-      signOffTests: (slug, what) => `Phase 4 sign-off: the implementation has already started, so the tests are no longer written first — ${({ tdd: "check that every planned test exists with its T-ID in the test's name (test(\"T-01 …\")) so tests-in-code finds it", ai: `check that the eval set is the feature's own and record the baseline (/eval ${slug} --set-baseline)`, both: `check that every planned test exists with its T-ID in the test's name (test("T-01 …")) and that the eval set is the feature's own, and record the baseline (/eval ${slug} --set-baseline)` })[what]}. Then approve — /approve ${slug} tests.`,
-      approveTests: (slug, what) => `Phase 4, the hard gate: ${({ tdd: "write every planned test and confirm each fails for the right reason", ai: "write the deterministic tests and the eval harness, and record the baseline", both: "write every planned test (each failing for the right reason) and the eval harness, and record the baseline" })[what]} — /writeTests ${slug}; no implementation code until then. Then approve — /approve ${slug} tests.`,
+      signOffTests: (slug, what) => `Phase 4 sign-off: the implementation has already started, so the tests are no longer written first — ${({ tdd: "check that every planned test exists with its T-ID in the test's name (test(\"T-01 …\")) so tests-in-code finds it", ai: `check that the eval set is the feature's own and record the baseline (/eval ${slug} baseline)`, both: `check that every planned test exists with its T-ID in the test's name (test("T-01 …")) and that the eval set is the feature's own, and record the baseline (/eval ${slug} baseline)` })[what]}. Then approve — /approve ${slug} tests.`,
+      approveTests: (slug, what) => `Phase 4, the hard gate: ${({ tdd: "write every planned test and confirm each fails for the right reason", ai: "write the deterministic tests and the eval harness, and record the baseline", both: "write every planned test (each failing for the right reason) and the eval harness, and record the baseline" })[what]} — /spec ${slug} tests; no implementation code until then. Then approve — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary. Optional, before it: /spec-simplify ${slug} — a behaviour-preserving cleanup of the feature's own code, proven by its tests.`,
-      breakIntoTasks: (slug) => `Break the design into tasks — /createTask ${slug}.`,
-      drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). Decide: the spec is now wrong → /spec-impact ${slug} (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
+      allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary. Optional, before it: /spec-review ${slug} simplify — a behaviour-preserving cleanup of the feature's own code, proven by its tests.`,
+      breakIntoTasks: (slug) => `Break the design into tasks — /spec ${slug} tasks.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). Decide: the spec is now wrong → /spec-change ${slug} impact (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
       // but predates a later change: re-confirm it — never "sign it off" as if there were none).
       // signOff.role (1.14, meta.approvalRoles.execution): the role to sign as; signOff.missing / signed: the roles still missing / signed.
       finished: (slug, day, total, signOff) => `'${slug}' is finished (${day}) — its ${total} implementing file(s) are unchanged since.` +
-        (!signOff ? ` Nothing left to do here — /spec-drift ${slug} checks it after later changes.`
+        (!signOff ? ` Nothing left to do here — /spec-report drift ${slug} checks it after later changes.`
           : signOff.why ? ` Its execution sign-off (${signOff.at}) predates ${signOff.why} — re-confirm it: /approve ${slug} execution${signOff.role ? " --role " + signOff.role : ""}.`
             : ` Sign it off${signOff.missing ? ` — ${signOff.missing}${signOff.signed ? ` (signed: ${signOff.signed})` : ""}` : ""}: /approve ${slug} execution${signOff.role ? " --role " + signOff.role : ""}.`),
       // All tasks verified and finished, but a project check (meta.checks) has no passing run since the last task activity.
@@ -1558,6 +1558,8 @@ const msg = {
       atLeastItems: (n) => `with at least ${n} item${n === 1 ? "" : "s"}`, // 1.25.1: a schema `minItems` (spec_append_tasks.tasks)
       // 1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
       unknownArgs: (tool, items, valid) => `Unknown argument${items.length > 1 ? "s" : ""} for ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (did you mean ${u.didYouMean}?)` : "")).join(", ")} — nothing was done. ${tool} takes: ${valid}.`,
+      // 1.26: an argument of another mode of a tool that folded several into one (spec_roadmap_edit kind, spec_export format, spec_scan coverage)
+      inapplicable: (tool, mode, names, allowed) => `${tool} {${mode}} does not take ${names} — nothing was done. With ${mode} it takes: ${allowed || "no other argument"}.`,
       notObject: "arguments must be a JSON object.",
       dotdot: "projectDir must not contain '..' path segments.",
       network: (dir) => `projectDir must be a local folder — a network or device path (${dir}) is refused, so a tool call can never point this local server at another machine; open the project locally (or start the server with it as the working directory).`,
@@ -1849,14 +1851,14 @@ const msg = {
       fillEmpty: "it has no content beyond headings",
       fillPlaceholders: (n, first) => `${n} template placeholder(s) left (first: ${first})`,
       fillHint: {
-        "classification.md": (slug) => `confirm the tracks and write the blast radius and compliance tags (/classify ${slug}), then /approve ${slug} classification`,
+        "classification.md": (slug) => `confirm the tracks and write the blast radius and compliance tags (/spec ${slug}), then /approve ${slug} classification`,
         "requirements.md": (slug) => `check it with /clarify ${slug} and ears_validate (${DEV_SPEC} ears ${slug})`,
         "bug.md": (slug) => `write the Reproduction and the Root Cause with evidence (/spec-doctor ${slug})`,
         "design.md": (slug) => `run /spec-doctor ${slug} (mandatory sections, Constitution Check)`,
         "test-plan.md": (slug) => `check the AC coverage with trace_check (${DEV_SPEC} trace ${slug})`,
         "eval-plan.md": (slug) => `set the thresholds and the baseline, then /spec-doctor ${slug}`,
-        "tasks.md": (slug) => `break the design into real tasks (/createTask ${slug}), then trace_check`,
-        "change.md": (slug) => `write its summary, 1–3 EARS criteria, the approach and 1–3 tasks each with a _Verify:_ command, then approve the plan in one call — spec_approve {name: "${slug}", through: "tasks"} (/spec-ff ${slug})`,
+        "tasks.md": (slug) => `break the design into real tasks (/spec ${slug} tasks), then trace_check`,
+        "change.md": (slug) => `write its summary, 1–3 EARS criteria, the approach and 1–3 tasks each with a _Verify:_ command, then approve the plan in one call — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks)`,
         default: (slug) => `/spec-doctor ${slug}`,
       },
       approveClassification: (slug) => `Confirm & approve the classification — /approve ${slug} classification.`,
@@ -2163,7 +2165,7 @@ const msg = {
         amend: "## Proposed steering or constitution amendments",
         amendNote: "<!-- For human approval — never applied automatically. Name the file (.specs/steering/constitution.md, tech.md, …), the exact change and why. -->",
         followUps: "## Follow-ups",
-        followUpsNote: "<!-- Candidate backlog items — add the ones you accept with spec_backlog (dev-spec backlog add \"<name>\" \"<note>\"). -->",
+        followUpsNote: "<!-- Candidate backlog items — add the ones you accept with spec_roadmap_edit {kind: \"backlog\"} (dev-spec backlog add \"<name>\" \"<note>\"). -->",
       },
       // retro.md: the one layout (i18n.js renderRetro, linked) with this language's retroText and phase names
       retro: (m, fmt) => renderRetro(MSG.en.metrics.retroText, MSG.en.metrics.phase, m, fmt),
@@ -2194,7 +2196,7 @@ const msg = {
     // Living catalog (.specs/SPECS.md) chrome. IDs, `_Supersedes:_` and the AUTO-GENERATED marker stay English-stable.
     catalog: {
       title: (proj) => `Spec catalog — ${proj}`,
-      autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_catalog {write: true} (dev-spec catalog --write).",
+      autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_export {format: \"catalog\", write: true} (dev-spec catalog --write).",
       intro: "What the system does today: every acceptance criterion, grouped by feature. A criterion replaced by a later feature that has shipped (_Supersedes:_) is struck through and names the criterion that replaces it; one a feature still in progress plans to replace is marked \"to be superseded\" and still counts.",
       totals: (f, acs, current, sup, pending) => `**${f} feature(s) · ${acs} acceptance criteria — ${current} current${pending ? ` (${pending} to be superseded)` : ""}, ${sup} superseded**`,
       status: { active: "in progress", complete: "complete", finished: "finished", archived: "archived" },
@@ -2218,7 +2220,7 @@ const msg = {
       notArchived: (slug) => `Nothing is archived as '${slug}' (.specs/_archive/${slug}/ not found).`,
       activeExists: (slug) => `'${slug}' is already an active feature — rename it first (${DEV_SPEC} feature rename ${slug} "<new name>"), then restore the archived one.`,
       done: (slug) => `Restored '${slug}' from .specs/_archive/ ✓`,
-      noRecord: "It was archived before archive recorded its roadmap entry — re-declare its dependencies with spec_depend if it had any.",
+      noRecord: "It was archived before archive recorded its roadmap entry — re-declare its dependencies with spec_roadmap_edit {kind: \"depend\"} if it had any.",
       skipDependsOn: (d, reason) => `its dependency '${d}' (${reason})`,
       skipDependent: (k, reason) => `'${k}', which depended on it (${reason})`,
       skipRecord: (field, reason) => `the archive record's ${field} (${reason})`,
@@ -2226,7 +2228,7 @@ const msg = {
       reason: { gone: "no longer exists", archived: "archived too — restoring it puts the link back", cycle: "would close a dependency cycle", invalid: "unexpected shape — left out" },
       renamedRecords: (list) => `archive records updated to the new name (restore puts their dependencies back): ${list}`,
       prunedDependents: (list) => `its dependents' links to it left the roadmap: ${list} (recorded — restore puts them back)`,
-      prunedIncomplete: (slug, pct, list) => `'${slug}' was not complete (${pct}%), yet ${list} depended on it: the roadmap no longer shows them blocked by it — restore it, or re-declare the dependency with spec_depend, if they still need that work`,
+      prunedIncomplete: (slug, pct, list) => `'${slug}' was not complete (${pct}%), yet ${list} depended on it: the roadmap no longer shows them blocked by it — restore it, or re-declare the dependency with spec_roadmap_edit {kind: "depend"}, if they still need that work`,
     },
     drift: {
       none: "No finished feature has a drift baseline yet — spec_finish {write: true} (" + DEV_SPEC + " finish <feature> --write) records one when a feature is ready to finish.",
@@ -2468,7 +2470,7 @@ const msg = {
         intro: (from, to) => `.specs/ upgraded from ${from || "a dev-spec before 1.13"} to ${to || "?"}. Per feature: what the ${to || "?"} rules flag, what to do and which review to run. Work through it with /spec-upgrade (Claude Code) or dev-spec upgrade; re-run the audit any time for the current state.`,
         migrations: "Migrations",
         group: { blocked: "⛔ Blocked — doctor fails", attention: "▲ Needs attention", ok: "✓ OK" },
-        footer: "Every change goes through the normal gates: re-approvals with spec_approve (/approve), spec edits after an approval with spec_impact (/spec-impact), follow-up work with spec_append_tasks (/spec-converge). Nothing here is applied automatically.",
+        footer: "Every change goes through the normal gates: re-approvals with spec_approve (/approve), spec edits after an approval with spec_impact (/spec-change <feature> impact), follow-up work with spec_append_tasks (/spec-review <feature> converge). Nothing here is applied automatically.",
       },
     },
 
@@ -2536,14 +2538,14 @@ const msg = {
         config: {
           head: "Status line — add this to ~/.claude/settings.json (every project) or to a project's .claude/settings.local.json (this machine only — the path is this machine's, so never the committed .claude/settings.json):",
           after: "It prints one line — the most active feature, its tasks, unverified ticks and the next step — and nothing outside a dev-spec project.",
-          cacheNote: "This path is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): after a plugin update run /spec-statusline again — the old copy is removed 14 days after an update.",
-          cacheFollows: "This CLI is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): the command looks up the newest installed version of the plugin at each run, so it keeps working after a plugin update — no need to run /spec-statusline again.",
+          cacheNote: "This path is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): after a plugin update run /spec-setup statusline again — the old copy is removed 14 days after an update.",
+          cacheFollows: "This CLI is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): the command looks up the newest installed version of the plugin at each run, so it keeps working after a plugin update — no need to run /spec-setup statusline again.",
           tryIt: (cmd) => `Try it: echo '{"cwd": "<your project>"}' | ${cmd}`,
         },
       },
       planBridge: {
-        byText: "dev-spec: the user approved this plan. To track it as a spec (EARS criteria, traced tasks, evidence gates), offer /spec-import — spec_import {tool: \"plan\", text: <the approved plan's markdown>} (CLI: " + DEV_SPEC + " import plan - < plan.md). The plan file in ~/.claude/plans is outside the project, so pass its text. Skip it for a quick change; import only with the user's OK.",
-        byPath: (rel) => `dev-spec: the user approved this plan. To track it as a spec (EARS criteria, traced tasks, evidence gates), offer /spec-import — spec_import {tool: "plan", path: "${rel}"} (CLI: ${DEV_SPEC} import plan ${rel}). Skip it for a quick change; import only with the user's OK.`,
+        byText: "dev-spec: the user approved this plan. To track it as a spec (EARS criteria, traced tasks, evidence gates), offer /spec-adopt import — spec_import {tool: \"plan\", text: <the approved plan's markdown>} (CLI: " + DEV_SPEC + " import plan - < plan.md). The plan file in ~/.claude/plans is outside the project, so pass its text. Skip it for a quick change; import only with the user's OK.",
+        byPath: (rel) => `dev-spec: the user approved this plan. To track it as a spec (EARS criteria, traced tasks, evidence gates), offer /spec-adopt import — spec_import {tool: "plan", path: "${rel}"} (CLI: ${DEV_SPEC} import plan ${rel}). Skip it for a quick change; import only with the user's OK.`,
       },
       importText: {
         label: "(inline text)",
@@ -2849,6 +2851,8 @@ const msg = {
       wrote: (file) => `✎ wrote ${file}`,
       exportsIsFeature: (dir) => `${dir} is a feature folder from before dev-spec reserved the name 'exports' (it holds requirements.md / .state.json) — move or rename that folder by hand, then export again.`,
       exportsLinked: (rel) => `Refused to write ${rel}: .specs/exports/ or that file is a link (a symbolic link, a junction) or resolves outside .specs/ — replace it with a plain folder / file, then export again. Nothing was written.`,
+      // 1.26: html / md without write — a preview, not the whole document (an agent paid ~18k characters for a template-only feature)
+      previewHint: (n, rel) => `A preview (the document's first ${n} characters, as markdown). write: true (--write) writes ${rel}; includeBody: true (--include-body) returns the whole document.`,
     },
     // Requirements traceability matrix (trace_check {matrix} / `dev-spec trace --matrix | --csv` / spec_export {format: "csv"}):
     // labels only — the IDs, the kind column (AC / EC / NFR / SC) and the JSON codes (status, gaps, reason) stay English.
@@ -2901,10 +2905,10 @@ const msg = {
         notes: { template: "template", superseded: (list) => `superseded by ${list}`, changed: "changed since approval" },
       },
     },
-    // Release notes from the specs (spec_changelog / `dev-spec changelog`): headings localized, IDs English-stable.
+    // Release notes from the specs (spec_export {format: "changelog"} / `dev-spec changelog`): headings localized, IDs English-stable.
     releaseNotes: {
       title: (proj) => `Release notes — ${proj}`,
-      autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_changelog {write: true} (dev-spec changelog --write).",
+      autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_export {format: \"changelog\", write: true} (dev-spec changelog --write).",
       sinceDate: (d) => `Changes since ${d}`,
       sinceLast: (d) => `Changes since the last release notes (${d})`,
       all: "Every change the specs record",
@@ -2966,7 +2970,7 @@ const msg = {
       stale: (file) => `stale: ${file} — --write removes it (no decision backs it any more)`,
       summary: (n, w, u, r) => `ADRs: ${n} — ${w} file(s) written · ${u} unchanged · ${r} removed`,
     },
-    // 1.16 E3 — milestones (spec_milestone; roadmap.json meta.milestones): the status codes stay English (on-track · at-risk ·
+    // 1.16 E3 — milestones (spec_roadmap_edit {kind: "milestone"}; roadmap.json meta.milestones): the status codes stay English (on-track · at-risk ·
     // late · done), these are their labels.
     milestone: {
       title: "Milestones",
@@ -2975,7 +2979,7 @@ const msg = {
       archivedLabel: "archived",
       line: (name, date, done, total, eta, status, feats, archived) => `${name} — ${date} · ${done}/${total} feature(s) done · ETA ${eta || "—"} · ${status} · ${feats || "—"}${archived ? ` (archived: ${archived})` : ""}`,
       head: (n, today) => `${n} milestone(s) — today ${today}:`,
-      none: "No milestones yet — add one: " + DEV_SPEC + " milestone add <name> <YYYY-MM-DD> <features…> (spec_milestone {action: \"add\", name, date, features}).",
+      none: "No milestones yet — add one: " + DEV_SPEC + " milestone add <name> <YYYY-MM-DD> <features…> (spec_roadmap_edit {kind: \"milestone\", action: \"add\", name, date, features}).",
       added: (name, date, list) => `Milestone '${name}' added — ${date}: ${list}`,
       updated: (name, date, list) => `Milestone '${name}' updated — ${date}: ${list}`,
       removed: (name) => `Milestone '${name}' removed.`,
@@ -2998,7 +3002,7 @@ const msg = {
       badStored: (rel) => `${rel} → meta.milestones is not a list of {name, date, features} as milestone add writes them (a valid name, a real YYYY-MM-DD day, one entry per name) — fix it by hand; refusing to change it.`,
       notesTitle: (title, name) => `${title} — ${name}`,
       notesScope: (name, date, list) => `Milestone ${name} (${date}): ${list}`,
-      notesAutogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_changelog {milestone, write: true} (dev-spec changelog --milestone <name> --write).",
+      notesAutogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_export {format: \"changelog\", milestone, write: true} (dev-spec changelog --milestone <name> --write).",
       nothingToWrite: (file) => `Nothing to report for this milestone — ${file} was not written.`,
     },
 
@@ -3042,10 +3046,10 @@ const msg = {
       ffWhyRoles: (missing) => `signed off, but it waits for the other roles (${missing}) — the later phases can't be approved before it.`,
       // A role refusal inside a fast-forward (the phases before it stay approved): given = the role named that doesn't sign this phase.
       ffWhyRole: (roles, slug, phase, through, given) => (given ? `'${given}' is not a role that signs off '${phase}' (roles: ${roles})` : `'${phase}' is signed off per role (${roles})`) +
-        ` — nothing was recorded for '${phase}'. Run the fast-forward again as the role you sign for: /spec-ff ${slug} --role <role> (CLI: ${DEV_SPEC} approve ${slug} --through ${through} --role <role>); it resumes at '${phase}'.`,
-      ffHint: (slug, list, role) => `Every planning artifact through tasks is filled and passes its gate — fast-forward: /spec-ff ${slug}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through tasks${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate.`,
+        ` — nothing was recorded for '${phase}'. Run the fast-forward again as the role you sign for: /approve ${slug} --through ${through} --role <role> (CLI: ${DEV_SPEC} approve ${slug} --through ${through} --role <role>); it resumes at '${phase}'.`,
+      ffHint: (slug, list, role) => `Every planning artifact through tasks is filled and passes its gate — fast-forward: /approve ${slug} --through tasks${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through tasks${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate.`,
       // 1.21 review C3 — a size xs / s plan whose Phase 4 tests gate is still ahead: the call ends before it
-      ffHintTests: (slug, list, through, role) => `Every planning artifact through ${through} is filled and passes its gate — fast-forward: /spec-ff ${slug} ${through}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through ${through}${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate. Then Phase 4: write the failing tests / eval sets (/writeTests ${slug}), approve tests, then the tasks.`,
+      ffHintTests: (slug, list, through, role) => `Every planning artifact through ${through} is filled and passes its gate — fast-forward: /approve ${slug} --through ${through}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through ${through}${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate. Then Phase 4: write the failing tests / eval sets (/spec ${slug} tests), approve tests, then the tasks.`,
       batch: (n) => `  batch approvals (fast-forward): ${n}`,
     },
 
@@ -3114,11 +3118,11 @@ const msg = {
         : `  velocity: no completed task in the last ${v.windowDays} days`),
       etaNote: (pct) => `ETA = remaining points ÷ velocity, in working days (±${pct}%) · \`_Size: XS|S|M|L|XL_\` on a task = 1/2/3/5/8 points; an unsized task counts as its feature's median (else M) · a feature waiting on a dependency starts after that one's ETA.`,
       overlap: {
-        attentionActive: (other, files) => `plans the same files as ${other}: ${files} — order them (spec_depend) or declare _Supersedes:_ if one replaces the other's behaviour`,
+        attentionActive: (other, files) => `plans the same files as ${other}: ${files} — order them (spec_roadmap_edit {kind: "depend"}) or declare _Supersedes:_ if one replaces the other's behaviour`,
         attentionFinished: (other, files) => `plans files in ${other}'s finish baseline: ${files} — declare _Supersedes: ${other}/US-n.AC-m_ where it replaces that behaviour, or spec_drift flags ${other} after the merge`,
-        doctorActive: (list, slug) => `open tasks plan the same files as another active feature — ${list}: both land on them at merge time and one drifts silently. Order the two (spec_depend {name: "${slug}", add: ["<other>"]} · ${DEV_SPEC} depend ${slug} <other>) or, where one replaces the other's behaviour, declare _Supersedes: <other>/US-n.AC-m_`,
-        doctorFinished: (list, slug) => `open tasks plan files a finished feature recorded in its drift baseline — ${list}: after the merge spec_drift flags it. Declare _Supersedes: <feature>/US-n.AC-m_ on the criteria of ${slug} that replace its behaviour, make ${slug} depend on it where it builds on it (spec_depend {name: "${slug}", add: ["<feature>"]} · ${DEV_SPEC} depend ${slug} --add <feature>), or re-finish it after the merge (spec_finish)`,
-        hookLine: (n, list) => `⚠ ${n} cross-feature file overlap(s): ${list} — run /spec-doctor on them (order them with /depend, or declare _Supersedes:_)`,
+        doctorActive: (list, slug) => `open tasks plan the same files as another active feature — ${list}: both land on them at merge time and one drifts silently. Order the two (spec_roadmap_edit {kind: "depend", name: "${slug}", add: ["<other>"]} · ${DEV_SPEC} depend ${slug} <other>) or, where one replaces the other's behaviour, declare _Supersedes: <other>/US-n.AC-m_`,
+        doctorFinished: (list, slug) => `open tasks plan files a finished feature recorded in its drift baseline — ${list}: after the merge spec_drift flags it. Declare _Supersedes: <feature>/US-n.AC-m_ on the criteria of ${slug} that replace its behaviour, make ${slug} depend on it where it builds on it (spec_roadmap_edit {kind: "depend", name: "${slug}", add: ["<feature>"]} · ${DEV_SPEC} depend ${slug} --add <feature>), or re-finish it after the merge (spec_finish)`,
+        hookLine: (n, list) => `⚠ ${n} cross-feature file overlap(s): ${list} — run /spec-doctor on them (order them with /roadmap depend, or declare _Supersedes:_)`,
         cliHead: (n) => `⚠ ${n} cross-feature file overlap(s):`,
         cliActive: (a, b, files) => `  ${a} ↔ ${b}: ${files}`,
         cliFinished: (a, b, files) => `  ${a} → ${b} (finished): ${files}`,
@@ -3208,7 +3212,7 @@ const msg = {
       implFirst: (n, tests, taskC, testC, files) => `red-first: task ${n} (makes ${tests} green) was first committed in ${taskC}, before any commit touching a test file that names ${tests} (${files} — first in ${testC}): the implementation came before its test.`,
       testNotCommitted: (n, tests, taskC, files) => `red-first: task ${n} (makes ${tests} green) is committed (${taskC}), but no commit read touches a test file that names ${tests} (${files}) — commit the test first.`,
       redFirstStatus: (n, tests, status) => `red-first: task ${n} (${tests}) — ` + ({ ok: "the test was committed first ✓", "no-test-file": "no test file names it yet (nothing to compare)", "no-task-commit": "no commit cites the task yet", "outside-window": "can't tell: the log window is full (--max N)" })[status],
-      conventions: (slug) => `No commit cites a task of '${slug}'. Conventions: name the feature and the task — "Part of .specs/${slug}/ task #N." (what /spec-commit writes) — or the IDs it covers: "Makes T-01 green", US-1.AC-2.`,
+      conventions: (slug) => `No commit cites a task of '${slug}'. Conventions: name the feature and the task — "Part of .specs/${slug}/ task #N." (what /executeTask commit writes) — or the IDs it covers: "Makes T-01 green", US-1.AC-2.`,
       noGit: "git is not available here, or this is not a git repository with commits — dev-spec log reads `git log`. Or pipe a log in: git log --name-only --relative | " + DEV_SPEC + " log <feature> -",
     },
 
@@ -3329,9 +3333,9 @@ const msg = {
       on: "Guard mode SCOPE — Write/Edit on a code file outside .specs/ asks unless an open task of an approved feature names it in _Implements:_ (the file, its folder or a glob; test files excepted), and asks for every code edit while no feature has approved, unfinished tasks (roadmap.json meta.guard: \"scope\"). Test files are allowed while a feature's test plan is approved and the feature is unfinished (Phase 4 writes the failing tests before the tasks gate), and every code file while a spike is under way (its prototype).",
       ask: (file, features, hint) => `dev-spec guard (scope): ${file} is not in the plan — no open task of ${features} names it in _Implements:_. ${hint} (Guard mode is scope — ${DEV_SPEC} init --guard on allows every code file while tasks are approved; --guard off disables it.)`,
       hint: {
-        "same-folder": (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — same folder as ${ref}) and re-approve the tasks phase, or plan the change with /spec-converge (spec_append_tasks).`,
-        nearby: (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — it plans ${ref} nearby) and re-approve the tasks phase, or plan the change with /spec-converge (spec_append_tasks).`,
-        next: (n, slug) => `Add it to the _Implements:_ of task ${n} (${slug}, the next open task) and re-approve the tasks phase, or plan the change with /spec-converge (spec_append_tasks).`,
+        "same-folder": (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — same folder as ${ref}) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
+        nearby: (n, slug, ref) => `Add it to task ${n}'s _Implements:_ (${slug} — it plans ${ref} nearby) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
+        next: (n, slug) => `Add it to the _Implements:_ of task ${n} (${slug}, the next open task) and re-approve the tasks phase, or plan the change with /spec-review ${slug} converge (spec_append_tasks).`,
       },
     },
 
@@ -3438,7 +3442,7 @@ _Outcome: [go | no-go | pivot]_
         missing: (slug) => `spike.md is missing — scaffold it again: ${DEV_SPEC} spike "${slug}" (create-only: what exists is kept).`,
         fillQuestion: (slug) => `Write the question this spike answers (and its timebox) in spike.md → Question / Timebox — /spec-spike ${slug}.`,
         investigate: (n, text, slug) => `Investigate — task #${n}: ${text}. Prototype code stays outside .specs/ (link it under spike.md → Evidence); tick it: ${DEV_SPEC} done ${slug} ${n}.`,
-        decide: (slug) => `Record the decision in spike.md → Decision — go / no-go / pivot, the rationale and its _Outcome:_ line — and log it: /spec-decide ${slug} (spec_decide).`,
+        decide: (slug) => `Record the decision in spike.md → Decision — go / no-go / pivot, the rationale and its _Outcome:_ line — and log it: /spec-change ${slug} decide (spec_decide).`,
         outcome: (slug) => `State the outcome in spike.md → Decision: a line _Outcome: go_, _Outcome: no-go_ or _Outcome: pivot_ (/spec-spike ${slug}).`,
         timeboxPassed: (d) => `The timebox ended on ${d}: decide with the evidence you have.`,
         goCreateFirst: (slug, name, summary) => `Decision: go. Spec the real feature — spec_create {name: "${name}", summary: ${JSON.stringify(summary)}} (${DEV_SPEC} create "${name}" --summary ${JSON.stringify(summary)}) — then archive the spike: /feature archive ${slug}.`,
@@ -3506,7 +3510,7 @@ _Outcome: [go | no-go | pivot]_
       plansDir: "Claude Code plan mode keeps plans under plansDirectory (default ~/.claude/plans — outside the project): copy the plan into the project first, or set plansDirectory to a folder inside it.",
       several: (dir, list) => `'${dir}' holds several documents (${list}) — pass the one to import.`,
       planTitle: "Plan",
-      wNoSteps: "no checklist, to-do or steps list found — the scaffold's tasks.md was kept (break the work into tasks with /createTask)",
+      wNoSteps: "no checklist, to-do or steps list found — the scaffold's tasks.md was kept (break the work into tasks with /spec <feature> tasks)",
       wCancelled: (list) => `cancelled to-dos imported as open tasks (drop the ones that no longer apply): ${list}`,
       wNoDesignLeft: "nothing left for the design beyond the criteria and the steps — the scaffold's design.md was kept",
       wNotExecPlan: "no ExecPlan sections found (Progress, Decision Log, Concrete Steps, Validation and Acceptance …) — is this an ExecPlan? Try tool 'plan'.",

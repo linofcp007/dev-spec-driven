@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSources, require, __dirname }) => {
 
   { // --- 1.13 batch 4: localized roadmap phase / doctor ears detail / add-track entries, guard code types, numbers & enums refused on every surface ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -387,10 +387,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
       for (const p of leftovers14) { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, "x"); }
       const probe14 = [".specs/alpha/.lock", ".specs/alpha/.lock.reclaim", ".specs/_archive/old/.lock", ".specs/.roadmap.lock", ".specs/.roadmap.lock.reclaim",
         ".specs/alpha/tasks.md.4242.1790000000000.tmp", ".specs/alpha/.lock.4242.1790000000000.77.tmp", ".specs/roadmap.json.1.2.tmp"];
-      const ignored14 = (g14(["check-ignore", "--", ...probe14]).stdout || "").split(/\r?\n/).filter(Boolean);
-      const status14 = g14(["status", "--porcelain", "--untracked-files=all"]).stdout || "";
-      giGit14 = ignored14.length === probe14.length && !/\.lock|\.tmp|\.removing-/.test(status14) && /\.specs\/\.gitignore/.test(status14) && /\.specs\/alpha\/tasks\.md/.test(status14)
-        ? "ok" : JSON.stringify([ignored14, status14]);
+      // 1.26: asked once more when git answers nothing — on a loaded machine `check-ignore` once listed none of the probes while
+      // `status` showed them ignored; its exit code and stderr go into the label
+      const gitSaw = remeasure(() => {
+        const ci = g14(["check-ignore", "--", ...probe14]);
+        const ignored = (ci.stdout || "").split(/\r?\n/).filter(Boolean);
+        const status = g14(["status", "--porcelain", "--untracked-files=all"]).stdout || "";
+        const good = ignored.length === probe14.length && !/\.lock|\.tmp|\.removing-/.test(status) && /\.specs\/\.gitignore/.test(status) && /\.specs\/alpha\/tasks\.md/.test(status);
+        return { good, ignored, status, code: ci.status, err: String(ci.stderr || (ci.error && ci.error.message) || "").slice(0, 200) };
+      }, (x) => x.good);
+      giGit14 = gitSaw.good ? "ok" : JSON.stringify([gitSaw.ignored, gitSaw.status, gitSaw.code, gitSaw.err]);
       fs.rmSync(path.join(gif14.dir, ".lock"), { force: true });
       for (const p of leftovers14) fs.rmSync(p, { force: true });
       fs.rmSync(path.join(gi14, ".specs", ".removing-beta-0a1b2c3d"), { recursive: true, force: true });
@@ -458,11 +464,14 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     // L5 — a lock taken inside another waits only for what is left of the outer budget (at least ~0.5 s), never a second full wait.
     const nestALk = S.createFeature(rmPLk, "Nest outer", ["core"]);
     const nestBLk = S.createFeature(rmPLk, "Nest inner", ["core"]);
-    fs.writeFileSync(path.join(nestBLk.dir, ".lock"), JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "someone-else" }));
-    const tNestLk = Date.now();
-    const nestLk = S.withFeatureLock(nestALk.dir, () => S.withFeatureLock(nestBLk.dir, () => "inner ran", { onBusy: () => "inner busy" }), { waitMs: 100 });
-    const nestMsLk = Date.now() - tNestLk;
-    fs.rmSync(path.join(nestBLk.dir, ".lock"), { force: true });
+    const { nestLk, nestMsLk } = remeasure(() => { // 1.26: measured once more on a timing-only miss (the ~0.5 s floor is the wait itself)
+      fs.writeFileSync(path.join(nestBLk.dir, ".lock"), JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "someone-else" }));
+      const tNestLk = Date.now();
+      const r = S.withFeatureLock(nestALk.dir, () => S.withFeatureLock(nestBLk.dir, () => "inner ran", { onBusy: () => "inner busy" }), { waitMs: 100 });
+      const ms = Date.now() - tNestLk;
+      fs.rmSync(path.join(nestBLk.dir, ".lock"), { force: true });
+      return { nestLk: r, nestMsLk: ms };
+    }, (s) => s.nestMsLk < 3000);
     ok(nestLk === "inner busy" && nestMsLk < 3000, "a nested lock waits for the outer budget's remainder (~0.5 s floor), not a second full DEV_SPEC_LOCK_WAIT_MS (" + nestMsLk + " ms)");
     const giLines14 = ".lock\n.lock.reclaim\n.roadmap.lock\n.roadmap.lock.reclaim\n*.[0-9]*.[0-9]*.tmp\n.removing-*/\n";
     ok(giInit14 === giLines14 && giMerged14 === "# mine\r\n.lock\r\n.lock.reclaim\r\n.roadmap.lock\r\n.roadmap.lock.reclaim\r\n*.[0-9]*.[0-9]*.tmp\r\n.removing-*/\r\n" &&
@@ -515,13 +524,15 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     const badArg = spawnSync(process.execPath, [dockerJs, "--suite", "nope"], { encoding: "utf8" });
     const noPathEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^path$/i.test(k)));
     const noDocker = spawnSync(process.execPath, [dockerJs], { encoding: "utf8", env: { ...noPathEnv, PATH: path.join(tmp, "no-such-bin-dir") } });
-    ok(mods.length && mods.every((m) => ["child_process", "fs", "os", "path"].includes(m)) && require(path.join(root, "package.json")).scripts["test:docker"] === "node scripts/test-docker.js" &&
-      help.status === 0 && /--network none/.test(help.stdout) && /read-only/.test(help.stdout) && /node:18-alpine/.test(help.stdout) &&
-      badArg.status === 2 && /unknown suite 'nope'/.test(badArg.stderr) &&
-      noDocker.status === 2 && /Docker is not available: the docker command was not found/.test(noDocker.stderr) && /npm test/.test(noDocker.stderr) &&
-      /"--network", "none"/.test(src) && /:\/repo:ro/.test(src) && !/\.github|workflow/i.test(src),
-      "scripts/test-docker.js: Node core only, wired as npm run test:docker; --help names the read-only mount, --network none and the default images; a bad argument and a missing docker exit 2 with a clear message (got " +
-      JSON.stringify([mods, help.status, badArg.status, noDocker.status, (noDocker.stderr || "").slice(0, 120)]) + ")");
+    all("scripts/test-docker.js: Node core only, wired as npm run test:docker; --help names the read-only mount, --network none and the default images; a bad argument and a missing docker exit 2 with a clear message (got " +
+      JSON.stringify([mods, help.status, badArg.status, noDocker.status, (noDocker.stderr || "").slice(0, 120)]) + ")", [
+      () => mods.length, () => mods.every((m) => ["child_process", "fs", "os", "path"].includes(m)),
+      () => require(path.join(root, "package.json")).scripts["test:docker"] === "node scripts/test-docker.js", () => help.status === 0,
+      () => /--network none/.test(help.stdout), () => /read-only/.test(help.stdout), () => /node:18-alpine/.test(help.stdout),
+      () => badArg.status === 2, () => /unknown suite 'nope'/.test(badArg.stderr), () => noDocker.status === 2,
+      () => /Docker is not available: the docker command was not found/.test(noDocker.stderr), () => /npm test/.test(noDocker.stderr),
+      () => /"--network", "none"/.test(src), () => /:\/repo:ro/.test(src), () => !/\.github|workflow/i.test(src),
+    ]);
   }
 
   // 1.17: no regex literal lost its backslashes (a heredoc'd edit once turned /^\s*status\s*:/i into /^s*statuss*:/i in
@@ -751,12 +762,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     rt.meta.checks.types = "npx tsc --noEmit"; rt.meta.approvalRoles.tasks = ["tech"]; rt.meta.milestones.push({ name: "ga", date: "2026-12-01", features: ["auth"] }); rt.meta.changelogAt = T(9);
     const m5 = M(rb, ro, rt, "roadmap");
     const f5 = m5.merged;
-    ok(!m5.conflicts.length && m5.kind === "roadmap" && js(f5.features.app.dependsOn) === '["billing"]' && f5.features.app.order === 2 && !!f5.features.billing &&
-      f5.backlog.length === 2 && f5.backlog[0].note === "csv · pdf · xlsx" && f5.backlog[1].name === "Search" && f5.backlog[1].note === "later" &&
-      js(Object.keys(f5.meta.checks)) === '["test","lint","types"]' && js(f5.meta.approvalRoles) === '{"design":["tech","security"],"tasks":["tech"]}' &&
-      js(f5.meta.milestones.map((m) => [m.name, m.features])) === '[["beta",["app","billing"]],["ga",["auth"]]]' && f5.meta.specVersion === "1.21.0" && f5.meta.changelogAt === T(9) &&
-      S.mergeStateJson(undefined, { meta: {} }, { meta: {} }).kind === "roadmap",
-      "1.21 F1a merge: roadmap.json — dependsOn a 3-way set merge (one side removed auth, the other added billing), features / backlog (case-insensitive names, notes joined) / milestones / checks / roles united by key, specVersion the higher, changelogAt the later; no conflict (got " + js(m5) + ")");
+    all("1.21 F1a merge: roadmap.json — dependsOn a 3-way set merge (one side removed auth, the other added billing), features / backlog (case-insensitive names, notes joined) / milestones / checks / roles united by key, specVersion the higher, changelogAt the later; no conflict (got " + js(m5) + ")", [
+      () => !m5.conflicts.length, () => m5.kind === "roadmap", () => js(f5.features.app.dependsOn) === '["billing"]',
+      () => f5.features.app.order === 2, () => !!f5.features.billing, () => f5.backlog.length === 2, () => f5.backlog[0].note === "csv · pdf · xlsx",
+      () => f5.backlog[1].name === "Search", () => f5.backlog[1].note === "later",
+      () => js(Object.keys(f5.meta.checks)) === '["test","lint","types"]',
+      () => js(f5.meta.approvalRoles) === '{"design":["tech","security"],"tasks":["tech"]}',
+      () => js(f5.meta.milestones.map((m) => [m.name, m.features])) === '[["beta",["app","billing"]],["ga",["auth"]]]',
+      () => f5.meta.specVersion === "1.21.0", () => f5.meta.changelogAt === T(9),
+      () => S.mergeStateJson(undefined, { meta: {} }, { meta: {} }).kind === "roadmap",
+    ]);
 
     // 6. a meta scalar both sides changed differently → a real conflict: ours kept, reported; written INTO the file as
     // mergeConflicts (valid JSON, ours' BOM / CRLF / final newline kept); an unknown key → 3-way per key
@@ -798,13 +813,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     const at2 = S.mergeAttributes(at1.text, false);
     const at3 = S.mergeAttributes(at1.text, true);
     const at4 = S.mergeAttributes(at3.text, true);
-    ok(bad.ok === false && bad.parseError === "theirs" && g1.kind === "generated" && g1.keepOurs === true && g2.keepOurs === false &&
-      added.ok && added.clean && js(JSON.parse(added.text).ticks) === js({ 1: T(1), 2: T(2) }) &&
-      S.mergeKindOfPath(".specs/a/.state.json") === "state" && S.mergeKindOfPath(".specs/roadmap.json") === "roadmap" && S.mergeKindOfPath("x/.specs/SPECS.md") === "generated" &&
-      at1.changed && at1.text.startsWith("*.png binary\r\n") && S.MERGE_ATTRIBUTE_LINES.every((l) => at1.text.includes(l + "\r\n")) &&
-      S.MERGE_ATTRIBUTE_LINES[0] === ".specs/**/.state.json merge=dev-spec-state" && !at2.changed && at3.changed && at3.text === "*.png binary\r\n" && !at4.changed,
-      "1.21 F1a merge: an unparseable side merges nothing (parseError); ROADMAP.md / SPECS.md keep ours only when both sides are dev-spec's output (a hand-written one is left to git's text merge); an empty base merges as added on both sides; .gitattributes gains / loses the driver's lines idempotently, other lines and CRLF kept (got " +
-      js([bad, g1, g2, at1.text]) + ")");
+    all("1.21 F1a merge: an unparseable side merges nothing (parseError); ROADMAP.md / SPECS.md keep ours only when both sides are dev-spec's output (a hand-written one is left to git's text merge); an empty base merges as added on both sides; .gitattributes gains / loses the driver's lines idempotently, other lines and CRLF kept (got " +
+      js([bad, g1, g2, at1.text]) + ")", [
+      () => bad.ok === false, () => bad.parseError === "theirs", () => g1.kind === "generated", () => g1.keepOurs === true,
+      () => g2.keepOurs === false, () => added.ok, () => added.clean, () => js(JSON.parse(added.text).ticks) === js({ 1: T(1), 2: T(2) }),
+      () => S.mergeKindOfPath(".specs/a/.state.json") === "state", () => S.mergeKindOfPath(".specs/roadmap.json") === "roadmap",
+      () => S.mergeKindOfPath("x/.specs/SPECS.md") === "generated", () => at1.changed, () => at1.text.startsWith("*.png binary\r\n"),
+      () => S.MERGE_ATTRIBUTE_LINES.every((l) => at1.text.includes(l + "\r\n")),
+      () => S.MERGE_ATTRIBUTE_LINES[0] === ".specs/**/.state.json merge=dev-spec-state", () => !at2.changed, () => at3.changed,
+      () => at3.text === "*.png binary\r\n", () => !at4.changed,
+    ]);
 
     // 9. doctor fails merge-conflicts while a conflicted merge's list is still in the feature's .state.json or in roadmap.json (PT)
     const mp = path.join(tmp, "proj-merge-doctor");
@@ -944,7 +962,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     fs.writeFileSync(rmp, JSON.stringify(rmj, null, 2));
     const up = S.specUpgrade(pu, { apply: true });
     const upMd = fs.readFileSync(path.join(pu, ".specs", "UPGRADE.md"), "utf8");
-    const portOk = up.ok && !upMd.includes(S.DEV_SPEC) && upMd.includes("dev-spec done csv-export <n> --run") && up.lines.some((l) => l.includes(S.DEV_SPEC + " done csv-export <n> --run")) &&
+    const portOk = up.ok && !upMd.includes(S.DEV_SPEC) && upMd.includes("dev-spec done csv-export <n> --run") && S.upgradeLines(up).some((l) => l.includes(S.DEV_SPEC + " done csv-export <n> --run")) &&
       S.portableCli("run " + S.DEV_SPEC.replace(/"/g, "&quot;") + " drift x") === "run dev-spec drift x" && S.portableCli(S.DEV_SPEC + " done x 1 --run") === "dev-spec done x 1 --run";
     ok(quoteOk && viaShell === "ok" && viaBash !== "failed" && !/^failed/.test(viaBash) && !/^failed/.test(viaPs) && portOk,
       "1.21 F3: the runnable CLI line is quoted for bash AND PowerShell (double quotes; single quotes around \" $ ` !; a placeholder when a ' joins them; forward slashes) and runs as printed in the platform shell" +

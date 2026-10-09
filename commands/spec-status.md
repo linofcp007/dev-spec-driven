@@ -1,17 +1,17 @@
 ---
-description: Mode, tracks, phase, task progress and test / eval state of a feature (or of every feature).
-argument-hint: "[feature name | blank for all]"
+description: Status of a feature — tracks, phase, task progress, verification and eval state — or of every feature.
+disable-model-invocation: true
+argument-hint: "[feature | blank for all]"
+allowed-tools: mcp__plugin_dev-spec-driven_spec-driven__spec_status, mcp__plugin_dev-spec-driven_spec-driven__spec_next_action
 ---
-
-Use the **dev-spec-driven** skill status workflow.
 
 Target: $ARGUMENTS
 
-If a feature name is given, run the `spec_status` MCP tool and report: the feature's kind and flow, active tracks, current
-phase, artifacts present, task progress (done/total, with each task's `verified` flag) and the next task,
-plus each active track's mandatory design sections — +saas / +ai / +sec (`secSections`) / +privacy
-(`privacySections`) / +dist (`distSections`) / +api (`apiSections`) / +ui (`uiSections`) / +obs (`obsSections`) / +data (`dataSections`), each one **present** vs **filled** (the same rule `spec_doctor` uses) — and the +ai
-eval-plan/prompt state. If no name is given, run `spec_list` and show every feature with its track set, phase, and
-task progress — and its `kind` when it is a bugfix or a spike, its `flow` when design-first. Keep it concise and
-scannable. For "what now?", use `spec_next_action`; for dates, `/roadmap` (ETAs from the recorded velocity).
-Respond in the user's language (EN/PT/ES).
+- **A feature** — `spec_status {name}`: its kind and flow, tracks and size, current phase, artifacts, tasks done / total
+  with each one's `verified` flag, the next task, each active track's design sections present vs filled, and the +ai
+  eval state.
+- **No name** — `spec_status {}`: every feature with its tracks, phase and task progress (its kind when a bugfix, a spike
+  or a change; its flow when design-first).
+
+Keep it concise and scannable. "What now?" → `spec_next_action {name}`; dates and dependencies → `/roadmap`. Respond in
+the user's language (EN / PT / ES).

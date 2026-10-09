@@ -14,7 +14,9 @@
  *   handshake  (MCP) this file counts the assertions of the handshake every process runs (initialize, tools/list).
  * The longest chains start first (the previous run's times, kept in the OS temp dir).
  * Every chain runs in its own child process (its own temp dir and, for the MCP suite, its own server), at most one per
- * CPU at a time; the output is printed file by file in file order, then ONE total. The LAST line is always
+ * CPU at a time — hermetic: a fresh, empty temp folder as its working folder and none of the shell's variables that steer
+ * the plugin (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, DEV_SPEC_*… — isolate()); the output is printed file by file in file
+ * order, then ONE total. The LAST line is always
  * `N passed, M failed` — scripts/test-docker.js reads it — and a chain that dies without its total fails the suite (the
  * run never drains to exit 0). An assertion a file makes after its run() resolved (a forgotten await) is a FAIL — a "late
  * assertion", labelled with its file — never a silent pass or a lost line.
@@ -22,12 +24,13 @@
  *   node <suite> [--only <file|area|NN>[,…]]... [--list] [--times] [--jobs <n>] [--help]
  */
 
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
 const CHAIN_ENV = "DEV_SPEC_TEST_CHAIN"; // set in a child: the comma-separated file stems it runs, in order
+const CWD_ENV = "DEV_SPEC_TEST_CWD"; // set in a child: its own working folder (a fresh, empty temp folder — isolate())
 const RE_TEST_FILE = /^(\d{2})-([a-z0-9]+(?:-[a-z0-9]+)*)\.js$/;
 const RE_TOTAL = /\n(\d+) passed, (\d+) failed\s*$/;
 const RE_FILE_STATS = /^#file (\S+) (\d+) (\d+) (\d+)\r?\n/gm; // a child's report of one file: stem, passed, failed, ms
@@ -55,6 +58,41 @@ function sweepStaleTmp(prefix) {
     const p = path.join(os.tmpdir(), n);
     try { const st = fs.lstatSync(p); if (st.isDirectory() && !st.isSymbolicLink() && st.mtimeMs < cutoff) rmTmpDir(p); } catch {}
   }
+}
+
+// Hermetic chains (1.26). A chain never sees the shell the suite was started from: the variables that steer the plugin — the
+// project (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR), the MCP server's switches (SPEC_MCP_*), Claude Code's plugin variables
+// (CLAUDE_PLUGIN_*), the user defaults and knobs (every DEV_SPEC_* but DEV_SPEC_TEST_* — the suites' own: the chain, its folder,
+// the shells to test) and the terminal width (COLUMNS) — are dropped, and its working folder is a fresh, empty temp folder. A test
+// that starts the CLI, a hook or the server without naming a project finds none — never the maintainer's dogfood .specs/ at the
+// repo root (git-ignored, meta.lang pt: tests that passed in a worktree failed after the merge), nor a DEV_SPEC_DEFAULT_LANG or a
+// SPEC_PROJECT_DIR exported in the shell. A test that wants one of them sets it for the process it starts.
+const RE_HOST_ENV = /^(?:SPEC_PROJECT_DIR|SPEC_MCP_\w*|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_\w*|DEV_SPEC_(?!TEST_)\w*|COLUMNS)$/i;
+const hostEnvKey = (k) => RE_HOST_ENV.test(k);
+// env without the host's steering variables (a new object; `env` untouched).
+function hermeticEnv(env) {
+  const out = {};
+  for (const [k, v] of Object.entries(env)) if (!hostEnvKey(k)) out[k] = v;
+  return out;
+}
+const samePath = (a, b) => {
+  const norm = (p) => { let r = path.resolve(p); try { r = fs.realpathSync.native(r); } catch {} return process.platform === "win32" ? r.toLowerCase() : r; };
+  return norm(a) === norm(b);
+};
+// This process, made hermetic: the host's steering variables leave process.env and — unless the runner already started it in
+// its own folder (CWD_ENV names the working folder) — it moves into a fresh temp folder of its own (`prefix` + 6 characters,
+// the shape sweepStaleTmp removes when a killed run left it), removed when it exits. Idempotent. The runner's child calls it
+// before it loads a test file; the harnesses call it first thing too, so a harness loaded any other way (a chain started by
+// hand: DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js) is just as isolated. → the working folder.
+function isolate(prefix) {
+  for (const k of Object.keys(process.env)) if (hostEnvKey(k)) delete process.env[k];
+  const given = process.env[CWD_ENV];
+  if (given && samePath(given, process.cwd())) return process.cwd();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix || "dev-spec-test-"));
+  process.chdir(dir);
+  process.env[CWD_ENV] = dir;
+  process.on("exit", () => { try { process.chdir(os.tmpdir()); } catch {} rmTmpDir(dir); }); // a folder can't go while it is the cwd
+  return dir;
 }
 
 // Start order: the longest chains first — by the files' times in the previous run (<tmp>/dev-spec-test-times-<key>.json;
@@ -187,6 +225,16 @@ function usageError(msg, usage) {
 }
 
 const secs = (ms) => (ms / 1000).toFixed(1) + " s";
+// The longest a chain may run (1.26): the slowest takes ~1 min idle, a few under load or on a slow mount — 30 min means hung.
+// DEV_SPEC_TEST_CHAIN_TIMEOUT_S overrides it (seconds — the runner's own test uses a few).
+const CHAIN_TIMEOUT_MS = (/^[1-9]\d*$/.test(String(process.env.DEV_SPEC_TEST_CHAIN_TIMEOUT_S || "")) ? +process.env.DEV_SPEC_TEST_CHAIN_TIMEOUT_S : 1800) * 1000;
+// Kill a chain and what it started: on Windows a process's children outlive it (taskkill /T takes the tree); elsewhere SIGKILL.
+function killTree(kid) {
+  try {
+    if (process.platform === "win32" && kid.pid) spawnSync("taskkill", ["/pid", String(kid.pid), "/T", "/F"], { stdio: "ignore", timeout: 30000 });
+    else kid.kill("SIGKILL");
+  } catch { try { kid.kill(); } catch {} }
+}
 
 // The parent: select, schedule, print. `opts`: { suite, dir, entry, tmpPrefix }.
 function runParent(opts) {
@@ -227,14 +275,43 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
   const t0 = Date.now();
   // out: stdout and stderr as they came (what is printed) · stdout alone: where the total is read — a Node warning a chain
   // writes to stderr after its total line never voids the count.
+  // Every chain is hermetic (1.26 — isolate() above): the host's steering variables dropped, a fresh empty temp folder as its
+  // working folder (removed once it closed).
+  // A loaded machine (1.26): spawn() THROWS when the OS refuses a process (spawn UNKNOWN / EAGAIN — memory or handle pressure),
+  // and that crashed the whole run, every other chain's output lost (it is printed at the end); now it is tried once more a
+  // second later, then the chain fails. A chain still running after CHAIN_TIMEOUT_MS (a hung child — a CLI process that never
+  // exits) is killed with its process tree and fails ("without a clean total"), so the suite never hangs.
   const runChain = (chain) => new Promise((resolve) => {
-    let out = "", stdout = "";
+    let out = "", stdout = "", cwd = null, watchdog = null, settled = false;
     const started = Date.now();
-    const kid = spawn(process.execPath, [opts.entry], { env: { ...process.env, [CHAIN_ENV]: chain.map((f) => f.stem).join(",") }, stdio: ["ignore", "pipe", "pipe"] });
-    kid.stdout.on("data", (d) => { out += d; stdout += d; });
-    kid.stderr.on("data", (d) => (out += d));
-    kid.on("error", (e) => resolve({ chain, out: out + "\n" + e.message, stdout, code: 1, ms: Date.now() - started }));
-    kid.on("close", (code) => resolve({ chain, out, stdout, code, ms: Date.now() - started }));
+    const name = chain.map((f) => f.stem).join(" + ");
+    const done = (r) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      if (cwd) rmTmpDir(cwd);
+      resolve({ chain, ms: Date.now() - started, ...r });
+    };
+    const start = (attempt) => {
+      let kid;
+      try {
+        cwd = cwd || fs.mkdtempSync(path.join(os.tmpdir(), opts.tmpPrefix || "dev-spec-test-"));
+        const env = { ...hermeticEnv(process.env), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
+        kid = spawn(process.execPath, [opts.entry], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+      } catch (e) {
+        if (attempt === 0) return void setTimeout(() => start(1), 1000);
+        return done({ out: `# ${name}: could not start its process (twice): ${e.message}\n`, stdout: "", code: 1 });
+      }
+      watchdog = setTimeout(() => {
+        out += `\n# ${name}: still running after ${secs(CHAIN_TIMEOUT_MS)} — killed with its child processes (a hung process?)\n`;
+        killTree(kid);
+      }, CHAIN_TIMEOUT_MS);
+      kid.stdout.on("data", (d) => { out += d; stdout += d; });
+      kid.stderr.on("data", (d) => (out += d));
+      kid.on("error", (e) => done({ out: out + "\n" + e.message, stdout, code: 1 }));
+      kid.on("close", (code) => done({ out, stdout, code }));
+    };
+    start(0);
   });
   // At most one process per CPU at a time (each MCP chain also runs its own server), the longest chains first; results
   // keep the chain order.
@@ -287,6 +364,83 @@ async function settle() {
   while (pending() && Date.now() - t0 < SETTLE_MAX_MS) await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
+// The assertion helpers (1.26) every file receives beside `ok`, built on ITS ok (one call = one assertion, so the totals stay
+// comparable; a late one is a late assertion like any ok). A FAIL says what failed, not only that something did:
+//   all(label, conds)   ONE assertion over many conditions — `{ name: condition, … }` (the names are the keys) or
+//                       `[() => cond, …]` (each thunk's source is its name). A function is called (lazily, in order) and a
+//                       throw counts as false with its message — so a condition guarded by an earlier one (`r && r.ok` →
+//                       `() => r.ok`) never aborts the file; a promise is false (await it first). Every condition is
+//                       evaluated — no short circuit — and the FAIL line is followed by one `false: <name>` line per false one.
+//   eq(actual, expected, label)   deep equality through JSON (as `js(a) === js(b)` — key order counts); a FAIL is followed by
+//                       the FIRST difference: its path ($.features[2].name), what was found and what was expected.
+//   remeasure(measure, holds)   no assertion: a timing-bound check's sample, measured once more on a miss (below).
+// Prefer all() over `ok(a && b && …)` beyond ~4 conditions (docs/maintainers/testing.md → Adding a test).
+const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+const thunkSource = (fn) => String(fn).replace(/^\s*(?:async\s*)?\(\s*\)\s*=>\s*/, "").replace(/\s+/g, " ").trim();
+const show = (v) => (v === undefined ? "undefined" : clip(JSON.stringify(v), 160));
+const kindOf = (v) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v);
+// The first difference between two JSON values (already through JSON) → "at <path>: …", or null when they are the same text.
+function firstDiff(a, b, at) {
+  if (JSON.stringify(a) === JSON.stringify(b)) return null;
+  const ka = kindOf(a), kb = kindOf(b);
+  if (ka !== kb) return `at ${at}: got ${ka} ${show(a)} — expected ${kb} ${show(b)}`;
+  if (ka === "array") {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if (i >= a.length) return `at ${at}[${i}]: missing (got ${a.length} item(s), expected ${b.length}) — expected ${show(b[i])}`;
+      if (i >= b.length) return `at ${at}[${i}]: unexpected extra item (got ${a.length}, expected ${b.length}): ${show(a[i])}`;
+      const d = firstDiff(a[i], b[i], `${at}[${i}]`);
+      if (d) return d;
+    }
+  } else if (ka === "object") {
+    const key = (k) => (/^[A-Za-z_$][\w$]*$/.test(k) ? `${at}.${k}` : `${at}[${JSON.stringify(k)}]`);
+    for (const k of Object.keys(b)) if (!Object.prototype.hasOwnProperty.call(a, k)) return `at ${key(k)}: missing — expected ${show(b[k])}`;
+    for (const k of Object.keys(a)) if (!Object.prototype.hasOwnProperty.call(b, k)) return `at ${key(k)}: unexpected key — got ${show(a[k])}`;
+    for (const k of Object.keys(b)) { const d = firstDiff(a[k], b[k], key(k)); if (d) return d; }
+    return `at ${at}: the same keys in another order — got ${show(Object.keys(a))}, expected ${show(Object.keys(b))}`;
+  } else if (ka === "string") {
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    const around = (s) => (i > 30 ? "…" : "") + JSON.stringify(s.slice(Math.max(0, i - 30), i + 60)) + (s.length > i + 60 ? "…" : "");
+    return `at ${at} (character ${i}): got ${around(a)} — expected ${around(b)}`;
+  }
+  return `at ${at}: got ${show(a)} — expected ${show(b)}`;
+}
+function assertHelpers(ok) {
+  const all = (label, conds) => {
+    const entries = Array.isArray(conds) ? conds.map((c, i) => [typeof c === "function" ? thunkSource(c) : `#${i + 1}`, c])
+      : conds && typeof conds === "object" ? Object.entries(conds) : [];
+    if (!entries.length) { ok(false, `${label}\n      all(): no condition given`); return false; }
+    const bad = [];
+    for (const [name, c] of entries) {
+      let v;
+      try { v = typeof c === "function" ? c() : c; } catch (e) { bad.push(`${name} (threw: ${clip(String((e && e.message) || e), 160)})`); continue; }
+      if (v && typeof v.then === "function") bad.push(`${name} (a promise — await it first)`);
+      else if (!v) bad.push(name);
+    }
+    ok(!bad.length, bad.length ? `${label}\n${bad.map((n) => `      false: ${clip(n, 400)}`).join("\n")}` : label);
+    return !bad.length;
+  };
+  const eq = (actual, expected, label) => {
+    const through = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+    let d;
+    try { d = firstDiff(through(actual), through(expected), "$"); } catch (e) { d = `not comparable through JSON: ${clip(String((e && e.message) || e), 160)}`; }
+    ok(!d, d ? `${label}\n      ${d}` : label);
+    return !d;
+  };
+  return { all, eq, remeasure };
+}
+// remeasure(measure, holds, tries = 2) — for a timing-bound check (1.26; not an assertion): measure() → a sample (the times and
+// whatever the check reads), holds(sample) → whether its time bound holds. On a miss it measures again (up to `tries` samples)
+// and returns the last one — a passing retry, or the last miss. A load spike on a shared machine fails one sample, not two; a
+// real regression (the linear scan gone quadratic, a wait come back) fails them all. Measure the baseline INSIDE measure()
+// when the bound is relative, so a retry re-measures both. sample.tries says how many it took.
+function remeasure(measure, holds, tries = 2) {
+  let s, n = 0;
+  do { s = measure(); n++; } while (n < tries && !holds(s));
+  if (s && typeof s === "object") { try { Object.defineProperty(s, "tries", { value: n, enumerable: false, configurable: true }); } catch {} }
+  return s;
+}
+
 // A child: run the files of one chain, in order, in this process. `setup(files)` → { ctx, counts(), fail(label), end() } —
 // the suite's harness (its server, its temp dir, its helpers); the runner reports each file, then hands over to end(),
 // which prints the total line and exits.
@@ -296,6 +450,7 @@ async function settle() {
 // such an assertion passed silently into another file's count, or was dropped: the CLI harness exits at once, the MCP
 // harness's total stopped being the last line ("without a clean total").
 async function runChildChain(opts) {
+  isolate(opts.tmpPrefix); // before any test file or harness loads (a no-op in the folder the runner started it in)
   const stems = String(process.env[CHAIN_ENV]).split(",").filter(Boolean);
   const files = loadFiles(opts.dir);
   const chain = stems.map((s) => files.find((f) => f.stem === s));
@@ -316,7 +471,7 @@ async function runChildChain(opts) {
     let open = true;
     const ok = (cond, label) => (open ? h.ctx.ok(cond, label) : late(f, label));
     try {
-      const left = await require(f.file).run({ ...h.ctx, ok });
+      const left = await require(f.file).run({ ...h.ctx, ok, ...assertHelpers(ok) });
       if (left && typeof left === "object") Object.assign(h.ctx, left); // values for the files that need this one
     } catch (e) {
       h.fail(`${f.stem} threw: ${(e && e.stack) || e}`);
@@ -336,4 +491,5 @@ function main(opts) {
   return runParent(opts);
 }
 
-module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, CHAIN_ENV, RE_TEST_FILE };
+module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, isolate, hermeticEnv,
+  assertHelpers, firstDiff, remeasure, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_TEST_FILE, CHAIN_TIMEOUT_MS };

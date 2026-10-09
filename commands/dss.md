@@ -1,14 +1,13 @@
 ---
-description: Short alias for /spec-status — feature or project status.
+description: Short alias for /spec-status — a feature's status, or every feature's.
 disable-model-invocation: true
-argument-hint: "[feature name | blank for all]"
+argument-hint: "[feature | blank for all]"
+allowed-tools: mcp__plugin_dev-spec-driven_spec-driven__spec_status, mcp__plugin_dev-spec-driven_spec-driven__spec_next_action
 ---
 
-Short alias for `/spec-status` — the **dev-spec-driven** skill status workflow.
-
-Target: $ARGUMENTS
+Short alias for `/spec-status`. Target: $ARGUMENTS
 
 Read `${CLAUDE_PLUGIN_ROOT}/commands/spec-status.md` and follow it exactly, with the target above as its arguments: that
-file is the whole procedure (this alias adds nothing of its own). Should it be unreadable: run `spec_status` for a named
-feature (kind, flow, tracks, phase, tasks with their `verified` flag, each active track's section completeness, eval
-state) or `spec_list` for all features. Keep it concise. Respond in the user's language (EN/PT/ES).
+file is the whole procedure. Should it be unreadable: `spec_status {name}` for a feature (tracks, phase, tasks with their
+`verified` flag, track sections, eval state), `spec_status {}` for every feature. Keep it concise. Respond in the user's
+language (EN / PT / ES).

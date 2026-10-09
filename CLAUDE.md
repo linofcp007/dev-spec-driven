@@ -24,7 +24,8 @@ Read the file BEFORE you change its area (a section name another note cites — 
   the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) · The module rule
   (1.18) · The build (1.20) · Config paths.
 - **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs, +data) or
-  track packs: The track model · Project-defined tracks (1.15) · Classifier gotchas.
+  track packs: The track model · Project-defined tracks (1.15) · Classifier gotchas · The classifier's signal rules, track
+  by track.
 - **`docs/maintainers/languages.md`** — before adding or rewording ANY user-facing string, a translated heading or a
   language: Languages (EN / PT-PT / PT-BR / ES) · Localization gotchas.
 - **`docs/maintainers/mcp.md`** — before changing a tool's schema or description, a capability (prompts, resources,
@@ -81,7 +82,9 @@ When you add an operation, add it to the engine module of its concern first (see
 object in `spec.js`, then wire it into server.js (tool) AND
 cli/dev-spec.js (subcommand) AND a test in the area's mcp/tests file. Keep the CLI and MCP behavior identical —
 both call the same engine function with the same defaults (e.g. `roadmapReport()` backs `spec_roadmap`
-and `dev-spec roadmap`; `approvePhase()` has one default approver, `$USER`/`$USERNAME`/`user`).
+and `dev-spec roadmap`; `approvePhase()` has one default approver, `$USER`/`$USERNAME`/`user`). A tool that folds
+several CLI commands calls each one's function: `spec_roadmap_edit {kind: "depend"}` = `setDependency()` = `dev-spec depend`,
+`spec_export {format: "catalog"}` = `catalog()` = `dev-spec catalog` (docs/maintainers/mcp.md → Folded tools).
 Any user-facing string the operation GENERATES or RETURNS goes through `mcp/lib/i18n.js` (EN/PT/ES),
 never hardcoded in the engine — see docs/maintainers/languages.md. The CLI's human output is localized too
 (`cliText(lang)` over `i18n.msg(lang).cliOutput`: the feature's language for feature commands, the
@@ -116,7 +119,8 @@ written by hand. IDs and markers stay English-stable (languages.md). The one Eng
 - **Changed templates / tracks / i18n — the corpus? Run `npm run build`** and commit the regenerated
   `mcp/lib/engine/corpus.generated.json` (the built-in placeholder corpus). Precisely: after changing a file of
   `CORPUS_SOURCES` — `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` /
-  `tracks.js` — or package.json's version; mcp/test.js fails until then. The same build writes the committed
+  `tracks.js` (never for a version bump alone — 1.26: neither generated file carries the version); mcp/test.js fails until
+  then, `npm run check` says whether both are current. The same build writes the committed
   `hooks/stop-claims.generated.json` (the Stop hook's claim pre-filter): rebuild after changing an i18n file or `engine/guards.js`
   too. Never edit either by hand. The one-file engine
   (`mcp/lib/spec.bundle.js`) is git-ignored and built on demand (`dev-spec bundle`) — never commit it (architecture.md → The build).
@@ -134,7 +138,7 @@ mcp/lib/i18n.js · i18n/        the localized content: en.js · pt.js · es.js �
 mcp/lib/prompts-resources.js   MCP prompts (= commands/*.md) + specs:// resources
 cli/dev-spec.js                the universal CLI over the same facade (the same defaults as MCP)
 hooks/                         hooks.json (auto-loaded) + guard / approval / observe / spec / stop / plan hooks + pre-commit
-commands/ · agents/            the slash commands (also the MCP prompts) · the plugin subagents
+commands/ · agents/            the 22 slash commands (also the MCP prompts) · the 5 plugin subagents
 skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) + references/ (read on demand)
 evals/                         plugin evals for `claude plugin eval` (maintainer-side, local only)
 mcp/test.js · cli/test-cli.js  the suites' entry points — their files: mcp/tests/ · cli/tests/ (NN-<area>…, + harness.js)
@@ -146,18 +150,20 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(2132 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(2146 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 610 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 615 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its
 AREA: `mcp/tests/NN-<area>.js` / `cli/tests/NN-<area>-<topic>.js` (NN is the area, the same in both; `--list` says what
 each holds; `--only <file|area|NN>` runs a part, plus the files it needs — testing.md → The suites). Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
-Exact counts that change when a package adds a command, tool or template (55 command files, the tools/list length, the
+Exact counts that change when a package adds a command, tool or template (22 command files, the tools/list length, the
 template keys, the resource list) are asserted in place — update them in the same change. The source guards (no literal
 U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's printed labels, no raw fs write outside
 engine/files.js — the write gate, conventions.md) read every `mcp/lib` source
 — the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone; never a built bundle
 (its registry comes from scripts/build.js, which they read). Both suites run on the modules (the harnesses drop
-`DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp.
+`DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp. Every chain is hermetic (1.26): a fresh empty temp folder as its
+cwd, none of the shell's `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `DEV_SPEC_*` (but `DEV_SPEC_TEST_*`) — a test sets what it
+needs for the process it starts, and never reads a path from `process.cwd()` (testing.md → Hermetic chains).
 Linux containers (`npm run test:docker`), plugin evals and the cross-platform test rules: docs/maintainers/testing.md.

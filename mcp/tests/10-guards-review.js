@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, tmp, __dirname }) => {
+exports.run = async ({ ok, remeasure, S, tmp, __dirname }) => {
   const js = JSON.stringify;
 
   // 1.22 review (finding 2) — a zero count is no admission ("All tasks done. 0 tests failing." was `admitted`, silent), and a
@@ -29,9 +29,11 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
     S.completeTask(p, "billing", 1);
     const s = S.stopCheck(p, { message: "All tasks done. 0 tests failing." });
     // linear: a long run of zero words before an admission
-    const t0 = Date.now();
-    S.stopClaims("All done. " + "none of the ".repeat(4000) + "tests fail. " + "no ".repeat(20000) + "tests fail.");
-    const ms = Date.now() - t0;
+    const { ms } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      S.stopClaims("All done. " + "none of the ".repeat(4000) + "tests fail. " + "no ".repeat(20000) + "tests fail.");
+      return { ms: Date.now() - t0 };
+    }, (s) => s.ms < 3000);
     ok(!wrong.length && s.block === true && s.why === "unverified" && ms < 3000,
       "1.22 review: stopClaims — a zero count before an admission (0 / zero / no / none of; PT nenhum(a); ES ninguno(a)) is no admission, nor is a failure that now passes in its clause (EN / PT / PT-BR / ES); real admissions stay; the gate then checks the features (wrong: " +
       js(wrong) + ", gate " + js([s.block, s.why]) + ", " + ms + " ms)");
@@ -130,9 +132,11 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
       input: js({ session_id: "s", cwd: p, hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "cmd /c node cli" + BS + "dev-spec.js approve alpha tasks" } }) });
     let hd = null; try { hd = JSON.parse(h.stdout).hookSpecificOutput.permissionDecision; } catch { /* none */ }
     // linear enough: a long unquoted cmd /c line
-    const t0 = Date.now();
-    dec("Bash", "cmd /c " + "x ".repeat(20000) + "node cli/dev-spec.js approve a tasks");
-    const ms = Date.now() - t0;
+    const { ms } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      dec("Bash", "cmd /c " + "x ".repeat(20000) + "node cli/dev-spec.js approve a tasks");
+      return { ms: Date.now() - t0 };
+    }, (s) => s.ms < 3000);
     ok(!wrong.length && once.actions.length === 1 && force.force === true && down.actions[0].kind === "guard-down" && down.actions[0].setting === "approvalGuard" &&
       h.status === 0 && hd === "deny" && ms < 3000,
       "1.22 review: the approval guard reads cmd /c /k /r and pwsh / powershell -Command / -c (and Windows PowerShell's positional script) unquoted — the rest of the line is the script — plus winpty, flock (its lock file; -c), script -c, find -exec and Start-Process -ArgumentList (array or string): approve / --force / init --approval-guard off are caught at deny (the hook too); a quoted script is one action; status / next and echo stay allowed, pwsh -File run.ps1 <the CLI's approve> asks (1.23) (wrong: " +

@@ -240,13 +240,14 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     ok(tl.every((t) => t.annotations && t.annotations.openWorldHint === false && typeof t.annotations.readOnlyHint === "boolean" &&
       (t.annotations.readOnlyHint || (typeof t.annotations.destructiveHint === "boolean" && typeof t.annotations.idempotentHint === "boolean"))) &&
       // 1.25.1 (review 7): destructiveHint on every tool one of whose arguments removes or overwrites a record (it was spec_feature alone)
+      // 1.26: spec_backlog / spec_depend / spec_milestone → spec_roadmap_edit; spec_list → spec_status, spec_coverage → spec_scan, spec_catalog → spec_export
       tl.filter((t) => t.annotations.destructiveHint === true).map((t) => t.name).sort().join() === ["spec_feature", "spec_export", "spec_approve", "spec_complete_task",
-        "spec_impact", "spec_backlog", "spec_milestone", "spec_depend", "spec_add_track", "spec_init", "spec_tracks"].sort().join() &&
-      roTools.join() === ["ears_validate", "spec_classify", "spec_clarify", "spec_coverage", "spec_doctor", "spec_drift", "spec_list", "spec_next_action", "spec_next_task",
+        "spec_impact", "spec_roadmap_edit", "spec_add_track", "spec_init", "spec_tracks"].sort().join() &&
+      roTools.join() === ["ears_validate", "spec_classify", "spec_clarify", "spec_doctor", "spec_drift", "spec_next_action", "spec_next_task",
         "spec_scan", "spec_status", "trace_check", "spec_stop_check", "spec_log"].sort().join() &&
       ["spec_complete_task", "spec_approve", "spec_append_tasks", "spec_decide", "spec_finish"].every((n) => tl.find((t) => t.name === n).annotations.idempotentHint === false) &&
-      ["spec_roadmap", "spec_catalog", "spec_export", "spec_upgrade", "spec_init"].every((n) => tl.find((t) => t.name === n).annotations.idempotentHint === true),
-      "1.16 C3: every tool carries annotations — openWorldHint false everywhere, readOnlyHint only for the 14 tools no argument makes write, destructiveHint on the 11 whose arguments remove or overwrite (1.25.1 r7 — it was spec_feature alone), idempotentHint per tool (got " +
+      ["spec_roadmap", "spec_roadmap_edit", "spec_export", "spec_upgrade", "spec_init"].every((n) => tl.find((t) => t.name === n).annotations.idempotentHint === true),
+      "1.16 C3: every tool carries annotations — openWorldHint false everywhere, readOnlyHint only for the 12 tools no argument makes write, destructiveHint on the 9 whose arguments remove or overwrite (1.25.1 r7 — it was spec_feature alone), idempotentHint per tool (got " +
       JSON.stringify(tl.filter((t) => !t.annotations || t.annotations.destructiveHint === true).map((t) => t.name).concat(roTools)) + ")");
     const roBefore = cSnap(path.join(sl, ".specs"));
     const roCalls = [];
@@ -264,7 +265,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     const vals = (m) => (m.result && m.result.completion) || null;
     const pr = { ref: { type: "ref/prompt", name: "spec-status" }, argument: { name: "args", value: "bi" } };
     const cp = [await comp(pr), await comp({ ...pr, ref: { type: "ref/prompt", name: "spec-doctor" }, argument: { name: "args", value: "" } }),
-      await comp({ ...pr, argument: { name: "args", value: "billing x" } }), await comp({ ref: { type: "ref/prompt", name: "classify" }, argument: { name: "args", value: "a" } }),
+      await comp({ ...pr, argument: { name: "args", value: "billing x" } }), await comp({ ref: { type: "ref/prompt", name: "spec-bugfix" }, argument: { name: "args", value: "a" } }),
       await comp({ ...pr, argument: { name: "args", value: "ILL" } })];
     ok(JSON.stringify(csInit.result.capabilities.completions) === "{}" && JSON.stringify(vals(cp[0])) === '{"values":["billing"],"total":1,"hasMore":false}' &&
       vals(cp[1]).values.join() === "auth,billing" && vals(cp[2]).values.length === 0 && vals(cp[3]).values.length === 0 && vals(cp[4]).values.join() === "billing",
@@ -345,7 +346,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     const hooksCfg16 = JSON.parse(cRead(path.join(root, "hooks", "hooks.json"))).hooks;
     // (1.25.1: exec form — `node` + the script as its one argument)
     const planCfg = (hooksCfg16.PostToolUse || []).find((e) => e.hooks.some((h) => /plan-hook\.js/.test((h.args || []).join(" ")))) || {};
-    ok(hp.every((h) => h.status === 0) && /\/spec-import — spec_import \{tool: "plan", text: <the approved plan's markdown>\}/.test(ctx(hpj[0])) && Object.keys(hpj[0]).join() === "hookSpecificOutput" &&
+    ok(hp.every((h) => h.status === 0) && /\/spec-adopt import — spec_import \{tool: "plan", text: <the approved plan's markdown>\}/.test(ctx(hpj[0])) && Object.keys(hpj[0]).join() === "hookSpecificOutput" &&
       /spec_import \{tool: "plan", path: "docs\/plan\.md"\}/.test(ctx(hpj[1])) && /o utilizador aprovou este plano/.test(ctx(hpj[2])) &&
       hp.slice(3, 7).every((h) => h.stdout === "") && /spec_import/.test(ctx(hpj[7])) &&
       planCfg.matcher === "ExitPlanMode" && planCfg.hooks[0].command === "node" && JSON.stringify(planCfg.hooks[0].args) === JSON.stringify(["${CLAUDE_PLUGIN_ROOT}/hooks/plan-hook.js"]) && planCfg.hooks[0].timeout === 10 &&

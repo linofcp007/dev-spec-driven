@@ -28,8 +28,7 @@ Then **you have no evidence, so you make no claim** — and a tick is a claim:
   evidence)." Hand over the CLI line exactly as the tool's note prints it — the clone's path resolved; a plugin
   install puts no `dev-spec` on PATH, so a bare `dev-spec done …` doesn't run for the user.
 - **Ask — don't go looking for a shell.** No Bash / PowerShell tool in this session means stop and ask the user:
-  never dispatch a subagent or search the tool list for one (the 1.19 eval traces: 4 of 14 shell-less runs did,
-  and it cost 2–4 extra calls each to learn nothing new).
+  never dispatch a subagent or search the tool list for one (it costs extra calls and learns nothing new).
 - **The user ran it and reported the result** ("ran `npm test`: 14 pass, exit 0") → record exactly that:
   `spec_complete_task {…, evidence: {command, exitCode, summary}}`. A reported failure is recorded the same way (it
   refuses the tick).
@@ -168,7 +167,7 @@ green (the fix), not to this one.
   before the change by design (a bugfix's T-02, "the neighbouring behaviour still works") belongs in no
   `_Makes green:_`, so the check never asks for its red run. A bugfix scaffolded before 1.14 still lists T-02 in task
   4's `_Makes green:_` and gets the warning for it: remove T-02 from there — never make the test fail artificially.
-- `/next-action`'s verify step explains the red proof: record the red run while the test still fails (before the fix,
+- `spec_next_action`'s verify step explains the red proof: record the red run while the test still fails (before the fix,
   or with the fix stashed), or drop `_Expect: fail_` if the task is no red test.
 
 ## `_Verify:_` commands that pipe
@@ -235,7 +234,7 @@ Task runs prove tasks; a feature is done when the **whole project's checks** pas
   since the run, or the run was of another command — `echo ok` recorded as check `test`) · `before-last-tick` · `code-changed` (the feature's implementing files — its tasks' `_Implements:_` —
   changed since the run; each recorded run is stamped with a hash of them) · `unobserved` (only with
   `meta.evidence: "observed"` — a passing run the harness never saw, see below). Doctor warns `suite-evidence` once every
-  task is done; the execution sign-off refuses it too, and `/next-action`'s finish step says how to run and record them.
+  task is done; the execution sign-off refuses it too, and `spec_next_action`'s finish step says how to run and record them.
 - Record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}` (each `name` a `meta.checks` name,
   run from the project root — recorded in `.state.json → finishChecks` before the readiness is computed, so one call
   can make the feature ready; a failed run is recorded and stays a blocker), or let the CLI run them:
@@ -280,9 +279,9 @@ project checks). Interrupted and backgrounded runs are not logged.
 `dev-spec done --run` and `finish --run` also record the git commit the run was made on and whether the tree was dirty
 (outside `.specs/`) when git is available — context, not proof; the merge summary tags runs `@sha` (`-dirty`).
 `dev-spec log <feature>` reads `git log` (read-only, local) and lists per task the commits that cite it — "task #N" with
-the feature name, as `/spec-commit` writes `Part of .specs/<feature>/ task #N.`, or its T- / AC IDs ("Makes T-01
+the feature name, as the spec commit format (`/executeTask commit`) writes `Part of .specs/<feature>/ task #N.`, or its T- / AC IDs ("Makes T-01
 green") — and, on +tdd, a **red-first check**: an implementation committed before its test. Commit with the
-`/spec-commit` conventions and that history reads itself. An MCP-only client uses `spec_log {name, gitLog}`: it passes
+spec commit conventions and that history reads itself. An MCP-only client uses `spec_log {name, gitLog}`: it passes
 the text of `git log --name-only --relative` it ran itself — the MCP server never runs git (or any command).
 
 ## The end-of-turn evidence gate (Claude Code)

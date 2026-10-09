@@ -23,7 +23,7 @@ quotes unless `includeBrief`. The PostToolUse hook exits early for `/.execution/
 never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (MIT). 1.22 (prose only, from Anthropic's
 `code-review` / `code-simplifier` plugins): the reviewer rates each Critical / Important finding 0–100, lists what is not a
 finding, and gains a **verify** mode (one finding, judged fresh — only 80+ opens a fix round; 50–79 is ledgered as
-unconfirmed, below 50 refuted) and a **simplify** mode (the diff of `/spec-simplify`), plus §5 written rules (constitution,
+unconfirmed, below 50 refuted) and a **simplify** mode (the diff of `/spec-review simplify`), plus §5 written rules (constitution,
 CLAUDE.md / AGENTS.md, code comments — quoted) and the history of rewritten lines; `agents/spec-simplifier.md` does the
 simplification pass. The engine's only part is the simplifier's SubagentStop gate (below). 1.14 adds to the brief:
 `verifyPipes` (the `_Verify:_` commands that pipe), `expect: "fail"` for an `_Expect: fail_` task, `projectChecks`
@@ -419,7 +419,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   ignores `.specs/`; silently skipped without git; a malformed value is dropped, never an error — `gitEvidence()`); the
   merge summary tags a run `@sha` / `@sha-dirty`. `parseGitLog()` + `taskCommits()` work on git log TEXT (so the MCP
   server stays exec-free); `dev-spec log <feature> [--max N] [-]` feeds them `git log` (or stdin). Conventions (what
-  /spec-commit writes): a message cites task N when it names the feature (its slug as a word — `.specs/<slug>/`,
+  /executeTask commit writes): a message cites task N when it names the feature (its slug as a word — `.specs/<slug>/`,
   `feat(<slug>):`) AND "task #N" / "task N" / "#N" (PT "tarefa N", ES "tarea N"); it cites every task whose text / markers
   name one of its T-IDs (`T-01` = `T-1`) or AC IDs — unless the message names another feature and not this one. +tdd
   red-first: a task with `_Makes green: T-xx_` whose first citing commit is older than the first commit touching a test
@@ -645,7 +645,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   STARTS with "Status" ("**Status:** `DONE`" is a claim — it used to skip the implementer's report); every other code
   span still drops out with `stopProse` (reviews 2–3: unwrapping more made "`order.status === "blocked"`" or "with status
   `blocked`" in a commit line a BLOCKED status). The hard gate
-  stays `spec_finish`'s `code-changed`, which sees only the tasks' `_Implements:_` files — /spec-simplify records the
+  stays `spec_finish`'s `code-changed`, which sees only the tasks' `_Implements:_` files — /spec-review simplify records the
   project checks again after the pass for that reason. Shared helpers: `readStopReport()`, `flatReport()`,
   `reportExitCodes()`, `stopReportFile()` (the implementer's gate reads through them too). **1.23 review 5:** a check's run
   is the run line that IS a run of its command by `runProvesVerify` (the same text first; `node scripts/lint.js` runs the check
@@ -669,15 +669,18 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   closing messages claim nothing. `hooks/stop-claims.generated.json` — COMMITTED, written by `npm run build` from guards.js
   `stopClaimFilter()`: every language's claim patterns (`stopClaimSources()`, pt-BR's included), the word wrapper `STOP_WORD`
   stopPatterns compiles them with, and stopProse's tail length and regexes (`RE_STOP_FENCE` / `RE_STOP_CODE` / `RE_STOP_QUOTE`) —
-  is stamped with the version and the size of each `STOP_FILTER_SOURCES` file (the i18n files, guards.js; LF, no BOM). The hook
-  takes it only while package.json's version and every size match (one stat each — an edit that keeps a file's size is the
-  accepted limit, as for the bundle); then hook-utils.js `claimMatch()` runs the engine's prose (`claimProse()` — the same regexes,
+  is stamped with the size of each `STOP_FILTER_SOURCES` file (the i18n files, guards.js; LF, no BOM) — no version since 1.26:
+  the filter is a function of those files alone, so a release that changes none of them leaves it as it was. The hook takes it
+  only while every size matches (one stat each — an edit that keeps a file's size is the accepted limit, as for the bundle;
+  `npm run check` and the suite catch it before a commit); then hook-utils.js `claimMatch()` runs the engine's prose
+  (`claimProse()` — the same regexes,
   core.js replaceHtmlCommentSpans' scan) through ONE alternation of the patterns (34 compiled apart: ~19 ms; together ~7 ms), and no
   match ends the hook — stopClaims' own answer then is `no-claim`. A superset: negations, questions and admissions stay the
   engine's. Missing, broken, stale or any error → the engine decides, as before. A SubagentStop is never pre-filtered (the
   implementer's `Status: DONE` is read with backticks unwrapped — statusProse). mcp/tests/10-guards-review6.js ("I-I4"): the prose
   equals stopProse and nothing the engine reads as a claim is sent away, on ~2,500 handwritten and generated messages; the hook on
-  the clone and on a copy whose filter is missing / of another version / stamped with another size. Measured (p50 of 15
+  the clone and on a copy whose filter is missing / stamped with another size (→ the engine) or whose package.json has another
+  version (→ still the filter, 1.26). Measured (p50 of 15
   interleaved fresh processes, a recently active project of 10 / 52 / ~150 features): no claim 162 / 163 / 163 → 59 / 59 / 59 ms;
   a claim 236 / 246 / 274 → 253 / 263 / 291 (the filter's ~12 ms compile before the engine — still the engine's answer).
   1.25.1: the hook's `mayClaim()` reads the file's `triggers` groups first (Claims → Trigger words): the alternation holds only the
@@ -689,7 +692,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   an OPEN task of such a feature names it in `_Implements:_` (the file via `implementsKey`, a folder above it, or a glob
   matching it) or when it is a test file (tests are planned by T-ID); otherwise ask, naming the likely task (a planned
   file in the same folder, else the longest shared folder prefix, else the `taskSchedule()` next task of the first covering
-  feature that has one — 1.14 F3 —, else the first open task) or `/spec-converge`. Text reads only; `guard: true` is unchanged.
+  feature that has one — 1.14 F3 —, else the first open task) or `/spec-review <feature> converge`. Text reads only; `guard: true` is unchanged.
 
 ## Harness-observed evidence (1.14 F1)
 - **Only as strong as the approval guard (1.25.1, review 7, finding 10).** The log is a file the agent can write: with

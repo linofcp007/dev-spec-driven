@@ -119,11 +119,11 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   qwr("login", "design.md", qrd("login", "design.md").split("\n").filter((l) => !/^> \*\*TODO\*\*/.test(l)).join("\n"));
   const qSt = run(["status", "login", "--project", q]);
   const qDoc = run(["doctor", "login", "--project", q]);
-  ok(qNa.code === 0 && /--through test-plan/.test(qNa.out) && /\/writeTests export-csv/.test(qNa.out) && qAgain.code === 0 && /Tracks not added — \+saas/.test(qAgain.out) &&
+  ok(qNa.code === 0 && /--through test-plan/.test(qNa.out) && /\/spec export-csv tests/.test(qNa.out) && qAgain.code === 0 && /Tracks not added — \+saas/.test(qAgain.out) &&
     /Appended to change\.md/.test(qApp.out) && /change\.md changed after its approval/.test(qApp.out) && qNf.code === 1 && /not found in change\.md/.test(qNf.out) &&
     /--kind feature\|bugfix\|spike\|change, --size xs\|s\|m\|l/.test(qHelp.out) && /◐ Threat Model \(only the template's guidance\)/.test(qSt.out) &&
     /Threat Model:only the template's guidance/.test(qDoc.out),
-    "1.21 review C3 / C9 / C10 (CLI): next-action on size s +tdd names --through test-plan then /writeTests; create on an existing change with a track prints 'Tracks not added'; append-tasks / undone name change.md; help lists --kind …|change and --size; status on an unsized feature says 'only the template's guidance', as doctor (got " +
+    "1.21 review C3 / C9 / C10 (CLI): next-action on size s +tdd names --through test-plan then /spec <f> tests; create on an existing change with a track prints 'Tracks not added'; append-tasks / undone name change.md; help lists --kind …|change and --size; status on an unsized feature says 'only the template's guidance', as doctor (got " +
     JSON.stringify({ na: qNa.out.slice(0, 300), again: qAgain.out.slice(0, 200), app: qApp.out.slice(0, 200), nf: qNf.out, st: qSt.out.split("\n").filter((l) => /Threat/.test(l)) }) + ")");
 
   // --- 1.21 verify (CLI) — the change kind at the seams ---

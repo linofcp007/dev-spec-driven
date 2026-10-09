@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   const b13 = path.join(tmp, "wp13-bool");
   run(["init", "core", "--project", b13]);
   run(["create", "Billing", "tdd", "--project", b13]);
@@ -182,13 +182,15 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const newP23 = path.join(tmp, "wp23-new-by-init");
   const init23 = run(["init", "--project", newP23]);
   const quote23 = process.platform === "win32" ? run(["list", "--project", p23 + "\""]) : { code: 0, out: "login" };
-  ok(pj23[0].code === 1 && /--project .*deeper: no such folder — check the path \(only init creates a project folder\)/.test(pj23[0].out) && !fs.existsSync(path.join(tmp, "wp23-typo")) &&
-    pj23[1].code === 1 && /roadmap\.json is a file, not a folder/.test(pj23[1].out) && pj23[2].code === 1 && /--project is empty/.test(pj23[2].out) &&
-    pj23.slice(3).every((r) => r.code === 1 && /holds a variable that was never expanded/.test(r.out)) &&
-    pjJ23.code === 1 && pjJ23.j && pjJ23.j.ok === false && /no such folder/.test(pjJ23.j.error) &&
-    init23.code === 0 && fs.existsSync(path.join(newP23, ".specs", "steering")) && quote23.code === 0 && /login/.test(quote23.out),
-    "1.23 review: --project missing / a file / empty / $VAR / %VAR% exits 1 (localized, --json: ok false) and creates nothing; init --project <new> creates it; a trailing \" (Windows quoting) is dropped (got " +
-    JSON.stringify(pj23.map((r) => [r.code, r.out.trim().slice(0, 90)]).concat([[init23.code], [quote23.code, quote23.out.slice(0, 40)]])) + ")");
+  all("1.23 review: --project missing / a file / empty / $VAR / %VAR% exits 1 (localized, --json: ok false) and creates nothing; init --project <new> creates it; a trailing \" (Windows quoting) is dropped (got " +
+    JSON.stringify(pj23.map((r) => [r.code, r.out.trim().slice(0, 90)]).concat([[init23.code], [quote23.code, quote23.out.slice(0, 40)]])) + ")", [
+    () => pj23[0].code === 1, () => /--project .*deeper: no such folder — check the path \(only init creates a project folder\)/.test(pj23[0].out),
+    () => !fs.existsSync(path.join(tmp, "wp23-typo")), () => pj23[1].code === 1, () => /roadmap\.json is a file, not a folder/.test(pj23[1].out),
+    () => pj23[2].code === 1, () => /--project is empty/.test(pj23[2].out),
+    () => pj23.slice(3).every((r) => r.code === 1 && /holds a variable that was never expanded/.test(r.out)), () => pjJ23.code === 1, () => pjJ23.j,
+    () => pjJ23.j.ok === false, () => /no such folder/.test(pjJ23.j.error), () => init23.code === 0,
+    () => fs.existsSync(path.join(newP23, ".specs", "steering")), () => quote23.code === 0, () => /login/.test(quote23.out),
+  ]);
 
   // 1.23 review (L24) — an engine exception (a FILE where .specs/ goes: ENOTDIR) is one line on stderr and, with --json, the
   // {ok: false, error, code} document on stdout (it was the raw message on stderr only).
@@ -229,12 +231,14 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const planU16 = inDir(w23, ["import", "plan", "-", "--name", "Utf16 plan", "--json"], u16("# Plan: Dark mode\r\n\r\n## Steps\r\n1. Add the theme context in `src/theme.ts`\r\n2. Wire the toggle in `src/settings.tsx`\r\n"));
   let plan23 = null;
   try { plan23 = JSON.parse(planU16.out.slice(planU16.out.indexOf("{"))); } catch { /* not JSON */ }
-  ok(cr23.code === 0 && fs.existsSync(path.join(w23, ".specs", "beta")) && bl23w.code === 0 && !fs.existsSync(path.join(sub23, ".specs")) &&
-    earsRel23.code === 0 && /EARS: 1 critérios/.test(earsRel23.out) && earsP23.code === 0 && /EARS: 1 critérios/.test(earsP23.out) &&
-    scanP23.code === 0 && /^Análise de .*src$/m.test(scanP23.out) && /GET {5}\/users/.test(scanP23.out) &&
-    earsU16.code === 0 && /EARS: 2 critérios, 2 com verbo modal/.test(earsU16.out) && plan23 && plan23.ok === true && Object.keys(plan23.mapping).length === 3,
-    "1.23 review: from a subfolder the CLI uses the project above (create / backlog add start no nested .specs/), a path is read from the subfolder — or from --project when named (ears, scan); scan in the project's language; UTF-16 stdin decoded (ears -, import plan -) (got " +
-    JSON.stringify([cr23.code, bl23w.code, earsRel23.out.trim().slice(0, 50), earsP23.out.trim().slice(0, 50), scanP23.out.slice(0, 40), earsU16.out.trim().slice(0, 50), plan23 && plan23.mapping]) + ")");
+  all("1.23 review: from a subfolder the CLI uses the project above (create / backlog add start no nested .specs/), a path is read from the subfolder — or from --project when named (ears, scan); scan in the project's language; UTF-16 stdin decoded (ears -, import plan -) (got " +
+    JSON.stringify([cr23.code, bl23w.code, earsRel23.out.trim().slice(0, 50), earsP23.out.trim().slice(0, 50), scanP23.out.slice(0, 40), earsU16.out.trim().slice(0, 50), plan23 && plan23.mapping]) + ")", [
+    () => cr23.code === 0, () => fs.existsSync(path.join(w23, ".specs", "beta")), () => bl23w.code === 0,
+    () => !fs.existsSync(path.join(sub23, ".specs")), () => earsRel23.code === 0, () => /EARS: 1 critérios/.test(earsRel23.out),
+    () => earsP23.code === 0, () => /EARS: 1 critérios/.test(earsP23.out), () => scanP23.code === 0, () => /^Análise de .*src$/m.test(scanP23.out),
+    () => /GET {5}\/users/.test(scanP23.out), () => earsU16.code === 0, () => /EARS: 2 critérios, 2 com verbo modal/.test(earsU16.out), () => plan23,
+    () => plan23.ok === true, () => Object.keys(plan23.mapping).length === 3,
+  ]);
 
   // 1.24 r6 B1: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked like --project when they chose the project — a missing folder
   // (init alone creates it) or a file is refused, the message names the variable; a folder without .specs/ is fine.
@@ -265,14 +269,16 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     const ptP = path.join(tmp, "r6b1-pt");
     run(["init", "--lang", "pt", "--project", ptP]);
     const ptMiss = envRun({ SPEC_PROJECT_DIR: path.join(ptP, "nope"), CLAUDE_PROJECT_DIR: ptP }, ["list"]);
-    ok(r[0].code === 1 && /SPEC_PROJECT_DIR=.*deeper: no such folder/.test(r[0].out) && r[1].code === 1 && !createdTypo &&
-      r[2].code === 1 && /SPEC_PROJECT_DIR=.*r6b1-a-file\.txt is a file, not a folder/.test(r[2].out) && !/ENOTDIR/.test(r[2].out) &&
-      r[3].code === 1 && /CLAUDE_PROJECT_DIR=.*deeper: no such folder/.test(r[3].out) &&
-      r[4].code === 1 && r[4].j && r[4].j.ok === false && /SPEC_PROJECT_DIR=/.test(r[4].j.error) && r[5].code === 1 && r[5].j && r[5].j.ok === false && /CLAUDE_PROJECT_DIR=/.test(r[5].j.error) &&
-      okBare.code === 0 && /No features under/.test(okBare.out) && okFlag.code === 0 && okFall.code === 0 &&
-      okInit.code === 0 && fs.existsSync(path.join(newInit, ".specs", "steering")) && ptMiss.code === 1 && /SPEC_PROJECT_DIR=.*nope/.test(ptMiss.out),
-      "1.24 r6 B1: a SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR that chose the project is checked like --project — a missing folder or a file exits 1 naming the variable (--json: ok false), nothing created; a folder without .specs/, --project over it, an unexpanded value falling through and init (creates it) work (got " +
-      JSON.stringify(r.map((x) => [x.code, x.out.trim().slice(0, 90)]).concat([[okBare.code, okFlag.code, okFall.code, okInit.code, createdTypo], [ptMiss.code, ptMiss.out.trim().slice(0, 80)]])) + ")");
+    all("1.24 r6 B1: a SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR that chose the project is checked like --project — a missing folder or a file exits 1 naming the variable (--json: ok false), nothing created; a folder without .specs/, --project over it, an unexpanded value falling through and init (creates it) work (got " +
+      JSON.stringify(r.map((x) => [x.code, x.out.trim().slice(0, 90)]).concat([[okBare.code, okFlag.code, okFall.code, okInit.code, createdTypo], [ptMiss.code, ptMiss.out.trim().slice(0, 80)]])) + ")", [
+      () => r[0].code === 1, () => /SPEC_PROJECT_DIR=.*deeper: no such folder/.test(r[0].out), () => r[1].code === 1, () => !createdTypo,
+      () => r[2].code === 1, () => /SPEC_PROJECT_DIR=.*r6b1-a-file\.txt is a file, not a folder/.test(r[2].out), () => !/ENOTDIR/.test(r[2].out),
+      () => r[3].code === 1, () => /CLAUDE_PROJECT_DIR=.*deeper: no such folder/.test(r[3].out), () => r[4].code === 1, () => r[4].j,
+      () => r[4].j.ok === false, () => /SPEC_PROJECT_DIR=/.test(r[4].j.error), () => r[5].code === 1, () => r[5].j, () => r[5].j.ok === false,
+      () => /CLAUDE_PROJECT_DIR=/.test(r[5].j.error), () => okBare.code === 0, () => /No features under/.test(okBare.out), () => okFlag.code === 0,
+      () => okFall.code === 0, () => okInit.code === 0, () => fs.existsSync(path.join(newInit, ".specs", "steering")), () => ptMiss.code === 1,
+      () => /SPEC_PROJECT_DIR=.*nope/.test(ptMiss.out),
+    ]);
   }
 
   // 1.24 r6 B7: --project (or the environment) naming a project's .specs/ folder is refused with the folder to name instead — it
@@ -371,14 +377,16 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     const q = run(["create", "Zed", "--question", "Is it fast?", "--project", p]), tb = run(["create", "Zed", "--timebox", "3d", "--project", p]);
     const ch = run(["create", "Tiny fix", "--kind", "change", "--project", p]);
     const chMcp = S.createFeature(p, "Tiny two", undefined, undefined, undefined, undefined, "change", {});
-    ok(bug.code === 1 && /usage: dev-spec bugfix "<name>"/.test(bug.out) && !/dev-spec create/.test(bug.out) &&
-      ears.every((r) => r.code === 1 && /: no such file/.test(r.out) && !/not found under/.test(r.out)) && earsJ && earsJ.ok === false && earsFeature.code === 0 && /EARS: /.test(earsFeature.out) &&
-      q.code === 1 && /--question only applies to a spike/.test(q.out) && /spike "<name>" --question/.test(q.out) && !/kind: "spike"/.test(q.out) &&
-      tb.code === 1 && /--timebox only applies to a spike/.test(tb.out) && !fs.existsSync(path.join(p, ".specs", "zed")) &&
-      ch.code === 0 && /cli\/dev-spec\.js" approve tiny-fix --through tasks/.test(ch.out) && !/spec_approve \{/.test(ch.out) &&
-      chMcp.ok && /spec_approve \{name: "tiny-two", through: "tasks"\}/.test(chMcp.note),
-      "1.24 r6 B9: bugfix's own usage; ears <missing file> says no such file (--json ok false; a feature name still works); create --question / --timebox name the flag and the spike command; a change's create note gives the CLI approve line on the CLI (spec_approve over MCP) (got " +
-      JSON.stringify([bug.out.trim().slice(0, 80), ears.map((r) => r.out.trim().slice(0, 80)), q.out.trim().slice(0, 140), tb.out.trim().slice(0, 80), ch.out.slice(0, 400)]) + ")");
+    all("1.24 r6 B9: bugfix's own usage; ears <missing file> says no such file (--json ok false; a feature name still works); create --question / --timebox name the flag and the spike command; a change's create note gives the CLI approve line on the CLI (spec_approve over MCP) (got " +
+      JSON.stringify([bug.out.trim().slice(0, 80), ears.map((r) => r.out.trim().slice(0, 80)), q.out.trim().slice(0, 140), tb.out.trim().slice(0, 80), ch.out.slice(0, 400)]) + ")", [
+      () => bug.code === 1, () => /usage: dev-spec bugfix "<name>"/.test(bug.out), () => !/dev-spec create/.test(bug.out),
+      () => ears.every((r) => r.code === 1 && /: no such file/.test(r.out) && !/not found under/.test(r.out)), () => earsJ, () => earsJ.ok === false,
+      () => earsFeature.code === 0, () => /EARS: /.test(earsFeature.out), () => q.code === 1, () => /--question only applies to a spike/.test(q.out),
+      () => /spike "<name>" --question/.test(q.out), () => !/kind: "spike"/.test(q.out), () => tb.code === 1,
+      () => /--timebox only applies to a spike/.test(tb.out), () => !fs.existsSync(path.join(p, ".specs", "zed")), () => ch.code === 0,
+      () => /cli\/dev-spec\.js" approve tiny-fix --through tasks/.test(ch.out), () => !/spec_approve \{/.test(ch.out), () => chMcp.ok,
+      () => /spec_approve \{name: "tiny-two", through: "tasks"\}/.test(chMcp.note),
+    ]);
   }
 
   // 1.25.1 (review 7) — the CLI's own options. A process with its own env and cwd: { out, stdout, code }.
@@ -436,12 +444,16 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     const wrong = Object.entries(want).filter(([k, c]) => !(cases[k].code === 1 && cases[k].doc && cases[k].doc.ok === false && cases[k].doc.code === c)).map(([k]) => [k, cases[k].doc]);
     const shortHuman = cliIn(["status", "-j"], { SPEC_PROJECT_DIR: p });
     const stdinDash = spawnSync(process.execPath, [CLI, "ears", "-", "--project", p], { encoding: "utf8", input: "- **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL open a session\n" });
-    ok(max50.code === 1 && max50.doc && max50.doc.code === "invalid-arguments" && /--max/.test(max50.doc.error) && /at most 8/.test(max50.doc.error) && max8.code === 0 &&
-      !wrong.length && JSON.stringify(cases.unknownFlag.doc.unknown) === '[{"argument":"--rnu","didYouMean":"--run"}]' &&
-      JSON.stringify(cases.short.doc.unknown) === '[{"argument":"-j","didYouMean":"--json"}]' && JSON.stringify(cases.noValue.doc.missing) === '["--lang"]' &&
-      JSON.stringify(cases.badBool.doc.invalid) === '["--batch"]' && JSON.stringify(cases.extra.doc.unknown) === '[{"argument":"beta"}]' &&
-      shortHuman.code === 1 && /unknown option -j/.test(shortHuman.out) && !/Feature 'j' not found/.test(shortHuman.out) && stdinDash.status === 0 && /EARS: 1 criteria/.test(stdinDash.stdout),
-      "1.25.1 r7: next --max 9+ is refused (≤ 8, as spec_next_task); --json usage errors carry a stable code (project-missing, project-not-dir, unknown-argument {unknown}, missing-arguments {missing}, invalid-arguments {invalid}, usage, unknown-command, feature-not-found); -j is an unknown option (did you mean --json?), a lone - is still stdin (got " +
-      JSON.stringify([max50.code, max50.doc, max8.code, wrong, cases.short.doc, shortHuman.out.slice(0, 120)]).slice(0, 900) + ")");
+    all("1.25.1 r7: next --max 9+ is refused (≤ 8, as spec_next_task); --json usage errors carry a stable code (project-missing, project-not-dir, unknown-argument {unknown}, missing-arguments {missing}, invalid-arguments {invalid}, usage, unknown-command, feature-not-found); -j is an unknown option (did you mean --json?), a lone - is still stdin (got " +
+      JSON.stringify([max50.code, max50.doc, max8.code, wrong, cases.short.doc, shortHuman.out.slice(0, 120)]).slice(0, 900) + ")", [
+      () => max50.code === 1, () => max50.doc, () => max50.doc.code === "invalid-arguments", () => /--max/.test(max50.doc.error),
+      () => /at most 8/.test(max50.doc.error), () => max8.code === 0, () => !wrong.length,
+      () => JSON.stringify(cases.unknownFlag.doc.unknown) === '[{"argument":"--rnu","didYouMean":"--run"}]',
+      () => JSON.stringify(cases.short.doc.unknown) === '[{"argument":"-j","didYouMean":"--json"}]',
+      () => JSON.stringify(cases.noValue.doc.missing) === '["--lang"]', () => JSON.stringify(cases.badBool.doc.invalid) === '["--batch"]',
+      () => JSON.stringify(cases.extra.doc.unknown) === '[{"argument":"beta"}]', () => shortHuman.code === 1,
+      () => /unknown option -j/.test(shortHuman.out), () => !/Feature 'j' not found/.test(shortHuman.out), () => stdinDash.status === 0,
+      () => /EARS: 1 criteria/.test(stdinDash.stdout),
+    ]);
   }
 };

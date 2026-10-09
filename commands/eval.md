@@ -1,26 +1,20 @@
 ---
-description: (+ai) Run a feature's local eval harness (golden / adversarial / regression) with your own API key.
-argument-hint: "[feature name] [--dry-run | --set-baseline]"
+description: (+ai) Run a feature's local eval harness with your own API key, record a baseline, or gate a model migration on it.
+disable-model-invocation: true
+argument-hint: "[feature] [run [--dry-run] | baseline | migrate <target model>]"
 ---
 
-Use the **dev-spec-driven** skill eval harness (+ai track).
+Args: $ARGUMENTS (default: `run`) — the harness, from the project root:
+`node "${CLAUDE_PLUGIN_ROOT}/mcp/evals/run-evals.js" <feature-slug> [--dry-run] [--set-baseline] [--model=<id>] [--max-items=<N>]`
 
-Args: $ARGUMENTS
+- **run** — with the user's own `ANTHROPIC_API_KEY` (none, or `--dry-run`: the sets are validated and the plan printed,
+  no model called; an invalid set exits 1 naming each bad item). Report per set the score, the delta against the
+  baseline and whether it met its threshold (golden ≥ 85 %, adversarial 100 %, regression 100 % unless
+  `evals/thresholds.json` says otherwise).
+- **baseline** — the same run with `--set-baseline`, only after a good run the user accepts.
+- **migrate `<target model>`** — run the current sets through the target (`--model=<id>`) and compare per set. Switch only
+  if it matches or beats the current model on every set (or tune the prompt until it does, re-evaluating each time);
+  otherwise stay. Record the decision and the numbers in design.md → Model Lifecycle. Never migrate without the comparison.
 
-Run the local harness from the project root:
-
-```
-node "${CLAUDE_PLUGIN_ROOT}/mcp/evals/run-evals.js" <feature-slug> [--dry-run] [--set-baseline] [--model=<id>] [--max-items=<N>]
-```
-
-It uses the user's own `ANTHROPIC_API_KEY` (no CI, no extra service). Without a key — or with
-`--dry-run` — it validates the sets and prints the plan without calling a model. Validation covers every item
-(`{ id, input, expect: { type: contains|equals|regex|refuse|judge, value | rubric } }` — a known grader, a value for
-contains/equals/regex, a regex that compiles, a rubric for judge) and `evals/thresholds.json` (a number in [0, 1] per
-set); an invalid set — an empty one included (it can't pass what it never graded) — exits 1 naming each bad item,
-and a live run refuses before any model call. `--max-items` caps the items graded per set and must be an integer ≥ 1
-(anything else exits 2); the switches take `--x` or `--x=true|false` (1/0, yes/no, on/off — any other value exits 2,
-so `--set-baseline=false` never writes a baseline). Report the scores
-per set, the delta vs baseline, and whether each set met its threshold (golden ≥85%, adversarial
-safety 100%, regression 100% by default; override in `evals/thresholds.json`). On the first good
-run, offer to record a baseline with `--set-baseline`. Respond in the user's language.
+Patterns: `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/eval-suite-patterns.md`. Respond in the user's language
+(EN / PT / ES).

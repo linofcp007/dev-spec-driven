@@ -1,91 +1,24 @@
 ---
-description: Record your approval of a phase gate for a feature (auditable, resumable).
+description: Record your approval of a phase gate — one phase, every filled phase up to one (--through), forced or revoked.
 disable-model-invocation: true
-argument-hint: "[feature name] [phase] [--role name] [--force [--reason text] [--expires date|30d]] [--revoke [--reason text]]"
+argument-hint: "[feature] [phase | --through <phase>] [--role name] [--force [--reason text] [--expires date|30d] | --revoke]"
 ---
 
-Use the **dev-spec-driven** skill approval gate.
+The user's approval of a phase gate. Args: $ARGUMENTS
 
-Args: $ARGUMENTS
+1. `spec_doctor {name}` first — show the verdict. No phase given? Show the one `spec_next_action` names and ask which to
+   approve: record only what the user approves.
+2. Record it with `spec_approve {name, phase}` — classification · requirements · design · test-plan · eval-plan · tests ·
+   tasks · execution. `--through <phase>` → `spec_approve {name, through}`: every filled planning phase up to it, in
+   order, each through its own gate — how a size xs / s plan is approved; it stops at the first refusal and never
+   includes `execution`. `--role <r>` → `role` (a role sign-off under `meta.approvalRoles`).
+3. A refusal names its failing check ids (`phase-order`: an earlier phase first) — show them and fix them, never retry
+   blindly. `execution`, the sign-off after a ready `/spec-finish`, is gated by spec_finish's blockers — `suite-evidence`
+   (the project checks run on the current code) among them.
+4. `--force` → `force: true` only because the user accepts the failing checks — their `reason` and an optional `expires`
+   (`YYYY-MM-DD` or `30d`) become the waiver; it stays flagged (doctor, ROADMAP.md, metrics, the merge summary).
+5. `--revoke` → `spec_approve {name, phase, revoke: true, reason}`: the phase is pending again; later phases stay approved.
 
-(A **change** — kind `change`, size xs — has two approvals only: `tasks`, its plan in `change.md`, and `execution`; a
-size xs / s feature approves its whole plan with `/spec-ff` once it is filled. A design section left with nothing but
-the template's guidance line is refused like an unfilled one.)
-
-Only record an approval the user actually gave. Run `spec_doctor` first and show the verdict. Then call the
-`spec_approve` MCP tool with the feature name and phase (one of: classification, requirements, design,
-test-plan, eval-plan, tests, tasks, execution; CLI `dev-spec approve <feature> <phase> [--by NAME]`).
-With the human approval guard on (`spec_init {approvalGuard: "ask" | "deny"}`), the plugin's hook asks the user
-before that call, or refuses it: then give the user the command the refusal names to run themselves (their own
-terminal, or `! node <clone>/cli/dev-spec.js approve …`) and wait — never retry it another way. In other MCP clients
-the server asks the user itself when the client supports elicitation (a question with an Approve box and a note —
-only their explicit approve is recorded, as `confirmed`, and only for the version the question showed); a `declined: true`
-result means the user said no (or didn't answer): record nothing, ask what should change. `changedSincePreview: true`
-means the artifact (or, forced, its failing checks) changed while they decided: nothing was recorded — ask again. A `humanRequired: true` refusal (deny, a client that can't ask) works
-like the hook's: the user runs the `command` it names.
-
-**The approval is a gate:** that phase's checks run first and any failure **refuses** it, listing the failing
-check ids — e.g. requirements: `ears`, `placeholders`, `clarifications`, `success-criteria`, `priorities`,
-`ac-uniqueness` (bugfix: `reproduction`); design: `placeholders`, `constitution-check`, the active
-`saas-sections` / `ai-sections` / `sec-sections` / `privacy-sections` / `dist-sections` / `api-sections` /
-`ui-sections` / `obs-sections` / `data-sections` and a project track pack's `<pack>-sections`, `clarifications`
-(bugfix: `root-cause`, `reproduction` and `placeholders` — its design approval signs off `bug.md`, so a slot left in `bug.md`
-or an open `[NEEDS CLARIFICATION]` there refuses it too, and one in its Reproduction refuses the requirements); test-plan: `placeholders`, `traceability` (every AC
-has a test row, and no row cites an AC requirements.md doesn't define); eval-plan: `placeholders`; tasks:
-`placeholders` (no placeholder tasks), `traceability` (every AC covered by a task, no phantom AC / T-IDs in tasks),
-`task-deps` (a `_Depends:_` naming no task, or a cycle; a change's plan also `change-scope`); tests (the Phase 4 sign-off —
-failing tests / eval harness written and red): +tdd `tests-in-code` (every planned T-ID named by a test file),
-+ai `eval-sets` (`evals/golden.json` is the feature's own set, not the scaffold's sample) — nothing to approve on a
-core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_finish's blockers — `state` (a
-`.state.json` that can't be read), `roadmap` (a `roadmap.json` that can't be read), `doctor`, `root-cause`, `placeholders`, `changed-since-approval`, `tasks`, `open-tasks`, `verification`, `suite-evidence`
-(project checks without a passing run since the last tick, on the current code), `approval-gates`.
-`tests` is pending on a +tdd / +ai feature once its test or eval plan exists or was approved (never on a bugfix), so
-`gatesOk` stays false and `spec_next_action` asks for it until it is approved — and again once the test plan gains a T-ID
-or a plan is re-approved with other content after it (the approval records the plan it covered; an older one that
-recorded no plan is never asked for again). An approved artifact that was deleted counts as changed since its approval: restore it, or
-revoke that approval. **Phase by phase:** a phase is
-refused while an EARLIER active phase that has an artifact is still unapproved — or was approved but its artifact changed
-since (a whitespace-only edit is no change) — check `phase-order`, naming the phase(s) to approve (or re-review and
-re-approve) first (a bugfix's tasks can't be approved before its design / `bug.md`; on a design-first feature
-the design comes before the requirements). A `roadmap-invalid` refusal (`code`) means `.specs/roadmap.json` can't be read:
-its approval roles are unknown, so nothing is approved or revoked until it is repaired. On a refusal, show the failing checks and fix them (or ask the user to) —
-don't retry blindly. "Fix it" or "go ahead" said about the outcome is not an approval of an artifact the user hasn't
-seen: present it first (in a bugfix, the reproduction and the root cause in `bug.md`).
-
-`force: true` (CLI `--force`) records it anyway as a **forced** approval with the failing check ids: use it only
-when the user explicitly chooses to accept the failures, and say so. Forced approvals stay visible —
-`spec_doctor`'s `approval-gates` check warns, the roadmap lists them, and `spec_metrics` counts them. A phase with
-no artifact (eval-plan without +ai, test-plan without +tdd, a missing file — or one that can't be read: a folder of that
-name, no permission — `unreadable`) can't be approved, not even forced.
-With `force`, record the user's reason and, when they give one, an expiry: `reason` + `expires` (`YYYY-MM-DD`, today or
-later in UTC — the waiver holds through that UTC day —, or a number of days like `30d`) — CLI `--force --reason "…" --expires 30d` — are stored as the approval's
-**waiver** (`waiver {reason, expires}`, on the approval and its history record; only when the gate really fails —
-a passing gate waives nothing). Once the expiry passes while the approval still stands forced, `spec_doctor` warns
-`waiver-expired`; ROADMAP.md shows each forced approval with its waiver (an expired one flagged EXPIRED) and
-`/spec-finish` lists them in the merge summary. `reason` / `expires` without `force` are refused.
-
-**Revoke** an approval the user withdraws (given by mistake, or no longer true): `spec_approve {name, phase, revoke:
-true, reason}` (CLI `dev-spec approve <feature> <phase> --revoke --reason "…"`). It removes that phase's approval —
-and the role sign-offs waiting for it — and appends `{phase, at, by, revoked: true, reason}` to `approvalHistory` (no
-snapshot). It **never cascades**: later phases stay approved (`laterApproved`); the revoked phase is pending again, so
-doctor, next_action and finish ask for it, and approving another phase is refused (`phase-order`) until it is
-approved again. Revoking a phase that is not approved is an error; `execution` can be revoked too (its sign-off is
-then asked for again). On a phase signed off per role (below) a revocation is a role's act too: it names one of the
-phase's roles (`role` / `--role`); before the phase is approved it withdraws only that role's own waiting sign-off (the
-others stay). Revoke only when the user asks — the approval guard gates it like an approval.
-
-**Approvals by role** (opt-in: `.specs/roadmap.json → meta.approvalRoles`, set with `spec_init {approvalRoles}` / CLI
-`dev-spec init --roles requirements=product,design=tech+security`): a phase listed there needs `role` (CLI
-`--role <role>`, one of that phase's roles) and counts as approved only once **every** role has signed off its
-**current** content — until then the result says `pending` with the `missingRoles`, and doctor, next_action and finish
-keep naming them (ROADMAP.md too, once one role has signed). An edit after a role signed means that role signs again —
-for `tests` and `execution`, which have no file of their own, any change of the feature after it (a change request, an
-undone task, a re-approval of another phase with other content). One person signing for two roles is recorded, with a
-warning (`sameSigner`): role sign-offs are meant to come from different people. A phase approved before the
-roles were configured stays approved (by an unknown role); doctor warns until each role re-signs. To approve several
-filled phases in one go, see `/spec-ff`.
-
-Each approval writes `.specs/<feature>/.state.json` (latest approval + content fingerprint), appends to
-`approvalHistory` and saves a snapshot `.specs/<feature>/.history/<phase>@<n>.md` — the baseline `/spec-impact`
-diffs a later edit against (a re-approval of the same content shares the previous snapshot). An edit that only changes
-whitespace — trailing spaces, blank lines at the end — is no change since the approval. Confirm what was recorded. Respond in the user's language (EN/PT/ES).
+With the approval guard on, the hook or the MCP server asks the user before the call, or refuses it: then give them the
+command the refusal names to run themselves, and wait — never another way round. `declined: true` → nothing recorded;
+ask what should change. Confirm what was recorded. Respond in the user's language (EN / PT / ES).

@@ -6,7 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, rpc, payload, S, tmp }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp }) => {
   const js = JSON.stringify;
   const SHA = "a".repeat(40), SHA2 = "b".repeat(40);
   const rd = (...a) => fs.readFileSync(path.join(...a), "utf8");
@@ -211,12 +211,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp }) => {
     const same = S.mergeStateJson(base, { ...base, branch: rec("feature/x", "2026-10-01T00:00:00.000Z") }, { ...base, branch: rec("feature/x", "2026-10-01T00:00:00.000Z", { base: "dev", note: "t" }) }, "state");
     const noTime = S.mergeStateJson(base, { ...base, branch: { name: "feature/x" } }, { ...base, branch: rec("feature/y", "2026-10-01T00:00:00.000Z") }, "state");
     const text = S.mergeStateText(js(base), js({ ...base, branch: rec("feature/x", "2026-10-03T00:00:00.000Z") }, null, 2) + "\n", js({ ...base, branch: rec("feature/y", "2026-10-01T00:00:00.000Z") }), { path: ".specs/x/.state.json" });
-    ok(one.merged.branch.name === "feature/x" && !one.conflicts.length && earlier.merged.branch.name === "feature/y" && !earlier.conflicts.length &&
-      tie.merged.branch.name === "feature/x" && tie.conflicts.length === 1 && tie.conflicts[0].path === "branch" &&
-      same.merged.branch.base === "main" && same.merged.branch.note === "t" && !same.conflicts.length && noTime.merged.branch.name === "feature/y" && !noTime.conflicts.length &&
-      text.ok && text.clean && JSON.parse(text.text).branch.name === "feature/y",
-      "1.25 create --branch: the merge driver knows `branch` — one side's record is taken; two records → the EARLIER (`at`: where the feature started first; none = later); the same time and two names → a conflict (ours kept); the same name → one record (ours' fields over theirs') (got " +
-      js([earlier.merged.branch, tie.conflicts, same.merged.branch, noTime.merged.branch]) + ")");
+    all("1.25 create --branch: the merge driver knows `branch` — one side's record is taken; two records → the EARLIER (`at`: where the feature started first; none = later); the same time and two names → a conflict (ours kept); the same name → one record (ours' fields over theirs') (got " +
+      js([earlier.merged.branch, tie.conflicts, same.merged.branch, noTime.merged.branch]) + ")", [
+      () => one.merged.branch.name === "feature/x", () => !one.conflicts.length, () => earlier.merged.branch.name === "feature/y",
+      () => !earlier.conflicts.length, () => tie.merged.branch.name === "feature/x", () => tie.conflicts.length === 1,
+      () => tie.conflicts[0].path === "branch", () => same.merged.branch.base === "main", () => same.merged.branch.note === "t",
+      () => !same.conflicts.length, () => noTime.merged.branch.name === "feature/y", () => !noTime.conflicts.length, () => text.ok, () => text.clean,
+      () => JSON.parse(text.text).branch.name === "feature/y",
+    ]);
   }
 
   // 1.25.1 (review 7): spec_log = `dev-spec log <f> --json` for a feature on its own branch — the CLI reads `git log <commit>..HEAD`;
@@ -240,12 +242,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp }) => {
     fs.writeFileSync(path.join(plain, ".specs", "pay", "tasks.md"), "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] First\n- [ ] 2. [US1] Second\n");
     const noBranch = payload(await rpc("tools/call", { name: "spec_log", arguments: { name: "pay", gitLog: full, projectDir: plain } }));
     const counts = (r) => r.tasks.map((t) => t.commits.length).join();
-    ok(viaFull.ok && viaFull.commits === 2 && counts(viaFull) === "1,1" && js(viaFull.since) === js({ base: "main", commit: SHA }) &&
-      viaRange.commits === 2 && js(viaRange.tasks) === js(viaFull.tasks) && js(viaRange.since) === js(viaFull.since) &&
-      js(cli.tasks) === js(viaFull.tasks) && js(cli.since) === js(viaFull.since) && whole.commits === 4 && !whole.since &&
-      noBranch.commits === 4 && counts(noBranch) === "1,2" && !noBranch.since &&
-      /git log <branch\.commit>\.\.HEAD --name-only --relative/.test(desc),
-      "1.25.1 r7: spec_log on a feature with its own branch reads the range the CLI reads (<commit>..HEAD) — a full log is cut at the start commit, a ranged one taken as it is, both labelled since, the same result as the CLI's; the description names the range; a feature without a branch reads the whole log (got " +
-      js([viaFull.commits, counts(viaFull), viaFull.since, viaRange.commits, cli.commits, whole.commits, noBranch.commits, counts(noBranch)]) + ")");
+    all("1.25.1 r7: spec_log on a feature with its own branch reads the range the CLI reads (<commit>..HEAD) — a full log is cut at the start commit, a ranged one taken as it is, both labelled since, the same result as the CLI's; the description names the range; a feature without a branch reads the whole log (got " +
+      js([viaFull.commits, counts(viaFull), viaFull.since, viaRange.commits, cli.commits, whole.commits, noBranch.commits, counts(noBranch)]) + ")", [
+      () => viaFull.ok, () => viaFull.commits === 2, () => counts(viaFull) === "1,1", () => js(viaFull.since) === js({ base: "main", commit: SHA }),
+      () => viaRange.commits === 2, () => js(viaRange.tasks) === js(viaFull.tasks), () => js(viaRange.since) === js(viaFull.since),
+      () => js(cli.tasks) === js(viaFull.tasks), () => js(cli.since) === js(viaFull.since), () => whole.commits === 4, () => !whole.since,
+      () => noBranch.commits === 4, () => counts(noBranch) === "1,2", () => !noBranch.since,
+      () => /git log <branch\.commit>\.\.HEAD --name-only --relative/.test(desc),
+    ]);
   }
 };

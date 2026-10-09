@@ -91,7 +91,7 @@ steering file is never overwritten (skipped, reported); `dryRun: true` previews 
 The few non-negotiable principles every feature must obey — kept short, concrete, and testable.
 Each design.md carries a **Constitution Check** section (`spec_doctor` checks that it is there); whether
 the design honours every principle is judged at the gate by the human and the `spec-critic` agent
-(`/spec-doctor --deep`), and `/prReview` checks the code — a violation is sent back, not shipped.
+(`/spec-doctor --deep`), and the branch review (`/spec-review branch`) checks the code — a violation is sent back, not shipped.
 Anything that *must* break a principle goes in the design's **Complexity Tracking** table with a
 justification, not into the code unannounced.
 
@@ -688,7 +688,7 @@ review sections, a tasks template with its Definition of Done, a stricter consti
 override when present — create-only, never over an existing file.
 
 - **Commands:** `spec_templates {action: "list" | "init" | "check", artifact?, lang?}` (CLI `dev-spec templates
-  [list|init|check] [artifact] [--lang en|pt|pt-BR|es]`; `/spec-templates`). `list` shows built-in vs project per artifact
+  [list|init|check] [artifact] [--lang en|pt|pt-BR|es]`; the user's `/spec-setup templates`). `list` shows built-in vs project per artifact
   (and files that are not a template name — ignored); `init` copies the built-in template(s) into `.specs/templates/`
   (with `lang`: into `<lang>/`) to edit, never overwriting; `check` validates them against the current rules — each
   problem with `{file, line?, code, severity, message}` and a verdict (the CLI exits 1 on an error).

@@ -22,9 +22,9 @@ with real content from the `references/` templates. No MCP connection (e.g. clau
   each task, + a red-first check on +tdd, from the `git log --name-only --relative` text you pass — from the feature's
   `branch.commit` (`<commit>..HEAD`) when it has its own branch — the server never runs git).
 - **Change & after:** `spec_impact` (an edit after approval → what it touches; reopen) · `spec_decide` (decision log) ·
-  `spec_drift` · `spec_metrics` · `spec_catalog` · `spec_export` · `spec_changelog`.
-- **Project:** `spec_list` / `spec_status` · `spec_roadmap` / `spec_depend` / `spec_backlog` / `spec_milestone` ·
-  `spec_add_track` / `spec_feature` · `spec_scan` / `spec_coverage` (brownfield) · `steering_scaffold` · `spec_upgrade`
+  `spec_drift` · `spec_metrics` · `spec_export {format: "catalog"}` · `spec_export` · `spec_export {format: "changelog"}`.
+- **Project:** `spec_status` (no `name`: every feature) · `spec_roadmap` / `spec_roadmap_edit {kind: "depend"}` / `spec_roadmap_edit {kind: "backlog"}` / `spec_roadmap_edit {kind: "milestone"}` ·
+  `spec_add_track` / `spec_feature` · `spec_scan` / `spec_scan {coverage: true}` (brownfield) · `steering_scaffold` · `spec_upgrade`
   (after a plugin update).
 
 **The CLI** runs the same engine (`dev-spec <command>` in these docs — its name). A plugin install puts no `dev-spec` on

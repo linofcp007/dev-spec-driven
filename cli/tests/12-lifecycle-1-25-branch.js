@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, tmp, CLI }) => {
+exports.run = ({ ok, all, tmp, CLI }) => {
   const js = JSON.stringify;
   // git isolated from the user's config (no global hooks, signing or default branch), the CLI with the same environment
   const cfg = path.join(tmp, "br-gitconfig");
@@ -79,10 +79,13 @@ exports.run = ({ ok, tmp, CLI }) => {
   git(repo, "switch", "-q", "main");
   const sp = cli(["spike", "Cache choice", "--question", "Which cache?", "--branch", "--project", repo]);
   const spOn = current(repo);
-  ok(j.code === 0 && jr && jr.ok && jr.branch.name === "team/named" && jr.branch.recorded === true && jr.branch.switched === true && jr.branch.created === true &&
-    jr.branch.current === "team/named" && jr.branch.command === "git switch -c team/named" && current(repo) === "spike/cache-choice" &&
-    bf.code === 0 && bfOn === "fix/crash-on-save" && sp.code === 0 && spOn === "spike/cache-choice" && st(repo, "cache-choice").branch.name === "spike/cache-choice",
-    "1.25 create --branch: --json prints the engine's result with switched / created / current; --branch=<name> names it; bugfix --branch → fix/<slug>, spike --branch → spike/<slug> (got " + js([j.code, jr && jr.branch, bfOn, spOn]) + ")");
+  all("1.25 create --branch: --json prints the engine's result with switched / created / current; --branch=<name> names it; bugfix --branch → fix/<slug>, spike --branch → spike/<slug> (got " + js([j.code, jr && jr.branch, bfOn, spOn]) + ")", [
+    () => j.code === 0, () => jr, () => jr.ok, () => jr.branch.name === "team/named", () => jr.branch.recorded === true,
+    () => jr.branch.switched === true, () => jr.branch.created === true, () => jr.branch.current === "team/named",
+    () => jr.branch.command === "git switch -c team/named", () => current(repo) === "spike/cache-choice", () => bf.code === 0,
+    () => bfOn === "fix/crash-on-save", () => sp.code === 0, () => spOn === "spike/cache-choice",
+    () => st(repo, "cache-choice").branch.name === "spike/cache-choice",
+  ]);
 
   // a branch that exists: never recorded nor switched to, exit 1; git failing (a ref the new name can't live beside) → the record stays, exit 1
   git(repo, "switch", "-q", "main");
@@ -92,12 +95,16 @@ exports.run = ({ ok, tmp, CLI }) => {
   const df = cli(["create", "Clash", "core", "--branch", "zz/clash", "--project", repo]);
   const dfJ = cli(["create", "Clash", "--branch", "--json", "--project", repo]);
   const dfR = jsonOf(dfJ.stdout);
-  ok(tk.code === 1 && /A git branch named taken already exists — not recorded, and never switched to/.test(tk.out) && current(repo) === "main" && !("branch" in st(repo, "taken")) &&
-    fs.existsSync(path.join(repo, ".specs", "taken", "requirements.md")) &&
-    df.code === 1 && /▲ git switch -c zz\/clash failed: .+ — the branch is recorded; run the command once that is fixed\./.test(df.out) && current(repo) === "main" &&
-    st(repo, "clash").branch.name === "zz/clash" && dfJ.code === 1 && dfR && dfR.ok === true && dfR.branch.kept === true && dfR.branch.switched === false && typeof dfR.branch.error === "string" && dfR.branch.error.length > 0,
-    "1.25 create --branch: a branch of that name that exists is refused (not recorded, HEAD unchanged, the feature created) — exit 1; git refusing the switch (refs/heads/zz exists, so zz/<x> can't) keeps the record and says to run the command, exit 1 — a re-run tries again: --json switched: false + git's error (got " +
-    js([tk.code, tk.out.slice(-160), df.code, df.out.slice(-200), dfR && dfR.branch]) + ")");
+  all("1.25 create --branch: a branch of that name that exists is refused (not recorded, HEAD unchanged, the feature created) — exit 1; git refusing the switch (refs/heads/zz exists, so zz/<x> can't) keeps the record and says to run the command, exit 1 — a re-run tries again: --json switched: false + git's error (got " +
+    js([tk.code, tk.out.slice(-160), df.code, df.out.slice(-200), dfR && dfR.branch]) + ")", [
+    () => tk.code === 1, () => /A git branch named taken already exists — not recorded, and never switched to/.test(tk.out),
+    () => current(repo) === "main", () => !("branch" in st(repo, "taken")),
+    () => fs.existsSync(path.join(repo, ".specs", "taken", "requirements.md")), () => df.code === 1,
+    () => /▲ git switch -c zz\/clash failed: .+ — the branch is recorded; run the command once that is fixed\./.test(df.out),
+    () => current(repo) === "main", () => st(repo, "clash").branch.name === "zz/clash", () => dfJ.code === 1, () => dfR, () => dfR.ok === true,
+    () => dfR.branch.kept === true, () => dfR.branch.switched === false, () => typeof dfR.branch.error === "string",
+    () => dfR.branch.error.length > 0,
+  ]);
 
   // git missing (not on PATH): the engine reads the repository's files and records the branch; the CLI can't switch — exit 1, the command printed
   const noGitEnv = { ...env, PATH: path.dirname(process.execPath), Path: path.dirname(process.execPath) };

@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
 // 1.13 WP1: `done --run` verifies the very task it ticks; zero-padded numbers; --exit alone; --shell; localized output
 const w1p = path.join(tmp, "wp1-proj");
 fs.mkdirSync(w1p, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
@@ -337,10 +337,12 @@ ok(/^\$ node -e "process\.exit\(0\)"$/m.test(sm1) && /^\$ node --version\r?\nv\d
   const st = fs.existsSync(stFile) ? JSON.parse(fs.readFileSync(stFile, "utf8")) : {};
   const ev = st.evidence || {};
   const tasksNow = fs.readFileSync(path.join(vp, ".specs", "vac", "tasks.md"), "utf8");
-  ok(v1.code === 1 && v1.couldNotRun === "no-tests" && /tests 0/.test(v1.error) && v2.code === 1 && v2.couldNotRun === "output" && /SyntaxError/.test(v2.error) &&
-    v3.code === 1 && v3.couldNotRun === "output" && /No module named pytest/.test(v3.error) && v4.code === 0 && v4.verified === true &&
-    !ev["1"] && !ev["2"] && !ev["3"] && /- \[ \] 1\.[\s\S]*- \[ \] 2\.[\s\S]*- \[ \] 3\.[\s\S]*- \[x\] 4\./.test(tasksNow),
-    "1.24 r6 D4 / D5 / D8: done --run refuses a pass that ran no test (no-tests), a red run of a test file that doesn't parse and of a runner that isn't there (output) — nothing recorded, tasks open; a real test verifies (got " +
-    JSON.stringify([v1, v2.couldNotRun, (v2.error || v2.raw || "").slice(0, 120), v3.couldNotRun, v4.verified, Object.keys(ev)]) + ")");
+  all("1.24 r6 D4 / D5 / D8: done --run refuses a pass that ran no test (no-tests), a red run of a test file that doesn't parse and of a runner that isn't there (output) — nothing recorded, tasks open; a real test verifies (got " +
+    JSON.stringify([v1, v2.couldNotRun, (v2.error || v2.raw || "").slice(0, 120), v3.couldNotRun, v4.verified, Object.keys(ev)]) + ")", [
+    () => v1.code === 1, () => v1.couldNotRun === "no-tests", () => /tests 0/.test(v1.error), () => v2.code === 1, () => v2.couldNotRun === "output",
+    () => /SyntaxError/.test(v2.error), () => v3.code === 1, () => v3.couldNotRun === "output", () => /No module named pytest/.test(v3.error),
+    () => v4.code === 0, () => v4.verified === true, () => !ev["1"], () => !ev["2"], () => !ev["3"],
+    () => /- \[ \] 1\.[\s\S]*- \[ \] 2\.[\s\S]*- \[ \] 3\.[\s\S]*- \[x\] 4\./.test(tasksNow),
+  ]);
 }
 };

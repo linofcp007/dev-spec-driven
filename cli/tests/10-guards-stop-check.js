@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, tmp, CLI, require, __dirname }) => {
   const Sc1 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const rc1 = (args, input) => {
     const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp, CLAUDE_PROJECT_DIR: "" }, input });
@@ -26,12 +26,16 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
   const gBad = rc1(["init", "--guard", "strict", "--project", p1]);
   const sPt = rc1(["init", "--lang", "pt", "--stop-check", "off", "--guard", "scope", "--project", path.join(tmp, "c1-init-pt")]);
   const sEs = rc1(["init", "--lang", "es", "--stop-check", "quizá", "--project", path.join(tmp, "c1-init-es")]);
-  ok(gs.code === 0 && /Guard mode SCOPE/.test(gs.out) && metaC1(p1).guard === "scope" && gsJ && gsJ.guard === "scope" && gsJ.stopCheck === true && gsJ.guardNote === undefined &&
-    so.code === 0 && /Evidence gate OFF/.test(so.out) && soOff === false && sOn.code === 0 && sOnJ && sOnJ.stopCheck === true && /Evidence gate ON/.test(sOnJ.stopCheckNote) && metaC1(p1).stopCheck === true &&
-    sBad.code === 1 && /--stop-check takes on or off \(got 'maybe'\)/.test(sBad.out) && gBad.code === 1 && /--guard takes on, off or scope \(got 'strict'\)/.test(gBad.out) &&
-    sPt.code === 0 && /Gate de evidência DESLIGADO/.test(sPt.out) && /Modo guarda SCOPE \(âmbito\)/.test(sPt.out) && sEs.code === 1 && /--stop-check admite on u off \(recibido 'quizá'\)/.test(sEs.out),
-    "init --guard scope (any case) → meta.guard 'scope'; --stop-check off|on → meta.stopCheck (the result reports both; a note when set); bad values exit 1, localized (PT lines, ES error) (got " +
-    JSON.stringify([gs.out.slice(-160), so.out.slice(-120), sBad.out.slice(0, 120)]) + ")");
+  all("init --guard scope (any case) → meta.guard 'scope'; --stop-check off|on → meta.stopCheck (the result reports both; a note when set); bad values exit 1, localized (PT lines, ES error) (got " +
+    JSON.stringify([gs.out.slice(-160), so.out.slice(-120), sBad.out.slice(0, 120)]) + ")", [
+    () => gs.code === 0, () => /Guard mode SCOPE/.test(gs.out), () => metaC1(p1).guard === "scope", () => gsJ, () => gsJ.guard === "scope",
+    () => gsJ.stopCheck === true, () => gsJ.guardNote === undefined, () => so.code === 0, () => /Evidence gate OFF/.test(so.out),
+    () => soOff === false, () => sOn.code === 0, () => sOnJ, () => sOnJ.stopCheck === true, () => /Evidence gate ON/.test(sOnJ.stopCheckNote),
+    () => metaC1(p1).stopCheck === true, () => sBad.code === 1, () => /--stop-check takes on or off \(got 'maybe'\)/.test(sBad.out),
+    () => gBad.code === 1, () => /--guard takes on, off or scope \(got 'strict'\)/.test(gBad.out), () => sPt.code === 0,
+    () => /Gate de evidência DESLIGADO/.test(sPt.out), () => /Modo guarda SCOPE \(âmbito\)/.test(sPt.out), () => sEs.code === 1,
+    () => /--stop-check admite on u off \(recibido 'quizá'\)/.test(sEs.out),
+  ]);
 
   // stop-check = spec.stopCheck: the same result (--json), the reason and exit 1 when the turn would be sent back, a localized line and exit 0 otherwise.
   const p2 = path.join(tmp, "c1-stop");
@@ -48,12 +52,15 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
   const scPos = rc1(["stop-check", "All", "done!", "--project", p2]);
   const scNo = rc1(["stop-check", "--message", "I renamed the variable.", "--project", p2]);
   const scAdm = rc1(["stop-check", "--message", "Done, but task 1 is not verified.", "--project", p2]);
-  ok(sc.code === 1 && sc.stdout.trim() === eng.reason && /billing: #1 \(no evidence\)/.test(sc.out) && /read each listed task's _Verify:_ command/.test(sc.out) && !/--run/.test(sc.out) &&
-    scJ && JSON.stringify(scJ) === JSON.stringify(eng) && scIn.code === 1 && scIn.stdout.trim() === eng.reason && scInFlag.code === 1 && scPos.code === 1 &&
-    scNo.code === 0 && /^evidence gate: the message claims no completion or verification — allowed\./.test(scNo.stdout) &&
-    scAdm.code === 0 && /says plainly what is not verified/.test(scAdm.stdout),
-    "stop-check prints spec.stopCheck's reason and exits 1 when the turn would be sent back (--message, stdin via - or --message -, or the words after it); --json = the engine result; no claim / an admission → a line, exit 0 (got " +
-    JSON.stringify([sc.code, sc.out.slice(0, 200), scNo.out.slice(0, 120)]) + ")");
+  all("stop-check prints spec.stopCheck's reason and exits 1 when the turn would be sent back (--message, stdin via - or --message -, or the words after it); --json = the engine result; no claim / an admission → a line, exit 0 (got " +
+    JSON.stringify([sc.code, sc.out.slice(0, 200), scNo.out.slice(0, 120)]) + ")", [
+    () => sc.code === 1, () => sc.stdout.trim() === eng.reason, () => /billing: #1 \(no evidence\)/.test(sc.out),
+    () => /read each listed task's _Verify:_ command/.test(sc.out), () => !/--run/.test(sc.out), () => scJ,
+    () => JSON.stringify(scJ) === JSON.stringify(eng), () => scIn.code === 1, () => scIn.stdout.trim() === eng.reason, () => scInFlag.code === 1,
+    () => scPos.code === 1, () => scNo.code === 0,
+    () => /^evidence gate: the message claims no completion or verification — allowed\./.test(scNo.stdout), () => scAdm.code === 0,
+    () => /says plainly what is not verified/.test(scAdm.stdout),
+  ]);
   // Allow lines: verified, no recent activity, off, no .specs/; --agent spec-implementer checks the report; PT / ES lines.
   Sc1.completeTask(p2, "billing", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "1 passing" });
   const scVer = rc1(["stop-check", "--message", claim, "--project", p2]);
@@ -83,15 +90,18 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
   const p5 = path.join(tmp, "c1-es");
   Sc1.initProject(p5, ["core"], "es");
   const scEs = rc1(["stop-check", "--message", "Listo.", "--project", p5]);
-  ok(scVer.code === 0 && /every ticked task of the recently active features has passing evidence \(billing\) — allowed/.test(scVer.stdout) &&
-    scOld.code === 0 && /no feature was active in the last 4 h/.test(scOld.stdout) && scOff.code === 0 && /evidence gate: off \(roadmap\.json meta\.stopCheck: false\)/.test(scOff.stdout) &&
-    scNone.code === 0 && /no dev-spec \.specs\/ here/.test(scNone.stdout) &&
-    scImp.code === 1 && /you report task 2 of 'billing' as DONE, but its report \(\.specs\/billing\/\.execution\/task-2-report\.md\) doesn't show the _Verify:_ run/.test(scImp.out) &&
-    scImpJ && scImpJ.why === "implementer-evidence" && scImpJ.task === 2 && scImpOk.code === 0 && /the report of task 2 of 'billing' shows its _Verify:_ run — allowed/.test(scImpOk.stdout) &&
-    scPt.code === 0 && /gate de evidência: a mensagem não afirma conclusão nem verificação — permitido/.test(scPt.stdout) &&
-    scEs.code === 0 && /gate de evidencia: ninguna función tuvo actividad en las últimas 4 h/.test(scEs.stdout),
-    "stop-check allow lines (verified, no recent activity, off, no .specs/), --agent spec-implementer checks the task report (exit 1 without the run, 0 with it), PT / ES lines (got " +
-    JSON.stringify([scVer.out.slice(0, 140), scOld.out.slice(0, 120), scImp.out.slice(0, 160), scEs.out.slice(0, 120)]) + ")");
+  all("stop-check allow lines (verified, no recent activity, off, no .specs/), --agent spec-implementer checks the task report (exit 1 without the run, 0 with it), PT / ES lines (got " +
+    JSON.stringify([scVer.out.slice(0, 140), scOld.out.slice(0, 120), scImp.out.slice(0, 160), scEs.out.slice(0, 120)]) + ")", [
+    () => scVer.code === 0, () => /every ticked task of the recently active features has passing evidence \(billing\) — allowed/.test(scVer.stdout),
+    () => scOld.code === 0, () => /no feature was active in the last 4 h/.test(scOld.stdout), () => scOff.code === 0,
+    () => /evidence gate: off \(roadmap\.json meta\.stopCheck: false\)/.test(scOff.stdout), () => scNone.code === 0,
+    () => /no dev-spec \.specs\/ here/.test(scNone.stdout), () => scImp.code === 1,
+    () => /you report task 2 of 'billing' as DONE, but its report \(\.specs\/billing\/\.execution\/task-2-report\.md\) doesn't show the _Verify:_ run/.test(scImp.out),
+    () => scImpJ, () => scImpJ.why === "implementer-evidence", () => scImpJ.task === 2, () => scImpOk.code === 0,
+    () => /the report of task 2 of 'billing' shows its _Verify:_ run — allowed/.test(scImpOk.stdout), () => scPt.code === 0,
+    () => /gate de evidência: a mensagem não afirma conclusão nem verificação — permitido/.test(scPt.stdout), () => scEs.code === 0,
+    () => /gate de evidencia: ninguna función tuvo actividad en las últimas 4 h/.test(scEs.stdout),
+  ]);
 
   // 1.22 --agent spec-simplifier: its simplification report must END with the passing project checks (exit 1 otherwise).
   const p6 = path.join(tmp, "c1-simplify");

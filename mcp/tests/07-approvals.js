@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirname }) => {
 
   { // 1.14 B3 — team governance (approvals by role, roadmap.json meta.approvalRoles) and the fast-forward approval (spec_approve {through})
     const b3Root = path.join(tmp, "b3-governance");
@@ -74,16 +74,22 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const n1 = S.nextAction(pR, fR.slug);
     const fin1 = S.finishFeature(pR, fR.slug);
     const order1 = S.approvePhase(pR, fR.slug, "tasks", "tom", { role: "tech" });
-    ok(tech1.ok && tech1.approved === null && tech1.signedOff === "design" && tech1.pending === true && tech1.complete === false && tech1.missingRoles.join() === "security" &&
-      /'design' stays pending until every role has signed off its current content — missing role: security\./.test(tech1.note) &&
-      !st1.approvals.design && st1.signoffs.design.tech.by === "tom" && lastRec1.phase === "design" && lastRec1.role === "tech" && lastRec1.partial === true && !lastRec1.snapshot &&
-      d1.pendingGates[0] === "design" && d1.pendingRoles.design.missing.join() === "security" && d1.pendingRoles.design.signed.join() === "tech" && d1.nextGate.missingRoles.join() === "security" &&
-      /awaiting human approval: design \(missing role: security\), tasks \(missing role: tech\)/.test(chk(d1, "approval-gates").detail) && d1.gatesOk === false &&
-      n1.step === "approve" && /missing role: security \(signed: tech\): \/approve invoice-export design --role security/.test(n1.recommendation) && n1.missingRoles.join() === "security" &&
-      fin1.blockers.some((b) => b === "phases awaiting approval: design (missing role: security), tasks (missing role: tech)") && fin1.pendingRoles.design.missing.join() === "security" &&
-      order1.ok === false && order1.failing.includes("phase-order"),
-      "B3: one role's sign-off leaves the phase pending (approved: null, signoffs[phase][role], a `partial` history record without snapshot) — doctor's approval-gates, next_action ('missing role: security' + the --role to sign as), finish's blockers name the missing role; a later phase is refused on phase-order (got " +
-      JSON.stringify([tech1.note, chk(d1, "approval-gates").detail, n1.recommendation]) + ")");
+    all("B3: one role's sign-off leaves the phase pending (approved: null, signoffs[phase][role], a `partial` history record without snapshot) — doctor's approval-gates, next_action ('missing role: security' + the --role to sign as), finish's blockers name the missing role; a later phase is refused on phase-order (got " +
+      JSON.stringify([tech1.note, chk(d1, "approval-gates").detail, n1.recommendation]) + ")", [
+      () => tech1.ok, () => tech1.approved === null, () => tech1.signedOff === "design", () => tech1.pending === true, () => tech1.complete === false,
+      () => tech1.missingRoles.join() === "security",
+      () => /'design' stays pending until every role has signed off its current content — missing role: security\./.test(tech1.note),
+      () => !st1.approvals.design, () => st1.signoffs.design.tech.by === "tom", () => lastRec1.phase === "design", () => lastRec1.role === "tech",
+      () => lastRec1.partial === true, () => !lastRec1.snapshot, () => d1.pendingGates[0] === "design",
+      () => d1.pendingRoles.design.missing.join() === "security", () => d1.pendingRoles.design.signed.join() === "tech",
+      () => d1.nextGate.missingRoles.join() === "security",
+      () => /awaiting human approval: design \(missing role: security\), tasks \(missing role: tech\)/.test(chk(d1, "approval-gates").detail),
+      () => d1.gatesOk === false, () => n1.step === "approve",
+      () => /missing role: security \(signed: tech\): \/approve invoice-export design --role security/.test(n1.recommendation),
+      () => n1.missingRoles.join() === "security",
+      () => fin1.blockers.some((b) => b === "phases awaiting approval: design (missing role: security), tasks (missing role: tech)"),
+      () => fin1.pendingRoles.design.missing.join() === "security", () => order1.ok === false, () => order1.failing.includes("phase-order"),
+    ]);
     const rm1 = fs.readFileSync(path.join(pR, ".specs", "ROADMAP.md"), "utf8");
     ok(/awaiting role sign-off: design \(security\)/.test(rm1), "B3: ROADMAP.md 'Needs attention' lists a sign-off round under way (design waits for security)");
 
@@ -95,14 +101,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const tech3 = S.approvePhase(pR, fR.slug, "design", "tom", { role: "tech" });
     const st3 = state3(fR);
     const lastRec3 = st3.approvalHistory[st3.approvalHistory.length - 1];
-    ok(d2.pendingRoles.design.stale.join() === "tech" && d2.pendingRoles.design.missing.join() === "tech,security" &&
-      /sign-offs made before the artifact changed no longer count \(re-sign the current content\): design \(tech\)/.test(chk(d2, "approval-gates").detail) &&
-      sec2.ok && sec2.pending && sec2.missingRoles.join() === "tech" && Object.keys(st2.signoffs.design).join() === "security" && !st2.approvals.design &&
-      tech3.ok && tech3.approved === "design" && tech3.complete === true && tech3.signedRoles.sort().join() === "security,tech" &&
-      st3.approvals.design.roles.tech.fingerprint === st3.approvals.design.fingerprint && st3.approvals.design.roles.security.fingerprint === st3.approvals.design.fingerprint &&
-      !st3.signoffs && lastRec3.role === "tech" && !lastRec3.partial && lastRec3.roles.join() === "tech,security" && typeof lastRec3.snapshot === "string" &&
-      fs.existsSync(path.join(fR.dir, lastRec3.snapshot)) && !S.specDoctor(pR, fR.slug).pendingGates.includes("design"),
-      "B3: an edit after a role signed invalidates that sign-off (doctor: stale, both roles missing); the other role's sign-off of the new content waits; once every role signed the CURRENT content the phase is approved (roles recorded, snapshot, signoffs cleared)");
+    all("B3: an edit after a role signed invalidates that sign-off (doctor: stale, both roles missing); the other role's sign-off of the new content waits; once every role signed the CURRENT content the phase is approved (roles recorded, snapshot, signoffs cleared)", [
+      () => d2.pendingRoles.design.stale.join() === "tech", () => d2.pendingRoles.design.missing.join() === "tech,security",
+      () => /sign-offs made before the artifact changed no longer count \(re-sign the current content\): design \(tech\)/.test(chk(d2, "approval-gates").detail),
+      () => sec2.ok, () => sec2.pending, () => sec2.missingRoles.join() === "tech", () => Object.keys(st2.signoffs.design).join() === "security",
+      () => !st2.approvals.design, () => tech3.ok, () => tech3.approved === "design", () => tech3.complete === true,
+      () => tech3.signedRoles.sort().join() === "security,tech",
+      () => st3.approvals.design.roles.tech.fingerprint === st3.approvals.design.fingerprint,
+      () => st3.approvals.design.roles.security.fingerprint === st3.approvals.design.fingerprint, () => !st3.signoffs, () => lastRec3.role === "tech",
+      () => !lastRec3.partial, () => lastRec3.roles.join() === "tech,security", () => typeof lastRec3.snapshot === "string",
+      () => fs.existsSync(path.join(fR.dir, lastRec3.snapshot)), () => !S.specDoctor(pR, fR.slug).pendingGates.includes("design"),
+    ]);
     const m3 = S.metrics(pR, fR.slug);
     ok(m3.approvalsTotal === 3 && m3.rework === 0 && m3.leadTime.design && m3.leadTime.design.at === st3.approvals.design.at && m3.batchApprovals === 0,
       "B3: metrics count completed approvals only — a partial role sign-off is no approval (approvalsTotal 3, no rework, design's lead time = its completion) (got " + JSON.stringify([m3.approvalsTotal, m3.rework, m3.leadTime.design]) + ")");
@@ -130,11 +139,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const stFT2 = state3(fF);
     const fS = S.approvePhase(pF, fF.slug, "design", "sara", { role: "security", force: true });
     const dF = S.specDoctor(pF, fF.slug);
-    ok(fT.ok === false && fT.refused && fT.failing.join() === "constitution-check" && !stFT.signoffs && !stFT.approvals.design &&
-      fT2.ok && fT2.forced && fT2.pending && /^Signed off with force — the failing checks are recorded with the sign-off: constitution-check\. 'design' stays pending/.test(fT2.note) &&
-      stFT2.signoffs.design.tech.forced === true && stFT2.signoffs.design.tech.failing.join() === "constitution-check" && state3(fF).signoffs === undefined && fS.ok && fS.approved === "design" && state3(fF).approvals.design.forced === true && state3(fF).approvals.design.failing.join() === "constitution-check" &&
-      dF.forcedGates.includes("design") && S.metrics(pF, fF.slug).forcedApprovals === 1,
-      "B3: each role sign-off runs the phase's gate (refused → nothing recorded; force records the sign-off forced); the completed approval is forced, counted once by metrics");
+    all("B3: each role sign-off runs the phase's gate (refused → nothing recorded; force records the sign-off forced); the completed approval is forced, counted once by metrics", [
+      () => fT.ok === false, () => fT.refused, () => fT.failing.join() === "constitution-check", () => !stFT.signoffs, () => !stFT.approvals.design,
+      () => fT2.ok, () => fT2.forced, () => fT2.pending,
+      () => /^Signed off with force — the failing checks are recorded with the sign-off: constitution-check\. 'design' stays pending/.test(fT2.note),
+      () => stFT2.signoffs.design.tech.forced === true, () => stFT2.signoffs.design.tech.failing.join() === "constitution-check",
+      () => state3(fF).signoffs === undefined, () => fS.ok, () => fS.approved === "design", () => state3(fF).approvals.design.forced === true,
+      () => state3(fF).approvals.design.failing.join() === "constitution-check", () => dF.forcedGates.includes("design"),
+      () => S.metrics(pF, fF.slug).forcedApprovals === 1,
+    ]);
 
     // --- guard hook: a tasks phase waiting for a role is not approved tasks
     const pG = b3("guard");
@@ -177,14 +190,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const dL2 = S.specDoctor(pL, fL.slug);
     const reL2 = S.approvePhase(pL, fL.slug, "design", "sara", { role: "security" });
     const dL3 = S.specDoctor(pL, fL.slug);
-    ok(!dL.pendingGates.includes("design") && dL.unsignedRoles.design.join() === "tech,security" && chk(dL, "approval-gates").status === "warn" &&
-      /approved without the role sign-offs now required \(approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign\): design \(tech, security\)/.test(chk(dL, "approval-gates").detail) &&
-      finL.warnings.some((w) => /approved without the role sign-offs now required.*design \(tech, security\)/.test(w)) && !finL.blockers.some((b) => /design/.test(b)) &&
-      reL.ok && reL.pending && stL.approvals.design && !stL.approvals.design.roles && stL.signoffs.design.tech && !dL2.pendingGates.includes("design") &&
-      /re-sign in progress \(the phase stays approved as it was until every role has signed the new content\): design \(missing role: security\)/.test(chk(dL2, "approval-gates").detail) &&
-      reL2.ok && reL2.approved === "design" && Object.keys(state3(fL).approvals.design.roles).sort().join() === "security,tech" && !("design" in dL3.unsignedRoles) &&
-      !/approved without the role sign-offs/.test(chk(dL3, "approval-gates").detail),
-      "B3: an approval made before the roles were configured stays approved (unknown role) — doctor's approval-gates warns and names the roles to re-sign, finish lists it as a warning (never a blocker); a re-sign round keeps it approved until every role signed (got " + chk(dL, "approval-gates").detail + ")");
+    all("B3: an approval made before the roles were configured stays approved (unknown role) — doctor's approval-gates warns and names the roles to re-sign, finish lists it as a warning (never a blocker); a re-sign round keeps it approved until every role signed (got " + chk(dL, "approval-gates").detail + ")", [
+      () => !dL.pendingGates.includes("design"), () => dL.unsignedRoles.design.join() === "tech,security",
+      () => chk(dL, "approval-gates").status === "warn",
+      () => /approved without the role sign-offs now required \(approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign\): design \(tech, security\)/.test(chk(dL, "approval-gates").detail),
+      () => finL.warnings.some((w) => /approved without the role sign-offs now required.*design \(tech, security\)/.test(w)),
+      () => !finL.blockers.some((b) => /design/.test(b)), () => reL.ok, () => reL.pending, () => stL.approvals.design,
+      () => !stL.approvals.design.roles, () => stL.signoffs.design.tech, () => !dL2.pendingGates.includes("design"),
+      () => /re-sign in progress \(the phase stays approved as it was until every role has signed the new content\): design \(missing role: security\)/.test(chk(dL2, "approval-gates").detail),
+      () => reL2.ok, () => reL2.approved === "design", () => Object.keys(state3(fL).approvals.design.roles).sort().join() === "security,tech",
+      () => !("design" in dL3.unsignedRoles), () => !/approved without the role sign-offs/.test(chk(dL3, "approval-gates").detail),
+    ]);
 
     // a single approval that named a role (no role was required then) counts as THAT role's sign-off once roles are required;
     // sign-offs left waiting are dropped when the phase no longer needs roles; a "__proto__" phase is a refused key
@@ -219,14 +235,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const ffA = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fA.slug, through: "tasks", by: "ana" } }));
     const stA = state3(fA);
     const mA = S.metrics(pFF, fA.slug);
-    ok(nA.step === "approve" && nA.fastForward && nA.fastForward.phases.join() === "classification,requirements,design,tasks" && nA.fastForward.through === "tasks" && nA.fastForward.role === null &&
-      /fast-forward: \/spec-ff quick-spec \(CLI: node "[^"]*dev-spec\.js" approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order, each through its own gate\./.test(nA.recommendation) &&
-      ffA.ok && ffA.complete === true && ffA.approved.join() === "classification,requirements,design,tasks" && ffA.batch === true && ffA.steps.every((s) => s.approved) &&
-      ffA.message === "Fast-forward 'quick-spec': approved classification, requirements, design, tasks, in order, each through its own gate — every phase through 'tasks' is approved." &&
-      ["classification", "requirements", "design", "tasks"].every((ph) => stA.approvals[ph].batch === true && stA.approvals[ph].by === "ana") &&
-      stA.approvalHistory.filter((h) => h.batch === true && typeof h.snapshot === "string").length === 4 &&
-      mA.batchApprovals === 4 && S.metricsLines(mA).includes("  batch approvals (fast-forward): 4") && S.nextAction(pFF, fA.slug).step === "implement",
-      "B3: next_action names the fast-forward (/spec-ff + the CLI) when every planning artifact through tasks is filled and passes its gate; spec_approve {through: 'tasks'} approves them in order — each snapshotted, recorded batch: true, counted apart by metrics (got " + nA.recommendation + ")");
+    all("B3: next_action names the fast-forward (/approve --through — /spec-ff until 1.26 — + the CLI) when every planning artifact through tasks is filled and passes its gate; spec_approve {through: 'tasks'} approves them in order — each snapshotted, recorded batch: true, counted apart by metrics (got " + nA.recommendation + ")", [
+      () => nA.step === "approve", () => nA.fastForward, () => nA.fastForward.phases.join() === "classification,requirements,design,tasks",
+      () => nA.fastForward.through === "tasks", () => nA.fastForward.role === null,
+      () => /fast-forward: \/approve quick-spec --through tasks \(CLI: node "[^"]*dev-spec\.js" approve quick-spec --through tasks\) approves classification, requirements, design, tasks in order, each through its own gate\./.test(nA.recommendation),
+      () => ffA.ok, () => ffA.complete === true, () => ffA.approved.join() === "classification,requirements,design,tasks", () => ffA.batch === true,
+      () => ffA.steps.every((s) => s.approved),
+      () => ffA.message === "Fast-forward 'quick-spec': approved classification, requirements, design, tasks, in order, each through its own gate — every phase through 'tasks' is approved.",
+      () => ["classification", "requirements", "design", "tasks"].every((ph) => stA.approvals[ph].batch === true && stA.approvals[ph].by === "ana"),
+      () => stA.approvalHistory.filter((h) => h.batch === true && typeof h.snapshot === "string").length === 4, () => mA.batchApprovals === 4,
+      () => S.metricsLines(mA).includes("  batch approvals (fast-forward): 4"), () => S.nextAction(pFF, fA.slug).step === "implement",
+    ]);
     const ffAgain = S.approvePhase(pFF, fA.slug, undefined, "ana", { through: "tasks" });
     ok(ffAgain.ok && ffAgain.nothingToDo && ffAgain.approved.length === 0 && /^Nothing to fast-forward: every active phase of 'quick-spec' through 'tasks' is already approved\.$/.test(ffAgain.message),
       "B3: a second fast-forward has nothing to do and says so");
@@ -254,13 +273,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const eNone = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fE.slug } }));
     const eEnum = await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFF, name: fE.slug, through: "execution" } });
     const apTool3 = list.result.tools.find((t) => t.name === "spec_approve");
-    ok(eBoth.ok === false && /either a phase or through/.test(eBoth.error) && eExec.ok === false && /covers the planning phases only/.test(eExec.error) &&
-      eInact.ok === false && eInact.notActive && /'test-plan' is not an approvable phase of 'errors-ff'/.test(eInact.error) &&
-      eNone.ok === false && /Name the phase to approve — or through: <phase>/.test(eNone.error) && JSON.stringify(eEnum).includes("execution") && !(payload(eEnum) || {}).approved &&
-      apTool3.inputSchema.required.join() === "name" && apTool3.inputSchema.properties.through.enum.join() === "classification,requirements,design,test-plan,eval-plan,tests,tasks" &&
-      apTool3.inputSchema.properties.role.type === "string" && /APPROVALS BY ROLE/.test(apTool3.description) && /FAST-FORWARD/.test(apTool3.description) &&
-      !Object.keys(state3(fE).approvals).length,
-      "B3: phase and through together, through 'execution', an inactive phase and neither of them are refused (nothing approved); spec_approve advertises role + through (phase optional)");
+    all("B3: phase and through together, through 'execution', an inactive phase and neither of them are refused (nothing approved); spec_approve advertises role + through (phase optional)", [
+      () => eBoth.ok === false, () => /either a phase or through/.test(eBoth.error), () => eExec.ok === false,
+      () => /covers the planning phases only/.test(eExec.error), () => eInact.ok === false, () => eInact.notActive,
+      () => /'test-plan' is not an approvable phase of 'errors-ff'/.test(eInact.error), () => eNone.ok === false,
+      () => /Name the phase to approve — or through: <phase>/.test(eNone.error), () => JSON.stringify(eEnum).includes("execution"),
+      () => !(payload(eEnum) || {}).approved, () => apTool3.inputSchema.required.join() === "name",
+      () => apTool3.inputSchema.properties.through.enum.join() === "classification,requirements,design,test-plan,eval-plan,tests,tasks",
+      () => apTool3.inputSchema.properties.role.type === "string", () => /APPROVALS BY ROLE/.test(apTool3.description),
+      () => /FAST-FORWARD/.test(apTool3.description), () => !Object.keys(state3(fE).approvals).length,
+    ]);
 
     // with roles: the given role signs each phase; a phase that needs another role stops it; next_action suggests it with --role
     const pFR = b3("ff-roles");
@@ -273,12 +295,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const nC1 = S.nextAction(pFR, fC.slug);
     const ffC2 = payload(await rpc("tools/call", { name: "spec_approve", arguments: { projectDir: pFR, name: fC.slug, through: "tasks", role: "tech", by: "tom" } }));
     const stC = state3(fC);
-    ok(!nC0.fastForward && ffC1.ok === false && ffC1.stopReason === "role" && ffC1.stoppedAt === "design" && ffC1.approved.join() === "classification,requirements" &&
-      /'product' is not a role that signs off 'design'/.test(ffC1.error) && stC.approvals.requirements.roles.product.by === "paula" &&
-      nC1.fastForward && nC1.fastForward.role === "tech" && nC1.fastForward.phases.join() === "design,tasks" && /\/spec-ff roles-ff --role tech \(CLI: node "[^"]*dev-spec\.js" approve roles-ff --through tasks --role tech\)/.test(nC1.recommendation) &&
-      ffC2.ok && ffC2.complete && ffC2.approved.join() === "design,tasks" && Object.keys(stC.approvals.design.roles).sort().join() === "security,tech" &&
-      stC.approvals.design.batch === true && stC.approvals.tasks.roles.tech.batch === true,
-      "B3: fast-forward with roles — the given role signs each phase; a phase that role doesn't sign stops it (role, nothing recorded there); next_action suggests it with --role when one role is all each remaining phase waits for (got " + nC1.recommendation + ")");
+    all("B3: fast-forward with roles — the given role signs each phase; a phase that role doesn't sign stops it (role, nothing recorded there); next_action suggests it with --role when one role is all each remaining phase waits for (got " + nC1.recommendation + ")", [
+      () => !nC0.fastForward, () => ffC1.ok === false, () => ffC1.stopReason === "role", () => ffC1.stoppedAt === "design",
+      () => ffC1.approved.join() === "classification,requirements", () => /'product' is not a role that signs off 'design'/.test(ffC1.error),
+      () => stC.approvals.requirements.roles.product.by === "paula", () => nC1.fastForward, () => nC1.fastForward.role === "tech",
+      () => nC1.fastForward.phases.join() === "design,tasks",
+      () => /\/approve roles-ff --through tasks --role tech \(CLI: node "[^"]*dev-spec\.js" approve roles-ff --through tasks --role tech\)/.test(nC1.recommendation),
+      () => ffC2.ok, () => ffC2.complete, () => ffC2.approved.join() === "design,tasks",
+      () => Object.keys(stC.approvals.design.roles).sort().join() === "security,tech", () => stC.approvals.design.batch === true,
+      () => stC.approvals.tasks.roles.tech.batch === true,
+    ]);
     const fD = S.createFeature(pFR, "Roles wait", ["core"]);
     fillAll(fD);
     S.approvePhase(pFR, fD.slug, "classification", "a"); S.approvePhase(pFR, fD.slug, "requirements", "p", { role: "product" });
@@ -374,12 +400,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const t1 = (await uCall("spec_complete_task", { name: "login", number: 1, evidence: { command: uRun, exitCode: 0 }, projectDir: p1 })).p;
     const u1 = (await uCall("spec_complete_task", { name: "login", number: 1, undo: true, reason: "ticked  the wrong\ntask", projectDir: p1 })).p;
     const st1 = uSt(f1.dir);
-    ok(t1.ok && t1.verified && u1.ok && u1.unticked === true && u1.evidenceStale === true && u1.done === 0 && u1.next.number === 1 && u1.reason === "ticked the wrong task" &&
-      uR(f1.dir, "tasks.md") === crlf1 && st1.evidence["1"].stale === true && st1.evidence["1"].staleBy === "undo" && !(st1.ticks && st1.ticks["1"]) &&
-      st1.unticks.length === 1 && st1.unticks[0].n === 1 && st1.unticks[0].reason === "ticked the wrong task" && !isNaN(Date.parse(st1.unticks[0].at)) &&
-      /Task 1 is open again \(unticked\)\. Its recorded evidence no longer counts — ticking it again needs a new run of its _Verify:_ command: node "[^"]*dev-spec\.js" done login 1 --run\./.test(u1.note),
-      "1.16 U1: spec_complete_task {undo, reason} unticks the task — tasks.md byte-identical to before the tick (BOM + CRLF kept) —, marks its evidence stale (staleBy undo), drops ticks[1] and appends unticks [{n, at, reason}] (reason folded to one line) (got " +
-      js([u1, st1.unticks]) + ")");
+    all("1.16 U1: spec_complete_task {undo, reason} unticks the task — tasks.md byte-identical to before the tick (BOM + CRLF kept) —, marks its evidence stale (staleBy undo), drops ticks[1] and appends unticks [{n, at, reason}] (reason folded to one line) (got " +
+      js([u1, st1.unticks]) + ")", [
+      () => t1.ok, () => t1.verified, () => u1.ok, () => u1.unticked === true, () => u1.evidenceStale === true, () => u1.done === 0,
+      () => u1.next.number === 1, () => u1.reason === "ticked the wrong task", () => uR(f1.dir, "tasks.md") === crlf1,
+      () => st1.evidence["1"].stale === true, () => st1.evidence["1"].staleBy === "undo", () => !(st1.ticks && st1.ticks["1"]),
+      () => st1.unticks.length === 1, () => st1.unticks[0].n === 1, () => st1.unticks[0].reason === "ticked the wrong task",
+      () => !isNaN(Date.parse(st1.unticks[0].at)),
+      () => /Task 1 is open again \(unticked\)\. Its recorded evidence no longer counts — ticking it again needs a new run of its _Verify:_ command: node "[^"]*dev-spec\.js" done login 1 --run\./.test(u1.note),
+    ]);
     const n1 = (await uCall("spec_complete_task", { name: "login", number: 1, evidence: { summary: "looked fine" }, projectDir: p1 })).p;
     const doc1 = S.specDoctor(p1, "login").checks.find((c) => c.id === "verification") || {};
     const fin1 = S.finishFeature(p1, "login");
@@ -395,11 +424,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const e3 = await uCall("spec_complete_task", { name: "login", number: 9, undo: true, projectDir: p1 });
     const e4 = await uCall("spec_complete_task", { name: "login", number: 1, undo: true, reason: "x".repeat(501), projectDir: p1 });
     const e5 = await rpc("tools/call", { name: "spec_complete_task", arguments: { name: "login", number: 1, undo: "yes", projectDir: p1 } });
-    ok(a1.ok && a1.alreadyOpen === true && a1.unticked === false && /Task 2 is not ticked — nothing to undo\./.test(a1.note) && uSt(f1.dir).unticks.length === 1 &&
-      e1.isError && /undo takes no evidence/.test(e1.p.error) && e2.isError && /reason goes with undo/.test(e2.p.error) && e3.isError && e4.isError && /at most 500 characters/.test(e4.p.error) &&
-      e5.result.isError === true && /- \[x\] 1\./.test(uR(f1.dir, "tasks.md")) && uSt(f1.dir).unticks.length === 1,
-      "1.16 U1: undoing an open task answers ok with a note and records nothing; undo with evidence, reason without undo, an unknown task, a reason over 500 characters and a non-boolean undo are refused — nothing changed (got " +
-      js([a1.note, e1.p.error, e2.p.error, e4.p.error]) + ")");
+    all("1.16 U1: undoing an open task answers ok with a note and records nothing; undo with evidence, reason without undo, an unknown task, a reason over 500 characters and a non-boolean undo are refused — nothing changed (got " +
+      js([a1.note, e1.p.error, e2.p.error, e4.p.error]) + ")", [
+      () => a1.ok, () => a1.alreadyOpen === true, () => a1.unticked === false, () => /Task 2 is not ticked — nothing to undo\./.test(a1.note),
+      () => uSt(f1.dir).unticks.length === 1, () => e1.isError, () => /undo takes no evidence/.test(e1.p.error), () => e2.isError,
+      () => /reason goes with undo/.test(e2.p.error), () => e3.isError, () => e4.isError, () => /at most 500 characters/.test(e4.p.error),
+      () => e5.result.isError === true, () => /- \[x\] 1\./.test(uR(f1.dir, "tasks.md")), () => uSt(f1.dir).unticks.length === 1,
+    ]);
     // Localized: a PT feature's undo note, an ES feature's.
     const fPt = S.createFeature(p1, "Pagamentos", ["core"], "x", undefined, "pt");
     const fEs = S.createFeature(p1, "Pagos", ["core"], "x", undefined, "es");
@@ -543,14 +574,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const na6 = S.nextAction(p6, "login");
     const apLater = S.approvePhase(p6, "login", "design", "u");
     const fin6 = S.finishFeature(p6, "login");
-    ok(rv6.ok && rv6.revoked === "requirements" && rv6.revokedApproval === true && js(rv6.laterApproved) === '["design","tasks"]' && !st6.approvals.requirements &&
-      st6.approvals.design && st6.approvals.tasks && rec6.revoked === true && rec6.phase === "requirements" && rec6.by === "ana" && rec6.reason === "the scope changed" &&
-      rec6.snapshot === undefined && typeof rec6.approvedAt === "string" && hist6() === h0 &&
-      /^Revoked the approval of 'requirements' for login — the phase is pending again .* Nothing cascades: the later phases stay approved \(design, tasks\)/.test(rv6.message) &&
-      doc6.pendingGates.includes("requirements") && na6.step === "approve" && /requirements/.test(na6.recommendation) &&
-      apLater.ok === false && apLater.failing.includes("phase-order") && fin6.pendingGates.includes("requirements") && !fin6.readyToFinish,
-      "1.16 U2: spec_approve {revoke, reason} removes the approval and appends {phase, at, by, revoked, reason, approvedAt} to approvalHistory (no snapshot); it never cascades (laterApproved stay approved) — the phase is pending again for doctor / next_action / finish, and a later phase's re-approval is refused on phase-order (got " +
-      js([rv6.message, na6.step, apLater.failing]) + ")");
+    all("1.16 U2: spec_approve {revoke, reason} removes the approval and appends {phase, at, by, revoked, reason, approvedAt} to approvalHistory (no snapshot); it never cascades (laterApproved stay approved) — the phase is pending again for doctor / next_action / finish, and a later phase's re-approval is refused on phase-order (got " +
+      js([rv6.message, na6.step, apLater.failing]) + ")", [
+      () => rv6.ok, () => rv6.revoked === "requirements", () => rv6.revokedApproval === true, () => js(rv6.laterApproved) === '["design","tasks"]',
+      () => !st6.approvals.requirements, () => st6.approvals.design, () => st6.approvals.tasks, () => rec6.revoked === true,
+      () => rec6.phase === "requirements", () => rec6.by === "ana", () => rec6.reason === "the scope changed", () => rec6.snapshot === undefined,
+      () => typeof rec6.approvedAt === "string", () => hist6() === h0,
+      () => /^Revoked the approval of 'requirements' for login — the phase is pending again .* Nothing cascades: the later phases stay approved \(design, tasks\)/.test(rv6.message),
+      () => doc6.pendingGates.includes("requirements"), () => na6.step === "approve", () => /requirements/.test(na6.recommendation),
+      () => apLater.ok === false, () => apLater.failing.includes("phase-order"), () => fin6.pendingGates.includes("requirements"),
+      () => !fin6.readyToFinish,
+    ]);
     const ra6 = S.approvePhase(p6, "login", "requirements", "u");
     const m6 = S.metrics(p6, "login");
     const im6 = S.impactReport(p6, "login", { phase: "requirements" });
@@ -558,11 +592,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       S.approvePhase(p6, "login", null, "u", { revoke: true, through: "tasks" }), S.approvePhase(p6, "login", "design", "u", { revoke: true, expires: "30d" }),
       S.approvePhase(p6, "login", null, "u", { revoke: true })];
     const snap6 = uSt(f6.dir).approvalHistory.filter((h) => h.phase === "requirements" && h.snapshot).map((h) => h.snapshot);
-    ok(ra6.ok && ra6.snapshot && snap6.length === 2 && snap6[0] === snap6[1] && m6.revokedApprovals === 1 && m6.reworkByPhase && m6.reworkByPhase.requirements === undefined && m6.untickedTasks === 0 && im6.ok && im6.changed === false &&
-      eR.every((r) => r.ok === false) && eR[0].notApproved === true && /nothing to revoke/.test(eR[0].error) && /revoke takes no force or expires/.test(eR[1].error) &&
-      /not through/.test(eR[2].error) && /revoke takes no force or expires/.test(eR[3].error) && /Name the phase whose approval to revoke/.test(eR[4].error) && uSt(f6.dir).approvals.design,
-      "1.16 U2: re-approving a revoked phase records it again (r5 review: the same content shares its snapshot and is no rework — metrics: revokedApprovals 1, no requirements rework; spec_impact diffs that snapshot); revoking an unapproved phase, with force / expires / through, or without a phase is refused (got " +
-      js([snap6, m6.revokedApprovals, m6.reworkByPhase, eR.map((r) => r.error)]) + ")");
+    all("1.16 U2: re-approving a revoked phase records it again (r5 review: the same content shares its snapshot and is no rework — metrics: revokedApprovals 1, no requirements rework; spec_impact diffs that snapshot); revoking an unapproved phase, with force / expires / through, or without a phase is refused (got " +
+      js([snap6, m6.revokedApprovals, m6.reworkByPhase, eR.map((r) => r.error)]) + ")", [
+      () => ra6.ok, () => ra6.snapshot, () => snap6.length === 2, () => snap6[0] === snap6[1], () => m6.revokedApprovals === 1,
+      () => m6.reworkByPhase, () => m6.reworkByPhase.requirements === undefined, () => m6.untickedTasks === 0, () => im6.ok,
+      () => im6.changed === false, () => eR.every((r) => r.ok === false), () => eR[0].notApproved === true,
+      () => /nothing to revoke/.test(eR[0].error), () => /revoke takes no force or expires/.test(eR[1].error), () => /not through/.test(eR[2].error),
+      () => /revoke takes no force or expires/.test(eR[3].error), () => /Name the phase whose approval to revoke/.test(eR[4].error),
+      () => uSt(f6.dir).approvals.design,
+    ]);
     // Roles: a waiting sign-off is withdrawn (history record partial), then a completed approval by roles is revoked with its sign-offs.
     const p7 = uDir("revoke-roles");
     S.initProject(p7, ["core"], "en", { approvalRoles: { design: ["tech", "security"] } });
@@ -576,12 +614,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const sec7 = S.approvePhase(p7, "login", "design", "u", { role: "security" });
     const v7 = S.approvePhase(p7, "login", "design", "u", { revoke: true, role: "security" });
     const st7b = uSt(f7.dir);
-    ok(tech7.ok && tech7.pending && w7.ok && w7.revokedApproval === false && js(w7.withdrawnSignOffs) === '["tech"]' && /Withdrew the role sign-off\(s\) waiting for 'design' of login: tech/.test(w7.message) &&
-      st7a.signoffs === undefined && rec7.revoked === true && rec7.partial === true && js(rec7.roles) === '["tech"]' && rec7.roleOnly === true &&
-      sec7.ok && sec7.complete === true && v7.ok && v7.revokedApproval === true && !st7b.approvals.design && st7b.signoffs === undefined &&
-      S.specDoctor(p7, "login").pendingRoles.design && js(S.specDoctor(p7, "login").pendingRoles.design.missing) === '["tech","security"]',
-      "1.16 U2 + roles: revoking a phase that only waits for sign-offs withdraws them (history record revoked + partial, the roles listed); a completed approval by roles is revoked with them — every role signs again (got " +
-      js([w7, rec7, S.specDoctor(p7, "login").pendingRoles]) + ")");
+    all("1.16 U2 + roles: revoking a phase that only waits for sign-offs withdraws them (history record revoked + partial, the roles listed); a completed approval by roles is revoked with them — every role signs again (got " +
+      js([w7, rec7, S.specDoctor(p7, "login").pendingRoles]) + ")", [
+      () => tech7.ok, () => tech7.pending, () => w7.ok, () => w7.revokedApproval === false, () => js(w7.withdrawnSignOffs) === '["tech"]',
+      () => /Withdrew the role sign-off\(s\) waiting for 'design' of login: tech/.test(w7.message), () => st7a.signoffs === undefined,
+      () => rec7.revoked === true, () => rec7.partial === true, () => js(rec7.roles) === '["tech"]', () => rec7.roleOnly === true, () => sec7.ok,
+      () => sec7.complete === true, () => v7.ok, () => v7.revokedApproval === true, () => !st7b.approvals.design, () => st7b.signoffs === undefined,
+      () => S.specDoctor(p7, "login").pendingRoles.design, () => js(S.specDoctor(p7, "login").pendingRoles.design.missing) === '["tech","security"]',
+    ]);
     // execution: its sign-off is asked for again; ES wording; the approval guard reads a revocation as one (never as an approval).
     const p8 = uDir("revoke-exec");
     S.initProject(p8, ["core"], "en");
@@ -657,12 +697,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     sPt.approvals.classification.waiver.expires = "2021-03-04";
     uPut(fPt10.dir, sPt);
     const dPt = S.specDoctor(p10, fPt10.slug).checks.find((c) => c.id === "waiver-expired") || {};
-    ok(ok10.ok && !ok10.forced && ok10.waiverIgnored === true && /nothing was waived/.test(ok10.note) && !uSt(path.join(p10, ".specs", "login")).approvals.classification.waiver &&
-      pr10.ok && pr10.pending && js(pr10.waiver) === js({ reason: "legal review pending", expires: new Date(Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z") + 10 * 864e5).toISOString().slice(0, 10) }) &&
-      qa10.ok && qa10.complete === true && a10.forced === true && js(a10.waiver) === js(pr10.waiver) && a10.roles.product.waiver && !a10.roles.qa.waiver &&
-      /^aprovações forçadas cuja exceção expirou: classification \(expirou a 2021-03-04 — demo\)/.test(dPt.detail || ""),
-      "1.16 U3: a force whose gate passes waives nothing (waiverIgnored, nothing stored); with roles the completed approval carries the forced sign-off's waiver; doctor's waiver-expired is in the feature's language (PT) (got " +
-      js([ok10.note, a10.waiver, dPt.detail]) + ")");
+    all("1.16 U3: a force whose gate passes waives nothing (waiverIgnored, nothing stored); with roles the completed approval carries the forced sign-off's waiver; doctor's waiver-expired is in the feature's language (PT) (got " +
+      js([ok10.note, a10.waiver, dPt.detail]) + ")", [
+      () => ok10.ok, () => !ok10.forced, () => ok10.waiverIgnored === true, () => /nothing was waived/.test(ok10.note),
+      () => !uSt(path.join(p10, ".specs", "login")).approvals.classification.waiver, () => pr10.ok, () => pr10.pending,
+      () => js(pr10.waiver) === js({ reason: "legal review pending", expires: new Date(Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z") + 10 * 864e5).toISOString().slice(0, 10) }),
+      () => qa10.ok, () => qa10.complete === true, () => a10.forced === true, () => js(a10.waiver) === js(pr10.waiver),
+      () => a10.roles.product.waiver, () => !a10.roles.qa.waiver,
+      () => /^aprovações forçadas cuja exceção expirou: classification \(expirou a 2021-03-04 — demo\)/.test(dPt.detail || ""),
+    ]);
     const ga = S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: 'node cli/dev-spec.js approve login design --force --reason "demo day" --expires 30d' } }, "deny", { cli: "/x/cli/dev-spec.js" });
     const gb = S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: `node cli/dev-spec.js approve login design --force --reason "it's late"` } }, "deny", { cli: "/x/cli/dev-spec.js" });
     ok(ga.decision === "deny" && ga.force === true && ga.command === '! node "/x/cli/dev-spec.js" approve login design --force --reason "demo day" --expires 30d' &&
@@ -736,13 +779,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     stR1.evidence["1"].stale = true; // what spec_impact --reopen writes (no staleBy): the spec changed — the red run must be made again
     uPut(fR1.dir, stR1);
     const roR1 = S.completeTask(pR1, "redg", 1, { command: "node t01.js", exitCode: 0 });
-    ok(redR1.verified && fixR1.verified && unR1.ok && unR1.unticked && unR1.redKept === true &&
-      /Its red run of \d{4}-\d\d-\d\d \(the _Expect: fail_ proof\) is kept: .* a passing run counts as the fix going green: node "[^"]*dev-spec\.js" done redg 1 --run\./.test(unR1.note) &&
-      !/no longer counts/.test(unR1.note) && reR1.ok && reR1.verified === true && !reR1.unverifiedReason && recR1.stale === undefined && recR1.red && recR1.red.exitCode === 1 &&
-      edR1.ok === false && edR1.unexpectedPass === true && roR1.ok === false && roR1.unexpectedPass === true &&
-      S.msg("pt").undo.redKept(1, "x", "d") !== S.msg("en").undo.redKept(1, "x", "d") && /prueba de _Expect: fail_/.test(S.msg("es").undo.redKept(1, "x", "d")),
-      "1.16 U review 1: undoing an _Expect: fail_ task after its fix went green keeps its red run (redKept, a note that says so — EN / PT / ES) and a passing re-tick verifies it (the red run carried as `red`); an edited _Verify:_ or a spec_impact reopen (stale without staleBy) still needs a new red run — unexpected-pass (got " +
-      js([unR1.note, reR1.unverifiedReason, recR1.red, edR1.error, roR1.unexpectedPass]) + ")");
+    all("1.16 U review 1: undoing an _Expect: fail_ task after its fix went green keeps its red run (redKept, a note that says so — EN / PT / ES) and a passing re-tick verifies it (the red run carried as `red`); an edited _Verify:_ or a spec_impact reopen (stale without staleBy) still needs a new red run — unexpected-pass (got " +
+      js([unR1.note, reR1.unverifiedReason, recR1.red, edR1.error, roR1.unexpectedPass]) + ")", [
+      () => redR1.verified, () => fixR1.verified, () => unR1.ok, () => unR1.unticked, () => unR1.redKept === true,
+      () => /Its red run of \d{4}-\d\d-\d\d \(the _Expect: fail_ proof\) is kept: .* a passing run counts as the fix going green: node "[^"]*dev-spec\.js" done redg 1 --run\./.test(unR1.note),
+      () => !/no longer counts/.test(unR1.note), () => reR1.ok, () => reR1.verified === true, () => !reR1.unverifiedReason,
+      () => recR1.stale === undefined, () => recR1.red, () => recR1.red.exitCode === 1, () => edR1.ok === false, () => edR1.unexpectedPass === true,
+      () => roR1.ok === false, () => roR1.unexpectedPass === true,
+      () => S.msg("pt").undo.redKept(1, "x", "d") !== S.msg("en").undo.redKept(1, "x", "d"),
+      () => /prueba de _Expect: fail_/.test(S.msg("es").undo.redKept(1, "x", "d")),
+    ]);
     // 1 (observed mode): the red proof's own stamp still decides — a CLI-made red run proves, an unobserved one leaves it unobserved.
     const pR1o = uDir("review-red-observed");
     S.initProject(pR1o, ["core"], "en", { evidence: "observed" });
@@ -804,13 +850,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const naR3 = S.nextAction(pR3, "login");
     S.finishFeature(pR3, "login", { write: true });
     S.approvePhase(pR3, "login", "execution", "u");
-    ok(c0R3 === "finished" && rvR3.ok && c1R3 === "complete" && /## ☑ login/.test(mdR3) && drR3.verdict === "stale" &&
-      drR3.stale[0].since.some((x) => x.kind === "revoke" && x.phase === "requirements") && /approval revoked: requirements/.test(drR3.stale[0].why) &&
-      dcR3.code === 1 && /login: changed since finish .*approval revoked: requirements/.test(dcR3.out) && c2R3 === "complete" &&
-      naR3.step === "finish" && /re-approved: requirements/.test(naR3.recommendation) && !/approval revoked/.test(naR3.recommendation) &&
-      catR3() === "finished" && S.drift(pR3, "login").verdict === "clean",
-      "1.16 U review 3: revoking a phase of a finished feature makes its finish stale (changesSince kind revoke) — catalog / SPECS.md complete, spec_drift stale with the revocation named (CLI exit 1); a pending gate alone keeps the catalog off 'finished'; re-approved (next_action names the re-approval only) and finished again, it is finished and clean (got " +
-      js([c0R3, c1R3, drR3.verdict, drR3.stale[0] && drR3.stale[0].why, c2R3, naR3.step]) + ")");
+    all("1.16 U review 3: revoking a phase of a finished feature makes its finish stale (changesSince kind revoke) — catalog / SPECS.md complete, spec_drift stale with the revocation named (CLI exit 1); a pending gate alone keeps the catalog off 'finished'; re-approved (next_action names the re-approval only) and finished again, it is finished and clean (got " +
+      js([c0R3, c1R3, drR3.verdict, drR3.stale[0] && drR3.stale[0].why, c2R3, naR3.step]) + ")", [
+      () => c0R3 === "finished", () => rvR3.ok, () => c1R3 === "complete", () => /## ☑ login/.test(mdR3), () => drR3.verdict === "stale",
+      () => drR3.stale[0].since.some((x) => x.kind === "revoke" && x.phase === "requirements"),
+      () => /approval revoked: requirements/.test(drR3.stale[0].why), () => dcR3.code === 1,
+      () => /login: changed since finish .*approval revoked: requirements/.test(dcR3.out), () => c2R3 === "complete", () => naR3.step === "finish",
+      () => /re-approved: requirements/.test(naR3.recommendation), () => !/approval revoked/.test(naR3.recommendation), () => catR3() === "finished",
+      () => S.drift(pR3, "login").verdict === "clean",
+    ]);
 
     // 5: MCP accepts an empty gitLog / message (the CLI does — an empty git log is a repository without commits); `undone` refuses
     // done's evidence flags instead of ignoring them.
@@ -828,12 +876,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const u5j = cli16(["undone", "login", "1", "--run", "--json", "--project", pR5]);
     let l5j = null, u5jj = null;
     try { l5j = JSON.parse(l5cli.out); u5jj = JSON.parse(u5j.out); } catch { /* stay null */ }
-    ok(!l5a.isError && l5a.p.ok && l5a.p.commits === 0 && js(l5a.p) === js(l5j) && !l5b.isError && l5b.p.commits === 0 &&
-      !s5a.isError && s5a.p.ok && s5a.p.block === false && s5a.p.why === "no-claim" && n5a.isError && /Missing required argument\(s\): name/.test(n5a.p.error) &&
-      u5.every((r) => r.code === 1 && /undo takes no evidence/.test(r.err)) && u5j.code === 1 && u5jj && u5jj.ok === false && /undo takes no evidence/.test(u5jj.error) &&
-      uR(fR5.dir, "tasks.md") === tR5 && !uSt(fR5.dir).unticks,
-      "1.16 U review 5: spec_log {gitLog: ''} (0 commits, the CLI's JSON) and spec_stop_check {message: ''} (no-claim) are accepted — name stays required; `dev-spec undone` refuses --evidence / --exit / --cmd / --run (exit 1, localized, --json the refusal) and changes nothing (got " +
-      js([l5a.p.error, s5a.p.why, n5a.p.error, u5.map((r) => r.code), u5jj]) + ")");
+    all("1.16 U review 5: spec_log {gitLog: ''} (0 commits, the CLI's JSON) and spec_stop_check {message: ''} (no-claim) are accepted — name stays required; `dev-spec undone` refuses --evidence / --exit / --cmd / --run (exit 1, localized, --json the refusal) and changes nothing (got " +
+      js([l5a.p.error, s5a.p.why, n5a.p.error, u5.map((r) => r.code), u5jj]) + ")", [
+      () => !l5a.isError, () => l5a.p.ok, () => l5a.p.commits === 0, () => js(l5a.p) === js(l5j), () => !l5b.isError, () => l5b.p.commits === 0,
+      () => !s5a.isError, () => s5a.p.ok, () => s5a.p.block === false, () => s5a.p.why === "no-claim", () => n5a.isError,
+      () => /Missing required argument\(s\): name/.test(n5a.p.error), () => u5.every((r) => r.code === 1 && /undo takes no evidence/.test(r.err)),
+      () => u5j.code === 1, () => u5jj, () => u5jj.ok === false, () => /undo takes no evidence/.test(u5jj.error),
+      () => uR(fR5.dir, "tasks.md") === tR5, () => !uSt(fR5.dir).unticks,
+    ]);
   }
 
   { // 1.21 review A1 — role sign-offs made on two branches: tech signs requirements on one, product on the other; git's merge driver
@@ -864,16 +914,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const doc = S.specDoctor(pA, fA.slug);
     const gates = doc.checks.find((c) => c.id === "approval-gates") || {};
     const na = S.nextAction(pA, fA.slug);
-    ok(tech.ok && tech.complete === false && product.ok && product.complete === false && mg.ok && mg.clean &&
-      !st.approvals.requirements && js(Object.keys(st.signoffs.requirements).sort()) === '["product","tech"]' &&
-      doc.pendingRoles.requirements.signoffsComplete === true && doc.pendingRoles.requirements.missing.length === 0 &&
-      doc.nextGate.phase === "requirements" && doc.nextGate.signoffsComplete === true &&
-      /requirements \(every role signed: tech, product — not approved yet\)/.test(gates.detail) && /one of those roles signs again to complete it: \/approve login requirements --role tech/.test(gates.detail) &&
-      !/missing role/.test(gates.detail) &&
-      na.step === "approve" && na.signoffsComplete === true && !na.missingRoles && /Every role has signed off 'requirements' \(tech, product\), but it isn't approved yet/.test(na.recommendation) &&
-      /\/approve login requirements --role tech\./.test(na.recommendation),
-      "1.21 review A1: sign-offs of every role made on two merged branches (no approval — the driver never approves) read as signoffsComplete in doctor (pendingRoles, nextGate, the approval-gates label + note) and next_action (the re-sign to complete it) — never as missing roles (got " +
-      js([st.signoffs, doc.pendingRoles, doc.nextGate, gates.detail, na.step, na.recommendation, na.missingRoles]) + ")");
+    all("1.21 review A1: sign-offs of every role made on two merged branches (no approval — the driver never approves) read as signoffsComplete in doctor (pendingRoles, nextGate, the approval-gates label + note) and next_action (the re-sign to complete it) — never as missing roles (got " +
+      js([st.signoffs, doc.pendingRoles, doc.nextGate, gates.detail, na.step, na.recommendation, na.missingRoles]) + ")", [
+      () => tech.ok, () => tech.complete === false, () => product.ok, () => product.complete === false, () => mg.ok, () => mg.clean,
+      () => !st.approvals.requirements, () => js(Object.keys(st.signoffs.requirements).sort()) === '["product","tech"]',
+      () => doc.pendingRoles.requirements.signoffsComplete === true, () => doc.pendingRoles.requirements.missing.length === 0,
+      () => doc.nextGate.phase === "requirements", () => doc.nextGate.signoffsComplete === true,
+      () => /requirements \(every role signed: tech, product — not approved yet\)/.test(gates.detail),
+      () => /one of those roles signs again to complete it: \/approve login requirements --role tech/.test(gates.detail),
+      () => !/missing role/.test(gates.detail), () => na.step === "approve", () => na.signoffsComplete === true, () => !na.missingRoles,
+      () => /Every role has signed off 'requirements' \(tech, product\), but it isn't approved yet/.test(na.recommendation),
+      () => /\/approve login requirements --role tech\./.test(na.recommendation),
+    ]);
     const again = S.approvePhase(pA, fA.slug, "requirements", "tom", { role: "tech" });
     const st2 = JSON.parse(fs.readFileSync(sp, "utf8"));
     const doc2 = S.specDoctor(pA, fA.slug);
@@ -956,14 +1008,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const qAcc = A.asked[0] || { params: {} };
     const sAcc = stateOf(pEn, "acc");
     const lastHist = (sAcc.approvalHistory || []).slice(-1)[0] || {};
-    ok(ai.result && !ai.result.capabilities.elicitation && rAcc.ok === true && rAcc.approved === "classification" && rAcc.confirmed && rAcc.confirmed.via === "elicitation" &&
-      rAcc.confirmed.note === "looks good" && /^Confirmed by the user/.test(rAcc.confirmed.message) && A.asked.length === 1 &&
-      /^dev-spec: an agent asks to approve the classification phase of 'acc'\. The phase's checks pass\. Approvals are yours/.test(qAcc.params.message) &&
-      qAcc.params.requestedSchema && qAcc.params.requestedSchema.properties.approve.type === "boolean" && js(qAcc.params.requestedSchema.required) === '["approve"]' &&
-      qAcc.params.requestedSchema.properties.note.type === "string" && typeof qAcc.id === "string" &&
-      sAcc.approvals.classification.confirmed.via === "elicitation" && sAcc.approvals.classification.confirmed.note === "looks good" && lastHist.confirmed && lastHist.confirmed.via === "elicitation",
-      "1.21 F1b: a client with elicitation, meta.approvalGuard ask — spec_approve asks the user (elicitation/create: the action, the gate, a boolean approve + note) and an explicit approve records it with `confirmed` {via: elicitation, at, note} on the approval and its history record (got " +
-      js([rAcc, qAcc.params.message, sAcc.approvals.classification]) + ")");
+    all("1.21 F1b: a client with elicitation, meta.approvalGuard ask — spec_approve asks the user (elicitation/create: the action, the gate, a boolean approve + note) and an explicit approve records it with `confirmed` {via: elicitation, at, note} on the approval and its history record (got " +
+      js([rAcc, qAcc.params.message, sAcc.approvals.classification]) + ")", [
+      () => ai.result, () => !ai.result.capabilities.elicitation, () => rAcc.ok === true, () => rAcc.approved === "classification",
+      () => rAcc.confirmed, () => rAcc.confirmed.via === "elicitation", () => rAcc.confirmed.note === "looks good",
+      () => /^Confirmed by the user/.test(rAcc.confirmed.message), () => A.asked.length === 1,
+      () => /^dev-spec: an agent asks to approve the classification phase of 'acc'\. The phase's checks pass\. Approvals are yours/.test(qAcc.params.message),
+      () => qAcc.params.requestedSchema, () => qAcc.params.requestedSchema.properties.approve.type === "boolean",
+      () => js(qAcc.params.requestedSchema.required) === '["approve"]', () => qAcc.params.requestedSchema.properties.note.type === "string",
+      () => typeof qAcc.id === "string", () => sAcc.approvals.classification.confirmed.via === "elicitation",
+      () => sAcc.approvals.classification.confirmed.note === "looks good", () => lastHist.confirmed, () => lastHist.confirmed.via === "elicitation",
+    ]);
 
     A.setAnswer(decline);
     const rDec = await A.call("spec_approve", { name: "dec", phase: "classification", projectDir: pEn });
@@ -973,12 +1028,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const rNo = await A.call("spec_approve", { name: "can", phase: "classification", projectDir: pEn });
     A.setAnswer(() => ({ error: { code: -32601, message: "elicitation not available" } }));
     const rErr = await A.call("spec_approve", { name: "err", phase: "classification", projectDir: pEn });
-    ok(rDec.ok === false && rDec.declined === true && rDec.action === "decline" && /^The user declined in the MCP client: nothing recorded \(approve the classification phase of 'dec'\)/.test(rDec.error) &&
-      rCan.declined === true && rCan.action === "cancel" && /^The user dismissed the confirmation/.test(rCan.error) &&
-      rNo.declined === true && rNo.action === "accept" && /without ticking Approve/.test(rNo.error) &&
-      rErr.declined === true && rErr.elicitationError && rErr.elicitationError.code === -32601 && /could not ask the user \(elicitation not available\)/.test(rErr.error) &&
-      ["dec", "can", "err"].every((s) => !stateOf(pEn, s).approvals.classification && !(stateOf(pEn, s).approvalHistory || []).length),
-      "1.21 F1b: decline, cancel, an accept without approve: true and a client error each refuse it (declined: true + the action / elicitationError, a localized refusal) and record nothing (got " + js([rDec, rCan, rNo, rErr]) + ")");
+    all("1.21 F1b: decline, cancel, an accept without approve: true and a client error each refuse it (declined: true + the action / elicitationError, a localized refusal) and record nothing (got " + js([rDec, rCan, rNo, rErr]) + ")", [
+      () => rDec.ok === false, () => rDec.declined === true, () => rDec.action === "decline",
+      () => /^The user declined in the MCP client: nothing recorded \(approve the classification phase of 'dec'\)/.test(rDec.error),
+      () => rCan.declined === true, () => rCan.action === "cancel", () => /^The user dismissed the confirmation/.test(rCan.error),
+      () => rNo.declined === true, () => rNo.action === "accept", () => /without ticking Approve/.test(rNo.error), () => rErr.declined === true,
+      () => rErr.elicitationError, () => rErr.elicitationError.code === -32601,
+      () => /could not ask the user \(elicitation not available\)/.test(rErr.error),
+      () => ["dec", "can", "err"].every((s) => !stateOf(pEn, s).approvals.classification && !(stateOf(pEn, s).approvalHistory || []).length),
+    ]);
 
     // never answered → refused after DEV_SPEC_ELICIT_TIMEOUT_MS, the client is told (notifications/cancelled), and the server kept
     // answering meanwhile (a ping sent while it waits is answered first)
@@ -1004,12 +1062,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const rRevoke = await A.call("spec_approve", { name: "acc", phase: "classification", revoke: true, reason: "wrong scope", projectDir: pEn });
     const qRevoke = A.asked[A.asked.length - 1] || { params: {} };
     const revRec = (stateOf(pEn, "acc").approvalHistory || []).slice(-1)[0] || {};
-    ok(rRefused.ok === false && rRefused.refused === true && refusedAsked === 0 && rForced.ok === true && rForced.forced === true &&
-      /FORCED \(--force\)/.test(qForced.params.message) && /⚠ FORCED: the phase's checks fail \(placeholders\)/.test(qForced.params.message) && /Waiver: "demo day" until \d{4}-\d{2}-\d{2}\./.test(qForced.params.message) &&
-      stateOf(pEn, "forced").approvals.classification.confirmed.via === "elicitation" &&
-      rRevoke.ok === true && rRevoke.revoked === "classification" && /revoke the approval of the classification phase of 'acc'/.test(qRevoke.params.message) && revRec.revoked === true && revRec.confirmed && revRec.confirmed.via === "elicitation",
-      "1.21 F1b: a gate that refuses without force is answered as it is — nobody is asked; a forced approval's question says FORCED, names the failing checks and the waiver; a revocation is asked too and its record carries `confirmed` (got " +
-      js([rRefused.failing, refusedAsked, qForced.params.message, qRevoke.params.message]) + ")");
+    all("1.21 F1b: a gate that refuses without force is answered as it is — nobody is asked; a forced approval's question says FORCED, names the failing checks and the waiver; a revocation is asked too and its record carries `confirmed` (got " +
+      js([rRefused.failing, refusedAsked, qForced.params.message, qRevoke.params.message]) + ")", [
+      () => rRefused.ok === false, () => rRefused.refused === true, () => refusedAsked === 0, () => rForced.ok === true,
+      () => rForced.forced === true, () => /FORCED \(--force\)/.test(qForced.params.message),
+      () => /⚠ FORCED: the phase's checks fail \(placeholders\)/.test(qForced.params.message),
+      () => /Waiver: "demo day" until \d{4}-\d{2}-\d{2}\./.test(qForced.params.message),
+      () => stateOf(pEn, "forced").approvals.classification.confirmed.via === "elicitation", () => rRevoke.ok === true,
+      () => rRevoke.revoked === "classification", () => /revoke the approval of the classification phase of 'acc'/.test(qRevoke.params.message),
+      () => revRec.revoked === true, () => revRec.confirmed, () => revRec.confirmed.via === "elicitation",
+    ]);
 
     // a JSON-RPC batch holding an approval that waits for the user: ONE array reply, once the user answered
     A.setAnswer(accept());
@@ -1081,15 +1143,20 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     filledFeature("same");
     A.setAnswer(accept());
     const rSame = await A.call("spec_approve", { name: "same", phase: "classification", projectDir: pEn });
-    ok(dry.ok && dry.dryRun && dry.fingerprint === E22.textFingerprint(fs.readFileSync(path.join(pEn, ".specs", "edited", "classification.md"), "utf8").replace(/\nEdited while the question waited\.\n$/, ""), "classification") &&
-      dryFf.ok && dryFf.dryRun && dryFf.fingerprints && typeof dryFf.fingerprints.classification.fingerprint === "string" &&
-      rEd.ok === false && rEd.changedSincePreview === true && rEd.code === "changed-since-preview" && /^Nothing recorded: 'classification' of 'edited' changed after the user was asked to confirm it/.test(rEd.error) &&
-      !st22("edited").approvals.classification && !(st22("edited").approvalHistory || []).length &&
-      rFf.ok === false && rFf.changedSincePreview === true && JSON.stringify(rFf.approved) === "[]" && !st22("ff-edited").approvals.classification &&
-      rGrown.ok === false && rGrown.changedSincePreview === true && JSON.stringify(rGrown.newFailing) === '["phase-order"]' && /fails more checks \(phase-order\)/.test(rGrown.error) &&
-      !st22("grown").approvals.requirements && rSame.ok === true && rSame.confirmed && st22("same").approvals.classification.fingerprint === S.approvePhase(pEn, "same", "classification", "u", { dryRun: true }).fingerprint,
-      "1.22 review: an approval confirmed over MCP records only what its preview judged — an edit while the question waited (approve, fast-forward) or a forced gate that fails more checks since (phase-order) is refused: changedSincePreview, code changed-since-preview, nothing recorded; an unchanged one is recorded as before; the dry run carries the fingerprint(s) (got " +
-      js([dry.fingerprint, dryFf.fingerprints, rEd, rFf.error, rGrown.newFailing, rGrown.error, rSame.ok]) + ")");
+    all("1.22 review: an approval confirmed over MCP records only what its preview judged — an edit while the question waited (approve, fast-forward) or a forced gate that fails more checks since (phase-order) is refused: changedSincePreview, code changed-since-preview, nothing recorded; an unchanged one is recorded as before; the dry run carries the fingerprint(s) (got " +
+      js([dry.fingerprint, dryFf.fingerprints, rEd, rFf.error, rGrown.newFailing, rGrown.error, rSame.ok]) + ")", [
+      () => dry.ok, () => dry.dryRun,
+      () => dry.fingerprint === E22.textFingerprint(fs.readFileSync(path.join(pEn, ".specs", "edited", "classification.md"), "utf8").replace(/\nEdited while the question waited\.\n$/, ""), "classification"),
+      () => dryFf.ok, () => dryFf.dryRun, () => dryFf.fingerprints, () => typeof dryFf.fingerprints.classification.fingerprint === "string",
+      () => rEd.ok === false, () => rEd.changedSincePreview === true, () => rEd.code === "changed-since-preview",
+      () => /^Nothing recorded: 'classification' of 'edited' changed after the user was asked to confirm it/.test(rEd.error),
+      () => !st22("edited").approvals.classification, () => !(st22("edited").approvalHistory || []).length, () => rFf.ok === false,
+      () => rFf.changedSincePreview === true, () => JSON.stringify(rFf.approved) === "[]", () => !st22("ff-edited").approvals.classification,
+      () => rGrown.ok === false, () => rGrown.changedSincePreview === true, () => JSON.stringify(rGrown.newFailing) === '["phase-order"]',
+      () => /fails more checks \(phase-order\)/.test(rGrown.error), () => !st22("grown").approvals.requirements, () => rSame.ok === true,
+      () => rSame.confirmed,
+      () => st22("same").approvals.classification.fingerprint === S.approvePhase(pEn, "same", "classification", "u", { dryRun: true }).fingerprint,
+    ]);
 
     // 1.23 — a remove the user confirmed deletes only the folder they were asked about: another feature renamed into the name while
     // the question waited (the confirmation used to delete it), or files edited meanwhile, is refused (changedSincePreview, code
@@ -1117,14 +1184,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const keptAfterBad = fs.existsSync(eng.dir);
     const engOk =S.manageFeature(pEn, "remove", "engine-pin", undefined, { confirm: true, preview: { fingerprint: engPrev.fingerprint } });
     const I23 = require(path.join(__dirname, "lib", "i18n.js"));
-    ok(rSwap.ok === false && rSwap.changedSincePreview === true && rSwap.code === "changed-since-preview" && /^Nothing deleted: \.specs\/scratch\/ changed after the user was asked/.test(rSwap.error) &&
-      /WEEKS OF WORK/.test(fs.readFileSync(path.join(featDir("scratch"), "requirements.md"), "utf8")) && fs.existsSync(featDir("scratch-old")) &&
-      rGrows.ok === false && rGrows.changedSincePreview === true && fs.existsSync(path.join(grown.dir, "notes-added.md")) &&
-      rGone.ok === true && rGone.confirmed && !fs.existsSync(featDir("goner")) &&
-      typeof engPrev.fingerprint === "string" && /^[0-9a-f]{40}$/.test(engPrev.fingerprint) && engBad.changedSincePreview === true && keptAfterBad && engOk.ok === true && !fs.existsSync(eng.dir) &&
-      ["pt", "es", "pt-BR"].every((l) => /\.specs\/x\//.test(I23.msg(l).featureOps.removeChangedSincePreview("x"))) && /^Nada foi apagado/.test(I23.msg("pt").featureOps.removeChangedSincePreview("x")),
-      "1.23: a remove the user confirmed over MCP deletes only the folder the question named — a feature renamed into the name, or files added while it waited → changedSincePreview, nothing deleted; unchanged → removed; the engine checks remove's preview fingerprint (EN / PT / ES) (got " +
-      js([rSwap, rGrows.code, rGone.ok, engBad.code, engOk.ok]) + ")");
+    all("1.23: a remove the user confirmed over MCP deletes only the folder the question named — a feature renamed into the name, or files added while it waited → changedSincePreview, nothing deleted; unchanged → removed; the engine checks remove's preview fingerprint (EN / PT / ES) (got " +
+      js([rSwap, rGrows.code, rGone.ok, engBad.code, engOk.ok]) + ")", [
+      () => rSwap.ok === false, () => rSwap.changedSincePreview === true, () => rSwap.code === "changed-since-preview",
+      () => /^Nothing deleted: \.specs\/scratch\/ changed after the user was asked/.test(rSwap.error),
+      () => /WEEKS OF WORK/.test(fs.readFileSync(path.join(featDir("scratch"), "requirements.md"), "utf8")),
+      () => fs.existsSync(featDir("scratch-old")), () => rGrows.ok === false, () => rGrows.changedSincePreview === true,
+      () => fs.existsSync(path.join(grown.dir, "notes-added.md")), () => rGone.ok === true, () => rGone.confirmed,
+      () => !fs.existsSync(featDir("goner")), () => typeof engPrev.fingerprint === "string", () => /^[0-9a-f]{40}$/.test(engPrev.fingerprint),
+      () => engBad.changedSincePreview === true, () => keptAfterBad, () => engOk.ok === true, () => !fs.existsSync(eng.dir),
+      () => ["pt", "es", "pt-BR"].every((l) => /\.specs\/x\//.test(I23.msg(l).featureOps.removeChangedSincePreview("x"))),
+      () => /^Nada foi apagado/.test(I23.msg("pt").featureOps.removeChangedSincePreview("x")),
+    ]);
 
     { // 1.24 r6 (integration): a revoke confirmed over MCP removes the approval its question named — another one recorded while
       // the user read it (revoked and approved again) is refused (changed-since-preview, the newer approval kept); unchanged → revoked.
@@ -1153,12 +1224,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       const rTrkYes = await A.call("spec_add_track", { name: "trk", track: "tdd", remove: true, projectDir: pEn });
       const askedMid = A.asked.length;
       const rSec = await A.call("spec_add_track", { name: "trk", track: "sec", remove: true, projectDir: pEn });
-      ok(rRvSwap.ok === false && rRvSwap.changedSincePreview === true && rRvSwap.code === "changed-since-preview" && rRvSwap.revoke === true &&
-        !!stateOf(pEn, "rv-swap").approvals.classification && rRvSame.ok === true && rRvSame.confirmed && !stateOf(pEn, "rv-same").approvals.classification &&
-        askedTdd === 1 && rTrkNo.ok === false && rTrkNo.declined === true && JSON.stringify(tracksAfterNo).includes("tdd") &&
-        rTrkYes.ok !== false && rTrkYes.confirmed && rSec.ok !== false && A.asked.length === askedMid,
-        "1.24 r6: over MCP elicitation a revoke carries its preview (an approval re-recorded while the user was asked is not revoked — changed-since-preview; unchanged → revoked) and spec_add_track {remove} of +tdd is asked (decline keeps the track, accept removes it); removing +sec asks nothing (got " +
-        js([rRvSwap, rRvSame.ok, askedTdd, rTrkNo.declined, tracksAfterNo, rTrkYes.ok, rSec.ok, A.asked.length - askedMid]) + ")");
+      all("1.24 r6: over MCP elicitation a revoke carries its preview (an approval re-recorded while the user was asked is not revoked — changed-since-preview; unchanged → revoked) and spec_add_track {remove} of +tdd is asked (decline keeps the track, accept removes it); removing +sec asks nothing (got " +
+        js([rRvSwap, rRvSame.ok, askedTdd, rTrkNo.declined, tracksAfterNo, rTrkYes.ok, rSec.ok, A.asked.length - askedMid]) + ")", [
+        () => rRvSwap.ok === false, () => rRvSwap.changedSincePreview === true, () => rRvSwap.code === "changed-since-preview",
+        () => rRvSwap.revoke === true, () => !!stateOf(pEn, "rv-swap").approvals.classification, () => rRvSame.ok === true, () => rRvSame.confirmed,
+        () => !stateOf(pEn, "rv-same").approvals.classification, () => askedTdd === 1, () => rTrkNo.ok === false, () => rTrkNo.declined === true,
+        () => JSON.stringify(tracksAfterNo).includes("tdd"), () => rTrkYes.ok !== false, () => rTrkYes.confirmed, () => rSec.ok !== false,
+        () => A.asked.length === askedMid,
+      ]);
     }
 
     // 1.23 — the client cancels the tools/call while its question waits (notifications/cancelled): the question is withdrawn
@@ -1280,12 +1353,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const hookAskedAtDeny = H.asked.length - hookAskedAtAsk;
     await H.stop();
     await B.stop();
-    ok(rAsk.ok === true && rAsk.approved === "classification" && !rAsk.confirmed && B.asked.length === 0 &&
-      rDeny.ok === false && rDeny.humanRequired === true && rDeny.approvalGuard === "deny" && /approve two classification --force/.test(rDeny.command || "") &&
-      /^dev-spec approval guard: refused — approvals are the human's/.test(rDeny.error) && !stateOf(pB, "two").approvals.classification &&
-      rOff.ok === true && !rOff.confirmed && C.asked.length === 0 && rHook.ok === true && !rHook.confirmed && hookAskedAtAsk === 0,
-      "1.21 F1b: without elicitation, ask keeps today's behaviour (recorded, nobody asked) and deny is refused (humanRequired + the command the user runs, nothing recorded); approvalGuard off asks nobody; SPEC_MCP_APPROVAL_HOOK=on (the Claude Code plugin — its hook asks) leaves an `ask` call as it was (got " +
-      js([rAsk.approved, rDeny, rOff.approved, rHook.approved]) + ")");
+    all("1.21 F1b: without elicitation, ask keeps today's behaviour (recorded, nobody asked) and deny is refused (humanRequired + the command the user runs, nothing recorded); approvalGuard off asks nobody; SPEC_MCP_APPROVAL_HOOK=on (the Claude Code plugin — its hook asks) leaves an `ask` call as it was (got " +
+      js([rAsk.approved, rDeny, rOff.approved, rHook.approved]) + ")", [
+      () => rAsk.ok === true, () => rAsk.approved === "classification", () => !rAsk.confirmed, () => B.asked.length === 0, () => rDeny.ok === false,
+      () => rDeny.humanRequired === true, () => rDeny.approvalGuard === "deny", () => /approve two classification --force/.test(rDeny.command || ""),
+      () => /^dev-spec approval guard: refused — approvals are the human's/.test(rDeny.error), () => !stateOf(pB, "two").approvals.classification,
+      () => rOff.ok === true, () => !rOff.confirmed, () => C.asked.length === 0, () => rHook.ok === true, () => !rHook.confirmed,
+      () => hookAskedAtAsk === 0,
+    ]);
     ok(rHookDeny.ok === false && rHookDeny.humanRequired === true && rHookDeny.approvalGuard === "deny" && !stateOf(pHookDeny, "denied").approvals.classification &&
       rHookAsked.ok === false && rHookAsked.declined === true && hookAskedAtDeny === 1 && !stateOf(pHookDeny, "asked").approvals.classification,
       "1.22 review: SPEC_MCP_APPROVAL_HOOK=on no longer waves a deny-level approval through — one that reaches the server got past no hook: refused without elicitation (humanRequired), asked with it (declined → nothing recorded) (got " +
@@ -1343,12 +1418,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     const wd = S.approvePhase(p2, "widget", "design", "pat", { revoke: true, role: "product", reason: "signed too early" });
     const st2 = JSON.parse(fs.readFileSync(path.join(tmp, "proj-r5a-roles-withdraw", ".specs", "widget", ".state.json"), "utf8"));
     const rec2 = st2.approvalHistory[st2.approvalHistory.length - 1];
-    ok(rvNone.ok === false && rvNone.roleRequired === true && /a revocation names the role revoking it: \/approve widget design --revoke --role <role>/.test(rvNone.error) &&
-      rvIntern.ok === false && rvIntern.roleNotListed === true && rvProduct.ok === false && rvProduct.notApproved === true && /'product' has no sign-off waiting for 'design'/.test(rvProduct.error) &&
-      doneDesign && rvApproved.ok && rvApproved.revokedApproval === true &&
-      wd.ok && js(wd.withdrawnSignOffs) === '["product"]' && js(Object.keys(st2.signoffs.design)) === '["tech"]' && rec2.partial === true && rec2.roleOnly === true && js(rec2.roles) === '["product"]',
-      "r5 review L16: revoking a role-governed phase names a listed role (none → roleRequired, an unlisted one → roleNotListed, a role with nothing waiting → refused); before the approval a role withdraws only ITS sign-off (the others stay; history record partial + roleOnly) (got " +
-      js([rvNone.error, rvIntern.error, rvProduct.error, wd.withdrawnSignOffs, st2.signoffs, rec2]) + ")");
+    all("r5 review L16: revoking a role-governed phase names a listed role (none → roleRequired, an unlisted one → roleNotListed, a role with nothing waiting → refused); before the approval a role withdraws only ITS sign-off (the others stay; history record partial + roleOnly) (got " +
+      js([rvNone.error, rvIntern.error, rvProduct.error, wd.withdrawnSignOffs, st2.signoffs, rec2]) + ")", [
+      () => rvNone.ok === false, () => rvNone.roleRequired === true,
+      () => /a revocation names the role revoking it: \/approve widget design --revoke --role <role>/.test(rvNone.error), () => rvIntern.ok === false,
+      () => rvIntern.roleNotListed === true, () => rvProduct.ok === false, () => rvProduct.notApproved === true,
+      () => /'product' has no sign-off waiting for 'design'/.test(rvProduct.error), () => doneDesign, () => rvApproved.ok,
+      () => rvApproved.revokedApproval === true, () => wd.ok, () => js(wd.withdrawnSignOffs) === '["product"]',
+      () => js(Object.keys(st2.signoffs.design)) === '["tech"]', () => rec2.partial === true, () => rec2.roleOnly === true,
+      () => js(rec2.roles) === '["product"]',
+    ]);
     // the merge driver keeps the other roles' sign-offs a roleOnly revocation left (and drops what an old-style partial one withdrew)
     const T = (d) => `2026-09-0${d}T00:00:00.000Z`;
     const mg = S.mergeStateJson({ approvals: {} },
@@ -1462,11 +1541,13 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     fs.writeFileSync(path.join(f7.dir, ".state.json"), JSON.stringify(s7, null, 2));
     const we = S.specDoctor(p7, f7.slug).checks.find((c) => c.id === "waiver-expired");
     const fin7 = S.finishFeature(p7, f7.slug, {});
-    ok(a7.ok && a7.complete === false && b7.ok && b7.complete === true && w7 && w7.reason === "constitution review next sprint" && /^\d{4}-\d{2}-\d{2}$/.test(w7.expires) &&
-      histW && histW.expires === w7.expires && b7.waiver && b7.waiver.expires === w7.expires && we && we.status === "warn" &&
-      fin7.waivers && fin7.waivers[0].expired === true,
-      "1.24 r6 E7: a role-signed forced approval carries the strictest waiver of its forced sign-offs (the earliest expiry, even when the completing one has none) — doctor warns waiver-expired once it passes, spec_finish says expired (got " +
-      js([w7, histW, b7.waiver, we, fin7.waivers]) + ")");
+    all("1.24 r6 E7: a role-signed forced approval carries the strictest waiver of its forced sign-offs (the earliest expiry, even when the completing one has none) — doctor warns waiver-expired once it passes, spec_finish says expired (got " +
+      js([w7, histW, b7.waiver, we, fin7.waivers]) + ")", [
+      () => a7.ok, () => a7.complete === false, () => b7.ok, () => b7.complete === true, () => w7,
+      () => w7.reason === "constitution review next sprint", () => /^\d{4}-\d{2}-\d{2}$/.test(w7.expires), () => histW,
+      () => histW.expires === w7.expires, () => b7.waiver, () => b7.waiver.expires === w7.expires, () => we, () => we.status === "warn",
+      () => fin7.waivers, () => fin7.waivers[0].expired === true,
+    ]);
 
     // 1.24 r6 (unconfirmed item, confirmed): a revoke confirmed over MCP elicitation revoked whatever approval stood when the user
     // answered — another approval recorded while the question waited (a re-approval of other content) was revoked in its place.

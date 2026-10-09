@@ -15,7 +15,7 @@ phase. Adapted from the rationalization tables of [obra/superpowers](https://git
 
 | Thought | Reality |
 |---|---|
-| "The requirements are obvious" | Then writing them takes five minutes, and `/grill` finds the one that wasn't. |
+| "The requirements are obvious" | Then writing them takes five minutes, and the grill (`spec_clarify`, `/clarify --grill`) finds the one that wasn't. |
 | "We'll handle errors later" | The unwanted-behaviour criteria (IF…THEN) are where the bugs live. Write them now. |
 | "'Fast' is clear enough" | Vague words are untestable. Put a number on it. |
 
@@ -47,7 +47,7 @@ one behaviour at a time, red for the right reason, minimal code, green, refactor
 |---|---|
 | "Close enough to the AC" | An AC is met or it isn't. Check it by ID. |
 | "I'll tick it now and verify later" | A tick is a claim. Evidence first (`_Verify:_`, `spec_complete_task {evidence}`). |
-| "While I'm here I'll also refactor X" | Out of the task = out of scope. File it: `spec_backlog add` with a `refactor:` note. |
+| "While I'm here I'll also refactor X" | Out of the task = out of scope. File it: `spec_roadmap_edit {kind: "backlog"} add` with a `refactor:` note. |
 | "I'll write a quick helper" | Search first — the design's Reuse & Integration, then the codebase by concept and synonyms. The fourth retry wrapper was a quick helper too. |
 | "I'll copy this function and tweak it" | A copy forks the knowledge: the bug fixed in one lives on in the other. Extend it (a parameter with a default, callers unchanged) — or, at the third use, extract it (the rule of three). |
 | "The subagent said DONE" | Review the diff and the evidence. A report is a claim. |
@@ -64,10 +64,10 @@ one behaviour at a time, red for the right reason, minimal code, green, refactor
 | Thought | Reality |
 |---|---|
 | "The approval was refused — I'll just `--force` it" | Force is the human's call, over named failures, and it stays flagged. Fix the checks or ask. |
-| "Everything is filled, I'll `/spec-ff` it myself" | A fast-forward is still the human's approval of every phase it records. Ask first. |
-| "We decided that in chat, no need to write it down" | Decisions in chat are lost at the next compaction. `/spec-decide` — `decisions.md` travels with the spec. |
-| "It's a small edit to an approved requirement, no need to re-approve" | An approved spec that changed is not approved. `/spec-impact`, then re-approve. |
-| "I'll add the missing tasks myself" | Follow-up work goes through `/spec-converge`: the human approves the list first. |
+| "Everything is filled, I'll fast-forward it myself" | A fast-forward is still the human's approval of every phase it records. Ask first. |
+| "We decided that in chat, no need to write it down" | Decisions in chat are lost at the next compaction. `spec_decide` — `decisions.md` travels with the spec. |
+| "It's a small edit to an approved requirement, no need to re-approve" | An approved spec that changed is not approved. `spec_impact`, then re-approve. |
+| "I'll add the missing tasks myself" | Follow-up work goes through a converge pass: the human approves the list first (`spec_append_tasks`). |
 | "The finished feature's spec is stale, I'll rewrite it" | Write the new behaviour in a new feature with `_Supersedes:_`; keep history. |
 
 ## Verification & finishing

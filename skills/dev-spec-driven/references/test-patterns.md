@@ -106,7 +106,7 @@ task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits
   so is `test_t2_is_after_t1` (a pytest name about a time variable, not test T-2).
 - IDs compare by number: `T-1`, `T-01` and `test_T01` name the same planned test.
 - Only test files are read: source files in a broad list of languages — the one guard mode, `spec_scan` and
-  `spec_coverage` count as code (JS/TS, Python, Go, Rust, Java/Kotlin/Scala/Groovy, C#/F#/VB, Ruby, PHP, Swift,
+  `spec_scan {coverage: true}` count as code (JS/TS, Python, Go, Rust, Java/Kotlin/Scala/Groovy, C#/F#/VB, Ruby, PHP, Swift,
   Objective-C, C/C++, Vue/Svelte, PowerShell, shell, SQL, Lua, R, Perl, Elixir/Erlang, Haskell, Clojure, Dart, Julia,
   Nim, OCaml …), plus a Bats suite (`*.bats`) and Perl's `t/*.t` — that sit under a `test/`, `tests/`, `__tests__/`,
   `spec/` or `e2e/` folder or are named like a test in their language (`*.test.ts`, `*.spec.js`, `test_*.py`,
@@ -409,7 +409,7 @@ and the test then proves the code does what it does, not what the AC asks. Code 
 — what a characterization or guard test pins — is not "written before its test": it is what that test describes.
 
 The micro-cycle never changes the plan: it adds no T-ID to `test-plan.md` on its own (a behaviour the plan misses is
-a spec gap — `/spec-converge`, `spec_append_tasks`), never edits a planned test's assertion to get green ("When a
+a spec gap — a converge pass, `spec_append_tasks`), never edits a planned test's assertion to get green ("When a
 test is wrong", below), and the task's evidence is still its `_Verify:_` run.
 
 ### Rationalizations → answers

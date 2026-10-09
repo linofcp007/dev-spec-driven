@@ -53,7 +53,7 @@ function readScript(text, shell) {
 // A shell that runs: the first of the candidates that answers --version.
 const probe = (cands) => cands.filter(Boolean).find((b) => { try { return spawnSync(b, ["--version"], { encoding: "utf8", timeout: 20000 }).status === 0; } catch { return false; } });
 
-exports.run = async ({ ok, run, tmp, CLI }) => {
+exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
   const ROOT = path.join(path.dirname(CLI), "..");
   const S = require(path.join(ROOT, "mcp", "lib", "spec.js"));
   const C = require(path.join(ROOT, "cli", "completion.js"));
@@ -121,13 +121,15 @@ exports.run = async ({ ok, run, tmp, CLI }) => {
     const none = run(["completion"]), bad = run(["completion", "tcsh"]), j = spawnSync(process.execPath, [CLI, "completion", "bash", "--json"], { encoding: "utf8", env: cleanEnv() });
     const pw = gen("pwsh"), env = gen("bash", { ...cleanEnv(), SPEC_PROJECT_DIR: path.join(tmp, "c125-nope") });
     const help = run(["completion", "--help"]);
-    ok(none.code === 1 && /completion <powershell\|bash\|zsh\|fish>/.test(none.out) && bad.code === 1 && /tcsh/.test(bad.out) && /powershell, bash, zsh, fish/.test(bad.out) &&
-      j.status === 1 && j.stdout === "" && /--json/.test(j.stderr) && pw.status === 0 && pw.stdout === scripts.powershell.stdout &&
-      env.status === 0 && env.stdout === scripts.bash.stdout &&
-      help.code === 0 && help.out.includes('node "' + cliFwd + '" completion powershell > "$HOME\\dev-spec-completion.ps1"') && /\$PROFILE/.test(help.out) &&
-      help.out.indexOf("PowerShell") < help.out.indexOf("bash:") && /conf\.d\/dev-spec\.fish/.test(help.out) && /compinit/.test(help.out),
-      "1.25 completion: `completion` needs a shell (usage, exit 1), refuses another (naming powershell, bash, zsh, fish), refuses --json (stdout empty), takes pwsh for powershell, ignores a mistyped SPEC_PROJECT_DIR, and its --help gives the install lines with this CLI's path — PowerShell first (got " +
-      JSON.stringify([none.code, none.out.slice(0, 120), bad.code, bad.out.slice(0, 160), j.status, j.stdout, pw.status, env.status, env.stderr, help.out.slice(0, 400)]) + ")");
+    all("1.25 completion: `completion` needs a shell (usage, exit 1), refuses another (naming powershell, bash, zsh, fish), refuses --json (stdout empty), takes pwsh for powershell, ignores a mistyped SPEC_PROJECT_DIR, and its --help gives the install lines with this CLI's path — PowerShell first (got " +
+      JSON.stringify([none.code, none.out.slice(0, 120), bad.code, bad.out.slice(0, 160), j.status, j.stdout, pw.status, env.status, env.stderr, help.out.slice(0, 400)]) + ")", [
+      () => none.code === 1, () => /completion <powershell\|bash\|zsh\|fish>/.test(none.out), () => bad.code === 1, () => /tcsh/.test(bad.out),
+      () => /powershell, bash, zsh, fish/.test(bad.out), () => j.status === 1, () => j.stdout === "", () => /--json/.test(j.stderr),
+      () => pw.status === 0, () => pw.stdout === scripts.powershell.stdout, () => env.status === 0, () => env.stdout === scripts.bash.stdout,
+      () => help.code === 0, () => help.out.includes('node "' + cliFwd + '" completion powershell > "$HOME\\dev-spec-completion.ps1"'),
+      () => /\$PROFILE/.test(help.out), () => help.out.indexOf("PowerShell") < help.out.indexOf("bash:"),
+      () => /conf\.d\/dev-spec\.fish/.test(help.out), () => /compinit/.test(help.out),
+    ]);
   }
 
   // 1.25 completion: the PowerShell script is pure ASCII (Windows PowerShell 5.1 reads a native command's output with the console's

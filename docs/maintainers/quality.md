@@ -36,7 +36,7 @@ nudge, the TDD micro-cycle.
   built-in / track-pack / project template criterion's words (`builtinTemplateAcs()`, `projectTemplateAcs()`, and two light
   edits of one), criteria retired by a shipped `_Supersedes:_`, declared pairs (pending ones too). Candidates from a
   prefix-filter inverted index (exact for the threshold); caps 4000 criteria / 200k comparisons / 200 pairs. Doctor warn
-  `cross-feature-acs` (names the other feature's AC), `spec_catalog.crossAcs` {pairs, truncated}, a SPECS.md section when
+  `cross-feature-acs` (names the other feature's AC), `spec_export {format: "catalog"}.crossAcs` {pairs, truncated}, a SPECS.md section when
   a pair exists, agents/spec-critic.md.
 - **Glossary** — the steering stub `glossary.md` (steering_scaffold; init never creates it): `- **Term** — definition.
   _Avoid: a, b_` (`_Avoid:_` English-stable, same line, a sub-line or an indented paragraph after a blank line).
@@ -100,14 +100,14 @@ nudge, the TDD micro-cycle.
   distinct concepts or ONE strong phrase (message queue, event bus, publish … event, domain event, background job / worker,
   concurrent writes / updates, race condition, double booking, distributed transaction, two-phase commit, webhook, Kafka,
   RabbitMQ, SQS, saga — PT / ES twins), review 7 — "click event", "Retry button", "Images load async" alone never do.
-  Answered (review 2) ANYWHERE in that user text — /clarify folds the answer into requirements.md, /grill asks in Phase 1
+  Answered (review 2) ANYWHERE in that user text — /clarify folds the answer into requirements.md, /clarify --grill asks in Phase 1
   while the design is a template — by a multi-word phrase only (`RE_CONSISTENCY_ANSWER`: eventual / strong consistency,
   consistency model, idempotent / idempotency…, at-least / at-most / exactly-once, isolation level, optimistic / pessimistic
   locking, outbox, dedup…, atomicity / atomically, two-phase commit; PT / ES twins; `ACID` upper-case) — never a bare
   "consistent", "eventually", "atomic" or "isolation" ("tenant isolation"). → `nudges [{code: "consistency-unstated",
-  signals ≤ 3}]` (one word per concept, each strong phrase); plain features only, never with +dist. /grill has the matching
+  signals ≤ 3}]` (one word per concept, each strong phrase); plain features only, never with +dist. /clarify --grill has the matching
   "Constraints round" (atomicity, ACID / isolation, race conditions, consistency model, delivery + idempotency, dependency
-  failure, volume, a measurable business outcome). **1.21 F5 P6 — one question bank:** /grill skips a constraint question an
+  failure, volume, a measurable business outcome). **1.21 F5 P6 — one question bank:** /clarify --grill skips a constraint question an
   active track's design sections own (+dist: atomicity … dependency failure; +saas: volume; +api: idempotent creates and
   concurrent updates) — clarify's rule (no nudge under +dist) — and a sized design's Error Handling points at the IF…THEN
   criteria instead of asking again (prose + the sized builders; no engine check).
@@ -177,7 +177,7 @@ nudge, the TDD micro-cycle.
   keeps the 1.18 needle rule (the r19 exclusion of every REUSE_SYN heading dropped whole sections; mcp/test.js "1.19 R review
   2" diffs it against a copy of the 1.18 rule). `_Emits metrics:_` also pulls an +obs feature's `[OBS] Telemetry` section
   (marker + the Telemetry synonyms, `trackSectionTable("obs")`), beside the `[SaaS] Observability` rule (T review 6).
-- **Backlog names (R review 5)** — `spec_backlog add` of a name already in the backlog (case-insensitive) keeps its entry and
+- **Backlog names (R review 5)** — `spec_roadmap_edit {kind: "backlog"} add` of a name already in the backlog (case-insensitive) keeps its entry and
   spelling and APPENDS a new note to its note (`BACKLOG_NOTE_SEP` " · ", one line; a note it already holds, or none, changes
   nothing; the whole note ≤ `BACKLOG_NOTE_MAX` 2,000 characters — past it add is refused, nothing written) → `exists: true`,
   `appended`, a localized `note` (`featureOps.backlogAppended` / `backlogKept` / `backlogNoteFull`); the CLI prints that note
@@ -188,8 +188,8 @@ nudge, the TDD micro-cycle.
   Reuse section, concept + three synonyms, shared folders, `.specs/SPECS.md`; reuse → extend → create, the rule of three, no
   copy-paste) + a hard rule + the report's `### Reuse` block (Reused / Extended / Created + searched / Duplicated on purpose /
   Refactor candidates); agents/spec-reviewer.md: Code quality = duplication against the EXISTING codebase (a new unit
-  duplicating one is Important), the guide's smells Minor; the controller files refactor candidates with `spec_backlog add`
-  (`refactor:` note) — subagent-execution.md, /executeTask; red-flags rows; SKILL.md, AGENTS.md, /design. No engine gate reads
+  duplicating one is Important), the guide's smells Minor; the controller files refactor candidates with `spec_roadmap_edit {kind: "backlog"} add`
+  (`refactor:` note) — subagent-execution.md, /executeTask; red-flags rows; SKILL.md, AGENTS.md, /spec (design). No engine gate reads
   the Reuse block (R5: prose only — the SubagentStop gate is unchanged). Extending a unit OUTSIDE the task's `_Implements:_`
   files is never a silent edit (R review 6): NEEDS_CONTEXT → a converge task (`spec_append_tasks`, re-approved) or the
   controller's go-ahead, or create locally and name it in the report — the scope guard (`meta.guard: "scope"`) would otherwise

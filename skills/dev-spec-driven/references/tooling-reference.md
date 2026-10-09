@@ -3,7 +3,7 @@
 Read on demand from `SKILL.md`. The workflow itself lives in `SKILL.md`; this file holds the lookup
 tables.
 
-## MCP tools (`spec-driven` server — 38 tools)
+## MCP tools (`spec-driven` server — 32 tools)
 
 All tools are local file operations on `.specs/` (or a read-only scan of the codebase); none hit the network.
 They scaffold and check — they never overwrite your files. Arguments are validated against each tool's
@@ -15,7 +15,10 @@ argument error carries a stable `code`: `unknown-argument` (`unknown` [{argument
 not given (or a variable the client left unexpanded, `${workspaceFolder}`, `$HOME`, `%CD%`), the server's project is used —
 `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR`, else the client's first root (MCP roots), else the nearest folder with a `.specs/`
 at or above its working folder, else that folder; a relative one resolves from the client's root when roots chose the default.
-Results are compact JSON.
+Results are compact JSON. The older tool names — `spec_list` (= `spec_status` without `name`), `spec_backlog` / `spec_depend` /
+`spec_milestone` (= `spec_roadmap_edit {kind}`), `spec_catalog` / `spec_changelog` (= `spec_export {format}`), `spec_coverage`
+(= `spec_scan {coverage: true}`) — still answer a call as hidden aliases (never listed). In Claude Code plugin mode `spec_stop_check`
+and `spec_log` are not listed (the Stop hook and the CLI do their job); both stay callable.
 
 | Tool | Use it for |
 |---|---|
@@ -26,9 +29,9 @@ Results are compact JSON.
 | `spec_tracks` | The team's own tracks (1.15): packs in `.specs/tracks/<name>/` — `list` (built-in + packs, valid or not) · `init <name>` (a commented example pack) · `check` (stable codes, verdict) — see `references/project-tracks.md`; `signals` (1.21) — the classifier's signal overrides of this project (`op` list / set / forget; learned by `spec_create` from Phase 0 corrections, applied after 2 consistent ones) |
 | `spec_create` | Scaffold a feature for its tracks (tracks + lang persisted in `.state.json`; with `tracks` AND a `summary`, a choice that differs from the summary's classification is recorded as a Phase 0 correction — `signalOverrides`); `kind: "bugfix"` → the bugfix flow, `kind: "spike"` (+ `question`, `timebox`) → a spike; `size` (1.21: xs · s · m · l — xs = `kind: "change"`, one `change.md`; s = one story, merged weigh sections, core-tier track sections; m / l = the full chain, duplicate track sections merged — `references/workflows.md` → Sizes); `brownfield: true` → + `integration-plan.md`; `flow: "design-first"`; `branch: "true"` (a boolean is read as its word) or a name (1.25) → the feature's own git branch (`feature/<slug>`, `fix/<slug>` for a bugfix, `spike/<slug>`), recorded in `.state.json → branch` {name, base, commit, at} — read from the repository's files — with `branch.command` / `args` (`git switch -c <name>`) for you to run (the server runs no git); a branch of that name that exists, or no repository → nothing recorded (`branch.reason` exists / no-git); a re-run keeps the recorded branch |
 | `spec_import` | Import a Kiro / spec-kit / OpenSpec spec, a plan (Claude Code plan mode / Cursor), a Codex ExecPlan, BMAD docs or a fluidplan plan (path inside the project — or, for a plan / ExecPlan / fluidplan PLAN.md, its markdown as `text`: plan mode keeps plans in `~/.claude/plans`) as a NEW feature — IDs remapped (`mapping`), `counts`, `warnings` listed, source untouched; a fluidplan plan's settled decisions → `decisions.md`. 1.25: `kiro-steering` (`.kiro/steering/*.md`, front matter kept) / `cursor-rules` (`.cursor/rules/*.mdc` — `alwaysApply` → always, `globs` → fileMatch, else manual — and `.cursorrules`) → `.specs/steering/<name>.md` files, `path` optional, an existing file never overwritten (`skipped` with its `reason`); `dryRun: true` → the whole import, nothing written: the same answer + `preview` (each file, bounded) |
-| `spec_list` | List all features with track set, phase, and task progress |
+| `spec_status` without `name` | List all features with track set, phase, and task progress |
 | `spec_status` | One feature: kind (feature / bugfix / spike / change), flow, phase, artifacts, tasks (with `verified`), each active track's sections present vs filled (`secSections`, `privacySections`, `distSections` …), eval state; `branch` (1.25 — a feature started with `spec_create {branch}`: the record + `current`, the branch HEAD is on, and `exists`) |
-| `spec_next_action` | "You are here → do this next": one `step`, phase by phase (re-review → for the first unapproved phase: fill → fix → approve, the next phase only after that approval → fix → implement → verify → finish → finished / drift; a spike: fill → implement → decide → promote / archive / pivot) + `changedSinceApproval`; suggests `/spec-ff` when every planning artifact passes its gate; a feature on its own branch (`branch`) while HEAD is on another and work is left: the recommendation adds `git switch <name>` first |
+| `spec_next_action` | "You are here → do this next": one `step`, phase by phase (re-review → for the first unapproved phase: fill → fix → approve, the next phase only after that approval → fix → implement → verify → finish → finished / drift; a spike: fill → implement → decide → promote / archive / pivot) + `changedSinceApproval`; suggests the fast-forward (`/approve <feature> --through tasks`) when every planning artifact passes its gate; a feature on its own branch (`branch`) while HEAD is on another and work is left: the recommendation adds `git switch <name>` first |
 | `ears_validate` | Lint criteria: modal verb, stable IDs, vague words, placeholders — issue `code`s `no-modal` · `no-id` · `vague` · `placeholder` · `no-keyword` · `needs-clarification` · `padded-id` (a zero-padded `US-1.AC-01` — IDs are compared as written: write `US-1.AC-1`) |
 | `spec_clarify` | Requirement ambiguities/gaps before design (markers, placeholders with file:line, missing sections, IF…THEN, track gaps — tenant isolation, AI quality/cost, access denial, secrets, data subject rights, retention; with a glossary, every avoided word used — `glossary`; queues / events / concurrency / transactions named (two concepts, or one strong phrase; never the template's words) while neither requirements.md nor design.md states a consistency model, delivery guarantee or idempotency — one question, `nudges` `consistency-unstated`) |
 | `trace_check` | AC ↔ task ↔ test gaps (the verdict — a test-plan ROW covers an AC, never a Gaps / Out of Scope note; a removed track's criteria are not required) + warnings for EC/NFR/SC, `justifiedTestGaps` (+tdd: uncovered ACs the plan names only in such a note — still gaps), `untracedCriteria` (criteria with a modal verb but no ID beside US-n.AC-m ones, by line), `phantomSupersedes` and `phantomAffects`; `code: true` scans test files for T-IDs; `matrix: true` adds the requirements traceability matrix (one row per AC / EC / NFR / SC — `status` verified · implemented · planned · untraced, `gaps` no-task · no-test · no-coverage, linked tasks + evidence, tests, design, decisions, supersedes, changed since approval; informational, never the verdict) |
@@ -45,17 +48,17 @@ Results are compact JSON.
 | `spec_stop_check` | The end-of-turn evidence gate for MCP-only clients (= the Stop hook, `stop-check --json`): `message` → `block` + `reason` when it claims done / verified while recently active features have unverified ticks (or project checks without a passing run); `why` otherwise; `agent: "spec-implementer"` checks the task report, `agent: "spec-simplifier"` the simplification report |
 | `spec_log` | Git-linked evidence from `gitLog` — the `git log --name-only --relative` text the client passes (the server never runs git): the commits citing each task + the +tdd red-first check (= `log <f> - --json`); `max` = the window it was read with; a feature on its own branch (spec_status `branch`): `git log <branch.commit>..HEAD --name-only --relative`, as `dev-spec log` reads it — a fuller log is cut at that commit (`since`) |
 | `spec_metrics` | Lead times, rework, forced and batch approvals, change requests, evidence pass rate, velocity; `write: true` (with `name`) → `retro.md` (never overwritten) |
-| `spec_catalog` | The living catalog: every feature + AC (superseded ones marked), spikes, decisions, possible duplicate / conflicting criteria across active features (`crossAcs`); `write: true` → `.specs/SPECS.md` (AUTO-GENERATED) |
-| `spec_export` | Stakeholder export: one offline, printable HTML (or `md`) document of a feature or the whole project (with a traceability-matrix section / per-feature counts); `format: "csv"` → the traceability matrix as RFC 4180 CSV (formula-safe, UTF-8 BOM, the AUTO-GENERATED marker as its last record); `format: "gherkin"` (1.16) → a Gherkin `.feature` per feature: one Scenario per current acceptance criterion (tags `@US-n.AC-m`, its planned `@T-xx`, the track markers), the EARS clauses as Given (WHILE / WHERE / IF) · When (WHEN) · Then (the SHALL response, verbatim) — a criterion that can't be split cleanly is one Then step with its whole text (`unsplit`); template and shipped-superseded criteria left out with a comment; PT / ES in Gherkin's own dialect (`# language: pt` / `es`); `format: "jira"` · `"linear"` (1.16) → a CSV for the tracker's importer (feature → stories → tasks by `[USn]`; Jira: Work item ID · Work type · Summary · Description · Status · Parent · Labels…; Linear: ID · Title · Description · Status · Estimate · Labels · Parent issue; the marker is the last header cell); `format: "adr"` (1.25) → the decision log as Architecture Decision Records: one MADR file per decision (front matter `status` accepted · superseded by ADR-NNNN and `date`, then Context and Problem Statement · Decision Outcome · Consequences · More Information — only the sections the log has text for, nothing invented; localized headings), `.specs/exports/adr/<feature>/NNNN-<title>.md` + `index.md` — the ADR number IS the decision's D-number (stable: a new decision never renumbers the others), discoveries left out (`excluded`), superseded ↔ supersedes linked, links back to the feature, its log entry and each `_Affects:_` reference; no `name` = every feature's (archived ones under `adr/_archive/`) + `adr/index.md`; without `write`: `documents` (+ `stale`), with it `written` · `unchanged` (a re-run writes nothing) · `removed` (the generated files no decision backs any more — never a hand-written one); `write: true` → `.specs/exports/` (`<feature>.rtm.csv` / `project.rtm.csv` for csv, `<feature>.feature`, `<feature>.<tracker>.csv` / `project.<tracker>.csv`, `adr/<feature>/…`) |
-| `spec_changelog` | Release notes from the specs (Added · Changed · Fixed) since `since` (default: the last written notes); `write: true` → `.specs/RELEASE-NOTES.md`; `milestone` → only that milestone's features (`since` defaults to `all`; `write` → `.specs/RELEASE-NOTES.<milestone>.md`, `meta.changelogAt` untouched) |
+| `spec_export {format: "catalog"}` | The living catalog: every feature + AC (superseded ones marked), spikes, decisions, possible duplicate / conflicting criteria across active features (`crossAcs`); `write: true` → `.specs/SPECS.md` (AUTO-GENERATED) |
+| `spec_export` | Stakeholder export: one offline, printable HTML (or `md`) document of a feature or the whole project (with a traceability-matrix section / per-feature counts) — without `write` a markdown `preview` (≤ 1,500 characters, `bytes`, `hint`; the whole document with `includeBody: true`); `format: "catalog"` / `"changelog"` → the living catalog / the release notes (their rows below); `format: "csv"` → the traceability matrix as RFC 4180 CSV (formula-safe, UTF-8 BOM, the AUTO-GENERATED marker as its last record); `format: "gherkin"` (1.16) → a Gherkin `.feature` per feature: one Scenario per current acceptance criterion (tags `@US-n.AC-m`, its planned `@T-xx`, the track markers), the EARS clauses as Given (WHILE / WHERE / IF) · When (WHEN) · Then (the SHALL response, verbatim) — a criterion that can't be split cleanly is one Then step with its whole text (`unsplit`); template and shipped-superseded criteria left out with a comment; PT / ES in Gherkin's own dialect (`# language: pt` / `es`); `format: "jira"` · `"linear"` (1.16) → a CSV for the tracker's importer (feature → stories → tasks by `[USn]`; Jira: Work item ID · Work type · Summary · Description · Status · Parent · Labels…; Linear: ID · Title · Description · Status · Estimate · Labels · Parent issue; the marker is the last header cell); `format: "adr"` (1.25) → the decision log as Architecture Decision Records: one MADR file per decision (front matter `status` accepted · superseded by ADR-NNNN and `date`, then Context and Problem Statement · Decision Outcome · Consequences · More Information — only the sections the log has text for, nothing invented; localized headings), `.specs/exports/adr/<feature>/NNNN-<title>.md` + `index.md` — the ADR number IS the decision's D-number (stable: a new decision never renumbers the others), discoveries left out (`excluded`), superseded ↔ supersedes linked, links back to the feature, its log entry and each `_Affects:_` reference; no `name` = every feature's (archived ones under `adr/_archive/`) + `adr/index.md`; without `write`: `documents` (+ `stale`), with it `written` · `unchanged` (a re-run writes nothing) · `removed` (the generated files no decision backs any more — never a hand-written one); `write: true` → `.specs/exports/` (`<feature>.rtm.csv` / `project.rtm.csv` for csv, `<feature>.feature`, `<feature>.<tracker>.csv` / `project.<tracker>.csv`, `adr/<feature>/…`) |
+| `spec_export {format: "changelog"}` | Release notes from the specs (Added · Changed · Fixed) since `since` (default: the last written notes); `write: true` → `.specs/RELEASE-NOTES.md`; `milestone` → only that milestone's features (`since` defaults to `all`; `write` → `.specs/RELEASE-NOTES.<milestone>.md`, `meta.changelogAt` untouched) |
 | `spec_add_track` | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data (additive, never overwrites); `remove: true` takes a track off without deleting files |
 | `spec_feature` | archive (reversible) · restore · rename (deps follow) · flow (`design-first` / `requirements-first`) · remove (destructive — needs `confirm: true`) |
 | `spec_roadmap` | Multi-feature roadmap (%, blocked, cycles, velocity + ETA forecasts, cross-feature overlaps, needs attention); `write: true` → `.specs/ROADMAP.md` (+ `html: true`), `lang` = chrome language |
-| `spec_depend` | Show / replace (`dependsOn`) / edit (`add`, `remove`) dependencies and `order` — existing features only, cycles rejected |
-| `spec_milestone` | Milestones (`meta.milestones`): `add` (name, date YYYY-MM-DD, existing active features — an existing name is updated) · `rm` · `list`; each judged against its features' ETAs → `on-track` · `at-risk` (`eta-after-date` · `eta-unknown` · `no-features`) · `late` · `done`; ROADMAP.md shows a Milestones table and lists late / at-risk ones under Needs attention; rename / remove / archive (→ `archived`, restore puts it back) of a feature follow |
-| `spec_backlog` | Planned-but-unspecced features (shown in ROADMAP.md) |
+| `spec_roadmap_edit {kind: "depend"}` | Show / replace (`dependsOn`) / edit (`add`, `remove`) dependencies and `order` — existing features only, cycles rejected |
+| `spec_roadmap_edit {kind: "milestone"}` | Milestones (`meta.milestones`): `add` (name, date YYYY-MM-DD, existing active features — an existing name is updated) · `rm` · `list`; each judged against its features' ETAs → `on-track` · `at-risk` (`eta-after-date` · `eta-unknown` · `no-features`) · `late` · `done`; ROADMAP.md shows a Milestones table and lists late / at-risk ones under Needs attention; rename / remove / archive (→ `archived`, restore puts it back) of a feature follow |
+| `spec_roadmap_edit {kind: "backlog"}` | Planned-but-unspecced features (shown in ROADMAP.md) |
 | `spec_scan` | Brownfield inventory: stack, frameworks, routes (method + path + file:line), tests, entrypoints, env var names, migrations |
-| `spec_coverage` | Brownfield: share of code files named in any `_Implements:_` marker, per folder, + unmatched markers |
+| `spec_scan {coverage: true}` | Brownfield: share of code files named in any `_Implements:_` marker, per folder, + unmatched markers |
 | `spec_upgrade` | After a plugin update: audit every active feature against the current rules (status, doctor fails/warns, pending gates, changed since approval, approvals without history, unverified tasks, drift, next step, `review` critic / converge / none, grouped blocked · attention · ok); `apply: true` saves inferred tracks, seeds pre-1.13 approval baselines (`.history/`), completes `.specs/.gitignore`, stamps `roadmap.json → meta.specVersion` and writes `.specs/UPGRADE.md` — never edits an artifact, approves or ticks |
 
 ### `spec_doctor` checks (stable ids)
@@ -294,20 +297,20 @@ its evidence turns stale, so a re-tick needs a new run. `statusline` prints one 
 feature with work under way, its tasks, unverified ticks and the next step, in the project language; nothing outside a
 dev-spec project; exit 0 always; it reads the session JSON on stdin and walks up from its folder to the nearest
 `.specs/`) — `--print-config` prints the `settings.json` `statusLine` entry with this clone's absolute path
-(`/spec-statusline` installs it). `rules <tool>` prints a rule file with this
+(`/spec-setup statusline` installs it). `rules <tool>` prints a rule file with this
 clone's absolute paths, to paste into another project; `mcp-config <client>` prints a ready MCP config.
 
 ## Hooks (Claude Code, local — never block on their own errors)
 
 | Hook | Event | What it does |
 |---|---|---|
-| `hooks/guard-hook.js` | PreToolUse (Write/Edit/NotebookEdit, Bash/PowerShell/Monitor) | Only with guard mode on: asks before an edit to a code file outside `.specs/` — a Write / Edit, or (1.25.1) each code file a shell command writes (`sed -i`, a redirect, `tee`, `cp`, `Set-Content`…; reads, test runs, builds and git never prompt), the nearest `.specs/` above the file counting too (a monorepo's package) — while no feature has approved, unfinished tasks — except a test file while a feature has an approved test plan and is unfinished (Phase 4 writes the failing tests first) and any code edit while an active spike exists (its prototype); with `guard: "scope"`, once tasks are approved, also for a code file no open task names in `_Implements:_` (test files excepted — the reason names the likely task or `/spec-converge`); silent otherwise |
+| `hooks/guard-hook.js` | PreToolUse (Write/Edit/NotebookEdit, Bash/PowerShell/Monitor) | Only with guard mode on: asks before an edit to a code file outside `.specs/` — a Write / Edit, or (1.25.1) each code file a shell command writes (`sed -i`, a redirect, `tee`, `cp`, `Set-Content`…; reads, test runs, builds and git never prompt), the nearest `.specs/` above the file counting too (a monorepo's package) — while no feature has approved, unfinished tasks — except a test file while a feature has an approved test plan and is unfinished (Phase 4 writes the failing tests first) and any code edit while an active spike exists (its prototype); with `guard: "scope"`, once tasks are approved, also for a code file no open task names in `_Implements:_` (test files excepted — the reason names the likely task or `/spec-review <feature> converge`); silent otherwise |
 | `hooks/approval-hook.js` | PreToolUse (`Bash`, `PowerShell`, `Monitor`, `Write` / `Edit` / `NotebookEdit`, `spec_approve` / `spec_feature` / `spec_init` / `spec_add_track` under any MCP prefix, another MCP server's file tools — `write_file`, `edit_block`, `move_file`…) | Only with `meta.approvalGuard` `ask` / `deny` (`init --approval-guard`): an agent's `spec_approve`, `spec_feature` remove with `confirm`, `dev-spec approve` / `feature remove --yes` through the Bash, PowerShell or Monitor tool (also inside `bash -c` / `cmd /c` / `pwsh -Command` / `-EncodedCommand`, after PowerShell's `--%`), turning +tdd / +ai off (`spec_add_track {remove}` / `add-track --remove`), a hand or shell edit of `.specs/roadmap.json`, a feature's `.state.json` (also by `dev-spec merge-state` or git's `checkout` / `restore` / `merge-file` / `rm` / `mv`) or a harness-observed log (`.execution/observed.jsonl`) — 1.25.1: also through a glob, a brace expansion, a variable, a whole folder, an extractor or a link to `.specs/`, text fed to a shell (`echo … | bash`, `bash <(…)`), another MCP server's file tool —, or lowering the guard → `ask` (a permission prompt naming the feature, phase, role and `--force`; Claude Code shows it in auto mode too, only bypass-permissions mode may skip it) or `deny` (refused; the user sees the `! node <clone>/cli/dev-spec.js …` command to run). A command naming the CLI with an approval word in a form the guard can't read always asks; one too long to read is treated as an approval. Silent otherwise — a shell command naming neither dev-spec, `.specs` nor a guarded file is never read further; it stops accidents and casual workarounds, not a determined agent with a shell (an inline or written script) — a guardrail, not a sandbox |
 | `hooks/spec-hook.js` | PostToolUse (Write/Edit) | On save: `requirements.md` → EARS lint + placeholders; `tasks.md` → traceability (+ EC/NFR/SC warnings); `design.md` → every active track's mandatory sections (`[SaaS]` `[AI]` `[SEC]` `[PRIVACY]` `[DIST]` `[API]` `[UI]` `[OBS]` `[DATA]`, and a track pack's), Constitution Check, placeholders; any spec file → marks `ROADMAP.md` / `SPECS.md` stale (a stamp in `.specs/.execution/`, refreshed once at the end of the turn). Skips `.execution/` and `.specs/templates/` |
 | `hooks/spec-hook.js` | SessionStart | Refreshes a stale `ROADMAP.md` / `SPECS.md` (a session that ended before its Stop hook), then one status line per feature (at most 20, the most relevant — then one "+N more — /spec-status" line), plus one line per finished feature whose implementing files drifted, one line when features' open tasks plan the same files (cross-feature overlap), one line while `.specs/` comes from an older dev-spec (`meta.specVersion` absent or older — run `/spec-upgrade`), and one line when `.gitattributes` names the spec state's merge driver but git config runs it from a missing script or another copy (re-run `merge-state --install` after a plugin update — read as text, no git process) |
 | `hooks/observe-hook.js` | PostToolUse + PostToolUseFailure (Bash, PowerShell) | Logs a Bash (or PowerShell, with an explicit exit code) run of a task's runnable `_Verify:_` command (or its `&&` join) or of a `meta.checks` command — `{command, exitCode, at, event, session}` — to `.specs/<feature>/.execution/observed.jsonl` / `.specs/.execution/observed.jsonl` (git-ignored, ≤ 64 KB); interrupted or backgrounded runs are skipped. The engine then stamps each reported run `observed: true / false`. Prints nothing |
 | `hooks/stop-hook.js` | Stop | First refreshes `ROADMAP.md` / `SPECS.md` when the turn's spec saves left them stale (once a turn); then the end-of-turn evidence gate: when the closing message claims done / verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without passing evidence (or, all tasks done, project checks without a passing run), sends the turn back with the reason; never twice in a row; off with `meta.stopCheck: false` |
-| `hooks/plan-hook.js` | PostToolUse (`ExitPlanMode`) | The plan-mode bridge: when the user approves a plan in a dev-spec project, one line of context suggests `/spec-import` of it (`spec_import {tool: "plan", text}` — or `{path}` when the plan file is inside the project); never imports by itself, silent elsewhere |
+| `hooks/plan-hook.js` | PostToolUse (`ExitPlanMode`) | The plan-mode bridge: when the user approves a plan in a dev-spec project, one line of context suggests `/spec-adopt import` of it (`spec_import {tool: "plan", text}` — or `{path}` when the plan file is inside the project); never imports by itself, silent elsewhere |
 | `hooks/stop-hook.js` | SubagentStop (`spec-implementer`, `spec-simplifier`) | An implementer's DONE for a task with a runnable `_Verify:_` needs its report (`task-N-report.md`, named in the reply) to carry each `_Verify:_` command and the exit code the task needs (exit 0; a non-zero exit for an `_Expect: fail_` task); a simplifier's DONE needs `simplify-report.md` to end with a `## Final runs` section in which every run exits 0 and every project check is one of the runs — else the stop is sent back |
 
 `hooks/precommit-check.js` is an optional git pre-commit validator (staged EARS errors, phantom references; a stale `ROADMAP.md` /
@@ -330,8 +333,8 @@ project-root/
 └── .specs/
     ├── roadmap.json              # order + dependencies + backlog + meta (lang, roadmapLang, guard, stopCheck, evidence, approvalGuard, checks, approvalRoles, changelogAt, specVersion, milestones)
     ├── ROADMAP.md  (ROADMAP.html)   # generated — never hand-edit
-    ├── SPECS.md                  # generated living catalog (spec_catalog write) — never hand-edit
-    ├── RELEASE-NOTES.md          # generated release notes (spec_changelog write) — never hand-edit
+    ├── SPECS.md                  # generated living catalog (spec_export {format: "catalog"} write) — never hand-edit
+    ├── RELEASE-NOTES.md          # generated release notes (spec_export {format: "changelog"} write) — never hand-edit
     ├── UPGRADE.md                # generated upgrade checklist (spec_upgrade apply) — tick its boxes as you go
     ├── exports/                  # generated stakeholder documents (spec_export write)
     ├── templates/                # the team's own scaffolds (spec_templates) — <artifact>.md, <lang>/, steering/
@@ -388,13 +391,13 @@ the Mermaid dependency graph): a progress bar, feature table (with an ETA column
 attention", and a backlog of planned-but-unspecced features. **An optional self-contained `.specs/ROADMAP.html`**
 (`html: true` / `--html`) renders the same as a brand-styled page (Pro Digital Key palette, offline,
 light/dark toggle defaulting to the system theme). It's kept up to date automatically: the engine
-regenerates it on every mutation (`spec_create`, `spec_complete_task`, `spec_approve`, `spec_depend`,
-`spec_backlog`, `spec_impact` reopen, `spec_feature`…); a spec file you (or the agent) hand-edit in Claude Code marks it stale and the
+regenerates it on every mutation (`spec_create`, `spec_complete_task`, `spec_approve`, `spec_roadmap_edit {kind: "depend"}`,
+`spec_roadmap_edit {kind: "backlog"}`, `spec_impact` reopen, `spec_feature`…); a spec file you (or the agent) hand-edit in Claude Code marks it stale and the
 Stop hook regenerates it once, at the end of the turn (SessionStart, the next mutation and the optional pre-commit check too —
 the pre-commit check stages it again when it was staged).
 As a backstop, call `spec_roadmap` with `write: true` (CLI: `dev-spec roadmap --write [--html]`). **Pass the
 user's language** (`lang` / `--lang pt`) so the roadmap chrome matches — it's stored and reused on
-auto-refresh. Track future work with `spec_backlog` (`/backlog add "name"`). The files are
+auto-refresh. Track future work with `spec_roadmap_edit {kind: "backlog"}` (`/roadmap backlog add "name"`). The files are
 auto-generated — never hand-edit them. Spikes are listed apart (🔬, with their timebox).
 
 **Forecasts.** A task's `_Size: XS|S|M|L|XL_` marker is worth 1 / 2 / 3 / 5 / 8 points (an unsized task counts as its
@@ -408,7 +411,7 @@ dependency's ETA — or `eta: null` with a `reason` (`not-enough-data`, `no-task
 the files under it), or an active feature planning files a finished feature recorded in its drift baseline, collide at
 merge time — unless a dependency orders them or `_Supersedes:_` declares it. They are listed in `overlaps`, under
 "needs attention", in a SessionStart line and as doctor's `cross-feature-overlap` warning: order them with
-`spec_depend`, or re-plan the files.
+`spec_roadmap_edit {kind: "depend"}`, or re-plan the files.
 
 "Needs attention" lists, per feature: unmet dependencies, open clarifications, unfilled track sections
 (every active track's — `[SaaS]` / `[AI]` / `[SEC]` / `[PRIVACY]` / `[DIST]` / `[API]` / `[UI]` / `[OBS]` / `[DATA]` — and a track pack's), template placeholders in the current phase, artifacts changed since their
@@ -420,69 +423,39 @@ A `ROADMAP.md`/`ROADMAP.html` that dev-spec did **not** generate (no `AUTO-GENER
 marker) is never overwritten. `lang` on `spec_roadmap` sets only the roadmap chrome language
 (`meta.roadmapLang`); the project language (`meta.lang`) is set by `spec_init`.
 
-## Command reference (55 commands)
+## Command reference
+
+`/spec` and `/spec-bugfix` are the model's too; every other command is the user's to type (the model calls the tool it
+wraps). Subcommands and flags are listed in each command's `argument-hint` and body.
 
 | Command | Phase | What it does |
 |---|---|---|
-| `/spec` | entry | Start/resume the whole workflow for a feature — picks mode + tracks, then runs the pipeline (uses `spec_classify`/`spec_next_action`) |
-| `/spec-tour` | entry | A guided ~10-minute tour on the user's own repo: one tiny real change through every gate, then keep / archive / remove it |
-| `/spec-init` | setup | Scaffold `.specs/steering/` for the active tracks; `--lang`, `--guard`, `--check`, `--roles`, `--stop-check` (uses `spec_init`) |
-| `/spec-guard` | setup | Guard mode on / off / scope: code edits ask while no feature has approved tasks (not Phase 4 test files, nor a spike's prototype) — scope: also outside the plan's files (uses `spec_init {guard}`) |
-| `/spec-templates` | setup | The team's own scaffolds in `.specs/templates/`: list / init / check (uses `spec_templates`) |
-| `/spec-tracks` | setup | The team's own tracks — packs in `.specs/tracks/<name>/`: list / init / check (uses `spec_tracks`) |
-| `/spec-superpowers` | setup | With superpowers installed too: a marked precedence block in CLAUDE.md (project or `--user`) routes feature work here; `--remove` |
-| `/spec-upgrade` | setup | After a plugin update: audit `.specs/` against the new rules, apply the safe migrations after an OK, then the critic / converge reviews it recommends (uses `spec_upgrade`) |
-| `/classify` | 0 | Pick mode + composable tracks; write classification.md (uses `spec_classify`) |
+| `/spec [idea \| feature] [phase]` | entry · 0–5 | Start or resume a feature — mode, tracks and size (`spec_classify`), then the phase named or the one `spec_next_action` names: requirements, design, test / eval plan, failing tests, tasks |
+| `/spec-bugfix` | bugfix | Reproduce → root cause (with evidence) → approval → failing regression test (`_Expect: fail_`) → fix → verify (uses `spec_create {kind: "bugfix"}`) |
 | `/spec-spike` | 0 | A timeboxed investigation that ends in a decision (go / no-go / pivot) (uses `spec_create {kind: "spike"}`) |
-| `/createSpec` | 1 | Requirements in EARS with stable AC IDs (uses `ears_validate`) |
-| `/clarify` | 1 | Surface requirement ambiguities/gaps before design (uses `spec_clarify`) |
-| `/grill` | 1 | Interrogate your understanding of the requirements before design, and fold the answers into requirements.md |
-| `/design` | 2 | Design with base + active-track mandatory sections |
-| `/testPlan` | 3 | (+tdd) enumerate tests, map to AC IDs, choose layers and Kind (example / property) |
-| `/evalPlan` | 3 | (+ai) golden/adversarial/regression sets, graders, thresholds, baseline |
-| `/writeTests` | 4 | (+tdd/+ai) failing tests (T-IDs in test names, `trace --code`) + eval harness; the hard gate |
-| `/createTask` | 5 | Traceable, ordered tasks with `_Verify:_`, `_Expect: fail_`, `_Size:_` (uses `trace_check`) |
-| `/executeTask` | 6 | Implement: core / red-green-refactor / prompt-iteration per task; `--subagents` → implementer + reviewer per task (uses `spec_task_brief`) |
-| `/spec-converge` | 6 | Whole feature AC by AC vs the code (reviewer in converge mode) → approved follow-up tasks (uses `spec_append_tasks`) |
-| `/spec-doctor` | gate | Health-check a feature; returns readyToAdvance + gate status (uses `spec_doctor`); `--deep` adds the `spec-critic` semantic review |
-| `/approve` | gate | Record a phase approval — refused while its checks fail, `--force` records it as forced (`--reason` / `--expires` = its waiver), `--role` signs as a role, `--revoke` withdraws an approval (uses `spec_approve`) |
-| `/spec-ff` | gate | Fast-forward: approve every filled planning phase in order, each through its own gate (uses `spec_approve {through}`) |
-| `/next-action` | any | "You are here → do this next" + what changed since approval (uses `spec_next_action`) |
-| `/spec-impact` | change | What an edit after approval touches; `--reopen` with the user's OK; then re-approve (uses `spec_impact`) |
-| `/spec-decide` | change | Record a decision or discovery in `decisions.md` (D-n, `_Affects:_`) (uses `spec_decide`) |
-| `/add-track` | any | Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data, additive; `--remove` takes a track off without deleting files (uses `spec_add_track`) |
-| `/feature` | any | Archive / restore / rename / remove a feature, deps kept consistent; `flow` switches design-first; remove needs `confirm: true` (CLI `--yes`) (uses `spec_feature`) |
-| `/eval` | +ai | Run the local eval harness (golden/adversarial/regression) with your API key |
-| `/roadmap` | any | Multi-feature roadmap: %, deps, blocked, cycles, ETA, overlaps, needs attention; writes `.specs/ROADMAP.md` (uses `spec_roadmap`) |
-| `/depend` | any | Show / set / edit feature dependencies and order, cycle-checked; CLI `--add` / `--rm` / `--clear` (uses `spec_depend`) |
-| `/backlog` | any | Add/remove planned features shown in ROADMAP.md (uses `spec_backlog`) |
-| `/spec-catalog` | any | Living catalog of every feature + AC, superseded ones marked → `.specs/SPECS.md` (uses `spec_catalog`) |
-| `/spec-export` | any | One offline, printable document of a feature or the project for stakeholders; `--csv` the traceability matrix, `--gherkin` BDD `.feature` files, `--tracker jira` · `--tracker linear` a tracker import CSV, `--adr` the decision log as MADR files (uses `spec_export`) |
-| `/spec-changelog` | after | Release notes (Added · Changed · Fixed) from the specs → `.specs/RELEASE-NOTES.md`; `--milestone <name>` scopes them (uses `spec_changelog`) |
-| `/spec-milestone` | any | Milestones: a target date for a set of features vs their ETAs → on-track · at-risk · late · done (uses `spec_milestone`) |
-| `/scan` | brownfield | Inventory an existing codebase (uses `spec_scan`) |
-| `/reverse` | brownfield | Reverse-engineer steering + specs from existing code |
-| `/coverage` | brownfield | Spec coverage of existing code via `_Implements:_` (uses `spec_coverage`) |
-| `/spec-import` | brownfield | Import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan, BMAD docs or a fluidplan plan as a new feature — or Kiro steering / Cursor rules as steering files; `--dry-run` writes nothing (uses `spec_import`) |
-| `/spec-bugfix` | bugfix | Reproduce → root cause (with evidence) → approval → failing regression test (`_Expect: fail_`) → fix → verify (uses `spec_create {kind:"bugfix"}`) |
-| `/spec-simplify` | close | Optional, before `/spec-finish`: behaviour-preserving cleanups of the feature's own lines, one commit each, proven by the tests and reviewed; `--subagents` → the `spec-simplifier` agent |
+| `/clarify [--grill]` | 1 | Requirement ambiguities / gaps before design (`spec_clarify`); `--grill` interrogates one question at a time and folds the answers into requirements.md |
+| `/approve [phase \| --through p] [--force \| --revoke]` | gate | The user's sign-off: refused while the phase's checks fail; `--through` fast-forwards the filled phases, each through its own gate; `--force` (`--reason` / `--expires` = its waiver), `--role`, `--revoke` (uses `spec_approve`) |
+| `/spec-doctor [--deep]` | gate | Health-check a feature: readyToAdvance + gate status (`spec_doctor`); `--deep` adds the `spec-critic` semantic review |
+| `/executeTask [n] [--subagents] \| commit` | 6 | Implement: core / red-green-refactor / prompt-iteration per task; `--subagents` → implementer + reviewer (+ a verifier per finding) per task (uses `spec_task_brief`); `commit` writes the spec-referencing commit message (format below) |
+| `/spec-review branch \| converge \| simplify \| feedback \| prompt` | 6 · close | `branch`: the track-aware local pre-merge review against the full chain, the written rules and the history of rewritten lines, each finding verified (80+) · `converge`: the whole feature AC by AC → approved follow-up tasks (`spec_append_tasks`) · `simplify`: optional behaviour-preserving cleanups of the feature's own lines, one commit each, proven by the tests · `feedback`: review comments against the spec · `prompt` (+ai): a prompt change gated on eval / cost / version |
 | `/spec-finish` | close | Blockers + warnings + fresh checks + a merge summary from the spec chain; then merge locally / keep (uses `spec_finish`) |
-| `/spec-drift` | after | Implementing files changed since finish, and what to do about it (uses `spec_drift`) |
-| `/spec-metrics` | after | Lead times, rework, forced approvals, change requests, pass rate, velocity; `--write` → retro.md (uses `spec_metrics`) |
-| `/spec-review-feedback` | support | Classify review comments against the spec: fix AC violations, route spec changes, push back on out-of-scope |
-| `/spec-commit` | support | Conventional commits referencing spec + tests + evals (format below) |
-| `/prReview` | support | Track-aware local pre-merge review against the full chain, the project's written rules and the history of rewritten lines; each finding verified (confidence 80+) before it is reported |
-| `/promptReview` | support | (+ai) gate prompt changes on eval/cost/version |
-| `/migrateModel` | support | (+ai) eval-gated model migration |
-| `/spec-status` | any | Mode, tracks, phase, task/test/eval state (uses `spec_status`/`spec_list`) |
-| `/spec-statusline` | setup | Claude Code status line: the active feature, tasks, unverified ticks, next step — writes the `settings.json` entry after you confirm (uses `dev-spec statusline`) |
+| `/spec-change impact \| decide \| track ±x` | change | `impact`: what an edit after approval touches, `--reopen` with the user's OK, then re-approve (`spec_impact`) · `decide`: a D-n entry in decisions.md (`spec_decide`) · `track +x` / `-x`: add a track, additive, or take one off without deleting files (`spec_add_track`) |
+| `/spec-status` | any | Mode, tracks, phase, task / test / eval state (uses `spec_status`) |
+| `/roadmap [--write \| --html] \| depend \| backlog \| milestone` | any | The roadmap: %, deps, blocked, cycles, ETA, overlaps, needs attention → `.specs/ROADMAP.md` (`spec_roadmap`) · `depend`: dependencies and order, cycle-checked · `backlog`: planned-but-unspecced features · `milestone`: target dates vs ETAs (`spec_roadmap_edit {kind}`) |
+| `/feature` | any | Archive / restore / rename / remove a feature, deps kept consistent; `flow` switches design-first; remove needs `confirm: true` (CLI `--yes`) (uses `spec_feature`) |
+| `/spec-report catalog \| drift \| metrics \| changelog \| export` | after | The living catalog → `.specs/SPECS.md` · drift since finish · metrics and retro · release notes → `.specs/RELEASE-NOTES.md` · the stakeholder export (HTML / md, `--csv`, `--gherkin`, `--tracker jira \| linear`, `--adr`) (`spec_export`, `spec_drift`, `spec_metrics`) |
+| `/spec-adopt scan \| reverse \| coverage \| import` | brownfield | Inventory an existing codebase (`spec_scan`), reverse-engineer steering + specs, spec coverage via `_Implements:_` (`spec_scan {coverage: true}`), import a Kiro / spec-kit / OpenSpec spec, a plan, a Codex ExecPlan, BMAD docs, a fluidplan plan — or Kiro steering / Cursor rules (`spec_import`; `--dry-run` writes nothing) |
+| `/spec-setup init \| guard \| statusline \| superpowers \| templates \| tracks` | setup | `.specs/steering/` for the tracks (`spec_init`: `--lang`, `--check`, `--roles`, `--stop-check`) · guard mode on / off / scope (`spec_init {guard}`) · the Claude Code status line (`dev-spec statusline`) · the superpowers precedence block in CLAUDE.md · the team's scaffolds in `.specs/templates/` (`spec_templates`) · the team's track packs in `.specs/tracks/<name>/` (`spec_tracks`) |
+| `/spec-upgrade` | setup | After a plugin update: audit `.specs/` against the new rules, apply the safe migrations after an OK, then the critic / converge reviews it recommends (uses `spec_upgrade`) |
+| `/eval run \| baseline \| migrate` | +ai | Run the local eval harness (golden / adversarial / regression) with your API key, record a baseline, migrate to another model only on an equal-or-better eval |
+| `/spec-tour` | entry | A guided ~10-minute tour on the user's own repo: one tiny real change through every gate, then keep / archive / remove it |
 
-**Aliases:** `/ds` → `/spec` · `/dsx` → `/executeTask` · `/dss` → `/spec-status`. (As a plugin, all
-commands are namespaced, e.g. `/dev-spec-driven:spec-doctor`. The `spec-` prefix on `/spec-init`, `/spec-status`,
-`/spec-doctor` and `/spec-commit` keeps them from colliding with Claude Code's built-in `/init`, `/status`,
-`/doctor` and `/commit`. Other MCP clients get the same commands as MCP prompts.)
+**Aliases:** `/ds` → `/spec` · `/dsx` → `/executeTask` · `/dss` → `/spec-status`. (As a plugin, all commands are
+namespaced, e.g. `/dev-spec-driven:spec-doctor`. The `spec-` prefix on `/spec-setup`, `/spec-status` and
+`/spec-doctor` keeps them from colliding with Claude Code's built-in `/init`, `/status` and `/doctor`. Other MCP clients
+get the same commands as MCP prompts.)
 
-## Commit messages (`/spec-commit`)
+## Commit messages (`/executeTask commit`)
 
 Conventional commits whose body references the spec chain:
 

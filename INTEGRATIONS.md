@@ -2,11 +2,11 @@
 
 The methodology travels through **three portable layers**, so it works far beyond Claude Code:
 
-1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 38
+1. **MCP server** (`mcp/server.js`) — the open Model Context Protocol. Any MCP client gets all 32
    tools (`spec_classify`, `spec_init`, `spec_create`, `spec_doctor`, `trace_check`, `ears_validate`,
    `spec_approve`, …), including the change-management ones — `spec_impact`, `spec_append_tasks`,
-   `spec_import`, `spec_metrics`, `spec_catalog`, `spec_drift` —, `spec_upgrade` (after a plugin update) and the 1.14
-   ones — `spec_templates`, `spec_export`, `spec_changelog`, `spec_decide` — and (1.15) `spec_tracks` (project-defined tracks) — and (1.16) `spec_stop_check` (the end-of-turn evidence gate for clients
+   `spec_import`, `spec_metrics`, `spec_export {format: "catalog"}`, `spec_drift` —, `spec_upgrade` (after a plugin update) and the 1.14
+   ones — `spec_templates`, `spec_export`, `spec_export {format: "changelog"}`, `spec_decide` — and (1.15) `spec_tracks` (project-defined tracks) — and (1.16) `spec_stop_check` (the end-of-turn evidence gate for clients
    without hooks) and `spec_log` (commits per task from the `git log` text the client passes — the server never runs git). They are plain local file operations, so
    they behave the same in every client. The server also offers **prompts** (one per plugin command) and read-only
    **resources** (the specs) — see [MCP prompts and resources](#mcp-prompts-and-resources).
@@ -57,7 +57,7 @@ prints the config with that path already filled in for your machine.
 Besides its tools, the `spec-driven` server advertises two more MCP capabilities, so clients that support them get
 more than tool calls:
 
-- **Prompts** — one per plugin command (`spec`, `spec-status`, `spec-impact`, `spec-ff`, `spec-tour`, … — 55 of them, read from
+- **Prompts** — one per plugin command (`spec`, `spec-status`, `spec-change`, `approve`, `spec-tour`, … — 22 of them, read from
   `commands/*.md`), each with one optional `args` argument. A client that surfaces MCP prompts shows them as slash
   commands or in a prompt picker — VS Code / Copilot Chat, for example, lists them under `/`; whether and how another
   client shows them depends on the client and its version. Each prompt starts with one line telling an agent without the
@@ -75,9 +75,10 @@ server entry (`"env": { "SPEC_MCP_PROMPTS": "off" }`) if you don't want them.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 55 commands, the 4 agents, the hooks (PostToolUse + SessionStart, the Stop /
-SubagentStop evidence gate, the Bash observed-evidence log, the ExitPlanMode plan-mode bridge, plus the opt-in PreToolUse
-guard and approval guard) and the MCP server all load:
+Native — it's a plugin (Claude Code 2.1.139 or later: its hooks run in exec form). Skills, the 22 commands, the 5
+agents, the hooks (PostToolUse + SessionStart, the Stop / SubagentStop evidence gate, the Bash / PowerShell
+observed-evidence log, the ExitPlanMode plan-mode bridge, plus the opt-in PreToolUse guard and approval guard) and the
+MCP server all load:
 
 ```bash
 claude --plugin-dir "<PLUGIN>"
@@ -85,7 +86,7 @@ claude --plugin-dir "<PLUGIN>"
 
 Or register just the MCP server: `claude mcp add spec-driven -- node "<PLUGIN>/mcp/server.js"`.
 See [INSTALL.md](./INSTALL.md) for the persistent marketplace install, your defaults (`DEV_SPEC_DEFAULT_LANG`, `DEV_SPEC_STOP_CHECK`,
-`DEV_SPEC_GUARD_DEFAULT` — fallbacks a project's `roadmap.json` overrides) and the opt-in status line (`/spec-statusline`, or
+`DEV_SPEC_GUARD_DEFAULT` — fallbacks a project's `roadmap.json` overrides) and the opt-in status line (`/spec-setup statusline`, or
 `node "<PLUGIN>/cli/dev-spec.js" statusline --print-config` for the `settings.json` entry).
 
 The MCP server also answers `completion/complete` (feature slugs for the prompts' feature argument, and the `{slug}` /
@@ -94,7 +95,7 @@ The MCP server also answers `completion/complete` (feature slugs for the prompts
 client can use both.
 
 **Alongside superpowers.** If the superpowers plugin is installed too, its planning / TDD / debugging / execution /
-review / branch-finishing skills overlap this plugin. `/spec-superpowers` writes (after you confirm) a marked
+review / branch-finishing skills overlap this plugin. `/spec-setup superpowers` writes (after you confirm) a marked
 precedence block into the project's `CLAUDE.md` (or `~/.claude/CLAUDE.md` with `--user`) — superpowers itself defers
 to CLAUDE.md — so feature work runs here and superpowers keeps the rest. To switch it off instead: per project,
 `.claude/settings.json` → `"enabledPlugins": { "superpowers@claude-plugins-official": false }`; everywhere, `/plugin disable`.
@@ -134,7 +135,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   { "mcpServers": { "spec-driven": { "command": "node", "args": ["<PLUGIN>/mcp/server.js"] } } }
   ```
 - **Rules:** [`.cursor/rules/dev-spec-driven.mdc`](./.cursor/rules/dev-spec-driven.mdc) ships in this
-  repo (`alwaysApply: true`). For your own project, generate it with absolute paths:
+  repo (`alwaysApply: false` with a `description` — an Agent Requested rule: Cursor loads it when the task is spec-driven
+  work, not in every chat). For your own project, generate it with absolute paths:
   `mkdir -p .cursor/rules && node "<PLUGIN>/cli/dev-spec.js" rules cursor > .cursor/rules/dev-spec-driven.mdc`
   (PowerShell: the recipe at the top).
 - **Your existing rules (1.25):** `node "<PLUGIN>/cli/dev-spec.js" import cursor-rules --dry-run` shows how the project's
@@ -150,7 +152,7 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   { "mcpServers": { "spec-driven": { "command": "node", "args": ["<PLUGIN>/mcp/server.js"] } } }
   ```
 - **Rules:** [`.windsurf/rules/dev-spec-driven.md`](./.windsurf/rules/dev-spec-driven.md)
-  (`trigger: always_on`). For your own project:
+  (`trigger: model_decision` with a `description` — Windsurf loads it when the task calls for it). For your own project:
   `mkdir -p .windsurf/rules && node "<PLUGIN>/cli/dev-spec.js" rules windsurf > .windsurf/rules/dev-spec-driven.md`
   (PowerShell: the recipe at the top).
 
@@ -231,7 +233,7 @@ for specs not implemented yet, the converge pass for half-done ones) runs inline
 |---|---|---|---|
 | Engine tools (classify, scaffold, doctor, trace, EARS, approval gates and roles, evidence, impact, converge, import, catalog, drift, metrics, upgrade, templates, export, changelog, decisions) | ✅ MCP | ✅ MCP | ✅ CLI |
 | Workflow methodology | ✅ skill | ✅ `AGENTS.md` / rules file | ✅ `AGENTS.md` |
-| Slash commands (`/spec`, `/spec-doctor`, `/spec-impact`, …) | ✅ | ✅ as MCP prompts, where the client shows them (else the CLI) | — (use the CLI; `dev-spec prompts` prints one) |
+| Slash commands (`/spec`, `/spec-doctor`, `/spec-change`, …) | ✅ | ✅ as MCP prompts, where the client shows them (else the CLI) | — (use the CLI; `dev-spec prompts` prints one) |
 | Spec resources (`specs://…`) | — (the files are in the project) | ✅ where the client supports resources | — |
 | Hooks on save (EARS / traceability / design checks) + SessionStart status, drift, upgrade and overlap lines | ✅ | — (use git `pre-commit`, `dev-spec doctor`, `dev-spec drift`, `dev-spec upgrade`, `dev-spec roadmap`) | ✅ git pre-commit |
 | End-of-turn evidence gate (a "done" claim with unverified ticks is sent back) | ✅ Stop / SubagentStop hook, on by default | — (call the `spec_stop_check {message}` MCP tool before claiming done — or the CLI `dev-spec stop-check --message "…"`) | — (`dev-spec stop-check`) |

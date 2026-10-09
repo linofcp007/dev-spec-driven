@@ -71,16 +71,16 @@ Pick only the criteria that fit the improvement (US-1.AC-1 and US-1.AC-7 always)
 - **Track:** usually `core`; add **+tdd** whenever behaviour must be pinned before moving code
   (almost always, for refactors). The red-green here is: write characterization tests → refactor →
   tests still green.
-- **Grill first:** before touching the code, run `/grill` (or `/guardian-grill` on the current
-  module) so you understand the branches you're about to move. Fold that Shared Understanding into the
-  requirements — it's free RFC.
+- **Grill first:** before touching the code, grill the requirements (`spec_clarify`, the user's
+  `/clarify --grill` — or `/guardian-grill` on the current module) so you understand the branches you're about to
+  move. Fold that Shared Understanding into the requirements — it's free RFC.
 - **Exit = re-measure:** the feature is done when `dev-guardian`'s gate re-runs and shows the target
   deltas met. Record the before/after in the spec's completion note so the improvement is auditable.
 
 ## The loop this belongs to
 
 ```
-guardian gate (measure)  →  /guardian-improve (seed specs)  →  /grill (understand)
+guardian gate (measure)  →  /guardian-improve (seed specs)  →  /clarify --grill (understand)
         ↑                                                              │
         └──────────────  re-run gate (prove the delta)  ←── execute ───┘
 ```

@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, tmp, CLI, require, __dirname }) => {
 // B5 — `done --run` honours _Expect: fail_ (+ records the git commit), `init --check` / `finish --run` (meta.checks), `dev-spec log`.
 // Commands run in cmd.exe and sh alike (node -e "…" in double quotes); git runs isolated from the user's config and is optional.
 const Sb5 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -34,12 +34,15 @@ const dRedJ = rb5(["done", "redcli", "2", "--run", "--json", "--project", pb]);
 const dRedJr = jsonB5(dRedJ.stdout);
 const tasksB5 = fs.readFileSync(path.join(fb.dir, "tasks.md"), "utf8");
 const ev2B5 = stB5(pb, "redcli").evidence["2"];
-ok(dPass.code === 1 && /Task 1 expects its test to FAIL \(_Expect: fail_\), but the run passed \(exit 0\)/.test(dPass.out) && /- \[ \] 1\./.test(tasksB5) &&
-  dRed.code === 0 && /Task 2 done \(verified\)/.test(dRed.out) && /✓ red run recorded for task 2 \(exit 3\) — the test fails before its fix/.test(dRed.out) && /- \[x\] 2\./.test(tasksB5) &&
-  dRedJ.code === 0 && dRedJr && dRedJr.redRecorded === true && dRedJr.expected === "fail" && dRedJr.alreadyDone === true && !/red run recorded/.test(dRedJ.stdout) &&
-  ev2B5.expected === "fail" && ev2B5.exitCode === 3 && (!("commit" in ev2B5) || gitB5(pb, "rev-parse", "HEAD").status === 0),
-  "done --run on an _Expect: fail_ task: a passing _Verify:_ is refused (task stays open), a failing one ticks it as the red proof with a line saying so; --json keeps stdout one document (redRecorded, expected: 'fail'); no git repository → no commit recorded (got " +
-  JSON.stringify([dPass.out.slice(0, 160), dRed.out.slice(0, 240)]) + ")");
+all("done --run on an _Expect: fail_ task: a passing _Verify:_ is refused (task stays open), a failing one ticks it as the red proof with a line saying so; --json keeps stdout one document (redRecorded, expected: 'fail'); no git repository → no commit recorded (got " +
+  JSON.stringify([dPass.out.slice(0, 160), dRed.out.slice(0, 240)]) + ")", [
+  () => dPass.code === 1, () => /Task 1 expects its test to FAIL \(_Expect: fail_\), but the run passed \(exit 0\)/.test(dPass.out),
+  () => /- \[ \] 1\./.test(tasksB5), () => dRed.code === 0, () => /Task 2 done \(verified\)/.test(dRed.out),
+  () => /✓ red run recorded for task 2 \(exit 3\) — the test fails before its fix/.test(dRed.out), () => /- \[x\] 2\./.test(tasksB5),
+  () => dRedJ.code === 0, () => dRedJr, () => dRedJr.redRecorded === true, () => dRedJr.expected === "fail", () => dRedJr.alreadyDone === true,
+  () => !/red run recorded/.test(dRedJ.stdout), () => ev2B5.expected === "fail", () => ev2B5.exitCode === 3,
+  () => (!("commit" in ev2B5) || gitB5(pb, "rev-parse", "HEAD").status === 0),
+]);
 
 // done --run records the commit it ran on and whether the tree was dirty (changes under .specs/ don't count) — git read-only.
 if (hasGitB5) {
@@ -76,13 +79,17 @@ const icJ = rb5(["init", "--json", "--check=e2e=node e2e.js", "--project", pc]);
 const icJr = jsonB5(icJ.stdout);
 const icPt = rb5(["init", "--lang", "pt", "--check", "e2e=node e2e.js", "--project", path.join(tmp, "b5-checks-pt")]);
 const icEs = rb5(["init", "--lang", "es", "--check", "oops", "--project", path.join(tmp, "b5-checks-es")]);
-ok(ic1.code === 0 && /Project checks \(meta\.checks\): test → npm test · lint → npm run lint/.test(ic1.out) && JSON.stringify(m1B5) === JSON.stringify({ test: "npm test", lint: "npm run lint" }) &&
-  ic2.code === 0 && JSON.stringify(m2B5) === JSON.stringify({ test: "npm test" }) && icBad.code === 1 && /--check expects name=command \(got 'oops'\)/.test(icBad.out) &&
-  icBadName.code === 1 && /invalid check name 'bad name'/.test(icBadName.out) && JSON.stringify(m3B5) === JSON.stringify(m2B5) &&
-  icJ.code === 0 && icJr && JSON.stringify(icJr.checks) === JSON.stringify({ test: "npm test", e2e: "node e2e.js" }) &&
-  icPt.code === 0 && /Verificações do projeto \(meta\.checks\): e2e → node e2e\.js/.test(icPt.out) && icEs.code === 1 && /--check espera nombre=comando \(recibido 'oops'\)/.test(icEs.out),
-  "init --check name=cmd (repeatable, --check=… too) sets roadmap.json meta.checks, name= removes one, a value without '=' or a bad name is refused writing nothing; --json reports the checks; PT line, ES error (got " +
-  JSON.stringify([ic1.out.slice(-120), icBad.out.slice(0, 120)]) + ")");
+all("init --check name=cmd (repeatable, --check=… too) sets roadmap.json meta.checks, name= removes one, a value without '=' or a bad name is refused writing nothing; --json reports the checks; PT line, ES error (got " +
+  JSON.stringify([ic1.out.slice(-120), icBad.out.slice(0, 120)]) + ")", [
+  () => ic1.code === 0, () => /Project checks \(meta\.checks\): test → npm test · lint → npm run lint/.test(ic1.out),
+  () => JSON.stringify(m1B5) === JSON.stringify({ test: "npm test", lint: "npm run lint" }), () => ic2.code === 0,
+  () => JSON.stringify(m2B5) === JSON.stringify({ test: "npm test" }), () => icBad.code === 1,
+  () => /--check expects name=command \(got 'oops'\)/.test(icBad.out), () => icBadName.code === 1,
+  () => /invalid check name 'bad name'/.test(icBadName.out), () => JSON.stringify(m3B5) === JSON.stringify(m2B5), () => icJ.code === 0, () => icJr,
+  () => JSON.stringify(icJr.checks) === JSON.stringify({ test: "npm test", e2e: "node e2e.js" }), () => icPt.code === 0,
+  () => /Verificações do projeto \(meta\.checks\): e2e → node e2e\.js/.test(icPt.out), () => icEs.code === 1,
+  () => /--check espera nombre=comando \(recibido 'oops'\)/.test(icEs.out),
+]);
 
 // finish --run: runs every project check (from the project root), records each (a failure too — it stays a blocker); --json; PT.
 const pf = path.join(tmp, "b5-finish");
@@ -97,13 +104,20 @@ const fPtB5 = Sb5.createFeature(pf, "Fim", ["core"], "", undefined, "pt");
 fs.writeFileSync(path.join(fPtB5.dir, "tasks.md"), "- [x] 1. [US1] Feito\n");
 const frPt = rb5(["finish", "fim", "--run", "--project", pf]);
 const frNone = rb5(["finish", "redcli", "--run", "--project", pb]);
-ok(fr.code === 1 && /\$ node -e "process\.exit\(0\)" {3}\(test\)/.test(fr.out) && /\$ node -e "process\.exit\(2\)" {3}\(lint\)/.test(fr.out) && /Recorded 2 project check run\(s\) in \.state\.json → finishChecks\./.test(fr.out) &&
-  /✗ project checks without a passing run since the last task activity: lint \(latest run failed \(exit 2\)\)/.test(fr.out) && !/test \(no run/.test(fr.out) && fcB5.test.exitCode === 0 && fcB5.lint.exitCode === 2 &&
-  frJ.code === 1 && frJr && frJr.recordedChecks.length === 2 && frJr.suiteChecks.find((c) => c.name === "test").status === "pass" && /\$ node -e/.test(frJ.stderr) && !/\$ node -e/.test(frJ.stdout) &&
-  /Registada\(s\) 2 execução\(ões\) de verificações do projeto/.test(frPt.out) && /verificações do projeto sem uma execução bem-sucedida .*: lint \(a última execução falhou \(exit 2\)\)/.test(frPt.out) &&
-  frNone.code === 1 && /no project checks to run \(roadmap\.json meta\.checks\) — set them: node "[^"]*dev-spec\.js" init --check test="npm test"/.test(frNone.out),
-  "finish --run runs each meta.checks command and records it (a failure stays the suite-evidence blocker); --json keeps stdout one document; PT; without meta.checks it runs nothing and exits 1 (got " +
-  JSON.stringify([fr.out.slice(0, 300), frNone.out.slice(0, 120)]) + ")");
+all("finish --run runs each meta.checks command and records it (a failure stays the suite-evidence blocker); --json keeps stdout one document; PT; without meta.checks it runs nothing and exits 1 (got " +
+  JSON.stringify([fr.out.slice(0, 300), frNone.out.slice(0, 120)]) + ")", [
+  () => fr.code === 1, () => /\$ node -e "process\.exit\(0\)" {3}\(test\)/.test(fr.out),
+  () => /\$ node -e "process\.exit\(2\)" {3}\(lint\)/.test(fr.out),
+  () => /Recorded 2 project check run\(s\) in \.state\.json → finishChecks\./.test(fr.out),
+  () => /✗ project checks without a passing run since the last task activity: lint \(latest run failed \(exit 2\)\)/.test(fr.out),
+  () => !/test \(no run/.test(fr.out), () => fcB5.test.exitCode === 0, () => fcB5.lint.exitCode === 2, () => frJ.code === 1, () => frJr,
+  () => frJr.recordedChecks.length === 2, () => frJr.suiteChecks.find((c) => c.name === "test").status === "pass",
+  () => /\$ node -e/.test(frJ.stderr), () => !/\$ node -e/.test(frJ.stdout),
+  () => /Registada\(s\) 2 execução\(ões\) de verificações do projeto/.test(frPt.out),
+  () => /verificações do projeto sem uma execução bem-sucedida .*: lint \(a última execução falhou \(exit 2\)\)/.test(frPt.out),
+  () => frNone.code === 1,
+  () => /no project checks to run \(roadmap\.json meta\.checks\) — set them: node "[^"]*dev-spec\.js" init --check test="npm test"/.test(frNone.out),
+]);
 const pp = path.join(tmp, "b5-finish-pipe");
 rb5(["init", "--check", "piped=node -e \"process.exit(0)\" | node -e \"process.exit(0)\"", "--project", pp]);
 Sb5.createFeature(pp, "Pipe", ["core"], "", undefined, "en");

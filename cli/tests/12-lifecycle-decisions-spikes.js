@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, tmp, CLI, require, __dirname }) => {
 // C2 — `dev-spec decide` (= spec_decide) and `dev-spec spike` / `create --kind spike` (= spec_create {kind: "spike"}), EN / PT.
 const Sc2 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const jsonC2 = (s) => { try { return JSON.parse(s); } catch { return null; } };
@@ -26,14 +26,17 @@ const dcBad = rc2(["decide", "auth", "--title", "x", "--decision", "y", "--affec
 const dcBadJ = rc2(["decide", "auth", "--title", "x", "--decision", "y", "--affects", "T-99", "--json", "--project", pd]);
 const dcNoTitle = rc2(["decide", "auth", "--decision", "y", "--project", pd]);
 const dcUsage = rc2(["decide", "--project", pd]);
-ok(dc1.code === 0 && /^✎ D-1 — JWT sessions  \(\.specs\/auth\/decisions\.md\)\n  _Affects: US-1\.AC-2, T-02, Architecture_\n$/.test(dc1.out) &&
-  dc2.code === 0 && dc2j && dc2j.ok === true && dc2j.id === "D-2" && dc2j.kind === "discovery" && JSON.stringify(dc2j.supersedes) === '["D-1"]' &&
-  /\n## D-2 — Skew\n\n- _Kind: discovery_\n- _Date: [^_]+_\n- _Supersedes: D-1_\n\n\*\*Discovery:\*\* 30 s of skew\.\n$/.test(before) &&
-  dcBad.code === 1 && /unknown _Affects:_ reference\(s\): US-9\.AC-9, Ghost — /.test(dcBad.out) && dcBadJ.code === 1 && jsonC2(dcBadJ.stdout) && jsonC2(dcBadJ.stdout).unknownAffects[0] === "T-99" &&
-  dcNoTitle.code === 1 && /needs a title/.test(dcNoTitle.out) && dcUsage.code === 1 && /dev-spec decide <feature>/.test(dcUsage.out) &&
-  fs.readFileSync(path.join(fd.dir, "decisions.md"), "utf8") === before,
-  "decide = spec_decide: appends D-1 (✎ line, canonical _Affects:_), --discovery + --supersedes, --json = the MCP result; unknown _Affects:_ / no --title → exit 1, nothing written (got " +
-  JSON.stringify([dc1.out, dcBad.out.slice(0, 120)]) + ")");
+all("decide = spec_decide: appends D-1 (✎ line, canonical _Affects:_), --discovery + --supersedes, --json = the MCP result; unknown _Affects:_ / no --title → exit 1, nothing written (got " +
+  JSON.stringify([dc1.out, dcBad.out.slice(0, 120)]) + ")", [
+  () => dc1.code === 0, () => /^✎ D-1 — JWT sessions  \(\.specs\/auth\/decisions\.md\)\n  _Affects: US-1\.AC-2, T-02, Architecture_\n$/.test(dc1.out),
+  () => dc2.code === 0, () => dc2j, () => dc2j.ok === true, () => dc2j.id === "D-2", () => dc2j.kind === "discovery",
+  () => JSON.stringify(dc2j.supersedes) === '["D-1"]',
+  () => /\n## D-2 — Skew\n\n- _Kind: discovery_\n- _Date: [^_]+_\n- _Supersedes: D-1_\n\n\*\*Discovery:\*\* 30 s of skew\.\n$/.test(before),
+  () => dcBad.code === 1, () => /unknown _Affects:_ reference\(s\): US-9\.AC-9, Ghost — /.test(dcBad.out), () => dcBadJ.code === 1,
+  () => jsonC2(dcBadJ.stdout), () => jsonC2(dcBadJ.stdout).unknownAffects[0] === "T-99", () => dcNoTitle.code === 1,
+  () => /needs a title/.test(dcNoTitle.out), () => dcUsage.code === 1, () => /dev-spec decide <feature>/.test(dcUsage.out),
+  () => fs.readFileSync(path.join(fd.dir, "decisions.md"), "utf8") === before,
+]);
 
 // 1.22 review — `--affects "Decisions, reuse & risks"` (the size-S scaffold's own heading, typed unquoted): rejoined, written `quoted`.
 const fS22 = Sc2.createFeature(pd, "Small", ["core"], "", undefined, "en", "feature", { size: "s" });
@@ -77,15 +80,17 @@ const docS2 = rc2(["doctor", "cache-spike", "--project", ps]);
 const naS2 = rc2(["next-action", "cache-spike", "--json", "--project", ps]);
 const finS = rc2(["finish", "cache-spike", "--write", "--project", ps]);
 const rmS = rc2(["roadmap", "--write", "--project", ps]);
-ok(docS.code === 1 && /✗ decision — spike\.md → Decision is not written yet/.test(docS.out) && /✓ timebox — timebox until 2099-01-31/.test(docS.out) &&
-  apS.code === 1 && /is a spike: it has no design gate/.test(apS.out) && atS.code === 1 && /is a spike — it has no tracks/.test(atS.out) &&
-  /Record the decision in spike\.md → Decision/.test(naS.out) &&
-  docS2.code === 0 && /✓ decision — decision recorded \(_Outcome: no-go_\)/.test(docS2.out) &&
-  jsonC2(naS2.stdout) && jsonC2(naS2.stdout).step === "archive" && jsonC2(naS2.stdout).outcome === "no-go" &&
-  finS.code === 0 && /spike 'cache-spike' is ready to finish/.test(finS.out) && fs.existsSync(path.join(ps, ".specs", "cache-spike", ".execution", "merge-summary.md")) &&
-  rmS.code === 0 && /\[cache-spike\]\(\.\/cache-spike\/spike\.md\) 🔬 spike/.test(fs.readFileSync(path.join(ps, ".specs", "ROADMAP.md"), "utf8")),
-  "spike on the CLI: doctor exits 1 until the decision is written; approve / add-track refuse a spike; next-action goes decide → archive (no-go); finish is ready once decided; ROADMAP.md labels it (got " +
-  JSON.stringify([docS.out.slice(0, 200), naS.out.slice(0, 160)]) + ")");
+all("spike on the CLI: doctor exits 1 until the decision is written; approve / add-track refuse a spike; next-action goes decide → archive (no-go); finish is ready once decided; ROADMAP.md labels it (got " +
+  JSON.stringify([docS.out.slice(0, 200), naS.out.slice(0, 160)]) + ")", [
+  () => docS.code === 1, () => /✗ decision — spike\.md → Decision is not written yet/.test(docS.out),
+  () => /✓ timebox — timebox until 2099-01-31/.test(docS.out), () => apS.code === 1, () => /is a spike: it has no design gate/.test(apS.out),
+  () => atS.code === 1, () => /is a spike — it has no tracks/.test(atS.out), () => /Record the decision in spike\.md → Decision/.test(naS.out),
+  () => docS2.code === 0, () => /✓ decision — decision recorded \(_Outcome: no-go_\)/.test(docS2.out), () => jsonC2(naS2.stdout),
+  () => jsonC2(naS2.stdout).step === "archive", () => jsonC2(naS2.stdout).outcome === "no-go", () => finS.code === 0,
+  () => /spike 'cache-spike' is ready to finish/.test(finS.out),
+  () => fs.existsSync(path.join(ps, ".specs", "cache-spike", ".execution", "merge-summary.md")), () => rmS.code === 0,
+  () => /\[cache-spike\]\(\.\/cache-spike\/spike\.md\) 🔬 spike/.test(fs.readFileSync(path.join(ps, ".specs", "ROADMAP.md"), "utf8")),
+]);
 
 // PT: the spike and the decision log in the feature's language.
 const pp = path.join(tmp, "c2-pt");

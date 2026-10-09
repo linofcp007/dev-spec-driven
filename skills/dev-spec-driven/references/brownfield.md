@@ -52,7 +52,7 @@ prompt you to capture isolation/observability/cost, threat-model and data-invent
 routes, data models match the schema, error handling matches the code. Spot-check against the source.
 
 ### 5. Coverage
-`spec_coverage` (CLI: `dev-spec coverage`) measures coverage through the **`_Implements:_` markers** of every
+`spec_scan {coverage: true}` (CLI: `dev-spec coverage`) measures coverage through the **`_Implements:_` markers** of every
 feature's tasks (active or archived): a code file is covered when some marker names it — the file, a folder that
 contains it, or a glob. Code is a source file in a broad list of languages (the one guard mode and the scan use — PowerShell,
 shell and SQL included; docs, config and data such as a `.psd1` are not). It reports `coveragePercent` (covered code files /
@@ -76,7 +76,7 @@ scaffolds **`integration-plan.md`**:
 ### 7. Spec ↔ code traceability
 Add an `_Implements: path/to/file.ts_` marker to tasks that modify real files. `trace_check`
 verifies those files exist and flags missing ones — closing the loop between specs and code, and
-surfacing **orphaned specs** (documented, never implemented). Combine with `spec_coverage` to find
+surfacing **orphaned specs** (documented, never implemented). Combine with `spec_scan {coverage: true}` to find
 **orphaned code** (implemented, never documented). `trace_check {code: true}` also finds planned T-IDs in the
 test files, and `spec_finish {write: true}` records the implementing files so `spec_drift` can tell when they change.
 
@@ -84,7 +84,7 @@ test files, and `spec_finish {write: true}` records the implementing files so `s
 
 Specs and plans already written for another tool become dev-spec features with `spec_import {tool, path, name?,
 tracks?, lang?, dryRun?}` (CLI `dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--tracks …]
-[--lang pt] [--dry-run]`; `/spec-import`). The path must be inside the project; the source is only read; the result is always a
+[--lang pt] [--dry-run]`; the user's `/spec-adopt import`). The path must be inside the project; the source is only read; the result is always a
 NEW feature (an existing slug is an error). `dryRun: true` (1.25) runs the whole import and writes nothing — no file, folder,
 lock or roadmap refresh: the same answer plus `preview` (each file it would write, its size and first characters), `counts`
 (stories, criteria, tasks, decisions), the tracks it would classify, `mapping` and `warnings`; every refusal is the real one's.

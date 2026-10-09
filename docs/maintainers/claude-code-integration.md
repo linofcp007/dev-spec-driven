@@ -15,6 +15,12 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   NOTHING resolves keeps the agent from launching — so naming both is safe everywhere, and naming Bash alone left the
   agents shell-less on a PowerShell-only Windows (they could only answer NEEDS_CONTEXT). The tool names are the exact
   strings of permission rules and hook matchers (`PowerShell`). spec-critic has no shell on purpose (read-only).
+  spec-verifier (1.26 — the reviewer's former verify mode, split out so each per-finding dispatch loads ~3 KB instead of the
+  reviewer's whole prompt) lists both too: it reads `git diff` / `git blame` and may run one focused test. It reports no run,
+  so the SubagentStop matcher leaves it out (`^(dev-spec-driven:)?spec-(implementer|simplifier)$`). Agent descriptions stay
+  ≤ ~250 characters (every session lists them): what the agent does and when, never "see the agent body" — the dispatcher
+  sees only the description. The critic runs on `model: inherit` (one judgment-heavy dispatch per gate: the session's model);
+  the dispatched-in-bulk agents default to `sonnet` (an inherited Opus would multiply the cost of N parallel verifiers).
 - **Hooks never block and stay cheap.** Every hook exits 0 on any error or irrelevant event, emits at most
   one JSON object, has a 10 s timeout, and only acts on a `.specs/` dev-spec owns (`isDevSpecProject` — checked by
   PostToolUse AND SessionStart: another tool's `.specs/` gets no status block in every session). The PostToolUse hook:
@@ -52,8 +58,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   Write / Edit runs three hooks (guard, approval, spec), a Bash call two (approval, observe). **Minimum Claude Code 2.1.139**
   (released 2026-05-11): its changelog — "Added hook `args: string[]` field (exec form) that spawns the command directly without a
   shell, so path placeholders never need quoting"; the docs page states no minimum. An older version reads no `args` and would run
-  a bare `node` with the payload on stdin (a syntax error: every hook silently off) — INSTALL.md and the README's quick start state
-  the minimum. `claude plugin validate` (2.1.295) checks the hooks' schema (`args` must be an array) and passes. Never go back to
+  a bare `node` with the payload on stdin (a syntax error: every hook silently off) — INSTALL.md and the Requirements of the three READMEs
+  (EN / PT / ES) state the minimum. `claude plugin validate` (2.1.295) checks the hooks' schema (`args` must be an array) and passes. Never go back to
   shell form for a hook; a new hook takes the same shape (mcp/tests/10-guards-hooks-r7.js checks every entry).
 - **Which project a hook reads (1.23 review 5, M8): `sessionProject({cwd, anchors})`** (engine/guards.js, on the facade). The
   MCP server is pinned to `SPEC_PROJECT_DIR` = `${CLAUDE_PROJECT_DIR}` (the folder Claude Code started in) and records approvals,
@@ -95,18 +101,33 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   platform now (a folder linked to `.specs/` — below).
 - **Commands never reuse a Claude Code built-in name.** `/init`, `/status`, `/doctor` and `/commit`
   collided with the built-ins (a bare `/doctor` ran Claude Code's, and our own messages told users to
-  "run /doctor"); they are `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` since v1.11.
-- **Command descriptions are one short English line (1.24 review 6).** Claude Code lists every skill and command with its
-  description under ONE shared character budget; the 55 descriptions held 11,013 characters (~40 % of them "PT - … ES - …" /
-  "Atalho. Atajo." tails), and in a real session 15 dev-spec commands — /spec and /spec-status among them — were listed with no
-  description at all (the model can't pick a command it can't read). Each is ≤ 150 characters now (5,530 in all;
-  mcp/tests/10-guards-review6.js holds the bound: ≤ 150 each, ≤ 6,000 in all, no PT / ES tail); the multilingual triggers live in
-  SKILL.md's description. The MCP prompts serve the same lines.
-- **User-only commands: `disable-model-invocation: true` (1.24 review 6, C-I1).** Documented for command files
-  (code.claude.com/docs/en/slash-commands — the same front matter as skills, except `name` / `paths`): Claude can't run the command
-  on its own (nor preload it into a subagent); the user types it. Set on `approve`, `spec-ff`, `spec-guard`, `spec-statusline`,
-  `spec-superpowers`, `spec-tour` and the aliases `ds` / `dss` / `dsx` (the model has the full commands). The prompts loader
-  (prompts-resources.js `parseFrontMatter`) reads and ignores it; the D4 strict-YAML check accepts it.
+  "run /doctor"); they became `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` in v1.11 — and the umbrella commands
+  of 1.26 keep the prefix (`/spec-setup`, `/spec-review`: `/review` is a built-in too).
+- **22 commands, 2 of them model-invocable (1.26 — the context diet).** Claude Code lists every model-invocable skill and
+  command with its description under ONE budget shared by every installed plugin (1 % of the context window; on overflow
+  descriptions are dropped, least-used first): 1.24 cut the 55 descriptions from 11,013 characters to 5,530 and a real session
+  still listed 15 dev-spec commands with no description. 1.26 folds the 55 into 22 (the phase commands into `/spec`, the rest
+  into umbrella commands with subcommands — extending.md → The 1.26 command set) and sets `disable-model-invocation: true` on
+  every command but `/spec` and `/spec-bugfix`: documented for command files (code.claude.com/docs/en/skills — the same front
+  matter as skills, except `name` / `paths`), a user-only command's description leaves the model's context entirely, the
+  user still types it, and Claude can't run it on its own (nor preload it into a subagent). The model-visible listing is those
+  two descriptions + the skill's: 776 characters (5,718 before: 46 commands' 4,707 + the skill's 1,011); mcp/tests/10-guards-review6.js holds it ≤ 1,500, each
+  description ≤ 125 characters, one English line (the multilingual triggers live in SKILL.md's description). The model reaches
+  the rest through the skill and the MCP tools, so a model-invocable command never tells it to RUN a user-only one
+  (17-docs-review7: "record it with `spec_approve`", never "with /approve"). The prompts loader (prompts-resources.js
+  `parseFrontMatter`) reads and ignores the key; the D4 strict-YAML check accepts it. The MCP prompts serve every command.
+- **Lean bodies.** A command routes (its subcommands), names the ONE tool call (or CLI line) per subcommand with the current
+  tool names, and states the few rules that matter (show the verdict, approvals are the user's, evidence before claims); the
+  catalogues — check ids, result keys, flag lists — live in the tool results and `references/` (named by the full
+  `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/<file>.md` path: an MCP prompt resolves it too; 17-docs P9 fails a bare
+  `references/…` in a command). Only the commands that need the workflow (`/spec`, `/spec-bugfix`, `/executeTask`,
+  `/spec-review`, `/spec-tour`) say "use the dev-spec-driven skill"; the self-contained ones (status, doctor, report, setup,
+  roadmap…) don't pull SKILL.md in.
+- **`allowed-tools` on the read-only commands.** `/spec-status` and `/dss` (`spec_status`, `spec_next_action`), `/spec-doctor`
+  (`spec_doctor`), `/roadmap` (`spec_roadmap` — it writes only the generated ROADMAP files) and `/spec-report` (`spec_drift`,
+  `spec_metrics`) grant their tools for the turn that invokes them, by their plugin names
+  (`mcp__plugin_dev-spec-driven_spec-driven__<tool>`, comma-separated). `claude plugin validate` passes (2.1.292 does not parse a
+  command's front matter at all — a deliberately broken probe passed too).
 - **The aliases follow the full command (1.24 review 6, C-I9).** `/ds`, `/dss`, `/dsx` read and follow
   `${CLAUDE_PLUGIN_ROOT}/commands/<spec | spec-status | executeTask>.md` with their arguments — Claude Code substitutes the
   variable anywhere in a command's body (plugins reference → Environment variables), and `getPrompt()` does for an MCP client — so
@@ -128,7 +149,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   (a shell command's path-like words — ≤ 8 —, never a network path): with the session at a monorepo's root, `packages/app/.specs`
   (guard on) guards `packages/app/src/a.ts`; the engine checks the session's project AND `sessionProject({cwd: dirname(file)})`,
   the first ask wins. "Code" is
-  `isCodeFile(rel)` (engine/scan.js) — 1.21.1: ONE notion of code the guard, the brownfield scan, `spec_coverage` and the
+  `isCodeFile(rel)` (engine/scan.js) — 1.21.1: ONE notion of code the guard, the brownfield scan, `spec_scan {coverage: true}` and the
   test-code scan share: `CODE_EXT` (JS/TS incl. `.mts`/`.cts`, Python, Go, Rust, JVM, .NET, C/C++ `.cc`/`.hpp`,
   PowerShell `.ps1`/`.psm1`, shell, Windows `.bat`/`.cmd`, `.sql`, `.ipynb`, Lua, R, Perl, Elixir/Erlang, Haskell,
   Clojure, CUDA, Fortran, HDL, shaders, code-bearing templates like `.erb`/`.razor`…) plus a test-only extension
@@ -450,7 +471,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   newest installed `<version>` holding cli/dev-spec.js at each run (cli/completion.js `statuslineCommand`: the completion scripts'
   rule in a `node -e` one-liner with no shell syntax — no double quote, dollar, backtick, percent, ! or backslash — so cmd.exe, PowerShell, sh and bash pass it alike;
   a path holding one of those keeps the plain command and its re-run note, `cacheNote`; else `cacheFollows`). A plugin cannot ship a status line (plugin `settings` honour only `agent` /
-  `subagentStatusLine`), hence the opt-in `/spec-statusline`.
+  `subagentStatusLine`), hence the opt-in `/spec-setup statusline`.
 - **User defaults** — the environment variables `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT`
   (`userOptionRaw()` → `userDefaults()`), FALLBACKS only: project meta always wins; empty, invalid or unexpanded (`${X}`)
   changes nothing. `newProjectLang()` only for a brand-new project (no meta.lang, no feature — active or archived), seeded
@@ -464,7 +485,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   only), and an older Claude Code validating option fields strictly could refuse the whole plugin. Claude Code's
   settings.json `env` block reaches the hooks, stdio MCP servers and the Bash tool alike (code.claude.com/docs/en/env-vars).
 - **MCP** — every tool carries `annotations` from server.js `TOOL_ANNOTATIONS` (`READ_ONLY` for the 14 tools no argument
-  makes write; `destructiveHint` on the 11 tools one of whose arguments removes or overwrites a record — 1.25.1 review 7: `spec_feature` remove, `spec_export` adr, `spec_approve` revoke, `spec_complete_task` undo, `spec_impact` reopen, `spec_backlog` / `spec_milestone` rm, `spec_depend` replace / clear, `spec_add_track` remove, `spec_init` (a removed check, cleared roles, an overwritten setting), `spec_tracks` signals set / forget; `idempotentHint` per tool; `openWorldHint: false` everywhere —
+  makes write; `destructiveHint` on the 11 tools one of whose arguments removes or overwrites a record — 1.25.1 review 7: `spec_feature` remove, `spec_export` adr, `spec_approve` revoke, `spec_complete_task` undo, `spec_impact` reopen, `spec_roadmap_edit {kind: "backlog"}` / `spec_roadmap_edit {kind: "milestone"}` rm, `spec_roadmap_edit {kind: "depend"}` replace / clear, `spec_add_track` remove, `spec_init` (a removed check, cleared roles, an overwritten setting), `spec_tracks` signals set / forget; `idempotentHint` per tool; `openWorldHint: false` everywhere —
   the protocol's defaults are the opposite, so all are explicit); mcp/test.js requires one entry per tool and snapshots
   `.specs/` around every read-only one. `completion/complete` (prompts-resources.js `complete()`): feature slugs for a
   prompt argument that names a feature, the `specs://` template variables `slug` / `artifact` / `file` (≤ 100 values,

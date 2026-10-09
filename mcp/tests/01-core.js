@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirname }) => {
+exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, require, __dirname }) => {
 
   const cls = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: "Stripe billing webhook for multi-tenant SaaS that also summarizes invoices with an LLM" } }));
   ok(cls.tracks.includes("tdd") && cls.tracks.includes("saas") && cls.tracks.includes("ai"), "classify detects tdd+saas+ai (" + cls.label + ")");
@@ -344,11 +344,13 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirna
   // "paths only (the brief never enters your context)" — references/subagent-execution.md: no spec text either (the AC
   // EARS text, test rows, design, steering stay in the file); the controller gets the IDs it acts on. includeBrief: all.
   const bwFull = await brief({ name: "Brief Demo", number: 2, write: true, includeBrief: true });
-  ok(!("acceptanceCriteria" in bw) && !("tests" in bw) && !("designSections" in bw) && !("steering" in bw) && !/THE SYSTEM SHALL/.test(JSON.stringify(bw)) &&
-    bw.task.number === 2 && bw.loop === "tdd" && bw.inlineOnly === false && JSON.stringify(bw.refs) === JSON.stringify({ acs: ["US-1.AC-1"], tests: ["T-01"] }) &&
-    Array.isArray(bw.unresolved.acs) && bw.implements[0] === "src/keys.js" &&
-    bwFull.brief && bwFull.acceptanceCriteria[0].id === "US-1.AC-1" && bwFull.tests[0].id === "T-01" && !("refs" in bwFull),
-    "write:true returns the paths + the task's identifiers (refs, loop, inlineOnly, markers) and no spec text; includeBrief:true returns the full result");
+  all("write:true returns the paths + the task's identifiers (refs, loop, inlineOnly, markers) and no spec text; includeBrief:true returns the full result", [
+    () => !("acceptanceCriteria" in bw), () => !("tests" in bw), () => !("designSections" in bw), () => !("steering" in bw),
+    () => !/THE SYSTEM SHALL/.test(JSON.stringify(bw)), () => bw.task.number === 2, () => bw.loop === "tdd", () => bw.inlineOnly === false,
+    () => JSON.stringify(bw.refs) === JSON.stringify({ acs: ["US-1.AC-1"], tests: ["T-01"] }), () => Array.isArray(bw.unresolved.acs),
+    () => bw.implements[0] === "src/keys.js", () => bwFull.brief, () => bwFull.acceptanceCriteria[0].id === "US-1.AC-1",
+    () => bwFull.tests[0].id === "T-01", () => !("refs" in bwFull),
+  ]);
   fs.appendFileSync(bw.paths.ledger, "Task 2: complete (commits a..b, review clean)\n");
   await brief({ name: "Brief Demo", number: 2, write: true });
   ok(/Task 2: complete/.test(fs.readFileSync(bw.paths.ledger, "utf8")), "a second write never overwrites the ledger");
@@ -621,8 +623,9 @@ exports.run = async ({ ok, rpc, rawOnce, payload, S, root, tmp, require, __dirna
   ok(!fs.existsSync(path.join(root, ".mcp.json")) && fs.existsSync(path.join(root, pj.mcpServers)) &&
     /\$\{CLAUDE_PLUGIN_ROOT\}\/mcp\/server\.js/.test(fs.readFileSync(path.join(root, pj.mcpServers), "utf8")),
     "plugin.json → mcp/servers.json (no root .mcp.json), server path via ${CLAUDE_PLUGIN_ROOT}");
-  ok(["spec-init", "spec-status", "spec-doctor", "spec-commit"].every((c) => fs.existsSync(path.join(root, "commands", c + ".md"))) &&
-    !["init", "status", "doctor", "commit"].some((c) => fs.existsSync(path.join(root, "commands", c + ".md"))),
+  // (1.26: /spec-init → /spec-setup init, /spec-commit → /executeTask commit; the built-in names stay out either way)
+  ok(["spec-setup", "spec-status", "spec-doctor", "spec-review"].every((c) => fs.existsSync(path.join(root, "commands", c + ".md"))) &&
+    !["init", "status", "doctor", "commit", "review"].some((c) => fs.existsSync(path.join(root, "commands", c + ".md"))),
     "commands that collided with Claude Code built-ins are renamed spec-*");
   // 1.21 F3: SKILL.md is loaded whole when the skill fires (the 1.19 eval run: ~17.5k → ~38k tokens of context), so it keeps
   // the rules an agent needs at decision time and points to the lookup material (tool catalog, per-track checklists,

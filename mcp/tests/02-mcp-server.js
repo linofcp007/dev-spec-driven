@@ -7,6 +7,10 @@ const fs = require("fs");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
+// 1.26 (the context diet): the size of tools/list in the default mode — measured 43,1xx characters with the clone's CLI path
+// counted as `dev-spec`; ~3% headroom so the gain is kept. Raise it only for a description a model needs.
+const TOOLS_LIST_CAP = 44500;
+
 exports.handshake = true; // this file counts the handshake's assertions — every other process runs it muted
 exports.run = async ({
   ok, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename,
@@ -581,38 +585,38 @@ exports.run = async ({
     // prompts/list — one per commands/*.md, read at runtime; description = front matter; one optional `args` argument.
     const pl = (await s1.req("prompts/list", {})).result.prompts;
     const plNames = pl.map((p) => p.name);
-    ok(pl.length === a1Stems.length && a1Stems.length >= 44 && plNames.slice().sort().join() === a1Stems.slice().sort().join() &&
+    ok(pl.length === a1Stems.length && a1Stems.length >= 20 && plNames.slice().sort().join() === a1Stems.slice().sort().join() &&
       plNames.indexOf("spec") < plNames.indexOf("spec-bugfix") && pl.every((p) => p.description && p.description === a1Fm(p.name).description) &&
       pl.every((p) => Object.keys(p).join() === "name,description,arguments" && p.arguments.length === 1 && p.arguments[0].name === "args" && p.arguments[0].required === false),
       "prompts/list: one prompt per commands/*.md (" + pl.length + "), sorted by name, each with its front-matter description and one optional `args` argument");
     const plArg = (n) => (pl.find((p) => p.name === n) || { arguments: [{}] }).arguments[0].description || "";
-    ok(plArg("spec-impact") === "Arguments (optional): " + a1Fm("spec-impact")["argument-hint"] && /^No arguments needed/.test(plArg("coverage")) &&
+    ok(plArg("spec-change") === "Arguments (optional): " + a1Fm("spec-change")["argument-hint"] &&
       JSON.stringify(pl) === JSON.stringify(PR.listPrompts({ lang: "en" }).map((p) => ({ name: p.name, description: p.description, arguments: p.arguments }))),
-      "prompts/list: the `args` description comes from argument-hint (an empty hint says no arguments are needed); same list as the module the CLI uses");
+      "prompts/list: the `args` description comes from argument-hint; same list as the module the CLI uses (an empty hint: the fixture below)");
 
     // prompts/get — the body with $ARGUMENTS replaced, after one line for agents without the skill.
-    const g1 = (await s1.req("prompts/get", { name: "spec-impact", arguments: { args: "login design $& $1" } })).result;
+    const g1 = (await s1.req("prompts/get", { name: "spec-change", arguments: { args: "login design $& $1" } })).result;
     const g1t = g1 && g1.messages[0].content.text;
     const rootPosix = posix(path.resolve(root));
-    ok(g1 && g1.description === a1Fm("spec-impact").description && g1.messages.length === 1 && g1.messages[0].role === "user" && g1.messages[0].content.type === "text" &&
+    ok(g1 && g1.description === a1Fm("spec-change").description && g1.messages.length === 1 && g1.messages[0].role === "user" && g1.messages[0].content.type === "text" &&
       /^Note for the agent: if no dev-spec-driven skill is available/.test(g1t) && g1t.includes(rootPosix + "/AGENTS.md") && g1t.includes(rootPosix + "/skills/dev-spec-driven/references/") &&
       g1t.includes("Args: login design $& $1\n") && !g1t.includes("$ARGUMENTS") && g1t.split("\n")[1] === "" && /spec_impact/.test(g1t),
       "prompts/get: {description, messages:[{role:user, content:{type:text}}]} — the preamble (AGENTS.md + references/ paths), then the body with $ARGUMENTS ← args ($& / $1 kept literally)");
-    const g2 = (await s1.req("prompts/get", { name: "spec-impact" })).result;
+    const g2 = (await s1.req("prompts/get", { name: "spec-change" })).result;
     const g3 = (await s1.req("prompts/get", { name: "eval", arguments: {} })).result;
     const g3t = g3 && g3.messages[0].content.text;
     ok(g2 && g2.messages[0].content.text.includes("Args: \n") && !g2.messages[0].content.text.includes("$ARGUMENTS") &&
       g3t && !g3t.includes("${CLAUDE_PLUGIN_ROOT}") && g3t.includes(rootPosix + "/mcp/evals/run-evals.js"),
       "prompts/get: no arguments → $ARGUMENTS is empty; ${CLAUDE_PLUGIN_ROOT} resolves to this clone (other clients have no such variable)");
     const gBad = await Promise.all([
-      s1.req("prompts/get", { name: "nope" }), s1.req("prompts/get", { name: "../README" }), s1.req("prompts/get", { name: "spec-impact.md" }),
+      s1.req("prompts/get", { name: "nope" }), s1.req("prompts/get", { name: "../README" }), s1.req("prompts/get", { name: "spec-change.md" }),
       s1.req("prompts/get", {}), s1.req("prompts/get", { name: "spec", arguments: { args: 5 } }), s1.req("prompts/get", { name: "spec", arguments: ["x"] }),
       s1.req("prompts/get", { name: "spec", arguments: "x" }), s1.req("prompts/get", { name: "constructor" }),
     ]);
-    ok(gBad.every((r) => r.error && r.error.code === -32602 && !r.result) && /^Unknown prompt 'nope' — one of: .*spec-impact/.test(gBad[0].error.message) &&
+    ok(gBad.every((r) => r.error && r.error.code === -32602 && !r.result) && /^Unknown prompt 'nope' — one of: .*spec-change/.test(gBad[0].error.message) &&
       /Unknown prompt '\.\.\/README'/.test(gBad[1].error.message) && /needs the prompt `name`/.test(gBad[3].error.message) &&
       [4, 5, 6].every((i) => /`arguments` must be an object of strings/.test(gBad[i].error.message)),
-      "prompts/get: an unknown prompt (also '../README', 'spec-impact.md', 'constructor'), no name or non-string arguments → JSON-RPC -32602 with a clear message");
+      "prompts/get: an unknown prompt (also '../README', 'spec-change.md', 'constructor'), no name or non-string arguments → JSON-RPC -32602 with a clear message");
 
     // resources/list — ROADMAP.md, SPECS.md, steering, each active feature's allowlisted artifacts; nothing else.
     const rl = (await s1.req("resources/list", {})).result;
@@ -730,8 +734,8 @@ exports.run = async ({
     const fmList = PR.listPrompts({ commandsDir: fmDir, lang: "en" });
     const fmGet = PR.getPrompt("crlf-cmd", "a b", { commandsDir: fmDir, lang: "en" });
     ok(fmList.map((p) => p.name).join() === "crlf-cmd,no-fm" && fmList[0].description === "It's a CRLF command" && fmList[0].argumentHint === "[x] [--y]" &&
-      fmList[1].description === "" && fmGet.ok && /\n\nDo it: a b\nThen a b again\.\n$/.test(fmGet.messages[0].content.text) && !fmGet.messages[0].content.text.includes("\r"),
-      "front matter with a BOM, CRLF and quoted values is parsed; a file without front matter is still a prompt; only *.md files are prompts; the body comes back with LF");
+      fmList[1].description === "" && /^No arguments needed/.test(fmList[1].arguments[0].description) && fmGet.ok && /\n\nDo it: a b\nThen a b again\.\n$/.test(fmGet.messages[0].content.text) && !fmGet.messages[0].content.text.includes("\r"),
+      "front matter with a BOM, CRLF and quoted values is parsed; a file without front matter is still a prompt (no hint: no arguments needed); only *.md files are prompts; the body comes back with LF");
     const a1pt = path.join(tmp, "proj-a1-pt");
     S.initProject(a1pt, ["core"], "pt");
     S.createFeature(a1pt, "Pagamentos", ["core"]);
@@ -741,13 +745,14 @@ exports.run = async ({
     const ptBad = await s2.req("resources/read", { uri: "specs://feature/../x" });
     const ptMiss = await s2.req("resources/read", { uri: "specs://feature/pagamentos/eval-plan.md" });
     const ptList = (await s2.req("resources/list", {})).result.resources;
-    const ptArgs = (await s2.req("prompts/list", {})).result.prompts.find((p) => p.name === "coverage").arguments[0].description;
+    const ptArgs = (await s2.req("prompts/list", {})).result.prompts.find((p) => p.name === "spec-change").arguments[0].description;
+    const ptNoHint = PR.listPrompts({ commandsDir: fmDir, lang: "pt" })[1].arguments[0].description;
     await s2.stop();
     const deepKeys = (o, pre = "") => Object.keys(o).sort().flatMap((k) => (o[k] && typeof o[k] === "object" ? deepKeys(o[k], pre + k + ".") : [pre + k]));
     const a1Msg = ["en", "pt", "es"].map((l) => S.msg(l).promptsResources);
     ok(/^Nota para o agente: se não houver uma skill dev-spec-driven/.test(ptGet.messages[0].content.text) && /^URI de recurso inválido/.test(ptBad.error.message) &&
       /^Recurso não encontrado/.test(ptMiss.error.message) && ptList.some((r) => r.description === "Requisitos (EARS) da feature 'pagamentos' (.specs/pagamentos/requirements.md).") &&
-      /^Não precisa de argumentos/.test(ptArgs) && deepKeys(a1Msg[1]).join() === deepKeys(a1Msg[0]).join() && deepKeys(a1Msg[2]).join() === deepKeys(a1Msg[0]).join() &&
+      ptArgs.startsWith("Argumentos (opcionais): [feature]") && /^Não precisa de argumentos/.test(ptNoHint) && deepKeys(a1Msg[1]).join() === deepKeys(a1Msg[0]).join() && deepKeys(a1Msg[2]).join() === deepKeys(a1Msg[0]).join() &&
       a1Msg.every((m) => Object.keys(m.res.labels).sort().join() === PR.RESOURCE_ARTIFACTS.slice().sort().join()) && /^Nota para el agente/.test(a1Msg[2].preamble("a", "b")),
       "prompts/resources messages follow the project language (PT preamble, errors, descriptions); EN/PT/ES blocks have the same keys and a label per artifact");
 
@@ -916,12 +921,12 @@ exports.run = async ({
 
     // S7 — backlog 'remove' is rm's alias on every surface (the enum lists it); the templates description names pt-BR.
     const tl7 = (await rpc("tools/list", {})).result.tools;
-    const bl7 = tl7.find((t) => t.name === "spec_backlog");
+    const bl7 = tl7.find((t) => t.name === "spec_roadmap_edit"); // 1.26: spec_backlog is spec_roadmap_edit {kind: "backlog"}
     const tp7 = tl7.find((t) => t.name === "spec_templates");
-    const rm7 = await rpc("tools/call", { name: "spec_backlog", arguments: { action: "REMOVE", name: "pay", projectDir: p6 } });
+    const rm7 = await rpc("tools/call", { name: "spec_roadmap_edit", arguments: { kind: "backlog", action: "REMOVE", name: "pay", projectDir: p6 } });
     ok(bl7.inputSchema.properties.action.enum.join() === "add,rm,remove,list" && !rm7.result.isError && payload(rm7).backlog.length === 0 &&
       S.backlog(p6, "add", "X").ok && S.backlog(p6, "remove", "x").ok && /\(en \| pt \| pt-BR \| es\)/.test(tp7.description),
-      "full review S7: spec_backlog's action enum lists remove (alias of rm — engine and MCP, case-folded); spec_templates names the pt-BR/ folder (got " +
+      "full review S7: the backlog's action enum (spec_roadmap_edit) lists remove (alias of rm — engine and MCP, case-folded); spec_templates names the pt-BR/ folder (got " +
       JSON.stringify([bl7.inputSchema.properties.action.enum, rm7.result.isError]) + ")");
   }
 
@@ -932,11 +937,12 @@ exports.run = async ({
     // tools/list is what every client that loads its tools up front pays in context on every session: it was ~124k characters
     // (~31k tokens), 29 descriptions past 1,024 characters. The descriptions carry the rules an agent acts on (evidence before
     // claims, approvals are the user's, what a refusal means); the reference detail lives in references/tooling-reference.md.
-    // The runnable CLI path (spec.DEV_SPEC — the clone's location) is counted as the bare `dev-spec`.
-    const toolsJson = js(list.result.tools).split(S.DEV_SPEC).join("dev-spec");
+    // The runnable CLI path (spec.DEV_SPEC — the clone's location; JSON-escaped in the list) is counted as the bare `dev-spec`.
+    // 1.26 (the context diet): 38 tools / 75,909 characters → 32 tools / ~43,000 — the cap keeps the gain (~3% headroom).
+    const toolsJson = js(list.result.tools).split(js(S.DEV_SPEC).slice(1, -1)).join("dev-spec");
     const longDesc = list.result.tools.map((t) => [t.name, t.description.split(S.DEV_SPEC).join("dev-spec").length]).filter(([, n]) => n > 2500);
-    ok(toolsJson.length < 76000 && !longDesc.length && list.result.tools.every((t) => !/\n/.test(t.description)),
-      "1.23 review: tools/list stays compact — under 76,000 characters (was ~124,000), no tool description past 2,500, every one a single line (got " +
+    ok(toolsJson.length < TOOLS_LIST_CAP && !longDesc.length && list.result.tools.every((t) => !/\n/.test(t.description)),
+      "1.26: tools/list stays compact — under " + TOOLS_LIST_CAP + " characters (1.23: ~124,000 → 76,000; 1.26: 32 tools), no tool description past 2,500, every one a single line (got " +
       toolsJson.length + " characters; " + js(longDesc) + ")");
     // A private server with its own env (null removes a variable) and cwd; every line it writes is kept; `onRequest` answers the
     // server's own requests (roots/list).
@@ -1153,7 +1159,7 @@ exports.run = async ({
     { // 1.24 r6 A-I2: every argument error carries a stable code (+ the arguments it names) — the message stays localized
       const p = path.join(tmp, "proj-r6-ai2");
       S.initProject(p, ["core"], "pt");
-      const miss = bodyOf(await call("spec_status", { projectDir: p }));
+      const miss = bodyOf(await call("spec_doctor", { projectDir: p })); // 1.26: spec_status without a name lists every feature
       const inv = bodyOf(await call("spec_complete_task", { name: "x", number: 1.5, evidence: { command: "a", exitCode: "0" }, projectDir: p }));
       const notObj = bodyOf(await rpc("tools/call", { name: "spec_list", arguments: [p] }));
       const dd = bodyOf(await call("spec_list", { projectDir: "../somewhere" }));
@@ -1230,7 +1236,7 @@ exports.run = async ({
 
     { // 1.24 r6 A-I1: a tool's result is compact JSON — the same object without the indentation (~22% of a reply's characters)
       const r = await call("spec_list", { projectDir: path.join(tmp, "proj-r6-a5") });
-      const e = await call("spec_status", { projectDir: path.join(tmp, "proj-r6-a5") });
+      const e = await call("spec_doctor", { projectDir: path.join(tmp, "proj-r6-a5") }); // 1.26: spec_status without a name lists
       const t = r.result.content[0].text, te = e.result.content[0].text;
       ok(!/\n/.test(t) && JSON.stringify(JSON.parse(t)) === t && !/\n/.test(te) && JSON.parse(te).code === "missing-arguments",
         "1.24 r6 A-I1: tool results and argument errors are compact JSON (got " + js([t.slice(0, 80), te.slice(0, 80)]) + ")");

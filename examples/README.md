@@ -1,4 +1,4 @@
-# Example — a fully worked spec (1.25 shape)
+# Example — a fully worked spec (1.26 shape)
 
 `demo-project/` is a self-contained mini-project showing what a feature looks like with the current
 methodology: **prioritized user stories (P1/P2)**, **Success Criteria**, a design that weighs its choices
@@ -100,7 +100,7 @@ Roadmap — overall 19%  (0/2 complete)
 
 `api-keys` has every planning gate approved and 0/9 tasks done; `usage-metering` is an earlier-phase
 scaffold (its requirements are still the template). It is **blocked (⛔)** until `api-keys` reaches 100% —
-exactly what `spec_depend` records and `spec_roadmap` computes (cycle-checked). The same data is in the
+exactly what `spec_roadmap_edit {kind: "depend"}` records and `spec_roadmap` computes (cycle-checked). The same data is in the
 generated `.specs/ROADMAP.md`.
 
 ### `clarify api-keys` → one question left for the author

@@ -4,35 +4,66 @@ Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the i
 What the server advertises and validates, and how it frames messages.
 
 ## MCP tools (in `mcp/lib/engine/`, exported by `mcp/lib/spec.js`, dispatched by `mcp/server.js`)
-`spec_init` · `spec_classify` · `spec_create` · `spec_list` · `spec_status` · `spec_next_task` ·
-`spec_complete_task` · `ears_validate` · `trace_check` · `spec_doctor` · `spec_approve` ·
-`steering_scaffold` · `spec_roadmap` · `spec_backlog` · `spec_depend` · `spec_scan` ·
-`spec_coverage` · `spec_clarify` · `spec_next_action` · `spec_add_track` · `spec_feature` ·
-`spec_task_brief` · `spec_finish` · `spec_import` · `spec_append_tasks` · `spec_impact` ·
-`spec_metrics` · `spec_catalog` · `spec_drift` · `spec_upgrade` · `spec_templates` · `spec_export` ·
-`spec_changelog` · `spec_decide` · `spec_tracks` · `spec_stop_check` · `spec_log` · `spec_milestone` (**38 total**; `mcp/test.js` asserts the exact count —
-verify with an `initialize` + `tools/list` handshake against `mcp/server.js`). All tools are pure-local file ops on
+`spec_init` · `spec_classify` · `spec_create` · `spec_status` · `spec_next_task` · `spec_task_brief` · `spec_finish` ·
+`spec_complete_task` · `ears_validate` · `trace_check` · `spec_doctor` · `spec_approve` · `steering_scaffold` · `spec_roadmap` ·
+`spec_roadmap_edit` · `spec_scan` · `spec_clarify` · `spec_next_action` · `spec_add_track` · `spec_feature` · `spec_import` ·
+`spec_append_tasks` · `spec_impact` · `spec_metrics` · `spec_drift` · `spec_upgrade` · `spec_templates` · `spec_tracks` ·
+`spec_export` · `spec_decide` · `spec_stop_check` · `spec_log` (**32 total** — 30 listed in Claude Code plugin mode, below; `mcp/test.js`
+asserts the exact count — verify with an `initialize` + `tools/list` handshake against `mcp/server.js`). All tools are pure-local file ops on
 `.specs/` (or a read-only codebase scan for brownfield / `trace --code` / import); none hit the network, run a command or
 call git. Scaffolders never overwrite an existing file; mutators edit only what they own (checkboxes, appended tasks and
 track sections, appended `decisions.md` entries, `.state.json` / `roadmap.json`, generated `ROADMAP.*` / `SPECS.md` /
 `UPGRADE.md` / `RELEASE-NOTES.md` / `.specs/exports/*`, templates `init` copies) and never rewrite spec prose. The
 observed-run log (`.execution/observed.jsonl`, F1) is written only by `hooks/observe-hook.js` through `observeRun()` —
 no tool writes it, and no tool accepts an `observed` stamp from its caller.
-**The description budget (1.23).** `tools/list` is what every client that loads its tools up front pays in context on every
-session — it had grown to ~124k characters (~31k tokens). A description says what the tool does and the rules an agent must act
-on (evidence before claims, approvals are the user's, what a refusal or a stable code means) — at most 2,500 characters, one
-line; the reference detail (every output field, every check id, formats) lives in `references/tooling-reference.md` and the
-topic files. `mcp/tests/02-mcp-server.js` holds the whole list under 76,000 characters (the clone's CLI path counted as
-`dev-spec`); the tests that pin a description's wording (a rule) name it. `projectDir` (1.24 r6 A5) is described on every tool:
-`spec_init`'s (`PROJECT_DIR_INIT`) says how the folder is chosen (see Argument validation → projectDir), every other tool shares
-the bare `PROJECT_DIR` ("Project folder") — 37 copies of a longer text cost ~2k characters of the budget (74,946 with it).
+**The description budget (1.23, tightened in 1.26 — the context diet).** `tools/list` is what every client that loads its tools up
+front pays in context on every session — it had grown to ~124k characters (~31k tokens); 1.23 brought it to 76k, 1.26 to ~43k
+(38 tools / 75,909 → 32 / ~43,000). A description says what a model needs to CHOOSE and CALL the tool: its purpose, when to use it
+vs a neighbour, the important arguments and the rules an agent must act on (evidence before claims, approvals are the user's, never
+force without the user's consent, what a refusal means) — at most 2,500 characters, one line, in English. Never a catalogue the
+result already carries (check ids, result keys, reason codes), version history or a long example: the reference detail lives in
+`references/tooling-reference.md` and the topic files. Property descriptions are as short (often a few words). `mcp/tests/02-mcp-server.js`
+holds the whole list under `TOOLS_LIST_CAP` (44,500 — the 1.26 size + ~3%; the clone's CLI path counted as `dev-spec`); the tests
+that pin a description's wording (a rule) name it — `mcp/tests/harness.js` pins spec_complete_task's nothingToVerify / unverified
+sentences, 17-docs the runnable `done … --run` line, the no-subagent rule, finish's "A green run is EVIDENCE" and approve's "an
+explicit yes for THAT phase". `projectDir` (1.24 r6 A5) is described on every tool: `spec_init`'s (`PROJECT_DIR_INIT`) says how the
+folder is chosen (see Argument validation → projectDir), every other tool shares the bare `PROJECT_DIR` ("Project folder"); the
+track names share `TRACK_ITEM`.
 Roadmap/deps persist in `.specs/roadmap.json`; cross-feature deps are cycle-checked and must name existing features.
+
+**Folded tools and their hidden aliases (1.26).** Seven tools became modes of four: `spec_list` → `spec_status` without `name` (the
+same `listFeatures` result — the CLI's `status` without a feature is `list`); `spec_backlog` / `spec_depend` / `spec_milestone` →
+`spec_roadmap_edit {kind: "backlog" | "depend" | "milestone"}` (destructive: rm, dependsOn replaces; `spec_roadmap` stays the
+read + ROADMAP.md writer); `spec_catalog` / `spec_changelog` → `spec_export {format: "catalog" | "changelog"}` (`exportSpecs` hands
+them to `catalog()` / `changelog()` — the very results of `dev-spec catalog` / `changelog --json`); `spec_coverage` → `spec_scan
+{coverage: true}`. The CLI keeps its commands (list, backlog, depend, milestone, catalog, changelog, coverage) — parity is the same
+engine function and defaults behind both. **Hidden aliases** (`LEGACY_TOOLS`, server.js): a `tools/call` by an old name still
+works — its arguments are checked against the OLD schema (`toolDef()` returns the alias's; an old caller gets the very refusals it
+got: `spec_depend` without name is `missing-arguments`, `spec_catalog {includeBody}` an unknown argument named by `spec_catalog`),
+then translated (`translateLegacy`) and the NEW tool runs: the result is the new tool's. Never listed, never completed
+(completion/complete knows prompts and resources only), no `runTool` case of their own (02-mcp-server's guard counts the cases
+against tools/list). `mcp/tests/02-mcp-server-tools.js` asserts each alias = its new tool.
+**Arguments by mode (`ARG_MODES`).** A folded tool takes some arguments in one of its modes only — `kind`, `format` (default html),
+`coverage` (default false). An argument the call's mode doesn't take is refused before anything runs: code `inapplicable-arguments`,
+`inapplicable` [names], `args.inapplicable` (localized: "spec_roadmap_edit {kind: "backlog"} does not take dependsOn — nothing was
+done. With kind: "backlog" it takes: action, name, note."). Checked after the type checks (the mode key's enum first); a mode's
+`required` (depend → `name`) are `missing-arguments`. The mode key and `projectDir` go everywhere.
+**Plugin mode's list (1.26).** With `SPEC_MCP_APPROVAL_HOOK=on` (mcp/servers.json — the Claude Code plugin) `tools/list` leaves out
+`PLUGIN_UNLISTED` — `spec_stop_check` (the Stop hook decides it at every turn's end) and `spec_log` (the CLI reads git) — ~2k
+characters for nothing in every session; both still answer `tools/call` by name.
+**Lean replies (1.26).** A result never carries its human rendering beside the same data: `spec_export` html / md without `write`
+return `{bytes, preview, truncated, hint}` — the first 1,500 characters of the document's markdown rendering (an HTML document
+opens with its stylesheet) — unless `includeBody: true` (a template-only feature's HTML was ~18.5k characters per call); catalog /
+changelog leave their markdown out unless `includeBody`; `spec_upgrade` and `spec_templates` carry no `lines` (`upgradeLines(r)` /
+`templatesLines(r)` render the CLI's human report from the structure). The engine's own default (the option omitted) keeps the
+document — code callers; both surfaces pass it explicitly: MCP `includeBody: args.includeBody === true`, the CLI `bodyWanted()`
+(its human output always prints the document, `--json` only with `--include-body`), so `--json` stays the MCP result.
 
 **Capabilities (1.14 — no longer tools-only).** `initialize` advertises `tools {listChanged: false}`, `prompts
 {listChanged: false}`, `resources {listChanged: false, subscribe: false}` and (1.16) `completions {}`; the logic lives in
 `mcp/lib/prompts-resources.js`, server.js only maps it onto JSON-RPC. `SPEC_MCP_PROMPTS=off|0|false|no` drops the
 prompts capability (and `prompts/*` answers -32601): `mcp/servers.json` sets it for the Claude Code plugin, whose own
-slash commands are the same files — without it Claude Code lists every command twice (`/mcp__…__spec-impact`).
+slash commands are the same files — without it Claude Code lists every command twice (`/mcp__…__spec-change`).
 - **Prompts** = `commands/*.md`, read at runtime (never a hardcoded list — a new command is a new prompt): name = file
   name without `.md`, description = front-matter `description`, one optional `args` argument described from
   `argument-hint` (front matter parsed by hand: BOM/CRLF, quoted values, block scalars). `prompts/get` renders the body
@@ -146,7 +177,7 @@ client) is its path (`fileUriToPath`) — 1.25.1 (review 7): both read by hooks/
 folder and let an approval of that project through); server.js keeps the codes' localized messages; a RELATIVE path resolves from the client's root when roots chose the default (it went to
 the server's cwd — `.` from Claude Desktop scaffolded the app folder), else from the server's working folder. The folder must
 EXIST, as the CLI's `--project` (1.23 review L14): a missing one is refused (`project-missing`) — only `spec_init` creates one —
-and so is a file (`project-not-dir`): `spec_create` into a mistyped path built the whole tree there, `spec_list` on a file
+and so is a file (`project-not-dir`): `spec_create` into a mistyped path built the whole tree there, the list (`spec_status` without name, then spec_list) on a file
 answered `{exists: false}`, a `file://` projectDir ended in ENOENT. The engine receives the absolute folder; `resolveProjectDir`
 is unchanged. The default projectDir (cwd / env / roots) and the CLI are not restricted by these rules. **spec_import (1.25.1,
 review 7)** reads the files its path names and returns them (`dryRun`: `preview`) — `{projectDir: "<home>/.aws", path:
@@ -159,7 +190,7 @@ as the "where am I / what now?" call for clients without the skill.
 **Stable codes (1.24 r6 A-I2).** Every argument error is the tool's JSON `{ok: false, error, code, …}` (`argError`), `isError:
 true`: `unknown-argument` (+ `unknown` [{argument, didYouMean?}]) · `missing-arguments` (+ `missing` [names]) ·
 `invalid-arguments` (+ `invalid` — the paths, e.g. `["number", "evidence.exitCode"]`; arguments that aren't an object:
-`["arguments"]`) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` · `project-no-specs` (1.25.1, spec_import). Callers branch
+`["arguments"]`) · `inapplicable-arguments` (1.26, + `inapplicable` — another mode's arguments, see Arguments by mode) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` · `project-no-specs` (1.25.1, spec_import). Callers branch
 on the code (English, stable); the message is in the project language — the default project's for a projectDir refusal. The feature resolver's refusals (1.25.1, review 7 — `resolveFeature` / `existingFeature`, state.js) carry their code too, on
 every tool and the CLI's `--json`: `feature-not-found` · `feature-name-invalid` (no usable slug) · `feature-name-reserved` (they were
 `{ok: false, error}` alone); an operation that hands such a refusal back keeps the code (`{ok: false, error: f.error, code: f.code}`).
@@ -179,7 +210,7 @@ A tool that THROWS (a file system error — `.specs` being a file) answers the J
 error's code, e.g. ENOTDIR>}` with `isError: true`, in the project's language.
 **Compact results (1.24 r6 A-I1).** A tool's result text is `JSON.stringify(out)` — no indentation (`toolReply`, argument errors
 included). The indentation was what every agent paid in context on every call: measured on a realistic feature (core +tdd
-+saas +sec — spec_doctor, spec_status, spec_task_brief, spec_next_action, trace_check {matrix}, spec_list, spec_roadmap,
++saas +sec — spec_doctor, spec_status, spec_task_brief, spec_next_action, trace_check {matrix}, spec_status without name (then spec_list), spec_roadmap,
 spec_create {includeBody}) the replies went from 40,529 to 31,435 characters (−22%; trace_check −42%, spec_status −32%; a reply
 that is mostly embedded markdown, create's bodies, barely changes). Every client parses the text as JSON; nothing reads its layout.
 

@@ -8,7 +8,8 @@
  * on stdin/stdout. No npm install, no network, no cost — pure Node core.
  *
  * Tools (all operate on the project's `.specs/` directory): see TOOLS below —
- * 38 tools, verify with an `initialize` + `tools/list` handshake; each carries `annotations` (TOOL_ANNOTATIONS).
+ * 32 tools (30 listed in Claude Code plugin mode — PLUGIN_UNLISTED), verify with an `initialize` + `tools/list` handshake; each
+ * carries `annotations` (TOOL_ANNOTATIONS). The 1.26 hidden aliases (LEGACY_TOOLS) answer tools/call by the old names.
  * Prompts: one per plugin command (commands/*.md) — slash commands in MCP clients without the skill
  * (SPEC_MCP_PROMPTS=off drops them). Resources: the project's spec artifacts, read-only, as specs:// URIs.
  * Completions (completion/complete): feature slugs and specs:// template variables. All live in lib/prompts-resources.js.
@@ -37,28 +38,35 @@ const SUPPORTED_PROTOCOLS = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-
 
 // --- Tool catalogue --------------------------------------------------------
 
+// The description budget (1.26 — the context diet): tools/list is what every client that loads its tools up front pays in
+// context on every session. A description says what a model needs to CHOOSE and CALL the tool: its purpose, when to use it
+// (vs a neighbour), the important arguments and the rules an agent must act on (evidence before claims, approvals are the
+// user's, never force without the user's consent). The reference detail — every output field, check id, format — lives in
+// references/tooling-reference.md; the result itself carries its stable codes. mcp/tests/02-mcp-server.js caps the whole list.
 // Every tool's projectDir (1.24 r6 A5): spec_init's says how the folder is chosen (tools/call → projectDirArg); every other tool
-// carries one short shared text — 37 copies of a longer one would cost ~2k characters of the description budget (tools/list
-// stays under 76,000 characters: mcp/tests/02-mcp-server.js).
-const PROJECT_DIR_INIT = Object.freeze({ type: "string", description: "Project folder, an existing one (only spec_init creates one): a path or a local file:// URI. Default: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR, else the client's first root (MCP roots), else the nearest folder up from the server's cwd with a .specs/, else that cwd. Relative: from the client's first root when roots chose the default, else from the cwd; an unexpanded $VAR / %VAR% / ${VAR} counts as not given." });
+// carries one short shared text.
+const PROJECT_DIR_INIT = Object.freeze({ type: "string", description: "Project folder — only spec_init creates a missing one: a path or a local file:// URI. Default: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR, else the client's first root, else the nearest folder with .specs/ up from the server's cwd, else the cwd. Relative: from the client's first root, else the cwd." });
 const PROJECT_DIR = Object.freeze({ type: "string", description: "Project folder" });
+// A track name (spec_init / spec_create / spec_import): no enum — an unknown name gets the engine's did-you-mean.
+const TRACK_ITEM = Object.freeze({ type: "string", description: "core | tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a project track pack; 'tdd,saas' / '+saas +ai' are split" });
+const ROADMAP_ACTIONS = [...new Set([...spec.BACKLOG_ACTIONS, ...spec.MILESTONE_ACTIONS])]; // add · rm (alias remove) · list
 
 const TOOLS = [
   {
     name: "spec_init",
     description:
-      "Initialize the spec-driven structure: create `.specs/steering/` and the steering files the given tracks need (constitution/product/tech/structure always; testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai; security for +sec; privacy for +privacy; distributed for +dist; api for +api; ui for +ui; observability for +obs; data for +data). `lang` (en/pt/pt-BR/es — pt = European, pt-BR = Brazilian Portuguese) writes the steering in that language and becomes the project default (roadmap.json meta.lang, inherited by every new feature). Project settings, each optional (omit = unchanged), stored in roadmap.json meta and always reported back: `guard` (on | off | scope — the plugin's PreToolUse hook asks before a code edit while no feature has approved, unfinished tasks; scope also asks for a file no open task names in _Implements:_), `stopCheck` (the end-of-turn evidence gate, on by default), `approvalGuard` (off | ask | deny — approvals become a human act: an agent's spec_approve, spec_feature remove or lowering this guard is asked of the user, or refused at deny), `checks` (the project's named check commands — every task brief lists them, and spec_finish then needs a passing recorded run of each since the feature's last task activity), `evidence` (reported | observed — observed: a runnable _Verify:_ counts only from a run the harness saw or the CLI made) and `approvalRoles` (phase → the roles that must each sign it off). Idempotent — never overwrites existing files.",
+      "Initialize .specs/ and the steering files of the tracks the project uses (core always; each track adds its own). Idempotent — never overwrites a file. `lang` writes the steering in that language and becomes the project default. Optional project settings, each unchanged when omitted and always reported back: `guard`, `stopCheck`, `approvalGuard`, `checks`, `evidence`, `approvalRoles`. Lowering a protection (guard, approvalGuard, roles) is the user's decision — never do it without their consent.",
     inputSchema: {
       type: "object",
       properties: {
-        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a project track pack (spec_tracks); 'tdd,saas' / '+saas +ai' are split" }, description: "Tracks in use across the project. 'core' is always included." },
-        lang: { type: "string", enum: LANG_ENUM, description: "Project language for generated steering + tool messages (default en). Becomes the project default." },
-        guard: { type: "string", enum: ["on", "off", "scope"], description: "Guard mode: \"on\" = code edits ask while no feature has approved, unfinished tasks; \"scope\" = also, once tasks are approved, a code file no open task names in _Implements:_; \"off\". true / false mean on / off. Omit to leave it unchanged." },
-        evidence: { type: "string", enum: ["reported", "observed"], description: "\"reported\" (default) — reported runs verify as given; \"observed\" — a runnable _Verify:_ (and a project check) counts only from a run the harness observed or the CLI made (done --run / finish --run). Omit to leave it unchanged." },
-        stopCheck: { type: "boolean", description: "The end-of-turn evidence gate (on by default): the Stop hook sends a turn back when its closing message claims done / verified while a recently active feature has unverified ticks. Omit to leave it unchanged." },
-        approvalGuard: { type: "string", enum: [...spec.APPROVAL_GUARD_LEVELS], description: "The human approval guard (default off): \"ask\" = an agent's approval (spec_approve, spec_feature remove, lowering this guard — or the same through the shell) asks the user first; \"deny\" = refused — the human runs it themselves. In MCP clients without the plugin's hook this server enforces it (elicitation, else deny refuses). Omit to leave it unchanged." },
-        checks: { type: "object", additionalProperties: { type: "string" }, description: "Project check commands {name: command}, e.g. {\"test\": \"npm test\"}: names letters, digits, . _ : - (≤ 40), one-line commands (≤ 500 chars), at most 20; an empty command removes one, the others are kept. Omit to leave them unchanged." },
-        approvalRoles: { type: "object", description: "Approvals by role: {<phase>: [<role>, …]} (a \"tech+security\" string is split); {} clears them. Omit to leave them unchanged." },
+        tracks: { type: "array", items: TRACK_ITEM, description: "Tracks the project uses ('core' always included)." },
+        lang: { type: "string", enum: LANG_ENUM, description: "Project language (default en): pt = European, pt-BR = Brazilian Portuguese." },
+        guard: { type: "string", enum: ["on", "off", "scope"], description: "on = a code edit asks while no feature has approved, unfinished tasks; scope = also a file no open task names in _Implements:_; off." },
+        evidence: { type: "string", enum: ["reported", "observed"], description: "observed = a runnable _Verify:_ counts only from a run the harness saw or the CLI made; reported (default)." },
+        stopCheck: { type: "boolean", description: "The end-of-turn evidence gate (on by default)." },
+        approvalGuard: { type: "string", enum: [...spec.APPROVAL_GUARD_LEVELS], description: "ask = an agent's approval asks the user first; deny = only the human approves; off (default)." },
+        checks: { type: "object", additionalProperties: { type: "string" }, description: "Project check commands {name: command}, e.g. {\"test\": \"npm test\"} — spec_finish needs a passing run of each; an empty command removes one." },
+        approvalRoles: { type: "object", description: "{<phase>: [<role>, …]}: every role signs the phase off; {} clears them." },
         projectDir: PROJECT_DIR_INIT,
       },
     },
@@ -66,14 +74,14 @@ const TOOLS = [
   {
     name: "spec_classify",
     description:
-      "Heuristically classify a feature description into the track set (core +tdd? +saas? +ai? +sec? +privacy? +dist? +api? +ui? +obs? +data?, plus the project's track packs — spec_tracks) from local keyword signals (EN/PT/ES) — no LLM, no cost. Returns the recommended tracks, matched signals and reasoning, plus a suggested size (suggestedSize xs | s | m | l, sizeReason, sizeNote) and, for Brazilian Portuguese wording, `langHint: 'pt-BR'` (lang stays 'pt' — pass lang 'pt-BR' to spec_init / spec_create then): confirm it with the human and pass it to spec_create {size} — nothing applies a size by itself. Use it to seed Phase 0; the human still approves — then pass the tracks they chose to spec_create: a choice that differs from this suggestion is recorded, and after 2 consistent corrections the project's .specs/classifier.json overrides those words here (`overrides`; spec_tracks {action: 'signals'} lists / sets / forgets them). `explain: true` lists every keyword match.",
+      "Phase 0: classify a feature description into tracks (core +tdd +saas +ai +sec +privacy +dist +api +ui +obs +data, plus the project's track packs) from local keyword signals in EN / PT / ES — no model. Returns the recommended tracks with the matched signals and reasoning, a suggested size (xs | s | m | l) and, for Brazilian wording, langHint 'pt-BR'. A suggestion: confirm tracks and size with the user, then pass their choice to spec_create. `explain: true` lists every keyword match.",
     inputSchema: {
       type: "object",
       properties: {
-        description: { type: "string", description: "Plain-language description of the feature/request." },
-        name: { type: "string", description: "Optional feature name (also used as evidence)." },
-        lang: { type: "string", enum: LANG_ENUM, description: "Language of the notes/reasoning. Default: the description's own language." },
-        explain: { type: "boolean", description: "Also return `explain`: every keyword match and the project's signal overrides." },
+        description: { type: "string", description: "The feature or request in plain language." },
+        name: { type: "string", description: "Optional feature name (also read as evidence)." },
+        lang: { type: "string", enum: LANG_ENUM, description: "Language of the notes (default: the description's)." },
+        explain: { type: "boolean", description: "Also return every keyword match." },
         projectDir: PROJECT_DIR, // its track packs and signal overrides apply
       },
       required: ["description"],
@@ -82,57 +90,54 @@ const TOOLS = [
   {
     name: "spec_create",
     description:
-      "Scaffold a feature's spec folder under `.specs/<slug>/` with the artifact skeleton for the chosen tracks: classification.md, requirements.md (EARS + stable AC IDs), design.md (with mandatory +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data sections), tasks.md, plus test-plan.md/tests/ (+tdd), eval-plan.md/prompts/evals/ (+ai), load-test.md (+saas). Artifacts are generated in `lang` (en/pt/pt-BR/es — pt = European, pt-BR = Brazilian Portuguese) — defaults to the project language, persisted per feature in .state.json. Idempotent. A bugfix can be prefilled in the same call — reproduction · rootCause · condition · behaviour (`prefilled` / `prefillSkipped` say what landed) — and includeBody returns the created scaffolds' bodies, so no Read-back is needed.",
+      "Scaffold a feature under .specs/<slug>/ for the chosen tracks: classification, requirements (EARS, stable AC IDs), design (each active track's mandatory sections), tasks, plus the test plan (+tdd), eval plan (+ai) and load test (+saas). Idempotent. `kind`: feature (default) · bugfix (reproduce → root cause → failing regression test → fix; its bug.md can be prefilled in this call) · spike (a timeboxed question that ends in a decision) · change (size xs: one change.md). `includeBody` returns the created files — no read-back needed.",
     inputSchema: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Feature name (human readable; slugified for the folder)." },
-        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a project track pack (spec_tracks); 'tdd,saas' / '+saas +ai' are split" }, description: "Active tracks ('core' always added). Omit to auto-classify from name + summary (same as the CLI) — confirm with the human in Phase 0." },
-        summary: { type: "string", description: "Optional one-line feature summary." },
-        size: { type: "string", enum: [...spec.FEATURE_SIZES], description: "The feature's size, the rigor it gets (spec_classify suggests one; confirm it in Phase 0): 'xs' = a CHANGE (kind 'change'): ONE change.md — summary, 1–3 EARS criteria, the approach, 1–3 tasks with _Verify:_ — core only, two approvals (the plan, then the execution sign-off); 's' = one story, the weigh sections merged, only the core-tier track sections, the plan approved in one call; 'm' / 'l' = the full chain, duplicate sections of two active tracks merged. A new feature only; omit = the classic scaffold. Every size keeps EARS, trace, the evidence gate, the bugfix iron law, phase order and the finish gate." },
-        kind: { type: "string", enum: ["feature", "bugfix", "spike", "change"], description: "'feature' (default). 'bugfix' — the systematic-debugging flow: bug.md (reproduction · root cause · fix — gated by the requirements / design approvals), a one-story requirements.md (IF…THEN), a regression test plan and two tasks: the failing regression test (_Expect: fail_), then the fix; always +tdd. 'spike' — a timeboxed investigation that ends in a decision: spike.md (Question · Timebox · Options · Evidence · Decision with _Outcome: go | no-go | pivot_) and a few investigation tasks, no requirements / design / tasks gates (doctor fails `decision` until it is written). 'change' — size xs (see size). Prototype code lives outside .specs/." },
-        question: { type: "string", description: "kind 'spike' only: the question it answers → spike.md → Question (default: summary). Create-only." },
-        timebox: { type: "string", description: "kind 'spike' only: its end — a date (YYYY-MM-DD) or a duration from today (3d, 2w, 8h) → spike.md → Timebox (**Until:** YYYY-MM-DD). Create-only." },
-        reproduction: { type: "string", description: "kind 'bugfix' only: the exact steps / input / environment that reproduce the bug → bug.md → Reproduction (≤ 20000 characters). Create-only (an existing bug.md is left alone: `prefillSkipped`)." },
-        rootCause: { type: "string", description: "kind 'bugfix' only: the root cause WITH its evidence → bug.md → Root Cause — only once you know it (the iron law holds: the human still approves bug.md before any fix). Create-only." },
-        condition: { type: "string", description: "kind 'bugfix' only: the trigger of the regression criterion — US-1.AC-1 becomes `IF <condition> THEN THE SYSTEM SHALL <behaviour>`. One line, ≤ 500 characters." },
-        behaviour: { type: "string", description: "kind 'bugfix' only: the correct behaviour → the THEN clause of US-1.AC-1 and bug.md → Expected. One line, ≤ 500 characters; left out, it stays a slot." },
-        includeBody: { type: "boolean", description: "Return the body of every artifact this call created as `bodies` {file: text} — no need to read the files back." },
-        lang: { type: "string", enum: LANG_ENUM, description: "Language for the generated artifacts. Defaults to the project language (roadmap.json meta.lang), else en." },
-        brownfield: { type: "boolean", description: "The feature lands in an EXISTING codebase: also scaffold integration-plan.md (integration points, modifications, sequencing, risks)." },
-        flow: { type: "string", enum: [...spec.FLOWS], description: "Phase order: 'design-first' = classification → design → requirements → test / eval plan → tests → tasks (work that starts from an architecture); 'requirements-first' (default). A new feature only (later: spec_feature {action: 'flow'}); a bugfix ignores it." },
-        branch: { type: "string", description: "'true' or a name: the feature's own git branch (default feature/<slug>; fix/, spike/ by kind), recorded with its base — run the returned branch.command yourself (this server never runs git)." },
+        name: { type: "string", description: "Feature name (slugified for the folder)." },
+        tracks: { type: "array", items: TRACK_ITEM, description: "Active tracks ('core' always added). Omit to auto-classify — confirm with the user in Phase 0." },
+        summary: { type: "string", description: "One-line summary." },
+        size: { type: "string", enum: [...spec.FEATURE_SIZES], description: "The rigor, confirmed with the user: xs = a change (one change.md, core only); s = one story, lighter sections; m / l = the full chain. New features only; omit = the classic scaffold." },
+        kind: { type: "string", enum: ["feature", "bugfix", "spike", "change"], description: "feature (default) | bugfix | spike | change (= size xs)." },
+        question: { type: "string", description: "spike: the question it answers (default: summary)." },
+        timebox: { type: "string", description: "spike: its end — YYYY-MM-DD or a duration (3d, 2w, 8h)." },
+        reproduction: { type: "string", description: "bugfix: the exact steps / input / environment that reproduce it." },
+        rootCause: { type: "string", description: "bugfix: the root cause WITH its evidence — only once known." },
+        condition: { type: "string", description: "bugfix: the trigger of US-1.AC-1 (IF <condition> THEN …), one line." },
+        behaviour: { type: "string", description: "bugfix: the correct behaviour (THEN …), one line." },
+        includeBody: { type: "boolean", description: "Return the created files' bodies (`bodies`)." },
+        lang: { type: "string", enum: LANG_ENUM, description: "Artifacts' language (default: the project's)." },
+        brownfield: { type: "boolean", description: "An existing codebase: also scaffold integration-plan.md." },
+        flow: { type: "string", enum: [...spec.FLOWS], description: "design-first (design before requirements) | requirements-first (default). New features only." },
+        branch: { type: "string", description: "'true' or a name: the feature's own git branch (default feature/<slug>) — run the returned branch.command yourself (this server never runs git)." },
         projectDir: PROJECT_DIR,
       },
       required: ["name"],
     },
   },
   {
-    name: "spec_list",
-    description: "List all features under `.specs/`, each with its detected tracks, current phase, and task progress (done/total).",
-    inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR } },
-  },
-  {
     name: "spec_status",
-    description: "Detailed status for one feature: its kind (feature / bugfix / spike / change) and flow (requirements-first / design-first), active tracks, phase, artifacts present, task progress and next task, plus +saas scale-section completeness, +ai eval/prompt state and the +sec / +privacy / +dist / +api / +ui / +obs / +data section completeness (secSections / privacySections / distSections / apiSections / uiSections / obsSections / dataSections).",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: PROJECT_DIR }, required: ["name"] },
+    description:
+      "A feature's status: its kind (feature / bugfix / spike / change), flow, tracks, phase, artifacts, task progress with the next task, and how complete each active track's design sections are. Without `name`: every feature under .specs/ with its kind, tracks, phase and task progress (done / total). For the one next step, call spec_next_action.",
+    inputSchema: { type: "object", properties: { name: { type: "string", description: "Feature name/slug. Omit to list every feature." }, projectDir: PROJECT_DIR } },
   },
   {
     name: "spec_next_task",
-    description: "Return the next task for a feature (its number and text) — the first open task, in task-number order, whose `_Depends:_` tasks are all done — plus remaining/total counts. With dependencies in play: `skipped` [{number, waitsOn}] (open tasks passed over) and `blocked` (open tasks that can never start: a cycle, a _Depends:_ naming no task); none able to start → next null + a localized note (fix the _Depends:_ markers; spec_doctor fails `task-deps`). `batch: true` also returns the following open [P] tasks of the same section that can run beside it (declared, disjoint _Implements:_ files, dependencies done; max 3 by default) — for parallel subagents in separate worktrees. `waves: true` returns the execution waves of every open task (`waves` [[numbers…]] — a wave's tasks can run at once: their dependencies done or in earlier waves, no shared _Implements:_ file; a task without _Implements:_ or an +ai prompt task runs alone), plus `cycles` and `blocked`.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, batch: { type: "boolean", description: "Also return the parallel batch." }, max: { type: "integer", minimum: 1, maximum: 8, description: "Batch size cap (default 3, max 8)." }, waves: { type: "boolean", description: "Also return the execution waves of the open tasks (+ cycles, blocked)." }, projectDir: PROJECT_DIR }, required: ["name"] },
+    description:
+      "The next task of a feature — the first open one, in number order, whose _Depends:_ tasks are done — plus remaining / total; `skipped` / `blocked` explain the tasks passed over (none able to start: next null and a note — fix the _Depends:_ markers). `batch: true` adds the following open [P] tasks that can run beside it (disjoint _Implements:_ files) for parallel subagents; `waves: true` returns the execution waves of every open task.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, batch: { type: "boolean", description: "Also return the parallel batch." }, max: { type: "integer", minimum: 1, maximum: 8, description: "Batch size cap (default 3)." }, waves: { type: "boolean", description: "Also return the execution waves (+ cycles, blocked)." }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "spec_task_brief",
     description:
-      "A self-contained brief for ONE task (default: the next task by spec_next_task's rule — none able to start → task null, `blocked` and a note; an explicit number resolves like spec_complete_task: the first OPEN task of a duplicated number) so a fresh implementer can execute it without reading the whole spec: the task text with its story / phase / [P], the full EARS text of every AC it cites, the test-plan row of every T-ID it names, its `_Verify:_` command — the evidence its report must carry (`verifyPipes` flags one that pipes: a pipeline's exit code is its LAST command's) —, `_Expect: fail_` (`expect: \"fail\"`: its run must FAIL), its `_Depends:_` with each one's status, the tasks.md Global Constraints, the design sections and decisions that mention it, the steering that applies (the defaults, `inclusion: always` files and `fileMatch` files matching its _Implements:_ paths; `manual` ones listed), the glossary entries its text uses, a Reuse section (the design's Reuse & Integration entries for it and the existing files next to its _Implements:_ targets — search before you write), the project checks (`projectChecks`) and the definition of done for its loop (core / tdd / ai-prompt — +ai prompt tasks are `inlineOnly`). BUGFIX: bug.md's Reproduction and Root Cause; while Root Cause is unfilled a task after the root-cause task (none: after task 1) comes back `gated` (spec_complete_task would refuse it). In the feature's language. `write: true` writes .specs/<feature>/.execution/task-<N>-brief.md (+ an append-only ledger.md) and returns the paths and the task's identifiers (`refs`) — the basis of subagent-driven execution; the spec text is then left out unless includeBrief.",
+      "A self-contained brief for ONE task (default: the next one, as spec_next_task picks it) so a fresh implementer can execute it without the whole spec: the task, the full text of the ACs it cites, its test-plan rows, its _Verify:_ command (the evidence its report must carry), _Expect: fail_, dependencies, global constraints, the design sections, decisions, steering and glossary that apply, a Reuse section (search before you write), the project checks and the definition of done. A bugfix task after the root-cause task is `gated` until bug.md's Root Cause is filled. `write: true` writes .specs/<feature>/.execution/task-<N>-brief.md (+ ledger.md) and returns the paths — the basis of subagent-driven execution.",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name/slug." },
-        number: { type: "integer", minimum: 0, description: "Task number (≥ 0). Omit for the next open task." },
-        write: { type: "boolean", description: "Write the brief to .specs/<feature>/.execution/ and return paths + the task's identifiers (the brief markdown and the spec text it quotes are omitted unless includeBrief)." },
-        includeBrief: { type: "boolean", description: "Include the brief markdown and the full structured result (AC texts, test rows, design sections, steering) (default: true when not writing, false when writing)." },
+        number: { type: "integer", minimum: 0, description: "Task number. Omit for the next task." },
+        write: { type: "boolean", description: "Write the brief file; the brief itself is then left out unless includeBrief." },
+        includeBrief: { type: "boolean", description: "Include the brief and its structured content (default: true unless writing)." },
         projectDir: PROJECT_DIR,
       },
       required: ["name"],
@@ -141,118 +146,117 @@ const TOOLS = [
   {
     name: "spec_finish",
     description:
-      "Close a feature (finishing-a-development-branch): a readiness report plus a merge title + summary GENERATED FROM THE SPEC CHAIN. `readyToFinish` is true only without `blockers`: doctor fails, an artifact changed since its approval, template placeholders, a bugfix's unwritten Root Cause, no tasks or open tasks, ticked tasks without passing verification evidence (`unverified`), with project checks (roadmap.json meta.checks) a check without a passing recorded run since the feature's last task activity (`suite-evidence`, each check in `suiteChecks`), and phases awaiting approval. `evidence` [{name, command, exitCode, summary}] records the project checks as YOU ran them (each a meta.checks name; run the configured command from the project root — another command reads `changed`) BEFORE the readiness is computed, so one call can make the feature ready; a failed run is recorded too and stays a blocker; returned as `recordedChecks` with `observed` (true when the plugin's Bash hook saw that run; \"cli\" for `" + spec.DEV_SPEC + " finish <f> --run`). `warnings` never block (uncovered EC / NFR / SC IDs, planned T-IDs no test file names); `checks` lists the track-gated items only a fresh run or a human can confirm. `write: true` writes the summary to .specs/<feature>/.execution/merge-summary.md (content omitted unless includeBody), and a READY feature records its drift baseline (`baseline` — spec_drift compares against it later). Integration is LOCAL: the human picks merge locally or keep the branch — no pull requests, no CI; it never merges, pushes or approves by itself. A green run is EVIDENCE, not the sign-off: after it, ask the user for an explicit yes on the `execution` phase before calling spec_approve — never promise to approve it once they paste a passing run.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary to .specs/<feature>/.execution/merge-summary.md." }, includeBody: { type: "boolean", description: "Include the merge summary in the result (default: true when not writing, false when writing)." }, evidence: { type: "array", description: "The project checks' runs (roadmap.json meta.checks) — the server never runs them: run each configured command and report it here. Needs meta.checks; validated all-or-nothing.", items: { type: "object", properties: { name: { type: "string", description: "A meta.checks name." }, command: { type: "string", description: "The command that ran." }, exitCode: { type: "integer", description: "Its exit code." }, summary: { type: "string", description: "e.g. '212 passing' or the last lines of output." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional, with commit: uncommitted changes outside .specs/." } }, required: ["name", "command", "exitCode"] } }, projectDir: PROJECT_DIR }, required: ["name"] },
+      "Close a feature: a readiness report plus a merge title + summary generated from the spec chain. `readyToFinish` only without `blockers` (doctor fails, edits since an approval, placeholders, open or unverified tasks, a project check without a passing recorded run since the last task activity, phases awaiting approval); `warnings` never block. `evidence` [{name, command, exitCode, summary}] records the project checks' runs YOU made (meta.checks names; the server never runs them) before readiness is computed. `write: true` writes .specs/<feature>/.execution/merge-summary.md and, when ready, records the drift baseline. Integration is LOCAL — the human merges or keeps the branch; it never merges, pushes or approves by itself. A green run is EVIDENCE, not the sign-off: ask the user for an explicit yes on the `execution` phase before calling spec_approve.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary file (+ the drift baseline when ready)." }, includeBody: { type: "boolean", description: "Include the merge summary (default: true unless writing)." }, evidence: { type: "array", description: "The project checks' runs you made (needs meta.checks; all-or-nothing).", items: { type: "object", properties: { name: { type: "string", description: "A meta.checks name." }, command: { type: "string" }, exitCode: { type: "integer" }, summary: { type: "string", description: "e.g. '212 passing'." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional: uncommitted changes outside .specs/." } }, required: ["name", "command", "exitCode"] } }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "spec_complete_task",
     description:
-      "Mark task N as done in a feature's tasks.md — EVIDENCE BEFORE CLAIMS. BEFORE calling it: if the task has a runnable _Verify:_ command and you have NOT run it yourself (no shell in this session), do NOT call this tool at all — not bare, not with a summary-only note, never with an exit code you did not see: name the _Verify:_ command and ask the user for its output (or to run `" + spec.DEV_SPEC + " done <feature> <n> --run` — that exact line: a plugin install puts no `dev-spec` on PATH), then record what they report; never send a subagent to look for a shell. Tick with a note only when the user explicitly asks for an UNVERIFIED tick. \"I finished it, mark it done\" is a claim, not a run. Pass `evidence` {command, exitCode, summary} — the run you actually made (stamped `observed`: true when the plugin's Bash hook saw it). A non-zero exitCode REFUSES the tick and stays recorded; an exit code alone, or a command without its exit code, is rejected. EVIDENCE GATE: a runnable _Verify:_ counts as verified only with {command, exitCode: 0} where `command` IS its _Verify:_ command (several: all of them in ONE run joined with ` && `; a prefix the _Verify:_ holds must stay) — another command ticks it unverified (command-mismatch), and so does a summary-only note (a task without a runnable _Verify:_ may be attested by a note). The result carries `verified`; whenever it is false, a stable `unverifiedReason` (e.g. no-evidence · failed-run · stale-evidence · command-mismatch) plus a localized note; doctor, spec_finish and ROADMAP.md list such an unverified task with its localized reason. A task with no runnable _Verify:_ and nothing recorded is verified with `nothingToVerify: true` (nothing was run or attested) — doctor, spec_finish and ROADMAP.md pass it too (never listed as unverified). RED → GREEN: an `_Expect: fail_` task is proven by a FAILING run of its _Verify:_; a pass is refused (`unexpectedPass`) until its red run is on record; a run that never reached the test (exit 126 / 127 / 9009, a missing test file — `couldNotRun`) is refused. A piped command → `pipeMasked: true`. Bugfix: a task after the root-cause task (none: after task 1) is refused until bug.md's Root Cause is filled. A task ticked before its `_Depends:_` are done gets `waitsOn`. UNDO: `undo: true` (+ a one-line `reason`) unticks task N instead of editing tasks.md — its evidence turns stale (a re-tick needs a NEW run).",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, number: { type: "integer", minimum: 0 }, evidence: { type: "object", properties: { command: { type: "string" }, exitCode: { type: "integer" }, summary: { type: "string", description: "e.g. '14/14 passing' or the last lines of output" }, commit: { type: "string", description: "Optional: the git commit the run was made on (`git rev-parse --short HEAD`) — `dev-spec done --run` records it." }, dirty: { type: "boolean", description: "Optional, with commit: the working tree had uncommitted changes outside .specs/." } }, description: "Verification actually run for this task." }, undo: { type: "boolean", description: "Untick task N instead (no evidence): its evidence turns stale, a re-tick needs a new run (CLI: dev-spec undone <feature> <n>)." }, reason: { type: "string", description: "With undo: why the tick is undone (one line, ≤ 500 characters) — recorded in .state.json unticks (CLI: --reason)." }, projectDir: PROJECT_DIR }, required: ["name", "number"] },
+      "Tick task N of a feature — EVIDENCE BEFORE CLAIMS. Pass `evidence` {command, exitCode, summary}: the run of its _Verify:_ command you actually made. If you cannot run it (no shell), do NOT call this tool: name the _Verify:_ command and ask the user for its output, or to run `" + spec.DEV_SPEC + " done <feature> <n> --run` (that exact line) — never send a subagent to look for a shell, never pass an exit code you did not see. \"I finished it, mark it done\" is a claim, not a run; tick with a note only when the user explicitly asks for an UNVERIFIED tick. A non-zero exitCode REFUSES the tick (it stays recorded). A runnable _Verify:_ is verified only by {command: that very command (several: one run joined with ` && `), exitCode: 0}; anything else ticks it unverified. The result carries `verified`; when false, a stable `unverifiedReason` plus a localized note; doctor, spec_finish and ROADMAP.md list such an unverified task with its localized reason. A task with no runnable _Verify:_ and nothing recorded is verified with `nothingToVerify: true` (nothing was run or attested) — doctor, spec_finish and ROADMAP.md pass it too (never listed as unverified). RED → GREEN: an `_Expect: fail_` task needs a FAILING run first; a run that never reached the test (exit 126 / 127 / 9009) is refused. Bugfix: a task after the root-cause task is refused until bug.md's Root Cause is filled. `undo: true` (+ `reason`) unticks it instead — its evidence turns stale.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, number: { type: "integer", minimum: 0 }, evidence: { type: "object", properties: { command: { type: "string" }, exitCode: { type: "integer" }, summary: { type: "string", description: "e.g. '14/14 passing' or the last lines of output." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional: uncommitted changes outside .specs/." } }, description: "The run you made." }, undo: { type: "boolean", description: "Untick task N instead (its evidence turns stale)." }, reason: { type: "string", description: "With undo: why, one line." }, projectDir: PROJECT_DIR }, required: ["name", "number"] },
   },
   {
     name: "ears_validate",
-    description: "Lint EARS acceptance criteria, one logical criterion at a time (wrapped lines and list continuations are joined; HTML comments and fenced code are skipped): flags criteria missing a modal verb (SHALL / DEVE / DEBE), missing a stable ID (US-1.AC-1; EC-1, NFR-1 and SC-001 count too — a bare AC-1 does not: trace_check reads US-n.AC-m only), vague words (fast, user-friendly, appropriate, … in EN/PT/ES), template placeholders still in a criterion ([trigger], [behavior] …), a missing EARS keyword, and every open [NEEDS CLARIFICATION]. Pass `text` directly, or `name` to lint that feature's requirements.md. Each issue has a stable `code` (no-modal · no-id · vague · placeholder · no-keyword · needs-clarification · padded-id), a severity (only no-modal is an error, which makes the verdict fail), the criterion's `line` (+ `endLine` when it spans several) and a `msg` in the feature's language (or `lang` for raw text).",
-    inputSchema: { type: "object", properties: { text: { type: "string" }, name: { type: "string" }, lang: { type: "string", enum: LANG_ENUM }, projectDir: PROJECT_DIR } },
+    description: "Lint EARS acceptance criteria: a missing modal verb (SHALL / DEVE / DEBE — the only error), a missing stable ID (US-n.AC-m; EC / NFR / SC IDs count too), vague words, template placeholders, a missing EARS keyword and open [NEEDS CLARIFICATION] markers. Pass `text`, or `name` to lint that feature's requirements.md. Each issue has a stable `code`, a severity, its line and a localized `msg`.",
+    inputSchema: { type: "object", properties: { text: { type: "string", description: "The criteria to lint." }, name: { type: "string", description: "Or a feature: its requirements.md." }, lang: { type: "string", enum: LANG_ENUM, description: "Language of the messages for raw text." }, projectDir: PROJECT_DIR } },
   },
   {
     name: "trace_check",
-    description: "Verify traceability for a feature, both directions. GAPS decide `verdict`: criteria with no US-n.AC-m ID (`unidentifiedCriteria`; 0 ACs is never a pass), ACs no task cites (`uncoveredByTasks`), phantom AC / T-IDs in tasks, on +tdd ACs without a test-plan row (`uncoveredByTests`) and test-plan rows citing undefined ACs (`phantomAcsInTests`), and `_Implements:_` files that don't exist (`missingImplFiles` — a file named only by OPEN tasks is the plan, `plannedImplFiles`). Informational: `supersedes` / `phantomSupersedes`, `removedAcs` (phantom IDs a recorded change request removed — delete or update what still cites them), `testsNotMappedToTasks`. WARNINGS (never the verdict): `justifiedTestGaps` (ACs the test plan lists only as gaps / out of scope — still untested), `untracedCriteria` (modal criteria with no ID beside US-n.AC-m ones); EC-n / NFR-n need a task or a test-plan row, SC-nnn a test-plan row or quickstart.md. `code: true` also scans the project's test files (bounded, read-only) for the T-IDs and AC IDs they name — `code` (`plannedNotInCode`, `inCodeNotInPlan`…); a T-ID whose plan row names a test path counts only there. `matrix: true` adds `matrix`, the requirements traceability matrix (informational): one row per AC / EC / NFR / SC with its status — untraced (gaps no-task · no-test · no-coverage) · planned · implemented (every linked task done, one not verified) · verified — and its tasks + evidence, tests, design sections, decisions, supersedes and approval. CLI: dev-spec trace <f> --matrix (a table) or --csv; spec_export {format: 'csv'} writes it as a file.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, code: { type: "boolean", description: "Also scan test files (test/spec/__tests__ folders, .specs/<feature>/tests/, *.test.*, test_*.py, *_test.go, *Test.java, *Tests.cs, *Tests.fs, *Spec.scala …) for the T-IDs they name — put the T-ID in the test name: test(\"T-01 …\"), def test_T01_…, func TestT01…, [Fact(DisplayName=\"T-01 …\")] (CLI: --code)." }, matrix: { type: "boolean", description: "Also return `matrix`, the requirements traceability matrix (one row per AC / EC / NFR / SC: status, tasks + evidence, tests, design, decisions, approval) — CLI: --matrix (table) or --csv." }, projectDir: PROJECT_DIR }, required: ["name"] },
+    description: "Traceability of a feature, both directions. Gaps decide `verdict`: criteria without a US-n.AC-m ID, ACs no task cites, phantom AC / T-IDs in tasks, on +tdd ACs without a test-plan row and rows citing undefined ACs, and _Implements:_ files that don't exist (those only open tasks name are the plan); warnings never decide it. `code: true` also scans the project's test files for the T-IDs / AC IDs they name; `matrix: true` adds the requirements traceability matrix (one row per AC / EC / NFR / SC: status, tasks + evidence, tests, design, decisions, approval).",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, code: { type: "boolean", description: "Also scan test files for the T-IDs they name (put the T-ID in the test's name)." }, matrix: { type: "boolean", description: "Also return the traceability matrix." }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "spec_doctor",
-    description: "One health-check that decides whether a feature is ready to advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. FAIL: requirements / design missing, ears (a criterion without a modal verb or a US-n.AC-m ID), clarifications (open [NEEDS CLARIFICATION]), ac-uniqueness, placeholders (template text in the current or an earlier phase's artifact; a later phase's only warns), the active tracks' mandatory design sections present AND filled (saas-sections / ai-sections / sec-sections / privacy-sections / dist-sections / api-sections / ui-sections / obs-sections / data-sections / <pack>-sections), traceability (the gaps a later, still-template file would cause are deferred as a warn), task-deps, verify-control, change-scope, a bugfix's root-cause, a spike's question / decision, merge-conflicts. WARN: steering, success-criteria, priorities, mermaid, constitution-check, design-tradeoffs / design-risks / design-reuse, test-plan / eval-plan, secondary-trace, supersedes, tests-in-code, verification (ticked tasks without passing evidence, with the reason), red-green, suite-evidence, duplicate-tasks, unread-tasks, verify-pipes, integration-plan, changed-since-approval (names the spec_impact phases to diff), glossary, cross-feature-acs, cross-feature-overlap, steering-changed-since-approval (`steeringChanged`), decision-affects, waiver-expired, a spike's timebox. approval-gates: the pending phases, forced approvals with their failing checks, and what the next approval would refuse (`nextGate` {phase, ready, failing, missingRoles}). Also returns phase, approvals, pendingGates, forcedGates, gatesOk and summary.",
+    description: "One health check that decides whether a feature can advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. It fails on what blocks the next approval — missing artifacts, EARS problems, open clarifications, duplicate ACs, template placeholders in the current phase, the active tracks' mandatory design sections (<track>-sections), traceability gaps, task dependencies — and warns on the rest (unverified tasks, edits since an approval, steering changes, cross-feature overlaps…). Also returns the phase, approvals, pending and forced gates, and what the next approval would refuse (`nextGate`).",
     inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "spec_approve",
-    description: "Record human approval of a phase gate for a feature (.state.json + a .history/ snapshot); a change has only tasks — its change.md — and execution. The approval is a GATE: that phase's checks run first and any failure REFUSES it, listing the failing check ids (requirements: EARS, placeholders, open clarifications, success criteria + priorities, AC uniqueness — bugfix: bug.md Reproduction; design: placeholders, Constitution Check, the active tracks' sections — bugfix: bug.md Root Cause; test-plan: placeholders, every AC has a test, no row citing an AC requirements.md does not define; eval-plan: placeholders; tests (Phase 4): +tdd every planned T-ID named by a test file, +ai a golden set of its own; tasks: no placeholder tasks, every AC covered, no phantom IDs; execution — spec_finish's blockers: state, doctor, root-cause, placeholders, changed-since-approval, tasks, open-tasks, verification, suite-evidence, approval-gates; a spike: spike, decision, open-tasks). An earlier unapproved phase refuses it (`phase-order`). `force: true` records it as forced — only when the user asked; a phase with no readable artifact can't be approved (`unreadable`). APPROVALS BY ROLE (roadmap.json meta.approvalRoles): a listed phase needs `role` and counts as approved only once every role signed off its CURRENT content (until then `missingRoles`; a tests / execution sign-off older than a change doesn't count; `sameSigner`: one person, two roles). FAST-FORWARD: `through` approves the active phases up to it in order, each through its gate, stopping at the first refusal. Only record an approval the user gave — an explicit yes for THAT phase (a passing test run, a ticked task or \"finish it\" / \"fix it\" is not one; `execution` too). With meta.approvalGuard ask / deny the plugin's hook asks the user before this call, or refuses it — then ask the user to run it themselves, never retry it another way. In other MCP clients the server asks through elicitation — recorded only on an explicit approve (`confirmed`; edited meanwhile: `changedSincePreview`); declined or unanswered → `declined: true`, nothing recorded — or, at deny without elicitation, refuses it (`humanRequired: true` + the `command` the user runs). WAIVERS: with `force`, `reason` (one line) and `expires` (UTC YYYY-MM-DD, or 30d) record why and until when. REVOKE: `revoke: true` (+ `reason`) removes `phase`'s approval — never cascades; on a per-role phase it names its `role` (before the approval: only that role's sign-off).",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, phase: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"], description: "The phase to approve (or `through` for the fast-forward), or — with revoke — whose approval to revoke." }, through: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks"], description: "Fast-forward: approve every active phase from the first unapproved one up to this one, in order, each through its gate." }, role: { type: "string", description: "The role this sign-off (or, with revoke, this revocation) is for, when roadmap.json meta.approvalRoles lists the phase." }, by: { type: "string", description: "Approver (default: $USER / $USERNAME, else 'user')." }, force: { type: "boolean", description: "Approve even though the phase's checks fail — recorded as forced, with the failing check ids." }, reason: { type: "string", description: "With force: why the gate is waived; with revoke: why the approval is revoked. One line, ≤ 500 characters." }, expires: { type: "string", description: "With force: when the waiver expires — YYYY-MM-DD (today or later in UTC) or Nd (e.g. 30d), at most 3650 days." }, revoke: { type: "boolean", description: "Revoke the approval of `phase` (and its waiting role sign-offs) instead — never cascades." }, projectDir: PROJECT_DIR }, required: ["name"] },
+    description: "Record the user's approval of a phase gate (.state.json + a .history/ snapshot). Only record an approval the user gave — an explicit yes for THAT phase (a passing test run, a ticked task or \"finish it\" / \"fix it\" is not one; `execution` too). The gate REFUSES it while the phase's checks fail (the failing check ids are listed — fix them) or an earlier phase is unapproved (`phase-order`). `force: true` records a forced approval — only when the user asked for it; with `reason` and `expires` it is a waiver. APPROVALS BY ROLE (meta.approvalRoles): pass `role`; the phase counts once every role signed off. FAST-FORWARD: `through` approves the active phases up to it in order, stopping at the first refusal. `revoke: true` (+ `reason`) withdraws `phase`'s approval (never cascades). With meta.approvalGuard ask / deny the user is asked first (the plugin's hook, else MCP elicitation — recorded only on their explicit approve) or the call is refused (`humanRequired`: hand the user the `command` to run) — never retry it another way.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, phase: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"], description: "The phase to approve — or, with revoke, whose approval to withdraw." }, through: { type: "string", enum: ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks"], description: "Fast-forward: approve every active phase up to this one, in order, each through its gate." }, role: { type: "string", description: "The role this sign-off (or revocation) is for, when meta.approvalRoles lists the phase." }, by: { type: "string", description: "Approver (default: $USER / $USERNAME, else 'user')." }, force: { type: "boolean", description: "Approve although the checks fail (recorded as forced) — only on the user's request." }, reason: { type: "string", description: "With force: why the gate is waived; with revoke: why. One line." }, expires: { type: "string", description: "With force: the waiver's end — YYYY-MM-DD (UTC) or Nd (e.g. 30d)." }, revoke: { type: "boolean", description: "Withdraw `phase`'s approval instead (never cascades)." }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "steering_scaffold",
-    description: "Create one steering file from its template (constitution.md, product.md, tech.md, structure.md, testing-standards.md, scale.md, observability.md, cost.md, ai-strategy.md, security.md, privacy.md, distributed.md, api.md, ui.md, data.md, glossary.md) — or a CUSTOM scoped steering file for any other name matching ^[a-z0-9][a-z0-9-]{0,62}\\.md$ (not a Windows device name such as nul.md): a stub with Kiro-compatible front matter (`inclusion: always | fileMatch | manual`, `fileMatchPattern: \"src/api/**\"`) — spec_task_brief includes `always` files and the `fileMatch` files matching a task's _Implements:_ paths, and lists `manual` ones. glossary.md (never created by spec_init) is the product's ubiquitous language, one entry per term — `- **Customer** — a person or company with a signed contract. _Avoid: client, user_` (the `_Avoid:_` marker stays English): spec_clarify and spec_doctor flag the avoided words, task briefs quote the entries they use. In `lang` (default: the project language). Idempotent — never overwrites.",
-    inputSchema: { type: "object", properties: { file: { type: "string", description: "A known template name, or a custom name like api-conventions.md." }, lang: { type: "string", enum: LANG_ENUM }, projectDir: PROJECT_DIR }, required: ["file"] },
+    description: "Create one steering file from its template (constitution, product, tech, structure, testing-standards, scale, observability, cost, ai-strategy, security, privacy, distributed, api, ui, data or glossary .md) or a custom scoped one (another lowercase name.md) with Kiro-compatible front matter (`inclusion: always | fileMatch | manual`, `fileMatchPattern`) — task briefs include the files that apply. glossary.md is the product's ubiquitous language (`- **Term** — definition. _Avoid: synonyms_`): clarify and doctor flag the avoided words. Idempotent — never overwrites.",
+    inputSchema: { type: "object", properties: { file: { type: "string", description: "A template name, or a custom name like api-conventions.md." }, lang: { type: "string", enum: LANG_ENUM }, projectDir: PROJECT_DIR }, required: ["file"] },
   },
   {
     name: "spec_roadmap",
-    description: "Show the multi-feature roadmap: each feature's tracks, phase, completion % (planning phases up to 30%, then the fraction of tasks done), dependencies and blocked status (a dependency is met at 100%), the overall % and any circular dependency. `write: true` (re)generates .specs/ROADMAP.md (Markdown with the Mermaid dependency graph — git-friendly); `html: true` also writes a self-contained .specs/ROADMAP.html (offline, light/dark); `lang` localizes the chrome only (meta.roadmapLang). A same-named file dev-spec did not generate is never overwritten (`errors`). FORECASTS: `velocity` = points completed per working day over the last 28 days (a task's `_Size: XS|S|M|L|XL_` = 1/2/3/5/8 points); each feature's `forecast` → `eta` + `range` (±25%) in working days after its unfinished dependencies, or eta null with a `reason` (not-enough-data · no-tasks · dependency · cycle · done). OVERLAPS: `overlaps` = active features whose open tasks plan the same files (_Implements:_), unless ordered by a dependency or declared with _Supersedes:_ (spec_doctor warns cross-feature-overlap). MILESTONES: `milestones` with their status (spec_milestone).",
-    inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR, write: { type: "boolean", description: "(Re)write .specs/ROADMAP.md (default format)." }, html: { type: "boolean", description: "Also (re)write the brand-styled .specs/ROADMAP.html." }, lang: { type: "string", enum: LANG_ENUM, description: "Language for the roadmap chrome." } } },
+    description: "The multi-feature roadmap: each feature's tracks, phase, completion %, dependencies and blocked status, the overall %, cycles, the backlog and milestones; forecasts (`velocity` from _Size:_ points, each feature's `eta` + range, or a reason) and `overlaps` (active features whose open tasks plan the same files). `write: true` (re)generates .specs/ROADMAP.md (Markdown + Mermaid, git-friendly), `html: true` also ROADMAP.html; a file dev-spec did not generate is never overwritten. To change the backlog, dependencies or milestones: spec_roadmap_edit.",
+    inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR, write: { type: "boolean", description: "(Re)write .specs/ROADMAP.md." }, html: { type: "boolean", description: "Also (re)write .specs/ROADMAP.html." }, lang: { type: "string", enum: LANG_ENUM, description: "Language of the roadmap chrome." } } },
   },
   {
-    name: "spec_backlog",
-    description: "Manage the backlog — planned features that don't have a `.specs/<feature>/` folder yet (so the roadmap's 'what's left' includes work not yet started). Actions: 'add' (name + optional note — one line, at most 2,000 characters, else add is refused and nothing is written; a name that already has an active feature folder is refused — it is specced, not planned; a name already in the backlog, compared case-insensitively, keeps its entry and the new note is APPENDED to its note — one line, joined with ' · ', a note it already holds changes nothing, the whole note at most 2,000 characters (past it add is refused: file it under another name) — the result then carries `exists: true`, `appended` and a localized `note`; give separate items distinct names), 'rm' (alias 'remove'), or omit / 'list' to list. Stored in .specs/roadmap.json.",
-    inputSchema: { type: "object", properties: { action: { type: "string", enum: spec.BACKLOG_ACTIONS.slice() }, name: { type: "string" }, note: { type: "string" }, projectDir: PROJECT_DIR } },
-  },
-  {
-    name: "spec_depend",
-    description: "Show or edit a feature's dependencies and/or order in .specs/roadmap.json. `dependsOn` REPLACES the list ([] clears it); `add` / `remove` edit it incrementally; `order` sets the position; `name` alone only returns the current dependencies (nothing is written). Every dependency must be an existing feature. Rejects changes that would create a circular dependency. Use for 'feature X depends on Y' or 'do X before Y' (set order).",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, dependsOn: { type: "array", items: { type: "string" }, description: "Replaces the list with these feature slugs ([] clears it)." }, add: { type: "array", items: { type: "string" }, description: "Feature slugs to add to the current list." }, remove: { type: "array", items: { type: "string" }, description: "Feature slugs to remove from the current list." }, order: { type: "integer", description: "Optional explicit ordering position." }, projectDir: PROJECT_DIR }, required: ["name"] },
-  },
-  {
-    name: "spec_milestone",
-    description: "Milestones — named target dates for a set of features (roadmap.json meta.milestones [{name, date, features}]; nothing is sent anywhere). `action`: 'list' (default) — every milestone with its status; 'add' — name + date (YYYY-MM-DD) + features (≥ 1 existing ACTIVE feature; each item is one feature name, 'a,b' is split) — an existing name (compared case- and accent-insensitively) is UPDATED (`updated: true`); 'rm' (alias 'remove') — by name. A feature's rename / remove / archive is followed (archive → the milestone's `archived` list; restore puts it back). STATUS (stable codes) against the roadmap forecasts: done · late (the date passed, a feature not done) · at-risk — `reason` eta-after-date · eta-unknown (listed in `unknownEta`) · no-features — · on-track. Each milestone: {name, date, features, archived?, status, reason?, done, total, open, eta}, plus `today` and localized `lines`. ROADMAP.md shows a Milestones table; spec_changelog {milestone} scopes the release notes to one. A name: letters, digits, spaces and . _ : # ( ) + - (≤ 60 characters); at most 50 milestones of 200 features.",
-    inputSchema: { type: "object", properties: { action: { type: "string", enum: spec.MILESTONE_ACTIONS.slice(), description: "list (default) | add | rm (alias remove)." }, name: { type: "string", description: "The milestone's name (add / rm)." }, date: { type: "string", description: "Its target day, YYYY-MM-DD (add)." }, features: { type: "array", items: { type: "string" }, description: "Its features — existing active feature names, one per item (add; replaces the active list of an existing milestone)." }, projectDir: PROJECT_DIR } },
+    name: "spec_roadmap_edit",
+    description: "Edit the roadmap (.specs/roadmap.json); `kind` says what. 'backlog' — planned features without a spec folder yet: `action` add (`name` + an optional one-line `note`; an existing name gets the note appended) · rm · list (default). 'depend' — a feature's dependencies and order: `name` (required) with `dependsOn` (REPLACES the list; [] clears it) or `add` / `remove`, and `order`; `name` alone shows them. Every dependency must be an existing feature; a cycle is refused. 'milestone' — a target date for a set of features: `action` add (`name`, `date` YYYY-MM-DD, `features`; an existing name is updated) · rm · list (default), each with its status against the forecasts (done · late · at-risk · on-track). An argument of another kind is refused (inapplicable-arguments).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["backlog", "depend", "milestone"], description: "What to edit." },
+        action: { type: "string", enum: ROADMAP_ACTIONS, description: "backlog / milestone: add | rm (alias remove) | list (default)." },
+        name: { type: "string", description: "backlog / milestone: the item's name; depend: the feature." },
+        note: { type: "string", description: "backlog add: one line (≤ 2,000 characters)." },
+        dependsOn: { type: "array", items: { type: "string" }, description: "depend: REPLACES the dependency list ([] clears it)." },
+        add: { type: "array", items: { type: "string" }, description: "depend: dependencies to add." },
+        remove: { type: "array", items: { type: "string" }, description: "depend: dependencies to remove." },
+        order: { type: "integer", description: "depend: its position in the roadmap." },
+        date: { type: "string", description: "milestone add: its target day, YYYY-MM-DD." },
+        features: { type: "array", items: { type: "string" }, description: "milestone add: its features (existing active ones)." },
+        projectDir: PROJECT_DIR,
+      },
+      required: ["kind"],
+    },
   },
   {
     name: "spec_scan",
-    description: "Brownfield: heuristic, bounded, read-only scan of an EXISTING codebase (no model, no cost) — the file inventory by extension, top-level modules, stack + web frameworks, HTTP routes with method + path + file:line (the common Node, Python, Java, .NET, Ruby, PHP and Go frameworks; `candidateEndpoints` counts them all), test frameworks + test-file count, entrypoints, the environment variable NAMES the code reads (never values; .env itself is never read) and migration / schema files. Nested manifests count in a monorepo; the folders the root .gitignore excludes and testdata/ are skipped. A projectDir that is not a folder is an error. Interpret it to infer the steering / constitution and reverse-engineer specs.",
-    inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR, cap: { type: "integer", minimum: 1, description: "Max code / manifest files to scan (default 5000; images, docs and data don't count). `truncated`: a code file was left unscanned." } } },
-  },
-  {
-    name: "spec_coverage",
-    description: "Brownfield: how much of the codebase is covered by specs — the share of code files (test files reported apart) named in any `_Implements:_` marker (a file, a folder or a glob) of any feature, active or archived, with a per-top-level-folder breakdown (`byFolder`), the uncovered folders, per-feature counts, the _Implements:_ entries that name nothing on disk (`unmatchedImplements`) and those naming an existing test or non-code file (`nonCodeImplements`, informational). `coveragePercent` = covered code files / code files; `documented`/`undocumented` = folders with at least one / no covered file. It skips what spec_scan skips (the root .gitignore's generated folders, testdata/); a projectDir that is not a folder is an error.",
-    inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR } },
+    description: "Brownfield, read-only, bounded, no model. Default: inventory an EXISTING codebase — files by extension, top-level modules, stack and web frameworks, HTTP routes (method, path, file:line), test frameworks and files, entrypoints, the environment variable NAMES the code reads (never values; .env is never read) and migration / schema files — to infer the steering and reverse-engineer specs. `coverage: true` instead measures how much code the specs cover: the share of code files any feature's _Implements:_ names (active or archived), per top-level folder, the uncovered folders and the _Implements:_ entries naming nothing on disk.",
+    inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR, cap: { type: "integer", minimum: 1, description: "The inventory's max code / manifest files (default 5000)." }, coverage: { type: "boolean", description: "Measure the specs' coverage of the code instead." } } },
   },
   {
     name: "spec_clarify",
-    description: "Surface ambiguities and gaps in a feature's requirements BEFORE design: vague terms, leftover placeholders / TBD (with file:line), missing edge-case / NFR / out-of-scope sections, missing IF…THEN failure paths and track-specific gaps (tenant isolation, AI quality / cost, access denial, data subject rights…). Returns the clarification questions to ask the user — what the feature's kind and size ask (a change: only its own change.md; size s: no edge-case / NFR question). With .specs/steering/glossary.md, every avoided word (`_Avoid:_`) used in requirements.md / design.md is a question naming the term to use (`glossary`). When the requirements / design name queues, events, webhooks, concurrency, transactions or retries but state no consistency model, delivery guarantee or idempotency, ONE question asks for them (`nudges` consistency-unstated; not with +dist).",
+    description: "Surface the ambiguities and gaps of a feature's requirements BEFORE design — vague terms, leftover placeholders / TBD, missing edge cases / NFRs / out-of-scope / failure paths, track-specific gaps, glossary words to avoid, an unstated consistency model — as the clarification questions to ask the user (fewer for a change or a size-s feature).",
     inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "spec_next_action",
     description:
-      "\"You are here, do this next.\" ONE recommendation for a feature, phase by phase — `step`: first `fix` with `stateInvalid: true` when .state.json can't be read (repair or restore it); then re-review (an artifact changed after ITS approval: re-review it, never ship it silently; `impact` names the spec_impact phases to diff; a deleted approved artifact is named in `missingApproved` — restore it or revoke that approval) → for the FIRST active phase not approved yet (classification, requirements, design, test-plan, eval-plan, tests, tasks — or a design-first feature's order, `flow`): fill (`file`) → fix (`refusedGate` {phase, failing}) → approve, the next phase starting only after that approval → fix (a check still failing, e.g. after a forced approval) → implement (the next open task) → verify (a ticked task not verified: the recommendation names each with its reason and how to record a passing run) → finish (run spec_finish) → finished (asks for the execution sign-off) or drift (implementing files changed since the finish — spec wrong → spec_impact, code wrong → fix, harmless → re-finish); `tasks` when there are none yet. A finished feature that changed since its finish answers finish again (`staleBaseline`). Also returns phase, tracks, the doctor verdict, gatesOk, pendingGates, changedSinceApproval, `steeringChanged` and the localized `recommendation`. Use it to resume work or answer 'what now?'.",
+      "\"You are here, do this next\" for a feature: ONE recommended `step` — fix (an unreadable .state.json), re-review (an artifact changed after its approval — never ship it silently; `impact` names the spec_impact phases), fill / fix / approve the first unapproved phase, implement, verify (ticked tasks without passing evidence), finish, finished (asks for the execution sign-off) or drift — with a localized `recommendation`, the phase, tracks, doctor verdict and pending gates. Use it to resume work or answer 'where am I / what now?'.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "spec_add_track",
     description:
-      "Escalate an EXISTING feature to a new track (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs or +data) - additive only, never overwrites. Scaffolds just the missing artifacts (test-plan.md/tests/, eval-plan.md/prompts/evals/, load-test.md), appends that track's mandatory design.md sections and template tasks, adds its steering files, updates classification.md's Active Tracks line and persists the track set in .state.json. `track` takes one or several ('saas,ai', '+saas +ai'); an unknown track is an error with a did-you-mean. With `remove: true` the track is turned OFF instead - non-destructive: no file is deleted, the result lists the now-inactive artifacts, and doctor/status/next_action stop requiring them ('core' can't be removed; a bugfix keeps +tdd). Use when a feature grew into needing tests, scale, AI, security or privacy work after it was created (or no longer does).",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", description: "tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a project track pack (spec_tracks) - or several: 'saas,ai' / '+sec +privacy'." }, remove: { type: "boolean", description: "Turn the track(s) off instead (files are kept, listed as inactive)." }, projectDir: PROJECT_DIR }, required: ["name", "track"] },
+      "Escalate an EXISTING feature to more tracks (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data or a track pack) — additive, never overwrites: scaffolds the missing artifacts, appends the track's design sections and template tasks, adds its steering and records the track set. `remove: true` turns tracks off instead — no file is deleted, the now-inactive artifacts are listed ('core' can't be removed; a bugfix keeps +tdd). Turning +tdd / +ai off drops their gates: only with the user's consent.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, track: { type: "string", description: "tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a track pack — several: 'saas,ai' / '+sec +privacy'." }, remove: { type: "boolean", description: "Turn the track(s) off instead (files kept)." }, projectDir: PROJECT_DIR }, required: ["name", "track"] },
   },
   {
     name: "spec_feature",
     description:
-      "Manage a feature's lifecycle: archive (move it to .specs/_archive/<slug>/, out of the active roadmap; the features that depended on it are named in `dependentsPruned`, with a warning when it was not complete), restore (move it back with its roadmap entry and dependencies; those that no longer exist are listed in `skipped`), rename (slug, folder and roadmap key, with every reference updated — dependsOn lists, other features' `_Supersedes: <old>/US-n.AC-m_` markers, archive records), flow (the phase order: 'design-first' | 'requirements-first'; approved phases stay approved; a bugfix is refused) or remove (delete .specs/<slug>/ — destructive: needs `confirm: true`; without it nothing is deleted and the result, an error with needsConfirm, lists what would be; prefer archive, reversible with restore). Every action keeps roadmap.json consistent and regenerates the roadmap (and SPECS.md). A folder another process is updating is never moved or deleted: the action waits, then answers `busy`.",
-    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename", "restore", "flow"] }, name: { type: "string" }, newName: { type: "string", description: "New name (required for action 'rename')." }, flow: { type: "string", enum: [...spec.FLOWS], description: "The phase order (required for action 'flow')." }, confirm: { type: "boolean", description: "Must be true for action 'remove' (deletion is permanent). Ignored by archive/rename/restore/flow." }, projectDir: PROJECT_DIR }, required: ["action", "name"] },
+      "A feature's lifecycle: archive (to .specs/_archive/, out of the roadmap — reversible), restore, rename (folder, slug and every reference), flow (the phase order) or remove (deletes .specs/<slug>/ — needs `confirm: true` and the user's consent; without confirm nothing is deleted and the result lists what would be; prefer archive). The roadmap (and SPECS.md) are regenerated; a folder another process is updating is never moved (`busy`).",
+    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["remove", "archive", "rename", "restore", "flow"] }, name: { type: "string" }, newName: { type: "string", description: "rename: the new name." }, flow: { type: "string", enum: [...spec.FLOWS], description: "flow: the phase order." }, confirm: { type: "boolean", description: "remove: must be true (deletion is permanent)." }, projectDir: PROJECT_DIR }, required: ["action", "name"] },
   },
-
   {
     name: "spec_import",
     description:
-      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source is only read). `tool`: 'kiro' (.kiro/specs/<name>/), 'spec-kit' (specs/<nnn-name>/ — spec.md, plan.md, tasks.md), 'openspec' (openspec/specs/<capability>/ or openspec/changes/<id>/), 'plan' (a Markdown plan — Claude Code plan mode, a Cursor .cursor/plans/*.plan.md), 'execplan' (a Codex ExecPlan), 'bmad' (BMAD PRD + stories, or one story file) or 'fluidplan' (a .fluidplan/<id>/ folder, its plan.json, PLAN.md or DECISIONS.md); 'kiro-steering' (.kiro/steering/*.md) / 'cursor-rules' (.cursor/rules/*.mdc, .cursorrules) write .specs/steering/ files instead (path optional; an existing name is skipped, never overwritten). Each scenario becomes ONE EARS criterion where possible (else kept with [NEEDS CLARIFICATION]); IDs are remapped to US-N.AC-M (`mapping` {oldId: newId}); tasks are renumbered keeping their ticks, [P] / [USn] tags, _Implements:_, _Verify:_ and _Depends:_; decisions go to decisions.md / design.md; every artifact notes 'Imported from <tool> <path> on <date>'. `path`: a document or folder inside the project, never in a hidden folder but the tools' own (several plans in a folder: name the file); `text` (plan / execplan / fluidplan only, instead of path) is the document itself — e.g. a Claude Code plan, kept in ~/.claude/plans OUTSIDE the project. Tracks: `tracks`, else auto-classified. `dryRun: true` writes nothing: the same result plus `preview` (each file, bounded). Returns {feature, files, mapping, counts, warnings}.",
+      "Import a spec written for another tool as a NEW feature (the source is only read): `tool` kiro · spec-kit · openspec · plan (a Markdown plan — Claude Code plan mode, Cursor) · execplan (Codex) · bmad · fluidplan; or steering: kiro-steering / cursor-rules (→ .specs/steering/, existing names skipped). Scenarios become EARS criteria (else [NEEDS CLARIFICATION]), IDs are remapped to US-n.AC-m (`mapping`), tasks keep their ticks and markers. `path`: a file or folder inside the project; `text` (plan / execplan / fluidplan): the document itself — e.g. a plan kept outside the project. `dryRun: true` writes nothing and returns a `preview`.",
     inputSchema: {
       type: "object",
       properties: {
-        tool: { type: "string", enum: ["kiro", "spec-kit", "openspec", "plan", "execplan", "bmad", "fluidplan", "kiro-steering", "cursor-rules"], description: "The format of the source spec." },
-        path: { type: "string", description: "The spec's folder or file, relative to the project root or absolute — inside the project. Required unless `text` is given." },
-        text: { type: "string", description: "tool 'plan' / 'execplan' / 'fluidplan' only, instead of `path`: the document's markdown itself (fluidplan: its PLAN.md, DECISIONS.md may follow) — e.g. an approved Claude Code plan, kept in ~/.claude/plans outside the project. The result then has inline: true, source: null." },
-        name: { type: "string", description: "Feature name (default: the source's title, else its folder or file name). An existing feature with that slug is an error." },
-        tracks: { type: "array", items: { type: "string", description: "core | tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a project track pack (spec_tracks); 'tdd,saas' / '+saas +ai' are split" }, description: "Active tracks ('core' always added). Omit to auto-classify from the imported requirements." },
-        lang: { type: "string", enum: LANG_ENUM, description: "Language of the generated artifacts (headings, notes). Defaults to the project language, else en. The imported text itself is kept as written." },
+        tool: { type: "string", enum: ["kiro", "spec-kit", "openspec", "plan", "execplan", "bmad", "fluidplan", "kiro-steering", "cursor-rules"], description: "The source's format." },
+        path: { type: "string", description: "The source, inside the project (required unless text)." },
+        text: { type: "string", description: "plan / execplan / fluidplan: the document itself, instead of path." },
+        name: { type: "string", description: "Feature name (default: the source's title)." },
+        tracks: { type: "array", items: TRACK_ITEM, description: "Active tracks ('core' always added). Omit to auto-classify." },
+        lang: { type: "string", enum: LANG_ENUM, description: "Artifacts' language (the imported text stays as written)." },
         dryRun: { type: "boolean", description: "Write nothing." },
         projectDir: PROJECT_DIR,
       },
-      required: ["tool"], // + `path` or `text` (not for a steering tool) — the engine says which is missing (a schema can't express "one of")
+      required: ["tool"], // + `path` or `text` (not for a steering tool) — REQUIRED_ONE_OF (a schema can't express "one of")
     },
   },
-
   {
     name: "spec_append_tasks",
     description:
-      "Converge: append NEW tasks to a feature's tasks.md without touching the tasks already there (never renumbered or edited): numbered after the highest number in use, under a phase heading (default the localized 'Phase: Convergence', created with a closing **Checkpoint:**; an existing heading with that text is reused). Each task becomes `- [ ] N. [USn][P] text` with its `_Requirements:_` / `_Makes green:_` / `_Implements:_` / `_Verify:_` / `_Expect: fail_` / `_Size:_` / `_Depends:_` sub-lines, so every other tool works on it as on any task. Every AC ID must exist in requirements.md, every T-ID be planned in test-plan.md, every `depends` name an active task or one of this call (never itself, no cycle), every path be project-relative — else an error and NOTHING is written. New content invalidates an earlier tasks approval (`needsReapproval`): review and re-approve. Use it when implementation drifted from the plan or a review found follow-up work.",
+      "Converge: append NEW tasks to a feature's tasks.md without touching the existing ones (numbered after the highest), under a phase heading (default 'Phase: Convergence', with a **Checkpoint:**), each with its _Requirements:_ / _Makes green:_ / _Implements:_ / _Verify:_ / _Expect: fail_ / _Size:_ / _Depends:_ lines. AC IDs, T-IDs, dependencies and paths are validated — any error writes NOTHING. New tasks invalidate an earlier tasks approval (`needsReapproval`): review and re-approve. Use it when the implementation drifted from the plan or a review found follow-up work.",
     inputSchema: {
       type: "object",
       properties: {
@@ -264,37 +268,36 @@ const TOOLS = [
           items: {
             type: "object",
             properties: {
-              text: { type: "string", description: "Task description (required)." },
-              requirements: { type: "array", items: { type: "string" }, description: "AC IDs it proves (_Requirements:_, e.g. US-1.AC-2)." },
-              implements: { type: "array", items: { type: "string" }, description: "Project-relative files it touches (_Implements:_)." },
-              verify: { type: "string", description: "One-line command that proves it (_Verify:_)." },
-              makesGreen: { type: "array", items: { type: "string" }, description: "T-IDs it makes green (_Makes green:_, e.g. T-01)." },
-              expectFail: { type: "boolean", description: "_Expect: fail_ — its proof is a FAILING run (a test written before its fix)." },
-              size: { type: "string", description: "_Size:_ XS | S | M | L | XL." },
-              depends: { type: "array", items: { type: "integer", minimum: 0 }, description: "_Depends:_ — the task numbers to finish first." },
-              story: { type: "string", description: "US<n> (e.g. US1) or shared." },
+              text: { type: "string", description: "Task description." },
+              requirements: { type: "array", items: { type: "string" }, description: "AC IDs it proves (US-1.AC-2)." },
+              implements: { type: "array", items: { type: "string" }, description: "Project-relative files it touches." },
+              verify: { type: "string", description: "One-line command that proves it." },
+              makesGreen: { type: "array", items: { type: "string" }, description: "T-IDs it makes green." },
+              expectFail: { type: "boolean", description: "Its proof is a FAILING run (a test before its fix)." },
+              size: { type: "string", description: "XS | S | M | L | XL." },
+              depends: { type: "array", items: { type: "integer", minimum: 0 }, description: "Task numbers to finish first." },
+              story: { type: "string", description: "US<n> or shared." },
               parallel: { type: "boolean", description: "[P] — can run in parallel." },
             },
             required: ["text"],
           },
         },
-        heading: { type: "string", description: "Phase heading to append under (default: the localized 'Phase: Convergence')." },
+        heading: { type: "string", description: "Phase heading (default: the localized 'Phase: Convergence')." },
         projectDir: PROJECT_DIR,
       },
       required: ["name", "tasks"],
     },
   },
-
   {
     name: "spec_impact",
     description:
-      "Change request: what an edit made AFTER an approval touches — the current artifact vs the snapshot its latest approval saved (.specs/<feature>/.history/). `phase`: 'requirements' (default): added / modified / removed ACs (and SC / EC / NFR IDs) by stable ID, each with the tasks citing it, the T-IDs covering it and the design sections naming it; 'design': the changed ## sections (a bugfix: bug.md + design.md) and the tasks citing an ID they name; 'test-plan': the T-ID rows changed and the tasks making each green; 'eval-plan': the changed sections; 'tasks': added / removed / changed task numbers; a change (kind change): its change.md, phase 'tasks'; 'steering' (read-only, `name` optional — omitted: project-wide): the features approved under a steering file that changed since. An approval with no snapshot → `baseline: 'fingerprint-only'` (changed or not) or 'none' (unknown); a phase never approved is an error. `reopen: true` (requirements / design / test-plan / eval-plan): unticks the affected DONE tasks (never a REMOVED criterion's — those come back in `retire` [{id, tasks, tests}] to delete or repoint), marks their evidence stale, records the change request in .state.json `changes` and refreshes the roadmap — it never edits the spec; review, then re-approve.",
+      "Change request: what an edit made AFTER an approval touches — the artifact vs the snapshot its approval saved. `phase`: requirements (default — added / modified / removed IDs with the tasks, tests and design sections citing each) · design · test-plan · eval-plan · tasks · steering (the features approved under a steering file that changed since; `name` optional). `reopen: true` unticks the affected done tasks (never a removed criterion's — those come back in `retire`), marks their evidence stale and records the change request — it never edits the spec; review, then re-approve.",
     inputSchema: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Feature name/slug (optional only with phase 'steering': omitted = every active feature)." },
-        phase: { type: "string", enum: ["requirements", "design", "test-plan", "eval-plan", "tasks", "steering"], description: "Which approved artifact to compare (default requirements — a change: tasks, its change.md); 'steering' lists the features approved under steering that changed since." },
-        reopen: { type: "boolean", description: "requirements / design / test-plan / eval-plan (not tasks — except a change's plan): untick the affected done tasks, mark their evidence stale and record the change request." },
+        name: { type: "string", description: "Feature name/slug (optional with phase 'steering')." },
+        phase: { type: "string", enum: ["requirements", "design", "test-plan", "eval-plan", "tasks", "steering"], description: "Which approved artifact to compare (default requirements)." },
+        reopen: { type: "boolean", description: "Untick the affected done tasks and record the change request (not for tasks)." },
         projectDir: PROJECT_DIR,
       },
     },
@@ -302,114 +305,92 @@ const TOOLS = [
   {
     name: "spec_metrics",
     description:
-      "Metrics & retrospective, derived locally from .state.json, .history/ and the artifacts (no model, no cost). With `name`: the lead time in hours from creation to the first approval of each phase (classification → requirements → design → test-plan/eval-plan → tests → tasks), to complete (all tasks done) and to finished (the earliest of the first execution approval and the finish spec_finish {write} recorded on a ready feature); rework (re-approvals — a lower bound for approvals made before the change history, `reworkLowerBound`), forced approvals, change requests and reopened tasks, the evidence pass rate, tasks done / total and open [NEEDS CLARIFICATION] markers. Without `name`: every feature plus averages / medians and totals. `velocity`: points per working day over the last 28 days (the rate the roadmap forecasts use). `write: true` (with `name`) creates a localized .specs/<feature>/retro.md pre-filled with the metrics (its proposed steering amendments are for human approval, never applied); never overwrites.",
+      "Metrics & retrospective from the local spec data (no model). With `name`: the lead time from creation to each phase's first approval, to complete and to finished; rework (re-approvals), forced approvals, change requests, reopened tasks, the evidence pass rate and open clarifications. Without `name`: every feature plus averages / medians. `velocity`: points per working day over 28 days. `write: true` (with `name`) creates .specs/<feature>/retro.md — its proposed steering amendments need the user's approval; never overwrites.",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name/slug. Omit for the whole project." },
-        write: { type: "boolean", description: "Create .specs/<feature>/retro.md (needs name; never overwrites)." },
+        write: { type: "boolean", description: "Create retro.md (needs name; never overwrites)." },
         projectDir: PROJECT_DIR,
       },
     },
-  },
-
-  {
-    name: "spec_catalog",
-    description:
-      "Living catalog — 'what the system does today': every feature (active, complete / finished, archived) with its status, and every AC ID with a one-line EARS text. A criterion replaced by a later SHIPPED feature (the newer criterion declares `_Supersedes: <feature>/US-n.AC-m_`) is shown as superseded, naming its replacement; one a feature still in progress plans to replace reads 'to be superseded' and stays current. `crossAcs` {pairs, truncated}: criteria of two ACTIVE features that read alike (near-duplicate) or may contradict each other (SHALL vs SHALL NOT, different numbers) — a bounded heuristic. `write: true` (re)writes .specs/SPECS.md (AUTO-GENERATED; a hand-written SPECS.md is never overwritten — the result is then an error); once it exists, every roadmap refresh refreshes it. Without `write`: the structure plus the markdown.",
-    inputSchema: { type: "object", properties: { write: { type: "boolean", description: "(Re)write .specs/SPECS.md (never over a hand-written one)." }, projectDir: PROJECT_DIR } },
   },
   {
     name: "spec_drift",
     description:
-      "Drift since finish: spec_finish {write: true} on a ready feature records a baseline (a sha1 of every file its `_Implements:_` markers name); spec_drift reports, per finished feature, the files changed, missing or now present since that baseline. `name` checks one feature (active or archived). Listed apart, never errors: `unbaselined` (no baseline), `reopened` (its tasks are open again) and `stale` (changed since its finish — a change request, a re-approval of changed content, a new _Implements:_ file: finish it again; one whose files also changed is in `features` and `drifted` too, verdict drift — decide on the drift first). An unreadable .state.json is reported in `errors` (verdict error), never as clean. Read-only; it hashes only the recorded files.",
-    inputSchema: { type: "object", properties: { name: { type: "string", description: "One feature (active or archived). Omit for every feature." }, projectDir: PROJECT_DIR } },
+      "Drift since finish: per finished feature (or `name`), the files its _Implements:_ markers name that changed, went missing or appeared since spec_finish recorded the baseline. `unbaselined`, `reopened` and `stale` (changed since its finish — finish it again) are listed apart; an unreadable state is an error, never clean. Read-only.",
+    inputSchema: { type: "object", properties: { name: { type: "string", description: "One feature (active or archived). Omit for all." }, projectDir: PROJECT_DIR } },
   },
   {
     name: "spec_upgrade",
     description:
-      "After updating the plugin: audit the project's .specs/ against this engine's rules (read-only by default) and, with `apply: true`, run the safe migrations. The audit returns from / to / needsUpgrade (roadmap.json meta.specVersion) and, per ACTIVE feature: kind, tracks, phase, status, the doctor verdict with the failing / warning ids, pending gates, changed since approval, approvals without history, unverified tasks, drift, the next step, a `review` recommendation (critic · converge · none) and a `group` (blocked · attention · ok); plus `summary`, `plan` (what apply would change) and localized `lines`. `apply: true` never edits an artifact, approves, ticks or deletes anything: it saves inferred tracks, seeds the change history of approvals whose content still matches (.history/), completes .specs/.gitignore, stamps meta.specVersion once every feature migrated and writes .specs/UPGRADE.md (AUTO-GENERATED) — `migrations` says what it did; a second apply changes nothing.",
-    inputSchema: { type: "object", properties: { apply: { type: "boolean", description: "Run the safe migrations and write .specs/UPGRADE.md (default: a read-only audit)." }, projectDir: PROJECT_DIR } },
+      "After a plugin update: audit .specs/ against this engine's rules (read-only by default) — per active feature its status, doctor fails / warnings, pending gates, edits since approval, unverified tasks, drift, the next step and a review recommendation (critic · converge · none), plus `plan` (what apply would change). `apply: true` — only after the user agrees — runs the safe migrations (saves inferred tracks, seeds the approval history, completes .specs/.gitignore, stamps meta.specVersion, writes .specs/UPGRADE.md); it never edits an artifact, approves, ticks or deletes.",
+    inputSchema: { type: "object", properties: { apply: { type: "boolean", description: "Run the safe migrations (default: the read-only audit)." }, projectDir: PROJECT_DIR } },
   },
-
   {
     name: "spec_templates",
     description:
-      "Project templates: a team's own scaffolds in .specs/templates/. `<artifact>.md` replaces the built-in template of classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist, integration-plan, bug (bug.md), the bugfix variants bug-requirements / bug-test-plan / bug-tasks, the spike ones spike / spike-tasks or change (change.md — a change's one file); `<lang>/<artifact>.md` (en | pt | pt-BR | es) wins for features in that language; `steering/<file>.md` replaces a steering stub. Every scaffolder uses an override when present — create-only — with {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}} substituted; the active tracks' sections, criteria, task blocks and test rows are still appended unless the template already has them. A template's [bracketed] slots count as placeholders (doctor, approve). `action`: 'list' (default) — built-in vs project template per artifact for `lang`; 'init' — copy the built-in template(s) (`artifact`, or all) into .specs/templates/ (with `lang`: its <lang>/ folder) for editing, never overwriting; 'check' — validate them against the current rules (missing track sections, EARS / AC-ID problems, unknown {{variables}}, a bug.md without a Root Cause section…): {file, line?, code, severity, message} + a verdict pass | warn | fail. Nothing outside .specs/templates/ is read or written. Returns localized `lines`.",
+      "Project templates in .specs/templates/: `<artifact>.md` replaces the built-in template for new features (`<lang>/<artifact>.md` (en | pt | pt-BR | es) wins for that language), `steering/<file>.md` a steering stub; {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}} are substituted and the active tracks' sections still appended. `action`: list (default — built-in vs project per artifact) · init (copy the built-in templates for editing, never overwriting) · check (validate them: {file, line, code, severity, message} + a verdict).",
     inputSchema: {
       type: "object",
       properties: {
         action: { type: "string", enum: ["list", "init", "check"], description: "list (default) | init | check." },
-        artifact: { type: "string", description: "One template: classification | requirements | design | tasks | test-plan | eval-plan | load-test | quickstart | checklist | integration-plan | bug | bug-requirements | bug-test-plan | bug-tasks | spike | spike-tasks | change | steering/<file>.md ('.md' optional). Omit for all." },
-        lang: { type: "string", enum: LANG_ENUM, description: "list: the feature language to resolve for (default: the project language). init: copy the templates in this language into .specs/templates/<lang>/. check: only the templates that apply to it. Messages follow it." },
+        artifact: { type: "string", description: "One template (requirements, design, tasks, bug, change… or steering/<file>.md). Omit for all." },
+        lang: { type: "string", enum: LANG_ENUM, description: "The language to resolve, copy or check (default: the project's)." },
         projectDir: PROJECT_DIR,
       },
     },
   },
-
   {
     name: "spec_tracks",
     description:
-      "Project-defined tracks (track packs): a team's own domain rigor (+a11y, +mobile…) beside the built-in core / tdd / saas / ai / sec / privacy / dist / api / ui / obs / data. A pack is .specs/tracks/<name>/ — track.json (name, [MARKER], title, classifier signals, its mandatory design sections, an optional steering file) plus optional markdown fragments (requirements.md, tasks.md, test-plan.md, checklist.md, steering.md; a <lang>/ subfolder wins). A VALID pack is a marker track everywhere — the scaffolds, spec_doctor '<name>-sections', the design gate, trace, status, the roadmap, task briefs, export and import; a bad pack is reported and ignored as a whole, never half-applied. A pack is data only — nothing in it runs. `action`: 'list' (default) — the built-in tracks and every pack with its validity; 'init' — scaffold a commented example pack (`name`, in `lang`; never overwrites); 'check' — validate every pack (or `name`): {file, line?, code, severity, message} + a verdict; 'signals' — the classifier's signal overrides in .specs/classifier.json (learned by spec_create from Phase 0 corrections, applied after 2 consistent ones): `op` 'list' (default) | 'set' (`track`, `word` — a literal word or phrase —, `effect` off | weak | strong; applies at once) | 'forget'. The full pack format: references/project-tracks.md. Returns localized `lines`.",
+      "Project-defined tracks (track packs in .specs/tracks/<name>/ — data only, nothing runs): a team's own rigor (+a11y, +mobile…) beside the built-in tracks. A valid pack works as a marker track everywhere; a bad one is reported and ignored whole (format: references/project-tracks.md). `action`: list (default) · init (scaffold an example pack `name`) · check (validate) · signals (the classifier's learned overrides in .specs/classifier.json — `op` list · set {track, word, effect} · forget).",
     inputSchema: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "init", "check", "signals"], description: "list (default) | init | check | signals (the classifier's signal overrides — .specs/classifier.json)." },
-        name: { type: "string", description: "init: the new pack's name (^[a-z][a-z0-9]{1,19}$). list / check: one pack (or a built-in track for list). Omit for all." },
-        lang: { type: "string", enum: LANG_ENUM, description: "init: the language of the example files' text and comments (default: the project language). Messages follow it." },
+        action: { type: "string", enum: ["list", "init", "check", "signals"], description: "list (default) | init | check | signals." },
+        name: { type: "string", description: "init: the new pack's name; list / check: one pack." },
+        lang: { type: "string", enum: LANG_ENUM, description: "init: the example's language (default: the project's)." },
         op: { type: "string", enum: ["list", "set", "forget"], description: "signals: list (default) | set | forget." },
-        track: { type: "string", description: "signals set / forget: the track (tdd | saas | ai | sec | privacy | dist | api | ui | obs | data, or a track pack)." },
-        word: { type: "string", description: "signals set / forget: the word or phrase (a literal, 2–60 characters: letters, digits, inner spaces / hyphens / apostrophes / dots)." },
-        effect: { type: "string", enum: ["off", "weak", "strong"], description: "signals set: off (no signal of that track) | weak (an anchor) | strong (turns the track on alone)." },
+        track: { type: "string", description: "signals set / forget: the track." },
+        word: { type: "string", description: "signals set / forget: the word or phrase." },
+        effect: { type: "string", enum: ["off", "weak", "strong"], description: "signals set: off | weak (an anchor) | strong (turns the track on alone)." },
         projectDir: PROJECT_DIR,
       },
     },
   },
-
   {
     name: "spec_export",
     description:
-      "Stakeholder export: ONE self-contained, offline, printable document for product, legal and clients. With `name`: that feature in its language — summary, user stories with their EARS acceptance criteria (superseded ones struck through), the requirements, the design (a bugfix: bug.md), the test plan, the tasks (done / verified), decisions, approvals and a traceability matrix. Without `name`: the whole project — the roadmap summary, each active feature's requirements digest and the living catalog. `format`: 'html' (default — light/dark, print-ready, every spec text escaped, no external URL), 'md', 'csv' (the requirements traceability matrix — RFC 4180, formula-safe, UTF-8 BOM; written as .rtm.csv), 'gherkin' (a .feature per feature: one Scenario per current criterion tagged @US-n.AC-m + its T-IDs, the EARS clauses as Given / When / Then verbatim — never invented behaviour; PT / ES in Gherkin's dialect), 'jira' | 'linear' (a CSV for the tracker's own importer: feature → stories → tasks; nothing is sent anywhere) or 'adr' (decisions.md as MADR files — ADR number = D-n, discoveries left out — in .specs/exports/adr/<feature>/; a write removes the generated ones no decision backs). Without `write` the document comes back as `content`; `write: true` writes .specs/exports/<feature|project>.<format> (AUTO-GENERATED marker) and returns `file` + `bytes` — a hand-written file, or one reached through a link, is never overwritten (an error). CLI: dev-spec export [feature] [--md | --csv | --gherkin | --adr | --tracker jira|linear] [--write].",
+      "Documents generated from the specs. `format`: html (default) / md — ONE self-contained, offline, printable stakeholder document: a feature (`name`, in its language) or the whole project · csv — the requirements traceability matrix · gherkin — a .feature per feature (the EARS clauses as steps, never invented) · jira / linear — a tracker import CSV (nothing is sent) · adr — decisions.md as MADR files · catalog — the living catalog: every feature and AC with its status, superseded criteria named (.specs/SPECS.md) · changelog — release notes from the specs: Added / Changed / Fixed since `since`, or of one `milestone` (.specs/RELEASE-NOTES.md). `write: true` writes the file (AUTO-GENERATED; a hand-written one is never overwritten) and returns its path. Without write: html / md return a markdown `preview`, catalog / changelog their structure — `includeBody: true` adds the whole document.",
     inputSchema: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Feature name/slug. Omit for the whole project." },
-        format: { type: "string", enum: spec.EXPORT_FORMATS.slice(), description: "Document format (default html)." },
-        write: { type: "boolean", description: "Write .specs/exports/<feature|project>.<format> instead of returning the content (never over a hand-written file)." },
+        name: { type: "string", description: "One feature (not for catalog / changelog). Omit for the whole project." },
+        format: { type: "string", enum: spec.EXPORT_FORMATS.slice(), description: "Default html." },
+        write: { type: "boolean", description: "Write the file instead of returning it." },
+        includeBody: { type: "boolean", description: "html / md / catalog / changelog without write: return the whole document." },
+        since: { type: "string", description: "changelog: an ISO date / timestamp, 'last' (default — since the last written notes) or 'all'." },
+        milestone: { type: "string", description: "changelog: only this milestone's features." },
         projectDir: PROJECT_DIR,
       },
     },
   },
-  {
-    name: "spec_changelog",
-    description:
-      "Release notes generated from the spec data (no model, no git log). Added: features shipped since `since` (a finish recorded or the execution signed off), each with its summary and acceptance criteria; Changed: criteria superseded by a feature shipped since then, the change requests recorded since (spec_impact reopen) and shipped changes (kind 'change'); Fixed: bugfixes shipped since then, with the root cause from bug.md. `since`: an ISO date or timestamp, 'last' (default — roadmap.json meta.changelogAt, stamped by the last written notes) or 'all'. Returns added / changed / fixed, counts, since + sinceSource and the markdown. `write: true` writes .specs/RELEASE-NOTES.md (AUTO-GENERATED; a hand-written one is never overwritten) and stamps meta.changelogAt — nothing when there is nothing to report. `milestone`: only that milestone's features (since then defaults to 'all'; write → .specs/RELEASE-NOTES.<milestone>.md, meta.changelogAt untouched).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        since: { type: "string", description: "ISO date / timestamp, 'last' (default: since the last written release notes) or 'all'." },
-        milestone: { type: "string", description: "Only this milestone's features (since then defaults to 'all')." },
-        write: { type: "boolean", description: "Write .specs/RELEASE-NOTES.md and stamp meta.changelogAt (nothing when there is nothing to report)." },
-        projectDir: PROJECT_DIR,
-      },
-    },
-  },
-
   {
     name: "spec_decide",
     description:
-      "Decision log: append ONE entry to .specs/<feature>/decisions.md (created with a localized header when absent): `## D-<n> — <title>` with the English-stable markers _Kind: decision | discovery_, _Date:_, _Affects:_ and _Supersedes: D-n_, then the Context / Decision / Consequences paragraphs. Append-only, under the feature lock — an existing entry is never renumbered or rewritten. `affects` is validated against the feature (an AC ID defined in requirements.md, a planned T-ID, an EC / NFR / SC ID, else a design.md section heading — bug.md for a bugfix, spike.md for a spike): an unknown one is an error (`unknownAffects`) and nothing is written; `supersedes` must name entries already in the log. Task briefs, the merge summary, the export and the catalog show the log; spec_doctor warns when a decision names something that no longer exists, or came after the approval of what it affects (re-review with spec_impact). Returns {id, n, kind, title, affects, supersedes, at, file, created, message}.",
+      "Decision log: append ONE entry to .specs/<feature>/decisions.md — `## D-<n> — <title>` with _Kind:_ decision | discovery, _Date:_, _Affects:_, _Supersedes:_ and Context / Decision / Consequences. Append-only: an entry is never renumbered or rewritten. `affects` must name what exists (an AC / T / EC / NFR / SC ID, or a design section) and `supersedes` earlier entries — else nothing is written (`unknownAffects`).",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name/slug (a spike or a bugfix too)." },
-        title: { type: "string", description: "One line — the decision in a few words (≤ 200 chars)." },
-        decision: { type: "string", description: "What was decided (for a discovery: what was found). Markdown; multi-line allowed." },
-        context: { type: "string", description: "Optional — why it had to be decided: the forces, the options weighed." },
-        consequences: { type: "string", description: "Optional — what follows from it: what changes, what it rules out, the follow-up work." },
-        affects: { type: "array", items: { type: "string" }, description: "Optional — what it touches: AC IDs (US-1.AC-2), T-IDs (T-03), EC / NFR / SC IDs, design section names as design.md spells them ('Data Models'; a heading holding a comma is named as it is)." },
-        supersedes: { type: "array", items: { type: "string" }, description: "Optional — earlier entries this one replaces (D-1)." },
-        kind: { type: "string", enum: ["decision", "discovery"], description: "decision (default) | discovery — a fact learnt while working." },
+        title: { type: "string", description: "One line (≤ 200 characters)." },
+        decision: { type: "string", description: "What was decided (a discovery: what was found)." },
+        context: { type: "string", description: "Optional: why — the forces, the options weighed." },
+        consequences: { type: "string", description: "Optional: what follows from it." },
+        affects: { type: "array", items: { type: "string" }, description: "Optional: AC / T / EC / NFR / SC IDs, or design section headings as design.md spells them ('Data Models')." },
+        supersedes: { type: "array", items: { type: "string" }, description: "Optional: the entries it replaces (D-1)." },
+        kind: { type: "string", enum: ["decision", "discovery"], description: "decision (default) | discovery." },
         projectDir: PROJECT_DIR,
       },
       required: ["name", "title", "decision"],
@@ -418,12 +399,12 @@ const TOOLS = [
   {
     name: "spec_stop_check",
     description:
-      "The end-of-turn evidence gate for MCP-only clients (no Stop hook, no shell) — the same decision as the plugin's Stop hook and `dev-spec stop-check --json`. BEFORE sending a closing message that says the work is done or verified, pass that message: `block: true` means it would be sent back — a recently active feature has ticked tasks without verification evidence (or, every task done, project checks without a passing run since the last task activity) — and `reason` lists them with what to record (spec_complete_task / spec_finish {evidence}); record the runs, or say plainly which items are NOT verified, then check again. `block: false` with a stable `why`: no-specs · off · no-claim · admitted · verified · no-recent. `agent: \"spec-implementer\"` checks an implementer's DONE report (its .execution/task-N-report.md must show each _Verify:_ command and the exit code it needs); `agent: \"spec-simplifier\"` a simplifier's (its simplify-report.md must end with a '## Final runs' section where every run passes and every project check ran; `why` simplify-ok · simplifier-evidence · no-changes · no-report). Read-only; it never runs anything.",
+      "The end-of-turn evidence gate for MCP-only clients (no Stop hook) — the plugin's Stop hook decision. BEFORE sending a closing message that says the work is done or verified, pass it: `block: true` means a recently active feature has ticks without verification evidence (or project checks without a passing run) and `reason` lists them — record the runs, or say plainly what is NOT verified, then check again; `block: false` carries a stable `why`. `agent` (spec-implementer / spec-simplifier) checks that subagent's report instead. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
-        message: { type: "string", description: "The closing message you are about to send (its last 20 000 characters are read)." },
-        agent: { type: "string", description: "Optional: the subagent type sending it — spec-implementer is checked on its task report, spec-simplifier on its simplification report (CLI: --agent)." },
+        message: { type: "string", description: "The closing message you are about to send." },
+        agent: { type: "string", description: "Optional: spec-implementer | spec-simplifier." },
         projectDir: PROJECT_DIR,
       },
       required: ["message"],
@@ -432,13 +413,13 @@ const TOOLS = [
   {
     name: "spec_log",
     description:
-      "Git-linked evidence: per ACTIVE task of a feature, the commits whose message cites it, plus (+tdd) a red-first check — the result of `dev-spec log <feature> --json`. THIS SERVER NEVER RUNS GIT: pass `gitLog`, the output of `git log --name-only --relative` run in the project — for a feature on its own branch (spec_status `branch`) `git log <branch.commit>..HEAD --name-only --relative`, as the CLI reads it (a fuller log is cut at that commit); an empty gitLog (no commits) is valid. A message cites task N when it names the feature (its slug) and \"task #N\" / \"#N\" (PT tarefa, ES tarea), or one of the task's T-IDs / AC IDs. Red-first: a task with _Makes green: T-xx_ committed before any commit touching a test file that names T-xx warns `impl-first`. Returns {commits, truncated, citing, tasks, redFirst, warnings, lines}; `max` = the --max-count the log was read with (a log that long is a full window).",
+      "Git-linked evidence: per active task of a feature, the commits whose message cites it (the slug + \"task #N\" / \"#N\", or one of its T / AC IDs), plus (+tdd) a red-first check (`impl-first`: the code committed before its test). THIS SERVER NEVER RUNS GIT: pass `gitLog`, the output of `git log --name-only --relative` run in the project — for a feature on its own branch (spec_status `branch`) `git log <branch.commit>..HEAD --name-only --relative`; an empty log is valid.",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name/slug." },
-        gitLog: { type: "string", description: "That output (e.g. --max-count=1000) — never run by this server." },
-        max: { type: "integer", minimum: 1, description: "Optional: the --max-count the log was read with (a log that long is a full window)." },
+        gitLog: { type: "string", description: "That output (e.g. with --max-count=1000) — never run by this server." },
+        max: { type: "integer", minimum: 1, description: "Optional: the --max-count it was read with." },
         projectDir: PROJECT_DIR,
       },
       required: ["name", "gitLog"],
@@ -449,33 +430,100 @@ const TOOLS = [
 // --- Tool annotations (MCP 2025-03-26+) -------------------------------------
 // Hints for clients, one entry per tool (mcp/test.js requires every tool listed here) — never a security boundary: the engine
 // enforces its own rules whatever a client makes of them. readOnlyHint: true only when NO argument can make the tool write
-// (spec_roadmap / spec_catalog / spec_export / spec_changelog / spec_metrics / spec_task_brief write with `write: true`,
-// spec_impact with `reopen`, spec_upgrade with `apply`, spec_templates / spec_tracks with `init` — so they are not read-only;
-// a read-only tool never touches .specs/ — mcp/test.js snapshots the tree around each). destructiveHint (MCP: false = "only
-// additive updates"): every tool one of whose arguments removes or overwrites a record the user made (1.25.1, review 7 — only
-// spec_feature carried it): spec_feature (remove deletes a feature folder), spec_export (adr: removes the generated ADR files no
-// decision backs), spec_approve (revoke), spec_complete_task (undo), spec_impact (reopen unticks), spec_backlog / spec_milestone
-// (rm), spec_depend (dependsOn replaces the list, [] clears it), spec_add_track (remove), spec_init (an empty check command removes
-// it, approvalRoles {} clears them, a setting is overwritten) and spec_tracks (signals set overwrites / forget removes an override).
-// The rest only add records or regenerate their own derived files (ROADMAP.*, SPECS.md, a brief, a merge summary). idempotentHint:
-// a second identical call changes nothing more (a tick, an approval, an appended task or decision, finish's evidence each add a
-// record: false). openWorldHint: false everywhere — local files only, no network, no command, no git.
+// (spec_roadmap / spec_export / spec_metrics / spec_task_brief write with `write: true`, spec_impact with `reopen`, spec_upgrade
+// with `apply`, spec_templates / spec_tracks with `init` — so they are not read-only; a read-only tool never touches .specs/ —
+// mcp/test.js snapshots the tree around each). destructiveHint (MCP: false = "only additive updates"): every tool one of whose
+// arguments removes or overwrites a record the user made (1.25.1, review 7 — only spec_feature carried it): spec_feature (remove
+// deletes a feature folder), spec_export (adr: removes the generated ADR files no decision backs), spec_approve (revoke),
+// spec_complete_task (undo), spec_impact (reopen unticks), spec_roadmap_edit (rm; depend's dependsOn replaces the list, [] clears
+// it), spec_add_track (remove), spec_init (an empty check command removes it, approvalRoles {} clears them, a setting is
+// overwritten) and spec_tracks (signals set overwrites / forget removes an override). The rest only add records or regenerate
+// their own derived files (ROADMAP.*, SPECS.md, a brief, a merge summary). idempotentHint: a second identical call changes nothing
+// more (a tick, an approval, an appended task or decision, finish's evidence each add a record: false). openWorldHint: false
+// everywhere — local files only, no network, no command, no git.
 const READ_ONLY = Object.freeze({ readOnlyHint: true, openWorldHint: false });
 const writes = (idempotent, destructive) => Object.freeze({ readOnlyHint: false, destructiveHint: !!destructive, idempotentHint: idempotent, openWorldHint: false });
 const TOOL_ANNOTATIONS = {
-  spec_init: writes(true, true), spec_classify: READ_ONLY, spec_create: writes(true), spec_list: READ_ONLY, spec_status: READ_ONLY,
+  spec_init: writes(true, true), spec_classify: READ_ONLY, spec_create: writes(true), spec_status: READ_ONLY,
   spec_next_task: READ_ONLY, spec_task_brief: writes(true), spec_finish: writes(false), spec_complete_task: writes(false, true),
   ears_validate: READ_ONLY, trace_check: READ_ONLY, spec_doctor: READ_ONLY, spec_approve: writes(false, true), steering_scaffold: writes(true),
-  spec_roadmap: writes(true), spec_backlog: writes(true, true), spec_depend: writes(true, true), spec_scan: READ_ONLY, spec_coverage: READ_ONLY,
+  spec_roadmap: writes(true), spec_roadmap_edit: writes(true, true), spec_scan: READ_ONLY,
   spec_clarify: READ_ONLY, spec_next_action: READ_ONLY, spec_add_track: writes(true, true), spec_feature: writes(true, true),
   spec_import: writes(true), spec_append_tasks: writes(false), spec_impact: writes(true, true), spec_metrics: writes(true),
-  spec_catalog: writes(true), spec_drift: READ_ONLY, spec_upgrade: writes(true), spec_templates: writes(true), spec_tracks: writes(true, true),
-  spec_export: writes(true, true), spec_changelog: writes(true), spec_decide: writes(false),
-  spec_stop_check: READ_ONLY, spec_log: READ_ONLY, spec_milestone: writes(true, true),
+  spec_drift: READ_ONLY, spec_upgrade: writes(true), spec_templates: writes(true), spec_tracks: writes(true, true),
+  spec_export: writes(true, true), spec_decide: writes(false), spec_stop_check: READ_ONLY, spec_log: READ_ONLY,
 };
 // A tool missing from the table gets the protocol's own defaults spelled out (may write, may destroy, not idempotent) — the
 // test fails on it anyway.
 for (const t of TOOLS) t.annotations = Object.prototype.hasOwnProperty.call(TOOL_ANNOTATIONS, t.name) ? TOOL_ANNOTATIONS[t.name] : writes(false, true);
+
+// --- Hidden aliases (1.26 — the tools folded into others) ----------------------------------------------------------------------
+// spec_list → spec_status (no name) · spec_backlog / spec_depend / spec_milestone → spec_roadmap_edit {kind} · spec_catalog /
+// spec_changelog → spec_export {format} · spec_coverage → spec_scan {coverage: true}. A tools/call by an old name still works:
+// its arguments are checked against the OLD schema (an old caller gets the very refusals it got — unknown, missing, invalid, by
+// the old names), then translated, and the NEW tool runs — the result is the new tool's. Never listed (tools/list), never
+// completed (completion/complete completes prompts and resources, no tool). docs/maintainers/mcp.md → Hidden aliases.
+const ACTION = (actions) => ({ type: "string", enum: actions.slice() });
+const STRINGS = Object.freeze({ type: "array", items: { type: "string" } });
+const LEGACY_TOOLS = [
+  { name: "spec_list", to: "spec_status", args: () => ({}), inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR } } },
+  { name: "spec_backlog", to: "spec_roadmap_edit", args: (a) => ({ kind: "backlog", action: a.action, name: a.name, note: a.note }),
+    inputSchema: { type: "object", properties: { action: ACTION(spec.BACKLOG_ACTIONS), name: { type: "string" }, note: { type: "string" }, projectDir: PROJECT_DIR } } },
+  { name: "spec_depend", to: "spec_roadmap_edit", args: (a) => ({ kind: "depend", name: a.name, dependsOn: a.dependsOn, add: a.add, remove: a.remove, order: a.order }),
+    inputSchema: { type: "object", properties: { name: { type: "string" }, dependsOn: STRINGS, add: STRINGS, remove: STRINGS, order: { type: "integer" }, projectDir: PROJECT_DIR }, required: ["name"] } },
+  { name: "spec_milestone", to: "spec_roadmap_edit", args: (a) => ({ kind: "milestone", action: a.action, name: a.name, date: a.date, features: a.features }),
+    inputSchema: { type: "object", properties: { action: ACTION(spec.MILESTONE_ACTIONS), name: { type: "string" }, date: { type: "string" }, features: STRINGS, projectDir: PROJECT_DIR } } },
+  { name: "spec_catalog", to: "spec_export", args: (a) => ({ format: "catalog", write: a.write }),
+    inputSchema: { type: "object", properties: { write: { type: "boolean" }, projectDir: PROJECT_DIR } } },
+  { name: "spec_changelog", to: "spec_export", args: (a) => ({ format: "changelog", since: a.since, milestone: a.milestone, write: a.write }),
+    inputSchema: { type: "object", properties: { since: { type: "string" }, milestone: { type: "string" }, write: { type: "boolean" }, projectDir: PROJECT_DIR } } },
+  { name: "spec_coverage", to: "spec_scan", args: () => ({ coverage: true }), inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR } } },
+];
+const LEGACY = new Map(LEGACY_TOOLS.map((t) => [t.name, t]));
+// A tool's definition by name — a listed tool or a hidden alias (whose schema is the old one): what the argument checks read.
+const toolDef = (name) => TOOLS.find((t) => t.name === name) || LEGACY.get(name);
+// An alias call → the new tool's name and arguments (projectDir carried over; an absent / null argument stays absent).
+function translateLegacy(legacy, args) {
+  const out = legacy.args(args);
+  if (args.projectDir != null) out.projectDir = args.projectDir;
+  for (const k of Object.keys(out)) if (out[k] === undefined || out[k] === null) delete out[k];
+  return { name: legacy.to, args: out };
+}
+
+// --- Arguments by mode (1.26) ----------------------------------------------------------------------------------------------
+// A tool that took over others takes some arguments in one of its modes only — `kind` (spec_roadmap_edit), `format` (spec_export),
+// `coverage` (spec_scan). An argument the call's mode doesn't take is refused before anything runs (code inapplicable-arguments,
+// `inapplicable` [names] — before 1.26 it was another tool's argument, an unknown one), and a mode's `required` ones are missing
+// arguments. The mode key itself and projectDir go everywhere. fallback: the mode when the key is not given.
+const EXPORT_DOC = ["name", "write", "includeBody"], EXPORT_FILE = ["name", "write"];
+const ARG_MODES = {
+  spec_roadmap_edit: { key: "kind", modes: { backlog: ["action", "name", "note"], depend: ["name", "dependsOn", "add", "remove", "order"], milestone: ["action", "name", "date", "features"] },
+    required: { depend: ["name"] } },
+  spec_export: { key: "format", fallback: "html", modes: { html: EXPORT_DOC, md: EXPORT_DOC, csv: EXPORT_FILE, gherkin: EXPORT_FILE, jira: EXPORT_FILE, linear: EXPORT_FILE,
+    adr: EXPORT_FILE, catalog: ["write", "includeBody"], changelog: ["since", "milestone", "write", "includeBody"] } },
+  spec_scan: { key: "coverage", fallback: false, modes: { false: ["cap"], true: [] } },
+};
+// The call's mode → { key, value, takes, required } (takes: the arguments it accepts), or null (a tool without modes, or a value the
+// enum check refuses).
+function argMode(toolName, args) {
+  const m = hasOwn(ARG_MODES, toolName) ? ARG_MODES[toolName] : null;
+  if (!m) return null;
+  const value = args[m.key] == null ? m.fallback : args[m.key];
+  const key = String(value);
+  if (!hasOwn(m.modes, key)) return null;
+  return { key: m.key, value, takes: m.modes[key], required: (m.required && hasOwn(m.required, key) && m.required[key]) || [] };
+}
+// The arguments given that the call's mode doesn't take → { names, mode, allowed } | null.
+function inapplicableArgs(toolName, args) {
+  const mode = argMode(toolName, args);
+  if (!mode) return null;
+  const names = Object.keys(args).filter((k) => args[k] != null && k !== mode.key && k !== "projectDir" && !mode.takes.includes(k));
+  return names.length ? { names, mode: mode.key + ": " + JSON.stringify(mode.value), allowed: mode.takes.join(", ") } : null;
+}
+// Claude Code plugin mode (SPEC_MCP_APPROVAL_HOOK=on — mcp/servers.json): the plugin's own hooks do what these two are for (the
+// Stop hook answers spec_stop_check's question at every turn's end; the CLI reads git for `log`), so they are not LISTED there —
+// characters an agent would pay on every session for nothing. Both stay callable by name.
+const PLUGIN_UNLISTED = new Set(["spec_stop_check", "spec_log"]);
 
 // --- Tool dispatch ---------------------------------------------------------
 
@@ -518,10 +566,8 @@ function runTool(name, args, extra) {
         reproduction: args.reproduction, rootCause: args.rootCause, condition: args.condition, behaviour: args.behaviour, includeBody: args.includeBody === true, // flow (C3), question / timebox (C2 spike), the bugfix prefill + bodies (1.21 F3)
         size: args.size, branch: args.branch }); // 1.21 F5: the feature's size (= `create --size`); 1.25: its own git branch (= `create --branch`)
     }
-    case "spec_list":
-      return spec.listFeatures(pdir);
-    case "spec_status":
-      return spec.statusFeature(pdir, args.name);
+    case "spec_status": // 1.26: without a name, every feature (spec_list's result — the CLI's `status` without a feature = `list`)
+      return typeof args.name === "string" && args.name.trim() ? spec.statusFeature(pdir, args.name) : spec.listFeatures(pdir);
     case "spec_next_task":
       return spec.nextTask(pdir, args.name, { batch: args.batch, max: args.max, waves: args.waves === true }); // waves: = `next --waves`
     case "spec_task_brief":
@@ -545,16 +591,12 @@ function runTool(name, args, extra) {
       return spec.scaffoldSteeringFile(pdir, args.file, args.lang);
     case "spec_roadmap": // html:true implies writing; a failed write is an error (same engine call as the CLI)
       return spec.roadmapReport(pdir, { write: args.write, html: args.html, lang: args.lang });
-    case "spec_backlog":
-      return spec.backlog(pdir, args.action, args.name, args.note);
-    case "spec_depend":
-      return spec.setDependency(pdir, args.name, args.dependsOn, args.order, { add: args.add, remove: args.remove });
-    case "spec_milestone": // 1.16 E3 — the same engine call as the CLI's `milestone [add <name> <date> <features…> | rm <name> | list]`
-      return spec.milestone(pdir, args.action, { name: args.name, date: args.date, features: args.features });
-    case "spec_scan":
-      return spec.scanCodebase(pdir, { cap: args.cap });
-    case "spec_coverage":
-      return spec.coverage(pdir);
+    case "spec_roadmap_edit": // 1.26: the same engine calls as the CLI's `backlog` / `depend` / `milestone` (ARG_MODES checked the kind's arguments)
+      if (args.kind === "backlog") return spec.backlog(pdir, args.action, args.name, args.note);
+      if (args.kind === "depend") return spec.setDependency(pdir, args.name, args.dependsOn, args.order, { add: args.add, remove: args.remove });
+      return spec.milestone(pdir, args.action, { name: args.name, date: args.date, features: args.features }); // 1.16 E3
+    case "spec_scan": // 1.26 coverage: = the CLI's `coverage`
+      return args.coverage === true ? spec.coverage(pdir) : spec.scanCodebase(pdir, { cap: args.cap });
     case "spec_clarify":
       return spec.clarify(pdir, args.name);
     case "spec_next_action":
@@ -576,8 +618,6 @@ function runTool(name, args, extra) {
     case "spec_metrics":
       return spec.metrics(pdir, args.name, { write: args.write === true });
 
-    case "spec_catalog": // a refused write (hand-written SPECS.md, no .specs/) is an error — same call as the CLI's `catalog`
-      return spec.catalog(pdir, { write: args.write === true });
     case "spec_drift":
       return spec.drift(pdir, args.name);
     case "spec_upgrade": // the same engine call as the CLI's `upgrade [--apply]` (apply only on an explicit true)
@@ -588,10 +628,11 @@ function runTool(name, args, extra) {
     case "spec_tracks": // the same engine call as the CLI's `tracks [list|init <name>|check] [name] [--lang]` / `signals [list|set|forget] …`
       return spec.trackPacks(pdir, args.action, { name: args.name, lang: args.lang, op: args.op, track: args.track, word: args.word, effect: args.effect });
 
-    case "spec_export": // the same engine call as the CLI's `export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write]`
-      return spec.exportSpecs(pdir, { name: args.name, format: args.format, write: args.write === true });
-    case "spec_changelog": // the same engine call as the CLI's `changelog [--since …] [--write]`
-      return spec.changelog(pdir, { since: args.since, write: args.write === true, milestone: args.milestone });
+    case "spec_export": // the same engine call as the CLI's `export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write]`;
+      // 1.26: format catalog / changelog = the CLI's `catalog` / `changelog` (exportSpecs hands them to catalog() / changelog());
+      // includeBody false unless asked — html / md: a preview, catalog / changelog: no markdown (= --json without --include-body)
+      return spec.exportSpecs(pdir, { name: args.name, format: args.format, write: args.write === true, includeBody: args.includeBody === true,
+        since: args.since, milestone: args.milestone });
 
     case "spec_decide": // the same engine call as the CLI's `decide <f> --title … --decision … [--affects …] [--supersedes …] [--discovery]`
       return spec.decide(pdir, args.name, { title: args.title, decision: args.decision, context: args.context, consequences: args.consequences,
@@ -838,12 +879,15 @@ const REQUIRED_ONE_OF = { spec_import: [{ names: ["path", "text"], unless: (a) =
 // nothing (→ no-claim) — the CLI's `log <f> -` / `stop-check --message ""` accept them, so MCP does too.
 const EMPTY_OK = { spec_log: ["gitLog"], spec_stop_check: ["message"] };
 function missingArgs(toolName, args) {
-  const tool = TOOLS.find((t) => t.name === toolName);
+  const tool = toolDef(toolName); // a hidden alias: its OLD schema (1.26)
   if (!tool || !tool.inputSchema) return [];
   const emptyOk = hasOwn(EMPTY_OK, toolName) ? EMPTY_OK[toolName] : [];
   const given = (k) => !(args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim() && !emptyOk.includes(k)));
   const missing = (Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []).filter((k) => !given(k));
   for (const group of hasOwn(REQUIRED_ONE_OF, toolName) ? REQUIRED_ONE_OF[toolName] : []) if (!group.unless(args) && !group.names.some(given)) missing.push(group.names[0]);
+  // 1.26: what the call's mode can't do without (ARG_MODES — spec_roadmap_edit {kind: "depend"} needs its feature's name)
+  const mode = argMode(toolName, args);
+  for (const k of mode ? mode.required : []) if (!given(k) && !missing.includes(k)) missing.push(k);
   // 1.25.1: a NESTED object's `required` keys too (spec_finish evidence[n] {name, command, exitCode}, spec_append_tasks tasks[n].text)
   // — by their path (`evidence[0].command`): `evidence: [{}]` reached the engine, which answered "'undefined' is not a project check".
   for (const [k, s] of Object.entries(tool.inputSchema.properties || {})) if (given(k)) nestedMissing(s, args[k], k, missing);
@@ -877,7 +921,7 @@ function nestedMissing(schema, value, where, out) {
 const ARG_ALIASES = { feature: "name", slug: "name", task: "number", tasknumber: "number", project: "projectDir", dir: "projectDir",
   projectdirectory: "projectDir", untick: "undo", unapprove: "revoke" };
 function unknownArgs(toolName, args) {
-  const tool = TOOLS.find((t) => t.name === toolName);
+  const tool = toolDef(toolName); // a hidden alias: its OLD schema (1.26)
   const props = tool && tool.inputSchema && tool.inputSchema.properties ? tool.inputSchema.properties : {};
   const names = Object.keys(props);
   const unknown = [];
@@ -1035,7 +1079,7 @@ function propertyIssues(props, obj, prefix, out) {
 }
 // [{ where, schema, value }] — formatted (and localized) only when there is something to report.
 function invalidArgs(toolName, args) {
-  const tool = TOOLS.find((t) => t.name === toolName);
+  const tool = toolDef(toolName); // a hidden alias: its OLD schema (1.26)
   if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return [];
   const out = [];
   propertyIssues(tool.inputSchema.properties, args, "", out);
@@ -1052,7 +1096,7 @@ const EXACT_ENUMS = { spec_import: new Set(["tool"]) };
 // reject a list-valued type).
 const BOOL_STRING_ARGS = { spec_create: new Set(["branch"]) };
 function foldEnumArgs(toolName, args) {
-  const tool = TOOLS.find((t) => t.name === toolName);
+  const tool = toolDef(toolName); // a hidden alias: its OLD schema (1.26)
   if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return args;
   let out = args;
   for (const [k, s] of Object.entries(tool.inputSchema.properties)) {
@@ -1262,15 +1306,15 @@ function handle(msg) {
             ? { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} }
             : { tools: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} },
           instructions:
-            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). To resume a feature or answer 'where am I / what now?', call spec_next_action {name}: where it stands and the ONE next step. Evidence before claims: tick a task (spec_complete_task) only with the run of its _Verify:_ command that you or the user actually made — if you cannot run it, ask for its output instead of ticking (never send a subagent to look for a shell). A CLI line you give the user is the runnable one the tools print — `" + spec.DEV_SPEC + " …` (a plugin install has no `dev-spec` on PATH). ears_validate, trace_check and spec_doctor enforce quality gates. Approvals are the user's: with meta.approvalGuard ask / deny, spec_approve asks the user through the client (elicitation) when it can. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). Everything is local: writes stay in the project's .specs/, reads inside the project (spec_scan / spec_coverage / trace_check {code} read its code; spec_import a source inside it — never a hidden folder or a non-document file, and with another projectDir only a dev-spec project's); no network, no command, no git." +
+            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). To resume a feature or answer 'where am I / what now?', call spec_next_action {name}: where it stands and the ONE next step. Evidence before claims: tick a task (spec_complete_task) only with the run of its _Verify:_ command that you or the user actually made — if you cannot run it, ask for its output instead of ticking (never send a subagent to look for a shell). A CLI line you give the user is the runnable one the tools print — `" + spec.DEV_SPEC + " …` (a plugin install has no `dev-spec` on PATH). ears_validate, trace_check and spec_doctor enforce quality gates. Approvals are the user's: with meta.approvalGuard ask / deny, spec_approve asks the user through the client (elicitation) when it can. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). Everything is local: writes stay in the project's .specs/, reads inside the project (spec_scan / trace_check {code} read its code; spec_import a source inside it — never a hidden folder or a non-document file, and with another projectDir only a dev-spec project's); no network, no command, no git." +
             (PROMPTS_ON ? " Prompts: one per plugin command (spec, spec-status, spec-impact, …) — the slash-command workflow for clients without the dev-spec-driven skill." : "") +
             " Resources (read-only): the project's spec artifacts — specs://roadmap, specs://catalog, specs://steering/{file}, specs://feature/{slug}/{artifact}.",
         });
       }
       case "ping":
         return result(id, {});
-      case "tools/list":
-        return result(id, { tools: TOOLS });
+      case "tools/list": // 1.26: in Claude Code plugin mode without the two its hooks cover (PLUGIN_UNLISTED — still callable)
+        return result(id, { tools: APPROVAL_HOOK ? TOOLS.filter((t) => !PLUGIN_UNLISTED.has(t.name)) : TOOLS });
       case "prompts/list": case "prompts/get": case "resources/list": case "resources/templates/list": case "resources/read":
       case "completion/complete":
         return handleContent(id, method, params);
@@ -1278,7 +1322,7 @@ function handle(msg) {
         const toolName = TYPE_CHECK.object(params) ? params.name : undefined;
         // No such tool — or no params / no name at all: JSON-RPC Invalid params (-32602), as MCP specifies for an unknown
         // tool. It used to be a SUCCESSFUL result {isError: true, "ERROR: Unknown tool: nope"}. Localized (project language).
-        if (typeof toolName !== "string" || !TOOLS.some((t) => t.name === toolName)) {
+        if (typeof toolName !== "string" || !toolDef(toolName)) { // a listed tool, or a hidden alias (1.26 — LEGACY_TOOLS)
           const A = argMessages(TYPE_CHECK.object(params) && TYPE_CHECK.object(params.arguments) ? params.arguments : undefined);
           return error(id, -32602, typeof toolName === "string" && toolName.trim() ? A.unknownTool(toolName) : A.noTool);
         }
@@ -1296,15 +1340,22 @@ function handle(msg) {
           const A = argMessages(folded);
           return argError(id, A.invalid(invalid.map((i) => A.item(i.where, expectedType(i.schema, A), shortJson(i.value))).join("; ")), "invalid-arguments", { invalid: invalid.map((i) => i.where) });
         }
+        // 1.26: a hidden alias (an old tool name) — checked above against its old schema, it runs as the new tool with its
+        // arguments translated (spec_list → spec_status, spec_backlog → spec_roadmap_edit {kind: "backlog"}…)
+        const legacy = LEGACY.get(toolName);
+        const call = legacy ? translateLegacy(legacy, folded) : { name: toolName, args: folded };
+        // 1.26: an argument of another mode of the tool (spec_roadmap_edit's kind, spec_export's format, spec_scan's coverage)
+        const off = inapplicableArgs(call.name, call.args);
+        if (off) return argError(id, argMessages(folded).inapplicable(call.name, off.mode, off.names.join(", "), off.allowed), "inapplicable-arguments", { inapplicable: off.names });
         // 1.24 r6 A2 / A3: projectDir checked and resolved — an existing folder (spec_init may create it), a file:// URI read as its
         // path, a relative one from the client's root; not given → the client's root when its roots gave the default (1.23)
-        const pd = projectDirArg(toolName, folded);
+        const pd = projectDirArg(call.name, call.args);
         if (pd.refuse) return argError(id, pd.refuse.error, pd.refuse.code);
         const args = pd.args;
         // 1.21 F1b: an agent's approval under meta.approvalGuard ask | deny — asked of the user (elicitation: the reply comes
         // later, the server keeps answering meanwhile) or refused (deny, a client that can't ask). 1.23: the call waits as an
         // inflight entry — cancelled by the client, its question is withdrawn and it gets no reply.
-        const policy = approvalPolicy(toolName, args);
+        const policy = approvalPolicy(call.name, args);
         if (policy && policy.elicit) {
           const sink = batchSink;
           const key = flightKey(id);
@@ -1314,11 +1365,11 @@ function handle(msg) {
             if (inflight.get(key) === flight) inflight.delete(key);
             if (!flight.cancelled) toolReply(id, o, sink);
           };
-          return elicitApproval(toolName, args, policy, flight, progressTokenOf(params)).then(finish, (e) => finish(toolFailure(e, args))).catch(() => {});
+          return elicitApproval(call.name, args, policy, flight, progressTokenOf(params)).then(finish, (e) => finish(toolFailure(e, args))).catch(() => {});
         }
         let out;
         try {
-          out = policy && policy.refuse ? policy.refuse : runTool(toolName, args);
+          out = policy && policy.refuse ? policy.refuse : runTool(call.name, args);
         } catch (e) {
           out = toolFailure(e, args); // 1.23: JSON like every other result (it was the bare text "ERROR: …")
         }

@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname }) => {
 
   { // 1.14 B1 — project templates (.specs/templates/): scaffolds, variables, track blocks, the placeholder corpus, spec_templates
     const b1Root = path.join(tmp, "b1-templates");
@@ -159,7 +159,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     const lsEn = S.templates(pp, "list");
     const lreq = (l) => l.templates.find((e) => e.artifact === "requirements");
     ok(lsPt.ok && lsPt.action === "list" && lreq(lsPt).source === "override" && lreq(lsPt).override === ".specs/templates/pt/requirements.md" && lreq(lsPt).overrides.length === 2 &&
-      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 33 /* 1.21: + steering/data.md (F4), + change (F5) */ && /^Templates para features em 'pt'/.test(lsPt.lines[0]) &&
+      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 33 /* 1.21: + steering/data.md (F4), + change (F5) */ && /^Templates para features em 'pt'/.test(S.templatesLines(lsPt)[0]) &&
       lsEn.lang === "pt" && lreq(S.templates(pp, "list", { lang: "en" })).override === ".specs/templates/requirements.md" &&
       S.templates(ps, "list").templates.some((e) => e.artifact === "steering/api-rules.md" && e.source === "override"),
       "B1: spec_templates list — built-in vs project template per artifact for a language (the <lang>/ one wins; default: the project language), in that language, custom steering templates included");
@@ -169,12 +169,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     const i2 = S.templates(pi, "init", { artifact: "Requirements" });
     const i3 = S.templates(pi, "init", { lang: "es" });
     const tplDir = path.join(pi, ".specs", "templates");
-    ok(i1.ok && i1.created.join() === ".specs/templates/requirements.md" && rd(tplDir, "requirements.md").startsWith("# Feature: {{name}}\n\n## Summary\n{{summary}}\n") &&
-      i2.ok && !i2.created.length && i2.kept.join() === ".specs/templates/requirements.md" && /Nothing copied/.test(i2.lines[0]) && rd(tplDir, "requirements.md").includes("<!-- team edit -->") &&
-      i3.created.length === 33 && i3.created.every((c) => c.startsWith(".specs/templates/es/")) && rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}") &&
-      fs.existsSync(path.join(tplDir, "es", "steering", "constitution.md")) && /copiada\(s\) en \.specs\/templates\//.test(i3.lines[0]) &&
-      S.templates(pi, "check").verdict === "pass" && S.templates(pi, "check", { lang: "es" }).verdict === "pass",
-      "B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 33 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md, ui.md; 1.21: + change.md, steering/data.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean");
+    all("B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 33 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md, ui.md; 1.21: + change.md, steering/data.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean", [
+      () => i1.ok, () => i1.created.join() === ".specs/templates/requirements.md",
+      () => rd(tplDir, "requirements.md").startsWith("# Feature: {{name}}\n\n## Summary\n{{summary}}\n"), () => i2.ok, () => !i2.created.length,
+      () => i2.kept.join() === ".specs/templates/requirements.md", () => /Nothing copied/.test(S.templatesLines(i2)[0]),
+      () => rd(tplDir, "requirements.md").includes("<!-- team edit -->"), () => i3.created.length === 33,
+      () => i3.created.every((c) => c.startsWith(".specs/templates/es/")),
+      () => rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}"),
+      () => fs.existsSync(path.join(tplDir, "es", "steering", "constitution.md")), () => /copiada\(s\) en \.specs\/templates\//.test(S.templatesLines(i3)[0]),
+      () => S.templates(pi, "check").verdict === "pass", () => S.templates(pi, "check", { lang: "es" }).verdict === "pass",
+    ]);
 
     // --- spec_templates check: a design template with some [SaaS] headings but not Observability, and the other rules
     const pk = b1("check");
@@ -190,13 +194,21 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     const ck = S.templates(pk, "check");
     const has = (code, file, sev) => ck.problems.some((p) => p.code === code && p.file === ".specs/templates/" + file && (!sev || p.severity === sev));
     const msgOf = (code) => (ck.problems.find((p) => p.code === code) || {}).message || "";
-    ok(ck.ok && ck.verdict === "fail" && has("missing-section", "design.md", "error") && /^\[SaaS\] Observability is missing/.test(msgOf("missing-section")) &&
-      ck.problems.filter((p) => p.code === "missing-section").length === 1 && has("no-sentinel", "design.md", "warn") && /\[SaaS\] Cost Envelope/.test(msgOf("no-sentinel")) &&
-      has("ears-no-modal", "requirements.md", "error") && has("ac-duplicate", "requirements.md", "error") && ck.problems.some((p) => p.code === "unknown-variable" && p.line === 1 && /\{\{owner\}\}/.test(p.message)) &&
-      has("phantom-ac", "tasks.md", "warn") && /US-1\.AC-9/.test(msgOf("phantom-ac")) && has("builtin-phantom", "requirements.md", "warn") && /test-plan\.md/.test(msgOf("builtin-phantom")) &&
-      has("root-cause-filled", "bug.md", "error") && has("no-placeholders", "eval-plan.md", "warn") && has("unknown-file", "notes.md") && has("unknown-file", "fr/") && has("empty", "quickstart.md") &&
-      ck.errors === ck.problems.filter((p) => p.severity === "error").length && /^\d+ template file\(s\) checked — [1-9]\d* error\(s\)/.test(ck.lines[0]) && ck.lines.some((l) => /^  ✗ \.specs\/templates\/design\.md — \[SaaS\] Observability/.test(l)),
-      "B1: spec_templates check flags a design template missing a +saas mandatory section (error) and one without its > **TODO** line, EARS / AC-ID errors, unknown {{variables}}, phantom AC IDs, a Root Cause that already reads as written, a chain template with no slot, empty and unknown files");
+    all("B1: spec_templates check flags a design template missing a +saas mandatory section (error) and one without its > **TODO** line, EARS / AC-ID errors, unknown {{variables}}, phantom AC IDs, a Root Cause that already reads as written, a chain template with no slot, empty and unknown files", [
+      () => ck.ok, () => ck.verdict === "fail", () => has("missing-section", "design.md", "error"),
+      () => /^\[SaaS\] Observability is missing/.test(msgOf("missing-section")),
+      () => ck.problems.filter((p) => p.code === "missing-section").length === 1, () => has("no-sentinel", "design.md", "warn"),
+      () => /\[SaaS\] Cost Envelope/.test(msgOf("no-sentinel")), () => has("ears-no-modal", "requirements.md", "error"),
+      () => has("ac-duplicate", "requirements.md", "error"),
+      () => ck.problems.some((p) => p.code === "unknown-variable" && p.line === 1 && /\{\{owner\}\}/.test(p.message)),
+      () => has("phantom-ac", "tasks.md", "warn"), () => /US-1\.AC-9/.test(msgOf("phantom-ac")),
+      () => has("builtin-phantom", "requirements.md", "warn"), () => /test-plan\.md/.test(msgOf("builtin-phantom")),
+      () => has("root-cause-filled", "bug.md", "error"), () => has("no-placeholders", "eval-plan.md", "warn"), () => has("unknown-file", "notes.md"),
+      () => has("unknown-file", "fr/"), () => has("empty", "quickstart.md"),
+      () => ck.errors === ck.problems.filter((p) => p.severity === "error").length,
+      () => /^\d+ template file\(s\) checked — [1-9]\d* error\(s\)/.test(S.templatesLines(ck)[0]),
+      () => S.templatesLines(ck).some((l) => /^  ✗ \.specs\/templates\/design\.md — \[SaaS\] Observability/.test(l)),
+    ]);
     // Only the test plan is the team's: the built-in tasks of a +tdd feature make green T-02…T-05 it never plans (check warns);
     // the appended +saas rows keep the built-in T-06 / T-07 those tasks cite.
     const ptp = b1("testplan-only");

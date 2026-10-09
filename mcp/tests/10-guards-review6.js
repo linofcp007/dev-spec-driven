@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
+exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the lexer) — read through mcp/test.js's require
   let HU; // what the hooks share before the engine loads (hooks/hook-utils.js — no engine)
   try { HU = require("../hooks/hook-utils.js"); } catch { HU = { approvalProjects: () => [], editTargets: () => [], sessionFlagFile: () => path.join(os.tmpdir(), "none") }; }
@@ -49,12 +49,15 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     const net = dec("PowerShell", "node \"" + C + "\" --% status \"alpha\" approve");
     const bash = dec("Bash", "echo --% approve");
     const hk = hookOut("approval-hook", pre(p, "PowerShell", { command: "node '" + C + "' --% approve alpha classification --force" }), { CLAUDE_PROJECT_DIR: p });
-    ok(js(seg) === js([["node", "x", "a", "b c|d", ";", "%X%", "'e", "f'"], ["Select-Object", "-First", "1"], ["node", "y"]]) &&
-      a.decision === "deny" && a.actions[0].kind === "approve" && a.actions[0].feature === "alpha" && a.actions[0].phase === "classification" && a.force === true &&
-      rm.decision === "deny" && rm.actions[0].kind === "remove" && lower.decision === "deny" && lower.actions[0].setting === "approvalGuard" &&
-      pipe.decision === "allow" && next.decision === "deny" && net.decision === "ask" && net.actions[0].why === "unparsed" && bash.decision === "allow" && decisionOf(hk) === "deny",
-      "1.24 r6 C1: PowerShell's --% passes the rest of the line (to a newline or an unquoted |) as raw words — `node <cli> --% approve …`, `feature remove … --yes`, `init --approval-guard off` are refused at deny (engine and hook), a pipe after it ends it, and the CLI followed by --% with an approval word it can't read asks (got " +
-      js([seg, a.decision, rm.decision, lower.decision, pipe.decision, next.decision, net.decision, bash.decision, decisionOf(hk)]) + ")");
+    all("1.24 r6 C1: PowerShell's --% passes the rest of the line (to a newline or an unquoted |) as raw words — `node <cli> --% approve …`, `feature remove … --yes`, `init --approval-guard off` are refused at deny (engine and hook), a pipe after it ends it, and the CLI followed by --% with an approval word it can't read asks (got " +
+      js([seg, a.decision, rm.decision, lower.decision, pipe.decision, next.decision, net.decision, bash.decision, decisionOf(hk)]) + ")", [
+      () => js(seg) === js([["node", "x", "a", "b c|d", ";", "%X%", "'e", "f'"], ["Select-Object", "-First", "1"], ["node", "y"]]),
+      () => a.decision === "deny", () => a.actions[0].kind === "approve", () => a.actions[0].feature === "alpha",
+      () => a.actions[0].phase === "classification", () => a.force === true, () => rm.decision === "deny", () => rm.actions[0].kind === "remove",
+      () => lower.decision === "deny", () => lower.actions[0].setting === "approvalGuard", () => pipe.decision === "allow",
+      () => next.decision === "deny", () => net.decision === "ask", () => net.actions[0].why === "unparsed", () => bash.decision === "allow",
+      () => decisionOf(hk) === "deny",
+    ]);
   }
 
   // C7 — fail closed: the CLI found where it runs, its subcommand a variable / substitution / ( expression / "$@" / nothing under
@@ -240,13 +243,17 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     const ap = (cfg.PreToolUse || []).find((e) => e.hooks.some((h) => /approval-hook/.test([h.command, ...(h.args || [])].join(" "))));
     const p = project("r6-e3", "en", { approvalGuard: "deny" }, ["Export"]);
     const hk = hookOut("approval-hook", pre(p, "mcp__plugin_dev-spec-driven_spec-driven__spec_add_track", { name: "export", track: "tdd", remove: true }), { CLAUDE_PROJECT_DIR: p });
-    ok(r1.decision === "deny" && r1.actions[0].kind === "guard-down" && r1.actions[0].setting === "track" && js(r1.actions[0].tracks) === js(["tdd"]) && r1.actions[0].feature === "export" &&
-      /add-track export tdd --remove/.test(r1.command) && /turn off \+tdd on 'export'/.test(r1.reason) && js(r2.actions[0].tracks) === js(["ai"]) &&
-      js(allowed) === js(["allow", "allow", "allow"]) && cli.every((d) => d.decision === "deny" && d.actions[0].setting === "track") && js(cli[0].actions[0].tracks) === js(["tdd"]) &&
-      js(cliOk) === js(["allow", "allow", "allow"]) && ask.decision === "ask" && new RegExp(ap.matcher).test("mcp__plugin_dev-spec-driven_spec-driven__spec_add_track") &&
-      new RegExp(ap.matcher).test("spec_add_track") && decisionOf(hk) === "deny",
-      "1.24 r6 E3: removing +tdd / +ai (spec_add_track {remove: true}, add-track --remove / --tracks) is a guard-down with the CLI line the human runs; other tracks, adding, remove: false stay allowed; hooks.json's matcher covers spec_add_track (got " +
-      js([r1.decision, r1.actions, r1.command, r2.actions, allowed, cli.map((d) => d.decision), cliOk, ask.decision, decisionOf(hk)]) + ")");
+    all("1.24 r6 E3: removing +tdd / +ai (spec_add_track {remove: true}, add-track --remove / --tracks) is a guard-down with the CLI line the human runs; other tracks, adding, remove: false stay allowed; hooks.json's matcher covers spec_add_track (got " +
+      js([r1.decision, r1.actions, r1.command, r2.actions, allowed, cli.map((d) => d.decision), cliOk, ask.decision, decisionOf(hk)]) + ")", [
+      () => r1.decision === "deny", () => r1.actions[0].kind === "guard-down", () => r1.actions[0].setting === "track",
+      () => js(r1.actions[0].tracks) === js(["tdd"]), () => r1.actions[0].feature === "export",
+      () => /add-track export tdd --remove/.test(r1.command), () => /turn off \+tdd on 'export'/.test(r1.reason),
+      () => js(r2.actions[0].tracks) === js(["ai"]), () => js(allowed) === js(["allow", "allow", "allow"]),
+      () => cli.every((d) => d.decision === "deny" && d.actions[0].setting === "track"), () => js(cli[0].actions[0].tracks) === js(["tdd"]),
+      () => js(cliOk) === js(["allow", "allow", "allow"]), () => ask.decision === "ask",
+      () => new RegExp(ap.matcher).test("mcp__plugin_dev-spec-driven_spec-driven__spec_add_track"),
+      () => new RegExp(ap.matcher).test("spec_add_track"), () => decisionOf(hk) === "deny",
+    ]);
   }
 
   // C-I10 — the hook's 2 s stdin safety net fired on a partial payload: it used to exit 0 (allowed). Partial input naming dev-spec /
@@ -287,24 +294,31 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     for (const s of [sid, sid + "-b"]) try { fs.unlinkSync(HU.sessionFlagFile("forced-note", s)); } catch { /* gone */ }
   }
 
-  // C-I1 + the listing budget — the human-only commands carry `disable-model-invocation: true` (Claude Code then never runs them on
-  // its own); the command descriptions are short English lines (the PT / ES tails filled Claude Code's shared skill-listing budget:
-  // 15 commands were listed with no description). The MCP prompts still list every command.
+  // C-I1 + the listing budget — Claude Code lists every model-invocable skill and command with its description under ONE budget
+  // shared by all installed plugins (1 % of the context window; on overflow descriptions are dropped — 15 dev-spec commands were
+  // listed with none). 1.26: only /spec and /spec-bugfix stay model-invocable; every other command carries
+  // `disable-model-invocation: true` — its description leaves the model's context, the user still types it — so the model-visible
+  // listing (those two descriptions + the skill's) stays ≤ 1,500 characters. The MCP prompts still list every command.
   {
     const PR = require("./lib/prompts-resources.js");
     const dir = path.join(__dirname, "..", "commands");
     const files = fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort();
     const fm = Object.fromEntries(files.map((f) => [f.slice(0, -3), PR.parseFrontMatter(fs.readFileSync(path.join(dir, f), "utf8")).data]));
-    const human = ["approve", "ds", "dss", "dsx", "spec-ff", "spec-guard", "spec-statusline", "spec-superpowers", "spec-tour"];
+    const modelInvocable = ["spec", "spec-bugfix"];
+    const human = Object.keys(fm).filter((n) => !modelInvocable.includes(n)).sort();
     const marked = Object.keys(fm).filter((n) => fm[n]["disable-model-invocation"] === "true").sort();
     const descs = Object.values(fm).map((d) => d.description || "");
     const total = descs.reduce((n, d) => n + d.length, 0);
-    const long = Object.keys(fm).filter((n) => (fm[n].description || "").length > 150 || !(fm[n].description || "").length);
+    const long = Object.keys(fm).filter((n) => (fm[n].description || "").length > 125 || !(fm[n].description || "").length);
     const tails = Object.keys(fm).filter((n) => / PT - | ES - |Atalho|Atajo/.test(fm[n].description || ""));
+    const skillDesc = PR.parseFrontMatter(fs.readFileSync(path.join(__dirname, "..", "skills", "dev-spec-driven", "SKILL.md"), "utf8")).data.description || "";
+    const visible = modelInvocable.reduce((n, c) => n + ((fm[c] || {}).description || "").length, 0) + skillDesc.length;
     const listed = PR.listPrompts({ lang: "en" }).map((x) => x.name);
-    ok(js(marked) === js(human) && !long.length && !tails.length && total <= 6000 && human.every((n) => listed.includes(n)) && listed.length === files.length,
-      "1.24 r6 C-I1: approve, spec-ff, spec-guard, spec-statusline, spec-superpowers, spec-tour and the aliases ds / dss / dsx carry disable-model-invocation: true (no other command); every description is one short English line (≤ 150 chars, no PT / ES tail, " +
-      total + " chars in all ≤ 6000 — Claude Code's skill-listing budget); the MCP prompts list every command (got " + js([marked, long, tails]) + ")");
+    ok(js(marked) === js(human) && modelInvocable.every((n) => fm[n] && fm[n]["disable-model-invocation"] === undefined) && !long.length && !tails.length &&
+      total <= 2600 && skillDesc.length > 200 && visible <= 1500 && listed.length === files.length && files.every((f) => listed.includes(f.slice(0, -3))),
+      "1.24 r6 C-I1 + 1.26: only /spec and /spec-bugfix are model-invocable — every other command carries disable-model-invocation: true; the model-visible listing (their descriptions + the skill's) is " +
+      visible + " ≤ 1,500 chars; every description is one short English line (≤ 125 chars, no PT / ES tail, " + total + " chars in all); the MCP prompts list every command (got " +
+      js([marked.length, human.length, long, tails]) + ")");
   }
 
   // C-I9 — the aliases hand over to the full command (its file, resolved by Claude Code and by the MCP prompt alike) instead of a lossy summary.
@@ -367,12 +381,14 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     const did = S.refreshStaleRoadmap(p);
     // the hooks stat the stamp raw, before the engine loads: the same name
     const raw = ["stop-hook.js", "precommit-check.js"].filter((h) => !fs.readFileSync(path.join(__dirname, "..", "hooks", h), "utf8").includes('"' + S.ROADMAP_STALE_FILE + '"'));
-    ok(linted && afterSave.roadmapKept && afterSave.catalogKept && afterSave.stamp && afterSave.ignore === "*\n" && afterSave.staleApi === true && afterSave.stale &&
-      cSave.status === 0 && cSave.stdout === "" && resFresh && afterStop.silent && !afterStop.stamp && afterStop.fresh &&
-      midSession.stamp && !midSession.fresh && afterSession.out && !afterSession.stamp && afterSession.fresh &&
-      afterMutation.marked === true && !afterMutation.stamp && afterMutation.fresh && noop.refreshed === false && did.refreshed === true && !raw.length,
-      "1.24 r6 I-I1: a spec save lints at once and leaves the stamp .specs/.execution/roadmap-stale (git-ignored) — ROADMAP.md / SPECS.md untouched; the Stop hook, SessionStart and the next mutation refresh them once and clear it; the specs:// resources render in memory meanwhile (got " +
-      js({ linted, afterSave, cSave: [cSave.status, cSave.stdout.slice(0, 60)], resFresh, afterStop, midSession, afterSession, afterMutation, noop, did, raw }) + ")");
+    all("1.24 r6 I-I1: a spec save lints at once and leaves the stamp .specs/.execution/roadmap-stale (git-ignored) — ROADMAP.md / SPECS.md untouched; the Stop hook, SessionStart and the next mutation refresh them once and clear it; the specs:// resources render in memory meanwhile (got " +
+      js({ linted, afterSave, cSave: [cSave.status, cSave.stdout.slice(0, 60)], resFresh, afterStop, midSession, afterSession, afterMutation, noop, did, raw }) + ")", [
+      () => linted, () => afterSave.roadmapKept, () => afterSave.catalogKept, () => afterSave.stamp, () => afterSave.ignore === "*\n",
+      () => afterSave.staleApi === true, () => afterSave.stale, () => cSave.status === 0, () => cSave.stdout === "", () => resFresh,
+      () => afterStop.silent, () => !afterStop.stamp, () => afterStop.fresh, () => midSession.stamp, () => !midSession.fresh, () => afterSession.out,
+      () => !afterSession.stamp, () => afterSession.fresh, () => afterMutation.marked === true, () => !afterMutation.stamp, () => afterMutation.fresh,
+      () => noop.refreshed === false, () => did.refreshed === true, () => !raw.length,
+    ]);
     // the pre-commit check: a stale roadmap is refreshed, and a generated file that was staged is staged again (the commit holds the fresh one)
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.24 r6 I-I1 pre-commit: skipped — git not available");
     else {
@@ -398,8 +414,8 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
 
   // 1.24 r6 I-I4: the Stop hook's claim pre-filter — a message holding no claim pattern of any language (in its prose, as the engine
   // reads it) ends the hook before the engine loads (~100 ms at the end of a turn). The build writes the patterns and the prose
-  // regexes into hooks/stop-claims.generated.json, stamped with the version and its sources' sizes; a missing or stale file → the
-  // engine decides, as before.
+  // regexes into hooks/stop-claims.generated.json, stamped with its sources' sizes (no version since 1.26); a missing or stale file →
+  // the engine decides, as before.
   {
     const filterFile = path.join(__dirname, "..", "hooks", "stop-claims.generated.json");
     let f = null;
@@ -415,14 +431,14 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
       "\n", "\r\n", "```", "~~~", "`", "<!--", "-->", "> ", "**", "Status: ", "DONE", "✅", "everything works", "x", "I've finished", "a tarefa 1 está feita", "y"];
     const gen = [];
     for (let i = 0; i < 2500; i++) { let m = ""; const n = 1 + Math.floor(rnd() * 12); for (let k = 0; k < n; k++) m += frags[Math.floor(rnd() * frags.length)] + (rnd() < 0.5 ? " " : ""); gen.push(m); }
-    const all = hand.concat(gen);
-    const proseDiff = f ? all.filter((m) => HU.claimProse(m, f.prose) !== E.stopProse(m)) : ["no filter file"];
-    const missed = f ? all.filter((m) => E.stopClaims(m).claim && !HU.claimMatch(m, f)) : ["no filter file"];
-    const filtered = f ? all.filter((m) => !HU.claimMatch(m, f)).length : 0;
+    const msgs = hand.concat(gen);
+    const proseDiff = f ? msgs.filter((m) => HU.claimProse(m, f.prose) !== E.stopProse(m)) : ["no filter file"];
+    const missed = f ? msgs.filter((m) => E.stopClaims(m).claim && !HU.claimMatch(m, f)) : ["no filter file"];
+    const filtered = f ? msgs.filter((m) => !HU.claimMatch(m, f)).length : 0;
     const fresh = (() => { try { return require("../scripts/build.js").buildStopClaims(E) === fs.readFileSync(filterFile, "utf8").replace(/\r\n/g, "\n"); } catch { return false; } })();
     ok(!proseDiff.length && !missed.length && filtered > 100 && fresh && f && js(f.claims) === js(E.stopClaimSources()),
       "1.24 r6 I-I4: the Stop hook's pre-filter reads the message's prose exactly as the engine does and lets through every message the engine reads as a claim (" +
-      all.length + " messages, " + filtered + " sent away); hooks/stop-claims.generated.json is the build's (got " + js({ proseDiff: proseDiff.slice(0, 3), missed: missed.slice(0, 3), filtered, fresh }) + ")");
+      msgs.length + " messages, " + filtered + " sent away); hooks/stop-claims.generated.json is the build's (got " + js({ proseDiff: proseDiff.slice(0, 3), missed: missed.slice(0, 3), filtered, fresh }) + ")");
 
     // (b) the hook: no claim → silent without the engine; a claim → the engine's block. A copy of the clone whose filter is missing,
     // of another version or stamped with another source size → the engine decides (loaded) — the same answers.
@@ -448,16 +464,18 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     const cf = path.join(clone, "hooks", "stop-claims.generated.json"), cfText = fs.readFileSync(cf, "utf8");
     const variants = {};
     variants.copy = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout.")];
-    fs.writeFileSync(cf, cfText.replace(/"version": "[^"]+"/, "\"version\": \"0.0.1\""));
+    // 1.26: the filter carries no version — another package.json version (a release that changed none of its sources) keeps it in use
+    const cpkg = path.join(clone, "package.json"), cpkgText = fs.readFileSync(cpkg, "utf8");
+    fs.writeFileSync(cpkg, cpkgText.replace(/"version":\s*"[^"]+"/, "\"version\": \"0.0.1\""));
     variants.version = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout."), stopAt(path.join(clone, "hooks"), "All done — the tests pass.")];
-    fs.writeFileSync(cf, cfText);
+    fs.writeFileSync(cpkg, cpkgText);
     fs.appendFileSync(path.join(clone, "mcp", "lib", "engine", "guards.js"), "// edited\n");
     variants.size = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout."), stopAt(path.join(clone, "hooks"), "All done — the tests pass.")];
     fs.rmSync(cf);
     variants.missing = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout."), stopAt(path.join(clone, "hooks"), "All done — the tests pass.")];
-    ok(js(real) === js(["silent/false", "block/true"]) && js(variants.copy) === js(["silent/false"]) &&
-      ["version", "size", "missing"].every((k) => js(variants[k]) === js(["silent/true", "block/true"])),
-      "1.24 r6 I-I4: the Stop hook sends a message with no claim away before the engine loads, and blocks a claim as the engine does; a copy of the clone reads its own filter; a filter of another version, stamped with another source size or missing → the engine decides, with the same answers (got " +
+    ok(js(real) === js(["silent/false", "block/true"]) && js(variants.copy) === js(["silent/false"]) && js(variants.version) === js(["silent/false", "block/true"]) &&
+      ["size", "missing"].every((k) => js(variants[k]) === js(["silent/true", "block/true"])),
+      "1.24 r6 I-I4: the Stop hook sends a message with no claim away before the engine loads, and blocks a claim as the engine does; a copy of the clone reads its own filter — under another package.json version too (1.26: no version stamp, a release that changes none of its sources keeps it); a filter stamped with another source size or missing → the engine decides, with the same answers (got " +
       js({ real, variants }) + ")");
   }
 
