@@ -20,7 +20,8 @@ require(${js(RUNNER)}).main({ suite: "fake", key: "fake", root: __dirname, dir: 
   tmpPrefix: "fake-runner-", setup: () => require("./harness.js").setup() });
 `);
   w("harness.js", `"use strict";
-const { exitFlushed } = require(${js(RUNNER)});
+const { exitFlushed, isolate } = require(${js(RUNNER)});
+isolate("fake-runner-"); // as the real harnesses do, first thing
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok   - " + m); } else { fail++; console.log("  FAIL - " + m); } };
 const end = () => { console.log("\\n" + pass + " passed, " + fail + " failed"); exitFlushed(fail ? 1 : 0); };
@@ -47,6 +48,7 @@ exports.run = async ({ ok }) => { ok(true, "w on time"); process.emitWarning("a 
 `);
   const env = { ...process.env, TMPDIR: own, TEMP: own, TMP: own };
   delete env.DEV_SPEC_TEST_CHAIN; // this process is itself a chain of the CLI suite: the fake one starts as a parent
+  delete env.DEV_SPEC_TEST_CWD; // …in a working folder of its own
   const fake = (...args) => { const r = spawnSync(process.execPath, [path.join(root, "suite.js"), ...args], { encoding: "utf8", env, timeout: 60000 }); return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status }; };
   const lastLine = (s) => s.trimEnd().split(/\r?\n/).pop();
 
@@ -73,4 +75,111 @@ exports.run = async ({ ok }) => { ok(true, "w on time"); process.emitWarning("a 
   const left = fs.readdirSync(own).filter((f) => /\.tmp$/.test(f));
   ok(held.code === 0 && lastLine(held.stdout) === "1 passed, 0 failed" && left.length === 0,
     "1.20 review: a times file the runner can't replace leaves no dev-spec-test-times-<key>.json.<pid>.tmp behind (got " + js([held.code, left]) + ")");
+
+  // 1.26 — the assertion helpers every file receives beside ok: all(label, conds) and eq(actual, expected, label), one assertion
+  // each (the totals stay comparable), built on the file's own ok (a late one is a late assertion). A FAIL says WHAT failed: the
+  // names of the false conditions (an object's keys, a thunk's source; a throw or a promise is false, with why) — every condition
+  // evaluated, no short circuit — and eq's first difference (its path, what was found, what was expected).
+  {
+    w("tests/08-helpers.js", `// all() and eq(): one assertion each, a FAIL that says what failed
+exports.run = async ({ all, eq }) => {
+  const r = { ok: true, items: [1, 2, 3] }, none = undefined;
+  all("all passes", [() => r.ok, () => r.items.length === 3]);
+  all("all fails", { "r is ok": r.ok, "three items": r.items.length === 4, "none has a name": () => none.name === "x", "a promise": () => Promise.resolve(true) });
+  all("thunks fail", [() => r.items.includes(9), () => true, () => r.items.length > 5]);
+  eq({ a: [1, { b: "x" }] }, { a: [1, { b: "x" }] }, "eq passes");
+  eq({ a: [1, { b: "xyz" }] }, { a: [1, { b: "xYz" }] }, "eq string");
+  eq([1, 2], [1, 2, 3], "eq length");
+  eq({ a: 1, b: 2 }, { b: 2, a: 1 }, "eq order");
+  setTimeout(() => all("late all", [() => true]), 30);
+};
+`);
+    const h = fake("--only", "08");
+    const block = (label) => { const at = h.out.indexOf("  FAIL - " + label + "\n"); return at < 0 ? null : h.out.slice(at).split(/\r?\n/).slice(1).filter((l, i, xs) => xs.slice(0, i + 1).every((x) => /^ {6}\S/.test(x))); };
+    const want = {
+      allPasses: /\n {2}ok {3}- all passes\r?\n/.test(h.out) && /\n {2}ok {3}- eq passes\r?\n/.test(h.out),
+      allFails: ((b) => !!b && b.length === 3 && b[0] === "      false: three items" && /^ {6}false: none has a name \(threw: .+\)$/.test(b[1]) &&
+        b[2] === "      false: a promise (a promise — await it first)")(block("all fails")),
+      thunks: js(block("thunks fail")) === js(["      false: r.items.includes(9)", "      false: r.items.length > 5"]),
+      eqString: js(block("eq string")) === js(["      at $.a[1].b (character 1): got \"xyz\" — expected \"xYz\""]),
+      eqLength: js(block("eq length")) === js(["      at $[2]: missing (got 2 item(s), expected 3) — expected 3"]),
+      eqOrder: js(block("eq order")) === js(["      at $: the same keys in another order — got [\"a\",\"b\"], expected [\"b\",\"a\"]"]),
+      late: /FAIL - late assertion from 08-helpers — [^\n]*: late all/.test(h.out),
+      total: h.code === 1 && lastLine(h.stdout) === "2 passed, 6 failed",
+    };
+    ok(Object.values(want).every(Boolean),
+      "1.26: all() and eq() are one assertion each, on the file's own ok (a late one is a late assertion) — a FAIL lists every false condition by name (an object's key, a thunk's source; a throw or a promise counts as false, saying so) and eq's first difference with its path (got " +
+      js({ want, out: h.out.split(/\r?\n/).filter((l) => /FAIL|^ {6}|passed/.test(l)) }) + ")");
+  }
+
+  // 1.26 — a loaded machine: remeasure() (a timing-bound check's sample, measured once more on a miss — no assertion of its own)
+  // returns a passing retry or the last miss, with how many samples it took; a chain still running after the chain timeout
+  // (DEV_SPEC_TEST_CHAIN_TIMEOUT_S; 30 min by default) is killed and fails the suite — it never hangs it.
+  {
+    w("tests/09-remeasure.js", `// remeasure(): once more on a miss
+exports.run = async ({ ok, remeasure }) => {
+  let n = 0, m = 0, k = 0;
+  const pass2 = remeasure(() => ({ v: ++n }), (s) => s.v >= 2);
+  const never = remeasure(() => ({ v: ++m }), () => false);
+  const first = remeasure(() => ({ v: ++k }), () => true);
+  console.log("REMEASURE " + JSON.stringify([pass2.v, pass2.tries, n, never.v, never.tries, m, first.v, first.tries, k, Object.keys(pass2)]));
+  ok(true, "remeasured");
+};
+`);
+    w("tests/10-hang.js", `// a chain that never finishes
+exports.run = () => new Promise(() => { setInterval(() => {}, 1000); });
+`);
+    const rm = fake("--only", "09");
+    const line = (rm.stdout.split(/\r?\n/).find((l) => l.startsWith("REMEASURE ")) || "").slice(10);
+    const hang = (() => { const r = spawnSync(process.execPath, [path.join(root, "suite.js"), "--only", "10"], { encoding: "utf8", env: { ...env, DEV_SPEC_TEST_CHAIN_TIMEOUT_S: "3" }, timeout: 60000 });
+      return { code: r.status, stdout: r.stdout || "", out: (r.stdout || "") + (r.stderr || "") }; })();
+    ok(rm.code === 0 && line === js([2, 2, 2, 2, 2, 2, 1, 1, 1, ["v"]]) &&
+      hang.code === 1 && lastLine(hang.stdout) === "0 passed, 1 failed" && /# 10-hang: still running after 3\.0 s — killed with its child processes/.test(hang.out) &&
+      /FAIL - 10-hang exited with code \S+ without a clean total/.test(hang.out),
+      "1.26: remeasure() measures once more on a miss (a passing retry, or the last miss; .tries says how many — non-enumerable), never on a pass; a chain still running after DEV_SPEC_TEST_CHAIN_TIMEOUT_S is killed and fails the suite (got " +
+      js([rm.code, line, hang.code, lastLine(hang.stdout), hang.out.split(/\r?\n/).filter((l) => /still running|FAIL/.test(l))]) + ")");
+  }
+
+  // 1.26 — hermetic chains: a suite started from a folder holding a .specs/ (the maintainer's dogfood one at the repo root: lang
+  // pt) with SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, DEV_SPEC_DEFAULT_LANG… exported runs every chain in a fresh, empty temp folder
+  // of its own (removed afterwards) with none of those variables — the suites' own DEV_SPEC_TEST_* and any other variable kept.
+  // The same when a chain is started by hand (DEV_SPEC_TEST_CHAIN set, no parent): the child isolates itself.
+  {
+    fs.rmSync(own, { recursive: true, force: true });
+    fs.mkdirSync(own, { recursive: true });
+    const KEYS = ["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "DEV_SPEC_DEFAULT_LANG", "DEV_SPEC_BUNDLE", "SPEC_MCP_PROMPTS", "COLUMNS",
+      "DEV_SPEC_TEST_BASH", "FAKE_KEEP"];
+    const envFile = `// what a chain sees: its working folder, what it holds, the host's variables
+exports.run = async ({ ok }) => {
+  const fs = require("fs");
+  const env = Object.fromEntries(${js(KEYS)}.map((k) => [k, process.env[k] === undefined ? null : process.env[k]]));
+  console.log("ENV " + JSON.stringify({ cwd: process.cwd(), files: fs.readdirSync(process.cwd()), env }));
+  ok(true, "env seen");
+};
+`;
+    w("tests/06-env.js", envFile);
+    w("tests/07-env.js", envFile);
+    w(".specs/roadmap.json", js({ features: {}, meta: { lang: "pt" } }));
+    w(".specs/decoy/requirements.md", "# Requisitos\n");
+    const host = { ...env, SPEC_PROJECT_DIR: root, CLAUDE_PROJECT_DIR: root, CLAUDE_PLUGIN_ROOT: root, DEV_SPEC_DEFAULT_LANG: "es", DEV_SPEC_BUNDLE: "1",
+      SPEC_MCP_PROMPTS: "off", COLUMNS: "20", DEV_SPEC_TEST_BASH: "keep-me", FAKE_KEEP: "kept" };
+    const seen = (out) => out.split(/\r?\n/).filter((l) => l.startsWith("ENV ")).map((l) => { try { return JSON.parse(l.slice(4)); } catch { return null; } });
+    const fold = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
+    const shape = (s) => !!s && /^fake-runner-[A-Za-z0-9]{6}$/.test(path.basename(s.cwd)) && fold(path.dirname(s.cwd)) === fold(own) &&
+      s.files.length === 0 && !fs.existsSync(s.cwd);
+    const clean = (s) => !!s && KEYS.slice(0, 7).every((k) => s.env[k] === null) && s.env.DEV_SPEC_TEST_BASH === "keep-me" && s.env.FAKE_KEEP === "kept";
+    const r = spawnSync(process.execPath, [path.join(root, "suite.js"), "--only", "06,07"], { cwd: root, encoding: "utf8", env: host, timeout: 60000 });
+    const two = seen(r.stdout || "");
+    ok(r.status === 0 && lastLine(r.stdout || "") === "2 passed, 0 failed" && two.length === 2 && two.every(shape) && two.every(clean) && two[0].cwd !== two[1].cwd,
+      "1.26: every chain runs hermetic — a fresh, empty temp folder of its own as its working folder (never the folder the suite was started from, with its .specs/; removed afterwards) and none of SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, CLAUDE_PLUGIN_*, SPEC_MCP_*, DEV_SPEC_* (but DEV_SPEC_TEST_*), COLUMNS (got " +
+      js([r.status, lastLine(r.stdout || ""), two]) + ")");
+    const byHand = spawnSync(process.execPath, [path.join(root, "suite.js")], { cwd: root, encoding: "utf8", env: { ...host, DEV_SPEC_TEST_CHAIN: "06-env" }, timeout: 60000 });
+    const one = seen(byHand.stdout || "");
+    const harnesses = ["mcp", "cli"].map((s) => fs.readFileSync(path.join(__dirname, "..", s, "tests", "harness.js"), "utf8"));
+    const first = (src, call) => { const at = src.indexOf(call); return at > 0 && [/\nconst S = require\(/, /\nconst tmp = /].every((re) => { const m = src.match(re); return !m || at < m.index; }); };
+    ok(byHand.status === 0 && lastLine(byHand.stdout || "") === "1 passed, 0 failed" && one.length === 1 && shape(one[0]) && clean(one[0]) &&
+      first(harnesses[0], "isolate(\"spec-test-\")") && first(harnesses[1], "isolate(\"cli-test-\")"),
+      "1.26: a chain started by hand (DEV_SPEC_TEST_CHAIN set, no runner parent) isolates itself the same way; mcp/tests/harness.js and cli/tests/harness.js call isolate() before the engine loads and their temp dir is made (got " +
+      js([byHand.status, lastLine(byHand.stdout || ""), one]) + ")");
+  }
 };

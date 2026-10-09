@@ -7,7 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, root, tmp, libSources, require, __dirname }) => {
+exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) => {
   // 1.20 build (scripts/build.js, `npm run build`): the committed, pre-generated placeholder corpus
   // (mcp/lib/engine/corpus.generated.json) and the single-file engine bundle built on demand (`--bundle`, `dev-spec bundle` —
   // never committed; built into tmp here). The child processes below run serialized functions (Function.prototype.toString)
@@ -26,7 +26,7 @@ exports.run = async ({ ok, S, root, tmp, libSources, require, __dirname }) => {
     const script = (name, fn, args) => { const f = path.join(tmp, name); fs.writeFileSync(f, "\"use strict\";\n(" + fn.toString() + ")(" + args + ");\n"); return f; };
 
     // The committed corpus is what a fresh build of these sources writes: a change to a file of CORPUS_SOURCES (a template, a
-    // track, a string, the readers the render runs through) or to package.json's version without a rebuild fails here.
+    // track, a string, the readers the render runs through) without a rebuild fails here — package.json's version is no input (1.26).
     const staleFiles = B.stale(E);
     const buildJs = path.join(root, "scripts", "build.js");
     const check = spawnSync(process.execPath, [buildJs, "--check"], { encoding: "utf8", timeout: 120000 });
@@ -42,13 +42,32 @@ exports.run = async ({ ok, S, root, tmp, libSources, require, __dirname }) => {
       "1.20 build: scripts/build.js is Node core only, wired as npm run build (the corpus) and npm run build:bundle; mcp/lib/spec.bundle.js is git-ignored (built on demand, never committed) and the source guards never read a bundle — they read the sources and scripts/build.js (got " +
       js({ buildReq, ignored }) + ")");
 
-    // This process reads the committed corpus (its version and sources stamps match) and its sets are exactly the rendered ones.
+    // 1.26 — the generated files carry no version: what they hold is a function of their sources alone (the corpus: CORPUS_SOURCES,
+    // proved below by V8 coverage; the stop-claim filter: STOP_FILTER_SOURCES), so a release that changes no source leaves them
+    // byte-identical — they were rewritten by every release. `npm run check` is the --check; .gitattributes marks both generated
+    // (linguist), and they stay LF.
+    {
+      const attrs = fs.readFileSync(path.join(root, ".gitattributes"), "utf8").split(/\r?\n/).map((l) => l.trim());
+      const read = (p) => { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; } };
+      const corpusFile = read(B.CORPUS_PATH), stopFile = read(B.STOP_CLAIMS_PATH);
+      all("1.26: the committed corpus and stop-claim filter carry no version (a release that changes no source rewrites neither); npm run check = build.js --check; .gitattributes marks both linguist-generated and keeps them LF", {
+        "npm run check is node scripts/build.js --check": pkgScripts.check === "node scripts/build.js --check",
+        "corpus.generated.json has a sources stamp and no version": !!corpusFile && typeof corpusFile.sources === "string" && !("version" in corpusFile),
+        "stop-claims.generated.json has its sizes and no version": !!stopFile && Object.keys(stopFile.sources || {}).length === E.STOP_FILTER_SOURCES.length && !("version" in stopFile),
+        "a fresh build of either has no version": !("version" in JSON.parse(B.buildCorpus(E))) && !("version" in JSON.parse(B.buildStopClaims(E))),
+        ".gitattributes marks the corpus generated": attrs.includes("mcp/lib/engine/corpus.generated.json linguist-generated=true"),
+        ".gitattributes marks the stop-claim filter generated": attrs.includes("hooks/stop-claims.generated.json linguist-generated=true"),
+        "*.json stays LF": attrs.some((l) => /^\*\.json\s+text eol=lf$/.test(l)),
+      });
+    }
+
+    // This process reads the committed corpus (its sources stamp matches) and its sets are exactly the rendered ones.
     const fresh = E.renderCorpusData();
     const setsNow = E.templateSets(), brNow = E.templateSetsBr();
     const pairs = [[setsNow.brackets, fresh.brackets], [setsNow.code, fresh.code], [brNow.brackets, fresh.bracketsBr], [brNow.code, fresh.codeBr],
       [E.templateTaskSet(), fresh.tasks], [E.bugStepSet(), fresh.bugSteps]];
     ok(E.builtinCorpusSource() === "file" && pairs.every(([s, l]) => js(sorted(s)) === js(l)) && fresh.brackets.length > 400 && fresh.tasks.length > 50 && fresh.bugSteps.length > 5,
-      "1.20 build: this process reads the committed corpus (source 'file' — its version and sources stamps match this engine) and every built-in set is exactly the rendered one: templateSets, templateSetsBr, templateTaskSet, the bug steps (got " +
+      "1.20 build: this process reads the committed corpus (source 'file' — its sources stamp matches this engine) and every built-in set is exactly the rendered one: templateSets, templateSetsBr, templateTaskSet, the bug steps (got " +
       js({ source: E.builtinCorpusSource(), sizes: pairs.map(([s, l]) => [s.size, l.length]) }) + ")");
 
     // 1.22 review: the built-in tracks' template task headings (trackTaskHeadings — which tasks.md block belongs to a track that
@@ -162,8 +181,8 @@ exports.run = async ({ ok, S, root, tmp, libSources, require, __dirname }) => {
       js({ ran, unlisted }) + ")");
 
     // A clone whose corpus can't be trusted renders it — never a wrong answer. A faithful copy elsewhere reads the file (the stamp
-    // is the sources, not their path); another version, a hand-edited template that wasn't rebuilt, a broken or a missing file
-    // → 'render'. Rendered, the corpus decides every fresh scaffold text (47 track sets × 4 languages × the feature, bugfix and
+    // is the sources, not their path — with another package.json version too, 1.26); a hand-edited template that wasn't rebuilt,
+    // a broken or a missing file → 'render'. Rendered, the corpus decides every fresh scaffold text (47 track sets × 4 languages × the feature, bugfix and
     // steering builders) exactly as the committed one does.
     const decideChild = function (lib, mode) {
       const crypto = require("crypto"), path = require("path");
@@ -211,8 +230,8 @@ exports.run = async ({ ok, S, root, tmp, libSources, require, __dirname }) => {
     const broken = decide(cloneLib, "source");
     fs.rmSync(corpusPath);
     const missing = decide(cloneLib, "decide");
-    ok(here.source === "file" && faithful.source === "file" && otherVersion.source === "render" && broken.source === "render",
-      "1.20 build: a copy of the clone elsewhere reads the committed corpus (the stamp is the sources, not their path); another package.json version or a broken corpus file → rendered (got " +
+    ok(here.source === "file" && faithful.source === "file" && otherVersion.source === "file" && broken.source === "render",
+      "1.20 build: a copy of the clone elsewhere reads the committed corpus (the stamp is the sources, not their path) — under another package.json version too (1.26: no version in the stamp, the corpus is the sources'); a broken corpus file → rendered (got " +
       js([here.source, faithful.source, otherVersion.source, broken.source]) + ")");
     ok(edited.source === "render" && Array.isArray(edited.probe) && edited.probe.includes("[why this slice ships first]") && !E.templateSets().brackets.has("why this slice ships first") &&
       Array.isArray(here.probe) && here.probe.includes("[why this is the minimum viable slice]"),
@@ -226,7 +245,8 @@ exports.run = async ({ ok, S, root, tmp, libSources, require, __dirname }) => {
     // placeholder question. A long-lived process (the MCP server) loads the engine; then the clone is updated under it — a slot
     // reworded AND the corpus rebuilt, as a `git pull` of both would do. That process renders (its own code), and its answers
     // are the old engine's; a process started after the update reads the new corpus. The same for a language file that loads
-    // on demand AFTER the corpus was trusted (pt.js here), and for package.json's version (read at load).
+    // on demand AFTER the corpus was trusted (pt.js here). package.json's version is no input (1.26): another version and a
+    // rebuild rewrite neither generated file, and both the running process and a later one keep reading the corpus.
     const raceChild = function (clone, mode) {
       const fs = require("fs"), path = require("path"), { spawnSync } = require("child_process");
       const lib = path.join(clone, "mcp", "lib");
@@ -248,10 +268,15 @@ exports.run = async ({ ok, S, root, tmp, libSources, require, __dirname }) => {
         out.build = rebuild();
         const pt = design("pt"); // the NEW pt.js — the code this process runs from now on
         Object.assign(out, { source: E.builtinCorpusSource(), fresh: pt.includes("[o que faz hoje por esta feature]"), probe: slots(pt) });
-      } else if (mode === "version") { // nothing asked yet — package.json gets another version, the corpus is rebuilt for it
+      } else if (mode === "version") { // nothing asked yet — package.json gets another version, then the build runs again
         const p = path.join(clone, "package.json");
+        const gen = [path.join(lib, "engine", "corpus.generated.json"), path.join(clone, "hooks", "stop-claims.generated.json")];
+        const before = gen.map((g) => fs.readFileSync(g, "utf8"));
         fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(/"version":\s*"[^"]+"/, "\"version\": \"0.0.2\""));
-        out.build = rebuild();
+        const r = spawnSync(process.execPath, [path.join(clone, "scripts", "build.js")], { encoding: "utf8" });
+        out.build = r.status;
+        out.unchanged = /^unchanged mcp\/lib\/engine\/corpus\.generated\.json$/m.test(r.stdout) && /^unchanged hooks\/stop-claims\.generated\.json$/m.test(r.stdout) &&
+          gen.every((g, i) => fs.readFileSync(g, "utf8") === before[i]);
         Object.assign(out, { version: E.engineVersion(), source: E.builtinCorpusSource() });
       } else Object.assign(out, { version: E.engineVersion(), source: E.builtinCorpusSource(), probe: slots(design(mode.slice(6))) }); // "later-<lang>": a later process
       process.stdout.write(JSON.stringify(out));
@@ -266,16 +291,18 @@ exports.run = async ({ ok, S, root, tmp, libSources, require, __dirname }) => {
       return c;
     };
     const raceDirs = { en: raceClone("p20-race-en"), pt: raceClone("p20-race-pt"), version: raceClone("p20-race-version") };
+    fs.mkdirSync(path.join(raceDirs.version, "hooks"), { recursive: true }); // …with its stop-claim filter, which the build rewrites too
+    fs.copyFileSync(B.STOP_CLAIMS_PATH, path.join(raceDirs.version, "hooks", "stop-claims.generated.json"));
     const race = (dir, mode) => spawnJson([raceJs, dir, mode], process.env);
     const rEn = race(raceDirs.en, "en"), rLoc = race(raceDirs.pt, "locale"), rVer = race(raceDirs.version, "version");
     const later = { en: race(raceDirs.en, "later-en"), pt: race(raceDirs.pt, "later-pt"), version: race(raceDirs.version, "later-en") }; // started after each update
     const version = require(path.join(root, "package.json")).version;
     const expected = S.placeholderReport(I.design({ name: "x", tracks: ["core"], label: "core", slug: "x", summary: "" }, "en")).map((p) => p.text); // this engine's answer
     ok(rEn.build === 0 && rEn.source === "render" && Array.isArray(rEn.probe) && expected.includes("[what it already does for this feature]") && js(rEn.probe) === js(expected) &&
-      rEn.state === "placeholder" && rVer.build === 0 && rVer.version === version && rVer.source === "render" &&
+      rEn.state === "placeholder" && rVer.build === 0 && rVer.unchanged === true && rVer.version === version && rVer.source === "file" &&
       later.en.source === "file" && Array.isArray(later.en.probe) && later.en.probe.includes("[what it does today for this feature]") && later.version.version === "0.0.2" &&
       later.version.source === "file",
-      "1.20 review: sources and corpus updated under a running process (a slot reworded + npm run build; another version + rebuild) before its first placeholder question → it renders from the code it LOADED (source 'render'): its own fresh scaffold reads exactly as this engine reads it — [what it already does for this feature] still a placeholder — and engineVersion() is the version it loaded; a process started after the update reads the new corpus (got " +
+      "1.20 review: sources and corpus updated under a running process (a slot reworded + npm run build) before its first placeholder question → it renders from the code it LOADED (source 'render'): its own fresh scaffold reads exactly as this engine reads it — [what it already does for this feature] still a placeholder; a process started after the update reads the new corpus. 1.26: another package.json version + rebuild rewrites neither generated file (both 'unchanged', byte-identical) — the running process (engineVersion() still the one it loaded) and a later one (0.0.2) both read the corpus (got " +
       js({ rEn, rVer, later: [later.en.source, later.version], expected }) + ")");
     ok(rLoc.build === 0 && rLoc.first === "file" && rLoc.fresh === true && rLoc.source === "render" && Array.isArray(rLoc.probe) && rLoc.probe.includes("[o que faz hoje por esta feature]") &&
       later.pt.source === "file" && Array.isArray(later.pt.probe) && js(later.pt.probe) === js(rLoc.probe),

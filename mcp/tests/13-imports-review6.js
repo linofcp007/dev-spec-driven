@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, S, tmp }) => {
+exports.run = async ({ ok, all, S, tmp }) => {
   const js = JSON.stringify;
   const fresh = (n) => { const p = path.join(tmp, "proj-r6i-" + n); S.initProject(p, ["core"]); return p; };
   const rd = (...a) => fs.readFileSync(path.join(...a), "utf8");
@@ -39,13 +39,16 @@ exports.run = async ({ ok, S, tmp }) => {
     const blocks = S.taskBlocks(tasks);
     const mk = (n) => S.taskMarkers(blocks.find((b) => b.number === n) || { lines: [] });
     const tc = r.ok ? S.traceCheck(p, r.feature) : {};
-    ok(r.ok && js(mk(3).requirements) === js(["US-1.AC-1", "US-1.AC-2"]) && js(mk(3).implements) === js(["src/models/album.ts"]) &&
-      js(mk(4).implements.slice().sort()) === js(["src/api/albums.ts", "src/services/album.ts"]) && js(mk(5).requirements) === js(["US-2.AC-1"]) &&
-      (tasks.match(/_Requirements:/g) || []).length === 3 && !mk(1).requirements.length && !mk(1).implements.length && !mk(2).implements.length &&
-      /- \[ \] 3\. \[P\] \[US1\] Create the Album model in src\/models\/album\.ts/.test(tasks) && /T999/.test(tasks) && blocks.length === 5 &&
-      tc.uncoveredByTasks && !tc.uncoveredByTasks.length && !tc.phantomAcsInTasks.length && !(r.warnings || []).some((w) => /_Requirements:_ references/.test(w)),
-      "1.24 r6 G-I1: a spec-kit task's [USn] tag becomes _Requirements:_ (that story's ACs) and the paths it names _Implements:_ — its own _Requirements:_ kept, a fenced example untouched; trace_check finds every criterion covered (got " +
-      js({ t3: mk(3), t4: mk(4).implements, t5: mk(5).requirements, unc: tc.uncoveredByTasks, warnings: r.warnings }) + ")");
+    all("1.24 r6 G-I1: a spec-kit task's [USn] tag becomes _Requirements:_ (that story's ACs) and the paths it names _Implements:_ — its own _Requirements:_ kept, a fenced example untouched; trace_check finds every criterion covered (got " +
+      js({ t3: mk(3), t4: mk(4).implements, t5: mk(5).requirements, unc: tc.uncoveredByTasks, warnings: r.warnings }) + ")", [
+      () => r.ok, () => js(mk(3).requirements) === js(["US-1.AC-1", "US-1.AC-2"]), () => js(mk(3).implements) === js(["src/models/album.ts"]),
+      () => js(mk(4).implements.slice().sort()) === js(["src/api/albums.ts", "src/services/album.ts"]),
+      () => js(mk(5).requirements) === js(["US-2.AC-1"]), () => (tasks.match(/_Requirements:/g) || []).length === 3, () => !mk(1).requirements.length,
+      () => !mk(1).implements.length, () => !mk(2).implements.length,
+      () => /- \[ \] 3\. \[P\] \[US1\] Create the Album model in src\/models\/album\.ts/.test(tasks), () => /T999/.test(tasks),
+      () => blocks.length === 5, () => tc.uncoveredByTasks, () => !tc.uncoveredByTasks.length, () => !tc.phantomAcsInTasks.length,
+      () => !(r.warnings || []).some((w) => /_Requirements:_ references/.test(w)),
+    ]);
   }
 
   // 1.24 r6 G-I3: spec-kit's data-model.md, research.md, contracts/ and quickstart.md were skipped with a warning ("not imported") — the

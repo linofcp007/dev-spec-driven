@@ -177,10 +177,19 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
 `scripts/build.js` (Node core only) builds two things from the sources:
 - **`npm run build`** (no argument) writes the COMMITTED placeholder corpus `mcp/lib/engine/corpus.generated.json` and (1.24 r6
   I-I4) the COMMITTED `hooks/stop-claims.generated.json` — the Stop hook's claim pre-filter (guards.js `stopClaimFilter()`, stamped
-  with the version and the sizes of `STOP_FILTER_SOURCES`: the i18n files and guards.js — tasks-and-evidence.md → End-of-turn
-  evidence gate); `node scripts/build.js --check` writes nothing and exits 1 while either is stale. Deterministic — the same
+  with the sizes of `STOP_FILTER_SOURCES`: the i18n files and guards.js — tasks-and-evidence.md → End-of-turn evidence gate);
+  `npm run check` (`node scripts/build.js --check`) writes nothing and exits 1 while either is stale. Deterministic — the same
   sources give the same bytes (sorted lists, no dates, LF; a CRLF or BOM checkout hashes the same). Rebuild after editing a file
-  of `CORPUS_SOURCES` or of `STOP_FILTER_SOURCES` (guards.js is the only one not in both).
+  of `CORPUS_SOURCES` or of `STOP_FILTER_SOURCES` (guards.js is the only one not in both). **No version in either (1.26)** —
+  until 1.25.1 both were stamped with package.json's version, so every release rewrote them with the same content (and the
+  runtime refused a current file whose stamp was another version). What each holds is a function of its sources alone — the
+  corpus's render runs through `CORPUS_SOURCES` only (V8 coverage proves it: `engineVersion()`'s upgrade.js is not in the
+  list), the filter is `stopClaimFilter()` over `STOP_FILTER_SOURCES` — so the sources hash (the corpus) and the sizes (the
+  filter) say everything the version could, and a release that changes no source leaves both byte-identical. The version
+  never caught what those miss either: an edit that keeps a source's size (the filter) is caught by `npm run check` / the
+  suite comparing a fresh build, before a commit. `.gitattributes` marks both `linguist-generated=true` (collapsed in a forge's
+  diff, out of its language statistics — still LF, still diffable). The bundle (below) keeps its version stamp: it is never
+  committed, so it never churns.
 - **`npm run build:bundle`** (`--bundle [--out <file.js>]`), also **`dev-spec bundle [--out <file.js>]`** (a plugin install has
   no npm), writes the one-file engine — by default `mcp/lib/spec.bundle.js`, which is **git-ignored and never committed** (2.7 MB,
   stale after every engine change: it would bloat the history and conflict on every parallel merge, for an opt-in gain on slow
@@ -192,7 +201,8 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   pathIgnored}` (1.24 r6 B-I1) — and `dev-spec version` shows it: the answer to "is my bundle used?".
 - **When to rebuild the corpus — precisely:** after changing a file of `CORPUS_SOURCES` — `mcp/lib/i18n.js`,
   `mcp/lib/i18n/*.js` (every template, string, pt-BR rule), `engine/core.js`, `engine/markdown.js`, `engine/packs.js`,
-  `engine/tasks.js`, `engine/tracks.js` (a track) — or `package.json`'s version. Any other engine file needs no rebuild.
+  `engine/tasks.js`, `engine/tracks.js` (a track) — never for `package.json`'s version alone (1.26). Any other engine file
+  needs no rebuild.
   mcp/test.js ("1.20 build") fails with "run npm run build" until the regenerated file is committed; nothing at runtime goes
   wrong meanwhile (below), it only goes slower. On a merge conflict in the file, take either side and run `npm run build`.
 - **The corpus.** The built-in part of the placeholder corpus (docs/maintainers/gates-and-approvals.md → Gates) —
@@ -201,11 +211,11 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   loaded every language's file; `localeLoaded` clears tracks.js's `TASK_HEADINGS` with the corpus) — is the same in every process of
   one engine, and rendering it (1,165 texts plus pt-BR's twins through toPtBr: ~200 ms) was the largest slice of a hook or
   CLI call (1.19's SessionStart was ~20% slower than 1.18's for it). The build renders it ONCE with the engine's own
-  functions (`renderCorpusData()`: the sets' members, sorted) into the JSON file, stamped `version` (package.json) and
-  `sources` — a sha1 over `CORPUS_SOURCES` (markdown.js): the eleven mcp/lib files the render runs through. On the first
+  functions (`renderCorpusData()`: the sets' members, sorted) into the JSON file, stamped `sources` — a sha1 over
+  `CORPUS_SOURCES` (markdown.js): the eleven mcp/lib files the render runs through (no `version` since 1.26; a `version` key
+  an older build wrote is ignored). On the first
   placeholder question a process reads the file (one `JSON.parse`, ~129 KB since 1.24 r6 — below) and uses it only while it matches the engine the
-  process LOADED: `version` is `engineVersion()` — package.json read as the engine loads, never later — and `sources` is the
-  hash of the sources as they were at load. markdown.js stats every source as it loads (`LOADED_STATS`: size, mtime, ctime —
+  process LOADED: `sources` is the hash of the sources as they were at load. markdown.js stats every source as it loads (`LOADED_STATS`: size, mtime, ctime —
   one stat each, no read, ~0.5 ms); the first question re-reads and hashes them (~2 ms natively) and trusts the file only
   while every stat is still the load-time one (stat'ed after the hash). A language file i18n.js loads on first use (`onLocaleLoad`) that
   changed since the engine loaded, after the corpus was trusted, drops it (`localeLoaded`: the sets render again). So a
@@ -257,7 +267,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   little (and loses without Node's compile cache, Node < 22.8). The MCP server takes it like every process.
 - **Guards.** `libSources()` (the source guards' file list) leaves `spec.bundle.js` out (a user-built one in mcp/lib); the
   guards read scripts/build.js, where the registry is written. Both suites run on the modules (the harnesses drop
-  `DEV_SPEC_BUNDLE`). The tests BUILD a bundle into tmp: mcp/tests/16-conventions-build.js ("1.20 bundle": the namespace, the
+  `DEV_SPEC_BUNDLE`, with every other `DEV_SPEC_*` of the shell — testing.md → Hermetic chains). The tests BUILD a bundle into tmp: mcp/tests/16-conventions-build.js ("1.20 bundle": the namespace, the
   embedded corpus, the modules' paths, every stamp true; on a copy of the clone — none, current, unset / 0, a relative or
   non-.js `DEV_SPEC_BUNDLE_PATH`, one elsewhere, a module touched or resized under the same mtime and put back, another
   version, a broken bundle; the MCP server's handshake, lists and ten tool calls byte for byte) and

@@ -6,7 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, S, tmp }) => {
+exports.run = async ({ ok, all, S, tmp }) => {
   const js = JSON.stringify;
   const fresh = (n, opts) => { const p = path.join(tmp, "proj-r6g-" + n); S.initProject(p, ["core"], "en", opts); return p; };
   const w = (f, rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
@@ -42,11 +42,13 @@ exports.run = async ({ ok, S, tmp }) => {
     const ff = S.approvePhase(p, f.slug, null, "alice", { through: "tasks" });
     const after = st(f).approvals;
     const forced = S.approvePhase(p, f.slug, "design", "alice", { force: true });
-    ok(t0.ok && ad.ok === false && ad.refused === true && ad.failing.includes("phase-order") && po && /requirements/.test(po.detail) && /changed since/.test(po.detail) &&
-      /\/approve export requirements/.test(po.detail) && ff.ok === false && ff.stoppedAt === "design" && js(ff.approved) === "[]" && ff.failing.includes("phase-order") &&
-      !after.design && !after.tasks && forced.ok && forced.forced && forced.failing.includes("phase-order"),
-      "1.24 r6 E1: approving a phase after one whose approved content changed is refused on phase-order (it names the phase to re-approve) — one by one and by a fast-forward; force records it forced (got " +
-      js([ad.failing, po && po.detail, ff.stoppedAt, ff.approved, ff.failing, forced.failing]) + ")");
+    all("1.24 r6 E1: approving a phase after one whose approved content changed is refused on phase-order (it names the phase to re-approve) — one by one and by a fast-forward; force records it forced (got " +
+      js([ad.failing, po && po.detail, ff.stoppedAt, ff.approved, ff.failing, forced.failing]) + ")", [
+      () => t0.ok, () => ad.ok === false, () => ad.refused === true, () => ad.failing.includes("phase-order"), () => po,
+      () => /requirements/.test(po.detail), () => /changed since/.test(po.detail), () => /\/approve export requirements/.test(po.detail),
+      () => ff.ok === false, () => ff.stoppedAt === "design", () => js(ff.approved) === "[]", () => ff.failing.includes("phase-order"),
+      () => !after.design, () => !after.tasks, () => forced.ok, () => forced.forced, () => forced.failing.includes("phase-order"),
+    ]);
     // the same feature, design's forced approval revoked; requirements re-approved → design approvable again
     S.approvePhase(p, f.slug, "design", "alice", { revoke: true });
     const rq = S.approvePhase(p, f.slug, "requirements", "alice");
@@ -81,12 +83,13 @@ exports.run = async ({ ok, S, tmp }) => {
     const bl = S.backlog(p, "list");
     const fin = S.finishFeature(p, f.slug, {});
     const s1 = st(f);
-    ok(a.ok === false && a.roadmapInvalid === true && a.code === "roadmap-invalid" && /roadmap\.json/.test(a.error) && /approval roles/.test(a.error) &&
-      aRole.ok === false && aRole.code === "roadmap-invalid" && aDry.ok === false && aDry.code === "roadmap-invalid" &&
-      thr.ok === false && thr.code === "roadmap-invalid" && rv.ok === false && rv.code === "roadmap-invalid" &&
-      !s1.approvals.requirements && !!s1.approvals.classification && !s1.signoffs,
-      "1.24 r6 E4: with roadmap.json unreadable, approve (any role, a dry run), the fast-forward and revoke refuse with code roadmap-invalid — nothing recorded (got " +
-      js([a.code, a.error, aRole.code, thr.code, rv.code, Object.keys(s1.approvals)]) + ")");
+    all("1.24 r6 E4: with roadmap.json unreadable, approve (any role, a dry run), the fast-forward and revoke refuse with code roadmap-invalid — nothing recorded (got " +
+      js([a.code, a.error, aRole.code, thr.code, rv.code, Object.keys(s1.approvals)]) + ")", [
+      () => a.ok === false, () => a.roadmapInvalid === true, () => a.code === "roadmap-invalid", () => /roadmap\.json/.test(a.error),
+      () => /approval roles/.test(a.error), () => aRole.ok === false, () => aRole.code === "roadmap-invalid", () => aDry.ok === false,
+      () => aDry.code === "roadmap-invalid", () => thr.ok === false, () => thr.code === "roadmap-invalid", () => rv.ok === false,
+      () => rv.code === "roadmap-invalid", () => !s1.approvals.requirements, () => !!s1.approvals.classification, () => !s1.signoffs,
+    ]);
     ok(check(doc, "roadmap") && check(doc, "roadmap").status === "fail" && /roadmap\.json/.test(check(doc, "roadmap").detail) && doc.readyToAdvance === false &&
       na.step === "fix" && na.roadmapInvalid === true && /roadmap\.json/.test(na.recommendation) && !/spec-ff/.test(na.recommendation) && !na.fastForward &&
       bl.ok === false && /roadmap\.json/.test(bl.error) &&

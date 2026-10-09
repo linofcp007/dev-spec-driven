@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, __dirname }) => {
 
   { // 1.14 A2 — the composable +sec (security) and +privacy (GDPR / RGPD) tracks, end to end, EN / PT / ES.
     const a2Root = path.join(tmp, "a2-tracks");
@@ -104,13 +104,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
         const after = S.specDoctor(p, f.slug);
         const retry = S.approvePhase(p, f.slug, "design", "t");
         const want = tr === "sec" ? 5 : 6;
-        ok(f.ok && f.label === "core +" + tr && heads.length === want && design.includes(titles[lang][tr === "sec" ? 0 : 1]) &&
-          (design.match(/^> \*\*TODO\*\*/gm) || []).length === want && reqs.includes("#### " + marker) && tasks.includes("US-1.AC-1" + (tr === "sec" ? "0" : "3")) &&
-          !trackIssues.length && e.issues.every((i) => i.severity !== "error") && !reqPh.some((x) => /SEC|PRIVACY/.test(x)) &&
-          chk(before, id).status === "fail" && /unfilled|por preencher|sin rellenar|sin completar/.test(chk(before, id).detail) && !chk(before, other).status &&
-          !refused.ok && refused.failing.includes(id) &&
-          chk(after, id).status === "pass" && /5|6/.test(chk(after, id).detail) && !retry.failing.includes(id),
-          `A2: ${lang} +${tr} scaffold — ${want} ${marker} sections with the TODO sentinel, ${marker} EARS criteria (no EARS issue, no placeholder), ${id} fails and the design approval is refused while TODO, passes once filled (${chk(before, id).detail} → ${chk(after, id).detail})`);
+        all(`A2: ${lang} +${tr} scaffold — ${want} ${marker} sections with the TODO sentinel, ${marker} EARS criteria (no EARS issue, no placeholder), ${id} fails and the design approval is refused while TODO, passes once filled (${chk(before, id).detail} → ${chk(after, id).detail})`, [
+          () => f.ok, () => f.label === "core +" + tr, () => heads.length === want, () => design.includes(titles[lang][tr === "sec" ? 0 : 1]),
+          () => (design.match(/^> \*\*TODO\*\*/gm) || []).length === want, () => reqs.includes("#### " + marker),
+          () => tasks.includes("US-1.AC-1" + (tr === "sec" ? "0" : "3")), () => !trackIssues.length,
+          () => e.issues.every((i) => i.severity !== "error"), () => !reqPh.some((x) => /SEC|PRIVACY/.test(x)),
+          () => chk(before, id).status === "fail", () => /unfilled|por preencher|sin rellenar|sin completar/.test(chk(before, id).detail),
+          () => !chk(before, other).status, () => !refused.ok, () => refused.failing.includes(id), () => chk(after, id).status === "pass",
+          () => /5|6/.test(chk(after, id).detail), () => !retry.failing.includes(id),
+        ]);
       }
     }
 
@@ -317,11 +319,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     };
     const offAll = Object.values(neg).every((r) => !r.tracks.includes("dist"));
     const possible = (r) => r.possible.some((p) => p.track === "dist");
-    ok(offAll && !neg.crud.signals.dist.length && !possible(neg.crud) && possible(neg.retry) && possible(neg.retries) && js(neg.retries.signals.dist) === js(["retry"]) &&
-      possible(neg.events) && !neg.click.signals.dist.length && !neg.video.signals.dist.length && possible(neg.lock) && neg.lock.tracks.includes("tdd") && possible(neg.cdc) &&
-      !neg.audit.signals.dist.length && cls("the health CDC report").signals.dist.includes("CDC") && !cls("the cdc report").signals.dist.length,
-      "1.17 D3: no +dist from plain CRUD, a click event, video streaming or audit events; a lone retry (one concept: 'retry' + 'retries'), 'publish an event' on an events app, an account lock's retry, 'CDC' — only 'possible' (got " +
-      js(Object.fromEntries(Object.entries(neg).map(([k, r]) => [k, [r.label, r.signals.dist]]))) + ")");
+    all("1.17 D3: no +dist from plain CRUD, a click event, video streaming or audit events; a lone retry (one concept: 'retry' + 'retries'), 'publish an event' on an events app, an account lock's retry, 'CDC' — only 'possible' (got " +
+      js(Object.fromEntries(Object.entries(neg).map(([k, r]) => [k, [r.label, r.signals.dist]]))) + ")", [
+      () => offAll, () => !neg.crud.signals.dist.length, () => !possible(neg.crud), () => possible(neg.retry), () => possible(neg.retries),
+      () => js(neg.retries.signals.dist) === js(["retry"]), () => possible(neg.events), () => !neg.click.signals.dist.length,
+      () => !neg.video.signals.dist.length, () => possible(neg.lock), () => neg.lock.tracks.includes("tdd"), () => possible(neg.cdc),
+      () => !neg.audit.signals.dist.length, () => cls("the health CDC report").signals.dist.includes("CDC"),
+      () => !cls("the cdc report").signals.dist.length,
+    ]);
 
     // --- D4: pairs of weak signals, shadowing, shared keywords, negation annotates
     const pair = cls("Queue the welcome email and retry with exponential backoff");
@@ -332,13 +337,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const saga = cls("Implement checkout as a saga with compensating transactions across the order and payment services");
     const lockOpt = cls("Use optimistic locking so concurrent updates to the cart never overwrite each other");
     // (1.17 D review 4: "message queue" is a +saas weak phrase too — the +saas hint survives; the bare 'queue' inside it is still no second hint)
-    ok(pair.tracks.includes("dist") && pair.weak.includes("dist") && mq.tracks.includes("dist") && !mq.signals.saas.includes("queue") && js(mq.signals.saas) === js(["message queue"]) &&
-      both.tracks.includes("dist") && both.tracks.includes("tdd") && both.signals.tdd.includes("exactly-once") && both.signals.dist.includes("exactly-once") &&
-      !kept.tracks.includes("dist") && kept.notes.some((n) => /\+dist kept off — 'kafka'/.test(n)) &&
-      although.tracks.includes("dist") && although.notes.some((n) => /\+dist is ON although 'distributed transaction' appeared negated/.test(n)) &&
-      saga.tracks.includes("dist") && saga.signals.dist.includes("compensating transaction") && lockOpt.signals.dist.includes("optimistic locking"),
-      "1.17 D4: two weak signals turn +dist on (weak-only); 'queue' inside 'message queue' is no second +saas hint (the phrase itself is one); 'exactly-once' serves +tdd and +dist; a negated signal keeps it off with a note or annotates it when a strong one wins (got " +
-      js([pair.signals.dist, mq.signals, both.signals.dist, kept.notes, although.notes]) + ")");
+    all("1.17 D4: two weak signals turn +dist on (weak-only); 'queue' inside 'message queue' is no second +saas hint (the phrase itself is one); 'exactly-once' serves +tdd and +dist; a negated signal keeps it off with a note or annotates it when a strong one wins (got " +
+      js([pair.signals.dist, mq.signals, both.signals.dist, kept.notes, although.notes]) + ")", [
+      () => pair.tracks.includes("dist"), () => pair.weak.includes("dist"), () => mq.tracks.includes("dist"),
+      () => !mq.signals.saas.includes("queue"), () => js(mq.signals.saas) === js(["message queue"]), () => both.tracks.includes("dist"),
+      () => both.tracks.includes("tdd"), () => both.signals.tdd.includes("exactly-once"), () => both.signals.dist.includes("exactly-once"),
+      () => !kept.tracks.includes("dist"), () => kept.notes.some((n) => /\+dist kept off — 'kafka'/.test(n)), () => although.tracks.includes("dist"),
+      () => although.notes.some((n) => /\+dist is ON although 'distributed transaction' appeared negated/.test(n)),
+      () => saga.tracks.includes("dist"), () => saga.signals.dist.includes("compensating transaction"),
+      () => lockOpt.signals.dist.includes("optimistic locking"),
+    ]);
 
     // --- D5: self-match sweep — every +dist keyword (EN / PT / ES) matches itself as a word; a strong one alone turns the track on
     const probe = { "public … evento": "publicar … evento", "public … mensagem": "publicou … mensagem", "public … mensaje": "publicó … mensaje", reintento: "reintentar",
@@ -379,14 +387,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       dropTodo(path.join(f.dir, "design.md"));
       const after = S.specDoctor(p, f.slug);
       const retry = S.approvePhase(p, f.slug, "design", "t");
-      ok(f.ok && f.label === "core +dist" && heads.length === 5 && design.includes(titles[lang]) && (design.match(/^> \*\*TODO\*\*/gm) || []).length === 5 &&
-        reqs.includes("#### [DIST]") && ["16", "17", "18", "19"].every((n) => reqs.includes("US-1.AC-" + n) && tasks.includes("US-1.AC-" + n)) &&
-        !own.length && e.issues.every((i) => i.severity !== "error") && states.length >= 4 && states.every(([, st]) => st === "placeholder") &&
-        chk(before, "dist-sections").status === "fail" && unfilledWord[lang].test(chk(before, "dist-sections").detail) && !chk(before, "sec-sections").status &&
-        !refused.ok && refused.failing.includes("dist-sections") && chk(after, "dist-sections").status === "pass" && /5/.test(chk(after, "dist-sections").detail) &&
-        !(retry.failing || []).includes("dist-sections"),
-        `1.17 D6: ${lang} +dist scaffold — 5 [DIST] sections with the TODO sentinel, [DIST] criteria US-1.AC-16..19 (no EARS issue but slots), every fresh artifact reads 'placeholder', dist-sections fails and the design approval is refused while TODO, passes once filled (got ` +
-        js([heads, own.map((i) => i.code), states.filter(([, st]) => st !== "placeholder"), chk(before, "dist-sections").detail, chk(after, "dist-sections").detail]) + ")");
+      all(`1.17 D6: ${lang} +dist scaffold — 5 [DIST] sections with the TODO sentinel, [DIST] criteria US-1.AC-16..19 (no EARS issue but slots), every fresh artifact reads 'placeholder', dist-sections fails and the design approval is refused while TODO, passes once filled (got ` +
+        js([heads, own.map((i) => i.code), states.filter(([, st]) => st !== "placeholder"), chk(before, "dist-sections").detail, chk(after, "dist-sections").detail]) + ")", [
+        () => f.ok, () => f.label === "core +dist", () => heads.length === 5, () => design.includes(titles[lang]),
+        () => (design.match(/^> \*\*TODO\*\*/gm) || []).length === 5, () => reqs.includes("#### [DIST]"),
+        () => ["16", "17", "18", "19"].every((n) => reqs.includes("US-1.AC-" + n) && tasks.includes("US-1.AC-" + n)), () => !own.length,
+        () => e.issues.every((i) => i.severity !== "error"), () => states.length >= 4, () => states.every(([, st]) => st === "placeholder"),
+        () => chk(before, "dist-sections").status === "fail", () => unfilledWord[lang].test(chk(before, "dist-sections").detail),
+        () => !chk(before, "sec-sections").status, () => !refused.ok, () => refused.failing.includes("dist-sections"),
+        () => chk(after, "dist-sections").status === "pass", () => /5/.test(chk(after, "dist-sections").detail),
+        () => !(retry.failing || []).includes("dist-sections"),
+      ]);
     }
 
     // --- D7: a filled +dist feature is ready — doctor passes and every gate approves without force (EN / PT / ES round trip)
@@ -467,13 +478,19 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const rm = S.removeTrack(at, plain.slug, "dist");
     const docRm = S.specDoctor(at, plain.slug), stRm = S.statusFeature(at, plain.slug);
     const reAdd = S.addTrack(at, plain.slug, "dist");
-    ok(add.ok && add.tracks === "core +dist" && add.added.includes("steering/distributed.md") && /## \[DIST\] Consistency Model/.test(pDesign) && /## Story US-1 — Data Consistency/.test(pTasks) &&
-      /_Requirements: \[the \+dist criterion this task proves\]_/.test(pTasks) && /## Active Tracks\ncore \+dist/.test(rd(plain.dir, "classification.md")) && chk(docAdd, "dist-sections").status === "fail" &&
-      tAdded === tBefore + 5 && rm.ok && rm.tracks === "core" && rm.inactive.includes("design.md ([DIST] sections)") && rm.inactive.includes("tasks.md (Story US-1 — Data Consistency)") &&
-      !chk(docRm, "dist-sections").status && stRm.distSections === null && stRm.tasks.total === tBefore && rd(plain.dir, "design.md").includes("[DIST] Consistency Model") &&
-      reAdd.ok && reAdd.tracks === "core +dist" && (rd(plain.dir, "tasks.md").match(/## Story US-1 — Data Consistency/g) || []).length === 1 && S.statusFeature(at, plain.slug).tasks.total === tBefore + 5,
-      "1.17 D10: add_track dist (sections, steering, 5 template tasks with placeholder ACs, Active Tracks, dist-sections fails); --remove is non-destructive (inactive, no check, distSections null, tasks not counted); re-adding duplicates nothing (got " +
-      js([add.added, rm.inactive, tBefore, tAdded]) + ")");
+    all("1.17 D10: add_track dist (sections, steering, 5 template tasks with placeholder ACs, Active Tracks, dist-sections fails); --remove is non-destructive (inactive, no check, distSections null, tasks not counted); re-adding duplicates nothing (got " +
+      js([add.added, rm.inactive, tBefore, tAdded]) + ")", [
+      () => add.ok, () => add.tracks === "core +dist", () => add.added.includes("steering/distributed.md"),
+      () => /## \[DIST\] Consistency Model/.test(pDesign), () => /## Story US-1 — Data Consistency/.test(pTasks),
+      () => /_Requirements: \[the \+dist criterion this task proves\]_/.test(pTasks),
+      () => /## Active Tracks\ncore \+dist/.test(rd(plain.dir, "classification.md")), () => chk(docAdd, "dist-sections").status === "fail",
+      () => tAdded === tBefore + 5, () => rm.ok, () => rm.tracks === "core", () => rm.inactive.includes("design.md ([DIST] sections)"),
+      () => rm.inactive.includes("tasks.md (Story US-1 — Data Consistency)"), () => !chk(docRm, "dist-sections").status,
+      () => stRm.distSections === null, () => stRm.tasks.total === tBefore, () => rd(plain.dir, "design.md").includes("[DIST] Consistency Model"),
+      () => reAdd.ok, () => reAdd.tracks === "core +dist",
+      () => (rd(plain.dir, "tasks.md").match(/## Story US-1 — Data Consistency/g) || []).length === 1,
+      () => S.statusFeature(at, plain.slug).tasks.total === tBefore + 5,
+    ]);
 
     // --- D11: markers are case-sensitive; the loose synonyms only count in the [DIST] context; [DIST] is no placeholder
     const cs = d("case");
@@ -719,9 +736,11 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     // --- 1.17 D review 10: the classifier stays linear on repeated keywords (100 KB of "queue …" took 6.9 s — each hit compared with every
     // hit); a track pack's keyword is a literal word (VERB_STEMS / irregular forms are the built-in signals' only: a pack keyword "public")
     const big = "queue ".repeat(Math.ceil(102400 / 6)); // (6.9 s before this review, 1.8 s in 1.16)
-    const t0 = Date.now();
-    const bigR = S.classify(big);
-    const bigMs = Date.now() - t0;
+    const { bigMs, bigR } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      const bigR = S.classify(big);
+      return { bigMs: Date.now() - t0, bigR };
+    }, (s) => s.bigMs < 4000);
     const vp = d("pack-public");
     S.initProject(vp, ["core"], "en");
     fs.mkdirSync(path.join(vp, ".specs", "tracks", "opendata"), { recursive: true });
@@ -873,13 +892,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
         const after = S.specDoctor(p, f.slug);
         const retry = S.approvePhase(p, f.slug, "design", "t");
         const id = n0 + "-sections";
-        ok(f.ok && f.label === "core +" + n0 && heads.length === X.sections.length && design.includes(X.title[lang]) && (design.match(/^> \*\*TODO\*\*/gm) || []).length === X.sections.length &&
-          reqs.includes("#### " + X.marker) && X.ids.every((n) => reqs.includes("US-1.AC-" + n) && tasks.includes("US-1.AC-" + n)) &&
-          !own.length && e.issues.every((i) => i.severity !== "error") && states.length >= 4 && states.every(([, st]) => st === "placeholder") &&
-          chk(before, id).status === "fail" && unfilledWord[lang].test(chk(before, id).detail) && !chk(before, "dist-sections").status &&
-          !refused.ok && refused.failing.includes(id) && chk(after, id).status === "pass" && new RegExp(String(X.sections.length)).test(chk(after, id).detail) && !(retry.failing || []).includes(id),
-          `1.19 T2: ${lang} +${n0} scaffold — ${X.sections.length} ${X.marker} sections with the TODO sentinel, criteria US-1.AC-${X.ids[0]}..${X.ids[X.ids.length - 1]} (no EARS issue but slots), every fresh artifact reads 'placeholder', ${id} fails and the design approval is refused while TODO, passes once filled (got ` +
-          js([heads, own.map((i) => i.code), states.filter(([, st]) => st !== "placeholder"), chk(before, id).detail, chk(after, id).detail]) + ")");
+        all(`1.19 T2: ${lang} +${n0} scaffold — ${X.sections.length} ${X.marker} sections with the TODO sentinel, criteria US-1.AC-${X.ids[0]}..${X.ids[X.ids.length - 1]} (no EARS issue but slots), every fresh artifact reads 'placeholder', ${id} fails and the design approval is refused while TODO, passes once filled (got ` +
+          js([heads, own.map((i) => i.code), states.filter(([, st]) => st !== "placeholder"), chk(before, id).detail, chk(after, id).detail]) + ")", [
+          () => f.ok, () => f.label === "core +" + n0, () => heads.length === X.sections.length, () => design.includes(X.title[lang]),
+          () => (design.match(/^> \*\*TODO\*\*/gm) || []).length === X.sections.length, () => reqs.includes("#### " + X.marker),
+          () => X.ids.every((n) => reqs.includes("US-1.AC-" + n) && tasks.includes("US-1.AC-" + n)), () => !own.length,
+          () => e.issues.every((i) => i.severity !== "error"), () => states.length >= 4, () => states.every(([, st]) => st === "placeholder"),
+          () => chk(before, id).status === "fail", () => unfilledWord[lang].test(chk(before, id).detail), () => !chk(before, "dist-sections").status,
+          () => !refused.ok, () => refused.failing.includes(id), () => chk(after, id).status === "pass",
+          () => new RegExp(String(X.sections.length)).test(chk(after, id).detail), () => !(retry.failing || []).includes(id),
+        ]);
       }
 
       // --- a filled feature is ready: doctor has no fail and every gate approves without force (EN / PT / ES round trip)
@@ -914,13 +936,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       const docRm = S.specDoctor(at, plain.slug), stRm = S.statusFeature(at, plain.slug);
       const reAdd = S.addTrack(at, plain.slug, n0);
       const added = (add.added || []).join("|");
-      ok(add.ok && add.tracks === "core +" + n0 && added.includes("steering/" + X.steering) && rd(plain.dir, "design.md").includes("## " + X.marker + " " + X.sections[0]) && pTasks.includes("## " + X.taskHead) &&
-        pTasks.includes("_Requirements: [the +" + n0 + " criterion this task proves]_") && rd(plain.dir, "classification.md").includes("## Active Tracks\ncore +" + n0) && chk(docAdd, n0 + "-sections").status === "fail" &&
-        tAdded === tBefore + 5 && rm.ok && rm.tracks === "core" && rm.inactive.includes("design.md (" + X.marker + " sections)") && rm.inactive.includes("tasks.md (" + X.taskHead + ")") &&
-        !chk(docRm, n0 + "-sections").status && stRm[X.statusKey] === null && stRm.tasks.total === tBefore && rd(plain.dir, "design.md").includes(X.marker + " " + X.sections[0]) &&
-        reAdd.ok && reAdd.tracks === "core +" + n0 && rd(plain.dir, "tasks.md").split("## " + X.taskHead).length === 2 && S.statusFeature(at, plain.slug).tasks.total === tBefore + 5,
-        `1.19 T4: add_track ${n0} (sections, steering/${X.steering}, 5 template tasks with placeholder ACs, Active Tracks, ${n0}-sections fails); --remove is non-destructive (inactive, no check, ${X.statusKey} null, tasks not counted); re-adding duplicates nothing (got ` +
-        js([add.added, rm.inactive, tBefore, tAdded]) + ")");
+      all(`1.19 T4: add_track ${n0} (sections, steering/${X.steering}, 5 template tasks with placeholder ACs, Active Tracks, ${n0}-sections fails); --remove is non-destructive (inactive, no check, ${X.statusKey} null, tasks not counted); re-adding duplicates nothing (got ` +
+        js([add.added, rm.inactive, tBefore, tAdded]) + ")", [
+        () => add.ok, () => add.tracks === "core +" + n0, () => added.includes("steering/" + X.steering),
+        () => rd(plain.dir, "design.md").includes("## " + X.marker + " " + X.sections[0]), () => pTasks.includes("## " + X.taskHead),
+        () => pTasks.includes("_Requirements: [the +" + n0 + " criterion this task proves]_"),
+        () => rd(plain.dir, "classification.md").includes("## Active Tracks\ncore +" + n0), () => chk(docAdd, n0 + "-sections").status === "fail",
+        () => tAdded === tBefore + 5, () => rm.ok, () => rm.tracks === "core", () => rm.inactive.includes("design.md (" + X.marker + " sections)"),
+        () => rm.inactive.includes("tasks.md (" + X.taskHead + ")"), () => !chk(docRm, n0 + "-sections").status, () => stRm[X.statusKey] === null,
+        () => stRm.tasks.total === tBefore, () => rd(plain.dir, "design.md").includes(X.marker + " " + X.sections[0]), () => reAdd.ok,
+        () => reAdd.tracks === "core +" + n0, () => rd(plain.dir, "tasks.md").split("## " + X.taskHead).length === 2,
+        () => S.statusFeature(at, plain.slug).tasks.total === tBefore + 5,
+      ]);
 
       // --- markers are case-sensitive; the loose (ordinary) names count only in the track's context; the marker is no placeholder
       const cs = d(n0 + "-case");
@@ -964,14 +991,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       const lpUpF = (nm) => lpUp.features.find((x) => x.name === nm) || {};
       const adopt = S.addTrack(lp, "f-" + n0, n0);
       const drop = S.addTrack(lp, "f-" + X.legacy, X.legacy, { remove: true });
-      ok(lpSt.tracks === "core" && js(lpSt.missingPacks) === js([n0]) && !chk(lpDoc, n0 + "-sections").status && chk(lpDoc, "track-pack-missing").status === "warn" &&
-        new RegExp("\\+" + n0 + " \\(a track pack from before 1\\.19 — '" + n0 + "' is a reserved name now, and the built-in \\+" + n0 + " track is NOT applied").test(chk(lpDoc, "track-pack-missing").detail) &&
-        new RegExp("'" + X.legacy + "' is a reserved name now: rename").test(chk(lpDocA, "track-pack-missing").detail) && lpUpF("f-" + n0).attention.includes("track-pack-reserved") &&
-        S.upgradeLines(lpUp).some((l) => /Rename its track pack\(s\) from before 1\.19 — /.test(l)) &&
-        adopt.ok && js(adopt.adopted) === js([n0]) && adopt.tracks === "core +" + n0 && rd(lpMain.dir, "design.md").includes("## " + X.marker + " " + X.sections[0]) &&
-        chk(S.specDoctor(lp, "f-" + n0), n0 + "-sections").status === "fail" && drop.ok && js(drop.removedTracks) === js([X.legacy]) && js(JSON.parse(rd(lpAlias.dir, ".state.json")).tracks) === js(["core"]),
-        `1.19 T6: a pre-1.19 pack named '${n0}' / '${X.legacy}' is the feature's missing pack (tracks read core, the built-in +${n0} is NOT applied, doctor and spec_upgrade say 'from before 1.19'); add-track adopts the built-in track, --remove drops the alias pack (got ` +
-        js([lpSt.tracks, lpSt.missingPacks, chk(lpDoc, "track-pack-missing").detail, chk(lpDocA, "track-pack-missing").detail, adopt.adopted, drop.error]) + ")");
+      all(`1.19 T6: a pre-1.19 pack named '${n0}' / '${X.legacy}' is the feature's missing pack (tracks read core, the built-in +${n0} is NOT applied, doctor and spec_upgrade say 'from before 1.19'); add-track adopts the built-in track, --remove drops the alias pack (got ` +
+        js([lpSt.tracks, lpSt.missingPacks, chk(lpDoc, "track-pack-missing").detail, chk(lpDocA, "track-pack-missing").detail, adopt.adopted, drop.error]) + ")", [
+        () => lpSt.tracks === "core", () => js(lpSt.missingPacks) === js([n0]), () => !chk(lpDoc, n0 + "-sections").status,
+        () => chk(lpDoc, "track-pack-missing").status === "warn",
+        () => new RegExp("\\+" + n0 + " \\(a track pack from before 1\\.19 — '" + n0 + "' is a reserved name now, and the built-in \\+" + n0 + " track is NOT applied").test(chk(lpDoc, "track-pack-missing").detail),
+        () => new RegExp("'" + X.legacy + "' is a reserved name now: rename").test(chk(lpDocA, "track-pack-missing").detail),
+        () => lpUpF("f-" + n0).attention.includes("track-pack-reserved"),
+        () => S.upgradeLines(lpUp).some((l) => /Rename its track pack\(s\) from before 1\.19 — /.test(l)), () => adopt.ok, () => js(adopt.adopted) === js([n0]),
+        () => adopt.tracks === "core +" + n0, () => rd(lpMain.dir, "design.md").includes("## " + X.marker + " " + X.sections[0]),
+        () => chk(S.specDoctor(lp, "f-" + n0), n0 + "-sections").status === "fail", () => drop.ok, () => js(drop.removedTracks) === js([X.legacy]),
+        () => js(JSON.parse(rd(lpAlias.dir, ".state.json")).tracks) === js(["core"]),
+      ]);
 
       // --- views: the test rows, status, spec_finish checks, the brief's and the matrix's track sections, the Gherkin tag, spec_import, steering
       const vw = d(n0 + "-views");
@@ -985,13 +1016,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       const vBrief = S.taskBrief(vw, vf.slug, vTask.number);
       const vRow = ((S.traceMatrix(vw, vf.slug).rows) || []).find((r) => r.id === X.matrixAc) || {};
       const vGk = S.exportSpecs(vw, { name: vf.slug, format: "gherkin" });
-      ok(X.plan.every((re) => re.test(vPlan)) && !vTr.uncoveredByTasks.length && !vTr.uncoveredByTests.length && !vTr.phantomAcsInTasks.length && !(vTr.testsNotMappedToTasks || []).length &&
-        Array.isArray(vSt[X.statusKey]) && vSt[X.statusKey].length === X.sections.length && vSt[X.statusKey].every((s) => s.filled) && vFin.checks.some((c) => X.finish.test(c)) &&
-        vBrief.ok && vBrief.designSections.includes(X.briefSection) && (vRow.design || []).includes(X.matrixSection) &&
-        new RegExp("(^|\\s)@" + X.token + "(\\s|$)", "m").test(vGk.content || "") && initV.created.includes(X.steering) && I.steeringKnownFiles().includes(X.steering) &&
-        ["en", "pt", "es", "pt-BR"].every((l) => X.steeringHead[l].test(I.steeringStub(X.steering, l) || "")) && (chk(S.specDoctor(vw, vf.slug), "steering").detail || "").includes(X.steering),
-        `1.19 T7: +${n0} views — its test rows are planned and traced, spec_status ${X.statusKey}, spec_finish's +${n0} checks, the brief and the matrix link a ${X.marker} criterion to its sections, Gherkin @${X.token}, steering/${X.steering} in EN / PT / ES / pt-BR (got ` +
-        js([vPlan.split("\n").filter((l) => X.ids.some((i) => l.includes("US-1.AC-" + i))), vSt[X.statusKey], vBrief.designSections, vRow.design, (vGk.content || "").split("\n")[0]]) + ")");
+      all(`1.19 T7: +${n0} views — its test rows are planned and traced, spec_status ${X.statusKey}, spec_finish's +${n0} checks, the brief and the matrix link a ${X.marker} criterion to its sections, Gherkin @${X.token}, steering/${X.steering} in EN / PT / ES / pt-BR (got ` +
+        js([vPlan.split("\n").filter((l) => X.ids.some((i) => l.includes("US-1.AC-" + i))), vSt[X.statusKey], vBrief.designSections, vRow.design, (vGk.content || "").split("\n")[0]]) + ")", [
+        () => X.plan.every((re) => re.test(vPlan)), () => !vTr.uncoveredByTasks.length, () => !vTr.uncoveredByTests.length,
+        () => !vTr.phantomAcsInTasks.length, () => !(vTr.testsNotMappedToTasks || []).length, () => Array.isArray(vSt[X.statusKey]),
+        () => vSt[X.statusKey].length === X.sections.length, () => vSt[X.statusKey].every((s) => s.filled),
+        () => vFin.checks.some((c) => X.finish.test(c)), () => vBrief.ok, () => vBrief.designSections.includes(X.briefSection),
+        () => (vRow.design || []).includes(X.matrixSection), () => new RegExp("(^|\\s)@" + X.token + "(\\s|$)", "m").test(vGk.content || ""),
+        () => initV.created.includes(X.steering), () => I.steeringKnownFiles().includes(X.steering),
+        () => ["en", "pt", "es", "pt-BR"].every((l) => X.steeringHead[l].test(I.steeringStub(X.steering, l) || "")),
+        () => (chk(S.specDoctor(vw, vf.slug), "steering").detail || "").includes(X.steering),
+      ]);
       const im = d(n0 + "-import");
       fs.mkdirSync(path.join(im, ".kiro", "specs", "orders"), { recursive: true });
       fs.writeFileSync(path.join(im, ".kiro", "specs", "orders", "requirements.md"), "### Requirement 1\n\n**User Story:** As a partner, I want the orders.\n\n#### Acceptance Criteria\n\n1. " + X.importAc + "\n");
@@ -1104,13 +1139,17 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       "1.19 T8: +api — an API key page, a call to the Stripe API and an SDK bump are no API contract ('possible' at most); 'no breaking changes' states the concern (a hazard, never negated); generic words alone are named as such (got " +
       js([keyPage.signals.api, stripe.possible, noBreak.negated.api, sdk.possible]) + ")");
     const btn = cls("Add a button to export orders as CSV"), login = cls("Log in form"), sales = cls("Metrics dashboard for sales");
-    ok(keyPage.tracks.includes("ui") && keyPage.signals.ui.includes("management page") && !btn.tracks.includes("ui") && btn.possible.some((p) => p.track === "ui") &&
-      !login.tracks.includes("ui") && !(login.signals.obs || []).length && !sales.tracks.includes("ui") &&
-      cls("The screening of job applicants").signals.ui.length === 0 && cls("A team formed in 2020").signals.ui.length === 0 &&
-      !cls("Translate the UI into Spanish").tracks.includes("ui") && cls("Build the UI for invoices in React").tracks.includes("ui") && !cls("no UI change: a backend-only fix").tracks.includes("ui") && S.signalConcept("ui", "Vue") === "framework" &&
-      cls("A modal with a dropdown").notes.some((n) => /on from weak signals only/i.test(n)) && btn.notes.some((n) => /none names a UI concern of its own/.test(n) || /weak signal 'button'|app-level words \('button'\)/.test(n)),
-      "1.19 T8: +ui — an API key management page is UI (not API); a button, the log in form (no +obs from 'log') and a sales dashboard are 'possible' at most; 'screening' / 'formed' are no screen / form; 'UI' (capitals) is an anchor — 'translate the UI' alone stays possible, UI + React turns it on, 'no UI' keeps it off (got " +
-      js([keyPage.signals, btn.possible, login.signals.ui, sales.possible]) + ")");
+    all("1.19 T8: +ui — an API key management page is UI (not API); a button, the log in form (no +obs from 'log') and a sales dashboard are 'possible' at most; 'screening' / 'formed' are no screen / form; 'UI' (capitals) is an anchor — 'translate the UI' alone stays possible, UI + React turns it on, 'no UI' keeps it off (got " +
+      js([keyPage.signals, btn.possible, login.signals.ui, sales.possible]) + ")", [
+      () => keyPage.tracks.includes("ui"), () => keyPage.signals.ui.includes("management page"), () => !btn.tracks.includes("ui"),
+      () => btn.possible.some((p) => p.track === "ui"), () => !login.tracks.includes("ui"), () => !(login.signals.obs || []).length,
+      () => !sales.tracks.includes("ui"), () => cls("The screening of job applicants").signals.ui.length === 0,
+      () => cls("A team formed in 2020").signals.ui.length === 0, () => !cls("Translate the UI into Spanish").tracks.includes("ui"),
+      () => cls("Build the UI for invoices in React").tracks.includes("ui"), () => !cls("no UI change: a backend-only fix").tracks.includes("ui"),
+      () => S.signalConcept("ui", "Vue") === "framework",
+      () => cls("A modal with a dropdown").notes.some((n) => /on from weak signals only/i.test(n)),
+      () => btn.notes.some((n) => /none names a UI concern of its own/.test(n) || /weak signal 'button'|app-level words \('button'\)/.test(n)),
+    ]);
     const grafana = cls("A Grafana dashboard for the checkout"), obsSaas = cls("Add observability to the billing service"), noDown = cls("Deploy the billing service without downtime and roll back on errors");
     ok(!sales.tracks.includes("obs") && sales.possible.some((p) => p.track === "obs") && grafana.tracks.includes("obs") && !(grafana.signals.ui || []).includes("dashboard") &&
       obsSaas.tracks.includes("obs") && obsSaas.tracks.includes("saas") && noDown.tracks.includes("obs") && !noDown.negated.obs.length &&
@@ -1121,20 +1160,23 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
 
     // --- 1.19 T9: every built-in track together — criteria in track order with unique IDs (US-1.AC-1..31), one T-ID per template AC,
     // every template AC planned and tasked, one <track>-sections check per marker track
-    const all = d("all-tracks");
-    const every = S.createFeature(all, "Everything", S.OPTIONAL_TRACKS.slice(), "", undefined, "en");
+    const allDir = d("all-tracks");
+    const every = S.createFeature(allDir, "Everything", S.OPTIONAL_TRACKS.slice(), "", undefined, "en");
     const aReq = rd(every.dir, "requirements.md"), aPlan = rd(every.dir, "test-plan.md"), aTasks = S.parseTasks(rd(every.dir, "tasks.md"));
     const acIds = [...aReq.matchAll(/\*\*(US-\d+\.AC-\d+)\*\*/g)].map((m) => m[1]);
     const tIds = [...aPlan.matchAll(/^\| (T-\d+) \|/gm)].map((m) => m[1]);
-    const aTr = S.traceCheck(all, every.slug), aDoc = S.specDoctor(all, every.slug);
+    const aTr = S.traceCheck(allDir, every.slug), aDoc = S.specDoctor(allDir, every.slug);
     // (1.21 F4: + [DATA], US-1.AC-32..35 — eleven tracks, 36 criteria and T-IDs, nine <track>-sections checks)
     const order = ["[SaaS]", "[AI]", "[SEC]", "[PRIVACY]", "[DIST]", "[API]", "[UI]", "[OBS]", "[DATA]"].map((m) => aReq.indexOf("#### " + m));
-    ok(every.ok && every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs +data" && acIds.length === 36 && new Set(acIds).size === 36 && acIds.includes("US-1.AC-35") &&
-      tIds.length === 36 && new Set(tIds).size === 36 && new Set(aTasks.map((t) => t.number)).size === aTasks.length && order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])) &&
-      !aTr.uncoveredByTasks.length && !aTr.uncoveredByTests.length && !aTr.phantomAcsInTasks.length && !aTr.phantomTestsInTasks.length && !(aTr.testsNotMappedToTasks || []).length &&
-      ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
-      "1.19 T9: every built-in track — 36 unique criteria (the [API] / [UI] / [OBS] / [DATA] blocks after [DIST], US-1.AC-20..35), 36 unique T-IDs, unique task numbers, every template AC planned and tasked, nine <track>-sections checks (got " +
-      js([every.label, acIds.length, tIds.length, order, aTr.uncoveredByTasks, aTr.uncoveredByTests]) + ")");
+    all("1.19 T9: every built-in track — 36 unique criteria (the [API] / [UI] / [OBS] / [DATA] blocks after [DIST], US-1.AC-20..35), 36 unique T-IDs, unique task numbers, every template AC planned and tasked, nine <track>-sections checks (got " +
+      js([every.label, acIds.length, tIds.length, order, aTr.uncoveredByTasks, aTr.uncoveredByTests]) + ")", [
+      () => every.ok, () => every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs +data", () => acIds.length === 36,
+      () => new Set(acIds).size === 36, () => acIds.includes("US-1.AC-35"), () => tIds.length === 36, () => new Set(tIds).size === 36,
+      () => new Set(aTasks.map((t) => t.number)).size === aTasks.length, () => order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])),
+      () => !aTr.uncoveredByTasks.length, () => !aTr.uncoveredByTests.length, () => !aTr.phantomAcsInTasks.length,
+      () => !aTr.phantomTestsInTasks.length, () => !(aTr.testsNotMappedToTasks || []).length,
+      () => ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
+    ]);
 
     // --- 1.19 T10: the placeholder corpus stays bounded as tracks are added (every set of at most two optional tracks + all of them):
     // its texts are counted and its render time is compared with one all-tracks scaffold (relative — no absolute milliseconds)
@@ -1251,14 +1293,20 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const mWebSt = JSON.parse(rd(mWeb.dir, ".state.json")), mWebDesign = rd(mWeb.dir, "design.md");
     const mUiDoc = chk(S.specDoctor(mp, "f-webui"), "ui-sections");
     const mDrop = S.addTrack(mp, "f-contracts", "contracts", { remove: true });
-    ok(/\+webui \(a track pack from before 1\.19 — its marker \[UI\] is the built-in \+ui track's now/.test(mDoc.detail || "") && /node "[^"]*dev-spec\.js" add-track f-webui ui/.test(mDoc.detail || "") &&
-      /o seu marcador \[OBS\] é agora o do track \+obs incluído/.test(mDocPt.detail || "") && js(mUpF.reservedMarkers) === js([{ name: "webui", marker: "[UI]", track: "ui" }]) &&
-      (mUpF.attention || []).includes("track-pack-reserved") && S.upgradeLines(mUp).some((l) => /Change the marker of its track pack\(s\) from before 1\.19 — \+webui \[UI\]/.test(l)) &&
-      mAdopt.ok && js(mAdopt.adopted) === js(["ui"]) && js(mAdopt.adoptedPacks) === js(["webui"]) && mWebDesign.includes("## [UI] Design System Usage") && mWebDesign.includes("## [UI] Thing webui") &&
-      !mWebSt.tracks.includes("webui") && !(mWebSt.packMarkers || {}).webui && mUiDoc.status === "fail" && !/:missing/.test(mUiDoc.detail) && !chk(S.specDoctor(mp, "f-webui"), "track-pack-missing").status &&
-      mDrop.ok && js(mDrop.removedTracks) === js(["contracts"]) && js(JSON.parse(rd(mCon.dir, ".state.json")).tracks) === js(["core"]) && mOps.ok,
-      "1.19 T review 4: a pre-1.19 pack of another name with a now-reserved marker ('webui' [UI]) — doctor says why (EN / PT) and spec_upgrade lists it (reservedMarkers, track-pack-reserved); add-track ui adopts it (the five [UI] sections appended beside the pack's heading, adopted / adoptedPacks, the pack's record gone, ui-sections 'unfilled' not 'missing'); add-track contracts --remove drops the pack (got " +
-      js([mDoc.detail, mDocPt.detail, mUpF.reservedMarkers, mAdopt.adopted, mAdopt.adoptedPacks, mUiDoc.detail, mDrop.error || mDrop.removedTracks]) + ")");
+    all("1.19 T review 4: a pre-1.19 pack of another name with a now-reserved marker ('webui' [UI]) — doctor says why (EN / PT) and spec_upgrade lists it (reservedMarkers, track-pack-reserved); add-track ui adopts it (the five [UI] sections appended beside the pack's heading, adopted / adoptedPacks, the pack's record gone, ui-sections 'unfilled' not 'missing'); add-track contracts --remove drops the pack (got " +
+      js([mDoc.detail, mDocPt.detail, mUpF.reservedMarkers, mAdopt.adopted, mAdopt.adoptedPacks, mUiDoc.detail, mDrop.error || mDrop.removedTracks]) + ")", [
+      () => /\+webui \(a track pack from before 1\.19 — its marker \[UI\] is the built-in \+ui track's now/.test(mDoc.detail || ""),
+      () => /node "[^"]*dev-spec\.js" add-track f-webui ui/.test(mDoc.detail || ""),
+      () => /o seu marcador \[OBS\] é agora o do track \+obs incluído/.test(mDocPt.detail || ""),
+      () => js(mUpF.reservedMarkers) === js([{ name: "webui", marker: "[UI]", track: "ui" }]),
+      () => (mUpF.attention || []).includes("track-pack-reserved"),
+      () => S.upgradeLines(mUp).some((l) => /Change the marker of its track pack\(s\) from before 1\.19 — \+webui \[UI\]/.test(l)), () => mAdopt.ok,
+      () => js(mAdopt.adopted) === js(["ui"]), () => js(mAdopt.adoptedPacks) === js(["webui"]),
+      () => mWebDesign.includes("## [UI] Design System Usage"), () => mWebDesign.includes("## [UI] Thing webui"),
+      () => !mWebSt.tracks.includes("webui"), () => !(mWebSt.packMarkers || {}).webui, () => mUiDoc.status === "fail",
+      () => !/:missing/.test(mUiDoc.detail), () => !chk(S.specDoctor(mp, "f-webui"), "track-pack-missing").status, () => mDrop.ok,
+      () => js(mDrop.removedTracks) === js(["contracts"]), () => js(JSON.parse(rd(mCon.dir, ".state.json")).tracks) === js(["core"]), () => mOps.ok,
+    ]);
 
     // --- 1.19 T review 5: the burn-rate guidance agrees with observability-patterns.md (the SRE workbook): 14.4× / 1 h and 6× / 6 h page,
     // 1× / 3 days opens a ticket — in the observability.md stub (EN / PT / ES / pt-BR) and in references/steering-templates.md

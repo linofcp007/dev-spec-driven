@@ -35,7 +35,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   file never timed starts first). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
   slowest: …`, then the total: the LAST line is always `N passed, M failed` (scripts/test-docker.js reads it). A process
   that dies or never prints its total fails the suite, a file that throws is one FAIL (its chain goes on), a server that
-  stops answering (15 s) fails the run — never a drain to exit 0. Each file gets its own `ok`: one it calls after its `run`
+  stops answering (15 s) fails the run — never a drain to exit 0. On a loaded machine (1.26): a chain whose process the OS
+  refuses to start (spawn() throwing `UNKNOWN` / `EAGAIN` under memory or handle pressure — it used to crash the whole run, every
+  other chain's output lost) is tried once more a second later, then fails; a chain still running after 30 min
+  (`DEV_SPEC_TEST_CHAIN_TIMEOUT_S`) is killed with its process tree and fails — the suite never hangs on a stuck child. Each file gets its own `ok`: one it calls after its `run`
   resolved (a forgotten await) is a FAIL, "late assertion from <file>", whenever it fires — the runner lets pending timers
   run (≤ 3 s) before the total, and one fired after it prints the total again; the total is read from stdout alone (a Node
   warning on stderr after it doesn't void the count). cli/tests/16-conventions-runner.js tests the runner on a fake suite.
@@ -43,6 +46,20 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality`
   (15-quality re-checks the behavioural fixtures 17-docs-evals builds under tmp). The handshake's assertions are counted
   by the file exporting `handshake: true` (02-mcp-server); every other process runs the handshake muted.
+- **Hermetic chains (1.26).** A chain never sees the shell the suite was started from: the runner spawns it with a fresh,
+  empty temp folder as its working folder (`<os tmpdir>/<spec-test-|cli-test->XXXXXX`, removed once it closed) and an
+  environment without the variables that steer the plugin — `SPEC_PROJECT_DIR`, `CLAUDE_PROJECT_DIR`, `SPEC_MCP_*`,
+  `CLAUDE_PLUGIN_*`, `COLUMNS` and every `DEV_SPEC_*` but the suites' own `DEV_SPEC_TEST_*` (`DEV_SPEC_TEST_CHAIN`,
+  `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`) — scripts/test-runner.js `isolate()` / `hermeticEnv()`. The
+  child runs `isolate()` again before it loads a file, and both harnesses first thing (a no-op in the folder the runner gave
+  it), so a chain started by hand (`DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js`) is isolated too. Why: the main checkout
+  keeps a git-ignored dogfood `.specs/` (meta.lang pt) at the repo root, and a test that started the CLI or a hook without
+  naming a project picked it up — green in a worktree, red after the merge; a `DEV_SPEC_DEFAULT_LANG` or `SPEC_PROJECT_DIR`
+  exported in the maintainer's shell did the same. A test that needs one of these variables sets it for the process it
+  starts; a test never reads `process.cwd()` for a path (use `tmp`, `root`, `__dirname`). cli/tests/16-conventions-runner.js
+  proves it on the fake suite (a decoy `.specs/` and the variables exported: none reaches a chain). The proof run: put a decoy
+  `.specs/` (`roadmap.json` `{"features":{},"meta":{"lang":"pt"}}` and a feature folder) at the repo root, export
+  `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` at it and `DEV_SPEC_DEFAULT_LANG=es`, and run both suites — still green.
 - **Running a part.** `--only <x>[,…]` (repeatable) takes a file by its full name (`17-docs` — that file alone; the CLI's
   `06-gates`, no file of that exact name, means `06-gates-*`), an area by its number (`09`) or its name (`gates`; `tracks`
   → `04-tracks` and `04-tracks-builtin`), and pulls in — and names — the files they need: `node mcp/test.js --only
@@ -54,24 +71,48 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   area or a file past ~1,500 lines: `NN-<area>-<topic>.js` whose first comment line says what it holds, exporting
   `run` (async in the MCP suite) — the runner picks it up. Make your projects under `tmp` (`path.join(tmp, "proj-<name>")`, a name no other file uses); the MCP
   server's default project (`tmp` itself) is 01-core's. A test that reads what another file built declares it in `deps`
-  — never rely on file order. Timing-bound assertions share the machine with the other processes: bound them relative to
+  — never rely on file order. **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
+  `eq(actual, expected, label)` (scripts/test-runner.js `assertHelpers`, built on the file's own `ok` — one call is ONE
+  assertion, so the totals stay comparable, and a late one is a late assertion). **Prefer `all()` over `ok(a && b && …)` for
+  more than ~4 conditions**: `ok()` with 15 conditions said only that one of them was false. `all(label, [() => a.ok, () =>
+  /x/.test(a.text), …])` names each false condition on its own `false: <the thunk's source>` line below the FAIL (an object
+  `{ name: cond, … }` names them by its keys); every condition is evaluated (no short circuit), a thunk runs lazily in order and
+  a throw is a false condition with its message — so `r && r.ok` becomes `() => r.ok` and never aborts the file — and a promise
+  is false (await it first). A prose check over many texts reads best as a table: `[[where, text, pattern], …]` mapped into
+  `all()`'s object (mcp/tests/15-quality.js, the 1.22 simplification-pass prose: 65 conditions, each FAIL names the file and the
+  sentence). `eq()` is `js(a) === js(b)` (key order counts) with the first difference printed: its path (`$.features[2].name`),
+  what was found, what was expected. The 1.26 conversion turned the 201 `ok()`s of 15 or more conditions (3,814 conditions, 42
+  files) into `all()` — every one but the five of 02-mcp-server.js (none in 17-docs*.js). Timing-bound assertions share the machine with the other processes: bound them relative to
   a baseline measured in the same test (as the 1.17 H checks do), not with a figure tuned on an idle machine — keep the old
   figure as a floor (`Math.max(floor, k × baseline)`: an idle run is as strict as before) and measure once more on a
-  timing-only miss (the statusline and flat-import checks since the 1.20 review).
+  timing-only miss (the statusline and flat-import checks since the 1.20 review). Since 1.26 that retry is one call — every
+  file receives `remeasure(measure, holds)`: `measure()` returns a sample (the times AND whatever the check reads — the baseline
+  too, when the bound is relative), `holds(sample)` says whether the time bound holds; on a miss it measures again and returns
+  the passing retry or the last miss (`sample.tries`). A load spike fails one sample, a real regression (a linear scan gone
+  quadratic, a retry loop come back) fails both. Prefer counting to timing where the regression has a count: "refused at once"
+  is ONE rename attempt (16-conventions-review7-core.js — `took < 1000` missed at 1,333 ms under load), the wall time a backstop.
+  1.26 put it on: the read-only refusal, the `__complete` medians (cli/tests/16-conventions-completion.js), the 16 KB / 64 KB
+  ratios and the 1 MB "at once" bound of the run matcher (09-evidence.js, 09-evidence-matcher.js), the cross-call cache's
+  cold / warm ratio (15-quality.js), the nested lock's wait (16-conventions.js) and the in-process "bounded time" checks of
+  18-reviews.js (S2, S4, S5/S6, R10), 04-tracks.js, 04-tracks-builtin.js, 03-languages.js, 05-markdown-trace.js, 08-tasks.js,
+  09-evidence.js, 10-guards.js, 10-guards-review.js, 13-imports.js and 15-quality.js (bounds unchanged); and on one non-timing
+  miss seen only under load — 16-conventions.js asks git `check-ignore` once more when it answers nothing.
 - **The source guards follow the layout:** the U+FEFF guard reads mcp/test.js, scripts/test-runner.js and every file of
   mcp/tests/. The engine guards (U+FEFF, backslash-stripped regex literals) also read scripts/build.js — a bundle's
   registry comes from it — and `libSources()` leaves a user-built `mcp/lib/spec.bundle.js` out (the sources verbatim: it
   would only report every finding twice).
 - **The corpus and the bundle (1.20).** Run `npm run build` after changing a file of `CORPUS_SOURCES` (`mcp/lib/i18n.js`,
-  `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` / `tracks.js`) or the version, and BEFORE
-  the suites: mcp/tests/16-conventions-build.js ("1.20 build") fails while the committed `corpus.generated.json` differs from a
+  `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` / `tracks.js`) — never for a version bump
+  alone (1.26: the generated files carry no version; `npm run check` says whether they are current) — and BEFORE the suites: mcp/tests/16-conventions-build.js ("1.20 build") fails while the committed `corpus.generated.json` differs from a
   fresh build (architecture.md → The build). The bundle is never committed: its tests BUILD one into tmp (`writeBundle()` /
-  `dev-spec bundle --out`) and point `DEV_SPEC_BUNDLE_PATH` at it. Both suites run on the engine's modules — the harnesses drop
-  `DEV_SPEC_BUNDLE` for their processes; the bundle's own tests set it for the children they start: 16-conventions-build ("1.20
+  `dev-spec bundle --out`) and point `DEV_SPEC_BUNDLE_PATH` at it. Both suites run on the engine's modules — the runner and the
+  harnesses drop `DEV_SPEC_BUNDLE` (with every other `DEV_SPEC_*` — Hermetic chains) for their processes; the bundle's own
+  tests set it for the children they start: 16-conventions-build ("1.20
   bundle": the namespace, the embedded corpus, the modules' paths, the stamps; the facade's choice on a copy of the clone —
   none, current, unset / 0, an invalid or another `DEV_SPEC_BUNDLE_PATH`, a module touched or resized and put back, another
-  version, a broken bundle; the MCP server on it; "1.20 build": a copy of the clone with a missing, broken, hand-edited or
-  other-version corpus renders it and decides every fresh scaffold text alike, and V8 coverage proves `CORPUS_SOURCES`) and
+  version, a broken bundle; the MCP server on it; "1.20 build": a copy of the clone with a missing, broken or hand-edited
+  corpus renders it and decides every fresh scaffold text alike — one under another package.json version reads it, and a
+  rebuild after a version bump rewrites neither generated file (1.26) — and V8 coverage proves `CORPUS_SOURCES`) and
   cli/tests/16-conventions-bundle.js (`dev-spec bundle`, then one session — 39 CLI commands, 7 hook events — in two fresh
   projects, modules vs bundle: the same output, exit codes and `.specs/` tree).
 

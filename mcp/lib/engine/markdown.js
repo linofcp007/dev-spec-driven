@@ -16,12 +16,12 @@ const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature, extractAcIds,
+let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, existingFeature, extractAcIds,
   featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
   locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists, renderTrackTaskHeadings,
   replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf,
   VALID_TRACKS, wildcardMatch;
-function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, engineVersion, existingFeature,
+function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, existingFeature,
   extractAcIds, featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
   isPackMarkerBracket, locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists,
   renderTrackTaskHeadings, replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS,
@@ -1036,9 +1036,10 @@ function renderTemplateSetsBr(base) {
 // The built-in part of the corpus — templateSets, templateSetsBr, templateTaskSet, the bug steps — is the same in every
 // process of one engine, and rendering it (1,165 texts, their pt-BR twins through toPtBr: ~200 ms) was the biggest slice of
 // a hook or CLI call. scripts/build.js (`npm run build`) renders it ONCE with the functions above (renderCorpusData) into
-// engine/corpus.generated.json, stamped with the engine version and the hash of CORPUS_SOURCES — every file the render runs
-// through (mcp/test.js proves the list with V8 coverage). A process reads that file (one JSON.parse) only while both stamps
-// match the engine it LOADED (the version read at load, the sources as they were at load — LOADED_STATS below); otherwise —
+// engine/corpus.generated.json, stamped with the hash of CORPUS_SOURCES — every file the render runs through (mcp/test.js
+// proves the list with V8 coverage) — and nothing else: no version (1.26 — the render never reads it, so a release that changes
+// no source keeps the same file). A process reads that file (one JSON.parse) only while the stamp matches the engine it LOADED
+// (the sources as they were at load — LOADED_STATS below); otherwise —
 // a hand-edited clone that wasn't rebuilt, a missing or broken file, sources updated under a running process — it renders
 // as before: a slower answer, never a wrong one. Inside spec.bundle.js the corpus is the copy the build embedded beside the
 // very sources it was rendered from (module.bundle — undefined under Node's own loader). The per-project part (the
@@ -1069,8 +1070,7 @@ function corpusSourcesHash(libDir) {
 // loaded while a `git pull` or `npm run build` rewrites the sources AND the corpus under it: compared with the files as they
 // are at its first placeholder question, the old code would trust a corpus rendered from the NEW sources (a reworded slot of
 // its own fresh scaffold would then read as the user's text). So every source's size, mtime and ctime are taken as the engine
-// loads (one stat each, no read — ~0.5 ms), and the version is the one read at load (engineVersion, upgrade.js); the file is
-// trusted only while every source still has them — its text on disk is then the text this process runs, and the sources
+// loads (one stat each, no read — ~0.5 ms); the file is trusted only while every source still has them — its text on disk is then the text this process runs, and the sources
 // hash is compared as before (an edit that keeps a file's size, mtime AND ctime is the accepted limit). A language file loads
 // on its first use (i18n.js): one that loads after the corpus was trusted and has changed since the engine loaded drops the
 // corpus (localeLoaded) — the sets render again, from the code this process now runs. Not in a bundle (its corpus is
@@ -1105,10 +1105,11 @@ function builtinCorpus() {
   try {
     const b = module.bundle; // set by spec.bundle.js's module registry only
     const data = b ? b.corpus() : JSON.parse(fs.readFileSync(path.join(__dirname, CORPUS_FILE), "utf8"));
-    // The load-time version and (the modules) the sources' hash, the sources unchanged since the engine loaded — stat'ed
-    // AFTER the hash read them, so a file rewritten before or while it was hashed is never trusted.
+    // (The modules) the sources' hash, the sources unchanged since the engine loaded — stat'ed AFTER the hash read them, so a
+    // file rewritten before or while it was hashed is never trusted. No version (1.26): a `version` key an older build wrote is
+    // ignored — the hash alone decides, and an older corpus of the same sources is the same corpus.
     if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
-      taskHeadingsShape(data.taskHeadings) && taskHeadingsShape(data.steeringStubs) && taskHeadingsShape(data.templateReqs) && data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
+      taskHeadingsShape(data.taskHeadings) && taskHeadingsShape(data.steeringStubs) && taskHeadingsShape(data.templateReqs) && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
       BUILTIN_CORPUS = data;
       BUILTIN_CORPUS_FROM = b ? "bundle" : "file";
     }

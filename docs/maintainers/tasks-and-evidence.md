@@ -669,15 +669,18 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   closing messages claim nothing. `hooks/stop-claims.generated.json` — COMMITTED, written by `npm run build` from guards.js
   `stopClaimFilter()`: every language's claim patterns (`stopClaimSources()`, pt-BR's included), the word wrapper `STOP_WORD`
   stopPatterns compiles them with, and stopProse's tail length and regexes (`RE_STOP_FENCE` / `RE_STOP_CODE` / `RE_STOP_QUOTE`) —
-  is stamped with the version and the size of each `STOP_FILTER_SOURCES` file (the i18n files, guards.js; LF, no BOM). The hook
-  takes it only while package.json's version and every size match (one stat each — an edit that keeps a file's size is the
-  accepted limit, as for the bundle); then hook-utils.js `claimMatch()` runs the engine's prose (`claimProse()` — the same regexes,
+  is stamped with the size of each `STOP_FILTER_SOURCES` file (the i18n files, guards.js; LF, no BOM) — no version since 1.26:
+  the filter is a function of those files alone, so a release that changes none of them leaves it as it was. The hook takes it
+  only while every size matches (one stat each — an edit that keeps a file's size is the accepted limit, as for the bundle;
+  `npm run check` and the suite catch it before a commit); then hook-utils.js `claimMatch()` runs the engine's prose
+  (`claimProse()` — the same regexes,
   core.js replaceHtmlCommentSpans' scan) through ONE alternation of the patterns (34 compiled apart: ~19 ms; together ~7 ms), and no
   match ends the hook — stopClaims' own answer then is `no-claim`. A superset: negations, questions and admissions stay the
   engine's. Missing, broken, stale or any error → the engine decides, as before. A SubagentStop is never pre-filtered (the
   implementer's `Status: DONE` is read with backticks unwrapped — statusProse). mcp/tests/10-guards-review6.js ("I-I4"): the prose
   equals stopProse and nothing the engine reads as a claim is sent away, on ~2,500 handwritten and generated messages; the hook on
-  the clone and on a copy whose filter is missing / of another version / stamped with another size. Measured (p50 of 15
+  the clone and on a copy whose filter is missing / stamped with another size (→ the engine) or whose package.json has another
+  version (→ still the filter, 1.26). Measured (p50 of 15
   interleaved fresh processes, a recently active project of 10 / 52 / ~150 features): no claim 162 / 163 / 163 → 59 / 59 / 59 ms;
   a claim 236 / 246 / 274 → 253 / 263 / 291 (the filter's ~12 ms compile before the engine — still the engine's answer).
   1.25.1: the hook's `mayClaim()` reads the file's `triggers` groups first (Claims → Trigger words): the alternation holds only the

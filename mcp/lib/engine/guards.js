@@ -2393,7 +2393,8 @@ function stopClaimFilter() {
     claims, ...(triggers.every((t) => t.source) ? { triggers } : {}) };
 }
 // The mcp/lib files that make that filter (the patterns, the wrapper, the prose) — the generated file stamps their sizes, and the
-// hook takes it only while every size and package.json's version still match (else: the engine decides, as before).
+// hook takes it only while every size still matches (else: the engine decides, as before). No version (1.26): a release that
+// changes none of these files leaves the generated file as it was.
 const STOP_FILTER_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es.js", "i18n/pt-br.js", "i18n/pt.js", "engine/guards.js"];
 // Does the message claim the work is done / verified? → { claim, admitted, claims: [matched text] }. A match does not count
 // when a negator or condition sits up to STOP_WINDOW words before it in the same clause ("not done", "once the tests

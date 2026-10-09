@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }) => {
   const i18n = require("./lib/i18n.js");
   const rd = (dir, f) => fs.readFileSync(path.join(dir, f), "utf8");
   const wr = (dir, f, t) => fs.writeFileSync(path.join(dir, f), t);
@@ -237,12 +237,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const d3 = chk(d3doc, "sec-sections");
     const na3 = S.nextAction(p, f.slug);
     const reapprove = S.approvePhase(p, f.slug, "design", "t");
-    ok(d1.status === "fail" && /Threat Model:only the template's guidance/.test(d1.detail) && save.clean === false && save.sections.length === 1 &&
-      d2.status === "fail" && !/Threat Model/.test(d2.detail) && !/Security Requirements/.test(d2.detail) && /Authentication & Authorization:only the template's guidance/.test(d2.detail) &&
-      d3.status === "warn" && /approved before 1\.21's stricter rule/.test(d3.detail) && !d3doc.changedSinceApproval && d3doc.readyToAdvance === true &&
-      na3.step !== "fix" && (na3.changedSinceApproval || []).length === 0 && reapprove.ok === false && reapprove.failing.includes("sec-sections"),
-      "1.21 F5: the stricter filled rule — the TODO line deleted and the guidance bullet kept is 'only the template's guidance': doctor fails and the save check lists it; a bullet edited or a line of one's own fills the section; a design approved with such sections (the 1.20 case) only warns — ready to advance, no change since approval, next_action doesn't send it back — while a NEW approval refuses it (got " +
-      JSON.stringify({ d1: d1.detail, d2: d2.detail, d3: [d3.status, d3.detail], na: na3.step, re: reapprove.failing }) + ")");
+    all("1.21 F5: the stricter filled rule — the TODO line deleted and the guidance bullet kept is 'only the template's guidance': doctor fails and the save check lists it; a bullet edited or a line of one's own fills the section; a design approved with such sections (the 1.20 case) only warns — ready to advance, no change since approval, next_action doesn't send it back — while a NEW approval refuses it (got " +
+      JSON.stringify({ d1: d1.detail, d2: d2.detail, d3: [d3.status, d3.detail], na: na3.step, re: reapprove.failing }) + ")", [
+      () => d1.status === "fail", () => /Threat Model:only the template's guidance/.test(d1.detail), () => save.clean === false,
+      () => save.sections.length === 1, () => d2.status === "fail", () => !/Threat Model/.test(d2.detail),
+      () => !/Security Requirements/.test(d2.detail), () => /Authentication & Authorization:only the template's guidance/.test(d2.detail),
+      () => d3.status === "warn", () => /approved before 1\.21's stricter rule/.test(d3.detail), () => !d3doc.changedSinceApproval,
+      () => d3doc.readyToAdvance === true, () => na3.step !== "fix", () => (na3.changedSinceApproval || []).length === 0,
+      () => reapprove.ok === false, () => reapprove.failing.includes("sec-sections"),
+    ]);
   }
 
   { // the overlap registry: a sized design that keeps both headings is judged on each; data sanity; an unsized one is unaffected
@@ -295,13 +298,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     wr(c.dir, "change.md", rd(c.dir, "change.md") + "\nOne more line.\n");
     const naEdit = S.nextAction(p, c.slug);
     const listed = S.listFeatures(p).features.find((x) => x.name === c.slug);
-    ok(c.ok && c.kind === "change" && c.size === "xs" && na0.step === "fill" && na0.file === "change.md" && /through: "tasks"/.test(na0.recommendation) &&
-      d1.verdict !== "fail" && chk(d1, "change-scope").status === "pass" && !chk(d1, "design").id && !chk(d1, "success-criteria").id && na1.step === "approve" &&
-      reqRefused.ok === false && reqRefused.change === true && ff.ok && ff.approved.join() === "tasks" && tick.ok && tick.verified && ticked &&
-      fin.readyToFinish && /change\.md/.test(fin.mergeSummary || "") === false && ex.ok && st.kind === "change" && st.phase === "complete" && tr.verdict === "pass" && tr.totalAcs === 1 &&
-      exp.ok !== false && naEdit.step === "re-review" && naEdit.changedSinceApproval.join() === "change.md" && listed.kind === "change",
-      "1.21 F5: the change kind end to end — ONE change.md; next_action fill change.md (then the plan in one call) → approve → the plan approved with spec_approve {through: 'tasks'} (the requirements phase refused: a change has none), the task ticked IN change.md with its run (verified), trace passes, finish ready, the execution signed off; an edit after the approval asks a re-review of change.md (got " +
-      JSON.stringify({ na0: [na0.step, na0.file], d1: d1.checks.filter((x) => x.status !== "pass").map((x) => x.id), ff: ff.approved || ff.failing, tick: tick.error, fin: fin.blockers, ex: ex.error, st: st.phase, naEdit: naEdit.changedSinceApproval }) + ")");
+    all("1.21 F5: the change kind end to end — ONE change.md; next_action fill change.md (then the plan in one call) → approve → the plan approved with spec_approve {through: 'tasks'} (the requirements phase refused: a change has none), the task ticked IN change.md with its run (verified), trace passes, finish ready, the execution signed off; an edit after the approval asks a re-review of change.md (got " +
+      JSON.stringify({ na0: [na0.step, na0.file], d1: d1.checks.filter((x) => x.status !== "pass").map((x) => x.id), ff: ff.approved || ff.failing, tick: tick.error, fin: fin.blockers, ex: ex.error, st: st.phase, naEdit: naEdit.changedSinceApproval }) + ")", [
+      () => c.ok, () => c.kind === "change", () => c.size === "xs", () => na0.step === "fill", () => na0.file === "change.md",
+      () => /through: "tasks"/.test(na0.recommendation), () => d1.verdict !== "fail", () => chk(d1, "change-scope").status === "pass",
+      () => !chk(d1, "design").id, () => !chk(d1, "success-criteria").id, () => na1.step === "approve", () => reqRefused.ok === false,
+      () => reqRefused.change === true, () => ff.ok, () => ff.approved.join() === "tasks", () => tick.ok, () => tick.verified, () => ticked,
+      () => fin.readyToFinish, () => /change\.md/.test(fin.mergeSummary || "") === false, () => ex.ok, () => st.kind === "change",
+      () => st.phase === "complete", () => tr.verdict === "pass", () => tr.totalAcs === 1, () => exp.ok !== false, () => naEdit.step === "re-review",
+      () => naEdit.changedSinceApproval.join() === "change.md", () => listed.kind === "change",
+    ]);
     // never ratcheted silently: a fourth task, a track, another size, add_track
     const big = S.createFeature(p, "Too big", undefined, "x", undefined, "en", "change");
     wr(big.dir, "change.md", fileTxt.replace("## Tasks\n", "## Tasks\n- [ ] 2. [US1] a\n  - _Requirements: US-1.AC-1_\n- [ ] 3. [US1] b\n  - _Requirements: US-1.AC-1_\n- [ ] 4. [US1] c\n  - _Requirements: US-1.AC-1_\n"));
@@ -313,12 +319,15 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const badSize = S.createFeature(p, "Bad size", undefined, "x", undefined, "en", undefined, { size: "xl" });
     const addTr = S.addTrack(p, c.slug, "sec");
     const kept = S.createFeature(p, "Footer typo", undefined, "", undefined, "en", undefined, { size: "m" });
-    ok(bigAp.ok === false && bigAp.failing.includes("change-scope") && bigDoc.status === "fail" && /4 task\(s\)/.test(bigDoc.detail) && /size s/.test(bigDoc.detail) &&
-      withTrack.ok === false && /\+sec/.test(withTrack.error) && !fs.existsSync(path.join(p, ".specs", "tracked")) && wrongSize.ok === false && /size xs/.test(wrongSize.error) &&
-      spike.ok === false && /not sized/.test(spike.error) && badSize.ok === false && /size must be one of: xs, s, m, l/.test(badSize.error) && addTr.ok === false && addTr.change === true &&
-      kept.ok && stateOf(c.dir).size === "xs" && /size is xs — kept it/.test(kept.note || ""),
-      "1.21 F5: a change stays XS, never silently — four tasks: the plan approval refuses and doctor fails change-scope (named, 'size s'); a track, kind change with size s, a sized spike, an unknown size and add_track on a change are refused before any write; a re-create keeps the size (a note) (got " +
-      JSON.stringify({ bigAp: bigAp.failing, bigDoc: bigDoc.detail, withTrack: withTrack.error, wrongSize: wrongSize.error, spike: spike.error, badSize: badSize.error, addTr: addTr.error, kept: kept.note }).slice(0, 1400) + ")");
+    all("1.21 F5: a change stays XS, never silently — four tasks: the plan approval refuses and doctor fails change-scope (named, 'size s'); a track, kind change with size s, a sized spike, an unknown size and add_track on a change are refused before any write; a re-create keeps the size (a note) (got " +
+      JSON.stringify({ bigAp: bigAp.failing, bigDoc: bigDoc.detail, withTrack: withTrack.error, wrongSize: wrongSize.error, spike: spike.error, badSize: badSize.error, addTr: addTr.error, kept: kept.note }).slice(0, 1400) + ")", [
+      () => bigAp.ok === false, () => bigAp.failing.includes("change-scope"), () => bigDoc.status === "fail", () => /4 task\(s\)/.test(bigDoc.detail),
+      () => /size s/.test(bigDoc.detail), () => withTrack.ok === false, () => /\+sec/.test(withTrack.error),
+      () => !fs.existsSync(path.join(p, ".specs", "tracked")), () => wrongSize.ok === false, () => /size xs/.test(wrongSize.error),
+      () => spike.ok === false, () => /not sized/.test(spike.error), () => badSize.ok === false,
+      () => /size must be one of: xs, s, m, l/.test(badSize.error), () => addTr.ok === false, () => addTr.change === true, () => kept.ok,
+      () => stateOf(c.dir).size === "xs", () => /size is xs — kept it/.test(kept.note || ""),
+    ]);
   }
 
   { // an XS bugfix keeps the iron law: only task 1 (the red regression test) can be ticked while bug.md → Root Cause is empty
@@ -405,13 +414,16 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const tr3 = S.traceCheck(p, c.slug);
     const ap3 = S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
     const n = modal.split("\n").length;
-    ok(tr1.verdict === "gaps-found" && tr1.uncoveredByTasks.join() === "US-1.AC-2" && tr1.totalAcs === 2 && doc1.status === "fail" && ap1.ok === false && ap1.failing.includes("traceability") &&
-      tr2.verdict === "gaps-found" && tr2.phantomAcsInTasks.join() === "US-1.AC-7" && tr2.totalAcs === 1 && /XS: 1 criteria/.test(scope2.detail) && ap2.ok === false && ap2.failing.includes("traceability") &&
-      mx2.rows.map((r) => r.id).join() === "US-1.AC-1" &&
-      v.criteria.split("\n").length === n && v.tasks.split("\n").length === n && !/- \[ \] \d/.test(v.criteria) && !/US-1\.AC-1\*\*/.test(v.tasks) && /- \[ \] 2\. /.test(v.tasks) &&
-      ears.summary.criteriaDetected === 2 && ears.issues.length === 0 && tr3.verdict === "pass" && ap3.ok,
-      "1.21 review C1: a change's traceability can fail — AC-2 cited by no task: trace gaps-found, doctor fails, the plan approval refuses (traceability); a task citing a phantom US-1.AC-7: a phantom gap, change-scope counts 1 criterion (not 2), refused, the matrix has one row; changeViews keeps every line (the criteria without the task blocks, the task blocks alone); a task with a modal verb is never linted as a criterion (EARS: 2 criteria, no issue); written right, trace passes and the plan is approved (got " +
-      JSON.stringify({ tr1: [tr1.verdict, tr1.uncoveredByTasks], ap1: ap1.failing, tr2: [tr2.phantomAcsInTasks, tr2.totalAcs], scope2: scope2.detail, ears: ears.summary, tr3: tr3.verdict, ap3: ap3.failing || ap3.ok }) + ")");
+    all("1.21 review C1: a change's traceability can fail — AC-2 cited by no task: trace gaps-found, doctor fails, the plan approval refuses (traceability); a task citing a phantom US-1.AC-7: a phantom gap, change-scope counts 1 criterion (not 2), refused, the matrix has one row; changeViews keeps every line (the criteria without the task blocks, the task blocks alone); a task with a modal verb is never linted as a criterion (EARS: 2 criteria, no issue); written right, trace passes and the plan is approved (got " +
+      JSON.stringify({ tr1: [tr1.verdict, tr1.uncoveredByTasks], ap1: ap1.failing, tr2: [tr2.phantomAcsInTasks, tr2.totalAcs], scope2: scope2.detail, ears: ears.summary, tr3: tr3.verdict, ap3: ap3.failing || ap3.ok }) + ")", [
+      () => tr1.verdict === "gaps-found", () => tr1.uncoveredByTasks.join() === "US-1.AC-2", () => tr1.totalAcs === 2, () => doc1.status === "fail",
+      () => ap1.ok === false, () => ap1.failing.includes("traceability"), () => tr2.verdict === "gaps-found",
+      () => tr2.phantomAcsInTasks.join() === "US-1.AC-7", () => tr2.totalAcs === 1, () => /XS: 1 criteria/.test(scope2.detail),
+      () => ap2.ok === false, () => ap2.failing.includes("traceability"), () => mx2.rows.map((r) => r.id).join() === "US-1.AC-1",
+      () => v.criteria.split("\n").length === n, () => v.tasks.split("\n").length === n, () => !/- \[ \] \d/.test(v.criteria),
+      () => !/US-1\.AC-1\*\*/.test(v.tasks), () => /- \[ \] 2\. /.test(v.tasks), () => ears.summary.criteriaDetected === 2,
+      () => ears.issues.length === 0, () => tr3.verdict === "pass", () => ap3.ok,
+    ]);
     // the pre-commit validator traces the STAGED change.md (a mirror with .state.json): a staged phantom blocks, never "traceability clean"
     const { spawnSync } = require("child_process");
     if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) console.log("  skip - git not available: 1.21 review C1 pre-commit not run");
@@ -468,15 +480,19 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const bug = S.nextAction(p, S.createFeature(p, "Crash", undefined, "", undefined, "en", "bugfix", { size: "xs" }).slug);
     const pt = S.nextAction(p, S.createFeature(p, "Exportar", ["core", "tdd"], "", undefined, "pt", undefined, { size: "s" }).slug);
     const es = S.nextAction(p, S.createFeature(p, "Exportar es", ["core", "tdd"], "", undefined, "es", undefined, { size: "s" }).slug);
-    ok(na0.step === "fill" && na0.fastForward.through === "test-plan" && na0.fastForward.phases.join() === "requirements,design,test-plan" &&
-      /approve it through test-plan in one call: spec_approve \{name: "export-csv", through: "test-plan"\}/.test(na0.recommendation) && /write the failing tests \(\/writeTests export-csv\), approve tests/.test(na0.recommendation) &&
-      na1.step === "approve" && na1.fastForward && na1.fastForward.through === "test-plan" && /\/spec-ff export-csv test-plan/.test(na1.recommendation) &&
-      ff.ok && ff.approved.join() === "requirements,design,test-plan" && na2.step === "fix" && /\/writeTests export-csv/.test(na2.recommendation) && !na2.fastForward &&
-      tests.ok && tasks.ok && ai.fastForward.through === "eval-plan" && plain.fastForward.through === "tasks" && bug.fastForward.through === "tasks" &&
-      /aprová-lo até test-plan numa só chamada/.test(pt.recommendation) && /escrever os testes que falham/.test(pt.recommendation) &&
-      /apruébalo hasta test-plan en una sola llamada/.test(es.recommendation) && /escribe las pruebas que fallan/.test(es.recommendation),
-      "1.21 review C3: size s with +tdd — next_action's fastForward ends at test-plan (requirements → design → test-plan; the text: then /writeTests, approve tests, then the tasks), the approve step names /spec-ff <f> test-plan, the call is approved whole, then Phase 4 (write the tests), tests and tasks; +ai ends at eval-plan; no +tdd / +ai and an XS bugfix still end at tasks; PT / ES localized (got " +
-      JSON.stringify({ na0: na0.fastForward, na1: [na1.step, na1.fastForward], ff: ff.approved || ff.failing, na2: na2.step, tests: tests.failing || tests.ok, tasks: tasks.failing || tasks.ok, ai: ai.fastForward, plain: plain.fastForward, bug: bug.fastForward }) + ")");
+    all("1.21 review C3: size s with +tdd — next_action's fastForward ends at test-plan (requirements → design → test-plan; the text: then /writeTests, approve tests, then the tasks), the approve step names /spec-ff <f> test-plan, the call is approved whole, then Phase 4 (write the tests), tests and tasks; +ai ends at eval-plan; no +tdd / +ai and an XS bugfix still end at tasks; PT / ES localized (got " +
+      JSON.stringify({ na0: na0.fastForward, na1: [na1.step, na1.fastForward], ff: ff.approved || ff.failing, na2: na2.step, tests: tests.failing || tests.ok, tasks: tasks.failing || tasks.ok, ai: ai.fastForward, plain: plain.fastForward, bug: bug.fastForward }) + ")", [
+      () => na0.step === "fill", () => na0.fastForward.through === "test-plan",
+      () => na0.fastForward.phases.join() === "requirements,design,test-plan",
+      () => /approve it through test-plan in one call: spec_approve \{name: "export-csv", through: "test-plan"\}/.test(na0.recommendation),
+      () => /write the failing tests \(\/writeTests export-csv\), approve tests/.test(na0.recommendation), () => na1.step === "approve",
+      () => na1.fastForward, () => na1.fastForward.through === "test-plan", () => /\/spec-ff export-csv test-plan/.test(na1.recommendation),
+      () => ff.ok, () => ff.approved.join() === "requirements,design,test-plan", () => na2.step === "fix",
+      () => /\/writeTests export-csv/.test(na2.recommendation), () => !na2.fastForward, () => tests.ok, () => tasks.ok,
+      () => ai.fastForward.through === "eval-plan", () => plain.fastForward.through === "tasks", () => bug.fastForward.through === "tasks",
+      () => /aprová-lo até test-plan numa só chamada/.test(pt.recommendation), () => /escrever os testes que falham/.test(pt.recommendation),
+      () => /apruébalo hasta test-plan en una sola llamada/.test(es.recommendation), () => /escribe las pruebas que fallan/.test(es.recommendation),
+    ]);
   }
 
   { // C4 — spec_impact works on a change: the default phase is tasks; its criteria diffed by ID, its tasks by number; --reopen works
@@ -494,15 +510,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const re = S.impactReport(p, c.slug, { reopen: true });
     const st = stateOf(c.dir);
     const after = rd(c.dir, "change.md");
-    ok(ap.ok && tick.ok && imp.ok && imp.phase === "tasks" && imp.file === "change.md" && imp.changed === true && imp.modified.map((m) => m.id).join() === "US-1.AC-1" &&
-      imp.tasks && imp.tasks.modified.length === 0 && imp.affectedTasks.map((t) => t.number).join() === "1" && /--phase tasks --reopen/.test(imp.hint || "") &&
-      /~ US-1\.AC-1/.test(lines) && /Impact: footer · tasks/.test(lines) && viaMcp.phase === "tasks" && viaMcp.modified.map((m) => m.id).join() === "US-1.AC-1" &&
-      wrong.ok === false && wrong.change === true && /one file, change\.md/.test(wrong.error) &&
-      na.step === "re-review" && /impact footer --phase tasks/.test(na.recommendation) &&
-      re.ok && re.reopened.join() === "1" && /^- \[ \] 1\. /m.test(after) && /US-1\.AC-1\*\* — WHEN any page renders/.test(after) && /## Approach/.test(after) &&
-      st.evidence["1"].stale === true && st.changes.length === 1 && st.changes[0].phase === "tasks" && st.changes[0].modified.join() === "US-1.AC-1",
-      "1.21 review C4: spec_impact on a change — the default phase is tasks (change.md): the edited AC-1 is 'modified' (by stable ID), its done task #1 affected, the hint names --phase tasks --reopen (MCP = engine); another phase is refused (change: true); next_action's re-review names --phase tasks; --reopen unticks #1 in change.md (its criteria untouched), marks its evidence stale and records the change request (phase tasks) (got " +
-      JSON.stringify({ imp: [imp.phase, imp.error, (imp.modified || []).map((m) => m.id), imp.hint], wrong: wrong.error, na: na.recommendation, re: [re.reopened, re.error], ch: st.changes }).slice(0, 1600) + ")");
+    all("1.21 review C4: spec_impact on a change — the default phase is tasks (change.md): the edited AC-1 is 'modified' (by stable ID), its done task #1 affected, the hint names --phase tasks --reopen (MCP = engine); another phase is refused (change: true); next_action's re-review names --phase tasks; --reopen unticks #1 in change.md (its criteria untouched), marks its evidence stale and records the change request (phase tasks) (got " +
+      JSON.stringify({ imp: [imp.phase, imp.error, (imp.modified || []).map((m) => m.id), imp.hint], wrong: wrong.error, na: na.recommendation, re: [re.reopened, re.error], ch: st.changes }).slice(0, 1600) + ")", [
+      () => ap.ok, () => tick.ok, () => imp.ok, () => imp.phase === "tasks", () => imp.file === "change.md", () => imp.changed === true,
+      () => imp.modified.map((m) => m.id).join() === "US-1.AC-1", () => imp.tasks, () => imp.tasks.modified.length === 0,
+      () => imp.affectedTasks.map((t) => t.number).join() === "1", () => /--phase tasks --reopen/.test(imp.hint || ""),
+      () => /~ US-1\.AC-1/.test(lines), () => /Impact: footer · tasks/.test(lines), () => viaMcp.phase === "tasks",
+      () => viaMcp.modified.map((m) => m.id).join() === "US-1.AC-1", () => wrong.ok === false, () => wrong.change === true,
+      () => /one file, change\.md/.test(wrong.error), () => na.step === "re-review", () => /impact footer --phase tasks/.test(na.recommendation),
+      () => re.ok, () => re.reopened.join() === "1", () => /^- \[ \] 1\. /m.test(after), () => /US-1\.AC-1\*\* — WHEN any page renders/.test(after),
+      () => /## Approach/.test(after), () => st.evidence["1"].stale === true, () => st.changes.length === 1, () => st.changes[0].phase === "tasks",
+      () => st.changes[0].modified.join() === "US-1.AC-1",
+    ]);
   }
 
   { // C5 — the export and the matrix read a change as a change: its kind, its criteria once (no tasks inside), one Tasks table, no
@@ -520,14 +539,19 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const pt = S.createFeature(p, "Rodape", undefined, "x", undefined, "pt", "change");
     const mdPt = S.exportSpecs(p, { name: pt.slug, format: "md" }).content;
     const count = (s, re) => (s.match(re) || []).length;
-    ok(/\*\*Kind:\*\* change \(size xs\)/.test(md0) && /_Change specification · /.test(md0) && !/^## Design/m.test(md0) && count(md0, /^## Tasks$/gm) === 1 &&
-      /^## Acceptance Criteria \(EARS\)\n\n1\. \*\*US-1\.AC-1\*\*/m.test(md0) && !/_Requirements:/.test(md0) && /\| Plan \(change\.md\) \| — \| — \| awaiting approval \|/.test(md0) &&
-      /Plan \(change\.md\) not approved yet\./.test(md0) && mx1.kind === "change" && mx1.approval && mx1.approval.baseline === "snapshot" && mx1.approval.changed === false &&
-      /\| Plan \(change\.md\) \| t \| [^|]+ \| changed since this approval/.test(md1) && /Plan \(change\.md\) approved /.test(md1) && mx2.approval.changed === true &&
-      mx2.rows.find((r) => r.id === "US-1.AC-2").approval.changed === true && mx2.rows.find((r) => r.id === "US-1.AC-1").approval.changed === false && /changed since the plan approval/.test(md1) &&
-      /change \(size xs\) · core/.test(proj) && /### Acceptance criteria/.test(proj) && /\*\*Tipo:\*\* alteração \(tamanho xs\)/.test(mdPt),
-      "1.21 review C5: a change's export — Kind 'change (size xs)', its criteria once (no task lines), ONE Tasks table, no design section, the plan's row awaiting approval then 'changed since this approval' after an edit; the matrix reads the plan approval (snapshot, per-row changed) and says so; the project export lists its acceptance criteria; PT localized (got " +
-      JSON.stringify({ md0: md0.slice(0, 900), mx1: mx1.approval, mx2: mx2.approval }).slice(0, 1800) + ")");
+    all("1.21 review C5: a change's export — Kind 'change (size xs)', its criteria once (no task lines), ONE Tasks table, no design section, the plan's row awaiting approval then 'changed since this approval' after an edit; the matrix reads the plan approval (snapshot, per-row changed) and says so; the project export lists its acceptance criteria; PT localized (got " +
+      JSON.stringify({ md0: md0.slice(0, 900), mx1: mx1.approval, mx2: mx2.approval }).slice(0, 1800) + ")", [
+      () => /\*\*Kind:\*\* change \(size xs\)/.test(md0), () => /_Change specification · /.test(md0), () => !/^## Design/m.test(md0),
+      () => count(md0, /^## Tasks$/gm) === 1, () => /^## Acceptance Criteria \(EARS\)\n\n1\. \*\*US-1\.AC-1\*\*/m.test(md0),
+      () => !/_Requirements:/.test(md0), () => /\| Plan \(change\.md\) \| — \| — \| awaiting approval \|/.test(md0),
+      () => /Plan \(change\.md\) not approved yet\./.test(md0), () => mx1.kind === "change", () => mx1.approval,
+      () => mx1.approval.baseline === "snapshot", () => mx1.approval.changed === false,
+      () => /\| Plan \(change\.md\) \| t \| [^|]+ \| changed since this approval/.test(md1), () => /Plan \(change\.md\) approved /.test(md1),
+      () => mx2.approval.changed === true, () => mx2.rows.find((r) => r.id === "US-1.AC-2").approval.changed === true,
+      () => mx2.rows.find((r) => r.id === "US-1.AC-1").approval.changed === false, () => /changed since the plan approval/.test(md1),
+      () => /change \(size xs\) · core/.test(proj), () => /### Acceptance criteria/.test(proj),
+      () => /\*\*Tipo:\*\* alteração \(tamanho xs\)/.test(mdPt),
+    ]);
   }
 
   { // C6 — a track pack's guidance line holding {{name}} / {{slug}} is still the template once the scaffold filled the feature's name in
@@ -608,14 +632,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const row = S.statusFeature(p, u.slug).secSections.find((x) => x.section === "Threat Model");
     const tpl = list.result.tools.find((t) => t.name === "spec_templates");
     const E = S.msg("en");
-    ok(nf.ok === false && /Task 9 not found in change\.md/.test(nf.error) && app.ok && app.file === "change.md" && /^change\.md changed after its approval/.test(app.note) &&
-      phantom.ok === false && /not in change\.md/.test(phantom.error) && stop.block === true && /\.specs\/footer\/change\.md \(task 1 first\)/.test(stop.reason) &&
-      earsMid.status === "fail" && /^change\.md cites AC IDs \(US-1\.AC-1\)/.test(earsMid.detail) &&
-      row.status === "template" && row.filled === false && /\bchange\b/.test(tpl.inputSchema.properties.artifact.description) && S.templates(p, "list").templates.some((x) => x.artifact === "change" && x.file === "change.md") &&
-      /a track \(\+sec\) makes it a feature of size s/.test(E.sizes.changeTracks("+sec")) && !/\ba \[/.test(E.sizes.coveredComment("[SaaS] Observability")) &&
-      /um track \(\+sec\) faz dela/.test(S.msg("pt").sizes.changeTracks("+sec")) && /un track \(\+sec\) lo convierte/.test(S.msg("es").sizes.changeTracks("+sec")),
-      "1.21 review C10: a change's messages name change.md — task not found, append-tasks (file, 'change.md changed after its approval', phantom 'not in change.md'), the stop gate ('read … .specs/<f>/change.md'), EARS 'change.md cites AC IDs'; spec_status gives an unsized row its status ('template', as doctor); spec_templates lists 'change'; 'a track (+sec) makes it' (EN / PT / ES) (got " +
-      JSON.stringify({ nf: nf.error, app: [app.file, app.note], phantom: phantom.error, stop: String(stop.reason).slice(0, 300), ears: earsMid.detail, row }).slice(0, 1600) + ")");
+    all("1.21 review C10: a change's messages name change.md — task not found, append-tasks (file, 'change.md changed after its approval', phantom 'not in change.md'), the stop gate ('read … .specs/<f>/change.md'), EARS 'change.md cites AC IDs'; spec_status gives an unsized row its status ('template', as doctor); spec_templates lists 'change'; 'a track (+sec) makes it' (EN / PT / ES) (got " +
+      JSON.stringify({ nf: nf.error, app: [app.file, app.note], phantom: phantom.error, stop: String(stop.reason).slice(0, 300), ears: earsMid.detail, row }).slice(0, 1600) + ")", [
+      () => nf.ok === false, () => /Task 9 not found in change\.md/.test(nf.error), () => app.ok, () => app.file === "change.md",
+      () => /^change\.md changed after its approval/.test(app.note), () => phantom.ok === false, () => /not in change\.md/.test(phantom.error),
+      () => stop.block === true, () => /\.specs\/footer\/change\.md \(task 1 first\)/.test(stop.reason), () => earsMid.status === "fail",
+      () => /^change\.md cites AC IDs \(US-1\.AC-1\)/.test(earsMid.detail), () => row.status === "template", () => row.filled === false,
+      () => /\bchange\b/.test(tpl.inputSchema.properties.artifact.description), () => S.templates(p, "list").templates.some((x) => x.artifact === "change" && x.file === "change.md"),
+      () => /a track \(\+sec\) makes it a feature of size s/.test(E.sizes.changeTracks("+sec")),
+      () => !/\ba \[/.test(E.sizes.coveredComment("[SaaS] Observability")),
+      () => /um track \(\+sec\) faz dela/.test(S.msg("pt").sizes.changeTracks("+sec")),
+      () => /un track \(\+sec\) lo convierte/.test(S.msg("es").sizes.changeTracks("+sec")),
+    ]);
   }
 
   // --- 1.21 verify — the verification pass on the merged 1.21 (the change kind at the seams) ---
@@ -672,14 +700,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const unsized = S.clarify(p, un.slug);
     const E = S.msg("en").clarify;
     const featureOnly = [E.addSuccessCriteria, E.prioritize, E.independentTest, E.edgeCases, E.outOfScope, E.nfr, E.unwanted];
-    ok(done.verdict === "clear" && done.questions.length === 0 && JSON.stringify(viaMcp.questions) === JSON.stringify(done.questions) &&
-      tmpl.questions.length === 1 && /change\.md:7 \[trigger\]/.test(tmpl.questions[0]) && /change\.md:13 \[the change\]/.test(tmpl.questions[0]) && !/requirements\.md/.test(JSON.stringify(tmpl)) &&
-      g.questions.includes(E.changeSummary) && g.questions.includes(E.changeApproach) && g.questions.some((x) => /Resolve \[NEEDS CLARIFICATION\]: which text\?/.test(x)) &&
-      g.questions.some((x) => /Quantify the vague term on line 7/.test(x)) && !g.questions.some((x) => featureOnly.includes(x)) &&
-      gp.questions.includes(S.msg("pt").clarify.changeSummary) && gp.questions.length === 1 &&
-      small.verdict === "clear" && !small.questions.includes(E.edgeCases) && !small.questions.includes(E.nfr) && unsized.questions.includes(E.edgeCases) && unsized.questions.includes(E.nfr),
-      "1.21 verify V6: spec_clarify on a change asks only its own — clear once written (MCP = engine), the template's slots named change.md:<line> (the task line too), a missing Summary / Approach, its markers and vague terms (line into change.md), never stories / SC / P1 / edge cases / out of scope / NFRs / IF…THEN (PT localized); a filled size s feature is clear — no edge-case / NFR question — while the same text unsized is asked both (got " +
-      JSON.stringify({ done: done.questions, tmpl: tmpl.questions, g: g.questions, gp: gp.questions, small: small.questions, unsized: unsized.questions }).slice(0, 1800) + ")");
+    all("1.21 verify V6: spec_clarify on a change asks only its own — clear once written (MCP = engine), the template's slots named change.md:<line> (the task line too), a missing Summary / Approach, its markers and vague terms (line into change.md), never stories / SC / P1 / edge cases / out of scope / NFRs / IF…THEN (PT localized); a filled size s feature is clear — no edge-case / NFR question — while the same text unsized is asked both (got " +
+      JSON.stringify({ done: done.questions, tmpl: tmpl.questions, g: g.questions, gp: gp.questions, small: small.questions, unsized: unsized.questions }).slice(0, 1800) + ")", [
+      () => done.verdict === "clear", () => done.questions.length === 0, () => JSON.stringify(viaMcp.questions) === JSON.stringify(done.questions),
+      () => tmpl.questions.length === 1, () => /change\.md:7 \[trigger\]/.test(tmpl.questions[0]),
+      () => /change\.md:13 \[the change\]/.test(tmpl.questions[0]), () => !/requirements\.md/.test(JSON.stringify(tmpl)),
+      () => g.questions.includes(E.changeSummary), () => g.questions.includes(E.changeApproach),
+      () => g.questions.some((x) => /Resolve \[NEEDS CLARIFICATION\]: which text\?/.test(x)),
+      () => g.questions.some((x) => /Quantify the vague term on line 7/.test(x)), () => !g.questions.some((x) => featureOnly.includes(x)),
+      () => gp.questions.includes(S.msg("pt").clarify.changeSummary), () => gp.questions.length === 1, () => small.verdict === "clear",
+      () => !small.questions.includes(E.edgeCases), () => !small.questions.includes(E.nfr), () => unsized.questions.includes(E.edgeCases),
+      () => unsized.questions.includes(E.nfr),
+    ]);
   }
 
   { // V7 — a change's messages name change.md and never its design: doctor's clarifications, the gherkin / tracker sources, decide
@@ -697,13 +729,18 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const ap = S.approvePhase(p, c.slug, null, "t", { through: "tasks" });
     const apCl = (ap.checks || []).find((x) => x.id === "clarifications") || {};
     const pt = S.msg("pt"), es = S.msg("es");
-    ok(/^# Source: \.specs\/footer\/change\.md — /m.test(gh) && /dev-spec task #1 — \.specs\/footer\/change\.md/.test(jira) && !/tasks\.md|requirements\.md/.test(gh + jira) &&
-      dOk.ok && dOk.affects.join() === "Approach,US-1.AC-1,Summary" && dBad.ok === false && /a section heading of change\.md \(Summary, Acceptance Criteria, Approach, Tasks\)/.test(dBad.error) &&
-      !/design\.md/.test(dBad.error) && (tr.phantomAffects || []).length === 0 &&
-      cl.status === "fail" && /in change\.md — resolve before approving the plan/.test(cl.detail) && !/design/.test(cl.detail) && ap.ok === false && /approving the plan/.test(apCl.detail || "") &&
-      /em change\.md — [\s\S]*aprovar o plano/.test(pt.hook.earsIssues(1, 0, "L1", true, "change.md")) && /antes de aprobar el plan/.test(es.gates.hookPlaceholders(1, "L1 [x]", "change.md")) &&
-      /before advancing to design/.test(S.msg("en").hook.earsIssues(1, 0, "L1", true)) && /in requirements\.md/.test(S.msg("en").gates.hookPlaceholders(1, "L1 [x]")),
-      "1.21 verify V7: a change names change.md — gherkin '# Source: .specs/<f>/change.md', the tracker's 'dev-spec task #1 — .specs/<f>/change.md', decide --affects takes a change.md section (Approach, Summary) and its refusal names change.md's sections; doctor's and the plan gate's clarifications say 'before approving the plan', never design; the save hook's EARS / placeholder lines (EN / PT / ES) name the file, requirements.md keeps its wording (got " +
-      JSON.stringify({ gh: gh.split("\n")[2], dOk: dOk.error || dOk.affects, dBad: dBad.error, cl: cl.detail, ap: apCl.detail }).slice(0, 1400) + ")");
+    all("1.21 verify V7: a change names change.md — gherkin '# Source: .specs/<f>/change.md', the tracker's 'dev-spec task #1 — .specs/<f>/change.md', decide --affects takes a change.md section (Approach, Summary) and its refusal names change.md's sections; doctor's and the plan gate's clarifications say 'before approving the plan', never design; the save hook's EARS / placeholder lines (EN / PT / ES) name the file, requirements.md keeps its wording (got " +
+      JSON.stringify({ gh: gh.split("\n")[2], dOk: dOk.error || dOk.affects, dBad: dBad.error, cl: cl.detail, ap: apCl.detail }).slice(0, 1400) + ")", [
+      () => /^# Source: \.specs\/footer\/change\.md — /m.test(gh), () => /dev-spec task #1 — \.specs\/footer\/change\.md/.test(jira),
+      () => !/tasks\.md|requirements\.md/.test(gh + jira), () => dOk.ok, () => dOk.affects.join() === "Approach,US-1.AC-1,Summary",
+      () => dBad.ok === false, () => /a section heading of change\.md \(Summary, Acceptance Criteria, Approach, Tasks\)/.test(dBad.error),
+      () => !/design\.md/.test(dBad.error), () => (tr.phantomAffects || []).length === 0, () => cl.status === "fail",
+      () => /in change\.md — resolve before approving the plan/.test(cl.detail), () => !/design/.test(cl.detail), () => ap.ok === false,
+      () => /approving the plan/.test(apCl.detail || ""),
+      () => /em change\.md — [\s\S]*aprovar o plano/.test(pt.hook.earsIssues(1, 0, "L1", true, "change.md")),
+      () => /antes de aprobar el plan/.test(es.gates.hookPlaceholders(1, "L1 [x]", "change.md")),
+      () => /before advancing to design/.test(S.msg("en").hook.earsIssues(1, 0, "L1", true)),
+      () => /in requirements\.md/.test(S.msg("en").gates.hookPlaceholders(1, "L1 [x]")),
+    ]);
   }
 };

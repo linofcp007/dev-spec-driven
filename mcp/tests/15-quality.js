@@ -8,7 +8,7 @@ const { spawnSync } = require("child_process");
 
 // Runs after 17-docs-evals, in the same process: it reads the behavioural fixtures it built under tmp (a3-eval-fixtures/): 1.16 Q2 and 1.19 R1 re-check them.
 exports.deps = ["17-docs-evals"];
-exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeature, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, shipFeature, require, __dirname }) => {
 
   // 1.16 package (Q) — spec quality: steering amendments, cross-feature ACs, glossary.
 
@@ -65,12 +65,16 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
     const imB = S.impactReport(q1, "Beta", { phase: "STEERING" });
     const imNo = await call("spec_impact", { projectDir: q1 });
     const imRe = S.impactReport(q1, "alpha", { phase: "steering", reopen: true });
-    ok(!imP.isError && imP.p.ok && imP.p.scope === "project" && imP.p.changed === true && js(imP.p.features.map((f) => f.feature)) === js(["alpha", "beta"]) &&
-      js(imP.p.files) === js(["constitution.md", "security.md"]) && js(imP.p.untracked) === js([{ feature: "legacy", phases: ["requirements", "design"] }]) &&
-      imB.ok && imB.scope === "feature" && imB.feature === "beta" && imB.features.length === 1 && js(imB.features[0].approvals[0].files) === js([{ file: "constitution.md", change: "modified" }]) &&
-      /^Steering — beta: approved under an older version of steering/.test(S.impactLines(imB)[0]) &&
-      imNo.isError && /name required — only phase 'steering' works project-wide/.test(imNo.p.error) && imRe.ok === false && /reopen doesn't apply to phase 'steering'/.test(imRe.error),
-      "1.16 Q1: spec_impact {phase: 'steering'} without a name lists every active feature approved under changed steering (+ the pre-1.16 ones as untracked); with a name, that feature; no name for another phase and reopen are refused (got " + js([imP.p && imP.p.features, imNo.p]) + ")");
+    all("1.16 Q1: spec_impact {phase: 'steering'} without a name lists every active feature approved under changed steering (+ the pre-1.16 ones as untracked); with a name, that feature; no name for another phase and reopen are refused (got " + js([imP.p && imP.p.features, imNo.p]) + ")", [
+      () => !imP.isError, () => imP.p.ok, () => imP.p.scope === "project", () => imP.p.changed === true,
+      () => js(imP.p.features.map((f) => f.feature)) === js(["alpha", "beta"]), () => js(imP.p.files) === js(["constitution.md", "security.md"]),
+      () => js(imP.p.untracked) === js([{ feature: "legacy", phases: ["requirements", "design"] }]), () => imB.ok, () => imB.scope === "feature",
+      () => imB.feature === "beta", () => imB.features.length === 1,
+      () => js(imB.features[0].approvals[0].files) === js([{ file: "constitution.md", change: "modified" }]),
+      () => /^Steering — beta: approved under an older version of steering/.test(S.impactLines(imB)[0]), () => imNo.isError,
+      () => /name required — only phase 'steering' works project-wide/.test(imNo.p.error), () => imRe.ok === false,
+      () => /reopen doesn't apply to phase 'steering'/.test(imRe.error),
+    ]);
     approveAll(q1, "alpha", ["requirements", "design"]);
     const imAfter = S.impactReport(q1, undefined, { phase: "steering" });
     ok(!qChecks(q1, "alpha").some((c) => c.id === "steering-changed-since-approval") && !S.nextAction(q1, "alpha").steeringChanged &&
@@ -355,13 +359,17 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
         for (const x of [fp, path.join(q2t, ".specs", "feature-" + f, ".state.json")]) fs.utimesSync(x, past, past);
       }
     };
-    touchAll();
-    t0 = Date.now();
-    const xCold = S.crossFeatureAcs(q2t);
-    const msCold = Date.now() - t0;
-    const warm = [];
-    for (let i = 0; i < 3; i++) { t0 = Date.now(); S.crossFeatureAcs(q2t); warm.push(Date.now() - t0); }
-    const msWarm = Math.min(...warm);
+    // 1.26: cold and warm measured once more (touched again: a cold call again) on a timing-only miss — a load spike in the cold
+    // call's shadow or in all three warm ones; a cache that stopped working misses every sample
+    const { xCold, msCold, msWarm } = remeasure(() => {
+      touchAll();
+      t0 = Date.now();
+      const cold = S.crossFeatureAcs(q2t);
+      const coldMs = Date.now() - t0;
+      const warm = [];
+      for (let i = 0; i < 3; i++) { t0 = Date.now(); S.crossFeatureAcs(q2t); warm.push(Date.now() - t0); }
+      return { xCold: cold, msCold: coldMs, msWarm: Math.min(...warm) };
+    }, (s) => s.msWarm * 2 <= s.msCold + 10 && s.msWarm < 3000);
     const f7 = path.join(q2t, ".specs", "feature-7", "requirements.md"), f8 = path.join(q2t, ".specs", "feature-8", "requirements.md");
     const f7raw = fs.readFileSync(f7, "utf8");
     fs.writeFileSync(f7, f7raw + "21. **US-1.AC-21** — WHEN a webhook delivery fails twice THE SYSTEM SHALL pause the webhook subscription\n");
@@ -499,18 +507,22 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
     const gAp = S.approvePhase(gp, gf.slug, "design", "t");
     const gSt = readSt(gf);
     const gDocAfter = S.specDoctor(gp, gf.slug);
-    ok(gApT.ok === false && js(gApT.failing) === js(["placeholders"]) && /\[existing module, component, helper or service\]/.test(gApT.checks[0].detail) &&
-      reuseSt(gDocT) === "warn" && /^Reuse & Integration is still the template/.test(chk(gDocT, "design-reuse").detail) &&
-      st3(gDocF) === "pass,pass,pass" && chk(gDocF, "design-reuse").detail === "3 item(s) named (reused / extended / new)" &&
-      st3(gMcp) === "pass,pass,pass" && gMcp.checks.findIndex((c) => c.id === "design-reuse") === gMcp.checks.findIndex((c) => c.id === "design-risks") + 1 &&
-      reuseSt(gDocE) === "warn" && /^Reuse & Integration is empty/.test(chk(gDocE, "design-reuse").detail) &&
-      reuseSt(gDocP) === "pass" && /^written \(no row or bullet/.test(chk(gDocP, "design-reuse").detail) &&
-      reuseSt(gDocDel) === "warn" && /^no Reuse & Integration section/.test(chk(gDocDel, "design-reuse").detail) && gDocDel.readyToAdvance === true &&
-      gDocDel.checks.every((c) => c.status !== "fail") && gSave.reuse === "missing" && gSave.clean === true && /\n  ▲ no Reuse & Integration section/.test(gSave.text) &&
-      gAp.ok === true && !gAp.forced && gSt.approvals.design.reuse === true && gSt.approvals.design.weigh === true &&
-      gSt.approvalHistory[gSt.approvalHistory.length - 1].reuse === true && gSt.approvals.requirements.reuse === undefined && reuseSt(gDocAfter) === "warn",
-      "1.19 R1: the Reuse & Integration slots refuse the design approval on placeholders only; filled → design-reuse passes (MCP too, right after design-risks); empty → warn; a line of prose ('greenfield') passes; deleted → warn, readyToAdvance, the approval goes through unforced and stamps reuse: true (approval + history, design only) — the 1.19 approval keeps the warn; the design-save check notes it with ▲ (got " +
-      js([gApT.failing, reuseSt(gDocT), st3(gDocF), chk(gDocF, "design-reuse").detail, reuseSt(gDocE), reuseSt(gDocP), reuseSt(gDocDel), gSave.reuse, gAp.ok, gSt.approvals.design, reuseSt(gDocAfter)]) + ")");
+    all("1.19 R1: the Reuse & Integration slots refuse the design approval on placeholders only; filled → design-reuse passes (MCP too, right after design-risks); empty → warn; a line of prose ('greenfield') passes; deleted → warn, readyToAdvance, the approval goes through unforced and stamps reuse: true (approval + history, design only) — the 1.19 approval keeps the warn; the design-save check notes it with ▲ (got " +
+      js([gApT.failing, reuseSt(gDocT), st3(gDocF), chk(gDocF, "design-reuse").detail, reuseSt(gDocE), reuseSt(gDocP), reuseSt(gDocDel), gSave.reuse, gAp.ok, gSt.approvals.design, reuseSt(gDocAfter)]) + ")", [
+      () => gApT.ok === false, () => js(gApT.failing) === js(["placeholders"]),
+      () => /\[existing module, component, helper or service\]/.test(gApT.checks[0].detail), () => reuseSt(gDocT) === "warn",
+      () => /^Reuse & Integration is still the template/.test(chk(gDocT, "design-reuse").detail), () => st3(gDocF) === "pass,pass,pass",
+      () => chk(gDocF, "design-reuse").detail === "3 item(s) named (reused / extended / new)", () => st3(gMcp) === "pass,pass,pass",
+      () => gMcp.checks.findIndex((c) => c.id === "design-reuse") === gMcp.checks.findIndex((c) => c.id === "design-risks") + 1,
+      () => reuseSt(gDocE) === "warn", () => /^Reuse & Integration is empty/.test(chk(gDocE, "design-reuse").detail), () => reuseSt(gDocP) === "pass",
+      () => /^written \(no row or bullet/.test(chk(gDocP, "design-reuse").detail), () => reuseSt(gDocDel) === "warn",
+      () => /^no Reuse & Integration section/.test(chk(gDocDel, "design-reuse").detail), () => gDocDel.readyToAdvance === true,
+      () => gDocDel.checks.every((c) => c.status !== "fail"), () => gSave.reuse === "missing", () => gSave.clean === true,
+      () => /\n  ▲ no Reuse & Integration section/.test(gSave.text), () => gAp.ok === true, () => !gAp.forced,
+      () => gSt.approvals.design.reuse === true, () => gSt.approvals.design.weigh === true,
+      () => gSt.approvalHistory[gSt.approvalHistory.length - 1].reuse === true, () => gSt.approvals.requirements.reuse === undefined,
+      () => reuseSt(gDocAfter) === "warn",
+    ]);
 
     // R1 — the stamp scheme: a design approval without `reuse` (made by 1.17 / 1.18: `weigh` only) is never flagged by design-reuse
     // (a pass with 'approved before 1.19') while design-tradeoffs still warns for it; without `weigh` either (pre-1.17) nothing warns.
@@ -644,26 +656,32 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
     const b1W = S.taskBrief(rp, rf.slug, 1, { write: true });
     const b1Mcp = payload(await call("spec_task_brief", { projectDir: rp, name: rf.slug, number: 1, write: true }));
     const b1File = fs.readFileSync(b1W.paths.brief, "utf8");
-    ok(js(b1.reuse.entries) === js(["| Reuse | the order repository | `src/orders/repo.ts` | reads and writes orders already |"]) && b1.reuse.total === 4 &&
-      js(b1.reuse.files) === js(["src/orders/helpers.ts", "src/orders/repo.ts", "src/orders/api.test.ts"]) && b1.reuse.state === "filled" &&
-      /\n- Reuse · the order repository · `src\/orders\/repo\.ts` · reads and writes orders already\n/.test(sec(b1)) && /\n- `src\/orders\/helpers\.ts`\n/.test(sec(b1)) &&
-      /search the codebase by concept and synonyms \(references\/code-reuse-and-quality\.md\)/.test(sec(b1)) && !b1.designSections.includes("Reuse & Integration") &&
-      b2.reuse.entries.length === 2 && /US-1\.AC-2 — an empty cart/.test(b2.reuse.entries[1]) && !b2.reuse.files.length &&
-      !b3.reuse.entries.length && b3.reuse.total === 4 && /lists 4 item\(s\), none naming this task's files or criteria/.test(sec(b3)) &&
-      b4.reuse.files.length === 15 && b4.reuse.more === 15 && b4.reuse.files[0] === "src/many/m00.ts" && /…and 15 more in the same folder\(s\)\./.test(sec(b4)) &&
-      !b5.reuse.files.length &&
-      b1W.reuse === undefined && js(b1W.refs.reuse) === js({ entries: 1, files: ["src/orders/helpers.ts", "src/orders/repo.ts", "src/orders/api.test.ts"] }) &&
-      js(b1Mcp.refs.reuse) === js(b1W.refs.reuse) && b1Mcp.reuse === undefined && /## Reuse — search before you write/.test(b1File),
-      "1.19 R2: the brief's Reuse section quotes the design's entries naming the task (a sibling file, its own file, its AC; a table row's cells joined by ' · '), says when none does, and lists the existing source files next to its own (non-test first; its own file, dot files, docs, node_modules out; ≤ 15 + 'more'); a Reuse & Integration section not naming the task stays out of Design context; write:true (MCP too) keeps refs.reuse {entries, files} (got " +
-      js([b1.reuse, b2.reuse.entries, b3.reuse, b4.reuse.more, b5.reuse, b1W.refs, b1.designSections]) + ")");
+    all("1.19 R2: the brief's Reuse section quotes the design's entries naming the task (a sibling file, its own file, its AC; a table row's cells joined by ' · '), says when none does, and lists the existing source files next to its own (non-test first; its own file, dot files, docs, node_modules out; ≤ 15 + 'more'); a Reuse & Integration section not naming the task stays out of Design context; write:true (MCP too) keeps refs.reuse {entries, files} (got " +
+      js([b1.reuse, b2.reuse.entries, b3.reuse, b4.reuse.more, b5.reuse, b1W.refs, b1.designSections]) + ")", [
+      () => js(b1.reuse.entries) === js(["| Reuse | the order repository | `src/orders/repo.ts` | reads and writes orders already |"]),
+      () => b1.reuse.total === 4, () => js(b1.reuse.files) === js(["src/orders/helpers.ts", "src/orders/repo.ts", "src/orders/api.test.ts"]),
+      () => b1.reuse.state === "filled",
+      () => /\n- Reuse · the order repository · `src\/orders\/repo\.ts` · reads and writes orders already\n/.test(sec(b1)),
+      () => /\n- `src\/orders\/helpers\.ts`\n/.test(sec(b1)),
+      () => /search the codebase by concept and synonyms \(references\/code-reuse-and-quality\.md\)/.test(sec(b1)),
+      () => !b1.designSections.includes("Reuse & Integration"), () => b2.reuse.entries.length === 2,
+      () => /US-1\.AC-2 — an empty cart/.test(b2.reuse.entries[1]), () => !b2.reuse.files.length, () => !b3.reuse.entries.length,
+      () => b3.reuse.total === 4, () => /lists 4 item\(s\), none naming this task's files or criteria/.test(sec(b3)),
+      () => b4.reuse.files.length === 15, () => b4.reuse.more === 15, () => b4.reuse.files[0] === "src/many/m00.ts",
+      () => /…and 15 more in the same folder\(s\)\./.test(sec(b4)), () => !b5.reuse.files.length, () => b1W.reuse === undefined,
+      () => js(b1W.refs.reuse) === js({ entries: 1, files: ["src/orders/helpers.ts", "src/orders/repo.ts", "src/orders/api.test.ts"] }),
+      () => js(b1Mcp.refs.reuse) === js(b1W.refs.reuse), () => b1Mcp.reuse === undefined, () => /## Reuse — search before you write/.test(b1File),
+    ]);
 
     // R2 — bounded: at most 8 entries (the rest counted in `omitted`), a 200,000-character line with no '/' is read once (the path
     // token only starts at a token boundary), the brief is localized (PT).
     const many = "## Reuse & Integration\n" + Array.from({ length: 12 }, (_, i) => `- Reuse \`src/orders/r${i}.ts\` — helper ${i}.\n`).join("") + "- " + "a".repeat(200000) + "\n\n";
     wDesign(rf, design(many));
-    const t0 = Date.now();
-    const bMany = S.taskBrief(rp, rf.slug, 1);
-    const manyMs = Date.now() - t0;
+    const { manyMs, bMany } = remeasure(() => { // 1.26: measured once more on a timing-only miss
+      const t0 = Date.now();
+      const bMany = S.taskBrief(rp, rf.slug, 1);
+      return { manyMs: Date.now() - t0, bMany };
+    }, (s) => s.manyMs < 3000);
     const ptp = rDir("brief-pt");
     S.initProject(ptp, ["core"], "pt");
     const ptf = S.createFeature(ptp, "Encomendas", ["core"], "", undefined, "pt");
@@ -686,21 +704,26 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
     const revQuality = cut(rev, "### 4. Code quality", "### Calibration");
     const subRefactor = cut(sub, "**Refactor candidates are filed", "## Parallel mode");
     const execReuse = cut(exec, "**Search before you write**", "**Can't run the");
-    ok(/concept and at least three synonyms/.test(implSearch) && /brief's \*\*Reuse\*\* section/.test(implSearch) && /\*\*reuse\*\*, else \*\*extend\*\*/.test(implSearch) &&
-      /copy-paste/.test(implSearch) && /rule of three/.test(implSearch) && /No new helper, component or client without the search/.test(impl) && /filed, not done/.test(impl) &&
-      ["### Reuse", "Reused:", "Extended:", "Created:", "searched:", "Duplicated on purpose:", "Refactor candidates:"].every((w) => implReuse.includes(w)) &&
-      /Duplication against the EXISTING codebase, not only inside the diff/.test(revQuality) && /duplicates an existing one is \*\*Important\*\*/.test(revQuality) &&
-      /Grep the name's stem and two synonyms/.test(revQuality) && /report's \*\*Reuse\*\* block/.test(revQuality) && /\*\*Minor\*\* unless they hide a defect/.test(revQuality) &&
-      /Duplication is always such a risk/.test(rev) && /a new unit duplicating an existing one/.test(rev) &&
-      /spec_roadmap_edit \{kind: "backlog", action: "add", name: "refactor-<topic>"/.test(subRefactor) && /Task 3: refactor candidate filed/.test(sub) && /check the report has its \*\*Reuse\*\* block/.test(sub) &&
-      /refactor:/.test(execReuse) && /duplicate in the existing codebase/.test(exec) &&
-      /"I'll write a quick helper" \| Search first/.test(flags) && /"I'll copy this function and tweak it"/.test(flags) && /rule of three/.test(flags) &&
-      /\*\*Reuse & Integration\*\*/.test(skill) && /design-reuse/.test(skill) && /code-reuse-and-quality\.md/.test(skill) && /\*\*Search before you write:\*\*/.test(skill) &&
-      skill.split(/\s+/).filter(Boolean).length <= 5000 && /\*\*Every design names what it reuses:\*\*/.test(dcmd) && /design-reuse/.test(dcmd) &&
-      /\*\*Reuse & Integration\*\*/.test(agentsMd) && /design-reuse/.test(agentsMd) && /Search before you write/.test(agentsMd) && /design-reuse/.test(guide) &&
-      [implSearch, implReuse, revQuality, subRefactor, execReuse].every((t) => t.length > 100 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
-      "1.19 R3: spec-implementer searches before it writes (a hard step: concept + synonyms, reuse → extend → create, no copy-paste) and reports a Reuse block; spec-reviewer checks every new unit against the existing codebase (a duplicate is Important, smells Minor); the controller files refactor candidates in the backlog (subagent-execution.md, /executeTask); red-flags, /design, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
-      js([implSearch.length, implReuse.length, revQuality.length, subRefactor.length, execReuse.length, skill.split(/\s+/).filter(Boolean).length]) + ")");
+    all("1.19 R3: spec-implementer searches before it writes (a hard step: concept + synonyms, reuse → extend → create, no copy-paste) and reports a Reuse block; spec-reviewer checks every new unit against the existing codebase (a duplicate is Important, smells Minor); the controller files refactor candidates in the backlog (subagent-execution.md, /executeTask); red-flags, /design, AGENTS.md and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
+      js([implSearch.length, implReuse.length, revQuality.length, subRefactor.length, execReuse.length, skill.split(/\s+/).filter(Boolean).length]) + ")", [
+      () => /concept and at least three synonyms/.test(implSearch), () => /brief's \*\*Reuse\*\* section/.test(implSearch),
+      () => /\*\*reuse\*\*, else \*\*extend\*\*/.test(implSearch), () => /copy-paste/.test(implSearch), () => /rule of three/.test(implSearch),
+      () => /No new helper, component or client without the search/.test(impl), () => /filed, not done/.test(impl),
+      () => ["### Reuse", "Reused:", "Extended:", "Created:", "searched:", "Duplicated on purpose:", "Refactor candidates:"].every((w) => implReuse.includes(w)),
+      () => /Duplication against the EXISTING codebase, not only inside the diff/.test(revQuality),
+      () => /duplicates an existing one is \*\*Important\*\*/.test(revQuality), () => /Grep the name's stem and two synonyms/.test(revQuality),
+      () => /report's \*\*Reuse\*\* block/.test(revQuality), () => /\*\*Minor\*\* unless they hide a defect/.test(revQuality),
+      () => /Duplication is always such a risk/.test(rev), () => /a new unit duplicating an existing one/.test(rev),
+      () => /spec_roadmap_edit \{kind: "backlog", action: "add", name: "refactor-<topic>"/.test(subRefactor), () => /Task 3: refactor candidate filed/.test(sub),
+      () => /check the report has its \*\*Reuse\*\* block/.test(sub), () => /refactor:/.test(execReuse),
+      () => /duplicate in the existing codebase/.test(exec), () => /"I'll write a quick helper" \| Search first/.test(flags),
+      () => /"I'll copy this function and tweak it"/.test(flags), () => /rule of three/.test(flags), () => /\*\*Reuse & Integration\*\*/.test(skill),
+      () => /design-reuse/.test(skill), () => /code-reuse-and-quality\.md/.test(skill), () => /\*\*Search before you write:\*\*/.test(skill),
+      () => skill.split(/\s+/).filter(Boolean).length <= 5000, () => /\*\*Every design names what it reuses:\*\*/.test(dcmd),
+      () => /design-reuse/.test(dcmd), () => /\*\*Reuse & Integration\*\*/.test(agentsMd), () => /design-reuse/.test(agentsMd),
+      () => /Search before you write/.test(agentsMd), () => /design-reuse/.test(guide),
+      () => [implSearch, implReuse, revQuality, subRefactor, execReuse].every((t) => t.length > 100 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
+    ]);
 
     // 1.22 — the prose of the verify pass, the written-rules / history angle and the simplification pass (adapted from
     // Anthropic's code-review / code-simplifier plugins): the reviewer rates findings and lists what is not one, the
@@ -711,38 +734,63 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
     const revRules = cut(rev, "### 5. Written rules and history", "### Calibration"), revSimp = cut(rev, "## Simplify mode", "## Verify mode");
     const subVerify = cut(sub, "### 6. Verify the findings", "### 7. Fix loop"), subSimp = cut(sub, "## The simplification pass", "## Closing");
     const guideSimp = cut(guide, "## The simplification pass", "## The refactor-candidate backlog");
-    ok(["**Pre-existing**", "**Outside the diff's lines**", "**Intended**", "**Disproved by a run**", "**Silenced on purpose**", "**A nitpick**"].every((w) => revNot.includes(w)) &&
-      /only \*\*80 or more\*\* there opens a fix round/.test(revNot) && /adapted from Anthropic's `code-review` plugin/.test(revNot) &&
-      ["**Exists at HEAD?**", "**Introduced by this diff?**", "**Intended?**", "**Already answered?**"].every((w) => revVerify.includes(w)) && /CONFIRMED \(80\+\) \| UNCONFIRMED \(50–79\) \| REFUTED \(under 50\)/.test(cut(rev, "Verify mode replaces them with:", "Simplify mode keeps")) &&
-      /quotes the rule with its file:line/.test(revRules) && /git blame -L <start>,<end> BASE -- <file>/.test(revRules) && /A fixed bug brought back is\s+\*\*Critical\*\*/.test(revRules) &&
-      /no test file, fixture or snapshot in the diff \(any is \*\*Critical\*\*/.test(revSimp) &&
-      /\*\*80 or more\*\* → confirmed/.test(subVerify) && /\*\*50–79\*\* → unconfirmed/.test(subVerify) && /\*\*Under 50\*\* → refuted/.test(subVerify) && /Task 3: refuted \(20, pre-existing\)/.test(sub) &&
-      /\*\*reverted\*\*, not repaired/.test(subSimp) && /dev-spec-driven:spec-simplifier/.test(subSimp) && /Verify pass \(one finding\) \| cheapest/.test(sub) &&
-      /\*\*Verify before you report\.\*\*/.test(prr) && /"Unconfirmed \(below 80\)"/.test(prr) && /\*\*History\*\*/.test(prr) && /\*\*Written rules\*\*/.test(prr) &&
-      /Only lines the branch added or changed/.test(simp) && /\*\*Never a test\*\*/.test(simp) && /\*\*Never a contract:\*\*/.test(simp) && /commit it alone/.test(simp) &&
-      /never edit the test, never fix forward/.test(simp) && /\*\*`## Final runs`\*\* — LAST in the file/.test(simp) && /ONE line\s+per run/.test(simp) && /NO_CHANGES/.test(simp) && /Adapted from Anthropic's `code-simplifier` plugin/.test(simp) &&
-      /\*\*before\*\*\s+`\/spec-finish`/.test(scmd) && /\*\*reverted\*\*\s+\(`git revert <sha>`/.test(scmd) && /done <feature> <n> --run/.test(scmd) && /Never "behaviour unchanged" without the runs/.test(scmd) &&
-      /\| Never a test, fixture or snapshot \|/.test(guideSimp) && /\/spec-simplify/.test(skill) && /\/spec-simplify/.test(exec) && /verify-mode reviewer/.test(exec) &&
-      /agents\/spec-reviewer\.md` → Verify mode/.test(agentsMd) && /commands\/spec-simplify\.md/.test(agentsMd) &&
+    // One row per claim of the prose — [where, its text, a string it must hold verbatim or a RegExp it must match (, false: must
+    // NOT)] — so a FAIL names exactly which file and which sentence went missing.
+    const revVerdicts = cut(rev, "Verify mode replaces them with:", "Simplify mode keeps");
+    const R = "spec-reviewer.md", SX = "subagent-execution.md", SI = "spec-simplifier.md", SC = "/spec-simplify", PR = "/prReview";
+    const prose = [
+      ...["**Pre-existing**", "**Outside the diff's lines**", "**Intended**", "**Disproved by a run**", "**Silenced on purpose**", "**A nitpick**"].map((w) => [R + " › Not a finding", revNot, w]),
+      [R + " › Not a finding", revNot, /only \*\*80 or more\*\* there opens a fix round/], [R + " › Not a finding", revNot, /adapted from Anthropic's `code-review` plugin/],
+      ...["**Exists at HEAD?**", "**Introduced by this diff?**", "**Intended?**", "**Already answered?**"].map((w) => [R + " › Verify mode", revVerify, w]),
+      [R + " › Verify mode's verdicts", revVerdicts, /CONFIRMED \(80\+\) \| UNCONFIRMED \(50–79\) \| REFUTED \(under 50\)/],
+      [R + " › Written rules", revRules, /quotes the rule with its file:line/], [R + " › Written rules", revRules, /git blame -L <start>,<end> BASE -- <file>/],
+      [R + " › Written rules", revRules, /A fixed bug brought back is\s+\*\*Critical\*\*/],
+      [R + " › Simplify mode", revSimp, /no test file, fixture or snapshot in the diff \(any is \*\*Critical\*\*/],
+      [SX + " › Verify the findings", subVerify, /\*\*80 or more\*\* → confirmed/], [SX + " › Verify the findings", subVerify, /\*\*50–79\*\* → unconfirmed/],
+      [SX + " › Verify the findings", subVerify, /\*\*Under 50\*\* → refuted/], [SX, sub, /Task 3: refuted \(20, pre-existing\)/],
+      [SX + " › The simplification pass", subSimp, /\*\*reverted\*\*, not repaired/], [SX + " › The simplification pass", subSimp, /dev-spec-driven:spec-simplifier/],
+      [SX, sub, /Verify pass \(one finding\) \| cheapest/],
+      [PR, prr, /\*\*Verify before you report\.\*\*/], [PR, prr, /"Unconfirmed \(below 80\)"/], [PR, prr, /\*\*History\*\*/], [PR, prr, /\*\*Written rules\*\*/],
+      [SI, simp, /Only lines the branch added or changed/], [SI, simp, /\*\*Never a test\*\*/], [SI, simp, /\*\*Never a contract:\*\*/], [SI, simp, /commit it alone/],
+      [SI, simp, /never edit the test, never fix forward/], [SI, simp, /\*\*`## Final runs`\*\* — LAST in the file/], [SI, simp, /ONE line\s+per run/], [SI, simp, /NO_CHANGES/],
+      [SI, simp, /Adapted from Anthropic's `code-simplifier` plugin/],
+      [SC, scmd, /\*\*before\*\*\s+`\/spec-finish`/], [SC, scmd, /\*\*reverted\*\*\s+\(`git revert <sha>`/], [SC, scmd, /done <feature> <n> --run/],
+      [SC, scmd, /Never "behaviour unchanged" without the runs/],
+      ["code-reuse-and-quality.md › The simplification pass", guideSimp, /\| Never a test, fixture or snapshot \|/], ["SKILL.md", skill, /\/spec-simplify/],
+      ["/executeTask", exec, /\/spec-simplify/], ["/executeTask", exec, /verify-mode reviewer/],
+      ["AGENTS.md", agentsMd, /agents\/spec-reviewer\.md` → Verify mode/], ["AGENTS.md", agentsMd, /commands\/spec-simplify\.md/],
       // review 1: an ❌ is never unconfirmed (nor pre-existing), a break on untouched lines is the diff's, the verifier gets the
       // report, the simplify pass records the checks again, documents guard mode, never runs the built-in /simplify, and the
       // simplify reviewer gets its inputs; reverts take the dependent commits and stop on a conflict; AGENTS.md scopes the rule
-      /An ❌ is never pre-existing and never UNCONFIRMED/.test(revVerify) && /\*\*An ❌ is never pre-existing:\*\*/.test(revNot) && /broken by it on lines it didn't touch/.test(revVerify) &&
-      /\*\*An ❌ comes back CONFIRMED or REFUTED, never unconfirmed\*\*/.test(subVerify) && /the report path \(the implementer's, or the simplifier's\)/.test(subVerify) &&
-      /finish <feature> --run/.test(scmd) && /\*\*guard\s+mode\*\*/.test(scmd) && /Don't run Claude Code's built-in `\/simplify` inside the pass/.test(scmd) && /after an inline pass too/.test(scmd) &&
-      /package path, MERGE_BASE, SIMPLIFY_BASE, the report path and the feature folder/.test(subSimp) &&
-      /review\.diff/.test(prr) && /A person's review comments go through/.test(agentsMd) &&
-      /\.specs\/_archive\//.test(revRules) && !/can suggest candidates/.test(scmd + guideSimp) &&
+      [R + " › Verify mode", revVerify, /An ❌ is never pre-existing and never UNCONFIRMED/], [R + " › Not a finding", revNot, /\*\*An ❌ is never pre-existing:\*\*/],
+      [R + " › Verify mode", revVerify, /broken by it on lines it didn't touch/],
+      [SX + " › Verify the findings", subVerify, /\*\*An ❌ comes back CONFIRMED or REFUTED, never unconfirmed\*\*/],
+      [SX + " › Verify the findings", subVerify, /the report path \(the implementer's, or the simplifier's\)/],
+      [SC, scmd, /finish <feature> --run/], [SC, scmd, /\*\*guard\s+mode\*\*/], [SC, scmd, /Don't run Claude Code's built-in `\/simplify` inside the pass/],
+      [SC, scmd, /after an inline pass too/],
+      [SX + " › The simplification pass", subSimp, /package path, MERGE_BASE, SIMPLIFY_BASE, the report path and the feature folder/],
+      [PR, prr, /review\.diff/], ["AGENTS.md", agentsMd, /A person's review comments go through/], [R + " › Written rules", revRules, /\.specs\/_archive\//],
+      [SC + " + the guide's simplification pass", scmd + guideSimp, /can suggest candidates/, false],
       // review 2: a conflicting revert is aborted, the simplifier runs in the foreground under guard mode, the checks are
       // recorded under their meta.checks names (and never invented), an ❌ carries no confidence, the run lines sit at the
       // margin with their output indented, and the section runs to the end of the file
-      [simp, scmd, subSimp].every((t) => /git revert --abort/.test(t)) && /run_in_background: false/.test(scmd) && /run_in_background: false/.test(subSimp) &&
-      /each under its `meta\.checks` name/.test(scmd) && /never add checks just to record a run/.test(scmd) && /Never add\s+checks to record a run/.test(subSimp) &&
-      /with no `\*\*Confidence:\*\*` line/.test(rev) && /its verdict\s+decides, not a confidence/.test(subVerify) &&
-      /at the margin/.test(simp) && /INDENTED lines/.test(simp) && /to the end of the file/.test(simp) &&
-      [revNot, revVerify, revRules, revSimp, subVerify, subSimp, guideSimp, simp, scmd].every((t) => t.length > 200 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
-      "1.22: spec-reviewer rates findings, lists what is not one, verifies one finding fresh (verify mode), checks the written rules + history and a simplification diff (simplify mode); the controller verifies each finding before a fix round (80+ confirmed, 50–79 unconfirmed, < 50 refuted) and runs the simplification pass (reverted, not repaired); /prReview verifies before it reports; the simplifier keeps the feature's lines, never a test or contract, one commit each, the final runs last; /spec-simplify, /executeTask, SKILL.md, AGENTS.md and the guide name them; no PR / CI steering (got " +
-      js([revNot.length, revVerify.length, revRules.length, revSimp.length, subVerify.length, subSimp.length, guideSimp.length, simp.length, scmd.length]) + ")");
+      [SI, simp, /git revert --abort/], [SC, scmd, /git revert --abort/], [SX + " › The simplification pass", subSimp, /git revert --abort/],
+      [SC, scmd, /run_in_background: false/], [SX + " › The simplification pass", subSimp, /run_in_background: false/],
+      [SC, scmd, /each under its `meta\.checks` name/], [SC, scmd, /never add checks just to record a run/],
+      [SX + " › The simplification pass", subSimp, /Never add\s+checks to record a run/],
+      [R, rev, /with no `\*\*Confidence:\*\*` line/], [SX + " › Verify the findings", subVerify, /its verdict\s+decides, not a confidence/],
+      [SI, simp, /at the margin/], [SI, simp, /INDENTED lines/], [SI, simp, /to the end of the file/],
+    ];
+    const sections = { [R + " › Not a finding"]: revNot, [R + " › Verify mode"]: revVerify, [R + " › Written rules"]: revRules, [R + " › Simplify mode"]: revSimp,
+      [SX + " › Verify the findings"]: subVerify, [SX + " › The simplification pass"]: subSimp, ["code-reuse-and-quality.md › The simplification pass"]: guideSimp,
+      [SI]: simp, [SC]: scmd };
+    all("1.22: spec-reviewer rates findings, lists what is not one, verifies one finding fresh (verify mode), checks the written rules + history and a simplification diff (simplify mode); the controller verifies each finding before a fix round (80+ confirmed, 50–79 unconfirmed, < 50 refuted) and runs the simplification pass (reverted, not repaired); /prReview verifies before it reports; the simplifier keeps the feature's lines, never a test or contract, one commit each, the final runs last; /spec-simplify, /executeTask, SKILL.md, AGENTS.md and the guide name them; no PR / CI steering (got " +
+      js([revNot.length, revVerify.length, revRules.length, revSimp.length, subVerify.length, subSimp.length, guideSimp.length, simp.length, scmd.length]) + ")", {
+      ...Object.fromEntries(prose.map(([where, text, p, want = true]) => [`${where} ${want ? "has" : "never has"} ${typeof p === "string" ? js(p) : p}`,
+        (typeof p === "string" ? text.includes(p) : p.test(text)) === want])),
+      ...Object.fromEntries(Object.entries(sections).map(([where, text]) => [`${where}: over 200 characters, no PR / CI steering`,
+        text.length > 200 && !/pull request|\bPRs?\b|\bCI\b/.test(text)])),
+    });
 
     // R4 — steering: structure.md gains Module Boundaries and Shared Code slots, the constitution's example principles a reuse rule
     // (EN / PT / ES / pt-BR) — slots, so a fresh stub still reads as a template.
@@ -953,15 +1001,18 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
     const step3 = cut(impl6, "3. **Search before you write**", "4. If anything is unclear");
     const outside6 = cut(guide6, "**Extending a unit outside the task's files.**", "## Module boundaries");
     const rules6 = ["en", "pt", "es", "pt-BR"].map((l) => I.brief(l).reuseRule);
-    ok(sysGot.every((s) => s === "pass") &&
-      /never edited silently/.test(step3) && /\*\*NEEDS_CONTEXT\*\*/.test(step3) && /spec_append_tasks/.test(step3) && /meta\.guard: "scope"/.test(step3) &&
-      /NEEDS_CONTEXT/.test(outside6) && /spec_append_tasks/.test(outside6) && /meta\.guard: "scope"/.test(outside6) && /Reuse\*\* block/.test(outside6) &&
-      /extend a unit outside\s+the task's files/.test(sub6) && /One name per candidate/.test(sub6) && /spec_append_tasks/.test(cut(exec6, "**Search before you write**", "**Can't run the")) &&
-      /its \*\*own name\*\*/.test(guide6) && /never edited silently — stop and ask \(NEEDS_CONTEXT\)/.test(rules6[0]) && /nunca é editada em silêncio — pede contexto \(NEEDS_CONTEXT\)/.test(rules6[1]) &&
-      /nunca se edita en silencio/.test(rules6[2]) && rules6[3] === I.toPtBr(rules6[1]) && /peça contexto/.test(rules6[3]) &&
-      [step3, outside6].every((t) => !/pull request|\bPRs?\b|\bCI\b/.test(t)),
-      "1.19 R review 6: PT / ES 'integração com o sistema existente' / 'integración con el sistema existente' name the Reuse section; extending a unit outside the task's files is NEEDS_CONTEXT or a converge task, never a silent edit (the scope guard named) — implementer, guide, protocol, /executeTask and the brief's rule in EN / PT / ES / pt-BR; one backlog name per refactor candidate (got " +
-      js([sysGot, step3.length, outside6.length, rules6.map((r) => r.slice(-160))]) + ")");
+    all("1.19 R review 6: PT / ES 'integração com o sistema existente' / 'integración con el sistema existente' name the Reuse section; extending a unit outside the task's files is NEEDS_CONTEXT or a converge task, never a silent edit (the scope guard named) — implementer, guide, protocol, /executeTask and the brief's rule in EN / PT / ES / pt-BR; one backlog name per refactor candidate (got " +
+      js([sysGot, step3.length, outside6.length, rules6.map((r) => r.slice(-160))]) + ")", [
+      () => sysGot.every((s) => s === "pass"), () => /never edited silently/.test(step3), () => /\*\*NEEDS_CONTEXT\*\*/.test(step3),
+      () => /spec_append_tasks/.test(step3), () => /meta\.guard: "scope"/.test(step3), () => /NEEDS_CONTEXT/.test(outside6),
+      () => /spec_append_tasks/.test(outside6), () => /meta\.guard: "scope"/.test(outside6), () => /Reuse\*\* block/.test(outside6),
+      () => /extend a unit outside\s+the task's files/.test(sub6), () => /One name per candidate/.test(sub6),
+      () => /spec_append_tasks/.test(cut(exec6, "**Search before you write**", "**Can't run the")), () => /its \*\*own name\*\*/.test(guide6),
+      () => /never edited silently — stop and ask \(NEEDS_CONTEXT\)/.test(rules6[0]),
+      () => /nunca é editada em silêncio — pede contexto \(NEEDS_CONTEXT\)/.test(rules6[1]), () => /nunca se edita en silencio/.test(rules6[2]),
+      () => rules6[3] === I.toPtBr(rules6[1]), () => /peça contexto/.test(rules6[3]),
+      () => [step3, outside6].every((t) => !/pull request|\bPRs?\b|\bCI\b/.test(t)),
+    ]);
 
     // 1.19 verify 5 — a NEW backlog entry's note has the same cap as an appended one: one line, at most 2,000 characters; past it
     // add is refused with a localized error and nothing is written (MCP and CLI — the CLI exits 1)

@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, require }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, require }) => {
 
   // 1.17 package (A) — design trade-offs / risks, /grill constraint questions, the TDD micro-cycle.
   {
@@ -70,18 +70,25 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, require })
     const gDocDel = S.specDoctor(gp, gf.slug);
     const gSaveDel = S.designSaveCheck(gp, gf.slug);
     const gApDel = S.approvePhase(gp, gf.slug, "design", "t");
-    ok(gApT.ok === false && js(gApT.failing) === js(["placeholders"]) && /\[option A\]/.test(gApT.checks[0].detail) &&
-      weigh(gDocT) === "warn,warn" && /still the template/.test(chk(gDocT, "design-tradeoffs").detail) && /Risks is still the template/.test(chk(gDocT, "design-risks").detail) &&
-      weigh(gDocF) === "pass,pass" && chk(gDocF, "design-tradeoffs").detail === "2 option(s) weighed" && chk(gDocF, "design-risks").detail === "1 risk(s) listed" &&
-      weigh(gMcp) === "pass,pass" && gMcp.checks.findIndex((c) => c.id === "design-tradeoffs") === gMcp.checks.findIndex((c) => c.id === "constitution-check") + 1 &&
-      weigh(gDocFew) === "warn,pass" && /lists 1 option\(s\) — weigh at least 2 per key decision/.test(chk(gDocFew, "design-tradeoffs").detail) &&
-      js(gSaveFew.weigh) === js({ tradeoffs: "few", risks: "filled" }) && gSaveFew.clean === true && /\n  ▲ Alternatives & Trade-offs lists 1 option/.test(gSaveFew.text) &&
-      weigh(gDocDel) === "warn,warn" && /^no Alternatives & Trade-offs section/.test(chk(gDocDel, "design-tradeoffs").detail) && /^no Risks section/.test(chk(gDocDel, "design-risks").detail) &&
-      gDocDel.readyToAdvance === true && gDocDel.checks.every((c) => c.status !== "fail") &&
-      js(gSaveDel.weigh) === js({ tradeoffs: "missing", risks: "missing" }) && (gSaveDel.text.match(/▲ no (?:Alternatives|Risks)/g) || []).length === 2 && // (+ design-reuse's ▲, 1.19 R1)
-      gApDel.ok === true && !gApDel.forced,
-      "1.17 A1: template sections refuse the design approval on placeholders only; filled → design-tradeoffs / design-risks pass (MCP too, right after constitution-check); one option → warn 'few'; deleted → two warns, readyToAdvance, the approval goes through unforced; the design-save check notes them with ▲ (got " +
-      js([gApT.failing, weigh(gDocT), weigh(gDocF), chk(gDocFew, "design-tradeoffs").detail, gSaveFew.weigh, weigh(gDocDel), gSaveDel.weigh, gApDel.ok]) + ")");
+    all("1.17 A1: template sections refuse the design approval on placeholders only; filled → design-tradeoffs / design-risks pass (MCP too, right after constitution-check); one option → warn 'few'; deleted → two warns, readyToAdvance, the approval goes through unforced; the design-save check notes them with ▲ (got " +
+      js([gApT.failing, weigh(gDocT), weigh(gDocF), chk(gDocFew, "design-tradeoffs").detail, gSaveFew.weigh, weigh(gDocDel), gSaveDel.weigh, gApDel.ok]) + ")", [
+      () => gApT.ok === false, () => js(gApT.failing) === js(["placeholders"]), () => /\[option A\]/.test(gApT.checks[0].detail),
+      () => weigh(gDocT) === "warn,warn", () => /still the template/.test(chk(gDocT, "design-tradeoffs").detail),
+      () => /Risks is still the template/.test(chk(gDocT, "design-risks").detail), () => weigh(gDocF) === "pass,pass",
+      () => chk(gDocF, "design-tradeoffs").detail === "2 option(s) weighed", () => chk(gDocF, "design-risks").detail === "1 risk(s) listed",
+      () => weigh(gMcp) === "pass,pass",
+      () => gMcp.checks.findIndex((c) => c.id === "design-tradeoffs") === gMcp.checks.findIndex((c) => c.id === "constitution-check") + 1,
+      () => weigh(gDocFew) === "warn,pass",
+      () => /lists 1 option\(s\) — weigh at least 2 per key decision/.test(chk(gDocFew, "design-tradeoffs").detail),
+      () => js(gSaveFew.weigh) === js({ tradeoffs: "few", risks: "filled" }), () => gSaveFew.clean === true,
+      () => /\n  ▲ Alternatives & Trade-offs lists 1 option/.test(gSaveFew.text), () => weigh(gDocDel) === "warn,warn",
+      () => /^no Alternatives & Trade-offs section/.test(chk(gDocDel, "design-tradeoffs").detail),
+      () => /^no Risks section/.test(chk(gDocDel, "design-risks").detail), () => gDocDel.readyToAdvance === true,
+      () => gDocDel.checks.every((c) => c.status !== "fail"), () => js(gSaveDel.weigh) === js({ tradeoffs: "missing", risks: "missing" }),
+      () => (gSaveDel.text.match(/▲ no (?:Alternatives|Risks)/g) || []).length === 2,
+      // (+ design-reuse's ▲, 1.19 R1)
+      () => gApDel.ok === true, () => !gApDel.forced,
+    ]);
 
     // A1 — hand-written PT / ES designs: the synonyms (Alternativas consideradas, Riscos e mitigações, Opciones consideradas, one ### per option,
     // a prose Risks section) are recognized, and the details are in the feature's language.
@@ -189,18 +196,22 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, require })
     const excuses = ["Too simple to test", "I'll test after", "Just this once", "keep the code as a reference", "Manual testing is enough", "TDD slows me down"];
     const flags = ["passed on its first run", "can't explain why it failed", "written after the code"];
     const newProse = [round, micro, implCycle, cut(dcmd, "**Every design weighs", "Re-read steering"), (critic.match(/^\| \*\*Trade-offs & risks\*\*.*$/m) || [""])[0]];
-    ok(["Atomicity", "ACID and isolation", "isolation level", "Race conditions", "concurrently", "Consistency model", "Delivery and idempotency", "idempoten", "Dependency failure", "Volume and growth", "Business outcome", "Success Criterion"]
-      .every((w) => round.includes(w)) && /\*\*Alternatives & Trade-offs\*\*/.test(round) &&
-      /obra\/superpowers[^\n]*\n?[^\n]*\(MIT\)/.test(micro) && excuses.every((e) => micro.includes(e)) && flags.every((f) => micro.includes(f)) && /one\s+behaviour at a time/.test(micro) &&
-      /deleted and redone/.test(micro) && /for the right reason/.test(micro) && /Refactor only on green/.test(micro) && /_Makes green:_/.test(micro) && /_Expect: fail_/.test(micro) &&
-      /one behaviour at a time/.test(implCycle) && /obra\/superpowers/.test(implCycle) && /\(MIT\)/.test(implCycle) && /deleted and redone from the test/.test(implCycle) &&
-      /Watch it fail for the right reason/.test(implCycle) && /Refactor only on green/.test(implCycle) && /No production code without a failing test first/.test(impl) &&
-      /micro-cycle/.test(exec) && /deleted and redone/.test(exec) && /\| test-driven-development \| [^\n]*micro-cycle[^\n]*\|/.test(sup) &&
-      /Trade-offs & risks/.test(critic) && /at least two REAL options/.test(critic) && /Alternatives & Trade-offs/.test(dcmd) && /\*\*Risks\*\*/.test(dcmd) &&
-      /\*\*Alternatives & Trade-offs\*\*/.test(skill) && /design-tradeoffs/.test(skill) && /micro-cycle/.test(skill) && /constraints round/.test(skill) && skill.split(/\s+/).filter(Boolean).length <= 5000 &&
-      newProse.every((t) => t.length > 50 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
-      "1.17 A2 / A3: /grill has the constraints round (atomicity, ACID + isolation, races, consistency, delivery + idempotency, dependency failure, volume, a measurable outcome); the micro-cycle (credited to obra/superpowers, MIT) with its rationalizations and red flags is in test-patterns.md, spec-implementer.md and /executeTask; the superpowers row, the critic's trade-offs row, /design and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
-      js([newProse.map((t) => t.length), skill.split(/\s+/).filter(Boolean).length]) + ")");
+    all("1.17 A2 / A3: /grill has the constraints round (atomicity, ACID + isolation, races, consistency, delivery + idempotency, dependency failure, volume, a measurable outcome); the micro-cycle (credited to obra/superpowers, MIT) with its rationalizations and red flags is in test-patterns.md, spec-implementer.md and /executeTask; the superpowers row, the critic's trade-offs row, /design and SKILL.md (≤ 5,000 words — 1.21 F3) name them; no PR / CI steering in the new text (got " +
+      js([newProse.map((t) => t.length), skill.split(/\s+/).filter(Boolean).length]) + ")", [
+      () => ["Atomicity", "ACID and isolation", "isolation level", "Race conditions", "concurrently", "Consistency model", "Delivery and idempotency", "idempoten", "Dependency failure", "Volume and growth", "Business outcome", "Success Criterion"] .every((w) => round.includes(w)),
+      () => /\*\*Alternatives & Trade-offs\*\*/.test(round), () => /obra\/superpowers[^\n]*\n?[^\n]*\(MIT\)/.test(micro),
+      () => excuses.every((e) => micro.includes(e)), () => flags.every((f) => micro.includes(f)), () => /one\s+behaviour at a time/.test(micro),
+      () => /deleted and redone/.test(micro), () => /for the right reason/.test(micro), () => /Refactor only on green/.test(micro),
+      () => /_Makes green:_/.test(micro), () => /_Expect: fail_/.test(micro), () => /one behaviour at a time/.test(implCycle),
+      () => /obra\/superpowers/.test(implCycle), () => /\(MIT\)/.test(implCycle), () => /deleted and redone from the test/.test(implCycle),
+      () => /Watch it fail for the right reason/.test(implCycle), () => /Refactor only on green/.test(implCycle),
+      () => /No production code without a failing test first/.test(impl), () => /micro-cycle/.test(exec), () => /deleted and redone/.test(exec),
+      () => /\| test-driven-development \| [^\n]*micro-cycle[^\n]*\|/.test(sup), () => /Trade-offs & risks/.test(critic),
+      () => /at least two REAL options/.test(critic), () => /Alternatives & Trade-offs/.test(dcmd), () => /\*\*Risks\*\*/.test(dcmd),
+      () => /\*\*Alternatives & Trade-offs\*\*/.test(skill), () => /design-tradeoffs/.test(skill), () => /micro-cycle/.test(skill),
+      () => /constraints round/.test(skill), () => skill.split(/\s+/).filter(Boolean).length <= 5000,
+      () => newProse.every((t) => t.length > 50 && !/pull request|\bPRs?\b|\bCI\b/.test(t)),
+    ]);
 
     // 1.17 A review 1 — the nudge never reads the plugin's own template text: a pristine scaffold of every track (+saas's "Concurrent users …
     // queue strategy … (events+fields)", +sec's "record a security audit event") fires nothing in EN / PT / ES / pt-BR; a template criterion

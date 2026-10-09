@@ -6,7 +6,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 // 1.14 full review (Ga) — evidence, project checks, CLI runs.
-exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, tmp, CLI, require, __dirname }) => {
   const Sga = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const jsonGa = (s) => { try { return JSON.parse(s); } catch { return null; } };
   const rga = (proj, args, env) => {
@@ -99,12 +99,15 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
   const same6 = tasksGa(f6) === before6;
   const a6 = rga(g6p, ["append-tasks", f6.slug, "--task", "Write the regression test", "--req", "US-1.AC-1", "--makes-green", "T-1", "--makes-green", "T-02", "--expect-fail", "--size", "m", "--verify", "npm test", "--json"]);
   const a6j = jsonGa(a6.stdout);
-  ok(a6bad.code === 1 && /size must be one of XS, S, M, L, XL \(got 'huge'\)/.test(a6bad.out) && a6ph.code === 1 && /Unknown tests \(not planned in test-plan\.md\): T-42/.test(a6ph.out) &&
-    a6bool.code === 1 && /--expect-fail/.test(a6bool.out) && a6two.code === 1 && /--size once per call/.test(a6two.out) && same6 &&
-    a6.code === 0 && a6j && a6j.appended[0].expectFail === true && a6j.appended[0].size === "M" && JSON.stringify(a6j.appended[0].makesGreen) === '["T-01","T-02"]' &&
-    /  - _Makes green: T-01, T-02_\n  - _Verify: npm test_\n  - _Expect: fail_\n  - _Size: M_\n/.test(tasksGa(f6)),
-    "full review Ga6: append-tasks --makes-green (repeatable, as the plan spells the T-IDs) / --expect-fail / --size write the markers; a bad size, an unplanned T-ID, a non-boolean --expect-fail or a second --size writes nothing (got " +
-    JSON.stringify([a6bad.out.slice(0, 120), a6ph.out.slice(0, 120), a6.out.slice(0, 200)]).slice(0, 500) + ")");
+  all("full review Ga6: append-tasks --makes-green (repeatable, as the plan spells the T-IDs) / --expect-fail / --size write the markers; a bad size, an unplanned T-ID, a non-boolean --expect-fail or a second --size writes nothing (got " +
+    JSON.stringify([a6bad.out.slice(0, 120), a6ph.out.slice(0, 120), a6.out.slice(0, 200)]).slice(0, 500) + ")", [
+    () => a6bad.code === 1, () => /size must be one of XS, S, M, L, XL \(got 'huge'\)/.test(a6bad.out), () => a6ph.code === 1,
+    () => /Unknown tests \(not planned in test-plan\.md\): T-42/.test(a6ph.out), () => a6bool.code === 1, () => /--expect-fail/.test(a6bool.out),
+    () => a6two.code === 1, () => /--size once per call/.test(a6two.out), () => same6, () => a6.code === 0, () => a6j,
+    () => a6j.appended[0].expectFail === true, () => a6j.appended[0].size === "M",
+    () => JSON.stringify(a6j.appended[0].makesGreen) === '["T-01","T-02"]',
+    () => /  - _Makes green: T-01, T-02_\n  - _Verify: npm test_\n  - _Expect: fail_\n  - _Size: M_\n/.test(tasksGa(f6)),
+  ]);
 
   // Ga9 (Windows): --shell bash is Git Bash, never WSL's launcher. An explicit System32 bash.exe is the user's choice (1.15): it
   // runs inside WSL — with no working distribution the relay fails and that is could-not-run (`wsl`), nothing recorded.
@@ -151,11 +154,14 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
   const fb = Sga.createFeature(gpb, "Big", ["core"], "", undefined, "en");
   wGa(fb.dir, "tasks.md", "- [x] 1. [US1] Done\n");
   const g10f = jsonGa(rga(gpb, ["finish", fb.slug, "--run", "--json"]).stdout);
-  ok(g10tj && g10tj.couldNotRun === "timeout" && /did not finish within --timeout 1 s/.test(g10tj.error) && g10z.code === 1 && /--timeout must be an integer ≥ 1/.test(g10z.out) && !/^\$ /m.test(g10z.out) &&
-    g10bj && g10bj.couldNotRun === "output-too-large" && /its output exceeded 64 MB/.test(g10bj.error) && g10cmdOk && !stGa(f10).evidence && /- \[ \] 1\.[\s\S]*- \[ \] 2\.[\s\S]*- \[ \] 3\./.test(tasksGa(f10)) &&
-    g10f && g10f.couldNotRun === "output-too-large" && g10f.check === "big" && !stGa(fb).finishChecks,
-    "full review Ga10: --timeout, output over 64 MB (done --run and finish --run) and a cmd.exe failure under --shell cmd on an _Expect: fail_ task are could-not-run — refused, nothing recorded; --timeout 0 is refused before anything runs (got " +
-    JSON.stringify([g10tj, g10z.out.slice(0, 120), g10bj && g10bj.couldNotRun, g10c, g10f && g10f.couldNotRun]).slice(0, 600) + ")");
+  all("full review Ga10: --timeout, output over 64 MB (done --run and finish --run) and a cmd.exe failure under --shell cmd on an _Expect: fail_ task are could-not-run — refused, nothing recorded; --timeout 0 is refused before anything runs (got " +
+    JSON.stringify([g10tj, g10z.out.slice(0, 120), g10bj && g10bj.couldNotRun, g10c, g10f && g10f.couldNotRun]).slice(0, 600) + ")", [
+    () => g10tj, () => g10tj.couldNotRun === "timeout", () => /did not finish within --timeout 1 s/.test(g10tj.error), () => g10z.code === 1,
+    () => /--timeout must be an integer ≥ 1/.test(g10z.out), () => !/^\$ /m.test(g10z.out), () => g10bj,
+    () => g10bj.couldNotRun === "output-too-large", () => /its output exceeded 64 MB/.test(g10bj.error), () => g10cmdOk, () => !stGa(f10).evidence,
+    () => /- \[ \] 1\.[\s\S]*- \[ \] 2\.[\s\S]*- \[ \] 3\./.test(tasksGa(f10)), () => g10f, () => g10f.couldNotRun === "output-too-large",
+    () => g10f.check === "big", () => !stGa(fb).finishChecks,
+  ]);
 
   // 1.24 r6 B6: --timeout past Node's timer limit (2147483 s) became a TimeoutOverflowWarning and a timeout after 1 ms — the run
   // was refused as could-not-run; it is a usage error now, before anything runs (done and finish).
