@@ -486,7 +486,7 @@ function activeDesign(design, tracks) {
 //              updates", "without breaking changes") — the negation is the requirement: never negated, no "kept off" note.
 //   cues     — [rules]: a keyword whose tier depends on the words around it. Rules are tried in order and the
 //              first that fires decides; `kind` names the generic mechanism (classify.js CUE_KINDS: near · sentence · text ·
-//              clause · ownership), `on` the keywords it reads (none: every keyword of the track), `ifTier` a hit of that tier
+//              clause · ownership · all), `on` the keywords it reads (none: every keyword of the track), `ifTier` a hit of that tier
 //              only, `then` the new tier, "none" (no signal at all) or "keep" (unchanged, no later rule).
 // Keywords are EN / PT / ES (+ pt-BR words) and technical synonyms, matched as WORDS (classify.js keywordRe: inflections, PT / ES
 // plurals, STEMS, VERB_STEMS, IRREGULAR_FORMS). One written with capitals is matched case-sensitively ("STRIDE", "UI"); " … " is a

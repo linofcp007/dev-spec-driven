@@ -445,7 +445,7 @@ ${backList ? `<ul>${backList}</ul>` : `<p class="sub">${t.backlogEmpty}</p>`}
 // ---------------------------------------------------------------------------
 // Roadmap forecasts. A task may carry `_Size: XS|S|M|L|XL_` (an English-stable marker, like _Verify:_) worth
 // XS=1 S=2 M=3 L=5 XL=8 points; an unsized task counts as its feature's median sized task (M when none is sized). When a
-// task was ticked is recorded by spec_complete_task (state.ticks[n] = ISO — recordTick); a task ticked before 1.14 falls
+// task was ticked is recorded by spec_complete_task (state.ticks[n] = ISO — tasks.js completeTask); a task ticked before 1.14 falls
 // back to its evidence (the first passing run, else the record's time); a tick made by hand has no time and is not counted.
 // Velocity = points completed per WORKING day (Mon–Fri, local calendar days) over the last FORECAST_WINDOW_DAYS calendar days,
 // counted from the day of the first completion in that window through today — project-wide, and per feature once the

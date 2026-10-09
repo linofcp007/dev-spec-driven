@@ -1040,8 +1040,8 @@ function foldEnumArgs(toolName, args) {
   return out;
 }
 // An argument error: {ok: false, error: <localized>, code: <stable, English>, …what it names} — callers branch
-// on the code: unknown-argument {unknown} · missing-arguments {missing} · invalid-arguments {invalid} · project-dotdot ·
-// project-network · project-uri · project-missing · project-not-dir.
+// on the code: unknown-argument {unknown} · missing-arguments {missing} · invalid-arguments {invalid} · inapplicable-arguments
+// {inapplicable} · project-dotdot · project-network · project-uri · project-missing · project-not-dir · project-no-specs.
 function argError(id, message, code, extra) {
   return toolReply(id, Object.assign({ ok: false, error: message, code }, extra || {}), batchSink);
 }
