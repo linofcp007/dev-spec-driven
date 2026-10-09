@@ -2137,10 +2137,11 @@ const msg = {
         followUps: "## Follow-ups",
         followUpsNote: "<!-- Candidate backlog items — add the ones you accept with spec_backlog (dev-spec backlog add \"<name>\" \"<note>\"). -->",
       },
-      // The ONE retro layout; each language passes its own retroText (lazy MSG reference — MSG is complete at call time).
+      // The ONE retro layout; each language passes its own retroText (lazy MSG reference — MSG is complete at call time). fmt: { dur,
+      // today, day? } — day: a stored instant's calendar date (finish.js passes dayOf, the local date — 1.25.1).
       buildRetro: (T, P, m, fmt) => {
         const lt = m.leadTime || {};
-        const rows = [[T.created, m.createdAt ? m.createdAt.slice(0, 10) + (m.createdAtApproximate ? ` (${T.approximate})` : "") : T.unknown]];
+        const rows = [[T.created, m.createdAt ? (fmt.day ? fmt.day(m.createdAt) : m.createdAt.slice(0, 10)) + (m.createdAtApproximate ? ` (${T.approximate})` : "") : T.unknown]];
         for (const ph of ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "complete", "finished"]) {
           if (lt[ph]) rows.push([T.lead(P[ph] || ph), fmt.dur(lt[ph].hours) + (lt[ph].approximate ? ` (${T.approximate})` : "")]);
         }

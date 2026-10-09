@@ -458,7 +458,7 @@ function metrics(projectDir, name, opts = {}) {
     if (write) {
       const file = path.join(f.dir, "retro.md");
       const rel = path.relative(projectDir, file).split(path.sep).join("/");
-      const written = writeIfAbsent(file, i18n.portableCli(M.retro(res, { dur: fmtHours, today: today() })));
+      const written = writeIfAbsent(file, i18n.portableCli(M.retro(res, { dur: fmtHours, today: today(), day: dayOf })));
       res.retro = { path: rel, written };
       res.note = written ? M.retroWritten(rel) : M.retroExists(rel);
     }
