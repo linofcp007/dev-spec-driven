@@ -576,6 +576,8 @@ function traceCheck(projectDir, name, opts = {}) {
   const activeReqs = activeDesign(rawReqs, tracks);
   const requiredAcs = requirementAcIds(activeReqs, dir);
   const definedAcs = activeReqs === rawReqs ? requiredAcs : requirementAcIds(rawReqs, dir);
+  // 1.25.1: never silently — the ACs an inactive section holds (a turned-off track's / a missing pack's) are a warning, inactiveAcs
+  const inactiveAcs = definedAcs === requiredAcs ? [] : [...definedAcs].filter((id) => !requiredAcs.has(id));
   // review 5 (M5): what the TASKS cite — taskCitations, the matrix's reader (never a Notes paragraph or the title; never another
   // feature's `<slug>/US-n.AC-m`); the test plan without another feature's references either
   const cites = taskCitations(blocks, dir, rawReqs);
@@ -669,6 +671,7 @@ function traceCheck(projectDir, name, opts = {}) {
     phantomAcsInTasks,
     ...(unidentified ? { unidentifiedCriteria: unidentified } : {}), // only when there are some: the result is otherwise unchanged
     ...(untraced.length ? { untracedCriteria: untraced } : {}), // a warning (F-I8) — likewise only when there are some
+    ...(inactiveAcs.length ? { inactiveAcs } : {}), // a warning (1.25.1) — the criteria of an inactive track section, never required
     implementsFiles: implFiles,
     missingImplFiles,
     plannedImplFiles,
@@ -738,7 +741,7 @@ function traceCheck(projectDir, name, opts = {}) {
 // missing _Implements:_ files). Any array field a later version adds is a gap kind too, unless listed as
 // informational here.
 // planned = an OPEN task's file, not written yet; the deep-traceability warnings (TRACE_WARNING_ORDER) are warnings.
-const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs", "justifiedTestGaps", "untracedCriteria"]);
+const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs", "justifiedTestGaps", "untracedCriteria", "inactiveAcs"]);
 const TRACE_GAP_ORDER = ["unidentifiedCriteria", "uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 // The kinds trace_check's verdict counts (testsNotMappedToTasks is listed, never failing), and the kinds that read
 // tasks.md / test-plan.md — doctor defers the latter while that artifact is still a later phase's template.
@@ -777,12 +780,13 @@ function traceGapLines(tr, lang) {
 // an _Implements:_ glob whose bounded walk stopped at its cap before any match. justifiedTestGaps (+tdd, a top-level array — 1.24
 // review 6, F3): uncovered ACs the test plan names only outside its test entries (a Gaps / Out of Scope note) — they stay
 // uncoveredByTests gaps; the warning says the plan accounts for them. untracedCriteria (only when some — F-I8): modal criteria with no
-// stable ID beside US-n.AC-m ones (L<line>).
-const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "untracedCriteria", "justifiedTestGaps", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
+// stable ID beside US-n.AC-m ones (L<line>). inactiveAcs (only when some — 1.25.1): the ACs requirements.md defines only in an
+// inactive section (a turned-off track's, a missing pack's) — not required, named so they never vanish silently.
+const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "untracedCriteria", "inactiveAcs", "justifiedTestGaps", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
 const TRACE_SECONDARY_KINDS = TRACE_WARNING_ORDER.slice(0, 4);
 function traceWarnings(tr) {
   const src = { ...(tr && tr.code ? { plannedNotInCode: tr.code.plannedNotInCode, inCodeNotInPlan: tr.code.inCodeNotInPlan } : {}) };
-  for (const k of [...TRACE_SECONDARY_KINDS, "untracedCriteria", "justifiedTestGaps", "unresolvedImplGlobs"]) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
+  for (const k of [...TRACE_SECONDARY_KINDS, "untracedCriteria", "inactiveAcs", "justifiedTestGaps", "unresolvedImplGlobs"]) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
   return TRACE_WARNING_ORDER.filter((k) => Array.isArray(src[k]) && src[k].length).map((k) => ({ kind: k, items: src[k].slice() }));
 }
 // The warnings as localized "label: ID, ID" lines (kinds = a subset, e.g. the secondary ones for doctor).

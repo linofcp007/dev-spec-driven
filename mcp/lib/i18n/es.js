@@ -2040,6 +2040,7 @@ const msg = {
         uncoveredSuccessCriteria: "criterios de éxito (SC) sin prueba ni paso del quickstart que los verifique",
         phantomSecondary: "las tareas / el plan de pruebas citan IDs EC/NFR/SC desconocidos (¿erratas?)",
         untracedCriteria: "criterios con verbo modal pero sin ID propio (por línea) — ninguna tarea ni prueba puede trazarlos: numera cada uno US-<historia>.AC-<n>",
+        inactiveAcs: "ACs bajo el encabezado de un track desactivado (o de un paquete de track que falta) — no se exigen ni se trazan: vuelve a activar el track, o sácalos de esa sección si son criterios del core",
         justifiedTestGaps: "ACs que el plan de pruebas solo nombra en una nota (Lagunas / Fuera de Alcance), nunca en una fila de prueba — siguen sin cobertura: añade una fila, o aprueba el plan de pruebas con force para aceptar la laguna",
         plannedNotInCode: "pruebas planificadas que ningún fichero de prueba nombra (pon el T-ID en el nombre de la prueba)",
         inCodeNotInPlan: "T-IDs en el código de prueba que ningún plan de pruebas incluye",

@@ -2041,6 +2041,7 @@ const msg = {
         uncoveredSuccessCriteria: "critérios de sucesso (SC) sem teste nem passo do quickstart que os verifique",
         phantomSecondary: "tarefas / plano de testes citam IDs EC/NFR/SC desconhecidos (gralhas?)",
         untracedCriteria: "critérios com verbo modal mas sem ID próprio (por linha) — nenhuma tarefa nem teste os pode rastrear: numera cada um US-<história>.AC-<n>",
+        inactiveAcs: "ACs sob o cabeçalho de um track desligado (ou de um pacote de track em falta) — não são exigidos nem rastreados: volta a ligar o track, ou tira-os dessa secção se forem critérios do core",
         justifiedTestGaps: "ACs que o plano de testes só nomeia numa nota (Lacunas / Fora de Âmbito), nunca numa linha de teste — continuam sem cobertura: acrescenta uma linha, ou aprova o plano de testes com force para aceitar a lacuna",
         plannedNotInCode: "testes planeados que nenhum ficheiro de teste nomeia (põe o T-ID no nome do teste)",
         inCodeNotInPlan: "T-IDs no código de teste que nenhum plano de testes lista",

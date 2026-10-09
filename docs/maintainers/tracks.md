@@ -530,6 +530,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   unmarked top-level "## Data Quality" still satisfies it. Only for a track section (a `marker`), never a core one.
 - **Markers are case-sensitive tokens** everywhere (`headingHasMarker`, `inactiveMarkerLines`, `trackAcIds`,
   `extractSection`, the brief): `### Timeout [sec]` is prose, never +sec. `RE_STABLE_BRACKET` lists `SEC` / `PRIVACY`.
+  `inactiveMarkerLines` also needs the marker to LEAD the heading (1.25.1 — `headingLeadMarkers`: "#### [SEC] Acceptance Criteria",
+  "## [AI] 7. Fallback…", "### 3. [AI] …"; never "### US-2 (P1): API notes [API]") — trace_check warns `inactiveAcs` for what it hides.
 - **Signal tiers** (`SIGNALS[track]`): `strong` (turns a track on alone), `weak` (score 1 — two weak ones, or a strong
   one, turn it on; a lone weak one is only "possible"), and `context` (corroborating-only, e.g. `permission` for +sec:
   weak evidence ONLY beside another non-negated signal of that track; alone it is no signal, no "possible" note, no

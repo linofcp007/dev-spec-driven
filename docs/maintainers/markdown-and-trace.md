@@ -158,7 +158,12 @@ matrix.
   +saas and deleted its +saas tasks failed traceability (doctor too) on criteria the matrix no longer listed. A phantom is an ID
   requirements.md defines NOWHERE (`definedAcs`, the whole text): a task or test row citing an inactive criterion is no typo. The
   secondary IDs alike (`traceSecondary(…, allReqText)`: coverage asked of the active ones, phantoms against all); doctor's
-  `secondary-trace` count reads the active requirements too.
+  `secondary-trace` count reads the active requirements too. **1.25.1 — only a LEADING marker, never silently:** a section is
+  inactive only when the off track's marker LEADS its heading (`headingLeadMarkers()` — after numbering, emphasis, an emoji,
+  "Section N:"; a run of markers counts): `### US-2 (P1): API notes [API]` is a core story and its ACs are required (it hid them, and
+  doctor passed them untasked). What an inactive section holds is the warning `inactiveAcs` (the ACs requirements.md defines only
+  there — `TRACE_INFO_FIELDS`, `TRACE_WARNING_ORDER` after `untracedCriteria`, only when some); doctor's `traceability` detail names
+  them without changing its status.
 - **Secondary IDs are trace WARNINGS, never the verdict**: EC-n / NFR-n need a task or (+tdd) a test-plan
   row, SC-nnn a test-plan row or a real quickstart.md line; compared by number (`SC-1` = `SC-001`); untouched
   template rows don't count. `warnings` = `[{kind, items}]`, excluded from `traceGaps()`.

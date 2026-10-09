@@ -2173,6 +2173,7 @@ const msg = {
         uncoveredSuccessCriteria: "success criteria (SC) that no test or quickstart step checks",
         phantomSecondary: "tasks / test plan cite unknown EC/NFR/SC IDs (typos?)",
         untracedCriteria: "criteria with a modal verb but no ID of their own (by line) — no task or test can trace them: number each one US-<story>.AC-<n>",
+        inactiveAcs: "ACs under the heading of a track that is off (or a missing track pack) — not required, not traced: add the track back, or move them out of that section if they are core criteria",
         justifiedTestGaps: "ACs the test plan names only in a note (Gaps / Out of Scope), never in a test row — still uncovered: add a row, or approve the test plan with force to accept the gap",
         plannedNotInCode: "planned tests that no test file names (put the T-ID in the test name)",
         inCodeNotInPlan: "T-IDs in test code that no feature's test plan lists",

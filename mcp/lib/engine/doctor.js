@@ -811,7 +811,9 @@ function specDoctor(projectDir, name, opts = {}) {
     // 1.24 review 6 (F3): the uncovered ACs the test plan names only in a note (Gaps / Out of Scope) — said beside the gap, never coverage
     // … and (F-I8) the modal criteria with no stable ID beside US-n.AC-m ones (untracedCriteria): a warn — nothing can trace them
     const untracedLines = laterFiles.includes("requirements.md") ? [] : traceWarningLines(tr, lng, ["untracedCriteria"]);
-    const gapLines = [...traceGapLines(kept, lng), ...(deferKinds.has("uncoveredByTests") ? [] : traceWarningLines(tr, lng, ["justifiedTestGaps"])), ...untracedLines];
+    // … and (1.25.1) the ACs an inactive track section holds (inactiveAcs): named in the detail, never a warn by themselves
+    const gapLines = [...traceGapLines(kept, lng), ...(deferKinds.has("uncoveredByTests") ? [] : traceWarningLines(tr, lng, ["justifiedTestGaps"])), ...untracedLines,
+      ...traceWarningLines(tr, lng, ["inactiveAcs"])];
     // The verdict's own kinds decide fail (testsNotMappedToTasks is listed, never failing — trace_check's verdict rule).
     const failing = traceGaps(kept).some((g) => TRACE_VERDICT_KINDS.has(g.kind));
     const deferred = traceGaps(tr).some((g) => deferKinds.has(g.kind) && TRACE_VERDICT_KINDS.has(g.kind));

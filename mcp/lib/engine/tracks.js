@@ -201,7 +201,7 @@ function sectionDropLines(lines, owner) {
   const heads = headingEntries(lines);
   const drop = new Map();
   heads.forEach((h, k) => {
-    const who = owner(lines[h.i]);
+    const who = owner(lines[h.i], h);
     if (!who) return;
     let end = lines.length;
     for (let j = k + 1; j < heads.length; j++) if (heads[j].level <= h.level) { end = heads[j].i; break; }
@@ -221,10 +221,35 @@ function inactiveTaskLines(tasks, tracks) {
 // design.md / requirements.md: the [SaaS] / [AI] / [SEC] / [PRIVACY] headed sections of tracks that are off (+ a track pack's
 // that is off, or saved by the feature but gone from the project — ghostMarkers, 1.15).
 // The marker is matched case-sensitively (C4, see headingHasMarker): `### Timeout [sec]` is never a [SEC] section.
+// 1.25.1: the marker must LEAD the heading (headingLeadMarkers) — the scaffold writes "#### [SEC] Acceptance Criteria (EARS)" /
+// "## [AI] 7. Fallback & Degradation"; a story heading that merely mentions one ("### US-2 (P1): API notes [API]") is the core's,
+// and its criteria were out of trace_check (doctor passed them untasked). trace_check names what this hides (inactiveAcs).
 function inactiveMarkerLines(md, tracks) {
   const off = markerTracks().filter((t) => !tracks.includes(t)).map((t) => [t, trackMarker(t)]).concat(ghostMarkers());
   if (!off.length) return new Map();
-  return sectionDropLines(md.split(/\r?\n/), (l) => { const hit = off.find(([, m]) => l.includes(m)); return hit && hit[0]; });
+  return sectionDropLines(String(md).split(/\r?\n/), (l, h) => {
+    const lead = headingLeadMarkers(h.text);
+    const hit = lead.length ? off.find(([, m]) => lead.includes(m)) : null;
+    return hit && hit[0];
+  });
+}
+// The [TOKEN] markers that LEAD a heading's text, in order — after the decoration headingTextMatches strips (emphasis, dashes,
+// numbering, "Section N:", an emoji): "[SEC] [PRIVACY] Data protection" → both; "5. [AI] Model Strategy" → [AI]; "US-2 (P1): API
+// notes [API]" → none. Case-sensitive tokens, as written (C4).
+const RE_MARKER_DECOR = /^(?:[\s*_—–:-]+|[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}]+|(?:section|sec[çc][ãa]o|se[çc][ãa]o|secci[óo]n)\s+\d+[.:)]?(?=\s|$)|\d+(?:\.\d+)*[.):]?(?=\s))/iu;
+const RE_MARKER_TOKEN = /^\[[A-Za-z][A-Za-z0-9]*\]/;
+function headingLeadMarkers(text) {
+  let t = String(text || "").slice(0, 400);
+  const out = [];
+  for (let guard = 0; guard < 40; guard++) {
+    const d = RE_MARKER_DECOR.exec(t);
+    if (d && d[0].length) { t = t.slice(d[0].length); continue; }
+    const m = RE_MARKER_TOKEN.exec(t);
+    if (!m) break;
+    out.push(m[0]);
+    t = t.slice(m[0].length);
+  }
+  return out;
 }
 
 // classification.md → the line under "## Active Tracks" (EN/PT/ES — the line the template generates) gets the
@@ -1702,6 +1727,6 @@ module.exports = { VALID_TRACKS, OPTIONAL_TRACKS, TRACK_STEERING, trackTokens, p
   TRACK_ALIASES, suggestTrack, unknownTracksError, trackLabel, SIGNALS, allTracks, optionalTracks, markerTracks, trackMarker, trackSectionTable, trackSteeringFiles, trackSignalTable,
   detectTracks, savedTracks, headingHasMarker, TRACK_MARKER, MARKER_TRACKS, trackAcIds, normTaskHeading, TASK_HEADINGS,
   renderTrackTaskHeadings, trackTaskHeadings, trackTaskHeadingIs, trackTaskHeading, activeTasks, sectionDropLines, inactiveTaskLines,
-  inactiveMarkerLines, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
+  inactiveMarkerLines, headingLeadMarkers, RE_ACTIVE_TRACKS, trackRunSource, RE_TRACK_RUN, trackRunRe, SAAS_SECTIONS, AI_SECTIONS,
   SEC_SECTIONS, PRIVACY_SECTIONS, DIST_SECTIONS, API_SECTIONS, UI_SECTIONS, OBS_SECTIONS, DATA_SECTIONS, TRACK_SECTIONS,
   TRACK_OVERLAPS, TRACK_TASK_OVERLAPS, activeSectionTracks, activeDesign, __link };
