@@ -112,11 +112,16 @@ reply lists them with a did-you-mean: a word people type for an argument (`ARG_A
 project / dir → projectDir, untick → undo, unapprove → revoke — when the tool takes it), else `spec.closestName` (core.js — the
 optimal-string-alignment distance, ≤ max(1, ⌊length / 3⌋) edits, case-insensitive: the CLI's flag rule; suggestTrack uses it
 too). Checked before the required keys, so a misspelt required key (`nmae`) reads as unknown with its fix, not as missing. A
-`null` unknown key is "not given", like any argument; a NESTED object's extra keys are still left to the engine. Every
+`null` unknown key is "not given", like any argument. **Nested keys too (1.25.1, review 7):** an object whose schema lists
+`properties` — an array's items included — refuses a key it doesn't list, by its path (`tasks[0].verfy`, did-you-mean
+`tasks[0].verify`; the message lists the keys that object takes, `tasks[] {text, …}`): `verfy` appended a task with no
+`_Verify:_` (which then ticked "verified, nothing to verify"), `evidence[0].sumary` dropped the summary. An object declared with
+`additionalProperties` (spec_init `checks`) takes any key. Every
 `args.X` runTool reads must be in its tool's schema — a key it doesn't list would now be refused, never read (a guard in
-02-mcp-server.js parses runTool's `case`s). Then required keys (`missingArgs`), then types (`invalidArgs` — `integer` means
+02-mcp-server.js parses runTool's `case`s). Then required keys (`missingArgs` — a nested object's `required` too, by path:
+`evidence[0].command`, `tasks[0].text`; `evidence: [{}]` reached the engine as "'undefined' is not a project check"), then types (`invalidArgs` — `integer` means
 a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, `maximum` (1.24 r6 A5 — `spec_next_task.max` ≤ 8;
-the message reads "between 1 and 8"), array `items` and nested
+the message reads "between 1 and 8"), `minItems` (1.25.1 — `spec_append_tasks.tasks`, `args.atLeastItems`), array `items` and nested
 object properties. A task `number` (spec_task_brief, spec_complete_task) carries `minimum: 0` (1.22 review — `-1` read "must
 be an integer"; 0 is a task number: next serves a hand-written task 0, so refusing it looped next → complete); the engine
 refuses the CLI's raw word in these same words (`msg(lang).args` —

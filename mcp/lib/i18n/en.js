@@ -1535,6 +1535,7 @@ const msg = {
       atLeast: (n) => `≥ ${n}`,
       atMost: (n) => `≤ ${n}`, // 1.24 r6 A5: a schema `maximum`
       between: (lo, hi) => `between ${lo} and ${hi}`, // 1.24 r6 A5: `minimum` and `maximum`
+      atLeastItems: (n) => `with at least ${n} item${n === 1 ? "" : "s"}`, // 1.25.1: a schema `minItems` (spec_append_tasks.tasks)
       // 1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
       unknownArgs: (tool, items, valid) => `Unknown argument${items.length > 1 ? "s" : ""} for ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (did you mean ${u.didYouMean}?)` : "")).join(", ")} — nothing was done. ${tool} takes: ${valid}.`,
       notObject: "arguments must be a JSON object.",

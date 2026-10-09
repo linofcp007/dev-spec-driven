@@ -140,7 +140,7 @@ const TOOLS = [
     name: "spec_finish",
     description:
       "Close a feature (finishing-a-development-branch): a readiness report plus a merge title + summary GENERATED FROM THE SPEC CHAIN. `readyToFinish` is true only without `blockers`: doctor fails, an artifact changed since its approval, template placeholders, a bugfix's unwritten Root Cause, no tasks or open tasks, ticked tasks without passing verification evidence (`unverified`), with project checks (roadmap.json meta.checks) a check without a passing recorded run since the feature's last task activity (`suite-evidence`, each check in `suiteChecks`), and phases awaiting approval. `evidence` [{name, command, exitCode, summary}] records the project checks as YOU ran them (each a meta.checks name; run the configured command from the project root — another command reads `changed`) BEFORE the readiness is computed, so one call can make the feature ready; a failed run is recorded too and stays a blocker; returned as `recordedChecks` with `observed` (true when the plugin's Bash hook saw that run; \"cli\" for `" + spec.DEV_SPEC + " finish <f> --run`). `warnings` never block (uncovered EC / NFR / SC IDs, planned T-IDs no test file names); `checks` lists the track-gated items only a fresh run or a human can confirm. `write: true` writes the summary to .specs/<feature>/.execution/merge-summary.md (content omitted unless includeBody), and a READY feature records its drift baseline (`baseline` — spec_drift compares against it later). Integration is LOCAL: the human picks merge locally or keep the branch — no pull requests, no CI; it never merges, pushes or approves by itself. A green run is EVIDENCE, not the sign-off: after it, ask the user for an explicit yes on the `execution` phase before calling spec_approve — never promise to approve it once they paste a passing run.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary to .specs/<feature>/.execution/merge-summary.md." }, includeBody: { type: "boolean", description: "Include the merge summary in the result (default: true when not writing, false when writing)." }, evidence: { type: "array", description: "The project checks' runs (roadmap.json meta.checks) — the server never runs them: run each configured command and report it here. Needs meta.checks; validated all-or-nothing.", items: { type: "object", properties: { name: { type: "string", description: "A meta.checks name (required)." }, command: { type: "string", description: "The command that ran (required)." }, exitCode: { type: "integer", description: "Its exit code (required)." }, summary: { type: "string", description: "e.g. '212 passing' or the last lines of output." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional, with commit: uncommitted changes outside .specs/." } } } }, projectDir: PROJECT_DIR }, required: ["name"] },
+    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary to .specs/<feature>/.execution/merge-summary.md." }, includeBody: { type: "boolean", description: "Include the merge summary in the result (default: true when not writing, false when writing)." }, evidence: { type: "array", description: "The project checks' runs (roadmap.json meta.checks) — the server never runs them: run each configured command and report it here. Needs meta.checks; validated all-or-nothing.", items: { type: "object", properties: { name: { type: "string", description: "A meta.checks name." }, command: { type: "string", description: "The command that ran." }, exitCode: { type: "integer", description: "Its exit code." }, summary: { type: "string", description: "e.g. '212 passing' or the last lines of output." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional, with commit: uncommitted changes outside .specs/." } }, required: ["name", "command", "exitCode"] } }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "spec_complete_task",
@@ -257,7 +257,8 @@ const TOOLS = [
         name: { type: "string", description: "Feature name/slug." },
         tasks: {
           type: "array",
-          description: "The tasks to append, in order (at least one).",
+          description: "The tasks to append, in order.",
+          minItems: 1,
           items: {
             type: "object",
             properties: {
@@ -825,40 +826,83 @@ const REQUIRED_ONE_OF = { spec_import: [{ names: ["path", "text"], unless: (a) =
 const EMPTY_OK = { spec_log: ["gitLog"], spec_stop_check: ["message"] };
 function missingArgs(toolName, args) {
   const tool = TOOLS.find((t) => t.name === toolName);
-  if (!tool || !tool.inputSchema || !Array.isArray(tool.inputSchema.required)) return [];
+  if (!tool || !tool.inputSchema) return [];
   const emptyOk = hasOwn(EMPTY_OK, toolName) ? EMPTY_OK[toolName] : [];
   const given = (k) => !(args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim() && !emptyOk.includes(k)));
-  const missing = tool.inputSchema.required.filter((k) => !given(k));
+  const missing = (Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []).filter((k) => !given(k));
   for (const group of hasOwn(REQUIRED_ONE_OF, toolName) ? REQUIRED_ONE_OF[toolName] : []) if (!group.unless(args) && !group.names.some(given)) missing.push(group.names[0]);
+  // 1.25.1: a NESTED object's `required` keys too (spec_finish evidence[n] {name, command, exitCode}, spec_append_tasks tasks[n].text)
+  // — by their path (`evidence[0].command`): `evidence: [{}]` reached the engine, which answered "'undefined' is not a project check".
+  for (const [k, s] of Object.entries(tool.inputSchema.properties || {})) if (given(k)) nestedMissing(s, args[k], k, missing);
   return missing;
 }
+// A value's missing required keys, by path — an object's (schema `properties` + `required`) and each array item's; the value
+// absent, null or a blank string is "not given" (the top-level rule). A value of the wrong type is invalidArgs' to report.
+function nestedMissing(schema, value, where, out) {
+  if (!TYPE_CHECK.object(schema)) return;
+  if (Array.isArray(value)) {
+    if (TYPE_CHECK.object(schema.items)) value.forEach((v, i) => nestedMissing(schema.items, v, `${where}[${i}]`, out));
+    return;
+  }
+  if (!TYPE_CHECK.object(value) || !TYPE_CHECK.object(schema.properties)) return;
+  for (const k of Array.isArray(schema.required) ? schema.required : []) {
+    const v = hasOwn(value, k) ? value[k] : undefined;
+    if (v === undefined || v === null || (typeof v === "string" && !v.trim())) out.push(where + "." + k);
+  }
+  for (const [k, s] of Object.entries(schema.properties)) if (hasOwn(value, k) && value[k] != null) nestedMissing(s, value[k], where + "." + k, out);
+}
 
-// Top-level arguments the tool's inputSchema doesn't list (1.24 r6 A1) → [{argument, didYouMean?}]. They used to be dropped, and
-// the call did something else than asked: spec_approve {revoked: true} RE-APPROVED changed content, spec_task_brief {task: 3}
-// briefed the next task, spec_export {feature} exported the whole project. Like the CLI's unknown flag (1.23), such a call is
-// refused before anything runs. An absent or null value is "not given" (the rule of every argument) — never an error. The
-// suggestion: a word people type for an argument (ARG_ALIASES, when the tool takes it), else the nearest name (spec.closestName).
+// Arguments the tool's inputSchema doesn't list (1.24 r6 A1) → { unknown: [{argument, didYouMean?}], valid } (valid: what the
+// message lists — the tool's own names, and for a nested key the names its object takes). They used to be dropped, and the call
+// did something else than asked: spec_approve {revoked: true} RE-APPROVED changed content, spec_task_brief {task: 3} briefed the
+// next task, spec_export {feature} exported the whole project. Like the CLI's unknown flag (1.23), such a call is refused before
+// anything runs. An absent or null value is "not given" (the rule of every argument) — never an error. The suggestion: a word
+// people type for an argument (ARG_ALIASES, when the tool takes it), else the nearest name (spec.closestName).
+// 1.25.1: NESTED keys too — an object whose schema lists `properties` (an array's items included): spec_append_tasks {tasks:
+// [{text, verfy: "npm test"}]} appended a task with no _Verify:_ (then ticked "verified, nothing to verify"), spec_finish
+// {evidence: [{…, sumary}]} dropped the summary. The argument is the key's path (`tasks[0].verfy`), the suggestion too.
 const ARG_ALIASES = { feature: "name", slug: "name", task: "number", tasknumber: "number", project: "projectDir", dir: "projectDir",
   projectdirectory: "projectDir", untick: "undo", unapprove: "revoke" };
 function unknownArgs(toolName, args) {
   const tool = TOOLS.find((t) => t.name === toolName);
   const props = tool && tool.inputSchema && tool.inputSchema.properties ? tool.inputSchema.properties : {};
   const names = Object.keys(props);
-  const out = [];
+  const unknown = [];
+  const scopes = new Map(); // where a key was unknown ("" = the tool's own arguments, "tasks[]") → the names it takes
   for (const k of Object.keys(args)) {
-    if (hasOwn(props, k) || args[k] === undefined || args[k] === null) continue;
+    if (args[k] === undefined || args[k] === null) continue;
+    if (hasOwn(props, k)) { nestedUnknown(props[k], args[k], k, k, unknown, scopes); continue; }
     const low = k.toLowerCase();
     const alias = hasOwn(ARG_ALIASES, low) && hasOwn(props, ARG_ALIASES[low]) ? ARG_ALIASES[low] : null;
     const near = alias || spec.closestName(k, names);
-    out.push(near ? { argument: k, didYouMean: near } : { argument: k });
+    unknown.push(near ? { argument: k, didYouMean: near } : { argument: k });
+    scopes.set("", names);
   }
-  return out;
+  const valid = [...scopes].map(([label, list]) => (label ? `${label} {${list.join(", ")}}` : list.join(", "))).join("; ");
+  return { unknown, valid };
+}
+// where: the value's path (`tasks[0]`) · label: its schema's (`tasks[]` — the message names the keys it takes once).
+function nestedUnknown(schema, value, where, label, unknown, scopes) {
+  if (!TYPE_CHECK.object(schema)) return;
+  if (Array.isArray(value)) {
+    if (TYPE_CHECK.object(schema.items)) value.forEach((v, i) => nestedUnknown(schema.items, v, `${where}[${i}]`, label + "[]", unknown, scopes));
+    return;
+  }
+  if (!TYPE_CHECK.object(value) || !TYPE_CHECK.object(schema.properties)) return; // additionalProperties (spec_init checks): any key
+  const props = schema.properties;
+  for (const k of Object.keys(value)) {
+    if (value[k] === undefined || value[k] === null) continue;
+    if (hasOwn(props, k)) { nestedUnknown(props[k], value[k], where + "." + k, label + "." + k, unknown, scopes); continue; }
+    const near = spec.closestName(k, Object.keys(props));
+    unknown.push(near ? { argument: where + "." + k, didYouMean: where + "." + near } : { argument: where + "." + k });
+    scopes.set(label, Object.keys(props));
+  }
 }
 
 // Argument TYPES, also straight from the inputSchema, checked before dispatch. A wrong type used to reach the
 // engine and be coerced: number 1.9 ticked task 1, name {a:1} created .specs/object-object/, cap "abc"
 // scanned 0 files, text 123 threw 'text.trim is not a function'. An argument the schema doesn't list is refused before
-// (unknownArgs — 1.24 r6; it used to be ignored); a nested object's extra keys are still left to the engine.
+// (unknownArgs — 1.24 r6; it used to be ignored — nested keys too since 1.25.1), and so is a missing nested required key.
 const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
 // A network path in projectDir — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — made this
 // local server open an SMB/WebDAV connection to whatever host a tool call named (on Windows the redirector sends the
@@ -944,6 +988,7 @@ function expectedType(schema, A) {
   if (schema.minimum != null && schema.maximum != null) d += " " + A.between(schema.minimum, schema.maximum); // 1.24 r6 A5
   else if (schema.minimum != null) d += " " + A.atLeast(schema.minimum);
   else if (schema.maximum != null) d += " " + A.atMost(schema.maximum);
+  if (schema.minItems != null) d += " " + A.atLeastItems(schema.minItems); // 1.25.1: spec_append_tasks.tasks
   return d;
 }
 function schemaIssues(schema, value, where, out) {
@@ -953,6 +998,7 @@ function schemaIssues(schema, value, where, out) {
   if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return bad();
   if (typeof value === "number" && schema.minimum != null && value < schema.minimum) return bad();
   if (typeof value === "number" && schema.maximum != null && value > schema.maximum) return bad(); // 1.24 r6 A5: spec_next_task.max
+  if (Array.isArray(value) && schema.minItems != null && value.length < schema.minItems) return bad(); // 1.25.1: tasks: [] appended nothing
   if (Array.isArray(value) && schema.items) value.forEach((v, i) => schemaIssues(schema.items, v, `${where}[${i}]`, out));
   if (TYPE_CHECK.object(value) && schema.properties) propertyIssues(schema.properties, value, where + ".", out);
 }
@@ -1215,11 +1261,8 @@ function handle(msg) {
         const folded = foldEnumArgs(toolName, rawArgs || {});
         // 1.24 r6 A1: an argument the schema doesn't list is refused FIRST — a misspelt required key reads as unknown (with its
         // did-you-mean) rather than missing; nothing runs.
-        const unknown = unknownArgs(toolName, folded);
-        if (unknown.length) {
-          const props = TOOLS.find((t) => t.name === toolName).inputSchema.properties || {};
-          return argError(id, argMessages(folded).unknownArgs(toolName, unknown, Object.keys(props).join(", ")), "unknown-argument", { unknown });
-        }
+        const { unknown, valid } = unknownArgs(toolName, folded);
+        if (unknown.length) return argError(id, argMessages(folded).unknownArgs(toolName, unknown, valid), "unknown-argument", { unknown });
         const missing = missingArgs(toolName, folded);
         if (missing.length) return argError(id, argMessages(folded).missing(missing.join(", ")), "missing-arguments", { missing });
         const invalid = invalidArgs(toolName, folded);

@@ -1260,5 +1260,37 @@ exports.run = async ({
         "1.24 r6 A6: an MCP call waits ~2 s for a feature lock another live process holds (DEV_SPEC_LOCK_WAIT_MS unset), then answers busy — the server froze 10 s; an explicit DEV_SPEC_LOCK_WAIT_MS still wins (got " +
         js([busy.busy, waited, busy2.busy, waited2, untouched]) + ")");
     }
+
+    { // 1.25.1 (review 7): a misspelt NESTED key is refused like a top-level one (path + did-you-mean), a nested required key and an
+      // array's minItems are checked before the engine — `verfy` appended a task with no _Verify:_ that then ticked "verified"
+      const p = path.join(tmp, "proj-r7-nested");
+      S.initProject(p, ["core"], "en", { checks: { test: "npm test" } });
+      const f = S.createFeature(p, "alpha", ["core"]);
+      const tasksBefore = fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8");
+      const verfy = bodyOf(await call("spec_append_tasks", { name: "alpha", tasks: [{ text: "x", verfy: "npm test", expect_fail: true }], projectDir: p }));
+      const none = bodyOf(await call("spec_append_tasks", { name: "alpha", tasks: [], projectDir: p }));
+      const noText = bodyOf(await call("spec_append_tasks", { name: "alpha", tasks: [{ verify: "npm test" }], projectDir: p }));
+      const sumary = bodyOf(await call("spec_finish", { name: "alpha", evidence: [{ name: "test", command: "npm test", exitCode: 0, sumary: "x" }], projectDir: p }));
+      const empty = bodyOf(await call("spec_finish", { name: "alpha", evidence: [{}], projectDir: p }));
+      const comand = bodyOf(await call("spec_complete_task", { name: "alpha", number: 1, evidence: { comand: "x", exitCode: 0 }, projectDir: p }));
+      const anyKey = bodyOf(await call("spec_init", { checks: { lint: "npm run lint" }, projectDir: p })); // additionalProperties: any name
+      const nulls = bodyOf(await call("spec_append_tasks", { name: "alpha", tasks: [{ text: "ok task", verify: "npm test", story: null }], projectDir: p }));
+      const ptMsg = txt(() => I.msg("pt").args.atLeastItems(1)), esMsg = txt(() => I.msg("es").args.atLeastItems(2));
+      ok(verfy.code === "unknown-argument" && js(verfy.unknown) === js([{ argument: "tasks[0].verfy", didYouMean: "tasks[0].verify" }, { argument: "tasks[0].expect_fail", didYouMean: "tasks[0].expectFail" }]) &&
+        /spec_append_tasks takes: tasks\[\] \{text, requirements, implements, verify/.test(verfy.error) &&
+        none.code === "invalid-arguments" && js(none.invalid) === '["tasks"]' && /with at least 1 item \(got \[\]\)/.test(none.error) &&
+        noText.code === "missing-arguments" && js(noText.missing) === '["tasks[0].text"]' &&
+        sumary.code === "unknown-argument" && sumary.unknown[0].didYouMean === "evidence[0].summary" &&
+        empty.code === "missing-arguments" && js(empty.missing) === '["evidence[0].name","evidence[0].command","evidence[0].exitCode"]' &&
+        comand.code === "unknown-argument" && comand.unknown[0].argument === "evidence.comand" && comand.unknown[0].didYouMean === "evidence.command" &&
+        anyKey.ok !== false && anyKey.checks.lint === "npm run lint" && nulls.ok === true &&
+        /^com pelo menos 1 item$/.test(ptMsg) && /^con al menos 2 elementos$/.test(esMsg) &&
+        list.result.tools.find((t) => t.name === "spec_finish").inputSchema.properties.evidence.items.required.join() === "name,command,exitCode" &&
+        list.result.tools.find((t) => t.name === "spec_append_tasks").inputSchema.properties.tasks.minItems === 1,
+        "1.25.1 r7: nested keys — tasks[0].verfy / evidence[0].sumary / evidence.comand refused (unknown-argument, path + did-you-mean, the keys that object takes); tasks: [] (minItems) and a nested required key (tasks[0].text, evidence[0] {name, command, exitCode}) refused before the engine; an additionalProperties object and a null nested key pass (got " +
+        js([verfy.unknown, none.error, noText.missing, sumary.unknown, empty.missing, comand.unknown, anyKey.ok, nulls.ok, ptMsg, esMsg]) + ")");
+      ok(fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8").split("\n").filter((l) => /^- \[ \] \d+\./.test(l)).length ===
+        tasksBefore.split("\n").filter((l) => /^- \[ \] \d+\./.test(l)).length + 1, "1.25.1 r7: of those calls only the valid append wrote a task");
+    }
   }
 };

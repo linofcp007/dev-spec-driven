@@ -1484,6 +1484,7 @@ const msg = {
       atLeast: (n) => `≥ ${n}`,
       atMost: (n) => `≤ ${n}`,
       between: (lo, hi) => `entre ${lo} e ${hi}`,
+      atLeastItems: (n) => `com pelo menos ${n} ${n === 1 ? "item" : "itens"}`,
       unknownArgs: (tool, items, valid) => `Argumento${items.length > 1 ? "s" : ""} desconhecido${items.length > 1 ? "s" : ""} para ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (será ${u.didYouMean}?)` : "")).join(", ")} — nada foi feito. ${tool} aceita: ${valid}.`,
       notObject: "arguments tem de ser um objeto JSON.",
       dotdot: "projectDir não pode conter segmentos de caminho '..'.",
