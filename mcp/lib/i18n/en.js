@@ -1544,6 +1544,8 @@ const msg = {
       // 1.24 r6 A3: projectDir names an existing folder (the CLI's --project rule) — spec_init alone creates one
       projectMissing: (dir) => `projectDir ${dir}: no such folder — check the path (only spec_init creates a project folder).`,
       projectNotDir: (dir) => `projectDir ${dir} is a file, not a folder.`,
+      // 1.25.1 (review 7): spec_import reads (and, dry, returns) the files its path names — only in the default project or a dev-spec one
+      projectNoSpecs: (dir) => `projectDir ${dir} holds no dev-spec project (a .specs/ with roadmap.json, steering/ or a feature) — spec_import reads files only in the default project or one spec_init set up: run spec_init with this projectDir first.`,
       projectUri: (uri) => `projectDir ${uri} is not a local file:// URI of a folder (file:///C:/path on Windows, file:///path elsewhere).`,
       // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params) — 1.14 full review S2.
       unknownTool: (name) => `Unknown tool: ${name} — tools/list lists the tools this server provides.`,
@@ -1887,6 +1889,9 @@ const msg = {
       pathRequired: "path required — the folder (or a file) of the spec to import.",
       outside: (p) => `'${p}' is outside the project — spec_import only reads inside the project directory.`,
       notFound: (p) => `'${p}' not found.`,
+      // 1.25.1 (review 7): never a hidden folder or file but the importers' own; a file named as the source is a document format
+      hidden: (p, part) => `'${p}' is in a hidden folder or is a hidden file (${part}) — spec_import reads none but the importers' own: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
+      notSource: (p) => `'${p}' is no spec source spec_import reads — name a .md / .markdown / .mdc / .txt / .json / .yaml / .yml file, or the source's folder.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
       exists: (slug) => `Feature '${slug}' already exists — import never overwrites it. Pass another name.`,
       tooLarge: (rel, max) => `${rel} is over ${max} characters — too large to import whole (the part past the limit, a plan's steps included, would be lost). Split or shorten it, then import again; nothing was created.`,

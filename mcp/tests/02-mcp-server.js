@@ -1292,5 +1292,12 @@ exports.run = async ({
       ok(fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8").split("\n").filter((l) => /^- \[ \] \d+\./.test(l)).length ===
         tasksBefore.split("\n").filter((l) => /^- \[ \] \d+\./.test(l)).length + 1, "1.25.1 r7: of those calls only the valid append wrote a task");
     }
+
+    { // 1.25.1 (review 7): the initialize instructions name spec_next_action (clients without the skill) and claim only what holds
+      const ins = (await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })).result.instructions;
+      ok(/spec_next_action \{name\}/.test(ins) && /where am I \/ what now/.test(ins) && !/All file ops are local to the project's \.specs\/ directory/.test(ins) &&
+        /writes stay in the project's \.specs\/, reads inside the project/.test(ins) && /never a hidden folder or a non-document file/.test(ins),
+        "1.25.1 r7: initialize's instructions point at spec_next_action for 'where am I / what now?' and say what is local (writes in .specs/, reads inside the project — spec_import's limits) instead of 'All file ops are local to .specs/' (got " + js(ins.slice(0, 200)) + ")");
+    }
   }
 };

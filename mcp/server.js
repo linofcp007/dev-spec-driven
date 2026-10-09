@@ -230,7 +230,7 @@ const TOOLS = [
   {
     name: "spec_import",
     description:
-      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source is only read). `tool`: 'kiro' (.kiro/specs/<name>/), 'spec-kit' (specs/<nnn-name>/ — spec.md, plan.md, tasks.md), 'openspec' (openspec/specs/<capability>/ or openspec/changes/<id>/), 'plan' (a Markdown plan — Claude Code plan mode, a Cursor .cursor/plans/*.plan.md), 'execplan' (a Codex ExecPlan), 'bmad' (BMAD PRD + stories, or one story file) or 'fluidplan' (a .fluidplan/<id>/ folder, its plan.json, PLAN.md or DECISIONS.md); 'kiro-steering' (.kiro/steering/*.md) / 'cursor-rules' (.cursor/rules/*.mdc, .cursorrules) write .specs/steering/ files instead (path optional; an existing name is skipped, never overwritten). Each scenario becomes ONE EARS criterion where possible (else kept with [NEEDS CLARIFICATION]); IDs are remapped to US-N.AC-M (`mapping` {oldId: newId}); tasks are renumbered keeping their ticks, [P] / [USn] tags, files (_Implements:_), verify commands (_Verify:_) and dependencies; decisions go to decisions.md / design.md; every artifact notes 'Imported from <tool> <path> on <date>'. `path` must resolve inside the project (a folder holding several plans is refused — name the file); `text` (plan / execplan / fluidplan only, instead of path) is the document itself — e.g. a Claude Code plan, kept in ~/.claude/plans OUTSIDE the project. Tracks: `tracks`, else auto-classified. `dryRun: true` writes nothing: the same result plus `preview` (each file, bounded). Returns {feature, files, mapping, counts, warnings}.",
+      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source is only read). `tool`: 'kiro' (.kiro/specs/<name>/), 'spec-kit' (specs/<nnn-name>/ — spec.md, plan.md, tasks.md), 'openspec' (openspec/specs/<capability>/ or openspec/changes/<id>/), 'plan' (a Markdown plan — Claude Code plan mode, a Cursor .cursor/plans/*.plan.md), 'execplan' (a Codex ExecPlan), 'bmad' (BMAD PRD + stories, or one story file) or 'fluidplan' (a .fluidplan/<id>/ folder, its plan.json, PLAN.md or DECISIONS.md); 'kiro-steering' (.kiro/steering/*.md) / 'cursor-rules' (.cursor/rules/*.mdc, .cursorrules) write .specs/steering/ files instead (path optional; an existing name is skipped, never overwritten). Each scenario becomes ONE EARS criterion where possible (else kept with [NEEDS CLARIFICATION]); IDs are remapped to US-N.AC-M (`mapping` {oldId: newId}); tasks are renumbered keeping their ticks, [P] / [USn] tags, _Implements:_, _Verify:_ and _Depends:_; decisions go to decisions.md / design.md; every artifact notes 'Imported from <tool> <path> on <date>'. `path`: a document or folder inside the project, never in a hidden folder but the tools' own (several plans in a folder: name the file); `text` (plan / execplan / fluidplan only, instead of path) is the document itself — e.g. a Claude Code plan, kept in ~/.claude/plans OUTSIDE the project. Tracks: `tracks`, else auto-classified. `dryRun: true` writes nothing: the same result plus `preview` (each file, bounded). Returns {feature, files, mapping, counts, warnings}.",
     inputSchema: {
       type: "object",
       properties: {
@@ -977,7 +977,22 @@ function projectDirArg(toolName, args) {
   try { st = fs.statSync(r.dir); } catch { st = null; }
   if (st && !st.isDirectory()) return { refuse: { code: "project-not-dir", error: argMessages().projectNotDir(r.dir) } };
   if (!st && toolName !== "spec_init") return { refuse: { code: "project-missing", error: argMessages().projectMissing(r.dir) } };
+  // 1.25.1 (review 7): spec_import reads the files its path names and returns them (dryRun: `preview`) — {projectDir: "<home>/.aws",
+  // tool: "plan", path: "credentials", dryRun: true} returned the credentials. An explicit projectDir other than the default project
+  // (env / roots / cwd) must hold a dev-spec .specs/ — spec_init there first; the engine refuses a hidden folder or a file that is no
+  // document wherever the project is (importSourceAt).
+  if (SPECS_REQUIRED.has(toolName) && st && !sameFolder(r.dir, defaultProjectDir()) && !spec.isDevSpecDir(r.dir)) {
+    return { refuse: { code: "project-no-specs", error: argMessages().projectNoSpecs(r.dir) } };
+  }
   return { args: { ...args, projectDir: r.dir } };
+}
+const SPECS_REQUIRED = new Set(["spec_import"]);
+const FOLD_PATHS = process.platform === "win32" || process.platform === "darwin";
+// The same folder, by real path (8.3 names, links), case-folded where the file system is.
+function sameFolder(a, b) {
+  const real = (p) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
+  const x = real(a), y = real(b);
+  return FOLD_PATHS ? x.toLowerCase() === y.toLowerCase() : x === y;
 }
 function shortJson(v) {
   let s;
@@ -1240,7 +1255,7 @@ function handle(msg) {
             ? { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} }
             : { tools: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} },
           instructions:
-            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). Evidence before claims: tick a task (spec_complete_task) only with the run of its _Verify:_ command that you or the user actually made — if you cannot run it, ask for its output instead of ticking (never send a subagent to look for a shell). A CLI line you give the user is the runnable one the tools print — `" + spec.DEV_SPEC + " …` (a plugin install has no `dev-spec` on PATH). ears_validate, trace_check and spec_doctor enforce quality gates. Approvals are the user's: with meta.approvalGuard ask / deny, spec_approve asks the user through the client (elicitation) when it can. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). All file ops are local to the project's .specs/ directory." +
+            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). To resume a feature or answer 'where am I / what now?', call spec_next_action {name}: where it stands and the ONE next step. Evidence before claims: tick a task (spec_complete_task) only with the run of its _Verify:_ command that you or the user actually made — if you cannot run it, ask for its output instead of ticking (never send a subagent to look for a shell). A CLI line you give the user is the runnable one the tools print — `" + spec.DEV_SPEC + " …` (a plugin install has no `dev-spec` on PATH). ears_validate, trace_check and spec_doctor enforce quality gates. Approvals are the user's: with meta.approvalGuard ask / deny, spec_approve asks the user through the client (elicitation) when it can. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). Everything is local: writes stay in the project's .specs/, reads inside the project (spec_scan / spec_coverage / trace_check {code} read its code; spec_import a source inside it — never a hidden folder or a non-document file, and with another projectDir only a dev-spec project's); no network, no command, no git." +
             (PROMPTS_ON ? " Prompts: one per plugin command (spec, spec-status, spec-impact, …) — the slash-command workflow for clients without the dev-spec-driven skill." : "") +
             " Resources (read-only): the project's spec artifacts — specs://roadmap, specs://catalog, specs://steering/{file}, specs://feature/{slug}/{artifact}.",
         });

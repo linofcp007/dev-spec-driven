@@ -140,11 +140,18 @@ the server's cwd — `.` from Claude Desktop scaffolded the app folder), else fr
 EXIST, as the CLI's `--project` (1.23 review L14): a missing one is refused (`project-missing`) — only `spec_init` creates one —
 and so is a file (`project-not-dir`): `spec_create` into a mistyped path built the whole tree there, `spec_list` on a file
 answered `{exists: false}`, a `file://` projectDir ended in ENOENT. The engine receives the absolute folder; `resolveProjectDir`
-is unchanged. The default projectDir (cwd / env / roots) and the CLI are not restricted by these rules.
+is unchanged. The default projectDir (cwd / env / roots) and the CLI are not restricted by these rules. **spec_import (1.25.1,
+review 7)** reads the files its path names and returns them (`dryRun`: `preview`) — `{projectDir: "<home>/.aws", path:
+"credentials"}` returned the credentials: an explicit projectDir other than the default project (`sameFolder` by real path) must hold
+a dev-spec `.specs/` (`spec.isDevSpecDir` — `SPECS_REQUIRED`), else `project-no-specs` (`args.projectNoSpecs`: run spec_init there
+first); the engine refuses hidden folders and non-documents everywhere (templates-imports-exports.md → spec_import stays inside the
+project). The `initialize` instructions say so ("Everything is local: writes stay in .specs/, reads inside the project…" — the
+old "All file ops are local to the project's .specs/ directory" was not true of the scans and the import) and name spec_next_action
+as the "where am I / what now?" call for clients without the skill.
 **Stable codes (1.24 r6 A-I2).** Every argument error is the tool's JSON `{ok: false, error, code, …}` (`argError`), `isError:
 true`: `unknown-argument` (+ `unknown` [{argument, didYouMean?}]) · `missing-arguments` (+ `missing` [names]) ·
 `invalid-arguments` (+ `invalid` — the paths, e.g. `["number", "evidence.exitCode"]`; arguments that aren't an object:
-`["arguments"]`) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir`. Callers branch
+`["arguments"]`) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` · `project-no-specs` (1.25.1, spec_import). Callers branch
 on the code (English, stable); the message is in the project language — the default project's for a projectDir refusal.
 Messages are localized in the project language (`msg(lang).args`). The engine
 still validates what schemas can't express (track names, AC IDs, paths). String enums the engine case-folds
