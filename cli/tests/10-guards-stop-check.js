@@ -133,6 +133,20 @@ exports.run = ({ ok, tmp, CLI, require, __dirname }) => {
     "1.23 review 5 (M16, L8): stop-check --agent spec-implementer accepts a UTF-16 report whose run is the _Verify:_ written with `/` for `\\` (exit 0, report-ok — the engine's answer); a run of another test file → exit 1 (got " +
     JSON.stringify([r7.code, r7J && r7J.why, e7, r7b.code, r7b.out.slice(0, 160)]) + ")");
 
+  // 1.25.1 (r7 finding 1): stop-check reads a claim about the WORK only — "Done. I updated the README …", "I verified that the bug is in
+  // the parser", "Listo, aquí tienes el resumen." claim nothing (exit 0) while a recent tick is unverified; "Work complete — ready to merge."
+  // and "Pronto para merge" are claims (exit 1).
+  const p8 = path.join(tmp, "c1-r7-claims");
+  Sc1.initProject(p8, ["core"], "en");
+  const f8 = Sc1.createFeature(p8, "Pay", ["core"], "", undefined, "en");
+  fs.writeFileSync(path.join(f8.dir, "tasks.md"), "- [ ] 1. [US1] Charge\n  - _Verify: node -e \"process.exit(0)\"_\n");
+  Sc1.completeTask(p8, "pay", 1);
+  const r8 = ["Done. I updated the README wording as you asked.", "I verified that the bug is in the parser.", "Listo, aquí tienes el resumen.",
+    "Work complete — ready to merge.", "Pronto para merge"].map((m) => rc1(["stop-check", "--message", m, "--json", "--project", p8]));
+  const w8 = r8.map((r) => r.code + ":" + ((jc1(r.stdout) || {}).why || "?"));
+  ok(JSON.stringify(w8) === JSON.stringify(["0:no-claim", "0:no-claim", "0:no-claim", "1:unverified", "1:unverified"]),
+    "1.25.1 (r7 finding 1): stop-check — a bare verb or 'Done.' before an unrelated summary claims nothing (exit 0, no-claim); 'Work complete — ready to merge.' / 'Pronto para merge' are claims sent back while a tick is unverified (exit 1) (got " + JSON.stringify(w8) + ")");
+
   // help and the header docblock document stop-check, --stop-check and --guard scope.
   const hC1 = rc1(["help"]).out;
   const docC1 = fs.readFileSync(CLI, "utf8").split("*/")[0];

@@ -8,7 +8,7 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded } = require("./common.js"); // load time
+const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded, stopLineClaim } = require("./common.js"); // load time
 // The assembled tables — call-time use only; mcp/lib/i18n.js links them once every language has loaded.
 let BUILD, MSG;
 function __link(T) { ({ BUILD, MSG } = T); }
@@ -1110,6 +1110,23 @@ const evalsReadme = "# Evals\n\n" +
     "Ficheiros de conjunto: `golden.json`, `adversarial.json`, opcional `regression.json`.\n" +
     "Formato de item: `{ id, input, expect: { type, value|rubric } }`. Tipos de grader: contains | equals | regex | refuse | judge.\n" +
     "O system prompt é lido do `../prompts/vN.md` mais recente (a sua secção `## System`).\n";
+
+// 1.25.1 — what the stop gate's claims (msg.stopGate.claims) are made of: a claim is about the WORK (a task, the feature, everything,
+// the tests), never a bare verb — "Verifiquei o ficheiro…", "Concluí que o problema…", "Acabei de ler o código", "O método está
+// implementado em src/pay.ts" were sent back while any recent tick was unverified. See en.js (STOP_EN_*).
+const STOP_PT_DONE = String.raw`(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resolvid[oa]s?|complet[oa]s?|pront[oa]s?)`;
+const STOP_PT_CHAIN = String.raw`(?:\s*(?:,|e|&)\s*(?:${STOP_PT_DONE}|testad[oa]s?|a\s+funcionar|funcionando))*`;
+// Its clause ends right there ("A correção está concluída.") — "está implementado em src/pay.ts" describes the code.
+const STOP_PT_END = String.raw`(?=[ \t]*(?:[.!,;:—–)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+const STOP_PT_END1 = String.raw`(?=[ \t]*(?:[.!;)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+// Not done IN / BY something ("está implementado em src/pay.ts", "foi feito pelo middleware", "pronto para começar").
+const STOP_PT_NOT_WHERE = String.raw`(?!\s+(?:em|no|na|nos|nas|num|numa|por|pel[oa]s?|via|com|através|dentro|desde|para|pra)(?![\p{L}\p{N}_]))`;
+// The work a first person finished: a tarefa (tarefa 3, tarefas 1-3), a feature, a correção, as alterações, tudo…
+const STOP_PT_WORK = String.raw`(?:(?:(?:a|as|o|os|toda|todas|todo|todos|esta|estas|este|estes|essa|essas|esse|esses|ambas|ambos|minha|minhas|nossa|nossas|última|últimas|restantes)\s+)*(?:\d+\s+)?(?:tarefas?(?:\s+#?\d+(?:\s*(?:,|e|[-–]|a)\s*#?\d+)*)?|passos?(?:\s+#?\d+)?|features?|funcionalidades?|hist[óo]rias?|implementa[çc][ãa]o|corre[çc](?:[ãa]o|[õo]es)|altera[çc](?:[ãa]o|[õo]es)|mudan[çc]as?|trabalho|plano|bugfix)|tudo)(?![\p{L}\p{N}_])`;
+// What the rest of a "Feito." line names when it claims the work (common.js stopLineClaim).
+const STOP_PT_TESTED = String.raw`(?:testes?|tarefas?|suites?|verificad[oa]s?|passam|passaram|passou|passando|verdes?|implementad[oa]s?|implementei|build|lint)`;
+// A first person's completion verb (singular and plural).
+const STOP_PT_I = String.raw`(?:terminei|conclu[íi]|implementei|verifiquei|acabei|finalizei|testei|termin[áa]mos|conclu[íi]mos|implement[áa]mos|verific[áa]mos|acab[áa]mos|finaliz[áa]mos|test[áa]mos)`;
 
 // ===========================================================================
 // Human-readable tool messages (doctor / clarify / next-action / add-track /
@@ -2991,16 +3008,30 @@ const msg = {
     },
 
     stopGate: {
+      // 1.25.1: no bare verb or participle — "verifiquei", "concluí", "implementado" alone claimed "Verifiquei o ficheiro…", "Concluí
+      // que o problema…", "O método está implementado em src/pay.ts" (STOP_PT_* above, common.js stopLineClaim).
       claims: [
-        String.raw`(?:está|estão|esta|ficou|ficaram|foi|foram|já\s+está|já\s+estão)\s+(?:tudo\s+)?(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resolvid[oa]s?)`,
+        // "A correção está concluída.", "Foi implementado e testado." — the clause ends there…
+        String.raw`(?:está|estão|esta|ficou|ficaram|foi|foram|já\s+está|já\s+estão)\s+(?:tudo\s+|totalmente\s+|agora\s+)?${STOP_PT_DONE}${STOP_PT_CHAIN}${STOP_PT_END}`,
+        // …or the work is its subject ("a funcionalidade está concluída e publicada"), or "está tudo feito"
+        String.raw`(?:tudo|tarefas?|feature|funcionalidade|hist[óo]rias?|implementa[çc][ãa]o|corre[çc][ãa]o|altera[çc](?:[ãa]o|[õo]es)|mudan[çc]as|trabalho|bugfix)\s+(?:(?:já|agora)\s+)?(?:está|estão|ficou|ficaram|foi|foram)\s+(?:tudo\s+|totalmente\s+|agora\s+)?${STOP_PT_DONE}${STOP_PT_NOT_WHERE}`,
+        String.raw`(?:está|estão|ficou|ficaram|já\s+está|já\s+estão)\s+tudo\s+${STOP_PT_DONE}${STOP_PT_NOT_WHERE}`,
         String.raw`tarefas?\s+#?\d+(?:\s*(?:,|e|[-–]|a)\s*#?\d+)*\s+(?:(?:est[áa]|est[ãa]o|foi|foram|ficou|ficaram)\s+)?(?:feit[oa]s?|conclu[íi]d[oa]s?|terminad[oa]s?|implementad[oa]s?|verificad[oa]s?)`,
         String.raw`todas\s+as\s+(?:\d+\s+)?tarefas\s+(?:(?:est[ãa]o|foram|ficaram|já)\s+)*(?:feitas|conclu[íi]das|terminadas|implementadas|verificadas|finalizadas|prontas)`,
-        String.raw`^[ \t*_#>\p{Extended_Pictographic}\uFE0F\u2713\u2714-]*(?:tudo\s+)?(?:feito|conclu[íi]do|terminado|implementado|verificado|finalizado)[*_]*(?=[ \t]*(?:[.,!:—–\p{Extended_Pictographic}\u2713\u2714-]|$))`,
-        String.raw`tudo\s+(?:feito|pronto|conclu[íi]do|terminado|verde|funciona|a\s+funcionar)`,
+        // "Feito.", "✅ Concluído", "Implementado e verificado." — "Pronto, aqui está o resumo." claims no task (common.js)
+        stopLineClaim(String.raw`(?:tudo\s+)?(?:feit[oa]|conclu[íi]d[oa]|terminad[oa]|implementad[oa]|verificad[oa]|finalizad[oa]|pront[oa])${STOP_PT_CHAIN}`, STOP_PT_TESTED,
+          String.raw`(?:${STOP_PT_WORK}|(?<=implementad[oa]s?\s+)(?:o|a|os|as|um|uma)(?![\p{L}\p{N}_]))`),
+        // "Tarefa concluída.", "Trabalho concluído —" (ending its clause)
+        String.raw`(?:feature|funcionalidade|hist[óo]ria|tarefa|implementa[çc][ãa]o|corre[çc][ãa]o|bugfix|refactor|migra[çc][ãa]o|trabalho)\s+(?:agora\s+)?(?:feit[oa]|conclu[íi]d[oa]|terminad[oa]|implementad[oa]|verificad[oa]|finalizad[oa]|complet[oa]|pront[oa])${STOP_PT_END}`,
+        String.raw`tudo\s+(?:feito|pronto|conclu[íi]do|terminado|verificado|implementado|testado|verde|funciona|a\s+funcionar)`,
         String.raw`(?:todos\s+os\s+(?:\d+\s+)?|os\s+)?testes?\s+(?:(?:já|agora|todos)\s+)*(?:passam|passaram|passa|passou|est[ãa]o\s+a\s+passar|a\s+passar|est[ãa]o\s+verdes|ficaram\s+verdes|verdes)`,
         String.raw`(?:isto|já)\s+funciona`,
-        String.raw`terminei|concluí|implementei|verifiquei|acabei|finalizei`,
-        String.raw`conclu[íi]d[oa]s?|verificad[oa]s?|implementad[oa]s?`,
+        // first person: "Implementei a tarefa 3", "Terminei." — not "Verifiquei o ficheiro", "Concluí que…", "Acabei de ler…"
+        String.raw`${STOP_PT_I}(?:\s+(?:já|agora|também))?(?:\s*(?:,|e)\s*${STOP_PT_I})*(?:\s+${STOP_PT_WORK}|${STOP_PT_END1})`,
+        // …and "implementei" builds the work whatever its object ("Implementei a lógica de retry") — not "…que" / "…como"
+        String.raw`(?:implementei|implement[áa]mos)(?=\s+(?!(?:que|se|como|porque|onde|quando|qual)(?![\p{L}\p{N}_]))[\p{L}\p{N}_])`,
+        // "Pronto para merge" (1.25.1 — it claimed nothing)
+        String.raw`pront[oa]s?\s+(?:para|pra)\s+(?:(?:o|a|um|uma|fazer|fazer\s+o)\s+)?(?:merge|integrar|integra[çc][ãa]o|entrega|entregar|release|lan[çc]amento|deploy|produ[çc][ãa]o|revis[ãa]o|review|pr|pull\s+request)`,
       ],
       negators: ["não", "nunca", "nem", "nada", "sem", "falta", "faltam", "ser", "quando", "depois", "antes", "se", "até", "vou", "vamos", "irei",
         "devo", "deve", "devem", "precisa", "precisam", "tenho", "temos", "quase", "parcialmente", "possa", "possam", "ainda"],

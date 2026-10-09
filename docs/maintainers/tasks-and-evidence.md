@@ -556,7 +556,24 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `:` and dashes; "no" and "se" are read by language (`stopNegates()`: "no" negates in EN, in ES only before a verb or
   clitic, never in guessed-PT text — em+o; "se" — PT "if" — only for a PT claim, never in guessed-ES text nor before a
   Spanish auxiliary or preterite). Claims include "All tasks
-  done", "All green", ranges ("Tasks 1-3 done"), "Feature complete" and an emoji ✅ ✓ ✔ around done. A spike is never
+  done", "All green", ranges ("Tasks 1-3 done"), "Feature complete" and an emoji ✅ ✓ ✔ around done. **A claim is about the
+  WORK (1.25.1, review 7):** every language listed its bare verbs and participles ("verified|implemented|finished|completed",
+  PT "terminei|concluí|…" / "concluíd[oa]|verificad[oa]|…", ES the same), so "I verified that the bug is in the parser", "the
+  migration was completed in 2023", "The pay() function is implemented in src/pay.ts", "Verifiquei o ficheiro…", "Acabei de ler o
+  código", "Terminé de leer…" were sent back while any recent tick was unverified — one model round-trip a turn. Now (the
+  `STOP_EN_*` / `STOP_PT_*` / `STOP_ES_*` fragments above each language's `msg`): a state ("X is / está / fue + done") claims when
+  its clause ends there (`…_END`: "Login is implemented.", "A correção está concluída.") or its subject is the work ("everything",
+  "the feature", "tasks", "o trabalho", "los cambios" — not done `in` / `by` / `em` / `en` something); a first person's present
+  perfect claims unless "that / whether / how …" or another gerund follows ("I've finished reading"); a simple past ("I implemented",
+  "implementei", "terminé") only with the work as its object (`…_WORK`: a task, the feature, the fix, the changes, everything, it) or
+  ending its sentence ("Terminei.") — "implemented" whatever its object, but never "…de + infinitive" / "…que"; the line-start
+  word (`stopLineClaim()`, i18n/common.js: "Done.", "✅ Feito", "Hecho.") only when it stands alone on its line, an emoji follows it,
+  the rest of the line names tests / tasks / verification (`…_TESTED`), or the work follows it ("Completed task 3") — "Done. I updated
+  the README as you asked." and "Listo, aquí tienes el resumen." claim nothing. New claims: "ready to merge / for review", "good to
+  go", PT "pronto para merge", ES "listo para el merge", "Work complete —", EN negator "how" ("Here's how X is implemented:").
+  Session scoping (only features this `session_id` touched) was left out: `.state.json` records no session — an MCP tick has none to
+  record — and a new state key would need the merge driver. mcp/tests/10-guards-hooks-r7.js holds the review's 17 messages and the
+  claims to keep; mcp/tests/03-languages.js's pt-BR idempotency lint skips these raw keys (PT-PT words to match, never derived text). A spike is never
   held to the project checks here; a reason listing only checks has its own head line (`headSuite`). When you add a
   language, add its six lists (claims, negators, admissions, fixed, zeroes, passNow — the regex ones are raw for pt-BR:
   i18n.js `defineDerivedLocale(MSG, {stopGate: …})`).
