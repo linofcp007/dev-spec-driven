@@ -63,16 +63,22 @@ exports.run = async ({
   const docsRef = (f) => docsRead("skills", "dev-spec-driven", "references", f);
   const docsSkill = docsRead("skills", "dev-spec-driven", "SKILL.md");
   const docsDesc = ((docsSkill.match(/^description: >\r?\n([\s\S]*?)\r?\n---/m) || [])[1] || "").split(/\r?\n/).map((l) => l.trim()).join(" ").trim();
-  ok(docsDesc.length > 200 && docsDesc.length < 1024 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /antes de começar a programar/.test(docsDesc) &&
-    /antes de empezar a programar/.test(docsDesc) && /update the specs/.test(docsDesc) && /atualizar as specs/.test(docsDesc) && /actualizar las specs/.test(docsDesc) &&
-    /after a dev-spec-driven update/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
-    `SKILL.md description is trilingual, scoped ("Not for …") and < 1024 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
+  // 1.26: the description is intent-based — what the user wants (plan before coding, fix a bug properly, adopt specs, a
+  // roadmap, update the specs after a plugin update) — and SAYS it works in Portuguese and Spanish instead of listing their
+  // trigger phrases (280 of its 1,011 characters); ≤ ~600 characters, the near-miss exclusions kept.
+  ok(docsDesc.length > 200 && docsDesc.length <= 620 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /eval\(\) or an LLM/.test(docsDesc) &&
+    /Works in English, Portuguese and Spanish/.test(docsDesc) && !/antes de|especificar|corrige|arregla|atualizar|actualizar/.test(docsDesc) &&
+    /before coding/.test(docsDesc) && /fix a reported bug/.test(docsDesc) && /existing codebase/.test(docsDesc) && /roadmap/.test(docsDesc) &&
+    /update the specs/.test(docsDesc) && /after a dev-spec-driven update/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
+    `SKILL.md description is intent-based, says it works in EN / PT / ES (no literal PT / ES trigger list), scoped ("Not for …") and ≤ 620 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
   const docsLoops = (docsSkill.split("## Phase 6")[1] || "").split("Track-gated")[0];
   ok(["**core task", "**+tdd task", "**+ai generation/prompt task"].every((k) => /spec_complete_task \{evidence\}/.test(((docsLoops.split(k)[1] || "").split("\n- **")[0]))),
     "every Phase 6 execution loop (core, +tdd, +ai) ends in spec_complete_task {evidence}");
-  const docsUnwanted = (docsSkill.match(/^\| Unwanted \| IF…THEN \| (.+) \|\r?$/m) || [])[1] || "";
-  ok(/ shall /.test(docsUnwanted) && S.earsValidate("1. **US-1.AC-1** — " + docsUnwanted).issues.length === 0 && !/user-friendly error message/.test(docsRef("ears-guide.md")),
-    "the SKILL.md EARS IF…THEN example passes the plugin's own linter; ears-guide's canonical example is measurable");
+  // 1.26: the EARS quick reference moved from SKILL.md to the top of ears-guide.md (Phase 1 reads it there).
+  const docsUnwanted = (docsRef("ears-guide.md").match(/^\| Unwanted \| IF…THEN \| (.+) \|\r?$/m) || [])[1] || "";
+  ok(/ shall /.test(docsUnwanted) && S.earsValidate("1. **US-1.AC-1** — " + docsUnwanted).issues.length === 0 && !/user-friendly error message/.test(docsRef("ears-guide.md")) &&
+    /references\/ears-guide\.md/.test(docsSkill),
+    "the EARS quick reference's IF…THEN example (ears-guide.md, which SKILL.md routes Phase 1 to) passes the plugin's own linter; ears-guide's canonical example is measurable");
   ok(/real defect[^\n]*\/spec-bugfix/.test(docsSkill) && /Bounded/.test(docsRef("classification-matrix.md")) && /\/spec-bugfix/.test(docsRef("classification-matrix.md")) &&
     /Bounded/.test(docsRef("bugfix.md")) && /\*\*After Phase 0 approval:\*\* `spec_init \{tracks, lang\}` if steering is missing, then\s+`spec_create \{name, tracks, size, lang\}` \*\*once\*\*/.test(docsSkill),
     "mode routing sends a real defect to /spec-bugfix and knows Bounded (SKILL, matrix, bugfix.md); spec_init → spec_create (with the size, 1.24 r6 H2) once, after Phase 0 approval");
@@ -347,7 +353,7 @@ exports.run = async ({
       }
     }
     const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
-    ok(d4Files.length === 60 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
+    ok(d4Files.length === 61 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
       "full review D4: all 55 commands + 5 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
@@ -463,9 +469,9 @@ exports.run = async ({
       /\*\*Dispatched into a worktree\?\*\*[^#]*`git rev-parse HEAD` there equals the BASE you were given/.test(cut(impl, "## Before you begin", "1. Read the brief")),
       "1.22 review P2: parallel mode and waves create each worktree by hand from BASE (never isolation: \"worktree\"); spec-implementer checks HEAD = BASE before it begins");
     // P3: SKILL.md's subagent loop names the verify pass, still ≤ 5,000 words.
-    ok(/send the diff to \*\*`dev-spec-driven:spec-reviewer`\*\*, verify each ❌ \/ Critical \/ Important finding \(a verify-mode `spec-reviewer` per finding; only 80\+ opens a fix round\)/.test(skillW) &&
+    ok(/send the diff to \*\*`dev-spec-driven:spec-reviewer`\*\*, verify each ❌ \/ Critical \/ Important finding \(a `dev-spec-driven:spec-verifier` per finding; only 80\+ opens a fix round\)/.test(skillW) &&
       docsSkill.split(/\s+/).filter(Boolean).length <= 5000,
-      "1.22 review P3: SKILL.md's subagent loop verifies each ❌ / Critical / Important finding before a fix round (80+), within 5,000 words (got " + docsSkill.split(/\s+/).filter(Boolean).length + ")");
+      "1.22 review P3: SKILL.md's subagent loop verifies each ❌ / Critical / Important finding before a fix round (80+; the spec-verifier agent since 1.26), within 5,000 words (got " + docsSkill.split(/\s+/).filter(Boolean).length + ")");
     // P4: since 1.21 the MCP server guards approvals too (elicitation, or a refusal under deny) — AGENTS.md says so and how
     // to answer a declined / humanRequired result.
     const agentsW = docsWs(docsAgents), guardItem = cut(agentsW, "**The approval guard: a Claude Code hook, and the MCP server.**", "- **Alongside superpowers.**");

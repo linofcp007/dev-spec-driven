@@ -24,7 +24,7 @@ the OWASP Top 10), abuse cases, and security testing you can run locally before 
 Auth words are **weak** on purpose — they are `+tdd`'s strong signals. "Login with a password" is
 `core +tdd` with a *possible* `+sec` note; "login with a password, RBAC and an audit log" turns `+sec` on
 (from weak signals only — the note asks you to double-check). A negated signal ("no authentication
-needed") keeps the track off and says so. Rules for every track: `classification-matrix.md`.
+needed") keeps the track off and says so. Deciding the track set: `classification-matrix.md`.
 
 Turn it on later with `spec_add_track {name, track: "sec"}` (`dev-spec add-track <feature> sec`);
 turn it off with `remove: true` — non-destructive, the `[SEC]` sections and tasks stay on disk, inactive.

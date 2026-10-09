@@ -7,6 +7,20 @@ Intel, and Siemens.
 
 The core rule: **if you can't write it in EARS, you don't understand it yet.**
 
+## Quick reference
+
+| Pattern | Keyword | Example |
+|---|---|---|
+| Ubiquitous | _(none)_ | The system shall respond within 500ms at P95. |
+| State-driven | WHILE | While offline, the app shall queue changes locally. |
+| Event-driven | WHEN | When a user clicks submit, the system shall validate. |
+| Optional | WHERE | Where SSO is configured, the system shall skip the password step. |
+| Unwanted | IF…THEN | If the password fails 5 times, then the system shall lock the account for 15 minutes. |
+
+PT: QUANDO / ENQUANTO / SE…ENTÃO / ONDE · O SISTEMA DEVE — ES: CUANDO / MIENTRAS / SI…ENTONCES / DONDE ·
+EL SISTEMA DEBE (all pass `ears_validate`). Compound order: WHILE → WHEN → IF. Every criterion must be testable and
+specific — no "fast", "user-friendly"; use concrete values.
+
 ## The Five Patterns
 
 ### 1. Ubiquitous (No Keyword)

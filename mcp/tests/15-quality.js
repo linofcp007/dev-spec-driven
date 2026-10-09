@@ -724,7 +724,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       /Only lines the branch added or changed/.test(simp) && /\*\*Never a test\*\*/.test(simp) && /\*\*Never a contract:\*\*/.test(simp) && /commit it alone/.test(simp) &&
       /never edit the test, never fix forward/.test(simp) && /\*\*`## Final runs`\*\* — LAST in the file/.test(simp) && /ONE line\s+per run/.test(simp) && /NO_CHANGES/.test(simp) && /Adapted from Anthropic's `code-simplifier` plugin/.test(simp) &&
       /\*\*before\*\*\s+`\/spec-finish`/.test(scmd) && /\*\*reverted\*\*\s+\(`git revert <sha>`/.test(scmd) && /done <feature> <n> --run/.test(scmd) && /Never "behaviour unchanged" without the runs/.test(scmd) &&
-      /\| Never a test, fixture or snapshot \|/.test(guideSimp) && /\/spec-simplify/.test(skill) && /\/spec-simplify/.test(exec) && /verify-mode reviewer/.test(exec) &&
+      /\| Never a test, fixture or snapshot \|/.test(guideSimp) && /simplification pass/.test(skill) && /\/spec-simplify/.test(exec) && /verify-mode reviewer/.test(exec) &&
       /agents\/spec-reviewer\.md` → Verify mode/.test(agentsMd) && /commands\/spec-simplify\.md/.test(agentsMd) &&
       // review 1: an ❌ is never unconfirmed (nor pre-existing), a break on untouched lines is the diff's, the verifier gets the
       // report, the simplify pass records the checks again, documents guard mode, never runs the built-in /simplify, and the
