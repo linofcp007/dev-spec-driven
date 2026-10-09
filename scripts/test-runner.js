@@ -15,7 +15,8 @@
  * The longest chains start first (the previous run's times, kept in the OS temp dir).
  * Every chain runs in its own child process (its own temp dir and, for the MCP suite, its own server), at most one per
  * CPU at a time — hermetic: a fresh, empty temp folder as its working folder and none of the shell's variables that steer
- * the plugin (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, DEV_SPEC_*… — isolate()); the output is printed file by file in file order, then ONE total. The LAST line is always
+ * the plugin (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, DEV_SPEC_*… — isolate()); the output is printed file by file in file
+ * order, then ONE total. The LAST line is always
  * `N passed, M failed` — scripts/test-docker.js reads it — and a chain that dies without its total fails the suite (the
  * run never drains to exit 0). An assertion a file makes after its run() resolved (a forgotten await) is a FAIL — a "late
  * assertion", labelled with its file — never a silent pass or a lost line.

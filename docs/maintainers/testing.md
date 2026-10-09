@@ -81,8 +81,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   is false (await it first). A prose check over many texts reads best as a table: `[[where, text, pattern], …]` mapped into
   `all()`'s object (mcp/tests/15-quality.js, the 1.22 simplification-pass prose: 65 conditions, each FAIL names the file and the
   sentence). `eq()` is `js(a) === js(b)` (key order counts) with the first difference printed: its path (`$.features[2].name`),
-  what was found, what was expected. The 1.26 conversion turned the 200 `ok()`s of 15 or more conditions into `all()` (not
-  02-mcp-server.js / 17-docs*.js). Timing-bound assertions share the machine with the other processes: bound them relative to
+  what was found, what was expected. The 1.26 conversion turned the 201 `ok()`s of 15 or more conditions (3,814 conditions, 42
+  files) into `all()` — every one but the five of 02-mcp-server.js (none in 17-docs*.js). Timing-bound assertions share the machine with the other processes: bound them relative to
   a baseline measured in the same test (as the 1.17 H checks do), not with a figure tuned on an idle machine — keep the old
   figure as a floor (`Math.max(floor, k × baseline)`: an idle run is as strict as before) and measure once more on a
   timing-only miss (the statusline and flat-import checks since the 1.20 review). Since 1.26 that retry is one call — every
