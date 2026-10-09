@@ -19,8 +19,8 @@ with real content from the `references/` templates. No MCP connection (e.g. clau
   `spec_complete_task {evidence}` · `spec_append_tasks` (converge) · `spec_finish` · `spec_stop_check {message}` (the
   end-of-turn evidence gate for clients without Claude Code's Stop hook: pass your closing message before you say done /
   verified — `block: true` means ticked tasks still lack passing evidence) · `spec_log {name, gitLog}` (the commits citing
-  each task, + a red-first check on +tdd, from the `git log --name-only --relative` text you pass — the server never runs
-  git).
+  each task, + a red-first check on +tdd, from the `git log --name-only --relative` text you pass — from the feature's
+  `branch.commit` (`<commit>..HEAD`) when it has its own branch — the server never runs git).
 - **Change & after:** `spec_impact` (an edit after approval → what it touches; reopen) · `spec_decide` (decision log) ·
   `spec_drift` · `spec_metrics` · `spec_catalog` · `spec_export` · `spec_changelog`.
 - **Project:** `spec_list` / `spec_status` · `spec_roadmap` / `spec_depend` / `spec_backlog` / `spec_milestone` ·
