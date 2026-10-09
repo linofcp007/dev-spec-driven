@@ -204,6 +204,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 
 ### Layout
 - **v1.11** — the MCP registration moved from a root `.mcp.json` to `mcp/servers.json` (see Config paths).
+- **1.16 / 1.17 / 1.19** — what quality.js and scaffold.js hold arrived as 1.16 Q1 (steering amendments), Q2 (cross-feature
+  ACs), Q3 (the glossary), 1.17 A1 (design trade-offs / risks), A2 (the constraint nudge), 1.19 R1 (reuse) and R2 (the
+  brief's Reuse section) — quality.md.
 - **1.17 H** — the linear text scans now in core.js. **1.18** — the engine, one file until then, split into modules behind
   the facade `mcp/lib/spec.js` (the same keys as ever).
 - **1.20** — the classifier's data became tracks.js `SIGNALS` with classify.js; packs.js; the build (corpus, bundle).
