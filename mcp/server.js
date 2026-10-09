@@ -22,6 +22,8 @@ const spec = require("./lib/spec.js");
 // The `lang` enum of every tool: en · pt (European Portuguese) · es · pt-BR (Brazilian Portuguese, 1.14 D1) — spec.LANGS.
 const LANG_ENUM = spec.LANGS.slice();
 const content = require("./lib/prompts-resources.js"); // MCP prompts + resources
+// 1.27: the operations — for each tool, the engine call it makes (the CLI's very call) and the argument each option comes from
+const OPS = require("./lib/operations.js");
 // 1.25.1 (review 7): the projectDir reading the approval hook shares (zero-dependency — a path or a local file:// URI): ONE parser
 const HOOK_UTILS = require("../hooks/hook-utils.js");
 
@@ -494,15 +496,10 @@ function translateLegacy(legacy, args) {
 // A tool that took over others takes some arguments in one of its modes only — `kind` (spec_roadmap_edit), `format` (spec_export),
 // `coverage` (spec_scan). An argument the call's mode doesn't take is refused before anything runs (code inapplicable-arguments,
 // `inapplicable` [names] — before 1.26 it was another tool's argument, an unknown one), and a mode's `required` ones are missing
-// arguments. The mode key itself and projectDir go everywhere. fallback: the mode when the key is not given.
-const EXPORT_DOC = ["name", "write", "includeBody"], EXPORT_FILE = ["name", "write"];
-const ARG_MODES = {
-  spec_roadmap_edit: { key: "kind", modes: { backlog: ["action", "name", "note"], depend: ["name", "dependsOn", "add", "remove", "order"], milestone: ["action", "name", "date", "features"] },
-    required: { depend: ["name"] } },
-  spec_export: { key: "format", fallback: "html", modes: { html: EXPORT_DOC, md: EXPORT_DOC, csv: EXPORT_FILE, gherkin: EXPORT_FILE, jira: EXPORT_FILE, linear: EXPORT_FILE,
-    adr: EXPORT_FILE, catalog: ["write", "includeBody"], changelog: ["since", "milestone", "write", "includeBody"] } },
-  spec_scan: { key: "coverage", fallback: false, modes: { false: ["cap"], true: [] } },
-};
+// arguments. The mode key itself and projectDir go everywhere. fallback: the mode when the key is not given. 1.27: derived from the
+// operations table (mcp/lib/operations.js) — a mode's arguments are its operation's — { tool: { key, fallback?, modes: {value:
+// [arguments]}, required?: {value: [arguments]} } }.
+const ARG_MODES = OPS.argModes();
 // The call's mode → { key, value, takes, required } (takes: the arguments it accepts), or null (a tool without modes, or a value the
 // enum check refuses).
 function argMode(toolName, args) {
@@ -553,97 +550,16 @@ function runTool(name, args, extra) {
     return { ok: false, error: argMessages().network(String(args.projectDir).trim()), code: "project-network" };
   }
   const pdir = spec.resolveProjectDir(args.projectDir);
-  switch (name) {
-    case "spec_init": // guard → meta.guard; checks → meta.checks; approvalRoles → meta.approvalRoles; stopCheck → meta.stopCheck (undefined leaves each unchanged; = `init --guard / --check / --roles / --stop-check`)
-      return spec.initProject(pdir, args.tracks, args.lang, { guard: args.guard, checks: args.checks, approvalRoles: args.approvalRoles, stopCheck: args.stopCheck,
-        approvalGuard: args.approvalGuard, evidence: args.evidence }); // 1.14 F2: approvalGuard → meta.approvalGuard (= `init --approval-guard`); F1: evidence → meta.evidence
-    case "spec_classify":
-      return spec.classify(args.description, { name: args.name, lang: args.lang, projectDir: pdir, explain: args.explain === true }); // meta.lang: the fallback when the text is inconclusive
-    case "spec_create": {
-      // No tracks → the engine keeps an existing feature's tracks, or classifies a new one in the feature's language — the explicit
-      // lang, else the project's (same as the CLI: the engine classifies, never the surface — full review Pb2).
-      return spec.createFeature(pdir, args.name, args.tracks, args.summary, undefined, args.lang, args.kind, { brownfield: args.brownfield === true, flow: args.flow, question: args.question, timebox: args.timebox,
-        reproduction: args.reproduction, rootCause: args.rootCause, condition: args.condition, behaviour: args.behaviour, includeBody: args.includeBody === true, // flow (C3), question / timebox (C2 spike), the bugfix prefill + bodies (1.21 F3)
-        size: args.size, branch: args.branch }); // 1.21 F5: the feature's size (= `create --size`); 1.25: its own git branch (= `create --branch`)
-    }
-    case "spec_status": // 1.26: without a name, every feature (spec_list's result — the CLI's `status` without a feature = `list`)
-      return typeof args.name === "string" && args.name.trim() ? spec.statusFeature(pdir, args.name) : spec.listFeatures(pdir);
-    case "spec_next_task":
-      return spec.nextTask(pdir, args.name, { batch: args.batch, max: args.max, waves: args.waves === true }); // waves: = `next --waves`
-    case "spec_task_brief":
-      return spec.taskBrief(pdir, args.name, args.number, { write: args.write, includeBrief: args.includeBrief });
-    case "spec_complete_task":
-      return spec.completeTask(pdir, args.name, args.number, args.evidence, { undo: args.undo === true, reason: args.reason }); // undo (1.16 U1) = `dev-spec undone`
-    case "spec_finish": // evidence (B5): the project checks' runs the agent reports — the server never runs them (`finish --run` does)
-      return spec.finishFeature(pdir, args.name, { write: args.write, includeBody: args.includeBody, evidence: args.evidence });
-    case "ears_validate":
-      return !args.text && args.name ? spec.earsFeature(pdir, args.name) : spec.earsValidate(args.text, args.lang || spec.projectLang(pdir));
-    case "trace_check":
-      return spec.traceCheck(pdir, args.name, { code: args.code === true, matrix: args.matrix === true }); // same call as `dev-spec trace <f> [--code] [--matrix]`
-    case "spec_doctor":
-      return spec.specDoctor(pdir, args.name);
-    case "spec_approve": // role: the sign-off's role (approvals by role); through: the fast-forward — the same engine call as `approve [--role] [--through]`
-      return spec.approvePhase(pdir, args.name, args.phase, args.by, { force: args.force === true, role: args.role, ...(args.through != null ? { through: args.through } : {}),
-        reason: args.reason, expires: args.expires, revoke: args.revoke === true, // 1.16 U2 / U3: revoke · the waiver (reason / expires) — = `approve --revoke / --reason / --expires`
-        ...(extra && extra.dryRun === true ? { dryRun: true } : {}), ...(extra && extra.confirmation ? { confirmation: extra.confirmation } : {}), // 1.21 F1b: never tool arguments — the elicitation's preview and the user's confirmation
-        ...(extra && TYPE_CHECK.object(extra.preview) ? { preview: extra.preview } : {}) }); // 1.22 review: what that preview judged — the engine refuses another version
-    case "steering_scaffold":
-      return spec.scaffoldSteeringFile(pdir, args.file, args.lang);
-    case "spec_roadmap": // html:true implies writing; a failed write is an error (same engine call as the CLI)
-      return spec.roadmapReport(pdir, { write: args.write, html: args.html, lang: args.lang });
-    case "spec_roadmap_edit": // 1.26: the same engine calls as the CLI's `backlog` / `depend` / `milestone` (ARG_MODES checked the kind's arguments)
-      if (args.kind === "backlog") return spec.backlog(pdir, args.action, args.name, args.note);
-      if (args.kind === "depend") return spec.setDependency(pdir, args.name, args.dependsOn, args.order, { add: args.add, remove: args.remove });
-      return spec.milestone(pdir, args.action, { name: args.name, date: args.date, features: args.features }); // 1.16 E3
-    case "spec_scan": // 1.26 coverage: = the CLI's `coverage`
-      return args.coverage === true ? spec.coverage(pdir) : spec.scanCodebase(pdir, { cap: args.cap });
-    case "spec_clarify":
-      return spec.clarify(pdir, args.name);
-    case "spec_next_action":
-      return spec.nextAction(pdir, args.name);
-    case "spec_add_track":
-      return spec.addTrack(pdir, args.name, args.track, { remove: !!args.remove });
-    case "spec_feature": // flow (C3): action 'flow' · preview (1.23, remove only — never a tool argument): the folder the user was asked about
-      return spec.manageFeature(pdir, args.action, args.name, args.newName, { confirm: args.confirm === true, flow: args.flow,
-        ...(extra && TYPE_CHECK.object(extra.preview) ? { preview: extra.preview } : {}) });
-
-    case "spec_import": // the engine refuses a path outside the project (same call as the CLI's `import`); text: 1.16 C4 (`import plan -`)
-      return spec.importSpec(pdir, args.tool, args.path, { name: args.name, tracks: args.tracks, lang: args.lang, text: args.text, dryRun: args.dryRun === true });
-
-    case "spec_append_tasks":
-      return spec.appendTasks(pdir, args.name, args.tasks, { heading: args.heading });
-
-    case "spec_impact": // the same engine call as the CLI's `impact` (reopen only on an explicit true)
-      return spec.impactReport(pdir, args.name, { phase: args.phase, reopen: args.reopen === true });
-    case "spec_metrics":
-      return spec.metrics(pdir, args.name, { write: args.write === true });
-
-    case "spec_drift":
-      return spec.drift(pdir, args.name);
-    case "spec_upgrade": // the same engine call as the CLI's `upgrade [--apply]` (apply only on an explicit true)
-      return spec.specUpgrade(pdir, { apply: args.apply === true });
-
-    case "spec_templates": // the same engine call as the CLI's `templates [list|init|check] [artifact] [--lang]`
-      return spec.templates(pdir, args.action, { artifact: args.artifact, lang: args.lang });
-    case "spec_tracks": // the same engine call as the CLI's `tracks [list|init <name>|check] [name] [--lang]` / `signals [list|set|forget] …`
-      return spec.trackPacks(pdir, args.action, { name: args.name, lang: args.lang, op: args.op, track: args.track, word: args.word, effect: args.effect });
-
-    case "spec_export": // the same engine call as the CLI's `export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write]`;
-      // 1.26: format catalog / changelog = the CLI's `catalog` / `changelog` (exportSpecs hands them to catalog() / changelog());
-      // includeBody false unless asked — html / md: a preview, catalog / changelog: no markdown (= --json without --include-body)
-      return spec.exportSpecs(pdir, { name: args.name, format: args.format, write: args.write === true, includeBody: args.includeBody === true,
-        since: args.since, milestone: args.milestone });
-
-    case "spec_decide": // the same engine call as the CLI's `decide <f> --title … --decision … [--affects …] [--supersedes …] [--discovery]`
-      return spec.decide(pdir, args.name, { title: args.title, decision: args.decision, context: args.context, consequences: args.consequences,
-        affects: args.affects, supersedes: args.supersedes, kind: args.kind });
-    case "spec_stop_check": // 1.16 U4: the Stop hook's decision for MCP-only clients — the same engine call as `dev-spec stop-check --json`
-      return spec.stopCheck(pdir, { message: args.message, agent: typeof args.agent === "string" ? args.agent : "" });
-    case "spec_log": // 1.16 U4: the git log TEXT the client supplies (this server never runs git) — the same engine call as `dev-spec log <f> - [--max N]`
-      return spec.taskCommits(pdir, args.name, args.gitLog, { max: args.max });
-    default:
-      throw new Error("Unknown tool: " + name);
-  }
+  // 1.27: the tool's operation (mcp/lib/operations.js) — the engine call the CLI makes too, each option read from its argument by the
+  // same table; a folded tool's mode (or the call's arguments) picks it. The server's own options are the extra ones it declares.
+  const op = OPS.forTool(name, args);
+  if (!op) throw new Error("Unknown tool: " + name);
+  const own = {};
+  const mine = OPS.internalOf(op, "mcp");
+  if (extra && extra.dryRun === true && mine.includes("dryRun")) own.dryRun = true;
+  if (extra && extra.confirmation && mine.includes("confirmation")) own.confirmation = extra.confirmation;
+  if (extra && TYPE_CHECK.object(extra.preview) && mine.includes("preview")) own.preview = extra.preview;
+  return OPS.run(op, spec, pdir, "mcp", (a) => (a.mcp === undefined ? undefined : args[a.mcp]), own);
 }
 
 // --- JSON-RPC / MCP plumbing ----------------------------------------------
@@ -802,7 +718,7 @@ async function elicitApproval(toolName, args, pol, flight, progressToken) {
     if (pre.waiver) details.push(E.waiver(pre.waiver.reason, pre.waiver.expires));
   } else if (toolName === "spec_feature") {
     // remove's own preview (no confirm): a feature that doesn't exist is answered as it is — nobody is asked
-    const pre = spec.manageFeature(spec.resolveProjectDir(args.projectDir), "remove", args.name, undefined, { confirm: false });
+    const pre = runTool(toolName, { action: "remove", name: args.name, projectDir: args.projectDir });
     if (pre && pre.ok === false && !pre.needsConfirm) return pre;
     // 1.23: the user confirms deleting THIS folder — another feature renamed into the name, or files edited while the question
     // waits, is not deleted (the engine compares the fingerprint under the folder's lock: changedSincePreview).
