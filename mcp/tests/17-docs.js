@@ -195,10 +195,11 @@ exports.run = async ({
     !/^## Pull requests/m.test(docsContrib) && /^## Before merging/m.test(docsContrib),
     "INSTALL: always-on via a local marketplace (no copy into the plugin cache); INSTALL + CONTRIBUTING validate plugin.json AND the marketplace");
   ok(/model: sonnet/.test(docsRef("subagent-execution.md")) && !/inherits the session/.test(docsRef("subagent-execution.md")) &&
-    ["spec-critic.md", "spec-implementer.md", "spec-reviewer.md", "spec-simplifier.md"].every((a) => /^model: sonnet$/m.test(docsRead("agents", a))) &&
+    ["spec-implementer.md", "spec-reviewer.md", "spec-verifier.md", "spec-simplifier.md"].every((a) => /^model: sonnet$/m.test(docsRead("agents", a))) &&
+    /^model: inherit$/m.test(docsRead("agents", "spec-critic.md")) && /The critic\s+declares `model: inherit`/.test(docsRef("subagent-execution.md")) &&
     /baseline green/.test(docsRead("commands", "executeTask.md")) && /Vocabulary map/.test(docsRef("classification-examples-saas.md")) &&
     /Vocabulary map/.test(docsRef("classification-examples-ai.md")) && !/`node mcp\/evals\/run-evals\.js/.test(docsRef("eval-suite-patterns.md")),
-    "references agree with the code: agents default to sonnet, --subagents needs a green baseline, Fast/Rigor vocabulary mapped, eval harness path resolvable");
+    "references agree with the code: the dispatched-in-bulk agents default to sonnet, the critic inherits the model (1.26), --subagents needs a green baseline, Fast/Rigor vocabulary mapped, eval harness path resolvable");
   const docsAttack = /ignore (?:all )?(?:previous|above|your|prior) instructions|ignore above|you are now DAN|disregard prior rules|what's your system prompt/i;
   const docsOutsideFences = (t) => t.split(/^\s*```.*$/m).filter((_, i) => i % 2 === 0).join("\n");
   ok(["ai-safety-patterns.md", "eval-suite-patterns.md", "mandatory-ai-design-sections.md", "example-spec-combined.md"].every((f) => {
@@ -217,12 +218,20 @@ exports.run = async ({
   // The read-only critic is limited to Read/Grep/Glob; the reviewer adds Bash (a focused test, read-only git); the
   // implementer and the 1.22 simplifier edit files and run commands — none gets the Agent tool (they never dispatch subagents).
   const agentTools = (x) => (fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^tools:.*?(?=\r?$)/gm) || [];
-  ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md,spec-simplifier.md" &&
+  // 1.26: the verifier (the reviewer's former verify mode) reads git and may run one focused test — a shell, no Write/Edit.
+  // Every description is short (every session lists them) and never sends the dispatcher to the body, which it never sees.
+  const agentDesc = (x) => ((fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^description: (.*?)\r?$/m) || [])[1] || "";
+  ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md,spec-simplifier.md,spec-verifier.md" &&
     agentTools("spec-critic.md").join() === "tools: Read, Grep, Glob" &&
     agentTools("spec-reviewer.md").join() === "tools: Read, Grep, Glob, Bash, PowerShell" &&
+    agentTools("spec-verifier.md").join() === "tools: Read, Grep, Glob, Bash, PowerShell" &&
     agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell" &&
-    agentTools("spec-simplifier.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell",
-    "4 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool");
+    agentTools("spec-simplifier.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell" &&
+    agentFiles.every((a) => agentDesc(a).length > 80 && agentDesc(a).length <= 250 && !/When to invoke|agent body/.test(agentDesc(a))) &&
+    !/read-only/i.test(agentDesc("spec-reviewer.md")) && /never edits code/i.test(agentDesc("spec-reviewer.md")) && /never edits code/i.test(agentDesc("spec-verifier.md")) &&
+    Buffer.byteLength(fs.readFileSync(path.join(agentsDir, "spec-verifier.md"), "utf8")) <= 4000 && !/^## Verify mode$/m.test(fs.readFileSync(path.join(agentsDir, "spec-reviewer.md"), "utf8")),
+    "5 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer and the verifier add a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool; every description ≤ 250 characters with no pointer to the body, the reviewer's says 'never edits code' (it has a shell), the verifier ≤ 4 KB and the reviewer has no verify mode left (1.26; got " +
+    JSON.stringify(agentFiles.map((a) => a + " " + agentDesc(a).length)) + ")");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
   ok(cmdFiles.length === 55 && ["spec-simplify.md", "spec-statusline.md", "spec-milestone.md", "spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
@@ -339,7 +348,7 @@ exports.run = async ({
     }
     const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
     ok(d4Files.length === 60 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
-      "full review D4: all 55 commands + 4 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
+      "full review D4: all 55 commands + 5 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;

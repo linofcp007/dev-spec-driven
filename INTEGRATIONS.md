@@ -75,7 +75,7 @@ server entry (`"env": { "SPEC_MCP_PROMPTS": "off" }`) if you don't want them.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 55 commands, the 4 agents, the hooks (PostToolUse + SessionStart, the Stop /
+Native — it's a plugin. Skills, the 55 commands, the 5 agents, the hooks (PostToolUse + SessionStart, the Stop /
 SubagentStop evidence gate, the Bash observed-evidence log, the ExitPlanMode plan-mode bridge, plus the opt-in PreToolUse
 guard and approval guard) and the MCP server all load:
 
