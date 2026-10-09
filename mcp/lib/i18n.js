@@ -15,7 +15,9 @@
  * (persisted in `.specs/<feature>/.state.json` lang). `spec.js` resolves the lang and passes it.
  *
  * STABLE TOKENS — never translated, the tooling matches them literally:
- *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), section markers ([SaaS], [AI], [SEC], [PRIVACY], [DIST]),
+ *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), every marker track's section marker ([SaaS], [AI], [SEC],
+ *   [PRIVACY], [DIST], [API], [UI], [OBS], [DATA] — engine/tracks.js TRACK_MARKER, rendered in MARKER_TRACK_ORDER) and a
+ *   track pack's own,
  *   story/parallel tags ([US1], [US2], [shared], [P]), the unfilled sentinel `> **TODO**`,
  *   `[NEEDS CLARIFICATION]`, the annotation tags `_Requirements:_ / _Makes green:_ /
  *   _Affects evals:_ / _Emits metrics:_ / _Implements:_`, `**Checkpoint:**`, the ```mermaid /
@@ -23,7 +25,8 @@
  *   Kind values (example / property).
  * EARS modal/keywords ARE localized (WHEN→QUANDO→CUANDO, THE SYSTEM SHALL→O SISTEMA DEVE→
  * EL SISTEMA DEBE, …) because earsValidate recognizes all three languages. Translated headings
- * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS/SEC_SECTIONS/PRIVACY_SECTIONS/DIST_SECTIONS) and RE_* matchers in the engine.
+ * are matched by the synonym tables (every table of TRACK_SECTIONS in engine/tracks.js — one per marker track, SAAS_SECTIONS …
+ * DATA_SECTIONS) and RE_* matchers in the engine.
  */
 
 const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli, FEATURE_SIZES } = require("./i18n/common.js");
@@ -70,7 +73,7 @@ function loadLocale(l) {
   Object.assign(MSG[l].sectionNames, MSG[l].secPrivacy.sectionNames); // pt-BR derives from pt's merged table
   MSG[l].quality = QUALITY_MSG[l];
   MSG[l].designWeigh = DESIGN_WEIGH_MSG[l];
-  blocks.__link({ BUILD, MSG });
+  blocks.__link({ BUILD, MSG, renderRetro });
   localeFileLoaded(LOCALE_FILES[l].slice(2)); // "i18n/<l>.js"
 }
 for (const l of BASE_LANGS) for (const [t] of TABLES) Object.defineProperty(t, l, { enumerable: true, configurable: true, get() { loadLocale(l); return t[l]; } });
@@ -194,6 +197,35 @@ function renderBrief(d, lang) {
   return out.join("\n");
 }
 
+// Layout of a feature's retro.md (spec_metrics {write} — engine/finish.js calls a language's MSG.metrics.retro(m, fmt), which
+// renders through here): language-neutral, every label from that language's metrics.retroText (T), its phase names from
+// metrics.phase (P). It lived in en.js until 1.25.1 — a PT or ES retro loaded the English locale file to render.
+function renderRetro(T, P, m, fmt) {
+  const lt = m.leadTime || {};
+  const rows = [[T.created, m.createdAt ? m.createdAt.slice(0, 10) + (m.createdAtApproximate ? ` (${T.approximate})` : "") : T.unknown]];
+  for (const ph of ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "complete", "finished"]) {
+    if (lt[ph]) rows.push([T.lead(P[ph] || ph), fmt.dur(lt[ph].hours) + (lt[ph].approximate ? ` (${T.approximate})` : "")]);
+  }
+  const by = m.reworkByPhase ? Object.entries(m.reworkByPhase).map(([ph, n]) => `${P[ph] || ph} ${n}`).join(", ") : "";
+  const reworkValue = m.rework == null ? null : m.rework + (by ? ` (${by})` : "");
+  rows.push([T.rework, reworkValue == null ? T.reworkUnknown
+    : m.reworkLowerBound && Array.isArray(m.legacyPhases) ? T.reworkPartial(reworkValue, m.legacyPhases.map((ph) => P[ph] || ph).join(", ")) : reworkValue]);
+  rows.push([T.forced, String(m.forcedApprovals)]);
+  rows.push([T.changes, `${m.changeRequests} (${T.reopened(m.reopenedTasks)})`]);
+  rows.push([T.passRate, m.evidence && m.evidence.runs ? T.runs(m.evidence.passRate, m.evidence.passing, m.evidence.runs) : T.noRuns]);
+  rows.push([T.tasks, T.tasksValue(m.tasks.done, m.tasks.total)]);
+  rows.push([T.clar, String(m.openClarifications)]);
+  const sig = [];
+  if (m.reworkByPhase) for (const [ph, n] of Object.entries(m.reworkByPhase)) sig.push(T.sigRework(P[ph] || ph, n + 1));
+  if (m.forcedApprovals) sig.push(T.sigForced(m.forcedApprovals));
+  if (m.reopenedTasks) sig.push(T.sigReopened(m.reopenedTasks));
+  if (m.evidence && m.evidence.runs && m.evidence.passRate < 100) sig.push(T.sigPass(m.evidence.passRate));
+  if (m.openClarifications) sig.push(T.sigClar(m.openClarifications));
+  return [T.title(m.feature), "", T.intro(fmt.today), "", T.metrics, "", T.header, "|---|---|", ...rows.map(([k, v]) => `| ${k} | ${v} |`), "",
+    T.well, "", "- ", "", T.hurt, "", ...(sig.length ? [T.signals(sig.join("; "))] : []), "- ", "", T.amend, "", T.amendNote, "- ", "",
+    T.followUps, "", T.followUpsNote, "- ", ""].join("\n");
+}
+
 // pt-BR (1.14 D1) — every table's pt-BR twin, derived lazily from pt (i18n/pt-br.js, loaded by the first read of one).
 const defineDerivedLocale = (table, raw, patch) => Object.defineProperty(table, "pt-BR", { enumerable: true, configurable: true,
   get() { ptbr().defineDerivedLocale(table, raw, patch); return table["pt-BR"]; } });
@@ -260,4 +292,5 @@ module.exports = {
   bugTestPlan: (name, lang) => L(lang).bugTestPlan(name),
   bugTasks: (name, lang) => L(lang).bugTasks(name), // one form for every size: the red regression test + the fix (no reproduce / root-cause tasks — their gates hold them)
   renderBrief,
+  renderRetro, // (retroText, phaseNames, metrics, fmt) → retro.md — the layout every language's metrics.retro renders through
 };

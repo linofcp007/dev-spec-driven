@@ -10,7 +10,7 @@ Args: $ARGUMENTS
 
 (A **change** — kind `change`, size xs — has two approvals only: `tasks`, its plan in `change.md`, and `execution`; a
 size xs / s feature approves its whole plan with `/spec-ff` once it is filled. A design section left with nothing but
-the template's guidance line is refused like an unfilled one — 1.21.)
+the template's guidance line is refused like an unfilled one.)
 
 Only record an approval the user actually gave. Run `spec_doctor` first and show the verdict. Then call the
 `spec_approve` MCP tool with the feature name and phase (one of: classification, requirements, design,
@@ -41,8 +41,8 @@ core-only feature; execution (the sign-off after a ready `/spec-finish`): spec_f
 (project checks without a passing run since the last tick, on the current code), `approval-gates`.
 `tests` is pending on a +tdd / +ai feature once its test or eval plan exists or was approved (never on a bugfix), so
 `gatesOk` stays false and `spec_next_action` asks for it until it is approved — and again once the test plan gains a T-ID
-or a plan is re-approved with other content after it (the approval records the plan it covered; one recorded before 1.22
-is never asked for again). An approved artifact that was deleted counts as changed since its approval: restore it, or
+or a plan is re-approved with other content after it (the approval records the plan it covered; an older one that
+recorded no plan is never asked for again). An approved artifact that was deleted counts as changed since its approval: restore it, or
 revoke that approval. **Phase by phase:** a phase is
 refused while an EARLIER active phase that has an artifact is still unapproved — or was approved but its artifact changed
 since (a whitespace-only edit is no change) — check `phase-order`, naming the phase(s) to approve (or re-review and

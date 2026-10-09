@@ -21,7 +21,9 @@ its `lines`.
 What to tell the user when they write a pack (details: `references/project-tracks.md`):
 
 - `track.json`: `name` = the folder name (`^[a-z][a-z0-9]{1,19}$`, never a built-in track), `marker` (`^[A-Z][A-Z0-9]{1,11}$`,
-  case-sensitive, unique — never SaaS / AI / SEC / PRIVACY / DIST), `title` {en, pt?, es?}, `signals` {strong, weak, context} (the
+  case-sensitive, unique — never a built-in track's marker: SAAS / AI / SEC / PRIVACY / DIST / API / UI / OBS / DATA, a
+  reserved word: TDD / CORE / SHARED / TODO / TBD / TBC / FIXME / NEEDS / NOTE / WIP, or an ID's shape: US / US1, P1, AC / AC1,
+  SC / SC1, EC / EC1, NFR / NFR1, T1), `title` {en, pt?, es?}, `signals` {strong, weak, context} (the
   classifier matches them as literal words — never as patterns), `sections` [{name, syn?, loose?, guidance?}] (the
   mandatory design sections), `steering` (optional file name). `//` comments are allowed.
 - Fragments are plain markdown: one list item = one criterion / task / checklist line; test-plan rows keep the built-in

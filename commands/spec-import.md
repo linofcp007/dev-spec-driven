@@ -1,6 +1,6 @@
 ---
 description: Import a Kiro, spec-kit or OpenSpec spec, a plan (Claude Code, Cursor, Codex, fluidplan) or BMAD docs as a feature; Kiro / Cursor rules as steering.
-argument-hint: "[kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan|kiro-steering|cursor-rules] [path, or the plan's text] [--name n] [--tracks tdd,saas] [--lang pt] [--dry-run]"
+argument-hint: "[kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan|kiro-steering|cursor-rules] [path or plan text] [--name n] [--dry-run]"
 ---
 
 Use the **dev-spec-driven** skill, import from other tools (`references/brownfield.md` → Import).
@@ -75,7 +75,7 @@ it for real; a refusal is the real import's.
 Show the user: the files written, the **ID mapping** (`mapping`: old → new) and every **warning** (criteria
 not in EARS form, stories without criteria, carried or skipped sections, unresolved task references). Then treat
 it like any new feature: **Phase 0** — confirm the track set with the user (`spec_add_track` to change it) —
-then `spec_clarify` / `ears_validate` on the imported requirements and the normal gates (`spec_doctor`,
-`/approve` per phase). A plan that starts from an architecture fits the design-first flow
+then `spec_clarify` / `ears_validate` on the imported requirements and the normal gates (`spec_doctor`, then
+`spec_approve` per phase on the user's yes). A plan that starts from an architecture fits the design-first flow
 (`spec_feature {action: "flow", name, flow: "design-first"}`). Imported checkboxes are not evidence: re-verify
 ticked tasks before trusting them. Respond in the user's language (EN/PT/ES).

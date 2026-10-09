@@ -16,7 +16,8 @@ its `lines`.
 - **`init`** — copies the built-in template(s) into `.specs/templates/` (one `artifact`, or all) with the variables in
   place, so the team edits them there. `lang` given → `.specs/templates/<lang>/`. It never overwrites a file. Artifacts:
   classification, requirements, design, tasks, test-plan, eval-plan, load-test, quickstart, checklist,
-  integration-plan, bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks, and `steering/<file>.md`
+  integration-plan, bug, bug-requirements, bug-test-plan, bug-tasks, spike, spike-tasks, change (a size-xs change's
+  `change.md`), and `steering/<file>.md`
   (incl. `security.md` / `privacy.md` / `distributed.md` / `api.md` / `ui.md` / `data.md`).
 - **`check`** — validates the project's templates against the current rules and lists each problem with its severity
   (the CLI exits 1 on an error). Fix the errors before scaffolding with them.

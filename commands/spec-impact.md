@@ -23,9 +23,9 @@ Use this when an **approved** artifact was edited afterwards — `spec_doctor` w
    - **eval-plan** — sections added / modified / removed, like the design;
    - **tasks** — task numbers added / removed / changed.
    `baseline: "fingerprint-only"` means the approval predates the change history: only *that* it changed is
-   known — re-review it by hand and re-approve (that starts the history). `baseline: "none"` (≤1.10, or a 1.12
-   bugfix design approval) recorded not even a fingerprint: `changed` is `null` (unknown — a file date is no
-   evidence) unless a file was added after it; re-review and re-approve to start tracking it.
+   known — re-review it by hand and re-approve (that starts the history). `baseline: "none"` — an older approval
+   that recorded not even a fingerprint: `changed` is `null` (unknown — a file date is no evidence) unless a file was
+   added after it; re-review and re-approve to start tracking it.
 2. Show the user the diff and `affectedTasks`, grouped by ID, with each task's evidence state. Ask whether the
    change is intended and which done tasks must be redone.
 3. **Only with the user's OK**, run it again with `reopen: true` (CLI `--reopen`; every phase but tasks): it
@@ -44,8 +44,8 @@ Use this when an **approved** artifact was edited afterwards — `spec_doctor` w
 `steering-changed-since-approval`, next_action adds a re-review hint — call `spec_impact {phase: "steering"}` with no
 name (CLI `dev-spec impact --phase steering`) for every active feature whose requirements / design approval was made
 under an older version of constitution.md, a track's steering file or an `always` / matching `fileMatch` file (`features`
-with each approval and the files `modified` / `removed`; `untracked` lists approvals made before 1.16, which recorded no
-steering and are never flagged), or with a name for one feature. It is read-only (`reopen` is refused): re-review each
+with each approval and the files `modified` / `removed`; `untracked` lists older approvals that recorded no steering —
+never flagged), or with a name for one feature. It is read-only (`reopen` is refused): re-review each
 approved artifact against the amended steering with the user, then re-approve it — the approval records the current steering.
 
 Never reopen on your own initiative, and never treat an approved spec that changed as still approved.

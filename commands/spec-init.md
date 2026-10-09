@@ -1,6 +1,6 @@
 ---
 description: Initialize .specs/ and the steering files for the tracks this project uses.
-argument-hint: "[tracks, e.g. tdd saas ai sec privacy dist api ui obs data] [--lang en|pt|pt-BR|es] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
+argument-hint: "[tracks, e.g. tdd api] [--lang en|pt|pt-BR|es] [--guard on|off|scope] [--approval-guard off|ask|deny] [--check …] [--roles …]"
 ---
 
 Use the **dev-spec-driven** skill to bootstrap project context.

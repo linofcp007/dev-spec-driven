@@ -335,8 +335,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 
 ### New in 1.18
 
-- **The engine as modules** — `mcp/lib/spec.js` is a facade over `mcp/lib/engine/` (20 modules by concept plus one
-  importer per source tool), `i18n.js` over one file per language; a pure refactor, proven behaviour-identical.
+- **The engine as modules** — `mcp/lib/spec.js` is a facade over `mcp/lib/engine/` (20 modules by concept at the time —
+  today's count is in the tree below — plus one importer per source tool), `i18n.js` over one file per language; a pure refactor, proven behaviour-identical.
 
 ### New in 1.17
 
@@ -887,8 +887,8 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 
 ### Novidades da 1.18
 
-- **O motor em módulos** — `mcp/lib/spec.js` passa a fachada sobre `mcp/lib/engine/` (20 módulos por conceito e um
-  importador por ferramenta de origem), o `i18n.js` sobre um ficheiro por língua; um refactor puro, com comportamento
+- **O motor em módulos** — `mcp/lib/spec.js` passa a fachada sobre `mcp/lib/engine/` (20 módulos por conceito na
+  altura — a contagem de hoje está na árvore abaixo — e um importador por ferramenta de origem), o `i18n.js` sobre um ficheiro por língua; um refactor puro, com comportamento
   comprovadamente idêntico.
 
 ### Novidades da 1.17
@@ -1458,8 +1458,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 
 ### Novedades de la 1.18
 
-- **El motor en módulos** — `mcp/lib/spec.js` pasa a ser una fachada sobre `mcp/lib/engine/` (20 módulos por concepto y un
-  importador por herramienta de origen), `i18n.js` sobre un archivo por idioma; un refactor puro, con comportamiento
+- **El motor en módulos** — `mcp/lib/spec.js` pasa a ser una fachada sobre `mcp/lib/engine/` (20 módulos por concepto en
+  ese momento — el recuento de hoy está en el árbol de abajo — y un importador por herramienta de origen), `i18n.js` sobre un archivo por idioma; un refactor puro, con comportamiento
   demostradamente idéntico.
 
 ### Novedades de la 1.17
@@ -1714,7 +1714,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (38 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine, one module per concern (classify, scaffold, lint, trace, doctor, gates, impact, roadmap, scan, import/)
+│   ├── lib/engine/                   ← the engine: 22 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js                   ← localized content's facade (artifact + steering builders, messages)
 │   ├── lib/i18n/                     ← each language's text (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources

@@ -1142,7 +1142,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
 
     // Every WP8 message exists in EN, PT and ES (same keys).
     const keys8 = (o, pre = "") => Object.entries(o).flatMap(([k, v]) => (v && typeof v === "object" && !Array.isArray(v) ? keys8(v, pre + k + ".") : [pre + k])).sort();
-    ok(["impact", "metrics"].every((ns) => { const en = JSON.stringify(keys8(S.msg("en")[ns]).filter((k) => k !== "buildRetro")); return ["pt", "es"].every((l) => JSON.stringify(keys8(S.msg(l)[ns])) === en); }) &&
+    ok(["impact", "metrics"].every((ns) => { const en = JSON.stringify(keys8(S.msg("en")[ns])); return ["pt", "es"].every((l) => JSON.stringify(keys8(S.msg(l)[ns])) === en); }) &&
       ["approvalHistory", "changes"].every((k) => ["en", "pt", "es"].every((l) => typeof S.msg(l).jsonShape[k] === "string")) &&
       /^# Retrospectiva: x/.test(S.msg("es").metrics.retro({ feature: "x", leadTime: {}, evidence: { runs: 0 }, tasks: { done: 0, total: 0 }, openClarifications: 0, forcedApprovals: 0, changeRequests: 0, reopenedTasks: 0, rework: null }, { dur: String, today: "2026-01-01" })),
       "WP8 messages (impact, metrics, retro, jsonShape) exist in EN, PT and ES with the same keys");
