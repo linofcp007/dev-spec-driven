@@ -58,8 +58,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   Write / Edit runs three hooks (guard, approval, spec), a Bash call two (approval, observe). **Minimum Claude Code 2.1.139**
   (released 2026-05-11): its changelog — "Added hook `args: string[]` field (exec form) that spawns the command directly without a
   shell, so path placeholders never need quoting"; the docs page states no minimum. An older version reads no `args` and would run
-  a bare `node` with the payload on stdin (a syntax error: every hook silently off) — INSTALL.md and the README's quick start state
-  the minimum. `claude plugin validate` (2.1.295) checks the hooks' schema (`args` must be an array) and passes. Never go back to
+  a bare `node` with the payload on stdin (a syntax error: every hook silently off) — INSTALL.md and the Requirements of the three READMEs
+  (EN / PT / ES) state the minimum. `claude plugin validate` (2.1.295) checks the hooks' schema (`args` must be an array) and passes. Never go back to
   shell form for a hook; a new hook takes the same shape (mcp/tests/10-guards-hooks-r7.js checks every entry).
 - **Which project a hook reads (1.23 review 5, M8): `sessionProject({cwd, anchors})`** (engine/guards.js, on the facade). The
   MCP server is pinned to `SPEC_PROJECT_DIR` = `${CLAUDE_PROJECT_DIR}` (the folder Claude Code started in) and records approvals,

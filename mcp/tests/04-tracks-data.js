@@ -465,10 +465,10 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, require, __dirname }) => {
     ok(!loc.length && ["pt", "es"].every((l) => ["test-plan.md", "steering.md", "requirements.md", "tasks.md", "checklist.md"].every((fr) => fs.existsSync(path.join(src, l, fr)))),
       "1.21 review B6: the +mobile example pack is localized whole — pt/ and es/ hold test-plan.md and steering.md too; PT / pt-BR (pt/) / ES features get their [MOBILE] test rows and steering/mobile.md in their language; tracks check stays clean (got " +
       js(loc) + ")");
-    // the guide and the README point to it
+    // the guide and the README (1.26: each language's file) point to it
     const guide = fs.readFileSync(path.join(__dirname, "..", "skills", "dev-spec-driven", "references", "project-tracks.md"), "utf8");
-    const readme = fs.readFileSync(path.join(__dirname, "..", "README.md"), "utf8");
-    ok(/examples\/track-packs\/mobile/.test(guide) && /\.specs\/tracks\/mobile/.test(guide) && /examples\/track-packs\/mobile/.test(readme),
-      "1.21 F4: references/project-tracks.md and README.md point to examples/track-packs/mobile (copy it to .specs/tracks/mobile to start)");
+    const readmes = ["README.md", "README.pt.md", "README.es.md"].map((f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8"));
+    ok(/examples\/track-packs\/mobile/.test(guide) && /\.specs\/tracks\/mobile/.test(guide) && readmes.every((readme) => /examples\/track-packs\/mobile/.test(readme)),
+      "1.21 F4: references/project-tracks.md and README.md / .pt.md / .es.md point to examples/track-packs/mobile (copy it to .specs/tracks/mobile to start)");
   }
 };

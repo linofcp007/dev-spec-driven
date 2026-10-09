@@ -73,10 +73,12 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
     const spawned = entries.map(({ ev, h }) => spawnSync("node", h.args.map((a) => a.split("${CLAUDE_PLUGIN_ROOT}").join(root)), { input: js({ hook_event_name: ev, cwd: tmp, session_id: "s" }),
       encoding: "utf8", env: hookEnv(), cwd: tmp, timeout: 20000 }));
     const req = (t) => /Claude Code 2\.1\.139 (?:or later|ou posterior|o posterior)/.test(t);
-    const readme = fs.readFileSync(path.join(root, "README.md"), "utf8"), install = fs.readFileSync(path.join(root, "INSTALL.md"), "utf8");
-    const quick = ["### Quick start", "### Começar rápido", "### Inicio rápido"].map((h) => readme.slice(readme.indexOf(h), readme.indexOf(h) + 400));
+    const install = fs.readFileSync(path.join(root, "INSTALL.md"), "utf8");
+    // 1.26: one README per language, the requirement in its Requirements section (the quick start's first line until then)
+    const quick = ["README.md", "README.pt.md", "README.es.md"].map((f) => fs.readFileSync(path.join(root, f), "utf8").replace(/\r\n/g, "\n"))
+      .map((t) => { const m = t.match(/\n## (?:Requirements|Requisitos)\n/); return m ? t.slice(m.index, m.index + 400) : ""; });
     ok(entries.length >= 9 && !bad.length && spawned.every((r) => r.status === 0 && r.stdout === "") && req(install.slice(0, 600)) && quick.every(req),
-      "1.25.1 (r7 finding 2): every hooks.json entry is exec form — command 'node', args [${CLAUDE_PLUGIN_ROOT}/hooks/<script>] (an existing script), timeout 10 — and runs as Claude Code spawns it (no shell); INSTALL.md and the README's quick start (EN / PT / ES) require Claude Code 2.1.139+ (got " +
+      "1.25.1 (r7 finding 2): every hooks.json entry is exec form — command 'node', args [${CLAUDE_PLUGIN_ROOT}/hooks/<script>] (an existing script), timeout 10 — and runs as Claude Code spawns it (no shell); INSTALL.md and the Requirements of README.md / .pt.md / .es.md require Claude Code 2.1.139+ (got " +
       js({ n: entries.length, bad, spawned: spawned.map((r) => r.status + ":" + r.stdout.slice(0, 30)), quick: quick.map(req) }) + ")");
   }
 

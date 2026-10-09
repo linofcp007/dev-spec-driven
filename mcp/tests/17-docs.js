@@ -87,14 +87,14 @@ exports.run = async ({
     "SKILL.md claims are honest (constitution check = section presence; quickstart/checklist always scaffolded); the tool table lives in tooling-reference.md");
   // The expected set IS the live tools/list — a hand-kept list went stale (it stopped at 23 tools while the server had 29).
   const docsTools = list.result.tools.map((t) => t.name);
-  const docsReadme = docsRead("README.md");
-  const docsTables = ["## English", "## Português", "## Español"].map((h) => new Set([...((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0])
-    .matchAll(/^\| (`[a-z_]+`(?: \/ `[a-z_]+`)*) \|/gm)].flatMap((m) => m[1].match(/[a-z_]+/g))));
+  // 1.26: the README is one file per language — README.md (EN, the reference), README.pt.md (PT-PT), README.es.md (ES) — with
+  // the same sections and tables; every guard that read a language block of the one README reads that language's file.
+  const docsReadmes = [["en", "README.md"], ["pt", "README.pt.md"], ["es", "README.es.md"]].map(([lang, f]) => [lang, f, docsRead(f)]);
+  const docsTables = docsReadmes.map(([, , t]) => new Set([...t.matchAll(/^\| (`[a-z_]+`(?: \/ `[a-z_]+`)*) \|/gm)].flatMap((m) => m[1].match(/[a-z_]+/g))));
   ok(docsTables.every((s) => docsTools.every((t) => s.has(t)) && [...s].every((t) => list.result.tools.some((x) => x.name === t))) &&
-    !/path-filled/.test(docsReadme) && ["## Português", "## Español"].every((h) => { const sec = docsReadme.split("\n" + h + "\n")[1].split("\n## ")[0];
-      return /\/plugin marketplace add/.test(sec) && /node cli\/test-cli\.js/.test(sec) && /--subagents/.test(sec) && /_Verify:/.test(sec); }),
-    `README: EN/PT/ES tool tables list all ${docsTools.length} tools of the live tools/list (no phantom; missing: ` +
-    docsTables.map((s) => docsTools.filter((t) => !s.has(t)).join("+") || "none").join(" / ") + "); PT/ES carry subagents, evidence, marketplace install and the CLI test line");
+    docsReadmes.every(([, , t]) => !/path-filled/.test(t) && /\/plugin marketplace add/.test(t) && /node cli\/test-cli\.js/.test(t) && /--subagents/.test(t) && /_Verify:/.test(t)),
+    `README: the EN/PT/ES tool tables (README.md, README.pt.md, README.es.md) list all ${docsTools.length} tools of the live tools/list (no phantom; missing: ` +
+    docsTables.map((s) => docsTools.filter((t) => !s.has(t)).join("+") || "none").join(" / ") + "); each language carries subagents, evidence, marketplace install and the CLI test line");
   const docsRules = [[path.join(".cursor", "rules", "dev-spec-driven.mdc"), "cursor"], [path.join(".windsurf", "rules", "dev-spec-driven.md"), "windsurf"],
     [path.join(".github", "copilot-instructions.md"), "copilot"], ["GEMINI.md", "gemini"], ["AGENTS.md", "agents"]];
   const docsAgents = docsRead("AGENTS.md");
@@ -125,20 +125,20 @@ exports.run = async ({
   // the tasks gate's. (d) The maintainer notes ('When extending' — docs/maintainers/extending.md since 1.20): the README
   // tool-table test requires every live tool, not "the 23 v1.12 tools".
   const docsWs = (t) => t.replace(/\s+/g, " ");
-  const docsSec = (h) => docsWs((docsReadme.split("\n" + h + "\n")[1] || "").split("\n## ")[0]);
+  const docsSec = (lang) => docsWs((docsReadmes.find(([l]) => l === lang) || [])[2] || "");
   const docsSpecSrc = libSources({ i18n: false }).map((f) => fs.readFileSync(f, "utf8")).join("\n"); // the engine's sources (1.18: spec.js + engine/)
-  const docsAttn = [["## English", 'the `ROADMAP.md` "Needs attention" line list each unverified task with a localized reason', "Needs attention"],
-    ["## Português", 'a linha "Precisa de atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo', "Precisa de atenção"],
-    ["## Español", 'la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su motivo', "Necesita atención"]];
-  ok(docsAttn.every(([h, s, needs]) => docsSec(h).includes(s) && docsSpecSrc.includes('needs: "' + needs + '"')) &&
+  const docsAttn = [["en", 'the `ROADMAP.md` "Needs attention" line list each unverified task with a localized reason', "Needs attention"],
+    ["pt", 'a linha "Precisa de atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo', "Precisa de atenção"],
+    ["es", 'la línea "Necesita atención" del `ROADMAP.md` listan cada tarea sin verificar con su motivo', "Necesita atención"]];
+  ok(docsAttn.every(([lang, s, needs]) => docsSec(lang).includes(s) && docsSpecSrc.includes('needs: "' + needs + '"')) &&
     docsWs(docsAgents).includes('the `ROADMAP.md` "Needs attention" line list each unverified task with a localized reason') &&
-    ![docsReadme, docsAgents].some((t) => /shows how many each feature has|mostra quantas há|muestra cuántas tiene/.test(docsWs(t))),
-    "README (EN/PT/ES) + AGENTS.md: the ROADMAP.md needs-attention line lists each unverified task with its reason (the heading as the roadmap prints it), never 'shows how many'");
+    !docsReadmes.map(([, , t]) => t).concat([docsAgents]).some((t) => /shows how many each feature has|mostra quantas há|muestra cuántas tiene/.test(docsWs(t))),
+    "README (README.md / .pt.md / .es.md) + AGENTS.md: the ROADMAP.md needs-attention line lists each unverified task with its reason (the heading as the roadmap prints it), never 'shows how many'");
   const docsReopen = (t) => [...docsWs(t).matchAll(/reopen(?:: true)?`? (?:unticks|desmarca)/g)].map((m) => docsWs(t).slice(m.index).split(/\.\s|\|/)[0]);
-  const docsReopenSurfaces = [["README.md", docsReadme, 6], ["AGENTS.md", docsAgents, 2], ["tooling-reference.md", docsRef("tooling-reference.md"), 1], ["SKILL.md", docsSkill, 1],
-    ["workflows.md", docsRef("workflows.md"), 1]]; // 1.21 F3: the after-approval detail moved there
+  const docsReopenSurfaces = docsReadmes.map(([, f, t]) => [f, t, 1]).concat([["AGENTS.md", docsAgents, 2], ["tooling-reference.md", docsRef("tooling-reference.md"), 1],
+    ["SKILL.md", docsSkill, 1], ["workflows.md", docsRef("workflows.md"), 1]]); // 1.21 F3: the after-approval detail moved there
   const docsReopenBad = docsReopenSurfaces.flatMap(([f, t, n]) => { const s = docsReopen(t); return s.length < n ? [f + " (" + s.length + " < " + n + ")"] : s.filter((x) => !/\bretire\b/.test(x)).map((x) => f + ": " + x); });
-  ok(!docsReopenBad.length, "README (EN/PT/ES), AGENTS.md, tooling-reference and SKILL.md: every 'reopen unticks' sentence says a removed criterion's tasks are never unticked (retire) (bad: " + docsReopenBad.join(" | ") + ")");
+  ok(!docsReopenBad.length, "README.md / .pt.md / .es.md, AGENTS.md, tooling-reference and SKILL.md: every 'reopen unticks' sentence says a removed criterion's tasks are never unticked (retire) (bad: " + docsReopenBad.join(" | ") + ")");
   const docsApprove = docsWs(docsRead("commands", "approve.md"));
   const apDesc = (list.result.tools.find((t) => t.name === "spec_approve") || {}).description || "";
   // 1.26: the per-phase check lists left spec_approve's description AND /approve — a refusal names its failing check ids (the
@@ -260,7 +260,8 @@ exports.run = async ({
   const proseFiles = ["commands", path.join("skills", "dev-spec-driven"), "agents", "evals", "integrations"]
     .flatMap((d) => walkFiles(path.join(root, d)).filter((p) => p.endsWith(".md")))
     .concat([path.join(".cursor", "rules"), path.join(".windsurf", "rules")].flatMap((d) => walkFiles(path.join(root, d))))
-    .concat(["README.md", "AGENTS.md", "CONTRIBUTING.md", "INSTALL.md", "INTEGRATIONS.md", "GEMINI.md", path.join(".github", "copilot-instructions.md")].map((f) => path.join(root, f)));
+    .concat(["README.md", "README.pt.md", "README.es.md", "AGENTS.md", "CONTRIBUTING.md", "INSTALL.md", "INTEGRATIONS.md", "GEMINI.md",
+      path.join(".github", "copilot-instructions.md")].map((f) => path.join(root, f)));
   // Negations are dropped before matching. `no` is ambiguous: the English/Spanish negator ("no PRs", "(no CI)")
   // or the European-Portuguese contraction em+o ("o delta de eval no PR" = IN the PR). So a plural is always a
   // negation, but a singular `no PR`/`no CI` only after punctuation or at a line start; right after a word it
@@ -274,8 +275,8 @@ exports.run = async ({
   const negations = [String.raw`\bno\s+(?:PRs|pull requests)\b`, String.raw`(?<![A-Za-zÀ-ÿ0-9_]\s*)\bno\s+(?:paid\s+)?(?:PR|pull request|CI)\b`, negWindow]
     .map((r) => new RegExp(r + negTail(true), "gi"));
   const dropNegations = (t) => negations.reduce((s, re) => s.replace(re, ""), t);
-  // PT prose (README's `## Português` block) is read as PT: there `no` is always em+o, so only the window negates
-  // (PT negates with não/sem/nem) and a sentence-initial "No PR, inclui…" / "Depois, no CI, …" steers.
+  // PT prose (README.pt.md, whole — the README's `## Português` block until 1.26) is read as PT: there `no` is always em+o,
+  // so only the window negates (PT negates with não/sem/nem) and a sentence-initial "No PR, inclui…" / "Depois, no CI, …" steers.
   const ptNegation = new RegExp(negWindow + negTail(false), "gi");
   const ptNoRe = /(?<![\p{L}\p{N}_])[Nn]os?\s+(?:PRs?|[Pp]ull [Rr]equests?|CI)\b/u;
   const PR = "(?:PR|[Pp]ull [Rr]equest)";
@@ -289,10 +290,9 @@ exports.run = async ({
     String.raw`\b[Ee]n (?:el |la )?CI\b`,
   ].join("|"));
   const steers = (t, pt) => { const u = pt ? t.replace(ptNegation, "") : dropNegations(t); return steersRe.test(u) || (!!pt && ptNoRe.test(u)); };
-  const readmePath = path.join(root, "README.md");
-  const proseParts = proseFiles.map((p) => { const t = fs.readFileSync(p, "utf8"); const m = p === readmePath && t.match(/\n## Português\r?\n([\s\S]*?)\r?\n## Español\r?\n/);
-    return m ? [p, t.replace(m[1], ""), m[1]] : [p, t, ""]; });
-  const readmePt = (proseParts.find(([p]) => p === readmePath) || [])[2] || "";
+  const readmePtPath = path.join(root, "README.pt.md");
+  const proseParts = proseFiles.map((p) => { const t = fs.readFileSync(p, "utf8"); return p === readmePtPath ? [p, "", t] : [p, t, ""]; });
+  const readmePt = (proseParts.find(([p]) => p === readmePtPath) || [])[2] || "";
   const steersToPr = proseParts.filter(([, t, pt]) => steers(t) || steers(pt, true)).map(([p]) => p);
   const guardMissed = ["in the PR", "Prompt PRs are blocked", "git/PR-friendly", "Open a pull request", "push and open one", "on every PR", "a CI gate", "runs in CI",
     "Põe o delta de eval no PR.", "Os testes de carga correm no CI.", "Incluye el delta de evals en el PR.", "Depois, abrir o PR com o resumo.", "comenta nos PRs",
@@ -310,7 +310,7 @@ exports.run = async ({
   ok(guardMissed.length === 0 && guardFlagged.length === 0,
     "the PR/CI guard catches EN/PT/ES steering and allows negations (missed: " + guardMissed.join(" | ") + "; wrongly flagged: " + guardFlagged.join(" | ") + ")");
   ok(steersToPr.length === 0 && readmePt.length > 1000 && S.finishFeature(vDir, "login-loop").message.indexOf("PR") === -1,
-    "no command/skill/agent text steers toward PRs or CI; README's PT block is read as PT (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
+    "no command/skill/agent text steers toward PRs or CI; README.pt.md is read as PT, README.es.md as ES (found: " + steersToPr.map((p) => path.relative(root, p)).join(", ") + ")");
 
   // 1.14 full review (D) — docs and prose.
   {
@@ -538,12 +538,11 @@ exports.run = async ({
       /`spec_stop_check \{message\}`/.test(catalog) && /`spec_log \{name, gitLog\}`/.test(catalog) && list.result.tools.some((t) => t.name === "spec_stop_check") && list.result.tools.some((t) => t.name === "spec_log") &&
       docsRules.slice(0, 4).every(([f]) => /Below, `dev-spec <command>` stands for `node cli\/dev-spec\.js <command>`/.test(docsWs(docsRead(f))) && /`spec_stop_check \{message\}`/.test(docsRead(f))),
       "1.22 review P11: INTEGRATIONS' stop-gate row names spec_stop_check first (CLI as the alternative); tool-catalog.md lists spec_stop_check and spec_log; the Cursor / Windsurf / Copilot / Gemini rule files spell out `dev-spec <command>` and the MCP stop-check");
-    // P12: Spanish terminology follows es.js — "el gate de evidencia" (never "la puerta" outside the release notes the
-    // controller owns), and a command's ES description says "función", never "feature" (languages.md → Terminology).
-    // (1.24 review 6: the command descriptions carry no ES tail any more — 10-guards-review6 checks they stay short English; kept
-    // as a guard should a Spanish one come back.)
-    const esBlock = (docsReadme.split("\n## Español\n")[1] || "").split("\n## What's in the box")[0];
-    const esOutsideNews = esBlock.split(/\n### Novedades de la [\d.]+\n/).map((s, i) => (i ? s.split(/\n### /).slice(1).join("\n### ") : s)).join("\n");
+    // P12: Spanish terminology follows es.js — "el gate de evidencia" (never "la puerta"), and a command's ES description says
+    // "función", never "feature" (languages.md → Terminology). (1.24 review 6: the command descriptions carry no ES tail any
+    // more — 10-guards-review6 checks they stay short English; kept as a guard should a Spanish one come back.) 1.26: the ES
+    // README is README.es.md, whole — its release notes ("Novedades de la …") moved to CHANGELOG.md, the controller's.
+    const esOutsideNews = docsSec("es");
     const esDescFeature = fs.readdirSync(path.join(root, "commands")).filter((f) => f.endsWith(".md")).filter((f) => {
       const d = (docsRead("commands", f).match(/^description: (.*)$/m) || [, ""])[1];
       return / ES - /.test(d) && /\bfeatures?\b/i.test(d.split(" ES - ").pop());
@@ -551,7 +550,7 @@ exports.run = async ({
     const esJs = docsRead("mcp", "lib", "i18n", "es.js");
     ok(/gate de evidencia/.test(esJs) && !/puerta de evidencia/.test(esJs) &&
       !/la puerta de evidencia|La puerta de evidencia/.test(esOutsideNews) && /el gate de evidencia/.test(esOutsideNews) && !esDescFeature.length,
-      "1.22 review P12: README's ES block says 'el gate de evidencia' (as es.js) outside the release notes; no command's ES description says 'feature' (got " + JSON.stringify(esDescFeature) + ")");
+      "1.22 review P12: README.es.md says 'el gate de evidencia' (as es.js), never 'la puerta'; no command's ES description says 'feature' (got " + JSON.stringify(esDescFeature) + ")");
   }
 
   // Release hygiene: the three version fields agree.

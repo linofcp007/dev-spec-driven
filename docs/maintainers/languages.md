@@ -61,6 +61,13 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
 - **Terminology** mirrors the existing `ROADMAP_I18N` per language (PT keeps the "Feature/Tasks/Tracks"
   anglicisms; ES translates to Función/Tareas). Eval sample JSON (`golden.json`/`adversarial.json`) is
   data and stays as-is; its surrounding prose (README, prompt stub) is localized.
+- **The README, one file per language (1.26).** `README.md` (English, the reference), `README.pt.md` (European Portuguese —
+  no Brazilianisms: ficheiro, utilizador, ecrã, "estás a correr") and `README.es.md` (neutral Spanish) hold the same
+  sections and tables in the same order; a change to one goes to all three in the same commit. The docs tests read each
+  file whole — the tool tables against `tools/list`, the CLI summary, the counts, the Claude Code minimum under
+  Requirements, the needs-attention and reopen sentences, the tree (mcp/tests/17-docs*.js, 04-tracks-data, 10-guards-hooks-r7)
+  — and the PR/CI prose guard reads `README.pt.md` as Portuguese. What changed in a release goes into CHANGELOG.md, never
+  into a README.
 - **Adding a language:** a regional variant of an existing one derives from it, as pt-BR does from pt-PT (only the
   overrides). A new language adds a file `mcp/lib/i18n/<lang>.js` holding every table's block (`build`, `steering`,
   `evalsReadme`, `msg`, `quality`, `designWeigh`, `brief` — as `en.js` does), wires it into `i18n.js`'s `LOCALE_FILES`

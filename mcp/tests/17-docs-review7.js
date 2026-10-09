@@ -70,17 +70,21 @@ exports.run = async ({ ok, root, require }) => {
       "1.25.1 review: CLAUDE.md / CONTRIBUTING.md list exactly the Node core modules the runtime code requires, plus fetch — no readline (listed " + js(listed) + ", required " + js([...required].sort()) + ")");
   }
 
-  { // 3. README's tree states the engine's module count (the 1.18 note's "20 modules" was that release's — said so now).
+  { // 3. README's tree states the engine's module count (the 1.18 note's "20 modules" was that release's — said so then).
+    // 1.26: one README per language, each with the tree (its comments translated); the "New in 1.x" notes moved to CHANGELOG.md,
+    // so no README states another module count — every "N modules / módulos" in them is the engine's own.
     const src = rd("mcp", "lib", "engine", "index.js");
     const mods = (((src.match(/const MODULES = \[([\s\S]*?)\];/) || [])[1] || "").match(/"\.\/[^"]+\.js"/g) || []);
     const own = mods.filter((m) => !m.startsWith('"./import/')).length, importers = mods.length - own;
-    const readme = rd("README.md");
-    const tree = (readme.match(/^│ {3}├── lib\/engine\/ .*$/m) || [""])[0];
-    const stated = +((tree.match(/(\d+) modules, one per concern/) || [])[1] || 0);
-    const notes118 = [/\(20 modules by concept at the time —/, /\(20 módulos por conceito na\s+altura —/, /\(20 módulos por concepto en\s+ese momento —/];
-    ok(own >= 20 && importers >= 5 && stated === own && /one importer per source tool \(import\/\)/.test(tree) && !/\blint\b|\bimpact\b/.test(tree) &&
-      notes118.every((re) => re.test(readme)),
-      "1.25.1 review: README's tree says the engine's own module count (" + own + ", + " + importers + " in import/), and the 1.18 notes (EN / PT / ES) say their 20 was that release's (got " + js(tree.slice(0, 120)) + ")");
+    const readmes = [["README.md", /(\d+) modules, one per concern/, /one importer per source tool \(import\/\)/],
+      ["README.pt.md", /(\d+) módulos, um por assunto/, /um importador por ferramenta de origem \(import\/\)/],
+      ["README.es.md", /(\d+) módulos, uno por asunto/, /un importador por herramienta de origen \(import\/\)/]].map(([f, countRe, importRe]) => {
+      const text = rd(f), tree = (text.match(/^│ {3}├── lib\/engine\/ .*$/m) || [""])[0];
+      const counts = [...text.matchAll(/\b(\d+) (?:modules|módulos)\b/g)].map((m) => +m[1]);
+      return { f, tree: tree.slice(0, 120), stated: +((tree.match(countRe) || [])[1] || 0), importer: importRe.test(tree), counts, stale: /\blint\b|\bimpact\b/.test(tree) };
+    });
+    ok(own >= 20 && importers >= 5 && readmes.every((r) => r.stated === own && r.importer && !r.stale && r.counts.length >= 1 && r.counts.every((n) => n === own)),
+      "1.25.1 review: the tree of README.md / .pt.md / .es.md says the engine's own module count (" + own + ", + " + importers + " in import/) and no README states another (got " + js(readmes) + ")");
   }
 
   { // 4. Model-facing prose. /approve and /spec-ff are user-only commands since 1.24 (disable-model-invocation): the model records an
