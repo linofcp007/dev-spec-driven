@@ -199,7 +199,7 @@ flows, the bugfix kind.
   design's weigh / reuse rule) — the demo's api-keys keeps its legacy one. **Approving `tests` checks what Phase 4 produces** (`approvalChecks`): +tdd `tests-in-code` — every
   planned T-ID named by a test file (trace_check's code scan); +ai `eval-sets` — evals/golden.json is a set of the
   feature's own (not the scaffold's sample, not empty). Nothing to approve on a core-only feature. next_action keeps
-  the Phase 4 wording (`/writeTests`) plus what the gate checks — but on an executing / complete feature (tasks ticked,
+  the Phase 4 wording (`/spec <feature> tests`) plus what the gate checks — but on an executing / complete feature (tasks ticked,
   e.g. an upgraded 1.12 one) it uses `next.signOffTests` (a sign-off for the tests that exist, never "failing tests
   first, no implementation code"). **Approving `execution`** runs spec_finish's blockers
   (`finishFeature(…, {gateOnly: true})` → stable ids `state`, `roadmap`, `doctor`, `root-cause`, `placeholders`, `changed-since-approval`,
@@ -293,7 +293,7 @@ flows, the bugfix kind.
 - **Legacy rule:** a phase approved WITHOUT the roles now required (approved before roles were configured, or before a
   role was added) stays approved — by an unknown role, never retroactively pending; doctor / finish warn and ask each
   role to re-sign.
-- **Fast-forward** (`through`, `approve --through`, /spec-ff): approves the active phases IN ORDER (the flow's order) from
+- **Fast-forward** (`through`, `approve --through`, `/approve <feature> --through <phase>`): approves the active phases IN ORDER (the flow's order) from
   the first unapproved one up to `through` (never `execution`), each through its own gate — snapshot + history record
   flagged `batch: true` (`metrics.batchApprovals`). It stops at the first refused gate (`ok: false`, `refused`,
   `stoppedAt`, `failing`, `checks`; the phases before it stay approved, listed in `approved`) or at a phase still waiting
@@ -500,8 +500,8 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
   **The call ends before Phase 4 (1.21 review C3):** `planFastForwardEnd()` (gates.js) — with the `tests` gate due (+tdd /
   +ai — `testsGateDue`) and still ahead, `through` is the last planning phase before it (test-plan / eval-plan): its gate needs
   the written failing tests / the feature's eval sets, work that comes after the plan (a call through tasks stopped at `tests`
-  every time). The fill text is then `sizes.planFastForwardTests` (… through test-plan, then /writeTests, approve tests, then
-  tasks); the approve step's fast-forward (`approveStepExtras`) tries `through: tasks` first, else that end
+  every time). The fill text is then `sizes.planFastForwardTests` (… through test-plan, then /spec <feature> tests, approve tests,
+  then tasks); the approve step's fast-forward (`approveStepExtras`) tries `through: tasks` first, else that end
   (`governance.ffHintTests`) — never a fast-forward its gates would refuse.
 - **Track sections — the gate (markdown.js).** `sectionState(design, sections, marker, {size, lang})` → missing · unfilled ·
   **template** (every visible line of the section is a line of a track design block as the scaffold writes it —

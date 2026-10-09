@@ -471,7 +471,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   newest installed `<version>` holding cli/dev-spec.js at each run (cli/completion.js `statuslineCommand`: the completion scripts'
   rule in a `node -e` one-liner with no shell syntax — no double quote, dollar, backtick, percent, ! or backslash — so cmd.exe, PowerShell, sh and bash pass it alike;
   a path holding one of those keeps the plain command and its re-run note, `cacheNote`; else `cacheFollows`). A plugin cannot ship a status line (plugin `settings` honour only `agent` /
-  `subagentStatusLine`), hence the opt-in `/spec-statusline`.
+  `subagentStatusLine`), hence the opt-in `/spec-setup statusline`.
 - **User defaults** — the environment variables `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT`
   (`userOptionRaw()` → `userDefaults()`), FALLBACKS only: project meta always wins; empty, invalid or unexpanded (`${X}`)
   changes nothing. `newProjectLang()` only for a brand-new project (no meta.lang, no feature — active or archived), seeded

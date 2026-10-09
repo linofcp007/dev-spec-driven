@@ -28,7 +28,7 @@ cadastrar, celular, aplicativo, planilha, deletar, gerenciar, an ê / ô before 
 equipe, registro, contato, salvar, baixar, "o / do / no time"; European = utilizador, ficheiro, ecrã, telemóvel, equipa,
 palavra-passe, registo, contacto, facto, secção, descarregar, gerir, utente, "está a <infinitive>", é / ó before m / n — a hint
 at ≥ 2 points and more than the European count). The agent then passes `lang: "pt-BR"` to spec_init / spec_create (SKILL.md →
-Language; commands/classify.md). Project templates for it live in `.specs/templates/pt-BR/`.
+Language; /spec's Phase 0 — commands/spec.md). Project templates for it live in `.specs/templates/pt-BR/`.
 The EN templates are **not** frozen: 1.13 changed them on purpose (every template AC planned + tasked, track ACs under
 `[SaaS]`/`[AI]` headings, the test plan's Kind column…). When you change a template, change EN / PT / ES together
 (and pt-BR where it overrides that text) and keep the tests that round-trip a PT and an ES scaffold through doctor green.

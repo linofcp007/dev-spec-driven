@@ -23,7 +23,7 @@ quotes unless `includeBrief`. The PostToolUse hook exits early for `/.execution/
 never dispatches anything (keeps it cross-tool). Adapted from obra/superpowers (MIT). 1.22 (prose only, from Anthropic's
 `code-review` / `code-simplifier` plugins): the reviewer rates each Critical / Important finding 0–100, lists what is not a
 finding, and gains a **verify** mode (one finding, judged fresh — only 80+ opens a fix round; 50–79 is ledgered as
-unconfirmed, below 50 refuted) and a **simplify** mode (the diff of `/spec-simplify`), plus §5 written rules (constitution,
+unconfirmed, below 50 refuted) and a **simplify** mode (the diff of `/spec-review simplify`), plus §5 written rules (constitution,
 CLAUDE.md / AGENTS.md, code comments — quoted) and the history of rewritten lines; `agents/spec-simplifier.md` does the
 simplification pass. The engine's only part is the simplifier's SubagentStop gate (below). 1.14 adds to the brief:
 `verifyPipes` (the `_Verify:_` commands that pipe), `expect: "fail"` for an `_Expect: fail_` task, `projectChecks`
@@ -419,7 +419,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   ignores `.specs/`; silently skipped without git; a malformed value is dropped, never an error — `gitEvidence()`); the
   merge summary tags a run `@sha` / `@sha-dirty`. `parseGitLog()` + `taskCommits()` work on git log TEXT (so the MCP
   server stays exec-free); `dev-spec log <feature> [--max N] [-]` feeds them `git log` (or stdin). Conventions (what
-  /spec-commit writes): a message cites task N when it names the feature (its slug as a word — `.specs/<slug>/`,
+  /executeTask commit writes): a message cites task N when it names the feature (its slug as a word — `.specs/<slug>/`,
   `feat(<slug>):`) AND "task #N" / "task N" / "#N" (PT "tarefa N", ES "tarea N"); it cites every task whose text / markers
   name one of its T-IDs (`T-01` = `T-1`) or AC IDs — unless the message names another feature and not this one. +tdd
   red-first: a task with `_Makes green: T-xx_` whose first citing commit is older than the first commit touching a test
@@ -645,7 +645,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   STARTS with "Status" ("**Status:** `DONE`" is a claim — it used to skip the implementer's report); every other code
   span still drops out with `stopProse` (reviews 2–3: unwrapping more made "`order.status === "blocked"`" or "with status
   `blocked`" in a commit line a BLOCKED status). The hard gate
-  stays `spec_finish`'s `code-changed`, which sees only the tasks' `_Implements:_` files — /spec-simplify records the
+  stays `spec_finish`'s `code-changed`, which sees only the tasks' `_Implements:_` files — /spec-review simplify records the
   project checks again after the pass for that reason. Shared helpers: `readStopReport()`, `flatReport()`,
   `reportExitCodes()`, `stopReportFile()` (the implementer's gate reads through them too). **1.23 review 5:** a check's run
   is the run line that IS a run of its command by `runProvesVerify` (the same text first; `node scripts/lint.js` runs the check
@@ -692,7 +692,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   an OPEN task of such a feature names it in `_Implements:_` (the file via `implementsKey`, a folder above it, or a glob
   matching it) or when it is a test file (tests are planned by T-ID); otherwise ask, naming the likely task (a planned
   file in the same folder, else the longest shared folder prefix, else the `taskSchedule()` next task of the first covering
-  feature that has one — 1.14 F3 —, else the first open task) or `/spec-converge`. Text reads only; `guard: true` is unchanged.
+  feature that has one — 1.14 F3 —, else the first open task) or `/spec-review <feature> converge`. Text reads only; `guard: true` is unchanged.
 
 ## Harness-observed evidence (1.14 F1)
 - **Only as strong as the approval guard (1.25.1, review 7, finding 10).** The log is a file the agent can write: with
