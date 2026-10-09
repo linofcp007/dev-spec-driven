@@ -172,7 +172,8 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
     };
     const ctx = (x) => { try { return JSON.parse(x.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
     const bigLines = ctx(r.big).split("\n");
-    const bound = Number((/const MAX_UP = (\d+);/.exec(fs.readFileSync(path.join(HOOKS, "spec-hook.js"), "utf8")) || [])[1]);
+    // 1.27: the walk is the project probe's (mcp/lib/probe.js sessionProjects — the one every hook runs), bounded by its SESSION_MAX_UP
+    const bound = /probe\(\)|PR\.sessionProjects\(/.test(fs.readFileSync(path.join(HOOKS, "spec-hook.js"), "utf8")) ? require("./lib/probe.js").SESSION_MAX_UP : null;
     ok([r.none, r.other].every((x) => x.status === 0 && x.stdout === "" && x.engine === false) && r.noCwd.status === 0 && r.noCwd.stdout === "" && r.noCwd.engine === false &&
       [r.deep, r.anchor].every((x) => x.engine === true && /alpha/.test(ctx(x))) && bound === E.SESSION_MAX_UP &&
       bigLines.length <= 22 && bigLines.filter((l) => /^\s*\S.*\[core\]/.test(l)).length <= 20 && /\+5 more feature/.test(ctx(r.big)),

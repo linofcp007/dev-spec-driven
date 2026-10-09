@@ -193,6 +193,7 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
     fs.mkdirSync(path.join(fake, "hooks"), { recursive: true });
     fs.mkdirSync(path.join(fake, "mcp", "lib", "i18n"), { recursive: true });
     for (const f of ["approval-hook.js", "hook-utils.js", "guard-hook.js"]) fs.copyFileSync(path.join(HOOKS, f), path.join(fake, "hooks", f));
+    fs.copyFileSync(path.join(__dirname, "lib", "probe.js"), path.join(fake, "mcp", "lib", "probe.js")); // 1.27: the hooks' engine-free probe
     fs.copyFileSync(path.join(__dirname, "lib", "i18n.js"), path.join(fake, "mcp", "lib", "i18n.js"));
     for (const f of fs.readdirSync(path.join(__dirname, "lib", "i18n"))) fs.copyFileSync(path.join(__dirname, "lib", "i18n", f), path.join(fake, "mcp", "lib", "i18n", f));
     const mark = path.join(tmp, "r7-fake-loaded");

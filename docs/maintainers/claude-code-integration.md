@@ -21,8 +21,38 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   ≤ ~250 characters (every session lists them): what the agent does and when, never "see the agent body" — the dispatcher
   sees only the description. The critic runs on `model: inherit` (one judgment-heavy dispatch per gate: the session's model);
   the dispatched-in-bulk agents default to `sonnet` (an inherited Opus would multiply the cost of N parallel verifiers).
+- **One dev-spec project rule — `mcp/lib/probe.js` (1.27).** "Is this a dev-spec project, and where is it?" had four variants (the
+  engine's `isDevSpecDir`; the stop / plan hooks' — + classification.md and dot folders; the observe / spec hooks' — + a generated
+  ROADMAP.md; the guard's `devSpecWithoutRoadmap`) and two walk-ups (the guard's and hook-utils' `nearestSpecs` took the nearest
+  `.specs/` of ANY tool; the stop hook's `nearestDevSpec` the nearest dev-spec one): a `.specs/` holding only a classified feature was
+  a project to the Stop and observe hooks but not to the edit guard or the status line, and another tool's `.specs/` in a monorepo
+  package hid the dev-spec project above it from the guard. Now ONE zero-dependency module (Node core only, never the engine) holds
+  the rule and the walks, and every surface asks it: the hooks (each requires it lazily, past its own cheap pre-filter), hook-utils.js
+  (it re-exports the readers under their old names), the CLI's engine-free paths (cli/completion.js `statusProbe` / `resolveProject`,
+  required on first use — `help` loads nothing of mcp/lib) and the engine — doctor.js `isDevSpecDir` IS `probe.isDevSpecProject`
+  read through the engine's own reads (`PROBE_IO`: a dry run's folders, `readFileHead`), so files.js `nearestProject`,
+  `statusLineProject`, `guardLevel`'s user default, the server's `SPECS_REQUIRED` check and guards.js `sessionSpecs` (now the same
+  set) agree with the hooks by construction. **The rule** (`isDevSpecProject(dir)`): `<dir>/.specs` is a folder holding roadmap.json,
+  a `steering/` folder, a ROADMAP.md dev-spec generated (`RE_AUTOGEN` in its first 4,000 characters — a v1.8-era project has
+  nothing else; mcp/tests/01-core.js keeps serving one), or a feature folder — any folder not starting with `.` (`.execution/`,
+  `.removing-*` are none) — with a `.state.json` or a `classification.md`. Cheapest first: no `.specs/` = one stat, a project = two.
+  **The walks:** `nearestDevSpec(start, {maxUp})` (≤ `SESSION_MAX_UP` = 40, the engine's SESSION_MAX_UP / STATUS_MAX_UP),
+  `nearestSpecs` (any `.specs/`), `nearestProject` (the CLI's resolver: the folder itself with any `.specs/`, else the nearest
+  dev-spec one above, ≤ `PROJECT_MAX_UP` = 64); a network or device path is never walked (`isNetwork` — files.js `isNetworkPath`;
+  the guard and stop hooks' cruder `/^[\\/]{2}/` read `\\?\C:\…` and `\\wsl$\` as network). **The session:** `sessionAnchors()`
+  (CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR — usable ones) and `sessionProjects({cwd, anchors})` — the nearest dev-spec project at or
+  above the payload cwd, then each anchor that is one, distinct: the raw pre-check of every hook (`[]` exactly when
+  `spec.sessionProject` finds nothing). Also `usable` / `unexpandedVar` / `expandHome` and the readers `utf16OrUtf8` / `textOf` /
+  `jsonOf` / `readText` / `readJsonFile` (files.js `decodeText`'s reading). mcp/tests/10-guards-probe.js builds 12 layouts (an empty /
+  another tool's `.specs/`, roadmap.json / steering/ / a classified feature / a `.state.json` / a generated ROADMAP.md alone, a
+  steering FILE, dot folders, a monorepo package classified / of another tool) and checks the probe, the engine (isDevSpecDir,
+  statusLineProject, sessionProject, resolveProjectDir), statusProbe, the completion's resolver, the approval candidates and five
+  hooks (60 runs, the engine load as the observable) agree; `~`; network paths; and that no hook or cli/completion.js keeps a copy.
+  Cost: one small file, required only past each hook's own pre-filter — ~1.4 ms to require it from a hook (a one-line module: ~0.6);
+  every hook's fast path stays where 1.26 had it (median of 21 and 31 interleaved fresh processes, time in the process, Windows,
+  Node 26: 0–4 ms apart, inside the run-to-run spread; bare node 27 ms, the fast paths 31–47 ms either way).
 - **Hooks never block and stay cheap.** Every hook exits 0 on any error or irrelevant event, emits at most
-  one JSON object, has a 10 s timeout, and only acts on a `.specs/` dev-spec owns (`isDevSpecProject` — checked by
+  one JSON object, has a 10 s timeout, and only acts on a `.specs/` dev-spec owns (the probe's `isDevSpecProject` — checked by
   PostToolUse AND SessionStart: another tool's `.specs/` gets no status block in every session). The PostToolUse hook:
   requirements.md → EARS + placeholders, tasks.md → every trace gap + EC/NFR/SC warnings (and, tasks.md / change.md, the
   feature's `.state.json lastEditAt` stamp the stop gate reads as activity — `recordSpecEdit()`, 1.22 review), design.md →
@@ -37,15 +67,31 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   the plain path check runs first (an edit anywhere else cost the engine's ~100 ms load: 173 → 68 ms median per Write / Edit,
   `node -e 0` ≈ 61 ms; mcp/tests/10-guards-review.js asserts which events load it). **SessionStart probes first (1.25.1, review
   7):** it fires in every session of every project (the plugin is user-wide — startup, resume, clear, compact) and loaded the engine
-  before asking whether a dev-spec project was there: `sessionMayBeDevSpec()` runs the raw probe the guard / stop hooks use — the
-  nearest folder at or above the payload `cwd` whose `.specs/` passes the hook's `isDevSpecProject` (≤ `MAX_UP` = SESSION_MAX_UP
-  levels; a network cwd is itself), the anchors, and with neither a cwd nor an anchor the process folder — a superset of every
+  before asking whether a dev-spec project was there: `sessionMayBeDevSpec()` runs the raw probe every hook uses
+  (`probe.sessionProjects` — the nearest folder at or above the payload `cwd` whose `.specs/` is dev-spec's, ≤ SESSION_MAX_UP
+  levels; a network cwd is itself; the anchors), and with neither a cwd nor an anchor the process folder — a superset of every
   folder `sessionProject()` and the fallback can pick (a worktree maps only from a dev-spec folder at or above the cwd). Measured
   (median of 15, Windows): a repository without `.specs/` 145 → 56 ms (`node -e 0` 54); a dev-spec project unchanged (~178 ms).
   The context it prints is unchanged (≤ `SESSION_MAX_FEATURES` = 20 feature lines, then one "+N more"; mcp/tests/10-guards-hooks-r7.js).
   The Stop / SubagentStop hook
   follows the same rules (see End-of-turn evidence gate — 1.24 r6 I-I4: a closing message with no claim pattern ends it before the
-  engine loads, from the build's hooks/stop-claims.generated.json), and so do the 1.14 observe hook (it prints nothing at all and
+  engine loads, from the build's hooks/stop-claims.generated.json; **1.27 — the claim scan on a one-byte text:** V8 compiles a regex
+  for a one-byte and for a two-byte subject apart, and the two-byte code of the patterns' `[\p{L}\p{N}_]` boundaries is large — one
+  em dash, curly quote or emoji in the closing message cost stopClaims ~110 ms and the pre-filter ~30 ms more, and a wide character
+  only inside a code fence left the prose two-byte too. mcp/lib/latin1-scan.js (Node core only, loaded only for such a text):
+  `latin1Text` projects the prose to one Latin-1 character per code point (an index map leads each match back), `latin1Table` /
+  `latin1Pattern` rewrite the patterns once for it — a code point a pattern names (— – ’ ✓ ✔ U+FE0F) gets a C1 control of its own,
+  added to each `\p{…}` class holding it; one case-equivalent to a Latin-1 character (ſ K Å ẞ Ÿ μ Μ) becomes it; any other letter
+  ª, number ², pictograph ©, space U+00A0, U+2028 / U+2029 `\r`, the rest U+009F; a pattern form the rewrite can't read (another
+  property, `\P{…}`, a range past ASCII, a stand-in) makes it scan the text as it is — so the answers never change
+  (mcp/tests/10-guards-stop-scan.js: stopClaims and the pre-filter alike on 3,000+ wide messages; `stopClaims(m, {plain: true})` is
+  the reference). guards.js `stopScan` (a Latin-1 prose: a one-byte copy) and hook-utils `claimScan` use it; the engine builds its
+  claim patterns, triggers and admissions on first use (a message runs ~18 of ~47). The hook's three trigger regexes read the prose as
+  it is (on a wide one they cost less than the projection's table, and most messages trigger nothing): only a triggered message's
+  claim alternation scans the projection. guessLang still reads the prose itself (its INF lookahead names “ — ~8 ms on a wide text,
+  once a process). Measured (the Stop hook in a project with an unverified tick, median of 21 interleaved fresh processes, time in the
+  process, Windows, Node 26): a claim with an em dash 344 → 273 ms, with an emoji 339 → 277 (an ASCII claim 245 → 249); a triggered
+  message without a claim, with an em dash, 84 → 74; no trigger word 51 → 50), and so do the 1.14 observe hook (it prints nothing at all and
   exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
   output is a permission decision).
 - **Every hook runs in exec form (1.25.1, review 7): `{"type": "command", "command": "node", "args":
@@ -66,8 +112,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   ticks and evidence THERE; the hooks read the payload's `cwd` first — in a git worktree (EnterWorktree, a subagent `cd`'d into
   `.claude/worktrees/<n>` or a sibling checkout) the worktree's own copy of `.specs/`: the edit guard asked though the tasks were
   approved, the stop gate saw no activity, the SubagentStop gate looked for the report where the implementer hadn't written it.
-  The resolver: the nearest folder at or above `cwd` holding a dev-spec `.specs/` (`sessionSpecs`: `isDevSpecDir` or a feature's
-  classification.md; ≤ `SESSION_MAX_UP` = 40 levels — a `cd`'d subfolder too —, never above an anchor that holds `cwd`: a dev-spec
+  The resolver: the nearest folder at or above `cwd` holding a dev-spec `.specs/` (`sessionSpecs`: `isDevSpecDir` — the probe's rule,
+  1.27, which counts a feature's classification.md too; ≤ `SESSION_MAX_UP` = 40 levels — a `cd`'d subfolder too —, never above an anchor that holds `cwd`: a dev-spec
   folder above the session's own is another project; a network cwd is only itself), then `worktreeProject(near, anchors)`:
   `gitCheckoutOf()` reads the nearest `.git` (a FILE: `gitdir:` → its `commondir` → `linked`; a submodule's `.git` file has no
   commondir — no worktree); near in another checkout of the same repository as an anchor (`CLAUDE_PROJECT_DIR`,
@@ -76,19 +122,19 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   Folders are compared by text, then by real path (`sessionSame()`: git writes gitdir / commondir with long names, the payload
   may carry an 8.3 short name). No dev-spec folder near cwd → the first dev-spec anchor. → `{project, root, worktree}`;
   `sessionPath(s, p, cwd)` spells a payload path under `project` when it lies in `root` (the worktree's checkout). The guard,
-  stop and observe hooks keep a raw pre-check over the nearest `.specs/` above cwd (≤ `SESSION_MAX_UP` levels each — 1.24 r6 I2:
-  the observe hook's walk stopped at 12, and a `_Verify:_` run deeper below a nested project was never logged; inline, not
-  hook-utils.js's `nearestSpecs`, so its hot path requires nothing; mcp/tests/10-guards-review6.js checks every bound) and the
-  anchors (a superset; the engine loads only when it passes) and then ask the engine; the spec-hook stamps `lastEditAt` of a worktree's tasks.md save in the
+  stop, observe, spec (SessionStart) and plan hooks run a raw pre-check first — `probe.sessionProjects` (1.27: the nearest DEV-SPEC
+  `.specs/` above cwd, ≤ `SESSION_MAX_UP` levels — 1.24 r6 I2: the observe hook's walk stopped at 12, and a `_Verify:_` run deeper
+  below a nested project was never logged; mcp/tests/10-guards-review6.js checks every hook walks through the probe — and the
+  anchors; a superset: the engine loads only when it passes) and then ask the engine; the spec-hook stamps `lastEditAt` of a worktree's tasks.md save in the
   mapped project (its own state when that feature isn't there) and SessionStart reports the mapped project; the status line's
   `statusLineProject()` maps what it found the same way (`worktreeProject(dir, candidates)`).
 - **What the hooks share before the engine loads — `hooks/hook-utils.js` (1.24 review 6).** Not a hook (hooks.json never runs
   it): Node core only, never the engine. `utf16OrUtf8` / `textOf` / `jsonOf` / `readText` / `readJson` read a file as the engine
   does (files.js `decodeText`: a UTF-16 BOM decides, else UTF-8; the BOM dropped) — **C3 / A4:** Windows PowerShell 5.1's
   `Out-File` / `>` write UTF-16, and the approval, guard and stop hooks read such a roadmap.json / .state.json as UTF-8: the
-  approval and edit guards read "off", the stop gate saw no activity (the engine and the CLI enforced them). The guard, stop and
-  observe hooks check the first two bytes inline (`readJsonFile` / `textOfBuf`) and require hook-utils.js only for a BOM: their
-  hot paths load nothing more (a first `require` costs ~4 ms on Windows). Also `editTargets` (the approval hook's Write / Edit
+  approval and edit guards read "off", the stop gate saw no activity (the engine and the CLI enforced them). 1.27: the readers live
+  in mcp/lib/probe.js (`readJsonFile`, `textOf` …; hook-utils.js re-exports them under the names it always had — `readJson`); the
+  guard, stop and observe hooks read through the probe they require anyway, never hook-utils.js for a BOM. Also `editTargets` (the approval hook's Write / Edit
   target — below), `approvalProjects` (its candidate projects — below) and `sessionFlagFile` (a per-session marker in the OS temp
   folder, `dev-spec-<kind>-<sha1(session_id)>.flag`). mcp/tests/10-guards-review6.js checks the hook's readings agree with the
   engine's. The MCP server's `approvalMeta` reads roadmap.json through `spec.decodeText` too (an unchanged spec_init setting on a
@@ -187,7 +233,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   as no code / outside and allowed. The save hook (spec-hook) skips a network `.specs/` file outside the session's
   folders the same way. The session's own folders (payload `cwd`, CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR) are Claude Code's /
   the user's, not the agent's: the stop / observe / spec / guard hooks keep using a network cwd (a project on a share keeps
-  its hooks; the observe hook's walk up stops at the share root), never realpath'ed by a hook.
+  its hooks — the cwd itself and the anchors are read; 1.27: never walked up the share, as the engine's sessionProject — the observe
+  hook's walk climbed to the share root), never realpath'ed by a hook.
   **It never blocks on its own errors:** a malformed payload, a broken roadmap.json or any exception exits 0.
   1.14 adds the stricter `"scope"` level (see End-of-turn evidence gate and scope guard); a phase still waiting for a
   role's sign-off is not an approved tasks phase.
@@ -223,7 +270,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   went through at deny. Now: the folders the call names (MCP `projectDir`, the edited file's project, every `--project` value, every
   `SPEC_PROJECT_DIR=` / `CLAUDE_PROJECT_DIR=` / `export …=` / `$env:SPEC_PROJECT_DIR = …` assignment — those folders themselves),
   every `cd` / `chdir` / `pushd` / `sl` / `Set-Location` / `Push-Location` target (chained from cwd and from cwd alone, `~`
-  expanded; the nearest `.specs/` at or above it — ≤ 40 levels, as the CLI walks up), the nearest `.specs/` at or above the
+  expanded; where the CLI acts from it — `probe.nearestProject`, the CLI's own resolver walk since 1.27: the folder itself with any
+  `.specs/`, else the nearest dev-spec one above, ≤ 64 levels; it took the nearest `.specs/` of any tool, ≤ 40), the same for the
   payload `cwd`, then `CLAUDE_PROJECT_DIR` / `SPEC_PROJECT_DIR`. Text only (nothing evaluated — a superset: an extra candidate can
   only make the answer stricter). Network paths: the session's own folders (payload cwd, the anchors — Claude Code's / the
   user's) ARE read, as the guard / stop / observe hooks do (a project on a share kept no approval guard before); a network path
@@ -463,7 +511,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   cut to `$COLUMNS`, `--json`. **Without the engine outside a project (1.25.1, review 7):** Claude Code runs it after every
   message in every folder once it is installed user-wide, and it loaded the whole engine first (136–220 ms a render): the CLI now
   loads the facade on first use (a proxy over `require`), and the render walks the candidates with `statusProbe()` (cli/completion.js
-  — statusLineProject's null rule, Node core only: `isDevSpecDir` at or above each candidate, ≤ 40 levels, the same skips) before
+  — statusLineProject's null rule, without the engine: the probe's `nearestDevSpec` at or above each candidate — 1.27: the same rule
+  as `isDevSpecDir`, not a copy of it —, ≤ 40 levels, the same skips) before
   it; no project → the empty line at about Node's startup (~65 ms against ~140 ms measured on Windows). A project found → the
   engine decides as before (the worktree mapping only ever starts from a folder the walk finds). cli/tests/11-claude-code.js checks
   the two agree and that no mcp/lib module loads. `--print-config` prints the `statusLine` entry with this clone's absolute path;
@@ -479,8 +528,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   spec_create and spec_import (whose own text — warnings, design.md headings — follows `configuredLang()` too);
   `init --stop-check on` writes meta when DEV_SPEC_STOP_CHECK says off. The guard and stop hooks read the same names raw
   (their cheap pre-checks). A roadmap.json that doesn't parse: DEV_SPEC_STOP_CHECK still decides (engine and hook), the
-  guard stays off. DEV_SPEC_GUARD_DEFAULT reaches a dev-spec `.specs/` without roadmap.json (`isDevSpecDir` — steering/ or a
-  feature's .state.json; the hook's `devSpecWithoutRoadmap()`), never a folder without `.specs/` nor another tool's. **Never plugin.json `userConfig`**: it opens a configuration dialog on every install / enable,
+  guard stays off. DEV_SPEC_GUARD_DEFAULT reaches a dev-spec `.specs/` without roadmap.json (`isDevSpecDir` — the probe's rule; the
+  hook's `devSpecWithoutRoadmap()` asks the probe too), never a folder without `.specs/` nor another tool's. **Never plugin.json `userConfig`**: it opens a configuration dialog on every install / enable,
   reaches neither the Bash tool (the CLI) nor other MCP clients (Claude Code exports `CLAUDE_PLUGIN_OPTION_*` to hooks
   only), and an older Claude Code validating option fields strictly could refuse the whole plugin. Claude Code's
   settings.json `env` block reaches the hooks, stdio MCP servers and the Bash tool alike (code.claude.com/docs/en/env-vars).
@@ -494,5 +543,6 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   `path` or `text` — not for a steering tool, 1.25) = the file import minus the source note (`inline: true`, `source: null`); CLI `import plan -` (stdin)
   or `--text` (a word after the tool that is no track list, given with `--text`, is passed as the path: the engine's "path or
   text, not both"). `hooks/plan-hook.js` (PostToolUse, matcher `ExitPlanMode`): one line of `additionalContext` in a dev-spec
-  project, silent and exit 0 otherwise (the payload is undocumented — `tool_input.plan` and a plan-file path read
-  defensively); a network cwd is skipped before any stat (an inlined `isNetworkPath`).
+  project (1.27: the first of `probe.sessionProjects` — it looked at the cwd itself only, never walked up), silent and exit 0
+  otherwise (the payload is undocumented — `tool_input.plan` and a plan-file path read defensively); a network cwd or anchor is
+  left out before any stat (the probe's `isNetwork`).

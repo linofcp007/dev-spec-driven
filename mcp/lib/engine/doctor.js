@@ -1025,12 +1025,14 @@ const STATUS_TEST_FILES = 20; // test files the status line reads for Phase 4's 
 // Approve-gate checks the doctor only WARNS about (spec_doctor: success-criteria, priorities, reproduction, constitution-check) —
 // a forced approval failing only these is no `fix` for next_action, so none for the status line either.
 const STATUS_DOCTOR_WARNS = new Set(["success-criteria", "priorities", "reproduction", "constitution-check"]);
-// A folder whose .specs/ dev-spec owns: roadmap.json, steering/, or a feature folder with its .state.json (the hooks' rule).
+// A folder whose .specs/ dev-spec owns: roadmap.json, steering/, a generated ROADMAP.md (a v1.8-era project) or a feature folder (no
+// "." prefix) with its .state.json or classification.md — 1.27: THE rule, mcp/lib/probe.js isDevSpecProject (the hooks, the status
+// line's probe and the CLI's completion read the same one), here through the engine's reads (a dry run's folders — isDirSafe /
+// safeReaddir).
+const PROBE = require("../probe.js");
+const PROBE_IO = { isDir: (p) => isDirSafe(p), exists: (p) => fs.existsSync(p), head: (p) => readFileHead(p, 4000) || "", folders: (p) => safeReaddir(p) };
 function isDevSpecDir(dir) {
-  const root = path.join(dir, ".specs");
-  if (!isDirSafe(root)) return false;
-  if (fs.existsSync(path.join(root, "roadmap.json")) || isDirSafe(path.join(root, "steering"))) return true;
-  return safeReaddir(root).some((n) => !n.startsWith(".") && fs.existsSync(path.join(root, n, ".state.json")));
+  return PROBE.isDevSpecProject(dir, PROBE_IO);
 }
 // The project a status line is about: the nearest folder at or above one of the candidate folders (in order) that holds a
 // dev-spec .specs/ — a few stats per level, never a walk down. Unusable candidates (empty, an unexpanded `${VAR}`, a network
