@@ -333,4 +333,30 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname, require }) => {
       "1.24 r6 I-I3: featureOverlaps without a list reads the features light (name, complete?, dependsOn — roadmap()'s order) — the same pairs as through roadmap(), whole and {only} per feature (a spike, an ordered feature, a dependency, a finished baseline, a ticked feature without one, a feature still planning) — and reads no design.md / test-plan.md / checklist.md (got " +
       js({ same, pairsEq, read, pairs: ov.pairs.map((x) => x.a + "/" + x.b), light: light.map((f) => [f.name, f.phase]), heavy: heavy.map((f) => [f.name, f.phase]) }) + ")");
   }
+
+  // 1.24 r6 (found splitting 16-conventions, I-I8): the write gate lstat'ed a lock another process held, then took its real path — and
+  // when that process released the lock in between, the failed realpath read as "a link or outside .specs/": the waiter's call was
+  // refused (`Refused to write .specs/.roadmap.lock: that file is a link`), one backlog add of two racing processes lost now and then
+  // (16-conventions' race, ~1 run in 3 under load). A part that vanished between its lstat and its realpath is judged by its folder,
+  // as an absent part is; a real link is still refused.
+  {
+    const p = fresh("gate-vanish", "en");
+    const E = require("./lib/engine/index.js");
+    const root = path.join(p, ".specs"), lock = path.join(root, ".roadmap.lock");
+    fs.writeFileSync(lock, "{}");
+    const real = fs.realpathSync.native;
+    let calls = 0;
+    fs.realpathSync.native = function (q) {
+      if (path.resolve(String(q)).toLowerCase() === path.resolve(lock).toLowerCase()) { calls++; try { fs.unlinkSync(lock); } catch { /* gone */ } }
+      return real.apply(this, arguments);
+    };
+    let vanished;
+    try { vanished = E.specsWriteBlock(root, lock); } finally { fs.realpathSync.native = real; }
+    const out = path.join(tmp, "proj-r6-gate-vanish-out");
+    fs.mkdirSync(out, { recursive: true });
+    const linked = link(out, path.join(root, "linked-dir")) ? E.specsWriteBlock(root, path.join(root, "linked-dir", ".lock")) : { kind: "link", skipped: true };
+    ok(vanished === null && calls === 1 && linked && linked.kind === "link",
+      "1.24 r6: a lock released between the write gate's lstat and its realpath is no link — the waiter goes on (a backlog add was refused as 'linked'); a linked folder is still refused (got " +
+      js({ vanished, calls, linked }) + ")");
+  }
 };

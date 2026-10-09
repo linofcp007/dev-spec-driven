@@ -698,7 +698,13 @@ function specsWriteBlock(root, target, opts = {}) {
     // point) redirects it either
     const realRoot = realSpecsRoot(root);
     let real = null;
-    try { real = fs.realpathSync.native(deepest); } catch { /* unresolvable: refused below */ }
+    try { real = fs.realpathSync.native(deepest); } catch (e) {
+      // 1.24 r6: gone since its lstat (another process released its lock in between — the lock's waiter was refused as "a link"):
+      // judged by its folder, already walked, as an absent part is. Anything else unresolvable: refused below.
+      if (e && e.code === "ENOENT" && deepest !== root) {
+        try { real = path.join(fs.realpathSync.native(path.dirname(deepest)), path.basename(deepest)); } catch { real = null; }
+      }
+    }
     if (!realRoot || !real || real === realRoot || !withinRoot(realRoot, real)) return { kind: "link", at: deepest, file: deepest === target && !opts.dir };
   }
   return null;
