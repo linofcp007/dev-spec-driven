@@ -6,14 +6,15 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, __dirname }) => {
+exports.run = ({ ok, run, runIn, spawnIn, tmp, CLI, __dirname }) => {
   const ROOT = path.join(__dirname, "..");
   const HOOKS = path.join(ROOT, "hooks");
   // Built by the CLI into tmp (the clone may be read-only — a container's mount): used through DEV_SPEC_BUNDLE_PATH.
   const bundleFile = path.join(tmp, "p20-bundle", "spec.bundle.js");
   let built = null;
-  try { built = JSON.parse(run(["bundle", "--out", bundleFile, "--json"]).out); } catch { /* not JSON */ }
-  const human = run(["bundle", "--out", path.join(tmp, "p20-bundle", "second.js")]), badOut = run(["bundle", "--out", "bundle.txt"]), extra = run(["bundle", "now"]);
+  // (built in-process — 1.27: building reads the modules, it never loads a bundle)
+  try { built = JSON.parse(runIn(["bundle", "--out", bundleFile, "--json"]).out); } catch { /* not JSON */ }
+  const human = runIn(["bundle", "--out", path.join(tmp, "p20-bundle", "second.js")]), badOut = runIn(["bundle", "--out", "bundle.txt"]), extra = runIn(["bundle", "now"]);
   ok(built && built.ok === true && built.file === bundleFile && built.modules >= 30 && built.bytes > 1000000 && fs.existsSync(bundleFile) &&
     built.env.DEV_SPEC_BUNDLE === "1" && built.env.DEV_SPEC_BUNDLE_PATH === bundleFile && human.code === 0 && /the engine as one file \(\d+ modules/.test(human.out) &&
     /DEV_SPEC_BUNDLE=1 and DEV_SPEC_BUNDLE_PATH=/.test(human.out) && badOut.code === 1 && /usage: dev-spec bundle \[--out <file\.js>\]/.test(badOut.out) && extra.code === 1,
@@ -25,10 +26,10 @@ exports.run = ({ ok, run, tmp, CLI, __dirname }) => {
   {
     const mine = path.join(tmp, "p20-bundle", "mine.js");
     fs.writeFileSync(mine, "console.log('my own code');\n");
-    const refused = run(["bundle", "--out", mine]), refusedJ = run(["bundle", "--out", mine, "--json"]);
+    const refused = runIn(["bundle", "--out", mine]), refusedJ = runIn(["bundle", "--out", mine, "--json"]);
     const keptMine = fs.readFileSync(mine, "utf8") === "console.log('my own code');\n";
-    const again = run(["bundle", "--out", path.join(tmp, "p20-bundle", "second.js")]);
-    const forced = run(["bundle", "--out", mine, "--force"]);
+    const again = runIn(["bundle", "--out", path.join(tmp, "p20-bundle", "second.js")]);
+    const forced = runIn(["bundle", "--out", mine, "--force"]);
     let rj = null;
     try { rj = JSON.parse(refusedJ.out.slice(0, refusedJ.out.lastIndexOf("}") + 1)); } catch { /* not JSON (stdout, then the stderr line) */ }
     ok(refused.code === 1 && /mine\.js exists and is not a dev-spec bundle — nothing was written/.test(refused.out) && /--force/.test(refused.out) && keptMine &&
@@ -57,7 +58,8 @@ exports.run = ({ ok, run, tmp, CLI, __dirname }) => {
     JSON.stringify({ onBundle, onModules }) + ")");
 
   // The same session twice — two fresh projects, one on the modules, one on the bundle: every CLI command and hook prints the
-  // same thing (the project's path and ISO timestamps aside) and leaves the same .specs/ tree.
+  // same thing (the project's path and ISO timestamps aside) and leaves the same .specs/ tree. (1.27: the modules' CLI commands run
+  // in-process — cli/main.js on this process's modules —; the bundle's are processes started with DEV_SPEC_BUNDLE=1.)
   // (the same folder name: the catalog, the roadmap and the release notes print it)
   const projects = { modules: path.join(tmp, "p20-modules", "app"), bundle: path.join(tmp, "p20-bundle", "app") };
   Object.values(projects).forEach((p) => fs.mkdirSync(p, { recursive: true }));
@@ -105,10 +107,10 @@ exports.run = ({ ok, run, tmp, CLI, __dirname }) => {
     const env = envOf(mode === "bundle", proj);
     for (const st of steps) {
       if (st.write) { fs.writeFileSync(path.join(proj, ".specs", st.write[0]), st.write[1]); continue; }
+      const opts = { encoding: "utf8", env, cwd: tmp, input: st[0] === "statusline" ? JSON.stringify({ cwd: proj }) : undefined };
       const r = st.hook
         ? spawnSync(process.execPath, [path.join(HOOKS, st.hook)], { encoding: "utf8", env, input: JSON.stringify(st.payload(proj)) })
-        : spawnSync(process.execPath, [CLI, ...st, "--project", proj], { encoding: "utf8", env, cwd: tmp,
-          input: st[0] === "statusline" ? JSON.stringify({ cwd: proj }) : undefined });
+        : mode === "modules" ? spawnIn([...st, "--project", proj], opts) : spawnSync(process.execPath, [CLI, ...st, "--project", proj], opts);
       outs[mode].push({ step: st.hook || st.slice(0, 2).join(" "), code: r.status, out: norm((r.stdout || "") + (r.stderr || ""), proj) });
     }
   }

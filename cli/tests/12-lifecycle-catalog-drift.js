@@ -4,13 +4,13 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
 // 1.13 WP10: catalog (SPECS.md), _Supersedes:_ warnings in trace, feature restore, drift since finish — CLI = MCP.
 const S10 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const w10 = path.join(tmp, "wp10-proj");
 const w10s = path.join(w10, ".specs");
-const r10 = (args) => run([...args, "--project", w10]);
-run(["init", "core", "--project", w10]);
+const r10 = (args) => runIn([...args, "--project", w10]);
+runIn(["init", "core", "--project", w10]);
 ["Billing", "Billing v2", "Accounts"].forEach((n) => r10(["create", n, "core"]));
 const req10 = (f, body) => fs.writeFileSync(path.join(w10s, f, "requirements.md"), "# Requirements\n\n## Summary\n" + f + ".\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n" + body);
 req10("billing", "1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store the receipt\n2. **US-1.AC-2** — WHEN a refund is asked THE SYSTEM SHALL refund within 30 days\n");
@@ -58,15 +58,15 @@ const rest2 = r10(["feature", "restore", "billing"]);
 ok(rest2.code === 1 && /Nothing is archived as 'billing'/.test(rest2.out) && /restore/.test(r10(["feature"]).out), "feature restore of nothing archived exits 1; the usage names restore");
 // archive → rename the dependent → restore: the dependency comes back under the new name (rename prints what it updated).
 const w10rn = path.join(tmp, "wp10-rename");
-run(["init", "core", "--project", w10rn]);
-["Auth", "Billing"].forEach((n) => run(["create", n, "core", "--project", w10rn]));
-run(["depend", "billing", "auth", "--project", w10rn]);
-const arch10j = run(["feature", "archive", "auth", "--project", w10rn, "--json"]);
+runIn(["init", "core", "--project", w10rn]);
+["Auth", "Billing"].forEach((n) => runIn(["create", n, "core", "--project", w10rn]));
+runIn(["depend", "billing", "auth", "--project", w10rn]);
+const arch10j = runIn(["feature", "archive", "auth", "--project", w10rn, "--json"]);
 const arch10jr = (() => { try { return JSON.parse(arch10j.out); } catch { return {}; } })();
 ok(arch10j.code === 0 && arch10jr.action === "archive" && JSON.stringify(arch10jr.dependentsPruned) === '["billing"]' && arch10jr.incompleteDependency === true && /yet billing depended on it/.test(arch10jr.note),
   "feature archive --json carries dependentsPruned + incompleteDependency + the note (= spec_feature)");
-const ren10c = run(["feature", "rename", "billing", "payments", "--project", w10rn]);
-const rest10c = run(["feature", "restore", "auth", "--project", w10rn]);
+const ren10c = runIn(["feature", "rename", "billing", "payments", "--project", w10rn]);
+const rest10c = runIn(["feature", "restore", "auth", "--project", w10rn]);
 ok(ren10c.code === 0 && /Renamed 'billing' → 'payments' ✓\n {2}archive records updated to the new name .*: auth/.test(ren10c.out) && rest10c.code === 0 && !/Not restored/.test(rest10c.out) &&
   JSON.parse(fs.readFileSync(path.join(w10rn, ".specs", "roadmap.json"), "utf8")).features.payments.dependsOn.join() === "auth",
   "feature rename updates archived features' records (and says so) — restore then puts payments → auth back");
@@ -111,29 +111,29 @@ fill10("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens
 S10.completeTask(w10f, "login-loop", 1, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)
 S10.completeTask(w10f, "login-loop", 2, { command: "npm test", exitCode: 0, summary: "42/42 passing" });
 ["requirements", "design", "test-plan", "tasks"].forEach((p) => S10.approvePhase(w10f, "login-loop", p));
-const fin10 = run(["finish", "login-loop", "--write", "--project", w10f]);
+const fin10 = runIn(["finish", "login-loop", "--write", "--project", w10f]);
 const fin10State = JSON.parse(fs.readFileSync(path.join(bf10.dir, ".state.json"), "utf8"));
 ok(fin10.code === 0 && /Drift baseline recorded: 1 implementing file\(s\)/.test(fin10.out) && Object.keys(fin10State.finished.files).join() === "src/auth.js" &&
-  run(["drift", "--project", w10f]).code === 0, "finish --write on a ready feature records the drift baseline (and prints it); drift is then clean");
+  runIn(["drift", "--project", w10f]).code === 0, "finish --write on a ready feature records the drift baseline (and prints it); drift is then clean");
 const finDay10 = fin10State.finished.at.slice(0, 10);
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "fix\r\n");
-const drClean = run(["drift", "login-loop", "--project", w10f]);
+const drClean = runIn(["drift", "login-loop", "--project", w10f]);
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "two\n");
-const drDirty = run(["drift", "login-loop", "--project", w10f]);
+const drDirty = runIn(["drift", "login-loop", "--project", w10f]);
 let drJ = null;
-try { drJ = JSON.parse(run(["drift", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
+try { drJ = JSON.parse(runIn(["drift", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
 ok(drClean.code === 0 && new RegExp("✓ login-loop: 1 implementing file\\(s\\) unchanged since finish \\(" + finDay10 + "\\)").test(drClean.out) &&
   drDirty.code === 1 && new RegExp("⚠ login-loop: 1 of 1 implementing file\\(s\\) changed since finish \\(" + finDay10 + "\\)").test(drDirty.out) && /changed: src\/auth\.js/.test(drDirty.out) &&
   drJ && drJ.drifted.join() === "login-loop" && JSON.stringify(drJ) === JSON.stringify(S10.drift(w10f)),
   "drift <feature>: clean after finish (CRLF-normalized), exit 1 naming the changed file after an edit; --json = spec_drift");
 // next-action on the finished feature: the drift and the decision, never "close the feature with /spec-finish" again; a
 // re-finish names the drift its new baseline accepted; then next-action says finished (and asks for the sign-off).
-const naDrift10 = run(["next-action", "login-loop", "--project", w10f]);
+const naDrift10 = runIn(["next-action", "login-loop", "--project", w10f]);
 let naJ10 = null;
-try { naJ10 = JSON.parse(run(["next-action", "login-loop", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
+try { naJ10 = JSON.parse(runIn(["next-action", "login-loop", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
 const naEng10 = JSON.stringify(S10.nextAction(w10f, "login-loop"));
-const refin10 = run(["finish", "login-loop", "--write", "--project", w10f]);
-const naFin10 = run(["next-action", "login-loop", "--project", w10f]);
+const refin10 = runIn(["finish", "login-loop", "--write", "--project", w10f]);
+const naFin10 = runIn(["next-action", "login-loop", "--project", w10f]);
 ok(naDrift10.code === 0 && new RegExp("→ 'login-loop' was finished on " + finDay10 + ", but 1 of 1 implementing file\\(s\\) changed since: src/auth\\.js").test(naDrift10.out) &&
   !/close the feature/.test(naDrift10.out) && naJ10 && naJ10.step === "drift" && JSON.stringify(naJ10) === naEng10 &&
   refin10.code === 0 && new RegExp("Replaced the baseline of " + finDay10 + ", in which 1 file\\(s\\) had drifted: src/auth\\.js").test(refin10.out) &&
@@ -143,13 +143,13 @@ ok(naDrift10.code === 0 && new RegExp("→ 'login-loop' was finished on " + finD
 // finish it again (never "nothing left to do"), drift exits 1 naming why the baseline is stale — audit.js was never hashed.
 // The _Verify:_ is quoted: `done --run` runs it in /bin/sh on Linux, where unquoted `process.exit(0)` is a syntax error
 // ("(" unexpected) — cmd.exe accepted it, so the task stayed open only on Linux and the next four checks failed there.
-run(["append-tasks", "login-loop", "--task", "Audit log of logins", "--req", "US-1.AC-1", "--implements", "src/audit.js", "--verify", 'node -e "process.exit(0)"', "--project", w10f]);
+runIn(["append-tasks", "login-loop", "--task", "Audit log of logins", "--req", "US-1.AC-1", "--implements", "src/audit.js", "--verify", 'node -e "process.exit(0)"', "--project", w10f]);
 fs.writeFileSync(path.join(w10f, "src", "audit.js"), "audit\n");
-const apT10 = run(["approve", "login-loop", "tasks", "--project", w10f]);
+const apT10 = runIn(["approve", "login-loop", "tasks", "--project", w10f]);
 const done3 = run(["done", "login-loop", "3", "--run", "--project", w10f]); // the appended task, after the bugfix's red test (1) and fix (2)
-const naSt10 = run(["next-action", "login-loop", "--project", w10f]);
+const naSt10 = runIn(["next-action", "login-loop", "--project", w10f]);
 fs.appendFileSync(path.join(w10f, "src", "audit.js"), "// changed\n");
-const drSt10 = run(["drift", "login-loop", "--project", w10f]);
+const drSt10 = runIn(["drift", "login-loop", "--project", w10f]);
 ok(apT10.code === 0 && done3.code === 0 && /was finished on \d{4}-\d\d-\d\d, but it changed since \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\) and all its tasks are done — finish it again/.test(naSt10.out) &&
   !/Nothing left to do/.test(naSt10.out) && drSt10.code === 1 && /↻ login-loop: changed since finish \(\d{4}-\d\d-\d\d\) — re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js; its baseline no longer covers it: finish it again \(node "[^"]*dev-spec\.js" finish login-loop --write\)/.test(drSt10.out) &&
   !/✓ login-loop/.test(drSt10.out),
@@ -158,29 +158,29 @@ ok(apT10.code === 0 && done3.code === 0 && /was finished on \d{4}-\d\d-\d\d, but
 // The stale baseline still hashes its recorded files: src/auth.js changed → next-action asks for the drift decision (then
 // finish again) and drift lists the changed file — it said only "finish it again" and never named auth.js.
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "changed by another feature\n");
-const naSD10 = run(["next-action", "login-loop", "--project", w10f]);
-const drSD10 = run(["drift", "login-loop", "--project", w10f]);
+const naSD10 = runIn(["next-action", "login-loop", "--project", w10f]);
+const drSD10 = runIn(["drift", "login-loop", "--project", w10f]);
 ok(/but 1 of 1 implementing file\(s\) changed since: src\/auth\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naSD10.out) && /It also changed since that finish \(re-approved: tasks/.test(naSD10.out) &&
   drSD10.code === 1 && /⚠ login-loop: 1 of 1 implementing file\(s\) changed since finish/.test(drSD10.out) && /changed: src\/auth\.js/.test(drSD10.out) && /↻ login-loop: changed since finish/.test(drSD10.out),
   "a stale baseline whose recorded file changed: next-action → the drift decision + finish again; drift names the file and the stale baseline (got " + JSON.stringify([naSD10.out.slice(0, 120), drSD10.out.slice(0, 160)]) + ")");
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "two\n");
 // Every task ticked, but task 3's latest run failed: next-action names it and how to re-verify (--json = spec_next_action)
 // — it said "close the feature with /spec-finish", which then refused.
-const fail3 = run(["done", "login-loop", "3", "--evidence", "1 failing", "--exit", "1", "--cmd", "node -e process.exit(1)", "--project", w10f]);
-const naV10 = run(["next-action", "login-loop", "--project", w10f]);
+const fail3 = runIn(["done", "login-loop", "3", "--evidence", "1 failing", "--exit", "1", "--cmd", "node -e process.exit(1)", "--project", w10f]);
+const naV10 = runIn(["next-action", "login-loop", "--project", w10f]);
 let naVJ10 = null;
-try { naVJ10 = JSON.parse(run(["next-action", "login-loop", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
+try { naVJ10 = JSON.parse(runIn(["next-action", "login-loop", "--json", "--project", w10f]).out); } catch { /* invalid JSON */ }
 ok(fail3.code === 1 && /→ All tasks are ticked, but not all are verified: #3 \(latest run failed\)/.test(naV10.out) && /node "[^"]*dev-spec\.js" done login-loop 3 --run/.test(naV10.out) &&
   !/close the feature|Nothing left to do/.test(naV10.out) && naVJ10 && naVJ10.step === "verify" && JSON.stringify(naVJ10) === JSON.stringify(S10.nextAction(w10f, "login-loop")) &&
-  run(["finish", "login-loop", "--project", w10f]).code === 1,
+  runIn(["finish", "login-loop", "--project", w10f]).code === 1,
   "next-action on a feature whose latest run failed: 'verify' naming #3 and `done --run` (never 'close the feature'); finish refuses too (got " + JSON.stringify(naV10.out.slice(0, 140)) + ")");
 // Archived while its baseline is stale (tasks re-approved after the finish): the drift line says restore → finish → archive
 // again (it said "finish it again", and that command answered only "not found"); finish of the archived feature names
 // the archive and the restore. A file added under it later is no stale baseline (no _Implements:_ walk for an archived one).
-run(["feature", "archive", "login-loop", "--project", w10f]);
-const drAr10 = run(["drift", "--project", w10f]);
-const finAr10 = run(["finish", "login-loop", "--write", "--project", w10f]);
-run(["feature", "restore", "login-loop", "--project", w10f]);
+runIn(["feature", "archive", "login-loop", "--project", w10f]);
+const drAr10 = runIn(["drift", "--project", w10f]);
+const finAr10 = runIn(["finish", "login-loop", "--write", "--project", w10f]);
+runIn(["feature", "restore", "login-loop", "--project", w10f]);
 ok(drAr10.code === 1 && /↻ login-loop \(archived\): changed since finish \(\d{4}-\d\d-\d\d\) — re-approved: tasks; its baseline no longer covers it: restore it \(node "[^"]*dev-spec\.js" feature restore login-loop\), finish it again \(node "[^"]*dev-spec\.js" finish login-loop --write\), then archive it again/.test(drAr10.out) &&
   !/not in the baseline/.test(drAr10.out) && finAr10.code === 1 && /Feature 'login-loop' not found under .* — it is archived \(\.specs\/_archive\/login-loop\): restore it first \(node "[^"]*dev-spec\.js" feature restore login-loop\)\./.test(finAr10.out),
   "drift on an archived stale feature says restore → finish → archive again (no _Implements:_ walk: no new-file reason); finish of an archived feature names the archive and the restore (got " +
@@ -188,12 +188,12 @@ ok(drAr10.code === 1 && /↻ login-loop \(archived\): changed since finish \(\d{
 
 // PT project: catalog chrome, restore and drift messages in Portuguese.
 const w10pt = path.join(tmp, "wp10-pt");
-run(["init", "core", "--lang", "pt", "--project", w10pt]);
-run(["create", "Pagamentos", "core", "--project", w10pt]);
-const catPt10 = run(["catalog", "--project", w10pt]).out;
+runIn(["init", "core", "--lang", "pt", "--project", w10pt]);
+runIn(["create", "Pagamentos", "core", "--project", w10pt]);
+const catPt10 = runIn(["catalog", "--project", w10pt]).out;
 ok(/# Catálogo de specs — wp10-pt/.test(catPt10) && /AUTO-GERADO por dev-spec/.test(catPt10) && /pagamentos — em curso/.test(catPt10) &&
-  /Não há nada arquivado como 'x'/.test(run(["feature", "restore", "x", "--project", w10pt]).out) &&
-  /Nenhuma feature fechada tem ainda uma baseline de drift/.test(run(["drift", "--project", w10pt]).out), "PT: catalog chrome, restore error and drift note are localized");
+  /Não há nada arquivado como 'x'/.test(runIn(["feature", "restore", "x", "--project", w10pt]).out) &&
+  /Nenhuma feature fechada tem ainda uma baseline de drift/.test(runIn(["drift", "--project", w10pt]).out), "PT: catalog chrome, restore error and drift note are localized");
 
 // A _Supersedes:_ list hard-wrapped onto the next line: trace passes with no "never closed" warning, doctor's
 // traceability passes, the catalog strikes every target through.
@@ -204,18 +204,18 @@ const reqW10 = (f, body) => fs.writeFileSync(path.join(w10w, ".specs", f, "requi
 reqW10("billing", "1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store the receipt\n2. **US-1.AC-2** — WHEN a refund is asked THE SYSTEM SHALL refund within 30 days\n3. **US-1.AC-3** — WHEN z THE SYSTEM SHALL w\n");
 reqW10("wrapped", "1. **US-1.AC-1** — WHEN a refund is asked THE SYSTEM SHALL refund within 14 days\n   - _Supersedes: billing/US-1.AC-2,\n     billing/US-1.AC-3_\n");
 fs.writeFileSync(path.join(w10w, ".specs", "wrapped", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Refund\n  - _Requirements: US-1.AC-1_\n");
-const trW10 = run(["trace", "wrapped", "--project", w10w]);
+const trW10 = runIn(["trace", "wrapped", "--project", w10w]);
 ship10(w10w, "wrapped"); // 1.15: a shipped declarer retires its targets
-const catWr10 = run(["catalog", "--project", w10w]).out;
-ok(trW10.code === 0 && /verdict=pass {2}ACs=1 /.test(trW10.out) && !/⚠|never closed/.test(trW10.out) && !/✗ traceability/.test(run(["doctor", "wrapped", "--project", w10w]).out) &&
+const catWr10 = runIn(["catalog", "--project", w10w]).out;
+ok(trW10.code === 0 && /verdict=pass {2}ACs=1 /.test(trW10.out) && !/⚠|never closed/.test(trW10.out) && !/✗ traceability/.test(runIn(["doctor", "wrapped", "--project", w10w]).out) &&
   catWr10.includes("~~**US-1.AC-3** — WHEN z THE SYSTEM SHALL w~~ — superseded by `wrapped/US-1.AC-1`") && catWr10.includes("_(supersedes `billing/US-1.AC-2`, `billing/US-1.AC-3`)_"),
   "a _Supersedes:_ marker wrapped onto its next line: trace exit 0 with no phantom warning, doctor traceability passes, catalog strikes both targets through");
 
-// help + docblock: catalog / drift right after the feature line, restore on it.
-const help10 = run(["help"]).out;
-const doc10 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+// help + the command table: catalog / drift right after the feature line, restore on it.
+const help10 = runIn(["help"]).out;
+const doc10 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
 const hFeat = help10.indexOf("feature <remove|archive|rename|restore>"), hCat = help10.indexOf("  catalog [--write]"), hDrift = help10.indexOf("  drift [feature]");
 ok(hFeat > 0 && hCat > hFeat && hDrift > hCat && hDrift < help10.indexOf("  roadmap [") && /restore brings an archived feature back/.test(help10) &&
-  /rename \| restore a feature/.test(doc10) && /catalog \[--write\]/.test(doc10) && /drift \[feature\]/.test(doc10),
-  "help and the header docblock list catalog / drift (right after feature) and feature restore");
+  /feature <remove\|archive\|rename\|restore>/.test(doc10) && /catalog \[--write\]/.test(doc10) && /drift \[feature\]/.test(doc10),
+  "help and the command table list catalog / drift (right after feature) and feature restore");
 };

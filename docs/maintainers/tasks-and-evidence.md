@@ -75,7 +75,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   bogus failed run or red proof) — refused before anything runs (`couldNotRun: "wsl-exe"`, `runGate.wslExe`); a quoted
   path loses its quotes (spawn would miss the file). **PowerShell (1.21.1):** `pwsh` / `powershell` (`.exe`, a path to
   either, any platform — `isPwshShell()`) resolve to `{shell, cmd: false, pwsh: true, args: PWSH_RUN_ARGS}` and the CLI's
-  `b5Exec` runs `spawnSync(<shell>, [-NoProfile, -NonInteractive, -Command, <cmd>])` instead of Node's `<shell> -c` (both
+  `execCommand` (cli/run.js) runs `spawn(<shell>, [-NoProfile, -NonInteractive, -Command, <cmd>])` instead of Node's `<shell> -c` (both
   accept -c — measured on pwsh 7.6 and Windows PowerShell 5.1 — but it loads the user's profile and may prompt); the
   command is ONE argument, quoted by Node's Windows rules, which PowerShell reads back intact (`exit 3` → 3, `$x`, `"…"`,
   single quotes). The script's `exit N` is the run's code; a failing last command → 1 (`exit $LASTEXITCODE` passes a
@@ -113,7 +113,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   cmd.exe itself failed (exit 9009, "is not recognized as an internal or external command", its syntax errors, "cannot
   find the path specified" — EN/PT/ES wording) — never for a check that ran and failed. **Review 4 — the OEM code page:**
   cmd.exe (and Windows PowerShell 5.1) write their own messages in the console's OEM code page (850 on a PT / ES Windows)
-  while `b5Exec` decodes the output as UTF-8, so each accented letter arrives as U+FFFD: every accented class of the PT / ES
+  while `execCommand` decodes the output as UTF-8, so each accented letter arrives as U+FFFD: every accented class of the PT / ES
   wordings (`RE_CMD_SHELL_FAILURE`, the PowerShell `couldNotRunOutput` patterns) takes U+FFFD too — on a PT Windows "O sistema
   não conseguiu localizar o caminho especificado" never matched, and an `_Expect: fail_` task was ticked on cmd.exe's own failure.
   Review 5 (L10): "The filename, directory name, or volume label syntax is incorrect" had no PT / ES wording — PT-PT "A sintaxe
@@ -121,7 +121,7 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   "A sintaxe do nome do arquivo, do nome do diretório ou do rótulo do volume está incorreta", ES "La sintaxis del nombre de
   archivo, del nombre de directorio o de la etiqueta del volumen no es correcta" are read between their fixed ends (a gap of
   ≤ 120 characters, linear).
-- **A run that could not happen is never evidence** (CLI `b5Exec()`, `done --run` and `finish --run`): it is refused with
+- **A run that could not happen is never evidence** (CLI `runVerdict()` in cli/run.js, `done --run` and `finish --run`): it is refused with
   `{ok: false, couldNotRun}` + a localized `runGate` message and NOTHING is recorded (it used to be recorded as exit 1 —
   a passing check stored as failed, a red run that never happened). Stable `couldNotRun` codes: `shell-not-started` (spawn
   error ENOENT / EACCES / ENOEXEC / EPERM / EISDIR / ENOTDIR / UNKNOWN) · `run-error` (any other spawn error) · `signal` (no
@@ -149,7 +149,8 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   asks it on the reported `summary` of a passing run, before anything is written (`evidence.noTests`; a `ranBy: "cli"` call is
   not asked again — a summary may have dropped the line that shows a go package ran). Literal phrases, bounded, linear on 200 KB
   (mcp/tests/09-evidence-runs.js times them). `finish --run`'s project checks are not asked (a project check is a whole suite).
-- **`b5Exec` is asynchronous (1.23 review M13)** — `spawn` with a timer of its own, `main()` is async and awaits it: `--timeout`
+- **`execCommand` (cli/run.js) is asynchronous (1.23 review M13)** — `spawn` with a timer of its own; the done / finish handler returns
+  its promise and the call settles with it (1.27: the only asynchronous handlers, with a stream on stdin): `--timeout`
   kills the whole PROCESS TREE — `taskkill /T /F /PID` on Windows, the process group elsewhere (the child is spawned `detached`:
   its own group, `process.kill(-pid)`) — where spawnSync's timeout killed the shell alone (a test runner's worker ran on and held
   the output pipe: the CLI waited for it all the same); 3 s after the kill the run settles even if a pipe stays open. Ctrl+C /

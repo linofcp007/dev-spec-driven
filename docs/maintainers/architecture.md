@@ -88,7 +88,13 @@ mcp/evals/run-evals.js         local eval harness (uses ANTHROPIC_API_KEY; --dry
 mcp/test.js                    the MCP suite's entry point — `node mcp/test.js [--only <file|area|NN>] [--list]`
 mcp/tests/                     its files, one per area: NN-<area>[-<topic>].js (each exports run(ctx)) + harness.js (the
                                server under test, ok / rpc / payload, the shared helpers) — see testing.md → The suites
-cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts)
+cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts) —
+                               1.27: the entry point alone (`__complete`, then main with the process's streams, exit once flushed)
+cli/commands.js                1.27: THE command table — each command's options, arguments, completion specs, help lines and
+                               handler; the flag lists, the help and the completion model derive from it (conventions.md → The CLI)
+cli/main.js                    1.27: main(argv, io) → the exit code — the parser, the checks every command shares, the dispatch;
+                               no process.exit, no state between calls (the CLI suite calls it in-process)
+cli/run.js · cli/git.js        1.27: done --run / finish --run's runs (the process tree, the verdict) · every git call (one gitRun)
 cli/completion.js              1.25 shell completion: the scripts `completion <shell>` prints (from the CLI's tables) and the hidden
                                `__complete` (feature names, Node core only — answered before the engine loads)
 cli/completion/                its templates: dev-spec.bash · .zsh · .fish · .ps1 (conventions.md → Shell completion)
@@ -323,7 +329,7 @@ Two distinct distribution targets, deliberately kept separate — never conflate
   `${CLAUDE_PLUGIN_ROOT}`, so the user's editor must point at *this clone's* absolute `mcp/server.js`.
   That host-specific config is **generated on demand, never committed**: `node cli/dev-spec.js
   mcp-config <client>` (`claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all`) prints a ready
-  config with the absolute path resolved from `__dirname` (`mcpConfig()` in `cli/dev-spec.js`). The
+  config with the absolute path resolved from `__dirname` (`mcpConfigBlocks()` in `cli/commands.js`). The
   `integrations/*` templates carry the literal `/ABSOLUTE/PATH/TO/dev-spec-driven/…` placeholder as a
   copy-paste fallback. (There is **no** `install_host_context` symbol — the mechanism is `mcp-config`.)
 - **Rule files the same way:** `node cli/dev-spec.js rules <cursor|windsurf|copilot|gemini|agents>` prints

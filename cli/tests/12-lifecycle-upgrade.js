@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, runIn, tmp, CLI, require, __dirname }) => {
   const S17 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const readJ17 = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
   // A legacy project: made by this engine, then stripped of what 1.13 records (meta.specVersion, saved tracks); one feature
@@ -33,20 +33,20 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
 
   const u17 = path.join(tmp, "wp17-legacy");
   legacy17(u17, "en");
-  const au17 = run(["upgrade", "--project", u17]);
+  const au17 = runIn(["upgrade", "--project", u17]);
   let auJ17 = null;
-  try { auJ17 = JSON.parse(run(["upgrade", "--json", "--project", u17]).out); } catch { /* invalid JSON */ }
+  try { auJ17 = JSON.parse(runIn(["upgrade", "--json", "--project", u17]).out); } catch { /* invalid JSON */ }
   ok(au17.code === 0 && /^dev-spec upgrade — \.specs\/ from before 1\.13 \(no version stamp\) → dev-spec /m.test(au17.out) && /2 active feature\(s\): /.test(au17.out) &&
     /▸ draft — not started/.test(au17.out) && /▸ half — executing/.test(au17.out) && /Review it with the spec-critic agent/.test(au17.out) && /converge pass/.test(au17.out) &&
     /^Apply would change/m.test(au17.out) && /approval baselines to save to \.history\/ \(the file still matches its approval\): half\/requirements/.test(au17.out) &&
     !fs.existsSync(path.join(u17, ".specs", "UPGRADE.md")) && auJ17 && JSON.stringify(auJ17) === JSON.stringify(S17.specUpgrade(u17)),
     "upgrade (CLI): the audit — header, summary, per-feature status and review, what apply would change — exit 0, nothing written; --json = the engine / MCP result (got " + au17.out.slice(0, 200) + ")");
 
-  const ap17 = run(["upgrade", "--apply", "--project", u17]);
+  const ap17 = runIn(["upgrade", "--apply", "--project", u17]);
   const st17 = readJ17(path.join(u17, ".specs", "half", ".state.json"));
-  const ap17b = run(["upgrade", "--apply", "--project", u17]);
+  const ap17b = runIn(["upgrade", "--apply", "--project", u17]);
   let ap17j = null;
-  try { ap17j = JSON.parse(run(["upgrade", "--apply", "--json", "--project", u17]).out); } catch { /* invalid JSON */ }
+  try { ap17j = JSON.parse(runIn(["upgrade", "--apply", "--json", "--project", u17]).out); } catch { /* invalid JSON */ }
   all("upgrade --apply (CLI): the migrations done and the report path, exit 0; a second --apply says nothing to migrate; --json carries `migrations` (got " + ap17.out.slice(-300) + ")", [
     () => ap17.code === 0, () => /^Migrations applied/m.test(ap17.out), () => /meta\.specVersion: none → /.test(ap17.out),
     () => /approval baselines saved: half\/\.history\/requirements@1\.md/.test(ap17.out), () => /^Report: \.specs\/UPGRADE\.md/m.test(ap17.out),
@@ -58,21 +58,21 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   ]);
 
   // Switches read strictly; no .specs/ is an error (exit 1); PT output.
-  const bad17 = run(["upgrade", "--apply=maybe", "--project", u17]);
+  const bad17 = runIn(["upgrade", "--apply=maybe", "--project", u17]);
   fs.mkdirSync(path.join(tmp, "wp17-nothing"), { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one) — a folder without .specs/
-  const none17 = run(["upgrade", "--project", path.join(tmp, "wp17-nothing")]);
+  const none17 = runIn(["upgrade", "--project", path.join(tmp, "wp17-nothing")]);
   const pt17 = path.join(tmp, "wp17-pt");
   legacy17(pt17, "pt");
-  const ptOut17 = run(["upgrade", "--project", pt17]);
-  const ptAp17 = run(["upgrade", "--apply", "--project", pt17]);
+  const ptOut17 = runIn(["upgrade", "--project", pt17]);
+  const ptAp17 = runIn(["upgrade", "--apply", "--project", pt17]);
   ok(bad17.code === 1 && /--apply must be a boolean/.test(bad17.out) && none17.code === 1 && /No \.specs\/ at/.test(none17.out) &&
     ptOut17.code === 0 && /2 feature\(s\) ativa\(s\)/.test(ptOut17.out) && /por começar/.test(ptOut17.out) && /^O apply mudaria/m.test(ptOut17.out) &&
     ptAp17.code === 0 && /^Migrações aplicadas/m.test(ptAp17.out) && /^Relatório: \.specs\/UPGRADE\.md/m.test(ptAp17.out),
     "upgrade: --apply=maybe is refused (exit 1), no .specs/ exits 1; a PT project gets European-Portuguese output");
 
-  // help + the header docblock list the subcommand and its flag.
-  const help17 = run(["help"]).out;
-  const doc17 = fs.readFileSync(CLI, "utf8").split("*/")[0];
-  ok(/upgrade \[--apply\]/.test(help17) && /--apply \(upgrade\)/.test(help17) && /upgrade \[--apply\]/.test(doc17) && /upgrade: --apply/.test(doc17),
-    "help and the header docblock list upgrade [--apply]");
+  // help + the command table list the subcommand and its flag.
+  const help17 = runIn(["help"]).out;
+  const doc17 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
+  ok(/upgrade \[--apply\]/.test(help17) && /--apply \(upgrade\)/.test(help17) && /upgrade \[--apply\]/.test(doc17),
+    "help and the command table list upgrade [--apply]");
 };

@@ -4,10 +4,10 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp }) => {
+exports.run = ({ ok, run, runIn, tmp }) => {
   const p = path.join(tmp, "r7-bugorder-proj");
-  run(["init", "core", "--project", p]);
-  run(["bugfix", "Crash", "--summary", "crash on save", "--project", p]);
+  runIn(["init", "core", "--project", p]);
+  runIn(["bugfix", "Crash", "--summary", "crash on save", "--project", p]);
   const dir = path.join(p, ".specs", "crash");
   const ran = path.join(p, "ran-fix.txt");
   fs.writeFileSync(path.join(dir, "tasks.md"), "# Tasks: Crash\n\n## Phase: Fix\n" +
@@ -15,8 +15,8 @@ exports.run = ({ ok, run, tmp }) => {
     "- [ ] 2. [US1] Fix the crash in the save handler\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n" +
     "  - _Verify: node -e \"require('fs').writeFileSync('ran-fix.txt', 'x')\"_\n" +
     "- [ ] 3. [US1] Document the root cause in bug.md\n  - _Requirements: US-1.AC-1_\n");
-  const t1 = run(["done", "crash", "1", "--project", p]);
-  const t2 = run(["done", "crash", "2", "--project", p]);
+  const t1 = runIn(["done", "crash", "1", "--project", p]);
+  const t2 = runIn(["done", "crash", "2", "--project", p]);
   const t2run = run(["done", "crash", "2", "--run", "--project", p]);
   const tasks = fs.readFileSync(path.join(dir, "tasks.md"), "utf8");
   ok(t1.code === 0 && t2.code === 1 && /Task 2 can't be completed yet: bug\.md → Root Cause is not filled\. .*do task 3 first/.test(t2.out) &&

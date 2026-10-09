@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const SA = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = (v) => JSON.stringify(v);
   const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return {}; } };
@@ -22,13 +22,13 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const af = SA.createFeature(ap, "Orders", ["core"]);
   fs.writeFileSync(path.join(af.dir, "requirements.md"), REQ.replace("warehouse queue", "warehouse message queue")); // A review 7: a strong phrase fires alone
   fs.writeFileSync(path.join(af.dir, "design.md"), DESIGN);
-  const doc = run(["doctor", "orders", "--project", ap]);
-  const docJ = jsonOf(run(["doctor", "orders", "--json", "--project", ap]));
-  const cl = run(["clarify", "orders", "--project", ap]);
-  const clJ = jsonOf(run(["clarify", "orders", "--json", "--project", ap]));
-  run(["approve", "orders", "classification", "--force", "--project", ap]);
-  const apReq = run(["approve", "orders", "requirements", "--project", ap]);
-  const apDes = run(["approve", "orders", "design", "--project", ap]);
+  const doc = runIn(["doctor", "orders", "--project", ap]);
+  const docJ = jsonOf(runIn(["doctor", "orders", "--json", "--project", ap]));
+  const cl = runIn(["clarify", "orders", "--project", ap]);
+  const clJ = jsonOf(runIn(["clarify", "orders", "--json", "--project", ap]));
+  runIn(["approve", "orders", "classification", "--force", "--project", ap]);
+  const apReq = runIn(["approve", "orders", "requirements", "--project", ap]);
+  const apDes = runIn(["approve", "orders", "design", "--project", ap]);
   const ids = (docJ.checks || []).filter((c) => /^design-(?:tradeoffs|risks)$/.test(c.id)).map((c) => c.id + ":" + c.status);
   ok(/  ▲ design-tradeoffs — no Alternatives & Trade-offs section/.test(doc.out) && /  ▲ design-risks — no Risks section/.test(doc.out) &&
     js(ids) === js(["design-tradeoffs:warn", "design-risks:warn"]) && docJ.readyToAdvance === true &&
@@ -42,8 +42,8 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   fs.writeFileSync(path.join(af.dir, "design.md"), DESIGN.replace("## Data Models",
     "## Alternatives & Trade-offs\n| Decision | Option | Pros | Cons | Cost if wrong | Chosen |\n|---|---|---|---|---|---|\n| Hand-off | Synchronous call | Simple | Couples uptime | Lost orders | ✗ |\n" +
     "| Hand-off | Queue + outbox | Survives outages | At-least-once | A double shipment | ✓ — idempotency key |\n\n## Risks\n- Duplicate delivery — medium — idempotency key per order.\n\n## Data Models"));
-  const doc2 = run(["doctor", "orders", "--project", ap]);
-  const cl2 = jsonOf(run(["clarify", "orders", "--json", "--project", ap]));
+  const doc2 = runIn(["doctor", "orders", "--project", ap]);
+  const cl2 = jsonOf(runIn(["clarify", "orders", "--json", "--project", ap]));
   ok(/  ✓ design-tradeoffs — 2 option\(s\) weighed/.test(doc2.out) && /  ✓ design-risks — 1 risk\(s\) listed/.test(doc2.out) && cl2.nudges === undefined,
     "1.17 A1 / A2 (CLI): filled sections → ✓ design-tradeoffs (2 options) / ✓ design-risks; clarify no longer asks (got " + js([doc2.out.split("\n").filter((l) => /design-/.test(l)), cl2.nudges]) + ")");
 
@@ -53,11 +53,11 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const pf = SA.createFeature(pp, "Encomendas", ["core"], "", undefined, "pt");
   fs.writeFileSync(path.join(pf.dir, "requirements.md"), REQ.replace("hand the order to the warehouse queue", "pôr a encomenda na fila de mensagens do armazém"));
   fs.writeFileSync(path.join(pf.dir, "design.md"), "# Design: Encomendas\n\n## Visão Geral\nx.\n\n## Alternativas consideradas\n- Chamada síncrona.\n\n## Verificação da Constituição\n- [x] ok\n");
-  const pDoc = run(["doctor", "encomendas", "--project", pp]);
-  const pCl = run(["clarify", "encomendas", "--project", pp]);
-  run(["templates", "init", "design", "--project", pp]);
+  const pDoc = runIn(["doctor", "encomendas", "--project", pp]);
+  const pCl = runIn(["clarify", "encomendas", "--project", pp]);
+  runIn(["templates", "init", "design", "--project", pp]);
   fs.writeFileSync(path.join(pp, ".specs", "templates", "design.md"), "# Design: {{name}}\n\n## Visão Geral\n[Como funciona]\n\n## Verificação da Constituição\n- [ ] [Princípio 1] — cumpre\n");
-  const pTpl = run(["templates", "check", "--project", pp]);
+  const pTpl = runIn(["templates", "check", "--project", pp]);
   ok(/▲ design-tradeoffs — Alternativas e Compromissos lista 1 opção\(ões\) — o mínimo são 2 por decisão-chave/.test(pDoc.out) && /▲ design-risks — sem secção Riscos/.test(pDoc.out) &&
     /A spec menciona 'fila de mensagens', mas nem os requisitos nem o design dizem nada sobre consistência ou idempotência/.test(pCl.out) &&
     pTpl.code === 0 && /sem secção Alternativas e Compromissos — o doctor avisa \(design-tradeoffs\)/.test(pTpl.out) && /sem secção Riscos — o doctor avisa \(design-risks\)/.test(pTpl.out),
@@ -67,14 +67,14 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   // 1.17 A review 3 (CLI): a design approval made by 1.17 is stamped (weigh) and its missing sections warn (▲); the same approval without the
   // stamp (made before 1.17) → ✓ with the 'approved before 1.17' note — a finished pre-1.17 feature is never asked to reopen its design.
   fs.writeFileSync(path.join(af.dir, "design.md"), DESIGN);
-  const rApp = run(["approve", "orders", "design", "--project", ap]);
-  const rStamped = run(["doctor", "orders", "--project", ap]);
+  const rApp = runIn(["approve", "orders", "design", "--project", ap]);
+  const rStamped = runIn(["doctor", "orders", "--project", ap]);
   const rState = path.join(af.dir, ".state.json");
   const rSt = JSON.parse(fs.readFileSync(rState, "utf8"));
   const rWeigh = rSt.approvals.design.weigh;
   delete rSt.approvals.design.weigh;
   fs.writeFileSync(rState, JSON.stringify(rSt, null, 2));
-  const rLegacy = run(["doctor", "orders", "--project", ap]);
+  const rLegacy = runIn(["doctor", "orders", "--project", ap]);
   ok(rApp.code === 0 && rWeigh === true && /  ▲ design-tradeoffs — no Alternatives & Trade-offs section/.test(rStamped.out) &&
     /  ✓ design-tradeoffs — design approved before 1\.17 — asked only from its next approval \(no Alternatives & Trade-offs section/.test(rLegacy.out) &&
     /  ✓ design-risks — design approved before 1\.17/.test(rLegacy.out),

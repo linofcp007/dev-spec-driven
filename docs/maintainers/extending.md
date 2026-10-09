@@ -42,7 +42,7 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   `mcp/tests/17-docs-review6.js` — every "N tools / ferramentas / herramientas", "N (slash) commands", "Commands (N)", the
   prompts' "N of them, read from `commands/*.md`" and "N agents" must be the live tools/list length, command files and agent
   files. A new CLI command goes into the CLI summary of the three READMEs (the same file checks it against the CLI's
-  `case` labels), a new doctor check id into `references/tooling-reference.md`'s spec_doctor list (checked against the ids
+  command table), a new doctor check id into `references/tooling-reference.md`'s spec_doctor list (checked against the ids
   the engine emits).
 - New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
   one → The track model (registries and its classifier `SIGNALS`: `engine/tracks.js`, the classifier code in `engine/classify.js`; its builders in the
@@ -66,18 +66,23 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   `trackMarker()` / `trackSectionTable()` / `trackSteeringFiles()` / `trackSignalTable()`), never the built-in constants —
   those miss the project's track packs (only the process-wide template corpus and the built-in lists of `spec_tracks list`
   read the constants on purpose).
+- New CLI command (1.27) → ONE entry of `COMMANDS` in cli/commands.js, in the help's order: `name` (+ `aliases`), `options` (the
+  flags it reads — 1.23 review: any other is refused), `max` positionals, `bounds` (an integer flag's largest value), the
+  completion specs `args` (per position: words or an `@source` — feature names, phases, tracks…) / `sub` (positions a first word
+  picks) / `values` (a flag's values for THIS command), `text: true` when it prints text only, its `help` lines (`  <name> …` at two
+  spaces, then the description from column 35 — byte for byte what `help` prints) and `run(c)`, the handler (synchronous; a promise
+  only where it waits — never an `async` function). Nothing else to touch: the flag checks, `help` / `help <command>`, the
+  completion scripts and `checkCommandArgs()` read the table (conventions.md → The CLI is one table and one call;
+  cli/tests/16-conventions-cli-modules.js checks the entry). The engine call it makes is the MCP tool's, with the same defaults.
 - New CLI switch (a flag that takes no value) → `CLI_SWITCHES` in `mcp/lib/engine/guards.js`, exported as
-  `spec.CLI_SWITCHES` (the CLI's `BOOL_FLAGS` and the approval hook's lexer both read it); a new value flag → the CLI's
-  `VALUE_FLAGS`. Either one → the `COMMAND_OPTIONS` entry of every command that reads it (1.23 review: any other command refuses
-  it), and a NEW command → its `COMMAND_OPTIONS` entry (its flags, `max` positionals) — conventions.md → CLI: each command
-  reads its own options and arguments. A value flag a command reads EVERY occurrence of (an `every()` collector) → also
-  `REPEATABLE_FLAGS` (1.24 r6 B5: any other one given twice is a usage error). Shell completion (1.25) reads those tables as
-  they are; a NEW command's positionals → a `COMMAND_ARGS` entry (feature names, phases, tracks…), a value flag with a known set
-  of values → `FLAG_VALUES` — a list the facade has is named by its `@source` (`completionModel()`), never copied
-  (conventions.md → Shell completion).
+  `spec.CLI_SWITCHES` (the CLI's `BOOL_FLAGS` and the approval hook's lexer both read it); a new value flag → `VALUE_FLAG_SPECS`
+  in cli/commands.js (with its completion `values` where the set is known — a list the facade has is named by its `@source`
+  (`completionModel()`), never copied —, `repeatable: true` when a command reads EVERY occurrence with `c.every()` — 1.24 r6 B5:
+  any other one given twice is a usage error). Either one → the `options` of every command entry that reads it.
 - A tool argument that is a string OR a true/false switch (1.25 `spec_create {branch}`) → `type: "string"` (never a list-valued
   type — mcp.md → Argument validation) + its key in server.js `BOOL_STRING_ARGS`, the engine reading `"true"` / `"false"`; a CLI
-  value flag whose value is optional → the parser's bare-flag case (as `--branch`), never `CLI_SWITCHES`.
+  value flag whose value is optional → `optional: true` in `VALUE_FLAG_SPECS` (as `--branch`: a bare one is `true`), never
+  `CLI_SWITCHES`.
 - New `.state.json` / `roadmap.json` key → decide how two branches merge it (conventions.md → Merging the spec state): an
   append-only list or a keyed map gets its rule in state.js (`mergeFeatureState`'s `FIELDS`, `ROADMAP_FIELDS`, `META_FIELDS`);
   a plain value needs nothing (3-way per key — both sides changed it differently = a conflict the user resolves).

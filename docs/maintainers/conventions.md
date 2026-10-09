@@ -274,11 +274,12 @@ and U+FEFF gotchas are in CLAUDE.md.
   got 0 of 8; a stdout EPIPE / EOF / ERR_STREAM_DESTROYED exits quietly 0, any other stdout error prints one stderr line
   and exits 1). **The CLI the same (1.24 r6 B2):** `stdoutError()`, installed by main() after the status line's render path
   (which keeps its own exit-0 handler) — a reader that stops early (`export --md | head -1`, a pager quit) ends the output
-  quietly with the status the command set (`process.exitCode || 0`: `trace --csv | head` keeps trace's 1); any other stdout
-  error is one `dev-spec: <message>` line, exit 1. `console.log` swallows its own write errors, but `process.stdout.write`
-  (export, catalog, changelog, rules, trace --csv, prompts) raised an unhandled `'error'` — a stack trace and exit 1.
-  Never `process.exit()` right after a write (the CLI's `die()` under `--json` writes its small document with
-  `fs.writeSync(1, …)` first). The CLI's stdin (`ears -`, `import <plan> -`, `log <f> -`, `stop-check -`) is collected as
+  quietly with the status the command set (the call's `c.exitCode || 0`: `trace --csv | head` keeps trace's 1); any other stdout
+  error is one `dev-spec: <message>` line, exit 1 (both through the entry point's `io.exit`). `console.log` swallowed its own write
+  errors, but `process.stdout.write` (export, catalog, changelog, rules, trace --csv, prompts) raised an unhandled `'error'` — a
+  stack trace and exit 1. Never `process.exit()` right after a write: 1.27 — nothing in the CLI exits but its entry point, once the
+  call has ended and stdout and stderr have flushed (a write callback each; the status line's caller may never close stdin, so it
+  exits even with stdin open). The CLI's stdin (`ears -`, `import <plan> -`, `log <f> -`, `stop-check -`) is collected as
   BYTES and decoded like a file (`readStdin` → `decodeText`: a UTF-16 BOM decides, else UTF-8 — 1.23 review: a UTF-16 document,
   what Windows PowerShell 5.1's `>` writes, read as "0 criteria, pass" in `ears -`); from a terminal (`process.stdin.isTTY`)
   it first prints one stderr line, `cliOutput.stdinHint` — type, then Ctrl+D / Ctrl+Z Enter (1.24 r6 B-I9: it looked hung). The pre-commit validator reads staged
@@ -289,18 +290,18 @@ and U+FEFF gotchas are in CLAUDE.md.
   gets a ⚠ line (`earsWarnings`), never "EARS clean" — the PostToolUse hook's rule.
 - **Terminal-safe CLI output (1.25.1, review 7).** The CLI prints spec text as written (task text, a `_Verify:_` and its run's
   output, names): a raw ESC / OSC sequence or a lone carriage return in a cloned tasks.md made `done --run` show `$ npm test` while it
-  ran another command (and could retitle the terminal or hide lines). ONE choke point, `installOutputGuard()` (main's first step):
-  stdout and stderr's `write` — the human text loses every C0 control but tab and line feed (a CR only before a LF: CRLF lines, the
-  RFC 4180 CSV), DEL and every C1; under `--json` stdout keeps the value (JSON.stringify escapes C0; a raw DEL / C1 is written as its
-  `\u` escape — `die()`'s synchronous document too). The guard's regexes are built from char codes (never a raw control character in
+  ran another command (and could retitle the terminal or hide lines). ONE choke point (1.27: cli/main.js `guarded()`): everything the
+  CLI writes goes through the call's `c.write` / `c.writeErr` — the human text loses every C0 control but tab and line feed (a CR only
+  before a LF: CRLF lines, the RFC 4180 CSV), DEL and every C1; under `--json` stdout keeps the value (JSON.stringify escapes C0; a raw
+  DEL / C1 is written as its `\u` escape — `die()`'s document too). The guard's regexes are built from char codes (never a raw control character in
   the source). Running such a command is refused before anything runs: `done --run` (a `_Verify:_`) and `finish --run` (a stored
   project check — `projectChecks().unsafe`) answer `code: "control-chars"` (`verifyControl.run` / `.checks`, the command shown with
   `\u` escapes — `controlVisible`), spec_init refuses such a check (`validCheckCmd`) and doctor fails `verify-control`.
 - **The CLI loads the engine on first use (1.25.1, review 7).** `spec` is a proxy over the facade's `require` (`loadSpec()`): the
   status line's render outside a project (cli/completion.js `statusProbe` first — claude-code-integration.md → Status line) and the
-  bare help (`dev-spec`, `--help` / `-h` alone, `help` alone — `BARE_HELP`) never load it; nothing at the top of cli/dev-spec.js may
-  read `spec.*` before main() (`projectDir` / `PROJECT_SOURCE` are null on those two paths, `BOOL_FLAGS()` / `CLI_LANGS()` are read on
-  use). `version` and `completion` still load it: version reports where the engine loads from (the load is the measurement),
+  bare help (`dev-spec`, `--help` / `-h` alone, `help` alone — `BARE_HELP`) never load it; nothing at the top of cli/main.js or
+  cli/commands.js may read `spec.*` at load (`projectDir` / `PROJECT_SOURCE` are null on those two paths, `BOOL_FLAGS()` and the `--lang`
+  enum, `spec.LANGS`, are read on use). `version` and `completion` still load it: version reports where the engine loads from (the load is the measurement),
   completion's script holds the facade's value lists (never copied).
 - **Dates/timestamps**: fine to use `new Date()` in the MCP server and scripts (normal Node
   process). Do NOT assume that in any Workflow-script context.
@@ -314,6 +315,28 @@ and U+FEFF gotchas are in CLAUDE.md.
   `waiver.badExpires` promise "today or later in UTC"). `validIsoDay` (a YYYY-MM-DD round trip) is a format check, not a date.
   mcp/tests/16-conventions-review7-core.js guards it (no `toISOString().slice(0, 10)` in the engine) and runs a child in Tokyo
   with a frozen clock (`TZ` set through the child's env — a Git Bash `TZ=… node` prefix does not reach Node on Windows).
+- **The CLI is one table and one call (1.27).** cli/dev-spec.js is the entry point alone: `__complete` first (no engine), then
+  `main(argv, io)` (cli/main.js) with the process's streams, and the exit once stdout and stderr have flushed. Every command is ONE
+  entry of `COMMANDS` (cli/commands.js) — `name`, `aliases`, `options` (a value flag is one of `VALUE_FLAG_SPECS` — its completion
+  `values`, `repeatable`, an `optional` value —; any other name a switch of `spec.CLI_SWITCHES`), `max` positionals, `bounds` (an
+  integer flag's largest value: next `--max` ≤ 8, `--timeout` ≤ 2147483), completion `args` / `sub` / `values`, `text` (text only),
+  its `help` lines and its handler `run(c)`. `VALUE_FLAGS`, `REPEATABLE_FLAGS`, `COMMAND_OPTIONS`, `COMMAND_ARGS`, `FLAG_VALUES`,
+  `TEXT_ONLY_COMMANDS`, `HELP_ALIASES`, `helpText()` / `helpFor()` and `completionModel()` are DERIVED from it — none is written by
+  hand. **`main` never exits the process and keeps no state between calls:** each call parses its own command line into its own
+  context `c` (`createContext` — flags, positionals, the project, `c.out` / `c.fail` / `c.die` / `c.usage`, `c.log` / `c.err` /
+  `c.write`, `c.on` / `c.intFlag` / `c.every`, `c.readStdin`…); a usage error or a refusal ends the call by throwing `CliExit`
+  (it was `process.exit(1)`), an engine exception is one line (`{ok: false, error, code}` under `--json`); `io.env` / `io.cwd` are
+  applied to the process for the call and restored (the engine reads `process.env` / `process.cwd()` itself). A call is
+  SYNCHRONOUS — its promise already settled, `io.done(code)` already called — unless the command waits: `done --run` / `finish
+  --run` running commands (a handler returns a promise only there: it must never be an `async` function, or its usage errors would
+  wait too), stdin from a stream, the status line's stdin. The CLI suite relies on it (cli/tests/harness.js `runIn` / `spawnIn` —
+  testing.md → The harnesses). Only the entry point's `io` carries `exit` (a closed stdout — EPIPE — ends the process at once; a
+  SIGINT / SIGTERM during a run, once its tree is killed). The user's commands run in cli/run.js (`execCommand` — the process tree
+  killed at `--timeout`, the drain after the command exits, the 64 MB cap; `runVerdict`; `runCommand`; `runChecks`, finish --run's
+  loop; `runSummaries`), every git call in cli/git.js (`gitRun(args, {cwd})` — one environment: `GIT_OPTIONAL_LOCKS=0`,
+  `GIT_TERMINAL_PROMPT=0`, 64 MB, 30 s; the user's locale kept: no caller parses a translated message, and a failed `git config` /
+  `git switch` shows git's own words; `gitText`, `gitState`, `branchFacts`). cli/tests/16-conventions-cli-modules.js guards the
+  table (every entry has its help and completes) and the call contract; cli/tests/09-evidence-run-module.js tests cli/run.js alone.
 - **CLI `--lang` is the MCP enum**: `main()` refuses anything outside the MCP `lang` enum (case-folded) with the
   localized `args.invalid` message before dispatch — the engine's `normalizeLang()` would turn `fr` into `en` and save it.
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
@@ -329,7 +352,7 @@ and U+FEFF gotchas are in CLAUDE.md.
   review: `status || 0` passed a killed run). An engine refusal goes through `fail(r)`, never
   `die(r.error)`: with `--json` the whole `{ok: false, error, …}` result (`recorded`, `neverApproved`, `gated`…) is
   the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only — with `--json` (1.23
-  review) it prints `{ok: false, error, code}` on stdout too (written synchronously: `process.exit` follows; the stderr line stays —
+  review) it prints `{ok: false, error, code}` on stdout too (then the call ends — `CliExit`; the stderr line stays —
   1.25.1, review 7: the stable `code` MCP gives the same error — `unknown-argument` {unknown} for an unknown / misplaced option or
   word (a single-dash `-j` too: it read as a feature name), `missing-arguments` {missing}, `invalid-arguments` {invalid},
   `project-missing`, `project-not-dir` — else the CLI's own: `usage`, `unknown-command`, `project-empty`, `project-unexpanded`,
@@ -341,24 +364,27 @@ and U+FEFF gotchas are in CLAUDE.md.
   whose output is text only** — the help (`help`, no command, `--help` anywhere), `rules`, `mcp-config`, `evals`
   (`TEXT_ONLY_COMMANDS`) — is such a usage error (`cliOutput.noJson`, exit 1, nothing on stdout — `die(…, {text: true})`; 1.22
   review — it printed the text with exit 0); `--json=false` is the switch off. A new command that prints no structured result
-  joins that list.
-- **CLI: each command reads its own options and arguments (1.23 review).** `COMMAND_OPTIONS` (cli/dev-spec.js) lists every
+  says `text: true` in its table entry.
+- **CLI: each command reads its own options and arguments (1.23 review).** `COMMAND_OPTIONS` (derived from the table entries'
+  `options` and `max`, cli/commands.js) lists every
   command's flags and the most positionals it takes (`max`; absent = any number, or the command checks its own: templates,
   export, decide…); `checkCommandArgs()` refuses — before anything runs, after the help — a known flag the command doesn't
   read (`cliOutput.flagNotFor`, its options listed) and an argument past its last one (`extraArgs`): they were ignored —
   `approve <f> <phase> --remove` (meant --revoke) approved, `done <f> 3 4` ticked task 3 alone. `--json`, `--project` and
   `--help` are global (`GLOBAL_OPTIONS`). `backlog` (add takes note words, rm / list don't), `log` (a second word is `-`) and
   `feature` (1.24 r6 B4: remove / archive / restore take the name, rename and flow one more — flow's is its `--flow` or the word,
-  never both; `--flow` on another action is refused) check theirs in their case; the contradictory pairs are usage errors too
+  never both; `--flow` on another action is refused) check theirs in their handler; the contradictory pairs are usage errors too
   (B4): `depend <f> <deps…> --clear`, `merge-state <files…> --install|--uninstall` and both switches together, `stop-check
   --message … <words>`. **A single-value flag given twice (B5)** is refused (`refuseRepeatedFlags()`, `cliOutput.flagTwice`):
   the parser counts each VALUE flag (`flagCount`, both `--k v` and `--k=v`) and kept the last — `approve … --role tech --role
   product` signed for product alone; `REPEATABLE_FLAGS` are the ones a command collects every occurrence of (depend `--add` /
   `--rm`, init `--check`, append-tasks `--req` / `--implements` / `--makes-green` / `--depends`, decide `--affects` /
-  `--supersedes` — a new collector joins that list), and append-tasks keeps its own words for `--task` / `--verify` / `--story` /
+  `--supersedes` — a new collector is `repeatable: true` in `VALUE_FLAG_SPECS`; it reads them with `c.every()`), and append-tasks
+  keeps its own words for `--task` / `--verify` / `--story` /
   `--heading` / `--size`; `--shell` / `--timeout` without `--run` (`needsRun`) and `--run` with `--evidence` / `--exit` /
   `--cmd` (`runOrEvidence`) are usage errors; `undone` takes done's run flags only to refuse them (`undo.noEvidence`). A new
-  command or flag gets its `COMMAND_OPTIONS` entry (extending.md). **`--project` (L14)** names an existing folder
+  command is a table entry, a new flag one more name in the `options` of each entry that reads it (extending.md). **`--project`
+  (L14)** names an existing folder
   (`checkProject()`): empty, an unexpanded variable (`unexpandedVar`), a file or a missing folder is refused (localized
   `cliOutput.project*`) — `init` alone may create it (`create x --project <typo>` created the whole mistyped tree); on Windows a
   trailing `"` is dropped (`--project "C:\dir\"` reaches node as `C:\dir"`). The status line's render path checks none of this.
@@ -384,13 +410,14 @@ and U+FEFF gotchas are in CLAUDE.md.
   and prints its usage on `--help` (it ran the eval).
 - **Shell completion (1.25): `completion <powershell|bash|zsh|fish>`** prints a script (stdout only — `TEXT_ONLY_COMMANDS`, so
   `--json` is a usage error; it reads no project, so `checkProject()` skips it like `version`: it runs from a shell profile).
-  `completionModel()` builds it from the CLI's own tables — every command (`COMMAND_OPTIONS` keys + `help`, `evals`; a test
-  checks every `case` label is there), each one's flags (its `COMMAND_OPTIONS` + `GLOBAL_OPTIONS`; evals: run-evals.js's
-  switches, `EVALS_SWITCHES`, + `EVALS_VALUE_FLAGS`), the value flags (`VALUE_FLAGS` — the word after one is its value, never
-  a positional), **`COMMAND_ARGS`** (a command's positionals: per position words or a source, `"..."` repeats the last,
-  `"<cmd> <word>"` the positions a first word picks — `feature restore` → archived names; `HELP_ALIASES` copy their command's)
-  and **`FLAG_VALUES`** (`"<flag>"`, or `"<cmd> --<flag>"` where commands differ: `init --evidence` is a mode, `done --evidence` a
-  summary) — and the value lists their `@sources` name, read from the facade (`LANGS`, `VALID_TRACKS`, `PHASES`, `FLOWS`,
+  `completionModel()` builds it from the command table — every command and alias (a test checks each is there), each one's flags
+  (its `options` + `GLOBAL_OPTIONS`; evals: its `completeFlags`, run-evals.js's switches `EVALS_SWITCHES` + `EVALS_VALUE_FLAGS`),
+  the value flags (`VALUE_FLAGS` — the word after one is its value, never a positional), **`COMMAND_ARGS`** (from each entry's
+  `args` and `sub` — a command's positionals: per position words or a source, `"..."` repeats the last, `"<cmd> <word>"` the
+  positions a first word picks — `feature restore` → archived names; `HELP_ALIASES` copy their command's) and **`FLAG_VALUES`**
+  (`"<flag>"` from `VALUE_FLAG_SPECS`' `values`, or `"<cmd> --<flag>"` from an entry's `values` where commands differ: `init
+  --evidence` is a mode, `done --evidence` a summary; 1.27: the scripts' rows follow the table's order) — and the value lists
+  their `@sources` name, read from the facade (`LANGS`, `VALID_TRACKS`, `PHASES`, `FLOWS`,
   `FEATURE_SIZES`, `SIZE_POINTS`, `TRACKERS`, `APPROVAL_GUARD_LEVELS`, `IMPORT_TOOLS` (1.25), `TEMPLATE_ARTIFACTS`, the backlog /
   milestone actions) or the CLI (`mcpConfigBlocks()`, `RULE_FILES`, `commands/*.md`). `cli/completion.js` fills the template of
   the shell (`cli/completion/dev-spec.{bash,zsh,fish,ps1}`; `#@` lines are maintainer notes, never printed; LF always). One
@@ -424,20 +451,23 @@ and U+FEFF gotchas are in CLAUDE.md.
   `true|false|1|0|yes|no|on|off` into booleans and refuses any other value. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]`
   (1.14): ONE list, which the approval hook's lexer (`cliApprovalAction()`) also reads to tell a switch from a value flag —
   a new switch goes into `spec.CLI_SWITCHES` (never a CLI-only list: the hook would read the word after it as its value), a new
-  value flag into `VALUE_FLAGS` — `refuseUnknownFlags()` refuses any other `--flag` before anything runs (exit 1, a
+  value flag into `VALUE_FLAG_SPECS` (cli/commands.js; in its order the did-you-mean prefers the first of equally near flags) —
+  `refuseUnknownFlags()` refuses any other `--flag` before anything runs (exit 1, a
   localized did-you-mean; `done 2 --rnu` used to tick the task with no evidence). `evals` is exempt (its flags go to
   run-evals.js, which refuses its own unknown ones); `--` ends the options; `--help` anywhere prints the help and runs nothing
   (`evals --help`: the harness's usage). **Per command (1.24 r6 B-I3):** `<command> --help`, `-h` (now a switch, never a
-  positional: `status -h` looked for a feature "h") and `help <command>` print `helpFor()` — that command's blocks of the one
-  `helpText()` (each line whose first word is the command, with its continuation lines; `HELP_ALIASES` na / milestones), its
+  positional: `status -h` looked for a feature "h") and `help <command>` print `helpFor()` — that command's table entry's `help`
+  lines (an alias its command's — `HELP_ALIASES` na / milestones; `helpText()` is every entry's lines in the table's order between
+  its head and foot, so they are exactly the lines the pre-1.27 rule cut out of the whole help — a test checks it), its
   `COMMAND_OPTIONS` (a value flag shown `--x …`) and the localized frame (`cliOutput.cmdHelp`); no command, `-h` alone or a
-  word with no block → the whole help. A new command gets its block in `helpText()` starting `  <name> ` at two spaces. An explicit
+  word with no entry (or `help`, which has no lines of its own) → the whole help. A new command's `help` starts `  <name> ` at two
+  spaces, its other lines indented (a test checks every entry). An explicit
   `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
   switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise). 1.25: `dry-run` is a CLI switch too (`import
   --dry-run`), so `normalizeBoolFlags()` skips it under `evals` — the harness reads its own `--dry-run=maybe` (exit 2).
-  Numeric flags that MCP bounds (`--cap`, `--max`) and the CLI-only `--timeout` go through `intFlag()` (integer ≥ 1; `--timeout`
-  also ≤ 2147483 — `timeoutFlag()`, Node's timer limit, 1.24 r6 B6: `cliOutput.atMost`).
+  Numeric flags that MCP bounds (`--cap`, `--max`) and the CLI-only `--timeout` go through `intFlag()` (integer ≥ 1, at most the
+  command's `bounds` — `--timeout` ≤ 2147483, `timeoutFlag()`, Node's timer limit, 1.24 r6 B6: `cliOutput.atMost`; next `--max` ≤ 8).
   The engine refuses what the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
   task 1 / 2), `createFeature` kind ∈ feature|bugfix|spike, `backlog` action ∈ add|rm|remove|list. **In the validator's own words**
   (`msg(lang).args`, 1.22 review) where the schema bounds a value: a task number asked for (`askedTaskNumber()` — done / undone /

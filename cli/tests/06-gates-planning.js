@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   const S16 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const w16 = path.join(tmp, "wp16");
   S16.initProject(w16, ["core"], "en");
@@ -18,20 +18,20 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   S16.createFeature(w16, "Weekly digest", ["core"]);
   fs.writeFileSync(at16("weekly-digest", "requirements.md"), REQ16);
   fs.writeFileSync(at16("weekly-digest", "design.md"), "# Design: Digest\n\n## Overview\nA weekly job.\n\n## Constitution Check\n- [x] Principle 1 — complies\n");
-  const doc16 = run(["doctor", "weekly-digest", "--project", w16]);
+  const doc16 = runIn(["doctor", "weekly-digest", "--project", w16]);
   ok(doc16.code === 0 && /readyToAdvance=true/.test(doc16.out) && /▲ traceability — not traced yet — still a later phase's template: tasks\.md/.test(doc16.out) && !/✗ traceability|\(typos\?\)/.test(doc16.out),
     "doctor at the design gate (CLI): the template tasks.md's AC references are deferred (▲ not traced yet), readyToAdvance=true, exit 0");
 
   // bugfix: ticking the root-cause task with Root Cause empty warns; the next refusal says the section is empty (not "do task 2 first").
   // A tasks.md with a root-cause task: the four-task form bugfixes were scaffolded with before the short form (kept in projects).
-  run(["bugfix", "Login crash", "--summary", "Login crashes on accented emails", "--project", w16]);
+  runIn(["bugfix", "Login crash", "--summary", "Login crashes on accented emails", "--project", w16]);
   fs.writeFileSync(at16("login-crash", "tasks.md"), "# Tasks: Login crash\n\n## Phase: Fix\n" +
     "- [ ] 1. [shared] Reproduce the bug reliably and write the steps in bug.md → Reproduction\n  - _Requirements: US-1.AC-1_\n" +
     "- [ ] 2. [shared] Find the root cause with evidence; fill bug.md → Root Cause (no fix yet)\n  - _Requirements: US-1.AC-1_\n" +
     "- [ ] 3. [US1] Write regression test T-01 and watch it fail for the right reason (paste the output); add guard test T-02 (it passes already)\n  - _Requirements: US-1.AC-1_\n  - _Verify: [command that runs T-01]_\n  - _Expect: fail_\n" +
     "- [ ] 4. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n  - _Verify: [full test suite command]_\n");
-  const d2 = run(["done", "login-crash", "2", "--project", w16]);
-  const d3 = run(["done", "login-crash", "3", "--evidence", "red", "--project", w16]);
+  const d2 = runIn(["done", "login-crash", "2", "--project", w16]);
+  const d3 = runIn(["done", "login-crash", "3", "--evidence", "red", "--project", w16]);
   ok(d2.code === 0 && /⚠ Task 2 is ticked, but bug\.md → Root Cause is still empty — write the root cause there/.test(d2.out) &&
     d3.code === 1 && /Task 3 can't be completed yet: bug\.md → Root Cause is still empty — task 2 is ticked, but its deliverable is that section/.test(d3.out) && !/do task 2 first/.test(d3.out),
     "bugfix (CLI): done on the root-cause task with Root Cause empty warns; a later task's refusal names the empty section, never 'do task 2 first' for a ticked task");
@@ -39,9 +39,9 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   // add-track tdd after the requirements exist: rows from the feature's own ACs.
   S16.createFeature(w16, "Order cancel", ["core"]);
   fs.writeFileSync(at16("order-cancel", "requirements.md"), REQ16.replace("### US-1", "### US-1").replace("## Success Criteria", "### US-3 (P2): Notify\n#### Acceptance Criteria (EARS)\n1. **US-3.AC-1** — WHEN a digest bounces THE SYSTEM SHALL flag the account.\n\n## Success Criteria"));
-  const addT16 = run(["add-track", "order-cancel", "tdd", "--project", w16]);
+  const addT16 = runIn(["add-track", "order-cancel", "tdd", "--project", w16]);
   const rows16 = (fs.readFileSync(at16("order-cancel", "test-plan.md"), "utf8").match(/^\| T-\d+ \|[^|]*\|[^|]*\|[^|]*\| ([^|]*) \|/gm) || []).map((r) => r.split("|")[5].trim()).join();
-  ok(addT16.code === 0 && rows16 === "US-1.AC-1,US-1.AC-2,US-3.AC-1" && run(["trace", "order-cancel", "--json", "--project", w16]).out.includes('"phantomAcsInTests": []'),
+  ok(addT16.code === 0 && rows16 === "US-1.AC-1,US-1.AC-2,US-3.AC-1" && runIn(["trace", "order-cancel", "--json", "--project", w16]).out.includes('"phantomAcsInTests": []'),
     "add-track tdd (CLI) on written requirements: one test-plan row per real AC, no phantom template row (got " + rows16 + ")");
 
   // A removed AC: impact --reopen unticks nothing for it (retire), doctor names the change request instead of "typos?".
@@ -53,9 +53,9 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   S16.completeTask(w16, "billing", 2, { summary: "checked" });
   S16.approvePhase(w16, "billing", "requirements", undefined, { force: true });
   fs.writeFileSync(at16("billing", "requirements.md"), REQ16);
-  const im16 = run(["impact", "billing", "--project", w16]);
-  const ro16 = run(["impact", "billing", "--reopen", "--project", w16]);
-  const drB16 = run(["doctor", "billing", "--project", w16]);
+  const im16 = runIn(["impact", "billing", "--project", w16]);
+  const ro16 = runIn(["impact", "billing", "--reopen", "--project", w16]);
+  const drB16 = runIn(["doctor", "billing", "--project", w16]);
   ok(/Removed criteria still cited — US-2\.AC-1 → tasks #2: don't redo those tasks/.test(im16.out) && !/To untick the affected done tasks/.test(im16.out) &&
     ro16.code === 0 && /Change request #1 recorded — nothing unticked: a removed criterion's tasks are not redone/.test(ro16.out) &&
     /- \[x\] 2\. \[US2\] CSV export/.test(fs.readFileSync(at16("billing", "tasks.md"), "utf8")) &&
@@ -67,14 +67,14 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   S16.initProject(ai16, ["ai"], "en");
   S16.createFeature(ai16, "Ticket summary", ["ai"]);
   fs.writeFileSync(path.join(ai16, ".specs", "ticket-summary", "evals", "regression.json"), JSON.stringify({ items: [{ id: "r1", input: "x", expect: { type: "contain", value: "x" } }] }));
-  const ev16 = spawnSync(process.execPath, [CLI, "evals", "ticket-summary", "--dry-run", "--project", ai16], { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "" } });
+  const ev16 = spawnIn(["evals", "ticket-summary", "--dry-run", "--project", ai16], { env: { ...process.env, ANTHROPIC_API_KEY: "" } });
   ok(ev16.status === 1 && /✗ regression\.json — item r1: unknown grader type 'contain' \(use contains \| equals \| regex \| refuse \| judge\)/.test(ev16.stdout) &&
     /Dry run found invalid eval set\(s\)/.test(ev16.stdout) && !/sets are valid/.test(ev16.stdout),
     "evals --dry-run (CLI): a malformed item is an invalid set — exit 1, named with its reason, never 'sets are valid'");
   // --max-items 0 (or a bare / non-numeric one) is a usage error the CLI passes through — exit 2, no 0/0 = 100% and no
   // baseline, even with a key set (nothing is called: it is refused before any set is read).
   fs.rmSync(path.join(ai16, ".specs", "ticket-summary", "evals", "regression.json"));
-  const evMax16 = spawnSync(process.execPath, [CLI, "evals", "ticket-summary", "--max-items", "0", "--set-baseline", "--project", ai16], { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "dummy" } });
+  const evMax16 = spawnIn(["evals", "ticket-summary", "--max-items", "0", "--set-baseline", "--project", ai16], { env: { ...process.env, ANTHROPIC_API_KEY: "dummy" } });
   ok(evMax16.status === 2 && /Invalid argument\(s\): --max-items must be an integer ≥ 1 \(got "0"\)/.test(evMax16.stderr) && !/100\.0%|all sets pass/.test(evMax16.stdout) &&
     !fs.existsSync(path.join(ai16, ".specs", "ticket-summary", "evals", "baseline.json")),
     "evals --max-items 0 (CLI): exit 2 with the argument error — never 0/0 = 100% 'all sets pass', no baseline written");
@@ -84,8 +84,8 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   fs.writeFileSync(stub16, "globalThis.fetch = async () => ({ ok: true, json: async () => ({ content: [{ type: 'text', text: 'ok' }], usage: {} }) });\n");
   const base16 = path.join(ai16, ".specs", "ticket-summary", "evals", "baseline.json");
   const evSw16 = (args, key) => {
-    const r = spawnSync(process.execPath, [CLI, "evals", "ticket-summary", ...args, "--project", ai16],
-      { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: key, NODE_OPTIONS: "--require " + JSON.stringify(stub16) } });
+    const r = spawnIn(["evals", "ticket-summary", ...args, "--project", ai16],
+      { env: { ...process.env, ANTHROPIC_API_KEY: key, NODE_OPTIONS: "--require " + JSON.stringify(stub16) } });
     r.baseline = fs.existsSync(base16);
     try { fs.rmSync(base16); } catch {}
     return r;
@@ -100,8 +100,8 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   // 1.23 review (P1): every flag reaches the harness WHEREVER it stands — `evals --dry-run <f>` dropped it and ran LIVE (paid
   // calls) —; a mistyped switch (--dryrun), a second word and a value flag without its value exit 2 before anything runs; --help
   // prints the usage and runs nothing; a value flag before the feature keeps its value. With a key set (the stub keeps it offline).
-  const evAt16 = (args) => spawnSync(process.execPath, [CLI, ...args, "--project", ai16],
-    { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "dummy", NODE_OPTIONS: "--require " + JSON.stringify(stub16) } });
+  const evAt16 = (args) => spawnIn([...args, "--project", ai16],
+    { env: { ...process.env, ANTHROPIC_API_KEY: "dummy", NODE_OPTIONS: "--require " + JSON.stringify(stub16) } });
   const pos16 = [["evals", "--dry-run", "ticket-summary"], ["--dry-run", "evals", "ticket-summary"]].map(evAt16);
   const typo16 = evAt16(["evals", "ticket-summary", "--dryrun"]), extra16 = evAt16(["evals", "ticket-summary", "extra", "--dry-run"]);
   const noVal16 = evAt16(["evals", "ticket-summary", "--dry-run", "--model"]), model16 = evAt16(["evals", "--model", "claude-x", "ticket-summary", "--dry-run"]);
@@ -115,16 +115,16 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
     JSON.stringify([...pos16, typo16, extra16, noVal16, model16, ...help16].map((r) => [r.status, (r.stdout || "").split("\n")[1] || (r.stdout || "").slice(0, 40), (r.stderr || "").trim().slice(0, 70)])) + ")");
 
   // bug.md evidence in brackets ([object Object], [A-Z]) is content: doctor documents both sections and approve design passes.
-  run(["bugfix", "Profile Name Shows Object", "--summary", "The profile header shows object text", "--project", w16]);
+  runIn(["bugfix", "Profile Name Shows Object", "--summary", "The profile header shows object text", "--project", w16]);
   const bugP16 = at16("profile-name-shows-object", "bug.md");
   // (1.24 review 6, E8: the design gate reads every bug.md slot, as doctor does — Expected / Actual / Fix written too)
   fs.writeFileSync(bugP16, fs.readFileSync(bugP16, "utf8").replace(/## Reproduction\n> \*\*TODO\*\*[^\n]*/, "## Reproduction\n1. Log in.\n2. Open /profile: the header reads [object Object].")
     .replace(/## Root Cause\n> \*\*TODO\*\*[^\n]*/, "## Root Cause\nheader.js interpolates the whole user object, so the browser shows [object Object]; norm() only maps [A-Z].")
     .replace("[correct behavior]", "the user's display name").replace("[what happens — error message, output, log lines]", "the header reads [object Object]")
     .replace(/## Fix\n\[[^\]]*\]/, "## Fix\nInterpolate user.displayName."));
-  const bugDoc16 = run(["doctor", "profile-name-shows-object", "--project", w16]);
-  run(["approve", "profile-name-shows-object", "requirements", "--force", "--project", w16]); // phase by phase: requirements first
-  const bugAp16 = run(["approve", "profile-name-shows-object", "design", "--project", w16]);
+  const bugDoc16 = runIn(["doctor", "profile-name-shows-object", "--project", w16]);
+  runIn(["approve", "profile-name-shows-object", "requirements", "--force", "--project", w16]); // phase by phase: requirements first
+  const bugAp16 = runIn(["approve", "profile-name-shows-object", "design", "--project", w16]);
   ok(/✓ reproduction — reproduction documented/.test(bugDoc16.out) && /✓ root-cause — root cause documented/.test(bugDoc16.out) && !/bug\.md:\d+ \[object Object\]/.test(bugDoc16.out) && bugAp16.code === 0,
     "bugfix (CLI): a Reproduction / Root Cause quoting [object Object] / [A-Z] is documented (doctor ✓) and approve design passes (got " + bugAp16.out.slice(0, 120) + ")");
 
@@ -133,19 +133,19 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   fs.writeFileSync(at16("shop-fence", "requirements.md"), REQ16);
   fs.writeFileSync(at16("shop-fence", "test-plan.md"), "# Test Plan\n\n| ID | AC | File |\n|---|---|---|\n| T-01 | US-1.AC-1 | tests/digest.test.js |\n\n```md\n| T-02 | US-1.AC-2 | tests/skip.test.js |\n```\n");
   fs.writeFileSync(at16("shop-fence", "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Digest\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n");
-  const trF16 = run(["trace", "shop-fence", "--project", w16]);
+  const trF16 = runIn(["trace", "shop-fence", "--project", w16]);
   ok(trF16.code === 1 && /US-1\.AC-2/.test(trF16.out) && !/verdict=pass/i.test(trF16.out),
     "trace (CLI): a fenced example row in test-plan.md is no coverage — the AC it names is reported uncovered, exit 1 (got " + trF16.out.slice(0, 160) + ")");
 
   // 1.21 F3: bugfix --reproduction / --root-cause / --condition / --behaviour prefill bug.md and US-1.AC-1 (= spec_create's prefill);
   // --include-body puts the scaffolds' bodies in the --json result; the prefill on a plain feature is refused (exit 1, nothing made).
-  const bf21 = run(["bugfix", "Coupon twice", "--project", w16, "--summary", "The coupon applies twice", "--reproduction", "Apply PROMO10 twice; the total reads 81",
+  const bf21 = runIn(["bugfix", "Coupon twice", "--project", w16, "--summary", "The coupon applies twice", "--reproduction", "Apply PROMO10 twice; the total reads 81",
     "--root-cause", "applyCoupon() never checks cart.coupons (src/discount.js:12).", "--condition", "the same coupon is applied twice", "--behaviour", "keep one discount",
     "--include-body", "--json"]);
   let j21 = null;
   try { j21 = JSON.parse(bf21.out); } catch { /* reported below */ }
   const bug21 = fs.existsSync(at16("coupon-twice", "bug.md")) ? fs.readFileSync(at16("coupon-twice", "bug.md"), "utf8") : "";
-  const ref21 = run(["create", "Not a bug", "--project", w16, "--root-cause", "x"]);
+  const ref21 = runIn(["create", "Not a bug", "--project", w16, "--root-cause", "x"]);
   ok(bf21.code === 0 && j21 && j21.ok && /Apply PROMO10 twice; the total reads 81/.test(bug21) && /^applyCoupon\(\) never checks/m.test(bug21) &&
     /US-1\.AC-1\*\* — IF the same coupon is applied twice THEN THE SYSTEM SHALL keep one discount$/m.test(j21.bodies["requirements.md"]) && j21.bodies["bug.md"] === bug21 &&
     JSON.stringify(j21.prefilled) === JSON.stringify({ "bug.md": ["reproduction", "rootCause", "behaviour"], "requirements.md": ["condition", "behaviour"] }) &&
@@ -155,10 +155,10 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
 
   // 1.21 review A8: the CLI's refusals name the FLAG the user typed (--root-cause), never the MCP key (rootCause), and the CLI's own
   // way to make a bugfix (the runnable `bugfix` line); a too-long --condition names --condition. MCP keeps its keys (mcp/tests/06-gates.js).
-  const refA8 = run(["create", "Not a bug either", "--project", w16, "--root-cause", "x", "--json"]);
+  const refA8 = runIn(["create", "Not a bug either", "--project", w16, "--root-cause", "x", "--json"]);
   let jA8 = null;
   try { jA8 = JSON.parse(refA8.out); } catch { /* reported below */ }
-  const longA8 = run(["bugfix", "Long cond", "--project", w16, "--condition", "x".repeat(501)]);
+  const longA8 = runIn(["bugfix", "Long cond", "--project", w16, "--condition", "x".repeat(501)]);
   const I = require(path.join(__dirname, "..", "mcp", "lib", "i18n.js"));
   ok(refA8.code === 1 && jA8 && jA8.ok === false && /^--root-cause is a bugfix's input — create it as a bugfix: /.test(jA8.error) && !/rootCause/.test(jA8.error) &&
     jA8.error.includes(I.DEV_SPEC + ' bugfix "<name>" --root-cause') && longA8.code === 1 && /--condition must be one line of at most 500 characters/.test(longA8.out) &&
