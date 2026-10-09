@@ -1504,6 +1504,7 @@ const msg = {
       between: (lo, hi) => `entre ${lo} y ${hi}`,
       atLeastItems: (n) => `con al menos ${n} ${n === 1 ? "elemento" : "elementos"}`,
       unknownArgs: (tool, items, valid) => `Argumento${items.length > 1 ? "s" : ""} desconocido${items.length > 1 ? "s" : ""} para ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (¿quizás ${u.didYouMean}?)` : "")).join(", ")} — no se hizo nada. ${tool} acepta: ${valid}.`,
+      inapplicable: (tool, mode, names, allowed) => `${tool} {${mode}} no admite ${names} — no se hizo nada. Con ${mode} admite: ${allowed || "ningún otro argumento"}.`,
       notObject: "arguments debe ser un objeto JSON.",
       dotdot: "projectDir no puede contener segmentos de ruta '..'.",
       network: (dir) => `projectDir debe ser una carpeta local — una ruta de red o de dispositivo (${dir}) se rechaza, para que una llamada a una herramienta nunca apunte este servidor local a otra máquina; abre el proyecto localmente (o inicia el servidor con él como carpeta de trabajo).`,
@@ -2697,6 +2698,7 @@ const msg = {
       wrote: (file) => `✎ generado ${file}`,
       exportsIsFeature: (dir) => `${dir} es una carpeta de función anterior a que dev-spec reservara el nombre 'exports' (contiene requirements.md / .state.json) — mueve o renombra esa carpeta a mano y vuelve a exportar.`,
       exportsLinked: (rel) => `Me niego a escribir ${rel}: .specs/exports/ o ese fichero es un enlace (simbólico, o una junction) o apunta fuera de .specs/ — sustitúyelo por una carpeta / un fichero normal y vuelve a exportar. No se escribió nada.`,
+      previewHint: (n, rel) => `Una vista previa (los primeros ${n} caracteres del documento, en markdown). write: true (--write) escribe ${rel}; includeBody: true (--include-body) devuelve el documento entero.`,
     },
     rtm: {
       title: "Matriz de trazabilidad",

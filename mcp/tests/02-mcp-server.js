@@ -7,6 +7,10 @@ const fs = require("fs");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
+// 1.26 (the context diet): the size of tools/list in the default mode — measured 43,1xx characters with the clone's CLI path
+// counted as `dev-spec`; ~3% headroom so the gain is kept. Raise it only for a description a model needs.
+const TOOLS_LIST_CAP = 44500;
+
 exports.handshake = true; // this file counts the handshake's assertions — every other process runs it muted
 exports.run = async ({
   ok, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename,
@@ -916,12 +920,12 @@ exports.run = async ({
 
     // S7 — backlog 'remove' is rm's alias on every surface (the enum lists it); the templates description names pt-BR.
     const tl7 = (await rpc("tools/list", {})).result.tools;
-    const bl7 = tl7.find((t) => t.name === "spec_backlog");
+    const bl7 = tl7.find((t) => t.name === "spec_roadmap_edit"); // 1.26: spec_backlog is spec_roadmap_edit {kind: "backlog"}
     const tp7 = tl7.find((t) => t.name === "spec_templates");
-    const rm7 = await rpc("tools/call", { name: "spec_backlog", arguments: { action: "REMOVE", name: "pay", projectDir: p6 } });
+    const rm7 = await rpc("tools/call", { name: "spec_roadmap_edit", arguments: { kind: "backlog", action: "REMOVE", name: "pay", projectDir: p6 } });
     ok(bl7.inputSchema.properties.action.enum.join() === "add,rm,remove,list" && !rm7.result.isError && payload(rm7).backlog.length === 0 &&
       S.backlog(p6, "add", "X").ok && S.backlog(p6, "remove", "x").ok && /\(en \| pt \| pt-BR \| es\)/.test(tp7.description),
-      "full review S7: spec_backlog's action enum lists remove (alias of rm — engine and MCP, case-folded); spec_templates names the pt-BR/ folder (got " +
+      "full review S7: the backlog's action enum (spec_roadmap_edit) lists remove (alias of rm — engine and MCP, case-folded); spec_templates names the pt-BR/ folder (got " +
       JSON.stringify([bl7.inputSchema.properties.action.enum, rm7.result.isError]) + ")");
   }
 
@@ -932,11 +936,12 @@ exports.run = async ({
     // tools/list is what every client that loads its tools up front pays in context on every session: it was ~124k characters
     // (~31k tokens), 29 descriptions past 1,024 characters. The descriptions carry the rules an agent acts on (evidence before
     // claims, approvals are the user's, what a refusal means); the reference detail lives in references/tooling-reference.md.
-    // The runnable CLI path (spec.DEV_SPEC — the clone's location) is counted as the bare `dev-spec`.
-    const toolsJson = js(list.result.tools).split(S.DEV_SPEC).join("dev-spec");
+    // The runnable CLI path (spec.DEV_SPEC — the clone's location; JSON-escaped in the list) is counted as the bare `dev-spec`.
+    // 1.26 (the context diet): 38 tools / 75,909 characters → 32 tools / ~43,000 — the cap keeps the gain (~3% headroom).
+    const toolsJson = js(list.result.tools).split(js(S.DEV_SPEC).slice(1, -1)).join("dev-spec");
     const longDesc = list.result.tools.map((t) => [t.name, t.description.split(S.DEV_SPEC).join("dev-spec").length]).filter(([, n]) => n > 2500);
-    ok(toolsJson.length < 76000 && !longDesc.length && list.result.tools.every((t) => !/\n/.test(t.description)),
-      "1.23 review: tools/list stays compact — under 76,000 characters (was ~124,000), no tool description past 2,500, every one a single line (got " +
+    ok(toolsJson.length < TOOLS_LIST_CAP && !longDesc.length && list.result.tools.every((t) => !/\n/.test(t.description)),
+      "1.26: tools/list stays compact — under " + TOOLS_LIST_CAP + " characters (1.23: ~124,000 → 76,000; 1.26: 32 tools), no tool description past 2,500, every one a single line (got " +
       toolsJson.length + " characters; " + js(longDesc) + ")");
     // A private server with its own env (null removes a variable) and cwd; every line it writes is kept; `onRequest` answers the
     // server's own requests (roots/list).
@@ -1153,7 +1158,7 @@ exports.run = async ({
     { // 1.24 r6 A-I2: every argument error carries a stable code (+ the arguments it names) — the message stays localized
       const p = path.join(tmp, "proj-r6-ai2");
       S.initProject(p, ["core"], "pt");
-      const miss = bodyOf(await call("spec_status", { projectDir: p }));
+      const miss = bodyOf(await call("spec_doctor", { projectDir: p })); // 1.26: spec_status without a name lists every feature
       const inv = bodyOf(await call("spec_complete_task", { name: "x", number: 1.5, evidence: { command: "a", exitCode: "0" }, projectDir: p }));
       const notObj = bodyOf(await rpc("tools/call", { name: "spec_list", arguments: [p] }));
       const dd = bodyOf(await call("spec_list", { projectDir: "../somewhere" }));
@@ -1230,7 +1235,7 @@ exports.run = async ({
 
     { // 1.24 r6 A-I1: a tool's result is compact JSON — the same object without the indentation (~22% of a reply's characters)
       const r = await call("spec_list", { projectDir: path.join(tmp, "proj-r6-a5") });
-      const e = await call("spec_status", { projectDir: path.join(tmp, "proj-r6-a5") });
+      const e = await call("spec_doctor", { projectDir: path.join(tmp, "proj-r6-a5") }); // 1.26: spec_status without a name lists
       const t = r.result.content[0].text, te = e.result.content[0].text;
       ok(!/\n/.test(t) && JSON.stringify(JSON.parse(t)) === t && !/\n/.test(te) && JSON.parse(te).code === "missing-arguments",
         "1.24 r6 A-I1: tool results and argument errors are compact JSON (got " + js([t.slice(0, 80), te.slice(0, 80)]) + ")");

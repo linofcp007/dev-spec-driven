@@ -1163,8 +1163,9 @@ function renderCatalogMd(data, lang, proj) {
   }
   return md + renderCrossAcsMd(data.crossAcs, lang); // 1.16 Q2 (only when there is a pair)
 }
-// spec_catalog {write} / `dev-spec catalog [--write]`: the structure (+ markdown unless writing). Writing never
-// replaces a same-named file dev-spec didn't generate (the roadmap's guard) — the result is then an error.
+// spec_export {format: "catalog", write} / `dev-spec catalog [--write]`: the structure (+ markdown unless writing — 1.26: and unless
+// opts.includeBody is false, the MCP default: the structure carries the same data). Writing never replaces a same-named file
+// dev-spec didn't generate (the roadmap's guard) — the result is then an error.
 function catalog(projectDir, opts = {}) {
   const root = specsRoot(projectDir);
   const file = path.join(root, "SPECS.md");
@@ -1176,7 +1177,7 @@ function catalog(projectDir, opts = {}) {
     if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: E.notGenerated("SPECS.md") };
     writeFileAtomic(file, i18n.portableCli(data.markdown)); // committed: `dev-spec`, never a machine path (1.21 F3)
     res.wrote = true;
-  } else res.markdown = data.markdown;
+  } else if (opts.includeBody !== false) res.markdown = data.markdown;
   return res;
 }
 // Keep SPECS.md current after a mutation — only once it exists and carries the marker. Best-effort.

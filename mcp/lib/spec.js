@@ -74,7 +74,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   guardEnabled, guardLevel, sessionProject, sessionPath, shellWriteTargets, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
   isDevSpecDir, isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
   manageFeature, markdownToHtml, markRoadmapStale, matrixCsv, maybeRefreshCatalog, mdPlainText, refreshStaleRoadmap, ROADMAP_STALE_FILE, roadmapStale, staleGeneratedText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
-  MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
+  MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, templatesLines, upgradeLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
   recordSpecEdit, runStartStamp,
@@ -236,6 +236,7 @@ module.exports = {
   refreshStaleRoadmap, // (projectDir) → { refreshed } — the refresh, once, when stamped (Stop / SessionStart / pre-commit)
   staleGeneratedText, // (projectDir, "ROADMAP.md" | "SPECS.md") → while stamped, the text the refresh would write (in memory), else null — the specs:// resources
   specUpgrade, // spec_upgrade / `dev-spec upgrade [--apply]` / `/spec-upgrade` (audit + safe migrations, .specs/UPGRADE.md)
+  upgradeLines, // 1.26: a specUpgrade() result as the CLI's human report (the result no longer carries its `lines`)
   specVersionStatus, // roadmap.json meta.specVersion vs the engine — the SessionStart upgrade notice
   engineVersion,
   compareSemver,
@@ -270,6 +271,7 @@ module.exports = {
   controlVisible, // …and that command with its control characters as escapes, for the message
 
   templates, // spec_templates / `dev-spec templates [list|init|check]` — the project's own scaffolds in .specs/templates/
+  templatesLines, // 1.26: a templates() result as the CLI's human report (the result no longer carries its `lines`)
   templateKey, // "requirements.md" / "steering/tech" → the template key, or null (the allowlist)
   TEMPLATE_ARTIFACTS,
   trackPacks, // 1.15 — spec_tracks / `dev-spec tracks [list|init <name>|check]`: the project's track packs (.specs/tracks/<name>/)

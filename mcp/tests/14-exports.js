@@ -161,12 +161,12 @@ exports.run = async ({ ok, rpc, payload, S, tmp, shipFeature }) => {
       "markdownToHtml: nested / task / ordered lists, block quotes, escaped fenced code, tables (a '|' inside code stays), emphasis; links keep http(s)/mailto only; images become their alt text; raw HTML is escaped");
 
     // MCP = engine (the same call as the CLI).
-    const mx = payload(await call("spec_export", { name: "checkout", projectDir: xp }));
+    const mx = payload(await call("spec_export", { name: "checkout", includeBody: true, projectDir: xp })); // 1.26: without includeBody, a preview
     const mxBad = await call("spec_export", { name: "checkout", format: "pdf", projectDir: xp });
     const mxw = payload(await call("spec_export", { format: "md", write: true, projectDir: xp }));
     ok(mx.ok && noDate(mx.content) === noDate(S.exportSpecs(xp, { name: "checkout" }).content) && mxBad.result.isError === true && /format/.test(mxBad.result.content[0].text) &&
       mxw.ok && mxw.wrote && fs.existsSync(path.join(xp, ".specs", "exports", "project.md")),
-      "MCP spec_export = the engine call (content, the format enum, write)");
+      "MCP spec_export = the engine call (content with includeBody, the format enum, write)");
   }
 
   { // 1.14 B2.2 — release notes from the specs (spec_changelog): Added / Changed / Fixed since a date or the last notes.
@@ -532,12 +532,12 @@ exports.run = async ({ ok, rpc, payload, S, tmp, shipFeature }) => {
     rmj.meta.milestones = good;
     fs.writeFileSync(rmPath, JSON.stringify(rmj, null, 2));
     // MCP: the tool, its enum, and the same result as the engine (and the cap).
-    const tl = (await rpc("tools/list", {})).result.tools.find((t) => t.name === "spec_milestone") || {};
-    const mAdd = payload(await call("spec_milestone", { action: "ADD", name: "Mcp one", date: "2026-11-02", features: ["beta"], projectDir: mp }));
-    const mList = payload(await call("spec_milestone", { projectDir: mp }));
+    const tl = (await rpc("tools/list", {})).result.tools.find((t) => t.name === "spec_roadmap_edit") || {}; // 1.26: spec_milestone → {kind: "milestone"}
+    const mAdd = payload(await call("spec_roadmap_edit", { kind: "milestone", action: "ADD", name: "Mcp one", date: "2026-11-02", features: ["beta"], projectDir: mp }));
+    const mList = payload(await call("spec_roadmap_edit", { kind: "milestone", projectDir: mp }));
     const eList = S.milestone(mp, "list");
-    const mBad = await call("spec_milestone", { action: "delete", projectDir: mp });
-    const mRm = payload(await call("spec_milestone", { action: "remove", name: "mcp one", projectDir: mp }));
+    const mBad = await call("spec_roadmap_edit", { kind: "milestone", action: "delete", projectDir: mp });
+    const mRm = payload(await call("spec_roadmap_edit", { kind: "milestone", action: "remove", name: "mcp one", projectDir: mp }));
     const cap = JSON.parse(rdf(rmPath));
     cap.meta.milestones = Array.from({ length: 50 }, (_, i) => ({ name: "M" + i, date: "2026-12-01", features: ["beta"] }));
     fs.writeFileSync(rmPath, JSON.stringify(cap, null, 2));
@@ -545,7 +545,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, shipFeature }) => {
     ok(js(tl.inputSchema && tl.inputSchema.properties.action.enum) === js(["add", "rm", "remove", "list"]) && tl.inputSchema.properties.features.type === "array" &&
       mAdd.ok && mAdd.milestone.name === "Mcp one" && (mList.today !== eList.today || js(mList.milestones) === js(eList.milestones)) && mBad.result.isError === true &&
       mRm.ok && mRm.removed === "Mcp one" && capR.ok === false && /at most 50 milestones/.test(capR.error),
-      "1.16 E3: MCP spec_milestone — the action enum (case-folded), add / list / remove = the engine; at most 50 milestones (got " + js([mAdd.message, mRm.message, capR.error]) + ")");
+      "1.16 E3: MCP spec_roadmap_edit {kind: milestone} — the action enum (case-folded), add / list / remove = the engine; at most 50 milestones (got " + js([mAdd.message, mRm.message, capR.error]) + ")");
     // Localized: a PT project's milestones read in Portuguese (the roadmap chrome too).
     const ptp = path.join(tmp, "proj-116e-pt");
     S.initProject(ptp, ["core"], "pt");

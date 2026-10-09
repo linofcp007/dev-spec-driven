@@ -1505,6 +1505,7 @@ const msg = {
       between: (lo, hi) => `entre ${lo} e ${hi}`,
       atLeastItems: (n) => `com pelo menos ${n} ${n === 1 ? "item" : "itens"}`,
       unknownArgs: (tool, items, valid) => `Argumento${items.length > 1 ? "s" : ""} desconhecido${items.length > 1 ? "s" : ""} para ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (será ${u.didYouMean}?)` : "")).join(", ")} — nada foi feito. ${tool} aceita: ${valid}.`,
+      inapplicable: (tool, mode, names, allowed) => `${tool} {${mode}} não aceita ${names} — nada foi feito. Com ${mode} aceita: ${allowed || "nenhum outro argumento"}.`,
       notObject: "arguments tem de ser um objeto JSON.",
       dotdot: "projectDir não pode conter segmentos de caminho '..'.",
       network: (dir) => `projectDir tem de ser uma pasta local — um caminho de rede ou de dispositivo (${dir}) é recusado, para que uma chamada de ferramenta nunca aponte este servidor local para outra máquina; abre o projeto localmente (ou arranca o servidor com ele como pasta de trabalho).`,
@@ -2699,6 +2700,7 @@ const msg = {
       wrote: (file) => `✎ gerado ${file}`,
       exportsIsFeature: (dir) => `${dir} é uma pasta de feature anterior à reserva do nome 'exports' pelo dev-spec (contém requirements.md / .state.json) — move ou renomeia essa pasta à mão e volta a exportar.`,
       exportsLinked: (rel) => `Recusei escrever ${rel}: .specs/exports/ ou esse ficheiro é uma ligação (simbólica, ou uma junction) ou aponta para fora de .specs/ — substitui-a por uma pasta / um ficheiro normal e volta a exportar. Nada foi escrito.`,
+      previewHint: (n, rel) => `Uma pré-visualização (os primeiros ${n} caracteres do documento, em markdown). write: true (--write) escreve ${rel}; includeBody: true (--include-body) devolve o documento inteiro.`,
     },
     rtm: {
       title: "Matriz de rastreabilidade",

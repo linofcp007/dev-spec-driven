@@ -1558,6 +1558,8 @@ const msg = {
       atLeastItems: (n) => `with at least ${n} item${n === 1 ? "" : "s"}`, // 1.25.1: a schema `minItems` (spec_append_tasks.tasks)
       // 1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
       unknownArgs: (tool, items, valid) => `Unknown argument${items.length > 1 ? "s" : ""} for ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (did you mean ${u.didYouMean}?)` : "")).join(", ")} — nothing was done. ${tool} takes: ${valid}.`,
+      // 1.26: an argument of another mode of a tool that folded several into one (spec_roadmap_edit kind, spec_export format, spec_scan coverage)
+      inapplicable: (tool, mode, names, allowed) => `${tool} {${mode}} does not take ${names} — nothing was done. With ${mode} it takes: ${allowed || "no other argument"}.`,
       notObject: "arguments must be a JSON object.",
       dotdot: "projectDir must not contain '..' path segments.",
       network: (dir) => `projectDir must be a local folder — a network or device path (${dir}) is refused, so a tool call can never point this local server at another machine; open the project locally (or start the server with it as the working directory).`,
@@ -2849,6 +2851,8 @@ const msg = {
       wrote: (file) => `✎ wrote ${file}`,
       exportsIsFeature: (dir) => `${dir} is a feature folder from before dev-spec reserved the name 'exports' (it holds requirements.md / .state.json) — move or rename that folder by hand, then export again.`,
       exportsLinked: (rel) => `Refused to write ${rel}: .specs/exports/ or that file is a link (a symbolic link, a junction) or resolves outside .specs/ — replace it with a plain folder / file, then export again. Nothing was written.`,
+      // 1.26: html / md without write — a preview, not the whole document (an agent paid ~18k characters for a template-only feature)
+      previewHint: (n, rel) => `A preview (the document's first ${n} characters, as markdown). write: true (--write) writes ${rel}; includeBody: true (--include-body) returns the whole document.`,
     },
     // Requirements traceability matrix (trace_check {matrix} / `dev-spec trace --matrix | --csv` / spec_export {format: "csv"}):
     // labels only — the IDs, the kind column (AC / EC / NFR / SC) and the JSON codes (status, gaps, reason) stay English.

@@ -99,7 +99,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
     reqOf(q2, "beta", "1. **US-1.AC-1** — WHEN a login fails 3 times THE SYSTEM SHALL lock the account for 15 minutes\n2. **US-1.AC-2** — WHEN users sign up THE SYSTEM SHALL send a welcome email to each user\n" +
       "3. **US-1.AC-3** — THE SYSTEM SHALL NOT store the card number encrypted at rest\n4. **US-1.AC-4** — WHEN a user uploads an avatar image THE SYSTEM SHALL reject files larger than 2 MB\n");
     reqOf(q2, "gamma", "1. **US-1.AC-1** — WHEN the report is exported THE SYSTEM SHALL produce a CSV file\n");
-    const x2 = await call("spec_catalog", { projectDir: q2 });
+    const x2 = await call("spec_export", { format: "catalog", includeBody: true, projectDir: q2 }); // 1.26: spec_catalog → spec_export {format: "catalog"} (the markdown with includeBody)
     const pr = (x2.p.crossAcs || { pairs: [] }).pairs.map((p) => [p.kind, p.reason, p.a.feature + "/" + p.a.id, p.b.feature + "/" + p.b.id]);
     const dAl = qChecks(q2, "alpha").find((c) => c.id === "cross-feature-acs") || {};
     const dBe = qChecks(q2, "beta").find((c) => c.id === "cross-feature-acs") || {};
@@ -109,7 +109,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       /- ⚡ alpha\/US-1\.AC-3 ↔ beta\/US-1\.AC-3 \(possible conflict: SHALL vs SHALL NOT, 100% alike\)/.test(x2.p.markdown) &&
       dAl.status === "warn" && /^3 criterion pair\(s\)/.test(dAl.detail) && /US-1\.AC-1 ↔ beta\/US-1\.AC-1 \(possible conflict: different numbers 5\/15 ↔ 3\/15/.test(dAl.detail) &&
       /US-1\.AC-3 ↔ alpha\/US-1\.AC-3/.test(dBe.detail || "") && !qChecks(q2, "gamma").length,
-      "1.16 Q2 (EN): spec_catalog crossAcs — a different-numbers conflict, a near-duplicate (plural / 'each' folded), a SHALL vs SHALL NOT conflict; the upload pair with different triggers is none; SPECS.md section; doctor warns cross-feature-acs on both features naming the other's AC; gamma has none (got " + js(pr) + ")");
+      "1.16 Q2 (EN): the catalog's crossAcs (spec_export {format: catalog}) — a different-numbers conflict, a near-duplicate (plural / 'each' folded), a SHALL vs SHALL NOT conflict; the upload pair with different triggers is none; SPECS.md section; doctor warns cross-feature-acs on both features naming the other's AC; gamma has none (got " + js(pr) + ")");
     // PT / ES: accents folded, NÃO DEVE / NO DEBE, PT plural "-es"/"-s".
     const q2pt = qDir("q2pt");
     S.initProject(q2pt, ["core"], "pt");

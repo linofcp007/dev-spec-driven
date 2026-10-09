@@ -678,9 +678,9 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, list, __di
       "createFeature stores createdAt (ISO) in the new .state.json");
     ok(["spec_impact", "spec_metrics"].every((t) => list.result.tools.some((x) => x.name === t)), "tools/list advertises spec_impact and spec_metrics");
     const mtDesc = (list.result.tools.find((t) => t.name === "spec_metrics") || {}).description || "";
-    ok(/finished \(the earliest of the first execution approval and the finish spec_finish \{write\}/.test(mtDesc) && !/finished \(execution approved\)/.test(mtDesc) &&
-      /test-plan\/eval-plan → tests → tasks/.test(mtDesc),
-      "spec_metrics' description says what the engine does: finished = earliest of the execution approval and the spec_finish {write} record; Phase 4 'tests' is a measured phase");
+    // 1.26: the description says what the tool measures; the phase list and finished's exact rule are references/tooling-reference.md's
+    ok(/each phase's first approval, to complete and to finished/.test(mtDesc) && !/finished \(execution approved\)/.test(mtDesc),
+      "spec_metrics' description says what the engine does — the lead time to each phase's first approval, to complete and to finished (never 'finished (execution approved)')");
 
     // Fixture — CRLF requirements and tasks (Windows editors), a test plan and a design that cite the ACs.
     const reqA = ["# Feature: Drafts", "", "## Summary", "Save drafts.", "", "### US-1 (P1 — MVP): Save drafts", "", "#### Acceptance Criteria (EARS)",

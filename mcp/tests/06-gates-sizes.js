@@ -611,7 +611,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     ok(nf.ok === false && /Task 9 not found in change\.md/.test(nf.error) && app.ok && app.file === "change.md" && /^change\.md changed after its approval/.test(app.note) &&
       phantom.ok === false && /not in change\.md/.test(phantom.error) && stop.block === true && /\.specs\/footer\/change\.md \(task 1 first\)/.test(stop.reason) &&
       earsMid.status === "fail" && /^change\.md cites AC IDs \(US-1\.AC-1\)/.test(earsMid.detail) &&
-      row.status === "template" && row.filled === false && /\| change \|/.test(tpl.inputSchema.properties.artifact.description) && /spike-tasks or change \(change\.md/.test(tpl.description) &&
+      row.status === "template" && row.filled === false && /\bchange\b/.test(tpl.inputSchema.properties.artifact.description) && S.templates(p, "list").templates.some((x) => x.artifact === "change" && x.file === "change.md") &&
       /a track \(\+sec\) makes it a feature of size s/.test(E.sizes.changeTracks("+sec")) && !/\ba \[/.test(E.sizes.coveredComment("[SaaS] Observability")) &&
       /um track \(\+sec\) faz dela/.test(S.msg("pt").sizes.changeTracks("+sec")) && /un track \(\+sec\) lo convierte/.test(S.msg("es").sizes.changeTracks("+sec")),
       "1.21 review C10: a change's messages name change.md — task not found, append-tasks (file, 'change.md changed after its approval', phantom 'not in change.md'), the stop gate ('read … .specs/<f>/change.md'), EARS 'change.md cites AC IDs'; spec_status gives an unsized row its status ('template', as doctor); spec_templates lists 'change'; 'a track (+sec) makes it' (EN / PT / ES) (got " +

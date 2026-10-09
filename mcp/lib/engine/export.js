@@ -4,7 +4,8 @@
  * dev-spec-driven engine — exports: the stakeholder document, Gherkin, tracker CSV, release notes, milestones.
  * spec_export's documents (offline HTML or markdown: a zero-dep renderer that escapes every text run, the feature /
  * project document model), EARS criteria as Gherkin scenarios, tasks as tracker CSV rows (jira | linear),
- * spec_changelog (from the spec data only) and spec_milestone (roadmap.json meta.milestones).
+ * the release notes (spec_export {format: "changelog"} — from the spec data only) and the milestones (spec_roadmap_edit
+ * {kind: "milestone"} — roadmap.json meta.milestones).
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -24,7 +25,7 @@ let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM
   specsRoot, specsWriteContained, SPIKE_FILE, spikeInfo, stateFromFile, statePath, statusFeature, storyContext, stripEnd, stripEnds,
   stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks, taskProse, taskSize, timeOf, trackAcIds,
   trackLabel, trackMarker, verificationStatus, withoutTaskMarkers, withRoadmapLock, writeFileAtomic, writeRoadmap,
-  wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr;
+  wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr, catalog;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR,
   buildTraceMatrix, catalogData, changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, dayOf, today,
   designSections, detectPhase, detectTracks, dirKey, existingFeature, extractAcIds, extractSection, fcDay, fcIso,
@@ -36,7 +37,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
   sectionFirstParagraph, sha1Hex, SIZE_POINTS, slugify, specsRoot, specsWriteContained, SPIKE_FILE, spikeInfo, stateFromFile, statePath,
   statusFeature, storyContext, stripEnd, stripEnds, stripHtmlComments, supersededByIndex, supersedesMarkers, taskBlocks,
   taskProse, taskSize, timeOf, trackAcIds, trackLabel, trackMarker, verificationStatus, withoutTaskMarkers,
-  withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr } = E); }
+  withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr, catalog } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 B2 — stakeholder export (spec_export) · release notes from the specs (spec_changelog)
@@ -45,8 +46,12 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
 // .specs/exports/ holds spec_export's documents: a reserved name (RESERVED_SLUGS), never a feature folder.
 const EXPORT_DIR = "exports";
 // csv (1.14 F5): the requirements traceability matrix; 1.16 E1 gherkin, E2 jira / linear; 1.25 adr: the decision log as MADR files
-// (decisions.js — exportAdr)
-const EXPORT_FORMATS = ["html", "md", "csv", "gherkin", "jira", "linear", "adr"];
+// (decisions.js — exportAdr); 1.26 catalog (SPECS.md — catalog(), finish.js) and changelog (the release notes — changelog() below):
+// the two documents spec_catalog / spec_changelog returned before spec_export took them as formats.
+const EXPORT_FORMATS = ["html", "md", "csv", "gherkin", "jira", "linear", "adr", "catalog", "changelog"];
+// 1.26: html / md without write and without includeBody — a markdown preview of the document, not the document (an 18.5k-character
+// HTML for a template-only feature landed in the agent's context on every call): its first EXPORT_PREVIEW_CHARS characters.
+const EXPORT_PREVIEW_CHARS = 1500;
 const SUMMARY_SYN = ["summary", "resumo", "resumen"];
 const CRITERIA_SYN = ["acceptance criteria", "critérios de aceitação", "criterios de aceitacao", "critérios de aceite", "criterios de aceptación", "criterios de aceptacion"]; // a change's criteria (1.21 review C5)
 const SUCCESS_SYN = ["success criteria", "critérios de sucesso", "criterios de sucesso", "criterios de éxito", "criterios de exito"];
@@ -633,6 +638,9 @@ ${EXPORT_JS}
 // matrix of the feature (the project: of every active feature) as .specs/exports/<slug>.rtm.csv (project.rtm.csv;
 // project.feature.rtm.csv) — matrixCsv's document form: UTF-8 BOM, the marker as its last record. 1.16: 'gherkin' (exportGherkin),
 // 'jira' | 'linear' (trackerCsv); 1.25: 'adr' — the decision log as MADR files under .specs/exports/adr/ (exportAdr, decisions.js).
+// 1.26: 'catalog' → catalog() and 'changelog' → changelog() — the very results (and --json) of `dev-spec catalog` / `changelog`;
+// opts.includeBody: false (the MCP default — the surfaces pass it) — html / md return {bytes, preview, hint} instead of `content`,
+// catalog / changelog leave their markdown out (the structure carries the same data). Omitted: the whole document (callers in code).
 function exportSpecs(projectDir, opts = {}) {
   const pl = projectLang(projectDir);
   const fmt = opts.format == null || String(opts.format).trim() === "" ? "html" : String(opts.format).trim().toLowerCase();
@@ -640,6 +648,8 @@ function exportSpecs(projectDir, opts = {}) {
     const A = i18n.msg(pl).args;
     return { ok: false, error: A.invalid(A.item("format", A.oneOf(EXPORT_FORMATS.join(", ")), JSON.stringify(String(opts.format)))) };
   }
+  if (fmt === "catalog") return catalog(projectDir, { write: opts.write === true, includeBody: opts.includeBody });
+  if (fmt === "changelog") return changelog(projectDir, { since: opts.since, milestone: opts.milestone, write: opts.write === true, includeBody: opts.includeBody });
   const root = specsRoot(projectDir);
   if (fmt === "gherkin") return exportGherkin(projectDir, opts, pl);
   if (fmt === "adr") return exportAdr(projectDir, opts, pl); // 1.25: one MADR file per decision (decisions.js)
@@ -672,6 +682,16 @@ function exportSpecs(projectDir, opts = {}) {
   const res = { ok: true, scope: doc.scope, format: fmt, lang: doc.lang, file, wrote: false };
   if (doc.scope === "feature") res.feature = doc.feature; else res.features = doc.features;
   if (tracker) res.records = doc.records.length; // work items: features + stories + tasks
+  if (!opts.write && opts.includeBody === false && (fmt === "html" || fmt === "md")) {
+    // 1.26: the preview reads as text whatever the format — the markdown rendering of the same document model (an HTML document
+    // opens with its stylesheet: its first characters say nothing about the spec)
+    const md = fmt === "md" ? content : exportMd(doc);
+    let cut = Math.min(md.length, EXPORT_PREVIEW_CHARS);
+    const last = md.charCodeAt(cut - 1);
+    if (cut < md.length && last >= 0xd800 && last <= 0xdbff) cut--; // never half a surrogate pair
+    const rel = ".specs/" + EXPORT_DIR + "/" + base + "." + ext;
+    return { ...res, bytes: Buffer.byteLength(content, "utf8"), preview: md.slice(0, cut), truncated: cut < md.length, hint: i18n.msg(doc.lang).stakeholderExport.previewHint(EXPORT_PREVIEW_CHARS, rel) };
+  }
   if (!opts.write) { res.content = content; return res; }
   const exDir = path.dirname(file);
   // 1.22 review — never through a link: .specs/exports/ (or the document) linked or resolving outside .specs/ is refused
@@ -1318,7 +1338,7 @@ function changelog(projectDir, opts = {}) {
   const res = { ok: true, lang, since: sinceIso, sinceSource, generatedAt: now, added: d.added, changed: d.changed, fixed: d.fixed, counts, file, wrote: false };
   if (ms) res.milestone = { name: ms.name, date: ms.date, features: ms.features.slice(), ...(ms.archived ? { archived: ms.archived.slice() } : {}) };
   if (note) res.note = note;
-  if (!opts.write) return { ...res, markdown };
+  if (!opts.write) return opts.includeBody === false ? res : { ...res, markdown }; // 1.26: the markdown only on request (spec_export {includeBody})
   if (!fs.existsSync(root)) return { ...res, ok: false, error: M.err.noSpecs(root) };
   if (!counts.added && !counts.changed && !counts.fixed) return { ...res, note: (ms ? M.milestone.nothingToWrite : N.nothingToWrite)(".specs/" + fileName) };
   const w = withRoadmapLock(projectDir, () => {
