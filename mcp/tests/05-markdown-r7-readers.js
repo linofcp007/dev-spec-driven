@@ -56,4 +56,24 @@ exports.run = async ({ ok, S, tmp, require }) => {
     ok(js(got) === js(["missing", "missing", "filled", "filled", "filled", "filled", "filled", "filled"]),
       "1.25.1 (4): an unmarked '## Fallbacks' (a payment retry) no longer answers [AI] Fallback & Degradation; '## [AI] Fallbacks', a '### Fallback' under an [AI] heading and the full name (EN / PT / ES, 'Section 7:') do (got " + js(got) + ")");
   }
+
+  { // 1.25.1 (5): an empty / ellipsis bracket is a slot only as a field's whole value — never in a criterion's prose
+    const rep = (l) => E.placeholderReport(l).map((p) => p.text);
+    const prose = ["- **US-1.AC-1** — WHEN the list is empty THE SYSTEM SHALL return HTTP 200 with an empty array []",
+      "- **US-1.AC-2** — WHEN a line arrives THE SYSTEM SHALL append [...] to the log", "returns a []string", "x = []"].filter((l) => rep(l).length);
+    const slots = ["- **Test runner:** []", "- []", "1. []", "- Secret store: [] — never in code", "| T-01 | [] |", "- Baseline (date/score): [ ]",
+      "- SAST: [] · dependency audit: []", "Notes: [...]", "- [...]", "- [ ] []"].filter((l) => !rep(l).length);
+    ok(prose.length === 0 && slots.length === 0 && rep("- SAST: [] · dependency audit: []").length === 2,
+      "1.25.1 (5): '[]' / '[...]' in a criterion's prose (an empty array, an append, a Go []string) is the user's text; the templates' slots — a list item's, a label's value after its colon, a table cell's — are still placeholders (prose read as slots: " + js(prose) + ", slots missed: " + js(slots) + ")");
+    const p = fresh("empty-array");
+    const f = S.createFeature(p, "Orders", ["tdd"], "Orders", null, "en");
+    put(path.join(f.dir, "requirements.md"), ["# Requirements: Orders", "", "## Summary", "List orders.", "", "## User Stories", "", "### US-1 (P1): List orders", "",
+      "**As a** customer, **I want** my orders listed, **so that** I can track them.", "", "#### Acceptance Criteria (EARS)",
+      "- **US-1.AC-1** — WHEN a customer with no orders lists them, THE SYSTEM SHALL return HTTP 200 with an empty array [].",
+      "- **US-1.AC-2** — WHEN an order is placed, THE SYSTEM SHALL append [...] to the customer's history.", ""].join("\n"));
+    const ph = S.specDoctor(p, f.slug).checks.find((c) => c.id === "placeholders");
+    const ears = S.earsValidate(fs.readFileSync(path.join(f.dir, "requirements.md"), "utf8"));
+    ok(ph && !/requirements\.md/.test(ph.detail || "") && !(ears.issues || []).some((i) => i.code === "placeholder"),
+      "1.25.1 (5): doctor's placeholders and EARS no longer read 'an empty array []' / 'append [...]' as template slots (got " + js([ph, (ears.issues || []).map((i) => i.code)]) + ")");
+  }
 };

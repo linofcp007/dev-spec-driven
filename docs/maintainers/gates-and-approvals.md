@@ -17,6 +17,11 @@ flows, the bugfix kind.
   templates' slots (1.14 — see Project templates) — and the `> **TODO**`
   sentinel. Everything else in brackets is the user's content: `[free: 60, pro: 600]`, `[admin, billing-manager, read
   only]`, `[10 MB, 25 MB for pro]` (1.13's shape heuristics refused those and blocked upgraded, finished 1.12 specs).
+  **1.25.1 — an empty / ellipsis bracket by its place:** `[]` / `[ ]` (the corpus key `""`) and `[...]` / `[…]` are slots only as
+  a field's WHOLE value, where every template writes them (`bracketPlaceholders()` → `wholeValueAt()`): the line's own value after a
+  list marker / checkbox / quote ("- []", "1. []"), a label's after its colon ("- **Test runner:** []", "Secret store: [] — …"), a
+  table cell's or an item of a " · " field list — never glued to the text after it (`[]string`). "THE SYSTEM SHALL return HTTP 200
+  with an empty array []" and "… append [...]" were placeholders (EARS warned, doctor failed, the approval was refused).
   `scanBrackets()` walks outermost first and descends into a non-placeholder group, so a half-edited template sentence
   still reports the `[N]` left inside it. Syntax is skipped whole (links, reference links, footnotes, callouts, wiki
   links, glued indexing `x[0]`, checkboxes) and so are stable tags/IDs, `[NEEDS CLARIFICATION]` and the legacy
