@@ -1107,7 +1107,7 @@ exports.run = async ({
       });
       const callP = async (name, args) => bodyOf(await req("tools/call", { name, arguments: args }));
       const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
-      return { req, call: callP, asked, stop, init: (caps) => req("initialize", { protocolVersion: "2025-06-18", capabilities: caps || {} }) };
+      return { req, call: callP, asked, stop, write, init: (caps) => req("initialize", { protocolVersion: "2025-06-18", capabilities: caps || {} }) };
     };
 
     { // 1.24 r6 A1: an unknown / misspelt top-level argument is refused before anything runs — code unknown-argument, a did-you-mean
@@ -1259,6 +1259,98 @@ exports.run = async ({
       ok(busy.ok === false && busy.busy === true && waited >= 1500 && waited < 8000 && busy2.busy === true && waited2 < 1500 && untouched,
         "1.24 r6 A6: an MCP call waits ~2 s for a feature lock another live process holds (DEV_SPEC_LOCK_WAIT_MS unset), then answers busy — the server froze 10 s; an explicit DEV_SPEC_LOCK_WAIT_MS still wins (got " +
         js([busy.busy, waited, busy2.busy, waited2, untouched]) + ")");
+    }
+
+    { // 1.25.1 (review 7): a misspelt NESTED key is refused like a top-level one (path + did-you-mean), a nested required key and an
+      // array's minItems are checked before the engine — `verfy` appended a task with no _Verify:_ that then ticked "verified"
+      const p = path.join(tmp, "proj-r7-nested");
+      S.initProject(p, ["core"], "en", { checks: { test: "npm test" } });
+      const f = S.createFeature(p, "alpha", ["core"]);
+      const tasksBefore = fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8");
+      const verfy = bodyOf(await call("spec_append_tasks", { name: "alpha", tasks: [{ text: "x", verfy: "npm test", expect_fail: true }], projectDir: p }));
+      const none = bodyOf(await call("spec_append_tasks", { name: "alpha", tasks: [], projectDir: p }));
+      const noText = bodyOf(await call("spec_append_tasks", { name: "alpha", tasks: [{ verify: "npm test" }], projectDir: p }));
+      const sumary = bodyOf(await call("spec_finish", { name: "alpha", evidence: [{ name: "test", command: "npm test", exitCode: 0, sumary: "x" }], projectDir: p }));
+      const empty = bodyOf(await call("spec_finish", { name: "alpha", evidence: [{}], projectDir: p }));
+      const comand = bodyOf(await call("spec_complete_task", { name: "alpha", number: 1, evidence: { comand: "x", exitCode: 0 }, projectDir: p }));
+      const anyKey = bodyOf(await call("spec_init", { checks: { lint: "npm run lint" }, projectDir: p })); // additionalProperties: any name
+      const nulls = bodyOf(await call("spec_append_tasks", { name: "alpha", tasks: [{ text: "ok task", verify: "npm test", story: null }], projectDir: p }));
+      const ptMsg = txt(() => I.msg("pt").args.atLeastItems(1)), esMsg = txt(() => I.msg("es").args.atLeastItems(2));
+      ok(verfy.code === "unknown-argument" && js(verfy.unknown) === js([{ argument: "tasks[0].verfy", didYouMean: "tasks[0].verify" }, { argument: "tasks[0].expect_fail", didYouMean: "tasks[0].expectFail" }]) &&
+        /spec_append_tasks takes: tasks\[\] \{text, requirements, implements, verify/.test(verfy.error) &&
+        none.code === "invalid-arguments" && js(none.invalid) === '["tasks"]' && /with at least 1 item \(got \[\]\)/.test(none.error) &&
+        noText.code === "missing-arguments" && js(noText.missing) === '["tasks[0].text"]' &&
+        sumary.code === "unknown-argument" && sumary.unknown[0].didYouMean === "evidence[0].summary" &&
+        empty.code === "missing-arguments" && js(empty.missing) === '["evidence[0].name","evidence[0].command","evidence[0].exitCode"]' &&
+        comand.code === "unknown-argument" && comand.unknown[0].argument === "evidence.comand" && comand.unknown[0].didYouMean === "evidence.command" &&
+        anyKey.ok !== false && anyKey.checks.lint === "npm run lint" && nulls.ok === true &&
+        /^com pelo menos 1 item$/.test(ptMsg) && /^con al menos 2 elementos$/.test(esMsg) &&
+        list.result.tools.find((t) => t.name === "spec_finish").inputSchema.properties.evidence.items.required.join() === "name,command,exitCode" &&
+        list.result.tools.find((t) => t.name === "spec_append_tasks").inputSchema.properties.tasks.minItems === 1,
+        "1.25.1 r7: nested keys — tasks[0].verfy / evidence[0].sumary / evidence.comand refused (unknown-argument, path + did-you-mean, the keys that object takes); tasks: [] (minItems) and a nested required key (tasks[0].text, evidence[0] {name, command, exitCode}) refused before the engine; an additionalProperties object and a null nested key pass (got " +
+        js([verfy.unknown, none.error, noText.missing, sumary.unknown, empty.missing, comand.unknown, anyKey.ok, nulls.ok, ptMsg, esMsg]) + ")");
+      ok(fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8").split("\n").filter((l) => /^- \[ \] \d+\./.test(l)).length ===
+        tasksBefore.split("\n").filter((l) => /^- \[ \] \d+\./.test(l)).length + 1, "1.25.1 r7: of those calls only the valid append wrote a task");
+    }
+
+    { // 1.25.1 (review 7): a projectDir starting with ~ is the home folder (a JSON argument is never expanded; PowerShell 5.1 passes ~
+      // as typed) — "~/zz" made a folder literally named "~" in the server's cwd; the engine's resolveProjectDir expands it too (env)
+      const home = path.join(tmp, "proj-r7-home-tilde"), cwd = path.join(tmp, "proj-r7-tilde-cwd");
+      for (const d of [home, cwd]) fs.mkdirSync(d, { recursive: true });
+      const s = srv({ SPEC_PROJECT_DIR: null, CLAUDE_PROJECT_DIR: null, HOME: home, USERPROFILE: home }, cwd);
+      await s.init();
+      const made = await s.call("spec_init", { tracks: ["core"], projectDir: "~/zz" });
+      const back = await s.call("spec_create", { name: "alpha", tracks: ["core"], projectDir: "~" + path.sep + "zz" });
+      const listed = await s.call("spec_list", { projectDir: "~/zz" });
+      await s.stop();
+      const E = require("./lib/engine/index.js");
+      ok(made.ok !== false && same(made.specsDir, path.join(home, "zz", ".specs")) && back.ok && listed.features && listed.features.length === 1 &&
+        fs.readdirSync(cwd).length === 0 && E.expandHome("~user/x") === "~user/x" && E.expandHome("a/~") === "a/~" &&
+        same(E.expandHome("~"), require("os").homedir()),
+        "1.25.1 r7: projectDir ~/zz and ~\\zz name the home folder's zz (spec_init created it there, create / list found it) — nothing named '~' in the server's cwd; ~user and a later ~ stay as written (got " +
+        js([made.specsDir, back.ok, listed.features && listed.features.length, fs.readdirSync(cwd)]) + ")");
+    }
+
+    { // 1.25.1 (review 7): a roots/list answer that comes after the timeout still sets the default project (it was dropped: the cwd
+      // stayed the default for the whole session); the timed-out request is not cancelled, and the client is asked once
+      const rootDir = path.join(tmp, "proj-r7-late-root"), cwd = path.join(tmp, "proj-r7-late-cwd");
+      S.initProject(rootDir, ["core"], "en");
+      S.createFeature(rootDir, "from-late-root", ["core"]);
+      fs.mkdirSync(cwd, { recursive: true });
+      let pendingId = null;
+      const s = srv({ SPEC_PROJECT_DIR: null, CLAUDE_PROJECT_DIR: null, DEV_SPEC_ROOTS_TIMEOUT_MS: "300" }, cwd, (m) => { if (m.method === "roots/list") pendingId = m.id; return null; });
+      await s.init({ roots: { listChanged: true } });
+      const t0 = Date.now();
+      const before = await s.call("spec_list", {}); // waits the 300 ms, then the cwd
+      const waited = Date.now() - t0;
+      s.write({ jsonrpc: "2.0", id: pendingId, result: { roots: [{ uri: fileUri(rootDir) }] } }); // the late answer
+      await new Promise((r) => setTimeout(r, 150));
+      const after = await s.call("spec_list", {});
+      const asked = s.asked.length; // server→client requests seen (a notifications/cancelled has no id: not counted)
+      await s.stop();
+      ok(pendingId !== null && waited >= 250 && same(before.specsDir, path.join(cwd, ".specs")) && same(after.specsDir, path.join(rootDir, ".specs")) &&
+        after.features.length === 1 && asked === 1,
+        "1.25.1 r7: a roots/list answer after DEV_SPEC_ROOTS_TIMEOUT_MS still sets the default project — the calls before it used the cwd, the ones after it the root; one roots/list asked (got " +
+        js([pendingId, waited, before.specsDir, after.specsDir, asked]) + ")");
+    }
+
+    { // 1.25.1 (review 7): the feature resolver's refusals carry a stable code on every tool (feature-not-found was {ok: false, error} alone)
+      const p = path.join(tmp, "proj-r7-codes");
+      S.initProject(p, ["core"], "en");
+      const res = [];
+      for (const [tool, args] of [["spec_status", { name: "nope" }], ["spec_doctor", { name: "nope" }], ["spec_complete_task", { name: "nope", number: 1 }],
+        ["spec_approve", { name: "nope", phase: "requirements" }], ["spec_task_brief", { name: "nope" }], ["spec_drift", { name: "nope" }], ["spec_log", { name: "nope", gitLog: "" }],
+        ["spec_feature", { action: "archive", name: "nope" }], ["spec_status", { name: "..." }], ["spec_status", { name: "steering" }]]) res.push([tool, bodyOf(await call(tool, Object.assign({ projectDir: p }, args)))]);
+      const codes = res.map(([t, r]) => t + ":" + r.code);
+      ok(res.slice(0, 8).every(([, r]) => r.ok === false && r.code === "feature-not-found") && res[8][1].code === "feature-name-invalid" && res[9][1].code === "feature-name-reserved",
+        "1.25.1 r7: a feature the resolver doesn't find answers code feature-not-found on every tool (an unusable name feature-name-invalid, a reserved one feature-name-reserved) — the CLI's --json prints the same result (got " + js(codes) + ")");
+    }
+
+    { // 1.25.1 (review 7): the initialize instructions name spec_next_action (clients without the skill) and claim only what holds
+      const ins = (await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })).result.instructions;
+      ok(/spec_next_action \{name\}/.test(ins) && /where am I \/ what now/.test(ins) && !/All file ops are local to the project's \.specs\/ directory/.test(ins) &&
+        /writes stay in the project's \.specs\/, reads inside the project/.test(ins) && /never a hidden folder or a non-document file/.test(ins),
+        "1.25.1 r7: initialize's instructions point at spec_next_action for 'where am I / what now?' and say what is local (writes in .specs/, reads inside the project — spec_import's limits) instead of 'All file ops are local to .specs/' (got " + js(ins.slice(0, 200)) + ")");
     }
   }
 };

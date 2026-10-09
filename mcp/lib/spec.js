@@ -80,7 +80,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   recordSpecEdit, runStartStamp,
   parseGitLog, parseTasks, parseTracks, phasePercent, PHASES, placeholderKey, placeholderReport, planBridge, planPaths,
   posixPwshScript, posixShellSyntax, projectChecks, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
-  renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, unexpandedVar, resolveRunShell, resolveTask, restoreFeature,
+  renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, unexpandedVar, expandHome, resolveRunShell, resolveTask, restoreFeature,
   roadmap, roadmapData, roadmapReport, roadmapTailLines, RTM_STATUSES, scaffoldSteeringFile, scanCodebase, scanTestCode,
   setDependency, SIGNAL_CONCEPTS, SIGNALS, SIZE_POINTS, slugify, specDoctor, specsRoot, specUpgrade, specVersionStatus,
   spikeInfo, statusFeature, statusLine, statusLineProject, steeringFingerprints, steeringFrontMatter, steeringGlobMatch, STEERING_IMPORT_TOOLS,
@@ -89,8 +89,8 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
   changeViews, closestName, today, dayOf, decodeText, featureBranch, IMPORT_TOOLS,
-  userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
-  withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
+  userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, commandHasControl, controlVisible, windowsShellFailure, withFeatureLock, withinRoot,
+  withReadCache, writeFileAtomic, writeRoadmapHtml, writeRoadmapMd } = engine;
 
 module.exports = {
   CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)
@@ -103,6 +103,7 @@ module.exports = {
   unexpandedVar, // 1.23 review: a value holding a variable left unexpanded ("${…}", a leading $NAME, %NAME%) — never a folder name
   today, // 1.25.1: the local calendar date (YYYY-MM-DD) of now / of a given moment (engine/core.js)
   dayOf, // 1.25.1: a stored instant's local calendar date, "" when there is none
+  expandHome, // 1.25.1 (review 7): a leading ~ / ~/ is the home folder (PowerShell 5.1 and MCP arguments never expand it) — server projectDir
   closestName, // 1.24 r6: the did-you-mean — the candidate nearest a mistyped word (optimal-string-alignment distance), else null
   specsRoot,
   slugify,
@@ -191,6 +192,9 @@ module.exports = {
   removeTrack: featureLocked(removeTrack),
 
   existingFeature, // the eval harness resolves its feature like every other operation
+  // 1.25.1 (review 7): the write gate for a .specs/ file a script outside the engine owns — the eval harness's evals/baseline.json
+  // (it wrote with a raw fs.writeFileSync, through any link under .specs/). → { ok: true, file } | the gate's refusal (the wrapper below).
+  writeSpecFile: (file, text) => { writeFileAtomic(file, text); return { ok: true, file }; },
 
   traceGaps,
   traceGapLines,
@@ -261,6 +265,8 @@ module.exports = {
   signalConcept: (tr, kw) => (Object.prototype.hasOwnProperty.call(SIGNAL_CONCEPTS, tr) ? SIGNAL_CONCEPTS[tr].get(kw) || null : null), // 1.17 D review
 
   verifyPipeMasked, // a _Verify:_ command that pipes into another one (its exit code is the LAST command's) — `done --run`'s hint
+  commandHasControl, // 1.25.1 (review 7): a command holding a control character (ESC, a lone CR…) — done --run / finish --run refuse it
+  controlVisible, // …and that command with its control characters as escapes, for the message
 
   templates, // spec_templates / `dev-spec templates [list|init|check]` — the project's own scaffolds in .specs/templates/
   templateKey, // "requirements.md" / "steering/tech" → the template key, or null (the allowlist)

@@ -11,13 +11,13 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
+let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
   extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest, isBacktickUnit,
   isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap, realPathLoose,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
   traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps;
 let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
-function __link(E) { ({ dayOf, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
+function __link(E) { ({ dayOf, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
@@ -1009,6 +1009,20 @@ function pipeMaskedIn(s, pipefailAtStart, kind, depth) {
 function verifyPipes(block) {
   return taskMarkers(block).verify.filter(verifyPipeMasked);
 }
+// 1.25.1 (review 7) — a command holding a control character (an ESC / OSC sequence, a lone CR, a backspace… — every C0 but tab,
+// DEL, every C1): a terminal shows something else than what runs — a cloned tasks.md could print `$ npm test` while `done --run`
+// ran another command. `done --run` / `finish --run` refuse such a _Verify:_ / project check (nothing runs), spec_init refuses
+// such a check (validCheckCmd), doctor fails `verify-control`. Built from char codes (never a raw control character in the source).
+const RE_CMD_CONTROL = new RegExp("[" + String.fromCharCode(0) + "-" + String.fromCharCode(8) + String.fromCharCode(10) + "-" +
+  String.fromCharCode(31) + String.fromCharCode(0x7f) + "-" + String.fromCharCode(0x9f) + "]");
+const RE_CMD_CONTROL_ALL = new RegExp(RE_CMD_CONTROL.source, "g");
+const commandHasControl = (c) => RE_CMD_CONTROL.test(String(c));
+// The command with its control characters shown as \u escapes — how a message names it (never the raw bytes).
+const controlVisible = (c) => String(c).replace(RE_CMD_CONTROL_ALL, (ch) => "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0"));
+// The _Verify:_ commands of a block holding one.
+function verifyControls(block) {
+  return taskMarkers(block).verify.filter(commandHasControl);
+}
 
 // ---------------------------------------------------------------------------
 // 1.14 B5 — evidence: red → green (_Expect: fail_), the project's check commands (roadmap.json meta.checks) with a recorded
@@ -1696,16 +1710,18 @@ function lastTaskActivity(state) {
 const CHECK_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,39}$/;
 const CHECKS_MAX = 20;
 const validCheckName = (k) => typeof k === "string" && CHECK_NAME_RE.test(k) && !PROTO_KEYS.has(k.toLowerCase());
-const validCheckCmd = (v) => typeof v === "string" && v.trim() !== "" && !/[\r\n]/.test(v) && v.trim().length <= 500;
-// → { checks: [{name, command}] (stored order), invalid: [names of malformed entries — ignored] }
+const validCheckCmd = (v) => typeof v === "string" && v.trim() !== "" && !/[\r\n]/.test(v) && !commandHasControl(v) && v.trim().length <= 500; // 1.25.1: no control character
+// → { checks: [{name, command}] (stored order), invalid: [names of malformed entries — ignored], unsafe: [the stored ones whose
+// command holds a control character — 1.25.1: finish --run runs nothing while one is there, doctor fails verify-control] }
 function projectChecks(projectDir) {
   const l = loadRoadmap(projectDir);
   const raw = !l.parseError && isObj(l.rm.meta) ? l.rm.meta.checks : undefined;
-  if (raw === undefined) return { checks: [], invalid: [] };
-  if (!isObj(raw)) return { checks: [], invalid: ["meta.checks"] };
-  const checks = [], invalid = [];
+  if (raw === undefined) return { checks: [], invalid: [], unsafe: [] };
+  if (!isObj(raw)) return { checks: [], invalid: ["meta.checks"], unsafe: [] };
+  const checks = [], invalid = [], unsafe = [];
   for (const [name, cmd] of Object.entries(raw)) (validCheckName(name) && validCheckCmd(cmd) ? checks.push({ name, command: cmd.trim() }) : invalid.push(name));
-  return { checks, invalid };
+  for (const [name, cmd] of Object.entries(raw)) if (typeof cmd === "string" && commandHasControl(cmd)) unsafe.push(name);
+  return { checks, invalid, unsafe };
 }
 // spec_init {checks} / `init --check name=cmd`: {name: command} adds or replaces those checks, an empty command (or null)
 // removes one, the others are kept. → null (not given) · { set, remove } · { error } — validated before anything is written.
@@ -1851,7 +1867,7 @@ function suiteCodeStamp(projectDir, dir) {
 // run went on read as tested (a code stamp of the edited files; a later `at`).
 function runStartStamp(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   return { ok: true, at: new Date().toISOString(), code: suiteCodeStamp(projectDir, f.dir) };
 }
 // A runStart the CLI hands back → { at, code } — at: an ISO time not in the future (5 min of skew tolerated), else null (the
@@ -1956,7 +1972,7 @@ function parseGitLog(text) {
 // log was read with (a full window means older commits were not read: an order that can't be known is `outside-window`).
 function taskCommits(projectDir, name, logText, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const tasksText = readIfExists(path.join(dir, "tasks.md"));
   if (tasksText == null) return { ok: false, error: errs(projectDir, slug).tasksMissing(slug) };
@@ -1965,6 +1981,19 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   const tracks = detectTracks(dir);
   const blocks = taskBlocks(activeTasks(tasksText, tracks) || "");
   const commits = parseGitLog(logText);
+  // 1.25.1 (review 7): a feature started on its own branch (create --branch) recorded the commit it started from, and the CLI reads
+  // `git log <commit>..HEAD` — a log handed in (spec_log {gitLog}, `log <f> -`) is read the same way: cut at that commit when it holds
+  // it (it and every commit after it in the newest-first list are older work), and labelled `since` either way (spec_log's description
+  // names the range). opts.since: what the CLI read — {base, commit} the range, null the whole log on purpose (git no longer knows it).
+  let since = isObj(opts.since) && typeof opts.since.commit === "string" && opts.since.commit ? { base: typeof opts.since.base === "string" ? opts.since.base : null, commit: opts.since.commit } : null;
+  if (opts.since === undefined) {
+    const rec = featureBranchRecord(readState(projectDir, slug));
+    if (rec && rec.commit) {
+      since = { base: rec.base, commit: rec.commit };
+      const at = commits.findIndex((c) => c.hash.length >= 7 && (rec.commit.startsWith(c.hash) || c.hash.startsWith(rec.commit)));
+      if (at !== -1) commits.splice(at);
+    }
+  }
   const truncated = commits.length >= GITLOG_MAX_COMMITS || (Number.isInteger(opts.max) && commits.length >= opts.max); // the parser's cap is a window too
   const wordRe = (s) => new RegExp("(?<![\\p{L}\\p{N}_-])" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}_-])", "iu");
   const self = wordRe(slug);
@@ -2017,8 +2046,7 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   }
   const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
   const lines = [G.head(slug, commits.length, citing, truncated)];
-  // 1.25: opts.since {base, commit} — the CLI read the log from the feature's start (`git log <commit>..HEAD`: its branch record)
-  const since = isObj(opts.since) && typeof opts.since.commit === "string" && opts.since.commit ? { base: typeof opts.since.base === "string" ? opts.since.base : null, commit: opts.since.commit } : null;
+  // 1.25: since {base, commit} — the log read from the feature's start (`git log <commit>..HEAD`: its branch record), above
   if (since) lines.push(i18n.msg(lng).branch.logSince(since.base, since.commit.slice(0, 7)));
   for (const t of info) {
     const list = t.commits.slice(0, 5).map((c) => G.commitRef(commits[c.idx].short, cut(commits[c.idx].subject, 60), c.via.join(", ")));
@@ -2070,7 +2098,7 @@ module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isR
   isPwshShell, isPosixShellName, resolveRunShell, PWSH_VALUE_OPTS, PWSH_VALUE_ALIASES, RE_PWSH_COMMAND_OPT, pwshOption,
   pwshTracker, WRAPPER_OPTION_VALUES, WRAPPER_POSITIONALS, wrapperStep, posixShellSyntax, POSIX_DQ_ESCAPES, posixPwshScript,
   posixPwshScan,
-  verifyPipeMasked, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
+  verifyPipeMasked, RE_CMD_CONTROL, commandHasControl, controlVisible, verifyControls, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
   shellScript, pipeMaskedIn, verifyPipes, expectsFail, unknownExpectValues, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
   RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, VACUOUS_OUTPUT, RE_TESTS_RAN, vacuousRun, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
   cantRunRecord, CRASH_EXIT, crashExit, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,

@@ -438,7 +438,9 @@ async function main() {
       }
     }
     if (on("set-baseline")) {
-      fs.writeFileSync(baselineFile, JSON.stringify({ at: new Date().toISOString(), model, sets: report.sets }, null, 2));
+      // 1.25.1 (review 7): through the engine's write gate (spec.writeSpecFile) — never a raw write that follows a link under .specs/
+      const w = spec.writeSpecFile(baselineFile, JSON.stringify({ at: new Date().toISOString(), model, sets: report.sets }, null, 2));
+      if (w && w.ok === false) { console.error(w.error); process.exit(1); }
       console.log(T.baselineWritten(path.relative(projectDir, baselineFile)));
     }
     if (report.totalCost.inTok || report.totalCost.outTok) {

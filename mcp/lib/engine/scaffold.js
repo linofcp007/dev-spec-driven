@@ -661,7 +661,7 @@ function storeFeatureBranch(dir, record) {
 // the created artifacts' bodies (`bodies`).
 function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts = {}) {
   const f = resolveFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const existed = fs.existsSync(dir);
   // 1.23 review 5 — the name as the scaffolds write it (every title, {{name}}): ONE line, like a backlog name. A line break in it
@@ -1098,7 +1098,7 @@ function steeringImpact(projectDir, name, opts = {}) {
   let feats, lng, slug = null;
   if (named) {
     const f = existingFeature(projectDir, name);
-    if (!f.ok) return { ok: false, error: f.error };
+    if (!f.ok) return { ok: false, error: f.error, code: f.code };
     feats = [{ slug: f.slug, dir: f.dir }];
     slug = f.slug;
     lng = featureLang(projectDir, f.slug);
@@ -1409,7 +1409,7 @@ function inactiveArtifacts(dir, gone, T) {
 // spec_add_track {name, track, remove?}. `track` takes one or several ("saas,ai", "+saas +ai", an array).
 function addTrack(projectDir, name, track, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug); // escalate in the feature's own language
   const msg = i18n.msg(lng);

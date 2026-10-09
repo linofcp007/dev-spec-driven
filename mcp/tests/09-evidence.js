@@ -743,11 +743,14 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
     const c1 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 1, evidence: { command: "node t1.js", exitCode: 2, summary: "1 failing" } });
     S.observeRun(pO, { command: "node t1.js", exitCode: 0 });
     const c1b = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 1, evidence: { command: "node t1.js", exitCode: 0 } });
-    const c2 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0, observed: "cli" } }); // a caller can't claim "cli"
+    // a caller can't claim "cli": 1.25.1 (review 7) — `observed` is no key of evidence's schema, so the call is refused (unknown-argument)
+    const c2claim = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0, observed: "cli" } });
+    const c2 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 2, evidence: { command: "node t2.js", exitCode: 0 } });
     const c4 = await obsCall("spec_complete_task", { projectDir: pO, name: "auth", number: 4 });
     const st1 = obsState(fO);
     const docR = S.specDoctor(pO, fO.slug).checks.find((c) => c.id === "verification");
-    ok(c1.p.ok === false && c1.p.observed === true && c1b.p.ok && c1b.p.verified && c1b.p.observed === true && c2.p.ok && c2.p.verified === true && c2.p.observed === false &&
+    ok(c2claim.p.ok === false && c2claim.p.code === "unknown-argument" && c2claim.p.unknown[0].argument === "evidence.observed" &&
+      c1.p.ok === false && c1.p.observed === true && c1b.p.ok && c1b.p.verified && c1b.p.observed === true && c2.p.ok && c2.p.verified === true && c2.p.observed === false &&
       !c2.p.unverifiedReason && c4.p.ok && c4.p.observed === undefined && st1.evidence["1"].observed === true && st1.evidence["1"].history[0].observed === true &&
       st1.evidence["2"].observed === false && S.evidenceMode(pO) === "reported" && docR.status === "pass",
       "feature F1: default (meta.evidence reported) — the verdict is unchanged; every reported run is stamped observed true | false in its record and the result (a failed run too); a caller-given observed is ignored; no command → no stamp (got " +

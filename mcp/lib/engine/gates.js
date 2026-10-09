@@ -167,7 +167,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (opts.revoke === true) return revokeApproval(projectDir, name, phase, by, opts); // 1.16 U2: spec_approve {revoke} / approve --revoke
   if (opts.through != null) return approveThrough(projectDir, name, phase, by, opts); // 1.14 B3: the fast-forward (spec_approve {through})
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   if (phase == null || String(phase).trim() === "") return { ok: false, error: i18n.msg(featureLang(projectDir, f.slug)).governance.phaseRequired };
   const p = String(phase || "").toLowerCase().trim();
   if (!PHASES.includes(p)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(phase, PHASES.join(", ")) };
@@ -442,7 +442,7 @@ function legacySeeds(approvals, hist) {
 // sign-off → error (notApproved); `execution` included (its sign-off is asked for again). force / expires / through are refused.
 function revokeApproval(projectDir, name, phase, by, opts) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const lng = featureLang(projectDir, f.slug);
   const R = i18n.msg(lng).revoke;
   if (opts.through != null) return { ok: false, error: R.noThrough };
@@ -899,7 +899,7 @@ function approveStepExtras(projectDir, slug, dir, st, tracks, kind, pending, doc
 // `force` still only when the user asked: it forces each gate, like approve --force. Called by approvePhase, under its lock.
 function approveThrough(projectDir, name, phase, by, opts) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const lng = featureLang(projectDir, f.slug);
   const E = i18n.msg(lng).governance;
   const G = i18n.msg(lng).gates;
@@ -1146,7 +1146,7 @@ function impactReport(projectDir, name, opts = {}) {
   if (ph0 === "steering") return steeringImpact(projectDir, name, opts);
   if (name == null || String(name).trim() === "") return { ok: false, error: i18n.msg(projectLang(projectDir)).quality.impactNeedsName([...IMPACT_PHASES, "steering"].join(", ")) };
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const I = i18n.msg(lng).impact;
@@ -1508,7 +1508,7 @@ function flowOrderText(dir, tracks, flow) {
 // previous, changed, order, pendingGates, note }
 function setFeatureFlow(projectDir, name, flow) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const lng = featureLang(projectDir, f.slug);
   const F = i18n.msg(lng).flow;
   const pf = parseFlow(flow, lng);
@@ -1566,6 +1566,7 @@ const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-crit
   "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
 CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
 CHECK_PHASE["verify-suspicious"] = 5; // review 5: a garbled _Verify:_ value (a warn)
+CHECK_PHASE["verify-control"] = 5; // 1.25.1 (review 7): a _Verify:_ / project check holding a control character (a fail)
 Object.assign(CHECK_PHASE, { "evidence-moved": 6, "expect-value": 5 }); // 1.24 r6: a renumbered task's run (D1); an _Expect:_ value other than fail (D7)
 Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
 Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2, "design-reuse": 2 }); // 1.17 A1, 1.19 R1 (warns only)

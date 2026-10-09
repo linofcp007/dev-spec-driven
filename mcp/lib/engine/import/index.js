@@ -283,10 +283,33 @@ function dryRunResult(r, writes) {
   }
   return { ok: true, dryRun: true, ...r, preview };
 }
+// 1.25.1 (review 7) — what an import may read: spec_import {projectDir: "<home>/.aws", tool: "plan", path: "credentials", dryRun}
+// returned the file in its preview. Inside the project still, and now never through a hidden folder or file (a path segment
+// starting with ".") but the importers' own — IMPORT_DOT_ROOTS as the path's first segment, and .claude/plans/ (a plansDirectory
+// set inside the project) — and a FILE named as the source is a document format (IMPORT_SOURCE_EXT, or .cursorrules); every file
+// an importer reads is one of the kinds importers know (IMPORT_READ_EXT — spec-kit's contracts/ included). Over MCP an explicit
+// projectDir other than the default project must also hold a dev-spec .specs/ (server.js — project-no-specs).
+const IMPORT_DOT_ROOTS = [".kiro", ".cursor", ".cursorrules", ".fluidplan", ".agent"]; // .agent: Codex ExecPlans (.agent/PLANS.md)
+const IMPORT_SOURCE_EXT = [".md", ".markdown", ".mdc", ".txt", ".json", ".yaml", ".yml"];
+const IMPORT_READ_EXT = [...IMPORT_SOURCE_EXT, ".jsonc", ".graphql", ".gql", ".proto", ".http", ".rest", ".xml", ".avsc", ".sql"];
+// The first hidden segment of a project-relative path (posix) that no importer owns, else null.
+function importHiddenPart(rel) {
+  const parts = String(rel).split("/").filter((s) => s && s !== ".");
+  for (let i = 0; i < parts.length; i++) {
+    const low = parts[i].toLowerCase();
+    if (!low.startsWith(".")) continue;
+    if (i === 0 && IMPORT_DOT_ROOTS.includes(low)) continue;
+    if (i === 0 && low === ".claude" && parts.length > 1 && parts[1].toLowerCase() === "plans") continue;
+    return parts[i];
+  }
+  return null;
+}
+const importFileKind = (file, exts) => path.basename(file).toLowerCase() === ".cursorrules" || exts.includes(path.extname(file).toLowerCase());
 // The source a path names, as every importer reads it: inside the project — lexically first (nothing outside is even stat'ed),
-// then by real path (a symlink out) — and each file through `read` (inside the project; over IMPORT_MAX_BYTES characters → its
-// name in `tooLarge`, never cut). → { refused } | { realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge }.
-// 1.25: shared with the steering import (import/steering.js).
+// then by real path (a symlink out) — never hidden (importHiddenPart), a named file of a document format, and each file through
+// `read` (inside the project, never hidden, a known kind; over IMPORT_MAX_BYTES characters → its name in `tooLarge`, never cut).
+// → { refused } | { realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge }. A refusal carries a stable `code`:
+// import-outside · import-not-found · import-hidden · import-not-source. 1.25: shared with the steering import (import/steering.js).
 function importSourceAt(projectDir, t, source, W, lang0) {
   const C = i18n.msg(lang0).claudeCode.importText;
   const root = path.resolve(projectDir);
@@ -296,20 +319,32 @@ function importSourceAt(projectDir, t, source, W, lang0) {
   const shown = String(source).trim();
   // A leading ~ is the home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans (C3) and
   // that its text can be imported instead (1.16 C4).
-  const outside = () => ({ refused: { ok: false, error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir + " " + C.orText : "") } });
+  const outside = () => ({ refused: { ok: false, code: "import-outside", error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir + " " + C.orText : "") } });
+  const notFound = () => ({ refused: { ok: false, code: "import-not-found", error: W.notFound(shown) } });
+  const hidden = (part) => ({ refused: { ok: false, code: "import-hidden", error: W.hidden(shown, part) } });
   if (/^~(?:[\\/]|$)/.test(shown) || !isInsideDir(root, abs)) return outside();
-  if (!fs.existsSync(abs)) return { refused: { ok: false, error: W.notFound(shown) } };
+  const lexHidden = importHiddenPart(toPosix(path.relative(root, abs)));
+  if (lexHidden) return hidden(lexHidden); // before any stat: a hidden folder's files are not even looked at
+  if (!fs.existsSync(abs)) return notFound();
   let realRoot, realSrc;
-  try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return { refused: { ok: false, error: W.notFound(shown) } }; }
+  try { realRoot = fs.realpathSync.native(root); realSrc = fs.realpathSync.native(abs); } catch { return notFound(); }
   if (!isInsideDir(realRoot, realSrc)) return outside();
+  const realHidden = importHiddenPart(toPosix(path.relative(realRoot, realSrc)));
+  if (realHidden) return hidden(realHidden); // a link into a hidden folder
   const isFileSrc = !fs.statSync(realSrc).isDirectory();
+  if (isFileSrc && !(importFileKind(abs, IMPORT_SOURCE_EXT) && importFileKind(realSrc, IMPORT_SOURCE_EXT))) {
+    return { refused: { ok: false, code: "import-not-source", error: W.notSource(shown) } };
+  }
   const dir = isFileSrc ? path.dirname(realSrc) : realSrc;
   const rel = toPosix(path.relative(realRoot, dir)) || ".";
   const read = (file) => {
     try {
       if (!fs.existsSync(file)) return null;
       const real = fs.realpathSync.native(file);
-      if (!isInsideDir(realRoot, real)) { readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file)))); return null; }
+      if (!isInsideDir(realRoot, real) || importHiddenPart(toPosix(path.relative(realRoot, real))) || !importFileKind(file, IMPORT_READ_EXT) || !importFileKind(real, IMPORT_READ_EXT)) {
+        readWarnings.push(W.wUnreadable(toPosix(path.relative(realRoot, file))));
+        return null;
+      }
       const st = fs.statSync(real);
       if (!st.isFile()) return null;
       // 1.23 review 5 — a source file over the cap refuses the import (never cut: the steps past it were lost). Stat'ed first:
@@ -390,7 +425,7 @@ function importRun(projectDir, tool, source, opts) {
     name = fb;
   }
   const f = resolveFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   if (fs.existsSync(f.dir)) return { ok: false, error: W.exists(f.slug) };
   const pt = parseTracks(opts.tracks);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(lang0, pt.unknown) };
@@ -587,6 +622,6 @@ function importRun(projectDir, tool, source, opts) {
   };
 }
 
-module.exports = { IMPORT_TOOLS, IMPORT_MAX_BYTES, TEXT_IMPORT_TOOLS, commentInert, inertBlock, RE_IMPORT_TASK_HEAD,
+module.exports = { IMPORT_TOOLS, IMPORT_MAX_BYTES, TEXT_IMPORT_TOOLS, IMPORT_DOT_ROOTS, IMPORT_SOURCE_EXT, IMPORT_READ_EXT, importHiddenPart, commentInert, inertBlock, RE_IMPORT_TASK_HEAD,
   replaceRequirementsMarkers, replaceUnderscoreList, importTasks, fitTemplateTasks, C3_PARSERS, DRY_RUN_FILE_CHARS, DRY_RUN_TOTAL_CHARS,
   importSpec, dryRunResult, importSourceAt, importRun, __link };

@@ -243,4 +243,43 @@ exports.run = async ({ ok, rpc, S, tmp, require }) => {
       writes.some((w) => w.file === f && w.text === "one\nmore\n") && snap(p) === t0 && CTX.DRY_RUN === null && !has(p, ".specs", "steering", "probe.md"),
       "1.25 withDryRun: writeIfAbsent / specWrite / ensureDir record into the sink and readIfExists / safeReaddir / isDirSafe read it back; a folder move throws (EDRYRUN); the disk untouched; the sink cleared (got " + js(value) + ")");
   }
+
+  // 1.25.1 (review 7) — what an import may read: spec_import {projectDir: "<home>/.aws", tool: "plan", path: "credentials", dryRun}
+  // returned the file in its preview. Over MCP an explicit projectDir that is no dev-spec project (and not the default one) is refused
+  // (project-no-specs); in any project a hidden folder or file but the importers' own (import-hidden) and a named file that is no
+  // document (import-not-source) are refused — before anything is read; a link into a hidden folder too; the CLI's engine call alike.
+  {
+    const E = require("./lib/engine/index.js");
+    const SECRET = "SECRETVALUE-r7";
+    const home = path.join(tmp, "proj-r7-home");
+    put(home, ".aws/credentials", "[default]\naws_secret_access_key = " + SECRET + "\n");
+    const r1 = await call("spec_import", { projectDir: path.join(home, ".aws"), tool: "plan", path: "credentials", dryRun: true });
+    const r1b = await call("spec_import", { projectDir: home, tool: "plan", path: ".aws/credentials", dryRun: true });
+    const p = fresh("r7-read");
+    put(p, ".aws/plan.md", "# Plan\n\n## Steps\n1. " + SECRET + "\n");
+    put(p, ".env", "TOKEN=" + SECRET + "\n");
+    put(p, "keys/id_rsa", SECRET + "\n");
+    put(p, "docs/plan.md", "# Docs plan\n\n## Steps\n1. Write the docs page.\n");
+    put(p, ".claude/plans/dark.md", "# Dark mode\n\n## Steps\n1. Add the toggle.\n");
+    const r2 = await call("spec_import", { projectDir: p, tool: "plan", path: ".aws/plan.md", dryRun: true });
+    const r3 = await call("spec_import", { projectDir: p, tool: "plan", path: ".env", dryRun: true });
+    const r4 = await call("spec_import", { projectDir: p, tool: "plan", path: "keys/id_rsa", dryRun: true });
+    const r5 = await call("spec_import", { projectDir: p, tool: "plan", path: "docs/plan.md", dryRun: true });
+    const r6 = await call("spec_import", { projectDir: p, tool: "plan", path: ".claude/plans/dark.md", dryRun: true });
+    let linked = null;
+    try { fs.symlinkSync(path.join(p, ".aws", "plan.md"), path.join(p, "docs", "linked.md")); linked = await call("spec_import", { projectDir: p, tool: "plan", path: "docs/linked.md", dryRun: true }); } catch { linked = null; }
+    const cliSide = S.importSpec(p, "plan", ".aws/plan.md", { dryRun: true }); // the CLI's call: the same engine rule
+    const leaked = [r1, r1b, r2, r3, r4, linked].filter(Boolean).some((r) => js(r.body).includes(SECRET)) || js(cliSide).includes(SECRET);
+    const hp = E.importHiddenPart;
+    ok(r1.isError && r1.body.code === "project-no-specs" && /holds no dev-spec project/.test(r1.body.error) &&
+      r1b.isError && r1b.body.code === "project-no-specs" &&
+      r2.isError && r2.body.code === "import-hidden" && /\.aws/.test(r2.body.error) && r3.body.code === "import-hidden" &&
+      r4.isError && r4.body.code === "import-not-source" && r5.body.ok === true && r6.body.ok === true &&
+      (linked === null || linked.body.code === "import-hidden") && cliSide.ok === false && cliSide.code === "import-hidden" && !leaked &&
+      hp(".kiro/specs/a") === null && hp(".cursor/plans/x.plan.md") === null && hp(".cursorrules") === null && hp(".fluidplan/p1/plan.json") === null &&
+      hp(".claude/plans/x.md") === null && hp(".claude/settings.json") === ".claude" && hp("docs/.git/x.md") === ".git" && hp(".kiro/.secret/x.md") === ".secret" &&
+      ["pt", "es"].every((l) => /x\.md/.test(S.msg(l).importSpec.hidden("x.md", ".a")) && /x/.test(S.msg(l).importSpec.notSource("x")) && /dir-x/.test(S.msg(l).args.projectNoSpecs("dir-x"))),
+      "1.25.1 r7: spec_import never returns a file outside the project's documents — another projectDir must be a dev-spec project (project-no-specs), a hidden folder or file but .kiro/ .cursor/ .cursorrules .fluidplan/ .claude/plans/ is refused (import-hidden, a link into one too), a named file that is no document too (import-not-source); the CLI's engine call alike; nothing of the secret in any reply (got " +
+      js([r1.body.code, r1b.body.code, r2.body.code, r3.body.code, r4.body.code, r5.body.ok, r6.body.ok, linked && linked.body.code, cliSide.code, leaked]) + ")");
+  }
 };

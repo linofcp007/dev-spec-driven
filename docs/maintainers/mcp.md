@@ -102,6 +102,12 @@ call the client had given up on (a client tool-call timeout shorter than the 5-m
 carrying `_meta.progressToken` gets `notifications/progress {progressToken, progress: 0, 1, …, message: elicit.waiting}` at once
 and every `PROGRESS_EVERY_MS` (10 s) while its question waits — a client whose tool-call timeout restarts on progress keeps
 the call. A guardrail on the approve paths, like the hook — not a sandbox.
+**Known limit — `SPEC_MCP_APPROVAL_HOOK=on` at `ask` (1.25.1, review 7, documented, not changed).** The plugin's server leaves an
+`ask`-level approval to the PreToolUse hook; when the hook does not run (`disableAllHooks`, a managed policy, a hook that failed
+open) the call runs without asking anyone. Eliciting there instead is not clean: the server can't tell whether the hook ran —
+Claude Code declares elicitation, so a call the hook already put to the user would be asked a second time; telling them apart
+needs a hook→server handshake (a stamp per call) this release does not add. `deny` is unaffected (refused whenever it reaches
+the server). A team that needs the guard to hold with hooks disabled sets `approvalGuard: deny` (the human runs the approval).
 
 **Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the
 tool's advertised `inputSchema`, in this order — `arguments` that isn't an object; then **unknown arguments** (1.24 r6 A1,
@@ -112,11 +118,16 @@ reply lists them with a did-you-mean: a word people type for an argument (`ARG_A
 project / dir → projectDir, untick → undo, unapprove → revoke — when the tool takes it), else `spec.closestName` (core.js — the
 optimal-string-alignment distance, ≤ max(1, ⌊length / 3⌋) edits, case-insensitive: the CLI's flag rule; suggestTrack uses it
 too). Checked before the required keys, so a misspelt required key (`nmae`) reads as unknown with its fix, not as missing. A
-`null` unknown key is "not given", like any argument; a NESTED object's extra keys are still left to the engine. Every
+`null` unknown key is "not given", like any argument. **Nested keys too (1.25.1, review 7):** an object whose schema lists
+`properties` — an array's items included — refuses a key it doesn't list, by its path (`tasks[0].verfy`, did-you-mean
+`tasks[0].verify`; the message lists the keys that object takes, `tasks[] {text, …}`): `verfy` appended a task with no
+`_Verify:_` (which then ticked "verified, nothing to verify"), `evidence[0].sumary` dropped the summary. An object declared with
+`additionalProperties` (spec_init `checks`) takes any key. Every
 `args.X` runTool reads must be in its tool's schema — a key it doesn't list would now be refused, never read (a guard in
-02-mcp-server.js parses runTool's `case`s). Then required keys (`missingArgs`), then types (`invalidArgs` — `integer` means
+02-mcp-server.js parses runTool's `case`s). Then required keys (`missingArgs` — a nested object's `required` too, by path:
+`evidence[0].command`, `tasks[0].text`; `evidence: [{}]` reached the engine as "'undefined' is not a project check"), then types (`invalidArgs` — `integer` means
 a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, `maximum` (1.24 r6 A5 — `spec_next_task.max` ≤ 8;
-the message reads "between 1 and 8"), array `items` and nested
+the message reads "between 1 and 8"), `minItems` (1.25.1 — `spec_append_tasks.tasks`, `args.atLeastItems`), array `items` and nested
 object properties. A task `number` (spec_task_brief, spec_complete_task) carries `minimum: 0` (1.22 review — `-1` read "must
 be an integer"; 0 is a task number: next serves a hand-written task 0, so refusing it looped next → complete); the engine
 refuses the CLI's raw word in these same words (`msg(lang).args` —
@@ -135,12 +146,21 @@ the server's cwd — `.` from Claude Desktop scaffolded the app folder), else fr
 EXIST, as the CLI's `--project` (1.23 review L14): a missing one is refused (`project-missing`) — only `spec_init` creates one —
 and so is a file (`project-not-dir`): `spec_create` into a mistyped path built the whole tree there, `spec_list` on a file
 answered `{exists: false}`, a `file://` projectDir ended in ENOENT. The engine receives the absolute folder; `resolveProjectDir`
-is unchanged. The default projectDir (cwd / env / roots) and the CLI are not restricted by these rules.
+is unchanged. The default projectDir (cwd / env / roots) and the CLI are not restricted by these rules. **spec_import (1.25.1,
+review 7)** reads the files its path names and returns them (`dryRun`: `preview`) — `{projectDir: "<home>/.aws", path:
+"credentials"}` returned the credentials: an explicit projectDir other than the default project (`sameFolder` by real path) must hold
+a dev-spec `.specs/` (`spec.isDevSpecDir` — `SPECS_REQUIRED`), else `project-no-specs` (`args.projectNoSpecs`: run spec_init there
+first); the engine refuses hidden folders and non-documents everywhere (templates-imports-exports.md → spec_import stays inside the
+project). The `initialize` instructions say so ("Everything is local: writes stay in .specs/, reads inside the project…" — the
+old "All file ops are local to the project's .specs/ directory" was not true of the scans and the import) and name spec_next_action
+as the "where am I / what now?" call for clients without the skill.
 **Stable codes (1.24 r6 A-I2).** Every argument error is the tool's JSON `{ok: false, error, code, …}` (`argError`), `isError:
 true`: `unknown-argument` (+ `unknown` [{argument, didYouMean?}]) · `missing-arguments` (+ `missing` [names]) ·
 `invalid-arguments` (+ `invalid` — the paths, e.g. `["number", "evidence.exitCode"]`; arguments that aren't an object:
-`["arguments"]`) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir`. Callers branch
-on the code (English, stable); the message is in the project language — the default project's for a projectDir refusal.
+`["arguments"]`) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` · `project-no-specs` (1.25.1, spec_import). Callers branch
+on the code (English, stable); the message is in the project language — the default project's for a projectDir refusal. The feature resolver's refusals (1.25.1, review 7 — `resolveFeature` / `existingFeature`, state.js) carry their code too, on
+every tool and the CLI's `--json`: `feature-not-found` · `feature-name-invalid` (no usable slug) · `feature-name-reserved` (they were
+`{ok: false, error}` alone); an operation that hands such a refusal back keeps the code (`{ok: false, error: f.error, code: f.code}`).
 Messages are localized in the project language (`msg(lang).args`). The engine
 still validates what schemas can't express (track names, AC IDs, paths). String enums the engine case-folds
 (`phase`, `lang`, `kind`, `action`) are trimmed + lowercased first (`foldEnumArgs`) — the CLI passes `Design` / `PT`
@@ -199,8 +219,11 @@ that is mostly embedded markdown, create's bodies, barely changes). Every client
   1.24 r6 A2: `spec.unexpandedVar`, any `${` / a leading `$NAME` / `%NAME%`, no longer a whole `${VAR}` only) gets it as
   `projectDir`, a RELATIVE projectDir resolves from it (1.24 r6 A2 — Argument validation → projectDir), and resources / prompts /
   completions / argument messages read it (`defaultProjectDir()`). No usable root, an
-  error or no answer within `ROOTS_TIMEOUT_MS` (5 s) → `null`, the old default (cwd), not asked again until
-  `notifications/roots/list_changed`. The engine's `resolveProjectDir` is untouched — the server passes the root as projectDir.
+  error or no answer within `ROOTS_TIMEOUT_MS` (5 s; `DEV_SPEC_ROOTS_TIMEOUT_MS`, ≤ 60 s) → `null`, the old default (cwd), not
+  asked again until `notifications/roots/list_changed` — but (1.25.1, review 7) a timeout no longer cancels the request: an answer
+  that comes later still sets `rootsDir` (`clientRequest`'s `late` handler; it was dropped, and the cwd stayed the default for the
+  session), unless another ask started since (`rootsGen` — initialize, list_changed). The engine's `resolveProjectDir` is
+  untouched — the server passes the root as projectDir.
 - **The feature-lock wait (1.24 r6 A6).** The engine is synchronous: a call waiting for a feature lock another LIVE process holds
   (a CLI `done`, another editor's server — conventions.md → the locks) froze the WHOLE server — pings, every other tool, a
   pending approval's reply — for `DEV_SPEC_LOCK_WAIT_MS` (10 s by default). At start the server sets that variable to

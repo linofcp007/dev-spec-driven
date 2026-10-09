@@ -140,7 +140,7 @@ const TOOLS = [
     name: "spec_finish",
     description:
       "Close a feature (finishing-a-development-branch): a readiness report plus a merge title + summary GENERATED FROM THE SPEC CHAIN. `readyToFinish` is true only without `blockers`: doctor fails, an artifact changed since its approval, template placeholders, a bugfix's unwritten Root Cause, no tasks or open tasks, ticked tasks without passing verification evidence (`unverified`), with project checks (roadmap.json meta.checks) a check without a passing recorded run since the feature's last task activity (`suite-evidence`, each check in `suiteChecks`), and phases awaiting approval. `evidence` [{name, command, exitCode, summary}] records the project checks as YOU ran them (each a meta.checks name; run the configured command from the project root — another command reads `changed`) BEFORE the readiness is computed, so one call can make the feature ready; a failed run is recorded too and stays a blocker; returned as `recordedChecks` with `observed` (true when the plugin's Bash hook saw that run; \"cli\" for `" + spec.DEV_SPEC + " finish <f> --run`). `warnings` never block (uncovered EC / NFR / SC IDs, planned T-IDs no test file names); `checks` lists the track-gated items only a fresh run or a human can confirm. `write: true` writes the summary to .specs/<feature>/.execution/merge-summary.md (content omitted unless includeBody), and a READY feature records its drift baseline (`baseline` — spec_drift compares against it later). Integration is LOCAL: the human picks merge locally or keep the branch — no pull requests, no CI; it never merges, pushes or approves by itself. A green run is EVIDENCE, not the sign-off: after it, ask the user for an explicit yes on the `execution` phase before calling spec_approve — never promise to approve it once they paste a passing run.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary to .specs/<feature>/.execution/merge-summary.md." }, includeBody: { type: "boolean", description: "Include the merge summary in the result (default: true when not writing, false when writing)." }, evidence: { type: "array", description: "The project checks' runs (roadmap.json meta.checks) — the server never runs them: run each configured command and report it here. Needs meta.checks; validated all-or-nothing.", items: { type: "object", properties: { name: { type: "string", description: "A meta.checks name (required)." }, command: { type: "string", description: "The command that ran (required)." }, exitCode: { type: "integer", description: "Its exit code (required)." }, summary: { type: "string", description: "e.g. '212 passing' or the last lines of output." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional, with commit: uncommitted changes outside .specs/." } } } }, projectDir: PROJECT_DIR }, required: ["name"] },
+    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary to .specs/<feature>/.execution/merge-summary.md." }, includeBody: { type: "boolean", description: "Include the merge summary in the result (default: true when not writing, false when writing)." }, evidence: { type: "array", description: "The project checks' runs (roadmap.json meta.checks) — the server never runs them: run each configured command and report it here. Needs meta.checks; validated all-or-nothing.", items: { type: "object", properties: { name: { type: "string", description: "A meta.checks name." }, command: { type: "string", description: "The command that ran." }, exitCode: { type: "integer", description: "Its exit code." }, summary: { type: "string", description: "e.g. '212 passing' or the last lines of output." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional, with commit: uncommitted changes outside .specs/." } }, required: ["name", "command", "exitCode"] } }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "spec_complete_task",
@@ -160,7 +160,7 @@ const TOOLS = [
   },
   {
     name: "spec_doctor",
-    description: "One health-check that decides whether a feature is ready to advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. FAIL: requirements / design missing, ears (a criterion without a modal verb or a US-n.AC-m ID), clarifications (open [NEEDS CLARIFICATION]), ac-uniqueness, placeholders (template text in the current or an earlier phase's artifact; a later phase's only warns), the active tracks' mandatory design sections present AND filled (saas-sections / ai-sections / sec-sections / privacy-sections / dist-sections / api-sections / ui-sections / obs-sections / data-sections / <pack>-sections), traceability (the gaps a later, still-template file would cause are deferred as a warn), task-deps, change-scope, a bugfix's root-cause, a spike's question / decision, merge-conflicts. WARN: steering, success-criteria, priorities, mermaid, constitution-check, design-tradeoffs / design-risks / design-reuse, test-plan / eval-plan, secondary-trace, supersedes, tests-in-code, verification (ticked tasks without passing evidence, with the reason), red-green, suite-evidence, duplicate-tasks, unread-tasks, verify-pipes, integration-plan, changed-since-approval (names the spec_impact phases to diff), glossary, cross-feature-acs, cross-feature-overlap, steering-changed-since-approval (`steeringChanged`), decision-affects, waiver-expired, a spike's timebox. approval-gates: the pending phases, forced approvals with their failing checks, and what the next approval would refuse (`nextGate` {phase, ready, failing, missingRoles}). Also returns phase, approvals, pendingGates, forcedGates, gatesOk and summary.",
+    description: "One health-check that decides whether a feature is ready to advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. FAIL: requirements / design missing, ears (a criterion without a modal verb or a US-n.AC-m ID), clarifications (open [NEEDS CLARIFICATION]), ac-uniqueness, placeholders (template text in the current or an earlier phase's artifact; a later phase's only warns), the active tracks' mandatory design sections present AND filled (saas-sections / ai-sections / sec-sections / privacy-sections / dist-sections / api-sections / ui-sections / obs-sections / data-sections / <pack>-sections), traceability (the gaps a later, still-template file would cause are deferred as a warn), task-deps, verify-control, change-scope, a bugfix's root-cause, a spike's question / decision, merge-conflicts. WARN: steering, success-criteria, priorities, mermaid, constitution-check, design-tradeoffs / design-risks / design-reuse, test-plan / eval-plan, secondary-trace, supersedes, tests-in-code, verification (ticked tasks without passing evidence, with the reason), red-green, suite-evidence, duplicate-tasks, unread-tasks, verify-pipes, integration-plan, changed-since-approval (names the spec_impact phases to diff), glossary, cross-feature-acs, cross-feature-overlap, steering-changed-since-approval (`steeringChanged`), decision-affects, waiver-expired, a spike's timebox. approval-gates: the pending phases, forced approvals with their failing checks, and what the next approval would refuse (`nextGate` {phase, ready, failing, missingRoles}). Also returns phase, approvals, pendingGates, forcedGates, gatesOk and summary.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
@@ -230,7 +230,7 @@ const TOOLS = [
   {
     name: "spec_import",
     description:
-      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source is only read). `tool`: 'kiro' (.kiro/specs/<name>/), 'spec-kit' (specs/<nnn-name>/ — spec.md, plan.md, tasks.md), 'openspec' (openspec/specs/<capability>/ or openspec/changes/<id>/), 'plan' (a Markdown plan — Claude Code plan mode, a Cursor .cursor/plans/*.plan.md), 'execplan' (a Codex ExecPlan), 'bmad' (BMAD PRD + stories, or one story file) or 'fluidplan' (a .fluidplan/<id>/ folder, its plan.json, PLAN.md or DECISIONS.md); 'kiro-steering' (.kiro/steering/*.md) / 'cursor-rules' (.cursor/rules/*.mdc, .cursorrules) write .specs/steering/ files instead (path optional; an existing name is skipped, never overwritten). Each scenario becomes ONE EARS criterion where possible (else kept with [NEEDS CLARIFICATION]); IDs are remapped to US-N.AC-M (`mapping` {oldId: newId}); tasks are renumbered keeping their ticks, [P] / [USn] tags, files (_Implements:_), verify commands (_Verify:_) and dependencies; decisions go to decisions.md / design.md; every artifact notes 'Imported from <tool> <path> on <date>'. `path` must resolve inside the project (a folder holding several plans is refused — name the file); `text` (plan / execplan / fluidplan only, instead of path) is the document itself — e.g. a Claude Code plan, kept in ~/.claude/plans OUTSIDE the project. Tracks: `tracks`, else auto-classified. `dryRun: true` writes nothing: the same result plus `preview` (each file, bounded). Returns {feature, files, mapping, counts, warnings}.",
+      "Import a spec written for another tool as a NEW dev-spec feature (never over an existing feature; the source is only read). `tool`: 'kiro' (.kiro/specs/<name>/), 'spec-kit' (specs/<nnn-name>/ — spec.md, plan.md, tasks.md), 'openspec' (openspec/specs/<capability>/ or openspec/changes/<id>/), 'plan' (a Markdown plan — Claude Code plan mode, a Cursor .cursor/plans/*.plan.md), 'execplan' (a Codex ExecPlan), 'bmad' (BMAD PRD + stories, or one story file) or 'fluidplan' (a .fluidplan/<id>/ folder, its plan.json, PLAN.md or DECISIONS.md); 'kiro-steering' (.kiro/steering/*.md) / 'cursor-rules' (.cursor/rules/*.mdc, .cursorrules) write .specs/steering/ files instead (path optional; an existing name is skipped, never overwritten). Each scenario becomes ONE EARS criterion where possible (else kept with [NEEDS CLARIFICATION]); IDs are remapped to US-N.AC-M (`mapping` {oldId: newId}); tasks are renumbered keeping their ticks, [P] / [USn] tags, _Implements:_, _Verify:_ and _Depends:_; decisions go to decisions.md / design.md; every artifact notes 'Imported from <tool> <path> on <date>'. `path`: a document or folder inside the project, never in a hidden folder but the tools' own (several plans in a folder: name the file); `text` (plan / execplan / fluidplan only, instead of path) is the document itself — e.g. a Claude Code plan, kept in ~/.claude/plans OUTSIDE the project. Tracks: `tracks`, else auto-classified. `dryRun: true` writes nothing: the same result plus `preview` (each file, bounded). Returns {feature, files, mapping, counts, warnings}.",
     inputSchema: {
       type: "object",
       properties: {
@@ -257,7 +257,8 @@ const TOOLS = [
         name: { type: "string", description: "Feature name/slug." },
         tasks: {
           type: "array",
-          description: "The tasks to append, in order (at least one).",
+          description: "The tasks to append, in order.",
+          minItems: 1,
           items: {
             type: "object",
             properties: {
@@ -429,12 +430,12 @@ const TOOLS = [
   {
     name: "spec_log",
     description:
-      "Git-linked evidence for clients without a shell tool for dev-spec: per ACTIVE task of a feature, the commits whose message cites it, plus (+tdd) a red-first check — the same result as `dev-spec log <feature> --json`. THIS SERVER NEVER RUNS GIT (or any command): pass `gitLog`, the text of `git log --name-only --relative` that you or the user ran in the project (an empty gitLog — a repository without commits — is valid: 0 commits). A message cites task N when it names the feature (its slug) and \"task #N\" / \"#N\" (PT tarefa, ES tarea), or one of the task's T-IDs / AC IDs. Red-first: a task with _Makes green: T-xx_ committed before any commit touching a test file that names T-xx warns `impl-first`. Returns {commits, truncated, citing, tasks, redFirst, warnings, lines}; `max` = the --max-count the log was read with (a log that long is a full window).",
+      "Git-linked evidence: per ACTIVE task of a feature, the commits whose message cites it, plus (+tdd) a red-first check — the result of `dev-spec log <feature> --json`. THIS SERVER NEVER RUNS GIT: pass `gitLog`, the output of `git log --name-only --relative` run in the project — for a feature on its own branch (spec_status `branch`) `git log <branch.commit>..HEAD --name-only --relative`, as the CLI reads it (a fuller log is cut at that commit); an empty gitLog (no commits) is valid. A message cites task N when it names the feature (its slug) and \"task #N\" / \"#N\" (PT tarefa, ES tarea), or one of the task's T-IDs / AC IDs. Red-first: a task with _Makes green: T-xx_ committed before any commit touching a test file that names T-xx warns `impl-first`. Returns {commits, truncated, citing, tasks, redFirst, warnings, lines}; `max` = the --max-count the log was read with (a log that long is a full window).",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name/slug." },
-        gitLog: { type: "string", description: "The output of `git log --name-only --relative` (e.g. with --max-count=1000), run in the project — never run by this server." },
+        gitLog: { type: "string", description: "That output (e.g. --max-count=1000) — never run by this server." },
         max: { type: "integer", minimum: 1, description: "Optional: the --max-count the log was read with (a log that long is a full window)." },
         projectDir: PROJECT_DIR,
       },
@@ -448,23 +449,27 @@ const TOOLS = [
 // enforces its own rules whatever a client makes of them. readOnlyHint: true only when NO argument can make the tool write
 // (spec_roadmap / spec_catalog / spec_export / spec_changelog / spec_metrics / spec_task_brief write with `write: true`,
 // spec_impact with `reopen`, spec_upgrade with `apply`, spec_templates / spec_tracks with `init` — so they are not read-only;
-// a read-only tool never touches .specs/ — mcp/test.js snapshots the tree around each). destructiveHint: only spec_feature
-// (`remove` deletes a feature folder) — every other writer only adds or updates what it owns (1.25: spec_export {format:
-// "adr"} also removes the ADR files it generated that no decision backs any more — never a hand-written one). idempotentHint: a second
-// identical call changes nothing more (a tick, an approval, an appended task or decision, finish's evidence each add a record:
-// false). openWorldHint: false everywhere — local files only, no network, no command, no git.
+// a read-only tool never touches .specs/ — mcp/test.js snapshots the tree around each). destructiveHint (MCP: false = "only
+// additive updates"): every tool one of whose arguments removes or overwrites a record the user made (1.25.1, review 7 — only
+// spec_feature carried it): spec_feature (remove deletes a feature folder), spec_export (adr: removes the generated ADR files no
+// decision backs), spec_approve (revoke), spec_complete_task (undo), spec_impact (reopen unticks), spec_backlog / spec_milestone
+// (rm), spec_depend (dependsOn replaces the list, [] clears it), spec_add_track (remove), spec_init (an empty check command removes
+// it, approvalRoles {} clears them, a setting is overwritten) and spec_tracks (signals set overwrites / forget removes an override).
+// The rest only add records or regenerate their own derived files (ROADMAP.*, SPECS.md, a brief, a merge summary). idempotentHint:
+// a second identical call changes nothing more (a tick, an approval, an appended task or decision, finish's evidence each add a
+// record: false). openWorldHint: false everywhere — local files only, no network, no command, no git.
 const READ_ONLY = Object.freeze({ readOnlyHint: true, openWorldHint: false });
 const writes = (idempotent, destructive) => Object.freeze({ readOnlyHint: false, destructiveHint: !!destructive, idempotentHint: idempotent, openWorldHint: false });
 const TOOL_ANNOTATIONS = {
-  spec_init: writes(true), spec_classify: READ_ONLY, spec_create: writes(true), spec_list: READ_ONLY, spec_status: READ_ONLY,
-  spec_next_task: READ_ONLY, spec_task_brief: writes(true), spec_finish: writes(false), spec_complete_task: writes(false),
-  ears_validate: READ_ONLY, trace_check: READ_ONLY, spec_doctor: READ_ONLY, spec_approve: writes(false), steering_scaffold: writes(true),
-  spec_roadmap: writes(true), spec_backlog: writes(true), spec_depend: writes(true), spec_scan: READ_ONLY, spec_coverage: READ_ONLY,
-  spec_clarify: READ_ONLY, spec_next_action: READ_ONLY, spec_add_track: writes(true), spec_feature: writes(true, true),
-  spec_import: writes(true), spec_append_tasks: writes(false), spec_impact: writes(true), spec_metrics: writes(true),
-  spec_catalog: writes(true), spec_drift: READ_ONLY, spec_upgrade: writes(true), spec_templates: writes(true), spec_tracks: writes(true),
-  spec_export: writes(true), spec_changelog: writes(true), spec_decide: writes(false),
-  spec_stop_check: READ_ONLY, spec_log: READ_ONLY, spec_milestone: writes(true),
+  spec_init: writes(true, true), spec_classify: READ_ONLY, spec_create: writes(true), spec_list: READ_ONLY, spec_status: READ_ONLY,
+  spec_next_task: READ_ONLY, spec_task_brief: writes(true), spec_finish: writes(false), spec_complete_task: writes(false, true),
+  ears_validate: READ_ONLY, trace_check: READ_ONLY, spec_doctor: READ_ONLY, spec_approve: writes(false, true), steering_scaffold: writes(true),
+  spec_roadmap: writes(true), spec_backlog: writes(true, true), spec_depend: writes(true, true), spec_scan: READ_ONLY, spec_coverage: READ_ONLY,
+  spec_clarify: READ_ONLY, spec_next_action: READ_ONLY, spec_add_track: writes(true, true), spec_feature: writes(true, true),
+  spec_import: writes(true), spec_append_tasks: writes(false), spec_impact: writes(true, true), spec_metrics: writes(true),
+  spec_catalog: writes(true), spec_drift: READ_ONLY, spec_upgrade: writes(true), spec_templates: writes(true), spec_tracks: writes(true, true),
+  spec_export: writes(true, true), spec_changelog: writes(true), spec_decide: writes(false),
+  spec_stop_check: READ_ONLY, spec_log: READ_ONLY, spec_milestone: writes(true, true),
 };
 // A tool missing from the table gets the protocol's own defaults spelled out (may write, may destroy, not idempotent) — the
 // test fails on it anyway.
@@ -651,8 +656,10 @@ const serverRequests = new Map();
 let serverRequestSeq = 0;
 // → { rid, promise, cancel(reason) }. The promise resolves to the client's response, { timeout: true } (no answer within
 // timeoutMs) or { cancelled: true } (cancel(): the request that needed it was cancelled); the last two tell the client
-// (notifications/cancelled for our request id), so it can close the question.
-function clientRequest(method, params, timeoutMs) {
+// (notifications/cancelled for our request id), so it can close the question. `late` (1.25.1, review 7 — roots/list): a timeout
+// settles the promise but cancels nothing — the request stays open and an answer that comes later goes to late(response) (a
+// client slower than the timeout used to leave the default project on the server's cwd for the whole session).
+function clientRequest(method, params, timeoutMs, late) {
   const rid = "dev-spec-" + ++serverRequestSeq;
   let settle;
   const promise = new Promise((resolve) => { settle = resolve; });
@@ -665,7 +672,12 @@ function clientRequest(method, params, timeoutMs) {
     return true;
   };
   serverRequests.set(rid, (msg) => done(msg));
-  timer = setTimeout(() => done({ timeout: true }, "timeout"), timeoutMs);
+  const onTimeout = () => {
+    if (typeof late !== "function") return done({ timeout: true }, "timeout");
+    serverRequests.set(rid, (msg) => { serverRequests.delete(rid); late(msg); }); // still listening, nothing cancelled
+    settle({ timeout: true });
+  };
+  timer = setTimeout(onTimeout, timeoutMs);
   process.stdout.write(frame({ jsonrpc: "2.0", id: rid, method, params })); // never into a batch reply: the client must see it now
   return { rid, promise, cancel: (reason) => done({ cancelled: true }, reason || "cancelled") };
 }
@@ -825,40 +837,83 @@ const REQUIRED_ONE_OF = { spec_import: [{ names: ["path", "text"], unless: (a) =
 const EMPTY_OK = { spec_log: ["gitLog"], spec_stop_check: ["message"] };
 function missingArgs(toolName, args) {
   const tool = TOOLS.find((t) => t.name === toolName);
-  if (!tool || !tool.inputSchema || !Array.isArray(tool.inputSchema.required)) return [];
+  if (!tool || !tool.inputSchema) return [];
   const emptyOk = hasOwn(EMPTY_OK, toolName) ? EMPTY_OK[toolName] : [];
   const given = (k) => !(args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim() && !emptyOk.includes(k)));
-  const missing = tool.inputSchema.required.filter((k) => !given(k));
+  const missing = (Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []).filter((k) => !given(k));
   for (const group of hasOwn(REQUIRED_ONE_OF, toolName) ? REQUIRED_ONE_OF[toolName] : []) if (!group.unless(args) && !group.names.some(given)) missing.push(group.names[0]);
+  // 1.25.1: a NESTED object's `required` keys too (spec_finish evidence[n] {name, command, exitCode}, spec_append_tasks tasks[n].text)
+  // — by their path (`evidence[0].command`): `evidence: [{}]` reached the engine, which answered "'undefined' is not a project check".
+  for (const [k, s] of Object.entries(tool.inputSchema.properties || {})) if (given(k)) nestedMissing(s, args[k], k, missing);
   return missing;
 }
+// A value's missing required keys, by path — an object's (schema `properties` + `required`) and each array item's; the value
+// absent, null or a blank string is "not given" (the top-level rule). A value of the wrong type is invalidArgs' to report.
+function nestedMissing(schema, value, where, out) {
+  if (!TYPE_CHECK.object(schema)) return;
+  if (Array.isArray(value)) {
+    if (TYPE_CHECK.object(schema.items)) value.forEach((v, i) => nestedMissing(schema.items, v, `${where}[${i}]`, out));
+    return;
+  }
+  if (!TYPE_CHECK.object(value) || !TYPE_CHECK.object(schema.properties)) return;
+  for (const k of Array.isArray(schema.required) ? schema.required : []) {
+    const v = hasOwn(value, k) ? value[k] : undefined;
+    if (v === undefined || v === null || (typeof v === "string" && !v.trim())) out.push(where + "." + k);
+  }
+  for (const [k, s] of Object.entries(schema.properties)) if (hasOwn(value, k) && value[k] != null) nestedMissing(s, value[k], where + "." + k, out);
+}
 
-// Top-level arguments the tool's inputSchema doesn't list (1.24 r6 A1) → [{argument, didYouMean?}]. They used to be dropped, and
-// the call did something else than asked: spec_approve {revoked: true} RE-APPROVED changed content, spec_task_brief {task: 3}
-// briefed the next task, spec_export {feature} exported the whole project. Like the CLI's unknown flag (1.23), such a call is
-// refused before anything runs. An absent or null value is "not given" (the rule of every argument) — never an error. The
-// suggestion: a word people type for an argument (ARG_ALIASES, when the tool takes it), else the nearest name (spec.closestName).
+// Arguments the tool's inputSchema doesn't list (1.24 r6 A1) → { unknown: [{argument, didYouMean?}], valid } (valid: what the
+// message lists — the tool's own names, and for a nested key the names its object takes). They used to be dropped, and the call
+// did something else than asked: spec_approve {revoked: true} RE-APPROVED changed content, spec_task_brief {task: 3} briefed the
+// next task, spec_export {feature} exported the whole project. Like the CLI's unknown flag (1.23), such a call is refused before
+// anything runs. An absent or null value is "not given" (the rule of every argument) — never an error. The suggestion: a word
+// people type for an argument (ARG_ALIASES, when the tool takes it), else the nearest name (spec.closestName).
+// 1.25.1: NESTED keys too — an object whose schema lists `properties` (an array's items included): spec_append_tasks {tasks:
+// [{text, verfy: "npm test"}]} appended a task with no _Verify:_ (then ticked "verified, nothing to verify"), spec_finish
+// {evidence: [{…, sumary}]} dropped the summary. The argument is the key's path (`tasks[0].verfy`), the suggestion too.
 const ARG_ALIASES = { feature: "name", slug: "name", task: "number", tasknumber: "number", project: "projectDir", dir: "projectDir",
   projectdirectory: "projectDir", untick: "undo", unapprove: "revoke" };
 function unknownArgs(toolName, args) {
   const tool = TOOLS.find((t) => t.name === toolName);
   const props = tool && tool.inputSchema && tool.inputSchema.properties ? tool.inputSchema.properties : {};
   const names = Object.keys(props);
-  const out = [];
+  const unknown = [];
+  const scopes = new Map(); // where a key was unknown ("" = the tool's own arguments, "tasks[]") → the names it takes
   for (const k of Object.keys(args)) {
-    if (hasOwn(props, k) || args[k] === undefined || args[k] === null) continue;
+    if (args[k] === undefined || args[k] === null) continue;
+    if (hasOwn(props, k)) { nestedUnknown(props[k], args[k], k, k, unknown, scopes); continue; }
     const low = k.toLowerCase();
     const alias = hasOwn(ARG_ALIASES, low) && hasOwn(props, ARG_ALIASES[low]) ? ARG_ALIASES[low] : null;
     const near = alias || spec.closestName(k, names);
-    out.push(near ? { argument: k, didYouMean: near } : { argument: k });
+    unknown.push(near ? { argument: k, didYouMean: near } : { argument: k });
+    scopes.set("", names);
   }
-  return out;
+  const valid = [...scopes].map(([label, list]) => (label ? `${label} {${list.join(", ")}}` : list.join(", "))).join("; ");
+  return { unknown, valid };
+}
+// where: the value's path (`tasks[0]`) · label: its schema's (`tasks[]` — the message names the keys it takes once).
+function nestedUnknown(schema, value, where, label, unknown, scopes) {
+  if (!TYPE_CHECK.object(schema)) return;
+  if (Array.isArray(value)) {
+    if (TYPE_CHECK.object(schema.items)) value.forEach((v, i) => nestedUnknown(schema.items, v, `${where}[${i}]`, label + "[]", unknown, scopes));
+    return;
+  }
+  if (!TYPE_CHECK.object(value) || !TYPE_CHECK.object(schema.properties)) return; // additionalProperties (spec_init checks): any key
+  const props = schema.properties;
+  for (const k of Object.keys(value)) {
+    if (value[k] === undefined || value[k] === null) continue;
+    if (hasOwn(props, k)) { nestedUnknown(props[k], value[k], where + "." + k, label + "." + k, unknown, scopes); continue; }
+    const near = spec.closestName(k, Object.keys(props));
+    unknown.push(near ? { argument: where + "." + k, didYouMean: where + "." + near } : { argument: where + "." + k });
+    scopes.set(label, Object.keys(props));
+  }
 }
 
 // Argument TYPES, also straight from the inputSchema, checked before dispatch. A wrong type used to reach the
 // engine and be coerced: number 1.9 ticked task 1, name {a:1} created .specs/object-object/, cap "abc"
 // scanned 0 files, text 123 threw 'text.trim is not a function'. An argument the schema doesn't list is refused before
-// (unknownArgs — 1.24 r6; it used to be ignored); a nested object's extra keys are still left to the engine.
+// (unknownArgs — 1.24 r6; it used to be ignored — nested keys too since 1.25.1), and so is a missing nested required key.
 const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
 // A network path in projectDir — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — made this
 // local server open an SMB/WebDAV connection to whatever host a tool call named (on Windows the redirector sends the
@@ -909,7 +964,7 @@ function parseProjectDir(v) {
     if (host && host[1] && host[1].toLowerCase() !== "localhost") return { code: "project-network", message: (A) => A.network(s) };
     p = fileUriToPath(s);
     if (!p) return { code: "project-uri", message: (A) => A.projectUri(s) };
-  }
+  } else p = spec.expandHome(p); // 1.25.1 (review 7): "~/zz" is the home folder's zz — it made a folder named "~" in the cwd
   if (isNetworkPath(p)) return { code: "project-network", message: (A) => A.network(s) };
   return { dir: path.resolve(rootsDir || process.cwd(), p) };
 }
@@ -929,7 +984,22 @@ function projectDirArg(toolName, args) {
   try { st = fs.statSync(r.dir); } catch { st = null; }
   if (st && !st.isDirectory()) return { refuse: { code: "project-not-dir", error: argMessages().projectNotDir(r.dir) } };
   if (!st && toolName !== "spec_init") return { refuse: { code: "project-missing", error: argMessages().projectMissing(r.dir) } };
+  // 1.25.1 (review 7): spec_import reads the files its path names and returns them (dryRun: `preview`) — {projectDir: "<home>/.aws",
+  // tool: "plan", path: "credentials", dryRun: true} returned the credentials. An explicit projectDir other than the default project
+  // (env / roots / cwd) must hold a dev-spec .specs/ — spec_init there first; the engine refuses a hidden folder or a file that is no
+  // document wherever the project is (importSourceAt).
+  if (SPECS_REQUIRED.has(toolName) && st && !sameFolder(r.dir, defaultProjectDir()) && !spec.isDevSpecDir(r.dir)) {
+    return { refuse: { code: "project-no-specs", error: argMessages().projectNoSpecs(r.dir) } };
+  }
   return { args: { ...args, projectDir: r.dir } };
+}
+const SPECS_REQUIRED = new Set(["spec_import"]);
+const FOLD_PATHS = process.platform === "win32" || process.platform === "darwin";
+// The same folder, by real path (8.3 names, links), case-folded where the file system is.
+function sameFolder(a, b) {
+  const real = (p) => { try { return fs.realpathSync.native(p); } catch { return path.resolve(p); } };
+  const x = real(a), y = real(b);
+  return FOLD_PATHS ? x.toLowerCase() === y.toLowerCase() : x === y;
 }
 function shortJson(v) {
   let s;
@@ -944,6 +1014,7 @@ function expectedType(schema, A) {
   if (schema.minimum != null && schema.maximum != null) d += " " + A.between(schema.minimum, schema.maximum); // 1.24 r6 A5
   else if (schema.minimum != null) d += " " + A.atLeast(schema.minimum);
   else if (schema.maximum != null) d += " " + A.atMost(schema.maximum);
+  if (schema.minItems != null) d += " " + A.atLeastItems(schema.minItems); // 1.25.1: spec_append_tasks.tasks
   return d;
 }
 function schemaIssues(schema, value, where, out) {
@@ -953,6 +1024,7 @@ function schemaIssues(schema, value, where, out) {
   if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return bad();
   if (typeof value === "number" && schema.minimum != null && value < schema.minimum) return bad();
   if (typeof value === "number" && schema.maximum != null && value > schema.maximum) return bad(); // 1.24 r6 A5: spec_next_task.max
+  if (Array.isArray(value) && schema.minItems != null && value.length < schema.minItems) return bad(); // 1.25.1: tasks: [] appended nothing
   if (Array.isArray(value) && schema.items) value.forEach((v, i) => schemaIssues(schema.items, v, `${where}[${i}]`, out));
   if (TYPE_CHECK.object(value) && schema.properties) propertyIssues(schema.properties, value, where + ".", out);
 }
@@ -1029,13 +1101,19 @@ function toolFailure(e, args) {
 // `roots` is asked once (roots/list, on the first request that needs the project) and its first local file:// root becomes the
 // default: tools/call without a projectDir gets it as one, and resources / prompts / completions read it. A network root
 // (file://host/…), one with '..', or no usable root → the old default (cwd). notifications/roots/list_changed asks again.
-const ROOTS_TIMEOUT_MS = 5000;
+// 1.25.1 (review 7): no answer within ROOTS_TIMEOUT_MS → the cwd for now, but the question stays open: an answer that comes later
+// still sets the root (it was dropped, and the cwd stayed the default for the session). DEV_SPEC_ROOTS_TIMEOUT_MS (≥ 1, ≤ 60 000).
+const ROOTS_TIMEOUT_MS = (() => {
+  const n = Number(String(process.env.DEV_SPEC_ROOTS_TIMEOUT_MS || "").trim());
+  return Number.isSafeInteger(n) && n >= 1 ? Math.min(n, 60000) : 5000;
+})();
 // An env value that names a folder (an unexpanded `${VAR}`, `$VAR` or `%VAR%` — a client that didn't expand it — names none).
 const envDirSet = (v) => { const s = v == null ? "" : String(v).trim(); return !!s && !spec.unexpandedVar(s); };
 const ENV_PROJECT = envDirSet(process.env.SPEC_PROJECT_DIR) || envDirSet(process.env.CLAUDE_PROJECT_DIR);
 let clientRoots = false; // initialize: the client declared capabilities.roots
 let rootsDir; // undefined: not asked yet · null: no usable root · the folder
 let rootsWait = null; // the roots/list in flight
+let rootsGen = 0; // which ask an answer belongs to (initialize / list_changed start another: an older late answer is ignored)
 // A local file:// URI → its absolute path, else null (a host other than localhost, '..', a control character; on Windows a
 // drive path only — file:///C:/x, file:///c%3A/x).
 function fileUriToPath(uri) {
@@ -1063,8 +1141,14 @@ function firstFileRoot(res) {
 function rootsPending() {
   if (!clientRoots || ENV_PROJECT || rootsDir !== undefined) return null;
   if (!rootsWait) {
-    const q = clientRequest("roots/list", {}, ROOTS_TIMEOUT_MS);
-    rootsWait = q.promise.then((res) => { rootsDir = firstFileRoot(res); rootsWait = null; });
+    const gen = ++rootsGen;
+    // A late answer (after the timeout) sets the root then — unless another ask started since, or a root was set meanwhile.
+    const q = clientRequest("roots/list", {}, ROOTS_TIMEOUT_MS, (res) => { if (gen === rootsGen && rootsDir === null) rootsDir = firstFileRoot(res); });
+    const w = q.promise.then((res) => {
+      if (rootsWait === w) rootsWait = null;
+      if (gen === rootsGen) rootsDir = res.timeout ? null : firstFileRoot(res);
+    });
+    rootsWait = w;
   }
   return rootsWait;
 }
@@ -1182,6 +1266,8 @@ function handle(msg) {
         clientElicits = TYPE_CHECK.object(el) && (!Object.keys(el).length || TYPE_CHECK.object(el.form));
         clientRoots = TYPE_CHECK.object(caps.roots); // 1.23: the default project from roots/list (rootsPending)
         rootsDir = undefined;
+        rootsGen++; // 1.25.1: an answer to an earlier session's roots/list no longer applies
+        rootsWait = null;
         return result(id, {
           protocolVersion: proto,
           serverInfo: SERVER_INFO,
@@ -1190,7 +1276,7 @@ function handle(msg) {
             ? { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} }
             : { tools: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} },
           instructions:
-            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). Evidence before claims: tick a task (spec_complete_task) only with the run of its _Verify:_ command that you or the user actually made — if you cannot run it, ask for its output instead of ticking (never send a subagent to look for a shell). A CLI line you give the user is the runnable one the tools print — `" + spec.DEV_SPEC + " …` (a plugin install has no `dev-spec` on PATH). ears_validate, trace_check and spec_doctor enforce quality gates. Approvals are the user's: with meta.approvalGuard ask / deny, spec_approve asks the user through the client (elicitation) when it can. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). All file ops are local to the project's .specs/ directory." +
+            "Local spec-driven engine. Use spec_classify to pick tracks, spec_init to scaffold steering, spec_create to scaffold a feature, then spec_status / spec_next_task / spec_complete_task to drive execution (spec_task_brief builds a self-contained brief per task for subagent execution). To resume a feature or answer 'where am I / what now?', call spec_next_action {name}: where it stands and the ONE next step. Evidence before claims: tick a task (spec_complete_task) only with the run of its _Verify:_ command that you or the user actually made — if you cannot run it, ask for its output instead of ticking (never send a subagent to look for a shell). A CLI line you give the user is the runnable one the tools print — `" + spec.DEV_SPEC + " …` (a plugin install has no `dev-spec` on PATH). ears_validate, trace_check and spec_doctor enforce quality gates. Approvals are the user's: with meta.approvalGuard ask / deny, spec_approve asks the user through the client (elicitation) when it can. After a plugin update, spec_upgrade audits an existing .specs/ (apply: the safe migrations). Everything is local: writes stay in the project's .specs/, reads inside the project (spec_scan / spec_coverage / trace_check {code} read its code; spec_import a source inside it — never a hidden folder or a non-document file, and with another projectDir only a dev-spec project's); no network, no command, no git." +
             (PROMPTS_ON ? " Prompts: one per plugin command (spec, spec-status, spec-impact, …) — the slash-command workflow for clients without the dev-spec-driven skill." : "") +
             " Resources (read-only): the project's spec artifacts — specs://roadmap, specs://catalog, specs://steering/{file}, specs://feature/{slug}/{artifact}.",
         });
@@ -1215,11 +1301,8 @@ function handle(msg) {
         const folded = foldEnumArgs(toolName, rawArgs || {});
         // 1.24 r6 A1: an argument the schema doesn't list is refused FIRST — a misspelt required key reads as unknown (with its
         // did-you-mean) rather than missing; nothing runs.
-        const unknown = unknownArgs(toolName, folded);
-        if (unknown.length) {
-          const props = TOOLS.find((t) => t.name === toolName).inputSchema.properties || {};
-          return argError(id, argMessages(folded).unknownArgs(toolName, unknown, Object.keys(props).join(", ")), "unknown-argument", { unknown });
-        }
+        const { unknown, valid } = unknownArgs(toolName, folded);
+        if (unknown.length) return argError(id, argMessages(folded).unknownArgs(toolName, unknown, valid), "unknown-argument", { unknown });
         const missing = missingArgs(toolName, folded);
         if (missing.length) return argError(id, argMessages(folded).missing(missing.join(", ")), "missing-arguments", { missing });
         const invalid = invalidArgs(toolName, folded);

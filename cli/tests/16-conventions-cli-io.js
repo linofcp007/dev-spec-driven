@@ -118,4 +118,49 @@ exports.run = async ({ ok, run, tmp, CLI }) => {
       "1.24 r6 B-I9: `ears -` with piped stdin prints no stdin hint (only a terminal gets it); the hint exists in every language (got " +
       JSON.stringify([r.status, r.stderr.slice(0, 120), hints]) + ")");
   }
+
+  // 1.25.1 (review 7): terminal escape injection — task text / a _Verify:_ with raw ESC / OSC / C1 bytes reached the terminal (a cloned
+  // tasks.md could show `$ npm test` while done --run ran something else). The human output loses every control character but tab and
+  // line feed; --json keeps the value (a raw C1 / DEL written as its \u escape); done --run / finish --run refuse such a command
+  // (nothing runs, code control-chars) and doctor fails verify-control.
+  {
+    const ESC = String.fromCharCode(27), BEL = String.fromCharCode(7), CSI1 = String.fromCharCode(0x9b), CR = String.fromCharCode(13);
+    const p = path.join(tmp, "r7-ctl");
+    run(["init", "--project", p]);
+    run(["create", "Esc", "core", "--project", p]);
+    const tasks = path.join(p, ".specs", "esc", "tasks.md");
+    const evil = "node -e \"require('fs').writeFileSync('ran.txt','x')\" " + ESC + "[2K" + CR + "$ npm test";
+    fs.writeFileSync(tasks, "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] Title " + ESC + "]0;pwned" + BEL + "done " + CSI1 + "31m\n  - _Verify: " + evil + "_\n- [ ] 2. [US1] Plain\n");
+    const cli = (args) => spawnSync(process.execPath, [CLI, ...args, "--project", p], { encoding: "utf8" });
+    const raw = (s) => [...String(s)].filter((ch) => { const c = ch.charCodeAt(0); return (c < 32 && c !== 9 && c !== 10 && c !== 13) || (c >= 0x7f && c <= 0x9f); }).length;
+    const done = cli(["done", "esc", "1", "--run", "--json"]);
+    let dj = null;
+    try { dj = JSON.parse(done.stdout); } catch { dj = null; }
+    const status = cli(["status", "esc"]);
+    const next = cli(["next", "esc", "--json"]);
+    let nj = null;
+    try { nj = JSON.parse(next.stdout); } catch { nj = null; }
+    const doc = cli(["doctor", "esc", "--json"]);
+    let docj = null;
+    try { docj = JSON.parse(doc.stdout); } catch { docj = null; }
+    const vc = docj && docj.checks.find((c) => c.id === "verify-control");
+    // a project check holding an ESC: spec_init refuses it, one stored by hand makes finish --run run nothing
+    const initBad = cli(["init", "--check", "test=npm test" + ESC + "[2K"]);
+    const rmPath = path.join(p, ".specs", "roadmap.json");
+    const rm = JSON.parse(fs.readFileSync(rmPath, "utf8"));
+    rm.meta = Object.assign(rm.meta || {}, { checks: { test: "node -e \"require('fs').writeFileSync('ran2.txt','x')\"" + ESC + "[2K" } });
+    fs.writeFileSync(rmPath, JSON.stringify(rm, null, 2));
+    const fin = cli(["finish", "esc", "--run", "--json"]);
+    let fj = null;
+    try { fj = JSON.parse(fin.stdout); } catch { fj = null; }
+    const S = require(path.join(path.dirname(CLI), "..", "mcp", "lib", "i18n.js"));
+    ok(done.status === 1 && dj && dj.code === "control-chars" && /\\u001b/.test(dj.error) && !fs.existsSync(path.join(p, "ran.txt")) &&
+      status.status === 0 && /Title/.test(status.stdout) && raw(status.stdout + status.stderr) === 0 && !/\r(?!\n)/.test(status.stdout) &&
+      nj && nj.next && nj.next.text.includes(ESC) && nj.next.text.includes(CSI1) && raw(next.stdout) === 0 && /\\u009b/.test(next.stdout) &&
+      vc && vc.status === "fail" && /\\u001b/.test(vc.detail) && raw(doc.stdout) === 0 &&
+      initBad.status === 1 && fin.status === 1 && fj && fj.code === "control-chars" && /meta|test/.test(fj.error) && !fs.existsSync(path.join(p, "ran2.txt")) &&
+      ["pt", "es"].every((l) => /#1/.test(S.msg(l).verifyControl.doctor("#1")) && /x/.test(S.msg(l).verifyControl.run(1, "x")) && /t1/.test(S.msg(l).verifyControl.checks("t1"))),
+      "1.25.1 r7: no raw control character reaches the terminal — status prints the task text without ESC / OSC / C1 bytes, next --json keeps the value (C1 as \\u009b); done --run and finish --run refuse a command holding one (code control-chars, nothing ran), init --check refuses one, doctor fails verify-control (got " +
+      JSON.stringify([done.status, dj && dj.code, fs.existsSync(path.join(p, "ran.txt")), raw(status.stdout + status.stderr), nj && raw(next.stdout), vc, initBad.status, fin.status, fj && fj.code]).slice(0, 600) + ")");
+  }
 };

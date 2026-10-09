@@ -374,7 +374,7 @@ function decisionEntryLines(e, D) {
 // entry to decisions.md (created with its localized header when absent). Under the feature lock (featureLocked).
 function decide(projectDir, name, input) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const D = i18n.msg(lng).decisions;
@@ -723,7 +723,7 @@ function exportAdr(projectDir, opts, pl) {
   let scope;
   if (opts.name != null && String(opts.name).trim() !== "") {
     const f = existingFeature(projectDir, opts.name);
-    if (!f.ok) return { ok: false, error: f.error };
+    if (!f.ok) return { ok: false, error: f.error, code: f.code };
     models = [adrModel(projectDir, f, false)];
     scope = "feature";
   } else {

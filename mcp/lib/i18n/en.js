@@ -1553,6 +1553,7 @@ const msg = {
       atLeast: (n) => `≥ ${n}`,
       atMost: (n) => `≤ ${n}`, // 1.24 r6 A5: a schema `maximum`
       between: (lo, hi) => `between ${lo} and ${hi}`, // 1.24 r6 A5: `minimum` and `maximum`
+      atLeastItems: (n) => `with at least ${n} item${n === 1 ? "" : "s"}`, // 1.25.1: a schema `minItems` (spec_append_tasks.tasks)
       // 1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
       unknownArgs: (tool, items, valid) => `Unknown argument${items.length > 1 ? "s" : ""} for ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (did you mean ${u.didYouMean}?)` : "")).join(", ")} — nothing was done. ${tool} takes: ${valid}.`,
       notObject: "arguments must be a JSON object.",
@@ -1561,6 +1562,8 @@ const msg = {
       // 1.24 r6 A3: projectDir names an existing folder (the CLI's --project rule) — spec_init alone creates one
       projectMissing: (dir) => `projectDir ${dir}: no such folder — check the path (only spec_init creates a project folder).`,
       projectNotDir: (dir) => `projectDir ${dir} is a file, not a folder.`,
+      // 1.25.1 (review 7): spec_import reads (and, dry, returns) the files its path names — only in the default project or a dev-spec one
+      projectNoSpecs: (dir) => `projectDir ${dir} holds no dev-spec project (a .specs/ with roadmap.json, steering/ or a feature) — spec_import reads files only in the default project or one spec_init set up: run spec_init with this projectDir first.`,
       projectUri: (uri) => `projectDir ${uri} is not a local file:// URI of a folder (file:///C:/path on Windows, file:///path elsewhere).`,
       // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params) — 1.14 full review S2.
       unknownTool: (name) => `Unknown tool: ${name} — tools/list lists the tools this server provides.`,
@@ -1905,6 +1908,9 @@ const msg = {
       pathRequired: "path required — the folder (or a file) of the spec to import.",
       outside: (p) => `'${p}' is outside the project — spec_import only reads inside the project directory.`,
       notFound: (p) => `'${p}' not found.`,
+      // 1.25.1 (review 7): never a hidden folder or file but the importers' own; a file named as the source is a document format
+      hidden: (p, part) => `'${p}' is in a hidden folder or is a hidden file (${part}) — spec_import reads none but the importers' own: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
+      notSource: (p) => `'${p}' is no spec source spec_import reads — name a .md / .markdown / .mdc / .txt / .json / .yaml / .yml file, or the source's folder.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
       exists: (slug) => `Feature '${slug}' already exists — import never overwrites it. Pass another name.`,
       tooLarge: (rel, max) => `${rel} is over ${max} characters — too large to import whole (the part past the limit, a plan's steps included, would be lost). Split or shorten it, then import again; nothing was created.`,
@@ -2348,6 +2354,8 @@ const msg = {
       noGitUninstall: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --uninstall removes that repository's own git config and .gitattributes lines; there is nothing to remove here.`,
       attrsAdded: (file) => `${file}: the merge driver's lines added (commit it — the whole team gets them):`,
       attrsKept: (file) => `${file}: the merge driver's lines are already there.`,
+      // 1.25.1 (review 7): --install / --uninstall never write through a link
+      attrsNotFile: (file) => `${file} is a link or not a regular file — merge-state never writes through it (it would change the file it points at): replace it with a plain .gitattributes and run it again.`,
       attrsRemoved: (file) => `${file}: the merge driver's lines removed (commit it).`,
       attrsNone: (file) => `${file}: no merge driver line to remove.`,
       configSet: (key, value) => `git config ${key} = ${value}`,
@@ -2518,6 +2526,7 @@ const msg = {
           head: "Status line — add this to ~/.claude/settings.json (every project) or to a project's .claude/settings.local.json (this machine only — the path is this machine's, so never the committed .claude/settings.json):",
           after: "It prints one line — the most active feature, its tasks, unverified ticks and the next step — and nothing outside a dev-spec project.",
           cacheNote: "This path is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): after a plugin update run /spec-statusline again — the old copy is removed 14 days after an update.",
+          cacheFollows: "This CLI is a versioned copy in Claude Code's plugin cache (…/plugins/cache/…): the command looks up the newest installed version of the plugin at each run, so it keeps working after a plugin update — no need to run /spec-statusline again.",
           tryIt: (cmd) => `Try it: echo '{"cwd": "<your project>"}' | ${cmd}`,
         },
       },
@@ -2596,6 +2605,13 @@ const msg = {
       runHint: (cmd) => `⚠ \`${cmd}\` pipes into another command: the shell reports only the LAST command's exit code, so a failing check can be recorded as passing — drop the pipe, or start it with \`set -o pipefail;\` under bash (--shell bash); cmd.exe has no pipefail.`,
       doctor: (list) => `a _Verify:_ command pipes into another one — a failing check can exit 0 (a pipeline reports its LAST command's code): ${list}. Drop the pipe or use \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Task ${n}: the recorded command pipes into another one (\`${cmd}\`) — its exit 0 is the LAST command's, so this pass may hide a failing check. Drop the pipe (or use \`set -o pipefail\` under bash) and re-run.`,
+    },
+    // 1.25.1 (review 7): a _Verify:_ / project check command holding a control character (shown with \u escapes) — doctor fails
+    // verify-control; done --run / finish --run run nothing
+    verifyControl: {
+      doctor: (list) => `a command holds a control character (an escape sequence, a carriage return…) — a terminal shows another command than the one that runs: ${list}. Retype it as plain text; done --run / finish --run refuse it.`,
+      run: (n, cmd) => `Task ${n}: its _Verify:_ command holds a control character (${cmd}) — a terminal would show another command than the one that runs. Nothing ran: retype it as plain text in tasks.md.`,
+      checks: (list) => `Project check ${list}: its command holds a control character — a terminal would show another command than the one that runs. Nothing ran: set it again (${DEV_SPEC} init --check name="cmd").`,
     },
 
     // Project templates (.specs/templates/) — spec_templates / `dev-spec templates`, and the {{summary}} slot of a scaffold.

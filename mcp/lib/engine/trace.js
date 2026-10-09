@@ -317,7 +317,7 @@ const RE_PADDED_AC = /^US-(?:0\d+\.AC-\d+|\d+\.AC-0\d+)$/;
 // ears_validate {name} / `dev-spec ears <feature>`: lint a feature's requirements.md (resolver-aware).
 function earsFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const text = criteriaText(f.dir); // a change: its change.md without the task blocks (1.21 review C1)
   const lng = featureLang(projectDir, f.slug);
   if (text == null) return { ok: false, error: i18n.msg(lng).err.requirementsMissing(f.slug) };
@@ -562,7 +562,7 @@ function taskCitations(blocks, dir, reqText) {
 // an _Implements:_ glob walk may look at (default COVERAGE_CAP) — engine-internal (tests), never a tool argument.
 function traceCheck(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const dir = f.dir;
   // Strip HTML comments so example markers in template guidance don't count as real refs.
   // 1.21 review C1: a change's change.md is read as two views — its criteria without the task blocks, its task blocks alone —
@@ -1554,7 +1554,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
 // files naming each planned T-ID (bounded walk; opts.scan reuses one).
 function traceMatrix(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   return buildTraceMatrix(projectDir, f, opts);
 }
 

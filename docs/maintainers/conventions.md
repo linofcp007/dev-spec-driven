@@ -29,7 +29,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   append: `{append: true}` opens with O_APPEND | O_CREAT | O_NOFOLLOW where the platform has it, the target lstat'ed first) — and
   `withLockFile` checks its lock's path the same way BEFORE the lock exists. No other mcp/lib source writes with a raw fs call
   (mcp/tests/16-conventions.js guards it: writeFileSync / appendFileSync / renameSync / mkdirSync / copyFileSync / cpSync /
-  symlinkSync / linkSync / writeSync / an openSync with a write flag — files.js alone is allowed). The gate finds the `.specs`
+  symlinkSync / linkSync / writeSync / an openSync with a write flag — files.js alone is allowed; 1.25.1, review 7: mcp/evals/ too —
+  the eval harness writes evals/baseline.json through `spec.writeSpecFile`, the facade's gated atomic write, where its raw
+  fs.writeFileSync followed a link under .specs/). The gate finds the `.specs`
   folder a path lies in (`specsRootOf`: the nearest ancestor of that name — a path outside every .specs/ is not gated; the
   engine writes nothing there) and refuses (`specsWriteBlock`, lstat of each part below .specs/ + one realpath of the deepest
   that exists): **a link on the way** — a folder between .specs/ and the target (a feature folder, `.execution/`, `.history/`,
@@ -75,7 +77,10 @@ and U+FEFF gotchas are in CLAUDE.md.
   levels; 1.23 review: run from a subfolder, `create` / `backlog add` started a SECOND, nested .specs/ there) > the working
   folder. A value holding a variable left unexpanded — any `${`, a leading `$NAME`, a `%NAME%` (`unexpandedVar()`) — is
   unusable and falls through (1.23 review: `SPEC_PROJECT_DIR="${CLAUDE_PROJECT_DIR}/"`, `$CLAUDE_PROJECT_DIR` or
-  `%CLAUDE_PROJECT_DIR%` created that literal folder; only a whole `${VAR}` was caught). A separate project INSIDE another one
+  `%CLAUDE_PROJECT_DIR%` created that literal folder; only a whole `${VAR}` was caught). A leading `~` (alone, `~/`, `~\`) is the
+  home folder (1.25.1, review 7 — `expandHome()`, files.js; the CLI's `--project` / the env through its mirror in cli/completion.js,
+  the server's projectDir, the status line's candidates): Windows PowerShell 5.1 hands node `~` as typed and an MCP argument or a
+  JSON config is never expanded — `~/zz` made a folder named `~` in the working folder (`~user` stays as written). A separate project INSIDE another one
   needs `--project .` (or its own `.specs/` first — an empty one is enough). The CLI validates `--project` itself (below), the
   MCP server a tool's `projectDir` by the same rule (1.24 r6 — an existing folder, only spec_init creates one: mcp.md → Argument
   validation); a
@@ -170,7 +175,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   driver) writes the `.gitattributes` block (`mergeAttributes()`, pure, idempotent: a head comment + `MERGE_ATTRIBUTE_LINES`, the
   file's other lines and EOL kept) in the project folder and this clone's git config `merge.dev-spec-state.name` / `.driver` =
   `node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P` (forward slashes, single-quoted: git runs it through sh); `--uninstall`
-  removes both (an emptied .gitattributes is deleted). Without `--install` in a clone, git falls back to its text merge (an
+  removes both (an emptied .gitattributes is deleted); neither writes through a `.gitattributes` that is a link or not a regular file
+  (1.25.1, review 7 — lstat first: a cloned repository's link made --install write into the file it pointed at; exit 1, code
+  `attributes-not-file`, `mergeState.attrsNotFile`, nothing written, no git config). Without `--install` in a clone, git falls back to its text merge (an
   undefined driver name). **The sign-offs' drop rule runs on the 3-way RESULT** (`pruneSignoffs()`, 1.21 review A1): when only one
   side changed `signoffs`, `mergeThree` hands that side back as it is, so the rule is applied after it too (a stale
   `signoffs.<phase>.<role>` stayed next to the other side's later approval). **The driver never approves anything:** role
@@ -280,6 +287,21 @@ and U+FEFF gotchas are in CLAUDE.md.
   ~130 ms for the require). Only EARS errors and phantom task refs
   block; a requirements.md with EARS warnings or template placeholders (the STAGED text, `featurePlaceholders(…, text)`)
   gets a ⚠ line (`earsWarnings`), never "EARS clean" — the PostToolUse hook's rule.
+- **Terminal-safe CLI output (1.25.1, review 7).** The CLI prints spec text as written (task text, a `_Verify:_` and its run's
+  output, names): a raw ESC / OSC sequence or a lone carriage return in a cloned tasks.md made `done --run` show `$ npm test` while it
+  ran another command (and could retitle the terminal or hide lines). ONE choke point, `installOutputGuard()` (main's first step):
+  stdout and stderr's `write` — the human text loses every C0 control but tab and line feed (a CR only before a LF: CRLF lines, the
+  RFC 4180 CSV), DEL and every C1; under `--json` stdout keeps the value (JSON.stringify escapes C0; a raw DEL / C1 is written as its
+  `\u` escape — `die()`'s synchronous document too). The guard's regexes are built from char codes (never a raw control character in
+  the source). Running such a command is refused before anything runs: `done --run` (a `_Verify:_`) and `finish --run` (a stored
+  project check — `projectChecks().unsafe`) answer `code: "control-chars"` (`verifyControl.run` / `.checks`, the command shown with
+  `\u` escapes — `controlVisible`), spec_init refuses such a check (`validCheckCmd`) and doctor fails `verify-control`.
+- **The CLI loads the engine on first use (1.25.1, review 7).** `spec` is a proxy over the facade's `require` (`loadSpec()`): the
+  status line's render outside a project (cli/completion.js `statusProbe` first — claude-code-integration.md → Status line) and the
+  bare help (`dev-spec`, `--help` / `-h` alone, `help` alone — `BARE_HELP`) never load it; nothing at the top of cli/dev-spec.js may
+  read `spec.*` before main() (`projectDir` / `PROJECT_SOURCE` are null on those two paths, `BOOL_FLAGS()` / `CLI_LANGS()` are read on
+  use). `version` and `completion` still load it: version reports where the engine loads from (the load is the measurement),
+  completion's script holds the facade's value lists (never copied).
 - **Dates/timestamps**: fine to use `new Date()` in the MCP server and scripts (normal Node
   process). Do NOT assume that in any Workflow-script context.
   **Calendar dates (1.25.1, review 7): `today(now?, utc?)` and `dayOf(instant)` (engine/core.js; the facade's `today` /
@@ -307,7 +329,11 @@ and U+FEFF gotchas are in CLAUDE.md.
   review: `status || 0` passed a killed run). An engine refusal goes through `fail(r)`, never
   `die(r.error)`: with `--json` the whole `{ok: false, error, …}` result (`recorded`, `neverApproved`, `gated`…) is
   the one JSON document on stdout, as MCP returns it. `die()` is for CLI usage/argument errors only — with `--json` (1.23
-  review) it prints `{ok: false, error}` on stdout too (written synchronously: `process.exit` follows; the stderr line stays),
+  review) it prints `{ok: false, error, code}` on stdout too (written synchronously: `process.exit` follows; the stderr line stays —
+  1.25.1, review 7: the stable `code` MCP gives the same error — `unknown-argument` {unknown} for an unknown / misplaced option or
+  word (a single-dash `-j` too: it read as a feature name), `missing-arguments` {missing}, `invalid-arguments` {invalid},
+  `project-missing`, `project-not-dir` — else the CLI's own: `usage`, `unknown-command`, `project-empty`, `project-unexpanded`,
+  `project-is-specs`; `next --max` is bounded like the schema, ≤ 8),
   and an engine EXCEPTION (main's catch — a file where `.specs/` goes: ENOTDIR) answers `{ok: false, error, code}` (`code` the
   system error's, else `"exception"`) — it was the raw message on stderr alone; `merge-state --json` prints its result on every
   path (git merge-file's `{merged: "text", clean, conflicts}` for a hand-written overview, `{ok: false, parseError, error}` for

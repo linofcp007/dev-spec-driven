@@ -102,7 +102,11 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   names in `message` (`finishBranchLine` — a base no shell could take unquoted is left out of the command); a spike's finish /
   next_action carry `branch` too (its merge summary has no line — decisions.js untouched). `dev-spec log` reads `git log
   <commit>..HEAD` from the recorded commit (older commits are no work of this feature; a commit git no longer knows → the whole
-  log) and says so (`since` + `branch.logSince`); `spec_log` / `log -` read the text they are given, as before. Drift needs no
+  log) and says so (`since` + `branch.logSince`). `spec_log` / `log -` (1.25.1, review 7 — "the same result as `dev-spec log
+  --json`" did not hold: they read the whole text they were given) take the same range: spec_log's description names `git log
+  <branch.commit>..HEAD`, and `taskCommits` — when its caller says nothing (`opts.since` undefined; the CLI passes the range it read,
+  or `null` for its whole-log fallback) — reads the branch record, cuts a log that holds the start commit there (it and the older
+  commits after it) and labels `since`. Drift needs no
   start: it compares against the finish baseline. No hook reads the record.
 - **Merging it** (conventions.md → Merging the spec state): `branch` → the EARLIER record (`mergeBranchRecord`).
 

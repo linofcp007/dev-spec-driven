@@ -121,7 +121,7 @@ function finishBranchLine(branch, lng) {
 
 function finishFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const F = i18n.msg(lng).finish;
@@ -450,7 +450,7 @@ function metrics(projectDir, name, opts = {}) {
   const write = opts.write === true;
   if (name != null && String(name).trim() !== "") {
     const f = existingFeature(projectDir, name);
-    if (!f.ok) return { ok: false, error: f.error };
+    if (!f.ok) return { ok: false, error: f.error, code: f.code };
     const lng = featureLang(projectDir, f.slug);
     const M = i18n.msg(lng).metrics;
     const res = { ok: true, scope: "feature", lang: lng, ...featureMetrics(projectDir, f.slug, f.dir) };
@@ -581,7 +581,7 @@ function pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived) {
 // about over elicitation; another folder under that name now, or the same one edited since, is refused (changedSincePreview).
 function removeFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   sweepTombstones(f.root);
   // 1.24 r6 (G1) — a feature folder that is a LINK (a symbolic link, a junction): only the link goes — the folder it points at and
   // its files stay — under the roadmap lock alone: the feature lock would be created THROUGH the link (it was: a .lock left in the
@@ -601,7 +601,7 @@ function isLinkEntry(p) {
 }
 function removeLinkedFeatureLocked(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -662,7 +662,7 @@ function sweepTombstones(root) {
 }
 function removeFeatureLocked(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir, root } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -682,14 +682,14 @@ function removeFeatureLocked(projectDir, name, opts = {}) {
 
 function archiveFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const res = withMoveLock(projectDir, f.dir, f.slug, null, (moved) => withRoadmapLock(projectDir, () => archiveFeatureLocked(projectDir, name, moved)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
 }
 function archiveFeatureLocked(projectDir, name, moved) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir, root } = f;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -728,16 +728,16 @@ function archiveFeatureLocked(projectDir, name, moved) {
 function renameFeature(projectDir, name, newName) {
   if (newName == null || !String(newName).trim()) return { ok: false, error: errs(projectDir).renameNeedsName };
   const from = existingFeature(projectDir, name);
-  if (!from.ok) return { ok: false, error: from.error };
+  if (!from.ok) return { ok: false, error: from.error, code: from.code };
   const res = withMoveLock(projectDir, from.dir, from.slug, null, (moved) => withRoadmapLock(projectDir, () => renameFeatureLocked(projectDir, name, newName, moved)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
 }
 function renameFeatureLocked(projectDir, name, newName, moved) {
   const from = existingFeature(projectDir, name);
-  if (!from.ok) return { ok: false, error: from.error };
+  if (!from.ok) return { ok: false, error: from.error, code: from.code };
   const to = resolveFeature(projectDir, newName);
-  if (!to.ok) return { ok: false, error: to.error };
+  if (!to.ok) return { ok: false, error: to.error, code: to.code };
   const oldSlug = from.slug;
   const newSlug = to.slug;
   if (newSlug === oldSlug) return { ok: false, error: errs(projectDir).sameSlug };
@@ -862,7 +862,7 @@ function renameSupersedesRefs(projectDir, fromDir, raw, oldKey, newSlug) {
 // What `remove` would delete, returned INSTEAD of deleting when the caller hasn't confirmed.
 function removePreview(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   // Same order as removeFeature: never preview (and promise) a delete that the confirmed call would refuse.
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
@@ -1593,9 +1593,9 @@ function drift(projectDir, name, opts = {}) {
   let sources;
   if (named) {
     const f = resolveFeature(projectDir, name);
-    if (!f.ok) return { ok: false, error: f.error };
+    if (!f.ok) return { ok: false, error: f.error, code: f.code };
     sources = locateFeatures(projectDir, name);
-    if (!sources.length) return { ok: false, error: errs(projectDir).notFound(f.slug, f.root) };
+    if (!sources.length) return { ok: false, code: "feature-not-found", error: errs(projectDir).notFound(f.slug, f.root) };
   } else sources = featureDirs(projectDir);
   if (opts.activeOnly) sources = sources.filter((s) => !s.archived);
   const withBase = [];

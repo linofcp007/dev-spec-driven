@@ -338,8 +338,17 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   state may be next_action's `drift` (mcp/test.js "1.16 C review (parity)" checks 27 states). A network path (`isNetworkPath`,
   the engine's — server.js uses it too) is skipped before any fs call (a UNC cwd hung it for minutes). `dev-spec statusline` renders
   BEFORE any flag check (a status line must never print an error): exit 0 always, stdin capped, silent outside a project,
-  cut to `$COLUMNS`, `--json`; `--print-config` prints the `statusLine` entry with this clone's absolute path (a note when
-  it is a versioned plugin-cache copy). A plugin cannot ship a status line (plugin `settings` honour only `agent` /
+  cut to `$COLUMNS`, `--json`. **Without the engine outside a project (1.25.1, review 7):** Claude Code runs it after every
+  message in every folder once it is installed user-wide, and it loaded the whole engine first (136–220 ms a render): the CLI now
+  loads the facade on first use (a proxy over `require`), and the render walks the candidates with `statusProbe()` (cli/completion.js
+  — statusLineProject's null rule, Node core only: `isDevSpecDir` at or above each candidate, ≤ 40 levels, the same skips) before
+  it; no project → the empty line at about Node's startup (~65 ms against ~140 ms measured on Windows). A project found → the
+  engine decides as before (the worktree mapping only ever starts from a folder the walk finds). cli/tests/11-claude-code.js checks
+  the two agree and that no mcp/lib module loads. `--print-config` prints the `statusLine` entry with this clone's absolute path;
+  in a plugin's versioned cache folder (1.25.1, review 7 — the plain path broke at the first plugin update) a command that finds the
+  newest installed `<version>` holding cli/dev-spec.js at each run (cli/completion.js `statuslineCommand`: the completion scripts'
+  rule in a `node -e` one-liner with no shell syntax — no double quote, dollar, backtick, percent, ! or backslash — so cmd.exe, PowerShell, sh and bash pass it alike;
+  a path holding one of those keeps the plain command and its re-run note, `cacheNote`; else `cacheFollows`). A plugin cannot ship a status line (plugin `settings` honour only `agent` /
   `subagentStatusLine`), hence the opt-in `/spec-statusline`.
 - **User defaults** — the environment variables `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT`
   (`userOptionRaw()` → `userDefaults()`), FALLBACKS only: project meta always wins; empty, invalid or unexpanded (`${X}`)
@@ -354,7 +363,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   only), and an older Claude Code validating option fields strictly could refuse the whole plugin. Claude Code's
   settings.json `env` block reaches the hooks, stdio MCP servers and the Bash tool alike (code.claude.com/docs/en/env-vars).
 - **MCP** — every tool carries `annotations` from server.js `TOOL_ANNOTATIONS` (`READ_ONLY` for the 14 tools no argument
-  makes write; `destructiveHint` only on `spec_feature`; `idempotentHint` per tool; `openWorldHint: false` everywhere —
+  makes write; `destructiveHint` on the 11 tools one of whose arguments removes or overwrites a record — 1.25.1 review 7: `spec_feature` remove, `spec_export` adr, `spec_approve` revoke, `spec_complete_task` undo, `spec_impact` reopen, `spec_backlog` / `spec_milestone` rm, `spec_depend` replace / clear, `spec_add_track` remove, `spec_init` (a removed check, cleared roles, an overwritten setting), `spec_tracks` signals set / forget; `idempotentHint` per tool; `openWorldHint: false` everywhere —
   the protocol's defaults are the opposite, so all are explicit); mcp/test.js requires one entry per tool and snapshots
   `.specs/` around every read-only one. `completion/complete` (prompts-resources.js `complete()`): feature slugs for a
   prompt argument that names a feature, the `specs://` template variables `slug` / `artifact` / `file` (≤ 100 values,
