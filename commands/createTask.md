@@ -1,5 +1,5 @@
 ---
-description: Phase 5 — break the design into ordered, traceable tasks with the right markers per track. PT - tarefas rastreáveis. ES - tareas trazables.
+description: Phase 5 — break the design into ordered, traceable tasks with the right markers per track.
 argument-hint: "[feature name]"
 ---
 

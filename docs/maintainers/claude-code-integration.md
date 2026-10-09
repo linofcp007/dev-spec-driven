@@ -22,10 +22,16 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   feature's `.state.json lastEditAt` stamp the stop gate reads as activity — `recordSpecEdit()`, 1.22 review), design.md →
   `designSaveCheck()` (active tracks' marker sections, Constitution Check, placeholders); it skips `/.execution/`,
   `.specs/templates/` (unless that folder is a pre-1.14 feature), `.specs/tracks/` (1.15, the same exception) and generated files.
+  **It no longer refreshes ROADMAP.md / SPECS.md (1.24 r6 I-I1):** any other spec save leaves the stamp
+  `.specs/.execution/roadmap-stale` (`markRoadmapStale`) and the Stop / SubagentStop hook refreshes once, at the end of the turn
+  (SessionStart, the next engine mutation and the pre-commit check too) — ~75 % of the save hook was the refresh (272 / 423 / 725 ms a
+  save at 10 / 50 / 150 features → ~130–180 ms); the files lag at most one turn, read by nothing that decides
+  (lifecycle.md → Roadmap files).
   It loads the engine LAZILY (1.22 review): only for SessionStart and a PostToolUse on a `.specs/` file outside `.execution/` —
   the plain path check runs first (an edit anywhere else cost the engine's ~100 ms load: 173 → 68 ms median per Write / Edit,
   `node -e 0` ≈ 61 ms; mcp/tests/10-guards-review.js asserts which events load it). The Stop / SubagentStop hook
-  follows the same rules (see End-of-turn evidence gate), and so do the 1.14 observe hook (it prints nothing at all and
+  follows the same rules (see End-of-turn evidence gate — 1.24 r6 I-I4: a closing message with no claim pattern ends it before the
+  engine loads, from the build's hooks/stop-claims.generated.json), and so do the 1.14 observe hook (it prints nothing at all and
   exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
   output is a permission decision).
 - **Which project a hook reads (1.23 review 5, M8): `sessionProject({cwd, anchors})`** (engine/guards.js, on the facade). The
@@ -43,13 +49,42 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   Folders are compared by text, then by real path (`sessionSame()`: git writes gitdir / commondir with long names, the payload
   may carry an 8.3 short name). No dev-spec folder near cwd → the first dev-spec anchor. → `{project, root, worktree}`;
   `sessionPath(s, p, cwd)` spells a payload path under `project` when it lies in `root` (the worktree's checkout). The guard,
-  stop and observe hooks keep a raw pre-check over the nearest `.specs/` above cwd and the anchors (a superset; the engine
-  loads only when it passes) and then ask the engine; the spec-hook stamps `lastEditAt` of a worktree's tasks.md save in the
+  stop and observe hooks keep a raw pre-check over the nearest `.specs/` above cwd (≤ `SESSION_MAX_UP` levels each — 1.24 r6 I2:
+  the observe hook's walk stopped at 12, and a `_Verify:_` run deeper below a nested project was never logged; inline, not
+  hook-utils.js's `nearestSpecs`, so its hot path requires nothing; mcp/tests/10-guards-review6.js checks every bound) and the
+  anchors (a superset; the engine loads only when it passes) and then ask the engine; the spec-hook stamps `lastEditAt` of a worktree's tasks.md save in the
   mapped project (its own state when that feature isn't there) and SessionStart reports the mapped project; the status line's
   `statusLineProject()` maps what it found the same way (`worktreeProject(dir, candidates)`).
+- **What the hooks share before the engine loads — `hooks/hook-utils.js` (1.24 review 6).** Not a hook (hooks.json never runs
+  it): Node core only, never the engine. `utf16OrUtf8` / `textOf` / `jsonOf` / `readText` / `readJson` read a file as the engine
+  does (files.js `decodeText`: a UTF-16 BOM decides, else UTF-8; the BOM dropped) — **C3 / A4:** Windows PowerShell 5.1's
+  `Out-File` / `>` write UTF-16, and the approval, guard and stop hooks read such a roadmap.json / .state.json as UTF-8: the
+  approval and edit guards read "off", the stop gate saw no activity (the engine and the CLI enforced them). The guard, stop and
+  observe hooks check the first two bytes inline (`readJsonFile` / `textOfBuf`) and require hook-utils.js only for a BOM: their
+  hot paths load nothing more (a first `require` costs ~4 ms on Windows). Also `editTargets` (the approval hook's Write / Edit
+  target — below), `approvalProjects` (its candidate projects — below) and `sessionFlagFile` (a per-session marker in the OS temp
+  folder, `dev-spec-<kind>-<sha1(session_id)>.flag`). mcp/tests/10-guards-review6.js checks the hook's readings agree with the
+  engine's. The MCP server's `approvalMeta` reads roadmap.json through `spec.decodeText` too (an unchanged spec_init setting on a
+  UTF-16 roadmap.json was refused at deny as a guard-down: meta unknown).
 - **Commands never reuse a Claude Code built-in name.** `/init`, `/status`, `/doctor` and `/commit`
   collided with the built-ins (a bare `/doctor` ran Claude Code's, and our own messages told users to
   "run /doctor"); they are `/spec-init`, `/spec-status`, `/spec-doctor`, `/spec-commit` since v1.11.
+- **Command descriptions are one short English line (1.24 review 6).** Claude Code lists every skill and command with its
+  description under ONE shared character budget; the 55 descriptions held 11,013 characters (~40 % of them "PT - … ES - …" /
+  "Atalho. Atajo." tails), and in a real session 15 dev-spec commands — /spec and /spec-status among them — were listed with no
+  description at all (the model can't pick a command it can't read). Each is ≤ 150 characters now (5,530 in all;
+  mcp/tests/10-guards-review6.js holds the bound: ≤ 150 each, ≤ 6,000 in all, no PT / ES tail); the multilingual triggers live in
+  SKILL.md's description. The MCP prompts serve the same lines.
+- **User-only commands: `disable-model-invocation: true` (1.24 review 6, C-I1).** Documented for command files
+  (code.claude.com/docs/en/slash-commands — the same front matter as skills, except `name` / `paths`): Claude can't run the command
+  on its own (nor preload it into a subagent); the user types it. Set on `approve`, `spec-ff`, `spec-guard`, `spec-statusline`,
+  `spec-superpowers`, `spec-tour` and the aliases `ds` / `dss` / `dsx` (the model has the full commands). The prompts loader
+  (prompts-resources.js `parseFrontMatter`) reads and ignores it; the D4 strict-YAML check accepts it.
+- **The aliases follow the full command (1.24 review 6, C-I9).** `/ds`, `/dss`, `/dsx` read and follow
+  `${CLAUDE_PLUGIN_ROOT}/commands/<spec | spec-status | executeTask>.md` with their arguments — Claude Code substitutes the
+  variable anywhere in a command's body (plugins reference → Environment variables), and `getPrompt()` does for an MCP client — so
+  an alias never drifts from its command; each keeps a short fallback of the rules that matter (/dsx: `_Depends:_`, the
+  micro-cycle, the scope rule, evidence) should the file be unreadable.
 
 ## Guard mode (1.13 — from Catalog, drift, restore, guard, steering)
 - **Guard mode:** `roadmap.json → meta.guard` (`spec_init {guard}` / `init --guard on|off`, with or without
@@ -71,7 +106,10 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   — and, when its tests have a naming convention, to `RE_TEST_NAME` + the `isTestFile` matrix in mcp/tests/13-imports.js)
   rather than rewording. Docs, config, data (a PowerShell `.psd1` manifest), markup and styles stay silent. A code
   edit outside `.specs/` with no non-archived feature holding approved, unfinished tasks gets
-  `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note). Two exceptions,
+  `permissionDecision: "ask"` with a localized reason (a forced tasks approval still counts, with a note — a `systemMessage`
+  shown ONCE per session since 1.24 review 6, C-I8: it was printed on every code edit; the hook keeps a marker per `session_id`
+  in the OS temp folder holding the note — another set of forced features shows it again —, and a payload without
+  `session_id` shows it every time). Two exceptions,
   at both levels: a TEST file while some non-archived feature has an approved test plan and is unfinished (why
   `tests-phase` — Phase 4 writes the failing tests before tasks can be approved), and any code edit while an ACTIVE spike
   (undecided, or with open tasks, its timebox not passed) exists (why `spike`, field `spikes` — prototype work; a spike has
@@ -102,17 +140,35 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   unchanged in the engine); written under the roadmap lock, no write when unchanged; the result always reports the
   current `approvalGuard` (+ `approvalGuardNote` when given).
 - **The hook** `hooks/approval-hook.js` (PreToolUse, anchored matcher
-  `^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$` — 1.23 review 5: **Monitor** runs its
-  command in the Bash tool's shell with the Bash permission rules, and an approval through it went past a deny-level guard;
-  **Write / Edit** of `.specs/roadmap.json` or a feature's `.state.json`, below)
+  `^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track))$` — 1.23 review 5:
+  **Monitor** runs its command in the Bash tool's shell with the Bash permission rules, and an approval through it went past a
+  deny-level guard; **Write / Edit** of `.specs/roadmap.json`, a feature's `.state.json` or (1.24) a harness-observed log, below;
+  1.24 review 6: **spec_add_track**, below)
   is silent unless the guard is on: a tool call that can't be an approval (a Bash / PowerShell / Monitor command not containing
-  `dev-spec` — the hook's `candidate()` mirrors the engine's `approvalCandidate`, a superset; a Write / Edit of any other file)
-  exits before any file read; otherwise ONE raw read of roadmap.json per candidate project — the project the
-  call names (MCP `projectDir`, CLI `--project` in the command, the edited file's), the payload `cwd`, `CLAUDE_PROJECT_DIR`,
-  `SPEC_PROJECT_DIR` (at most 8; `${VAR}` unexpanded and network paths — `\\host\share`, `//host/share`, `\\?\UNC\…` —
-  refused, `\\?\C:\…` is local); the STRICTEST level wins. The engine is loaded only then; it answers
-  `{hookSpecificOutput: {permissionDecision, permissionDecisionReason}}` (+ `systemMessage` for deny). It never blocks on
-  its own trouble: a malformed payload, a broken roadmap.json or any exception exits 0 silently.
+  `dev-spec` — the hook's `candidate()` mirrors the engine's `approvalCandidate`, a superset; a Write / Edit whose path names
+  neither `.specs` nor an 8.3-looking segment `~N`) exits before any file read (and before hook-utils.js loads); otherwise ONE
+  raw read of roadmap.json (UTF-8 or UTF-16 — hook-utils.js) per candidate project; the STRICTEST level wins. The engine is loaded
+  only then; it answers `{hookSpecificOutput: {permissionDecision, permissionDecisionReason}}` (+ `systemMessage` for deny). It
+  never blocks on its own trouble: a malformed payload, a broken roadmap.json or any exception exits 0 silently.
+- **The candidate projects (1.24 review 6, C4 — hook-utils.js `approvalProjects`, at most 12):** the hook checked only the payload
+  `cwd` and the anchors, while the CLI acts on `--project` > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > the nearest dev-spec
+  `.specs/` at or above ITS cwd — a session started in a subfolder, a `cd "<P>" && node … approve`, a `SPEC_PROJECT_DIR=<P> node …`
+  went through at deny. Now: the folders the call names (MCP `projectDir`, the edited file's project, every `--project` value, every
+  `SPEC_PROJECT_DIR=` / `CLAUDE_PROJECT_DIR=` / `export …=` / `$env:SPEC_PROJECT_DIR = …` assignment — those folders themselves),
+  every `cd` / `chdir` / `pushd` / `sl` / `Set-Location` / `Push-Location` target (chained from cwd and from cwd alone, `~`
+  expanded; the nearest `.specs/` at or above it — ≤ 40 levels, as the CLI walks up), the nearest `.specs/` at or above the
+  payload `cwd`, then `CLAUDE_PROJECT_DIR` / `SPEC_PROJECT_DIR`. Text only (nothing evaluated — a superset: an extra candidate can
+  only make the answer stricter). Network paths: the session's own folders (payload cwd, the anchors — Claude Code's / the
+  user's) ARE read, as the guard / stop / observe hooks do (a project on a share kept no approval guard before); a network path
+  the AGENT names (`\\host\share`, `//host/share`, `\\?\UNC\…`) only when it lies on a share the session is on — never an SMB
+  connection to a host the agent picked; a network folder is never walked up; `\\?\C:\…` and WSL's `\\wsl$\` are local.
+- **The edited path as the file system reads it (1.24 review 6, C5 — `approvalEditTargets` in the engine, `editTargets` in
+  hook-utils.js, the same reading):** the Write / Edit check matched the raw text — `.specs/./roadmap.json`,
+  `.specs/alpha/../roadmap.json`, `roadmap.json::$DATA` and an 8.3 short name (`ROADMA~1.JSO`, `STATE~1.JSO`) wrote the file and
+  went through. Now the target is resolved against the payload cwd (`path.resolve` folds `.` / `..`), `guardTargetPath()` drops a
+  stream suffix and maps Git Bash's `/c/` (win32), and — on Windows, only when a segment looks like a short name (`~N`) — the real
+  path is read (the file's, else its parent's + the name; never on a network path). Either reading matching counts. (A trailing
+  dot / space — `roadmap.json.` — is NOT stripped by Node's file calls: no other file is written, so no rule.)
 - **`approvalGuardDecision(payload, level, {lang, cli?})`** — PURE (reads nothing) → `{decision: allow | ask | deny, why,
   level, …}`; `why` (stable): `off` · `no-payload` · `not-pre-tool-use` · `not-an-approval` · `approval`. On an approval:
   `actions` `[{kind: approve | remove | guard-down, source: mcp | cli, feature, phase, through, role, by, force, from, to,
@@ -134,7 +190,21 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   echo, git, grep, cat, Write-Host…), or a JavaScript runtime's script is a substitution / variable while the command names
   the CLI — `node $p approve …`, `node $(echo cli/dev-spec.js) approve …`, `alias a='node cli/dev-spec.js'; a approve …`, an
   unknown launcher, `pwsh -File run.ps1 node cli/dev-spec.js approve …` — always `ask` (it may be no approval: never refused,
-  never allowed).
+  never allowed). **1.24 review 6 — more of it:** (C7) the CLI found where it runs with its subcommand unreadable
+  (`cliSubcommandUnread()`: a substitution read as `""` — `$(echo approve)`, backticks, `"$(printf approve)"` —, a variable
+  `$A` / `${X:-approve}` / `$s` / `%X%`, a positional `"$@"` / `${args[@]}`, a word holding `$(`, a PowerShell `@splat`, or no
+  subcommand at all where one comes at run time: under xargs / parallel, or in PowerShell where a `( … )` expression ends the simple
+  command) while the command holds an approval word — read in the plain text, a `${X:-…}` default, or the raw text (`printf
+  'approve\nalpha'`); (C1) PowerShell's `--%` right after the CLI (`RE_PS_STOP_AFTER_CLI`) with an approval word the lexer found
+  no action in. (C-I10) `why: "partial"` (`approvalGuardDecision(…, {partial: true})`): the hook's 2 s stdin safety net fired
+  before stdin ended — the payload doesn't parse — and its text names dev-spec, `.specs` or an approval-shaped tool while a
+  project the session may be in (hook-utils `approvalProjects` over a `"cwd"` read from the partial text, the hook's own folder
+  and the anchors) has the guard on: ask (it exited 0 — allowed — before). Every unreadable action asks at both levels.
+- **Track removal (1.24 review 6, E3).** `spec_add_track {remove: true}` (any MCP prefix — the matcher and `RE_APPROVAL_MCP`
+  name it; `track` a string, an array or a `tracks` key) and `add-track <f> <tracks…> [--tracks …] --remove` turning off +tdd or
+  +ai (`APPROVAL_GATED_TRACKS` — the tracks that carry a phase: test-plan / eval-plan / tests) is a guard-down (`setting:
+  "track"`, `tracks`, `feature`); the human's command is `add-track <f> <tracks> --remove`. Adding a track, `--remove=false`, or
+  removing +sec / +saas / a pack (no phase of their own) stays allowed.
 - **The shell lexer** (`shellCommandWords()`, one linear pass, nothing evaluated): separators outside quotes are newline
   `;` `&` `|` `(` `)` `{` `}` backtick and `$(`; single quotes are literal; inside double quotes a backslash escapes only
   `"` `\` `$` `` ` ``; outside quotes it stays (a Windows path). `devSpecWordAt()`: the CLI's script (`dev-spec`,
@@ -178,7 +248,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   a reason that doesn't mention it — 1.21 review A4). The plugin's `mcp/servers.json` sets
   `SPEC_MCP_APPROVAL_HOOK=on`: in Claude Code the hook stays the only gate (no second question) — this hook path is unchanged.
 - **A guardrail on the approve paths, not a sandbox:** an agent running `node -e` (or a script of its own) isn't caught; a
-  hand edit of `.state.json` / roadmap.json through Write / Edit is (1.23), through a shell write only for roadmap.json.
+  hand edit of `.state.json` / roadmap.json through Write / Edit is (1.23), and (1.24 review 6) through a shell write too.
   `spec.CLI_SWITCHES` is the ONE list of CLI boolean switches (conventions.md → CLI boolean switches): a CLI-only switch would make this lexer
   read the next word as its value.
 - **The lexer (review fixes).** `shellCommandWords(cmd, mode)` lexes by the tool's shell: `bash` (`\x`, `\⏎`, `$'…'`,
@@ -188,18 +258,43 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   `$( )` / backticks read when unquoted, read as a script when fed to a shell (`bash <<EOF`, `sh <<<`); `<<` inside `(( ))`
   is a shift. `programAt()` skips launchers and their value options (`APPROVAL_OPTION_VALUES`: `sudo -u`, `exec -a`,
   `node -r` …) and counts npm / pnpm / yarn / bun / deno only through a real run subcommand (`APPROVAL_SUBCOMMANDS`).
+  **1.24 review 6 (C1) — PowerShell's stop-parsing token:** an unquoted `--%` at a word's start (ps mode) ends PowerShell's
+  parsing — the rest of the line, to a newline or a `|` outside `"…"`, reaches the program as written: split at blanks, `"…"`
+  grouping (quotes dropped), `'` `;` `$` `(` `` ` `` plain characters, `%VAR%` kept (cmd-style, expanded at run time). The
+  token itself is never a word. `node '<cli>' --% approve …` (the PowerShell tool's own guidance suggests `--%` for arguments
+  starting with `-`) approved at deny: the lexer read `--%` as the CLI's subcommand.
 - **Guard-down actions** (`kind: "guard-down"`, `setting`: approvalGuard · evidence · roles · check · stopCheck · guard ·
-  roadmap · state) — lowering the guard, and weakening what it protects: evidence observed → reported, approval roles cleared or a
-  required role dropped, a project check removed or its command changed, the stop gate off, the edit guard lowered, a
-  shell write / move / delete of `.specs/roadmap.json` (or of `.specs/`; `command: null` — the user makes that change), and
-  (1.23) a Write / Edit of `.specs/roadmap.json` or of a feature's `.state.json` (`command: null`).
+  roadmap · state · observed · track) — lowering the guard, and weakening what it protects: evidence observed → reported, approval
+  roles cleared or a required role dropped, a project check removed or its command changed, the stop gate off, the edit guard
+  lowered, +tdd / +ai turned off (`track`, 1.24 — above), a shell write / move / delete of `.specs/roadmap.json` (or of
+  `.specs/`; `command: null` — the user makes that change), and (1.23) a Write / Edit of `.specs/roadmap.json` or of a feature's
+  `.state.json` (`command: null`). **1.24 review 6:** `specsWriteActions()` (was roadmapWriteAction) reads every shell writer
+  (a redirection, tee / Set-Content / Out-File / rm / mv / dd of=…, sed / perl -i, cp / Copy-Item / ln / install onto it — or
+  into a folder receiving a file of that name) on three files — roadmap.json (`roadmap`), a `.state.json` (`state`, `feature`)
+  and a harness-observed log (`observed`) —, each path read as the file system reads it (`approvalPathText()`: `of=` / `-Path:`
+  prefixes, a stream suffix, Git Bash's `/c/`, `\` → `/`, `.` / `..` folded). (C2) `dev-spec merge-state <base> <ours>
+  <theirs>` whose `<ours>` is a `.state.json` / roadmap.json is a guard-down (`source: "cli"`, `command: null`): it writes its
+  merge into `<ours>` — git runs the driver inside `git merge` on its own temp files, never through the Bash tool, so the team
+  flow never meets this; `merge-state --install` / `--uninstall` / `--check` write no state and stay allowed. git's in-place
+  writers naming those files, `.specs/` or a feature folder (`gitWriteTargets()`: `checkout`, `restore` unless `--staged` alone,
+  `merge-file` unless `-p`, `rm` unless `--cached`, `mv`; after git's `-C` / `-c` / `--git-dir` …): `git checkout HEAD~1 --
+  .specs/roadmap.json` brought back a roadmap.json with the guard off. Read-only git (diff, log, show, add, commit, a branch
+  switch) stays allowed. (C6) **`.specs/**/.execution/observed.jsonl`** (`RE_OBSERVED_FILE` — the observe hook's log of the runs
+  Claude Code SAW; `.specs/.execution/observed.jsonl` for a project check, `feature: null`): a Write / Edit of it or a shell
+  write onto it forged "observed" evidence (a forged line turned a reported run into a verified, observed one) — a guard-down,
+  `command: null` (evidence is the harness's to record); a task report beside it (`.execution/task-N-report.md`) and reading the
+  log stay allowed.
   Judged against the project's meta, which the hook passes in (`opts.meta`); no readable meta → fail closed. Raising,
   adding or a no-op stays allowed. A `roadmap.json` that exists but doesn't parse keeps the strictest `"approvalGuard"` its
-  raw text names (`approvalGuardLevel` and the hook). Known limits: inline scripts (`node -e`, `python -c`, a script file the
-  agent wrote), a shell variable / alias / function DEFINED in an earlier tool call (the guard reads one command at a time —
-  within the same command it asks, as above), splatting, `git -c alias.x='!…'`, a copy or link of the CLI under another name,
-  `cd .specs && … > roadmap.json`, a shell write of a `.state.json`, and a NotebookEdit — each would need the agent to try to
-  get round the guard, which the deny reason tells it not to do.
+  raw text names (`approvalGuardLevel` and the hook) — NULs taken out first (1.24 review 6, A4: a BOM-less UTF-16 file read as
+  UTF-8). Known limits: inline scripts (`node -e`, `python -c`, a script file the agent wrote), a shell variable / alias /
+  function DEFINED in an earlier tool call (the guard reads one command at a time — within the same command it asks, as above),
+  splatting the CLI's own path (`& node @a`), `git -c alias.x='!…'`, a copy or link of the CLI under another name, `cd .specs &&
+  … > roadmap.json` (a relative target after
+  a cd), git forms whose files can't be known from the command (`git apply` / `am`, `git stash pop`, `git reset --hard`, a
+  branch switch), and a NotebookEdit — each would need the agent to try to get round the guard, which the deny reason tells it
+  not to do. Outside Claude Code the MCP server's elicitation path gates spec_approve / spec_feature / spec_init only (not a
+  `spec_add_track {remove}` — gates-and-approvals.md → Approvals the user confirmed over MCP).
 
 ## Claude Code integration (1.16 C)
 - **Status line** — `statusLine(dir, {columns})` / `statusLineProject(dirs)` (walks up at most 40 folders to the nearest

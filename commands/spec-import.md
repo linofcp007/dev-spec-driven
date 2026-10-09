@@ -1,5 +1,5 @@
 ---
-description: Import a spec written for Kiro, spec-kit or OpenSpec — or a plan (Claude Code plan mode, Cursor, Codex ExecPlan, fluidplan) or BMAD docs — as a new dev-spec feature (IDs remapped, source untouched). PT - importa uma spec do Kiro, spec-kit, OpenSpec, um plano (também do fluidplan) ou docs BMAD. ES - importa una spec de Kiro, spec-kit, OpenSpec, un plan (también de fluidplan) o docs BMAD.
+description: Import a Kiro, spec-kit or OpenSpec spec, a plan (Claude Code, Cursor, Codex, fluidplan) or BMAD docs as a new feature.
 argument-hint: "[kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan] [path, or the plan's text] [--name n] [--tracks tdd,saas] [--lang pt]"
 ---
 
@@ -13,7 +13,8 @@ a plan / ExecPlan / fluidplan PLAN.md, `{tool, text, …}` with the document's m
 reads stdin, `--text "…"` takes it inline):
 
 - `tool` — `kiro` (`.kiro/specs/<name>/`; a Portuguese / Spanish one too — `### Requisito N`, `## Introdução` /
-  `## Introducción`), `spec-kit` (`specs/<nnn-name>/`), `openspec`
+  `## Introducción`), `spec-kit` (`specs/<nnn-name>/` — `plan.md` and its `research.md`, `data-model.md`, `contracts/`,
+  `quickstart.md` become `design.md`; a task's `[USn]` tag its `_Requirements:_`, the paths it names its `_Implements:_`), `openspec`
   (`openspec/specs/<capability>/`, or a change folder `openspec/changes/<id>/`), `plan` (a Markdown plan: Claude Code
   plan mode or a Cursor plan `.cursor/plans/*.plan.md`), `execplan` (a Codex ExecPlan written per `PLANS.md`) or
   `bmad` (BMAD-METHOD docs: `docs/prd.md` or a sharded `docs/prd/`, `docs/stories/*.md`, `docs/architecture.md`;

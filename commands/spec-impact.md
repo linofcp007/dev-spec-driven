@@ -1,5 +1,5 @@
 ---
-description: Change request — show what an edit made after an approval touches (ACs, sections, tasks, tests), optionally reopen the affected tasks, then re-approve. PT - pedido de alteração (impacto de uma edição depois da aprovação). ES - solicitud de cambio (impacto de una edición tras la aprobación).
+description: Change request — what an edit after an approval touches (ACs, sections, tasks, tests); reopen tasks, then re-approve.
 argument-hint: "[feature name] [requirements|design|test-plan|eval-plan|tasks|steering] [--reopen]"
 ---
 

@@ -38,10 +38,11 @@ claude --plugin-dir ./dev-spec-driven
 `--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 55 commands, the 4 agents, the
 hooks and the `spec-driven` MCP server (38 tools) load for that session.
 
-> The rest of this guide uses a `$plugin` variable for your clone location. Set it once (PowerShell):
+> The rest of this guide uses a `$plugin` variable for the plugin's folder — here, your clone. Set it once (PowerShell):
 > ```powershell
 > $plugin = (Resolve-Path ./dev-spec-driven).Path   # or wherever you cloned it
 > ```
+> Installed from a marketplace (Option A or C) instead? See [Your plugin folder](#your-plugin-folder-plugin) below.
 
 ---
 
@@ -58,6 +59,30 @@ Register the clone itself as a local marketplace, then install from it — it lo
 (`dev-spec-driven-marketplace` is the `name` in `.claude-plugin/marketplace.json`.) Don't copy the folder
 into `~/.claude/plugins/` by hand: that directory is Claude Code's marketplace cache, not an auto-load
 location, so a manual copy never loads.
+
+---
+
+## Your plugin folder (`$plugin`)
+
+The commands in this guide use `$plugin` for the folder the plugin runs from. With a clone loaded by `--plugin-dir`
+(Option B) it is the clone. **Installed from a marketplace (Option A or C)**, Claude Code runs its own copy in the plugin
+cache — `~/.claude/plugins/cache/dev-spec-driven-marketplace/dev-spec-driven/<version>/` — and that folder **changes on
+every update** (a new version folder; the old one goes away). Read it from Claude Code's record of the install — the same
+`node` line in both shells:
+
+```powershell
+$plugin = node -p "require(require('os').homedir() + '/.claude/plugins/installed_plugins.json').plugins['dev-spec-driven@dev-spec-driven-marketplace'][0].installPath"
+$plugin   # e.g. C:\Users\you\.claude\plugins\cache\dev-spec-driven-marketplace\dev-spec-driven\<version>
+```
+
+```bash
+plugin=$(node -p "require(require('os').homedir() + '/.claude/plugins/installed_plugins.json').plugins['dev-spec-driven@dev-spec-driven-marketplace'][0].installPath")
+echo "$plugin"
+```
+
+(With `CLAUDE_CONFIG_DIR` set, that file lives under it instead of `~/.claude`.) Run it again after every
+`/plugin marketplace update`: whatever you set up with the old path — the git pre-commit validator, the merge driver, a
+status line — still points at the removed folder until you refresh it (each section below says how).
 
 ---
 
@@ -93,11 +118,16 @@ your machine and nothing runs remotely.
 The server resolves the project directory in this order:
 1. `SPEC_PROJECT_DIR` (set by the plugin's `mcp/servers.json` to `${CLAUDE_PROJECT_DIR}`)
 2. `CLAUDE_PROJECT_DIR`
-3. the process working directory
+3. the client's first local workspace root, when the client reports its roots (MCP `roots` — VS Code does)
+4. the nearest folder at or above the process working directory that holds a dev-spec `.specs/`
+5. the process working directory
 
+A variable the client left unexpanded (`${workspaceFolder}`, `$HOME`, `%CD%`) counts as not set.
 Every tool also accepts an explicit `projectDir` argument if you ever need to override it. It writes
-to `.specs/` in that project, and **never overwrites** existing files. An explicit `projectDir` must be a
-local folder: a network path (`\\host\share`, `//host/share`) is refused, so a tool call can never point the
+to `.specs/` in that project, and **never overwrites** existing files. An explicit `projectDir` must name an
+existing local folder (only `spec_init` creates one — a mistyped path is refused, never created), as a path or a
+local `file://` URI; a relative one is read from the client's root when the roots chose the project. A network
+path (`\\host\share`, `//host/share`) is refused, so a tool call can never point the
 server at another machine. A project that lives on a share can still be the server's working directory
 (or `SPEC_PROJECT_DIR`) — that is your own configuration, not a tool argument.
 
@@ -265,13 +295,17 @@ Elsewhere set them in your shell or in the other tool's MCP config `env`. An emp
 the CLI nor other MCP clients.)
 
 **Git pre-commit validator** (blocks commits with EARS errors / phantom AC refs in the *staged*
-content) — install inside your repo. The `[ -f … ] || exit 0` guard keeps commits working if the
-plugin folder later moves:
+content) — install inside your repo. The `[ -f … ]` guard keeps commits working if the plugin folder later moves — and
+says so on every commit, instead of silently checking nothing:
 
 ```powershell
 $hook = "$(git rev-parse --git-dir)/hooks/pre-commit"
-Set-Content $hook "#!/bin/sh`n[ -f `"$plugin/hooks/precommit-check.js`" ] || exit 0`nnode `"$plugin/hooks/precommit-check.js`" || exit 1"
+Set-Content $hook "#!/bin/sh`n[ -f `"$plugin/hooks/precommit-check.js`" ] || { echo `"dev-spec pre-commit: $plugin is gone - re-install this hook`" >&2; exit 0; }`nnode `"$plugin/hooks/precommit-check.js`" || exit 1"
 ```
+
+**Re-install it after each plugin update** when `$plugin` is a marketplace install: the hook names that version's
+folder, which the update removes — find the folder again ([Your plugin folder](#your-plugin-folder-plugin)) and re-run
+the two lines above. A hook that names a clone you update with `git pull` keeps working.
 
 **Eval harness** (+ai features) — run live with your own key, or offline with `--dry-run`:
 

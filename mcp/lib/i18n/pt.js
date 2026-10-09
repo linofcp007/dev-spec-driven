@@ -1131,6 +1131,8 @@ const msg = {
       failedTicked: (n, code) => `A tarefa ${n} já está marcada, mas a nova verificação falhou (exit ${code}) — ficou registado; passa a contar como não verificada até se registar uma execução com sucesso.`,
       badExit: (v) => `O exitCode tem de ser um inteiro (recebido '${v}').`,
       needsExit: "Uma evidência que indica um comando precisa do exit code — ou dá só um resumo, para uma verificação manual.",
+      unknownExpect: (n, values) => `A tarefa ${n} tem ${values.map((v) => "_Expect: " + v + "_").join(", ")} — o marcador só conhece \`fail\`, por isso, tal como está escrita, a tarefa tem de PASSAR. Se a execução dela tem de falhar (um teste escrito antes da correção), escreve _Expect: fail_.`,
+      noTests: (n, what) => `Tarefa ${n}: a execução passou, mas o output mostra que nenhum teste correu (${what}) — uma execução que não testa nada não prova nada (um glob, um caminho ou um filtro que não apanha nenhum teste). Nada foi registado; a tarefa continua por fazer. Corrige o comando _Verify:_ (ou o teste que ele indica) e depois regista uma execução que corra o teste.`,
     },
     finish: {
       ready: (slug) => `'${slug}' está pronta para fechar — confirma as verificações abaixo e depois faz merge local ou mantém o branch.`,
@@ -1166,6 +1168,7 @@ const msg = {
       changeNoTracks: (slug) => `'${slug}' é uma alteração (tamanho xs, só core) — um track faz dela uma feature: cria-se uma de tamanho s (spec_create {size: "s", tracks}) e arquiva-se esta alteração (spec_feature {action: "archive"}).`,
       tracksIgnored: (list, slug) => `Tracks não adicionados — ${list}: '${slug}' é uma alteração (tamanho xs, só core); um track faz dela uma feature — cria-se uma de tamanho s (spec_create {size: "s", tracks}) e arquiva-se esta alteração (spec_feature {action: "archive"}).`,
       changeCreated: (slug) => `'${slug}' é uma alteração (tamanho xs): UM ficheiro, .specs/${slug}/change.md — o resumo, 1–3 critérios EARS, a abordagem e 1–3 tarefas com _Verify:_. Preenchê-lo e aprovar o plano numa só chamada (spec_approve {name: "${slug}", through: "tasks"}); depois das tarefas, spec_finish e o fecho da execução.`,
+      changeCreatedCli: (slug) => `'${slug}' é uma alteração (tamanho xs): UM ficheiro, .specs/${slug}/change.md — o resumo, 1–3 critérios EARS, a abordagem e 1–3 tarefas com _Verify:_. Preenchê-lo e aprovar o plano numa só chamada: ${DEV_SPEC} approve ${slug} --through tasks; depois das tarefas, ${DEV_SPEC} finish ${slug} e o fecho da execução.`,
       sizeKept: (kept, asked) => `O tamanho desta feature é ${kept} — mantido (pedido: ${asked}): o tamanho escolhe-se uma vez, ao criar a feature.`,
       noGate: (phase, slug) => `'${slug}' é uma alteração: as únicas aprovações são o plano (fase tasks — change.md) e o fecho da execução — não há fase ${phase} para aprovar.`,
       scope: (acs, tasks, maxAcs, maxTasks, extra) => `uma alteração é XS — 1–${maxAcs} critérios de aceitação e 1–${maxTasks} tarefas, só core; o change.md tem ${acs} critérios e ${tasks} tarefa(s)${extra ? ` e o(s) track(s) ${extra}` : ""} — cria-se como feature de tamanho s (spec_create {size: "s"}) e arquiva-se esta alteração`,
@@ -1232,6 +1235,9 @@ const msg = {
       noSpecs: (root) => `Não há .specs/ em ${root}`,
       notGenerated: (file) => `${file} existe e não foi gerado pelo dev-spec — não foi alterado.`,
       specsLinked: (rel) => `Recusado escrever em ${rel}: essa pasta é uma ligação (link simbólico, junction) ou aponta para fora de .specs/ — substitui-a por uma pasta normal e tenta de novo. Nada foi escrito.`,
+      specsLinkedFile: (rel) => `Recusado escrever ${rel}: esse ficheiro é uma ligação (link simbólico) ou aponta para fora de .specs/ — substitui-o por um ficheiro normal e tenta de novo. Não foi escrito.`,
+      specsNotFolder: (rel) => `${rel} é um ficheiro onde o dev-spec precisa de uma pasta — muda-lhe o nome ou move-o e tenta de novo. Nada foi escrito lá.`,
+      specsNotFile: (rel) => `${rel} é uma pasta onde o dev-spec escreve um ficheiro — muda-lhe o nome ou move-a e tenta de novo. Não foi escrito.`,
       roadmapNotWritten: (file, broken) => `${broken} ${file} não foi regenerado — gerado a partir do que o roadmap.json ainda dá, perderia as dependências, o backlog e os marcos que não consegue ler. Corrige .specs/roadmap.json e corre ${DEV_SPEC} roadmap --write de novo.`,
       roadmapViewPartial: (broken) => `${broken} Esta vista deixa de fora o que não consegue ler (as dependências, o backlog e os marcos) até ser corrigido.`,
       unknownSteering: (file, known) => `Ficheiro de steering desconhecido '${file}'. Conhecidos: ${known}`,
@@ -1242,6 +1248,7 @@ const msg = {
       noId: "O critério não tem ID estável (ex.: US-1.AC-1).",
       bareAcId: (id) => `'${id}' não é um ID estável que o trace_check leia — escreve US-<história>.AC-<n> (ex.: US-1.${id}).`,
       subAcId: (id) => `'${id}' é um ID de subcritério, não um que o trace_check leia — dá a cada critério o seu próprio US-<história>.AC-<n> (um só nível: US-1.AC-1, US-1.AC-2 …).`,
+      paddedAcId: (id, canon) => `'${id}' tem zeros à esquerda — o trace_check, o tasks.md e o plano de testes comparam os IDs de AC tal como estão escritos: escreve ${canon} (aqui e onde for citado).`,
       vague: (term) => `Termo vago '${term}' — substitui-o por um valor concreto e testável.`,
       noKeyword: "Sem palavra-chave EARS (WHEN/WHILE/IF/WHERE · QUANDO/ENQUANTO/SE/ONDE · CUANDO/MIENTRAS/SI/DONDE). Aceitável em requisitos ubíquos; confirma que é intencional.",
     },
@@ -1326,7 +1333,7 @@ const msg = {
       acDup: (list) => `IDs de AC duplicados: ${list}`,
       acUnique: "IDs de AC únicos",
       earsDetail: (n, e, w) => `critérios=${n}, erros=${e}, avisos=${w}`,
-      earsNoCriteria: (ids, file = "requirements.md") => `o ${file} cita IDs de AC (${ids}) mas nenhum critério foi validado — o EARS valida um AC escrito como item de lista, título ou linha que comece pelo seu ID, ou como linha de tabela sob um título de Critérios de Aceitação`,
+      earsNoCriteria: (ids, file = "requirements.md") => `o ${file} cita IDs de AC (${ids}) que nenhum critério validado pelo EARS contém — escreve cada AC como item de lista, título ou linha que comece pelo seu ID ('- US-1.AC-1 — QUANDO …', '- [US-1.AC-1] …'), ou como linha de tabela sob um título de Critérios de Aceitação`,
       earsNoAcIds: (list, file = "requirements.md") => `o ${file} tem critérios (${list}) sem nenhum ID de AC que o trace_check leia — numera cada um US-<história>.AC-<n> (US-1.AC-1, US-1.AC-2 …); um AC-1 sozinho não é um`,
       designMissing: "design.md em falta",
       mermaidOk: "tem um diagrama",
@@ -1350,6 +1357,7 @@ const msg = {
       reReview: (files) => `Nova revisão: ${files} alterado(s) após a última aprovação — volta a aprovar a fase afetada.`,
       approvedMissing: (files, slug, phase) => `${files} foi aprovado mas já não existe — restaura-o (foi apagado depois da aprovação) ou, se desapareceu de vez, retira essa aprovação: /approve ${slug} ${phase} --revoke.`,
       stateInvalid: (error, slug) => `${error} Enquanto não for reparado, nada pode ser aprovado, marcado como feito nem fechado, e as aprovações, marcações e evidências que guarda não podem ser lidas — corrige-o à mão ou restaura-o do git (marcadores de conflito de um merge? resolve-os; ${DEV_SPEC} merge-state --install passa a juntá-lo pelo significado), depois /spec-doctor ${slug}.`,
+      roadmapInvalid: (error, slug) => `${error} Enquanto não for reparado, nada pode ser aprovado, revogado nem fechado — os papéis de aprovação e as verificações do projeto que guarda não podem ser lidos. Corrige-o à mão ou restaura-o do git (marcadores de conflito de um merge? resolve-os; ${DEV_SPEC} merge-state --install passa a juntá-lo pelo significado), depois /spec-doctor ${slug}.`,
       approveRequirements: (slug) => `Revê e aprova os requisitos — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Revê e aprova o design — /approve ${slug} design.`,
       approveTasks: (slug) => `Revê e aprova a divisão de tarefas — /approve ${slug} tasks.`,
@@ -1392,7 +1400,7 @@ const msg = {
       aiCost: "Especifica um teto de custo por pedido ($/tokens).",
       changeSummary: "Escreve o Resumo da alteração no change.md: o que muda e porquê, numa linha.",
       changeCriteria: "Escreve 1–3 critérios de aceitação EARS no change.md (1. **US-1.AC-1** — QUANDO … O SISTEMA DEVE …).",
-      changeApproach: "Escreve a Abordagem no change.md: o que a alteração toca (e nada mais).",
+      changeApproach: "Escreve a Abordagem no change.md: o que a alteração toca e porque é só isso.",
       changeScope: (detail) => `Mantém-na uma alteração, ou torna-a uma feature: ${detail}.`,
     },
     hook: {
@@ -1426,6 +1434,7 @@ const msg = {
       commandMismatch: (n, slug, ran, verify, red) => `Tarefa ${n}: a execução registada (\`${ran}\`) não é uma execução do seu comando _Verify:_ (${verify}) — fica marcada, mas continua não verificada até se registar uma execução ${red ? "QUE FALHE " : ""}desse comando (tal como está escrito — com vários comandos _Verify:_, todos eles numa SÓ execução unidos com \` && \`; um \`cd <raiz do projeto> &&\`, \`set -o pipefail;\` ou VAR=valor teu à frente serve (um cd para outra pasta é outra execução), mas nunca tires um que o _Verify:_ tenha)` +
         (red ? ` — regista-a ANTES de a correção entrar, enquanto o teste ainda falha: ${DEV_SPEC} done ${slug} ${n} --run (uma execução vermelha de outro comando nunca conta; com a correção já feita, põe-na de parte — git stash push -- <os ficheiros da correção>, não um git stash simples: levaria também o tasks.md e o .state.json — para essa execução e depois repõe-na).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `números de tarefa repetidos: ${list} — o complete/brief escolhem a primeira por fazer; renumera-as`,
+      evidenceMoved: (list, slug) => `execuções registadas sob um número de tarefa pertencem a uma tarefa que agora tem outro número (renumerada): ${list} — a evidência é guardada por número, por isso nenhuma das tarefas lê essa execução; regista a execução da tarefa movida: ${DEV_SPEC} done ${slug} <n> --run`,
     },
     observed: {
       on: "Modo de evidência OBSERVADO — uma tarefa cujo _Verify:_ tem um comando só fica verificada com uma execução com sucesso que o harness viu (no Claude Code, o hook de observação do plugin guarda cada execução Bash de um comando _Verify:_ ou de uma verificação do projeto) ou que o dev-spec done --run / finish --run fez; a execução de uma verificação do projeto também (roadmap.json meta.evidence). Um cliente só MCP não tem esse hook: regista as execuções dele com " + DEV_SPEC + " done <feature> <n> --run.",
@@ -1473,9 +1482,15 @@ const msg = {
       arrayOf: (t) => `um array (cada item ${t})`,
       oneOf: (list) => `um de: ${list}`,
       atLeast: (n) => `≥ ${n}`,
+      atMost: (n) => `≤ ${n}`,
+      between: (lo, hi) => `entre ${lo} e ${hi}`,
+      unknownArgs: (tool, items, valid) => `Argumento${items.length > 1 ? "s" : ""} desconhecido${items.length > 1 ? "s" : ""} para ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (será ${u.didYouMean}?)` : "")).join(", ")} — nada foi feito. ${tool} aceita: ${valid}.`,
       notObject: "arguments tem de ser um objeto JSON.",
       dotdot: "projectDir não pode conter segmentos de caminho '..'.",
       network: (dir) => `projectDir tem de ser uma pasta local — um caminho de rede ou de dispositivo (${dir}) é recusado, para que uma chamada de ferramenta nunca aponte este servidor local para outra máquina; abre o projeto localmente (ou arranca o servidor com ele como pasta de trabalho).`,
+      projectMissing: (dir) => `projectDir ${dir}: essa pasta não existe — verifica o caminho (só o spec_init cria a pasta de um projeto).`,
+      projectNotDir: (dir) => `projectDir ${dir} é um ficheiro, não uma pasta.`,
+      projectUri: (uri) => `projectDir ${uri} não é um URI file:// local de uma pasta (file:///C:/caminho no Windows, file:///caminho nos outros sistemas).`,
       unknownTool: (name) => `Ferramenta desconhecida: ${name} — tools/list lista as ferramentas deste servidor.`,
       noTool: "tools/call precisa de params.name (o nome da ferramenta — ver tools/list).",
       toolFailed: (why) => `A ferramenta falhou: ${why}`,
@@ -1579,6 +1594,7 @@ const msg = {
     },
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Remover '${slug}' apaga .specs/${slug}/ de vez (${n} ficheiro(s)). Nada foi apagado — passa confirm: true para a apagar, ou arquiva-a (reversível).`,
+      removeNeedsConfirmLink: (slug) => `.specs/${slug}/ é uma ligação (link simbólico, junction): remover '${slug}' apaga só a ligação — a pasta para onde aponta e os seus ficheiros ficam. Nada foi apagado — passa confirm: true para remover a ligação.`,
       removeChangedSincePreview: (slug) => `Nada foi apagado: .specs/${slug}/ mudou depois de o utilizador ter sido questionado sobre a remoção (outra feature renomeada para este nome, ou ficheiros editados enquanto a pergunta esperava) — a confirmação cobria a pasta que lhe foi mostrada. Pergunta-lhe de novo.`,
       backlogNotFound: (name, known) => `'${name}' não está no backlog${known ? ` (backlog: ${known})` : " (o backlog está vazio)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' já tem uma spec (.specs/${slug}/) — o backlog é para features ainda sem spec (estado: ${DEV_SPEC} status ${slug}).`,
@@ -1592,6 +1608,7 @@ const msg = {
       yes: "sim", no: "não",
       tracks: (label, conf) => `Tracks: ${label}   confiança: ${conf}`,
       note: (n) => `\nNota: ${n}`,
+      langHint: (l) => `Idioma: redação em português do Brasil (--lang ${l} no create / init).`,
       created: (dir, lang, files, kept) => `Criado em ${dir} [${lang}]:\n  ${files}` + (kept ? `\n  (já existiam, mantidos: ${kept})` : ""),
       nothingNew: "(nada de novo)",
       steeringCreated: (f) => `Criado ${f}`,
@@ -1656,11 +1673,44 @@ const msg = {
       projectUnexpanded: (v) => `--project ${v} contém uma variável que nunca foi expandida — passa a própria pasta.`,
       projectMissing: (dir) => `--project ${dir}: essa pasta não existe — verifica o caminho (só o init cria a pasta de um projeto).`,
       projectNotDir: (dir) => `--project ${dir} é um ficheiro, não uma pasta.`,
+      projectEnvMissing: (name, dir) => `${name}=${dir}: essa pasta não existe — corrige a variável ou remove-a (só o init cria a pasta de um projeto).`,
+      projectEnvNotDir: (name, dir) => `${name}=${dir} é um ficheiro, não uma pasta — corrige a variável ou remove-a.`,
+      projectIsSpecs: (label, parent) => `${label} é a pasta .specs do projeto ${parent} — indica a própria pasta do projeto: ${parent}`,
+      version: {
+        head: (v) => `dev-spec-driven ${v || "(versão desconhecida)"}`,
+        cli: (f) => `  CLI:      ${f}`,
+        node: (v) => `  Node.js:  ${v}`,
+        engineModules: "  motor:    os seus módulos (mcp/lib/engine/)",
+        engineBundle: (f) => `  motor:    o bundle num só ficheiro ${f} (DEV_SPEC_BUNDLE=1)`,
+        engineSkipped: (f, why) => `  motor:    os seus módulos — DEV_SPEC_BUNDLE=1, mas o bundle ${f} foi ignorado: ${why}`,
+        skip: { missing: "esse ficheiro não existe", "other-version": "foi gerado para outra versão", stale: "um módulo mudou depois de ser gerado", broken: "não foi possível carregá-lo" },
+        rebuild: (cmd) => `            → ${cmd}`,
+        pathIgnored: "  (DEV_SPEC_BUNDLE_PATH ignorado: não é o caminho absoluto de um ficheiro .js)",
+        project: (dir, src) => `  projeto:  ${dir} — ${src}`,
+        src: { flag: "indicado com --project", SPEC_PROJECT_DIR: "indicado por SPEC_PROJECT_DIR", CLAUDE_PROJECT_DIR: "indicado por CLAUDE_PROJECT_DIR", nearest: "a pasta mais próxima acima desta com uma .specs/ do dev-spec", cwd: "a pasta de trabalho" },
+        state: {
+          devSpec: (lang) => `            um projeto dev-spec · idioma: ${lang}`,
+          noSpecs: (lang) => `            ainda sem .specs/ do dev-spec (o init cria-a) · idioma: ${lang}`,
+          missing: "            a pasta não existe (o init cria-a)",
+        },
+      },
+      cmdHelp: {
+        options: (list) => `  As suas opções: ${list}`,
+        none: "  Não tem opções próprias.",
+        global: "  Em todos os comandos: --json · --project <pasta> · --help (-h) · --version (-V)",
+        all: `  Todos os comandos e os detalhes: ${DEV_SPEC} help`,
+      },
+      stdinHint: "a ler do terminal — escreve ou cola o texto e depois Ctrl+D numa linha à parte (Windows: Ctrl+Z e Enter).",
+      earsNoFile: (file) => `${file}: esse ficheiro não existe — o ears recebe o nome de uma feature, um ficheiro markdown, --text "…" ou - (stdin).`,
+      bundleNotOurs: (file) => `${file} já existe e não é um bundle do dev-spec — nada foi escrito. Escolhe outro --out, ou junta --force para o substituir.`,
+      flagTwice: (flag) => `${flag} foi indicada mais de uma vez — esta opção só aceita um valor: indica-a uma vez.`,
+      atMost: (n) => `, no máximo ${n}`,
+      runHeldOpen: (code) => `⚠ o comando terminou (${code}), mas um processo que ele lançou em segundo plano manteve a saída aberta — a execução ficou registada nesse fim; o que esse processo imprimir depois não está na evidência.`,
     },
 
     gates: {
       empty: "sem conteúdo além dos títulos",
-      more: (n) => `+${n} a mais`,
+      more: (n) => `+${n} mais`,
       placeholdersNone: "nenhum placeholder do template na fase atual",
       placeholdersFail: (list) => `placeholders do template por preencher na fase atual (ou numa anterior): ${list}`,
       placeholdersLater: (list) => `as fases seguintes ainda são template (ainda não bloqueia): ${list}`,
@@ -1673,6 +1723,9 @@ const msg = {
       approveUnreadable: (phase, slug, file) => `Nada para aprovar: ${file} em '${slug}' não pode ser lido (uma pasta com esse nome, sem permissão, ou outro programa a usá-lo) — torna-o um ficheiro legível e depois aprova '${phase}'.`,
       approveForced: (ids) => `Aprovado com force — as verificações a falhar ficam registadas com a aprovação: ${ids}.`,
       phaseOrder: (list, slug, first) => `há fases anteriores ainda por aprovar: ${list} — aprova-as primeiro, por ordem (/approve ${slug} ${first})`,
+      phaseOrderChanged: (list, slug, first) => `há fases anteriores alteradas desde a sua aprovação: ${list} — revê-as (spec_impact) e volta a aprová-las primeiro, por ordem (/approve ${slug} ${first})`,
+      roadmapUnreadable: (detail) => `${detail} Nada registado: os papéis de aprovação e as verificações do projeto que este ficheiro guarda não podem ser lidos — aprovações, revogações e o spec_finish recusam até ser reparado (marcadores de conflito de um merge? resolve-os; ${DEV_SPEC} merge-state --install passa a juntá-lo pelo significado).`,
+      roadmapCheck: (detail) => `${detail} Os papéis de aprovação e as verificações do projeto que guarda não podem ser lidos: aprovações, revogações e o spec_finish recusam até ser reparado.`,
       forcedGates: (list) => `aprovado com force apesar de verificações a falhar: ${list}`,
       finishRootCause: "bug.md → Causa Raiz por preencher — nenhuma correção antes de se conhecer a causa",
       finishPlaceholders: (list) => `placeholders do template por preencher na cadeia da spec: ${list}`,
@@ -1778,6 +1831,9 @@ const msg = {
       wRemoved: (name) => `o requisito REMOVED '${name}' não foi importado`,
       wRenamed: (from, to) => `requisito RENAMED '${from}' → '${to}' (importado com o nome novo)`,
       wSkipped: (files) => `não importados (ficam onde estão): ${files}`,
+      skDocs: { research: "Investigação", dataModel: "Modelo de dados", contracts: "Contratos", quickstart: "Arranque rápido" },
+      skFrom: (file) => `> Do spec-kit \`${file}\`.`,
+      wNoPlanDocs: (file) => `não há ${file} na origem — o design.md tem os documentos de design encontrados ao lado (investigação, modelo de dados, contratos, arranque rápido) sem o plano`,
       wUnreadable: (file) => `${file} aponta para fora do projeto — ignorado`,
       done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  correspondência: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
@@ -1953,6 +2009,8 @@ const msg = {
         uncoveredNfr: "requisitos não funcionais (NFR) sem tarefa nem teste que os cubra",
         uncoveredSuccessCriteria: "critérios de sucesso (SC) sem teste nem passo do quickstart que os verifique",
         phantomSecondary: "tarefas / plano de testes citam IDs EC/NFR/SC desconhecidos (gralhas?)",
+        untracedCriteria: "critérios com verbo modal mas sem ID próprio (por linha) — nenhuma tarefa nem teste os pode rastrear: numera cada um US-<história>.AC-<n>",
+        justifiedTestGaps: "ACs que o plano de testes só nomeia numa nota (Lacunas / Fora de Âmbito), nunca numa linha de teste — continuam sem cobertura: acrescenta uma linha, ou aprova o plano de testes com force para aceitar a lacuna",
         plannedNotInCode: "testes planeados que nenhum ficheiro de teste nomeia (põe o T-ID no nome do teste)",
         inCodeNotInPlan: "T-IDs no código de teste que nenhum plano de testes lista",
         unresolvedImplGlobs: "globs de _Implements:_ não resolvidos por completo (a leitura dos ficheiros parou no limite antes de uma correspondência — não contam como em falta)",
@@ -2040,12 +2098,17 @@ const msg = {
         const f = a.feature || "?";
         if (a.kind === "remove") return `apagar definitivamente a feature '${f}' (a pasta em .specs/, as aprovações e o histórico)`;
         if (a.kind === "unreadable") {
+          if (a.why === "partial") return "executar uma chamada de ferramenta que o guarda de aprovações só recebeu em parte (a entrada veio cortada) e que menciona dev-spec ou .specs/";
           return a.why === "too-long" ? `correr um comando de shell demasiado longo para o guarda de aprovações o ler (${a.length} caracteres) que menciona dev-spec ou .specs/`
             : "correr um comando de shell que menciona a CLI do dev-spec com uma palavra de aprovação numa forma que o guarda de aprovações não consegue ler (um lançador desconhecido, um glob, uma variável ou uma string concatenada)";
         }
         if (a.kind === "guard-down") {
           if (a.setting === "roadmap" && a.source === "edit") return "editar à mão .specs/roadmap.json (é lá que estão o guarda de aprovações e os gates do projeto)";
-          if (a.setting === "state") return `editar à mão o .state.json de '${f}' — as aprovações, a evidência e o histórico`;
+          if (a.setting === "state") return a.source === "edit" ? `editar à mão o .state.json de '${f}' — as aprovações, a evidência e o histórico`
+            : `alterar o .state.json de '${f}' a partir da shell — as aprovações, a evidência e o histórico`;
+          if (a.setting === "observed") return (a.feature ? `escrever à mão o registo das execuções observadas de '${a.feature}' (.execution/observed.jsonl)` : "escrever à mão o registo das execuções observadas do projeto (.specs/.execution/observed.jsonl)") +
+            " — as execuções que os gates aceitam como evidência";
+          if (a.setting === "track") return `desligar ${(a.tracks || []).map((t) => "+" + t).join(", ")} em '${f}' — os gates que traz (o plano de testes / de evals, os testes a falhar ou os evals da Fase 4) deixam de ser exigidos`;
           if (a.setting === "evidence") return "voltar a pôr o modo de evidência (meta.evidence) em reported";
           if (a.setting === "stopCheck") return "desligar o gate de evidência no fim do turno (meta.stopCheck)";
           if (a.setting === "guard") return a.from ? `baixar o modo guarda (meta.guard) de ${a.from} para ${a.to}` : `pôr o modo guarda (meta.guard) em ${a.to}`;
@@ -2078,6 +2141,7 @@ const msg = {
       forced: (ids) => `⚠ FORÇADA: as verificações da fase falham (${ids}) — ficaria registada como aprovada mesmo assim.`,
       waiver: (reason, expires) => "Exceção: " + [reason ? `"${reason}"` : null, expires ? `até ${expires}` : null].filter(Boolean).join(" ") + ".",
       phases: (list) => `Fases a aprovar, por ordem: ${list}.`,
+      removeSize: (n, rel) => `Isto apaga ${rel} de vez — ${n} ficheiro${n === 1 ? "" : "s"}.`,
       approveTitle: "Aprovar",
       approveDesc: "Marca para registar; deixa em branco (ou recusa) para não aprovar.",
       noteTitle: "Nota",
@@ -2099,6 +2163,7 @@ const msg = {
       parseError: (side, why) => `dev-spec merge-state: ${side} não é JSON válido (${why}) — nada foi combinado e ours ficou como estava; faz o merge do ficheiro à mão.`,
       unreadable: (file) => `não é possível ler ${file}.`,
       noGit: (dir) => `${dir} não está dentro de um repositório git (ou o git não está instalado) — merge-state --install escreve a configuração git desse repositório.`,
+      noGitUninstall: (dir) => `${dir} não está dentro de um repositório git (ou o git não está instalado) — merge-state --uninstall retira a configuração git e as linhas do .gitattributes desse repositório; aqui não há nada a retirar.`,
       attrsAdded: (file) => `${file}: linhas do merge driver adicionadas (faz commit — toda a equipa as recebe):`,
       attrsKept: (file) => `${file}: o ficheiro já tem as linhas do merge driver.`,
       attrsRemoved: (file) => `${file}: linhas do merge driver removidas (faz commit).`,
@@ -2241,7 +2306,7 @@ const msg = {
         steps: {
           "re-review": (s) => `rever ${s.files.join(", ")}`,
           fill: (s) => `preencher ${s.file}`,
-          fix: (s) => (s.file === "bug.md" ? "escrever a causa raiz em bug.md" : s.file === ".state.json" ? "reparar o .state.json (não pode ser lido)" : `corrigir o gate ${s.phase}`),
+          fix: (s) => (s.file === "bug.md" ? "escrever a causa raiz em bug.md" : s.file === ".state.json" ? "reparar o .state.json (não pode ser lido)" : s.file === "roadmap.json" ? "reparar o roadmap.json (não pode ser lido)" : `corrigir o gate ${s.phase}`),
           approve: (s) => `aprovar ${s.phase}`,
           tests: () => "escrever os testes e depois aprová-los (Fase 4)",
           tasks: () => "dividir em tarefas",
@@ -2331,6 +2396,7 @@ const msg = {
       unreadTasks: (list) => `linhas com caixa de verificação que não são tarefas: ${list} — uma linha de tarefa é "- [ ] N. texto" (um marcador -, * ou +, depois o número); estas nunca são marcadas, incluídas num brief nem verificadas. Numera-as (ou torna-as subpassos de uma tarefa); uma linha com 4+ espaços de indentação depois de uma linha em branco, fora de uma lista, é um bloco de código — tira-lhe a indentação.`,
       doctor: (list) => `texto com forma de marcador numa linha de tarefa não dá nenhum marcador: ${list} — as ferramentas não leem nada aí (nenhuma verificação é executada, nenhum ficheiro é rastreado). Escreve-o como _Verify: <comando>_ / _Implements: <caminho>_ / _Depends: 3_ (em itálico, com o valor lá dentro).`,
       suspiciousVerify: (list) => `um comando _Verify:_ parece mal escrito: ${list} — começa por _ ou * (um delimitador do marcador lido como parte dele), tem código entre crases lá dentro (dois comandos escritos como um: dá a cada um o seu _Verify:_; uma substituição de comando lê-se melhor como $(…)) ou tem uma aspa sem par. O done --run corre-o tal como está escrito: corrige o marcador.`,
+      expectValue: (list) => `um valor de _Expect:_ que as ferramentas não conhecem: ${list} — o único valor é fail (_Expect: fail_: a execução da tarefa tem de FALHAR, um teste escrito antes da correção); qualquer outro valor deixa uma tarefa cuja execução tem de passar. Escreve _Expect: fail_, ou tira o marcador.`,
     },
     outsideCode: {
       doctor: (list) => `testes planeados fora do código de testes apontam para um artefacto que ainda é um modelo: ${list} — preenche-o (a execução de carga real, o conjunto de avaliação da própria feature) antes de considerar esses testes verificados.`,
@@ -2506,6 +2572,7 @@ const msg = {
         "signal-invalid": (a) => `signals.${a.tier}: '${a.keyword}' não é uma palavra-chave (letras e dígitos com espaços, - ' . no meio — 2 a 60 caracteres; sempre comparada como palavra literal, nunca como padrão) — o pack é ignorado.`,
         "too-many": (a) => `${a.field}: mais de ${a.max} — o pack é ignorado.`,
         "section-duplicate": (a) => `a secção '${a.name}' tem o nome repetido — o pack é ignorado.`,
+        "section-overlap": (a) => `as secções '${a.other}' e '${a.name}' podem responder ao mesmo título ('${a.heading}'): um nome ou sinónimo que começa o de outra deixa um só título preencher as duas — muda o nome de uma; o pack é ignorado.`,
         "steering-invalid": (a) => `o steering '${a.file}' não é um nome de ficheiro de steering (minúsculas, dígitos e -, terminado em .md; não um nome de dispositivo) — o pack é ignorado.`,
         "steering-shared": (a) => `o steering ${a.file} também é um ficheiro de steering incluído — fica o que for escrito primeiro.`,
         "unknown-key": (a) => `chave desconhecida "${a.key}" — ignorada.`,
@@ -2748,6 +2815,7 @@ const msg = {
       signOffsToo: (roles) => `As validações por papel que estavam à espera também foram retiradas: ${roles}.`,
       laterStay: (list, phase) => `Nada em cascata: as fases seguintes continuam aprovadas (${list}); aprovar outra fase é recusado (phase-order) até '${phase}' voltar a ser aprovada.`,
       notApproved: (phase, slug) => `'${phase}' não está aprovada em ${slug} e nenhuma validação por papel está à espera — nada a revogar.`,
+      changedSincePreview: (phase, slug) => `Nada revogado: '${phase}' de ${slug} mudou depois de se pedir ao utilizador para confirmar a revogação (aprovada de novo, ou revogada, entretanto) — a confirmação cobria o que lhe foi mostrado. Volta a pedir a confirmação ao utilizador, para que confirme o que existe agora.`,
       roleRequired: (phase, slug, roles) => `'${phase}' é validada por papel (${roles}) — uma revogação indica o papel que revoga: /approve ${slug} ${phase} --revoke --role <papel>. Nada foi registado.`,
       noSignOff: (role, phase, slug, waiting) => `'${role}' não tem nenhuma validação à espera para '${phase}' de ${slug} — nada a retirar (à espera: ${waiting}); cada papel só retira a sua própria validação.`,
       phaseRequired: "Indica a fase cuja aprovação queres revogar.",
@@ -2856,6 +2924,7 @@ const msg = {
       },
       wslBash: (p) => `--shell ${p} é o lançador bash.exe do WSL, que corre o comando dentro de uma distribuição Linux (ou falha com "execvpe(/bin/bash) failed") e não numa shell desta máquina — usado como pediste; uma execução que o WSL não consiga arrancar não é registada. A shell desta máquina é o Git Bash, que o --shell bash encontra (com o Git for Windows).`,
       wslExe: (p) => `--shell ${p} é o wsl.exe, que não é uma shell (rejeita o -c que qualquer execução numa shell usa) — recusado, nada foi executado. Indica o caminho do bash.exe do WSL para correr dentro do WSL, ou --shell bash para o Git Bash.`,
+      noTests: (cmd, what) => `\`${cmd}\` passou, mas o output mostra que nenhum teste correu (${what}) — uma execução que não testa nada não prova nada (um glob, um caminho ou um filtro que não apanha nenhum teste). Nada foi registado; a tarefa continua por fazer. Corrige o comando _Verify:_ (ou o teste que ele indica) e depois volta a correr o done --run.`,
       noGitBash: "--shell bash: não foi encontrado nenhum Git Bash (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — um bash.exe em System32 ou WindowsApps é o lançador do WSL, que corre o comando dentro de uma distribuição Linux, por isso nunca é usado. Nada foi executado. Instala o Git for Windows, ou indica em --shell o caminho completo de um bash.exe.",
     },
     gitLog: {
@@ -3029,6 +3098,7 @@ _Outcome: [go | no-go | pivot]_
 `,
       badTimebox: (v) => `timebox tem de ser uma data de fim (AAAA-MM-DD) ou uma duração a partir de hoje (p. ex. 3d, 2w, 8h) — recebido: ${v}.`,
       spikeOnly: (arg) => `${arg} só se aplica a um spike (kind: "spike").`,
+      spikeOnlyCli: (flag) => `${flag} só se aplica a um spike — cria-o como spike: ${DEV_SPEC} spike "<nome>" ${flag} "…" (ou --kind spike).`,
       tracksIgnored: (list) => `Um spike é só core — tracks ignorados (${list}); dá-os à feature que especificares depois de um 'go'.`,
       noTracks: (slug) => `'${slug}' é um spike — não tem tracks. Depois de um 'go', especifica a feature real com os seus tracks (spec_create).`,
       noGate: (phase, slug) => `'${slug}' é um spike: não tem gate de ${phase} — o seu percurso é pergunta → investigar → decidir. Regista a decisão em spike.md → Decisão (o spec_decide regista-a no log); o spec_finish fecha-o.`,

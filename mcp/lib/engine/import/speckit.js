@@ -10,9 +10,9 @@ const fs = require("fs");
 const path = require("path");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let blankFacts, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings, mdListItems, mdRange,
-  newImportModel, RE_MD_HR, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines;
+  newImportModel, RE_MD_HR, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths;
 function __link(E) { ({ blankFacts, earsFromGwt, isLtUnit, isWsUnit, leftoverExtras, markRange, mdBody, mdHeadings,
-  mdListItems, mdRange, newImportModel, RE_MD_HR, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines } = E); }
+  mdListItems, mdRange, newImportModel, RE_MD_HR, stripEnd, stripHtmlComments, tidyLines, titleFromStory, unusedLines, planPaths } = E); }
 
 // spec-kit: specs/<nnn-name>/ — spec.md (### User Story N - Title (Priority: P1) + numbered Given/When/Then
 // Acceptance Scenarios, Edge Cases, FR-xxx, Key Entities, SC-xxx), plan.md (→ design.md), tasks.md (T001 [P] [US1]).
@@ -155,12 +155,125 @@ function parseSpecKit(dir, read, W) {
     model.carried.push(...leftoverExtras(lines, hs, used)); // e.g. ### Non-Functional Requirements (NFR-001)
     for (const x of [...model.extra, ...model.carried]) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
   }
-  if (plan != null) model.design = { text: plan, file: "plan.md" };
-  else model.warnings.push(W.wNoDesign("plan.md"));
-  if (tasks != null) model.tasks = { text: tasks, file: "tasks.md" };
+  // 1.24 r6 (G-I3): research.md, data-model.md, contracts/ and quickstart.md are design — each under its own heading after plan.md
+  // (they were skipped with a warning: "not imported"). Read through `read` like every source file: inside the project, a file
+  // over the import cap refuses the import.
+  const docs = specKitDesignDocs(dir, read, W, model);
+  if (plan != null || docs) model.design = { text: [plan, docs].filter((x) => x != null).join("\n\n"), file: "plan.md" };
+  if (plan == null) model.warnings.push(docs ? W.wNoPlanDocs("plan.md") : W.wNoDesign("plan.md"));
+  // 1.24 r6 (G-I1): a task's [USn] tag → _Requirements:_ (that story's ACs, resolved by importSpec), the paths it names → _Implements:_
+  if (tasks != null) model.tasks = { text: specKitTaskMarkers(tasks), file: "tasks.md" };
   else model.warnings.push(W.wNoTasks);
-  model.skipped = ["research.md", "data-model.md", "quickstart.md", "contracts"].filter((x) => fs.existsSync(path.join(dir, x)));
   return model;
 }
 
-module.exports = { SPECKIT_GUIDANCE, specKitInput, RE_SPECKIT_PRIORITY, specKitStoryHeading, parseSpecKit, __link };
+// 1.24 r6 (G-I1) — spec-kit's tasks.md says which story a task serves ([US1]) and names the files it touches in its text: the import
+// kept both as prose, so trace_check found every criterion uncovered right after an import. Each task line (a checkbox outside fenced
+// code and HTML comments) gets the sub-lines it lacks: `_Requirements: US<n>_` for its [USn] tag (importSpec's refs turn US<n> into
+// that story's AC IDs, as for a hand-written one) and `_Implements: <paths>_` for the paths its text names (planPaths — the plan
+// import's rule: a folder part and an extension, never a URL / absolute / home path / glob). A task that already carries the marker
+// (its line or an indented sub-line) keeps it.
+const RE_SK_TASK = /^(\s*)[-*+]\s+\[[ xX~\-/]\]\s+(.*)$/;
+const RE_SK_STORY_TAG = /\[US-?(\d+)\]/i;
+const RE_SK_FENCE = /^\s{0,3}(`{3,}|~{3,})/;
+// Does line l close the fence opened with `fence` (a run of the same character, at least as long, nothing after it)?
+const skClosesFence = (l, fence) => { const f = RE_SK_FENCE.exec(l); return !!f && f[1][0] === fence[0] && f[1].length >= fence.length && !l.slice(f.index + f[0].length).trim(); };
+function specKitTaskMarkers(text) {
+  const lines = String(text).split(/\r?\n/);
+  const eol = /\r\n/.test(String(text)) ? "\r\n" : "\n";
+  const out = [];
+  let fence = null, inComment = false;
+  const indentOf = (l) => l.length - l.trimStart().length;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    out.push(l);
+    if (inComment) { if (l.includes("-->")) inComment = false; continue; }
+    if (fence) { if (skClosesFence(l, fence)) fence = null; continue; }
+    const f = RE_SK_FENCE.exec(l);
+    if (f) { fence = f[1]; continue; }
+    const opens = l.includes("<!--") && !l.slice(l.lastIndexOf("<!--")).includes("-->");
+    const m = opens ? null : RE_SK_TASK.exec(l);
+    if (opens) { inComment = true; continue; }
+    if (!m) continue;
+    const indent = m[1].length;
+    let j = i + 1; // the task's own body: the indented lines below it
+    while (j < lines.length && lines[j].trim() && indentOf(lines[j]) > indent) j++;
+    const own = lines.slice(i, j).join("\n");
+    const sub = " ".repeat(indent + 2) + "- ";
+    const tag = RE_SK_STORY_TAG.exec(m[2]);
+    if (tag && !/_Requirements:/i.test(own)) out.push(sub + "_Requirements: US" + tag[1] + "_");
+    const paths = planPaths(m[2]);
+    if (paths.length && !/_Implements:/i.test(own)) out.push(sub + "_Implements: " + paths.join(", ") + "_");
+  }
+  return out.join(eol);
+}
+// 1.24 r6 (G-I3) — spec-kit's design documents beside plan.md, in its own order (research → data model → contracts → quickstart),
+// as design.md sections: `## <localized title>`, a provenance line, then the document — its first-line title dropped and every
+// other heading one level down (outside fenced code), so its sections stay under ours; a contract that is no markdown goes into a
+// fenced block (its language from the extension). contracts/ is read two levels deep, sorted, at most SPECKIT_CONTRACTS_MAX files of
+// a text kind (SPECKIT_CONTRACT_EXT); the rest are named in model.skipped (the import's "not imported" warning). → the text | null.
+const SPECKIT_CONTRACTS_MAX = 30;
+const SPECKIT_CONTRACT_EXT = { md: "", markdown: "", yaml: "yaml", yml: "yaml", json: "json", jsonc: "json", graphql: "graphql", gql: "graphql",
+  proto: "proto", txt: "", http: "http", rest: "http", xml: "xml", avsc: "json", sql: "sql" };
+function specKitDesignDocs(dir, read, W, model) {
+  const D = W.skDocs;
+  const parts = [];
+  // (a document holding nothing but its title carries nothing: no empty section)
+  const section = (title, file, body) => { if (body.trim()) parts.push("## " + title + "\n\n" + W.skFrom(file) + "\n\n" + body.trim()); };
+  for (const [file, title] of [["research.md", D.research], ["data-model.md", D.dataModel]]) {
+    const t = read(path.join(dir, file));
+    if (t != null && t.trim()) section(title, file, demoteMd(t));
+  }
+  const cdir = path.join(dir, "contracts");
+  const files = [];
+  const walk = (d, rel, depth) => {
+    let es;
+    try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of es.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+      if (e.name.startsWith(".")) continue;
+      const r = rel ? rel + "/" + e.name : e.name;
+      if (e.isDirectory()) { if (depth < 2) walk(path.join(d, e.name), r, depth + 1); }
+      else files.push(r);
+    }
+  };
+  walk(cdir, "", 1);
+  const kind = (f) => { const x = (/\.([A-Za-z0-9]+)$/.exec(f) || [])[1]; return x != null && Object.prototype.hasOwnProperty.call(SPECKIT_CONTRACT_EXT, x.toLowerCase()) ? x.toLowerCase() : null; };
+  const textual = files.filter((f) => kind(f) != null);
+  const skipped = files.filter((f) => kind(f) == null).concat(textual.slice(SPECKIT_CONTRACTS_MAX)).map((f) => "contracts/" + f);
+  const contracts = [];
+  for (const f of textual.slice(0, SPECKIT_CONTRACTS_MAX)) {
+    const t = read(path.join(cdir, ...f.split("/")));
+    if (t == null || !t.trim()) continue;
+    const x = kind(f);
+    const head = "### `contracts/" + f + "`";
+    if (x === "md" || x === "markdown") contracts.push(head + "\n\n" + demoteMd(t, 2).trim());
+    else {
+      const longest = Math.max(2, ...(t.match(/`+/g) || []).map((s) => s.length));
+      const fence = "`".repeat(longest + 1);
+      contracts.push(head + "\n\n" + fence + SPECKIT_CONTRACT_EXT[x] + "\n" + t.replace(/\s+$/, "") + "\n" + fence);
+    }
+  }
+  if (contracts.length) parts.push("## " + D.contracts + "\n\n" + W.skFrom("contracts/") + "\n\n" + contracts.join("\n\n"));
+  const q = read(path.join(dir, "quickstart.md"));
+  if (q != null && q.trim()) section(D.quickstart, "quickstart.md", demoteMd(q));
+  if (skipped.length) model.skipped.push(...skipped);
+  return parts.length ? parts.join("\n\n") : null;
+}
+// A markdown document as a design.md section's body: its title (a first non-blank `# ` line) dropped and every ATX heading `by`
+// levels down (at most ######), outside fenced code — a `#` line in a code block is code.
+function demoteMd(text, by = 1) {
+  const lines = String(text).replace(/\r\n?/g, "\n").split("\n");
+  const first = lines.findIndex((l) => l.trim());
+  if (first !== -1 && /^#\s/.test(lines[first])) lines.splice(first, 1);
+  let fence = null;
+  return lines.map((l) => {
+    if (fence) { if (skClosesFence(l, fence)) fence = null; return l; }
+    const f = RE_SK_FENCE.exec(l);
+    if (f) { fence = f[1]; return l; }
+    const h = /^(#{1,6})(\s.*|)$/.exec(l);
+    return h ? "#".repeat(Math.min(6, h[1].length + by)) + h[2] : l;
+  }).join("\n");
+}
+
+module.exports = { SPECKIT_GUIDANCE, specKitInput, RE_SPECKIT_PRIORITY, specKitStoryHeading, parseSpecKit, RE_SK_TASK, RE_SK_STORY_TAG,
+  RE_SK_FENCE, skClosesFence, specKitTaskMarkers, SPECKIT_CONTRACTS_MAX, SPECKIT_CONTRACT_EXT, specKitDesignDocs, demoteMd, __link };

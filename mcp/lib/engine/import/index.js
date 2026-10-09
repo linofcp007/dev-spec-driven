@@ -20,14 +20,14 @@ let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, 
   parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE, RE_TESTABILITY, readIfExists,
   requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines, slugify, stripHtmlComments, testIndex,
   toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs, unknownTracksError, withTrackBlocks,
-  writeFileAtomic, appendSpecText, flatText;
+  writeFileAtomic, appendSpecText, flatText, specNameText;
 function __link(E) { ({ BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
   isInsideDir, isLtUnit, isPackTrack, isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf,
   packRequirementsBlock, packTaskBlock, parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE,
   RE_TESTABILITY, readIfExists, requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines,
   slugify, stripHtmlComments, testIndex, toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs,
-  unknownTracksError, withTrackBlocks, writeFileAtomic, appendSpecText, flatText } = E); }
+  unknownTracksError, withTrackBlocks, writeFileAtomic, appendSpecText, flatText, specNameText } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_import — a spec written for another tool (Kiro · spec-kit · OpenSpec) becomes a NEW dev-spec feature
@@ -323,7 +323,8 @@ function importSpec(projectDir, tool, source, opts = {}) {
   // C3: a single-document source shows its file; inline text (1.16 C4) has none — `source` null, `inline` true.
   const srcRel = inline ? null : model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel;
 
-  // The source's title never opens an HTML comment in the files' titles (1.17 F review); a name the caller gives is theirs. Even in a
+  // The source's title never opens an HTML comment in the files' titles (1.17 F review) — escaped before its slug is taken, as it
+  // always was; a name the caller gives keeps its slug and is made inert when written (specNameText, below — 1.24 r6). Even in a
   // code span: the name reaches design.md / tasks.md too, whose decision-target reader (blankHtmlComments) sees no code spans.
   const given = opts.name != null && !!String(opts.name).trim();
   // One line (flatText, 1.23 review 5): a line break in a name opened a heading in every file's title.
@@ -352,6 +353,9 @@ function importSpec(projectDir, tool, source, opts = {}) {
   // ROADMAP.md twice, each a walk over every feature)
   const cr = createFeature(projectDir, name, pt.given ? pt.tracks : cls.tracks, model.summary || undefined, cls, opts.lang, undefined, { refresh: false });
   if (!cr.ok) return cr;
+  // 1.24 r6 (G4): from here on the name is WRITTEN (every title, decisions.md's header, a pack's {{name}}): inert to HTML comments
+  // like createFeature's — a name the caller gives too ("Import <!-- x" opened a comment in every imported file's title)
+  name = specNameText(name);
   const lng = cr.lang;
   const L = i18n.msg(lng).importSpec;
   const warnings = [...readWarnings, ...model.warnings];

@@ -14,7 +14,11 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   file's first comment line). (1.21 F5: `06-gates-sizes.js` in both folders — the sizes, the change kind, the stricter
   filled rule, the overlaps; its pinned sha1 is every no-size builder output of the pre-1.21 track combinations: update it
   only when the no-size scaffold changes ON PURPOSE. A test that "fills" a track section answers each `> **TODO**` line with
-  a line of its own — deleting the sentinel and keeping the guidance bullet is the template, not an answer.)
+  a line of its own — deleting the sentinel and keeping the guidance bullet is the template, not an answer.) (1.24 r6 I-I8:
+  `16-conventions.js` was the MCP suite's critical path — ~30 s alone, 33–40 s under load, the rest of the suite done long
+  before it; its "1.20 build" block — the committed corpus and stop-claim filter, the bundle, the race of sources updated under
+  a running process, the all-language sets — is `16-conventions-build.js` now, in a process of its own: ~16 s each, every
+  assertion kept, 56 + 14. Split a file the same way when `--times` shows it alone on the critical path.)
 - **The harnesses.** `mcp/tests/harness.js`: ONE server per process (mcp/server.js over stdio, its default project a
   throwaway temp dir), the handshake, and the context every file's `run` receives, destructured in its signature
   (`exports.run = async ({ ok, rpc, S, tmp }) => { … }` — no parameter name a test could redeclare): `ok`, `rpc`,
@@ -60,10 +64,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   would only report every finding twice).
 - **The corpus and the bundle (1.20).** Run `npm run build` after changing a file of `CORPUS_SOURCES` (`mcp/lib/i18n.js`,
   `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` / `tracks.js`) or the version, and BEFORE
-  the suites: mcp/tests/16-conventions.js ("1.20 build") fails while the committed `corpus.generated.json` differs from a
+  the suites: mcp/tests/16-conventions-build.js ("1.20 build") fails while the committed `corpus.generated.json` differs from a
   fresh build (architecture.md → The build). The bundle is never committed: its tests BUILD one into tmp (`writeBundle()` /
   `dev-spec bundle --out`) and point `DEV_SPEC_BUNDLE_PATH` at it. Both suites run on the engine's modules — the harnesses drop
-  `DEV_SPEC_BUNDLE` for their processes; the bundle's own tests set it for the children they start: 16-conventions ("1.20
+  `DEV_SPEC_BUNDLE` for their processes; the bundle's own tests set it for the children they start: 16-conventions-build ("1.20
   bundle": the namespace, the embedded corpus, the modules' paths, the stamps; the facade's choice on a copy of the clone —
   none, current, unset / 0, an invalid or another `DEV_SPEC_BUNDLE_PATH`, a module touched or resized and put back, another
   version, a broken bundle; the MCP server on it; "1.20 build": a copy of the clone with a missing, broken, hand-edited or

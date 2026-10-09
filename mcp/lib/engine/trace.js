@@ -104,8 +104,10 @@ const RE_MODAL_EN = new RegExp(B + "SHALL" + E, "iu");
 const RE_MODAL_CAPS = new RegExp(B + "(DEVE|DEVER[ÁA]|DEVEM|DEVER[ÃA]O|DEBE|DEBER[ÁA]|DEBEN|DEBER[ÁA]N)" + E, "u");
 const RE_MODAL_SYSTEM = new RegExp(B + "sistema\\s+(n[ãa]o\\s+|no\\s+)?(deve|dever[áa]|debe|deber[áa])" + E, "iu");
 // A list item that opens with a stable AC ID defines a criterion, whatever section it sits in — a checkbox item
-// (`- [ ] **US-1.AC-1** — …`) too, and an ID in single italics or a code span (1.14 full review Pa2).
-const RE_LIST_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
+// (`- [ ] **US-1.AC-1** — …`) too, and an ID in single italics or a code span (1.14 full review Pa2). 1.24 review 6 (F1): an ID in
+// brackets or parentheses too (`- [US-1.AC-1] …`, `- (US-1.AC-1) …`, `- [ ] [US-1.AC-1] …` — criterionLabel's openers): such an AC was
+// counted by trace_check and never linted, so `- [US-1.AC-1] User can log in` (no modal verb) passed the requirements approval.
+const RE_LIST_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?[[(]?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
 const RE_MODAL = { test: (s) => RE_MODAL_EN.test(s) || RE_MODAL_CAPS.test(s) || RE_MODAL_SYSTEM.test(s) };
 // Lowercase PT/ES modal — only trusted on a numbered item inside an acceptance-criteria context.
 const RE_MODAL_LOOSE = new RegExp(B + "(deve|dever[áa]|devem|dever[ãa]o|debe|deber[áa]|deben|deber[áa]n)" + E, "iu");
@@ -134,9 +136,9 @@ const RE_FULL_ID_NO_T = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+(?!\.?\d)|EC-\d+|NFR-\
 
 // A unit that DEFINES an AC for the EARS linter (criterionBlocks {acUnits}) — 1.14 full review Pa2: only list items were
 // linted, so an AC written as a table row, a bold paragraph, a heading or a checkbox item was never EARS-checked while
-// trace_check counted it. A line (list marker / checkbox optional) or a heading that starts with its ID; a table row
-// with a cell that is exactly an AC ID.
-const RE_LEAD_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)?(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
+// trace_check counted it. A line (list marker / checkbox optional) or a heading that starts with its ID (bracketed or in parentheses
+// too — 1.24 review 6, F1); a table row with a cell that is exactly an AC ID.
+const RE_LEAD_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)?(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?[[(]?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
 const RE_CELL_AC = /^(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+(?:\.\d+)?|AC-\d+)(?:\*\*|__|\*|_|`)?$/; // (a sub-criterion ID too — review 5, L31: linted, then named)
 
 // Strip HTML comments (possibly multi-line — commentLines) so template guidance doesn't count as real content,
@@ -184,12 +186,27 @@ function criterionBlocks(text, opts = {}) {
     if (!c.hidden && !c.fence && !icode[i] && RE_LIST_DEFINES_AC.test(c.vis.trim())) listDefined.add(leadId(c.vis.trim()));
   });
   const unitDefined = new Set();
+  const inDefContext = (s, sect) => !sect || RE_AC_HEADING.test(sect) || RE_MODAL.test(s) || RE_EARS_CAPS.test(s);
   const definesHere = (s, sect) => {
     const id = leadId(s);
-    if (!id || listDefined.has(id) || unitDefined.has(id)) return false;
-    if (sect && !RE_AC_HEADING.test(sect) && !RE_MODAL.test(s) && !RE_EARS_CAPS.test(s)) return false;
+    if (!id || listDefined.has(id) || unitDefined.has(id) || !inDefContext(s, sect)) return false;
     unitDefined.add(id);
     return true;
+  };
+  // acUnits — 1.24 review 6 (F2): every DEFINITION of a US-n.AC-m ID (criterionLabel's reading of the unit), a repeat included, in
+  // document order → `defs` [{ id, key, line }] (key: the ID by number — US-1.AC-01 is US-1.AC-1, F8). acDuplicates (ac-uniqueness)
+  // reads them: a list item led by its ID (a checkbox, an emphasis, a bracket before it — RE_LIST_DEFINES_AC), and a heading / table row
+  // / paragraph line that defines one as above. Such a unit that repeats an ID already defined is a reference (above), never a
+  // criterion — but a DEFINITION again, a duplicate, when it carries a modal verb (it states a criterion of its own), or, a heading in
+  // an acceptance-criteria context, when no list item defines the ID (two `##### US-1.AC-1` headings). A coverage table, a Notes line,
+  // a heading over the list item that defines its ID stay references.
+  const defs = [];
+  const noteDef = (id, ln) => { if (id && RE_US_AC_ONLY.test(id)) defs.push({ id, key: acKey(id), line: ln }); };
+  const labelOf = (s) => { const lab = criterionLabel(s); return lab && !lab.slug ? lab.id : null; };
+  const redefines = (s, sect, heading) => {
+    const id = leadId(s);
+    if (!id || (!listDefined.has(id) && !unitDefined.has(id)) || !inDefContext(s, sect)) return false;
+    return RE_MODAL.test(s) || (heading && !listDefined.has(id) && (!sect || RE_AC_HEADING.test(sect)));
   };
   all.forEach((raw, i) => {
     const ln = i + 1;
@@ -211,18 +228,28 @@ function criterionBlocks(text, opts = {}) {
       while (stack.length && stack[stack.length - 1].level >= hd.level) stack.pop();
       stack.push({ level: hd.level, text: hd.text.trim() });
       section = stack.map((h) => h.text).join(" / ");
-      if (acUnits && RE_LEAD_DEFINES_AC.test(hd.text.trim()) && definesHere(hd.text.trim(), stack.slice(0, -1).map((h) => h.text).join(" / ") || null)) {
-        flush();
-        cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [hd.text.trim()], definesAc: true, heading: true };
-        return;
+      const ht = hd.text.trim();
+      if (acUnits && RE_LEAD_DEFINES_AC.test(ht)) {
+        const parent = stack.slice(0, -1).map((h) => h.text).join(" / ") || null;
+        if (definesHere(ht, parent)) {
+          noteDef(labelOf(ht), ln);
+          flush();
+          cur = { line: ln, endLine: ln, numbered: false, section, indent: 0, parts: [ht], definesAc: true, heading: true };
+          return;
+        }
+        if (redefines(ht, parent, true)) noteDef(labelOf(ht), ln); // a duplicate definition — still no criterion of its own
       }
     }
     if (acUnits && /^\s*\|/.test(line)) {
       flush();
       const cells = tableCells(line);
       const idCell = cells.find((x) => RE_CELL_AC.test(x));
-      if (idCell && (!section || RE_AC_HEADING.test(section) || RE_MODAL.test(line)) && definesHere(idCell, null)) { // earsValidate's AC context; a reference is no criterion
-        blocks.push({ line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [cells.filter(Boolean).join(" | ")], definesAc: true });
+      const cellId = idCell ? labelOf(idCell) : null;
+      if (idCell && (!section || RE_AC_HEADING.test(section) || RE_MODAL.test(line))) { // earsValidate's AC context; a reference is no criterion
+        if (definesHere(idCell, null)) {
+          noteDef(cellId, ln);
+          blocks.push({ line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [cells.filter(Boolean).join(" | ")], definesAc: true });
+        } else if (redefines(idCell + " " + line, null, false)) noteDef(cellId, ln);
       }
       return;
     }
@@ -246,14 +273,18 @@ function criterionBlocks(text, opts = {}) {
       }
       flush();
       cur = { line: ln, endLine: ln, numbered: RE_NUMBERED.test(line), section, indent: indentOf(line), parts: [trimmed] };
-      if (acUnits && RE_LIST_DEFINES_AC.test(trimmed)) cur.definesAc = true;
+      if (acUnits && RE_LIST_DEFINES_AC.test(trimmed)) { cur.definesAc = true; noteDef(labelOf(trimmed), ln); }
       return;
     }
-    if (acUnits && RE_LEAD_DEFINES_AC.test(trimmed) && definesHere(trimmed, section)) {
-      // A paragraph line that starts with an AC ID defines its own criterion — never the lazy continuation of the one above.
-      flush();
-      cur = { line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [trimmed], definesAc: true };
-      return;
+    if (acUnits && RE_LEAD_DEFINES_AC.test(trimmed)) {
+      if (definesHere(trimmed, section)) {
+        // A paragraph line that starts with an AC ID defines its own criterion — never the lazy continuation of the one above.
+        noteDef(labelOf(trimmed), ln);
+        flush();
+        cur = { line: ln, endLine: ln, numbered: false, section, indent: indentOf(line), parts: [trimmed], definesAc: true };
+        return;
+      }
+      if (redefines(trimmed, section, false)) noteDef(labelOf(trimmed), ln);
     }
     if (cur) {
       cur.endLine = ln; // indented or lazy continuation of the criterion above (or an AC heading's body)
@@ -266,8 +297,14 @@ function criterionBlocks(text, opts = {}) {
   return {
     cleaned,
     blocks: blocks.map((b) => ({ line: b.line, endLine: b.endLine, numbered: b.numbered, section: b.section, text: b.parts.join(" "), ...(b.definesAc ? { definesAc: true } : {}) })),
+    defs,
   };
 }
+const RE_US_AC_ONLY = /^US-(\d+)\.AC-(\d+)$/; // a criterion's US-n.AC-m label (never a sub-criterion's US-1.AC-1.2)
+// An AC ID by NUMBER (1.24 review 6, F8): "US-01.AC-01" → "US-1.AC-1" (anything else as it is). A zero-padded one (RE_PADDED_AC) is
+// EARS's `padded-id` warning; ac-uniqueness compares by this key.
+const acKey = (id) => { const m = RE_US_AC_ONLY.exec(id); return m ? "US-" + parseInt(m[1], 10) + ".AC-" + parseInt(m[2], 10) : id; };
+const RE_PADDED_AC = /^US-(?:0\d+\.AC-\d+|\d+\.AC-0\d+)$/;
 
 // ears_validate {name} / `dev-spec ears <feature>`: lint a feature's requirements.md (resolver-aware).
 function earsFeature(projectDir, name) {
@@ -279,13 +316,21 @@ function earsFeature(projectDir, name) {
   return earsValidate(text, lng);
 }
 
-// requirements.md defines AC IDs (trace_check's reading, requirementAcIds) but EARS linted no criterion at all: the IDs,
-// shortened ("US-1.AC-1, US-1.AC-2 …"), else null. Doctor's `ears` check and the requirements approval gate fail on it
+// requirements.md defines AC IDs (trace_check's reading, requirementAcIds) that NO criterion EARS linted carries: those IDs,
+// shortened ("US-1.AC-1, US-1.AC-2 …"), else null. Doctor's `ears` check and the requirements / change-plan approvals fail on it
 // (1.14 full review Pa2) — an AC written only mid-sentence, or in a summary table, is counted yet never checked.
+// 1.24 review 6 (F1): per ID — it fired only when EARS linted no criterion at all, so beside one well-formed criterion an AC trace_check
+// required but EARS never read (`- WHEN … the user sees an error (US-1.AC-1)`, a blockquoted AC, `- Login US-1.AC-1: …`) passed doctor
+// and the approval. A criterion carries an ID written in its own text (never a `_Supersedes:_` marker's nor another feature's
+// `<slug>/US-n.AC-m`, read as requirementAcIds reads them). `ears`: earsValidate's result for reqText (its non-enumerable `criteria`).
 function earsUnlinted(reqText, ears, dir) {
-  if (!ears || !ears.summary || ears.summary.criteriaDetected > 0) return null;
+  if (!ears || !ears.summary) return null;
   const ids = [...requirementAcIds(reqText || "", dir)];
-  return ids.length ? shortIdList(ids) : null;
+  if (!ids.length) return null;
+  const carried = new Set();
+  for (const c of ears.criteria || []) for (const id of extractAcIds(stripForeignAcRefs(stripSupersedes(c.text), dir, reqText || ""))) carried.add(id);
+  const miss = ids.filter((id) => !carried.has(id));
+  return miss.length ? shortIdList(miss) : null;
 }
 const shortIdList = (xs) => xs.slice(0, 5).join(", ") + (xs.length > 5 ? " …" : ""); // "US-1.AC-1, US-1.AC-2 …"
 // The mirror (1.22 review): EARS linted criteria but requirements.md defines no AC ID trace_check reads — a spec numbered with
@@ -420,6 +465,9 @@ function earsValidate(text, lang) {
       const bare = bareLabel(b.text);
       add("warn", "no-id", !bare ? M.noId : /^US-/.test(bare) ? M.subAcId(bare) : M.bareAcId(bare)); // review 5 (L31): a sub-criterion ID
     }
+    // 1.24 review 6 (F8): a zero-padded US-n.AC-m in the criterion's own text — every reader compares AC IDs as written, so
+    // `US-1.AC-01` and a task's `US-1.AC-1` were an uncovered AC and a phantom with no word why. Named, with its canonical form.
+    for (const id of extractAcIds(stripForeignAcRefs(own))) if (RE_PADDED_AC.test(id)) add("warn", "padded-id", M.paddedAcId(id, acKey(id)));
 
     // Every distinct vague term, not just the first ("rápida e amigável" is two things to quantify) — "clean up" is a verb.
     vagueTermsOf(b.text).forEach((term) => add("warn", "vague", M.vague(term)));
@@ -521,21 +569,46 @@ function traceCheck(projectDir, name, opts = {}) {
   const tracks = detectTracks(dir);
   const blocks = taskBlocks(rawTasks);
 
-  const requiredAcs = requirementAcIds(rawReqs, dir);
+  // 1.24 review 6 (F9): the REQUIRED ACs are the ACTIVE requirements' (activeDesign — a removed track's [SaaS] / [AI] / … criteria are
+  // inactive, as the matrix, the export and tracks.md's removal rule read them), covered by the ACTIVE tasks (activeTasks — the matrix's
+  // tasks): a feature that turned +saas off and deleted its +saas tasks failed traceability on criteria the matrix no longer listed.
+  // Whatever requirements.md defines (active or not) is no phantom: a task or test row citing an inactive criterion is no typo.
+  const activeReqs = activeDesign(rawReqs, tracks);
+  const requiredAcs = requirementAcIds(activeReqs, dir);
+  const definedAcs = activeReqs === rawReqs ? requiredAcs : requirementAcIds(rawReqs, dir);
   // review 5 (M5): what the TASKS cite — taskCitations, the matrix's reader (never a Notes paragraph or the title; never another
   // feature's `<slug>/US-n.AC-m`); the test plan without another feature's references either
   const cites = taskCitations(blocks, dir, rawReqs);
   const acsInTasks = cites.acs;
-  const acsInTestPlan = extractAcIds(stripForeignAcRefs(testPlan, dir, rawReqs));
+  const activeTaskText = activeTasks(rawTasks, tracks);
+  const activeBlocks = activeTaskText === rawTasks ? blocks : taskBlocks(activeTaskText);
+  const acsInActiveTasks = activeBlocks === blocks ? acsInTasks : taskCitations(activeBlocks, dir, rawReqs).acs;
+  // 1.24 review 6 (F3): an AC's test COVERAGE comes from the plan's test entries only (testPlanEntries — a T-ID's table row or list
+  // item, the matrix's `tests`), never from any mention: an AC named in the Coverage Check's "Gaps" list or under "Out of Scope"
+  // counted as covered and the test-plan approval passed. Any mention still names an AC (phantoms, the justified gaps below).
+  const acsInTestPlan = new Set();
+  for (const e of testPlanEntries(rawPlan)) for (const id of extractAcIds(stripForeignAcRefs(e.text, dir, rawReqs))) acsInTestPlan.add(id);
+  const acsNamedInPlan = extractAcIds(stripForeignAcRefs(testPlan, dir, rawReqs));
 
-  const uncoveredByTasks = [...requiredAcs].filter((id) => !acsInTasks.has(id));
+  const uncoveredByTasks = [...requiredAcs].filter((id) => !acsInActiveTasks.has(id));
   // Reverse direction: AC IDs referenced by tasks that don't exist in requirements (typos).
-  const phantomAcsInTasks = [...acsInTasks].filter((id) => !requiredAcs.has(id));
+  const phantomAcsInTasks = [...acsInTasks].filter((id) => !definedAcs.has(id));
   // 1.22 review: criteria EARS lints but no AC ID this reader counts (a bare AC-1, or none) — 0 ACs used to be "all covered".
   // (review 4: with AC IDs defined, a criterion numbered with a bare AC-n is still one — linted only when the text holds one;
   // review 5, L31: or a sub-criterion ID, US-1.AC-1.2)
-  const unidentified = !rawReqs.trim() || (requiredAcs.size && !RE_BARE_AC.test(rawReqs) && !RE_SUB_AC.test(rawReqs)) ? null
-    : earsUnidentified(rawReqs, earsValidate(rawReqs, "en"), dir);
+  let ears = null;
+  const earsOf = () => ears || (ears = earsValidate(rawReqs, "en"));
+  const unidentified = !rawReqs.trim() || (definedAcs.size && !RE_BARE_AC.test(rawReqs) && !RE_SUB_AC.test(rawReqs)) ? null
+    : earsUnidentified(rawReqs, earsOf(), dir);
+  // 1.24 review 6 (F-I8): beside US-n.AC-m criteria, a linted criterion with a modal verb and NO stable ID of its own (nor a bare /
+  // sub-criterion one — those are unidentifiedCriteria) is EARS's no-id warn only: nothing can trace it. The warning untracedCriteria
+  // ("L<line>", only when some) names it — never a gap, never the verdict.
+  const untraced = [];
+  if (definedAcs.size && rawReqs.trim()) {
+    for (const c of earsOf().criteria || []) {
+      if ((RE_MODAL.test(c.text) || RE_MODAL_LOOSE.test(c.text)) && !ownStableId(c.text, dir) && !bareLabel(c.text)) untraced.push("L" + c.line);
+    }
+  }
 
   // Spec ↔ code: tasks may carry `_Implements: path/to/file_` markers. Verify the files exist.
   const implFiles = [];
@@ -595,6 +668,7 @@ function traceCheck(projectDir, name, opts = {}) {
     uncoveredByTasks,
     phantomAcsInTasks,
     ...(unidentified ? { unidentifiedCriteria: unidentified } : {}), // only when there are some: the result is otherwise unchanged
+    ...(untraced.length ? { untracedCriteria: untraced } : {}), // a warning (F-I8) — likewise only when there are some
     implementsFiles: implFiles,
     missingImplFiles,
     plannedImplFiles,
@@ -603,9 +677,13 @@ function traceCheck(projectDir, name, opts = {}) {
 
   if (tracks.includes("tdd")) {
     const uncoveredByTests = [...requiredAcs].filter((id) => !acsInTestPlan.has(id));
-    // Reverse: AC IDs the test plan covers that requirements.md doesn't define (a typo, a removed criterion, a template
+    // Reverse: AC IDs the test plan names that requirements.md doesn't define (a typo, a removed criterion, a template
     // row for a track the requirements never got) — a fenced example is no reference (planIdText), as for tasks.
-    const phantomAcsInTests = [...acsInTestPlan].filter((id) => !requiredAcs.has(id));
+    const phantomAcsInTests = [...acsNamedInPlan].filter((id) => !definedAcs.has(id));
+    // 1.24 review 6 (F3): the uncovered ACs the plan NAMES outside its test entries (the Coverage Check's "Gaps (with justification)",
+    // "Out of Scope for Testing") — still gaps (no test covers them: approving the plan anyway is a forced approval), and a warning
+    // that says the plan accounts for them.
+    const justifiedTestGaps = uncoveredByTests.filter((id) => acsNamedInPlan.has(id));
     // T-IDs by NUMBER (review 5, L32 — the matrix's and the test-code scan's rule): a task's T-1 is the plan's T-01; each is
     // reported as its own file spells it. The tasks' T-IDs are what the tasks cite (taskCitations).
     const planTestIds = testIdKeys(testPlan);
@@ -619,6 +697,7 @@ function traceCheck(projectDir, name, opts = {}) {
     result.plannedTests = planTestIds.size;
     result.testsNotMappedToTasks = testsNotInTasks;
     result.phantomTestsInTasks = phantomTestsInTasks;
+    result.justifiedTestGaps = justifiedTestGaps; // a warning (TRACE_INFO_FIELDS) — never the verdict
   }
 
   const gaps =
@@ -643,7 +722,7 @@ function traceCheck(projectDir, name, opts = {}) {
 
   // Deep traceability — WARNINGS, never part of the verdict (above) nor of traceGaps(): the secondary IDs of
   // requirements.md and, with opts.code, the T-IDs of the project's test code.
-  Object.assign(result, traceSecondary(dir, rawReqs, blocks, rawPlan, tracks));
+  Object.assign(result, traceSecondary(dir, activeReqs, activeBlocks, rawPlan, tracks, rawReqs)); // (F9: an inactive section's EC / NFR / SC is no warning)
   // 1.14 F5 — opts.matrix: + the requirements traceability matrix (buildTraceMatrix); with code both share ONE walk.
   const scan = opts.code && opts.matrix ? (typeof opts.scan === "function" ? opts.scan() : opts.scan) || scanTestCode(projectDir) : opts.scan;
   if (opts.code) result.code = traceTestCode(projectDir, dir, testPlan, requiredAcs, scan);
@@ -659,7 +738,7 @@ function traceCheck(projectDir, name, opts = {}) {
 // missing _Implements:_ files). Any array field a later version adds is a gap kind too, unless listed as
 // informational here.
 // planned = an OPEN task's file, not written yet; the deep-traceability warnings (TRACE_WARNING_ORDER) are warnings.
-const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs"]);
+const TRACE_INFO_FIELDS = new Set(["implementsFiles", "plannedImplFiles", "unresolvedImplGlobs", "warnings", "uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "removedAcs", "justifiedTestGaps", "untracedCriteria"]);
 const TRACE_GAP_ORDER = ["unidentifiedCriteria", "uncoveredByTasks", "phantomAcsInTasks", "uncoveredByTests", "phantomAcsInTests", "phantomTestsInTasks", "testsNotMappedToTasks", "missingImplFiles"];
 // The kinds trace_check's verdict counts (testsNotMappedToTasks is listed, never failing), and the kinds that read
 // tasks.md / test-plan.md — doctor defers the latter while that artifact is still a later phase's template.
@@ -695,12 +774,15 @@ function traceGapLines(tr, lang) {
 // trace_check `warnings` — ONE shape, the one traceGaps() returns: [{ kind, items: [id, …] }], only the non-empty
 // kinds, in this order. The secondary kinds are also top-level arrays (always present); the code kinds live in
 // result.code (present with opts.code). None of them changes the verdict. unresolvedImplGlobs (a top-level array too):
-// an _Implements:_ glob whose bounded walk stopped at its cap before any match.
-const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
+// an _Implements:_ glob whose bounded walk stopped at its cap before any match. justifiedTestGaps (+tdd, a top-level array — 1.24
+// review 6, F3): uncovered ACs the test plan names only outside its test entries (a Gaps / Out of Scope note) — they stay
+// uncoveredByTests gaps; the warning says the plan accounts for them. untracedCriteria (only when some — F-I8): modal criteria with no
+// stable ID beside US-n.AC-m ones (L<line>).
+const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "untracedCriteria", "justifiedTestGaps", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
 const TRACE_SECONDARY_KINDS = TRACE_WARNING_ORDER.slice(0, 4);
 function traceWarnings(tr) {
   const src = { ...(tr && tr.code ? { plannedNotInCode: tr.code.plannedNotInCode, inCodeNotInPlan: tr.code.inCodeNotInPlan } : {}) };
-  for (const k of [...TRACE_SECONDARY_KINDS, "unresolvedImplGlobs"]) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
+  for (const k of [...TRACE_SECONDARY_KINDS, "untracedCriteria", "justifiedTestGaps", "unresolvedImplGlobs"]) if (tr && Array.isArray(tr[k])) src[k] = tr[k];
   return TRACE_WARNING_ORDER.filter((k) => Array.isArray(src[k]) && src[k].length).map((k) => ({ kind: k, items: src[k].slice() }));
 }
 // The warnings as localized "label: ID, ID" lines (kinds = a subset, e.g. the secondary ones for doctor).
@@ -750,8 +832,12 @@ function secondaryDefinitions(reqText) {
 // SC by a test-plan row or a real (non-template) line of quickstart.md. phantomSecondary = IDs the tasks / test plan
 // cite that requirements.md never writes. The test plan counts only while +tdd is active: after add_track --remove tdd
 // it is an inactive artifact and must not silence (or raise) anything — the rest of traceCheck reads it only under tdd.
-function traceSecondary(dir, reqText, blocks, planText, tracks) {
-  const { defined, all } = secondaryDefinitions(reqText);
+// allReqText (1.24 review 6, F9): the WHOLE requirements when reqText is its active part — an ID only an inactive section (a removed
+// track's) defines needs no coverage, and a task citing it is no phantom.
+function traceSecondary(dir, reqText, blocks, planText, tracks, allReqText) {
+  const own = secondaryDefinitions(reqText);
+  const { defined } = own;
+  const all = allReqText != null && allReqText !== reqText ? secondaryDefinitions(allReqText).all : own.all;
   const inTasks = secondaryIds(blocks.map((b) => taskProse(b).join("\n")).join("\n"));
   const inPlan = tracks.includes("tdd") ? secondaryIds(testPlanEntries(planText).map((e) => e.text).join("\n")) : new Map();
   const inQuickstart = secondaryIds(realLines(readIfExists(path.join(dir, "quickstart.md")) || "", RE_SECONDARY_ID_LINE).join("\n"));
@@ -1143,7 +1229,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
 //   approval    the requirements approval (at, by, forced) and whether THIS row changed since (the approved snapshot's text
 //               for the ID; an approval without a snapshot knows only whether the file changed: null = unknown)
 // status (stable codes):
-//   untraced    a trace gap names it — `gaps`: no-task (an AC no task cites), no-test (+tdd: an AC no test-plan line covers),
+//   untraced    a trace gap names it — `gaps`: no-task (an AC no task cites), no-test (+tdd: an AC no test-plan ENTRY covers — 1.24 review 6, F3),
 //               no-coverage (an EC / NFR no task or planned test covers; an SC no test-plan row or quickstart.md line) —
 //               exactly trace_check's gaps and its secondary warnings for that ID
 //   planned     traced, but no linked task is done yet — one is still open, or none is linked (a planned test only)
@@ -1263,8 +1349,9 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const planOn = phaseActive("test-plan", tracks);
   const planRaw = planOn ? read("test-plan.md") || "" : "";
   const planText = planIdText(planRaw);
-  const planAcs = extractAcIds(stripForeignAcRefs(planText, dir, reqs)); // trace_check's uncoveredByTests set
   const entries = testPlanEntries(planRaw).map((e) => ({ ids: e.ids, acs: extractAcIds(stripForeignAcRefs(e.text, dir, reqs)), sec: secondaryIds(e.text) }));
+  // trace_check's uncoveredByTests set: the ACs the plan's test ENTRIES cite (1.24 review 6, F3 — never a Gaps / Out of Scope note)
+  const planAcs = new Set(entries.flatMap((e) => [...e.acs]));
   const planSec = new Set(entries.flatMap((e) => [...e.sec.keys()]));
   const quickSec = secondaryIds(realLines(read("quickstart.md") || "", RE_SECONDARY_ID_LINE).join("\n"));
   let code = null;

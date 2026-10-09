@@ -12,20 +12,31 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   (wrapped in `featureLocked` when it writes a feature) — every surface requires the facade, never a module. A name it
   takes resolves its folder through `resolveFeature()` / `existingFeature()`, never `path.join(specsRoot, slugify(name))`,
   and its state goes through `readJson()` / `writeFileAtomic` under the locks (conventions.md → Conventions & gotchas).
+  Every file it writes goes through the write gate — `writeFileAtomic` / `writeIfAbsent` / `ensureDir` / `specWrite` (append),
+  never a raw `fs.writeFileSync` / `appendFileSync` / `renameSync` / `mkdirSync` outside engine/files.js (a source guard
+  fails it — conventions.md → The write gate).
 - New MCP tool → the operation above, a TOOLS entry + dispatch case in
-  `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys), the CLI
+  `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys, and EVERY argument the
+  dispatch reads: one the schema doesn't list is refused, `unknown-argument` — mcp.md → Argument validation), the CLI
   subcommand, a test in the file of its area in `mcp/tests/` and `cli/tests/` (testing.md → The suites; bump the exact
   tool count — the handshake's, `mcp/tests/harness.js`), the README tool tables (EN/PT/ES —
   `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails
   the suite), a `TOOL_ANNOTATIONS` entry in `mcp/server.js` (1.16 — mcp/test.js requires one per tool and snapshots `.specs/`
-  around every read-only one), and (usually) a thin command in `commands/`.
+  around every read-only one), the tool count every doc states (below), and (usually) a thin command in `commands/`.
 - New command → a `commands/<name>.md` with `description` + `argument-hint` front matter; it is automatically an MCP
   prompt too (bump the exact command count in `mcp/tests/17-docs.js` and the README command lists). Never a Claude Code built-in
   name.
+- **The counts the docs state** (1.24 review 6 — INTEGRATIONS.md still said 51 prompts at 55, integrations/README.md 34
+  tools at 38): README, INSTALL, llms-install, INTEGRATIONS, integrations/README, AGENTS and CONTRIBUTING are read by
+  `mcp/tests/17-docs-review6.js` — every "N tools / ferramentas / herramientas", "N (slash) commands", "Commands (N)", the
+  prompts' "N of them, read from `commands/*.md`" and "N agents" must be the live tools/list length, command files and agent
+  files. A new CLI command goes into README's CLI summary in EN / PT / ES (the same file checks it against the CLI's
+  `case` labels), a new doctor check id into `references/tooling-reference.md`'s spec_doctor list (checked against the ids
+  the engine emits).
 - New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
   one → The track model (registries and its classifier `SIGNALS`: `engine/tracks.js`, the classifier code in `engine/classify.js`; its builders in the
   `i18n/<lang>.js` files) — 1.21: its sections' `tier`, any `TRACK_OVERLAPS` / `TRACK_TASK_OVERLAPS` / `CORE_SUPERSEDED_BY`
-  entry (data only). New artifact → the resource allowlist, the template allowlist
+  entry (data only); no section name / synonym may start another section's (`sectionOverlaps()` — 1.24 review 6, F7). New artifact → the resource allowlist, the template allowlist
   (`TEMPLATE_ARTIFACTS`, `engine/templates.js`) and `templateCorpus()` (`engine/markdown.js`) if it has slots.
 - A size-aware builder (1.21 F5) → the `a.size` branch in EN / PT / ES, NEVER a change to the no-size text (the pinned
   sha1 in mcp/tests/06-gates-sizes.js fails otherwise — update it only when the no-size scaffold changes on purpose), and
@@ -42,7 +53,8 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   `spec.CLI_SWITCHES` (the CLI's `BOOL_FLAGS` and the approval hook's lexer both read it); a new value flag → the CLI's
   `VALUE_FLAGS`. Either one → the `COMMAND_OPTIONS` entry of every command that reads it (1.23 review: any other command refuses
   it), and a NEW command → its `COMMAND_OPTIONS` entry (its flags, `max` positionals) — conventions.md → CLI: each command
-  reads its own options and arguments.
+  reads its own options and arguments. A value flag a command reads EVERY occurrence of (an `every()` collector) → also
+  `REPEATABLE_FLAGS` (1.24 r6 B5: any other one given twice is a usage error).
 - New `.state.json` / `roadmap.json` key → decide how two branches merge it (conventions.md → Merging the spec state): an
   append-only list or a keyed map gets its rule in state.js (`mergeFeatureState`'s `FIELDS`, `ROADMAP_FIELDS`, `META_FIELDS`);
   a plain value needs nothing (3-way per key — both sides changed it differently = a conflict the user resolves).

@@ -52,6 +52,15 @@ exports.run = ({ ok, run, tmp, CLI }) => {
   const j3 = (() => { try { return JSON.parse(m3j.stdout); } catch { return null; } })();
   ok(m3j.status === 1 && j3 && j3.ok === false && j3.parseError === "theirs" && /theirs is not valid JSON/.test(j3.error) && fs.readFileSync(o3, "utf8") === before3,
     "1.23 review: merge-state --json on an unparseable side prints {ok: false, parseError, error} on stdout, exit 1, ours untouched (got " + js([m3j.status, m3j.stdout.slice(0, 160)]) + ")");
+  // 1.24 r6 E5: two branches each adding one dependency edge that together close a cycle — the merge exited 0 (clean) and wrote the
+  // cycle; it is a conflict now: exit 1, ours kept at the dependsOn that closes it, the conflict listed
+  const cBase = { meta: { lang: "en" }, features: { alpha: {}, beta: {} } };
+  const [b8, o8, t8] = [put("b8", cBase), put("o8", { ...cBase, features: { alpha: { dependsOn: ["beta"] }, beta: {} } }), put("t8", { ...cBase, features: { alpha: {}, beta: { dependsOn: ["alpha"] } } })];
+  const m8 = run(["merge-state", b8, o8, t8, ".specs/roadmap.json"]);
+  const r8 = parse(o8);
+  ok(m8.code === 1 && /features\.beta\.dependsOn/.test(m8.out) && r8 && js(r8.features.alpha.dependsOn) === '["beta"]' && !r8.features.beta.dependsOn &&
+    Array.isArray(r8.mergeConflicts) && r8.mergeConflicts[0].path === "features.beta.dependsOn",
+    "1.24 r6 E5: merge-state on roadmap.json whose two sides' dependency edges close a cycle exits 1 — ours kept at the edge that closes it, the conflict listed (got " + js([m8.code, m8.out, r8]) + ")");
 
   // --- with git: --install / --uninstall, then a real merge of two branches (skipped without git — the Docker images have it)
   const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
@@ -92,6 +101,13 @@ exports.run = ({ ok, run, tmp, CLI }) => {
     u1.code === 0 && /the merge driver's lines removed/.test(u1.out) && attrsU === "*.png binary\n" && drvU.status !== 0,
     "1.21 F1a: merge-state --install writes the .gitattributes lines (other lines kept, idempotent) and this clone's git config (merge.dev-spec-state.driver = node '<clone>/cli/dev-spec.js' merge-state %O %A %B %P); --uninstall removes both; outside a repository it refuses (got " +
     js([iNo.out.slice(0, 120), i1.out.slice(0, 300), drv, u1.out.slice(0, 200)]) + ")");
+
+  // 1.24 r6 B9: --uninstall outside a repository said what --install writes — it names --uninstall (nothing to remove there)
+  {
+    const uNo = noRepo ? run(["merge-state", "--uninstall", "--project", outside]) : null;
+    ok(!uNo || (uNo.code === 1 && /is not inside a git repository/.test(uNo.out) && /merge-state --uninstall/.test(uNo.out) && !/--install/.test(uNo.out)),
+      "1.24 r6 B9: merge-state --uninstall outside a git repository exits 1 naming --uninstall, not --install" + (uNo ? " (got " + js(uNo.out.trim().slice(0, 200)) + ")" : " — skipped: tmp sits inside a repository"));
+  }
 
   // The end-to-end merge: main approves the planning phases; branch A approves the tasks, ticks task 1 and adds a backlog item;
   // branch B ticks task 2, adds another backlog item and a dependency. With the driver installed, `git merge` is clean and the

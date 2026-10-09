@@ -14,12 +14,12 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures, maybeRefreshCatalog, own,
-  positionPhase, readIfExists, readJson, renderRoadmapHtml, renderRoadmapMd, roadmapData, roadmapExtras, safeReaddir,
-  shapeError, specsRoot, withRoadmapLock, writeFileAtomic;
-function __link(E) { ({ compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures,
-  maybeRefreshCatalog, own, positionPhase, readIfExists, readJson, renderRoadmapHtml, renderRoadmapMd, roadmapData,
-  roadmapExtras, safeReaddir, shapeError, specsRoot, withRoadmapLock, writeFileAtomic } = E); }
+let catalogData, compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures, maybeRefreshCatalog, own,
+  positionPhase, readIfExists, readJson, removeSpecFile, renderRoadmapHtml, renderRoadmapMd, roadmapData, roadmapExtras, safeReaddir,
+  shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent;
+function __link(E) { ({ catalogData, compareSemver, EVIDENCE_HISTORY, EVIDENCE_OTHERS, existsCached, isDirSafe, isObj, jsonRel, listFeatures,
+  maybeRefreshCatalog, own, positionPhase, readIfExists, readJson, removeSpecFile, renderRoadmapHtml, renderRoadmapMd, roadmapData,
+  roadmapExtras, safeReaddir, shapeError, specsRoot, withRoadmapLock, writeFileAtomic, writeIfAbsent } = E); }
 
 // Language resolution. The project's language is the single source of truth, persisted in
 // .specs/roadmap.json meta.lang (seeded by spec_init); each feature may override it via
@@ -186,6 +186,13 @@ function wsText(raw, phase) {
   let end = lines.length;
   while (end > 0 && lines[end - 1] === "") end--;
   return lines.slice(0, end).join("\n");
+}
+// 1.24 review 6 (E-I5) — the fingerprint of wsText: recorded as `wsFingerprint` (`designWsFingerprint`) on every NEW approval, its
+// history record and each role sign-off, next to `fingerprint` (which keeps its rule). Two versions that differ only in trailing
+// whitespace / final blank lines share it — a waiting role sign-off (no snapshot of its own) of such a version still counts, and
+// changedSinceApproval needs no .history snapshot to tell a whitespace-only edit. Older records have none: the snapshot fallback.
+function wsFingerprint(raw, phase) {
+  return raw == null ? null : sha1Hex(wsText(raw, phase));
 }
 // Does this text still match a fingerprint an approval recorded? An approval recorded before the BOM was ignored
 // hashed the file with its BOM: that fingerprint still matches the same content (with or without the BOM now).
@@ -363,6 +370,61 @@ function findCycle(depsMap) {
   }
   return cycle;
 }
+// 1.24 r6 (G6) — EVERY dependency cycle (findCycle stops at the first: `a → a` hid `b ↔ c`): the strongly connected components
+// with more than one feature, or one naming itself (Tarjan's, iterative — no recursion depth). → [{ members, path }] in the order
+// their first feature appears in the map; `path` a cycle through the component's first feature (`a → b → c → a`, the shortest one
+// its own edges give, closed on its start — as findCycle reports one), `members` every feature of it (a component can hold more
+// than one cycle: each member is in one).
+function findCycles(depsMap) {
+  const depsOf = (n) => (Object.prototype.hasOwnProperty.call(depsMap, n) && Array.isArray(depsMap[n]) ? depsMap[n].filter((d) => typeof d === "string") : []);
+  const keys = Object.keys(depsMap);
+  const pos = new Map(keys.map((k, i) => [k, i]));
+  const index = new Map(), low = new Map(), onStack = new Set(), stack = [], comps = [];
+  let next = 0;
+  const visit = (v) => { index.set(v, next); low.set(v, next); next++; stack.push(v); onStack.add(v); };
+  for (const root of keys) {
+    if (index.has(root)) continue;
+    visit(root);
+    const work = [[root, 0]];
+    while (work.length) {
+      const top = work[work.length - 1];
+      const v = top[0];
+      const ds = depsOf(v);
+      if (top[1] < ds.length) {
+        const w = ds[top[1]++];
+        if (!index.has(w)) { visit(w); work.push([w, 0]); }
+        else if (onStack.has(w)) low.set(v, Math.min(low.get(v), index.get(w)));
+        continue;
+      }
+      work.pop();
+      if (work.length) { const u = work[work.length - 1][0]; low.set(u, Math.min(low.get(u), low.get(v))); }
+      if (low.get(v) !== index.get(v)) continue;
+      const comp = [];
+      for (let w = null; w !== v;) { w = stack.pop(); onStack.delete(w); comp.push(w); }
+      if (comp.length > 1 || depsOf(v).includes(v)) comps.push(comp);
+    }
+  }
+  const at = (n) => (pos.has(n) ? pos.get(n) : Infinity);
+  return comps.map((comp) => {
+    const members = comp.slice().sort((a, b) => at(a) - at(b) || (a < b ? -1 : a > b ? 1 : 0));
+    const start = members[0];
+    const inComp = new Set(comp);
+    // the shortest way back to `start` inside the component (breadth first)
+    const parent = new Map([[start, null]]);
+    const queue = [start];
+    let last = null;
+    for (let q = 0; q < queue.length && last === null; q++) {
+      for (const w of depsOf(queue[q])) {
+        if (!inComp.has(w)) continue;
+        if (w === start) { last = queue[q]; break; }
+        if (!parent.has(w)) { parent.set(w, queue[q]); queue.push(w); }
+      }
+    }
+    const back = [];
+    for (let n = last; n !== null; n = parent.get(n)) back.push(n);
+    return { members, path: back.reverse().concat(start) };
+  }).sort((a, b) => at(a.members[0]) - at(b.members[0]));
+}
 
 // dependsOn REPLACES the list ([] clears it); edits.add / edits.remove change it incrementally (applied in
 // that order, after a replacement); order sets the position. Nothing requested = a read: the current deps
@@ -445,7 +507,7 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
 
 function roadmap(projectDir) {
   const list = listFeatures(projectDir);
-  if (!list.exists) return { ok: true, specsDir: list.specsDir, features: [], overallPercent: 0, complete: 0, total: 0, cycle: null, backlog: [] };
+  if (!list.exists) return { ok: true, specsDir: list.specsDir, features: [], overallPercent: 0, complete: 0, total: 0, cycle: null, cycles: [], backlog: [] };
   const rm = readRoadmap(projectDir);
   const pctByName = Object.create(null); // a dep named "constructor" must not read Object.prototype's
   const feats = list.features.map((f) => {
@@ -460,10 +522,11 @@ function roadmap(projectDir) {
     f.blocked = f.unmetDeps.length > 0;
   }
   feats.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
-  const cycle = findCycle(Object.fromEntries(feats.map((f) => [f.name, f.dependsOn])));
+  // 1.24 r6 (G6): every cycle (`cycles`, one path each), `cycle` the first of them (as before: one path, or null)
+  const cycles = findCycles(Object.fromEntries(feats.map((f) => [f.name, f.dependsOn]))).map((c) => c.path);
   const overall = feats.length ? Math.round(feats.reduce((s, f) => s + f.percent, 0) / feats.length) : 0;
   const backlog = readRoadmap(projectDir).backlog || [];
-  return { ok: true, specsDir: list.specsDir, features: feats, cycle: cycle || null, overallPercent: overall, complete: feats.filter((f) => f.percent === 100).length, total: feats.length, backlog };
+  return { ok: true, specsDir: list.specsDir, features: feats, cycle: cycles[0] || null, cycles, overallPercent: overall, complete: feats.filter((f) => f.percent === 100).length, total: feats.length, backlog };
 }
 
 // ---------------------------------------------------------------------------
@@ -472,6 +535,10 @@ function roadmap(projectDir) {
 
 // One line: a line break in a backlog name or note became markdown structure (a heading) in ROADMAP.md and the export.
 const flatText = (s) => String(s || "").replace(/\s+/g, " ").trim();
+// 1.24 r6 (G4) — a feature NAME as a spec writes it (every title, a template's {{name}}): one line (flatText) and inert to HTML
+// comments — "<!--" / "-->" as &lt;!-- / --&gt; (a name holding "<!--" opened a comment in its titles that hid every criterion
+// of the scaffold; the summary and an imported title were already made inert). The slug is the name's, as before.
+const specNameText = (s) => flatText(s).replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;");
 function addBacklog(projectDir, name, note) {
   const nm = flatText(name);
   if (!nm) return { ok: false, error: errs(projectDir).nameRequired };
@@ -552,6 +619,10 @@ function backlog(projectDir, action, name, note) {
     const A = i18n.msg(projectLang(projectDir)).args;
     return { ok: false, error: A.invalid(A.item("action", A.oneOf(BACKLOG_ACTIONS.join(", ")), JSON.stringify(String(action)))) };
   }
+  // 1.24 review 6 (E4): a roadmap.json that doesn't parse (or has the wrong shape) is an error, never "Backlog (0)" — milestone /
+  // depend's rule (its sanitized copy read as an empty backlog)
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
   return { ok: true, backlog: readRoadmap(projectDir).backlog || [] };
 }
 
@@ -617,11 +688,12 @@ function writeRoadmapFile(projectDir, lang, data, name, render) {
 }
 
 // Keep the roadmap current after any mutation. MD is the default (always); HTML only if it exists.
-// Best-effort — never breaks the primary operation.
+// Best-effort — never breaks the primary operation. It clears the stale stamp first (below): this refresh covers it.
 function maybeRefreshRoadmap(projectDir) {
   try {
     const root = specsRoot(projectDir);
     if (!fs.existsSync(root)) return;
+    clearRoadmapStale(projectDir);
     const html = fs.existsSync(path.join(root, "ROADMAP.html"));
     // One computation for both files — none when neither may be written (hand-written ROADMAP.md, no HTML; a broken roadmap.json
     // keeps them as they are — 1.23 review 5).
@@ -634,6 +706,56 @@ function maybeRefreshRoadmap(projectDir) {
   } catch {
     /* best-effort */
   }
+}
+
+// 1.24 r6 I-I1 — the save hook's DEFERRED refresh. A spec file saved through Claude Code's Write / Edit tool refreshed ROADMAP.md
+// and SPECS.md on the spot (hooks/spec-hook.js, PostToolUse): every save recomputed every feature's row — ~75 % of the hook, 272 /
+// 423 / 725 ms per save at 10 / 50 / 150 features. The hook now leaves a STAMP, `.specs/.execution/roadmap-stale` (the project's
+// scratch folder, which git-ignores itself), and the refresh runs ONCE for all the saves since: at the end of the turn (the Stop /
+// SubagentStop hook), at SessionStart, in the next engine mutation (maybeRefreshRoadmap clears the stamp first) and in the pre-commit
+// check — refreshStaleRoadmap. The lint stays on every save. The generated files lag at most one turn, and nothing reads them for a
+// decision: approvals fingerprint a feature's own artifacts, every view (spec_roadmap, the catalog, next_action, the status line)
+// computes from the specs, and the specs://roadmap / catalog resources render in memory while the stamp is there
+// (docs/maintainers/lifecycle.md → Roadmap files). → whether the stamp is there (written now or before).
+const ROADMAP_STALE_FILE = "roadmap-stale";
+const roadmapStalePath = (projectDir) => path.join(specsRoot(projectDir), ".execution", ROADMAP_STALE_FILE);
+function markRoadmapStale(projectDir) {
+  try {
+    const root = specsRoot(projectDir);
+    if (!isDirSafe(root)) return false;
+    const ex = path.join(root, ".execution");
+    writeIfAbsent(path.join(ex, ".gitignore"), "*\n"); // .execution/ (created through the write gate) ignores itself
+    writeIfAbsent(path.join(ex, ROADMAP_STALE_FILE), "");
+    return true;
+  } catch {
+    return false; // best-effort: a read-only folder, a link (the gate) — the next mutation refreshes anyway
+  }
+}
+// Is the stamp there? (A plain stat: never the read cache — the stamp comes and goes inside one call.)
+function roadmapStale(projectDir) {
+  try { return fs.statSync(roadmapStalePath(projectDir)).isFile(); } catch { return false; }
+}
+function clearRoadmapStale(projectDir) {
+  if (!roadmapStale(projectDir)) return false;
+  try { return removeSpecFile(roadmapStalePath(projectDir)); } catch { return false; }
+}
+// The refresh the stamp stands for, when it is there → { refreshed }. The stamp goes first (maybeRefreshRoadmap): a save while the
+// refresh runs stamps again, and the next refresh covers it.
+function refreshStaleRoadmap(projectDir) {
+  if (!roadmapStale(projectDir)) return { refreshed: false };
+  maybeRefreshRoadmap(projectDir);
+  return { refreshed: true };
+}
+// While the stamp is there: the text the refresh WOULD write now for a generated ROADMAP.md / SPECS.md (in memory, nothing written),
+// else null — not stale, the file absent or hand-written, a broken roadmap.json (the refresh keeps the last good file). The
+// specs://roadmap / specs://catalog resources serve it: never the stale file.
+function staleGeneratedText(projectDir, name) {
+  if (!roadmapStale(projectDir)) return null;
+  const file = path.join(specsRoot(projectDir), name);
+  if (readIfExists(file) == null || !isGeneratedOrAbsent(file)) return null;
+  if (name === "ROADMAP.md") return roadmapError(projectDir) ? null : i18n.portableCli(renderRoadmapMd(projectDir, roadmapChromeLang(projectDir)));
+  if (name === "SPECS.md") return i18n.portableCli(catalogData(projectDir).markdown);
+  return null;
 }
 
 // spec_roadmap as ONE operation for the MCP tool and the CLI: the roadmap view plus, with write/html, the
@@ -1023,6 +1145,94 @@ function mergeFeatureState(b, o, t, ctx) {
     if (SO === undefined) delete out.signoffs;
     else setOwn(out, "signoffs", SO);
   }
+  // 1.24 review 6 (E2): a run older than a reopen / an undo of its task that only ONE side recorded is stale in the result
+  const ev = ownVal(out, "evidence");
+  const evStale = staleMergedEvidence(o, t, ev);
+  if (evStale !== ev) setOwn(out, "evidence", evStale);
+  return out;
+}
+// 1.24 review 6 (E2) — the merge's post-pass over the evidence. A change request that reopened task n (`changes[].reopened`) or an
+// undone tick of n (`unticks[]` {n, at}) recorded on ONE side never reached the other side's evidence: a run of that task the other
+// branch made BEFORE it won the merge (the later run, mergeRunRecord) with no stale mark, and a re-tick with no new run read
+// verified (finish and the execution sign-off passed). A merged record of slot n whose run is older than such an event is marked
+// stale — `staleBy: "undo"` for an untick; a reopen (the spec changed — redProof never reads through it) wins over an undo —
+// unless the side that recorded the event kept that task's own record valid (a task sharing the number that the reopen didn't
+// reach). A record's time is its run's `at`, or its note's (`noteAt`) for a task with no _Verify:_ command (the note IS its
+// re-check — recordEvidence). Events both sides hold (the base's) are applied on both already. Copy on write: no input is mutated.
+// → the evidence (the same object when nothing changes)
+function staleMergedEvidence(o, t, ev) {
+  if (!isObj(ev)) return ev;
+  const listOf = (doc, key) => (Array.isArray(ownVal(doc, key)) ? ownVal(doc, key) : []);
+  const onlyIn = (side, other, key, idOf) => { const there = new Set(listOf(other, key).map(idOf)); return listOf(side, key).filter((x) => isObj(x) && !there.has(idOf(x))); };
+  const events = [];
+  for (const [side, other] of [[o, t], [t, o]]) {
+    for (const c of onlyIn(side, other, "changes", CHANGE_ID)) if (Array.isArray(c.reopened)) for (const n of c.reopened) events.push({ n: String(n), at: mergeTime(c.at), undo: false, side });
+    for (const u of onlyIn(side, other, "unticks", UNTICK_ID)) if (u.n != null) events.push({ n: String(u.n), at: mergeTime(u.at), undo: true, side });
+  }
+  if (!events.length) return ev;
+  const records = (slot) => (isObj(slot) ? [slot, ...(Array.isArray(slot.others) ? slot.others.filter(isObj) : [])] : []);
+  const runTime = (r) => (typeof r.verify === "string" && r.verify ? mergeTime(r.at) : Math.max(mergeTime(r.at), mergeTime(r.noteAt)));
+  // The side's own record of r's task: by its `task` stamp; an unstamped record (v1.12) is the slot's latest.
+  const sideRecord = (side, n, r, isMain) => {
+    const recs = records(ownVal(ownVal(side, "evidence"), n));
+    return runTask(r) !== null ? recs.find((x) => runTask(x) === runTask(r)) : isMain ? recs[0] : undefined;
+  };
+  const judge = (n, r, isMain) => {
+    let reopen = false, undo = false;
+    for (const e of events) {
+      if (e.n !== n || !(e.at > runTime(r))) continue;
+      const mine = sideRecord(e.side, n, r, isMain);
+      if (mine && mine.stale !== true) continue; // the side that recorded it kept this task's record valid: it never reached it
+      if (e.undo) undo = true; else reopen = true;
+    }
+    if (reopen && !(r.stale === true && r.staleBy === undefined)) { const c = copyOwn(r); c.stale = true; delete c.staleBy; return c; }
+    if (!reopen && undo && r.stale !== true) { const c = copyOwn(r); c.stale = true; c.staleBy = "undo"; return c; }
+    return r;
+  };
+  let out = ev;
+  for (const n of Object.keys(ev)) {
+    const slot = ev[n];
+    if (!isObj(slot) || !events.some((e) => e.n === n)) continue;
+    let next = judge(n, slot, true);
+    if (Array.isArray(slot.others)) {
+      const others = slot.others.map((x) => (isObj(x) ? judge(n, x, false) : x));
+      if (others.some((x, i) => x !== slot.others[i])) { if (next === slot) next = copyOwn(slot); setOwn(next, "others", others); }
+    }
+    if (next !== slot) { if (out === ev) out = copyOwn(ev); setOwn(out, n, next); }
+  }
+  return out;
+}
+// 1.24 review 6 (E5) — roadmap.json: dependency edges each side added alone can close a cycle together (alpha → beta on one branch,
+// beta → alpha on the other): the merge was clean, wrote the cycle, and every later depend was refused on it. A cycle in the merged
+// features is a CONFLICT: the first edge on it ours doesn't hold (theirs brought it) is undone — ours kept at that feature's
+// dependsOn, {path: features.<slug>.dependsOn, base?, ours?, theirs?} reported — until no cycle is left; a cycle ours' own lists
+// hold is not the merge's (left as it is). → the merged document (a copy when something changed)
+function breakMergedCycles(b, o, t, merged, ctx) {
+  let feats = ownVal(merged, "features");
+  if (!isObj(feats)) return merged;
+  const depsAt = (doc, slug) => ownVal(ownVal(ownVal(doc, "features"), slug), "dependsOn");
+  let copied = false;
+  for (let round = 0, max = Object.keys(feats).length + 1; round < max; round++) {
+    const map = Object.create(null);
+    for (const k of Object.keys(feats)) map[k] = isObj(feats[k]) && Array.isArray(feats[k].dependsOn) ? feats[k].dependsOn.filter((d) => typeof d === "string") : [];
+    const cycle = findCycle(map);
+    if (!cycle) break;
+    let slug = null;
+    for (let i = 0; i + 1 < cycle.length && slug === null; i++) {
+      const ov = depsAt(o, cycle[i]);
+      if (!(Array.isArray(ov) && ov.includes(cycle[i + 1])) && isObj(feats[cycle[i]])) slug = cycle[i];
+    }
+    if (slug === null) break; // a cycle ours already had (a hand edit): not the merge's
+    if (!copied) { feats = copyOwn(feats); copied = true; }
+    const ov = depsAt(o, slug);
+    mergeConflict(ctx, ["features", slug, "dependsOn"], depsAt(b, slug), ov, depsAt(t, slug));
+    const entry = copyOwn(feats[slug]);
+    if (ov === undefined) delete entry.dependsOn; else setOwn(entry, "dependsOn", ov);
+    setOwn(feats, slug, entry);
+  }
+  if (!copied) return merged;
+  const out = copyOwn(merged);
+  setOwn(out, "features", feats);
   return out;
 }
 // roadmap.json.
@@ -1071,7 +1281,8 @@ function mergeStateJson(base, ours, theirs, kind) {
   const ctx = { conflicts: [] };
   if (!isObj(ours) || !isObj(theirs)) return { kind: k, merged: mergeThree(base, ours, theirs, () => mergeConflict(ctx, [], base, ours, theirs)), conflicts: ctx.conflicts };
   const b = isObj(base) ? base : undefined;
-  const merged = k === "roadmap" ? mergeObject(b, ours, theirs, [], ctx, (f) => (own(ROADMAP_FIELDS, f) ? ROADMAP_FIELDS[f] : null)) : mergeFeatureState(b, ours, theirs, ctx);
+  const merged = k === "roadmap" ? breakMergedCycles(b, ours, theirs, mergeObject(b, ours, theirs, [], ctx, (f) => (own(ROADMAP_FIELDS, f) ? ROADMAP_FIELDS[f] : null)), ctx) // 1.24 review 6 (E5)
+    : mergeFeatureState(b, ours, theirs, ctx);
   return { kind: k, merged, conflicts: ctx.conflicts };
 }
 // The driver's whole job on file TEXTS (git's %O %A %B; opts.path = %P, opts.kind overrides): parse (a BOM tolerated; an empty
@@ -1296,12 +1507,13 @@ function mergeDriverStatus(projectDir, opts = {}) {
 
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
-  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, sha1Hex, fingerprintMatches,
+  stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, wsFingerprint, sha1Hex, fingerprintMatches,
   BOM_CHAR, artifactMatches, uncheckTasks, phaseFile, FEATURE_SIZES, sizeInput, featureSize, isChangeDir, PLANNING_CEILING, PHASE_PERCENT, phasePercent, featurePercent,
-  roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, setDependency, dependencyUnlocked,
-  roadmap, flatText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,
+  roadmapPath, loadRoadmap, readRoadmap, roadmapError, writeRoadmap, findCycle, findCycles, setDependency, dependencyUnlocked,
+  roadmap, flatText, specNameText, addBacklog, BACKLOG_NOTE_MAX, BACKLOG_NOTE_SEP, addBacklogUnlocked, removeBacklog, removeBacklogUnlocked, BACKLOG_ACTIONS, backlog,
   roadmapLang, roadmapChromeLang, setRoadmapLang, RE_AUTOGEN, isGeneratedOrAbsent, writeRoadmapMd, writeRoadmapHtml,
-  writeRoadmapFile, maybeRefreshRoadmap, roadmapReport, featureDirs, locateFeatures,
+  writeRoadmapFile, maybeRefreshRoadmap, ROADMAP_STALE_FILE, markRoadmapStale, roadmapStale, clearRoadmapStale, refreshStaleRoadmap, staleGeneratedText,
+  roadmapReport, featureDirs, locateFeatures,
   // 1.21 F1a — the spec state's git merge driver
   MERGE_DRIVER, MERGE_KINDS, MERGE_ATTRIBUTE_PATHS, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY, mergeStateJson, mergeStateText,
   mergeKindOfPath, mergeAttributes, mergeConflictsCheck,

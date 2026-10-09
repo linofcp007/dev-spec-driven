@@ -1,5 +1,5 @@
 ---
-description: Record a decision (or a discovery) in the feature's decision log — decisions.md, D-1, D-2… with what it affects. PT - regista uma decisão no log da feature. ES - registra una decisión en el log de la función.
+description: Record a decision or a discovery in the feature's decision log (decisions.md — D-1, D-2… and what each affects).
 argument-hint: "[feature] [what was decided]"
 ---
 

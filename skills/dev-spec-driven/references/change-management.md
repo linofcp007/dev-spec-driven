@@ -265,9 +265,14 @@ or `{}` clears it) stores `roadmap.json → meta.approvalRoles`. A listed phase 
   ("missing role: security" and the `--role` to sign as), `spec_finish`'s blockers, `ROADMAP.md` and the guard hook all
   see it that way;
 - the completing sign-off writes `approvals[<phase>].roles` and the snapshot, like a single approval;
-- a sign-off of content that changed since no longer counts: that role signs the current content again;
+- a sign-off of content that changed since no longer counts: that role signs the current content again (a
+  whitespace-only edit — trailing spaces, blank lines at the end — is no change);
+- forced sign-offs with waivers: the approval carries the strictest one (the earliest `--expires`), so doctor warns
+  `waiver-expired` when any role's waiver ran out;
 - a phase approved before the roles were configured stays approved (by an unknown role); doctor and finish warn and
-  ask each role to re-sign. Without `meta.approvalRoles`, one approval per phase, as before.
+  ask each role to re-sign. Without `meta.approvalRoles`, one approval per phase, as before. A `roadmap.json` that can't
+  be read (a merge's conflict markers) hides the roles: approvals and revocations refuse (`roadmap-invalid`) and doctor
+  fails `roadmap` until it is repaired.
 
 **Fast-forward (`/spec-ff`).** `spec_approve {name, through: "tasks"}` (CLI `dev-spec approve <feature> --through
 tasks`) approves the active phases **in order** from the first unapproved one up to `through` — each through its own
@@ -302,7 +307,8 @@ date|last|all>] [--write]`) builds release notes from the spec data alone — no
 - **Added** — features shipped since `since` (a finish baseline recorded, or the `execution` sign-off approved), each
   with its summary and its user-story criteria (template ones left out); a feature shipped before `since` is never
   Added again;
-- **Changed** — criteria superseded (`_Supersedes:_`) by a feature shipped since then, and the change requests
+- **Changed** — the changes (`kind: "change"`, one `change.md`) shipped since then, with their summary and criteria;
+  criteria superseded (`_Supersedes:_`) by a feature shipped since then, and the change requests
   (`spec_impact` reopen) recorded since then, with the current text of the criteria a requirements change touched;
 - **Fixed** — bugfixes shipped since then, with the root-cause one-liner from `bug.md` (spikes are never listed).
 

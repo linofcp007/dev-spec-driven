@@ -1,5 +1,6 @@
 ---
-description: Give dev-spec-driven precedence over the superpowers plugin for feature work — writes a marked precedence block into CLAUDE.md after you confirm (or removes it). PT - dá precedência ao dev-spec-driven sobre o superpowers. ES - da prioridad a dev-spec-driven sobre superpowers.
+description: Give dev-spec-driven precedence over the superpowers plugin — a marked CLAUDE.md block, written (or removed) after you confirm.
+disable-model-invocation: true
 argument-hint: "[--project|--user] [--remove]"
 ---
 

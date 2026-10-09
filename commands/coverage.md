@@ -1,5 +1,5 @@
 ---
-description: Brownfield — measure how much of the existing code is covered by specs (files named in _Implements:_), and list the gaps. PT - cobertura de specs. ES - cobertura de specs.
+description: Brownfield — measure how much existing code the specs cover (files in _Implements:_) and list the gaps.
 argument-hint: ""
 ---
 

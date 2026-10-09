@@ -120,6 +120,18 @@ trackers, release notes, milestones).
     (`FP_LS_PS`). Pinned to fluidplan 755d1b2 (2026-09-26).
 - **spec-kit scenarios** (1.22 review): numbered items under the story, else — only under an explicit "Acceptance Scenarios"
   label, as kiro.js reads its criteria — bulleted ones (`mdListItems(…, false)`); a bullet outside the label stays prose.
+- **spec-kit tasks and design documents (1.24 r6 G-I1 / G-I3).** `specKitTaskMarkers()` gives each task line (a checkbox outside
+  fenced code and HTML comments) the sub-lines it lacks: `_Requirements: US<n>_` for its `[USn]` tag — importSpec's `refs` turn it
+  into that story's AC IDs, as a hand-written `US2` — and `_Implements: <paths>_` for the paths its text names (`planPaths()`, the
+  plan import's rule); a marker the task already carries (its line or a sub-line) is kept. The imported sample traces clean (it
+  read every criterion uncovered). `specKitDesignDocs()` appends `research.md`, `data-model.md`, `contracts/` and
+  `quickstart.md` to plan.md's text (they were skipped with a "not imported" warning): each under a localized `## ` heading
+  (`importSpec.skDocs`) with a provenance line (`skFrom`), its first-line title dropped and its headings one level down outside
+  fenced code (`demoteMd`); a contract that is no markdown goes into a fence (`SPECKIT_CONTRACT_EXT` gives its language and the
+  text kinds read); contracts/ two levels deep, at most `SPECKIT_CONTRACTS_MAX` (30) files — the rest, and any other kind, are
+  named in the "not imported" warning; a document holding only its title adds no section. Every file goes through the
+  importer's `read` (inside the project; over `IMPORT_MAX_BYTES` → the whole import refused). No plan.md but such documents:
+  design.md holds them, the warning says so (`wNoPlanDocs`).
 - **A title that names no folder** (1.22 review): when the caller gives no `name` and the parser's `nameHint` (a plan's /
   ExecPlan's / fluidplan's title, BMAD's PRD or story title) slugifies to nothing (`# Добавить тёмную тему`), importSpec uses the
   parser's `nameFallback` — the name it had without the title (the plan file's stem, the folder, fp.id, the story file's stem);
@@ -136,7 +148,8 @@ trackers, release notes, milestones).
   at least one character per 3 bytes, so one over 3 × the cap is refused without being read whole; bytes are not characters (a
   2.1 MB file of CJK text under the cap imports whole).
 - **What an import writes (1.23 review 5):** the name — the caller's or the title's — is one line (`flatText`: a line break opened a
-  heading in every file's title); the active tracks' design blocks follow the imported design body through `appendSpecText` (an
+  heading in every file's title) and, once the feature is created, inert to HTML comments (`specNameText` — 1.24 r6 G4: a GIVEN
+  name's `<!--` opened a comment in every imported file's title; a title's `<!--` is escaped before its slug is taken, as ever); the active tracks' design blocks follow the imported design body through `appendSpecText` (an
   open code fence at its end closed first — a design ending inside a ```mermaid had the sections written into it), as do the
   packs' task blocks; an archived feature holding the same slug is a warning (`createArchivedTwin`); the roadmap is refreshed
   ONCE, after the imported files (createFeature's refresh skipped: `{ refresh: false }` — it rendered every feature twice).
@@ -209,8 +222,9 @@ trackers, release notes, milestones).
   one Tasks table, no design, the plan's approval row (`planPhase`); the project export lists its criteria, not stories. A story written as its own `## US-n` section appears once, under the stories.
 - **`spec_changelog`** reads the spec data only (no model, no git log). Added = features that shipped since `since`
   (finish `{write}` recorded their baseline, or their execution sign-off was approved) with their user-story ACs (template
-  criteria left out); Changed = ACs superseded by a feature shipped since then + change requests (`changes`) recorded since
-  then, with the current AC text (folded into the entry of a feature new in these notes); Fixed = bugfixes shipped + the
+  criteria left out); Changed = the CHANGES shipped since then (kind `change` — 1.24 r6 G-I10: `changed.changes`, each with its
+  summary and criteria; they were listed under Added as new features) + ACs superseded by a feature shipped since then + change
+  requests (`changes`) recorded since then, with the current AC text (folded into the entry of a feature new in these notes); Fixed = bugfixes shipped + the
   root-cause one-liner. A feature shipped before `since` is never Added again (a role's `partial` execution sign-off is no shipment — only the
   completing one); a spike is never listed. `since`: an ISO
   date (`YYYY-MM-DD` = 00:00 UTC) or timestamp, `last` (default — `meta.changelogAt`; everything while unset) or `all`.

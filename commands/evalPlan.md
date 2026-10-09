@@ -1,5 +1,5 @@
 ---
-description: Phase 3 (+ai) — build golden / adversarial / regression eval sets, graders, thresholds, baseline. PT - plano de evals (+ai). ES - plan de evals (+ai).
+description: Phase 3 (+ai) — eval sets (golden / adversarial / regression), graders, thresholds and a baseline.
 argument-hint: "[feature name]"
 ---
 

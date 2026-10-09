@@ -35,7 +35,7 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify, worktreeProject, stateFromFile;
+  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers;
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -59,7 +59,7 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify, worktreeProject, stateFromFile } = E); }
+  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -316,6 +316,13 @@ function nextAction(projectDir, name, opts = {}) {
   const nx = fm.next;
   const G = fm.gates;
   const kind = st.kind || "feature";
+  // 1.24 review 6 (E4): roadmap.json that can't be read holds the approval roles and project checks — every approval, revocation and
+  // finish refuses on it, so the one step is to repair it (it recommended a role-less /spec-ff the approval would have taken alone)
+  const roadmapBad = roadmapError(projectDir);
+  if (roadmapBad) {
+    return { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict, gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [],
+      changedSinceApproval: changed, step: "fix", roadmapInvalid: true, recommendation: nx.roadmapInvalid(roadmapBad, slug) };
+  }
   // Phase by phase (SKILL.md: each phase is presented for approval before the next one starts), so a brand-new feature
   // is told to write its classification — never the design before the requirements are approved, and never to fix the
   // checks of phases it hasn't reached:
@@ -605,6 +612,10 @@ function specDoctor(projectDir, name, opts = {}) {
   // it, and the approvals, ticks and evidence it holds can't be read: a FAIL naming the file, never "awaiting approval: <every phase>".
   const stateRead = readState(projectDir, slug);
   if (stateRead.invalid) add("state", "fail", stateRead.invalid);
+  // 1.24 review 6 (E4): roadmap.json that doesn't parse or has the wrong shape — the approval roles and project checks it holds are
+  // unknown (read as none, they failed open): approve / revoke / spec_finish refuse on it, so doctor FAILS naming it
+  const rmc = roadmapGovernanceCheck(projectDir, lng);
+  if (rmc) add(rmc.id, rmc.status, rmc.detail);
 
   // Steering
   const steeringDir = path.join(root, "steering");
@@ -701,7 +712,13 @@ function specDoctor(projectDir, name, opts = {}) {
     const laterDesign = ph.later.some((r) => r.file === "design.md");
     add("mermaid", diagram === "present" || (diagram === "template" && laterDesign) ? "pass" : "warn",
       diagram === "missing" ? m.mermaidMissing : diagram === "template" && !laterDesign ? m.mermaidTemplate : m.mermaidOk);
-    add("constitution-check", RE_CONSTITUTION_CHECK.test(design) ? "pass" : "warn", RE_CONSTITUTION_CHECK.test(design) ? m.constitutionOk : m.constitutionMissing);
+    // 1.24 review 6 (F10): the design gate's reader — sectionFilled over the active design (a heading of its own, comments never count,
+    // "TBD" is no answer): a "Constitution Check" only named in an HTML comment (or a section saying TBD) passed here while the design
+    // approval refused it.
+    const consDesign = activeDesign(design, tracks);
+    const consFilled = sectionFilled(consDesign, CONSTITUTION_SYN);
+    add("constitution-check", consFilled ? "pass" : "warn", consFilled ? m.constitutionOk
+      : extractSection(consDesign, CONSTITUTION_SYN) == null ? m.constitutionMissing : G.constitutionUnfilled);
     // 1.17 A1 — design-tradeoffs / design-risks, 1.19 R1 — design-reuse: warns only (never a fail, never an approval check).
     // Not while design.md is still a LATER phase's template (nothing is being designed yet — the placeholders check already says
     // so). A design approved before a check existed (its approval lacks that check's stamp — `weigh` 1.17, `reuse` 1.19) is
@@ -774,18 +791,21 @@ function specDoctor(projectDir, name, opts = {}) {
       ...(laterFiles.includes("requirements.md") ? [...TRACE_TASK_KINDS, ...TRACE_PLAN_KINDS, "unidentifiedCriteria"].filter((k) => k !== "missingImplFiles") : []),
     ]);
     const kept = Object.fromEntries(Object.entries(tr).filter(([k]) => !deferKinds.has(k)));
-    const gapLines = traceGapLines(kept, lng);
+    // 1.24 review 6 (F3): the uncovered ACs the test plan names only in a note (Gaps / Out of Scope) — said beside the gap, never coverage
+    // … and (F-I8) the modal criteria with no stable ID beside US-n.AC-m ones (untracedCriteria): a warn — nothing can trace them
+    const untracedLines = laterFiles.includes("requirements.md") ? [] : traceWarningLines(tr, lng, ["untracedCriteria"]);
+    const gapLines = [...traceGapLines(kept, lng), ...(deferKinds.has("uncoveredByTests") ? [] : traceWarningLines(tr, lng, ["justifiedTestGaps"])), ...untracedLines];
     // The verdict's own kinds decide fail (testsNotMappedToTasks is listed, never failing — trace_check's verdict rule).
     const failing = traceGaps(kept).some((g) => TRACE_VERDICT_KINDS.has(g.kind));
     const deferred = traceGaps(tr).some((g) => deferKinds.has(g.kind) && TRACE_VERDICT_KINDS.has(g.kind));
     const deferredFiles = laterFiles.filter((x) => x === "tasks.md" || x === "test-plan.md" || x === "requirements.md").join(", "); // C3: + requirements.md (design-first)
     if (failing) add("traceability", "fail", gapLines.join("; "));
     else if (deferred) add("traceability", "warn", [G.traceDeferred(deferredFiles), ...gapLines].join("; "));
-    else add("traceability", "pass", [fm.traceGapText.allCovered(tr.totalAcs), ...gapLines].join("; "));
+    else add("traceability", untracedLines.length ? "warn" : "pass", [fm.traceGapText.allCovered(tr.totalAcs), ...gapLines].join("; "));
     // Secondary IDs (EC / NFR / SC): a warn, never a fail — only when requirements.md defines or the chain cites one.
     const D = fm.deepTrace;
     const secLines = traceWarningLines(tr, lng, TRACE_SECONDARY_KINDS);
-    const secDefined = secondaryDefinitions(criteriaText(dir) || "").defined.size;
+    const secDefined = secondaryDefinitions(activeDesign(criteriaText(dir) || "", tracks)).defined.size; // (1.24 review 6, F9: the active requirements, as trace_check)
     if (secLines.length || secDefined) add("secondary-trace", secLines.length ? "warn" : "pass", secLines.length ? secLines.join("; ") : D.secondaryOk(secDefined));
     // `_Supersedes:_` references that resolve to nothing (a typo, a removed feature): trace_check's warnings, surfaced
     // here too — until fixed, the living catalog shows the AC they meant to replace as current. Never a fail.
@@ -810,6 +830,13 @@ function specDoctor(projectDir, name, opts = {}) {
   const vs = verificationStatus(projectDir, slug, dir);
   if (vs.withVerify || Object.keys(vs.evidence).length) {
     add("verification", vs.unverified.length ? "warn" : "pass", vs.unverified.length ? m.unverified(unverifiedLabel(vs, featureLang(projectDir, slug))) : m.verifiedOk);
+  }
+  // 1.24 r6 D1 — a record a renumbering left under a number that is no longer its task's (stamped with the text of a task that
+  // now has another number): neither task reads it any more (ownRecord), so the moved task needs a new run. A warn.
+  const moved = movedEvidence(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), vs.evidence);
+  if (moved.length) {
+    const item = (x) => "#" + x.from + " → #" + x.to + " «" + cleanTaskText(withoutTaskMarkers(x.text)).replace(/\s+/g, " ").trim().slice(0, 60) + "»";
+    add("evidence-moved", "warn", fm.evidenceGate.evidenceMoved(moved.slice(0, 8).map(item).join(", ") + (moved.length > 8 ? " " + fm.gates.more(moved.length - 8) : ""), slug));
   }
   // B5 (warns): red-green — T-IDs made green with no recorded red run of an _Expect: fail_ task; suite-evidence — the project
   // checks (meta.checks) without a passing run since the last task activity, once every task is done (finish blocks on it).
@@ -838,6 +865,10 @@ function specDoctor(projectDir, name, opts = {}) {
   // `done --run` runs it exactly as written. Active tasks only; a warn.
   const oddVerify = suspiciousVerify(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""));
   if (oddVerify.length) add("verify-suspicious", "warn", fm.markerSyntax.suspiciousVerify(oddVerify.map((o) => "#" + o.number + " " + o.values.map((v) => "«" + v + "»").join(", ")).join("; ")));
+  // 1.24 r6 D7 — an _Expect:_ value other than fail (failure, red, PT falha): the task stays must-pass, silently. Active tasks; a warn.
+  const oddExpect = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
+    .map((b) => ({ number: b.number, values: unknownExpectValues(b) })).filter((o) => o.values.length);
+  if (oddExpect.length) add("expect-value", "warn", fm.markerSyntax.expectValue(oddExpect.slice(0, 8).map((o) => "#" + o.number + " " + o.values.map((v) => "«" + v + "»").join(", ")).join("; ") + (oddExpect.length > 8 ? " " + fm.gates.more(oddExpect.length - 8) : "")));
   // 1.14 full review Pa6 — a test planned outside test code (load-test.md, evals/*.json) whose artifact is still the
   // scaffold, once that test is due (a done task makes it green, or every task is done). A warn; spec_finish repeats it.
   const ocTemplates = outsideCodeTemplates(projectDir, dir, tracks, greenDone);
@@ -1076,6 +1107,7 @@ function statusTestsGate(pdir, dir, tracks) {
 function statusNext(pdir, f, kind, lng, unverified) {
   const st = f.st;
   if (st.invalid) return { step: "fix", file: ".state.json" }; // r5 review: next_action's step — repair the state file first
+  if (roadmapError(pdir)) return { step: "fix", file: "roadmap.json" }; // 1.24 review 6 (E4): …and roadmap.json (its roles / checks)
   const approvals = approvalsInForce(f.dir, f.tracks, isObj(st.approvals) ? st.approvals : {}); // 1.22 review: a stale tests sign-off is pending
   const open = f.blocks.filter((b) => !b.done);
   if (kind === "spike") {

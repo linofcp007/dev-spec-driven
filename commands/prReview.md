@@ -1,5 +1,5 @@
 ---
-description: Track-aware local pre-merge review against the full spec chain, each finding verified before it is reported (no PR or CI needed). PT - revisão local antes do merge. ES - revisión local antes del merge.
+description: Track-aware local pre-merge review against the full spec chain, each finding verified before it is reported.
 argument-hint: "[feature name or diff scope]"
 ---
 

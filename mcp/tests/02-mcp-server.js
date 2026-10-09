@@ -63,7 +63,8 @@ exports.run = async ({
     ok(rNested.result.isError && /evidence\.exitCode must be an integer/.test(errText(rNested)) && /- \[ \] 2\./.test(fs.readFileSync(w3Tasks, "utf8")),
       "nested object properties are validated (evidence.exitCode)");
     const rExtra = await call("spec_list", { projectDir: w3, bogus: { deep: 1 } });
-    ok(!rExtra.result.isError && body(rExtra).features.some((x) => x.name === "arg-check"), "unknown extra properties are ignored");
+    // 1.24 r6 A1: an argument the schema doesn't list is refused (it was ignored — and a misspelt one changed what the call did)
+    ok(rExtra.result.isError && body(rExtra).code === "unknown-argument" && /^Unknown argument for spec_list: bogus/.test(errText(rExtra)), "an unknown extra property is refused (unknown-argument)");
     const rArr = await call("spec_list", [w3]);
     ok(rArr.result.isError && /arguments must be a JSON object/.test(errText(rArr)), "non-object arguments are rejected");
     const w3pt = path.join(tmp, "proj-wp3-pt");
@@ -974,14 +975,28 @@ exports.run = async ({
     const sv = server23({});
     const iNew = await sv.req("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
     const iOdd = await sv.req("initialize", { protocolVersion: "2099-01-01", capabilities: {} });
-    // A tool that throws (spec_init into a FILE: the engine's mkdir fails) answers the JSON every other refusal is — {ok: false,
-    // error: "The tool failed: …", code} — never the bare text "ERROR: …" (1.23 review L24).
-    const aFile = path.join(tmp, "proj-p23-a-file.txt");
-    fs.writeFileSync(aFile, "not a folder\n");
-    const thrown = await sv.req("tools/call", { name: "spec_init", arguments: { projectDir: aFile } });
+    await sv.stop();
+    // A tool that throws answers the JSON every other refusal is — {ok: false, error: "The tool failed: …", code} — never the
+    // bare text "ERROR: …" (1.23 review L24). The throw: a server whose fs.mkdirSync fails with EACCES for one project (a
+    // --require preload — the engine itself no longer throws on the shapes 1.23 used: since 1.24 r6 G7 a `.specs` FILE is a
+    // localized wrongKind refusal, and since A3 a projectDir that is a file is refused before the engine).
+    const throwProj = path.join(tmp, "proj-p23-throws");
+    fs.mkdirSync(throwProj, { recursive: true });
+    const preload = path.join(tmp, "p23-mkdir-eacces.js");
+    fs.writeFileSync(preload, [
+      "const fs = require('fs');",
+      "const mkdir = fs.mkdirSync;",
+      "fs.mkdirSync = function (p, ...rest) {",
+      "  if (String(p).includes('proj-p23-throws')) { const e = new Error(\"EACCES: permission denied, mkdir '\" + p + \"'\"); e.code = 'EACCES'; throw e; }",
+      "  return mkdir.call(this, p, ...rest);",
+      "};",
+    ].join("\n") + "\n");
+    const svThrow = server23({ NODE_OPTIONS: "--require \"" + preload.split(path.sep).join("/") + "\"" });
+    await svThrow.req("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
+    const thrown = await svThrow.req("tools/call", { name: "spec_init", arguments: { projectDir: throwProj } });
     let thrownOut = null;
     try { thrownOut = JSON.parse(thrown.result.content[0].text); } catch { thrownOut = null; }
-    await sv.stop();
+    await svThrow.stop();
     ok(iNew.result.protocolVersion === "2025-11-25" && iOdd.result.protocolVersion === "2025-11-25" &&
       thrown.result.isError === true && thrownOut && thrownOut.ok === false && /^The tool failed: E[A-Z]+/.test(thrownOut.error) && /^E[A-Z]+$/.test(thrownOut.code || "") &&
       /^A ferramenta falhou: x$/.test(I.msg("pt").args.toolFailed("x")) && /^La herramienta falló: x$/.test(I.msg("es").args.toolFailed("x")),
@@ -1050,5 +1065,200 @@ exports.run = async ({
       same(listEnv.specsDir, path.join(other, ".specs")) && se.asked.length === 0,
       "1.23: no SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR + a client with roots → its first local file:// root is the default project (asked once; a network root skipped; an explicit projectDir wins; list_changed asks again); no roots → cwd; SPEC_PROJECT_DIR set → never asked (got " +
       js([listA.specsDir, explicit.specsDir, askedOnce, listB.specsDir, askedTwice, listCwd.specsDir, listEnv.specsDir, se.asked.length]) + ")");
+  }
+
+  { // 1.24 r6 — the MCP server (review 6): unknown arguments, codes on argument errors, projectDir (roots, file://, an existing folder)
+    const js = JSON.stringify;
+    const os = require("os");
+    const I = require("./lib/i18n.js");
+    const call = (name, args) => rpc("tools/call", { name, arguments: args });
+    const bodyOf = (res) => { try { return JSON.parse(res.result.content[0].text); } catch { return { raw: res }; } };
+    const txt = (fn) => { try { return String(fn()); } catch (e) { return "THREW: " + e.message; } }; // a missing text must FAIL, not crash the run
+    const same = (a, b) => typeof a === "string" && path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+    const fileUri = (p) => {
+      const s = path.resolve(p).split(path.sep).join("/");
+      return process.platform === "win32" ? "file:///" + encodeURI(s) : "file://" + encodeURI(s);
+    };
+    // A private server with its own env (null removes a variable) and cwd; `onRequest` answers the server's own requests (roots/list).
+    const srv = (env, cwd, onRequest) => {
+      const e = { ...process.env, SPEC_MCP_PROMPTS: "" };
+      for (const [k, v] of Object.entries(env || {})) { if (v === null) delete e[k]; else e[k] = v; }
+      const kid = spawn(process.execPath, [SERVER], { env: e, cwd: cwd || tmp, stdio: ["pipe", "pipe", "inherit"] });
+      const waiting = new Map(), asked = [];
+      let b = "", n = 0;
+      const write = (m) => kid.stdin.write(JSON.stringify(m) + "\n");
+      kid.stdout.on("data", (d) => {
+        b += d.toString();
+        let nl;
+        while ((nl = b.indexOf("\n")) >= 0) {
+          const line = b.slice(0, nl).trim();
+          b = b.slice(nl + 1);
+          if (!line) continue;
+          const m = JSON.parse(line);
+          if (m.method && m.id !== undefined) { asked.push(m); const a = onRequest ? onRequest(m) : null; if (a) write(Object.assign({ jsonrpc: "2.0", id: m.id }, a)); continue; }
+          if (waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); }
+        }
+      });
+      const req = (method, params) => new Promise((resolve) => {
+        const id = "r6-" + ++n;
+        const t = setTimeout(() => abort("1.24 r6: no reply to " + method + " (" + id + ") within 20s"), 20000);
+        waiting.set(id, (m) => { clearTimeout(t); resolve(m); });
+        write({ jsonrpc: "2.0", id, method, params });
+      });
+      const callP = async (name, args) => bodyOf(await req("tools/call", { name, arguments: args }));
+      const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
+      return { req, call: callP, asked, stop, init: (caps) => req("initialize", { protocolVersion: "2025-06-18", capabilities: caps || {} }) };
+    };
+
+    { // 1.24 r6 A1: an unknown / misspelt top-level argument is refused before anything runs — code unknown-argument, a did-you-mean
+      const p = path.join(tmp, "proj-r6-a1");
+      S.initProject(p, ["core"], "en");
+      const f = S.createFeature(p, "alpha", ["core"]);
+      const cls = path.join(f.dir, "classification.md");
+      fs.writeFileSync(cls, "# Classification — alpha\n\n## Active Tracks\ncore\n\n## Rationale\nA small internal change with no external surface.\n");
+      const a0 = S.approvePhase(p, "alpha", "classification", "t");
+      fs.appendFileSync(cls, "\nScope grew: it now also touches billing.\n");
+      const stateFile = path.join(f.dir, ".state.json");
+      const before = fs.readFileSync(stateFile, "utf8");
+      // `revoked` for `revoke`: the key was dropped and the call RE-APPROVED the changed content
+      const rv = await call("spec_approve", { name: "alpha", phase: "classification", revoked: true, projectDir: p });
+      const after = fs.readFileSync(stateFile, "utf8");
+      const tb = bodyOf(await call("spec_task_brief", { name: "alpha", task: 3, projectDir: p })); // `task` for `number`: the NEXT task's brief
+      const typo = bodyOf(await call("spec_status", { nmae: "alpha", projectDir: p })); // a misspelt required key: named as unknown, with its fix
+      const extra = bodyOf(await call("spec_list", { projectDir: p, bogus: { deep: 1 } }));
+      const nul = await call("spec_list", { projectDir: p, bogus: null }); // null = not given, as for every argument
+      const ptMsg = txt(() => I.msg("pt").args.unknownArgs("spec_x", [{ argument: "a", didYouMean: "b" }], "b, c"));
+      const esMsg = txt(() => I.msg("es").args.unknownArgs("spec_x", [{ argument: "a" }, { argument: "z" }], "b"));
+      const rvB = bodyOf(rv);
+      ok(a0.ok && rv.result.isError === true && rvB.code === "unknown-argument" && js(rvB.unknown) === js([{ argument: "revoked", didYouMean: "revoke" }]) &&
+        /^Unknown argument for spec_approve: revoked \(did you mean revoke\?\) — nothing was done\. spec_approve takes: name, phase,/.test(rvB.error) && before === after &&
+        tb.ok === false && tb.code === "unknown-argument" && tb.unknown[0].argument === "task" && tb.unknown[0].didYouMean === "number" && tb.task === undefined &&
+        typo.code === "unknown-argument" && typo.unknown[0].didYouMean === "name" && extra.code === "unknown-argument" && extra.unknown[0].didYouMean === undefined &&
+        !nul.result.isError && /^Argumento desconhecido para spec_x: a \(será b\?\)/.test(ptMsg) && /^Argumentos desconocidos para spec_x: a, z/.test(esMsg),
+        "1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list is refused (code unknown-argument, `unknown` [{argument, didYouMean}], localized) and nothing runs — spec_approve {revoked} no longer re-approves changed content, spec_task_brief {task: 3} no longer briefs the next task (got " +
+        js([rvB, tb.code, typo.unknown, extra.unknown, before === after]) + ")");
+      // Every argument a tool's handler reads is in its inputSchema — one it doesn't list would now be refused, never read.
+      const src = fs.readFileSync(SERVER, "utf8");
+      const parts = src.slice(src.indexOf("function runTool("), src.indexOf("// --- JSON-RPC / MCP plumbing")).split(/case "([a-z_]+)":/);
+      const unlisted = [];
+      for (let i = 1; i < parts.length; i += 2) {
+        const tool = list.result.tools.find((t) => t.name === parts[i]);
+        const props = tool ? tool.inputSchema.properties : {};
+        for (const m of parts[i + 1].matchAll(/\bargs\.([A-Za-z_]+)/g)) if (!Object.prototype.hasOwnProperty.call(props, m[1])) unlisted.push(parts[i] + "." + m[1]);
+      }
+      ok((parts.length - 1) / 2 === list.result.tools.length && !unlisted.length,
+        "1.24 r6 A1: every argument runTool reads is in its tool's inputSchema (" + (parts.length - 1) / 2 + " tools; got " + js(unlisted) + ")");
+    }
+
+    { // 1.24 r6 A-I2: every argument error carries a stable code (+ the arguments it names) — the message stays localized
+      const p = path.join(tmp, "proj-r6-ai2");
+      S.initProject(p, ["core"], "pt");
+      const miss = bodyOf(await call("spec_status", { projectDir: p }));
+      const inv = bodyOf(await call("spec_complete_task", { name: "x", number: 1.5, evidence: { command: "a", exitCode: "0" }, projectDir: p }));
+      const notObj = bodyOf(await rpc("tools/call", { name: "spec_list", arguments: [p] }));
+      const dd = bodyOf(await call("spec_list", { projectDir: "../somewhere" }));
+      const net = bodyOf(await call("spec_list", { projectDir: "//fileserver/share/proj" }));
+      ok(miss.code === "missing-arguments" && js(miss.missing) === '["name"]' && /em falta: name/.test(miss.error) &&
+        inv.code === "invalid-arguments" && js(inv.invalid) === '["number","evidence.exitCode"]' && /tem de ser/.test(inv.error) &&
+        notObj.code === "invalid-arguments" && js(notObj.invalid) === '["arguments"]' && dd.code === "project-dotdot" && net.code === "project-network",
+        "1.24 r6 A-I2: argument errors carry a stable code — missing-arguments {missing}, invalid-arguments {invalid}, project-dotdot, project-network — with the localized message (got " +
+        js([miss, inv.code, inv.invalid, notObj.code, dd.code, net.code]) + ")");
+    }
+
+    { // 1.24 r6 A2: with the client's roots, an unexpanded projectDir counts as not given (→ the root) and a relative one resolves from the root
+      const rootDir = path.join(tmp, "proj-r6-a2-root"), cwd = path.join(tmp, "proj-r6-a2-cwd");
+      for (const d of [path.join(rootDir, "sub"), cwd]) fs.mkdirSync(d, { recursive: true });
+      const s = srv({ SPEC_PROJECT_DIR: null, CLAUDE_PROJECT_DIR: null }, cwd, (m) => (m.method === "roots/list" ? { result: { roots: [{ uri: fileUri(rootDir) }] } } : null));
+      await s.init({ roots: { listChanged: true } });
+      const init = await s.call("spec_init", { tracks: ["core"], projectDir: "$HOME" });
+      const made = [];
+      for (const [name, pd] of [["brace", "${workspaceFolder}/"], ["percent", "%CD%"], ["dollar", "$PWD/x"], ["dot", "."], ["dotslash", "./"]]) {
+        made.push([name, await s.call("spec_create", { name, tracks: ["core"], projectDir: pd })]);
+      }
+      const sub = await s.call("spec_init", { tracks: ["core"], projectDir: "sub" });
+      await s.stop();
+      ok(init.ok !== false && same(init.specsDir, path.join(rootDir, ".specs")) && made.every(([n, r]) => r.ok && fs.existsSync(path.join(rootDir, ".specs", n))) &&
+        sub.ok !== false && same(sub.specsDir, path.join(rootDir, "sub", ".specs")) && fs.readdirSync(cwd).length === 0,
+        "1.24 r6 A2: roots chose the default project → a projectDir holding an unexpanded variable ($HOME, ${workspaceFolder}/, %CD%, $PWD/x) is the root, a relative one ('.', './', 'sub') resolves from it — nothing lands in the server's cwd (got " +
+        js([init.specsDir, made.map(([n, r]) => [n, r.ok]), sub.specsDir, fs.readdirSync(cwd)]) + ")");
+    }
+
+    { // 1.24 r6 A3: a projectDir naming no folder is refused (only spec_init creates one), a file too; a file:// URI names its folder
+      const base = path.join(tmp, "proj-r6-a3"), cwd = path.join(tmp, "proj-r6-a3-cwd");
+      fs.mkdirSync(cwd, { recursive: true });
+      S.initProject(base, ["core"], "en");
+      const typo = path.join(base, "my-projct-typo");
+      const aFile = path.join(base, "a-file.txt");
+      fs.writeFileSync(aFile, "x\n");
+      const s = srv({ SPEC_PROJECT_DIR: base, CLAUDE_PROJECT_DIR: null }, cwd);
+      await s.init();
+      const refused = [];
+      for (const [tool, args] of [["spec_create", { name: "alpha", tracks: ["core"] }], ["spec_backlog", { action: "add", name: "x" }], ["spec_roadmap", { write: true }],
+        ["steering_scaffold", { file: "tech.md" }], ["spec_tracks", { action: "init", name: "mob" }], ["spec_list", {}]]) refused.push(await s.call(tool, Object.assign({ projectDir: typo }, args)));
+      const onFile = await s.call("spec_list", { projectDir: aFile });
+      const initNew = await s.call("spec_init", { tracks: ["core"], projectDir: path.join(base, "fresh") });
+      const viaUri = await s.call("spec_create", { name: "beta", tracks: ["core"], projectDir: fileUri(base) });
+      const listUri = await s.call("spec_list", { projectDir: fileUri(base) });
+      const netUri = await s.call("spec_list", { projectDir: "file://fileserver/share/proj" });
+      await s.stop();
+      ok(refused.every((r) => r.ok === false && r.code === "project-missing" && /^projectDir .*my-projct-typo: no such folder — check the path \(only spec_init creates a project folder\)/.test(r.error)) &&
+        !fs.existsSync(typo) && onFile.ok === false && onFile.code === "project-not-dir" && /a-file\.txt is a file, not a folder/.test(onFile.error) &&
+        initNew.ok !== false && fs.existsSync(path.join(base, "fresh", ".specs")) && viaUri.ok && fs.existsSync(path.join(base, ".specs", "beta")) &&
+        listUri.ok !== false && same(listUri.specsDir, path.join(base, ".specs")) && netUri.ok === false && netUri.code === "project-network" && fs.readdirSync(cwd).length === 0 &&
+        ["pt", "es"].every((l) => /x-dir/.test(txt(() => I.msg(l).args.projectMissing("x-dir"))) && /x-dir/.test(txt(() => I.msg(l).args.projectNotDir("x-dir")))),
+        "1.24 r6 A3: a projectDir that names no folder is refused (project-missing — spec_init alone creates one), a file is refused (project-not-dir — spec_list said exists: false), a file:// URI names its folder (a network one is refused), nothing lands in the cwd (got " +
+        js([refused.map((r) => r.code), onFile, viaUri.ok, listUri.specsDir, netUri.code, fs.readdirSync(cwd)]) + ")");
+    }
+
+    { // 1.24 r6 A5: descriptions — spec_status names the change kind, spec_next_task.max has its maximum (validated), every projectDir is described
+      const tools = list.result.tools;
+      const tool = (n) => tools.find((t) => t.name === n);
+      const undescribed = tools.filter((t) => t.inputSchema.properties.projectDir && !t.inputSchema.properties.projectDir.description).map((t) => t.name);
+      const p = path.join(tmp, "proj-r6-a5");
+      S.initProject(p, ["core"], "en");
+      S.createFeature(p, "alpha", ["core"]);
+      const over = bodyOf(await call("spec_next_task", { name: "alpha", batch: true, max: 9, projectDir: p }));
+      const atMax = bodyOf(await call("spec_next_task", { name: "alpha", batch: true, max: 8, projectDir: p }));
+      const pdInit = tool("spec_init").inputSchema.properties.projectDir.description;
+      ok(/feature \/ bugfix \/ spike \/ change\)/.test(tool("spec_status").description) && tool("spec_next_task").inputSchema.properties.max.maximum === 8 &&
+        over.code === "invalid-arguments" && /max must be an integer between 1 and 8 \(got 9\)/.test(over.error) && atMax.ok !== false && !undescribed.length &&
+        /client's first root/.test(pdInit) && /relative/i.test(pdInit) && /only spec_init creates/i.test(pdInit) &&
+        ["pt", "es"].every((l) => /1.*8/.test(txt(() => I.msg(l).args.between(1, 8)))),
+        "1.24 r6 A5: spec_status's kinds name change; spec_next_task.max carries maximum 8 and 9 is refused; every projectDir has a description — spec_init's says how the folder is chosen (got " +
+        js([over.error, atMax.ok, undescribed, pdInit]) + ")");
+    }
+
+    { // 1.24 r6 A-I1: a tool's result is compact JSON — the same object without the indentation (~22% of a reply's characters)
+      const r = await call("spec_list", { projectDir: path.join(tmp, "proj-r6-a5") });
+      const e = await call("spec_status", { projectDir: path.join(tmp, "proj-r6-a5") });
+      const t = r.result.content[0].text, te = e.result.content[0].text;
+      ok(!/\n/.test(t) && JSON.stringify(JSON.parse(t)) === t && !/\n/.test(te) && JSON.parse(te).code === "missing-arguments",
+        "1.24 r6 A-I1: tool results and argument errors are compact JSON (got " + js([t.slice(0, 80), te.slice(0, 80)]) + ")");
+    }
+
+    { // 1.24 r6 A6: a feature lock another live process holds makes an MCP call wait ~2 s (not DEV_SPEC_LOCK_WAIT_MS's 10 s) — then busy
+      const p = path.join(tmp, "proj-r6-a6");
+      S.initProject(p, ["core"], "en");
+      const f = S.createFeature(p, "alpha", ["core"]);
+      const lock = path.join(f.dir, ".lock");
+      fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: "r6-a6" }));
+      const s = srv({ SPEC_PROJECT_DIR: p, DEV_SPEC_LOCK_WAIT_MS: null }, p);
+      await s.init();
+      const t0 = Date.now();
+      const busy = await s.call("spec_complete_task", { name: "alpha", number: 1, evidence: { command: "echo", exitCode: 0, summary: "x" } });
+      const waited = Date.now() - t0;
+      await s.stop();
+      const s2 = srv({ SPEC_PROJECT_DIR: p, DEV_SPEC_LOCK_WAIT_MS: "300" }, p); // an explicit DEV_SPEC_LOCK_WAIT_MS still wins
+      await s2.init();
+      const t1 = Date.now();
+      const busy2 = await s2.call("spec_complete_task", { name: "alpha", number: 1, evidence: { command: "echo", exitCode: 0, summary: "x" } });
+      const waited2 = Date.now() - t1;
+      await s2.stop();
+      const untouched = /- \[ \] 1\./.test(fs.readFileSync(path.join(f.dir, "tasks.md"), "utf8"));
+      fs.unlinkSync(lock);
+      ok(busy.ok === false && busy.busy === true && waited >= 1500 && waited < 8000 && busy2.busy === true && waited2 < 1500 && untouched,
+        "1.24 r6 A6: an MCP call waits ~2 s for a feature lock another live process holds (DEV_SPEC_LOCK_WAIT_MS unset), then answers busy — the server froze 10 s; an explicit DEV_SPEC_LOCK_WAIT_MS still wins (got " +
+        js([busy.busy, waited, busy2.busy, waited2, untouched]) + ")");
+    }
   }
 };

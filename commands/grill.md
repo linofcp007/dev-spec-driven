@@ -1,5 +1,5 @@
 ---
-description: Grill my understanding of a feature's requirements before design, and fold the result into requirements.md. PT - sabatina aos requisitos antes do design. ES - interrogatorio de los requisitos antes del diseño.
+description: Grill my understanding of a feature's requirements before design, and fold the result into requirements.md.
 argument-hint: "[feature name]"
 ---
 

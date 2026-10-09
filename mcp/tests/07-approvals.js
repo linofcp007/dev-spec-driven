@@ -1126,6 +1126,41 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       "1.23: a remove the user confirmed over MCP deletes only the folder the question named — a feature renamed into the name, or files added while it waited → changedSincePreview, nothing deleted; unchanged → removed; the engine checks remove's preview fingerprint (EN / PT / ES) (got " +
       js([rSwap, rGrows.code, rGone.ok, engBad.code, engOk.ok]) + ")");
 
+    { // 1.24 r6 (integration): a revoke confirmed over MCP removes the approval its question named — another one recorded while
+      // the user read it (revoked and approved again) is refused (changed-since-preview, the newer approval kept); unchanged → revoked.
+      // And spec_add_track {remove} turning +tdd off is asked about (decline → nothing changes; accept → removed); +sec is not.
+      filledFeature("rv-swap");
+      S.approvePhase(pEn, "rv-swap", "classification", "u");
+      A.setAnswer(() => {
+        const before = stateOf(pEn, "rv-swap").approvals.classification.at;
+        S.approvePhase(pEn, "rv-swap", "classification", "u", { revoke: true });
+        while (new Date().toISOString() === before) { /* a later timestamp */ }
+        S.approvePhase(pEn, "rv-swap", "classification", "u");
+        return accept()();
+      });
+      const rRvSwap = await A.call("spec_approve", { name: "rv-swap", phase: "classification", revoke: true, projectDir: pEn });
+      filledFeature("rv-same");
+      S.approvePhase(pEn, "rv-same", "classification", "u");
+      A.setAnswer(accept());
+      const rRvSame = await A.call("spec_approve", { name: "rv-same", phase: "classification", revoke: true, projectDir: pEn });
+      S.createFeature(pEn, "trk", ["core", "tdd", "sec"]);
+      const askedBefore = A.asked.length;
+      A.setAnswer(decline);
+      const rTrkNo = await A.call("spec_add_track", { name: "trk", track: "tdd", remove: true, projectDir: pEn });
+      const tracksAfterNo = stateOf(pEn, "trk").tracks;
+      const askedTdd = A.asked.length - askedBefore;
+      A.setAnswer(accept());
+      const rTrkYes = await A.call("spec_add_track", { name: "trk", track: "tdd", remove: true, projectDir: pEn });
+      const askedMid = A.asked.length;
+      const rSec = await A.call("spec_add_track", { name: "trk", track: "sec", remove: true, projectDir: pEn });
+      ok(rRvSwap.ok === false && rRvSwap.changedSincePreview === true && rRvSwap.code === "changed-since-preview" && rRvSwap.revoke === true &&
+        !!stateOf(pEn, "rv-swap").approvals.classification && rRvSame.ok === true && rRvSame.confirmed && !stateOf(pEn, "rv-same").approvals.classification &&
+        askedTdd === 1 && rTrkNo.ok === false && rTrkNo.declined === true && JSON.stringify(tracksAfterNo).includes("tdd") &&
+        rTrkYes.ok !== false && rTrkYes.confirmed && rSec.ok !== false && A.asked.length === askedMid,
+        "1.24 r6: over MCP elicitation a revoke carries its preview (an approval re-recorded while the user was asked is not revoked — changed-since-preview; unchanged → revoked) and spec_add_track {remove} of +tdd is asked (decline keeps the track, accept removes it); removing +sec asks nothing (got " +
+        js([rRvSwap, rRvSame.ok, askedTdd, rTrkNo.declined, tracksAfterNo, rTrkYes.ok, rSec.ok, A.asked.length - askedMid]) + ")");
+    }
+
     // 1.23 — the client cancels the tools/call while its question waits (notifications/cancelled): the question is withdrawn
     // (notifications/cancelled for the server's own request id), nothing is recorded even when the user answers Approve later,
     // and the cancelled request gets no reply. A call carrying a progressToken gets notifications/progress while it waits.
@@ -1199,6 +1234,20 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       /^dev-spec: un agente pide aprobar la fase classification de 'facturas'\. Las comprobaciones de la fase pasan\./.test(qEs.params.message) &&
       qEs.params.requestedSchema.properties.note.title === "Nota" && /^El usuario lo rechazó en el cliente MCP: no se registró nada/.test(rEs.error) && !stateOf(pEs, "facturas").approvals.classification,
       "1.21 F1b: the question and the refusals speak the feature's language — PT (deny: an explicit approve in the client records it), ES (ask) (got " + js([qPt.params.message, rPtNo.error, qEs.params.message, rEs.error]) + ")");
+
+    { // 1.24 r6 A-I8: the remove question says how much it deletes — remove's preview file count (a scratch folder and weeks of work read alike)
+      const big = S.createFeature(pEn, "sizable", ["core"]);
+      for (let i = 0; i < 3; i++) fs.writeFileSync(path.join(big.dir, "notes-" + i + ".md"), "x\n");
+      const pre = S.manageFeature(pEn, "remove", "sizable");
+      A.setAnswer(decline);
+      const rBig = await A.call("spec_feature", { action: "remove", name: "sizable", confirm: true, projectDir: pEn });
+      const qBig = A.asked[A.asked.length - 1] || { params: {} };
+      const I24 = require(path.join(__dirname, "lib", "i18n.js"));
+      const n = pre.wouldDelete ? pre.wouldDelete.files : -1;
+      ok(rBig.declined === true && n > 3 && new RegExp("This deletes \\.specs/sizable/ for good — " + n + " files\\.").test(qBig.params.message || "") && fs.existsSync(big.dir) &&
+        ["pt", "pt-BR", "es"].every((l) => { try { return /\.specs\/x\/.*7/.test(I24.msg(l).elicit.removeSize(7, ".specs/x/")); } catch { return false; } }),
+        "1.24 r6 A-I8: spec_feature remove's question names what it deletes — '.specs/sizable/ … N files' from remove's preview (EN / PT / pt-BR / ES) (got " + js([n, qBig.params.message]) + ")");
+    }
     await A.stop();
 
     // --- a client WITHOUT elicitation: ask and off → today's behaviour (recorded, nobody asked); deny → refused, the command given
@@ -1356,5 +1405,89 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
     ok(/today or later in UTC/.test(i18n.msg("en").waiver.badExpires('"x"', 3650)) && /hoje ou depois em UTC/.test(i18n.msg("pt").waiver.badExpires('"x"', 3650)) &&
       /hoy o después en UTC/.test(i18n.msg("es").waiver.badExpires('"x"', 3650)),
       "r5 review: the waiver --expires refusal says the date is a UTC day (EN / PT / ES)");
+  }
+
+  { // 1.24 review 6 — role sign-offs vs a whitespace-only edit (E6), the strictest waiver of a role-signed approval (E7), a revoke over elicitation (preview)
+    const js = JSON.stringify;
+    const w6 = (f, rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
+    const st6 = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
+    const REQ6 = "# Feature: x\n\n## Summary\nExport invoices as CSV.\n\n### US-1 (P1 — MVP): Export\n#### Acceptance Criteria (EARS)\n" +
+      "1. **US-1.AC-1** — WHEN an admin clicks Export THE SYSTEM SHALL download a CSV.\n2. **US-1.AC-2** — IF the export fails THEN THE SYSTEM SHALL show the error code.\n\n" +
+      "## Success Criteria\n- **SC-001** — 95% of exports finish in under 5 s.\n";
+    const DESIGN6 = "# Design: x\n\n## Overview\nAn endpoint.\n\n## Architecture\n```mermaid\ngraph TD\n  A-->B\n```\n\n## Alternatives & Trade-offs\nSync over a queue: simpler.\n\n" +
+      "## Risks\nLarge months; streaming.\n\n## Reuse & Integration\n| Need | Reuse | Why |\n|---|---|---|\n| CSV | the csv writer | tested |\n";
+    const TASKS6 = "# Tasks\n\n- [ ] 1. [US1] Build the export\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Verify: [manual: open the CSV]_\n";
+    const feature6 = (p) => {
+      const f = S.createFeature(p, "Export", ["core"]);
+      w6(f, "classification.md", "# Classification\n\n## Active tracks\ncore\n\n## Why\nA small export feature.\n");
+      w6(f, "requirements.md", REQ6); w6(f, "design.md", DESIGN6); w6(f, "tasks.md", TASKS6);
+      return f;
+    };
+
+    // 1.24 r6 E6: a whitespace-only edit (an editor's trailing-whitespace trim / final newline) is no change since an approval (r5) —
+    // but a role's WAITING sign-off (no snapshot) went stale on it: the next role's sign-off didn't complete the phase. New approvals
+    // and sign-offs record a whitespace-insensitive `wsFingerprint` too (E-I5): a sign-off of the same content but whitespace counts.
+    const p6 = path.join(tmp, "proj-r6a-ws");
+    S.initProject(p6, ["core"], "en", { approvalRoles: { requirements: ["product", "tech"] } });
+    const f6 = feature6(p6);
+    S.approvePhase(p6, f6.slug, "classification", "carol");
+    const pr = S.approvePhase(p6, f6.slug, "requirements", "pat", { role: "product" });
+    w6(f6, "requirements.md", REQ6.replace("download a CSV.", "download a CSV.   ") + "\n\n");
+    const gates6 = (S.specDoctor(p6, f6.slug).checks.find((c) => c.id === "approval-gates") || {}).detail || "";
+    const te = S.approvePhase(p6, f6.slug, "requirements", "tom", { role: "tech" });
+    const s6 = st6(f6);
+    ok(pr.ok && pr.complete === false && typeof s6.approvalHistory[1].wsFingerprint === "string" && !/no longer count/.test(gates6) &&
+      te.ok && te.complete === true && !!s6.approvals.requirements && typeof s6.approvals.requirements.wsFingerprint === "string" && js(S.nextAction(p6, f6.slug).changedSinceApproval) === "[]",
+      "1.24 r6 E6: a whitespace-only edit doesn't invalidate a waiting role sign-off — the next role completes the phase (sign-offs and approvals record wsFingerprint) (got " +
+      js([pr.complete, te.complete, te.missingRoles, gates6.slice(0, 160)]) + ")");
+    // …while a real edit still does
+    w6(f6, "requirements.md", REQ6.replace("download a CSV.", "download a UTF-8 CSV."));
+    const na6 = S.nextAction(p6, f6.slug);
+    ok(js(na6.changedSinceApproval) === '["requirements.md"]', "1.24 r6 E6: a real edit is still a change since the approval (got " + js(na6.changedSinceApproval) + ")");
+
+    // 1.24 r6 E7: a phase approved by roles where one forced sign-off carries an expiring waiver and the completing one none — the
+    // approval kept the completing sign-off's waiver (no expiry): the expiry was lost, doctor never warned waiver-expired. The
+    // approval now carries the STRICTEST waiver of the forced sign-offs that count (the earliest expiry).
+    const p7 = path.join(tmp, "proj-r6a-waiver");
+    S.initProject(p7, ["core"], "en", { approvalRoles: { design: ["tech", "security"] } });
+    const f7 = feature6(p7);
+    S.approvePhase(p7, f7.slug, null, "alice", { through: "requirements" });
+    const a7 = S.approvePhase(p7, f7.slug, "design", "tom", { role: "tech", force: true, reason: "constitution review next sprint", expires: "1d" });
+    const b7 = S.approvePhase(p7, f7.slug, "design", "sue", { role: "security", force: true, reason: "accepted risk" });
+    const s7 = st6(f7);
+    const w7 = s7.approvals.design && s7.approvals.design.waiver && { ...s7.approvals.design.waiver };
+    const histW = { ...s7.approvalHistory[s7.approvalHistory.length - 1].waiver };
+    // time travel: the tech waiver's expiry passes (the approval's, the role record's and the history's)
+    for (const x of [s7.approvals.design.waiver, s7.approvals.design.roles.tech.waiver, ...s7.approvalHistory.map((h) => h.waiver)]) if (x && x.expires) x.expires = "2026-01-01";
+    fs.writeFileSync(path.join(f7.dir, ".state.json"), JSON.stringify(s7, null, 2));
+    const we = S.specDoctor(p7, f7.slug).checks.find((c) => c.id === "waiver-expired");
+    const fin7 = S.finishFeature(p7, f7.slug, {});
+    ok(a7.ok && a7.complete === false && b7.ok && b7.complete === true && w7 && w7.reason === "constitution review next sprint" && /^\d{4}-\d{2}-\d{2}$/.test(w7.expires) &&
+      histW && histW.expires === w7.expires && b7.waiver && b7.waiver.expires === w7.expires && we && we.status === "warn" &&
+      fin7.waivers && fin7.waivers[0].expired === true,
+      "1.24 r6 E7: a role-signed forced approval carries the strictest waiver of its forced sign-offs (the earliest expiry, even when the completing one has none) — doctor warns waiver-expired once it passes, spec_finish says expired (got " +
+      js([w7, histW, b7.waiver, we, fin7.waivers]) + ")");
+
+    // 1.24 r6 (unconfirmed item, confirmed): a revoke confirmed over MCP elicitation revoked whatever approval stood when the user
+    // answered — another approval recorded while the question waited (a re-approval of other content) was revoked in its place.
+    // The dry run names the approval it would revoke (approvedAt, and the role sign-offs it would withdraw); the confirmed call
+    // with that preview refuses another one (changed-since-preview), nothing written.
+    const p8 = path.join(tmp, "proj-r6a-revoke");
+    S.initProject(p8, ["core"], "en");
+    const f8 = feature6(p8);
+    S.approvePhase(p8, f8.slug, null, "alice", { through: "requirements" });
+    const dry = S.approvePhase(p8, f8.slug, "requirements", "bob", { revoke: true, dryRun: true });
+    const tw8 = Date.now(); while (Date.now() - tw8 < 5) { /* a later approval time stamp */ }
+    w6(f8, "requirements.md", REQ6.replace("download a CSV.", "download a UTF-8 CSV."));
+    const re8 = S.approvePhase(p8, f8.slug, "requirements", "carol");
+    const conf = { via: "elicitation", at: new Date().toISOString() };
+    const rv8 = S.approvePhase(p8, f8.slug, "requirements", "bob", { revoke: true, confirmation: conf, preview: { approvedAt: dry.approvedAt, withdrawn: dry.withdrawn } });
+    const s8 = st6(f8);
+    const dry2 = S.approvePhase(p8, f8.slug, "requirements", "bob", { revoke: true, dryRun: true });
+    const rv8b = S.approvePhase(p8, f8.slug, "requirements", "bob", { revoke: true, confirmation: conf, preview: { approvedAt: dry2.approvedAt, withdrawn: dry2.withdrawn } });
+    ok(dry.ok && dry.dryRun && dry.revoke && typeof dry.approvedAt === "string" && re8.ok && rv8.ok === false && rv8.changedSincePreview === true && rv8.code === "changed-since-preview" &&
+      !!s8.approvals.requirements && s8.approvals.requirements.by === "carol" && !s8.approvalHistory.some((h) => h.revoked) && rv8b.ok && rv8b.revoked === "requirements",
+      "1.24 r6: a revoke confirmed over elicitation refuses when the approval changed since its preview (another approval recorded meanwhile) — nothing revoked; with the current preview it revokes (got " +
+      js([dry.approvedAt, rv8.code, rv8.error, rv8b.ok]) + ")");
   }
 };

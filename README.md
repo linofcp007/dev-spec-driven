@@ -236,6 +236,22 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.24
+
+- **A sixth full review, fixed** — 75 findings across the server, the CLI, the hooks, the evidence, the gates, the
+  markdown readers, the classifier and the imports, each reproduced first; the fixes are kept as regression tests. Among
+  them: the git merge driver could keep a run older than the spec change it followed; a criterion written
+  `- [US-1.AC-1] …` skipped the EARS check; a section holding only "TBD" counted as written; a run that executed no
+  tests counted as proof; a misspelt MCP argument (`revoked`) re-approved instead of revoking.
+- **A classifier that finds the obvious** — speech-to-text, OCR, medical records, KYC, card data, key rotation and dozens
+  more now raise +ai / +privacy / +sec (on a 141-sentence EN / PT / ES test set: from 0–11% to 100%), and a sentence that
+  states a protection ("No personal data is sent to the LLM provider") keeps its track on.
+- **Safer and faster** — one write gate for everything under `.specs/` (never through a link); the approval guard also
+  reads PowerShell's `--%`, git and `merge-state` writes of the state files, the observed-run log and turning +tdd / +ai
+  off; a spec save no longer regenerates ROADMAP.md (once per turn instead — up to 3.6× faster saves); `dev-spec
+  version` and per-command help (`dev-spec <cmd> --help`); shorter command descriptions that fit Claude Code's listing.
+  The CHANGELOG lists every fix.
+
 ### New in 1.23
 
 - **A fifth full review, fixed** — 68 findings across the server, the CLI, the hooks, the evidence, the gates, the
@@ -404,7 +420,7 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **Hooks** (`hooks/hooks.json`): on saving `requirements.md` → EARS lint + placeholders; on saving
   `tasks.md` → traceability check; on saving `design.md` → the active tracks' mandatory sections; at
   session start → feature status + drift + overlapping features; at the end of a turn (and of a
-  `spec-implementer` or `spec-simplifier` subagent) → the evidence gate; after each Bash run → the observed-evidence log (silent). The
+  `spec-implementer` or `spec-simplifier` subagent) → the evidence gate; after each Bash or PowerShell run → the observed-evidence log (silent). The
   opt-in guard runs before code edits, the opt-in approval guard before an agent's approval. Plus an optional git
   `pre-commit` validator.
 - **Eval harness** (`mcp/evals/run-evals.js`): runs golden/adversarial/regression sets with **your
@@ -431,6 +447,9 @@ Then describe a feature (the skill auto-triggers in your language) or drive it e
 ```
 /dev-spec-driven:spec  Add per-tenant API keys with rotation and Stripe-metered usage
 ```
+
+New to the plugin? `/dev-spec-driven:spec-tour` takes one tiny real change on your own repo through every gate in about
+10 minutes.
 
 ### Updating to a new version
 
@@ -490,14 +509,14 @@ prints the raw result, and `help` lists every flag. A plugin install puts no `de
 
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
-  [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
+  [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
 create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
 ```
 
 ### Why no GitHub Actions
@@ -742,6 +761,25 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
 
+### Novidades da 1.24
+
+- **Uma sexta revisão completa, corrigida** — 75 problemas no servidor, no CLI, nos hooks, na evidência, nos gates, na
+  leitura do markdown, no classificador e nas importações, cada um reproduzido primeiro e guardado como teste de
+  regressão. Entre eles: o driver de merge do git podia manter uma execução anterior à alteração da spec que se lhe
+  seguiu; um critério escrito `- [US-1.AC-1] …` escapava à verificação EARS; uma secção só com "TBD" contava como
+  escrita; uma execução que não correu nenhum teste contava como prova; um argumento MCP mal escrito (`revoked`) voltava a
+  aprovar em vez de revogar.
+- **Um classificador que encontra o óbvio** — speech-to-text, OCR, registos médicos, KYC, dados de cartões, rotação de
+  chaves e dezenas de outros sinais ativam agora +ai / +privacy / +sec (num conjunto de teste de 141 frases EN / PT / ES:
+  de 0–11% para 100%), e uma frase que declara uma proteção ("Nenhum dado pessoal é enviado ao fornecedor do LLM")
+  mantém o seu track.
+- **Mais seguro e mais rápido** — uma só verificação de escrita para tudo o que está em `.specs/` (nunca através de um
+  link); a guarda das aprovações também lê o `--%` do PowerShell, as escritas do git e do `merge-state` nos ficheiros de
+  estado, o registo das execuções observadas e o desligar do +tdd / +ai; gravar uma spec já não regenera o ROADMAP.md
+  (uma vez por turno — gravações até 3,6× mais rápidas); `dev-spec version` e ajuda por comando
+  (`dev-spec <cmd> --help`); descrições dos comandos mais curtas, que cabem na lista do Claude Code. O CHANGELOG lista
+  cada correção.
+
 ### Novidades da 1.23
 
 - **Uma quinta revisão completa, corrigida** — 68 problemas no servidor, no CLI, nos hooks, na evidência, nos gates, na
@@ -929,7 +967,7 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **Hooks** (`hooks/hooks.json`): ao gravar `requirements.md` → valida EARS + placeholders; ao gravar
   `tasks.md` → verifica a rastreabilidade; ao gravar `design.md` → as secções obrigatórias dos tracks ativos;
   no arranque da sessão → estado das funcionalidades + drift + funcionalidades que se sobrepõem; no fim de um turno
-  (e de um subagente `spec-implementer` ou `spec-simplifier`) → o gate de evidência; depois de cada execução Bash → o registo da evidência
+  (e de um subagente `spec-implementer` ou `spec-simplifier`) → o gate de evidência; depois de cada execução Bash ou PowerShell → o registo da evidência
   observada (silencioso). O modo guarda opcional corre antes das edições de código, a guarda opcional das aprovações
   antes da aprovação de um agente. Mais um validador `pre-commit` opcional do git.
 - **Harness de evals** (`mcp/evals/run-evals.js`): corre os conjuntos golden/adversarial/regression
@@ -957,6 +995,9 @@ Depois descreve uma funcionalidade (a skill ativa-se na tua língua) ou conduz e
 ```
 /dev-spec-driven:spec  Adicionar chaves de API por inquilino com rotação e uso medido pelo Stripe
 ```
+
+Primeira vez com o plugin? O `/dev-spec-driven:spec-tour` leva uma alteração real e pequena do teu próprio repositório por
+todos os gates em cerca de 10 minutos.
 
 ### Atualizar para uma nova versão
 
@@ -1017,14 +1058,14 @@ executável, `node "<clone>/cli/dev-spec.js" …` com o caminho resolvido (fiche
 
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
-  [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
+  [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
 create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
 ```
 
 ### Porque não há GitHub Actions
@@ -1273,6 +1314,25 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
 
+### Novedades de la 1.24
+
+- **Una sexta revisión completa, corregida** — 75 problemas en el servidor, la CLI, los hooks, la evidencia, los gates,
+  la lectura del markdown, el clasificador y las importaciones, cada uno reproducido primero y guardado como test de
+  regresión. Entre ellos: el driver de merge de git podía conservar una ejecución anterior al cambio de la spec que la
+  siguió; un criterio escrito `- [US-1.AC-1] …` se saltaba la verificación EARS; una sección con solo "TBD" contaba como
+  escrita; una ejecución que no corrió ningún test contaba como prueba; un argumento MCP mal escrito (`revoked`) volvía a
+  aprobar en lugar de revocar.
+- **Un clasificador que encuentra lo obvio** — speech-to-text, OCR, historias clínicas, KYC, datos de tarjetas, rotación
+  de claves y decenas de señales más activan ahora +ai / +privacy / +sec (en un conjunto de prueba de 141 frases EN / PT /
+  ES: del 0–11% al 100%), y una frase que declara una protección ("Ningún dato personal se envía al proveedor del LLM")
+  mantiene su track.
+- **Más seguro y más rápido** — una sola verificación de escritura para todo lo que está en `.specs/` (nunca a través de
+  un enlace); la guardia de aprobaciones también lee el `--%` de PowerShell, las escrituras de git y de `merge-state` en
+  los archivos de estado, el registro de ejecuciones observadas y la desactivación de +tdd / +ai; guardar una spec ya no
+  regenera el ROADMAP.md (una vez por turno — guardados hasta 3,6× más rápidos); `dev-spec version` y
+  ayuda por comando (`dev-spec <cmd> --help`); descripciones de comandos más cortas, que caben en la lista de Claude Code.
+  El CHANGELOG lista cada corrección.
+
 ### Novedades de la 1.23
 
 - **Una quinta revisión completa, corregida** — 68 problemas en el servidor, la CLI, los hooks, la evidencia, los gates, la
@@ -1461,7 +1521,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Hooks** (`hooks/hooks.json`): al guardar `requirements.md` → valida EARS + placeholders; al guardar
   `tasks.md` → comprueba la trazabilidad; al guardar `design.md` → las secciones obligatorias de los tracks
   activos; al iniciar la sesión → estado de las funciones + drift + funciones que se solapan; al final de un turno
-  (y de un subagente `spec-implementer` o `spec-simplifier`) → el gate de evidencia; tras cada ejecución Bash → el registro de la
+  (y de un subagente `spec-implementer` o `spec-simplifier`) → el gate de evidencia; tras cada ejecución Bash o PowerShell → el registro de la
   evidencia observada (silencioso). El modo guardia opcional se ejecuta antes de las ediciones de código, la guardia
   opcional de las aprobaciones antes de la aprobación de un agente. Más un validador `pre-commit` opcional de git.
 - **Harness de evals** (`mcp/evals/run-evals.js`): ejecuta los conjuntos
@@ -1489,6 +1549,9 @@ Luego describe una función (la skill se activa en tu idioma) o condúcela expl�
 ```
 /dev-spec-driven:spec  Añadir claves de API por inquilino con rotación y uso medido por Stripe
 ```
+
+¿Primera vez con el plugin? `/dev-spec-driven:spec-tour` lleva un cambio real y pequeño de tu propio repositorio por todos
+los gates en unos 10 minutos.
 
 ### Actualizar a una nueva versión
 
@@ -1549,14 +1612,14 @@ línea ejecutable, `node "<clone>/cli/dev-spec.js" …` con la ruta resuelta (lo
 
 ```text
 classify [--explain] · signals [list|set|forget] · init [--guard on|off|scope] [--stop-check on|off] [--check name=cmd] [--roles …]
-  [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates
+  [--evidence reported|observed] [--approval-guard off|ask|deny] · steering · templates [list|init|check] · tracks [list|init|check]
 create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m|l] · bugfix · spike · import [- | --text] · list · status · doctor
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
 catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
-mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check]
+mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
 ```
 
 ### Por qué no hay GitHub Actions
@@ -1590,9 +1653,9 @@ del plugin (`claude plugin eval`, suites de activación y de comportamiento) se 
 dev-spec-driven/                      ← plugin root
 ├── .claude-plugin/                   ← plugin.json + marketplace.json
 ├── skills/dev-spec-driven/
-│   ├── SKILL.md                      ← trilingual track-based workflow
+│   ├── SKILL.md                      ← the track-based workflow (English, with PT / ES triggers)
 │   └── references/                   ← deep library (EARS, scale, eval, safety, …)
-├── commands/                         ← 55 slash commands (trilingual descriptions; also the MCP prompts)
+├── commands/                         ← 55 slash commands (short English descriptions; also the MCP prompts)
 ├── agents/                           ← spec-implementer + spec-reviewer + spec-critic + spec-simplifier
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES + behavioural, with fixtures)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)
@@ -1608,11 +1671,11 @@ dev-spec-driven/                      ← plugin root
 │   ├── test.js                       ← the MCP test suite (node mcp/test.js — must end `0 failed`; --only <area>, --list)
 │   └── tests/                        ← its files, one per area (cli/test-cli.js + cli/tests/: the CLI suite)
 ├── scripts/                          ← test-runner.js (both suites' runner) · test-docker.js (both suites in Linux containers)
-├── hooks/                            ← local automation (PostToolUse, SessionStart, Stop/SubagentStop evidence gate, Bash observed-evidence log, opt-in PreToolUse guard + approval guard, pre-commit)
+├── hooks/                            ← local automation (PostToolUse, SessionStart, Stop/SubagentStop evidence gate, Bash / PowerShell observed-evidence log, opt-in PreToolUse guard + approval guard, pre-commit)
 ├── AGENTS.md                         ← portable workflow (Codex/Gemini/Cursor/Windsurf/…)
 ├── .cursor/ · .windsurf/ · .github/copilot-instructions.md · GEMINI.md   ← per-tool rules
 ├── integrations/                     ← MCP config templates per tool (placeholder path; `mcp-config` fills it)
-├── examples/demo-project/            ← a worked feature (1.14 shape) that passes doctor + trace
+├── examples/demo-project/            ← a worked feature in the current shape (examples/README.md) that passes doctor + trace
 ├── INTEGRATIONS.md                   ← how to use it in every tool (+ MCP configs)
 ├── docs/maintainers/                 ← maintainer notes by topic (CLAUDE.md is their short index)
 ├── package.json · LICENSE · CHANGELOG.md · CLAUDE.md

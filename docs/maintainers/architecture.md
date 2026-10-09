@@ -94,18 +94,22 @@ scripts/build.js               `npm run build`: the committed corpus (--check: e
 scripts/test-runner.js         the runner both suites share: files → chains (deps) → parallel processes, --only / --list
 scripts/test-docker.js         both suites in Linux containers — `npm run test:docker` (local Docker, never hosted CI)
 hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|NotebookEdit) + approval-hook.js
-                               (^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init))$) · PostToolUse → spec-hook.js
+                               (^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track))$) · PostToolUse → spec-hook.js
                                (Write|Edit) + observe-hook.js (Bash) + plan-hook.js (ExitPlanMode) · PostToolUseFailure (Bash) → observe-hook.js ·
                                SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-(implementer|simplifier)$)
                                → stop-hook.js
 hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks; scope level)
 hooks/approval-hook.js         opt-in human approval guard (meta.approvalGuard ask|deny: an agent's approval asks / is refused)
 hooks/observe-hook.js          harness-observed evidence (logs Bash runs of _Verify:_ / project-check commands; prints nothing)
-hooks/spec-hook.js             save checks (requirements/tasks/design.md) + SessionStart status (at most 20 features, then
-                               "+N more"), drift, upgrade and overlap lines
-hooks/stop-hook.js             end-of-turn evidence gate (spec.stopCheck — a "done" claim with unverified recent ticks)
+hooks/hook-utils.js            what the hooks share BEFORE the engine loads (1.24): UTF-8 / UTF-16 reads, a Write / Edit target as the
+                               file system reads it, the approval hook's candidate projects, a per-session marker — no hook itself
+hooks/spec-hook.js             save checks (requirements/tasks/design.md; any spec save stamps ROADMAP.* / SPECS.md stale — 1.24 r6
+                               I-I1) + SessionStart status (at most 20 features, then "+N more"), drift, upgrade and overlap lines
+hooks/stop-hook.js             end-of-turn: the stale ROADMAP.* / SPECS.md refreshed once, then the evidence gate (spec.stopCheck —
+                               a "done" claim with unverified recent ticks)
 hooks/plan-hook.js             plan-mode bridge (ExitPlanMode: one line of context suggesting /spec-import of the approved plan)
-hooks/precommit-check.js       optional git pre-commit validator
+hooks/precommit-check.js       optional git pre-commit validator (+ a stale ROADMAP.* / SPECS.md refreshed, re-staged when staged)
+hooks/stop-claims.generated.json GENERATED (npm run build, committed): the stop gate's claim patterns — the Stop hook's pre-filter
 AGENTS.md                      portable workflow for non-Claude agent tools
 .cursor/ .windsurf/ .github/copilot-instructions.md GEMINI.md  per-tool rule files (point to AGENTS.md)
 INTEGRATIONS.md                per-tool setup + MCP config snippets
@@ -168,13 +172,21 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
 
 ## The build (1.20) — the committed corpus, the on-demand bundle, and when to rebuild
 `scripts/build.js` (Node core only) builds two things from the sources:
-- **`npm run build`** (no argument) writes the COMMITTED placeholder corpus `mcp/lib/engine/corpus.generated.json`;
-  `node scripts/build.js --check` writes nothing and exits 1 while it is stale. Deterministic — the same sources give the same
-  bytes (sorted lists, no dates, LF; a CRLF or BOM checkout hashes the same).
+- **`npm run build`** (no argument) writes the COMMITTED placeholder corpus `mcp/lib/engine/corpus.generated.json` and (1.24 r6
+  I-I4) the COMMITTED `hooks/stop-claims.generated.json` — the Stop hook's claim pre-filter (guards.js `stopClaimFilter()`, stamped
+  with the version and the sizes of `STOP_FILTER_SOURCES`: the i18n files and guards.js — tasks-and-evidence.md → End-of-turn
+  evidence gate); `node scripts/build.js --check` writes nothing and exits 1 while either is stale. Deterministic — the same
+  sources give the same bytes (sorted lists, no dates, LF; a CRLF or BOM checkout hashes the same). Rebuild after editing a file
+  of `CORPUS_SOURCES` or of `STOP_FILTER_SOURCES` (guards.js is the only one not in both).
 - **`npm run build:bundle`** (`--bundle [--out <file.js>]`), also **`dev-spec bundle [--out <file.js>]`** (a plugin install has
   no npm), writes the one-file engine — by default `mcp/lib/spec.bundle.js`, which is **git-ignored and never committed** (2.7 MB,
   stale after every engine change: it would bloat the history and conflict on every parallel merge, for an opt-in gain on slow
-  file systems only). The user who wants it builds it, once after each plugin update.
+  file systems only). The user who wants it builds it, once after each plugin update. `dev-spec bundle` replaces an existing
+  file only when it is a previous bundle (its header: `"use strict";` then `// GENERATED by scripts/build.js --bundle`) or with
+  `--force` (1.24 r6 B8 — `--out src/app.js` overwrote the user's file; `cliOutput.bundleNotOurs`). `build.js --bundle` itself
+  (a maintainer's script) does not ask. **Which engine ran** is never printed by the facade (hooks and the status line stay
+  silent) but it is recorded — `spec.engineSource` `{kind, requested, file, skipped: missing|other-version|stale|broken,
+  pathIgnored}` (1.24 r6 B-I1) — and `dev-spec version` shows it: the answer to "is my bundle used?".
 - **When to rebuild the corpus — precisely:** after changing a file of `CORPUS_SOURCES` — `mcp/lib/i18n.js`,
   `mcp/lib/i18n/*.js` (every template, string, pt-BR rule), `engine/core.js`, `engine/markdown.js`, `engine/packs.js`,
   `engine/tasks.js`, `engine/tracks.js` (a track) — or `package.json`'s version. Any other engine file needs no rebuild.
@@ -188,14 +200,14 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   CLI call (1.19's SessionStart was ~20% slower than 1.18's for it). The build renders it ONCE with the engine's own
   functions (`renderCorpusData()`: the sets' members, sorted) into the JSON file, stamped `version` (package.json) and
   `sources` — a sha1 over `CORPUS_SOURCES` (markdown.js): the eleven mcp/lib files the render runs through. On the first
-  placeholder question a process reads the file (one `JSON.parse`, ~38 KB) and uses it only while it matches the engine the
+  placeholder question a process reads the file (one `JSON.parse`, ~129 KB since 1.24 r6 — below) and uses it only while it matches the engine the
   process LOADED: `version` is `engineVersion()` — package.json read as the engine loads, never later — and `sources` is the
   hash of the sources as they were at load. markdown.js stats every source as it loads (`LOADED_STATS`: size, mtime, ctime —
   one stat each, no read, ~0.5 ms); the first question re-reads and hashes them (~2 ms natively) and trusts the file only
   while every stat is still the load-time one (stat'ed after the hash). A language file i18n.js loads on first use (`onLocaleLoad`) that
   changed since the engine loaded, after the corpus was trusted, drops it (`localeLoaded`: the sets render again). So a
   long-lived process — the MCP server — under which a `git pull` / `npm run build` rewrote the sources AND the corpus renders
-  from the code it runs, never trusts the new corpus (1.20 review — the race mcp/tests/16-conventions.js reproduces in child
+  from the code it runs, never trusts the new corpus (1.20 review — the race mcp/tests/16-conventions-build.js reproduces in child
   processes). Otherwise too — a clone hand-edited and not rebuilt, a missing or broken file — it renders exactly as before:
   never a wrong answer, only a slower one (`builtinCorpusSource()`: `file` · `bundle` · `render`). An edit that keeps a
   source's size, mtime AND ctime is the accepted limit. mcp/test.js proves `CORPUS_SOURCES` with V8 coverage (every
@@ -203,6 +215,20 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   makes that test name it), and that a rendered corpus decides every fresh scaffold text exactly as the committed one. The
   per-project part (the project's templates, its track packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only
   `.has()` is ever asked of these sets. A new builder or artifact goes into `templateCorpus()` as before — then rebuild.
+  **Every other all-language set a gate asks about (1.24 r6 I-I2 — review 6 finding I1)** is in the corpus too: rendered on first use,
+  they loaded pt.js, es.js and the derived pt-BR into every English doctor / next_action / done / finish / catalog. `steeringStubs`
+  ({file: [sha1 of the stub with its whitespace taken out]} — `isSteeringStub()`, doctor's steering check; hashes, not the 55 KB of
+  stubs), `diagrams` (the scaffold's Mermaid blocks, every language and size — `templateDiagramSet()`, doctor's mermaid check),
+  `sectionLines` / `sectionLinesBr` (the built-in track design blocks' line keys, EN / PT / ES, and pt-BR's own extra ones —
+  `sectionTemplateLines()`, a section's own lines), `bugSlots` (the bug report's slots — `bugTemplateSlots()`) and `templateReqs`
+  ({lang: [the all-track requirements.md, the bugfix's]} — `builtinTemplateReqs()`; their criteria are read LIVE by acIndex in
+  quality.js `builtinTemplateAcs`, so the corpus never depends on the criteria readers in trace.js / finish.js — V8 coverage would
+  have asked for them in `CORPUS_SOURCES`, and every edit there for a rebuild). `localeLoaded` drops them with the rest. A rule
+  for a new one: an engine set built from EVERY language's texts belongs here; a process must only load the languages it speaks
+  (mcp/tests/16-conventions-build.js "I-I2" runs an English doctor / next_action / done / finish / catalog in a child process and asserts
+  require.cache holds no pt.js, es.js or pt-br.js). The file grew from ~45 KB to ~129 KB (read + JSON.parse ~0.8 ms). Measured
+  (p50 of 11 interleaved fresh `dev-spec` processes, the reviewer's 52-feature English project, Windows 11, Node 24): doctor 423 →
+  339 ms, next-action 362 → 287, finish 382 → 314, catalog 364 → 296; status unchanged (214).
 - **The bundle.** Each engine and i18n module (`engine/**`, `i18n.js`, `i18n/*` — not the facade spec.js, not
   prompts-resources.js) is its source VERBATIM inside `function (exports, require, module, __filename, __dirname)`, run by a
   small module registry (`moduleRegistry()` in scripts/build.js, emitted with `Function.prototype.toString`). The bundle
@@ -228,7 +254,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   little (and loses without Node's compile cache, Node < 22.8). The MCP server takes it like every process.
 - **Guards.** `libSources()` (the source guards' file list) leaves `spec.bundle.js` out (a user-built one in mcp/lib); the
   guards read scripts/build.js, where the registry is written. Both suites run on the modules (the harnesses drop
-  `DEV_SPEC_BUNDLE`). The tests BUILD a bundle into tmp: mcp/tests/16-conventions.js ("1.20 bundle": the namespace, the
+  `DEV_SPEC_BUNDLE`). The tests BUILD a bundle into tmp: mcp/tests/16-conventions-build.js ("1.20 bundle": the namespace, the
   embedded corpus, the modules' paths, every stamp true; on a copy of the clone — none, current, unset / 0, a relative or
   non-.js `DEV_SPEC_BUNDLE_PATH`, one elsewhere, a module touched or resized under the same mtime and put back, another
   version, a broken bundle; the MCP server's handshake, lists and ten tool calls byte for byte) and

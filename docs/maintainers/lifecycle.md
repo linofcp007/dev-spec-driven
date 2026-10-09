@@ -7,7 +7,7 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
 ## Catalog, drift, restore, guard, steering (1.13)
 - **`SPECS.md` is AUTO-GENERATED** like the roadmap: `spec_catalog {write}` and `maybeRefreshCatalog()` use
   the same `RE_AUTOGEN` / `isGeneratedOrAbsent()` guard, so a hand-written `.specs/SPECS.md` is never
-  overwritten; once it exists, every roadmap refresh refreshes it too.
+  overwritten; once it exists, every roadmap refresh refreshes it too (a hand edit's: at the end of the turn — Roadmap files).
 - **`_Supersedes: <feature>/US-n.AC-m[, …]_`** on a criterion (same line, a sub-line or its table row) marks
   the older AC as replaced. `stripSupersedes()` runs before own-AC extraction (trace, acIndex), so the foreign
   ID is never one of this feature's ACs; unresolvable references are `phantomSupersedes` (never a gap). **Only a
@@ -48,6 +48,10 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   archive result names what the prune did — `dependentsPruned` (always), plus `incompleteDependency: true` and a
   warning `note` when the archived feature wasn't complete (its dependents now read as unblocked; the roadmap
   meets a dep at 100%). `rename` rewrites archived records too (`renamePlan()`), so restore finds the new slug.
+  **Never through a link (1.24 r6):** archive into a `.specs/_archive/` that is a link (or resolves outside .specs/) moved the
+  whole feature there, and restore pulled any folder the link's target held into .specs/; both are refused now by the write gate
+  (conventions.md → The write gate: the archive's `ensureDir(_archive)`, the restore's lock at `_archive/<slug>/.lock`, a linked
+  `_archive/<slug>` too) — `linked: true`, nothing moved. A `_archive` that is a FILE is a localized `wrongKind` refusal.
   **One slug active AND archived (1.23 review 5):** archive refuses (`err.alreadyArchived`) and restore refuses
   (`restore.activeExists`) — each used to advise the other's refused step ("archive it", "Remove it there first", with no command
   for either); both now name the one way out, a rename of the active feature (the runnable `feature rename` line). The state is not
@@ -150,12 +154,25 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   record's time (`taskCompletedAt`); a box ticked by hand has no time and is not counted.
 - **Velocity** = points per WORKING day (Mon–Fri, UTC days) over the last `FORECAST_WINDOW_DAYS` = 28 calendar days,
   counted from the day of the window's first completion through today — project-wide, and per feature once it has
-  `FORECAST_MIN_TASKS` = 3 completions of its own in the window. **ETA** = open points ÷ velocity, in working days from
+  `FORECAST_MIN_TASKS` = 3 completions of its own in the window. **The project rate counts the ARCHIVED features' completions
+  too (1.24 r6 G3, `archivedCompletions()`):** their ticks happened — archiving a feature shipped this week wiped the velocity
+  (roadmap, spec_metrics) and turned every other feature's ETA into `not-enough-data`. An archived folder whose mtime is older
+  than the window (archiving writes its .state.json there, after every tick) is skipped unread; with `opts.now` fixed (tests)
+  every archived folder is read. **ETA** = open points ÷ velocity, in working days from
   today or from the working day after each unfinished dependency's ETA, with a ±`FORECAST_SPREAD` (25%) range (low/high
   chain off the dependencies' low/high). No ETA → `eta: null` + a stable `reason`: `not-enough-data` (< 3 completions in
   the window) · `no-tasks` · `dependency` · `cycle` · `done`. Surfaces: `spec_roadmap` (`velocity`, each feature's
   `forecast`), the ROADMAP.md / .html ETA column ('—' without one) + velocity line, `spec_metrics.velocity`, the CLI
   roadmap. Pure reads of tasks.md + .state.json.
+- **Every dependency cycle (1.24 r6 G6).** `findCycles()` (state.js — Tarjan's strongly connected components, iterative; a
+  component of more than one feature, or one naming itself) → `{members, path}`; roadmap() returns `cycles` (each one's path,
+  `a → b → a`, the shortest through the component's first feature) and `cycle` = the first (as before). ROADMAP.md / .html write
+  one "Circular dependency" line per cycle, the CLI roadmap names the first in its head line and the others in
+  `roadmapTailLines`. `forecastData()` computes the components itself from the features' dependsOn: every member gets reason
+  `cycle` — only `findCycle`'s first cycle used to (a → a hid b ↔ c), and a member the walk met second was overwritten with
+  `dependency`. `findCycle` stays the refusal's check (spec_depend, restore). **A dependency done but not signed off**
+  (review 6 G-I6) needs nothing: every task ticked IS phase `complete` (100%, detectPhase — the execution sign-off is finish's
+  business), so its dependents are unblocked and chain their ETA from today (a test pins it).
 - **Overlaps** (`featureOverlaps()`): two ACTIVE features whose OPEN tasks plan the same files (`implementsKey`; a folder
   covers the files under it, a glob what it matches and its literal folder), or an active feature planning a file a
   FINISHED feature recorded in its drift baseline. Not an overlap: features ordered by a dependency (either way,
@@ -165,7 +182,15 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   `_Supersedes:_`), one SessionStart line. Doctor runs `featureOverlaps(…, {only})` (a whole roadmap() walk) only when an
   OPEN active task of the feature has an `_Implements:_` — a pair needs one on its active side (1.22 review, a 30 features ×
   40 tasks project, a feature with none: doctor 236 → 64 ms, next_action 336 → 96 ms, spec_finish 257 → 75 ms); the answer is
-  the walk's.
+  the walk's. **The walk is light (1.24 r6 I-I3):** without a feature list (doctor, SessionStart — the roadmap renderer passes its
+  own) `featureOverlaps` reads `overlapFeatures()` — per active feature only what it uses: the name, complete or not (detectPhase's
+  rule: every active task ticked; a spike: `spikePhase` says complete) and roadmap.json's dependsOn, in roadmap()'s order (meta.order,
+  then the name) — tasks.md, .state.json and roadmap.json, never detectPhase's planning chain (a planned feature's requirements /
+  design / test plan and the placeholder corpus). The same pairs (mcp/tests/12-lifecycle-review6.js "I-I3", and the review's
+  overlap-exp.js). featureOverlaps in one process, warm, per call (the reviewer's 10 / 52 / ~150-feature projects): 9 / 45 / 126 →
+  6 / 20 / 55 ms; fresh processes (p50 of 11 interleaved): SessionStart 254 / 390 → 248 / 342 ms at 52 / 150, `dev-spec doctor`
+  332 / 477 → 310 / 410, `dev-spec next-action` 282 / 383 → 252 / 288. No cache across calls in the MCP server (the decision
+  above, Roadmap files): every call reads the files again.
 
 ## Roadmap files and dependencies (from Conventions & gotchas)
 - **Generated roadmap files carry the `AUTO-GENERATED by dev-spec` marker (EN/PT/ES, `RE_AUTOGEN`)**.
@@ -188,7 +213,7 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   `renderRoadmapMd`/`renderRoadmapHtml` (both take `lang`) build the output; `ROADMAP_I18N` holds
   EN/PT/ES chrome; `meta.roadmapLang` (else `meta.lang`) in `roadmap.json` persists the language for auto-refresh.
   `maybeRefreshRoadmap` (in every mutator) writes MD always + HTML if it exists + SPECS.md if it exists —
-  best-effort. **The refresh's cost (1.22 review):** every tick recomputed every feature's row (30 features × 40 tasks: 313
+  best-effort (a hand edit through Claude Code: once a turn — below). **The refresh's cost (1.22 review):** every tick recomputed every feature's row (30 features × 40 tasks: 313
   ms a tick against 13.8 without the refresh). `roadmapRow()` results are cached IN PROCESS (`ROW_CACHE`, ≤ 500 — the MCP
   server; a one-shot CLI / hook never calls twice, so the first `roadmapData` of a process signs nothing), keyed on every
   input the row reads: each entry of the feature folder (size, mtime, ctime, inode; `.history/` one level down; `.execution/`,
@@ -198,9 +223,35 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   The marker readers are memoized by text (`taskMarkerSpans` by line — frozen, shared; `taskMarkers` by the block's prose —
   copies; bounded). Measured on 30 × 40, in process: a tick with its refresh ~185 → ~65 ms (no refresh: ~10), roadmapData
   ~180 → ~58; a one-shot `done` / tasks.md save ~470 → ~440. mcp/tests/08-tasks.js renders ROADMAP.md after each kind of
-  change from the cache and fresh and compares them byte for byte. The PostToolUse hook does the same for hand-edits, skipping when the changed file IS a
-  `ROADMAP.*`. HTML must stay **offline** — no CDN/external URLs (test asserts it). Backlog lives in
-  `roadmap.json` `backlog: [{name,note}]`; `spec_create` drops the backlog item with the same slug. Name and note are one
+  change from the cache and fresh and compares them byte for byte. HTML must stay **offline** — no CDN/external URLs (test asserts it).
+- **A hand edit refreshes them ONCE A TURN, not on every save (1.24 r6 I-I1).** The PostToolUse save hook used to refresh ROADMAP.md
+  + SPECS.md on every Write / Edit of a spec file — a one-shot process, so no `ROW_CACHE`: every feature's row each time, ~75 % of
+  the hook. It now lints as before and leaves a STAMP, `.specs/.execution/roadmap-stale` (`markRoadmapStale()`, state.js — create-only
+  through the write gate; the project's `.execution/` git-ignores itself, so no `.specs/.gitignore` line, no upgrade item); a save of
+  a generated file (`ROADMAP.*`, SPECS.md, UPGRADE.md at the root) stamps nothing, and a file with nothing to lint (classification.md,
+  a test plan, steering) is now silent — its "Roadmap updated → N%" line went with the refresh (`hook.roadmapUpdated` is unused).
+  `refreshStaleRoadmap()` — a stat, then `maybeRefreshRoadmap()` (MD + an existing HTML + SPECS.md) — runs where a turn's saves end:
+  the **Stop / SubagentStop hook** (before the gate, whatever it says — a second stop in a row and the gate off included; the
+  projects it already finds: the nearest dev-spec folder at or above the payload cwd and the anchors — one stat each, the engine
+  loads only for a stamped one), **SessionStart** (a session that ended before its Stop), **every engine mutation**
+  (`maybeRefreshRoadmap` clears the stamp first — a save while it runs stamps again) and the **pre-commit check**
+  (hooks/precommit-check.js: the root's `.specs/` and every nested one a staged path names; a generated file that was STAGED is
+  `git add`ed again so the commit holds the fresh one — an unstaged one stays unstaged). **The lag and why it is safe:** ROADMAP.md /
+  SPECS.md / ROADMAP.html are at most one turn behind the specs (a project another agent tool edits never had the hook). Nothing
+  reads them for a decision: approvals fingerprint a feature's own artifacts (`artifactFingerprint` over requirements / design /
+  test-plan / tasks… — never a generated file); spec_roadmap, the catalog, next_action, doctor, the status line and the stop gate
+  compute from the specs; export.js only asks whether SPECS.md exists; the hooks read ROADMAP.md for its AUTO-GENERATED marker
+  only (`isDevSpecProject`). The one reader that served the file — the `specs://roadmap` / `specs://catalog` resources — serves
+  `staleGeneratedText()` while the stamp is there (the refresh's text, rendered in memory — a hand-written file or a broken
+  roadmap.json: the file, as the refresh would keep it). What can still see the old text: a commit made INSIDE the turn without the
+  pre-commit check installed (the next turn's Stop shows the file modified), and a stamp left in a project the session never
+  stops in (a spec file of ANOTHER project edited through the session) — refreshed by that project's next mutation or session.
+  Measured (p50 of 11 interleaved fresh processes, Windows 11, Node 24; the reviewer's 10 / 52 / ~150-feature projects): a save of
+  tasks.md 243 / 384 / 661 → 169 / 172 / 182 ms, requirements.md 232 / 352 / 645 → 134 / 136 / 158, design.md 219 / 337 / 626 →
+  148 / 148 / 149, classification.md 215 / 350 / 628 → 118 / 132 / 129; the Stop hook that refreshes (once a turn) 163 / 164 /
+  168 → 251 / 383 / 652, without a stamp unchanged; SessionStart unchanged. mcp/tests/10-guards-review6.js ("I-I1") covers the
+  stamp, each refresh point, the resources and the pre-commit re-stage.
+- **The backlog** lives in `roadmap.json` `backlog: [{name,note}]`; `spec_create` (and restore, and a rename onto that name — 1.24 r6) drops the backlog item with the same slug. Name and note are one
   line (`flatText()` on add and when rendered — a line break became a heading in ROADMAP.md); a name an ACTIVE feature
   already holds is refused (`backlogIsFeature`); `remove` is an alias of `rm` on every surface (`BACKLOG_ACTIONS`).
 - **What reaches ROADMAP.* from roadmap.json (1.23 review 5).** `dependsOn` is only shape-checked (a list of strings): the

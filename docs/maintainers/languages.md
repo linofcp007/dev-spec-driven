@@ -12,14 +12,23 @@ PT and ES mirror its structure (same sections, IDs, markers and slots). **pt-BR 
 (`lang: "pt-BR"`; `pt_BR` / `pt-br` / `ptbr` fold to it via `canonicalLang()`, `pt` / `pt-PT` stay European): every
 pt-BR string is `toPtBr(<the pt string>)` — protected tokens (code spans, `_Marker:_`s, paths, the caller's arguments),
 then `PTBR_OVERRIDES`, the progressive (`está a correr` → `está rodando`), `PTBR_PHRASES`, the second person (`tens` →
-`você tem`), clause-start imperatives (`corre` → `execute`) and `PTBR_WORDS` (vocabulary + spelling) — built lazily per
+`você tem`), clause-start imperatives (`corre` → `execute`) and `PTBR_WORDS` (vocabulary + spelling; a word whose
+Brazilian twin changes gender — `ecrã` → `tela`, `faturação` → `faturamento` — also has its articles, contractions and
+possessives in `PTBR_PHRASES`, or the word rule alone writes "no tela"; 1.24 review 6) — built lazily per
 table group (`defineDerivedLocale`), so it inherits every key, ID, marker and synonym of the PT set and a PT edit
 reaches pt-BR with nothing else to change. **When you add or edit a PT string, read its twin once**
 (`node -e "console.log(require('./mcp/lib/i18n.js').toPtBr('…'))"`): a clause-start 3rd person read as an order goes
 into `RE_PTBR_NOT_IMPERATIVE`, a missed word into `PTBR_WORDS` / `PTBR_PHRASES`, anything else into `PTBR_OVERRIDES`;
 `mcp/test.js` (pD1) lints every pt-BR string (no European-only vocabulary, English-stable tokens byte-identical,
 idempotent). Readers that match PT headings/keywords match pt-BR too (`baseLang()`); the classifier's language guess
-counts Brazilian markers but still answers `pt`. Project templates for it live in `.specs/templates/pt-BR/`.
+counts Brazilian markers but still answers `pt` (a stable field — pt and pt-BR classify alike). **1.24 r6 H-I4:** when the
+Brazilian markers outweigh the European ones, `spec_classify` (= `classify --json`) adds **`langHint: "pt-BR"`** (absent
+otherwise — never with an explicit `pt-BR`; `ptVariantHint()` in engine/classify.js: STRONG = você, usuário, arquivo, cadastro /
+cadastrar, celular, aplicativo, planilha, deletar, gerenciar, an ê / ô before m / n + a vowel — eletrônico, gênero; WEAK = tela,
+equipe, registro, contato, salvar, baixar, "o / do / no time"; European = utilizador, ficheiro, ecrã, telemóvel, equipa,
+palavra-passe, registo, contacto, facto, secção, descarregar, gerir, utente, "está a <infinitive>", é / ó before m / n — a hint
+at ≥ 2 points and more than the European count). The agent then passes `lang: "pt-BR"` to spec_init / spec_create (SKILL.md →
+Language; commands/classify.md). Project templates for it live in `.specs/templates/pt-BR/`.
 The EN templates are **not** frozen: 1.13 changed them on purpose (every template AC planned + tasked, track ACs under
 `[SaaS]`/`[AI]` headings, the test plan's Kind column…). When you change a template, change EN / PT / ES together
 (and pt-BR where it overrides that text) and keep the tests that round-trip a PT and an ES scaffold through doctor green.
@@ -53,16 +62,18 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   data and stays as-is; its surrounding prose (README, prompt stub) is localized.
 - **Adding a language:** a regional variant of an existing one derives from it, as pt-BR does from pt-PT (only the
   overrides). A new language adds a file `mcp/lib/i18n/<lang>.js` holding every table's block (`build`, `steering`,
-  `evalsReadme`, `msg`, `quality`, `designWeigh`, `brief` — as `en.js` does), wires it into `i18n.js`'s `LOCALES`, adds it
-  to `LANGS` (`i18n/common.js`), extends the classifier `SIGNALS` (`engine/tracks.js`; language guess in `engine/classify.js`), `ROADMAP_I18N`
-  (`engine/roadmap-md.js`), the `TRACK_SECTIONS` synonyms (all four tables, `engine/tracks.js`), the stop gate's
-  `stopGate.claims` / `negators` / `admissions`, the `RE_*` matchers and the `lang` enums of the MCP schemas, then adds
-  a test asserting a localized scaffold round-trips.
+  `evalsReadme`, `msg`, `quality`, `designWeigh`, `brief` — as `en.js` does), wires it into `i18n.js`'s `LOCALE_FILES`
+  (each table's getter for it loads that file on first use), adds it to `BASE_LANGS` (`i18n/common.js` — `LANGS`, the
+  strict `canonicalLang()` reading every surface validates with, and the MCP schemas' `lang` enum, `LANG_ENUM` in
+  `mcp/server.js`, all derive from it: no enum to edit by hand), extends the classifier `SIGNALS` (`engine/tracks.js`;
+  language guess in `engine/classify.js`), `ROADMAP_I18N` (`engine/roadmap-md.js`), the `TRACK_SECTIONS` synonyms (all
+  four tables, `engine/tracks.js`), the stop gate's `stopGate.claims` / `negators` / `admissions` and the `RE_*`
+  matchers, then adds a test asserting a localized scaffold round-trips.
 
 ## Localization gotchas (from Conventions & gotchas)
 - **Multilingual headings:** the `TRACK_SECTIONS` tables (`SAAS_SECTIONS` / `AI_SECTIONS` / `SEC_SECTIONS` /
   `PRIVACY_SECTIONS`) are `{name, syn:[…], loose?:[…]}` with EN/PT/ES synonyms; `extractSection` matches any synonym
-  (a `loose` one only in the track's context — see The track model). `doctor`/`clarify` use `RE_CONSTITUTION_CHECK`,
+  (a `loose` one only in the track's context — see The track model). `clarify` uses `RE_CONSTITUTION_CHECK` (doctor's `constitution-check` reads `CONSTITUTION_SYN` through `sectionFilled`, the gate's reader, since 1.24 review 6),
   `RE_SUCCESS_CRITERIA`, `RE_INDEPENDENT_TEST`, `RE_OUT_OF_SCOPE`, `RE_NFR`, `RE_EDGE_CASES`,
   `RE_GLOBAL_CONSTRAINTS`; `addTrack` uses `RE_TESTABILITY` for the +tdd block heading. Add a synonym when
   adding a language. Localized BODY content is in `mcp/lib/i18n.js` (its `i18n/<lang>.js` files), not the engine.

@@ -1,5 +1,5 @@
 ---
-description: (+ai) Run the local eval harness for a feature (golden/adversarial/regression) using your own API key. PT - corre evals locais (+ai). ES - ejecuta evals locales (+ai).
+description: (+ai) Run a feature's local eval harness (golden / adversarial / regression) with your own API key.
 argument-hint: "[feature name] [--dry-run | --set-baseline]"
 ---
 

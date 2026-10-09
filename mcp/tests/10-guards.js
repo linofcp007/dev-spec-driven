@@ -71,6 +71,9 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     writeState(gFeat.dir, { ...S.readState(g, "billing"), approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t" } } });
     ok(silent(runGuard(pre(g, "Write", { file_path: code }))), "guard ON + a feature with approved, unfinished tasks → silent (allowed)");
     writeState(gFeat.dir, { ...S.readState(g, "billing"), approvals: { tasks: { at: "2026-01-01T00:00:00Z", by: "t", forced: true, failing: ["placeholders"] } } });
+    // (1.24 r6 C-I8 shows the note once a session — a marker in the OS temp folder keyed by session_id "s": a previous run of the
+    // suite left it, and the note read as already shown. Removed first, so every run starts a fresh session.)
+    try { fs.unlinkSync(require("../hooks/hook-utils.js").sessionFlagFile("forced-note", "s")); } catch { /* none */ }
     const forcedOut = runGuard(pre(g, "Write", { file_path: code }));
     let forcedJ = {};
     try { forcedJ = JSON.parse(forcedOut.stdout); } catch { /* none */ }
@@ -225,6 +228,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
 
     // (H4) steering_scaffold custom names: localized stub with front matter; known names keep their templates; rejections.
     const c11 = path.join(tmp, "proj-wp11-custom");
+    fs.mkdirSync(c11, { recursive: true }); // a projectDir names an existing folder (1.24 r6 A3 — only spec_init creates one)
     const cs1 = (await call11("steering_scaffold", { file: "api-conventions.md", projectDir: c11 })).p;
     const csText = fs.readFileSync(path.join(c11, ".specs", "steering", "api-conventions.md"), "utf8");
     const csFm = S.steeringFrontMatter(csText);
@@ -308,11 +312,12 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const dzBug = S.designSaveCheck(e11, "crash-on-save");
     ok(dzBug.ok && dzBug.kind === "bugfix" && dzBug.constitution === null && dzBug.clean && dzBug.text === "Design check [core +tdd]: mandatory sections filled, no template placeholders ✓",
       "a bugfix's design.md is not asked for a Constitution Check (bug.md's Root Cause replaces the design)");
-    // A design.md that is not an active feature's (archived, steering/) still reports the roadmap refresh.
+    // A design.md that is not an active feature's (archived, steering/) gets no design check. 1.24 r6 I-I1: it reported the roadmap
+    // refresh; the save now only marks the roadmap stale (refreshed at the end of the turn) — nothing to say.
     S.createFeature(e11, "Old Design", ["core"]);
     S.manageFeature(e11, "archive", "old-design");
     const dzArch = runPost(path.join(e11, ".specs", "_archive", "old-design", "design.md"));
-    ok(/^Roadmap updated → \d+%/.test(dzArch) && !/Design check/.test(dzArch), "hook on an ARCHIVED feature's design.md → the roadmap note, as before (no design check, not silent)");
+    ok(dzArch === "" && S.roadmapStale(e11) === true, "hook on an ARCHIVED feature's design.md → no design check, silent; the roadmap is marked stale (got " + JSON.stringify(dzArch.slice(0, 80)) + ")");
   }
 
   { // 1.14 C1 — the end-of-turn evidence gate (stopCheck, hooks/stop-hook.js on Stop / SubagentStop) and the scope guard (meta.guard "scope")

@@ -990,4 +990,131 @@ exports.run = async ({ ok, rpc, payload, S, tmp, libSources, list, __dirname }) 
       cvPt && /parece mal escrito/.test(cvPt.detail),
       "review 5: doctor verify-suspicious warns for a _Verify:_ holding a code span inside it or a quote with no partner (never for paired quotes or a plain command; PT) (got " + js([cv, clean, cvPt && cvPt.detail]) + ")");
   }
+
+  // 1.24 r6 D2: an EMPTY label followed by its value — `_Verify:_ npm test`, `- _Verify:_ `npm test``, `*Verify:* npm test` — yields
+  // no marker (nothing runs, the task ticks as "nothing to verify"): doctor's malformed-markers names it again. A title naming
+  // markers ("Document the _Verify:_ and _Implements:_ markers", "the _Verify:_ marker") is prose.
+  {
+    const js = JSON.stringify;
+    const pd = path.join(tmp, "proj-r6-empty-label");
+    S.initProject(pd, ["core"], "en");
+    const cases = {
+      plain: ["- [ ] 1. Build the parser _Verify:_ npm test", ["Verify"]],
+      code: ["- [ ] 1. Build the parser\n  - _Verify:_ `npm test`", ["Verify"]],
+      star: ["- [ ] 1. Build the parser\n  - *Verify:* npm test", ["Verify"]],
+      impl: ["- [ ] 1. Build the parser _Implements:_ src/parser.js _Verify: npm test_", ["Implements"]],
+      codeMid: ["- [ ] 1. Build the parser _Verify:_ `npm test` and lint", ["Verify"]],
+      title2: ["- [ ] 1. Document the _Verify:_ and _Implements:_ markers", []],
+      title1: ["- [ ] 1. Document the _Verify:_ marker in the README", []],
+      titlePt: ["- [ ] 1. Documentar o marcador _Verify:_ e a etiqueta _Implements:_", []],
+      tail: ["- [ ] 1. Rename the _Verify:_ marker_", []],
+      end: ["- [ ] 1. Explain _Verify:_.", []],
+    };
+    const got = {};
+    let k = 0;
+    for (const [name, [text]] of Object.entries(cases)) {
+      const f = S.createFeature(pd, "E" + (k++), ["core"], "", undefined, "en");
+      fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n" + text + "\n");
+      const c = S.specDoctor(pd, f.slug).checks.find((x) => x.id === "malformed-markers");
+      got[name] = c ? (c.detail.match(/\(([^)]*)\)/) || [, ""])[1].split(", ").map((l) => l.replace(/:$/, "")).filter(Boolean) : [];
+    }
+    const wrong = Object.keys(cases).filter((n) => js(got[n]) !== js(cases[n][1]));
+    ok(!wrong.length, "1.24 r6 D2: an empty marker label followed by a code span or plain text is malformed-markers again (`_Verify:_ npm test`, `- _Verify:_ `npm test``, `*Verify:* npm test`); a title naming markers is prose (wrong: " +
+      js(wrong.map((n) => [n, got[n]])) + ")");
+  }
+
+  // 1.24 r6 D9: a marker closer followed by closing punctuation a markdown reader allows — `*`, quotes, dashes, guillemets — is read:
+  // `**_Verify: x_**`, `***Verify: x***`, `("_Verify: x_")`, `_Verify: x_— then`; bold labels and `__x__` stay no markers.
+  {
+    const js = JSON.stringify;
+    const v = (line) => S.taskMarkers({ text: line, body: [] }).verify;
+    const want = {
+      "Build **_Verify: npm test_**": ["npm test"], "Build ***Verify: npm test***": ["npm test"], 'Build ("_Verify: npm test_")': ["npm test"],
+      "Build _Verify: npm test_— then lint": ["npm test"], "Build _Verify: npm test_– then": ["npm test"], "Build «_Verify: npm test_»": ["npm test"],
+      "Build “_Verify: npm test_”": ["npm test"], "Build ‘_Verify: npm test_’": ["npm test"], "Build '_Verify: npm test_'": ["npm test"],
+      "Build *_Verify: npm test_*": ["npm test"], "Build _Verify: npm test_.": ["npm test"],
+      "Build **Verify:** npm test": [], "x __Verify: npm test__": [], '_Verify: python -c "import a_; print(1)"_': ['python -c "import a_; print(1)"'],
+      "x *Verify: ls **/*.js*": ["ls **/*.js"], "x *Verify: npm test* and *Implements: a.js*": ["npm test"], "x ****Verify: npm test****": [],
+    };
+    const wrong = Object.keys(want).filter((l) => js(v(l)) !== js(want[l]));
+    ok(!wrong.length, "1.24 r6 D9: marker closers followed by *, quotes, dashes or guillemets are read (bold-italic, quoted, a dash after); a bold label, __x__ and ****x**** stay no marker; a value keeps its own _ (wrong: " +
+      js(wrong.map((l) => [l, v(l)])) + ")");
+  }
+
+  // 1.24 r6 D3: "\r\r\n" line endings (a CRLF file converted again) and a U+2028 / U+2029 inside a task's text — the task vanished
+  // from the whole-file view (complete_task: "Task 1 not found") while activeTasks (split on /\r?\n/) still read it.
+  {
+    const js = JSON.stringify;
+    const pc = path.join(tmp, "proj-r6-crcr");
+    S.initProject(pc, ["core"], "en");
+    const fc = S.createFeature(pc, "Crcr", ["core"], "", undefined, "en");
+    const tc = path.join(fc.dir, "tasks.md");
+    fs.writeFileSync(tc, ["# Tasks", "", "## Phase 1", "", "- [ ] 1. Build the parser _Verify: npm test_", "- [ ] 2. Handle errors _Verify: npm test_", ""].join("\r\r\n"));
+    const c1 = S.completeTask(pc, "crcr", 1, { command: "npm test", exitCode: 0 });
+    const after = fs.readFileSync(tc, "utf8");
+    const fl = S.createFeature(pc, "Ls", ["core"], "", undefined, "en");
+    const LS = String.fromCharCode(0x2028), PS = String.fromCharCode(0x2029);
+    fs.writeFileSync(path.join(fl.dir, "tasks.md"), "# Tasks\n\n- [x] 1. Build the parser\n- [ ] 2. Handle errors" + LS + "(see the spec) _Verify: npm test_\n- [ ] 3. Docs" + PS + "end\n");
+    const nx = S.nextTask(pc, "ls");
+    const c2 = S.completeTask(pc, "ls", 2, { command: "npm test", exitCode: 0 });
+    ok(c1.ok && c1.verified && c1.total === 2 && after.includes("- [x] 1. Build the parser _Verify: npm test_\r\r\n- [ ] 2.") && nx.next && nx.next.number === 2 && nx.total === 3 &&
+      c2.ok && c2.verified && S.taskMarkers(S.taskBlocks(fs.readFileSync(path.join(fl.dir, "tasks.md"), "utf8"))[1]).verify[0] === "npm test",
+      "1.24 r6 D3: a tasks.md with \\r\\r\\n line endings reads its tasks (ticked in place, the endings kept); a U+2028 / U+2029 inside a task's text is an ordinary character (got " +
+      js([c1.ok, c1.total, c1.error, nx.next, nx.total, c2.ok, c2.error]) + ")");
+  }
+
+  // 1.24 r6 D-I6: the whole-file scanner and the active view (activeTasks — a track turned off) read the same task numbers on every
+  // tasks.md variant: LF / CRLF / \r\r\n, a BOM, tabs, U+2028 / U+2029 in a task's text, a nested list, a fence and a comment.
+  {
+    const js = JSON.stringify;
+    const LS = String.fromCharCode(0x2028), PS = String.fromCharCode(0x2029), BOM = String.fromCharCode(0xfeff);
+    const E = require(path.join(__dirname, "lib", "engine", "index.js")); // activeTasks is the engine's (no facade name)
+    const wrong = [];
+    let n = 0;
+    for (const eol of ["\n", "\r\n", "\r\r\n"]) for (const bom of ["", BOM]) for (const sep of ["", LS, PS]) for (const tab of [" ", "\t"]) {
+      const lines = [bom + "# Tasks", "", "## Phase 1", "", "-" + tab + "[ ]" + tab + "1." + tab + "Build the parser" + sep + "(see the spec) _Verify: npm test_",
+        "", "## Story US-1 — Security", "", "- [ ] 2. Threat model" + sep + "notes", "", "## Phase 2", "", "- Group A", "    - [ ] 3. Nested task", "", "```md", "- [ ] 9. Example", "```",
+        "<!-- - [ ] 8. hidden -->", "- [x] 4. Done task" + sep, ""];
+      const text = lines.join(eol);
+      const whole = S.taskBlocks(text).map((b) => b.number);
+      const off = S.taskBlocks(E.activeTasks(text, ["core"])).map((b) => b.number);
+      const on = S.taskBlocks(E.activeTasks(text, ["core", "sec"])).map((b) => b.number);
+      const parsed = S.parseTasks(text).map((t) => t.number);
+      if (js(whole) !== "[1,2,3,4]" || js(off) !== "[1,3,4]" || js(on) !== js(whole) || js(parsed) !== js(whole)) wrong.push([js(eol), bom ? "bom" : "", sep.charCodeAt(0) || "", tab === "\t" ? "tab" : "", whole, off, on]);
+      n++;
+    }
+    ok(!wrong.length && n === 36, "1.24 r6 D-I6: on " + n + " tasks.md variants the whole-file scanner, parseTasks and the active view (+sec off / on) read the same task numbers (wrong: " + js(wrong.slice(0, 6)) + ")");
+    const CR = String.fromCharCode(13);
+    const t0 = Date.now();
+    const hostile = [S.taskBlocks("- [ ] 1. a" + CR.repeat(200000) + "b\n- [ ] 2. c" + CR.repeat(200000) + "\n"), E.activeTasks(("## Story US-1 — Security" + CR.repeat(100000) + "\n").repeat(2), ["core"])];
+    const ms = Date.now() - t0;
+    ok(ms < 3000 && hostile[0].length === 2, "1.24 r6 D3: trailing-CR stripping stays linear (200,000 CRs before text / at a line's end) (got " + js([ms, hostile[0].length]) + ")");
+  }
+
+  // 1.24 r6 D6: the next task and the waves' implicit chain follow the SECTIONS in file order, then the number — a task appended into
+  // an earlier phase (spec_append_tasks {heading}, numbered after every task) comes before a later phase's tasks: by number, next
+  // served Phase 2 first, past Phase 1's checkpoint. parseTasks' public order stays by number.
+  {
+    const js = JSON.stringify;
+    const po = path.join(tmp, "proj-r6-order");
+    S.initProject(po, ["core"], "en");
+    const fo = S.createFeature(po, "Order", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fo.dir, "tasks.md"), ["# Tasks", "", "## Phase 1: Foundation", "", "- [x] 1. Create the schema", "- [ ] 2. Write the repository",
+      "**Checkpoint:** the repository persists users", "", "## Phase 2: API", "", "- [ ] 3. Expose GET /users", "- [ ] 4. Expose POST /users",
+      "**Checkpoint:** the API serves users", ""].join("\n"));
+    const ap = S.appendTasks(po, "order", [{ text: "Add the repository's unique-email constraint" }], { heading: "Phase 1: Foundation" });
+    const c2 = S.completeTask(po, "order", 2);
+    const nx = S.nextTask(po, "order", { waves: true });
+    const br = S.taskBrief(po, "order");
+    const st = S.statusFeature(po, "order");
+    const parsed = S.parseTasks(fs.readFileSync(path.join(fo.dir, "tasks.md"), "utf8")).map((t) => t.number);
+    ok(ap.ok && ap.appended[0].number === 5 && c2.next && c2.next.number === 5 && nx.next.number === 5 && js(nx.waves) === "[[5],[3],[4]]" && br.task && br.task.number === 5 &&
+      st.tasks.next && st.tasks.next.number === 5 && js(parsed) === "[1,2,3,4,5]",
+      "1.24 r6 D6: a task appended into Phase 1 is next before Phase 2's tasks (complete_task's next, next_task, the waves, the brief's default task, status); parseTasks stays by number (got " +
+      js([ap.appended.map((x) => x.number), c2.next, nx.next, nx.waves, br.task && br.task.number, st.tasks.next, parsed]) + ")");
+    // within one section (or a tasks.md without phases) the number decides, as before
+    fs.writeFileSync(path.join(fo.dir, "tasks.md"), "- [ ] 2. Second\n- [ ] 1. First\n- [ ] 3. Third\n");
+    const flat = S.nextTask(po, "order", { waves: true });
+    ok(flat.next.number === 1 && js(flat.waves) === "[[1],[2],[3]]", "1.24 r6 D6: within one section the number decides (unchanged) (got " + js([flat.next, flat.waves]) + ")");
+  }
 };

@@ -1,5 +1,5 @@
 ---
-description: Stakeholder export — one self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for product, legal and clients. PT - exportação para stakeholders. ES - exportación para stakeholders.
+description: Stakeholder export — one self-contained, offline, printable HTML or markdown document of a feature or the project.
 argument-hint: "[feature name | blank for the whole project] [--md | --csv | --gherkin | --tracker jira|linear] [--write]"
 ---
 

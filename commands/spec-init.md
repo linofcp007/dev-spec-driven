@@ -1,6 +1,6 @@
 ---
-description: Initialize .specs/ and the steering files for the tracks this project uses. PT - inicializa .specs/ e steering. ES - inicializa .specs/ y steering.
-argument-hint: "[tracks, e.g. tdd saas ai sec privacy dist api ui obs data] [--lang pt] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
+description: Initialize .specs/ and the steering files for the tracks this project uses.
+argument-hint: "[tracks, e.g. tdd saas ai sec privacy dist api ui obs data] [--lang en|pt|pt-BR|es] [--guard on|off|scope] [--check name=cmd] [--roles requirements=product,design=tech+security] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]"
 ---
 
 Use the **dev-spec-driven** skill to bootstrap project context.
@@ -8,11 +8,11 @@ Use the **dev-spec-driven** skill to bootstrap project context.
 Args: $ARGUMENTS
 
 Run the `spec_init` MCP tool `{tracks, lang, guard?, checks?, approvalRoles?, stopCheck?, approvalGuard?, evidence?}` (CLI
-`dev-spec init [tracks...] [--lang pt] [--guard on|off|scope] [--check name="cmd"] [--roles …] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]`)
+`dev-spec init [tracks...] [--lang en|pt|pt-BR|es] [--guard on|off|scope] [--check name="cmd"] [--roles …] [--stop-check on|off] [--approval-guard off|ask|deny] [--evidence reported|observed]`)
 to create `.specs/steering/` and the steering files the given tracks require (constitution/product/tech/structure always;
 testing-standards for +tdd; scale/observability/cost for +saas; ai-strategy for +ai; security for +sec; privacy for
 +privacy; distributed for +dist; api for +api; ui for +ui; observability for +obs; data for +data). Tracks may be given as `tdd saas`, `'tdd,saas'` or `+saas +ai`; an unknown name is an error with a
-did-you-mean. **Pass `lang` matching the user's language** — the stubs come out in it and it becomes the project
+did-you-mean. **Pass `lang` matching the user's language** (`en`, `pt` European, `pt-BR` Brazilian, `es`) — the stubs come out in it and it becomes the project
 default every new feature inherits. It never overwrites an existing file (a team's own steering stubs in
 `.specs/templates/steering/` are used when present — `/spec-templates`).
 
@@ -31,7 +31,7 @@ unchanged):
 - `approvalGuard` — the human approval guard, `"off"` (default) / `"ask"` / `"deny"`: an agent's `spec_approve`,
   `spec_feature` remove, `dev-spec approve` / `feature remove --yes` through the shell, or lowering this guard, asks the
   user first (`ask` — a prompt Claude Code shows in auto mode too; only its bypass-permissions mode may skip it) or is refused in every mode (`deny` — the user
-  runs it in their own terminal or with Claude Code's `!` prefix). Lowering it — or weakening what it protects (evidence → reported, roles cleared or dropped, a check removed or changed, the stop gate or edit guard off, a shell write of .specs/roadmap.json, a hand edit of roadmap.json or a feature's .state.json) — is guarded too: only the user does that.
+  runs it in their own terminal or with Claude Code's `!` prefix). Lowering it — or weakening what it protects (evidence → reported, roles cleared or dropped, a check removed or changed, the stop gate or edit guard off, +tdd / +ai turned off, a shell write of .specs/roadmap.json or a feature's .state.json — `dev-spec merge-state` and git's restores too —, a hand edit of roadmap.json or a feature's .state.json, any write of a harness-observed log) — is guarded too: only the user does that.
 - `evidence` — `"reported"` (default) or `"observed"` (CLI `--evidence observed`): then only a run the harness saw (the plugin's Bash hook in Claude Code) or `dev-spec done --run` / `finish --run` made verifies a `_Verify:_` or a project check — an MCP-only client has no such hook.
 
 **Teams** (several people on branches): suggest the merge driver once — `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" merge-state --install` (CLI only; it

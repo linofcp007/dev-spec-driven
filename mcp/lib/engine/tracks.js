@@ -13,10 +13,10 @@
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName, noteGhostPacks, packOf,
-  packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf;
-function __link(E) { ({ acIndex, builtinTaskHeadings, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName,
-  noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf } = E); }
+let acIndex, builtinTaskHeadings, closestName, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName, noteGhostPacks, packOf,
+  packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf, dropTrailingCr;
+function __link(E) { ({ acIndex, builtinTaskHeadings, closestName, existsCached, ghostMarkers, headingEntries, isPackTrack, legacyPackName,
+  noteGhostPacks, packOf, packTracks, readIfExists, readJson, savedPackName, statePath, stripHtmlComments, useTemplateScopeOf, dropTrailingCr } = E); }
 
 const VALID_TRACKS = ["core", "tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
 // The optional, composable tracks (core is always on) — the classifier's, add_track's and every per-track loop's list.
@@ -69,22 +69,8 @@ const TRACK_ALIASES = { ia: "ai", llm: "ai", ml: "ai", genai: "ai", test: "tdd",
 function suggestTrack(token) {
   // Own keys only: a plain-object lookup matched 'constructor' / '__proto__' and suggested Object itself.
   if (Object.prototype.hasOwnProperty.call(TRACK_ALIASES, token)) return TRACK_ALIASES[token];
-  // Optimal-string-alignment distance: a transposition ('sasa', 'ia') costs 1.
-  const dist = (a, b) => {
-    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-    for (let j = 1; j <= b.length; j++) d[0][j] = j;
-    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-    }
-    return d[a.length][b.length];
-  };
-  let best = null;
-  for (const t of allTracks()) {
-    const n = dist(token, t);
-    if (n <= Math.max(1, Math.floor(token.length / 2)) && (!best || n < best.n)) best = { t, n };
-  }
-  return best ? best.t : null;
+  // The optimal-string-alignment distance (core.js — a transposition, 'sasa' / 'ia', costs 1), up to half the token's length.
+  return closestName(token, allTracks(), (t, w) => Math.max(1, Math.floor(w.length / 2)));
 }
 function unknownTracksError(lang, unknown) {
   return i18n.msg(lang).tracks.unknown(unknown, allTracks().join(", "));
@@ -197,11 +183,13 @@ function trackTaskHeading(tr, tasksText) {
 // tasks.md minus the task blocks of tracks that were turned off — the same rule as activeDesign: the block stays
 // on disk (inactive) and counts again when the track is re-added. Progress, next task, phase, roadmap and finish
 // read this; completing, tracing and briefing a task read the whole file.
+// 1.24 r6 D3: split as the task scanner splits (scanTaskLines: at "\n", every trailing CR dropped — "\r\r\n" kept a "\r" here) —
+// the headings are read on those lines, the kept lines are written back as they are (their own line endings).
 function activeTasks(tasksText, tracks) {
   if (tasksText == null) return tasksText;
-  const lines = tasksText.split(/\r?\n/);
-  const drop = inactiveTaskLines(lines, tracks);
-  return drop.size ? lines.filter((_, i) => !drop.has(i)).join("\n") : tasksText;
+  const raw = String(tasksText).split("\n");
+  const drop = inactiveTaskLines(raw.map(dropTrailingCr), tracks);
+  return drop.size ? raw.filter((_, i) => !drop.has(i)).join("\n") : tasksText;
 }
 // 0-based line index → the value `owner` returned for the heading that holds it: every line under a heading
 // `owner` picks (a truthy value, e.g. the turned-off track), up to the next heading of the same or a higher level.
@@ -546,6 +534,9 @@ const SIGNALS = {
       "multi-region", "production-ready", "production grade", "production-grade",
       "enterprise", "high performance", "load test", "load-test", "egress",
       "horizontal scaling", "autoscale", "thousands of users", "millions of",
+      // 1.24 r6 F-I5: a tenant is as strong as its PT / ES twin "inquilino" ("Each tenant sees only its own invoices" was a hint while
+      // "Cada inquilino vê apenas as suas faturas" was +saas) — the rental sense (rent, a landlord, a lease) is no signal (saas cues)
+      "tenant",
       // PT
       "inquilino", "multi-inquilino", "multiinquilino", "limite de taxa", "tempo de atividade",
       "observabilidade", "alta disponibilidade", "pronto para produção", "pronto para producao",
@@ -557,7 +548,7 @@ const SIGNALS = {
       "listo para producción", "prueba de carga", "escalabilidad",
     ],
     weak: [
-      "tenant", "queue", "worker", "background job", "scheduled", "scheduled task",
+      "queue", "worker", "background job", "scheduled", "scheduled task",
       "public api", "scale", "throughput", "latency", "p95", "p99", "p50", "tps", "qps",
       "cdn", "cache", "partition",
       // 1.17 D review: a message queue IS a queue — the phrase counts for +saas too (as 'exactly-once' does for +tdd and +dist):
@@ -567,6 +558,15 @@ const SIGNALS = {
       "fila de mensagens", "cola de mensajes",
       "fila", "agendado", "tarefa agendada", "desempenho", "latência", "cola", "programado",
       "rendimiento", "latencia", "escala", "caché",
+    ],
+    // CUES (1.24 r6 F-I5) — a tenant / an inquilino / a locatário who rents a home is no SaaS tenant: in a sentence about rent, a landlord, a
+    // lease or an apartment the word is no signal at all ("Tenants pay their rent online", "Os inquilinos pagam a renda ao senhorio")
+    cues: [
+      { kind: "sentence", on: ["tenant", "inquilino", "locatário"], then: "none", edge: "letter",
+        phrases: ["rent(?:s|ed|al|als|ing)?", "landlords?", "landlad(?:y|ies)", "leases?", "leased", "leasing", "lettings?", "apartments?",
+          "property managers?", "property management", "evictions?", "rendas?", "senhori[oa]s?", "arrendamentos?", "arrendatári[oa]s?", "aluguel",
+          "aluguer", "aluguéis", "alugueis", "imóve(?:l|is)", "apartamentos?", "condomínios?", "fiador(?:es)?", "despejos?", "alquiler(?:es)?",
+          "caser[oa]s?", "arrendador(?:es)?", "pisos?", "inmuebles?", "fianzas?", "desahucios?"] },
     ],
   },
   ai: {
@@ -579,6 +579,25 @@ const SIGNALS = {
       "language model", "artificial intelligence",
       // review 5: a trained model is an AI feature too (evals, drift) — "Detect fraud with a machine learning model"
       "machine learning", "machine-learning", "ml model", "deep learning", "neural network",
+      // 1.24 r6 F6 / F-I5 — recall: "AI" / "IA" written in capitals (case-sensitive: a lower-case "ai" / "ia" stays weak — PT "ia" is also
+      // a verb form; "AI-generated", "AI-powered" through the adjective compounds; an English "IA" is information architecture — ai cues),
+      // the perception and language tasks a model does (speech-to-text, OCR, computer vision, sentiment analysis, a vision model, RAG), an
+      // agentic design, and the named models — "Whisper" / "LLaMA" / "Llama 3" only in their capitalised, versioned product spelling (a
+      // whisper, a llama, ES "llama" = calls), DeepSeek
+      "AI", "IA", "Whisper", "whisper model", "whisper api", "speech-to-text", "speech to text", "speech recognition", "voice recognition",
+      "automatic speech recognition", "OCR", "optical character recognition", "computer vision", "image recognition", "object detection",
+      "facial recognition", "face recognition", "image classification", "sentiment analysis", "sentiment model", "sentiment classifier", "vision model", "vision-language model",
+      "agentic", "retrieval-augmented generation", "retrieval augmented generation", "deepseek",
+      "LLaMA", "Llama 2", "Llama 3", "Llama 4", "Llama-2", "Llama-3", "Llama-4", "Llama2", "Llama3", "Llama4",
+      // PT
+      "reconhecimento de voz", "reconhecimento de fala", "fala para texto", "fala em texto", "voz para texto", "voz em texto",
+      "reconhecimento ótico de caracteres", "reconhecimento óptico de caracteres", "visão computacional", "visão por computador",
+      "reconhecimento de imagem", "reconhecimento de imagens", "deteção de objetos", "detecção de objetos", "reconhecimento facial",
+      "análise de sentimento", "análise de sentimentos", "modelo de visão", "agêntico", "agêntica", "geração aumentada por recuperação",
+      // ES
+      "reconocimiento de voz", "voz a texto", "reconocimiento óptico de caracteres", "visión artificial", "visión por computador",
+      "visión por computadora", "reconocimiento de imágenes", "detección de objetos", "reconocimiento facial", "análisis de sentimiento",
+      "análisis de sentimientos", "modelo de visión", "agéntico", "agéntica", "generación aumentada por recuperación",
       // PT
       "alucina", "injeção de prompt", "injecao de prompt", "funcionalidade de ia",
       "produto de ia", "pesquisa semântica", "pesquisa semantica", "incorporação",
@@ -597,9 +616,25 @@ const SIGNALS = {
       "prompt", "agent", "model", "generation", "summariz", "completion", "inference",
       "tokens", "token cost", "assistant", "temperature", "context window", "retrieval",
       "moderation", "few-shot", "sampling", "ai", "generative",
+      // 1.24 r6 F-I5: a transcription may be done by people ("transcribe the interview notes") — an anchor
+      "transcription", "transcribe", "transcribing",
       // PT/ES
       "agente", "modelo", "geração", "resumo", "resumir", "assistente", "inferência", "custo de tokens",
       "generación", "resumen", "asistente", "coste de tokens", "ia", "generativo", "generativa",
+      "transcrição", "transcrever", "transcripción", "transcribir",
+    ],
+    // CUES (1.24 r6 F-I5) — an English "IA" is information architecture ("Information architecture (IA) review of the docs navigation"):
+    // in a sentence about navigation, a sitemap or a taxonomy it is no signal at all; nor is an "AI" file (Adobe Illustrator) or a
+    // meeting's action item, nor a game's / a chat's "Whisper" (a private message: "Whisper messages to other players")
+    cues: [
+      { kind: "near", on: ["Whisper"], then: "none",
+        after: { words: ["messages?", "chats?", "mode", "channels?", "commands?", "networks?", "quietly", "softly"], chars: 24 } },
+      { kind: "sentence", on: ["Whisper"], then: "none", edge: "letter",
+        phrases: ["players?", "in-game", "guilds?", "twitch", "party chat", "direct messages?", "private messages?", "dms?"] },
+      { kind: "sentence", on: ["IA"], then: "none", edge: "letter",
+        phrases: ["information architecture", "navigation", "sitemaps?", "site maps?", "taxonom(?:y|ies)", "card sorting", "wayfinding"] },
+      { kind: "sentence", on: ["AI"], then: "none", edge: "letter",
+        phrases: ["adobe illustrator", "illustrator", "action items?", "vector files?", "eps", "svg"] },
     ],
   },
   // +sec (1.14). Auth words stay WEAK here (they are +tdd's strong signals): an auth feature is only "possibly"
@@ -615,6 +650,28 @@ const SIGNALS = {
       // review 5: role-based access control is an authorization design (the bare "access control" / "rbac" stay weak — inside the
       // phrase they are shadowed: one strong signal)
       "role-based access control", "role based access control",
+      // 1.24 r6 F6 / F-I5 — recall: card data (PCI scope), impersonating users, signed requests (HMAC, signature verification),
+      // password hashing, credential rotation, a public share link (anyone holding it gets in), unauthorized access (a hazard: "No
+      // unauthorized / unauthenticated access to the reports" states the requirement — sec hazards)
+      "card number", "credit card number", "cardholder data", "cardholder", "pci dss", "pci-dss", "pci compliance", "pci-compliance",
+      "pci compliant", "pci-compliant", "pci scope", "PAN",
+      "impersonate", "impersonating", "impersonation", "hmac", "signature verification", "webhook signature", "signed webhook",
+      "signature … webhook", "signature … payload", "request signing", "signing secret", "signing key",
+      "bcrypt", "argon2", "scrypt", "pbkdf2", "password hashing", "hash … password",
+      "key rotation", "secret rotation", "credential rotation", "token rotation", "rotate … credential", "rotate … secret", "rotate … keys", "rotate … api key",
+      "rotate … signing key", "rotate … encryption key", "rotate … token", "rotating … credential", "rotating … secret", "rotating … keys",
+      "public share link", "share … public link", "anyone with the link",
+      "unauthorized access", "unauthorised access", "unauthenticated access",
+      // PT
+      "número do cartão", "números dos cartões", "número de cartão", "dados do cartão", "dados de cartão", "dados dos cartões",
+      "titular do cartão", "personificar", "personificação", "verificação de assinatura", "verificação da assinatura", "assinatura do webhook",
+      "assinatura dos webhooks", "assinatura … webhook", "rotação … credenciais", "rotação … chaves", "rotação … segredos",
+      "link público de partilha", "partilhar … link público", "compartilhar … link público", "acesso não autorizado",
+      // ES
+      "número de tarjeta", "datos de tarjeta", "datos de la tarjeta", "titular de la tarjeta", "suplantar", "suplantación",
+      "verificación de firma", "verificación de la firma", "firma del webhook", "firma de los webhooks", "firma … webhook",
+      "rotación … credenciales", "rotación … claves", "rotación … secretos", "enlace público para compartir", "compartir … enlace público",
+      "acceso no autorizado", "accesos no autorizados",
       // PT
       "controlo de acesso baseado em funções", "controlo de acesso baseado em perfis", "controle de acesso baseado em papéis",
       "controle de acesso baseado em funções", "controle de acesso baseado em perfis",
@@ -647,6 +704,12 @@ const SIGNALS = {
       // password" is two of them — +sec on; a password reset alone is a hint). One concept each (sec.concepts): "SSO (single sign-on)".
       "password", "palavra-passe", "senha", "contraseña", "sso", "single sign-on", "oidc", "openid connect", "saml",
       "brute force", "brute-force", // weak: also an algorithm ("a brute-force search") — the attack phrase is strong
+      // 1.24 r6 F6 / F-I5 — anchors: a federated login ("Add login with Google (OAuth)" is two), a file upload, a public / share link (a
+      // blog post's share button too — one concept), verifying a signature (a PDF form's too), user roles, a (valid / invalid / expired)
+      // token — and the secrets word in PT / ES (EN "secrets" had no twin)
+      "oauth", "login with google", "log in with google", "sign in with google", "sign-in with google", "sign in with apple", "social login",
+      "file upload", "upload … file", "public link", "share link", "sharing link", "shareable link", "verify … signature", "verifies … signature",
+      "user roles", "valid token", "invalid token", "expired token",
       // C4: the STRIDE methodology only as the upper-case acronym (an upper-case keyword is matched case-sensitively, see
       // classify): a lower-case "stride" is an array stride or a running stride. "STRIDE threat model" stays strong through
       // "threat model".
@@ -658,10 +721,19 @@ const SIGNALS = {
       // 1.22 review — the two-factor / multi-factor signal (EN "two-factor", "multi-factor") in PT / ES too: "autenticação de dois fatores"
       // is autenticação + dois fatores, two weak signals like "two-factor authentication" (never ONE phrase: it would shadow the second)
       "dois fatores", "multifator",
+      // 1.24 r6 (see EN)
+      "segredos", "login com google", "login com o google", "entrar com google", "entrar com o google", "sessão com google", "sessão com o google",
+      "upload de ficheiros", "upload de arquivos", "carregamento de ficheiros", "link público", "link de partilha",
+      "link de compartilhamento", "verificar … assinatura", "token válido", "token inválido",
+      "token expirado",
       // ES
       "autenticación", "autorización", "control de acceso", "token de acceso", "clave de api",
       "cifrado", "encriptación", "seguridad", "registro de auditoría", "privilegio mínimo", "validación de entrada", "fuerza bruta",
       "dos factores", "doble factor", // (ES "multifactor" is the EN word above)
+      // 1.24 r6 (see EN)
+      "secretos", "sesión con google", "login con google", "subida de archivos", "carga de archivos", "enlace público",
+      "enlace para compartir", "enlaces para compartir", "verificar … firma",
+      "token caducado", "roles de usuario",
       // full review Pb5 — the encryption VERBS, PT / pt-BR / ES (EN has "encrypt" + its inflections): encriptar, cifrar,
       // criptografar as VERB_STEMS — their conjugations only, one signal per verb (like encrypt / encryption). Never a bare
       // "cifra": PT/ES also a figure, an amount ("as cifras do trimestre").
@@ -677,7 +749,20 @@ const SIGNALS = {
       sso: ["sso", "single sign-on"],
       oidc: ["oidc", "openid connect"],
       password: ["password", "palavra-passe", "senha", "contraseña"],
+      // 1.24 r6 — one concept each (EN / PT / ES)
+      secrets: ["secrets", "segredos", "secretos"],
+      federated: ["login with google", "log in with google", "sign in with google", "sign-in with google", "sign in with apple", "social login",
+        "login com google", "login com o google", "entrar com google", "entrar com o google", "sessão com google", "sessão com o google",
+        "sesión con google", "login con google"],
+      upload: ["file upload", "upload … file", "upload de ficheiros", "upload de arquivos", "carregamento de ficheiros", "subida de archivos",
+        "carga de archivos"],
+      link: ["public link", "share link", "sharing link", "shareable link", "link público", "link de partilha", "link de compartilhamento",
+        "enlace público", "enlace para compartir", "enlaces para compartir"],
+      token: ["valid token", "invalid token", "expired token", "token válido", "token inválido", "token expirado", "token caducado"],
     },
+    // 1.24 r6: unauthorized access is the concern a negation states ("No unauthorized access to the reports" = the requirement)
+    hazards: ["unauthorized access", "unauthorised access", "unauthenticated access", "acesso não autorizado",
+      "acceso no autorizado", "accesos no autorizados"],
     // CUES (1.22 review 2) — the 1.22 factor words count only as AUTHENTICATION: "depende de dois fatores", "depende de dos factores",
     // "doble factor de ponderación", "a multi-factor risk model" were a weak +sec signal (one more weak word turned +sec on). Next
     // to an auth word — "autenticação de dois fatores", "login com dois fatores", "autenticación de doble factor", "doble factor de
@@ -689,7 +774,44 @@ const SIGNALS = {
     // Review 4 — PT / ES put the adjective AFTER the noun, between the auth word and the factor word ("autenticação forte de dois
     // fatores", "autenticación obligatoria de doble factor" turned +sec off while "strong multi-factor authentication" kept it):
     // one optional adjective slot; and the auth verbs conjugated ("The user logs in with multi-factor", "inicia sesión con…").
+    // 1.24 r6 F5 / F-I5 — two rules come first (the first rule that fires decides):
+    // (1) an ACCESS RULE — an auth word right after "without / sem / sin" in a sentence that denies (reject, block, deny, refuse, forbid,
+    //     prevent, must not, cannot, never, nobody… + PT / ES) is an authentication requirement, strong: "Reject requests without a valid
+    //     access token", "Users without MFA must not access the admin panel", "Rejeitar pedidos sem um token de acesso válido", "Los
+    //     usuarios sin MFA no pueden acceder al panel" (the negation reading is classify.js's — negationOf (c));
+    // (2) a CREDENTIAL HANDLED — a secret, a key, a token, a credential or a password in a sentence about logs, a repository, plain text,
+    //     hashing, a vault, rotation, a leak, hard-coding or masking is secrets handling, strong: "No API keys are logged", "No secrets in
+    //     the repository; load them from the vault", "Hash passwords with bcrypt", "Rotate the database credentials" ("log in" / "logged
+    //     in" never count; a bare PT / ES "registo" / "registro" is also a sign-up: only "nos registos" / "en los registros").
     cues: [
+      { kind: "all", on: ["mfa", "2fa", "two-factor", "multi-factor", "multifactor", "authentication", "autenticação", "autenticacao", "autenticación",
+        "access token", "refresh token", "token de acesso", "token de acceso", "api key", "chave de api", "clave de api", "credential", "credencial",
+        "credenciais", "sso", "single sign-on", "password", "palavra-passe", "senha", "contraseña", "dois fatores", "dos factores", "doble factor",
+        "multifator", "oidc", "saml", "valid token", "invalid token", "expired token", "token válido", "token inválido", "token expirado",
+        "token caducado"], then: "strong",
+        rules: [
+          { kind: "near", before: { words: [[["without", "sem", "sin"], { optional: ["a", "an", "the", "any", "um", "uma", "o", "un", "una", "el", "la",
+            "nenhum", "nenhuma", "ningún", "ninguna"] }, { optional: ["valid", "válido", "válida", "valido", "valida", "active", "ativo", "activo",
+            "proper", "second"] }]], chars: 40, edge: "letter" } },
+          { kind: "sentence", edge: "letter", phrases: ["reject(?:s|ed|ing)?", "refus(?:e|es|ed|ing)", "den(?:y|ies|ied|ying)", "block(?:s|ed|ing)?",
+            "forbid(?:s|den|ding)?", "prohibit(?:s|ed|ing)?", "prevent(?:s|ed|ing)?", "disallow(?:s|ed|ing)?", "must not", "mustn['’]t", "cannot",
+            "can['’]t", "may not", "should not", "shouldn['’]t", "shall not", "never", "nobody", "no one", "rejeit(?:ar|a|am|ad[oa]s?)",
+            "recus(?:ar|a|am|ad[oa]s?)", "bloque(?:ar|ia|iam|a|an|ad[oa]s?)", "imped(?:ir|e|em|id[oa]s?)", "pro[ií]b(?:ir|e|em|id[oa]s?)",
+            "não (?:pode|podem|deve|devem|poderá|poderão|consegue|conseguem)", "nunca", "ninguém", "rechaz(?:ar|a|an|ad[oa]s?)",
+            "deneg(?:ar|ad[oa]s?)", "denieg(?:a|an)", "impid(?:e|en)", "prohib(?:ir|id[oa]s?)", "prohíb(?:e|en)",
+            "no (?:puede|pueden|debe|deben|podrá|podrán)", "jamás", "nadie"] },
+        ] },
+      { kind: "sentence", on: ["api key", "secrets", "credential", "access token", "refresh token", "password", "palavra-passe", "senha", "contraseña",
+        "token de acesso", "chave de api", "credencial", "credenciais", "token de acceso", "clave de api", "segredos", "secretos"], then: "strong",
+        edge: "letter", phrases: ["logs(?![^\\S\\n]+(?:in|on|out)(?![\\p{L}]))", "logged(?![^\\S\\n]+(?:in|on|out)(?![\\p{L}]))", "logging(?![^\\S\\n]+(?:in|on|out)(?![\\p{L}]))", "log files?",
+          [["the", "an?", "our", "audit", "error", "access", "application", "server", "debug"], "log(?![^\\S\\n]+(?:in|on|out)(?![\\p{L}]))"],
+          "repositor(?:y|ies)", "repos?", "git", "github", "gitlab", "source code", "plain[- ]?text", "clear[- ]?text", "hash(?:es|ed|ing)?", "bcrypt",
+          "argon2", "scrypt", "pbkdf2", "salt(?:s|ed|ing)?", "vaults?", "rotat\\p{L}*", "leak(?:s|ed|ing|age)?", "hard-?coded", "hardcod\\p{L}*",
+          "redact\\p{L}*", "mask(?:s|ed|ing)?", "environment variables?", "env vars?", "kms", "keychain",
+          "(?:nos|nas|aos|dos) registos", "registad[oa]s? nos", "repositórios?", "cofres?", "texto simples", "texto claro", "rod(?:ar|ad[oa]s?)",
+          "rotaç\\p{L}*", "vaz(?:ar|am|a|amentos?)", "fugas?", "mascar\\p{L}*", "código[- ]fonte",
+          "(?:en|de) los registros", "registrad[oa]s? en", "repositorios?", "bóvedas?", "texto plano", "rotar", "rotaci\\p{L}*", "filtraci\\p{L}*",
+          "enmascar\\p{L}*", "código fuente"] },
       { kind: "near", on: ["dois fatores", "multifator", "dos factores", "doble factor", "multi-factor", "multifactor"], then: "keep",
         before: { words: [[["authenticat\\p{L}*", "auth", "log-?ins?", "log in", "log(?:s|ged|ging) in", "sign-?ins?", "sign in", "sign(?:s|ed|ing) in",
           "sso", "verification", "autenticaç\\p{L}*", "autenticac\\p{L}*", "autenticar", "verificaç\\p{L}*", "verificac\\p{L}*", "início de sessão",
@@ -719,6 +841,19 @@ const SIGNALS = {
       "data retention", "anonymiz", "anonymis", "pseudonymiz",
       "pseudonymis", "data minimi", "data processing agreement", "privacy by design", "privacy policy", "privacy notice",
       "special category data", "data controller", "data processor", "international transfer", "standard contractual clauses",
+      // 1.24 r6 F6 / F-I5 — recall: health data about patients (special category), identity checks (KYC), national identifiers, a
+      // passport number, a user's location (a person's location is personal data; a parcel's is not — "location tracking" is an anchor)
+      "medical record", "health record", "patient record", "patient data", "clinical record", "medical history", "electronic health record",
+      "protected health information", "PHI", "EHR", "kyc", "know your customer", "know-your-customer", "passport number", "social security number",
+      "ssn", "national insurance number", "national id number", "national identity number", "user location", "user's location", "users' location",
+      "users’ location", "location of the user", "location of users",
+      // PT
+      "registo médico", "registro médico", "registo clínico", "processo clínico", "histórico médico", "histórico clínico", "historial médico", "prontuário", "dados de pacientes", "dados dos pacientes", "dados do paciente",
+      "número de segurança social", "número da segurança social", "localização do utilizador", "localização dos utilizadores",
+      "localização do usuário", "localização dos usuários",
+      // ES
+      "historial clínico", "historia clínica", "expediente médico", "datos de pacientes", "datos de los pacientes", "datos del paciente", "número de la seguridad social",
+      "número de seguridad social", "ubicación del usuario", "ubicación de los usuarios", "ubicación de usuarios",
       // PT
       "dados pessoais", "dado pessoal", "proteção de dados", "protecao de dados", "titular dos dados", "titulares dos dados",
       "direito ao apagamento", "direito ao esquecimento", "direito de apagamento", "portabilidade dos dados",
@@ -742,6 +877,22 @@ const SIGNALS = {
       // C4: generic alone — an OAuth consent screen, a trash folder's retention period, an archive's retention policy are no
       // personal-data processing. WEAK (EN / PT / ES alike): +privacy only once another privacy signal corroborates them.
       "consent", "retention period", "retention policy", "retention policies",
+      // 1.24 r6 F6 / F-I5 — anchors: an address, a birth date, location tracking, an ID document / passport / national tax number, a
+      // fingerprint, a face (facial recognition is +ai strong too), health information, a recorded call — each personal data only beside
+      // another signal ("Track the parcel location", "Show the NIF on the invoice" stay hints)
+      "home address", "postal address", "mailing address", "street address", "dates of birth", "birth date", "birthdate", "DOB",
+      "location tracking", "location history", "background location", "live location",
+      "real-time location", "passport", "id document", "identity document", "id card", "identity card",
+      "driver's license", "driving licence", "identity verification", "identity check",
+      "fingerprint", "facial recognition", "face recognition", "health information",
+      "call recording", "recorded calls", "record calls", "NIF", "NIE", "DNI", "CPF",
+      // PT
+      "morada", "endereço residencial", "endereço postal", "rastreamento de localização", "rastreio de localização", "histórico de localização",
+      "passaporte", "documento de identificação", "documento de identidade", "cartão de cidadão", "impressão digital", "impressões digitais",
+      "reconhecimento facial", "número de contribuinte", "gravação de chamadas", "gravações de chamadas",
+      // ES
+      "domicilio", "dirección postal", "seguimiento de ubicación", "historial de ubicación", "pasaporte", "documento de identidad", "huella dactilar",
+      "huellas dactilares", "reconocimiento facial", "grabación de llamadas", "grabaciones de llamadas",
       // PT
       "dados do utilizador", "dados dos utilizadores", "dados de utilizador", "dados do cliente", "dados dos clientes",
       "perfil do utilizador", "perfil de utilizador", "perfil do cliente", "endereço de email", "endereço de e-mail",
@@ -758,6 +909,13 @@ const SIGNALS = {
       "consentimiento", "plazo de conservación", "periodo de retención", "período de retención", "política de retención", // C4 (see EN)
       "política de conservación",
     ],
+    // 1.24 r6: one concept, one signal — a recorded call, a tracked location (EN / PT / ES)
+    concepts: {
+      call: ["call recording", "recorded calls", "record calls", "gravação de chamadas", "gravações de chamadas", "grabación de llamadas",
+        "grabaciones de llamadas"],
+      location: ["location tracking", "location history", "background location", "live location", "real-time location", "rastreamento de localização", "rastreio de localização",
+        "histórico de localização", "seguimiento de ubicación", "historial de ubicación"],
+    },
   },
   // +dist (1.17 D): distributed systems and data consistency — a write that reaches more than one system (a database AND a
   // broker, a cache, another service), delivery guarantees, idempotency, concurrency. STRONG: the named brokers / job and workflow

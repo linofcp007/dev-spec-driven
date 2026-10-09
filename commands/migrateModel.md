@@ -1,5 +1,5 @@
 ---
-description: (+ai) Eval-gated migration to a new/replacement model — never migrate blind. PT - migração de modelo com evals (+ai). ES - migración de modelo con evals (+ai).
+description: (+ai) Eval-gated migration to a new or replacement model — never migrate blind.
 argument-hint: "[feature name] [target model]"
 ---
 

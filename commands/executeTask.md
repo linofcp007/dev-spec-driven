@@ -1,5 +1,5 @@
 ---
-description: Phase 6 — implement tasks in order, choosing the loop (core / red-green-refactor / prompt-iteration) per task; --subagents dispatches an implementer + reviewer per task. PT - executa as tarefas. ES - ejecuta las tareas.
+description: Phase 6 — implement the tasks in order, the right loop per task; --subagents runs an implementer + reviewer per task.
 argument-hint: "[feature name | task number | 'next'] [--subagents]"
 ---
 

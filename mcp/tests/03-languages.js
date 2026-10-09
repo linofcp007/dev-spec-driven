@@ -11,7 +11,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
   {
     const I = require("./lib/i18n.js");
     // European-only vocabulary a pt-BR string must never hold (the transform's job) — whole words, case-insensitive.
-    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|contigo|tens|podes|queres)(?![\p{L}])|(?<![\p{L}])(?:a correr|à espera)(?![\p{L}])|por defeito|por omissão/iu;
+    // (1.24 r6 H-I5: + revisto / revista(s) / revistos — Brazil says revisado)
+    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|revist[oa]s?|contigo|tens|podes|queres)(?![\p{L}])|(?<![\p{L}])(?:a correr|à espera)(?![\p{L}])|por defeito|por omissão/iu;
     // 1. language codes: aliases fold to pt-BR; pt / pt-PT stay European; the strict reader refuses the unknown
     ok(["pt-BR", "pt_BR", "pt-br", "ptbr", "PT-BR", " pt_br "].every((l) => S.normalizeLang(l) === "pt-BR" && S.canonicalLang(l) === "pt-BR") &&
       ["pt", "pt-PT", "pt_pt", "PT"].every((l) => S.normalizeLang(l) === "pt" && S.canonicalLang(l) === "pt") &&
@@ -348,5 +349,49 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
       ["en", "pt", "es", "pt-BR"].every((l) => runnable[l] >= 60 && runnable[l] === runnable.en) && br.includes(I.DEV_SPEC + " done csv-export 2 --run") && /^Execute: /.test(br) && /equipe/.test(br),
       "1.21 F3: every message that says to run the CLI prints `node \"<clone>/cli/dev-spec.js\" …` (this clone's path) in EN / PT / ES / pt-BR — done --run, finish --run, drift, the fast-forward; no bare `dev-spec <command>` outside the descriptions and the committed-file texts; pt-BR keeps the line byte for byte (got " +
       JSON.stringify({ devSpec: I.DEV_SPEC, perLang, bare, runnable, br }) + ")");
+  }
+
+  { // 1.24 r6 H6: the ES steering stubs say "funcionalidad" where "función" reads as a code function (structure.md's module
+    // boundaries, observability.md's per-feature metrics) — EN says feature there
+    const I = require("./lib/i18n.js");
+    const st = I.steeringStub("structure.md", "es"), ob = I.steeringStub("observability.md", "es");
+    ok(!/cada función expone|no importa ninguna función/.test(st) && /cada funcionalidad expone un único punto de entrada/.test(st) && /lib\/\* no importa ninguna funcionalidad/.test(st) &&
+      !/Por función:/.test(ob) && /Por funcionalidad: conteo de solicitudes/.test(ob),
+      "1.24 r6 H6: ES structure.md / observability.md stubs — 'cada funcionalidad expone…', 'Por funcionalidad:' (a feature, never a code function)");
+  }
+
+  { // 1.24 r6 H8 + H9: pt-BR says "revisado" (never the European "revisto"), "+N mais", and "tela" takes its own (feminine)
+    // article and possessive; PT's change-approach question asks why the change touches only that, as EN / ES do
+    const I = require("./lib/i18n.js");
+    const tr = I.toPtBr;
+    const revBr = ["modelo de ameaças revisto.", "documentado, revisto, na biblioteca", "os contratos revistos", "a lista revista", "as regras revistas"].map((s) => tr(s));
+    const ecra = tr("O erro aparece no ecrã, num ecrã e no teu ecrã; o ecrã de login, um ecrã de ajuda, os ecrãs do seu ecrã e o leitor de ecrã.");
+    const ptA = I.msg("pt").clarify.changeApproach, brA = I.msg("pt-BR").clarify.changeApproach;
+    ok(revBr.join(" | ") === "modelo de ameaças revisado. | documentado, revisado, na biblioteca | os contratos revisados | a lista revisada | as regras revisadas" &&
+      I.msg("pt").gates.more(3) === "+3 mais" && I.msg("pt-BR").gates.more(3) === "+3 mais" &&
+      ecra === "O erro aparece na tela, em uma tela e na sua tela; a tela de login, uma tela de ajuda, as telas da sua tela e o leitor de tela." &&
+      tr(ecra) === ecra && ptA === "Escreve a Abordagem no change.md: o que a alteração toca e porque é só isso." &&
+      brA === "Escreva a Abordagem no change.md: o que a alteração toca e por que é só isso.",
+      "1.24 r6 H8 + H9: pt-BR — revisto/revista(s) → revisado(s)/revisada(s); '+N mais'; ecrã → tela with its article (no/num/o/um/os/do seu/teu → na/em uma/a/uma/as/da sua); PT changeApproach asks why that is all of it (got " +
+      JSON.stringify({ revBr, more: I.msg("pt").gates.more(3), ecra, ptA, brA }) + ")");
+  }
+
+  { // 1.24 r6 H-I4: spec_classify reads pt and pt-BR alike (lang stays "pt" — a stable field) and says which one the wording is:
+    // `langHint: "pt-BR"` when the Brazilian markers outweigh the European ones (você, usuário, arquivo, tela, cadastrar, "o time"…);
+    // none for European wording, another language or an explicit lang pt-BR
+    const brText = "Permitir que o usuário faça upload de um arquivo na tela de cadastro";
+    const br = payload(await rpc("tools/call", { name: "spec_classify", arguments: { description: brText } }));
+    const team = S.classify("Você pode exportar a planilha do time de vendas", {});
+    const eu = S.classify("Permitir que o utilizador carregue um ficheiro no ecrã de registo", {});
+    const es = S.classify("Exportar facturas en PDF para el cliente", {});
+    const en = S.classify("Add a CSV export for the time sheet", {});
+    const explicitBr = S.classify(brText, { lang: "pt-BR" });
+    const explicitPt = S.classify(brText, { lang: "pt" });
+    const accents = [S.classify("Relatório eletrônico de vendas", {}), S.classify("Relatório electrónico de vendas", {})];
+    ok(br.lang === "pt" && br.langHint === "pt-BR" && team.langHint === "pt-BR" && eu.lang === "pt" && !("langHint" in eu) && !("langHint" in es) &&
+      !("langHint" in en) && explicitBr.lang === "pt-BR" && !("langHint" in explicitBr) && explicitPt.langHint === "pt-BR" &&
+      accents[0].langHint === "pt-BR" && !("langHint" in accents[1]) && JSON.stringify(br.tracks) === JSON.stringify(S.classify(brText, {}).tracks),
+      "1.24 r6 H-I4: Brazilian wording gets langHint 'pt-BR' (lang stays 'pt'; MCP = engine) — você / usuário / arquivo / tela / cadastro, 'o time', eletrônico; European wording, ES, EN and an explicit pt-BR get none (got " +
+      JSON.stringify([br.lang, br.langHint, team.langHint, eu.langHint, es.langHint, explicitBr.langHint, explicitPt.langHint, accents.map((r) => r.langHint)]) + ")");
   }
 };

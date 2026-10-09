@@ -25,37 +25,55 @@ try { require("module").enableCompileCache?.(); } catch { /* never a reason to f
 // no read (a plugin update or an edit since the build). A missing, broken or stale bundle: the modules, silently — hooks
 // and the status line print nothing about it. The bundle runs each module's source verbatim (its own __dirname, the same
 // load order and __link): no behaviour differs. docs/maintainers/architecture.md → The build.
+// 1.24 r6 B-I1: where it loaded from is recorded (ENGINE_SOURCE → the facade's `engineSource`, which `dev-spec version` reports):
+// { kind: "modules" | "bundle", requested (DEV_SPEC_BUNDLE on), file (the bundle looked for), skipped: null | "missing" |
+// "other-version" | "stale" | "broken", pathIgnored (a DEV_SPEC_BUNDLE_PATH that is no absolute .js path) } — the choice itself
+// is unchanged and still silent.
+let ENGINE_SOURCE = null;
 const { i18n, engine } = loadEngine();
 function loadEngine() {
-  if (/^(?:1|true|yes|on)$/i.test(String(process.env.DEV_SPEC_BUNDLE || "").trim())) {
+  const requested = /^(?:1|true|yes|on)$/i.test(String(process.env.DEV_SPEC_BUNDLE || "").trim());
+  let file = null, skipped = null, pathIgnored = false;
+  if (requested) {
     try {
       const fs = require("fs"), path = require("path");
       const given = String(process.env.DEV_SPEC_BUNDLE_PATH || "").trim();
-      const b = require(path.isAbsolute(given) && /\.js$/i.test(given) ? given : path.join(__dirname, "spec.bundle.js"));
-      const pkg = fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8");
-      const version = JSON.parse(pkg.charCodeAt(0) === 0xfeff ? pkg.slice(1) : pkg).version;
-      const current = ([rel, size, mtimeMs]) => {
-        const st = fs.statSync(path.join(__dirname, ...String(rel).split("/")), { throwIfNoEntry: false });
-        return !!st && st.size === size && st.mtimeMs === mtimeMs;
-      };
-      if (b.stamp.version === String(version).trim() && b.stamp.files.length > 0 && b.stamp.files.every(current)) {
-        const req = b.load(__dirname);
-        return { i18n: req("./i18n.js"), engine: req("./engine/index.js") };
+      const usable = path.isAbsolute(given) && /\.js$/i.test(given);
+      pathIgnored = given !== "" && !usable;
+      file = usable ? given : path.join(__dirname, "spec.bundle.js");
+      skipped = fs.existsSync(file) ? "broken" : "missing"; // until the checks below pass
+      if (skipped === "broken") {
+        const b = require(file);
+        const pkg = fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8");
+        const version = JSON.parse(pkg.charCodeAt(0) === 0xfeff ? pkg.slice(1) : pkg).version;
+        const current = ([rel, size, mtimeMs]) => {
+          const st = fs.statSync(path.join(__dirname, ...String(rel).split("/")), { throwIfNoEntry: false });
+          return !!st && st.size === size && st.mtimeMs === mtimeMs;
+        };
+        if (b.stamp.version !== String(version).trim()) skipped = "other-version";
+        else if (b.stamp.files.length > 0 && !b.stamp.files.every(current)) skipped = "stale";
+        else if (b.stamp.files.length > 0) {
+          const req = b.load(__dirname);
+          const loaded = { i18n: req("./i18n.js"), engine: req("./engine/index.js") };
+          ENGINE_SOURCE = { kind: "bundle", requested, file, skipped: null, pathIgnored };
+          return loaded;
+        }
       }
     } catch { /* missing, broken or foreign: the modules */ }
   }
+  ENGINE_SOURCE = { kind: "modules", requested, file, skipped, pathIgnored };
   return { i18n: require("./i18n.js"), engine: require("./engine/index.js") };
 }
 const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalGuardDecision, approvalGuardLevel,
   approvalRolesOf, approvePhase, archiveFeature, artifactState, backlog, BACKLOG_ACTIONS, catalog, changelog,
-  checklistMd, clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, coverage, crashExit, createFeature,
+  checklistMd, clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, vacuousRun, coverage, crashExit, createFeature,
   crossFeatureAcs, csvCell, decide, decisionLog, designSaveCheck, detectPhase, detectTracks, drift, earsFeature,
   earsSteps, earsValidate, engineVersion, etaText, evidenceMode, existingFeature, expectsFail, EXPORT_FORMATS,
   exportSpecs, extractSection, featureFlow, featureLang, featureLocked, featureOverlaps, featurePercent,
-  featurePlaceholders, finishFeature, FLOWS, forecastData, globalConstraints, globFiles, glossaryEntries, guardCheck,
+  featurePlaceholders, finishFeature, FLOWS, forecastData, gateRefusal, globalConstraints, globFiles, glossaryEntries, guardCheck,
   guardEnabled, guardLevel, sessionProject, sessionPath, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
-  isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
-  manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
+  isDevSpecDir, isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
+  manageFeature, markdownToHtml, markRoadmapStale, matrixCsv, maybeRefreshCatalog, mdPlainText, refreshStaleRoadmap, ROADMAP_STALE_FILE, roadmapStale, staleGeneratedText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
@@ -70,7 +88,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
-  changeViews, decodeText,
+  changeViews, closestName, decodeText,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
@@ -78,10 +96,12 @@ module.exports = {
   CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)
   DEV_SPEC: i18n.DEV_SPEC, // 1.21 F3: `node "<clone>/cli/dev-spec.js"` — the runnable CLI line (tool descriptions, messages)
   portableCli: i18n.portableCli, // the runnable line → `dev-spec`, for text meant to be committed
+  engineSource: Object.freeze({ ...ENGINE_SOURCE }), // 1.24 r6 B-I1: modules or the bundle, and why a requested bundle was skipped (`dev-spec version`)
   VALID_TRACKS,
   PHASES,
   resolveProjectDir, // --project / projectDir > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest dev-spec project at or above cwd > cwd
   unexpandedVar, // 1.23 review: a value holding a variable left unexpanded ("${…}", a leading $NAME, %NAME%) — never a folder name
+  closestName, // 1.24 r6: the did-you-mean — the candidate nearest a mistyped word (optimal-string-alignment distance), else null
   specsRoot,
   slugify,
   normalizeTracks,
@@ -148,6 +168,7 @@ module.exports = {
   windowsShellFailure, // `done --run` on Windows: did cmd.exe itself fail (unknown command / its syntax error)? — the --shell hint
   resolveRunShell, // full review Ga9: `done --run` / `finish --run` — the shell (a bare bash → Git Bash on Windows; WSL's launcher refused)
   isWslLauncher,
+  vacuousRun, // 1.24 r6 D4: a pass whose output shows no test ran (node --test "tests 0", go "[no tests to run]"…) — done --run refuses it (no-tests)
   couldNotRunOutput, // full review Ga2 / Ga9: a run's output shows it never exercised the check (WSL relay, spawn error, missing test file…)
   crashExit, // 1.23 review: a crash's exit code (128 + SIGILL/ABRT/BUS/FPE/SEGV, a Windows NTSTATUS crash) — a failed run, never a red test
   posixPwshScript, // 1.21.1 review: a pwsh script whose `$…` / backticks a POSIX shell (/bin/sh, bash) would expand first — refused
@@ -179,6 +200,7 @@ module.exports = {
   // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's DEV_SPEC_* defaults (fallbacks)
   statusLine,
   statusLineProject,
+  isDevSpecDir, // 1.24 r6 B7: does <dir>/.specs/ belong to dev-spec (roadmap.json, steering/, a feature's .state.json)? — the CLI refuses a project's .specs/ named as the project
   isNetworkPath,
   networkPathInside, // 1.16 verify NEW-3: the guard's (and the save hook's) text-only rule for a network path
   planBridge,
@@ -199,6 +221,12 @@ module.exports = {
 
   catalog, // spec_catalog / `dev-spec catalog` (.specs/SPECS.md)
   maybeRefreshCatalog,
+  // 1.24 r6 I-I1 — the save hook's deferred ROADMAP.* / SPECS.md refresh (a stamp in .specs/.execution/, refreshed once a turn)
+  ROADMAP_STALE_FILE, // "roadmap-stale" — the stamp's name in .specs/.execution/ (the Stop hook and the pre-commit check stat it raw)
+  markRoadmapStale, // (projectDir) → true when the stamp is there — hooks/spec-hook.js on a spec save, instead of the refresh
+  roadmapStale, // (projectDir) → is the stamp there?
+  refreshStaleRoadmap, // (projectDir) → { refreshed } — the refresh, once, when stamped (Stop / SessionStart / pre-commit)
+  staleGeneratedText, // (projectDir, "ROADMAP.md" | "SPECS.md") → while stamped, the text the refresh would write (in memory), else null — the specs:// resources
   specUpgrade, // spec_upgrade / `dev-spec upgrade [--apply]` / `/spec-upgrade` (audit + safe migrations, .specs/UPGRADE.md)
   specVersionStatus, // roadmap.json meta.specVersion vs the engine — the SessionStart upgrade notice
   engineVersion,
@@ -325,9 +353,20 @@ module.exports = {
 // catalog refresh after it); the engine's writers keep the cache true (forgetCached / invalidateReadCache) and it is
 // dropped when the call returns — never shared between calls. A caller that makes several calls as one step (a hook)
 // can wrap them in withReadCache itself.
+// 1.24 r6 — a write the engine's write gate refused (a link under .specs/, a path of the wrong kind: engine/files.js
+// specsWriteGate) is that call's ANSWER, never an exception: { ok: false, linked | wrongKind: true, path, error } (localized), on
+// every surface alike (MCP isError, CLI exit 1). Any other exception is thrown as before.
 for (const [name, fn] of Object.entries(module.exports)) {
   if (typeof fn !== "function" || name === "msg") continue;
-  const call = function () { return withReadCache(() => fn.apply(this, arguments)); };
+  const call = function () {
+    try {
+      return withReadCache(() => fn.apply(this, arguments));
+    } catch (e) {
+      const refused = gateRefusal(e);
+      if (refused) return refused;
+      throw e;
+    }
+  };
   Object.defineProperty(call, "name", { value: fn.name || name });
   module.exports[name] = call;
 }

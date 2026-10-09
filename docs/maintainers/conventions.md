@@ -19,10 +19,40 @@ and U+FEFF gotchas are in CLAUDE.md.
   feature whose title (`specTitle` of requirements.md / spike.md / bug.md) is another long name is refused (`slugTaken`,
   `err.slugTaken` — it names the slug, by which that feature stays reachable); it used to answer ok and drop the new summary.
   The name is written as ONE line wherever it lands (titles, `{{name}}` — `flatText`; createFeature, applyTracks, the
-  importer). **Never through a link:** `linkedSpecsFolder()` (scaffold.js, over `specsWriteContained`) refuses spec_init /
+  importer) and inert to HTML comments (1.24 r6 G4 — `specNameText`, state.js: `<!--` / `-->` → `&lt;!--` / `--&gt;`; "Login <!-- v2"
+  opened a comment in every title that hid the scaffold's criteria — the slug is the name's, as before). **Never through a link:** `linkedSpecsFolder()` (scaffold.js, over `specsWriteContained`) refuses spec_init /
   steering_scaffold through a linked `.specs/steering/`, and spec_create / add_track through a linked `.specs/<feature>/`
   (or its steering, when a track brings a steering file) — `linked: true`, `err.specsLinked`, nothing written (spec_export and
   templates init already refused); the export's Tasks table and the roadmap row read tasks.md through `readContained`.
+- **The write gate (1.24 r6 — ONE gate for everything under .specs/).** `specsWriteGate(target, {dir, createOnly})`
+  (engine/files.js) runs first in every engine writer — `writeFileAtomic`, `writeIfAbsent`, `ensureDir` and `specWrite` (the
+  append: `{append: true}` opens with O_APPEND | O_CREAT | O_NOFOLLOW where the platform has it, the target lstat'ed first) — and
+  `withLockFile` checks its lock's path the same way BEFORE the lock exists. No other mcp/lib source writes with a raw fs call
+  (mcp/tests/16-conventions.js guards it: writeFileSync / appendFileSync / renameSync / mkdirSync / copyFileSync / cpSync /
+  symlinkSync / linkSync / writeSync / an openSync with a write flag — files.js alone is allowed). The gate finds the `.specs`
+  folder a path lies in (`specsRootOf`: the nearest ancestor of that name — a path outside every .specs/ is not gated; the
+  engine writes nothing there) and refuses (`specsWriteBlock`, lstat of each part below .specs/ + one realpath of the deepest
+  that exists): **a link on the way** — a folder between .specs/ and the target (a feature folder, `.execution/`, `.history/`,
+  `_archive/`, `_archive/<slug>/`) or the target itself that is a symbolic link / junction, or that resolves outside the real
+  .specs/ (another reparse point; a part GONE between its lstat and that realpath — a lock another process released meanwhile — is
+  judged by its folder, as an absent part is: its waiter was refused as "a link", and one of two racing backlog adds was lost
+  now and then — mcp/tests/12-lifecycle-review6.js); **the wrong kind** — a file where a folder is needed (.specs itself, a feature path,
+  `_archive`), a folder where a file is written (ROADMAP.md, an export). .specs/ itself may be a link (a project keeping its specs
+  elsewhere): what is checked lies below it. A create-only write (`createOnly`) passes an existing target that is itself a link —
+  "wx" never writes through it. The refusal is an Error (`code` ESPECSLINK / ESPECSKIND, `gate` {kind, rel, file}, the message in
+  the project's language: `err.specsLinked` (a folder) · `specsLinkedFile` · `specsNotFolder` · `specsNotFile`); **the facade
+  answers it** (spec.js's wrapper, `gateRefusal`) as the call's result — `{ok: false, linked | wrongKind: true, path, error}` —
+  on every surface alike (MCP isError, CLI exit 1 with one line; it was a raw EEXIST / ENOTDIR / EISDIR, a stack on the CLI). The
+  feature mutators meet it up front: their lock is the first write into the folder, so `featureLocked` / `withMoveLock` refuse a
+  linked feature folder (or `_archive/<slug>`) once, before anything is written, in the feature's language (`onRefused`; a
+  path of the wrong kind at the lock is the lock's own business — a folder named .lock is a stuck lock). Best-effort writers
+  swallow it like any other failure: `.specs/.gitignore` linked is left alone, observed.jsonl linked logs nothing, a linked
+  ROADMAP.md is not refreshed. **Why:** a committed `.specs/<feature> -> ~/elsewhere` got every tick, approval, brief,
+  decision, retro.md and the lock written into the folder it points at; `.execution/merge-summary.md -> ~/.bashrc` got the
+  merge summary (spec text) written into the user's shell profile (the in-place `fs.writeFileSync` of the derived files and
+  the appends followed file links; `writeFileAtomic`'s rename replaced a file link but wrote through a folder link). Known
+  limit: a write after another in one call can still be refused (a tasks.md that is itself a link: `done` records its
+  evidence in .state.json, then the tick is refused) — nothing is ever written THROUGH a link.
 - **The project folder: `resolveProjectDir()` (files.js) — every surface's default.** The explicit argument (CLI `--project`, a
   tool's `projectDir`) > `SPEC_PROJECT_DIR` > `CLAUDE_PROJECT_DIR` > **the nearest folder at or above the working folder that
   holds a dev-spec .specs/** (`nearestProject()`: `isDevSpecDir` — roadmap.json, steering/ or a feature's .state.json — the
@@ -31,18 +61,27 @@ and U+FEFF gotchas are in CLAUDE.md.
   folder. A value holding a variable left unexpanded — any `${`, a leading `$NAME`, a `%NAME%` (`unexpandedVar()`) — is
   unusable and falls through (1.23 review: `SPEC_PROJECT_DIR="${CLAUDE_PROJECT_DIR}/"`, `$CLAUDE_PROJECT_DIR` or
   `%CLAUDE_PROJECT_DIR%` created that literal folder; only a whole `${VAR}` was caught). A separate project INSIDE another one
-  needs `--project .` (or its own `.specs/` first — an empty one is enough). The CLI validates `--project` itself (below); a
+  needs `--project .` (or its own `.specs/` first — an empty one is enough). The CLI validates `--project` itself (below), the
+  MCP server a tool's `projectDir` by the same rule (1.24 r6 — an existing folder, only spec_init creates one: mcp.md → Argument
+  validation); a
   PATH argument (`scan <path>`, `ears <file>`, `import <tool> <path>`) is read from the project when it was NAMED (`--project`
   or the env — as import always read it), else from the working folder (`argPath()`: a path typed in a subfolder is relative
   to it, as in git; import hands the engine that path relative to the project, which still refuses one outside it), and
-  `scan <subfolder>` reports in the project's language (`scanCodebase {lang}`).
+  `scan <subfolder>` reports in the project's language (`scanCodebase {lang}`). `ears <word>`: a file → linted; else a word
+  that reads as a path (a separator, or a `.md` / `.markdown` / `.txt` name) and names no feature is `cliOutput.earsNoFile`
+  (1.24 r6 B9 — `ears missing.md` answered "Feature 'missing-md' not found"); anything else is a feature name.
 - **`spec_feature remove` needs `confirm: true`** (CLI `--yes`). Without it nothing is deleted and the
   result (an error with `needsConfirm`) lists what would be — `removePreview()` checks roadmap.json first
-  and uses `lstat` (a symlink/junction is one entry, never followed). Prefer archive (reversible).
+  and uses `lstat` (a symlink/junction is one entry, never followed). Prefer archive (reversible). **A feature folder that is
+  itself a link (1.24 r6)** is removed as the link alone (`removeLinkEntry` — unlink, rmdir as the fallback; the target and its
+  files are kept): the preview says so (`link: true`, `wouldDelete.files` 0, `featureOps.removeNeedsConfirmLink`) and the remove
+  runs under the roadmap lock only — the feature lock would be created THROUGH the link (it was: a `.lock` left in the target);
+  every other mutator of a linked feature folder is refused (the write gate, above).
 - **Rename follows every reference** (`renamePlan`, computed BEFORE the folder moves so the old slug still resolves,
   written after): roadmap.json dependsOn, `_Supersedes: <old>/…_` markers in other features' requirements.md (active
   and archived; never one in a comment/fence), and archived features' `.state.json → archived` records. A broken
-  archived state file that names the old slug refuses the rename.
+  archived state file that names the old slug refuses the rename. A backlog item named like the NEW slug is dropped
+  (`pruneBacklog`, as create and restore do — 1.24 r6 G5: it was listed under Features and Backlog) → `removedFromBacklog`.
 - **A change's requirements.md / tasks.md are its change.md (1.21 F5).** `readIfExists`, `existsCached`, `readContained`
   and `writeFileAtomic` alias a missing `requirements.md` / `tasks.md` to the folder's `change.md` when that folder's
   `.state.json` says `kind: "change"` (`changeAlias()`, files.js; `readRaw` / `existsRaw` are the unaliased readers). A raw
@@ -88,7 +127,18 @@ and U+FEFF gotchas are in CLAUDE.md.
   conflict: ours kept there, `{path, base?, ours?, theirs?}` reported (a missing side deleted the key), and written INTO the file as
   a top-level `mergeConflicts` list — the file stays valid JSON, the driver exits 1 (git marks it conflicted, stderr lists each
   path), and doctor fails `merge-conflicts` (`mergeConflictsCheck()`, feature + roadmap, both doctors) until someone picks the values
-  and deletes the list. An unparseable ours / theirs merges nothing (exit 1, ours untouched). `ROADMAP.md` / `.html` / `SPECS.md`
+  and deletes the list. **Two post-passes on the RESULT (1.24 review 6):** (E2) a change request reopening task n
+  (`changes[].reopened`) or an untick of n (`unticks[]`) that only ONE side recorded never reached the other side's evidence — that
+  branch's run of the task made BEFORE it won as the later run, unmarked, and a re-tick with no new run read verified (finish and
+  the execution sign-off passed). `staleMergedEvidence()` marks each merged record of slot n (the latest and its `others`) whose run
+  is older than such an event `stale` — `staleBy: "undo"` for an untick; a reopen (the spec changed) wins over an undo — unless the
+  side that recorded the event kept that task's own record (its `task` stamp) valid: a task sharing the number the reopen didn't
+  reach. A record's time is its run's `at`, or `noteAt` for a task without a _Verify:_ command (its note is the re-check). Events
+  both sides hold (the base's) were applied on both. (E5) roadmap.json: dependency edges each side added alone can close a cycle
+  together (alpha → beta here, beta → alpha there) — merged clean, every later `depend` was refused on it. `breakMergedCycles()`
+  undoes, cycle by cycle, the first edge on it ours doesn't hold: ours kept at that feature's `dependsOn`, reported as a conflict
+  (`features.<slug>.dependsOn`, theirs' list — exit 1); a cycle ours' own lists already hold is not the merge's (left as it is).
+  `lastApprovedPhase` needs no pass: it follows the merged approvals already (above). An unparseable ours / theirs merges nothing (exit 1, ours untouched). `ROADMAP.md` / `.html` / `SPECS.md`
   (`kind: "generated"`) keep ours when BOTH sides carry the AUTO-GENERATED marker (the next write regenerates them); a hand-written
   one goes to `git merge-file`. `--install [--project]` (CLI only — the engine never calls git; MCP has no tool: git runs the
   driver) writes the `.gitattributes` block (`mergeAttributes()`, pure, idempotent: a head comment + `MERGE_ATTRIBUTE_LINES`, the
@@ -185,10 +235,16 @@ and U+FEFF gotchas are in CLAUDE.md.
   has flushed — on a Linux pipe, docker or `| tee`, writes go async past the 64 KB buffer and the tail, FAIL lines and the
   total, was dropped) and for the MCP server (on stdin close it flushes its queued replies first — a slow reader on Linux
   got 0 of 8; a stdout EPIPE / EOF / ERR_STREAM_DESTROYED exits quietly 0, any other stdout error prints one stderr line
-  and exits 1). Never `process.exit()` right after a write (the CLI's `die()` under `--json` writes its small document with
+  and exits 1). **The CLI the same (1.24 r6 B2):** `stdoutError()`, installed by main() after the status line's render path
+  (which keeps its own exit-0 handler) — a reader that stops early (`export --md | head -1`, a pager quit) ends the output
+  quietly with the status the command set (`process.exitCode || 0`: `trace --csv | head` keeps trace's 1); any other stdout
+  error is one `dev-spec: <message>` line, exit 1. `console.log` swallows its own write errors, but `process.stdout.write`
+  (export, catalog, changelog, rules, trace --csv, prompts) raised an unhandled `'error'` — a stack trace and exit 1.
+  Never `process.exit()` right after a write (the CLI's `die()` under `--json` writes its small document with
   `fs.writeSync(1, …)` first). The CLI's stdin (`ears -`, `import <plan> -`, `log <f> -`, `stop-check -`) is collected as
   BYTES and decoded like a file (`readStdin` → `decodeText`: a UTF-16 BOM decides, else UTF-8 — 1.23 review: a UTF-16 document,
-  what Windows PowerShell 5.1's `>` writes, read as "0 criteria, pass" in `ears -`). The pre-commit validator reads staged
+  what Windows PowerShell 5.1's `>` writes, read as "0 criteria, pass" in `ears -`); from a terminal (`process.stdin.isTTY`)
+  it first prints one stderr line, `cliOutput.stdinHint` — type, then Ctrl+D / Ctrl+Z Enter (1.24 r6 B-I9: it looked hung). The pre-commit validator reads staged
   names NUL-separated with `core.quotePath=false`, so accented paths work, and loads the engine only once a staged
   `requirements.md` / `tasks.md` / `change.md` under a `.specs/` needs it (1.22 review — most commits stage none and paid
   ~130 ms for the require). Only EARS errors and phantom task refs
@@ -221,13 +277,36 @@ and U+FEFF gotchas are in CLAUDE.md.
   export, decide…); `checkCommandArgs()` refuses — before anything runs, after the help — a known flag the command doesn't
   read (`cliOutput.flagNotFor`, its options listed) and an argument past its last one (`extraArgs`): they were ignored —
   `approve <f> <phase> --remove` (meant --revoke) approved, `done <f> 3 4` ticked task 3 alone. `--json`, `--project` and
-  `--help` are global (`GLOBAL_OPTIONS`). `backlog` (add takes note words, rm / list don't) and `log` (a second word is `-`)
-  check theirs in their case; `--shell` / `--timeout` without `--run` (`needsRun`) and `--run` with `--evidence` / `--exit` /
+  `--help` are global (`GLOBAL_OPTIONS`). `backlog` (add takes note words, rm / list don't), `log` (a second word is `-`) and
+  `feature` (1.24 r6 B4: remove / archive / restore take the name, rename and flow one more — flow's is its `--flow` or the word,
+  never both; `--flow` on another action is refused) check theirs in their case; the contradictory pairs are usage errors too
+  (B4): `depend <f> <deps…> --clear`, `merge-state <files…> --install|--uninstall` and both switches together, `stop-check
+  --message … <words>`. **A single-value flag given twice (B5)** is refused (`refuseRepeatedFlags()`, `cliOutput.flagTwice`):
+  the parser counts each VALUE flag (`flagCount`, both `--k v` and `--k=v`) and kept the last — `approve … --role tech --role
+  product` signed for product alone; `REPEATABLE_FLAGS` are the ones a command collects every occurrence of (depend `--add` /
+  `--rm`, init `--check`, append-tasks `--req` / `--implements` / `--makes-green` / `--depends`, decide `--affects` /
+  `--supersedes` — a new collector joins that list), and append-tasks keeps its own words for `--task` / `--verify` / `--story` /
+  `--heading` / `--size`; `--shell` / `--timeout` without `--run` (`needsRun`) and `--run` with `--evidence` / `--exit` /
   `--cmd` (`runOrEvidence`) are usage errors; `undone` takes done's run flags only to refuse them (`undo.noEvidence`). A new
   command or flag gets its `COMMAND_OPTIONS` entry (extending.md). **`--project` (L14)** names an existing folder
-  (`checkProjectFlag()`): empty, an unexpanded variable (`unexpandedVar`), a file or a missing folder is refused (localized
+  (`checkProject()`): empty, an unexpanded variable (`unexpandedVar`), a file or a missing folder is refused (localized
   `cliOutput.project*`) — `init` alone may create it (`create x --project <typo>` created the whole mistyped tree); on Windows a
   trailing `"` is dropped (`--project "C:\dir\"` reaches node as `C:\dir"`). The status line's render path checks none of this.
+  **The environment too (1.24 r6 B1):** `PROJECT_SOURCE` reads resolveProjectDir's precedence in the CLI (files.js keeps its
+  signature) — `flag` · `SPEC_PROJECT_DIR` · `CLAUDE_PROJECT_DIR` · `nearest` · `cwd` — and a variable that CHOSE the project is
+  checked like `--project`: a missing folder (but for `init`) or a file is refused with the variable named
+  (`cliOutput.projectEnvMissing` / `projectEnvNotDir`) — a mistyped `SPEC_PROJECT_DIR` created that tree, a file ended in a raw
+  ENOTDIR, and `list` answered "No features". A folder without `.specs/` is fine (CLAUDE_PROJECT_DIR is any folder Claude Code
+  opened); an empty or unexpanded value still falls through. **B7:** a dev-spec project's own `.specs/` named as the project
+  (`--project <proj>/.specs`, or the variable — `spec.isDevSpecDir(parent)`) is refused naming the parent
+  (`cliOutput.projectIsSpecs`): it created `.specs/.specs/`, which then won every walk-up. `version` checks none of this — it reports.
+  **`version` / `--version` / `-V` (1.24 r6 B-I1)** — what a bug report needs: `{ok, version, cli, node, engine: {source:
+  modules|bundle, bundle: {requested, file?, skipped?: missing|other-version|stale|broken, pathIgnored?}}, project: {dir, source:
+  flag|SPEC_PROJECT_DIR|CLAUDE_PROJECT_DIR|nearest|cwd, exists, devSpec, lang}}` (`printVersion()`; human lines
+  `cliOutput.version.*`). The engine part is the facade's `spec.engineSource` — `loadEngine()` records where it loaded from and
+  why a requested bundle was skipped (the choice itself unchanged and silent). `--version` / `-V` anywhere (as `--help`) print it
+  and run nothing — the other command's words and flags are not read (`help --version` stays the help); the `version` command
+  takes no option or argument and never refuses its project (a missing one reads `exists: false`).
   **`evals` (P1)** forwards every word of the command line but the command and `--project` (the CLI passes its resolved one) —
   read with run-evals.js's rules (`evalsArgs()`: its value flags `--project` / `--model` / `--prompt` / `--max-items` take the
   next word): only the words after the feature were forwarded, so `evals --dry-run <f>` ran LIVE (paid calls). run-evals.js
@@ -241,11 +320,16 @@ and U+FEFF gotchas are in CLAUDE.md.
   value flag into `VALUE_FLAGS` — `refuseUnknownFlags()` refuses any other `--flag` before anything runs (exit 1, a
   localized did-you-mean; `done 2 --rnu` used to tick the task with no evidence). `evals` is exempt (its flags go to
   run-evals.js, which refuses its own unknown ones); `--` ends the options; `--help` anywhere prints the help and runs nothing
-  (`evals --help`: the harness's usage). An explicit
+  (`evals --help`: the harness's usage). **Per command (1.24 r6 B-I3):** `<command> --help`, `-h` (now a switch, never a
+  positional: `status -h` looked for a feature "h") and `help <command>` print `helpFor()` — that command's blocks of the one
+  `helpText()` (each line whose first word is the command, with its continuation lines; `HELP_ALIASES` na / milestones), its
+  `COMMAND_OPTIONS` (a value flag shown `--x …`) and the localized frame (`cliOutput.cmdHelp`); no command, `-h` alone or a
+  word with no block → the whole help. A new command gets its block in `helpText()` starting `  <name> ` at two spaces. An explicit
   `--include-body=false` / `--include-brief=false` is passed through as false (`boolFlag()`), as MCP receives it.
   The eval harness (`mcp/evals/run-evals.js`, which `evals` forwards to untouched) applies the same rule to its own
   switches (`--dry-run`, `--set-baseline`, `--require-live`: exit 2 otherwise).
-  Numeric flags that MCP bounds (`--cap`, `--max`) and the CLI-only `--timeout` go through `intFlag()` (integer ≥ 1).
+  Numeric flags that MCP bounds (`--cap`, `--max`) and the CLI-only `--timeout` go through `intFlag()` (integer ≥ 1; `--timeout`
+  also ≤ 2147483 — `timeoutFlag()`, Node's timer limit, 1.24 r6 B6: `cliOutput.atMost`).
   The engine refuses what the MCP schema refuses where the CLI passes raw strings: `taskNumber()` (digits only — `"1.9"` / `"2abc"` are not
   task 1 / 2), `createFeature` kind ∈ feature|bugfix|spike, `backlog` action ∈ add|rm|remove|list. **In the validator's own words**
   (`msg(lang).args`, 1.22 review) where the schema bounds a value: a task number asked for (`askedTaskNumber()` — done / undone /

@@ -29,7 +29,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite; // 1.23 review 5
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub; // 1.23 review 5 · 1.24 r6
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -47,7 +47,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite } = E); }
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub } = E); }
 
 // 1.23 review 5 — the first of `files` a write would reach through a link (a .specs/<feature>/ or .specs/steering/ that is a
 // symbolic link / junction, or resolves outside the real .specs/ — specsWriteContained) → that folder as `.specs/<rel>/`, else
@@ -355,8 +355,9 @@ function steeringPlaceholders(root) {
     const text = readIfExists(path.join(dir, name));
     if (text == null) continue;
     const body = steeringFrontMatter(text).body;
-    const templates = i18n.LANGS.map((l) => i18n.steeringStub(name, l)).filter(Boolean);
-    if (artifactState({ text: body }, { template: templates }) === "placeholder") out.push({ file: name, placeholders: placeholderReport(body).length });
+    // a known stub verbatim in any language (whitespace aside): the corpus's hashes (1.24 r6 I-I2 — every language's stub was
+    // rendered here, loading pt.js, es.js and pt-BR into each English doctor / next_action), else artifactState's own reading
+    if (isSteeringStub(name, body) || artifactState({ text: body }) === "placeholder") out.push({ file: name, placeholders: placeholderReport(body).length });
   }
   return out;
 }
@@ -616,16 +617,20 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   const existed = fs.existsSync(dir);
   // 1.23 review 5 — the name as the scaffolds write it (every title, {{name}}): ONE line, like a backlog name. A line break in it
   // opened a heading in every artifact ("Login\n## US-9 …\n- **US-9.AC-1** …" put a real criterion into requirements.md).
-  name = flatText(name);
+  // 1.24 r6 (G4): … and inert to HTML comments (specNameText: "<!--" / "-->" → &lt;!-- / --&gt;) — "Login <!-- v2" hid every
+  // criterion of its requirements.md behind the title's comment opener.
+  const nameIn = flatText(name);
+  name = specNameText(name);
   // … and never through a link: a .specs/<feature>/ that is a symbolic link / junction (or resolves outside .specs/) got every
   // scaffold — and later its ticks and approvals — written into the folder it points at.
   const linked = linkedSpecsFolder(projectDir, [statePath(dir)]);
   if (linked) return { ok: false, linked: true, error: errs(projectDir).specsLinked(linked) };
   // A folder name keeps the slug's first 64 characters: a long name that reaches an EXISTING feature holding another long name
   // (they differ only past the cut) is refused — the re-run used to answer ok and drop the new feature's summary silently.
-  if (existed && slugifyFull(name) !== slugify(name)) {
+  // (The title holds the name as written — inert since 1.24 r6, raw before: either reads as this name.)
+  if (existed && slugifyFull(nameIn) !== slugify(nameIn)) {
     const held = specTitle(readIfExists(path.join(dir, "requirements.md")) || readIfExists(path.join(dir, SPIKE_FILE)) || readIfExists(path.join(dir, "bug.md")) || "", slug);
-    if (held !== slug && slugifyFull(held) !== slugifyFull(name)) return { ok: false, slugTaken: true, feature: slug, error: errs(projectDir).slugTaken(slug, held, name) };
+    if (held !== slug && slugifyFull(held) !== slugifyFull(name) && slugifyFull(held) !== slugifyFull(nameIn)) return { ok: false, slugTaken: true, feature: slug, error: errs(projectDir).slugTaken(slug, held, nameIn) };
   }
   const pt = parseTracks(tracks);
   const given = pt.given;
@@ -665,7 +670,10 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // question / timebox on a feature or bugfix are refused — unless the caller asked for a spike and the folder already has
   // another kind (the kindKept note says so; the spike inputs are simply unused).
   if (!spike && askedKind !== "spike" && opts && ["question", "timebox"].some((k) => opts[k] != null && String(opts[k]).trim())) {
-    return { ok: false, error: i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir))).spike.spikeOnly(opts.question != null && String(opts.question).trim() ? "question" : "timebox") };
+    const SPM = i18n.msg(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir))).spike;
+    const key = opts.question != null && String(opts.question).trim() ? "question" : "timebox";
+    // 1.24 r6 B9: the CLI (opts.cli) names its flag and its spike command, as the bug prefill does — MCP keeps the key
+    return { ok: false, error: opts.cli === true ? SPM.spikeOnlyCli("--" + key) : SPM.spikeOnly(key) };
   }
   // 1.21 F3 — the bugfix prefill: validated before anything is written; on a feature or spike it is refused (unless the caller
   // asked for a bugfix and the folder already has another kind — the kindKept note says so, the inputs are unused).
@@ -807,7 +815,8 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   if (change) { // 1.21 F5 — a change (size xs): ONE file, change.md (a project's change template first); no other artifact
     put(CHANGE_FILE, scaf("change", () => i18n.change({ name, summary: writtenSummary }, lng)));
     const res = finish({ ok: true, slug, dir, kind: "change", tracks: t, lang: lng, label: trackLabel(t), created, skipped: skip });
-    if (res.ok !== false && created.includes(CHANGE_FILE)) res.note = [res.note, i18n.msg(lng).sizes.changeCreated(slug)].filter(Boolean).join(" ");
+    const SZN = i18n.msg(lng).sizes; // 1.24 r6: the CLI (opts.cli) gets its own approve / finish lines, MCP spec_approve {through}
+    if (res.ok !== false && created.includes(CHANGE_FILE)) res.note = [res.note, opts && opts.cli === true ? SZN.changeCreatedCli(slug) : SZN.changeCreated(slug)].filter(Boolean).join(" ");
     // 1.21 review C9: an EXISTING change named with tracks (a new one is refused before any write) — never silently: tracksIgnored
     const ignored = given ? pt.tracks.filter((x) => x !== "core" && !t.includes(x)) : [];
     if (res.ok !== false && ignored.length) {
@@ -1073,7 +1082,7 @@ function steeringImpactLines(r) {
 // append-if-missing, never a rewrite of what the user wrote.
 function applyTracks(projectDir, f, name, trs, lng) {
   const { slug, dir, root } = f;
-  name = flatText(name); // one line in every title it reaches (1.23 review 5)
+  name = specNameText(name); // one line in every title it reaches (1.23 review 5), inert to HTML comments (1.24 r6)
   const state = readState(projectDir, slug);
   if (state.invalid) return { ok: false, error: state.invalid };
   const coreSteering = steeringFilesForTracks([]);

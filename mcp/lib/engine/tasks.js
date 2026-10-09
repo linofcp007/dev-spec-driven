@@ -16,7 +16,7 @@ const i18n = require("../i18n.js");
 let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions, briefGlossary, briefSteering,
   bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir, errs, evidenceRule,
   existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds, extractSection,
-  extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, headRest, idKey, implementsKey, implementsRel,
+  extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, idKey, implementsKey, implementsRel,
   inactiveTaskLines, isBacktickUnit, isObj, isPackTrack, isRecord, lineMap, markerTracks, maybeRefreshRoadmap,
   normalizeEvidence, normTaskHeading, observedAny, observedStamp, own, ownEvidence, ownRecord, packTracks, planIdText,
   projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof, REPRO_SYN,
@@ -24,11 +24,11 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias;
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun;
 function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
-  extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, headRest, idKey, implementsKey,
+  extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, idKey, implementsKey,
   implementsRel, inactiveTaskLines, isBacktickUnit, isObj, isPackTrack, isRecord, lineMap, markerTracks,
   maybeRefreshRoadmap, normalizeEvidence, normTaskHeading, observedAny, observedStamp, own, ownEvidence, ownRecord,
   packTracks, planIdText, projectChecks, RE_FENCE_CLOSE, RE_LIST_ITEM, RE_TEST_REF, readIfExists, readState, redProof,
@@ -36,7 +36,7 @@ function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, b
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias } = E); }
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -122,7 +122,8 @@ function parallelBatch(tasksText, max, tracks) {
 // never fenced code — taskMarkers reads it like every marker) names tasks of the SAME tasks.md that must be done first.
 // Every reader works on ONE view — the active tasks (activeTasks) — and follows resolveTask's duplicate-number rule: a
 // dependency on number n is done once EVERY task numbered n is done; a number no active task carries never is.
-//   - next (taskSchedule): the first open task in tasks order (parseTasks: by number, stable) whose _Depends:_ are all done —
+//   - next (taskSchedule): the first open task in tasks order (taskDepGraph: by section in file order, then by number — 1.24 r6
+//     D6; parseTasks' public list stays by number) whose _Depends:_ are all done —
 //     only the task resolveTask answers for its number is a candidate. A tasks.md without _Depends:_ gets exactly the task it
 //     got before (the first open one). `skipped` = the tasks passed over, `blocked` = the tasks that can never start as things
 //     stand (a cycle, a _Depends:_ naming no task — or waiting on such a task).
@@ -163,14 +164,24 @@ function taskDependsSpec(block) {
   return { declared, numbers, invalid };
 }
 // The dependency view of a task list (blocks in file order): numbers → blocks, each block's _Depends:_, which numbers are
-// done, and the tasks order (parseTasks' — by number, stable).
+// done, and the tasks order: by SECTION (taskSections — a phase heading and the checkpoint closing it, in file order), then by
+// number (stable). 1.24 r6 D6: by number alone, a task spec_append_tasks put into an EARLIER phase (numbered after every task)
+// came after a later phase's tasks — next served Phase 2 past Phase 1's checkpoint. parseTasks' public order stays by number;
+// within a section (a tasks.md without phases: one section) the number decides, as before.
+function taskSections(blocks) {
+  const sec = [];
+  let k = -1;
+  blocks.forEach((b, i) => { const p = blocks[i - 1]; if (!p || b.phase !== p.phase || b.checkpoint !== p.checkpoint) k++; sec.push(k); });
+  return sec;
+}
 function taskDepGraph(blocks) {
   const byNum = new Map();
   blocks.forEach((b, i) => { const l = byNum.get(b.number); if (l) l.push(i); else byNum.set(b.number, [i]); });
   const doneNum = new Map();
   for (const [num, l] of byNum) doneNum.set(num, l.every((i) => blocks[i].done));
   const specs = blocks.map(taskDependsSpec);
-  const order = blocks.map((_, i) => i).sort((a, b) => blocks[a].number - blocks[b].number || a - b);
+  const sec = taskSections(blocks);
+  const order = blocks.map((_, i) => i).sort((a, b) => sec[a] - sec[b] || blocks[a].number - blocks[b].number || a - b);
   // The dependency numbers of block i that are not done yet (open, or carried by no task), ascending.
   const waitsOn = (i) => specs[i].numbers.filter((n) => doneNum.get(n) !== true).sort((a, b) => a - b);
   return { blocks, byNum, doneNum, specs, order, waitsOn };
@@ -537,6 +548,10 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const EG = i18n.msg(lng).evidenceGate;
   const ev = normalizeEvidence(evidence);
   if (ev && ev.error) return { ok: false, error: ev.error === "badExit" ? EV.badExit(ev.value) : ev.error === "noContent" ? EG.noContent : EV.needsExit };
+  // 1.24 r6 D4: a passing run whose summary shows no test ran (a glob, a path or a filter that matched nothing — vacuousRun) proves
+  // nothing: refused before anything is recorded (couldNotRun "no-tests", stable). `done --run` (ranBy "cli") read the whole output.
+  const vacuous = ev && ev.command && ev.exitCode === 0 && !(opts && opts.ranBy === "cli") ? vacuousRun(ev.summary) : null;
+  if (vacuous) return { ok: false, couldNotRun: "no-tests", error: EV.noTests(n, vacuous.text) };
   // Validate the state BEFORE touching tasks.md: a broken .state.json used to throw after the tick,
   // leaving a ticked task with no evidence.
   const state = readState(projectDir, f.slug);
@@ -554,7 +569,12 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   // project, or a git worktree of it holding this feature): its verdict is then the same on another machine.
   const runRoot = ev && ev.command && ev.exitCode != null ? runRootStamp(ev.command, projectDir, f.slug) : undefined;
   if (runRoot) ev.root = runRoot;
-  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy, verifyCmds); // an observed run of ITS _Verify:_ (1.22 review)
+  // 1.24 r6 D-I5: when the task's own latest recorded run FAILED (or its record is stale), only a run the harness logged after it is
+  // this report's — a pass logged before the failure stamped a later, un-run pass report observed. (After a recorded pass, the same
+  // logged run reported again in another spelling is still that run.)
+  const prevOwn = ownEvidence(state.evidence || {}, task, dup);
+  const prevAt = isRecord(prevOwn) && prevOwn.exitCode != null && (prevOwn.exitCode !== 0 || prevOwn.stale === true) ? Date.parse(prevOwn.at) : NaN;
+  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy, verifyCmds, prevAt); // an observed run of ITS _Verify:_ (1.22 review)
   if (observed !== undefined) ev.observed = observed;
   const withObserved = (r) => (observed !== undefined ? Object.assign(r, { observed }) : r);
   // _Expect: fail_ (B5): a red run {command, exitCode ≠ 0} is the proof; a passing run is refused unless a red run of this
@@ -612,8 +632,12 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   // Never tick on a failure; a failed re-check of a ticked task stays recorded (it is now unverified).
   if (failed && xf) return withObserved(expectFailRefusal(n, ev, alreadyDone, lng)); // B5: a pass (unexpected-pass) or a command that couldn't run
   if (failed) {
-    const out = { ok: false, recorded: true, error: (alreadyDone ? EV.failedTicked(n, ev.exitCode) : EV.failed(n, ev.exitCode)) + (redHint ? " " + redHint : "") };
+    // 1.24 r6 D7: an _Expect:_ value other than fail (`failure`, `red`…) — the refusal names it: the task is must-pass as written
+    const unknown = unknownExpectValues(task);
+    const hint = unknown.length ? EV.unknownExpect(n, unknown) : redHint;
+    const out = { ok: false, recorded: true, error: (alreadyDone ? EV.failedTicked(n, ev.exitCode) : EV.failed(n, ev.exitCode)) + (hint ? " " + hint : "") };
     if (redHint) out.redPhaseVerify = true; // stable: branch on it, never on the text
+    if (unknown.length) out.unknownExpect = unknown; // stable: the _Expect:_ values the marker doesn't know
     return withObserved(out);
   }
   const tracksNow = detectTracks(f.dir);
@@ -782,8 +806,27 @@ function untickTask(projectDir, name, number, opts = {}) {
 // not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator — 1.17 H). Any GFM bullet
 // (1.22 review: `* [ ] 1.` / `+ [ ] 1.` read as ZERO tasks, silently); an ordered-list checkbox (`1. [ ] text`) is no task —
 // doctor's unread-tasks names it (unreadTaskLines).
+// 1.24 r6 D3: its text is every character to the end of the scanner's line (which holds no "\n" and no trailing CR) — a U+2028 /
+// U+2029 inside it (pasted from a PDF, Word, a JSON string) is an ordinary character, as a markdown reader reads it: headRest
+// refused such a line (a line terminator to `.`), so the task vanished from complete_task / brief while the active view read it.
 const RE_TASK_LINE_HEAD = /^(\s*[-*+]\s*\[)([ xX])\]\s*(\d+)\.(?!\d)/;
-const taskLine = (s) => headRest(s, RE_TASK_LINE_HEAD, false);
+function taskLine(s) {
+  const h = RE_TASK_LINE_HEAD.exec(s);
+  if (!h) return null;
+  let q = h[0].length;
+  while (q < s.length && isWsUnit(s[q])) q++;
+  const m = Array.from(h);
+  m[0] = s;
+  m.push(s.slice(q));
+  return m;
+}
+// A line without its trailing CRs — every one of them (1.24 r6 D3: "\r\r\n", a CRLF file converted to CRLF again, kept a "\r" on
+// each line and no task was read). A loop, not /\r+$/ (quadratic on a long run of CRs followed by text).
+function dropTrailingCr(l) {
+  let e = l.length;
+  while (e > 0 && l.charCodeAt(e - 1) === 13) e--;
+  return e === l.length ? l : l.slice(0, e);
+}
 const RE_CHECKPOINT = /^\s*\*\*Checkpoint:?\*\*:?\s*/i;
 const COMMENT_MASK = "\u0001";
 // CommonMark fence opener: a backtick fence's info string can't hold a backtick ("```npm test``` must pass"
@@ -800,7 +843,7 @@ const RE_TASK_FENCE_OPEN = /^(\s*)(?:(?=(`{3,}))\2[^`]*|(?=(~{3,}))\3.*)$/;
 // code span doesn't count as the closer that lets a comment open.
 const RE_PARA_BREAK = /^\s*$|^\s*(?:[-*+]|\d+[.)])(?:\s|$)|^\s{0,3}#{1,6}(?:\s|$)|^\s*(?:`{3,}|~{3,})|^\s*<!--/;
 function scanTaskLines(tasksText) {
-  const lines = String(tasksText || "").split("\n").map((l) => l.replace(/\r$/, ""));
+  const lines = String(tasksText || "").split("\n").map(dropTrailingCr);
   // Facts about the lines BELOW each line, so an unclosed marker is known the moment it opens (linear
   // passes): the longest ``` / ~~~ closer and the smallest indentation of a non-blank line.
   const n = lines.length;
@@ -968,6 +1011,19 @@ function backtickRuns(s) {
 // verification) — the last few results are kept by text. Callers get their own copies (they may annotate them).
 const TASK_BLOCKS_MEMO = new Map();
 const TASK_BLOCKS_MEMO_MAX = 32;
+// 1.24 r6 D1 — the tasks.md a block was read from, for ownRecord's renumber rule (evidence.js): every block taskBlocks() hands
+// out → the blocks of that read, and taskPeerStamps(block) → their task stamps (taskStamp: the text, ≤ 500 characters) — one
+// Set per scan, computed on first use and shared by its copies. A block built any other way (or copied by a caller) has none:
+// ownRecord then keeps its older rule.
+const BLOCK_PEERS = new WeakMap();
+const SCAN_STAMPS = new WeakMap();
+function taskPeerStamps(block) {
+  const blocks = block && typeof block === "object" ? BLOCK_PEERS.get(block) : undefined;
+  if (!blocks) return null;
+  let stamps = SCAN_STAMPS.get(blocks);
+  if (!stamps) { stamps = new Set(blocks.map(taskStamp)); SCAN_STAMPS.set(blocks, stamps); }
+  return stamps;
+}
 function taskBlocks(tasksText) {
   const key = String(tasksText || "");
   let blocks = TASK_BLOCKS_MEMO.get(key);
@@ -978,7 +1034,7 @@ function taskBlocks(tasksText) {
     if (TASK_BLOCKS_MEMO.size >= TASK_BLOCKS_MEMO_MAX) TASK_BLOCKS_MEMO.delete(TASK_BLOCKS_MEMO.keys().next().value);
   }
   TASK_BLOCKS_MEMO.set(key, blocks);
-  return blocks.map((b) => ({ ...b, body: b.body.slice(), bodyCode: b.bodyCode.slice() }));
+  return blocks.map((b) => { const c = { ...b, body: b.body.slice(), bodyCode: b.bodyCode.slice() }; BLOCK_PEERS.set(c, blocks); return c; });
 }
 // ownLines (changeViews only): an array filled with true at every line index a task block holds — its task line, its body
 // lines and the fenced code it owns.
@@ -1161,8 +1217,11 @@ function tasksIdText(dir) {
 //   - inline code is code: a `_` / `*` inside a code span never closes a marker (``_Verify: `npm test -- -g "a_ b"`_`` was cut at
 //     `"a`), and a label inside one opens none.
 const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emits metrics", "Implements", "Verify", "Expect", "Size", "Depends"]; // _Depends:_ (1.14 F3)
-const RE_TASK_MARKER_OPEN = new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
-const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]"]);
+// 1.24 r6 D9 — bold-italic: `***Verify: x***` opens at its third `*` (exactly two before it — `**Verify:**` stays a bold label, no
+// marker); a closer may be followed by `*` (`**_Verify: x_**`), quotes (`("_Verify: x_")`, “…”, ‘…’, «…»), a dash (`_Verify: x_—`)
+// — CommonMark's right-flanking rule (a closer followed by punctuation); and a run of `*` closes at its first star.
+const RE_TASK_MARKER_OPEN = new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*|(?<=(?:^|[^*\\p{L}\\p{N}_])\\*\\*)\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
+const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]", "*", '"', "'", "—", "–", "”", "’", "»"]);
 // → [{ key (the label, lower-case), value (untrimmed), start, end }], in line order.
 // A closer followed directly by whitespace / the end ("plain") wins over one followed by closing punctuation, when one exists
 // before the next marker opener (else the end of the line): `_Verify: python -c "import a_; print(1)"_` keeps its whole
@@ -1212,6 +1271,7 @@ function scanMarkerSpans(s) {
   for (let i = s.length - 1; i >= 0; i--) ok[i] = /\s/.test(s[i]) || (MARKER_CLOSE_PUNCT.has(s[i]) && ok[i + 1]);
   const plain = { _: [], "*": [] }, punct = { _: [], "*": [] };
   for (let j = 0; j < s.length; j++) {
+    if (s[j] === "*" && s[j - 1] === "*") continue; // r6 D9: a run of `*` closes at its first star (`***Verify: x***` → x)
     if ((s[j] === "_" || s[j] === "*") && ok[j + 1] && !(inCode && inCode[j])) (j + 1 === s.length || /\s/.test(s[j + 1]) ? plain : punct)[s[j]].push(j);
   }
   const cursor = { plain: { _: 0, "*": 0 }, punct: { _: 0, "*": 0 } };
@@ -1292,18 +1352,49 @@ function scanTaskMarkers(prose) {
   return out;
 }
 // Marker-shaped text on a task's own lines that yielded NO marker (1.14 full review Pa1): "Verify:" / "Implements:" /
-// "Makes green:" / "Expect:" outside every parsed marker and every code span — `**Verify:** npm test`, `Verify: npm test`,
-// `_Verify:_ npm test`. The tools read nothing there (no check to run, no file to trace). → [{ number, labels }] — doctor's
-// malformed-markers warn.
+// "Makes green:" / "Expect:" outside every parsed marker and every code span — `**Verify:** npm test`, `Verify: npm test` —
+// and (1.24 r6 D2) an EMPTY marker written apart from its value: `_Verify:_ npm test`, `- _Verify:_ `npm test``, `*Verify:*
+// npm test` (emptyLabelValues — review 5 made `_Verify:_` an empty span, which hid them). The tools read nothing there (no check
+// to run, no file to trace). → [{ number, labels }] — doctor's malformed-markers warn.
 // "depends:" only before a task number ("depends: 3", "Depends: #3, 5") — prose like "(depends: the schema from task 1)" is
 // prose (feature review R8).
 const RE_MARKER_WORD = /(?<![\p{L}\p{N}])(verify|implements|makes[ \t]+green|expect|depends(?=[ \t]*:[ \t*_]*#?\d))[ \t]*:/giu;
 const MARKER_WORD_LABEL = { verify: "Verify", implements: "Implements", "makes green": "Makes green", expect: "Expect", depends: "Depends" };
+// 1.24 r6 D2 — the empty markers of a line followed by a value: a code span right after one (any line), or plain text after the
+// line's ONLY empty marker whose first word is no marker noun — a title naming markers is prose ("Document the _Verify:_ and
+// _Implements:_ markers": two empty markers; "the _Verify:_ marker in the README"; PT / ES "marcador", "etiqueta"). → [keys]
+const MARKER_NOUNS = new Set(["marker", "markers", "label", "labels", "tag", "tags", "field", "fields", "line", "lines", "spelling", "spellings",
+  "syntax", "value", "values", "and", "or", "marcador", "marcadores", "etiqueta", "etiquetas", "campo", "campos", "linha", "linhas", "línea", "líneas",
+  "valor", "valores", "e", "ou", "y", "o"]);
+function emptyLabelValues(line) {
+  const spans = taskMarkerSpans(line);
+  const empties = spans.filter((sp) => sp.value === "");
+  const out = [];
+  let ticks = null;
+  for (const e of empties) { // in line order: backtickRuns' cursor only moves forward
+    let p = e.end;
+    while (p < line.length && (line[p] === " " || line[p] === "\t")) p++;
+    if (p >= line.length) continue;
+    if (line[p] === "`") {
+      ticks = ticks || backtickRuns(line);
+      let r = p;
+      while (line[r] === "`") r++;
+      if (ticks.spanEnd(p) > r) { out.push(e.key); continue; } // a code span: the value, written apart
+    }
+    if (empties.length > 1) continue; // several empty markers: a sentence naming them
+    const next = spans.find((sp) => sp.start >= p);
+    const word = (line.slice(p, next ? next.start : line.length).match(/^[\p{L}\p{N}]+/u) || [""])[0].toLowerCase();
+    if (word && !MARKER_NOUNS.has(word)) out.push(e.key);
+  }
+  return out;
+}
+const markerLabel = (key) => TASK_MARKER_LABELS.find((l) => l.toLowerCase() === key) || key;
 function malformedMarkers(blocks) {
   const out = [];
   for (const b of blocks) {
     const labels = new Set();
     for (const line of taskProse(b)) {
+      for (const key of emptyLabelValues(line)) labels.add(markerLabel(key)); // r6 D2
       if (!/verify|implements|green|expect|depends/i.test(line)) continue;
       const masked = withoutTaskMarkers(line);
       const ticks = backtickRuns(masked);
@@ -1640,8 +1731,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // self-ignoring scratch: no repo config needed
     writeIfAbsent(paths.ledger, t.ledgerHeader(slug));    // the ledger is appended by the controller, never reset
-    forgetCached(paths.brief); // written in place below: its cached text is dropped
-    fs.writeFileSync(paths.brief, md, "utf8");            // derived artifact: regenerated on every call
+    writeFileAtomic(paths.brief, md);                     // derived artifact: regenerated on every call (1.24 r6: through the write gate)
   }
   const includeBrief = opts.includeBrief != null ? !!opts.includeBrief : !write;
 
@@ -2026,12 +2116,12 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
 module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_TOKEN, taskDependsSpec, taskDepGraph,
   stuckTasks, taskSchedule, dependencyCycles, taskWaves, openDependenciesOf, briefDependencies, taskDepsBlockedNote,
   taskDepsWaitList, taskDepsIssues, taskDepsCheck, RE_ROOT_CAUSE_TASK, bugfixGate, rootCauseTaskIndex, blockPosition,
-  taskNumber, tasksBytes, textEncoding, encodeText, tasksRewrite, checkboxBytes, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, RE_CHECKPOINT,
+  taskSections, taskNumber, tasksBytes, textEncoding, encodeText, tasksRewrite, checkboxBytes, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, dropTrailingCr, RE_CHECKPOINT,
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
-  TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
+  TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, BLOCK_PEERS, SCAN_STAMPS, taskPeerStamps, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
   MARKER_CLOSE_PUNCT, MARKER_SPANS_MEMO, MARKER_SPANS_MEMO_MAX, MARKER_MEMO_LINE_MAX, NO_MARKER_SPANS, taskMarkerSpans, scanMarkerSpans,
   taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, TASK_MARKERS_MEMO, TASK_MARKERS_MEMO_MAX, taskMarkers, scanTaskMarkers,
-  RE_MARKER_WORD, MARKER_WORD_LABEL, malformedMarkers, suspiciousVerify, verifySuspicious, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,
+  RE_MARKER_WORD, MARKER_WORD_LABEL, MARKER_NOUNS, emptyLabelValues, markerLabel, malformedMarkers, suspiciousVerify, verifySuspicious, RE_GLOBAL_CONSTRAINTS, globalConstraints, isPromptTask,
   RE_DEFINES_AC, acIndex, storyContext, testIndex, designSections, BRIEF_DESIGN_BUDGET, taskBrief, RE_NEW_TASK_TAGS,
   RE_THEMATIC_BREAK, unwrapCodeSpan, newTaskSpec, appendTasks, __link };

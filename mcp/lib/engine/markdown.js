@@ -222,7 +222,8 @@ function otherFeatureTest(dir) {
 // token before a slash in front of it (`login/US-1.AC-1`, `P1/US-1.AC-1`); for a table row with no lead label, its cell that is
 // exactly such an ID. An ID cited later in the criterion ("… (see EC-1)", "… (T-01)") labels nothing. → {id, slug} | null.
 // Review 5 (L31): a sub-criterion ID (US-1.AC-1.2) is a label of its own — never its parent's US-1.AC-1 — and no stable ID (bareLabel).
-const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`|\[|\()?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
+// 1.24 review 6 (F1): an emphasis AND a bracket opener (`- **[NFR-1]** …`) lead a label too — the EARS unit readers accept the same leads.
+const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`)?[[(]?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
 const RE_CELL_LABEL = /^(?:\*\*|__|\*|_|`)?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?:\*\*|__|\*|_|`)?$/u;
 function criterionLabel(text) {
   const s = String(text || "");
@@ -267,9 +268,10 @@ function planIdText(planText) {
   return stripFencedCode(stripHtmlComments(planText));
 }
 
-// Count unresolved [NEEDS CLARIFICATION: ...] markers in real content (not template comments).
+// Count unresolved [NEEDS CLARIFICATION: ...] markers in real content (not template comments). 1.24 review 6 (F11): never in fenced or
+// indented code either (stripFencedCode — every other reader's rule): an example of how to mark an open point blocked the design.
 function clarificationMarkers(md) {
-  const text = stripHtmlComments(md);
+  const text = stripFencedCode(stripHtmlComments(md));
   const out = [];
   const re = /\[NEEDS[ _-]CLARIFICATION:?([^\]\n]{0,500})\]/gi;
   let m;
@@ -442,6 +444,29 @@ function headingTextMatches(text, syns, inflect) {
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || (inflect && RE_SYN_INFLECTION.test(t.slice(s.length)))));
 }
+// 1.24 review 6 (F7): can ONE heading answer both a section named / synonymed `x` and one named `y`? — headingTextMatches' rule (the
+// synonym STARTS the heading, word-bounded, an English inflection allowed on a track section): only when one key equals the other or
+// is a word-prefix of it ("offline" / "offline sync") or its inflection ("model" / "modeling notes"). Two such sections of ONE track
+// are answered by the longer one's heading: "## [MOB] Offline Sync" filled "Offline" too, so deleting the "Offline" section passed.
+const keyStarts = (s, t) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || RE_SYN_INFLECTION.test(t.slice(s.length)));
+function synonymsOverlap(x, y) {
+  const a = String(x).trim().toLowerCase(), b = String(y).trim().toLowerCase();
+  return !!a && !!b && (keyStarts(a, b) || keyStarts(b, a));
+}
+// A track's section table → the pairs of sections that one heading can answer: [[name, other name, key, other key]] ([] when none —
+// the invariant every built-in table keeps; `tracks check` refuses a pack that breaks it, section-overlap). Keys: name + syn + loose.
+function sectionOverlaps(sections) {
+  const keys = (sections || []).map((s) => [...new Set([s.name, ...(s.syn || []), ...(s.loose || [])].filter((k) => typeof k === "string").map((k) => k.trim().toLowerCase()))]);
+  const out = [];
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      let hit = null;
+      for (const a of keys[i]) { for (const b of keys[j]) if (synonymsOverlap(a, b)) { hit = [a, b]; break; } if (hit) break; }
+      if (hit) out.push([sections[i].name, sections[j].name, hit[0], hit[1]]);
+    }
+  }
+  return out;
+}
 
 // marker = "[SaaS]" / "[AI]": a heading carrying the track marker wins, so "[AI] Observability for AI"
 // can no longer stand in for "[SaaS] Observability". Unmarked headings are the fallback (hand-written
@@ -535,9 +560,9 @@ function sectionState(design, sections, marker, opts = {}) {
     const body = extractSection(design, sec.syn, marker, sec.loose);
     if (body == null) return out("missing");
     // review 5 (M2 / L28): the sentinel as a reader sees it (a commented-out or quoted-in-code one is none), and nothing but
-    // structure — sub-headings, a rule, an empty table — is nothing written
+    // structure — sub-headings, a rule, an empty table — is nothing written; nor (1.24 review 6, F4) a generic slot / punctuation line
     if (RE_TODO_SENTINEL.test(stripFencedCode(stripHtmlComments(body)))) return out("unfilled");
-    const content = sectionContent(body);
+    const content = writtenContent(body);
     if (!content.prose.length && !content.code.length) return out("unfilled");
     const own = sectionOwnLines(body, opts.lang);
     if (!own.length) return out("template");
@@ -570,19 +595,24 @@ function addSectionLines(set, text, wild) {
     set.add(k);
   }
 }
-function sectionTemplateLines(lang) {
-  if (!SECTION_TEMPLATE_LINES) {
+// The built-in track design blocks' line keys → a sorted list: group "base" (EN / PT / ES), or "pt-BR" — only its lines the base
+// set lacks (a pt-BR section is read against both). 1.24 r6 I-I2: read from the corpus (builtinCorpus) — rendered, they loaded
+// pt.js and es.js into every English gate that reads a section.
+function renderSectionLines(group) {
+  const lines = (langs) => {
     const set = new Set();
-    for (const l of i18n.BASE_LANGS) for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, l)); } catch { /* a builder's trouble never breaks a gate */ } }
-    SECTION_TEMPLATE_LINES = set;
-  }
+    for (const l of langs) for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, l)); } catch { /* a builder's trouble never breaks a gate */ } }
+    return set;
+  };
+  const base = lines(i18n.BASE_LANGS);
+  if (group !== "pt-BR") return sortList(base);
+  return sortList([...lines(["pt-BR"])].filter((k) => !base.has(k)));
+}
+function sectionTemplateLines(lang) {
+  if (!SECTION_TEMPLATE_LINES) { const c = builtinCorpus(); SECTION_TEMPLATE_LINES = new Set(c ? c.sectionLines : renderSectionLines("base")); }
   const sets = [SECTION_TEMPLATE_LINES];
   if (lang === "pt-BR") {
-    if (!SECTION_TEMPLATE_LINES_BR) {
-      const set = new Set();
-      for (const tr of VALID_TRACKS) { try { addSectionLines(set, i18n.trackDesignBlock(tr, "pt-BR")); } catch { /* ignore */ } }
-      SECTION_TEMPLATE_LINES_BR = set;
-    }
+    if (!SECTION_TEMPLATE_LINES_BR) { const c = builtinCorpus(); SECTION_TEMPLATE_LINES_BR = new Set(c ? c.sectionLinesBr : renderSectionLines("pt-BR")); }
     sets.push(SECTION_TEMPLATE_LINES_BR);
   }
   const reg = packRegistry();
@@ -601,7 +631,7 @@ function sectionTemplateLines(lang) {
   return { sets, wild };
 }
 function sectionOwnLines(body, lang) {
-  const { prose, code } = sectionContent(body);
+  const { prose, code } = writtenContent(body); // (1.24 review 6, F4: a TBD beside the guidance line is no line of the author's)
   if (!prose.length) return code;
   const { sets, wild } = sectionTemplateLines(lang);
   return prose.filter((l) => { const k = sectionLineKey(l); return !sets.some((s) => s.has(k)) && !wild.some((w) => wildcardMatch(w, k)); }).concat(code);
@@ -631,6 +661,35 @@ function sectionContent(body) {
   });
   return { prose, code };
 }
+// 1.24 review 6 (F4) — what a section's author WROTE: sectionContent() minus the prose lines that answer nothing — a generic slot
+// word (genericAnswer: TODO / TBD / TBC / FIXME / "…" / "a definir", "Pending" / "Pendente" / "Pendiente" / "to be decided" …, after
+// list / quote / checkbox markers, emphasis, a wrapping bracket and trailing punctuation: "- TBD", "**TBD**", "[TBD]", "- [ ] TODO",
+// "> TBD", "Pending.") and a line with no letter or digit ("-", "—", "...", "| - | - |"); a table row answers when one of its cells
+// does. A section holding only those read as filled — a [SEC] Threat Model "TBD" approved the design, a bugfix's Root Cause "TBD"
+// passed the iron law. A real one-word answer stays: "N/A", "None.", "No." (the honest "nothing here" a Risks section asks for; a
+// sized feature's na / na-short rule reads its own text). Fenced code is the author's (review C2). The ONE reader of sectionState,
+// sectionOwnLines and — through hasProseOutsideBrackets — gates.js's sectionFilled / bugSectionFilled and the spike / decision prose.
+// → { prose, code }. Linear.
+const RE_PENDING_ANSWER = /^(?:pending|pendente|pendiente|to be (?:defined|determined|decided|confirmed|written)|(?:a|por) (?:decidir|determinar|confirmar|preencher|rellenar))$/iu;
+function genericAnswer(s) {
+  let t = String(s).replace(/[*_`]+/g, "").trim();
+  let e = t.length;
+  while (e > 0 && ".:;!?".includes(t[e - 1])) e--; // trailing punctuation (a loop: linear on a long run of dots)
+  t = t.slice(0, e).trim();
+  if (t.startsWith("[") && t.endsWith("]")) t = t.slice(1, -1).trim(); // "[TBD]"
+  return isGenericSlot(t) || RE_PENDING_ANSWER.test(t);
+}
+const RE_LINE_MARKERS = /^[ \t]*(?:>[ \t]*)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?(?:\[[ xX]\][ \t]+)?/;
+const RE_WORD_CHAR = /[\p{L}\p{N}]/u;
+function lineAnswers(l) {
+  if (/^\s*\|/.test(l)) return tableCells(l).some((c) => RE_WORD_CHAR.test(c) && !genericAnswer(c));
+  const rest = l.replace(RE_LINE_MARKERS, "");
+  return RE_WORD_CHAR.test(rest) && !genericAnswer(rest);
+}
+function writtenContent(body) {
+  const { prose, code } = sectionContent(body);
+  return { prose: prose.filter(lineAnswers), code };
+}
 // A design's Mermaid diagram as doctor's `mermaid` check reads it (review 5, L28) → "present" | "template" | "missing": the fenced
 // blocks (``` or ~~~, any length) whose info string starts with "mermaid", outside HTML comments; "template" when every one still
 // holds the scaffold's own diagram (any language — whitespace folded). It was a substring test for "```mermaid": a ~~~mermaid fence
@@ -648,22 +707,26 @@ function mermaidBlocks(text) {
   }
   return out.map((b) => b.join(" ").replace(/\s+/g, " ").trim());
 }
-const TEMPLATE_DIAGRAMS = {}; // lang group ("base" | "pt-BR") → Set of the scaffold's diagrams, rendered on first use
-function templateDiagrams(group) {
-  if (TEMPLATE_DIAGRAMS[group]) return TEMPLATE_DIAGRAMS[group];
+// The scaffold's own diagrams (every language, pt-BR's too; each design size) → a sorted list. 1.24 r6 I-I2: read from the corpus
+// (builtinCorpus) — rendered, doctor's mermaid check loaded pt.js, es.js and pt-BR into every English process.
+function renderTemplateDiagrams() {
   const set = new Set();
-  for (const l of group === "base" ? i18n.BASE_LANGS : ["pt-BR"]) {
+  for (const l of i18n.LANGS) {
     for (const size of [undefined, "s", "m"]) {
       try { mermaidBlocks(i18n.design({ name: "x", tracks: ["core"], label: trackLabel(["core"]), slug: "x", summary: "", size }, l)).forEach((d) => set.add(d)); } catch { /* a builder's trouble never breaks a check */ }
     }
   }
-  return (TEMPLATE_DIAGRAMS[group] = set);
+  return sortList(set);
+}
+let TEMPLATE_DIAGRAMS = null; // Set — process-wide
+function templateDiagramSet() {
+  if (!TEMPLATE_DIAGRAMS) { const c = builtinCorpus(); TEMPLATE_DIAGRAMS = new Set(c ? c.diagrams : renderTemplateDiagrams()); }
+  return TEMPLATE_DIAGRAMS;
 }
 function mermaidState(design) {
   const blocks = mermaidBlocks(design).filter(Boolean); // an empty block draws nothing
   if (!blocks.length) return "missing";
-  const isTemplate = (d) => templateDiagrams("base").has(d) || templateDiagrams("pt-BR").has(d);
-  return blocks.every(isTemplate) ? "template" : "present";
+  return blocks.every((d) => templateDiagramSet().has(d)) ? "template" : "present";
 }
 // "n/a — <why it does not apply>" (EN / PT / ES; any emphasis around the n/a): the section's own text is that ONE line → "na"
 // when the reason holds at least NA_REASON_WORDS words, "na-short" when it holds fewer; anything else → null.
@@ -980,9 +1043,13 @@ function renderTemplateSetsBr(base) {
 // as before: a slower answer, never a wrong one. Inside spec.bundle.js the corpus is the copy the build embedded beside the
 // very sources it was rendered from (module.bundle — undefined under Node's own loader). The per-project part (the
 // project's templates, its track packs: projectTemplateHas, packCorpusSets) stays computed per call. Only .has() is ever
-// asked of these sets.
+// asked of these sets. 1.24 r6 I-I2 (review 6, I1): every OTHER all-language template set a gate asks about comes from it too —
+// the steering stubs (isSteeringStub), the scaffold's diagrams (templateDiagramSet), the track design blocks' lines
+// (sectionTemplateLines), the bug report's slots (bugTemplateSlots) and the requirement templates (builtinTemplateReqs): rendered,
+// they loaded pt.js, es.js and pt-BR into every English doctor / next_action / done / finish / catalog (~78 ms a call).
 const CORPUS_FILE = "corpus.generated.json";
-const CORPUS_KEYS = ["brackets", "code", "bracketsBr", "codeBr", "tasks", "bugSteps"];
+const CORPUS_KEYS = ["brackets", "code", "bracketsBr", "codeBr", "tasks", "bugSteps", "diagrams", "sectionLines", "sectionLinesBr", "bugSlots"];
+const sortList = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)); // code-unit order, stable across Node versions
 const CORPUS_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es.js", "i18n/pt-br.js", "i18n/pt.js", "engine/core.js",
   "engine/markdown.js", "engine/packs.js", "engine/tasks.js", "engine/tracks.js"]; // mcp/lib-relative, in hash order
 // A source file's text as the stamp reads it: a leading BOM and CRLF line ends are encoding, not code.
@@ -1013,17 +1080,21 @@ const sourceStat = (rel) => {
 };
 const LOADED_STATS = module.bundle ? null : new Map(CORPUS_SOURCES.map((rel) => [rel, sourceStat(rel)]));
 const sourcesUnchanged = () => !!LOADED_STATS && CORPUS_SOURCES.every((rel) => { const s = LOADED_STATS.get(rel); return s !== null && sourceStat(rel) === s; });
-// The built-in corpus as it renders now → { brackets, code, bracketsBr, codeBr, tasks, bugSteps }: sorted string lists (the
-// sets' members — code-unit order, stable across Node versions). What scripts/build.js writes, and what the tests compare.
+// The built-in corpus as it renders now → { brackets, code, bracketsBr, codeBr, tasks, bugSteps, taskHeadings, steeringStubs,
+// diagrams, sectionLines, sectionLinesBr, bugSlots, templateReqs }: sorted string lists (the sets' members — code-unit order,
+// stable across Node versions) — the requirement templates in render order. What scripts/build.js writes, and what the tests compare.
 function renderCorpusData() {
-  const sort = (xs) => [...xs].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const sort = sortList;
   const base = renderTemplateSets(), br = renderTemplateSetsBr(base);
   return { brackets: sort(base.brackets), code: sort(base.code), bracketsBr: sort(br.brackets), codeBr: sort(br.code),
     tasks: sort(renderTemplateTasks()), bugSteps: sort(new Set(renderBugSteps())),
     // 1.22 review: every built-in track's template task headings, all languages (trackTaskHeadings — tracks.js)
-    taskHeadings: Object.fromEntries(VALID_TRACKS.map((t) => [t, sort(renderTrackTaskHeadings(t))])) };
+    taskHeadings: Object.fromEntries(VALID_TRACKS.map((t) => [t, sort(renderTrackTaskHeadings(t))])),
+    // 1.24 r6 I-I2: the gates' other all-language sets
+    steeringStubs: renderSteeringStubs(), diagrams: renderTemplateDiagrams(), sectionLines: renderSectionLines("base"),
+    sectionLinesBr: renderSectionLines("pt-BR"), bugSlots: renderBugSlots(), templateReqs: renderTemplateReqs() };
 }
-// The corpus's task headings: { track: [heading…] } — strings only, own keys.
+// The corpus's task headings, steering stubs, requirement templates: { key: [string…] } — strings only, own keys.
 const taskHeadingsShape = (h) => !!h && typeof h === "object" && !Array.isArray(h) &&
   Object.values(h).every((v) => Array.isArray(v) && v.every((x) => typeof x === "string"));
 let BUILTIN_CORPUS = undefined; // undefined: not looked for yet · null: none usable (render) · else the data
@@ -1037,7 +1108,7 @@ function builtinCorpus() {
     // The load-time version and (the modules) the sources' hash, the sources unchanged since the engine loaded — stat'ed
     // AFTER the hash read them, so a file rewritten before or while it was hashed is never trusted.
     if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
-      taskHeadingsShape(data.taskHeadings) && data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
+      taskHeadingsShape(data.taskHeadings) && taskHeadingsShape(data.steeringStubs) && taskHeadingsShape(data.templateReqs) && data.version === engineVersion() && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
       BUILTIN_CORPUS = data;
       BUILTIN_CORPUS_FROM = b ? "bundle" : "file";
     }
@@ -1058,6 +1129,7 @@ function localeLoaded(rel) {
   BUILTIN_CORPUS = null; // looked for, none usable: the sets render on their next use
   BUILTIN_CORPUS_FROM = "render";
   TEMPLATE_SETS = TEMPLATE_SETS_BR = TEMPLATE_TASKS = BUG_STEPS = null;
+  STEERING_STUBS = TEMPLATE_DIAGRAMS = SECTION_TEMPLATE_LINES = SECTION_TEMPLATE_LINES_BR = BUG_SLOTS = TEMPLATE_REQS = null; // 1.24 r6 I-I2
   TASK_HEADINGS.clear(); // tracks.js's per-track sets, read from it (1.22 review)
 }
 if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
@@ -1196,7 +1268,7 @@ function artifactState(input, opts = {}) {
   else if (!/[\r\n]/.test(input) && (path.isAbsolute(input) || /\.(md|markdown|json)$/i.test(input))) text = readIfExists(input);
   else text = String(input);
   if (text == null) return "missing";
-  const squash = (x) => String(x).replace(/\s+/g, "");
+  const squash = squashText; // whitespace aside (the steering stubs' hashes are taken the same way — isSteeringStub)
   const templates = opts.template == null ? [] : [].concat(opts.template);
   if (templates.some((tpl) => squash(tpl) === squash(text))) return "placeholder";
   if (headingsOnly(text)) return "placeholder";
@@ -1258,7 +1330,7 @@ function chainPlaceholders(dir, tracks, kind, phase, blockingOnly, texts) {
     .map((a) => ({ ...artifactReport(dir, a.file, tracks, texts ? texts[a.file] : undefined), idx: a.idx })).filter((r) => r.state === "placeholder");
   return { all, blocking: all.filter((r) => r.idx <= cur), later: all.filter((r) => r.idx > cur) };
 }
-// Some prose once brackets (nested too), HTML comments and the TODO sentinel are set aside: a root cause written as
+// Some prose (written content — writtenContent) once brackets (nested too), HTML comments and the TODO sentinel are set aside: a root cause written as
 // nothing but "[the cause, with evidence]" is not written yet — whatever the bracket says. A bracket group is set aside when it
 // closes on its own line (its nested groups with it); an unbalanced "[" or "]" stays. ONE pass (review 5, P5): a stack of the
 // open "[" (emptied at each line break) marks each closed group in a difference array — removing the innermost groups again and
@@ -1282,7 +1354,10 @@ function hasProseOutsideBrackets(body) {
     else if (was && !cut) from = j;
   }
   if (!cut) outside.push(t.slice(from));
-  return /[\p{L}\p{N}]/u.test(outside.join(" "));
+  // 1.24 review 6 (F4): "prose" is WRITTEN content (writtenContent — never a generic slot line, TBD / TODO / "Pending." / "…", a
+  // punctuation-only line or bare structure) — a Root Cause "TBD" passed the iron law, a Constitution Check "TBD" its gate.
+  const w = writtenContent(outside.join(" "));
+  return w.prose.length > 0 || w.code.some((l) => RE_WORD_CHAR.test(l));
 }
 // bug.md is a bug REPORT: its Reproduction, Expected vs Actual and Root Cause quote logs, output and error text, full of
 // brackets that are evidence, not slots — `[object Object]`, `[WARN]`, a regex class `[A-Z]`, `[Error: ENOENT …]`,
@@ -1316,25 +1391,71 @@ function bugPlaceholders(text, items) {
 // (hasProseOutsideBrackets: the blank lines above a sentinel line are no longer part of what is blanked — they hold no
 // bracket, letter or digit, so its answer is the same; 1.17 H, as RE_TODO_SENTINEL)
 const RE_TODO_SENTINEL_LINE = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*.*$/gm;
-// Every bracketed slot of the bug report template, in every language (the Summary slot included: built without one).
+// Every bracketed slot of the bug report template, in every language (the Summary slot included: built without one) — from the
+// corpus (1.24 r6 I-I2), rendered when it can't be trusted.
 let BUG_SLOTS = null;
-function bugTemplateSlots() {
-  if (BUG_SLOTS) return BUG_SLOTS;
+function renderBugSlots() {
   const set = new Set();
   for (const l of i18n.LANGS) {
     let t;
     try { t = i18n.bugReport({ name: "x" }, l); } catch { continue; } // a builder's trouble never breaks the check
     for (const m of String(t || "").matchAll(/\[([^[\]\n]*)\]/g)) set.add(placeholderKey(m[1]));
   }
-  return (BUG_SLOTS = set);
+  return sortList(set);
+}
+function bugTemplateSlots() {
+  if (BUG_SLOTS) return BUG_SLOTS;
+  const c = builtinCorpus();
+  return (BUG_SLOTS = new Set(c ? c.bugSlots : renderBugSlots()));
+}
+
+// 1.24 r6 I-I2 — the steering stubs of every language (doctor's steering check: a steering file whose body is still one of them
+// verbatim, whitespace aside, is a template — scaffold.js steeringPlaceholders): per known file, the sha1 of each stub with its
+// whitespace taken out (artifactState's comparison), from the corpus — never every language's text rendered to compare one file.
+const squashText = (x) => String(x).replace(/\s+/g, "");
+const stubHash = (text) => crypto.createHash("sha1").update(squashText(text)).digest("hex");
+function renderSteeringStubs() {
+  const out = {};
+  for (const f of sortList(i18n.steeringKnownFiles())) {
+    const hs = new Set();
+    for (const l of i18n.LANGS) { const t = i18n.steeringStub(f, l); if (typeof t === "string" && t) hs.add(stubHash(t)); }
+    out[f] = sortList(hs);
+  }
+  return out;
+}
+let STEERING_STUBS = null; // { file: [hash…] } — process-wide
+function isSteeringStub(file, text) {
+  if (!STEERING_STUBS) { const c = builtinCorpus(); STEERING_STUBS = c ? c.steeringStubs : renderSteeringStubs(); }
+  const hs = typeof file === "string" && Object.prototype.hasOwnProperty.call(STEERING_STUBS, file) ? STEERING_STUBS[file] : null;
+  return !!hs && hs.includes(stubHash(text));
+}
+// 1.24 r6 I-I2 — the built-in requirement templates (EN / PT / pt-BR / ES: every built-in track's requirements.md, the bugfix's)
+// whose criteria the cross-feature check (quality.js builtinTemplateAcs) sets aside: { lang: [text…] }, in render order. The texts
+// themselves (i18n only): their criteria are read live (acIndex), so the corpus never depends on the criteria readers.
+function renderTemplateReqs() {
+  const out = {};
+  for (const l of i18n.LANGS) {
+    out[l] = [];
+    for (const fn of [() => i18n.requirements({ name: "x", tracks: VALID_TRACKS.slice(), summary: "" }, l), () => i18n.bugRequirements({ name: "x" }, l)]) {
+      try { const t = fn(); if (typeof t === "string") out[l].push(t); } catch { /* a builder's trouble never breaks the check */ }
+    }
+  }
+  return out;
+}
+let TEMPLATE_REQS = null; // [[text, lang]…] in i18n.LANGS order — process-wide (quality.js keys its table on this array)
+function builtinTemplateReqs() {
+  if (TEMPLATE_REQS) return TEMPLATE_REQS;
+  const c = builtinCorpus();
+  const by = c ? c.templateReqs : renderTemplateReqs();
+  return (TEMPLATE_REQS = i18n.LANGS.flatMap((l) => (Object.prototype.hasOwnProperty.call(by, l) ? by[l] : []).map((t) => [t, l])));
 }
 
 module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
   notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
   otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
   templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
-  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, extractSection,
-  sectionContent, isTableSep, SLOT_MAX, bracketCloser, mermaidBlocks, mermaidState,
+  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, synonymsOverlap, sectionOverlaps, extractSection,
+  sectionContent, writtenContent, genericAnswer, lineAnswers, isTableSep, SLOT_MAX, bracketCloser, mermaidBlocks, mermaidState,
   RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
   trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
   RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,
@@ -1342,4 +1463,5 @@ module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLi
   builtinCorpusSource, builtinTaskHeadings, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
   bracketPlaceholders, scanBrackets, artifactState, headingsOnly, RE_MANUAL_VERIFY, artifactReport, featurePlaceholders,
   placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, RE_TODO_SENTINEL_LINE,
-  bugTemplateSlots, __link };
+  bugTemplateSlots, renderBugSlots, renderSectionLines, renderTemplateDiagrams, templateDiagramSet, renderSteeringStubs, isSteeringStub,
+  renderTemplateReqs, builtinTemplateReqs, __link };

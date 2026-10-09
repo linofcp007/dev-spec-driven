@@ -1,5 +1,5 @@
 ---
-description: Start (or resume) the dev-spec-driven workflow for a feature — picks mode + composable tracks, then runs the phased pipeline. PT - inicia/retoma o fluxo spec-driven. ES - inicia/reanuda el flujo spec-driven.
+description: Start or resume the dev-spec-driven workflow for a feature — mode and tracks, then the phased pipeline.
 argument-hint: "[feature idea or feature name]"
 ---
 

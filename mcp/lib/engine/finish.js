@@ -29,7 +29,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus, suiteSummaryLines,
   taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines, trackLabel,
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
-  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews;
+  withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions;
 function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
@@ -45,7 +45,7 @@ function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport, bugS
   spikeFinish, spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus,
   suiteSummaryLines, taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines,
   trackLabel, unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject,
-  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews } = E); }
+  withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_finish — close a feature LOCALLY: readiness report + a merge summary generated from the spec chain
@@ -142,7 +142,10 @@ function finishFeature(projectDir, name, opts = {}) {
   // (r5 review: `state` — .state.json unreadable — is its own blocker, first; the approvals it holds are unknown, so no pending gate
   // nor change since approval is reported from it: they read "every phase awaiting approval")
   const stateBad = !!state.invalid;
-  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause" && c.id !== "state").map((c) => c.id) : [];
+  const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause" && c.id !== "state" && c.id !== "roadmap").map((c) => c.id) : [];
+  // 1.24 review 6 (E4): roadmap.json unreadable — its project checks (meta.checks: suite-evidence) and approval roles are unknown
+  // (read as none, spec_finish was ready with the checks never run): its own blocker, like `state`
+  const roadmapBad = doc.ok && Array.isArray(doc.checks) ? doc.checks.find((c) => c.id === "roadmap" && c.status === "fail") : null;
   const pendingGates = stateBad ? [] : doc.pendingGates || [];
   // What next_action flags must block finishing too: an artifact edited after its approval, a template placeholder
   // ANYWHERE in the chain, and — for a bugfix — an unwritten root cause. Only a change known by CONTENT blocks: a file date
@@ -171,6 +174,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const blocked = [];
   const block = (id, detail) => blocked.push({ id, detail });
   if (stateBad) block("state", state.invalid); // r5 review (localized: readState's message — fix it by hand)
+  if (roadmapBad) block("roadmap", roadmapBad.detail); // 1.24 review 6 (E4)
   if (failing.length) block("doctor", F.doctor(failing.join(", ")));
   if (rootCauseMissing) block("root-cause", G.finishRootCause);
   if (leftovers.length) block("placeholders", G.finishPlaceholders(placeholderSummary(leftovers, lng)));
@@ -245,8 +249,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (write) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    forgetCached(summaryPath); // written in place below: its cached text is dropped
-    fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
+    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (1.24 r6: through the write gate)
   }
   const ready = blockers.length === 0;
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
@@ -459,8 +462,9 @@ function metrics(projectDir, name, opts = {}) {
     batchApprovals: sum((m) => m.batchApprovals), // 1.14 B3
     changeRequests: sum((m) => m.changeRequests), reopenedTasks: sum((m) => m.reopenedTasks), openClarifications: sum((m) => m.openClarifications),
     evidenceRuns: runs, evidencePassing: passing, evidencePassRate: runs ? round1((passing / runs) * 100) : null };
-  // 1.14 B4 — the project velocity (every feature's completions: the roadmap forecasts' rate)
-  const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions), (opts.now != null && timeOf(opts.now)) || Date.now());
+  // 1.14 B4 — the project velocity (every feature's completions: the roadmap forecasts' rate — 1.24 r6 G3: the archived ones' too)
+  const now = (opts.now != null && timeOf(opts.now)) || Date.now();
+  const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
   return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity };
 }
 
@@ -555,16 +559,50 @@ function removeFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
   sweepTombstones(f.root);
+  // 1.24 r6 (G1) — a feature folder that is a LINK (a symbolic link, a junction): only the link goes — the folder it points at and
+  // its files stay — under the roadmap lock alone: the feature lock would be created THROUGH the link (it was: a .lock left in the
+  // target), and the write gate refuses that lock anyway.
+  if (isLinkEntry(f.dir)) {
+    const lr = withRoadmapLock(projectDir, () => removeLinkedFeatureLocked(projectDir, name, opts));
+    if (lr.ok) maybeRefreshRoadmap(projectDir);
+    return lr;
+  }
   const res = withMoveLock(projectDir, f.dir, f.slug, null, () => withRoadmapLock(projectDir, () => removeFeatureLocked(projectDir, name, opts)));
   if (res.ok) maybeRefreshRoadmap(projectDir);
   return res;
 }
+// Is p a symbolic link / junction (lstat — never followed)?
+function isLinkEntry(p) {
+  try { return fs.lstatSync(p).isSymbolicLink(); } catch { return false; }
+}
+function removeLinkedFeatureLocked(projectDir, name, opts = {}) {
+  const f = existingFeature(projectDir, name);
+  if (!f.ok) return { ok: false, error: f.error };
+  const { slug, dir } = f;
+  const bad = roadmapError(projectDir);
+  if (bad) return { ok: false, error: bad };
+  if (!isLinkEntry(dir)) return { ok: false, busy: true, error: errs(projectDir, slug).featureBusy(slug) }; // replaced meanwhile: ask again
+  if (opts.preview && typeof opts.preview.fingerprint === "string" && featureFolderFingerprint(dir) !== opts.preview.fingerprint) {
+    return { ok: false, changedSincePreview: true, code: "changed-since-preview", feature: slug,
+      error: i18n.msg(featureLang(projectDir, slug)).featureOps.removeChangedSincePreview(slug) };
+  }
+  invalidateReadCache(); // a folder entry removed: the per-call read cache can't follow it
+  removeLinkEntry(dir); // the link alone — never what it points at
+  const ms = pruneRoadmapRefs(projectDir, slug);
+  return { ok: true, action: "remove", feature: slug, link: true, ...milestoneResult(ms) };
+}
 // The folder a remove would delete, as one sha1: its identity (device + inode / file ID + birth time — kept across a rename, so
 // another feature renamed into this name differs) and every entry under it (relative path, size, mtime; lstat — a link is one
-// entry, never followed; the feature's own .lock left out: the remove holds it). null when the folder can't be read.
+// entry, never followed; the feature's own .lock left out: the remove holds it). null when the folder can't be read. A feature
+// folder that is itself a link (1.24 r6): the link's identity and its target — what a remove deletes.
 function featureFolderFingerprint(dir) {
   let st;
   try { st = fs.lstatSync(dir); } catch { return null; }
+  if (st.isSymbolicLink()) {
+    let to = "";
+    try { to = fs.readlinkSync(dir); } catch { /* unreadable: the identity alone */ }
+    return require("crypto").createHash("sha1").update(`link ${st.dev} ${st.ino} ${Math.floor(st.birthtimeMs)} ${to}`).digest("hex");
+  }
   const rows = [`dir ${st.dev} ${st.ino} ${Math.floor(st.birthtimeMs)}`];
   const walk = (d, rel) => {
     for (const e of safeReaddir(d).sort()) {
@@ -697,7 +735,11 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   const ms = pruneRoadmapRefs(projectDir, oldSlug, newSlug);
   for (const s of plan.supersedes) writeFileAtomic(s.file, s.text);
   for (const r of plan.records) writeFileAtomic(r.file, JSON.stringify(r.state, null, 2));
+  // 1.24 r6 (G5): the feature has a folder under the new name — a backlog item of that name is no longer planned-but-unspecced
+  // (create and restore drop it the same way; it was listed twice in ROADMAP.md, under Features and under Backlog)
+  const fromBacklog = pruneBacklog(projectDir, newSlug);
   const res = { ok: true, action: "rename", from: oldSlug, to: newSlug };
+  if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
   Object.assign(res, milestoneResult(ms)); // 1.16 E3
   const where = (x) => (x.archived ? "_archive/" : "") + x.feature;
   const fm = i18n.msg(featureLang(projectDir, newSlug));
@@ -800,6 +842,12 @@ function removePreview(projectDir, name) {
   // Same order as removeFeature: never preview (and promise) a delete that the confirmed call would refuse.
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
+  // 1.24 r6 (G1): a feature folder that is a link — the remove deletes the link alone: nothing under it is counted (it used to
+  // count the target's files as "would delete"), and the preview says so (`link: true`).
+  if (isLinkEntry(f.dir)) {
+    return { ok: false, needsConfirm: true, action: "remove", feature: f.slug, link: true, wouldDelete: { dir: f.dir, files: 0, entries: [], link: true },
+      fingerprint: featureFolderFingerprint(f.dir), error: i18n.msg(featureLang(projectDir, f.slug)).featureOps.removeNeedsConfirmLink(f.slug) };
+  }
   let files = 0;
   const walk = (d) => safeReaddir(d).forEach((e) => {
     const p = path.join(d, e);
@@ -1458,9 +1506,11 @@ function approvalInForceAt(hist, phase, t) {
   }
   return rec && recAt > revAt ? rec : null;
 }
-// An approval and a history record signed off the same content: both fingerprinted, the same fingerprint and designFingerprint.
-const sameApprovedContent = (a, rec) => isRecord(a) && isRecord(rec) && typeof a.fingerprint === "string" && !!a.fingerprint &&
-  a.fingerprint === rec.fingerprint && (a.designFingerprint || null) === (rec.designFingerprint || null);
+// An approval and a history record signed off the same content: both fingerprinted, the same fingerprint and designFingerprint —
+// or (1.24 review 6, E-I5) both carrying the whitespace-insensitive ones, equal: a re-approval after a whitespace-only edit changed nothing.
+const sameApprovedContent = (a, rec) => isRecord(a) && isRecord(rec) && ((typeof a.fingerprint === "string" && !!a.fingerprint &&
+  a.fingerprint === rec.fingerprint && (a.designFingerprint || null) === (rec.designFingerprint || null)) ||
+  (typeof a.wsFingerprint === "string" && !!a.wsFingerprint && a.wsFingerprint === rec.wsFingerprint && (a.designWsFingerprint || null) === (rec.designWsFingerprint || null)));
 // The phases revoked in `since` that no approval in it restores (a revoke then a re-approval reads "re-approved" alone).
 function revokedSinceList(since) {
   const back = new Set(since.filter((x) => x.kind === "approval").map((x) => x.phase));

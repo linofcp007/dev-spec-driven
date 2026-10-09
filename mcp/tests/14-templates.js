@@ -261,6 +261,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname }) => {
     const mcpL = payload(await rpc("tools/call", { name: "spec_templates", arguments: { projectDir: pp, lang: "pt" } }));
     const mcpC = payload(await rpc("tools/call", { name: "spec_templates", arguments: { action: " CHECK ", projectDir: pk } }));
     const mcpBad = await rpc("tools/call", { name: "spec_templates", arguments: { action: "delete", projectDir: pk } });
+    fs.mkdirSync(pt0, { recursive: true }); // a projectDir names an existing folder (1.24 r6 A3) — the allowlist is what this checks
     const mcpTrav = payload(await rpc("tools/call", { name: "spec_templates", arguments: { action: "init", artifact: "../x", projectDir: pt0 } }));
     ok(mcpL.ok && JSON.stringify(mcpL) === JSON.stringify(S.templates(pp, "list", { lang: "pt" })) && mcpC.action === "check" && mcpC.verdict === "fail" &&
       JSON.stringify(mcpC.problems) === JSON.stringify(ck.problems) && mcpBad.result.isError && /action must be one of: list, init, check/.test(payload(mcpBad).error) &&

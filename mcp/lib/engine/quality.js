@@ -14,7 +14,7 @@ const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in pl
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders, clarificationMarkers,
   criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs, featureLang, ghostMarkers,
-  headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord, markerTracks, normalizeLang,
+  headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord, markerTracks, normalizeLang,
   OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock, packTracks, placeholderReport,
   projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE, RE_SUCCESS_CRITERIA,
   RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile, replaceHtmlCommentSpans,
@@ -22,10 +22,10 @@ let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceho
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope;
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
-  featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, isObj, isRecord,
+  featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
   markerTracks, normalizeLang, OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock,
   packTracks, placeholderReport, projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE,
   RE_SUCCESS_CRITERIA, RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile,
@@ -33,7 +33,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHea
   stripEnd, stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope } = E); }
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
@@ -204,17 +204,15 @@ function templateShapeTable(texts) {
   }
   return { skel, shapes };
 }
-// Every built-in template criterion (EN / PT / pt-BR / ES, every built-in track, the bugfix requirements) — process-wide.
-let XAC_TEMPLATES = null;
+// Every built-in template criterion (EN / PT / pt-BR / ES, every built-in track, the bugfix requirements) — process-wide. 1.24 r6
+// I-I2: the requirement templates come from the corpus (markdown.js builtinTemplateReqs — acIndex reads them here, live) —
+// rendering every language's here loaded pt.js, es.js and pt-BR into every English doctor / next_action. Kept while that list is
+// the same array (a corpus dropped under a long-lived process hands out a new one).
+let XAC_TEMPLATES = null; // { docs, table }
 function builtinTemplateAcs() {
-  if (XAC_TEMPLATES) return XAC_TEMPLATES;
-  const texts = [];
-  for (const l of i18n.LANGS) {
-    for (const fn of [() => i18n.requirements({ name: "x", tracks: VALID_TRACKS.slice(), summary: "" }, l), () => i18n.bugRequirements({ name: "x" }, l)]) {
-      try { texts.push([fn(), l]); } catch { /* a builder's trouble never breaks the check */ }
-    }
-  }
-  return (XAC_TEMPLATES = templateShapeTable(texts));
+  const docs = builtinTemplateReqs();
+  if (!XAC_TEMPLATES || XAC_TEMPLATES.docs !== docs) XAC_TEMPLATES = { docs, table: templateShapeTable(docs) };
+  return XAC_TEMPLATES.table;
 }
 // …and the project's own (this call's): its track packs' criteria and its requirements templates (.specs/templates/).
 function projectTemplateAcs(projectDir) {
@@ -818,8 +816,9 @@ function weighSectionHead(md, syns) {
   const end = index.find((h) => h.i > start.i && h.level <= start.level);
   return { level: start.level, title: start.text, body: lines.slice(start.body, end ? end.i : lines.length).join("\n") };
 }
-// A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot), trailing punctuation aside.
-const genericUnit = (s) => isGenericSlot(stripEnd(String(s).replace(/[*_`]+/g, "").trim(), unitIn(".:;!?"))); // /[.:;!?]+$/
+// A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot; "Pending", "[TBD]" — 1.24 review 6,
+// F4: genericAnswer, writtenContent's rule), emphasis and trailing punctuation aside: a Risks section saying "Pending." is no answer.
+const genericUnit = (s) => genericAnswer(s);
 // What a design section holds (A review 6): `entries` = table data rows (a table's header and separator rows skipped) + list items
 // at the section's outermost list level (indented up to 3 spaces; deeper ones are that item's pros / cons) — or, when that is
 // more, its sub-headings / bold-led paragraphs (one "### Option A" or "**Option A — …**" per option); `proseWords` = the words

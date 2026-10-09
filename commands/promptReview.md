@@ -1,5 +1,5 @@
 ---
-description: (+ai) Gate a prompt change on eval delta, cost delta, and version bump. PT - revisão de prompt (+ai). ES - revisión de prompt (+ai).
+description: (+ai) Gate a prompt change on its eval delta, cost delta and version bump.
 argument-hint: "[feature name]"
 ---
 

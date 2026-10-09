@@ -20,7 +20,7 @@ let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, dupl
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail;
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
   ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
@@ -29,7 +29,7 @@ function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail } = E); }
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
@@ -676,6 +676,8 @@ function spikeDoctor(projectDir, f) {
   if (wExp) add(wExp.id, wExp.status, wExp.detail);
   const mc = mergeConflictsCheck(projectDir, slug, st, lng); // 1.21 F1a: conflicts the merge driver left unresolved
   if (mc) add(mc.id, mc.status, mc.detail);
+  const rmc = roadmapGovernanceCheck(projectDir, lng); // 1.24 review 6 (E4): roadmap.json unreadable — its roles (the sign-off's) unknown
+  if (rmc) add(rmc.id, rmc.status, rmc.detail);
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
   return { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), approvals: st.approvals || {}, pendingGates: [], forcedGates: [],
@@ -757,8 +759,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   if (write) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    forgetCached(summaryPath);
-    fs.writeFileSync(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary, "utf8"); // derived: regenerated on every call
+    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (1.24 r6: through the write gate)
   }
   const ready = blockers.length === 0;
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null; // "finished" (catalog, next_action)

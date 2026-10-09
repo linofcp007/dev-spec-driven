@@ -1,5 +1,5 @@
 ---
-description: Health-check a feature — is it ready to advance a phase? Runs EARS + placeholders + traceability + mandatory-section + evidence + approval checks. PT - diagnóstico (pronto para avançar?). ES - diagnóstico (¿listo para avanzar?).
+description: Health-check a feature before it advances a phase — EARS, placeholders, traceability, sections, evidence, approvals.
 argument-hint: "[feature name] [--deep]"
 ---
 
@@ -10,8 +10,9 @@ Feature: $ARGUMENTS
 Run the `spec_doctor` MCP tool for this feature (CLI `dev-spec doctor <feature>`, exit 1 on FAIL) and report the
 result clearly: each check (pass/warn/fail), the recorded phase approvals, and the `readyToAdvance` verdict.
 
-- **Fails** (block advancing): `ears` errors (or requirements.md cites AC IDs but no criterion was linted — write each AC
-  as a list item, heading or line that starts with its ID, or a table row under an Acceptance Criteria heading — or it
+- **Fails** (block advancing): `ears` errors (or requirements.md cites an AC ID that no linted criterion carries — write each AC
+  as a list item, heading or line that starts with its ID (`[US-1.AC-1]` / `(US-1.AC-1)` too), or a table row under an
+  Acceptance Criteria heading — or it
   has criteria but no `US-n.AC-m` ID trace_check reads: number each one `US-1.AC-1`, `US-1.AC-2` …; a bare `AC-1` is
   not one),
   `clarifications` still open (a bugfix: in `bug.md` too), `ac-uniqueness`, `placeholders` (template
@@ -26,7 +27,9 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   depending on itself, a cycle), `change-scope` (a change past 1–3 criteria, 1–3 tasks or core only — make it a feature),
   `merge-conflicts` (conflicts git's merge driver left in `.state.json` / `roadmap.json` — resolve them), `state` (the
   feature's `.state.json` can't be read — not valid JSON, e.g. a text merge's conflict markers, or the wrong shape: repair
-  it by hand or restore it from git; its approvals, ticks and evidence are unknown until then), missing
+  it by hand or restore it from git; its approvals, ticks and evidence are unknown until then), `roadmap` (`.specs/roadmap.json`
+  can't be read — not valid JSON or the wrong shape: its approval roles and project checks are unknown, so approvals,
+  revocations and `/spec-finish` refuse until it is repaired), missing
   `requirements`/`design`, a bugfix's `root-cause`, a spike's `question` / `decision`.
 - **Warnings**: `steering` (missing core files, or steering files still holding template placeholders — named),
   `success-criteria`, `priorities`, `mermaid`, `constitution-check`, `placeholders` of a later phase,
@@ -43,7 +46,10 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   (project checks without a passing run since the last task activity, or run before the implementing files changed —
   `/spec-finish` blocks on it), `verify-pipes` (a `_Verify:_` that pipes: its exit code is the last command's),
   `malformed-markers` (text on a task line shaped like a marker that yields none — `**Verify:** npm test`, a bare
-  `Verify:` — so no check runs and no file is traced: write `_Verify: <command>_`), `verify-suspicious` (a `_Verify:_`
+  `Verify:`, an empty `_Verify:_` followed by its value (`_Verify:_ npm test`) — so no check runs and no file is traced:
+  write `_Verify: <command>_`), `expect-value` (an `_Expect:_` value other than `fail` — the task stays one whose run must
+  pass), `evidence-moved` (a run recorded under a task number whose task was renumbered — `#1 → #2`: neither task reads it;
+  record the moved task's own run), `verify-suspicious` (a `_Verify:_`
   value that looks garbled — it starts with `_` or `*`, holds a code span inside it, or has a quote with no partner —
   which `done --run` would run as written), `outside-code-artifacts` (+tdd: a
   test planned outside test code — `load-test.md`, an eval set — whose artifact is still the scaffold),

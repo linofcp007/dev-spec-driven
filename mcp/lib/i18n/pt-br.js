@@ -107,6 +107,16 @@ const PTBR_PHRASES = {
   "pôr a passar": "fazer passar", "di-lo": "diga isso", "fá-lo": "faça isso",
   "efeitos secundários": "efeitos colaterais", "batem sempre certo": "sempre fecham", "porque se aplica": "por que se aplica",
   "porque importa": "por que importa", "porque é preciso": "por que é preciso", // the interrogative "why" is two words in Brazil
+  "porque é só isso": "por que é só isso",
+  // review 6 (H8) — "tela" is feminine where "ecrã" is masculine: the article, contraction or possessive before it changes along
+  // (the bare word is PTBR_WORDS'; "leitor de ecrã" → "leitor de tela" needs no article)
+  "o ecrã": "a tela", "os ecrãs": "as telas", "do ecrã": "da tela", "dos ecrãs": "das telas", "no ecrã": "na tela", "nos ecrãs": "nas telas",
+  "ao ecrã": "à tela", "aos ecrãs": "às telas", "pelo ecrã": "pela tela", "pelos ecrãs": "pelas telas", "um ecrã": "uma tela", "uns ecrãs": "umas telas",
+  "num ecrã": "em uma tela", "dum ecrã": "de uma tela", "seu ecrã": "sua tela", "seus ecrãs": "suas telas", "teu ecrã": "sua tela", "teus ecrãs": "suas telas",
+  "o seu ecrã": "a sua tela", "o teu ecrã": "a sua tela", "os seus ecrãs": "as suas telas", "os teus ecrãs": "as suas telas",
+  "do seu ecrã": "da sua tela", "do teu ecrã": "da sua tela", "no seu ecrã": "na sua tela", "no teu ecrã": "na sua tela",
+  "este ecrã": "esta tela", "esse ecrã": "essa tela", "neste ecrã": "nesta tela", "nesse ecrã": "nessa tela", "deste ecrã": "desta tela",
+  "desse ecrã": "dessa tela", "outro ecrã": "outra tela", "mesmo ecrã": "mesma tela", "novo ecrã": "nova tela",
   // a word whose Brazilian twin changes gender takes its article along
   "a faturação": "o faturamento", "da faturação": "do faturamento", "na faturação": "no faturamento", "à faturação": "ao faturamento",
   "pela faturação": "pelo faturamento", "uma faturação": "um faturamento", "a monitorização": "o monitoramento",
@@ -267,6 +277,8 @@ const PTBR_WORDS = {
   duma: "de uma", duns: "de uns", dumas: "de umas", doutro: "de outro", doutra: "de outra", doutros: "de outros", doutras: "de outras",
   // full review Pb7 — LGPD / Brazilian SaaS vocabulary (the section synonyms in spec.js read these headings)
   "multi-inquilino": "multilocatário", subcontratante: "operador", subcontratantes: "operadores", aipd: "RIPD",
+  // review 6 (H8): the participle of rever is "revisado" in Brazil ("revisto" reads European)
+  revisto: "revisado", revista: "revisada", revistos: "revisados", revistas: "revisadas",
 };
 
 function ptbrEscape(s) {

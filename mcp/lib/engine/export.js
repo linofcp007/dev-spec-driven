@@ -1173,6 +1173,7 @@ function changelogData(projectDir, since, only) {
   const fixed = [];
   const superseded = [];
   const changeRequests = [];
+  const changes = []; // 1.24 r6 (G-I10): the shipped changes (kind "change")
   const shipped = new Set();
   const srcs = featureDirs(projectDir).filter((s) => !only || only.has(s.slug)).map((s) => ({ ...s, st: stateFromFile(projectDir, statePath(s.dir)) }));
   for (const s of srcs) {
@@ -1194,7 +1195,8 @@ function changelogData(projectDir, since, only) {
     const reqFull = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
     const reqRaw = st.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without its task blocks (1.21 review C1)
     const reqs = activeDesign(reqRaw, tracks);
-    const entry = { feature: s.slug, title: specTitle(reqRaw, s.slug), kind: st.kind === "bugfix" ? "bugfix" : "feature", at: new Date(at).toISOString(), event: at === fin ? "finished" : "execution-approved" };
+    const kind = st.kind === "bugfix" || st.kind === "change" ? st.kind : "feature";
+    const entry = { feature: s.slug, title: specTitle(reqRaw, s.slug), kind, at: new Date(at).toISOString(), event: at === fin ? "finished" : "execution-approved" };
     if (s.archived) entry.archived = true;
     if (entry.kind === "bugfix") {
       const bug = readContained(projectDir, path.join(s.dir, "bug.md")) || "";
@@ -1204,7 +1206,8 @@ function changelogData(projectDir, since, only) {
     } else {
       entry.summary = sectionFirstParagraph(reqs, SUMMARY_SYN);
       entry.acs = releaseAcs(reqs);
-      added.push(entry);
+      // 1.24 r6 (G-I10): a shipped CHANGE (kind "change", one change.md) changes what exists — "Changed", never "Added"
+      (kind === "change" ? changes : added).push(entry);
     }
     // The earlier criteria this shipped feature replaces (_Supersedes:_), each with the criterion that replaces it.
     const own = acIndex(reqs);
@@ -1232,7 +1235,7 @@ function changelogData(projectDir, since, only) {
     });
   }
   const byAt = (a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0);
-  return { added: added.sort(byAt), fixed: fixed.sort(byAt), changed: { superseded: superseded.sort(byAt), changeRequests: changeRequests.sort(byAt) } };
+  return { added: added.sort(byAt), fixed: fixed.sort(byAt), changed: { changes: changes.sort(byAt), superseded: superseded.sort(byAt), changeRequests: changeRequests.sort(byAt) } };
 }
 function renderReleaseNotes(d, lang, proj, scope, now, ms) {
   const M = i18n.msg(lang);
@@ -1247,7 +1250,12 @@ function renderReleaseNotes(d, lang, proj, scope, now, ms) {
     md += `### ${name(a)}\n\n` + (a.summary ? a.summary + "\n\n" : "");
     if (a.acs.length) md += a.acs.map((x) => `- **${x.id}** — ${x.text}`).join("\n") + "\n\n";
   }
-  const lines = d.changed.superseded.map((x) => `- ~~${code(x.ac)}~~ — ${M.catalog.supersededBy(code(x.by))}${x.text ? ": " + x.text : ""}`);
+  const lines = [];
+  for (const c of d.changed.changes || []) { // 1.24 r6 (G-I10): a shipped change — its summary, then its criteria
+    lines.push(`- **${name(c)}**${c.summary ? " — " + c.summary : ""}`);
+    for (const x of c.acs || []) lines.push(`  - **${x.id}** — ${x.text}`);
+  }
+  lines.push(...d.changed.superseded.map((x) => `- ~~${code(x.ac)}~~ — ${M.catalog.supersededBy(code(x.by))}${x.text ? ": " + x.text : ""}`));
   for (const c of d.changed.changeRequests) {
     const parts = ["added", "modified", "removed"].filter((k) => c[k].length).map((k) => N.crParts[k](c[k].join(", ")));
     if (c.reopened.length) parts.push(N.crParts.reopened(c.reopened.map((n) => "#" + n).join(", ")));
@@ -1302,7 +1310,7 @@ function changelog(projectDir, opts = {}) {
   const sinceIso = since == null ? null : new Date(since).toISOString();
   const scope = sinceSource === "last" ? N.sinceLast(utcStamp(sinceIso)) : sinceSource === "date" ? N.sinceDate(utcStamp(sinceIso)) : N.all;
   const markdown = renderReleaseNotes(d, lang, path.basename(path.resolve(projectDir)), scope, now, ms);
-  const counts = { added: d.added.length, changed: d.changed.superseded.length + d.changed.changeRequests.length, fixed: d.fixed.length };
+  const counts = { added: d.added.length, changed: d.changed.changes.length + d.changed.superseded.length + d.changed.changeRequests.length, fixed: d.fixed.length };
   const res = { ok: true, lang, since: sinceIso, sinceSource, generatedAt: now, added: d.added, changed: d.changed, fixed: d.fixed, counts, file, wrote: false };
   if (ms) res.milestone = { name: ms.name, date: ms.date, features: ms.features.slice(), ...(ms.archived ? { archived: ms.archived.slice() } : {}) };
   if (note) res.note = note;

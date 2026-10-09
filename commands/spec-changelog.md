@@ -1,5 +1,5 @@
 ---
-description: Release notes generated from the specs — Added (shipped features and their ACs), Changed (superseded ACs, change requests), Fixed (bugfixes with their root cause). PT - notas de versão a partir das specs. ES - notas de la versión a partir de las specs.
+description: Release notes generated from the specs — Added, Changed (superseded ACs, change requests) and Fixed (root causes).
 argument-hint: "[--since <ISO date|last|all>] [--milestone <name>] [--write]"
 ---
 
@@ -13,7 +13,8 @@ It builds human release notes from the spec data alone — no model, no git log:
 - **Added** — features that shipped since `since` (`spec_finish {write: true}` recorded their baseline, or their
   `execution` sign-off was approved), each with its summary and every user-story acceptance criterion as one line
   (template criteria left out). A feature that already shipped before `since` is never listed as new again.
-- **Changed** — acceptance criteria superseded (`_Supersedes:_`) by a feature shipped since then, each with the
+- **Changed** — the changes (size `xs`, one `change.md`) shipped since then, each with its summary and criteria (a change
+  is never listed as Added); acceptance criteria superseded (`_Supersedes:_`) by a feature shipped since then, each with the
   criterion that replaces it; and the change requests (`spec_impact` reopen) recorded since then — the IDs or sections
   added, modified and removed, the tasks reopened and the current text of the criteria a requirements change touched.
 - **Fixed** — bugfix features shipped since then, with the root-cause one-liner from `bug.md`.

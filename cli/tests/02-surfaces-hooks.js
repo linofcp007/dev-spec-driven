@@ -46,9 +46,10 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     .filter((f) => !["flag", "dry-run", "set-baseline", "require-live", "model", "prompt", "max-items", "name-only", "relative", "json"].includes(f)); // (1.23 review: the help names every harness flag)
   const allFlags = run(["help", ...helpFlags.map((f) => (f === "lang" ? "--lang=en" : f === "project" ? "--project=" + pf : "--" + f + "=1"))]);
   const helpAnywhere = run(["done", "big", "2", "--help", "--project", pf]);
-  ok(helpFlags.length > 50 && allFlags.code === 0 && /universal spec-driven CLI/.test(allFlags.out) && helpAnywhere.code === 0 && /universal spec-driven CLI/.test(helpAnywhere.out) &&
+  // (1.24 r6 B-I3: `<command> --help` prints that command's part of the help — done's here — not the whole help)
+  ok(helpFlags.length > 50 && allFlags.code === 0 && /universal spec-driven CLI/.test(allFlags.out) && helpAnywhere.code === 0 && /^ {2}done <feature> <n>/m.test(helpAnywhere.out) &&
     /^- \[ \] 2\./m.test(tasksOf()),
-    "full review S5: every --flag the help documents (" + helpFlags.length + ") is accepted; done … --help prints the help and ticks nothing (got " + JSON.stringify([allFlags.code, allFlags.out.trim().split("\n")[0].slice(0, 100)]) + ")");
+    "full review S5: every --flag the help documents (" + helpFlags.length + ") is accepted; done … --help prints done's help and ticks nothing (got " + JSON.stringify([allFlags.code, allFlags.out.trim().split("\n")[0].slice(0, 100)]) + ")");
 
   // S7 — backlog remove (rm's alias) prints the removal like rm.
   run(["backlog", "add", "Zeta Seven", "--project", pf]);

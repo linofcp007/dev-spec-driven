@@ -307,13 +307,17 @@ function readResource(projectDir, uri) {
   switch (p.kind) {
     case "roadmap": {
       const md = path.join(root, "ROADMAP.md");
-      if (inSpecs && inSpecs(md)) return found(readText(md));
+      // 1.24 r6 I-I1: a generated file the save hook left stale (refreshed at the end of the turn) is served as the refresh would
+      // write it now — rendered in memory, never the stale file
+      if (inSpecs && inSpecs(md)) return found(spec.staleGeneratedText(pdir, "ROADMAP.md") ?? readText(md));
       if (!inSpecs || !inSpecs(path.join(root, "roadmap.json"))) return missing();
       const meta = spec.readRoadmap(pdir).meta || {}; // rendered in memory, never written (spec_roadmap {write} does that)
       return found(spec.renderRoadmapMd(pdir, meta.roadmapLang || meta.lang));
     }
-    case "catalog":
-      return file(path.join(root, "SPECS.md"));
+    case "catalog": {
+      const cat = path.join(root, "SPECS.md");
+      return inSpecs && inSpecs(cat) ? found(spec.staleGeneratedText(pdir, "SPECS.md") ?? readText(cat)) : missing();
+    }
     case "steering": {
       if (!steeringNameOk(p.file)) return invalid(E.badSteering(clip(p.file)));
       const dir = path.join(root, "steering");

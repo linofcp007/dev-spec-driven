@@ -1,4 +1,4 @@
-# Example — a fully worked spec (1.23 shape)
+# Example — a fully worked spec (1.24 shape)
 
 `demo-project/` is a self-contained mini-project showing what a feature looks like with the current
 methodology: **prioritized user stories (P1/P2)**, **Success Criteria**, a design that weighs its choices
@@ -7,6 +7,11 @@ methodology: **prioritized user stories (P1/P2)**, **Success Criteria**, a desig
 a **quickstart** acceptance scenario, **spec↔code** wiring via `_Implements:_`, the **Phase 4 failing tests**
 named by their T-IDs with a first task that records their **red run** (`_Expect: fail_`), and **fingerprinted
 approvals** with their `.history/` snapshots. It also shows a **multi-feature roadmap with a dependency**.
+
+One section of today's design template is missing on purpose: **Reuse & Integration** (what the design reuses, extends
+or adds, with paths). The demo's design was approved before 1.19 added that section, and doctor holds an approved
+design only to the sections that existed when it was signed off — `design-reuse` passes with a note (below) instead
+of warning; the next approval of the design would ask for it. A design you write now has it from the template.
 
 It is real and verifiable — the primary feature (`api-keys`) passes `doctor` (verdict PASS, no warnings) and
 `trace`, from a fresh clone too: each approval records a content fingerprint, so the new file dates a checkout

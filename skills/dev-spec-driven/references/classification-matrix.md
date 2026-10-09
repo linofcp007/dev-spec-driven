@@ -105,6 +105,16 @@ is a draft for the human, who confirms Phase 0.
   component of what is being built: a singular noun after the / this / our, *o / este / o nosso, el / este / nuestro* with a
   plain negation ("The importer does not need Kafka", *"O agendador não usa Kafka", "El importador no necesita Kafka"*)
   excludes; with can't / may not, *não pode, no puede*, or as a plural ("Suppliers don't use the checkout") it keeps.
+  **What follows "no X" / "without X" (1.24):** a negated SUBJECT with a verb is a requirement on X — "No personal data is sent
+  to the LLM provider", "Ensure no PII is written to the logs", "No API keys are logged", "No tenant can access another tenant's
+  records" keep their tracks (PT / ES *nenhum / ningún* were never negations: *"Nenhum dado pessoal é enviado…"*, *"Ningún
+  dato personal se envía…"*); so is data to protect kept out of a place — "No secrets in the repository", "No PII in logs",
+  *"Sem dados pessoais nos logs", "Sin datos personales en los registros"* — and a "without X" a denying predicate governs:
+  "Reject requests without a valid access token", "Block logins without two-factor authentication", "Users without MFA must
+  not access the admin panel", *"Rejeitar pedidos sem um token…", "Los usuarios sin MFA no pueden acceder…"* (an access rule:
+  the auth word is a strong +sec signal there). Still excluded: the bare phrase ("No personal data."), a scope ("No personal
+  data in this feature", *"Sin datos personales en esta versión"*), an adoption participle ("No LLM is needed", "No Kafka or
+  RabbitMQ is required", "No auth needed").
 - **This project's own corrections** (1.21): when the human confirms Phase 0 with other tracks than suggested — `spec_create`
   with `tracks` and the same description as `summary` — the words that drove the suggestion are recorded in
   `.specs/classifier.json`. After **two consistent corrections** a word the team keeps rejecting for a track stops turning it on
@@ -178,6 +188,9 @@ Turn on `+saas` if **any** are true:
 Skip `+saas` when it's a prototype, internal tool, or low-traffic feature with a contained blast
 radius and no tenancy/scale/cost concern.
 
+Classifier signals include `tenant` (strong, as PT / ES *inquilino*, pt-BR *locatário*) — except beside rent, a landlord, a lease,
+an apartment (*renda, senhorio, arrendamento · alquiler, casero*): a tenant who rents a home is no signal.
+
 See `classification-examples-saas.md` for 10+ worked SaaS examples.
 
 ---
@@ -200,6 +213,13 @@ Turn on `+ai` if **any** are true:
 Skip `+ai` when there is no LLM/agent/embedding in the path, or it's a throwaway prototype not
 shown to users. Internal, advisory, low-volume, non-regulated AI assists may take `+ai` with a
 **minimal** eval set rather than the full rigor (note this in `classification.md`).
+
+Classifier signals — **strong** (besides LLM / GPT / Claude / embeddings / RAG / machine learning…): `AI` / `IA` in capitals
+(a lower-case "ai" / "ia" is weak; an English "IA" beside navigation / a sitemap is information architecture; an "AI" file beside
+Illustrator is none), speech-to-text / speech recognition, OCR, computer vision, object detection, facial recognition, sentiment
+analysis, a vision model, agentic, retrieval-augmented generation, `Whisper`, `LLaMA` / `Llama 3` (capitalised and versioned —
+ES "llama" = calls), DeepSeek (+ PT / ES: *reconhecimento de fala, visão computacional, análise de sentimento · voz a texto,
+visión artificial, análisis de sentimiento*). **Weak:** transcription / transcribe (*transcrição, transcripción*).
 
 See `classification-examples-ai.md` for worked AI examples across chatbots, RAG, and agents.
 
@@ -225,6 +245,14 @@ authentication, authorization, RBAC, access control, access / refresh token, API
 CORS, audit log, input validation, security, hardening, least privilege, MFA / 2FA, two-factor / multi-factor (*dois
 fatores, multifator · dos factores, doble factor, multifactor*), brute force, `STRIDE` (and the encryption verbs
 *encriptar, cifrar, criptografar*) — "two-factor authentication" is two weak signals, so +sec turns on.
+Since 1.24 also **strong:** card numbers / cardholder data / PCI DSS / `PAN`, impersonation, HMAC / signature verification / a
+webhook signature, bcrypt / argon2 / scrypt / password hashing, key / secret / credential rotation, a public share link ("share
+… via public links", "anyone with the link"), unauthorized / unauthenticated access (a hazard: "No unauthorized access to the
+reports" is the requirement) — and two readings: an auth word after "without" in a denying sentence ("Reject requests without
+a valid access token") and a credential handled — a secret, key, token, credential or password beside logs, a repository,
+plain text, hashing, a vault, rotation, a leak ("No API keys are logged", "Hash passwords with bcrypt"). **Weak:** OAuth,
+login with Google / social login, a file upload, a public / share link, verifying a signature, user roles, a valid / invalid
+/ expired token, *segredos / secretos*.
 **Corroborating only:** permission, at rest, in transit. Never a bare "injection" (dependency injection) or "https".
 
 Skip `+sec` when the feature crosses no trust boundary and handles nothing sensitive (a static page, an internal
@@ -251,7 +279,13 @@ processor, international transfer, standard contractual clauses (*dados pessoais
 datos personales, derecho de supresión, EIPD, AEPD*). **Weak:** user / customer data, user profile, email address,
 phone number, date of birth, cookie, user tracking, geolocation, biometric, health data, opt-in / opt-out, unsubscribe,
 privacy, account deletion, data export, DPA, **consent**, retention period / policy — generic alone (an OAuth consent
-screen, a trash folder's retention) until a second privacy signal corroborates them.
+screen, a trash folder's retention) until a second privacy signal corroborates them. Since 1.24 also **strong:** medical /
+health / patient records, patient data, medical history, PHI / EHR, KYC, a passport number, a social security / national
+insurance number (SSN), a user's location (*registos médicos, histórico clínico, prontuário, localização do utilizador ·
+historial clínico, ubicación del usuario*); **weak:** home / postal address, dates of birth / `DOB`, location tracking / history,
+passport, ID document / card, identity verification, fingerprint, facial recognition, call recordings, `NIF` / `DNI` / `NIE` /
+`CPF` (*morada, cartão de cidadão, impressões digitais · domicilio, documento de identidad, huellas dactilares*) — "Track the
+parcel location" or "Show the NIF on the invoice" alone stay a hint.
 
 Since 1.14, GDPR / RGPD / HIPAA turn `+privacy` on, not `+saas`. Skip `+privacy` when no information about an
 identifiable person is involved. Details (not legal advice): `privacy-track.md`.
