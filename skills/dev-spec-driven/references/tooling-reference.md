@@ -216,7 +216,16 @@ evals <feature> [--dry-run ...]          mcp-config [client] · rules <cursor|wi
 prompts [name] [--args "…"]              statusline [--print-config]
 merge-state --install | --uninstall | --check [--project <dir>]     merge-state <base> <ours> <theirs> [<path>]   (git's merge driver)
 bundle [--out <file.js>] [--force]       version (or --version / -V)
+completion <powershell|bash|zsh|fish>    (the shell's completion script on stdout — INSTALL.md → Shell completion)
 ```
+
+**Shell completion.** `completion <shell>` prints a script for PowerShell (5.1 and 7), bash, zsh or fish — built from the
+CLI's own tables (each command's flags, the values known for a flag or an argument: languages, tracks, phases, flows,
+sizes, import formats…), so a new command, flag or value completes without touching it. Feature names come from the
+project's `.specs/` on Tab through a hidden `__complete features|archived [--project <dir>]` that never loads the engine
+(about Node's startup). Without a `dev-spec` on PATH the script also defines `dev-spec` (running this CLI with `node`); in a
+plugin's versioned folder it follows a plugin update to the newest installed version — save it again for the new commands
+and flags. Install lines: `completion --help` and INSTALL.md.
 
 **Teams — git's merge driver for the spec state.** `merge-state --install` writes `.gitattributes` (commit it) and this
 clone's git config (`merge.dev-spec-state.driver`; every teammate runs it once). Git then runs `merge-state %O %A %B %P` on

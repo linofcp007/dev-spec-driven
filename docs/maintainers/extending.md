@@ -54,7 +54,10 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   `VALUE_FLAGS`. Either one → the `COMMAND_OPTIONS` entry of every command that reads it (1.23 review: any other command refuses
   it), and a NEW command → its `COMMAND_OPTIONS` entry (its flags, `max` positionals) — conventions.md → CLI: each command
   reads its own options and arguments. A value flag a command reads EVERY occurrence of (an `every()` collector) → also
-  `REPEATABLE_FLAGS` (1.24 r6 B5: any other one given twice is a usage error).
+  `REPEATABLE_FLAGS` (1.24 r6 B5: any other one given twice is a usage error). Shell completion (1.25) reads those tables as
+  they are; a NEW command's positionals → a `COMMAND_ARGS` entry (feature names, phases, tracks…), a value flag with a known set
+  of values → `FLAG_VALUES` — a list the facade has is named by its `@source` (`completionModel()`), never copied
+  (conventions.md → Shell completion).
 - New `.state.json` / `roadmap.json` key → decide how two branches merge it (conventions.md → Merging the spec state): an
   append-only list or a keyed map gets its rule in state.js (`mergeFeatureState`'s `FIELDS`, `ROADMAP_FIELDS`, `META_FIELDS`);
   a plain value needs nothing (3-way per key — both sides changed it differently = a conflict the user resolves).

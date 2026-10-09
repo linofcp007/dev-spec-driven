@@ -88,6 +88,9 @@ mcp/test.js                    the MCP suite's entry point — `node mcp/test.js
 mcp/tests/                     its files, one per area: NN-<area>[-<topic>].js (each exports run(ctx)) + harness.js (the
                                server under test, ok / rpc / payload, the shared helpers) — see testing.md → The suites
 cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts)
+cli/completion.js              1.25 shell completion: the scripts `completion <shell>` prints (from the CLI's tables) and the hidden
+                               `__complete` (feature names, Node core only — answered before the engine loads)
+cli/completion/                its templates: dev-spec.bash · .zsh · .fish · .ps1 (conventions.md → Shell completion)
 cli/test-cli.js                the CLI suite's entry point — `node cli/test-cli.js` (never a top-level bin/: CLAUDE.md → Never ship a top-level bin/)
 cli/tests/                     its files: NN-<area>-<topic>.js (NN = the same area numbers as mcp/tests/) + harness.js
 scripts/build.js               `npm run build`: the committed corpus (--check: exit 1 when stale) · --bundle [--out]: the bundle

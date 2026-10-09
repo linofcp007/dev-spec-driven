@@ -332,6 +332,35 @@ project*. In Windows PowerShell 5.1, a plain `>` writes UTF-16.
 
 The CLI also runs standalone in any shell — `node cli/dev-spec.js help`.
 
+## Shell completion
+
+Tab completion for the CLI — the commands, their flags, the values they take (`--lang`, `--flow`, `--size`, the phases of
+`approve`, the tracks of `add-track`…) and the feature names of the project you are in. Save the script once, then load it
+from your shell's profile (`$plugin` as in [Your plugin folder](#your-plugin-folder-plugin)):
+
+**PowerShell** (Windows PowerShell 5.1 or PowerShell 7):
+
+```powershell
+node "$plugin\cli\dev-spec.js" completion powershell > "$HOME\dev-spec-completion.ps1"
+Add-Content $PROFILE '. "$HOME\dev-spec-completion.ps1"'    # or add that line to $PROFILE by hand (notepad $PROFILE)
+```
+
+**bash** / **zsh** / **fish**:
+
+```bash
+node "$plugin/cli/dev-spec.js" completion bash > ~/.dev-spec-completion.bash && echo '. ~/.dev-spec-completion.bash' >> ~/.bashrc
+node "$plugin/cli/dev-spec.js" completion zsh > ~/.dev-spec-completion.zsh && echo '. ~/.dev-spec-completion.zsh' >> ~/.zshrc   # after compinit
+node "$plugin/cli/dev-spec.js" completion fish > ~/.config/fish/conf.d/dev-spec.fish
+```
+
+Open a new shell and type `dev-spec st<Tab>`, `dev-spec status <Tab>`. A plugin install puts no `dev-spec` on PATH, so the
+script also defines `dev-spec` itself (it runs this CLI with `node`); with a `dev-spec` already on PATH (`npm link`) it only
+adds the completion. Feature names are read from the project's `.specs/` on each Tab (a `--project` on the line counts), in
+about the time Node takes to start — the engine is not loaded. After a plugin update the script finds the newest installed
+version by itself (feature names and the `dev-spec` command keep working); save it again to complete the new version's
+commands and flags. `node "$plugin/cli/dev-spec.js" completion --help` prints these lines with your path filled in. (In
+PowerShell, type a letter after `-` or `--` before Tab: a bare `-` is PowerShell's own parameter syntax.)
+
 ## Updating
 
 1. **Update the plugin.** Options A and C: `/plugin marketplace update dev-spec-driven-marketplace` (for C, `git pull`
