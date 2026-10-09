@@ -213,10 +213,10 @@ exports.run = async ({
     "attack examples in the AI references sit in fenced blocks labelled as defensive test data");
   const docsEvalRoot = path.join(root, "evals");
   const docsNeg = fs.readdirSync(docsEvalRoot).filter((c) => fs.existsSync(path.join(docsEvalRoot, c, "prompt.md")) && /^\s+- negative\s*$/m.test(docsRead("evals", c, "prompt.md")));
-  ok(docsNeg.length >= 4 && ["requirements.txt", "eval()", "OpenAI"].every((k) => docsNeg.some((c) => docsRead("evals", c, "prompt.md").includes(k))) &&
+  ok(docsNeg.length >= 5 && ["requirements.txt", "eval()", "OpenAI", "typo"].every((k) => docsNeg.some((c) => docsRead("evals", c, "prompt.md").includes(k))) &&
     docsNeg.every((c) => fs.readdirSync(path.join(docsEvalRoot, c, "graders")).every((g) => /^max: 0\s*$/m.test(docsRead("evals", c, "graders", g)))) &&
     !/The planning request/.test(docsRead("evals", "trigger-bugfix-en", "graders", "skill-fires.md")),
-    "plugin evals: near-miss negatives (requirements.txt, eval(), one LLM call) keep the skill silent; the bugfix grader names the defect report");
+    "plugin evals: near-miss negatives (requirements.txt, eval(), one LLM call, a typo fix — 1.26) keep the skill silent; the bugfix grader names the defect report");
 
   // Plugin structure for v1.12: agents, commands, plugin evals.
   const agentsDir = path.join(root, "agents");
