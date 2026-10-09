@@ -47,7 +47,7 @@ how they came to be — the releases and review findings — is in History at th
   Tareas). Eval sample JSON is data, as-is; its prose is localized.
 - **The README, one file per language.** `README.md` (the reference), `README.pt.md` (European, no Brazilianisms) and
   `README.es.md` (neutral) hold the same sections and tables in the same order; a change goes to all three in one commit. The
-  docs tests read each (mcp/tests/17-docs*.js, 04-tracks-data, 10-guards-hooks-r7); the PR / CI prose guard reads
+  docs tests read each (mcp/tests/17-docs*.js, 04-tracks-data, 10-guards-hooks-cost); the PR / CI prose guard reads
   `README.pt.md` as Portuguese. Release news goes into CHANGELOG.md.
 - **Adding a language:** a regional variant derives from its base, as pt-BR from pt (only the overrides). A new language is a
   file `mcp/lib/i18n/<lang>.js` with every block `en.js` has (`text`, `build`, `steering`, `evalsReadme`, `msg`, `quality`,
@@ -97,7 +97,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `spec_classify` adds `langHint: "pt-BR"` — a hint for the agent, never a reading change. The markers and their weights are
   `PTBR_STRONG` / `PTBR_WEAK` / `PTPT_STRONG` in engine/classify.js (a hint at ≥ 2 points and above the European count).
 - **1.24 r6 H10** — Adding a language named identifiers the code doesn't have and enums to edit by hand; it names the table and
-  the derived enum the code has, and mcp/tests/17-docs-review6.js holds it to them.
+  the derived enum the code has, and mcp/tests/17-docs-flows.js holds it to them.
 - **1.25.1** — the stop gate's `triggers` (a word of each claim: a message without one runs none of the language's claim
   patterns) join what a new language fills.
 - **1.26** — the README becomes one file per language: `README.md`, `README.pt.md`, `README.es.md`.

@@ -80,7 +80,7 @@ is in History at the end.
 - **Dry run** (`dryRun: true`, CLI `--dry-run`): `importRun` inside `withDryRun` (conventions.md → The dry-run sink) — the
   same reads, refusals and rendering, nothing written (`isDryRun()` also skips `maybeRefreshRoadmap`). `dryRunResult` =
   the real result or refusal + `dryRun: true` + a `preview` of the files under `dir` (first-write order, no dot files,
-  each ≤ `DRY_RUN_FILE_CHARS` cut at a line end, ≤ `DRY_RUN_TOTAL_CHARS` in all). mcp/tests/13-imports-1-25.js compares
+  each ≤ `DRY_RUN_FILE_CHARS` cut at a line end, ≤ `DRY_RUN_TOTAL_CHARS` in all). mcp/tests/13-imports-steering.js compares
   it with the real import, file by file.
 
 ### The sources

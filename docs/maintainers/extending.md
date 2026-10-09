@@ -29,12 +29,12 @@ how they came to be — the releases and review findings — is in History at th
 - **New slash command** → first ask whether it is a subcommand of an existing one: every file costs the user's `/` menu and,
   if model-invocable, the shared listing budget (claude-code-integration.md → 22 commands). If not: `commands/<name>.md` with a
   `description` (one English line, ≤ 125 characters), an `argument-hint` ≤ 130 characters (the body lists every flag; none
-  when it takes no argument, never an empty one — `mcp/tests/17-docs-review7.js`), `disable-model-invocation: true` (only
-  `/spec` and `/spec-bugfix` are model-invocable — mcp/tests/10-guards-review6.js) and a lean body
+  when it takes no argument, never an empty one — `mcp/tests/17-docs-identifiers.js`), `disable-model-invocation: true` (only
+  `/spec` and `/spec-bugfix` are model-invocable — mcp/tests/10-guards-guard-downs.js) and a lean body
   (claude-code-integration.md → Lean bodies). It is an MCP prompt too: the exact set in `mcp/tests/17-docs.js` and the counts
   change with it. Never a Claude Code built-in name.
 - **The counts the docs state** — every tools / commands / prompts / agents count in the READMEs, INSTALL, llms-install,
-  INTEGRATIONS, integrations/README, AGENTS and CONTRIBUTING is the live one (`mcp/tests/17-docs-review6.js` reads each
+  INTEGRATIONS, integrations/README, AGENTS and CONTRIBUTING is the live one (`mcp/tests/17-docs-flows.js` reads each
   phrasing, EN / PT / ES). A new CLI command also goes into the three READMEs' CLI summary, a new doctor check id into
   `references/tooling-reference.md`'s spec_doctor list.
 - **New doctor check** (or a check an approval refuses on) → ONE entry of `DOCTOR_CHECKS` in engine/doctor.js (its header lists
@@ -93,7 +93,7 @@ how they came to be — the releases and review findings — is in History at th
   `hooks/stop-claims.generated.json` (`STOP_FILTER_SOURCES` adds `engine/guards.js`) — architecture.md → The build; mcp/test.js
   fails until you do. A version bump alone needs no rebuild. A module the corpus render starts to run through joins
   `CORPUS_SOURCES` (the V8-coverage test names it). Never commit `mcp/lib/spec.bundle.js`.
-- **Renaming or removing a code identifier** → fix the notes citing it: `mcp/tests/17-docs-review7.js` fails on a backticked
+- **Renaming or removing a code identifier** → fix the notes citing it: `mcp/tests/17-docs-identifiers.js` fails on a backticked
   name in CLAUDE.md or `docs/maintainers/*.md` that no code file holds (a name from outside the code goes into its allowlist).
 - **SKILL.md stays the source of truth for the workflow** — the rules an agent needs at decision time, ≤ 5,000 words
   (`mcp/tests/01-core.js`; loaded whole every time the skill fires). Lookup material goes into `references/` with a one-line
@@ -112,13 +112,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.21 F5** — sized scaffolds: the size branch must leave the no-size text byte-identical (the pinned sha1).
 - **1.23 review** — a CLI command refuses every flag outside its own `options`.
 - **1.24 review 6** — the counts the docs state had drifted (INTEGRATIONS.md still said 51 prompts at 55, integrations/README.md
-  34 tools at 38): `mcp/tests/17-docs-review6.js` reads every one.
+  34 tools at 38): `mcp/tests/17-docs-flows.js` reads every one.
 - **1.24 review 6, F7** — no section name or synonym may start another section's; `sectionOverlaps()` checks it.
 - **1.24 r6 B5** — a value flag given twice is a usage error unless the flag is `repeatable` (a command reading every occurrence).
 - **1.25** — a source that is no feature (steering, `STEERING_IMPORT_TOOLS`) joins the importers; the string-or-switch argument
   (`spec_create {branch}`, `--branch`) and `BOOL_STRING_ARGS`.
 - **1.25.1 review** — the argument-hint rule (none empty, none past 130 characters); tracks.md still named six classifier
-  constants the 1.20 cue rules had replaced, so `mcp/tests/17-docs-review7.js` checks every backticked identifier of the notes.
+  constants the 1.20 cue rules had replaced, so `mcp/tests/17-docs-identifiers.js` checks every backticked identifier of the notes.
 - **1.26** — tools folded into others behind hidden aliases (`LEGACY_TOOLS`, the modes); the 55 slash commands folded into 22
   (the table below); the corpus stopped carrying the version, so a version bump alone no longer needs a rebuild.
 - **1.27** — one operations table (`OPERATIONS`, mcp/lib/operations.js) both surfaces run through and one CLI command table

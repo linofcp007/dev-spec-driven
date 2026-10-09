@@ -190,7 +190,7 @@ matrix. The rules come first; how they came to be — the releases and review fi
   fingerprint-only | none`), `counts` {rows, verified, implemented, planned, untraced, template, superseded}, `lang`, `kind`,
   `tracks`.
 - **Linear:** rows read indexes built once (`rtmIndex()`, `rtmKey()`, `rtmMerge()`), never a scan per row;
-  mcp/tests/05-markdown-r7-readers.js bounds the matrix at max(1.5 s, 4 × the plain trace).
+  mcp/tests/05-markdown-readers.js bounds the matrix at max(1.5 s, 4 × the plain trace).
 - **Stable codes:** `status` (`RTM_STATUSES`): `untraced` · `planned` (a linked task open, or none yet) · `implemented` (all
   done, one unverified) · `verified` (all done and verified; nothingToVerify counts). `gaps`: `no-task` · `no-test` (+tdd)
   · `no-coverage` (EC / NFR / SC; never an untouched template row) — exactly trace_check's gaps and warnings for that ID.

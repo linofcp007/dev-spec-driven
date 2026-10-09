@@ -18,9 +18,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
 - **One dev-spec project rule — `mcp/lib/probe.js`.** Node core only, never the engine; every surface asks it — the hooks
   (lazily, past each one's pre-filter), hooks/hook-utils.js (it re-exports the readers), the CLI's engine-free paths
   (cli/completion.js `statusProbe` / `resolveProject`) and the engine: doctor.js `isDevSpecDir` IS `probe.isDevSpecProject`
-  through the engine's reads (`PROBE_IO`: a dry run's folders), so files.js `nearestProject`, `statusLineProject`,
-  `guardLevel`'s user default, the server's `SPECS_REQUIRED` check and guards.js `sessionSpecs` agree with the hooks by
-  construction. Never copy the rule or a walk. **The rule** (`isDevSpecProject(dir)`): `<dir>/.specs` holds roadmap.json, a
+  through the engine's reads (`PROBE_IO`: a dry run's folders), so files.js `nearestProject` (`probe.nearestProject` over
+  those reads), `statusLineProject`, `guardLevel`'s user default, the server's `SPECS_REQUIRED` check and guards.js
+  `sessionProject` (its walk asks `isDevSpecDir`) agree with the hooks by construction. Never copy the rule or a walk. **The rule** (`isDevSpecProject(dir)`): `<dir>/.specs` holds roadmap.json, a
   `steering/` folder, a ROADMAP.md dev-spec generated (`RE_AUTOGEN` in its first 4,000 characters — all a v1.8-era project has;
   mcp/tests/01-core.js keeps one), or a feature folder (no `.` prefix) with a `.state.json` or a `classification.md` — the
   cheapest check first (no `.specs/`: one stat). **The walks:** `nearestDevSpec(start, {maxUp})` (≤ `SESSION_MAX_UP` = 40),
@@ -35,12 +35,12 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (~100 ms) only past a raw pre-check. **The spec hook** (PostToolUse Write|Edit) lints the save — requirements.md: EARS +
   placeholders; tasks.md: trace gaps + EC/NFR/SC warnings; design.md: `designSaveCheck()` — and stamps a tasks.md / change.md
   save in `.state.json lastEditAt` (`recordSpecEdit()`, the stop gate's activity); it skips `/.execution/`, `.specs/templates/`
-  and `.specs/tracks/` (unless the folder holds a `.state.json`) and generated files (mcp/tests/10-guards-review.js). It never
+  and `.specs/tracks/` (unless the folder holds a `.state.json`) and generated files (mcp/tests/10-guards-stop-gate.js). It never
   refreshes ROADMAP.md / SPECS.md: a save leaves `.specs/.execution/roadmap-stale` (`markRoadmapStale`) for the Stop /
   SubagentStop hook to refresh at the end of the turn (lifecycle.md → Roadmap files). **SessionStart** fires in every session of
   every project (the plugin is user-wide), so `sessionMayBeDevSpec()` runs the raw probe first — a superset of what
   `sessionProject()` can pick; it prints ≤ `SESSION_MAX_FEATURES` = 20 feature lines, then "+N more"
-  (mcp/tests/10-guards-hooks-r7.js). **The Stop hook** ends before the engine loads when the closing message holds no claim
+  (mcp/tests/10-guards-hooks-cost.js). **The Stop hook** ends before the engine loads when the closing message holds no claim
   pattern (hooks/stop-claims.generated.json; tasks-and-evidence.md → End-of-turn evidence gate). **The observe hook** prints
   nothing; **the approval hook** only a permission decision, and only with `meta.approvalGuard` on.
 - **The claim scan runs on a one-byte text** (mcp/lib/latin1-scan.js, loaded only for a prose past U+00FF; guards.js
@@ -55,18 +55,18 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   a plain string (spaces need no quoting; code.claude.com/docs/en/hooks → Exec form and shell form). Shell form runs `sh -c`
   (Git Bash or PowerShell on Windows) at 2–7× the cost, three hooks per Write / Edit or Bash call. **Minimum Claude Code
   2.1.139** (hook `args`): an older one runs a bare `node` — every hook silently off; INSTALL.md and the three READMEs'
-  Requirements state it. Never go back to shell form; a new hook takes the same shape (mcp/tests/10-guards-hooks-r7.js checks
+  Requirements state it. Never go back to shell form; a new hook takes the same shape (mcp/tests/10-guards-hooks-cost.js checks
   every entry).
 - **Which project a hook reads: `sessionProject({cwd, anchors})`** (engine/guards.js, on the facade). The MCP server works in
   `SPEC_PROJECT_DIR` = `${CLAUDE_PROJECT_DIR}` and records approvals, ticks and evidence THERE, while the payload `cwd` may be a
   git worktree (EnterWorktree, `.claude/worktrees/<n>`, a sibling checkout) with its own `.specs/` copy. The resolver: the
-  nearest dev-spec folder at or above `cwd` (`sessionSpecs`; ≤ `SESSION_MAX_UP` levels; never above an anchor that holds `cwd`; a
+  nearest dev-spec folder at or above `cwd` (each level asked `isDevSpecDir`; ≤ `SESSION_MAX_UP` levels; never above an anchor that holds `cwd`; a
   network cwd only itself), then `worktreeProject(near, anchors)`: `gitCheckoutOf()` reads the nearest `.git` (a FILE: `gitdir:`
   → `commondir` → `linked`; a submodule's has no commondir); near in another checkout of an anchor's repository (the status
   line's `workspace.project_dir` too) → the same folder there; else near in a linked worktree → the same folder in the main
   checkout — when that one is dev-spec's. Folders compare by text, then real path (`sessionSame()`: 8.3 vs long names). Nothing
   near → the first dev-spec anchor. → `{project, root, worktree}`; `sessionPath(s, p, cwd)` spells a payload path under
-  `project`. The hooks run `probe.sessionProjects` first (mcp/tests/10-guards-review6.js), then ask the engine; the spec hook
+  `project`. The hooks run `probe.sessionProjects` first (mcp/tests/10-guards-guard-downs.js), then ask the engine; the spec hook
   stamps a worktree's tasks.md save in the mapped project, SessionStart reports it, `statusLineProject()` maps the same way.
 - **What the hooks share before the engine loads — `hooks/hook-utils.js`** (not a hook; Node core and probe.js only): the
   probe's readers (`readJson`, `textOf` …: a UTF-16 BOM decides, else UTF-8 — files.js `decodeText`; Windows PowerShell 5.1
@@ -74,8 +74,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `editTargets` / `approvalProjects` (Human approval guard), `sessionFlagFile` (`dev-spec-<kind>-<sha1(session_id)>.flag` in the
   OS temp folder), `claimProse` / `claimScan` / `claimMatch` (the Stop hook's pre-filter) and `parseProjectDir(v, base)` /
   `fileUriToPath` / `unexpandedVar` — ONE reading of an MCP tool's projectDir (`{none}` · `{dir}` · `{code: project-dotdot |
-  project-network | project-uri}`), which **mcp/server.js** requires too (`HOOK_UTILS`). mcp/tests/10-guards-review6.js and
-  10-guards-review7.js check they agree with the engine's.
+  project-network | project-uri}`), which **mcp/server.js** requires too (`HOOK_UTILS`). mcp/tests/10-guards-guard-downs.js and
+  10-guards-shell-writes.js check they agree with the engine's.
 - **Commands never reuse a Claude Code built-in name** (`/init`, `/status`, `/doctor`, `/commit`, `/review`): one that could
   collide takes the `spec-` prefix (`/spec-setup`, `/spec-status`, `/spec-doctor`, `/spec-review`).
 - **22 commands, 2 of them model-invocable.** Model-invocable skill and command descriptions share ONE budget across all
@@ -83,8 +83,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   umbrella commands with subcommands (extending.md has the old → new table), and every command but `/spec` and `/spec-bugfix`
   sets `disable-model-invocation: true`: its description leaves the model's context, the user still types it, Claude can't run
   it. The model-visible listing (those two + the skill's) stays ≤ 1,500 characters, each description ≤ 125, one English line
-  (the multilingual triggers live in SKILL.md) — mcp/tests/10-guards-review6.js. A model-invocable command never tells the model
-  to RUN a user-only one (17-docs-review7: "record it with `spec_approve`", never "with /approve"). prompts-resources.js
+  (the multilingual triggers live in SKILL.md) — mcp/tests/10-guards-guard-downs.js. A model-invocable command never tells the model
+  to RUN a user-only one (17-docs-identifiers: "record it with `spec_approve`", never "with /approve"). prompts-resources.js
   `parseFrontMatter` ignores the key (the D4 strict-YAML check accepts it); the MCP prompts serve every command.
 - **Lean bodies.** A command routes (its subcommands), names the ONE tool call (or CLI line) per subcommand, and states the few
   rules that matter (show the verdict, approvals are the user's, evidence before claims); catalogues — check ids, result keys,
@@ -223,7 +223,7 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   → **`link`**. Allowed: spec documents, `.execution/` (but the observed log), lock files, read-only git. **Fail closed:** a
   program `shellKnownProgram()` doesn't know (not text-only, `APPROVAL_READERS`, a writer, a shell, a launcher or the CLI) run on
   `.specs/` or a guarded file is `unreadable` why `specs-arg` (`npx prettier --write .specs/roadmap.json`).
-  mcp/tests/10-guards-review7.js holds 33 legitimate commands that stay allowed; mcp/tests/10-guards-hooks.js checks the hook's
+  mcp/tests/10-guards-shell-writes.js holds 33 legitimate commands that stay allowed; mcp/tests/10-guards-hooks.js checks the hook's
   `candidate()` constants match the engine's.
 - **MCP file tools** (`approvalEditActions()` / `approvalPathArgs()`): string values of path-named keys (3 levels, ≤ 32; a
   `file://` URI via `fileUriToPath`) are read as an Edit's path; a move / delete tool also on `.specs/` or under it. Content keys

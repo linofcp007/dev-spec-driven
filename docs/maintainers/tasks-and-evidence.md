@@ -331,7 +331,7 @@ Engine: the `B5` block of `engine/evidence.js`.
   - *A claim is about the WORK* (the `STOP_EN_*` / `STOP_PT_*` / `STOP_ES_*` fragments): a state claims when its clause ends there
     (`…_END`) or the work is its subject; a simple past only with the work as its object (`…_WORK`) or ending its sentence; a
     line-start "Done." (`stopLineClaim()`) only alone, before an emoji, tests / tasks (`…_TESTED`) or the work — "Done. I updated
-    the README as you asked." claims nothing. mcp/tests/10-guards-hooks-r7.js holds the non-claims and the claims to keep;
+    the README as you asked." claims nothing. mcp/tests/10-guards-hooks-cost.js holds the non-claims and the claims to keep;
     mcp/tests/03-languages.js's pt-BR lint skips these raw keys.
   - No session scoping: `.state.json` records no session (an MCP tick has none), and a new state key would need the merge driver.
 - **Trigger words.** Each language's `stopGate.triggers` (pt-BR keeps pt's raw, with its own `funcionando` / `passando` / `rodando`)
@@ -382,7 +382,7 @@ Engine: the `B5` block of `engine/evidence.js`.
   only while every size matches (a size-preserving edit is the accepted limit; `npm run check` and the suite catch it). `mayClaim()`
   runs the triggers (none → done), then `claimMatch()` runs `claimProse()` (wide: `claimScan`) through ONE alternation of the
   triggered patterns; no match ends the hook. A superset: negations, questions and admissions stay the engine's; any trouble → the
-  engine. SubagentStop is never pre-filtered. mcp/tests/10-guards-review6.js ("I-I4") checks it filters out no engine claim. **`npm
+  engine. SubagentStop is never pre-filtered. mcp/tests/10-guards-guard-downs.js ("I-I4") checks it filters out no engine claim. **`npm
   run build` after editing an i18n file or guards.js** — the "1.20 build" test fails until the file is committed.
 - **Scope guard:** `meta.guard` `false | true | "scope"` (`guardLevel()`; the hook reads it raw; `guardInput()`: true / "on", false
   / "off", "scope"). `scope`, once a feature holds approved (or forced) tasks with open ones, adds `scopeGuardDecision()`: a code
@@ -592,7 +592,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.25.1 review 7** — a claim is about the WORK: every language listed its bare verbs and participles, so "I verified that the bug
   is in the parser", "the migration was completed in 2023", "The pay() function is implemented in src/pay.ts", "Verifiquei o
   ficheiro…", "Acabei de ler o código", "Terminé de leer…" were sent back while any recent tick was unverified — one model round-trip
-  a turn (the review's 17 messages are in mcp/tests/10-guards-hooks-r7.js); new claims ("ready to merge", "good to go", "Work
+  a turn (the review's 17 messages are in mcp/tests/10-guards-hooks-cost.js); new claims ("ready to merge", "good to go", "Work
   complete —") and the EN negator "how". Session scoping considered and left out. The implementer's report read per run: any exit 0
   anywhere passed "Ran `npm test` → exit code: 1 … Ran `npm run lint` → exit code: 0"; "DONE … exit code: 1" had passed before
   `notPassing`.

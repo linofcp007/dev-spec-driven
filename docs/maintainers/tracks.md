@@ -869,7 +869,7 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   precision 100%.
 - **1.25.1** — `AI_SECTIONS`' fallback words became loose (an unmarked "## Fallbacks" — a payment processor's — answered the
   deleted [AI] section); `headingLeadMarkers` (a marker must lead the heading). The 1.25.1 review found this note still naming
-  the constants 1.20 had replaced; 17-docs-review7.js now fails on any dead identifier.
+  the constants 1.20 had replaced; 17-docs-identifiers.js now fails on any dead identifier.
 
 ### Project-defined tracks
 - **1.14** — a project template gets every missing track block; a built-in scaffold without packs stays byte-identical to 1.14.

@@ -33,8 +33,9 @@ History at the end.
 
 ### The project folder: `resolveProjectDir()` — the resolver
 - **Every surface's default** (files.js): the explicit argument (`--project`, a tool's `projectDir`) > `SPEC_PROJECT_DIR` >
-  `CLAUDE_PROJECT_DIR` > the nearest folder at or above the working one holding a dev-spec .specs/ (`nearestProject()`: the
-  working folder itself with ANY `.specs/`; ≤ 64 levels; never up a network path — without the walk a subfolder run would
+  `CLAUDE_PROJECT_DIR` > the nearest folder at or above the working one holding a dev-spec .specs/ (`nearestProject()` —
+  `probe.nearestProject` over the engine's reads, the walk the CLI's completion makes too: the working folder itself with ANY
+  `.specs/`; ≤ 64 levels; never up a network path — without the walk a subfolder run would
   nest a second .specs/) > the working folder. A project INSIDE another needs `--project .` (or its own `.specs/` first).
 - **ONE rule says what a dev-spec .specs/ is:** mcp/lib/probe.js `isDevSpecProject(dir)` (Node core only); engine/doctor.js
   `isDevSpecDir` is it read through the engine's reads (a dry run's folders). `.specs/` holds roadmap.json, a `steering/`
@@ -59,7 +60,7 @@ History at the end.
   on the way** — a folder between .specs/ and the target, or the target, that is a symlink / junction or resolves outside the
   real .specs/ — and **the wrong kind** (a file where a folder is needed, or the reverse). .specs/ itself may be a link; only
   what lies below it is checked. A part gone between lstat and realpath (a lock just released) is judged by its folder
-  (mcp/tests/12-lifecycle-review6.js). `createOnly` passes an existing link target ("wx" never writes through it). **Why:** a
+  (mcp/tests/12-lifecycle-write-gate.js). `createOnly` passes an existing link target ("wx" never writes through it). **Why:** a
   committed link under .specs/ (`.execution/merge-summary.md -> ~/.bashrc`) would get spec text written where it points.
 - **The refusal** is an Error (`code` ESPECSLINK / ESPECSKIND, `gate`, a localized message — `err.specsLinked`…) that the
   facade answers as the call's result (`gateRefusal`: `{ok: false, linked | wrongKind: true, path, error}`) on every surface.
@@ -177,7 +178,7 @@ History at the end.
 - **Calendar dates: `today(now?, utc?)` / `dayOf(instant)` (engine/core.js, on the facade) are the ONE rule — the LOCAL date,
   YYYY-MM-DD.** Never `toISOString().slice(0, 10)` (the UTC date: the day before, just after midnight east of UTC). Stored
   timestamps stay UTC instants, shown through `dayOf`. The one UTC date on purpose: a waiver's `expires` (`today(undefined,
-  true)`). mcp/tests/16-conventions-review7-core.js guards it, with a child in Tokyo (`TZ` through the child's env — a Git Bash
+  true)`). mcp/tests/16-conventions-atomic-writes.js guards it, with a child in Tokyo (`TZ` through the child's env — a Git Bash
   `TZ=… node` prefix doesn't reach Node on Windows).
 
 ### The CLI is one table and one call
