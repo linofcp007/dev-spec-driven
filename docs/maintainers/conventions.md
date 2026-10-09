@@ -111,11 +111,20 @@ and U+FEFF gotchas are in CLAUDE.md.
   a sanitized copy; every mutator refuses BEFORE its destructive step — and the readers SAY it (r5 review): doctor fails
   `state`, next_action's one step is `fix` (`stateInvalid`), spec_finish blocks on `state`, the status line says repair
   (gates-and-approvals.md → next_action) — read as empty, every gate looked pending and next_action said "approve". A leading BOM is tolerated.
-  `writeIfAbsent` uses `flag:"wx"`. `writeFileAtomic`'s temp file never outlives the call: when the rename and the
-  plain-write fallback both fail (read-only / locked target on Windows, a folder at that path) it is removed before
-  the error is thrown — the best-effort refreshes swallow that error, and used to leave a `<file>.<pid>.<ts>.tmp`
-  in `.specs/` per call. On Windows an EPERM/EACCES/EBUSY rename is retried briefly (a scanner's lock). tasks.md
-  ticks go through it too (a reader never sees a truncated tasks.md).
+  `writeIfAbsent` uses `flag:"wx"`. `writeFileAtomic`'s temp file never outlives the call: when the rename fails for good
+  (read-only / locked target on Windows, a folder at that path) it is removed before the error is thrown — the best-effort
+  refreshes swallow that error, and used to leave a `<file>.<pid>.<ts>.tmp` in `.specs/`. tasks.md ticks go through it too (a
+  reader never sees a truncated tasks.md). **1.25.1 (review 7) — durable, and never torn in place:** the temp file is created
+  with `wx` (never written through a link planted at its name), written whole and **fsynced before the rename** (a crash right
+  after the rename could otherwise leave the new name with no data); after the rename its folder is fsynced on POSIX (Windows
+  can't open a folder for it; a file system that refuses an fsync — EINVAL / ENOTSUP / EPERM — is best effort). A rename Windows
+  refuses (EPERM / EACCES / EBUSY: an antivirus scan, the indexer, a preview pane) is retried with backoff — 5 … 800 ms, ~1.6 s in
+  all (it was ~60 ms) — never for a read-only target (no wait fixes it). **Then the write is REFUSED** — thrown, the previous
+  content untouched: the plain in-place `writeFileSync` it fell back on truncated the file first (a crash, a full disk or a
+  concurrent reader met it empty or half written) and followed a link the write gate had checked a moment before. Chosen over
+  a `.bak` copy: nothing to clean up or recover by hand, the write gate's guarantee (never through a link) kept whole. The cost:
+  an editor that holds a spec file open WITHOUT sharing delete on Windows makes writes to that one file fail until it lets go
+  (the error names the file). ~0.5 ms per write for the fsync (measured on Windows / NTFS).
 - **Merging the spec state across branches (1.21 F1a) — git's merge driver.** Two branches that both approve, tick or record
   evidence used to conflict in `.state.json` / `roadmap.json` (a text merge can't unite two JSON lists). `dev-spec merge-state
   <base> <ours> <theirs> [<path>]` is git's `%O %A %B %P` driver: `mergeStateText()` (state.js, PURE — no file, no git) parses

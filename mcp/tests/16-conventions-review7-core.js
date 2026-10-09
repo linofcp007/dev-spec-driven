@@ -1,5 +1,5 @@
 "use strict";
-// Conventions — 1.25.1 review 7 (engine core): one local calendar date (today / dayOf).
+// Conventions — 1.25.1 review 7 (engine core): writeFileAtomic is durable and never torn in place (fsync before the rename, a refused rename keeps the old content), one local calendar date (today / dayOf).
 // (16-conventions.js holds the area's earlier tests; this file the engine-core findings of the seventh review.)
 
 const fs = require("fs");
@@ -10,6 +10,77 @@ exports.run = async ({ ok, S, tmp, libSources, require, __dirname }) => {
   const js = JSON.stringify;
   const E = require("./lib/engine/index.js");
   const tmpsIn = (d) => fs.readdirSync(d).filter((x) => /\.tmp$/i.test(x));
+
+  // Finding 9 — writeFileAtomic wrote the temp file without an fsync (a crash right after the rename could leave the new name empty)
+  // and, when the rename kept failing (~60 ms of Windows retries), fell back to a plain in-place write that truncated the file first
+  // (a crash, a full disk or a concurrent reader met it empty or half written) and followed a link. Now: the temp file is fsynced
+  // before the rename, a refused rename is retried with backoff (Windows) and then REFUSED — the error thrown, the temp file
+  // removed, the previous content untouched; a read-only target is refused at once.
+  {
+    const p = path.join(tmp, "proj-r7c-atomic");
+    S.initProject(p, ["core"], "en");
+    const dir = path.join(p, ".specs");
+    const file = path.join(dir, "r7-atomic.json");
+    fs.writeFileSync(file, "OLD CONTENT\n");
+    const real = { rename: fs.renameSync, fsync: fs.fsyncSync, open: fs.openSync, write: fs.writeFileSync };
+    const log = [];
+    let fails = [];
+    fs.openSync = function (pth, fl) { const fd = real.open.apply(this, arguments); if (String(pth).endsWith(".tmp")) log.push(["open", fl, fd]); return fd; };
+    fs.fsyncSync = function (fd) { log.push(["fsync", fd]); return real.fsync.apply(this, arguments); };
+    fs.renameSync = function (a, b) {
+      log.push(["rename", path.basename(String(a)).replace(/\.\d+\.\d+\.tmp$/, ".<tmp>"), path.basename(String(b))]);
+      const code = fails.shift();
+      if (code) { const e = new Error(code + ": refused (test)"); e.code = code; throw e; }
+      return real.rename.apply(this, arguments);
+    };
+    fs.writeFileSync = function (pth) { if (path.resolve(String(pth)) === path.resolve(file)) log.push(["in-place", path.basename(String(pth))]); return real.write.apply(this, arguments); };
+    let ok1, buf, refused = null, afterRefused, retried = null, t0, t1;
+    try {
+      E.writeFileAtomic(file, "NEW ✓\n");
+      ok1 = fs.readFileSync(file, "utf8");
+      const order = log.map((x) => x[0]);
+      const tmpFd = (log.find((x) => x[0] === "open") || [])[2];
+      buf = { order, wx: (log.find((x) => x[0] === "open") || [])[1], syncedTmp: log.some((x) => x[0] === "fsync" && x[1] === tmpFd) };
+      E.writeFileAtomic(file, Buffer.from([0x41, 0x0d, 0x0a, 0xc3, 0xa9]));
+      buf.bytes = js([...fs.readFileSync(file)]);
+      // a rename refused for good: thrown, the old content intact, nothing written in place, no temp file left
+      fs.writeFileSync(file, "OLD CONTENT\n");
+      log.length = 0;
+      fails = ["EIO"];
+      try { E.writeFileAtomic(file, "NEVER\n"); } catch (e) { refused = e.code; }
+      afterRefused = { content: fs.readFileSync(file, "utf8"), inPlace: log.some((x) => x[0] === "in-place"), tmps: tmpsIn(dir) };
+      // a lock that clears: Windows retries EBUSY (with backoff) and the write lands; elsewhere it is refused at once
+      log.length = 0;
+      fails = ["EBUSY", "EBUSY"];
+      t0 = Date.now();
+      try { E.writeFileAtomic(file, "AFTER LOCK\n"); retried = "written"; } catch (e) { retried = e.code; }
+      t1 = Date.now() - t0;
+      retried = { result: retried, renames: log.filter((x) => x[0] === "rename").length, content: fs.readFileSync(file, "utf8"), tmps: tmpsIn(dir) };
+    } finally {
+      fs.renameSync = real.rename; fs.fsyncSync = real.fsync; fs.openSync = real.open; fs.writeFileSync = real.write; fails = [];
+    }
+    const win = process.platform === "win32";
+    ok(ok1 === "NEW ✓\n" && buf.wx === "wx" && buf.syncedTmp && buf.order.indexOf("fsync") > -1 && buf.order.indexOf("fsync") < buf.order.indexOf("rename") &&
+      buf.bytes === "[65,13,10,195,169]" && refused === "EIO" && afterRefused.content === "OLD CONTENT\n" && !afterRefused.inPlace && js(afterRefused.tmps) === "[]" &&
+      (win ? retried.result === "written" && retried.renames === 3 && retried.content === "AFTER LOCK\n"
+        : retried.result === "EBUSY" && retried.renames === 1 && retried.content === "OLD CONTENT\n") && js(retried.tmps) === "[]",
+      "1.25.1 review 7: writeFileAtomic creates its temp file exclusively, fsyncs it BEFORE the rename, writes bytes exactly; a refused rename is thrown with the old content intact (no in-place write, no temp left); Windows retries a passing lock (EBUSY) with backoff (got " +
+      js([ok1, buf, refused, afterRefused, retried, t1]) + ")");
+
+    // a read-only target on Windows: no wait fixes it — refused at once (the old fallback's plain write failed there too)
+    if (win) {
+      const ro = path.join(dir, "r7-readonly.json");
+      fs.writeFileSync(ro, "KEEP\n");
+      fs.chmodSync(ro, 0o444);
+      let code = null;
+      const s0 = Date.now();
+      try { E.writeFileAtomic(ro, "NO\n"); } catch (e) { code = e.code; }
+      const took = Date.now() - s0;
+      fs.chmodSync(ro, 0o644);
+      ok(code && fs.readFileSync(ro, "utf8") === "KEEP\n" && took < 1000 && js(tmpsIn(dir)) === "[]",
+        "1.25.1 review 7: a read-only target is refused at once (no ~1.6 s of retries), its content kept, no temp file left (got " + js([code, took, tmpsIn(dir)]) + ")");
+    } else ok(true, "1.25.1 review 7: read-only target — skipped (Windows only: a POSIX rename replaces a read-only file in a writable folder)");
+  }
 
   // Finding 10 — every calendar date was the UTC one (toISOString().slice(0, 10) in eleven places; todayIso, day): written between
   // 00:00 and 01:00 in Lisbon summer time, it was the day before. One helper, today(now) / dayOf(instant): the LOCAL date; stored
