@@ -58,8 +58,8 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   Write / Edit runs three hooks (guard, approval, spec), a Bash call two (approval, observe). **Minimum Claude Code 2.1.139**
   (released 2026-05-11): its changelog — "Added hook `args: string[]` field (exec form) that spawns the command directly without a
   shell, so path placeholders never need quoting"; the docs page states no minimum. An older version reads no `args` and would run
-  a bare `node` with the payload on stdin (a syntax error: every hook silently off) — INSTALL.md and the README's quick start state
-  the minimum. `claude plugin validate` (2.1.295) checks the hooks' schema (`args` must be an array) and passes. Never go back to
+  a bare `node` with the payload on stdin (a syntax error: every hook silently off) — INSTALL.md and the Requirements of the three READMEs
+  (EN / PT / ES) state the minimum. `claude plugin validate` (2.1.295) checks the hooks' schema (`args` must be an array) and passes. Never go back to
   shell form for a hook; a new hook takes the same shape (mcp/tests/10-guards-hooks-r7.js checks every entry).
 - **Which project a hook reads (1.23 review 5, M8): `sessionProject({cwd, anchors})`** (engine/guards.js, on the facade). The
   MCP server is pinned to `SPEC_PROJECT_DIR` = `${CLAUDE_PROJECT_DIR}` (the folder Claude Code started in) and records approvals,
@@ -471,7 +471,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   newest installed `<version>` holding cli/dev-spec.js at each run (cli/completion.js `statuslineCommand`: the completion scripts'
   rule in a `node -e` one-liner with no shell syntax — no double quote, dollar, backtick, percent, ! or backslash — so cmd.exe, PowerShell, sh and bash pass it alike;
   a path holding one of those keeps the plain command and its re-run note, `cacheNote`; else `cacheFollows`). A plugin cannot ship a status line (plugin `settings` honour only `agent` /
-  `subagentStatusLine`), hence the opt-in `/spec-statusline`.
+  `subagentStatusLine`), hence the opt-in `/spec-setup statusline`.
 - **User defaults** — the environment variables `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT`
   (`userOptionRaw()` → `userDefaults()`), FALLBACKS only: project meta always wins; empty, invalid or unexpanded (`${X}`)
   changes nothing. `newProjectLang()` only for a brand-new project (no meta.lang, no feature — active or archived), seeded

@@ -21,7 +21,7 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   subcommand, a test in the file of its area in `mcp/tests/` and `cli/tests/` (testing.md → The suites; bump the exact
   tool count — the handshake's, `mcp/tests/harness.js`), the README tool tables (EN/PT/ES —
   `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails
-  the suite), a `TOOL_ANNOTATIONS` entry in `mcp/server.js` (1.16 — mcp/test.js requires one per tool and snapshots `.specs/`
+  the suite) of README.md, README.pt.md and README.es.md, a `TOOL_ANNOTATIONS` entry in `mcp/server.js` (1.16 — mcp/test.js requires one per tool and snapshots `.specs/`
   around every read-only one), the tool count every doc states (below), and (usually) a thin command in `commands/`.
 - Folding a tool into another or renaming one (1.26) → keep the old name working: a `LEGACY_TOOLS` entry in `mcp/server.js`
   (its OLD inputSchema — old callers keep their refusals — and `args`, the translation to the new tool), never a `runTool` case;
@@ -38,10 +38,10 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   `mcp/tests/17-docs.js`, the counts in `mcp/tests/17-docs-review7.js` and the README command lists). Never a Claude Code
   built-in name.
 - **The counts the docs state** (1.24 review 6 — INTEGRATIONS.md still said 51 prompts at 55, integrations/README.md 34
-  tools at 38): README, INSTALL, llms-install, INTEGRATIONS, integrations/README, AGENTS and CONTRIBUTING are read by
+  tools at 38): README.md / README.pt.md / README.es.md, INSTALL, llms-install, INTEGRATIONS, integrations/README, AGENTS and CONTRIBUTING are read by
   `mcp/tests/17-docs-review6.js` — every "N tools / ferramentas / herramientas", "N (slash) commands", "Commands (N)", the
   prompts' "N of them, read from `commands/*.md`" and "N agents" must be the live tools/list length, command files and agent
-  files. A new CLI command goes into README's CLI summary in EN / PT / ES (the same file checks it against the CLI's
+  files. A new CLI command goes into the CLI summary of the three READMEs (the same file checks it against the CLI's
   `case` labels), a new doctor check id into `references/tooling-reference.md`'s spec_doctor list (checked against the ids
   the engine emits).
 - New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN

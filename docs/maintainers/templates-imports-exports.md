@@ -333,7 +333,7 @@ trackers, ADRs, release notes, milestones).
   AUTO-GENERATED marker is the LAST HEADER CELL (an empty column to leave unmapped) — a trailing record would become a
   work item.
 - **Milestones** — `roadmap.json → meta.milestones [{name, date, features, archived?}]` (`spec_roadmap_edit {kind: "milestone"}` / `dev-spec
-  milestone` / /spec-milestone), under the roadmap lock; `milestoneStore()` sanitizes — an entry is valid only as add writes
+  milestone` / /roadmap milestone), under the roadmap lock; `milestoneStore()` sanitizes — an entry is valid only as add writes
   it (a name `RE_MILESTONE_NAME` accepts — letters of any script with their marks —, a date `isoTime` accepts as a real
   day, feature lists of slugs, one entry per identity; a hand-edited roadmap.json reaches ROADMAP.md / .html, where every
   stored value still goes through `cell()` / `htmlEsc()`); a malformed list is refused by add / rm and read as its valid

@@ -15,7 +15,7 @@ commands/*.md                  55 slash commands (thin wrappers that invoke the 
 agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
                                `dev-spec-driven:spec-reviewer` (subagent execution, its simplify mode) /
                                `dev-spec-driven:spec-verifier` (one per finding before a fix round, 1.26) /
-                               `dev-spec-driven:spec-critic` (--deep) / `dev-spec-driven:spec-simplifier` (/spec-simplify, 1.22)
+                               `dev-spec-driven:spec-critic` (--deep) / `dev-spec-driven:spec-simplifier` (/spec-review simplify, 1.22)
 evals/                         plugin evals for `claude plugin eval` — maintainer-side, results ignored: triggering cases
                                (tags triggering / negative) and behavioural cases (tag behavior: <case>/case.yaml + fixture.sh,
                                built from evals/fixtures/ — lib.sh + project trees — with this plugin's own CLI); evals/README.md
@@ -111,7 +111,7 @@ hooks/spec-hook.js             save checks (requirements/tasks/design.md; any sp
                                I-I1) + SessionStart status (at most 20 features, then "+N more"), drift, upgrade and overlap lines
 hooks/stop-hook.js             end-of-turn: the stale ROADMAP.* / SPECS.md refreshed once, then the evidence gate (spec.stopCheck —
                                a "done" claim with unverified recent ticks)
-hooks/plan-hook.js             plan-mode bridge (ExitPlanMode: one line of context suggesting /spec-import of the approved plan)
+hooks/plan-hook.js             plan-mode bridge (ExitPlanMode: one line of context suggesting /spec-adopt import of the approved plan)
 hooks/precommit-check.js       optional git pre-commit validator (+ a stale ROADMAP.* / SPECS.md refreshed, re-staged when staged)
 hooks/stop-claims.generated.json GENERATED (npm run build, committed): the stop gate's claim patterns — the Stop hook's pre-filter
 AGENTS.md                      portable workflow for non-Claude agent tools

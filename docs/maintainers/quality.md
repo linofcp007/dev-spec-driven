@@ -100,14 +100,14 @@ nudge, the TDD micro-cycle.
   distinct concepts or ONE strong phrase (message queue, event bus, publish … event, domain event, background job / worker,
   concurrent writes / updates, race condition, double booking, distributed transaction, two-phase commit, webhook, Kafka,
   RabbitMQ, SQS, saga — PT / ES twins), review 7 — "click event", "Retry button", "Images load async" alone never do.
-  Answered (review 2) ANYWHERE in that user text — /clarify folds the answer into requirements.md, /grill asks in Phase 1
+  Answered (review 2) ANYWHERE in that user text — /clarify folds the answer into requirements.md, /clarify --grill asks in Phase 1
   while the design is a template — by a multi-word phrase only (`RE_CONSISTENCY_ANSWER`: eventual / strong consistency,
   consistency model, idempotent / idempotency…, at-least / at-most / exactly-once, isolation level, optimistic / pessimistic
   locking, outbox, dedup…, atomicity / atomically, two-phase commit; PT / ES twins; `ACID` upper-case) — never a bare
   "consistent", "eventually", "atomic" or "isolation" ("tenant isolation"). → `nudges [{code: "consistency-unstated",
-  signals ≤ 3}]` (one word per concept, each strong phrase); plain features only, never with +dist. /grill has the matching
+  signals ≤ 3}]` (one word per concept, each strong phrase); plain features only, never with +dist. /clarify --grill has the matching
   "Constraints round" (atomicity, ACID / isolation, race conditions, consistency model, delivery + idempotency, dependency
-  failure, volume, a measurable business outcome). **1.21 F5 P6 — one question bank:** /grill skips a constraint question an
+  failure, volume, a measurable business outcome). **1.21 F5 P6 — one question bank:** /clarify --grill skips a constraint question an
   active track's design sections own (+dist: atomicity … dependency failure; +saas: volume; +api: idempotent creates and
   concurrent updates) — clarify's rule (no nudge under +dist) — and a sized design's Error Handling points at the IF…THEN
   criteria instead of asking again (prose + the sized builders; no engine check).
@@ -189,7 +189,7 @@ nudge, the TDD micro-cycle.
   copy-paste) + a hard rule + the report's `### Reuse` block (Reused / Extended / Created + searched / Duplicated on purpose /
   Refactor candidates); agents/spec-reviewer.md: Code quality = duplication against the EXISTING codebase (a new unit
   duplicating one is Important), the guide's smells Minor; the controller files refactor candidates with `spec_roadmap_edit {kind: "backlog"} add`
-  (`refactor:` note) — subagent-execution.md, /executeTask; red-flags rows; SKILL.md, AGENTS.md, /design. No engine gate reads
+  (`refactor:` note) — subagent-execution.md, /executeTask; red-flags rows; SKILL.md, AGENTS.md, /spec (design). No engine gate reads
   the Reuse block (R5: prose only — the SubagentStop gate is unchanged). Extending a unit OUTSIDE the task's `_Implements:_`
   files is never a silent edit (R review 6): NEEDS_CONTEXT → a converge task (`spec_append_tasks`, re-approved) or the
   controller's go-ahead, or create locally and name it in the report — the scope guard (`meta.guard: "scope"`) would otherwise

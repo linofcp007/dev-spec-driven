@@ -24,7 +24,8 @@ Read the file BEFORE you change its area (a section name another note cites — 
   the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) · The module rule
   (1.18) · The build (1.20) · Config paths.
 - **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs, +data) or
-  track packs: The track model · Project-defined tracks (1.15) · Classifier gotchas.
+  track packs: The track model · Project-defined tracks (1.15) · Classifier gotchas · The classifier's signal rules, track
+  by track.
 - **`docs/maintainers/languages.md`** — before adding or rewording ANY user-facing string, a translated heading or a
   language: Languages (EN / PT-PT / PT-BR / ES) · Localization gotchas.
 - **`docs/maintainers/mcp.md`** — before changing a tool's schema or description, a capability (prompts, resources,
@@ -137,7 +138,7 @@ mcp/lib/i18n.js · i18n/        the localized content: en.js · pt.js · es.js �
 mcp/lib/prompts-resources.js   MCP prompts (= commands/*.md) + specs:// resources
 cli/dev-spec.js                the universal CLI over the same facade (the same defaults as MCP)
 hooks/                         hooks.json (auto-loaded) + guard / approval / observe / spec / stop / plan hooks + pre-commit
-commands/ · agents/            the slash commands (also the MCP prompts) · the plugin subagents
+commands/ · agents/            the 22 slash commands (also the MCP prompts) · the 5 plugin subagents
 skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) + references/ (read on demand)
 evals/                         plugin evals for `claude plugin eval` (maintainer-side, local only)
 mcp/test.js · cli/test-cli.js  the suites' entry points — their files: mcp/tests/ · cli/tests/ (NN-<area>…, + harness.js)
