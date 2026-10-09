@@ -22,7 +22,7 @@ Add the repo as a marketplace and install — works on any machine, no path edit
 Enable it when prompted; it auto-loads in future sessions. Verify:
 
 - `/help` → you should see `/dev-spec-driven:*` commands.
-- `/mcp` → you should see the **spec-driven** server connected with its 38 tools.
+- `/mcp` → you should see the **spec-driven** server connected with its tools — Claude Code lists all but `spec_stop_check` and `spec_log` (the plugin's Stop hook and CLI do their job; both stay callable).
 
 > You can also use the interactive `/plugin` menu: **Browse marketplaces → add `linofcp007/dev-spec-driven`
 > → install dev-spec-driven**.
@@ -37,7 +37,7 @@ claude --plugin-dir ./dev-spec-driven
 ```
 
 `--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 55 commands, the 4 agents, the
-hooks and the `spec-driven` MCP server (38 tools) load for that session.
+hooks and the `spec-driven` MCP server (32 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for the plugin's folder — here, your clone. Set it once (PowerShell):
 > ```powershell

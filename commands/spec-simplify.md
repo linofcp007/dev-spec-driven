@@ -15,7 +15,7 @@ Feature: $ARGUMENTS
 2. **Scope.** `MERGE_BASE = git merge-base <base-branch> HEAD`; only the lines `git diff MERGE_BASE..HEAD` added or
    changed. Never a test, a contract (an exported signature, a route, a status or error code, a schema, a config key,
    text a user sees, a log line or metric something reads), a new dependency, a prompt file (+ai) or code the feature
-   didn't write — a smell there is a refactor candidate: `spec_backlog {action: "add", name: "refactor-<topic>", note:
+   didn't write — a smell there is a refactor candidate: `spec_roadmap_edit {kind: "backlog", action: "add", name: "refactor-<topic>", note:
    "refactor: …"}`.
 3. **The list.** The ledger's deferred minors (`.specs/<feature>/.execution/ledger.md`, when the feature ran with
    subagents), the final review's "can ship" minors, then a read of the diff with the smell table and the project's

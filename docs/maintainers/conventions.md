@@ -443,5 +443,5 @@ and U+FEFF gotchas are in CLAUDE.md.
   (`msg(lang).args`, 1.22 review) where the schema bounds a value: a task number asked for (`askedTaskNumber()` — done / undone /
   brief, spec_complete_task / spec_task_brief `{number}`, schema `minimum: 0`) is an integer ≥ 0 (`taskNumberError()`: `-1` read
   "must be an integer"; not ≥ 1 — the scanner reads a hand-written "0." task and next serves it, so refusing 0 would loop next →
-  complete; `done` checks it itself before `--run` runs anything — an empty word would brief the NEXT task); a roadmap `order` (depend `--order`, spec_depend's `{type: "integer"}`) is a SAFE
+  complete; `done` checks it itself before `--run` runs anything — an empty word would brief the NEXT task); a roadmap `order` (depend `--order`, spec_roadmap_edit {kind: "depend"}'s `{type: "integer"}`) is a SAFE
   integer (`orderInput()` — `99999999999999999999` matched the digits and was stored as 1e20).

@@ -106,7 +106,7 @@ task that makes it green with `_Makes green:_`, and `dev-spec log` finds commits
   so is `test_t2_is_after_t1` (a pytest name about a time variable, not test T-2).
 - IDs compare by number: `T-1`, `T-01` and `test_T01` name the same planned test.
 - Only test files are read: source files in a broad list of languages — the one guard mode, `spec_scan` and
-  `spec_coverage` count as code (JS/TS, Python, Go, Rust, Java/Kotlin/Scala/Groovy, C#/F#/VB, Ruby, PHP, Swift,
+  `spec_scan {coverage: true}` count as code (JS/TS, Python, Go, Rust, Java/Kotlin/Scala/Groovy, C#/F#/VB, Ruby, PHP, Swift,
   Objective-C, C/C++, Vue/Svelte, PowerShell, shell, SQL, Lua, R, Perl, Elixir/Erlang, Haskell, Clojure, Dart, Julia,
   Nim, OCaml …), plus a Bats suite (`*.bats`) and Perl's `t/*.t` — that sit under a `test/`, `tests/`, `__tests__/`,
   `spec/` or `e2e/` folder or are named like a test in their language (`*.test.ts`, `*.spec.js`, `test_*.py`,

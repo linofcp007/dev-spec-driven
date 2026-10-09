@@ -128,7 +128,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   (a shell command's path-like words — ≤ 8 —, never a network path): with the session at a monorepo's root, `packages/app/.specs`
   (guard on) guards `packages/app/src/a.ts`; the engine checks the session's project AND `sessionProject({cwd: dirname(file)})`,
   the first ask wins. "Code" is
-  `isCodeFile(rel)` (engine/scan.js) — 1.21.1: ONE notion of code the guard, the brownfield scan, `spec_coverage` and the
+  `isCodeFile(rel)` (engine/scan.js) — 1.21.1: ONE notion of code the guard, the brownfield scan, `spec_scan {coverage: true}` and the
   test-code scan share: `CODE_EXT` (JS/TS incl. `.mts`/`.cts`, Python, Go, Rust, JVM, .NET, C/C++ `.cc`/`.hpp`,
   PowerShell `.ps1`/`.psm1`, shell, Windows `.bat`/`.cmd`, `.sql`, `.ipynb`, Lua, R, Perl, Elixir/Erlang, Haskell,
   Clojure, CUDA, Fortran, HDL, shaders, code-bearing templates like `.erb`/`.razor`…) plus a test-only extension
@@ -464,7 +464,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   only), and an older Claude Code validating option fields strictly could refuse the whole plugin. Claude Code's
   settings.json `env` block reaches the hooks, stdio MCP servers and the Bash tool alike (code.claude.com/docs/en/env-vars).
 - **MCP** — every tool carries `annotations` from server.js `TOOL_ANNOTATIONS` (`READ_ONLY` for the 14 tools no argument
-  makes write; `destructiveHint` on the 11 tools one of whose arguments removes or overwrites a record — 1.25.1 review 7: `spec_feature` remove, `spec_export` adr, `spec_approve` revoke, `spec_complete_task` undo, `spec_impact` reopen, `spec_backlog` / `spec_milestone` rm, `spec_depend` replace / clear, `spec_add_track` remove, `spec_init` (a removed check, cleared roles, an overwritten setting), `spec_tracks` signals set / forget; `idempotentHint` per tool; `openWorldHint: false` everywhere —
+  makes write; `destructiveHint` on the 11 tools one of whose arguments removes or overwrites a record — 1.25.1 review 7: `spec_feature` remove, `spec_export` adr, `spec_approve` revoke, `spec_complete_task` undo, `spec_impact` reopen, `spec_roadmap_edit {kind: "backlog"}` / `spec_roadmap_edit {kind: "milestone"}` rm, `spec_roadmap_edit {kind: "depend"}` replace / clear, `spec_add_track` remove, `spec_init` (a removed check, cleared roles, an overwritten setting), `spec_tracks` signals set / forget; `idempotentHint` per tool; `openWorldHint: false` everywhere —
   the protocol's defaults are the opposite, so all are explicit); mcp/test.js requires one entry per tool and snapshots
   `.specs/` around every read-only one. `completion/complete` (prompts-resources.js `complete()`): feature slugs for a
   prompt argument that names a feature, the `specs://` template variables `slug` / `artifact` / `file` (≤ 100 values,

@@ -13,7 +13,7 @@ feature task without losing it.
 
 See also: [improvement-specs.md](improvement-specs.md) (a refactor is its own spec, with characterization tests
 and a metric), [test-patterns.md](test-patterns.md) (refactor only on green; characterization tests),
-[brownfield.md](brownfield.md) (`spec_scan`, `spec_coverage`), [steering-templates.md](steering-templates.md)
+[brownfield.md](brownfield.md) (`spec_scan`, `spec_scan {coverage: true}`), [steering-templates.md](steering-templates.md)
 (`structure.md`, the constitution, `glossary.md`), [subagent-execution.md](subagent-execution.md) (the task report
 and the review), [red-flags.md](red-flags.md) ("while I'm here I'll also refactor X"),
 [ui-design-patterns.md](ui-design-patterns.md) (the design system: reuse for components),
@@ -328,7 +328,7 @@ report) — also when nothing was reused, because the search itself is the evide
 ```
 
 The controller and the reviewer read it before the diff: it says where to look for a duplicate the implementer
-may have missed. The controller files each refactor candidate in the backlog (`spec_backlog add`, a `refactor:` note —
+may have missed. The controller files each refactor candidate in the backlog (`spec_roadmap_edit {kind: "backlog"} add`, a `refactor:` note —
 below) and ledgers it; the implementer never does the refactor in the task.
 
 ## What the reviewer checks
@@ -392,7 +392,7 @@ code. With guard mode on, each edit of the pass asks the user (once every task i
 ## The refactor-candidate backlog
 
 - **One entry per candidate**, in the roadmap backlog (`dev-spec backlog add "refactor-<topic>" "refactor: <note>"`,
-  `spec_backlog {action: "add", name, note}`): the smell, the files, the evidence (a count, a metric, the feature that
+  `spec_roadmap_edit {kind: "backlog", action: "add", name, note}`): the smell, the files, the evidence (a count, a metric, the feature that
   tripped over it), and the refactoring you'd apply. The `refactor:` prefix tells a refactor candidate from a planned
   feature in ROADMAP.md. Give each candidate its **own name** (`refactor-pricing-switches`, `refactor-pricing-rounding`
   — the topic, not the area): an `add` with a name already in the backlog keeps that entry and appends the new note to

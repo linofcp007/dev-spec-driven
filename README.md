@@ -61,7 +61,7 @@ come next, then the tasks), with each track's core sections only; **m / l** keep
 with the sections two tracks both ask for written once. EARS, traceability, the evidence gate and the finish gate hold
 at every size; a design section counts as filled only with your own text. No size keeps the previous scaffold.
 
-### The local MCP server (`spec-driven`) — 38 tools
+### The local MCP server (`spec-driven`) — 32 tools
 
 Pure Node core — **no `npm install`, no network, no cost.** Tools:
 
@@ -73,7 +73,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_import` | Import a Kiro, spec-kit or OpenSpec spec, a Claude Code / Cursor plan, a Codex ExecPlan or BMAD docs as a new feature (IDs remapped to `US-N.AC-M`, tasks renumbered; a plan can come as `text` — plan mode keeps plans outside the project) — or Kiro steering / Cursor rules as `.specs/steering/` files; `dryRun` writes nothing |
 | `spec_templates` | Project templates: list, copy (`init`) or `check` the team's own scaffolds in `.specs/templates/`, which replace the built-in ones |
 | `spec_tracks` | Project-defined tracks: list, scaffold (`init`) or `check` the team's track packs in `.specs/tracks/<name>/` — each a marker track like `+sec` (signals, criteria, mandatory design sections, tasks, test rows, steering) |
-| `spec_list` / `spec_status` | Inspect features, phases, task progress, sections filled vs. present; each feature's kind (feature / bugfix / spike) and flow |
+| `spec_status` | Inspect a feature — phase, task progress, sections filled vs. present, its kind (feature / bugfix / spike / change) and flow; without `name`, every feature |
 | `spec_next_task` / `spec_complete_task` | Drive execution and tick tasks — with recorded **verification evidence** (a failed run refuses the tick and is recorded; an `_Expect: fail_` task is proven by a failing run; each run stamped `observed`); the next task is the first open one whose `_Depends:_` are done; `batch` for parallel `[P]` tasks, `waves` for the execution waves of every open task; `undo` unticks a task (its evidence turns stale — a re-tick needs a new run) |
 | `spec_task_brief` | Self-contained brief for one task — ACs and tests resolved to their spec text, design context, scoped steering, definition of done (the basis of subagent execution) |
 | `spec_append_tasks` | Converge: append follow-up tasks under `Phase: Convergence` without renumbering the existing ones (`depends` adds `_Depends:_`) |
@@ -88,17 +88,17 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_doctor` | One health-check → "ready to advance?" (EARS, placeholders, trace, sections, evidence, gates, steering) |
 | `spec_clarify` | Surface requirement ambiguities/gaps before design (with a glossary: every word it says to avoid) |
 | `spec_metrics` | Lead times, rework, forced approvals, change requests, evidence pass rate; `write` creates a pre-filled `retro.md` |
-| `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_` of a shipped feature; a draft's reads "to be superseded"), plus possible duplicate / conflicting criteria across active features; `write` → `.specs/SPECS.md` |
+| `spec_export` | `format: "catalog"` — living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_` of a shipped feature; a draft's reads "to be superseded"), plus possible duplicate / conflicting criteria across active features; `write` → `.specs/SPECS.md` |
 | `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`), a Gherkin `.feature` per feature (`"gherkin"`: one scenario per acceptance criterion, its EARS clauses as Given / When / Then) a CSV for Jira / Linear's importer (`"jira"` · `"linear"`: the feature, its stories, its tasks) or the decision log as Architecture Decision Records (`"adr"`: one MADR file per decision, ADR number = its D-n); `write` → `.specs/exports/` |
-| `spec_changelog` | Release notes from the specs — Added / Changed / Fixed since a date or the last notes; `milestone` scopes them to a milestone's features; `write` → `.specs/RELEASE-NOTES.md` |
+| `spec_export` | `format: "changelog"` — release notes from the specs — Added / Changed / Fixed since a date or the last notes; `milestone` scopes them to a milestone's features; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Implementing files changed, missing or new since `spec_finish` recorded its baseline |
 | `spec_stop_check` | The end-of-turn evidence gate for MCP-only clients: would this closing message ("done", "verified") be sent back — ticked tasks without evidence, project checks without a passing run? |
 | `spec_log` | The commits citing each task (+ the +tdd red-first check) from the `git log` text the client passes — the server never runs git |
 | `spec_upgrade` | After a plugin update: audit every active feature against the current rules (status, what doctor flags, next step, a critic / converge review); `apply` saves inferred tracks, gives pre-1.13 approvals a history baseline, stamps `meta.specVersion` and writes `.specs/UPGRADE.md` — never edits a spec |
-| `spec_roadmap` / `spec_depend` | Roadmap + dependencies (cycle-checked; `add` / `remove` edit the list), an ETA per feature from the velocity of ticked tasks and the files two features' open tasks both plan; `write:true` → `.specs/ROADMAP.md` (+ `html:true` for a brand-styled offline `.html`, `lang`) |
-| `spec_milestone` | Milestones: a target date for a set of features (`add` · `rm` · `list`), judged against their ETAs — `on-track` · `at-risk` · `late` · `done` (ROADMAP.md shows them; a feature's rename / archive / remove follows) |
-| `spec_backlog` | Track planned-but-unspecced features (shown in ROADMAP.md) |
-| `spec_scan` / `spec_coverage` | Brownfield: inventory an existing codebase (routes, tests, entrypoints, env var names, migrations) + the share of code files named in `_Implements:_` |
+| `spec_roadmap` / `spec_roadmap_edit` | Roadmap + dependencies (`spec_roadmap_edit {kind: "depend"}`: cycle-checked; `add` / `remove` edit the list), an ETA per feature from the velocity of ticked tasks and the files two features' open tasks both plan; `write:true` → `.specs/ROADMAP.md` (+ `html:true` for a brand-styled offline `.html`, `lang`) |
+| `spec_roadmap_edit` | `kind: "milestone"` — milestones: a target date for a set of features (`add` · `rm` · `list`), judged against their ETAs — `on-track` · `at-risk` · `late` · `done` (ROADMAP.md shows them; a feature's rename / archive / remove follows) |
+| `spec_roadmap_edit` | `kind: "backlog"` — track planned-but-unspecced features (shown in ROADMAP.md) |
+| `spec_scan` | Brownfield: inventory an existing codebase (routes, tests, entrypoints, env var names, migrations); `coverage: true` — the share of code files named in `_Implements:_` |
 | `steering_scaffold` | Create one steering file from its template (incl. `constitution.md`, `glossary.md`), or a custom scoped one |
 
 **Prompts and resources.** The server also serves one MCP **prompt** per plugin command — `/spec`, `/spec-status`,
@@ -186,7 +186,7 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 
 ### Living catalog, drift and restore
 
-- **`/spec-catalog`** (`spec_catalog`) — "what the system does today": every feature (active,
+- **`/spec-catalog`** (`spec_export {format: "catalog"}`) — "what the system does today": every feature (active,
   finished, archived) with each AC as one EARS line. A criterion replaced by a later feature declares it
   with `_Supersedes: <feature>/US-n.AC-m_` and the old one is shown as superseded. `write` generates
   `.specs/SPECS.md` (never over a hand-written file), refreshed with the roadmap from then on.
@@ -219,7 +219,7 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 
 - **Deeper scan** — `spec_scan` lists HTTP routes with method, path and `file:line` (Express, NestJS,
   Next.js, FastAPI, Flask, Django, Spring, ASP.NET, Rails, Laravel, Go …), test frameworks, entrypoints,
-  environment variable **names** (never values) and migration files. `spec_coverage` measures the share of
+  environment variable **names** (never values) and migration files. `spec_scan {coverage: true}` measures the share of
   code files named in any `_Implements:_` marker, per folder. `create --brownfield` adds an
   `integration-plan.md`.
 - **`/spec-import`** (`spec_import`) — bring a Kiro (`.kiro/specs/<name>/`), spec-kit
@@ -601,7 +601,7 @@ mantêm a cadeia completa, com as secções que dois tracks pedem escritas uma s
 evidência e o de fecho valem em todos os tamanhos; uma secção de design só conta como preenchida com texto próprio. Sem
 tamanho, fica o scaffold anterior.
 
-### O servidor MCP local (`spec-driven`) — 38 ferramentas
+### O servidor MCP local (`spec-driven`) — 32 ferramentas
 
 Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 
@@ -613,7 +613,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_import` | Importa uma spec do Kiro, spec-kit ou OpenSpec, um plano do Claude Code / Cursor, um ExecPlan do Codex ou documentos BMAD como nova funcionalidade (IDs convertidos para `US-N.AC-M`, tarefas renumeradas; um plano pode vir como `text` — o plan mode guarda os planos fora do projeto) — ou o steering do Kiro / as regras do Cursor como ficheiros de `.specs/steering/`; `dryRun` não escreve nada |
 | `spec_templates` | Templates do projeto: lista, copia (`init`) ou verifica (`check`) os scaffolds da equipa em `.specs/templates/`, que substituem os de origem |
 | `spec_tracks` | Tracks definidos pelo projeto: lista, cria (`init`) ou verifica (`check`) os track packs da equipa em `.specs/tracks/<nome>/` — cada um é um track com marcador como o `+sec` (sinais, critérios, secções obrigatórias do design, tarefas, linhas de teste, steering) |
-| `spec_list` / `spec_status` | Inspeciona funcionalidades, fases, progresso, secções preenchidas vs. presentes; o tipo de cada uma (feature / bugfix / spike) e o fluxo |
+| `spec_status` | Inspeciona uma funcionalidade — fase, progresso, secções preenchidas vs. presentes, o tipo (feature / bugfix / spike / change) e o fluxo; sem `name`, todas |
 | `spec_next_task` / `spec_complete_task` | Conduz a execução e marca tarefas — com **evidência de verificação** registada (uma execução falhada recusa a marcação e fica registada; uma tarefa `_Expect: fail_` prova-se com uma execução que falha; cada execução leva o carimbo `observed`); a próxima tarefa é a primeira aberta cujas `_Depends:_` estão feitas; `batch` para tarefas paralelas `[P]`, `waves` para as vagas de execução de todas as tarefas abertas; `undo` desmarca uma tarefa (a evidência fica obsoleta — voltar a marcá-la exige uma nova execução) |
 | `spec_task_brief` | Brief autocontido de uma tarefa — ACs e testes resolvidos para o texto da spec, contexto do design, steering com âmbito, definição de concluído (a base da execução com subagentes) |
 | `spec_append_tasks` | Convergência: acrescenta tarefas de seguimento em `Fase: Convergência` sem renumerar as existentes (`depends` acrescenta `_Depends:_`) |
@@ -628,17 +628,17 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_doctor` | Um health-check → "pronto para avançar?" (EARS, placeholders, trace, secções, evidência, gates, steering) |
 | `spec_clarify` | Expõe ambiguidades/lacunas dos requisitos antes do design (com um glossário: cada palavra que ele manda evitar) |
 | `spec_metrics` | Lead times, retrabalho, aprovações forçadas, pedidos de alteração, taxa de sucesso da evidência; `write` cria um `retro.md` pré-preenchido |
-| `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_` de uma funcionalidade entregue; o de um rascunho fica como "substituição prevista"), e os possíveis critérios duplicados / em conflito entre funcionalidades ativas; `write` → `.specs/SPECS.md` |
+| `spec_export` | `format: "catalog"` — catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_` de uma funcionalidade entregue; o de um rascunho fica como "substituição prevista"), e os possíveis critérios duplicados / em conflito entre funcionalidades ativas; `write` → `.specs/SPECS.md` |
 | `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`), um `.feature` Gherkin por funcionalidade (`"gherkin"`: um cenário por critério de aceitação, com as cláusulas EARS como Dado / Quando / Então) um CSV para o importador do Jira / Linear (`"jira"` · `"linear"`: a funcionalidade, as histórias, as tarefas) ou o registo de decisões como Architecture Decision Records (`"adr"`: um ficheiro MADR por decisão, número do ADR = o seu D-n); `write` → `.specs/exports/` |
-| `spec_changelog` | Notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `milestone` restringe-as às funcionalidades de um marco; `write` → `.specs/RELEASE-NOTES.md` |
+| `spec_export` | `format: "changelog"` — notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `milestone` restringe-as às funcionalidades de um marco; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Ficheiros de implementação alterados, em falta ou novos desde que o `spec_finish` registou a baseline |
 | `spec_stop_check` | O gate de evidência do fim do turno para clientes só MCP: esta mensagem final ("feito", "verificado") seria devolvida — tarefas marcadas sem evidência, verificações do projeto sem execução bem-sucedida? |
 | `spec_log` | Os commits que citam cada tarefa (+ a verificação red-first do +tdd) a partir do texto de `git log` que o cliente passa — o servidor nunca corre o git |
 | `spec_upgrade` | Depois de atualizar o plugin: audita cada funcionalidade ativa face às regras atuais (estado, o que o doctor assinala, próximo passo, uma revisão critic / converge); `apply` guarda os tracks inferidos, dá às aprovações anteriores à 1.13 uma baseline no histórico, carimba `meta.specVersion` e escreve `.specs/UPGRADE.md` — nunca edita uma spec |
-| `spec_roadmap` / `spec_depend` | Roadmap + dependências (deteta ciclos; `add` / `remove` editam a lista), uma ETA por funcionalidade a partir da velocidade das tarefas marcadas e os ficheiros que as tarefas abertas de duas funcionalidades planeiam em comum; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para o `.html` com a marca, offline, claro/escuro; `lang`) |
-| `spec_milestone` | Marcos: uma data-alvo para um conjunto de funcionalidades (`add` · `rm` · `list`), avaliada face às ETAs — `on-track` · `at-risk` · `late` · `done` (o ROADMAP.md mostra-os; renomear / arquivar / remover uma funcionalidade reflete-se neles) |
-| `spec_backlog` | Regista funcionalidades planeadas mas ainda sem spec (aparecem no ROADMAP.md) |
-| `spec_scan` / `spec_coverage` | Brownfield: inventário de código existente (rotas, testes, pontos de entrada, nomes de variáveis de ambiente, migrações) + a parte dos ficheiros de código indicados em `_Implements:_` |
+| `spec_roadmap` / `spec_roadmap_edit` | Roadmap + dependências (`spec_roadmap_edit {kind: "depend"}`: deteta ciclos; `add` / `remove` editam a lista), uma ETA por funcionalidade a partir da velocidade das tarefas marcadas e os ficheiros que as tarefas abertas de duas funcionalidades planeiam em comum; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para o `.html` com a marca, offline, claro/escuro; `lang`) |
+| `spec_roadmap_edit` | `kind: "milestone"` — marcos: uma data-alvo para um conjunto de funcionalidades (`add` · `rm` · `list`), avaliada face às ETAs — `on-track` · `at-risk` · `late` · `done` (o ROADMAP.md mostra-os; renomear / arquivar / remover uma funcionalidade reflete-se neles) |
+| `spec_roadmap_edit` | `kind: "backlog"` — regista funcionalidades planeadas mas ainda sem spec (aparecem no ROADMAP.md) |
+| `spec_scan` | Brownfield: inventário de código existente (rotas, testes, pontos de entrada, nomes de variáveis de ambiente, migrações); `coverage: true` — a parte dos ficheiros de código indicados em `_Implements:_` |
 | `steering_scaffold` | Cria um ficheiro de steering a partir do template (incl. `constitution.md`, `glossary.md`), ou um ficheiro personalizado com âmbito |
 
 **Prompts e recursos.** O servidor serve também um **prompt** MCP por cada comando do plugin — `/spec`, `/spec-status`,
@@ -726,7 +726,7 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 
 ### Catálogo vivo, drift e restauro
 
-- **`/spec-catalog`** (`spec_catalog`) — "o que o sistema faz hoje": todas as funcionalidades (ativas,
+- **`/spec-catalog`** (`spec_export {format: "catalog"}`) — "o que o sistema faz hoje": todas as funcionalidades (ativas,
   terminadas, arquivadas) com cada AC numa linha EARS. Um critério substituído por uma funcionalidade
   posterior é declarado com `_Supersedes: <feature>/US-n.AC-m_` e o antigo aparece como substituído. `write`
   gera `.specs/SPECS.md` (nunca por cima de um ficheiro escrito à mão), atualizado com o roadmap a partir daí.
@@ -764,7 +764,7 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **Análise mais funda** — o `spec_scan` lista rotas HTTP com método, caminho e `ficheiro:linha` (Express,
   NestJS, Next.js, FastAPI, Flask, Django, Spring, ASP.NET, Rails, Laravel, Go …), frameworks de teste,
   pontos de entrada, **nomes** de variáveis de ambiente (nunca os valores) e ficheiros de migração. O
-  `spec_coverage` mede a parte dos ficheiros de código indicados num marcador `_Implements:_`, por pasta.
+  `spec_scan {coverage: true}` mede a parte dos ficheiros de código indicados num marcador `_Implements:_`, por pasta.
   `create --brownfield` acrescenta um `integration-plan.md`.
 - **`/spec-import`** (`spec_import`) — traz uma spec do Kiro (`.kiro/specs/<name>/`), do spec-kit
   (`specs/<nnn-name>/`) ou do OpenSpec (`openspec/specs/<capability>/` ou uma pasta de change) como nova
@@ -1171,7 +1171,7 @@ evaluación — después llegan las pruebas que fallan y luego las tareas), solo
 trazabilidad, el gate de evidencia y el de cierre valen en todos los tamaños; una sección de diseño solo cuenta como
 rellenada con texto propio. Sin tamaño, se mantiene el scaffold anterior.
 
-### El servidor MCP local (`spec-driven`) — 38 herramientas
+### El servidor MCP local (`spec-driven`) — 32 herramientas
 
 Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 
@@ -1183,7 +1183,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_import` | Importa una spec de Kiro, spec-kit u OpenSpec, un plan de Claude Code / Cursor, un ExecPlan de Codex o documentos BMAD como función nueva (IDs convertidos a `US-N.AC-M`, tareas renumeradas; un plan puede llegar como `text` — el plan mode guarda los planes fuera del proyecto) — o el steering de Kiro / las reglas de Cursor como archivos de `.specs/steering/`; `dryRun` no escribe nada |
 | `spec_templates` | Plantillas del proyecto: lista, copia (`init`) o comprueba (`check`) los scaffolds del equipo en `.specs/templates/`, que sustituyen a los de origen |
 | `spec_tracks` | Tracks definidos por el proyecto: lista, crea (`init`) o comprueba (`check`) los track packs del equipo en `.specs/tracks/<nombre>/` — cada uno es un track con marcador como `+sec` (señales, criterios, secciones obligatorias del diseño, tareas, filas de prueba, steering) |
-| `spec_list` / `spec_status` | Inspecciona funciones, fases, progreso, secciones completadas vs. presentes; el tipo de cada una (feature / bugfix / spike) y el flujo |
+| `spec_status` | Inspecciona una función — fase, progreso, secciones completadas vs. presentes, el tipo (feature / bugfix / spike / change) y el flujo; sin `name`, todas |
 | `spec_next_task` / `spec_complete_task` | Conduce la ejecución y marca tareas — con **evidencia de verificación** registrada (una ejecución fallida rechaza la marca y queda registrada; una tarea `_Expect: fail_` se prueba con una ejecución que falla; cada ejecución lleva el sello `observed`); la siguiente tarea es la primera abierta cuyas `_Depends:_` están hechas; `batch` para tareas paralelas `[P]`, `waves` para las oleadas de ejecución de todas las tareas abiertas; `undo` desmarca una tarea (su evidencia queda obsoleta — volver a marcarla exige una nueva ejecución) |
 | `spec_task_brief` | Brief autocontenido de una tarea — ACs y pruebas resueltos al texto de la spec, contexto del diseño, steering con ámbito, definición de terminado (la base de la ejecución con subagentes) |
 | `spec_append_tasks` | Convergencia: añade tareas de seguimiento en `Fase: Convergencia` sin renumerar las existentes (`depends` añade `_Depends:_`) |
@@ -1198,17 +1198,17 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_doctor` | Un health-check → "¿listo para avanzar?" (EARS, placeholders, trace, secciones, evidencia, gates, steering) |
 | `spec_clarify` | Expone ambigüedades/lagunas de los requisitos antes del diseño (con un glosario: cada palabra que manda evitar) |
 | `spec_metrics` | Lead times, retrabajo, aprobaciones forzadas, solicitudes de cambio, tasa de éxito de la evidencia; `write` crea un `retro.md` prerrellenado |
-| `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_` de una función entregada; el de un borrador queda "por sustituir"), y los posibles criterios duplicados / en conflicto entre funciones activas; `write` → `.specs/SPECS.md` |
+| `spec_export` | `format: "catalog"` — catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_` de una función entregada; el de un borrador queda "por sustituir"), y los posibles criterios duplicados / en conflicto entre funciones activas; `write` → `.specs/SPECS.md` |
 | `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`), un `.feature` Gherkin por función (`"gherkin"`: un escenario por criterio de aceptación, con las cláusulas EARS como Dado / Cuando / Entonces) un CSV para el importador de Jira / Linear (`"jira"` · `"linear"`: la función, sus historias, sus tareas) o el registro de decisiones como Architecture Decision Records (`"adr"`: un archivo MADR por decisión, número del ADR = su D-n); `write` → `.specs/exports/` |
-| `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `milestone` las limita a las funciones de un hito; `write` → `.specs/RELEASE-NOTES.md` |
+| `spec_export` | `format: "changelog"` — notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `milestone` las limita a las funciones de un hito; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
 | `spec_stop_check` | El gate de evidencia del final del turno para clientes solo MCP: ¿este mensaje final ("hecho", "verificado") se devolvería — tareas marcadas sin evidencia, comprobaciones del proyecto sin una ejecución correcta? |
 | `spec_log` | Los commits que citan cada tarea (+ la comprobación red-first de +tdd) a partir del texto de `git log` que pasa el cliente — el servidor nunca ejecuta git |
 | `spec_upgrade` | Tras actualizar el plugin: audita cada función activa frente a las reglas actuales (estado, lo que señala el doctor, siguiente paso, una revisión critic / converge); `apply` guarda los tracks deducidos, da a las aprobaciones anteriores a la 1.13 una línea base en el historial, sella `meta.specVersion` y escribe `.specs/UPGRADE.md` — nunca edita una spec |
-| `spec_roadmap` / `spec_depend` | Hoja de ruta + dependencias (detecta ciclos; `add` / `remove` editan la lista), una ETA por función a partir de la velocidad de las tareas marcadas y los archivos que las tareas abiertas de dos funciones planifican a la vez; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para el `.html` con la marca, offline, claro/oscuro; `lang`) |
-| `spec_milestone` | Hitos: una fecha objetivo para un conjunto de funciones (`add` · `rm` · `list`), evaluada frente a sus ETAs — `on-track` · `at-risk` · `late` · `done` (ROADMAP.md los muestra; renombrar / archivar / eliminar una función se refleja en ellos) |
-| `spec_backlog` | Registra funciones planificadas pero aún sin spec (aparecen en ROADMAP.md) |
-| `spec_scan` / `spec_coverage` | Brownfield: inventario de código existente (rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones) + la parte de los archivos de código nombrados en `_Implements:_` |
+| `spec_roadmap` / `spec_roadmap_edit` | Hoja de ruta + dependencias (`spec_roadmap_edit {kind: "depend"}`: detecta ciclos; `add` / `remove` editan la lista), una ETA por función a partir de la velocidad de las tareas marcadas y los archivos que las tareas abiertas de dos funciones planifican a la vez; `write:true` → `.specs/ROADMAP.md` (+ `html:true` para el `.html` con la marca, offline, claro/oscuro; `lang`) |
+| `spec_roadmap_edit` | `kind: "milestone"` — hitos: una fecha objetivo para un conjunto de funciones (`add` · `rm` · `list`), evaluada frente a sus ETAs — `on-track` · `at-risk` · `late` · `done` (ROADMAP.md los muestra; renombrar / archivar / eliminar una función se refleja en ellos) |
+| `spec_roadmap_edit` | `kind: "backlog"` — registra funciones planificadas pero aún sin spec (aparecen en ROADMAP.md) |
+| `spec_scan` | Brownfield: inventario de código existente (rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones); `coverage: true` — la parte de los archivos de código nombrados en `_Implements:_` |
 | `steering_scaffold` | Crea un archivo de steering desde la plantilla (incl. `constitution.md`, `glossary.md`), o uno personalizado con ámbito |
 
 **Prompts y recursos.** El servidor sirve también un **prompt** MCP por cada comando del plugin — `/spec`,
@@ -1299,7 +1299,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 
 ### Catálogo vivo, drift y restauración
 
-- **`/spec-catalog`** (`spec_catalog`) — "lo que el sistema hace hoy": todas las funciones (activas,
+- **`/spec-catalog`** (`spec_export {format: "catalog"}`) — "lo que el sistema hace hoy": todas las funciones (activas,
   terminadas, archivadas) con cada AC en una línea EARS. Un criterio sustituido por una función posterior se
   declara con `_Supersedes: <feature>/US-n.AC-m_` y el antiguo aparece como sustituido. `write` genera
   `.specs/SPECS.md` (nunca encima de un archivo escrito a mano), que se actualiza con la hoja de ruta desde
@@ -1338,7 +1338,7 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **Análisis más profundo** — `spec_scan` lista rutas HTTP con método, ruta y `archivo:línea` (Express,
   NestJS, Next.js, FastAPI, Flask, Django, Spring, ASP.NET, Rails, Laravel, Go …), frameworks de pruebas,
   puntos de entrada, **nombres** de variables de entorno (nunca los valores) y archivos de migración.
-  `spec_coverage` mide la parte de los archivos de código nombrados en algún marcador `_Implements:_`, por
+  `spec_scan {coverage: true}` mide la parte de los archivos de código nombrados en algún marcador `_Implements:_`, por
   carpeta. `create --brownfield` añade un `integration-plan.md`.
 - **`/spec-import`** (`spec_import`) — trae una spec de Kiro (`.kiro/specs/<name>/`), spec-kit
   (`specs/<nnn-name>/`) u OpenSpec (`openspec/specs/<capability>/` o una carpeta de change) como función
@@ -1725,7 +1725,7 @@ dev-spec-driven/                      ← plugin root
 ├── evals/                            ← plugin evals for `claude plugin eval` (triggering EN/PT/ES + behavioural, with fixtures)
 ├── cli/dev-spec.js                   ← universal CLI (works in any tool / shell)
 ├── mcp/
-│   ├── server.js                     ← local stdio MCP server (38 tools + prompts + resources, zero-dependency)
+│   ├── server.js                     ← local stdio MCP server (32 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
 │   ├── lib/engine/                   ← the engine: 22 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)

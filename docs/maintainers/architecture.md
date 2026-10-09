@@ -60,7 +60,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
                                T-IDs in test code); the requirements traceability matrix, its CSV and export section
   gates.js                     the gate walk, pending gates, changedSinceApproval, approvalChecks, flows, detectPhase;
                                spec_approve (force, waivers, revoke, roles, the fast-forward); .history/ snapshots, spec_impact
-  doctor.js                    spec_doctor, spec_next_action, the design.md save check; spec_list / spec_status, the status line,
+  doctor.js                    spec_doctor, spec_next_action, the design.md save check; spec_status (one feature, or the list), the status line,
                                the plan-mode bridge, the DEV_SPEC_* defaults
   quality.js                   cross-feature ACs (Q2), the glossary (Q3), design trade-offs / risks (A1) and reuse (1.19 R1),
                                the brief's Reuse section (R2), the constraint nudge (A2), spec_clarify
@@ -69,11 +69,11 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
   roadmap-md.js                ROADMAP.md / .html (roadmapData), forecasts, cross-feature overlaps
   decisions.js                 decisions.md (spec_decide), its ADR export (spec_export format adr — 1.25) and the spike kind
   export.js                    spec_export (the escaping markdown renderer, the document model, Gherkin, tracker CSV);
-                               spec_changelog and spec_milestone
+                               spec_export {format: "changelog"} and spec_roadmap_edit {kind: "milestone"}
   guards.js                    guard mode (meta.guard, the scope guard), the end-of-turn stop gate, the human approval guard
                                and its shell lexer; CLI_SWITCHES
   upgrade.js                   spec_upgrade (meta.specVersion, the audit, the migrations)
-  scan.js                      the brownfield scan and spec_coverage; the ONE notion of code (CODE_EXT, isCodeFile) and of a
+  scan.js                      the brownfield scan and spec_scan {coverage: true}; the ONE notion of code (CODE_EXT, isCodeFile) and of a
                                test file (isTestFile) the scan, coverage, the test-code scan and guard mode share (1.21.1)
   import/                      spec_import: index.js (the entry point, task import) · common.js (the shared readers) · one
                                parser per tool — kiro.js · speckit.js · openspec.js · plan.js (plan + execplan) · bmad.js ·

@@ -81,7 +81,9 @@ When you add an operation, add it to the engine module of its concern first (see
 object in `spec.js`, then wire it into server.js (tool) AND
 cli/dev-spec.js (subcommand) AND a test in the area's mcp/tests file. Keep the CLI and MCP behavior identical —
 both call the same engine function with the same defaults (e.g. `roadmapReport()` backs `spec_roadmap`
-and `dev-spec roadmap`; `approvePhase()` has one default approver, `$USER`/`$USERNAME`/`user`).
+and `dev-spec roadmap`; `approvePhase()` has one default approver, `$USER`/`$USERNAME`/`user`). A tool that folds
+several CLI commands calls each one's function: `spec_roadmap_edit {kind: "depend"}` = `setDependency()` = `dev-spec depend`,
+`spec_export {format: "catalog"}` = `catalog()` = `dev-spec catalog` (docs/maintainers/mcp.md → Folded tools).
 Any user-facing string the operation GENERATES or RETURNS goes through `mcp/lib/i18n.js` (EN/PT/ES),
 never hardcoded in the engine — see docs/maintainers/languages.md. The CLI's human output is localized too
 (`cliText(lang)` over `i18n.msg(lang).cliOutput`: the feature's language for feature commands, the

@@ -8,7 +8,7 @@ Use the **dev-spec-driven** skill, milestones.
 Args: $ARGUMENTS
 
 Interpret the request ("the beta ships on 31 October with checkout and invoices", "drop the Q4 milestone", "are we on
-track?") and call the `spec_milestone` MCP tool `{action, name?, date?, features?}` (CLI `dev-spec milestone add
+track?") and call the `spec_roadmap_edit {kind: "milestone"}` MCP tool `{action, name?, date?, features?}` (CLI `dev-spec milestone add
 "<name>" <YYYY-MM-DD> <features…>` · `dev-spec milestone rm "<name>"` · `dev-spec milestone`):
 
 - **`add`** — a name (letters, digits, spaces and `. _ : # ( ) + -`, up to 60 characters), a real `YYYY-MM-DD` day and

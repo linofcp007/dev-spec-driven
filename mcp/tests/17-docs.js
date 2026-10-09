@@ -349,7 +349,7 @@ exports.run = async ({
     // D6: spec_approve's description lists every execution check (suite-evidence; a spike's spike / decision), one line.
     const d6Desc = list.result.tools.find((t) => t.name === "spec_approve").description;
     // (1.26: the per-phase check lists left the description — a refusal names its failing check ids; /approve lists each gate's)
-    ok(!/\n/.test(d6Desc) && /REFUSES it while the phase's checks fail/.test(d6Desc) && /spec_finish's blockers[^.]*`suite-evidence`/.test(dWs(dRead("commands", "approve.md"))),
+    ok(!/\n/.test(d6Desc) && /REFUSES it while the phase's checks fail/.test(d6Desc) && /spec_finish's blockers[\s\S]{0,400}`suite-evidence`/.test(dWs(dRead("commands", "approve.md"))),
       "full review D6: spec_approve's description says the gate refuses while the phase's checks fail; /approve names the execution gate's suite-evidence");
     // 1.21 review A8: no tool description runs two sentences together (spec_approve read "…the user runs).WAIVERS:")
     const runTogether = list.result.tools.map((t) => [t.name, (t.description.match(/[a-z)\]`'"]\.[A-Z]{3,}/g) || [])]).filter((x) => x[1].length);

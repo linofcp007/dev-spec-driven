@@ -692,7 +692,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, approveBefore, shipFeatur
       /Duplication against the EXISTING codebase, not only inside the diff/.test(revQuality) && /duplicates an existing one is \*\*Important\*\*/.test(revQuality) &&
       /Grep the name's stem and two synonyms/.test(revQuality) && /report's \*\*Reuse\*\* block/.test(revQuality) && /\*\*Minor\*\* unless they hide a defect/.test(revQuality) &&
       /Duplication is always such a risk/.test(rev) && /a new unit duplicating an existing one/.test(rev) &&
-      /spec_backlog \{action: "add", name: "refactor-<topic>"/.test(subRefactor) && /Task 3: refactor candidate filed/.test(sub) && /check the report has its \*\*Reuse\*\* block/.test(sub) &&
+      /spec_roadmap_edit \{kind: "backlog", action: "add", name: "refactor-<topic>"/.test(subRefactor) && /Task 3: refactor candidate filed/.test(sub) && /check the report has its \*\*Reuse\*\* block/.test(sub) &&
       /refactor:/.test(execReuse) && /duplicate in the existing codebase/.test(exec) &&
       /"I'll write a quick helper" \| Search first/.test(flags) && /"I'll copy this function and tweak it"/.test(flags) && /rule of three/.test(flags) &&
       /\*\*Reuse & Integration\*\*/.test(skill) && /design-reuse/.test(skill) && /code-reuse-and-quality\.md/.test(skill) && /\*\*Search before you write:\*\*/.test(skill) &&

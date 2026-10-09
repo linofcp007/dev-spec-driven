@@ -17,7 +17,7 @@ these rules still hold:
   at a time (the test first, watch it fail for the right reason, the minimal code, refactor only on green — code
   written before its test is redone); +ai prompt-iteration gated on the eval delta.
 - Stay inside the task's `_Implements:_` files: a change elsewhere is a plan change (the scope guard asks — add a task
-  with `spec_append_tasks`); a refactor you notice is filed with `spec_backlog`, not done.
+  with `spec_append_tasks`); a refactor you notice is filed with `spec_roadmap_edit {kind: "backlog"}`, not done.
 - Tick with `spec_complete_task {evidence}` — the `_Verify:_` command itself and its exit code (a note alone leaves a
   runnable `_Verify:_` unverified, a failed run is recorded and refuses the tick, an `_Expect: fail_` task needs its
   failing red run). No shell to run it? Don't tick — ask the user for the output (or
