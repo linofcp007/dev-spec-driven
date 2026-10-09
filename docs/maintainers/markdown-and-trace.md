@@ -221,7 +221,10 @@ matrix.
   `plannedImplFiles`, not a gap; a done task's missing file (or any path outside the project) stays
   `missingImplFiles`. `spec_coverage` = code files named in any `_Implements:_` (file, folder or glob) of any
   feature, active or archived. Every reader resolves a reference through `implementsPath()` (`:12` / `#L12` anchors
-  dropped) — trace_check included, reporting the spelling the task wrote; an anchor alone names nothing (missing).
+  dropped) — trace_check included, reporting the spelling the task wrote; an anchor alone names nothing (missing). A trailing
+  ANNOTATION after a path-like token is the author's note (1.25.1 — `RE_IMPL_ANNOTATED`: " (the helper)", " — new export", " - new
+  export", backticks around the path allowed): `_Implements: src/lib/a.ts (the helper)_` was a missing file that blocked doctor and
+  finish; a path holding spaces is read as written.
   Comparisons go through `implementsRel()` (+ backticks, `./`, trailing `/`) / `implementsKey()` (+ FOLD_CASE):
   `next --batch` (a shared file — or a folder and a file under it — ends the batch) and the brief's design sections.
 - **`earsValidate` is criterion-based, never line-based.** EARS phrasing (`ENQUANTO … QUANDO … O

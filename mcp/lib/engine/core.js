@@ -356,8 +356,14 @@ function globFolderNames(g) {
 }
 // The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
+// 1.25.1: a trailing ANNOTATION after the path — " (the helper)", " — new export", " - new export" — is the author's note, never part
+// of the path: `_Implements: src/lib/a.ts (the helper)_` was a missing file that blocked finish. Only after a path-like token (no
+// whitespace in it — backticks around it allowed); a path with spaces is read as written.
+const RE_IMPL_ANNOTATED = /^`?([^`\s]+)`?\s+(?:\(|[—–]|-\s)/;
 const implementsPath = (ref) => {
-  const s = stripHashLineAnchor(String(ref).trim().replace(/\\/g, "/")); // .replace(/#L?\d+.*$/, "")
+  const raw = String(ref).trim().replace(/\\/g, "/");
+  const ann = RE_IMPL_ANNOTATED.exec(raw);
+  const s = stripHashLineAnchor(ann ? ann[1] : raw); // .replace(/#L?\d+.*$/, "")
   const c = colonLineAnchorAt(s); // .replace(/:\d+(?:[-:]\d+)*$/, "")
   return (c === -1 ? s : s.slice(0, c)).trim();
 };

@@ -113,4 +113,22 @@ exports.run = async ({ ok, S, tmp, require }) => {
       "1.25.1 (7): an 'Acceptance Criteria' setext heading opens the AC context (a numbered item that reads like a requirement is linted, as under '## Acceptance Criteria'); the heading lines are no criteria and the section path holds them (got " +
       js([atx, setext, blocks.map((b) => [b.section, b.text])]) + ")");
   }
+
+  { // 1.25.1 (10): an annotated _Implements:_ reference — " (the helper)", " — new export", " - new export" — names the path before it
+    const ip = ["src/lib/a.ts (the helper)", "src/lib/a.ts — new export", "src/lib/a.ts - new export", "`src/lib/a.ts` (helper)", "src/lib/a.ts:12 (the helper)"]
+      .map((r) => E.implementsPath(r));
+    const kept = ["src/a-b.ts", "src/a.ts:12-20", "docs/My File.md", "src/api/**"].map((r) => E.implementsPath(r));
+    ok(ip.every((x) => x === "src/lib/a.ts") && js(kept) === js(["src/a-b.ts", "src/a.ts", "docs/My File.md", "src/api/**"]),
+      "1.25.1 (10): implementsPath drops a trailing annotation after a path-like token (backticks and a line anchor too); a hyphenated name, a range anchor, a path with spaces, a glob are read as before (got " + js([ip, kept]) + ")");
+    const p = fresh("impl-annot", ["core"]);
+    const f = S.createFeature(p, "Helper", ["core"], "Helper", null, "en");
+    put(path.join(p, "src", "lib", "a.ts"), "export const a = 1;\n");
+    put(path.join(p, "src", "lib", "b.ts"), "export const b = 1;\n");
+    put(path.join(f.dir, "requirements.md"), "# R\n\n## User Stories\n\n### US-1 (P1): x\n\n#### Acceptance Criteria (EARS)\n- **US-1.AC-1** — WHEN x THE SYSTEM SHALL y.\n");
+    put(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [x] 1. The helper\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/lib/a.ts (the helper), `src/lib/b.ts` — new export_\n");
+    const tr = S.traceCheck(p, f.slug);
+    const cov = S.coverage(p);
+    ok(tr.verdict === "pass" && js(tr.missingImplFiles) === "[]" && cov.coveredFiles === 2,
+      "1.25.1 (10): a done task's annotated _Implements:_ files exist — no missingImplFiles (it blocked doctor and finish), coverage counts both (got " + js([tr.verdict, tr.missingImplFiles, cov.coveredFiles]) + ")");
+  }
 };
