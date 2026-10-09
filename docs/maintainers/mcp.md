@@ -102,6 +102,12 @@ call the client had given up on (a client tool-call timeout shorter than the 5-m
 carrying `_meta.progressToken` gets `notifications/progress {progressToken, progress: 0, 1, …, message: elicit.waiting}` at once
 and every `PROGRESS_EVERY_MS` (10 s) while its question waits — a client whose tool-call timeout restarts on progress keeps
 the call. A guardrail on the approve paths, like the hook — not a sandbox.
+**Known limit — `SPEC_MCP_APPROVAL_HOOK=on` at `ask` (1.25.1, review 7, documented, not changed).** The plugin's server leaves an
+`ask`-level approval to the PreToolUse hook; when the hook does not run (`disableAllHooks`, a managed policy, a hook that failed
+open) the call runs without asking anyone. Eliciting there instead is not clean: the server can't tell whether the hook ran —
+Claude Code declares elicitation, so a call the hook already put to the user would be asked a second time; telling them apart
+needs a hook→server handshake (a stamp per call) this release does not add. `deny` is unaffected (refused whenever it reaches
+the server). A team that needs the guard to hold with hooks disabled sets `approvalGuard: deny` (the human runs the approval).
 
 **Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the
 tool's advertised `inputSchema`, in this order — `arguments` that isn't an object; then **unknown arguments** (1.24 r6 A1,
