@@ -43,6 +43,20 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality`
   (15-quality re-checks the behavioural fixtures 17-docs-evals builds under tmp). The handshake's assertions are counted
   by the file exporting `handshake: true` (02-mcp-server); every other process runs the handshake muted.
+- **Hermetic chains (1.26).** A chain never sees the shell the suite was started from: the runner spawns it with a fresh,
+  empty temp folder as its working folder (`<os tmpdir>/<spec-test-|cli-test->XXXXXX`, removed once it closed) and an
+  environment without the variables that steer the plugin — `SPEC_PROJECT_DIR`, `CLAUDE_PROJECT_DIR`, `SPEC_MCP_*`,
+  `CLAUDE_PLUGIN_*`, `COLUMNS` and every `DEV_SPEC_*` but the suites' own `DEV_SPEC_TEST_*` (`DEV_SPEC_TEST_CHAIN`,
+  `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`) — scripts/test-runner.js `isolate()` / `hermeticEnv()`. The
+  child runs `isolate()` again before it loads a file, and both harnesses first thing (a no-op in the folder the runner gave
+  it), so a chain started by hand (`DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js`) is isolated too. Why: the main checkout
+  keeps a git-ignored dogfood `.specs/` (meta.lang pt) at the repo root, and a test that started the CLI or a hook without
+  naming a project picked it up — green in a worktree, red after the merge; a `DEV_SPEC_DEFAULT_LANG` or `SPEC_PROJECT_DIR`
+  exported in the maintainer's shell did the same. A test that needs one of these variables sets it for the process it
+  starts; a test never reads `process.cwd()` for a path (use `tmp`, `root`, `__dirname`). cli/tests/16-conventions-runner.js
+  proves it on the fake suite (a decoy `.specs/` and the variables exported: none reaches a chain). The proof run: put a decoy
+  `.specs/` (`roadmap.json` `{"features":{},"meta":{"lang":"pt"}}` and a feature folder) at the repo root, export
+  `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` at it and `DEV_SPEC_DEFAULT_LANG=es`, and run both suites — still green.
 - **Running a part.** `--only <x>[,…]` (repeatable) takes a file by its full name (`17-docs` — that file alone; the CLI's
   `06-gates`, no file of that exact name, means `06-gates-*`), an area by its number (`09`) or its name (`gates`; `tracks`
   → `04-tracks` and `04-tracks-builtin`), and pulls in — and names — the files they need: `node mcp/test.js --only
@@ -66,8 +80,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` / `tracks.js`) or the version, and BEFORE
   the suites: mcp/tests/16-conventions-build.js ("1.20 build") fails while the committed `corpus.generated.json` differs from a
   fresh build (architecture.md → The build). The bundle is never committed: its tests BUILD one into tmp (`writeBundle()` /
-  `dev-spec bundle --out`) and point `DEV_SPEC_BUNDLE_PATH` at it. Both suites run on the engine's modules — the harnesses drop
-  `DEV_SPEC_BUNDLE` for their processes; the bundle's own tests set it for the children they start: 16-conventions-build ("1.20
+  `dev-spec bundle --out`) and point `DEV_SPEC_BUNDLE_PATH` at it. Both suites run on the engine's modules — the runner and the
+  harnesses drop `DEV_SPEC_BUNDLE` (with every other `DEV_SPEC_*` — Hermetic chains) for their processes; the bundle's own tests set it for the children they start: 16-conventions-build ("1.20
   bundle": the namespace, the embedded corpus, the modules' paths, the stamps; the facade's choice on a copy of the clone —
   none, current, unset / 0, an invalid or another `DEV_SPEC_BUNDLE_PATH`, a module touched or resized and put back, another
   version, a broken bundle; the MCP server on it; "1.20 build": a copy of the clone with a missing, broken, hand-edited or

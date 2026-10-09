@@ -20,7 +20,8 @@ require(${js(RUNNER)}).main({ suite: "fake", key: "fake", root: __dirname, dir: 
   tmpPrefix: "fake-runner-", setup: () => require("./harness.js").setup() });
 `);
   w("harness.js", `"use strict";
-const { exitFlushed } = require(${js(RUNNER)});
+const { exitFlushed, isolate } = require(${js(RUNNER)});
+isolate("fake-runner-"); // as the real harnesses do, first thing
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ok   - " + m); } else { fail++; console.log("  FAIL - " + m); } };
 const end = () => { console.log("\\n" + pass + " passed, " + fail + " failed"); exitFlushed(fail ? 1 : 0); };
@@ -47,6 +48,7 @@ exports.run = async ({ ok }) => { ok(true, "w on time"); process.emitWarning("a 
 `);
   const env = { ...process.env, TMPDIR: own, TEMP: own, TMP: own };
   delete env.DEV_SPEC_TEST_CHAIN; // this process is itself a chain of the CLI suite: the fake one starts as a parent
+  delete env.DEV_SPEC_TEST_CWD; // …in a working folder of its own
   const fake = (...args) => { const r = spawnSync(process.execPath, [path.join(root, "suite.js"), ...args], { encoding: "utf8", env, timeout: 60000 }); return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status }; };
   const lastLine = (s) => s.trimEnd().split(/\r?\n/).pop();
 
@@ -73,4 +75,47 @@ exports.run = async ({ ok }) => { ok(true, "w on time"); process.emitWarning("a 
   const left = fs.readdirSync(own).filter((f) => /\.tmp$/.test(f));
   ok(held.code === 0 && lastLine(held.stdout) === "1 passed, 0 failed" && left.length === 0,
     "1.20 review: a times file the runner can't replace leaves no dev-spec-test-times-<key>.json.<pid>.tmp behind (got " + js([held.code, left]) + ")");
+
+  // 1.26 — hermetic chains: a suite started from a folder holding a .specs/ (the maintainer's dogfood one at the repo root: lang
+  // pt) with SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, DEV_SPEC_DEFAULT_LANG… exported runs every chain in a fresh, empty temp folder
+  // of its own (removed afterwards) with none of those variables — the suites' own DEV_SPEC_TEST_* and any other variable kept.
+  // The same when a chain is started by hand (DEV_SPEC_TEST_CHAIN set, no parent): the child isolates itself.
+  {
+    fs.rmSync(own, { recursive: true, force: true });
+    fs.mkdirSync(own, { recursive: true });
+    const KEYS = ["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "DEV_SPEC_DEFAULT_LANG", "DEV_SPEC_BUNDLE", "SPEC_MCP_PROMPTS", "COLUMNS",
+      "DEV_SPEC_TEST_BASH", "FAKE_KEEP"];
+    const envFile = `// what a chain sees: its working folder, what it holds, the host's variables
+exports.run = async ({ ok }) => {
+  const fs = require("fs");
+  const env = Object.fromEntries(${js(KEYS)}.map((k) => [k, process.env[k] === undefined ? null : process.env[k]]));
+  console.log("ENV " + JSON.stringify({ cwd: process.cwd(), files: fs.readdirSync(process.cwd()), env }));
+  ok(true, "env seen");
+};
+`;
+    w("tests/06-env.js", envFile);
+    w("tests/07-env.js", envFile);
+    w(".specs/roadmap.json", js({ features: {}, meta: { lang: "pt" } }));
+    w(".specs/decoy/requirements.md", "# Requisitos\n");
+    const host = { ...env, SPEC_PROJECT_DIR: root, CLAUDE_PROJECT_DIR: root, CLAUDE_PLUGIN_ROOT: root, DEV_SPEC_DEFAULT_LANG: "es", DEV_SPEC_BUNDLE: "1",
+      SPEC_MCP_PROMPTS: "off", COLUMNS: "20", DEV_SPEC_TEST_BASH: "keep-me", FAKE_KEEP: "kept" };
+    const seen = (out) => out.split(/\r?\n/).filter((l) => l.startsWith("ENV ")).map((l) => { try { return JSON.parse(l.slice(4)); } catch { return null; } });
+    const fold = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
+    const shape = (s) => !!s && /^fake-runner-[A-Za-z0-9]{6}$/.test(path.basename(s.cwd)) && fold(path.dirname(s.cwd)) === fold(own) &&
+      s.files.length === 0 && !fs.existsSync(s.cwd);
+    const clean = (s) => !!s && KEYS.slice(0, 7).every((k) => s.env[k] === null) && s.env.DEV_SPEC_TEST_BASH === "keep-me" && s.env.FAKE_KEEP === "kept";
+    const r = spawnSync(process.execPath, [path.join(root, "suite.js"), "--only", "06,07"], { cwd: root, encoding: "utf8", env: host, timeout: 60000 });
+    const two = seen(r.stdout || "");
+    ok(r.status === 0 && lastLine(r.stdout || "") === "2 passed, 0 failed" && two.length === 2 && two.every(shape) && two.every(clean) && two[0].cwd !== two[1].cwd,
+      "1.26: every chain runs hermetic — a fresh, empty temp folder of its own as its working folder (never the folder the suite was started from, with its .specs/; removed afterwards) and none of SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, CLAUDE_PLUGIN_*, SPEC_MCP_*, DEV_SPEC_* (but DEV_SPEC_TEST_*), COLUMNS (got " +
+      js([r.status, lastLine(r.stdout || ""), two]) + ")");
+    const byHand = spawnSync(process.execPath, [path.join(root, "suite.js")], { cwd: root, encoding: "utf8", env: { ...host, DEV_SPEC_TEST_CHAIN: "06-env" }, timeout: 60000 });
+    const one = seen(byHand.stdout || "");
+    const harnesses = ["mcp", "cli"].map((s) => fs.readFileSync(path.join(__dirname, "..", s, "tests", "harness.js"), "utf8"));
+    const first = (src, call) => { const at = src.indexOf(call); return at > 0 && [/\nconst S = require\(/, /\nconst tmp = /].every((re) => { const m = src.match(re); return !m || at < m.index; }); };
+    ok(byHand.status === 0 && lastLine(byHand.stdout || "") === "1 passed, 0 failed" && one.length === 1 && shape(one[0]) && clean(one[0]) &&
+      first(harnesses[0], "isolate(\"spec-test-\")") && first(harnesses[1], "isolate(\"cli-test-\")"),
+      "1.26: a chain started by hand (DEV_SPEC_TEST_CHAIN set, no runner parent) isolates itself the same way; mcp/tests/harness.js and cli/tests/harness.js call isolate() before the engine loads and their temp dir is made (got " +
+      js([byHand.status, lastLine(byHand.stdout || ""), one]) + ")");
+  }
 };

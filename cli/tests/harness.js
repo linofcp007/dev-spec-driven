@@ -20,11 +20,13 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createRequire } = require("module");
-const { exitFlushed, rmTmpDir } = require("../../scripts/test-runner.js");
+const { exitFlushed, rmTmpDir, isolate } = require("../../scripts/test-runner.js");
 
-// The suite runs the CLI on the engine's MODULES (1.20): a DEV_SPEC_BUNDLE the user set is dropped for its processes — the
-// bundle's own file (16-conventions-bundle) sets it for the runs it compares.
-delete process.env.DEV_SPEC_BUNDLE;
+// Hermetic (1.26): no SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / DEV_SPEC_* … of the shell, and a fresh empty temp folder as the
+// working folder — what the runner already gave this chain (then a no-op), and the same when this harness is loaded any other
+// way. The suite runs the CLI on the engine's MODULES (1.20): a DEV_SPEC_BUNDLE the user set goes with them — the bundle's own
+// file (16-conventions-bundle) sets it for the runs it compares.
+isolate("cli-test-");
 const CLI_DIR = path.join(__dirname, ".."); // cli/ — where cli/test-cli.js lives: the tests' __dirname
 const CLI_TEST = path.join(CLI_DIR, "test-cli.js");
 const CLI = path.join(CLI_DIR, "dev-spec.js");

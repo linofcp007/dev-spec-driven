@@ -257,7 +257,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   little (and loses without Node's compile cache, Node < 22.8). The MCP server takes it like every process.
 - **Guards.** `libSources()` (the source guards' file list) leaves `spec.bundle.js` out (a user-built one in mcp/lib); the
   guards read scripts/build.js, where the registry is written. Both suites run on the modules (the harnesses drop
-  `DEV_SPEC_BUNDLE`). The tests BUILD a bundle into tmp: mcp/tests/16-conventions-build.js ("1.20 bundle": the namespace, the
+  `DEV_SPEC_BUNDLE`, with every other `DEV_SPEC_*` of the shell — testing.md → Hermetic chains). The tests BUILD a bundle into tmp: mcp/tests/16-conventions-build.js ("1.20 bundle": the namespace, the
   embedded corpus, the modules' paths, every stamp true; on a copy of the clone — none, current, unset / 0, a relative or
   non-.js `DEV_SPEC_BUNDLE_PATH`, one elsewhere, a module touched or resized under the same mtime and put back, another
   version, a broken bundle; the MCP server's handshake, lists and ten tool calls byte for byte) and

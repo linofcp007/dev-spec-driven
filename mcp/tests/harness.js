@@ -31,13 +31,15 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { createRequire } = require("module");
-const { exitFlushed, rmTmpDir } = require("../../scripts/test-runner.js");
+const { exitFlushed, rmTmpDir, isolate } = require("../../scripts/test-runner.js");
 
+// Hermetic (1.26), before the engine loads: no SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR / DEV_SPEC_* … of the shell, and a fresh
+// empty temp folder as the working folder — what the runner already gave this chain (then a no-op), and the same when this
+// harness is loaded any other way. The suites run on the engine's MODULES (1.20): a DEV_SPEC_BUNDLE the user set goes with them
+// — the bundle's own tests set it for the processes they start.
+isolate("spec-test-");
 const MCP_DIR = path.join(__dirname, ".."); // mcp/ — where mcp/test.js lives: the tests' __dirname
 const MCP_TEST = path.join(MCP_DIR, "test.js");
-// The suites run on the engine's MODULES (1.20): a DEV_SPEC_BUNDLE the user set is dropped for this process and its children
-// — the bundle's own tests set it for the processes they start.
-delete process.env.DEV_SPEC_BUNDLE;
 const S = require("../lib/spec.js");
 const root = path.join(MCP_DIR, "..");
 // Every engine source file (1.18): the facades (mcp/lib/spec.js, i18n.js, prompts-resources.js) and their modules under

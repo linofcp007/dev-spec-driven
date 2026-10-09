@@ -14,7 +14,8 @@
  *   handshake  (MCP) this file counts the assertions of the handshake every process runs (initialize, tools/list).
  * The longest chains start first (the previous run's times, kept in the OS temp dir).
  * Every chain runs in its own child process (its own temp dir and, for the MCP suite, its own server), at most one per
- * CPU at a time; the output is printed file by file in file order, then ONE total. The LAST line is always
+ * CPU at a time — hermetic: a fresh, empty temp folder as its working folder and none of the shell's variables that steer
+ * the plugin (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, DEV_SPEC_*… — isolate()); the output is printed file by file in file order, then ONE total. The LAST line is always
  * `N passed, M failed` — scripts/test-docker.js reads it — and a chain that dies without its total fails the suite (the
  * run never drains to exit 0). An assertion a file makes after its run() resolved (a forgotten await) is a FAIL — a "late
  * assertion", labelled with its file — never a silent pass or a lost line.
@@ -28,6 +29,7 @@ const os = require("os");
 const path = require("path");
 
 const CHAIN_ENV = "DEV_SPEC_TEST_CHAIN"; // set in a child: the comma-separated file stems it runs, in order
+const CWD_ENV = "DEV_SPEC_TEST_CWD"; // set in a child: its own working folder (a fresh, empty temp folder — isolate())
 const RE_TEST_FILE = /^(\d{2})-([a-z0-9]+(?:-[a-z0-9]+)*)\.js$/;
 const RE_TOTAL = /\n(\d+) passed, (\d+) failed\s*$/;
 const RE_FILE_STATS = /^#file (\S+) (\d+) (\d+) (\d+)\r?\n/gm; // a child's report of one file: stem, passed, failed, ms
@@ -55,6 +57,41 @@ function sweepStaleTmp(prefix) {
     const p = path.join(os.tmpdir(), n);
     try { const st = fs.lstatSync(p); if (st.isDirectory() && !st.isSymbolicLink() && st.mtimeMs < cutoff) rmTmpDir(p); } catch {}
   }
+}
+
+// Hermetic chains (1.26). A chain never sees the shell the suite was started from: the variables that steer the plugin — the
+// project (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR), the MCP server's switches (SPEC_MCP_*), Claude Code's plugin variables
+// (CLAUDE_PLUGIN_*), the user defaults and knobs (every DEV_SPEC_* but DEV_SPEC_TEST_* — the suites' own: the chain, its folder,
+// the shells to test) and the terminal width (COLUMNS) — are dropped, and its working folder is a fresh, empty temp folder. A test
+// that starts the CLI, a hook or the server without naming a project finds none — never the maintainer's dogfood .specs/ at the
+// repo root (git-ignored, meta.lang pt: tests that passed in a worktree failed after the merge), nor a DEV_SPEC_DEFAULT_LANG or a
+// SPEC_PROJECT_DIR exported in the shell. A test that wants one of them sets it for the process it starts.
+const RE_HOST_ENV = /^(?:SPEC_PROJECT_DIR|SPEC_MCP_\w*|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_\w*|DEV_SPEC_(?!TEST_)\w*|COLUMNS)$/i;
+const hostEnvKey = (k) => RE_HOST_ENV.test(k);
+// env without the host's steering variables (a new object; `env` untouched).
+function hermeticEnv(env) {
+  const out = {};
+  for (const [k, v] of Object.entries(env)) if (!hostEnvKey(k)) out[k] = v;
+  return out;
+}
+const samePath = (a, b) => {
+  const norm = (p) => { let r = path.resolve(p); try { r = fs.realpathSync.native(r); } catch {} return process.platform === "win32" ? r.toLowerCase() : r; };
+  return norm(a) === norm(b);
+};
+// This process, made hermetic: the host's steering variables leave process.env and — unless the runner already started it in
+// its own folder (CWD_ENV names the working folder) — it moves into a fresh temp folder of its own (`prefix` + 6 characters,
+// the shape sweepStaleTmp removes when a killed run left it), removed when it exits. Idempotent. The runner's child calls it
+// before it loads a test file; the harnesses call it first thing too, so a harness loaded any other way (a chain started by
+// hand: DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js) is just as isolated. → the working folder.
+function isolate(prefix) {
+  for (const k of Object.keys(process.env)) if (hostEnvKey(k)) delete process.env[k];
+  const given = process.env[CWD_ENV];
+  if (given && samePath(given, process.cwd())) return process.cwd();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix || "dev-spec-test-"));
+  process.chdir(dir);
+  process.env[CWD_ENV] = dir;
+  process.on("exit", () => { try { process.chdir(os.tmpdir()); } catch {} rmTmpDir(dir); }); // a folder can't go while it is the cwd
+  return dir;
 }
 
 // Start order: the longest chains first — by the files' times in the previous run (<tmp>/dev-spec-test-times-<key>.json;
@@ -227,14 +264,19 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
   const t0 = Date.now();
   // out: stdout and stderr as they came (what is printed) · stdout alone: where the total is read — a Node warning a chain
   // writes to stderr after its total line never voids the count.
+  // Every chain is hermetic (1.26 — isolate() above): the host's steering variables dropped, a fresh empty temp folder as its
+  // working folder (removed once it closed).
   const runChain = (chain) => new Promise((resolve) => {
     let out = "", stdout = "";
     const started = Date.now();
-    const kid = spawn(process.execPath, [opts.entry], { env: { ...process.env, [CHAIN_ENV]: chain.map((f) => f.stem).join(",") }, stdio: ["ignore", "pipe", "pipe"] });
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), opts.tmpPrefix || "dev-spec-test-"));
+    const env = { ...hermeticEnv(process.env), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
+    const done = (r) => { rmTmpDir(cwd); resolve(r); };
+    const kid = spawn(process.execPath, [opts.entry], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
     kid.stdout.on("data", (d) => { out += d; stdout += d; });
     kid.stderr.on("data", (d) => (out += d));
-    kid.on("error", (e) => resolve({ chain, out: out + "\n" + e.message, stdout, code: 1, ms: Date.now() - started }));
-    kid.on("close", (code) => resolve({ chain, out, stdout, code, ms: Date.now() - started }));
+    kid.on("error", (e) => done({ chain, out: out + "\n" + e.message, stdout, code: 1, ms: Date.now() - started }));
+    kid.on("close", (code) => done({ chain, out, stdout, code, ms: Date.now() - started }));
   });
   // At most one process per CPU at a time (each MCP chain also runs its own server), the longest chains first; results
   // keep the chain order.
@@ -296,6 +338,7 @@ async function settle() {
 // such an assertion passed silently into another file's count, or was dropped: the CLI harness exits at once, the MCP
 // harness's total stopped being the last line ("without a clean total").
 async function runChildChain(opts) {
+  isolate(opts.tmpPrefix); // before any test file or harness loads (a no-op in the folder the runner started it in)
   const stems = String(process.env[CHAIN_ENV]).split(",").filter(Boolean);
   const files = loadFiles(opts.dir);
   const chain = stems.map((s) => files.find((f) => f.stem === s));
@@ -336,4 +379,5 @@ function main(opts) {
   return runParent(opts);
 }
 
-module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, CHAIN_ENV, RE_TEST_FILE };
+module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, isolate, hermeticEnv,
+  CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_TEST_FILE };
