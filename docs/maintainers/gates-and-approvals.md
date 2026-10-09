@@ -150,7 +150,7 @@ flows, the bugfix kind.
   (before 1.13, a `.history/` not committed) → the fingerprint alone decides, as before.
   **1.24 review 6 (E6 / E-I5) — the whitespace-insensitive fingerprint is RECORDED:** every new approval, its history record and
   each role sign-off carry `wsFingerprint` = sha1(`wsText`) (state.js `wsFingerprint()`; `designWsFingerprint` for a bugfix's
-  design.md) next to `fingerprint` (whose rule is unchanged). `changedSinceApproval` checks it (`wsSame()`) before the snapshot
+  design.md) next to `fingerprint` (whose rule is unchanged). `changedSinceApproval` checks it (`approvedContentSame()`, gates.js) before the snapshot
   fallback — no `.history/` needed —, `sameContent()` (role sign-offs: `roleSignOffs`, `recordRoleSignOff`, doctor's role view)
   accepts a record whose `wsFingerprint` (+ `designWsFingerprint`) equals the content's (`phaseContent()` computes both), and
   `changesSince`'s `sameApprovedContent` too (a re-approval after a whitespace-only edit changed nothing). A WAITING role

@@ -407,7 +407,7 @@ function withLockFile(lock, fn, opts = {}) {
   // HERE, once, before the lock exists and before fn writes anything (the lock, the ticks, approvals, briefs and decisions all
   // landed in the folder the link points at). → opts.onRefused(error) | the refusal result ({ ok: false, linked: true, error }).
   // (A path of the wrong kind is the lock's own business: a folder named .lock is a stale lock that can't be removed — busy, stuck.)
-  const refused = specsGateError(lock);
+  const refused = lockGateError(lock);
   if (refused && refused.gate.kind === "link") return opts.onRefused ? opts.onRefused(refused) : gateRefusal(refused);
   if (CTX.DRY_RUN) return fn(); // 1.25: a dry run writes nothing — no lock file either (its writes go to the sink)
   ensureLockIgnore(specsDirOf(path.dirname(lock))); // before the lock exists: one left by a killed process is never committable
@@ -469,6 +469,20 @@ function withLockFile(lock, fn, opts = {}) {
     HELD_LOCKS.delete(key);
     releaseLock(lock, mine); // only our own: after a folder move the old path is empty — or another process's lock
   }
+}
+// The write gate on a lock file, with the lock file's own TRANSIENT refusals retried (1.25.1): on Windows a lock another holder is
+// releasing sits "delete pending" for a moment, and lstat / realpath of it answer EPERM — the gate read that as "unreadable, maybe
+// a link" and the waiter was refused (2 of 180 contended backlog adds failed with "…/.roadmap.lock: that file is a link"). Only a
+// refusal naming the lock FILE itself is retried (a linked folder on the way is refused at once); a real link at the lock path
+// lstats fine and is refused again on every try.
+const LOCK_GATE_RETRY_MS = [2, 5, 10, 20, 40, 80];
+function lockGateError(lock) {
+  let e = specsGateError(lock);
+  for (let i = 0; e && e.gate.kind === "link" && e.gate.file && i < LOCK_GATE_RETRY_MS.length; i++) {
+    sleepSync(LOCK_GATE_RETRY_MS[i]);
+    e = specsGateError(lock);
+  }
+  return e;
 }
 // Create `lock` holding `note` — atomically: the note goes to a temp file (named like writeFileAtomic's, so the maintained
 // .specs/.gitignore covers it) that is hard-linked into place — linkSync fails with EEXIST exactly like an O_EXCL create —

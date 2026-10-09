@@ -208,7 +208,11 @@ and U+FEFF gotchas are in CLAUDE.md.
   `acquireLockFile()`: the note is written to a temp file hard-linked into place — `linkSync` fails with EEXIST like O_EXCL —
   so the lock never exists without its note; where hard links are unsupported it falls back to the O_EXCL create + write, and
   `staleLock()` treats a noteless lock older than `LOCK_NOTELESS_STALE_MS` (5 s) as stale — a process killed in the old
-  create→write window left an EMPTY lock that blocked the feature for 2 min), re-entrant in one process; waiters retry for `DEV_SPEC_LOCK_WAIT_MS` (default 10 s), then get
+  create→write window left an EMPTY lock that blocked the feature for 2 min), re-entrant in one process. Before it is taken,
+  `lockGateError()` runs the write gate on the lock's path and retries a refusal naming the lock FILE itself a few times
+  (~160 ms): on Windows a lock another holder is releasing sits "delete pending" and lstat / realpath of it answer EPERM, which
+  the gate reads as "maybe a link" — 1.25.1 (2 of 180 contended backlog adds were refused); a linked folder on the way is refused
+  at once. Waiters retry for `DEV_SPEC_LOCK_WAIT_MS` (default 10 s), then get
   `{ok:false, busy:true, error}` (`err.featureBusy`, localized) with nothing changed. A lock taken while this process already
   holds another (`LOCK_DEADLINE`: a folder move's roadmap lock inside its feature lock) waits only for the outer acquisition's
   remaining budget, at least `LOCK_NESTED_MIN_MS` — nested waits could add up to twice the wait. A dead holder's lock (same host)
