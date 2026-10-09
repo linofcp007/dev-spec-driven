@@ -2270,10 +2270,15 @@ function setStopCheck(projectDir, on) {
 // 1.24 r6 I-I4: the claim scan's parts the Stop hook's pre-filter reuses before the engine loads — scripts/build.js writes them, with
 // every language's claim patterns (stopClaimSources), into hooks/stop-claims.generated.json (stopClaimFilter).
 const STOP_WORD = Object.freeze({ pre: "(?<![\\p{L}\\p{N}_])(?:", post: ")(?![\\p{L}\\p{N}_])", flags: "gimu" });
+// A claim pattern { source, flags, langs, re } whose RegExp is built on its first use (1.27): a message runs only the patterns of
+// the languages it triggers (~18 of ~47), and each RegExp built parses its Unicode property classes (~0.2 ms).
+function stopLazyPattern(source, flags, langs) {
+  let re = null;
+  return { source, flags, langs, get re() { return re || (re = new RegExp(source, flags)); } };
+}
 let STOP_PATTERNS = null;
 function stopPatterns() {
   if (STOP_PATTERNS) return STOP_PATTERNS;
-  const word = (src) => new RegExp(STOP_WORD.pre + src + STOP_WORD.post, STOP_WORD.flags);
   const all = (k) => [...new Set(i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {})[k] || []))]; // pt-BR repeats pt's patterns
   const langsOf = new Map();
   for (const l of i18n.LANGS) for (const src of (i18n.msg(l).stopGate || {}).claims || []) {
@@ -2288,10 +2293,14 @@ function stopPatterns() {
     const b = i18n.baseLang(l), src = ((i18n.msg(l).stopGate || {}).triggers || []).join("|");
     if (src) triggers.set(b, triggers.has(b) ? triggers.get(b) + "|" + src : src);
   }
+  // triggers / admissions: built on first use too (1.27 — a text scanned as its one-byte projection runs rewritten copies of them)
+  let trig = null, adm = null;
   STOP_PATTERNS = {
-    claims: [...langsOf].map(([src, langs]) => ({ re: word(src), langs })),
-    triggers: new Map([...triggers].map(([b, src]) => [b, new RegExp(STOP_WORD.pre + src + STOP_WORD.post, "iu")])),
-    admissions: all("admissions").map(word),
+    claims: [...langsOf].map(([src, langs]) => stopLazyPattern(STOP_WORD.pre + src + STOP_WORD.post, STOP_WORD.flags, langs)),
+    triggerSources: new Map([...triggers].map(([b, src]) => [b, STOP_WORD.pre + src + STOP_WORD.post])), // flags "iu"
+    get triggers() { return trig || (trig = new Map([...this.triggerSources].map(([b, src]) => [b, new RegExp(src, "iu")]))); },
+    admissionSources: all("admissions").map((src) => STOP_WORD.pre + src + STOP_WORD.post), // flags STOP_WORD.flags
+    get admissions() { return adm || (adm = this.admissionSources.map((src) => new RegExp(src, STOP_WORD.flags))); },
     negators: new Set(all("negators").map((w) => w.toLowerCase())),
     fixed: new Set(all("fixed").map((w) => w.toLowerCase())),
     // 1.22 review: a zero count right before an admission ("0 tests failing", "none of the tests fail") — read on the few
@@ -2396,16 +2405,47 @@ function stopClaimFilter() {
 // hook takes it only while every size still matches (else: the engine decides, as before). No version (1.26): a release that
 // changes none of these files leaves the generated file as it was.
 const STOP_FILTER_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es.js", "i18n/pt-br.js", "i18n/pt.js", "engine/guards.js"];
+// 1.27 — the claim scan on a one-byte text (mcp/lib/latin1-scan.js). V8 compiles a regex for a one-byte and for a two-byte subject
+// apart, and the two-byte code of the patterns' [\p{L}\p{N}_] boundaries is large: one em dash, curly quote or emoji in the closing
+// message made stopClaims ~120 ms slower (one-byte ~18 ms, Node 26 on Windows). Such a text is scanned as its exact one-byte
+// projection with the patterns rewritten once for it (an index map leads every match back); a text without a character past U+00FF
+// as a one-byte copy (a prose cut from a two-byte message — a wide character inside a code fence — stays two-byte in V8).
+let STOP_LATIN1 = undefined; // { L1, table, P: the rewritten patterns } | null (a pattern the rewrite can't read: the text as it is)
+function stopLatin1() {
+  if (STOP_LATIN1 !== undefined) return STOP_LATIN1;
+  const P = stopPatterns();
+  const L1 = require("../latin1-scan.js");
+  const table = L1.latin1Table([...P.claims.map((c) => c.source), ...P.triggerSources.values(), ...P.admissionSources]);
+  if (!table) return (STOP_LATIN1 = null);
+  const re = (src, flags) => new RegExp(L1.latin1Pattern(src, table), flags);
+  const claims = P.claims.map((c) => stopLazyPattern(L1.latin1Pattern(c.source, table), c.flags, c.langs)); // built on first use, as P's
+  const triggers = new Map([...P.triggerSources].map(([b, src]) => [b, re(src, "iu")]));
+  const admissions = P.admissionSources.map((src) => re(src, STOP_WORD.flags));
+  STOP_LATIN1 = { L1, table, P: { claims, triggers, admissions, zero: P.zero, passNow: P.passNow, negators: P.negators, fixed: P.fixed } };
+  return STOP_LATIN1;
+}
+// The prose → { text: what the regexes of `P` scan, orig: the text indexes refer to (for the clause, negation and question reads),
+// at: projected index → orig index (null: the same), P }. plain (tests): the prose as it is, with the patterns as written.
+function stopScan(prose, plain) {
+  const P = stopPatterns();
+  if (plain) return { text: prose, orig: prose, at: null, P };
+  if (!/[^\x00-\xff]/.test(prose)) { const one = Buffer.from(prose, "latin1").toString("latin1"); return { text: one, orig: one, at: null, P }; }
+  const l1 = stopLatin1();
+  const pr = l1 ? l1.L1.latin1Text(prose, l1.table) : null;
+  return pr ? { text: pr.text, orig: prose, at: pr.at, P: l1.P } : { text: prose, orig: prose, at: null, P };
+}
 // Does the message claim the work is done / verified? → { claim, admitted, claims: [matched text] }. A match does not count
 // when a negator or condition sits up to STOP_WINDOW words before it in the same clause ("not done", "once the tests
 // pass", "I'll verify"; words ending in n't / 'll too; a colon or a dash starts a new clause; "no" / "se" read by language —
 // stopNegates), nor when its sentence is a question. `admitted`: the message says plainly that something is NOT verified or
 // fails ("task 3 is not verified", "2 failing") — the honest answer is never sent back — unless that failure is one already
 // fixed ("I fixed the 2 failing tests", stopPastFailure).
-// opts.allPatterns (tests): run every claim pattern, whatever the triggers say — the answer must be the same.
+// opts.allPatterns (tests): run every claim pattern, whatever the triggers say — the answer must be the same. opts.plain (tests): scan
+// the prose as it is, never its one-byte projection (stopScan) — the answer must be the same.
 function stopClaims(message, opts = {}) {
-  const P = stopPatterns();
-  const text = stopProse(message);
+  const scan = stopScan(stopProse(message), opts.plain === true);
+  const P = scan.P, text = scan.orig; // the patterns run on scan.text; what follows reads the prose itself
+  const pos = (k) => (scan.at ? scan.at[k] : k); // a scanned index → the prose's
   const lang = guessLang(text); // decides "no" (a PT text: em + o) and "se" (an ES text: reflexive) — see stopNegates
   const found = [];
   const wordsOf = (s) => s.split(/[^\p{L}\p{N}_'’]+/u).filter(Boolean);
@@ -2413,16 +2453,17 @@ function stopClaims(message, opts = {}) {
   // 1.25.1: only the patterns of a language whose trigger words the text holds (a language without triggers: always).
   const hot = new Map();
   const runs = (langs) => opts.allPatterns === true || [...langs].some((l) => {
-    if (!hot.has(l)) { const t = P.triggers.get(l); hot.set(l, !t || t.test(text)); }
+    if (!hot.has(l)) { const t = P.triggers.get(l); hot.set(l, !t || t.test(scan.text)); }
     return hot.get(l);
   });
   for (const c of P.claims) {
     if (!runs(c.langs)) continue;
     c.re.lastIndex = 0;
     let m;
-    while ((m = c.re.exec(text)) !== null) {
+    while ((m = c.re.exec(scan.text)) !== null) {
       if (m[0] === "") { c.re.lastIndex++; continue; }
-      hits.push({ start: m.index, end: m.index + m[0].length, text: m[0], langs: c.langs });
+      const start = pos(m.index), end = pos(m.index + m[0].length);
+      hits.push({ start, end, text: text.slice(start, end), langs: c.langs });
     }
   }
   const langsAt = new Map(); // the languages every claim starting at an index reads as
@@ -2442,10 +2483,11 @@ function stopClaims(message, opts = {}) {
   const admitted = P.admissions.some((re) => {
     re.lastIndex = 0;
     let m;
-    while ((m = re.exec(text)) !== null) {
+    while ((m = re.exec(scan.text)) !== null) {
       if (m[0] === "") { re.lastIndex++; continue; }
-      if (stopZeroCount(text, m.index)) continue;
-      if (!stopPastFailure(text, m.index, m.index + m[0].length, wordsOf)) return true;
+      const start = pos(m.index);
+      if (stopZeroCount(text, start)) continue;
+      if (!stopPastFailure(text, start, pos(m.index + m[0].length), wordsOf)) return true;
     }
     return false;
   });

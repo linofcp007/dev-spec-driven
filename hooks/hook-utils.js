@@ -195,13 +195,26 @@ function claimProse(message, p) {
   return (at ? out + unfenced.slice(at) : unfenced).replace(new RegExp(p.code.source, p.code.flags), " ")
     .split("\n").filter((l) => !quote.test(l)).join("\n");
 }
+// 1.27 — what the pre-filter's regexes scan, as the engine's stopScan: a prose holding a character past U+00FF → its exact one-byte
+// projection, each pattern source rewritten for it (mcp/lib/latin1-scan.js — the regexes' two-byte code cost ~30 ms more here);
+// else the prose as a one-byte copy (a wide character inside a code fence left it two-byte). → { text, source(src) → the source to
+// compile }. f: the generated filter (its wrapper, claims and triggers make the table).
+function claimScan(prose, f) {
+  const same = (s) => s;
+  if (!/[^\x00-\xff]/.test(prose)) return { text: Buffer.from(prose, "latin1").toString("latin1"), source: same };
+  const L1 = require(path.join(__dirname, "..", "mcp", "lib", "latin1-scan.js"));
+  const table = L1.latin1Table([f.word.pre + f.word.post, ...f.claims, ...(Array.isArray(f.triggers) ? f.triggers : []).map((t) => t.source)]);
+  const pr = table && L1.latin1Text(prose, table);
+  return pr ? { text: pr.text, source: (s) => L1.latin1Pattern(s, table) } : { text: prose, source: same };
+}
 // ONE alternation of every pattern, each inside the word wrapper's group: a match exists at some position for some pattern exactly
 // when the alternation matches there (backtracking tries every alternative) — and it compiles once (34 patterns apart: ~19 ms).
-function claimMatch(message, f) {
+// scan: claimScan's (the caller made it for the trigger test already), else made here from the message.
+function claimMatch(message, f, scan) {
   if (!f.claims.length) return false;
-  const text = claimProse(message, f.prose);
-  return new RegExp(f.word.pre + "(?:" + f.claims.join(")|(?:") + ")" + f.word.post, String(f.word.flags).replace("g", "")).test(text);
+  const sc = scan || claimScan(claimProse(message, f.prose), f);
+  return new RegExp(sc.source(f.word.pre + "(?:" + f.claims.join(")|(?:") + ")" + f.word.post), String(f.word.flags).replace("g", "")).test(sc.text);
 }
 
 module.exports = { utf16OrUtf8, textOf, jsonOf, readText, readJson, isUtf16, isNetwork, shareOf, fsTargetPath, editTargets, nearestSpecs, approvalProjects, sessionFlagFile,
-  claimProse, claimMatch, RE_UNEXPANDED_VAR, unexpandedVar, RE_DOTDOT, fileUriToPath, parseProjectDir };
+  claimProse, claimScan, claimMatch, RE_UNEXPANDED_VAR, unexpandedVar, RE_DOTDOT, fileUriToPath, parseProjectDir };

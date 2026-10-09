@@ -74,7 +74,19 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   The context it prints is unchanged (≤ `SESSION_MAX_FEATURES` = 20 feature lines, then one "+N more"; mcp/tests/10-guards-hooks-r7.js).
   The Stop / SubagentStop hook
   follows the same rules (see End-of-turn evidence gate — 1.24 r6 I-I4: a closing message with no claim pattern ends it before the
-  engine loads, from the build's hooks/stop-claims.generated.json), and so do the 1.14 observe hook (it prints nothing at all and
+  engine loads, from the build's hooks/stop-claims.generated.json; **1.27 — the claim scan on a one-byte text:** V8 compiles a regex
+  for a one-byte and for a two-byte subject apart, and the two-byte code of the patterns' `[\p{L}\p{N}_]` boundaries is large — one
+  em dash, curly quote or emoji in the closing message cost stopClaims ~110 ms and the pre-filter ~30 ms more, and a wide character
+  only inside a code fence left the prose two-byte too. mcp/lib/latin1-scan.js (Node core only, loaded only for such a text):
+  `latin1Text` projects the prose to one Latin-1 character per code point (an index map leads each match back), `latin1Table` /
+  `latin1Pattern` rewrite the patterns once for it — a code point a pattern names (— – ’ ✓ ✔ U+FE0F) gets a C1 control of its own,
+  added to each `\p{…}` class holding it; one case-equivalent to a Latin-1 character (ſ K Å ẞ Ÿ μ Μ) becomes it; any other letter
+  ª, number ², pictograph ©, space U+00A0, U+2028 / U+2029 `\r`, the rest U+009F; a pattern form the rewrite can't read (another
+  property, `\P{…}`, a range past ASCII, a stand-in) makes it scan the text as it is — so the answers never change
+  (mcp/tests/10-guards-stop-scan.js: stopClaims and the pre-filter alike on 3,000+ wide messages; `stopClaims(m, {plain: true})` is
+  the reference). guards.js `stopScan` (a Latin-1 prose: a one-byte copy) and hook-utils `claimScan` use it; the claim patterns,
+  triggers and admissions are built on first use (a message runs ~18 of ~47). guessLang still reads the prose itself (its INF
+  lookahead names “ — ~8 ms on a wide text, once a process)), and so do the 1.14 observe hook (it prints nothing at all and
   exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
   output is a permission decision).
 - **Every hook runs in exec form (1.25.1, review 7): `{"type": "command", "command": "node", "args":

@@ -131,15 +131,16 @@ function mayClaim(message) {
     const hu = require("./hook-utils.js");
     // 1.25.1: only the claim patterns of the languages whose trigger words the prose holds (f.triggers — as stopClaims runs them):
     // none → no claim, with nothing but the small trigger regexes compiled (every pattern of every language cost ~35 ms).
+    // 1.27: the regexes scan a one-byte text (hook-utils claimScan — a wide character made them ~30 ms slower to compile)
+    const scan = hu.claimScan(hu.claimProse(message, f.prose), f);
     if (Array.isArray(f.triggers) && f.triggers.length) {
-      const prose = hu.claimProse(message, f.prose);
       const flags = String(f.word.flags).replace(/[gm]/g, "");
       const idx = new Set();
-      for (const t of f.triggers) if (new RegExp(f.word.pre + t.source + f.word.post, flags).test(prose)) for (const i of t.claims) idx.add(i);
+      for (const t of f.triggers) if (new RegExp(scan.source(f.word.pre + t.source + f.word.post), flags).test(scan.text)) for (const i of t.claims) idx.add(i);
       if (!idx.size) return false;
-      return hu.claimMatch(message, { ...f, claims: [...idx].sort((a, b) => a - b).map((i) => f.claims[i]) });
+      return hu.claimMatch(message, { ...f, claims: [...idx].sort((a, b) => a - b).map((i) => f.claims[i]) }, scan);
     }
-    return hu.claimMatch(message, f);
+    return hu.claimMatch(message, f, scan);
   } catch {
     return true;
   }
