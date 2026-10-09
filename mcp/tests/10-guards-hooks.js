@@ -29,7 +29,7 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
     const hk = hookOut("approval-hook", pre("Monitor", "node cli/dev-spec.js approve alpha tasks"));
     const tail = hookOut("approval-hook", pre("Monitor", "tail -f build.log"));
     const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
-    const ap = (cfg.PreToolUse || []).find((e) => e.hooks.some((h) => /approval-hook/.test(h.command)));
+    const ap = (cfg.PreToolUse || []).find((e) => e.hooks.some((h) => /approval-hook/.test([h.command, ...(h.args || [])].join(" "))));
     ok(eng.decision === "deny" && eng.actions[0].kind === "approve" && decisionOf(hk) === "deny" && tail.stdout === "" && tail.status === 0 &&
       new RegExp(ap.matcher).test("Monitor") && E.APPROVAL_SHELL_TOOLS.has("Monitor"),
       "1.23 review 5 (P4): an approval run through the Monitor tool is refused at deny (engine and hook, bash syntax); a Monitor command that runs no approval stays silent; hooks.json's matcher covers Monitor (got " +

@@ -1450,8 +1450,17 @@ function stopPatterns() {
     if (!langsOf.has(src)) langsOf.set(src, new Set());
     langsOf.get(src).add(i18n.baseLang(l));
   }
+  // 1.25.1 — each base language's trigger words (i18n stopGate.triggers; pt-BR's are pt's): a claim pattern of a language runs only
+  // when the text holds one of its triggers — every pattern holds one, so the answer is the same, and a message that triggers no
+  // language compiles none of the ~47 patterns (~35 ms of the first stopClaims in a process).
+  const triggers = new Map();
+  for (const l of i18n.LANGS) {
+    const b = i18n.baseLang(l), src = ((i18n.msg(l).stopGate || {}).triggers || []).join("|");
+    if (src) triggers.set(b, triggers.has(b) ? triggers.get(b) + "|" + src : src);
+  }
   STOP_PATTERNS = {
     claims: [...langsOf].map(([src, langs]) => ({ re: word(src), langs })),
+    triggers: new Map([...triggers].map(([b, src]) => [b, new RegExp(STOP_WORD.pre + src + STOP_WORD.post, "iu")])),
     admissions: all("admissions").map(word),
     negators: new Set(all("negators").map((w) => w.toLowerCase())),
     fixed: new Set(all("fixed").map((w) => w.toLowerCase())),
@@ -1537,11 +1546,21 @@ function stopClaimSources() {
 // What the Stop hook's claim pre-filter needs to decide "no claim" before the engine loads (scripts/build.js →
 // hooks/stop-claims.generated.json): the claim patterns, the word wrapper stopPatterns compiles them with, and stopProse's
 // tail length and regexes. The hook answers "maybe" whenever any pattern matches the prose — a superset of stopClaims' claim
-// (negations and questions stay the engine's to judge).
+// (negations and questions stay the engine's to judge). 1.25.1: `triggers` — per base language, its trigger words (`source`) and
+// the indexes in `claims` of its patterns: the hook compiles only the patterns of the languages whose triggers the prose holds
+// (none → no claim), as stopClaims runs them.
 function stopClaimFilter() {
   const re = (r) => ({ source: r.source, flags: r.flags });
+  const claims = stopClaimSources();
+  const triggers = i18n.BASE_LANGS.map((b) => {
+    const ls = i18n.LANGS.filter((l) => i18n.baseLang(l) === b);
+    const source = ls.flatMap((l) => (i18n.msg(l).stopGate || {}).triggers || []).filter((s, i, a) => a.indexOf(s) === i).join("|");
+    const mine = new Set(ls.flatMap((l) => (i18n.msg(l).stopGate || {}).claims || []));
+    return { lang: b, source, claims: claims.map((c, i) => (mine.has(c) ? i : -1)).filter((i) => i >= 0) };
+  });
+  // A language without triggers: its patterns always run — no trigger group may then gate them (the hook reads `triggers` only whole).
   return { word: { ...STOP_WORD }, prose: { max: STOP_MESSAGE_MAX, fence: re(RE_STOP_FENCE), code: re(RE_STOP_CODE), quote: re(RE_STOP_QUOTE) },
-    claims: stopClaimSources() };
+    claims, ...(triggers.every((t) => t.source) ? { triggers } : {}) };
 }
 // The mcp/lib files that make that filter (the patterns, the wrapper, the prose) — the generated file stamps their sizes, and the
 // hook takes it only while every size and package.json's version still match (else: the engine decides, as before).
@@ -1552,14 +1571,22 @@ const STOP_FILTER_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es
 // stopNegates), nor when its sentence is a question. `admitted`: the message says plainly that something is NOT verified or
 // fails ("task 3 is not verified", "2 failing") — the honest answer is never sent back — unless that failure is one already
 // fixed ("I fixed the 2 failing tests", stopPastFailure).
-function stopClaims(message) {
+// opts.allPatterns (tests): run every claim pattern, whatever the triggers say — the answer must be the same.
+function stopClaims(message, opts = {}) {
   const P = stopPatterns();
   const text = stopProse(message);
   const lang = guessLang(text); // decides "no" (a PT text: em + o) and "se" (an ES text: reflexive) — see stopNegates
   const found = [];
   const wordsOf = (s) => s.split(/[^\p{L}\p{N}_'’]+/u).filter(Boolean);
   const hits = [];
+  // 1.25.1: only the patterns of a language whose trigger words the text holds (a language without triggers: always).
+  const hot = new Map();
+  const runs = (langs) => opts.allPatterns === true || [...langs].some((l) => {
+    if (!hot.has(l)) { const t = P.triggers.get(l); hot.set(l, !t || t.test(text)); }
+    return hot.get(l);
+  });
   for (const c of P.claims) {
+    if (!runs(c.langs)) continue;
     c.re.lastIndex = 0;
     let m;
     while ((m = c.re.exec(text)) !== null) {

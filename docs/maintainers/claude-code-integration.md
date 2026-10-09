@@ -29,11 +29,32 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   (lifecycle.md → Roadmap files).
   It loads the engine LAZILY (1.22 review): only for SessionStart and a PostToolUse on a `.specs/` file outside `.execution/` —
   the plain path check runs first (an edit anywhere else cost the engine's ~100 ms load: 173 → 68 ms median per Write / Edit,
-  `node -e 0` ≈ 61 ms; mcp/tests/10-guards-review.js asserts which events load it). The Stop / SubagentStop hook
+  `node -e 0` ≈ 61 ms; mcp/tests/10-guards-review.js asserts which events load it). **SessionStart probes first (1.25.1, review
+  7):** it fires in every session of every project (the plugin is user-wide — startup, resume, clear, compact) and loaded the engine
+  before asking whether a dev-spec project was there: `sessionMayBeDevSpec()` runs the raw probe the guard / stop hooks use — the
+  nearest folder at or above the payload `cwd` whose `.specs/` passes the hook's `isDevSpecProject` (≤ `MAX_UP` = SESSION_MAX_UP
+  levels; a network cwd is itself), the anchors, and with neither a cwd nor an anchor the process folder — a superset of every
+  folder `sessionProject()` and the fallback can pick (a worktree maps only from a dev-spec folder at or above the cwd). Measured
+  (median of 15, Windows): a repository without `.specs/` 145 → 56 ms (`node -e 0` 54); a dev-spec project unchanged (~178 ms).
+  The context it prints is unchanged (≤ `SESSION_MAX_FEATURES` = 20 feature lines, then one "+N more"; mcp/tests/10-guards-hooks-r7.js).
+  The Stop / SubagentStop hook
   follows the same rules (see End-of-turn evidence gate — 1.24 r6 I-I4: a closing message with no claim pattern ends it before the
   engine loads, from the build's hooks/stop-claims.generated.json), and so do the 1.14 observe hook (it prints nothing at all and
   exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
   output is a permission decision).
+- **Every hook runs in exec form (1.25.1, review 7): `{"type": "command", "command": "node", "args":
+  ["${CLAUDE_PLUGIN_ROOT}/hooks/<x>.js"], "timeout": 10}`.** The hooks reference (code.claude.com/docs/en/hooks → Exec form and
+  shell form): with `args` Claude Code resolves `command` on PATH and spawns it directly — no shell, `${CLAUDE_PLUGIN_ROOT}`
+  substituted into each `args` element as a plain string (a path with spaces needs no quoting); `node` + a script path is the
+  documented cross-platform pattern (node.exe is a real executable, never a `.cmd` shim). Without `args` (shell form) the command
+  string went through `sh -c`, on Windows Git Bash — or PowerShell when Git Bash is absent. Measured on Windows 11 (median of 15, the
+  observe hook on an irrelevant Bash call): exec 57 ms · Git Bash 98 ms · Windows PowerShell 5.1 395 ms · pwsh 7 348 ms — and a
+  Write / Edit runs three hooks (guard, approval, spec), a Bash call two (approval, observe). **Minimum Claude Code 2.1.139**
+  (released 2026-05-11): its changelog — "Added hook `args: string[]` field (exec form) that spawns the command directly without a
+  shell, so path placeholders never need quoting"; the docs page states no minimum. An older version reads no `args` and would run
+  a bare `node` with the payload on stdin (a syntax error: every hook silently off) — INSTALL.md and the README's quick start state
+  the minimum. `claude plugin validate` (2.1.295) checks the hooks' schema (`args` must be an array) and passes. Never go back to
+  shell form for a hook; a new hook takes the same shape (mcp/tests/10-guards-hooks-r7.js checks every entry).
 - **Which project a hook reads (1.23 review 5, M8): `sessionProject({cwd, anchors})`** (engine/guards.js, on the facade). The
   MCP server is pinned to `SPEC_PROJECT_DIR` = `${CLAUDE_PROJECT_DIR}` (the folder Claude Code started in) and records approvals,
   ticks and evidence THERE; the hooks read the payload's `cwd` first — in a git worktree (EnterWorktree, a subagent `cd`'d into

@@ -7,7 +7,7 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded } = require("./common.js"); // load time
+const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded, stopLineClaim } = require("./common.js"); // load time
 // The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
 let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
@@ -1109,6 +1109,23 @@ const evalsReadme = "# Evals\n\n" +
     "Ficheros de conjunto: `golden.json`, `adversarial.json`, opcional `regression.json`.\n" +
     "Formato de ítem: `{ id, input, expect: { type, value|rubric } }`. Tipos de grader: contains | equals | regex | refuse | judge.\n" +
     "El system prompt se lee del `../prompts/vN.md` más reciente (su sección `## System`).\n";
+
+// 1.25.1 — what the stop gate's claims (msg.stopGate.claims) are made of: a claim is about the WORK (a task, the feature, everything,
+// the tests), never a bare verb — "Verifiqué el archivo…", "Terminé de leer…", "Listo, aquí tienes el resumen.", "La función está
+// implementada en src/pay.ts" were sent back while any recent tick was unverified. See en.js (STOP_EN_*).
+const STOP_ES_DONE = String.raw`(?:hech[oa]s?|list[oa]s?|terminad[oa]s?|completad[oa]s?|complet[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resuelt[oa]s?)`;
+const STOP_ES_CHAIN = String.raw`(?:\s*(?:,|y|&)\s*(?:${STOP_ES_DONE}|probad[oa]s?|testead[oa]s?|funcionando))*`;
+// Its clause ends right there ("La tarea está terminada.") — "está implementada en src/pay.ts" describes the code.
+const STOP_ES_END = String.raw`(?=[ \t]*(?:[.!,;:—–)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+const STOP_ES_END1 = String.raw`(?=[ \t]*(?:[.!;)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+// Not done IN / BY something ("está implementada en src/pay.ts", "fue hecho por el middleware", "listo para empezar").
+const STOP_ES_NOT_WHERE = String.raw`(?!\s+(?:en|por|con|v[ií]a|desde|dentro|mediante|para)(?![\p{L}\p{N}_]))`;
+// The work a first person finished: la tarea (tarea 3, tareas 1-3), la función, la corrección, los cambios, todo…
+const STOP_ES_WORK = String.raw`(?:(?:(?:la|las|el|los|toda|todas|todo|todos|esta|estas|este|estos|esa|esas|ese|esos|ambas|ambos|mi|mis|nuestra|nuestras|nuestro|nuestros|última|últimas|restantes)\s+)*(?:\d+\s+)?(?:tareas?(?:\s+#?\d+(?:\s*(?:,|y|[-–]|a)\s*#?\d+)*)?|pasos?(?:\s+#?\d+)?|funcionalidad(?:es)?|funci[óo]n|historias?|implementaci[óo]n|correcci[óo]n(?:es)?|cambios?|trabajo|plan|bugfix)|todo)(?![\p{L}\p{N}_])`;
+// What the rest of a "Hecho." line names when it claims the work (common.js stopLineClaim).
+const STOP_ES_TESTED = String.raw`(?:pruebas?|tests?|tareas?|suites?|verificad[oa]s?|pasan|pasaron|pasó|pasando|verdes?|implementad[oa]s?|implementé|build|lint)`;
+// A first person's completion verb (singular and plural).
+const STOP_ES_I = String.raw`(?:terminé|completé|implementé|verifiqué|acabé|finalicé|probé|terminamos|completamos|implementamos|verificamos|acabamos|finalizamos|probamos)`;
 
 // ===========================================================================
 // Human-readable tool messages (doctor / clarify / next-action / add-track /
@@ -2991,17 +3008,35 @@ const msg = {
     },
 
     stopGate: {
+      // 1.25.1: no bare verb or participle — "verifiqué", "terminé", "implementada" alone claimed "Verifiqué el archivo…", "Terminé
+      // de leer…", "La función está implementada en src/pay.ts" (STOP_ES_* above, common.js stopLineClaim).
       claims: [
-        String.raw`(?:está|están|esta|quedó|quedaron|fue|fueron|ya\s+está|ya\s+están)\s+(?:todo\s+)?(?:hech[oa]s?|list[oa]s?|terminad[oa]s?|completad[oa]s?|implementad[oa]s?|verificad[oa]s?|finalizad[oa]s?|resuelt[oa]s?)`,
+        // "La tarea está terminada.", "Fue implementado y probado." — the clause ends there…
+        String.raw`(?:está|están|esta|quedó|quedaron|fue|fueron|ya\s+está|ya\s+están)\s+(?:todo\s+|totalmente\s+|ahora\s+)?${STOP_ES_DONE}${STOP_ES_CHAIN}${STOP_ES_END}`,
+        // …or the work is its subject ("la funcionalidad está terminada y publicada"), or "está todo hecho"
+        String.raw`(?:todo|tareas?|funcionalidad|funci[óo]n|historias?|implementaci[óo]n|correcci[óo]n|cambios|trabajo|bugfix)\s+(?:(?:ya|ahora)\s+)?(?:está|están|quedó|quedaron|fue|fueron)\s+(?:todo\s+|totalmente\s+|ahora\s+)?${STOP_ES_DONE}${STOP_ES_NOT_WHERE}`,
+        String.raw`(?:está|están|quedó|ya\s+está)\s+todo\s+${STOP_ES_DONE}${STOP_ES_NOT_WHERE}`,
+        // "La tarea 3 se ha completado.", "Se han implementado todos los cambios.", "He terminado la tarea." — not "He verificado que…"
+        String.raw`(?:se\s+)?(?:ha|han|he|hemos)\s+(?:ya\s+)?(?:sido\s+)?${STOP_ES_DONE}${STOP_ES_CHAIN}(?:\s+${STOP_ES_WORK}|${STOP_ES_END1})`,
         String.raw`tareas?\s+#?\d+(?:\s*(?:,|y|[-–]|a)\s*#?\d+)*\s+(?:(?:est[áa]|est[áa]n|fue|fueron|quedó|quedaron)\s+)?(?:hech[oa]s?|terminad[oa]s?|completad[oa]s?|implementad[oa]s?|verificad[oa]s?)`,
         String.raw`todas\s+las\s+(?:\d+\s+)?tareas\s+(?:(?:est[áa]n|fueron|quedaron|ya)\s+)*(?:hechas|terminadas|completadas|implementadas|verificadas|finalizadas|listas)`,
-        String.raw`^[ \t*_#>\p{Extended_Pictographic}\uFE0F\u2713\u2714-]*(?:todo\s+)?(?:hecho|listo|terminado|completado|implementado|verificado|finalizado)[*_]*(?=[ \t]*(?:[.,!:—–\p{Extended_Pictographic}\u2713\u2714-]|$))`,
-        String.raw`todo\s+(?:hecho|listo|terminado|en\s+verde|funciona)`,
+        // "Hecho.", "✅ Listo", "Implementado y verificado." — "Listo, aquí tienes el resumen." claims no task (common.js)
+        stopLineClaim(String.raw`(?:todo\s+)?(?:hech[oa]|list[oa]|terminad[oa]|completad[oa]|implementad[oa]|verificad[oa]|finalizad[oa])${STOP_ES_CHAIN}`, STOP_ES_TESTED,
+          String.raw`(?:${STOP_ES_WORK}|(?<=implementad[oa]s?\s+)(?:el|la|los|las|un|una)(?![\p{L}\p{N}_]))`),
+        // "Tarea terminada.", "Trabajo terminado —" (ending its clause)
+        String.raw`(?:funcionalidad|funci[óo]n|historia|tarea|implementaci[óo]n|correcci[óo]n|bugfix|refactor|migraci[óo]n|trabajo)\s+(?:ya\s+)?(?:hech[oa]|terminad[oa]|completad[oa]|complet[oa]|implementad[oa]|verificad[oa]|finalizad[oa]|list[oa])${STOP_ES_END}`,
+        String.raw`todo\s+(?:hecho|listo|terminado|verificado|implementado|probado|en\s+verde|funciona)`,
         String.raw`(?:todas\s+las\s+(?:\d+\s+)?|las\s+)?(?:pruebas|tests?)\s+(?:(?:ya|ahora|todas)\s+)*(?:pasan|pasaron|pasa|pasó|est[áa]n\s+pasando|est[áa]n\s+en\s+verde|en\s+verde)`,
         String.raw`ya\s+funciona`,
-        String.raw`terminé|completé|implementé|verifiqué|acabé|finalicé`,
-        String.raw`completad[oa]s?|verificad[oa]s?|implementad[oa]s?`,
+        // first person: "Implementé la tarea 3", "Terminé." — not "Verifiqué el archivo", "Terminé de leer…"
+        String.raw`${STOP_ES_I}(?:\s+(?:ya|también))?(?:\s*(?:,|y)\s*${STOP_ES_I})*(?:\s+${STOP_ES_WORK}|${STOP_ES_END1})`,
+        // …and "implementé" builds the work whatever its object ("Implementé la lógica de reintentos") — not "…que" / "…cómo"
+        String.raw`(?:implementé|implementamos)(?=\s+(?!(?:que|si|c[óo]mo|porque|donde|cuando|cu[áa]l)(?![\p{L}\p{N}_]))[\p{L}\p{N}_])`,
+        // "Listo para el merge" (1.25.1 — it claimed nothing)
+        String.raw`list[oa]s?\s+para\s+(?:(?:el|la|un|una|hacer|hacer\s+el)\s+)?(?:merge|fusionar|integrar|integraci[óo]n|entrega|entregar|release|lanzamiento|despliegue|desplegar|producci[óo]n|revisi[óo]n|review|pr|pull\s+request)`,
       ],
+      // 1.25.1 — the words every claim above holds at least one of (see en.js).
+      triggers: [String.raw`${STOP_ES_DONE}|${STOP_ES_I}|probad[oa]s?|verdes?|funciona|pasan|pasaron|pasa|pasó|pasando`],
       negators: ["no", "nunca", "ni", "nada", "sin", "falta", "faltan", "ser", "cuando", "después", "antes", "si", "hasta", "voy", "vamos", "debo", "debe",
         "deben", "necesita", "necesitan", "tengo", "tenemos", "hay", "casi", "parcialmente", "pueda", "puedan", "aún", "todavía"],
       admissions: [

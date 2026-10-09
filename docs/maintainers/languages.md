@@ -69,8 +69,8 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   `mcp/server.js`, all derive from it: no enum to edit by hand), extends the classifier `SIGNALS` (`engine/tracks.js`;
   language guess in `engine/classify.js`), `ROADMAP_I18N` (`engine/roadmap-md.js`), the `TRACK_SECTIONS` synonyms (every
   table in `TRACK_SECTIONS`, `engine/tracks.js` — one per marker track, listed under Localization gotchas below), the
-  stop gate's `stopGate.claims` / `negators` / `admissions` and the `RE_*` matchers, then adds a test asserting a localized
-  scaffold round-trips.
+  stop gate's `stopGate.claims` / `triggers` (1.25.1: a word of each claim) / `negators` / `admissions` and the `RE_*` matchers,
+  then adds a test asserting a localized scaffold round-trips.
 
 ## Localization gotchas (from Conventions & gotchas)
 - **Multilingual headings:** the `TRACK_SECTIONS` tables (one per marker track: `SAAS_SECTIONS` / `AI_SECTIONS` /

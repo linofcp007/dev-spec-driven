@@ -443,6 +443,8 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 
 ### Quick start
 
+Requires Node.js 18+ on PATH and Claude Code 2.1.139 or later (the hooks run in exec form — no shell per call).
+
 Install from GitHub (recommended — works on any machine, no paths to edit):
 
 ```text
@@ -1007,6 +1009,8 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
   baseline.
 
 ### Começar rápido
+
+Requer Node.js 18+ no PATH e Claude Code 2.1.139 ou posterior (os hooks correm em exec form — sem shell em cada chamada).
 
 Instala a partir do GitHub (recomendado — funciona em qualquer máquina, sem caminhos para editar):
 
@@ -1579,6 +1583,8 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
   conexión, `--set-baseline` registra una baseline.
 
 ### Inicio rápido
+
+Requiere Node.js 18+ en el PATH y Claude Code 2.1.139 o posterior (los hooks se ejecutan en exec form — sin shell en cada llamada).
 
 Instala desde GitHub (recomendado — funciona en cualquier máquina, sin rutas que editar):
 

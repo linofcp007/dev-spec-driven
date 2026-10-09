@@ -660,9 +660,10 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, __dirname, require }) => 
 
     // hooks.json: PostToolUse (matcher Bash) and PostToolUseFailure (matcher Bash) run hooks/observe-hook.js, beside spec-hook's entry.
     const hc = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
-    const obsCmd = 'node "${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js"';
-    const wired = (ev) => (hc[ev] || []).find((e) => e.matcher === "^(Bash|PowerShell)$" && e.hooks[0].command === obsCmd && e.hooks[0].timeout === 10); // + PowerShell (review R5)
-    ok(!!wired("PostToolUse") && !!wired("PostToolUseFailure") && (hc.PostToolUse || []).some((e) => e.matcher === "Write|Edit" && /spec-hook\.js/.test(e.hooks[0].command)) &&
+    // (1.25.1: exec form — `node` spawned directly, the script its one argument: no shell per spawn)
+    const execOf = (h) => (h && h.command === "node" && Array.isArray(h.args) && h.args.length === 1 ? h.args[0] : "");
+    const wired = (ev) => (hc[ev] || []).find((e) => e.matcher === "^(Bash|PowerShell)$" && execOf(e.hooks[0]) === "${CLAUDE_PLUGIN_ROOT}/hooks/observe-hook.js" && e.hooks[0].timeout === 10); // + PowerShell (review R5)
+    ok(!!wired("PostToolUse") && !!wired("PostToolUseFailure") && (hc.PostToolUse || []).some((e) => e.matcher === "Write|Edit" && /spec-hook\.js/.test(execOf(e.hooks[0]))) &&
       !fs.readFileSync(obsJs, "utf8").includes(String.fromCharCode(0xfeff)),
       "feature F1: hooks.json runs hooks/observe-hook.js on PostToolUse and PostToolUseFailure (matcher ^(Bash|PowerShell)$, timeout 10) beside spec-hook's Write|Edit entry; no literal BOM in observe-hook.js");
 

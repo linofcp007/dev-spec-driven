@@ -103,7 +103,9 @@ written by hand. IDs and markers stay English-stable (languages.md). The one Eng
 - **Hooks: never reference `hooks/hooks.json` in `plugin.json`.** Claude Code auto-loads the standard
   `hooks/hooks.json` from the plugin root. Declaring `"hooks": "./hooks/hooks.json"` in the manifest
   loads it a SECOND time → `Duplicate hooks file detected` and the plugin fails to load hooks (the bug
-  fixed in 1.9.1). `manifest.hooks` is ONLY for *additional* hook files at non-standard paths.
+  fixed in 1.9.1). `manifest.hooks` is ONLY for *additional* hook files at non-standard paths. Every entry is EXEC form
+  (`"command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/<x>.js"]` — no shell per spawn; Claude Code ≥ 2.1.139), never
+  shell form (claude-code-integration.md → Hooks and commands).
 - **Never write a literal U+FEFF into source.** The Edit tool can turn the escape `\uFEFF` inside a regex or string into
   the raw BOM character (invisible, and it breaks the match). Build it: `String.fromCharCode(0xfeff)` /
   `new RegExp("^" + String.fromCharCode(0xfeff))` (as prompts-resources.js does), or check the bytes after an edit.

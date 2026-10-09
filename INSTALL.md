@@ -2,7 +2,8 @@
 
 This is a Claude Code **plugin** with a bundled **local MCP server**. It needs **Node.js** on your
 PATH (the MCP server is plain Node — no `npm install`, no dependencies). Check with `node --version`
-(v18+; tested on v24).
+(v18+; tested on v24). Its hooks need **Claude Code 2.1.139 or later** (`claude --version`): they run in exec form — `node`
+started directly with the hook's script, no shell per call — which older versions don't read (their hooks would not run).
 
 There is **no GitHub Actions and no cloud component** — nothing to configure remotely, nothing that
 costs money per run.
@@ -180,7 +181,9 @@ NOT also reference it, or Claude Code reports `Duplicate hooks file detected`): 
 traceability, saving a `design.md` checks the active tracks' mandatory sections, and session start
 prints feature status plus one line per finished feature whose files drifted since `/spec-finish` (one line while
 `.specs/` comes from an older dev-spec — see *Updating* — and one when two features' open tasks plan the same files). To
-turn them off, disable the plugin (or empty `hooks/hooks.json`).
+turn them off, disable the plugin (or empty `hooks/hooks.json`). Each hook is `node` started directly with its script (exec
+form, Claude Code 2.1.139+): on Windows a shell-form hook went through Git Bash (+~40 ms a call) or, without Git Bash,
+PowerShell (+~300 ms a call), and a Write / Edit runs three hooks.
 
 **Evidence gate at the end of a turn (on by default).** A Stop hook (`hooks/stop-hook.js`, also on SubagentStop for the
 `spec-implementer` and `spec-simplifier` agents, checked on their reports) sends Claude back to work — once — when its closing message says a task or feature is done or
@@ -208,8 +211,9 @@ store the setting but don't enforce it.
 
 **Observed evidence (the log is always on; the rule is opt-in).** A PostToolUse hook (`hooks/observe-hook.js`, the Bash tool — and PowerShell when it reports an exit code)
 silently logs each run of a task's `_Verify:_` command or a project check to a git-ignored `.execution/observed.jsonl`,
-so every recorded run says whether Claude Code actually saw it (`observed`). To verify tasks only with runs the
-harness saw (or that `dev-spec done --run` made):
+so every recorded run says whether Claude Code actually saw it (`observed`). It runs in the background (`async`): Claude
+never waits for it — in a headless `claude -p` session, the run made just before the session ends may go unlogged. To
+verify tasks only with runs the harness saw (or that `dev-spec done --run` made):
 
 ```powershell
 node "$plugin\cli\dev-spec.js" init --evidence observed   # or spec_init {evidence: "observed"}; --evidence reported to go back

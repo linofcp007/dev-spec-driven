@@ -83,6 +83,31 @@ function findProjectDir(filePath) {
   return process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || process.cwd();
 }
 
+// 1.25.1 (review 7): SessionStart fires in EVERY session of every project — the plugin is user-wide — at startup, resume, clear and
+// compact, and the engine (~70 ms) loaded before anything asked whether a dev-spec project was there at all: 132 vs 49 ms (`node -e
+// 0`) a session in a repository without one. The raw probe the guard / stop hooks run comes first: the nearest folder at or above the
+// payload's cwd whose .specs/ is dev-spec's (≤ MAX_UP levels — the engine's SESSION_MAX_UP; a network cwd is itself, never walked),
+// the anchors (CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR) and — with neither a cwd nor an anchor — the process folder: a superset of every
+// folder spec.sessionProject and handle()'s fallback can pick (a worktree is mapped only from a dev-spec folder at or above the cwd).
+const MAX_UP = 40;
+function sessionMayBeDevSpec(payload) {
+  const has = (d) => { try { return fs.statSync(path.join(d, ".specs")).isDirectory() && isDevSpecProject(d); } catch { return false; } };
+  const anchors = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
+    .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim())).map((v) => v.trim());
+  if (anchors.some(has)) return true;
+  const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd.trim() : null;
+  if (!cwd) return !anchors.length && has(process.cwd());
+  if (/^[\\/]{2}/.test(cwd)) return has(cwd);
+  let d = path.resolve(cwd);
+  for (let i = 0; i < MAX_UP; i++) {
+    if (has(d)) return true;
+    const up = path.dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return false;
+}
+
 function main(raw) {
   if (ran) return; // stdin 'end' and the safety-net timer must not both run the hook
   ran = true;
@@ -101,7 +126,7 @@ function main(raw) {
     const filePath = typeof ti.file_path === "string" ? ti.file_path : typeof ti.path === "string" ? ti.path : "";
     const fwd = filePath.replace(/\\/g, "/");
     if (!filePath || !fwd.includes("/.specs/") || fwd.includes("/.execution/") || fwd.includes("/.specs/.removing-")) process.exit(0);
-  } else if (event !== "SessionStart") process.exit(0);
+  } else if (event !== "SessionStart" || !sessionMayBeDevSpec(payload)) process.exit(0);
   // One hook event = one engine call: every spec file is read once across the steps below (roadmap, catalog, the
   // check), however many of them ask — the engine's own writes (ROADMAP.md, SPECS.md) keep that cache true.
   return loadSpec().withReadCache(() => handle(payload, event));

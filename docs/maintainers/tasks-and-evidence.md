@@ -570,9 +570,36 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   `:` and dashes; "no" and "se" are read by language (`stopNegates()`: "no" negates in EN, in ES only before a verb or
   clitic, never in guessed-PT text — em+o; "se" — PT "if" — only for a PT claim, never in guessed-ES text nor before a
   Spanish auxiliary or preterite). Claims include "All tasks
-  done", "All green", ranges ("Tasks 1-3 done"), "Feature complete" and an emoji ✅ ✓ ✔ around done. A spike is never
+  done", "All green", ranges ("Tasks 1-3 done"), "Feature complete" and an emoji ✅ ✓ ✔ around done. **A claim is about the
+  WORK (1.25.1, review 7):** every language listed its bare verbs and participles ("verified|implemented|finished|completed",
+  PT "terminei|concluí|…" / "concluíd[oa]|verificad[oa]|…", ES the same), so "I verified that the bug is in the parser", "the
+  migration was completed in 2023", "The pay() function is implemented in src/pay.ts", "Verifiquei o ficheiro…", "Acabei de ler o
+  código", "Terminé de leer…" were sent back while any recent tick was unverified — one model round-trip a turn. Now (the
+  `STOP_EN_*` / `STOP_PT_*` / `STOP_ES_*` fragments above each language's `msg`): a state ("X is / está / fue + done") claims when
+  its clause ends there (`…_END`: "Login is implemented.", "A correção está concluída.") or its subject is the work ("everything",
+  "the feature", "tasks", "o trabalho", "los cambios" — not done `in` / `by` / `em` / `en` something); a first person's present
+  perfect claims unless "that / whether / how …" or another gerund follows ("I've finished reading"); a simple past ("I implemented",
+  "implementei", "terminé") only with the work as its object (`…_WORK`: a task, the feature, the fix, the changes, everything, it) or
+  ending its sentence ("Terminei.") — "implemented" whatever its object, but never "…de + infinitive" / "…que"; the line-start
+  word (`stopLineClaim()`, i18n/common.js: "Done.", "✅ Feito", "Hecho.") only when it stands alone on its line, an emoji follows it,
+  the rest of the line names tests / tasks / verification (`…_TESTED`), or the work follows it ("Completed task 3") — "Done. I updated
+  the README as you asked." and "Listo, aquí tienes el resumen." claim nothing. New claims: "ready to merge / for review", "good to
+  go", PT "pronto para merge", ES "listo para el merge", "Work complete —", EN negator "how" ("Here's how X is implemented:").
+  Session scoping (only features this `session_id` touched) was left out: `.state.json` records no session — an MCP tick has none to
+  record — and a new state key would need the merge driver. mcp/tests/10-guards-hooks-r7.js holds the review's 17 messages and the
+  claims to keep; mcp/tests/03-languages.js's pt-BR idempotency lint skips these raw keys (PT-PT words to match, never derived text).
+  **Trigger words (1.25.1):** the work-shaped patterns are larger (47, ~14 K characters — 34 / ~3.8 K before): compiled all together
+  the Stop hook's pre-filter took ~50 ms (~14 before) and the engine's first `stopClaims` in a process ~10 ms more. Each language's
+  `stopGate.triggers` (a regex source, whole words, case-insensitive; pt-BR keeps pt's raw — it holds pt-BR's own `funcionando` /
+  `passando` / `rodando`) lists the words EVERY claim pattern of that language holds at least one of; `stopPatterns().triggers`
+  (base language → regex) gates them: a pattern runs only when the text holds a trigger of one of its languages (a language without
+  triggers: always), so the answer is the same (`stopClaims(m, {allPatterns: true})` runs every pattern — the test compares them on
+  ~2,500 generated messages). The build writes `triggers: [{lang, source, claims: [indexes]}]` into the claim filter (only when every
+  base language has triggers); the Stop hook (`mayClaim`) compiles the claims of the languages whose triggers the prose holds — none
+  → no claim. **A new claim pattern adds its word to its language's triggers.** Measured (Windows, min of 15, a recently active
+  project): no trigger 76 → 65 ms; "Done. I updated the README …" (a trigger, no claim) 213 ms (sent back) → 80 ms (silent). A spike is never
   held to the project checks here; a reason listing only checks has its own head line (`headSuite`). When you add a
-  language, add its six lists (claims, negators, admissions, fixed, zeroes, passNow — the regex ones are raw for pt-BR:
+  language, add its seven lists (claims, triggers, negators, admissions, fixed, zeroes, passNow — the regex ones are raw for pt-BR:
   i18n.js `defineDerivedLocale(MSG, {stopGate: …})`).
 - **spec-implementer (SubagentStop):** it never ticks tasks, so its gate is its REPORT: a DONE / DONE_WITH_CONCERNS for a
   task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the LAST such path named in its reply,
@@ -653,7 +680,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   the clone and on a copy whose filter is missing / of another version / stamped with another size. Measured (p50 of 15
   interleaved fresh processes, a recently active project of 10 / 52 / ~150 features): no claim 162 / 163 / 163 → 59 / 59 / 59 ms;
   a claim 236 / 246 / 274 → 253 / 263 / 291 (the filter's ~12 ms compile before the engine — still the engine's answer).
-  `npm run build` after editing an i18n file or guards.js — the "1.20 build" test fails until the file is committed.
+  1.25.1: the hook's `mayClaim()` reads the file's `triggers` groups first (Claims → Trigger words): the alternation holds only the
+  patterns of the languages whose trigger words the prose holds, and none ends the hook (hook-utils.js `claimMatch` itself is unchanged
+  — it gets the subset). `npm run build` after editing an i18n file or guards.js — the "1.20 build" test fails until the file is committed.
 - **Scope guard:** `meta.guard` is `false | true | "scope"` (`guardLevel()`; the hook reads the same raw value;
   `guardInput()`: true / "on" → true, false / "off" → false, "scope" → "scope", strings case-insensitive). `scope` adds,
   once some feature holds approved (or forced) tasks with open ones, `scopeGuardDecision()`: a code file is allowed when
@@ -677,6 +706,14 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   creates a feature folder. Bounded: past `OBSERVED_MAX_BYTES` (64 KB) the log keeps its newest lines up to half of that
   (replaced atomically; a concurrent append can lose one line — that run then reads unobserved and is run again); a
   command over `OBSERVED_MAX_COMMAND` (4000) is never logged; at most `OBSERVED_MAX_FEATURES` (200) feature folders.
+- **Async (1.25.1, review 7).** Both hooks.json entries are `"async": true`: the hook prints nothing and decides nothing, yet
+  Claude Code waited for it after every Bash / PowerShell call (+60–190 ms). The hooks reference (Run hooks in the background):
+  `async` is a field of any `type: "command"` hook — no event is excluded, PostToolUseFailure included —; an async hook runs in the
+  background, its decision fields have no effect, its `timeout` is not enforced (kept at 10 as documentation), and under `claude -p`
+  Claude Code kills one still running at teardown (outcome `cancelled`) — the LAST run of a headless session may go unlogged (under
+  `meta.evidence: "observed"` that run then reads `unobserved`; `done --run` makes it observed). Ordering: the line lands within
+  ~0.2 s of the run, long before the model's next call (a model round-trip away); only a spec_complete_task issued in the SAME
+  parallel batch as its run could read the log first (that run then reads `unobserved` — record it again, or `done --run`).
 - **The hook** exits 0 at once unless the tool is `Bash` / `PowerShell` on one of the two events and a project is found —
   EVERY distinct dev-spec one (`isDevSpecProject`) among the nearest folder holding `.specs/` at or above the payload's `cwd`
   and `CLAUDE_PROJECT_DIR` / `SPEC_PROJECT_DIR`: a subagent working in a git worktree of the project runs in the worktree's
@@ -707,7 +744,11 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   dropped, npm's aliases of `npm test` read as it; mcp/tests/09-evidence-matcher.js checks the probes) each appear in some feature's tasks.md read the same way (≤ 2 MB each, dot / `_` folders skipped) or in a
   meta.checks command — a SUPERSET of the matcher (each step keeps a body a substring of its `_Verify:_`'s normalized text),
   as cheap as the flat-text test it replaced; observeRun runs the same test before it parses a tasks.md; it prints nothing, reads stdin asynchronously (≤ 4 MB, else
-  ignored), and exits 0 on any error.
+  ignored), and exits 0 on any error. **1.25.1 (review 7):** a WHOLE bracketed `_Verify:_` value (`RE_VERIFY_PLACEHOLDER`,
+  backticks around it allowed — the scaffold's untouched `_Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_`)
+  is taken out of the tasks text before the match: it named `npm test`, so every `npm test` loaded the engine to log nothing (170 →
+  64 ms a Bash call, median of 15 on Windows — `node -e 0` 54). The engine never runs such a value either (tasks.js `scanTaskMarkers`: `^\[.*\]$`); a value
+  that only starts with a bracket (`[ -f a ] && npm test`) stays, so the filter is still a superset.
 - **The stamp.** `observedRun(projectDir, slug | null, command, exitCode, {expected, root})` → `{observed, at?}`: true when the
   LATEST logged run within `OBSERVED_WINDOW_MS` (24 h; a stamp more than 5 min in the future ignored) that is itself a run of
   the expected commands (review 3: `runProvesVerify` from the project root, the matcher of the verdict — it used to need the

@@ -237,7 +237,7 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
     const cliOk = ["node cli/dev-spec.js add-track export tdd", "node cli/dev-spec.js add-track export sec privacy --remove", "node cli/dev-spec.js add-track export tdd --remove=false"].map((c) => dec("Bash", c).decision);
     const ask = mcp({ name: "export", track: "tdd", remove: true }, "ask");
     const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "hooks", "hooks.json"), "utf8")).hooks;
-    const ap = (cfg.PreToolUse || []).find((e) => e.hooks.some((h) => /approval-hook/.test(h.command)));
+    const ap = (cfg.PreToolUse || []).find((e) => e.hooks.some((h) => /approval-hook/.test([h.command, ...(h.args || [])].join(" "))));
     const p = project("r6-e3", "en", { approvalGuard: "deny" }, ["Export"]);
     const hk = hookOut("approval-hook", pre(p, "mcp__plugin_dev-spec-driven_spec-driven__spec_add_track", { name: "export", track: "tdd", remove: true }), { CLAUDE_PROJECT_DIR: p });
     ok(r1.decision === "deny" && r1.actions[0].kind === "guard-down" && r1.actions[0].setting === "track" && js(r1.actions[0].tracks) === js(["tdd"]) && r1.actions[0].feature === "export" &&

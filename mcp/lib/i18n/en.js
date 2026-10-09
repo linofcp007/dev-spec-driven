@@ -7,7 +7,7 @@
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded } = require("./common.js"); // load time
+const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded, stopLineClaim } = require("./common.js"); // load time
 // The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
 let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
@@ -1132,6 +1132,23 @@ const evalsReadme = "# Evals\n\n" +
     "Set files: `golden.json`, `adversarial.json`, optional `regression.json`.\n" +
     "Item shape: `{ id, input, expect: { type, value|rubric } }`. Grader types: contains | equals | regex | refuse | judge.\n" +
     "The system prompt is read from the latest `../prompts/vN.md` (its `## System` section).\n";
+
+// 1.25.1 — what the stop gate's claims (msg.stopGate.claims) are made of. A claim is about the WORK — a task, the feature, the fix,
+// everything, the tests — never a bare verb: "I verified that the bug is in the parser", "the migration was completed in 2023", "The
+// pay() function is implemented in src/pay.ts" were sent back while any recent tick was unverified (one more round-trip a turn).
+const STOP_EN_DONE = String.raw`(?:done|finished|complete|completed|implemented|verified)`;
+// …and more of them: "implemented and verified", "done, tested and working".
+const STOP_EN_CHAIN = String.raw`(?:\s*(?:,|&|and)\s*(?:now\s+|fully\s+)?(?:done|finished|complete|completed|implemented|verified|tested|working))*`;
+// Its clause ends right there ("Login is implemented.", "Work complete —"): "is implemented in src/pay.ts" describes the code.
+const STOP_EN_END = String.raw`(?=[ \t]*(?:[.!,;:—–)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+// A first person's verb ends its sentence ("I've finished.") — a comma or a colon after it introduces what was found.
+const STOP_EN_END1 = String.raw`(?=[ \t]*(?:[.!;)]|$|\p{Extended_Pictographic}|\u2713|\u2714))`;
+// The work a first person finished: a task (task 3, tasks 1-3), the feature, the fix, the changes, everything, it…
+const STOP_EN_WORK = String.raw`(?:(?:(?:the|all|every|each|both|my|our|remaining|last|final|this|that|these|those)\s+|all\s+of\s+the\s+|the\s+rest\s+of\s+the\s+)*(?:\d+\s+)?(?:tasks?(?:\s+#?\d+(?:\s*(?:,|and|&|[-–]|to)\s*#?\d+)*)?|steps?(?:\s+#?\d+)?|features?|stor(?:y|ies)|fix(?:es)?|bugfix|changes?|implementation|work|plan|checks?)|everything|it|them|all|both)(?![\p{L}\p{N}_])`;
+// What the rest of a "Done." line names when it claims the work (common.js stopLineClaim).
+const STOP_EN_TESTED = String.raw`(?:tests?|tasks?|suites?|checks?|builds?|lint|verified|passing|passes|passed|green|implemented)`;
+// A gerund after "finished" / "done" is another activity ("I've finished reading the code") — unless it is the work's own.
+const STOP_EN_ING = String.raw`(?!\s+(?!implementing|fixing|building|wiring|writing|adding|testing|verifying)\p{L}+ing(?![\p{L}\p{N}_]))`;
 
 // ===========================================================================
 // Human-readable tool messages (doctor / clarify / next-action / add-track /
@@ -3169,27 +3186,48 @@ const msg = {
     // EVERY language (an agent may answer in another language than the project's) as whole words, case-insensitive. Conservative
     // on purpose: a claim counts only outside code and quotes, not in a question, and not after a negator or a condition.
     stopGate: {
+      // 1.25.1: no bare verb — "verified", "implemented", "completed" alone claimed "I verified that the bug is in the parser" and
+      // "the migration was completed in 2023" (STOP_EN_* above, common.js stopLineClaim).
       claims: [
-        String.raw`all\s+(?:done|finished|complete|completed|green)`,
+        String.raw`all\s+(?:done|finished|complete|completed|implemented|verified|green)`,
         String.raw`(?:tasks?|steps?)\s+#?\d+(?:\s*(?:,|and|&|[-–]|to)\s*#?\d+)*\s+(?:(?:is|are|has\s+been|have\s+been)\s+)?(?:now\s+)?(?:done|finished|complete|completed|implemented|verified)`,
         String.raw`all\s+(?:(?:the|of\s+the)\s+)?(?:\d+\s+)?(?:tasks?|steps?|items?|stories|checks?)\s+(?:(?:are|have\s+been|now)\s+)*(?:done|finished|complete|completed|implemented|verified|green|passing)`,
-        // …ending its clause ("Feature complete.", "Fix done ✅") — never "the implementation done so far", "the task done list"
-        String.raw`(?:feature|story|task|implementation|fix|bugfix|refactor|migration)\s+(?:now\s+)?(?:done|finished|complete|completed|implemented|verified)(?=[ \t]*(?:[.!,;:—–)]|$|\p{Extended_Pictographic}|✓|✔))`,
-        String.raw`[\p{L}\p{N}_]+(?:['’](?:s|m|re)|\s+is|\s+are|\s+am|\s+has\s+been|\s+have\s+been)\s+(?:now\s+|all\s+|fully\s+)?(?:done|finished|complete|completed|implemented|verified)`,
-        String.raw`(?:i|we)(?:['’]ve|\s+have)\s+(?:now\s+|just\s+|also\s+)?(?:finished|completed|implemented|verified)`,
-        String.raw`^[ \t*_#>\p{Extended_Pictographic}\uFE0F\u2713\u2714-]*(?:all\s+)?(?:done|finished|complete|completed|implemented|verified)[*_]*(?=[ \t]*(?:[.,!:—–\p{Extended_Pictographic}\u2713\u2714-]|$))`,
+        // …ending its clause ("Feature complete.", "Fix done ✅", "Work complete —") — never "the implementation done so far", "the task done list"
+        String.raw`(?:feature|story|task|implementation|fix|bugfix|refactor|migration|work|everything)\s+(?:now\s+)?${STOP_EN_DONE}${STOP_EN_END}`,
+        // "Login is implemented.", "It's complete.", "The flow is implemented and tested." — the clause ends there…
+        String.raw`[\p{L}\p{N}_]+(?:['’](?:s|m|re)|\s+is|\s+are|\s+am|\s+has\s+been|\s+have\s+been)\s+(?:now\s+|all\s+|fully\s+)?${STOP_EN_DONE}${STOP_EN_CHAIN}${STOP_EN_END}`,
+        // …or the work is its subject ("everything is done and pushed") — not done BY or IN something ("Validation is done in the controller")
+        String.raw`(?:everything|work|feature|tasks?|steps?|stor(?:y|ies)|implementation|fix|bugfix|refactor(?:ing)?|migration|changes)(?:['’]s|\s+is|\s+are|\s+has\s+been|\s+have\s+been)\s+(?:now\s+|all\s+|fully\s+)?${STOP_EN_DONE}(?!\s+(?:by|in|on|at|via|through|with|using|inside|within|from|elsewhere|separately|later)(?![\p{L}\p{N}_]))`,
+        String.raw`(?:i['’]m|we['’]re|i\s+am|we\s+are)\s+(?:now\s+|all\s+)?(?:done|finished)${STOP_EN_ING}`,
+        // first person: "I've implemented the parser" — not "I've verified that…", "I've finished reading…"
+        String.raw`(?:i|we)(?:['’]ve|\s+have)\s+(?:now\s+|just\s+|also\s+|already\s+)?(?:finished|completed|implemented|verified)(?!\s+(?:that|whether|if|how|why|what|where|when|which|who)(?![\p{L}\p{N}_]))${STOP_EN_ING}`,
+        // "I implemented task 3", "We finished." — a simple past claims the work only with it ("I verified that the bug is…" doesn't)
+        String.raw`(?:i|we)\s+(?:now\s+|just\s+|also\s+|already\s+)?(?:finished|completed|implemented|verified)${STOP_EN_CHAIN}(?:\s+${STOP_EN_WORK}|${STOP_EN_END1})`,
+        // …and "implemented" builds the work whatever its object ("I implemented the retry logic") — not "…that" / "…how"
+        String.raw`(?:i|we)\s+(?:now\s+|just\s+|also\s+|already\s+)?implemented(?=\s+(?!(?:that|whether|if|how|why|what|where|when|which|who)(?![\p{L}\p{N}_]))[\p{L}\p{N}_])`,
+        // "Done.", "✅ Done", "Implemented and verified.", "Implemented the retry logic." — "Done. I updated the README as you asked."
+        // claims no task, "Implemented in 2019, the parser…" no work (common.js)
+        stopLineClaim(String.raw`(?:all\s+)?${STOP_EN_DONE}${STOP_EN_CHAIN}`, STOP_EN_TESTED,
+          String.raw`(?:(?:with\s+)?${STOP_EN_WORK}|(?<=implemented\s+)(?:the|a|an|all|both|each|every|my|our|this|these|those|its|their)(?![\p{L}\p{N}_]))`),
         String.raw`status\W{0,8}done(?:_with_concerns)?`,
         String.raw`(?:all\s+(?:the\s+)?(?:\d+\s+)?|the\s+)?(?:unit\s+|integration\s+|e2e\s+)?tests?\s+(?:(?:are|now|all|still)\s+)*(?:pass|passes|passed|passing|green)`,
         String.raw`[1-9]\d*\s*(?:\/\s*\d+\s+)?(?:tests?\s+)?(?:passing|passed)`,
         String.raw`(?:everything|it|all|this)\s+(?:now\s+)?works`,
         String.raw`(?:fully|thoroughly)\s+tested|tested\s+and\s+(?:working|verified)`,
-        String.raw`verified|implemented|finished|completed`,
+        // "Ready to merge.", "Good to go." (1.25.1 — "Work complete — ready to merge." claimed nothing)
+        String.raw`(?:ready|good)\s+(?:to\s+(?:merge|ship|release|deploy|go)|for\s+(?:(?:the|a)\s+)?(?:merge|merging|release|shipping|deploy(?:ment)?|review|pr|pull\s+request|production))`,
       ],
+      // 1.25.1 — the words every claim above holds at least one of (whole words, case-insensitive): a message holding none of a
+      // language's triggers runs none of its claim patterns (the engine's stopClaims, the Stop hook's pre-filter) — most closing messages
+      // claim nothing, and compiling every pattern of every language cost each Stop ~35 ms. A new claim pattern adds its word here
+      // (mcp/tests/10-guards-hooks-r7.js checks every claim test message is still read the same).
+      triggers: [String.raw`done|finished|complete|completed|implemented|verified|tested|green|pass|passes|passed|passing|works|ready|good|status`],
       // Up to 3 words before a claim, in the same sentence: it is negated or only a condition / a plan ("not done", "once the
-      // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes).
+      // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes). 1.25.1: "how" — "Here's how
+      // the retry is implemented:" describes the code.
       negators: ["not", "never", "no", "nothing", "nor", "none", "without", "cannot", "will", "would", "should", "must", "need", "needs", "to",
         "going", "gonna", "can", "could", "may", "might", "until", "unless", "before", "once", "when", "whenever", "after", "if", "whether",
-        "almost", "nearly", "partially", "partly", "yet"],
+        "almost", "nearly", "partially", "partly", "yet", "how"],
       // The message says plainly that something is NOT verified (or fails): never sent back.
       admissions: [
         String.raw`(?:not|never|\p{L}+n['’]t)\s+(?:(?:been|yet|fully|actually|be|all|really)\s+){0,2}(?:verified|tested|run)`,
