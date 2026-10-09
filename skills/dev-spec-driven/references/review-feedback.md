@@ -1,6 +1,6 @@
 # Handling review feedback (against the spec)
 
-`/spec-review-feedback` — when review comments arrive (a human reviewer, a review tool, the `spec-reviewer`
+`/spec-review feedback` — when review comments arrive (a human reviewer, a review tool, the `spec-reviewer`
 agent's final review), evaluate every comment **against the spec before changing code**. The spec gives
 you what generic review etiquette lacks: an objective answer to "is this in scope?".
 Adapted from the `receiving-code-review` skill of [obra/superpowers](https://github.com/obra/superpowers) (MIT).
@@ -17,7 +17,7 @@ Adapted from the `receiving-code-review` skill of [obra/superpowers](https://git
 | Class | Test | Action |
 |---|---|---|
 | **AC violation** | The code breaks a criterion (`US-1.AC-2`), a planned test, or a constitution principle | Fix it. Cite the AC in the reply and the commit. |
-| **Spec change** | The comment asks for behaviour the spec doesn't define, or contradicts an AC / design decision | Don't implement. Go back to the phase (`/createSpec`, `/design`) and get the change approved first. |
+| **Spec change** | The comment asks for behaviour the spec doesn't define, or contradicts an AC / design decision | Don't implement. Go back to the phase (requirements or design) and get the change approved first. |
 | **Out of scope / YAGNI** | It adds what the spec's `Out of Scope` excludes, or a "proper" feature nothing uses | Push back with the reference: *"Out of Scope lists X; happy to spec it separately."* Check usage (`grep`) before building "professional" extras. |
 | **Quality** | Correctness/robustness/security within scope (error handling, tenant scoping, a race) | Fix it; add a test when behaviour changes. |
 | **Nit / style** | Naming, formatting, preference | Apply if cheap and consistent with the codebase; otherwise say why not. |

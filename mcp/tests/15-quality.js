@@ -730,19 +730,21 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     // controller verifies each before a fix round (80+), /prReview verifies before it reports, the simplifier keeps the
     // feature's lines, never a test, one commit each, and proves it — and none of the new text steers toward PRs or CI.
     const simp = rRd("agents", "spec-simplifier.md"), scmd = rRd("commands", "spec-simplify.md"), prr = rRd("commands", "prReview.md");
-    const revNot = cut(rev, "**Not a finding**", "## Re-review mode"), revVerify = cut(rev, "## Verify mode", "## Final mode");
-    const revRules = cut(rev, "### 5. Written rules and history", "### Calibration"), revSimp = cut(rev, "## Simplify mode", "## Verify mode");
+    // 1.26: the verify pass is its own agent (agents/spec-verifier.md) — the reviewer's verify mode, moved whole.
+    const ver = rRd("agents", "spec-verifier.md");
+    const revNot = cut(rev, "**Not a finding**", "## Re-review mode"), revVerify = cut(ver, "## The questions", "## Output");
+    const revRules = cut(rev, "### 5. Written rules and history", "### Calibration"), revSimp = cut(rev, "## Simplify mode", "## Final mode");
     const subVerify = cut(sub, "### 6. Verify the findings", "### 7. Fix loop"), subSimp = cut(sub, "## The simplification pass", "## Closing");
     const guideSimp = cut(guide, "## The simplification pass", "## The refactor-candidate backlog");
     // One row per claim of the prose — [where, its text, a string it must hold verbatim or a RegExp it must match (, false: must
     // NOT)] — so a FAIL names exactly which file and which sentence went missing.
-    const revVerdicts = cut(rev, "Verify mode replaces them with:", "Simplify mode keeps");
-    const R = "spec-reviewer.md", SX = "subagent-execution.md", SI = "spec-simplifier.md", SC = "/spec-simplify", PR = "/prReview";
+    const revVerdicts = cut(ver, "## Output", "For an ❌");
+    const V = "spec-verifier.md", R = "spec-reviewer.md", SX = "subagent-execution.md", SI = "spec-simplifier.md", SC = "/spec-simplify", PR = "/prReview";
     const prose = [
       ...["**Pre-existing**", "**Outside the diff's lines**", "**Intended**", "**Disproved by a run**", "**Silenced on purpose**", "**A nitpick**"].map((w) => [R + " › Not a finding", revNot, w]),
       [R + " › Not a finding", revNot, /only \*\*80 or more\*\* there opens a fix round/], [R + " › Not a finding", revNot, /adapted from Anthropic's `code-review` plugin/],
-      ...["**Exists at HEAD?**", "**Introduced by this diff?**", "**Intended?**", "**Already answered?**"].map((w) => [R + " › Verify mode", revVerify, w]),
-      [R + " › Verify mode's verdicts", revVerdicts, /CONFIRMED \(80\+\) \| UNCONFIRMED \(50–79\) \| REFUTED \(under 50\)/],
+      ...["**Exists at HEAD?**", "**Introduced by this diff?**", "**Intended?**", "**Already answered?**"].map((w) => [V + " › The questions", revVerify, w]),
+      [V + " › Output", revVerdicts, /CONFIRMED \(80\+\) \| UNCONFIRMED \(50–79\) \| REFUTED \(under 50\)/],
       [R + " › Written rules", revRules, /quotes the rule with its file:line/], [R + " › Written rules", revRules, /git blame -L <start>,<end> BASE -- <file>/],
       [R + " › Written rules", revRules, /A fixed bug brought back is\s+\*\*Critical\*\*/],
       [R + " › Simplify mode", revSimp, /no test file, fixture or snapshot in the diff \(any is \*\*Critical\*\*/],
@@ -756,14 +758,14 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       [SI, simp, /Adapted from Anthropic's `code-simplifier` plugin/],
       [SC, scmd, /\*\*before\*\*\s+`\/spec-finish`/], [SC, scmd, /\*\*reverted\*\*\s+\(`git revert <sha>`/], [SC, scmd, /done <feature> <n> --run/],
       [SC, scmd, /Never "behaviour unchanged" without the runs/],
-      ["code-reuse-and-quality.md › The simplification pass", guideSimp, /\| Never a test, fixture or snapshot \|/], ["SKILL.md", skill, /\/spec-simplify/],
+      ["code-reuse-and-quality.md › The simplification pass", guideSimp, /\| Never a test, fixture or snapshot \|/], ["SKILL.md", skill, /simplification pass/],
       ["/executeTask", exec, /\/spec-simplify/], ["/executeTask", exec, /verify-mode reviewer/],
-      ["AGENTS.md", agentsMd, /agents\/spec-reviewer\.md` → Verify mode/], ["AGENTS.md", agentsMd, /commands\/spec-simplify\.md/],
+      ["AGENTS.md", agentsMd, /agents\/spec-verifier\.md`/], ["AGENTS.md", agentsMd, /simplification pass/],
       // review 1: an ❌ is never unconfirmed (nor pre-existing), a break on untouched lines is the diff's, the verifier gets the
       // report, the simplify pass records the checks again, documents guard mode, never runs the built-in /simplify, and the
       // simplify reviewer gets its inputs; reverts take the dependent commits and stop on a conflict; AGENTS.md scopes the rule
-      [R + " › Verify mode", revVerify, /An ❌ is never pre-existing and never UNCONFIRMED/], [R + " › Not a finding", revNot, /\*\*An ❌ is never pre-existing:\*\*/],
-      [R + " › Verify mode", revVerify, /broken by it on lines it didn't touch/],
+      [V + " › The questions", revVerify, /An ❌ is never pre-existing and never UNCONFIRMED/], [R + " › Not a finding", revNot, /\*\*An ❌ is never pre-existing:\*\*/],
+      [V + " › The questions", revVerify, /broken by it on lines it didn't touch/],
       [SX + " › Verify the findings", subVerify, /\*\*An ❌ comes back CONFIRMED or REFUTED, never unconfirmed\*\*/],
       [SX + " › Verify the findings", subVerify, /the report path \(the implementer's, or the simplifier's\)/],
       [SC, scmd, /finish <feature> --run/], [SC, scmd, /\*\*guard\s+mode\*\*/], [SC, scmd, /Don't run Claude Code's built-in `\/simplify` inside the pass/],
@@ -778,13 +780,13 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       [SC, scmd, /run_in_background: false/], [SX + " › The simplification pass", subSimp, /run_in_background: false/],
       [SC, scmd, /each under its `meta\.checks` name/], [SC, scmd, /never add checks just to record a run/],
       [SX + " › The simplification pass", subSimp, /Never add\s+checks to record a run/],
-      [R, rev, /with no `\*\*Confidence:\*\*` line/], [SX + " › Verify the findings", subVerify, /its verdict\s+decides, not a confidence/],
+      [V, ver, /with no\s+`\*\*Confidence:\*\*` line/], [SX + " › Verify the findings", subVerify, /its verdict\s+decides, not a confidence/],
       [SI, simp, /at the margin/], [SI, simp, /INDENTED lines/], [SI, simp, /to the end of the file/],
     ];
-    const sections = { [R + " › Not a finding"]: revNot, [R + " › Verify mode"]: revVerify, [R + " › Written rules"]: revRules, [R + " › Simplify mode"]: revSimp,
+    const sections = { [R + " › Not a finding"]: revNot, [V + " › The questions"]: revVerify, [R + " › Written rules"]: revRules, [R + " › Simplify mode"]: revSimp,
       [SX + " › Verify the findings"]: subVerify, [SX + " › The simplification pass"]: subSimp, ["code-reuse-and-quality.md › The simplification pass"]: guideSimp,
       [SI]: simp, [SC]: scmd };
-    all("1.22: spec-reviewer rates findings, lists what is not one, verifies one finding fresh (verify mode), checks the written rules + history and a simplification diff (simplify mode); the controller verifies each finding before a fix round (80+ confirmed, 50–79 unconfirmed, < 50 refuted) and runs the simplification pass (reverted, not repaired); /prReview verifies before it reports; the simplifier keeps the feature's lines, never a test or contract, one commit each, the final runs last; /spec-simplify, /executeTask, SKILL.md, AGENTS.md and the guide name them; no PR / CI steering (got " +
+    all("1.22: spec-reviewer rates findings, lists what is not one, the spec-verifier agent (1.26 — the reviewer's former verify mode) verifies one finding fresh, the reviewer checks the written rules + history and a simplification diff (simplify mode); the controller verifies each finding before a fix round (80+ confirmed, 50–79 unconfirmed, < 50 refuted) and runs the simplification pass (reverted, not repaired); /prReview verifies before it reports; the simplifier keeps the feature's lines, never a test or contract, one commit each, the final runs last; /spec-simplify, /executeTask, SKILL.md, AGENTS.md and the guide name them; no PR / CI steering (got " +
       js([revNot.length, revVerify.length, revRules.length, revSimp.length, subVerify.length, subSimp.length, guideSimp.length, simp.length, scmd.length]) + ")", {
       ...Object.fromEntries(prose.map(([where, text, p, want = true]) => [`${where} ${want ? "has" : "never has"} ${typeof p === "string" ? js(p) : p}`,
         (typeof p === "string" ? text.includes(p) : p.test(text)) === want])),

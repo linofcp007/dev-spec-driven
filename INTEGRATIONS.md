@@ -75,7 +75,7 @@ server entry (`"env": { "SPEC_MCP_PROMPTS": "off" }`) if you don't want them.
 
 ## Claude Code (CLI / IDE extension)
 
-Native — it's a plugin. Skills, the 55 commands, the 4 agents, the hooks (PostToolUse + SessionStart, the Stop /
+Native — it's a plugin. Skills, the 55 commands, the 5 agents, the hooks (PostToolUse + SessionStart, the Stop /
 SubagentStop evidence gate, the Bash observed-evidence log, the ExitPlanMode plan-mode bridge, plus the opt-in PreToolUse
 guard and approval guard) and the MCP server all load:
 
@@ -134,7 +134,8 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   { "mcpServers": { "spec-driven": { "command": "node", "args": ["<PLUGIN>/mcp/server.js"] } } }
   ```
 - **Rules:** [`.cursor/rules/dev-spec-driven.mdc`](./.cursor/rules/dev-spec-driven.mdc) ships in this
-  repo (`alwaysApply: true`). For your own project, generate it with absolute paths:
+  repo (`alwaysApply: false` with a `description` — an Agent Requested rule: Cursor loads it when the task is spec-driven
+  work, not in every chat). For your own project, generate it with absolute paths:
   `mkdir -p .cursor/rules && node "<PLUGIN>/cli/dev-spec.js" rules cursor > .cursor/rules/dev-spec-driven.mdc`
   (PowerShell: the recipe at the top).
 - **Your existing rules (1.25):** `node "<PLUGIN>/cli/dev-spec.js" import cursor-rules --dry-run` shows how the project's
@@ -150,7 +151,7 @@ Same as Claude Code (skills + MCP supported). If no project folder is mounted, t
   { "mcpServers": { "spec-driven": { "command": "node", "args": ["<PLUGIN>/mcp/server.js"] } } }
   ```
 - **Rules:** [`.windsurf/rules/dev-spec-driven.md`](./.windsurf/rules/dev-spec-driven.md)
-  (`trigger: always_on`). For your own project:
+  (`trigger: model_decision` with a `description` — Windsurf loads it when the task calls for it). For your own project:
   `mkdir -p .windsurf/rules && node "<PLUGIN>/cli/dev-spec.js" rules windsurf > .windsurf/rules/dev-spec-driven.md`
   (PowerShell: the recipe at the top).
 

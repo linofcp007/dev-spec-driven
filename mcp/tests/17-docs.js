@@ -63,16 +63,22 @@ exports.run = async ({
   const docsRef = (f) => docsRead("skills", "dev-spec-driven", "references", f);
   const docsSkill = docsRead("skills", "dev-spec-driven", "SKILL.md");
   const docsDesc = ((docsSkill.match(/^description: >\r?\n([\s\S]*?)\r?\n---/m) || [])[1] || "").split(/\r?\n/).map((l) => l.trim()).join(" ").trim();
-  ok(docsDesc.length > 200 && docsDesc.length < 1024 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /antes de começar a programar/.test(docsDesc) &&
-    /antes de empezar a programar/.test(docsDesc) && /update the specs/.test(docsDesc) && /atualizar as specs/.test(docsDesc) && /actualizar las specs/.test(docsDesc) &&
-    /after a dev-spec-driven update/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
-    `SKILL.md description is trilingual, scoped ("Not for …") and < 1024 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
+  // 1.26: the description is intent-based — what the user wants (plan before coding, fix a bug properly, adopt specs, a
+  // roadmap, update the specs after a plugin update) — and SAYS it works in Portuguese and Spanish instead of listing their
+  // trigger phrases (280 of its 1,011 characters); ≤ ~600 characters, the near-miss exclusions kept.
+  ok(docsDesc.length > 200 && docsDesc.length <= 620 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /eval\(\) or an LLM/.test(docsDesc) &&
+    /Works in English, Portuguese and Spanish/.test(docsDesc) && !/antes de|especificar|corrige|arregla|atualizar|actualizar/.test(docsDesc) &&
+    /before coding/.test(docsDesc) && /fix a reported bug/.test(docsDesc) && /existing codebase/.test(docsDesc) && /roadmap/.test(docsDesc) &&
+    /update the specs/.test(docsDesc) && /after a dev-spec-driven update/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
+    `SKILL.md description is intent-based, says it works in EN / PT / ES (no literal PT / ES trigger list), scoped ("Not for …") and ≤ 620 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
   const docsLoops = (docsSkill.split("## Phase 6")[1] || "").split("Track-gated")[0];
   ok(["**core task", "**+tdd task", "**+ai generation/prompt task"].every((k) => /spec_complete_task \{evidence\}/.test(((docsLoops.split(k)[1] || "").split("\n- **")[0]))),
     "every Phase 6 execution loop (core, +tdd, +ai) ends in spec_complete_task {evidence}");
-  const docsUnwanted = (docsSkill.match(/^\| Unwanted \| IF…THEN \| (.+) \|\r?$/m) || [])[1] || "";
-  ok(/ shall /.test(docsUnwanted) && S.earsValidate("1. **US-1.AC-1** — " + docsUnwanted).issues.length === 0 && !/user-friendly error message/.test(docsRef("ears-guide.md")),
-    "the SKILL.md EARS IF…THEN example passes the plugin's own linter; ears-guide's canonical example is measurable");
+  // 1.26: the EARS quick reference moved from SKILL.md to the top of ears-guide.md (Phase 1 reads it there).
+  const docsUnwanted = (docsRef("ears-guide.md").match(/^\| Unwanted \| IF…THEN \| (.+) \|\r?$/m) || [])[1] || "";
+  ok(/ shall /.test(docsUnwanted) && S.earsValidate("1. **US-1.AC-1** — " + docsUnwanted).issues.length === 0 && !/user-friendly error message/.test(docsRef("ears-guide.md")) &&
+    /references\/ears-guide\.md/.test(docsSkill),
+    "the EARS quick reference's IF…THEN example (ears-guide.md, which SKILL.md routes Phase 1 to) passes the plugin's own linter; ears-guide's canonical example is measurable");
   ok(/real defect[^\n]*\/spec-bugfix/.test(docsSkill) && /Bounded/.test(docsRef("classification-matrix.md")) && /\/spec-bugfix/.test(docsRef("classification-matrix.md")) &&
     /Bounded/.test(docsRef("bugfix.md")) && /\*\*After Phase 0 approval:\*\* `spec_init \{tracks, lang\}` if steering is missing, then\s+`spec_create \{name, tracks, size, lang\}` \*\*once\*\*/.test(docsSkill),
     "mode routing sends a real defect to /spec-bugfix and knows Bounded (SKILL, matrix, bugfix.md); spec_init → spec_create (with the size, 1.24 r6 H2) once, after Phase 0 approval");
@@ -110,8 +116,8 @@ exports.run = async ({
   ok(/for a task whose `_Verify:_` names a runnable command, a text note alone/.test(docsStep(6)) && /`_Verify: <command>_` always/.test(docsStep(5)) &&
     /`_Verify: <command>_` always/.test(docsRead("commands", "createTask.md")) && /target tests/.test(docsRead("commands", "createTask.md")) &&
     ((docsRef("example-spec-combined.md").split("## tasks.md")[1] || "").split("\n---")[0].match(/_Verify: /g) || []).length === 7 &&
-    /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "prReview.md")) && /`\/prReview` \| [^|\n]*constitution/.test(docsRef("workflows.md")),
-    "_Verify:_ is an always-marker in AGENTS.md step 5, /createTask and the combined example; a note verifies only a non-runnable task; /prReview checks the constitution (its row: references/workflows.md since 1.21 F3)");
+    /\*\*Constitution\*\*[^\n]*constitution\.md/.test(docsRead("commands", "prReview.md")) && /`\/spec-review branch` \| [^|\n]*constitution/.test(docsRef("workflows.md")),
+    "_Verify:_ is an always-marker in AGENTS.md step 5, /createTask and the combined example; a note verifies only a non-runnable task; /prReview checks the constitution (its row: references/workflows.md since 1.21 F3 — /spec-review branch since 1.26)");
   // Prose that lagged behind 1.13 behaviour. (a) The ROADMAP.md "needs attention" line NAMES each unverified task with its
   // reason — README/AGENTS said it "shows how many each feature has". (b) reopen never unticks a REMOVED criterion's tasks
   // (`retire` lists them) — every surface that says "reopen unticks the affected tasks" must carry that exception in the
@@ -195,10 +201,11 @@ exports.run = async ({
     !/^## Pull requests/m.test(docsContrib) && /^## Before merging/m.test(docsContrib),
     "INSTALL: always-on via a local marketplace (no copy into the plugin cache); INSTALL + CONTRIBUTING validate plugin.json AND the marketplace");
   ok(/model: sonnet/.test(docsRef("subagent-execution.md")) && !/inherits the session/.test(docsRef("subagent-execution.md")) &&
-    ["spec-critic.md", "spec-implementer.md", "spec-reviewer.md", "spec-simplifier.md"].every((a) => /^model: sonnet$/m.test(docsRead("agents", a))) &&
+    ["spec-implementer.md", "spec-reviewer.md", "spec-verifier.md", "spec-simplifier.md"].every((a) => /^model: sonnet$/m.test(docsRead("agents", a))) &&
+    /^model: inherit$/m.test(docsRead("agents", "spec-critic.md")) && /The critic\s+declares `model: inherit`/.test(docsRef("subagent-execution.md")) &&
     /baseline green/.test(docsRead("commands", "executeTask.md")) && /Vocabulary map/.test(docsRef("classification-examples-saas.md")) &&
     /Vocabulary map/.test(docsRef("classification-examples-ai.md")) && !/`node mcp\/evals\/run-evals\.js/.test(docsRef("eval-suite-patterns.md")),
-    "references agree with the code: agents default to sonnet, --subagents needs a green baseline, Fast/Rigor vocabulary mapped, eval harness path resolvable");
+    "references agree with the code: the dispatched-in-bulk agents default to sonnet, the critic inherits the model (1.26), --subagents needs a green baseline, Fast/Rigor vocabulary mapped, eval harness path resolvable");
   const docsAttack = /ignore (?:all )?(?:previous|above|your|prior) instructions|ignore above|you are now DAN|disregard prior rules|what's your system prompt/i;
   const docsOutsideFences = (t) => t.split(/^\s*```.*$/m).filter((_, i) => i % 2 === 0).join("\n");
   ok(["ai-safety-patterns.md", "eval-suite-patterns.md", "mandatory-ai-design-sections.md", "example-spec-combined.md"].every((f) => {
@@ -206,10 +213,10 @@ exports.run = async ({
     "attack examples in the AI references sit in fenced blocks labelled as defensive test data");
   const docsEvalRoot = path.join(root, "evals");
   const docsNeg = fs.readdirSync(docsEvalRoot).filter((c) => fs.existsSync(path.join(docsEvalRoot, c, "prompt.md")) && /^\s+- negative\s*$/m.test(docsRead("evals", c, "prompt.md")));
-  ok(docsNeg.length >= 4 && ["requirements.txt", "eval()", "OpenAI"].every((k) => docsNeg.some((c) => docsRead("evals", c, "prompt.md").includes(k))) &&
+  ok(docsNeg.length >= 5 && ["requirements.txt", "eval()", "OpenAI", "typo"].every((k) => docsNeg.some((c) => docsRead("evals", c, "prompt.md").includes(k))) &&
     docsNeg.every((c) => fs.readdirSync(path.join(docsEvalRoot, c, "graders")).every((g) => /^max: 0\s*$/m.test(docsRead("evals", c, "graders", g)))) &&
     !/The planning request/.test(docsRead("evals", "trigger-bugfix-en", "graders", "skill-fires.md")),
-    "plugin evals: near-miss negatives (requirements.txt, eval(), one LLM call) keep the skill silent; the bugfix grader names the defect report");
+    "plugin evals: near-miss negatives (requirements.txt, eval(), one LLM call, a typo fix — 1.26) keep the skill silent; the bugfix grader names the defect report");
 
   // Plugin structure for v1.12: agents, commands, plugin evals.
   const agentsDir = path.join(root, "agents");
@@ -217,12 +224,20 @@ exports.run = async ({
   // The read-only critic is limited to Read/Grep/Glob; the reviewer adds Bash (a focused test, read-only git); the
   // implementer and the 1.22 simplifier edit files and run commands — none gets the Agent tool (they never dispatch subagents).
   const agentTools = (x) => (fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^tools:.*?(?=\r?$)/gm) || [];
-  ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md,spec-simplifier.md" &&
+  // 1.26: the verifier (the reviewer's former verify mode) reads git and may run one focused test — a shell, no Write/Edit.
+  // Every description is short (every session lists them) and never sends the dispatcher to the body, which it never sees.
+  const agentDesc = (x) => ((fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^description: (.*?)\r?$/m) || [])[1] || "";
+  ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md,spec-simplifier.md,spec-verifier.md" &&
     agentTools("spec-critic.md").join() === "tools: Read, Grep, Glob" &&
     agentTools("spec-reviewer.md").join() === "tools: Read, Grep, Glob, Bash, PowerShell" &&
+    agentTools("spec-verifier.md").join() === "tools: Read, Grep, Glob, Bash, PowerShell" &&
     agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell" &&
-    agentTools("spec-simplifier.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell",
-    "4 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer adds a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool");
+    agentTools("spec-simplifier.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell" &&
+    agentFiles.every((a) => agentDesc(a).length > 80 && agentDesc(a).length <= 250 && !/When to invoke|agent body/.test(agentDesc(a))) &&
+    !/read-only/i.test(agentDesc("spec-reviewer.md")) && /never edits code/i.test(agentDesc("spec-reviewer.md")) && /never edits code/i.test(agentDesc("spec-verifier.md")) &&
+    Buffer.byteLength(fs.readFileSync(path.join(agentsDir, "spec-verifier.md"), "utf8")) <= 4000 && !/^## Verify mode$/m.test(fs.readFileSync(path.join(agentsDir, "spec-reviewer.md"), "utf8")),
+    "5 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer and the verifier add a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool; every description ≤ 250 characters with no pointer to the body, the reviewer's says 'never edits code' (it has a shell), the verifier ≤ 4 KB and the reviewer has no verify mode left (1.26; got " +
+    JSON.stringify(agentFiles.map((a) => a + " " + agentDesc(a).length)) + ")");
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md"));
   ok(cmdFiles.length === 55 && ["spec-simplify.md", "spec-statusline.md", "spec-milestone.md", "spec-tracks.md", "spec-tour.md", "spec-decide.md", "spec-spike.md", "spec-ff.md", "spec-export.md", "spec-changelog.md", "spec-templates.md", "spec-upgrade.md", "spec-superpowers.md", "spec-bugfix.md", "spec-finish.md", "spec-review-feedback.md", "spec-impact.md", "spec-metrics.md", "spec-converge.md",
     "spec-import.md", "spec-catalog.md", "spec-drift.md", "spec-guard.md"].every((x) => cmdFiles.includes(x)),
@@ -338,8 +353,8 @@ exports.run = async ({
       }
     }
     const d4Catalog = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-catalog");
-    ok(d4Files.length === 60 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
-      "full review D4: all 55 commands + 4 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
+    ok(d4Files.length === 61 && d4Bad.length === 0 && d4Catalog && /^Living catalog — what the system does today: every feature/.test(d4Catalog.description),
+      "full review D4: all 55 commands + 5 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-catalog's quoted description");
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-guard.md"), dRead("commands", "spec-init.md"), dRef("tooling-reference.md")];
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;
@@ -454,9 +469,9 @@ exports.run = async ({
       /\*\*Dispatched into a worktree\?\*\*[^#]*`git rev-parse HEAD` there equals the BASE you were given/.test(cut(impl, "## Before you begin", "1. Read the brief")),
       "1.22 review P2: parallel mode and waves create each worktree by hand from BASE (never isolation: \"worktree\"); spec-implementer checks HEAD = BASE before it begins");
     // P3: SKILL.md's subagent loop names the verify pass, still ≤ 5,000 words.
-    ok(/send the diff to \*\*`dev-spec-driven:spec-reviewer`\*\*, verify each ❌ \/ Critical \/ Important finding \(a verify-mode `spec-reviewer` per finding; only 80\+ opens a fix round\)/.test(skillW) &&
+    ok(/send the diff to \*\*`dev-spec-driven:spec-reviewer`\*\*, verify each ❌ \/ Critical \/ Important finding \(a `dev-spec-driven:spec-verifier` per finding; only 80\+ opens a fix round\)/.test(skillW) &&
       docsSkill.split(/\s+/).filter(Boolean).length <= 5000,
-      "1.22 review P3: SKILL.md's subagent loop verifies each ❌ / Critical / Important finding before a fix round (80+), within 5,000 words (got " + docsSkill.split(/\s+/).filter(Boolean).length + ")");
+      "1.22 review P3: SKILL.md's subagent loop verifies each ❌ / Critical / Important finding before a fix round (80+; the spec-verifier agent since 1.26), within 5,000 words (got " + docsSkill.split(/\s+/).filter(Boolean).length + ")");
     // P4: since 1.21 the MCP server guards approvals too (elicitation, or a refusal under deny) — AGENTS.md says so and how
     // to answer a declined / humanRequired result.
     const agentsW = docsWs(docsAgents), guardItem = cut(agentsW, "**The approval guard: a Claude Code hook, and the MCP server.**", "- **Alongside superpowers.**");

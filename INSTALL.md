@@ -36,7 +36,7 @@ git clone https://github.com/linofcp007/dev-spec-driven.git
 claude --plugin-dir ./dev-spec-driven
 ```
 
-`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 55 commands, the 4 agents, the
+`--plugin-dir` accepts any path (relative or absolute) to your clone. The skill, the 55 commands, the 5 agents, the
 hooks and the `spec-driven` MCP server (32 tools) load for that session.
 
 > The rest of this guide uses a `$plugin` variable for the plugin's folder — here, your clone. Set it once (PowerShell):

@@ -409,7 +409,7 @@ and the test then proves the code does what it does, not what the AC asks. Code 
 — what a characterization or guard test pins — is not "written before its test": it is what that test describes.
 
 The micro-cycle never changes the plan: it adds no T-ID to `test-plan.md` on its own (a behaviour the plan misses is
-a spec gap — `/spec-converge`, `spec_append_tasks`), never edits a planned test's assertion to get green ("When a
+a spec gap — a converge pass, `spec_append_tasks`), never edits a planned test's assertion to get green ("When a
 test is wrong", below), and the task's evidence is still its `_Verify:_` run.
 
 ### Rationalizations → answers

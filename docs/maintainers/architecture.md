@@ -13,7 +13,8 @@ skills/.../references/          deep library, read on demand — index.md lists 
                                workflows.md hold what SKILL.md points to (1.21)
 commands/*.md                  55 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
 agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
-                               `dev-spec-driven:spec-reviewer` (subagent execution, its verify / simplify modes) /
+                               `dev-spec-driven:spec-reviewer` (subagent execution, its simplify mode) /
+                               `dev-spec-driven:spec-verifier` (one per finding before a fix round, 1.26) /
                                `dev-spec-driven:spec-critic` (--deep) / `dev-spec-driven:spec-simplifier` (/spec-simplify, 1.22)
 evals/                         plugin evals for `claude plugin eval` — maintainer-side, results ignored: triggering cases
                                (tags triggering / negative) and behavioural cases (tag behavior: <case>/case.yaml + fixture.sh,

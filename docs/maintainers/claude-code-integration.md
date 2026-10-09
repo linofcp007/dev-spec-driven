@@ -15,6 +15,12 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   NOTHING resolves keeps the agent from launching — so naming both is safe everywhere, and naming Bash alone left the
   agents shell-less on a PowerShell-only Windows (they could only answer NEEDS_CONTEXT). The tool names are the exact
   strings of permission rules and hook matchers (`PowerShell`). spec-critic has no shell on purpose (read-only).
+  spec-verifier (1.26 — the reviewer's former verify mode, split out so each per-finding dispatch loads ~3 KB instead of the
+  reviewer's whole prompt) lists both too: it reads `git diff` / `git blame` and may run one focused test. It reports no run,
+  so the SubagentStop matcher leaves it out (`^(dev-spec-driven:)?spec-(implementer|simplifier)$`). Agent descriptions stay
+  ≤ ~250 characters (every session lists them): what the agent does and when, never "see the agent body" — the dispatcher
+  sees only the description. The critic runs on `model: inherit` (one judgment-heavy dispatch per gate: the session's model);
+  the dispatched-in-bulk agents default to `sonnet` (an inherited Opus would multiply the cost of N parallel verifiers).
 - **Hooks never block and stay cheap.** Every hook exits 0 on any error or irrelevant event, emits at most
   one JSON object, has a 10 s timeout, and only acts on a `.specs/` dev-spec owns (`isDevSpecProject` — checked by
   PostToolUse AND SessionStart: another tool's `.specs/` gets no status block in every session). The PostToolUse hook:
