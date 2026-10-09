@@ -236,6 +236,22 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.24
+
+- **A sixth full review, fixed** — 75 findings across the server, the CLI, the hooks, the evidence, the gates, the
+  markdown readers, the classifier and the imports, each reproduced first; the fixes are kept as regression tests. Among
+  them: the git merge driver could keep a run older than the spec change it followed; a criterion written
+  `- [US-1.AC-1] …` skipped the EARS check; a section holding only "TBD" counted as written; a run that executed no
+  tests counted as proof; a misspelt MCP argument (`revoked`) re-approved instead of revoking.
+- **A classifier that finds the obvious** — speech-to-text, OCR, medical records, KYC, card data, key rotation and dozens
+  more now raise +ai / +privacy / +sec (on a 141-sentence EN / PT / ES test set: from 0–11% to 100%), and a sentence that
+  states a protection ("No personal data is sent to the LLM provider") keeps its track on.
+- **Safer and faster** — one write gate for everything under `.specs/` (never through a link); the approval guard also
+  reads PowerShell's `--%`, git and `merge-state` writes of the state files, the observed-run log and turning +tdd / +ai
+  off; a spec save no longer regenerates ROADMAP.md (once per turn instead — up to 3.6× faster saves); `dev-spec
+  version` and per-command help (`dev-spec <cmd> --help`); shorter command descriptions that fit Claude Code's listing.
+  The CHANGELOG lists every fix.
+
 ### New in 1.23
 
 - **A fifth full review, fixed** — 68 findings across the server, the CLI, the hooks, the evidence, the gates, the
@@ -744,6 +760,25 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.24
+
+- **Uma sexta revisão completa, corrigida** — 75 problemas no servidor, no CLI, nos hooks, na evidência, nos gates, na
+  leitura do markdown, no classificador e nas importações, cada um reproduzido primeiro e guardado como teste de
+  regressão. Entre eles: o driver de merge do git podia manter uma execução anterior à alteração da spec que se lhe
+  seguiu; um critério escrito `- [US-1.AC-1] …` escapava à verificação EARS; uma secção só com "TBD" contava como
+  escrita; uma execução que não correu nenhum teste contava como prova; um argumento MCP mal escrito (`revoked`) voltava a
+  aprovar em vez de revogar.
+- **Um classificador que encontra o óbvio** — speech-to-text, OCR, registos médicos, KYC, dados de cartões, rotação de
+  chaves e dezenas de outros sinais ativam agora +ai / +privacy / +sec (num conjunto de teste de 141 frases EN / PT / ES:
+  de 0–11% para 100%), e uma frase que declara uma proteção ("Nenhum dado pessoal é enviado ao fornecedor do LLM")
+  mantém o seu track.
+- **Mais seguro e mais rápido** — uma só verificação de escrita para tudo o que está em `.specs/` (nunca através de um
+  link); a guarda das aprovações também lê o `--%` do PowerShell, as escritas do git e do `merge-state` nos ficheiros de
+  estado, o registo das execuções observadas e o desligar do +tdd / +ai; gravar uma spec já não regenera o ROADMAP.md
+  (uma vez por turno — gravações até 3,6× mais rápidas); `dev-spec version` e ajuda por comando
+  (`dev-spec <cmd> --help`); descrições dos comandos mais curtas, que cabem na lista do Claude Code. O CHANGELOG lista
+  cada correção.
 
 ### Novidades da 1.23
 
@@ -1278,6 +1313,25 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.24
+
+- **Una sexta revisión completa, corregida** — 75 problemas en el servidor, la CLI, los hooks, la evidencia, los gates,
+  la lectura del markdown, el clasificador y las importaciones, cada uno reproducido primero y guardado como test de
+  regresión. Entre ellos: el driver de merge de git podía conservar una ejecución anterior al cambio de la spec que la
+  siguió; un criterio escrito `- [US-1.AC-1] …` se saltaba la verificación EARS; una sección con solo "TBD" contaba como
+  escrita; una ejecución que no corrió ningún test contaba como prueba; un argumento MCP mal escrito (`revoked`) volvía a
+  aprobar en lugar de revocar.
+- **Un clasificador que encuentra lo obvio** — speech-to-text, OCR, historias clínicas, KYC, datos de tarjetas, rotación
+  de claves y decenas de señales más activan ahora +ai / +privacy / +sec (en un conjunto de prueba de 141 frases EN / PT /
+  ES: del 0–11% al 100%), y una frase que declara una protección ("Ningún dato personal se envía al proveedor del LLM")
+  mantiene su track.
+- **Más seguro y más rápido** — una sola verificación de escritura para todo lo que está en `.specs/` (nunca a través de
+  un enlace); la guardia de aprobaciones también lee el `--%` de PowerShell, las escrituras de git y de `merge-state` en
+  los archivos de estado, el registro de ejecuciones observadas y la desactivación de +tdd / +ai; guardar una spec ya no
+  regenera el ROADMAP.md (una vez por turno — guardados hasta 3,6× más rápidos); `dev-spec version` y
+  ayuda por comando (`dev-spec <cmd> --help`); descripciones de comandos más cortas, que caben en la lista de Claude Code.
+  El CHANGELOG lista cada corrección.
 
 ### Novedades de la 1.23
 

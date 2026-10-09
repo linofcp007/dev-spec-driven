@@ -3,6 +3,119 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.24.0] — 2026-10-09
+
+A sixth full review — nine areas (the MCP server, the CLI, the Claude Code hooks, tasks and evidence, gates and state,
+markdown / trace / doctor, the classifier, lifecycle / imports / exports, languages and docs) plus a cross-cutting
+performance and architecture pass: 75 findings, each reproduced first — 73 fixed, each with a regression test (two left
+on purpose: see the end) — and the improvements they proposed: a classifier that finds the obvious +ai / +privacy / +sec
+features, one write gate for everything under `.specs/`, an approval guard that reads more of what an agent can do,
+evidence that no longer accepts a run that tested nothing, gates that read placeholders as placeholders, and spec saves
+that no longer regenerate the roadmap on every edit.
+
+### Changed
+- **The classifier finds the obvious tracks.** On a 141-sentence EN / PT / ES corpus (now a test), recall went from
+  11% / 0% / 3% to 100% for +ai / +privacy / +sec, with no false positive: speech-to-text, OCR, computer vision, `AI` /
+  `IA` in capitals, agentic, Whisper, Llama; medical records, patient data, KYC, SSN, user location; card numbers,
+  cardholder data, PCI, HMAC, password hashing, key rotation, impersonation, public share links (OAuth, Google login, file
+  upload and roles as hints). A negation that states a requirement keeps its track: "No personal data is sent to the LLM
+  provider", "No API keys are logged", "Reject requests without a valid token", "Users without MFA must not access…" (they
+  turned +privacy / +sec off). `tenant` is as strong as `inquilino`, and a rental tenant (rent, landlord) is no SaaS tenant.
+- **Placeholders are placeholders.** A section holding only TODO / TBD / … / `-` / "Pending" is unfilled — a track section,
+  a bugfix's Root Cause (the iron law), the Constitution Check. Every criterion that defines an AC ID is EARS-checked
+  (`- [US-1.AC-1] …` without SHALL passed the requirements gate), duplicate AC IDs are caught in every syntax, and test
+  coverage comes only from test-plan entries: an AC named under the plan's Gaps or Out of Scope is untested
+  (`justifiedTestGaps`), and the test-plan approval says so.
+- **Gates.** Approving a phase is refused while an earlier approved phase was edited since its approval (/spec-ff stops
+  there too). An unreadable roadmap.json (merge conflict markers) blocks approvals, revocations and finish and fails
+  doctor's new `roadmap` check — the approval roles and project checks it holds no longer switch off silently. The bugfix
+  design gate checks bug.md's Reproduction and leftover slots. Whitespace-only edits keep waiting role sign-offs. A
+  role-signed forced approval carries the earliest-expiring waiver.
+- **Evidence.** A pass that ran no tests (`tests 0`, `no tests to run`, `0 passing`, `No tests found`, `collected 0
+  items`…) is refused (`couldNotRun: "no-tests"`). A missing runner, package or project (python -m, PHP, npx, dash, go,
+  cargo, dotnet, ruby, maven, pytest collection) and a test file that doesn't parse are never an `_Expect: fail_` red
+  proof. After a renumber a task no longer inherits another task's run (doctor `evidence-moved`). A task appended into an
+  earlier phase is served before a later phase's tasks.
+- **The approval guard reads more.** PowerShell's `--%`, `dev-spec merge-state` and git's in-place writers
+  (checkout / restore / merge-file / rm / mv) of the state files, writes to the observed-run log, turning +tdd / +ai off
+  (MCP elicitation too), a subcommand it can't read and a cut-off payload naming dev-spec now ask; it checks the project
+  the CLI acts on (`cd` / `Set-Location` targets, `SPEC_PROJECT_DIR=`, the nearest `.specs/`, a network session) and the
+  file a Write really hits (`./`, `..`, `::$DATA`, 8.3 names). A UTF-16 roadmap.json / .state.json (Windows PowerShell
+  5.1) no longer switches the hooks off.
+- **MCP.** A tool argument the tool doesn't take is refused (`unknown-argument`, with a did-you-mean) — `spec_approve
+  {revoked: true}` used to re-approve; every argument error has a stable `code`; `projectDir` must name an existing folder
+  (only `spec_init` creates one) and may be a `file://` URI; with client roots an unexpanded or relative `projectDir`
+  resolves from the root. Results are compact JSON (~22% smaller). A feature lock held elsewhere waits 2 s, not 10.
+- **CLI.** `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` are checked like `--project`, and a project's own `.specs/` is
+  refused as the project; `done --run` / `finish --run` end when the command exits (a dev server it started no longer
+  hangs them); a single-value flag given twice, and extra or contradictory arguments to `feature`, `merge-state`,
+  `depend`, `stop-check`, are usage errors; `--timeout` is capped; `bundle --out` won't overwrite a foreign file.
+- **Nothing is written through a link.** One write gate covers every writer under `.specs/`: a feature folder,
+  `_archive/` or spec file that is a symlink or junction is refused (`linked: true`; remove deletes the link alone), and
+  the wrong kind of path is a localized refusal instead of a raw EEXIST / ENOTDIR / EISDIR. A source guard keeps raw file
+  writes out of the engine.
+- **Faster where it runs most.** Saving a spec file in Claude Code no longer regenerates ROADMAP.md / SPECS.md: the hook
+  leaves a stamp and they are refreshed once — at the end of the turn, at SessionStart, by the next spec change or by the
+  pre-commit check (which re-stages them if they were staged); while stale, the `specs://roadmap` / `specs://catalog`
+  resources render fresh text. A tasks.md save went from 252 / 372 / 630 ms to 163 / 171 / 174 ms at 10 / 52 / 150
+  features. A turn whose closing message claims nothing ends in ~62 ms instead of ~165 (the Stop hook pre-filters the
+  claims before loading the engine). An English project loads only the English texts: doctor, next-action and finish are
+  20–40% faster. A spec save with nothing to lint prints nothing (it said "Roadmap updated").
+- **Commands.** Descriptions are short English lines (11,013 → 5,530 characters — they overflowed Claude Code's shared
+  listing, leaving 15 commands with no description); `/approve`, `/spec-ff`, `/spec-guard`, `/spec-statusline`,
+  `/spec-superpowers`, `/spec-tour` and the `/ds` `/dss` `/dsx` aliases can only be started by the user, and the aliases
+  follow their full command.
+
+### Added
+- `dev-spec version` (`--version`, `-V`): version, engine (modules or bundle, and why a bundle was skipped), the project
+  and how it was chosen. Per-command help: `<cmd> --help`, `-h`, `help <cmd>`.
+- `spec_classify` returns `langHint: "pt-BR"` for Brazilian wording (`lang` stays `pt`).
+- Doctor: `roadmap` (fail), `evidence-moved`, `expect-value`; EARS `padded-id`; trace `justifiedTestGaps`,
+  `untracedCriteria`; track packs `section-overlap`.
+- spec-kit import: `[USn]` tags become `_Requirements:_`, task paths `_Implements:_`; research.md, data-model.md,
+  contracts/ and quickstart.md land in design.md.
+- Release notes list a shipped change under "Changed"; every dependency cycle is reported (`cycles`).
+
+### Fixed
+- **Merging the spec state.** The git merge driver kept the other branch's newer run of a task this branch had reopened
+  or unticked — the evidence gate passed on a run older than the spec change; it is stale now. A dependency cycle formed
+  by two branches is a conflict (exit 1).
+- **Over MCP.** A revoke the user confirmed could revoke another approval recorded while they read the question.
+- **Tasks.** `\r\r\n` line endings or a U+2028 in a task line hid the task (and gave its `_Verify:_` to another); an
+  empty `_Verify:_` label with its command after it went unreported; markers in bold italics or before a quote / dash were
+  not read; an `_Expect:_` value other than `fail` was ignored silently; node's file-level TAP failure counted as a test
+  that ran.
+- **Lifecycle.** Archiving a shipped feature wiped the project velocity and every ETA; a feature name with `<!--` hid
+  its criteria; renaming onto a backlog item kept the item; `NEEDS CLARIFICATION` inside a code block blocked design;
+  doctor's constitution check read comments; a removed track's criteria were still required by trace.
+- **Hooks.** The observe hook stopped looking for the project 12 folders up (the others walk 40): a `_Verify:_` run from
+  deeper was never logged. Two processes writing to `.specs/` at once could see a lock released mid-check refused as "a
+  link".
+- **CLI.** `… | head` crashed with an EPIPE stack; `--timeout 9999999` killed the run at once; four messages pointed at
+  the wrong command or the MCP key.
+- **Languages.** pt-BR says "revisado" and gives "tela" its article ("na tela"); PT "+N mais"; ES "funcionalidad" where
+  "función" read as a code function.
+
+### Docs
+- Brazilian Portuguese is offered in the workflow (`lang: "pt-BR"`); `/classify` and SKILL.md pass the confirmed size
+  (sizes s / xs have no classification gate). The Cursor, Windsurf, Copilot and Gemini rule files say approvals are the
+  user's, `--force` only with their consent. INSTALL shows how to find a marketplace install's folder, and the
+  pre-commit recipe says when that folder is gone. Stale counts in INTEGRATIONS.md fixed and held by a test; the README's
+  CLI summary is complete; the Quick start offers `/spec-tour`. The maintainer notes cover every change above.
+
+### Tests
+- `node mcp/test.js` 2018 assertions (was 1897), `node cli/test-cli.js` 573 (was 550): a regression for every fix above,
+  the classifier's recall corpus (141 texts) and negation set (56), a generated tasks.md scanner test (36 variants), one
+  fixture per could-not-run runner, the source guard against raw file writes, and a check that an English process loads
+  no other language. `16-conventions` is split in two (`16-conventions-build`), shortening the MCP suite's longest chain.
+
+### Not changed (on purpose)
+- Spanish keeps both "fichero" and "archivo": the template texts are also how the engine recognizes a section nobody
+  filled in, so rewording ~100 of them would weaken that check on Spanish specs written before 1.24 — and "archivo"
+  beside "archivar" / "archivada" (a feature's archive) reads ambiguously. A decision for later.
+- The size heuristic still suggests size m by default and +tdd for small wording fixes ("Fix typo in the login page
+  title"): the size is always confirmed by the user in Phase 0, and tuning it needs its own corpus.
+
 ## [1.23.1] — 2026-10-08
 
 What 1.23.0 left open from the fifth review.
