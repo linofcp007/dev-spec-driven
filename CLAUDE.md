@@ -155,7 +155,7 @@ answering — never let it drain to exit 0. Add an assertion when you add a tool
 AREA: `mcp/tests/NN-<area>.js` / `cli/tests/NN-<area>-<topic>.js` (NN is the area, the same in both; `--list` says what
 each holds; `--only <file|area|NN>` runs a part, plus the files it needs — testing.md → The suites). Keep
 it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates the eval path offline.
-Exact counts that change when a package adds a command, tool or template (55 command files, the tools/list length, the
+Exact counts that change when a package adds a command, tool or template (22 command files, the tools/list length, the
 template keys, the resource list) are asserted in place — update them in the same change. The source guards (no literal
 U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's printed labels, no raw fs write outside
 engine/files.js — the write gate, conventions.md) read every `mcp/lib` source

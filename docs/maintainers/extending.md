@@ -28,11 +28,15 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   arguments that belong to one mode of the new tool → its `ARG_MODES` entry (refused elsewhere: `inapplicable-arguments`); the
   alias = new-tool assertion in `mcp/tests/02-mcp-server-tools.js`; every doc that names the old tool (mcp.md → Folded tools).
   A description stays within the budget (mcp.md → The description budget: `TOOLS_LIST_CAP`).
-- New command → a `commands/<name>.md` with `description` + `argument-hint` front matter (the hint ≤ 130 characters —
-  autocomplete cuts a longer one, the body lists every flag; no hint at all when the command takes no argument, never an
-  empty one — 1.25.1 review, `mcp/tests/17-docs-review7.js`); it is automatically an MCP
-  prompt too (bump the exact command count in `mcp/tests/17-docs.js` and the README command lists). Never a Claude Code built-in
-  name.
+- New command → first ask whether it is a subcommand of an existing one (1.26 folded 55 commands into 22 — the table below;
+  every command file costs the user's `/` menu and, if model-invocable, the shared listing budget). If it is one: a
+  `commands/<name>.md` with `description` (one English line, ≤ 125 characters) + `argument-hint` front matter (the hint ≤ 130
+  characters — autocomplete cuts a longer one, the body lists every flag; no hint at all when the command takes no argument,
+  never an empty one — 1.25.1 review, `mcp/tests/17-docs-review7.js`) + `disable-model-invocation: true` (only `/spec` and
+  `/spec-bugfix` are model-invocable — mcp/tests/10-guards-review6.js; claude-code-integration.md → 22 commands) + a lean body
+  (claude-code-integration.md → Lean bodies); it is automatically an MCP prompt too (the exact command set in
+  `mcp/tests/17-docs.js`, the counts in `mcp/tests/17-docs-review7.js` and the README command lists). Never a Claude Code
+  built-in name.
 - **The counts the docs state** (1.24 review 6 — INTEGRATIONS.md still said 51 prompts at 55, integrations/README.md 34
   tools at 38): README, INSTALL, llms-install, INTEGRATIONS, integrations/README, AGENTS and CONTRIBUTING are read by
   `mcp/tests/17-docs-review6.js` — every "N tools / ferramentas / herramientas", "N (slash) commands", "Commands (N)", the
@@ -102,3 +106,31 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   (`track-checklists.md`), supporting commands (`workflows.md`), and every reference file is listed in
   `references/index.md` (a test fails on an orphan). A rule agents need even when they skip the skill also goes into
   the MCP tool description that acts on it. Commands stay thin.
+
+## The 1.26 command set (old → new)
+1.26 folded the 55 slash commands into 22 (claude-code-integration.md → 22 commands, 2 of them model-invocable). There are
+no stubs for the old names — this table is the migration (the README and the release notes reuse it). A subcommand is the
+first word after the feature, or the first word when the command takes no feature.
+
+| Old command(s) | New command |
+|---|---|
+| `/spec`, `/next-action`, `/classify`, `/createSpec`, `/design`, `/testPlan`, `/evalPlan`, `/writeTests`, `/createTask` | `/spec [feature or idea] [phase]` — no feature: Phase 0; a feature: resumes at `spec_next_action`'s step; a phase (requirements · design · test-plan · eval-plan · tests · tasks): that phase |
+| `/spec-bugfix` | `/spec-bugfix` (unchanged, model-invocable) |
+| `/ds`, `/dss`, `/dsx` | unchanged — aliases of `/spec`, `/spec-status`, `/executeTask` |
+| `/clarify`, `/grill` | `/clarify [feature]`, `/clarify [feature] --grill` |
+| `/approve`, `/spec-ff` | `/approve [feature] [phase]`, `/approve [feature] --through <phase>` (also `--role`, `--force`, `--revoke`) |
+| `/spec-doctor` | `/spec-doctor [feature] [--deep]` |
+| `/executeTask`, `/spec-commit` | `/executeTask [feature or task number] [--subagents]`, `/executeTask commit [note]` |
+| `/spec-status` | `/spec-status` |
+| `/roadmap`, `/depend`, `/backlog`, `/spec-milestone` | `/roadmap [--write] [--html]`, `/roadmap depend …`, `/roadmap backlog …`, `/roadmap milestone …` |
+| `/prReview`, `/spec-converge`, `/spec-simplify`, `/spec-review-feedback`, `/promptReview` | `/spec-review [feature] branch`, `… converge`, `… simplify [--subagents]`, `… feedback <comments>`, `… prompt` |
+| `/spec-finish` | `/spec-finish` |
+| `/spec-spike` | `/spec-spike` |
+| `/spec-impact`, `/spec-decide`, `/add-track` | `/spec-change [feature] impact [phase] [--reopen]`, `… decide <decision>`, `… track +x` / `… track -x` |
+| `/feature` | `/feature` (archive · restore · rename · remove · flow) |
+| `/spec-catalog`, `/spec-drift`, `/spec-metrics`, `/spec-changelog`, `/spec-export` | `/spec-report catalog`, `… drift`, `… metrics`, `… changelog`, `… export` |
+| `/scan`, `/reverse`, `/coverage`, `/spec-import` | `/spec-adopt scan`, `… reverse`, `… coverage`, `… import` |
+| `/spec-init`, `/spec-guard`, `/spec-statusline`, `/spec-superpowers`, `/spec-templates`, `/spec-tracks` | `/spec-setup init`, `… guard`, `… statusline`, `… superpowers`, `… templates`, `… tracks` |
+| `/eval`, `/migrateModel` | `/eval [feature] run`, `… baseline`, `… migrate <target model>` |
+| `/spec-upgrade` | `/spec-upgrade` |
+| `/spec-tour` | `/spec-tour` — now a size-xs change (one `change.md`, ONE plan approval) |
