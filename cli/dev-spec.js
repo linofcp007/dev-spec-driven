@@ -1498,10 +1498,13 @@ async function main() {
       // Own keys only: `constructor`/`__proto__` would pass a plain lookup and crash path.join.
       if (!Object.prototype.hasOwnProperty.call(RULE_FILES, tool)) die(projectText().unknownRules(pos[0], Object.keys(RULE_FILES).join(", ")), invalidArg("tool"));
       const ROOT = path.resolve(__dirname, "..").replace(/\\/g, "/"); // forward slashes: valid in markdown and on Windows
-      const raw = fs.readFileSync(path.join(__dirname, "..", RULE_FILES[tool]), "utf8");
+      // 1.26: the clone's note "Paths in this file point into the dev-spec-driven clone. `… rules <tool>` prints this file…"
+      // is about the clone's copy — in the printed copy it would describe itself: it is dropped (with the blank line after it).
+      const raw = fs.readFileSync(path.join(__dirname, "..", RULE_FILES[tool]), "utf8")
+        .replace(/^> Paths in this file point into the dev-spec-driven clone\.[^\n]*\n(?:\r?\n)?/m, "");
       // One pass (so skills/…/references/x.md is never rewritten twice). `../../AGENTS.md` (the Cursor link)
       // and bare `references/x.md` (relative to the skill) resolve too, as do the plugin's `agents/x.md` and
-      // `commands/x.md` (AGENTS.md cites the reviewer's Verify mode, /spec-review-feedback and /spec-simplify).
+      // `commands/x.md` (AGENTS.md cites the spec-verifier agent).
       // Commands get quoted paths and link targets get <…> when the clone path has spaces.
       const re = /(\bnode\s+|\]\()?(?<![\w./-])(?:\.\.\/)*(cli\/dev-spec\.js|mcp\/server\.js|AGENTS\.md|skills\/dev-spec-driven(?:\/[\w.-]+)*\/?|references\/(?:[\w.-]+\.md)?|(?:agents|commands)\/[\w.-]+\.md)/g;
       const text = raw.replace(re, (m, lead, rel) => {
