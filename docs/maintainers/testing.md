@@ -109,6 +109,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   Windows — skipped without Git Bash), a Pester run is stood in for by a node script printing captured Pester output, and the
   engine-level PowerShell checks (posixShellSyntax, posixPwshScript, resolveRunShell, couldNotRunOutput / pwshParseFailure
   on captured pwsh 7 / 5.1 / Pester 3–6 outputs, every new pattern timed on 200 KB hostile inputs) run everywhere.
+  The shell completion scripts (1.25, cli/tests/16-conventions-completion.js) run the same way: bash (Git Bash on Windows,
+  `DEV_SPEC_TEST_BASH`), Windows PowerShell / pwsh through TabExpansion2, zsh and fish where installed (`DEV_SPEC_TEST_ZSH`,
+  `DEV_SPEC_TEST_FISH` — the Docker images have neither: `apk add zsh fish bash` in a `node:24-alpine` container runs them
+  all), each skipped with an `ok(true, "… skipped")` where it isn't.
 - **Eval harness** (`run-evals.js`) resolves the feature with the engine's resolver (accents, legacy slugs,
   `${VAR}` guard), prints in the feature's language, and treats a wrong-shaped set as invalid (exit 1). It validates
   EVERY item (`itemProblems()`: object, `id`, `input`, a grader in contains|equals|regex|refuse|judge, a value / a regex

@@ -1705,6 +1705,7 @@ const msg = {
       flagTwice: (flag) => `${flag} se indicó más de una vez — admite un solo valor: indícala una vez.`,
       atMost: (n) => `, como máximo ${n}`,
       runHeldOpen: (code) => `⚠ el comando terminó (${code}), pero un proceso que lanzó en segundo plano mantuvo su salida abierta — la ejecución se registró en ese final; lo que ese proceso imprima después no está en la evidencia.`,
+      completionGone: (cli) => `${cli} ya no existe y no se encontró una copia más reciente del plugin — guarda de nuevo el script de autocompletado desde la CLI actual (su completion --help explica cómo), o quítalo del perfil de tu shell.`,
     },
 
     gates: {

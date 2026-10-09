@@ -1785,6 +1785,8 @@ const msg = {
       atMost: (n) => `, at most ${n}`,
       // 1.24 r6 B3: done --run / finish --run settled at the command's exit while a background process still held its output
       runHeldOpen: (code) => `⚠ the command exited (${code}), but a process it started in the background kept its output open — the run was recorded at that exit; what that process prints later is not in the evidence.`,
+      // 1.25 completion: the `dev-spec` a completion script defines finds no CLI any more (written into the script when it is generated)
+      completionGone: (cli) => `${cli} is gone and no newer copy of the plugin was found — save the completion script again from the current CLI (its completion --help says how), or remove it from your shell profile.`,
     },
 
     // Gates: template placeholders, the approve gate (+ force), finish blockers, the bugfix execution gate,

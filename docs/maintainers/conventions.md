@@ -333,6 +333,43 @@ and U+FEFF gotchas are in CLAUDE.md.
   next word): only the words after the feature were forwarded, so `evals --dry-run <f>` ran LIVE (paid calls). run-evals.js
   refuses an unknown flag (did-you-mean, exit 2 — `--dryrun` ran live too), a value flag without its value and a second word,
   and prints its usage on `--help` (it ran the eval).
+- **Shell completion (1.25): `completion <powershell|bash|zsh|fish>`** prints a script (stdout only — `TEXT_ONLY_COMMANDS`, so
+  `--json` is a usage error; it reads no project, so `checkProject()` skips it like `version`: it runs from a shell profile).
+  `completionModel()` builds it from the CLI's own tables — every command (`COMMAND_OPTIONS` keys + `help`, `evals`; a test
+  checks every `case` label is there), each one's flags (its `COMMAND_OPTIONS` + `GLOBAL_OPTIONS`; evals: run-evals.js's
+  switches, `EVALS_SWITCHES`, + `EVALS_VALUE_FLAGS`), the value flags (`VALUE_FLAGS` — the word after one is its value, never
+  a positional), **`COMMAND_ARGS`** (a command's positionals: per position words or a source, `"..."` repeats the last,
+  `"<cmd> <word>"` the positions a first word picks — `feature restore` → archived names; `HELP_ALIASES` copy their command's)
+  and **`FLAG_VALUES`** (`"<flag>"`, or `"<cmd> --<flag>"` where commands differ: `init --evidence` is a mode, `done --evidence` a
+  summary) — and the value lists their `@sources` name, read from the facade (`LANGS`, `VALID_TRACKS`, `PHASES`, `FLOWS`,
+  `FEATURE_SIZES`, `SIZE_POINTS`, `TRACKERS`, `APPROVAL_GUARD_LEVELS`, `IMPORT_TOOLS` (1.25), `TEMPLATE_ARTIFACTS`, the backlog /
+  milestone actions) or the CLI (`mcpConfigBlocks()`, `RULE_FILES`, `commands/*.md`). `cli/completion.js` fills the template of
+  the shell (`cli/completion/dev-spec.{bash,zsh,fish,ps1}`; `#@` lines are maintainer notes, never printed; LF always). One
+  algorithm in the four: walk the words before the cursor (a value flag eats the next word, `--` ends the flags, `-h` / `-V`
+  skipped) → the command, its first positional, the position; then the flag's values (`--flag=` and a `a,b,` list keep their
+  prefix — bash splits `--lang=p` into `--lang` `=` `p`), the command's flags (a word starting `-`), the commands, or the
+  position's spec. Tables: bash / zsh a `case` per table (bash 3.2 — macOS — has no associative array), fish two parallel
+  lists read with `contains -i` (a `switch` pattern would read the `*` of `init#*` as a wildcard; `string join` of one word
+  returns 1 — the lookup returns 0 itself), PowerShell hashtables (never a `$T` beside a `$t`: its names are case-blind).
+  **Feature names** (`@feature` / `@archived`) are the only call the script makes on Tab: `dev-spec __complete
+  features|archived [--project <dir>]` — handled on the CLI's FIRST lines, before `spec.js` loads (`cli/completion.js`
+  `complete()`, Node core only: a mirror of `resolveProjectDir` / `nearestProject` / `isDevSpecDir` / `isNetworkPath` and of
+  `listFeatures`' `isFeatureFolder` rule, the `_archive/` listing beside it); never an error, never a refusal, exit 0. It costs
+  about Node's startup (Windows: ~80 ms against ~70 ms for `node -e 0` and ~450 ms for `list`); a test compares it with the
+  engine on 8 layouts and checks no `mcp/lib` module loads — **change the engine's resolution or listing rule and the
+  mirror follows** (the test fails otherwise). **The CLI the script runs** is this CLI's absolute path (no `dev-spec` on PATH in
+  a plugin install) — resolved at completion time: in a plugin's versioned folder (`…/dev-spec-driven/<version>/cli/dev-spec.js`)
+  the newest installed `<version>` (a plugin update replaces the folder, and the old one lingers for days), else that path,
+  else a `dev-spec` on PATH; the generated message `cliOutput.completionGone` when none is left. Without a `dev-spec` on PATH
+  the script defines `dev-spec` as a shell function running that CLI (PowerShell: each array argument — `--tracks tdd,saas`
+  parsed as a list — joined back with `,` IN PLACE in `$args`, so `--timebox 3d` stays "3d"; a copy would pass the number 3;
+  piped input goes on). The tables are the generating version's: save the script again after an update for new commands /
+  flags (documented, not detected). PowerShell 5.1 decodes a native command's output with the OEM code page, so the PowerShell
+  script is ASCII: a non-ASCII path or message rides as base64 (`QUOTE.powershell`), the header's install line names the file
+  instead. PowerShell completes nothing after a bare `-` / `--` (its own parameter syntax — a letter first). Tests:
+  cli/tests/16-conventions-completion.js runs bash (Git Bash on Windows) and Windows PowerShell (TabExpansion2) for real, zsh
+  (compadd / compset stubbed) and fish (`complete -C`) where installed (`DEV_SPEC_TEST_ZSH` / `DEV_SPEC_TEST_FISH`), and reads
+  each script's tables back.
 - **CLI boolean switches are read with `on(k)`, never by truthiness**: `--x=false` is the string "false" (truthy),
   so `done --run=false` ran the `_Verify:_` commands. `normalizeBoolFlags()` (every name in `BOOL_FLAGS`) turns
   `true|false|1|0|yes|no|on|off` into booleans and refuses any other value. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]`

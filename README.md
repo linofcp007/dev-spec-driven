@@ -519,6 +519,7 @@ finish [--write] [--run] · decide · add-track [--remove] · feature <remove|ar
 catalog [--write] · export [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
+completion <powershell|bash|zsh|fish>   (shell completion: commands, flags, values, feature names — INSTALL.md)
 ```
 
 ### Why no GitHub Actions
@@ -1071,6 +1072,7 @@ finish [--write] [--run] · decide · add-track [--remove] · feature <remove|ar
 catalog [--write] · export [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
+completion <powershell|bash|zsh|fish>   (completação na shell: comandos, opções, valores, nomes das features — INSTALL.md)
 ```
 
 ### Porque não há GitHub Actions
@@ -1628,6 +1630,7 @@ finish [--write] [--run] · decide · add-track [--remove] · feature <remove|ar
 catalog [--write] · export [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
+completion <powershell|bash|zsh|fish>   (autocompletado en la shell: comandos, opciones, valores, nombres de las features — INSTALL.md)
 ```
 
 ### Por qué no hay GitHub Actions

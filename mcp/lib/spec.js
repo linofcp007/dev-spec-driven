@@ -88,7 +88,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
-  changeViews, closestName, decodeText, featureBranch,
+  changeViews, closestName, decodeText, featureBranch, IMPORT_TOOLS,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
@@ -198,6 +198,7 @@ module.exports = {
 
   importSpec, // 1.25: + dryRun (the whole pipeline in the write gate's dry-run sink) and the steering tools (kiro-steering · cursor-rules)
   STEERING_IMPORT_TOOLS, // 1.25: the spec_import tools that write .specs/steering/ files, not a feature — their path is optional (server.js, the CLI)
+  IMPORT_TOOLS: Object.freeze(Object.keys(IMPORT_TOOLS)), // 1.25: the source formats importSpec reads (spec_import `tool`) — the CLI's completion offers them
   // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's DEV_SPEC_* defaults (fallbacks)
   statusLine,
   statusLineProject,
