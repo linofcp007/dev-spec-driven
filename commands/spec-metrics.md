@@ -25,5 +25,5 @@ a low pass rate). **`write: true`** (with a name, usually after `/spec-finish`) 
 `.specs/<feature>/retro.md`, pre-filled with the metrics: What went well · What hurt · Proposed steering or
 constitution amendments · Follow-ups. An existing `retro.md` is **never overwritten**. Help the user write the
 prose; the amendments are **proposals for the human** — never edit `constitution.md` or a steering file
-without their approval, and add accepted follow-ups with `spec_backlog`. Respond in the user's language
+without their approval, and add accepted follow-ups with `spec_roadmap_edit {kind: "backlog"}`. Respond in the user's language
 (EN/PT/ES).

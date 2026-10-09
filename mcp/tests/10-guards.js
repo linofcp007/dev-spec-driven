@@ -911,7 +911,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     S.setDependency(p10, "custom-aliases", []);
     S.setDependency(p10, "url-shortener", ["custom-aliases"]);
     const ov10c = S.featureOverlaps(p10).pairs;
-    ok(ov10a.length === 1 && ov10a[0].kind === "finished" && /spec_depend/.test(S.msg("en").forecast.overlap.doctorFinished("x", "y")) && ov10b.length === 0 && doc10 === undefined && ov10c.length === 0,
+    ok(ov10a.length === 1 && ov10a[0].kind === "finished" && /spec_roadmap_edit {kind: "depend"/.test(S.msg("en").forecast.overlap.doctorFinished("x", "y")) && ov10b.length === 0 && doc10 === undefined && ov10c.length === 0,
       "full review Gb10: an active feature planning a finished feature's baseline files is no overlap once either depends on the other (the advice /depend works); undepended it is (got " +
       JSON.stringify([ov10a.map((x) => x.kind), ov10b.length, doc10 && doc10.status, ov10c.length]) + ")");
 

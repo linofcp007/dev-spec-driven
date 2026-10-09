@@ -8,7 +8,7 @@ Use the **dev-spec-driven** skill, project templates.
 Args: $ARGUMENTS
 
 Call the `spec_templates` MCP tool (CLI `dev-spec templates [list|init|check] [artifact] [--lang en|pt|pt-BR|es]`) and show
-its `lines`.
+the result (`templates` per artifact / `created` / `problems` with the verdict).
 
 - **`list`** (default) — for each artifact, whether new features get the built-in template or the project's
   (`.specs/templates/<artifact>.md`; `.specs/templates/<lang>/<artifact>.md` wins for features in that language — a

@@ -36,7 +36,7 @@ nudge, the TDD micro-cycle.
   built-in / track-pack / project template criterion's words (`builtinTemplateAcs()`, `projectTemplateAcs()`, and two light
   edits of one), criteria retired by a shipped `_Supersedes:_`, declared pairs (pending ones too). Candidates from a
   prefix-filter inverted index (exact for the threshold); caps 4000 criteria / 200k comparisons / 200 pairs. Doctor warn
-  `cross-feature-acs` (names the other feature's AC), `spec_catalog.crossAcs` {pairs, truncated}, a SPECS.md section when
+  `cross-feature-acs` (names the other feature's AC), `spec_export {format: "catalog"}.crossAcs` {pairs, truncated}, a SPECS.md section when
   a pair exists, agents/spec-critic.md.
 - **Glossary** — the steering stub `glossary.md` (steering_scaffold; init never creates it): `- **Term** — definition.
   _Avoid: a, b_` (`_Avoid:_` English-stable, same line, a sub-line or an indented paragraph after a blank line).
@@ -177,7 +177,7 @@ nudge, the TDD micro-cycle.
   keeps the 1.18 needle rule (the r19 exclusion of every REUSE_SYN heading dropped whole sections; mcp/test.js "1.19 R review
   2" diffs it against a copy of the 1.18 rule). `_Emits metrics:_` also pulls an +obs feature's `[OBS] Telemetry` section
   (marker + the Telemetry synonyms, `trackSectionTable("obs")`), beside the `[SaaS] Observability` rule (T review 6).
-- **Backlog names (R review 5)** — `spec_backlog add` of a name already in the backlog (case-insensitive) keeps its entry and
+- **Backlog names (R review 5)** — `spec_roadmap_edit {kind: "backlog"} add` of a name already in the backlog (case-insensitive) keeps its entry and
   spelling and APPENDS a new note to its note (`BACKLOG_NOTE_SEP` " · ", one line; a note it already holds, or none, changes
   nothing; the whole note ≤ `BACKLOG_NOTE_MAX` 2,000 characters — past it add is refused, nothing written) → `exists: true`,
   `appended`, a localized `note` (`featureOps.backlogAppended` / `backlogKept` / `backlogNoteFull`); the CLI prints that note
@@ -188,7 +188,7 @@ nudge, the TDD micro-cycle.
   Reuse section, concept + three synonyms, shared folders, `.specs/SPECS.md`; reuse → extend → create, the rule of three, no
   copy-paste) + a hard rule + the report's `### Reuse` block (Reused / Extended / Created + searched / Duplicated on purpose /
   Refactor candidates); agents/spec-reviewer.md: Code quality = duplication against the EXISTING codebase (a new unit
-  duplicating one is Important), the guide's smells Minor; the controller files refactor candidates with `spec_backlog add`
+  duplicating one is Important), the guide's smells Minor; the controller files refactor candidates with `spec_roadmap_edit {kind: "backlog"} add`
   (`refactor:` note) — subagent-execution.md, /executeTask; red-flags rows; SKILL.md, AGENTS.md, /design. No engine gate reads
   the Reuse block (R5: prose only — the SubagentStop gate is unchanged). Extending a unit OUTSIDE the task's `_Implements:_`
   files is never a silent edit (R review 6): NEEDS_CONTEXT → a converge task (`spec_append_tasks`, re-approved) or the

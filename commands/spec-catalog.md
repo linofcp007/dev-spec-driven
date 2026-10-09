@@ -7,7 +7,7 @@ Use the **dev-spec-driven** skill, living catalog (`references/change-management
 
 Args: $ARGUMENTS
 
-Call the `spec_catalog` MCP tool (CLI `dev-spec catalog [--write]`). It lists every feature — active,
+Call the `spec_export {format: "catalog"}` MCP tool (CLI `dev-spec catalog [--write]`). It lists every feature — active,
 complete/finished and archived — with its status, and every AC ID with a one-line EARS text, grouped by
 feature — spikes with their question and outcome, and each feature's decisions (`decisions.md`, superseded ones
 marked). A criterion a later feature replaced is shown as **superseded**, naming the ID that replaces it, once that
@@ -17,7 +17,7 @@ feature has shipped (a finish recorded or its execution signed off); while it is
 re-approval or new `_Implements:_` file since), every artifact as approved (an edit not yet re-approved reads
 **complete**) and every tick verified.
 
-- Without `write` it returns the structure plus the markdown: summarize it (features, ACs, superseded ones).
+- Without `write` it returns the structure (`includeBody: true` adds the markdown): summarize it (features, ACs, superseded ones).
 - With `write: true` (`--write`) it (re)writes **`.specs/SPECS.md`**, carrying the AUTO-GENERATED marker, in the
   project language. A hand-written `SPECS.md` (no marker) is never overwritten — the result is an error; tell the
   user. Once `SPECS.md` exists, every mutator that refreshes the roadmap refreshes it too; never hand-edit it.

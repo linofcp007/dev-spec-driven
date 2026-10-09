@@ -67,7 +67,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHea
 // (shipped or pending). Bounded: candidates
 // come from an inverted index over each criterion's rarest words (the all-pairs prefix filter — exact for the similarity
 // threshold, never O(n²) over a big catalog), capped at XAC_MAX_CRITERIA criteria, XAC_MAX_COMPARISONS comparisons and
-// XAC_MAX_PAIRS pairs (`truncated`). Surfaces: doctor warn cross-feature-acs, spec_catalog `crossAcs` + a SPECS.md section.
+// XAC_MAX_PAIRS pairs (`truncated`). Surfaces: doctor warn cross-feature-acs, spec_export {format: "catalog"} `crossAcs` + a SPECS.md section.
 const XAC_DUPLICATE = 0.8; // strictly more, per clause: one word of five differing (4/5 = 0.8) is no duplicate
 const XAC_CONFLICT = 0.7;
 const XAC_TRIGGER = 0.5;
@@ -375,7 +375,7 @@ function xacTable(projectDir) {
   XAC_TABLE_CACHE = tableKey ? { key: tableKey, table } : null;
   return table;
 }
-// spec_catalog's / doctor's pairs. opts.only (a slug): only the pairs involving that feature. → { pairs: [{ kind, reason,
+// spec_export {format: "catalog"}'s / doctor's pairs. opts.only (a slug): only the pairs involving that feature. → { pairs: [{ kind, reason,
 // similarity, a: { feature, id, text }, b, numbers? }] (a = the criterion listed first: feature folder order, then its
 // criteria in order), criteria, comparisons, truncated }
 function crossFeatureAcs(projectDir, opts = {}) {

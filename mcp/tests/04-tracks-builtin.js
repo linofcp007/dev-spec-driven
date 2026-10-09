@@ -265,7 +265,8 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       "A2: EN/PT/ES parity — the same secPrivacy messages in every language, PT/ES names for all 11 [SEC] / [PRIVACY] sections");
     const desc = (n) => (list.result.tools.find((t) => t.name === n) || {}).description || "";
     const trackItem = (n) => JSON.stringify((list.result.tools.find((t) => t.name === n) || {}).inputSchema || {});
-    ok(/sec-sections \/ privacy-sections/.test(desc("spec_doctor")) && /\+sec/.test(desc("spec_classify")) && /\+privacy/.test(desc("spec_add_track")) &&
+    // 1.26: spec_doctor's description names the check ids' pattern (<track>-sections) — the ids themselves are in its result
+    ok(/<track>-sections/.test(desc("spec_doctor")) && /\+sec/.test(desc("spec_classify")) && /\+privacy/.test(desc("spec_add_track")) &&
       /core \| tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_create")) && /core \| tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_init")) &&
       /tdd \| saas \| ai \| sec \| privacy/.test(trackItem("spec_add_track")) && !/"enum"[^\]]*"privacy"/.test(trackItem("spec_create")),
       "A2: the MCP tool descriptions name sec / privacy (tracks keep no schema enum — unknown names get the did-you-mean)");
@@ -576,7 +577,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       /node "[^"]*dev-spec\.js" add-track f-dist dist --remove; to adopt the built-in track instead: node "[^"]*dev-spec\.js" add-track f-dist dist\)/.test(chk(lpDocD, "track-pack-missing").detail) &&
       lpStK.tracks === "core" && js(lpStK.missingPacks) === js(["kafka"]) && /'kafka' is a reserved name now: rename/.test(chk(lpDocK, "track-pack-missing").detail) &&
       lpUpF("f-dist").attention.includes("track-pack-reserved") && js(lpUpF("f-kafka").reservedPacks) === js(["kafka"]) &&
-      lpUp.lines.some((l) => /Rename its track pack\(s\) from before 1\.17 — \+kafka: the name is reserved now/.test(l)),
+      S.upgradeLines(lpUp).some((l) => /Rename its track pack\(s\) from before 1\.17 — \+kafka: the name is reserved now/.test(l)),
       "1.17 D review 1: a 1.16 pack named 'dist' / 'kafka' (recorded in packMarkers) is the feature's missing pack — tracks read core, the built-in +dist is NOT switched on (no dist-sections), doctor's track-pack-missing names the reserved name and the way out, spec_upgrade flags track-pack-reserved (got " +
       js([lpStD.tracks, lpStD.missingPacks, chk(lpDocD, "dist-sections").status, chk(lpDocK, "track-pack-missing").detail, lpUpF("f-dist").attention]) + ")");
     const lpAdopt = S.addTrack(lp, "f-dist", "dist");
@@ -966,7 +967,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
       ok(lpSt.tracks === "core" && js(lpSt.missingPacks) === js([n0]) && !chk(lpDoc, n0 + "-sections").status && chk(lpDoc, "track-pack-missing").status === "warn" &&
         new RegExp("\\+" + n0 + " \\(a track pack from before 1\\.19 — '" + n0 + "' is a reserved name now, and the built-in \\+" + n0 + " track is NOT applied").test(chk(lpDoc, "track-pack-missing").detail) &&
         new RegExp("'" + X.legacy + "' is a reserved name now: rename").test(chk(lpDocA, "track-pack-missing").detail) && lpUpF("f-" + n0).attention.includes("track-pack-reserved") &&
-        lpUp.lines.some((l) => /Rename its track pack\(s\) from before 1\.19 — /.test(l)) &&
+        S.upgradeLines(lpUp).some((l) => /Rename its track pack\(s\) from before 1\.19 — /.test(l)) &&
         adopt.ok && js(adopt.adopted) === js([n0]) && adopt.tracks === "core +" + n0 && rd(lpMain.dir, "design.md").includes("## " + X.marker + " " + X.sections[0]) &&
         chk(S.specDoctor(lp, "f-" + n0), n0 + "-sections").status === "fail" && drop.ok && js(drop.removedTracks) === js([X.legacy]) && js(JSON.parse(rd(lpAlias.dir, ".state.json")).tracks) === js(["core"]),
         `1.19 T6: a pre-1.19 pack named '${n0}' / '${X.legacy}' is the feature's missing pack (tracks read core, the built-in +${n0} is NOT applied, doctor and spec_upgrade say 'from before 1.19'); add-track adopts the built-in track, --remove drops the alias pack (got ` +
@@ -1252,7 +1253,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     const mDrop = S.addTrack(mp, "f-contracts", "contracts", { remove: true });
     ok(/\+webui \(a track pack from before 1\.19 — its marker \[UI\] is the built-in \+ui track's now/.test(mDoc.detail || "") && /node "[^"]*dev-spec\.js" add-track f-webui ui/.test(mDoc.detail || "") &&
       /o seu marcador \[OBS\] é agora o do track \+obs incluído/.test(mDocPt.detail || "") && js(mUpF.reservedMarkers) === js([{ name: "webui", marker: "[UI]", track: "ui" }]) &&
-      (mUpF.attention || []).includes("track-pack-reserved") && mUp.lines.some((l) => /Change the marker of its track pack\(s\) from before 1\.19 — \+webui \[UI\]/.test(l)) &&
+      (mUpF.attention || []).includes("track-pack-reserved") && S.upgradeLines(mUp).some((l) => /Change the marker of its track pack\(s\) from before 1\.19 — \+webui \[UI\]/.test(l)) &&
       mAdopt.ok && js(mAdopt.adopted) === js(["ui"]) && js(mAdopt.adoptedPacks) === js(["webui"]) && mWebDesign.includes("## [UI] Design System Usage") && mWebDesign.includes("## [UI] Thing webui") &&
       !mWebSt.tracks.includes("webui") && !(mWebSt.packMarkers || {}).webui && mUiDoc.status === "fail" && !/:missing/.test(mUiDoc.detail) && !chk(S.specDoctor(mp, "f-webui"), "track-pack-missing").status &&
       mDrop.ok && js(mDrop.removedTracks) === js(["contracts"]) && js(JSON.parse(rd(mCon.dir, ".state.json")).tracks) === js(["core"]) && mOps.ok,

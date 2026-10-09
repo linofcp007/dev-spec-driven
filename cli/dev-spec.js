@@ -218,9 +218,9 @@ VALUE_FLAGS.add("guard"); // init --guard on|off|scope (= spec_init {guard: true
 VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
 VALUE_FLAGS.add("approval-guard"); // 1.14 F2: init --approval-guard off|ask|deny (= spec_init {approvalGuard})
 ["roles", "role", "through"].forEach((k) => VALUE_FLAGS.add(k)); // init --roles …, approve --role <role> / --through <phase> (= spec_init {approvalRoles}, spec_approve {role, through})
-VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_changelog {since})
+VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_export {format: "changelog", since})
 VALUE_FLAGS.add("tracker"); // 1.16 E2: export [f] --tracker jira|linear (= spec_export {format: "jira" | "linear"})
-VALUE_FLAGS.add("milestone"); // 1.16 E3: changelog --milestone <name> (= spec_changelog {milestone})
+VALUE_FLAGS.add("milestone"); // 1.16 E3: changelog --milestone <name> (= spec_export {format: "changelog", milestone})
 VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --flow <flow> (= spec_create / spec_feature {flow}) — C3
 // 1.14 C2: spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
 ["question", "timebox", "title", "decision", "context", "consequences", "affects", "supersedes"].forEach((k) => VALUE_FLAGS.add(k));
@@ -315,6 +315,9 @@ const on = (k) => flags[k] === true;
 // true when not writing): absent → undefined (the engine's default), else the explicit boolean — `--include-body=false`
 // is false, as spec_finish {includeBody: false} (on() ? true : undefined turned it into the default).
 const boolFlag = (k) => (typeof flags[k] === "boolean" ? flags[k] : undefined);
+// 1.26: a document the human output prints (export html / md, catalog's and changelog's markdown) — always there for the human
+// output; with --json only on --include-body, as spec_export {includeBody} (the MCP default leaves it out: --json = the MCP result).
+const bodyWanted = () => (flags.json ? boolFlag("include-body") === true : true);
 // --help (in BOOL_FLAGS) anywhere prints the help (`done big 2 --help` ticked the task)
 // --waves (1.14 F3: next <f> --waves = spec_next_task {waves: true}) is in spec.CLI_SWITCHES too.
 // An unknown --flag is a usage error, before anything runs: it used to be accepted as a silent boolean switch, so
@@ -579,14 +582,14 @@ const COMMAND_OPTIONS = {
   "append-tasks": { options: ["task", "req", "implements", "verify", "story", "parallel", "makes-green", "expect-fail", "size", "depends", "heading"], max: 1 },
   impact: { options: ["phase", "reopen"], max: 1 },
   metrics: { options: ["write"], max: 1 },
-  catalog: { options: ["write"], max: 0 },
+  catalog: { options: ["write", "include-body"], max: 0 },
   drift: { options: [], max: 1 },
   upgrade: { options: ["apply"], max: 0 },
   prompts: { options: ["args"] },
   templates: { options: ["lang"] },
   tracks: { options: ["lang"] },
-  export: { options: ["md", "html", "csv", "gherkin", "adr", "tracker", "write"] },
-  changelog: { options: ["since", "write", "milestone"] },
+  export: { options: ["md", "html", "csv", "gherkin", "adr", "tracker", "write", "include-body"] },
+  changelog: { options: ["since", "write", "milestone", "include-body"] },
   log: { options: ["max"], max: 2 }, // <feature> [-]
   "stop-check": { options: ["message", "agent"] },
   decide: { options: ["title", "decision", "context", "consequences", "affects", "supersedes", "discovery", "kind"] },
@@ -1304,7 +1307,7 @@ async function main() {
 
     case "milestone":
     case "milestones": {
-      // dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list] (= spec_milestone {action, name, date, features}):
+      // dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list] (= spec_roadmap_edit {kind: "milestone", action, name, date, features}):
       // a name with spaces is quoted; the features may also be comma-separated. The action is case-folded, like the MCP enum.
       const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase() || "list";
       const syntax = "dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]";
@@ -1616,9 +1619,10 @@ async function main() {
     }
 
     case "catalog": {
-      // dev-spec catalog [--write] — the living .specs/SPECS.md (= spec_catalog {write}). Without --write the markdown is
-      // printed; a hand-written SPECS.md (no AUTO-GENERATED marker) is never overwritten → exit 1.
-      const r = spec.catalog(projectDir, { write: on("write") });
+      // dev-spec catalog [--write] [--include-body] — the living .specs/SPECS.md (= spec_export {format: "catalog", write, includeBody}).
+      // Without --write the markdown is printed (--json: with --include-body); a hand-written SPECS.md (no AUTO-GENERATED marker) is
+      // never overwritten → exit 1.
+      const r = spec.catalog(projectDir, { write: on("write"), includeBody: bodyWanted() });
       if (r.ok === false) process.exitCode = 1;
       if (!flags.json && r.error) console.error("dev-spec: " + r.error);
       const C = spec.msg(r.lang).catalog;
@@ -1662,7 +1666,7 @@ async function main() {
       const r = spec.specUpgrade(projectDir, { apply: on("apply") });
       if (!r.ok) return fail(r);
       if (r.migrations && r.migrations.errors.length) process.exitCode = 1;
-      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
+      return out(r, (r) => spec.upgradeLines(r).forEach((l) => console.log(l))); // 1.26: rendered from the result (it carries no lines)
     }
 
     case "prompts": {
@@ -1690,7 +1694,7 @@ async function main() {
       const r = spec.templates(projectDir, pos[0], { artifact: pos[1], lang: flags.lang });
       if (!r.ok) return fail(r);
       if (r.action === "check" && r.errors) process.exitCode = 1;
-      return out(r, (r) => r.lines.forEach((l) => console.log(l)));
+      return out(r, (r) => spec.templatesLines(r).forEach((l) => console.log(l))); // 1.26: rendered from the result (it carries no lines)
     }
 
     case "tracks": {
@@ -1708,7 +1712,7 @@ async function main() {
       // {name, format, write}): printed on stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No
       // feature = the whole project (--gherkin: one .feature per feature; --adr: every feature's ADRs + adr/index.md). --tracker
       // takes the tool's name (the MCP format).
-      const syntax = "dev-spec export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write]";
+      const syntax = "dev-spec export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] [--include-body]";
       const tracker = flags.tracker === undefined ? null : String(flags.tracker).trim().toLowerCase();
       if (pos.length > 1 || [on("md"), on("html"), on("csv"), on("gherkin"), on("adr"), tracker !== null].filter(Boolean).length > 1) usage(syntax);
       if (tracker !== null && !spec.TRACKERS.includes(tracker)) {
@@ -1716,7 +1720,7 @@ async function main() {
         die(A.invalid(A.item("--tracker", A.oneOf(spec.TRACKERS.join(", ")), JSON.stringify(String(flags.tracker)))), invalidArg("--tracker"));
       }
       const format = tracker || (on("md") ? "md" : on("csv") ? "csv" : on("gherkin") ? "gherkin" : on("adr") ? "adr" : "html");
-      const r = spec.exportSpecs(projectDir, { name: pos[0], format, write: on("write") });
+      const r = spec.exportSpecs(projectDir, { name: pos[0], format, write: on("write"), includeBody: bodyWanted() }); // --json: the preview unless --include-body
       if (!r.ok) return fail(r);
       const M = spec.msg(r.lang);
       const relOut = (f) => path.relative(projectDir, f).split(path.sep).join("/");
@@ -1743,10 +1747,11 @@ async function main() {
       });
     }
     case "changelog": {
-      // dev-spec changelog [--since <ISO date|last|all>] [--write] — release notes from the specs (= spec_changelog): the
-      // markdown on stdout (a note on stderr), or --write → .specs/RELEASE-NOTES.md + meta.changelogAt (exit 1 on a refusal).
-      if (pos.length) usage("dev-spec changelog [--since <ISO date|last|all>] [--milestone <name>] [--write]");
-      const r = spec.changelog(projectDir, { since: flags.since, write: on("write"), milestone: flags.milestone });
+      // dev-spec changelog [--since <ISO date|last|all>] [--write] — release notes from the specs (= spec_export {format: "changelog"}):
+      // the markdown on stdout (a note on stderr; --json: with --include-body), or --write → .specs/RELEASE-NOTES.md + meta.changelogAt
+      // (exit 1 on a refusal).
+      if (pos.length) usage("dev-spec changelog [--since <ISO date|last|all>] [--milestone <name>] [--write] [--include-body]");
+      const r = spec.changelog(projectDir, { since: flags.since, write: on("write"), milestone: flags.milestone, includeBody: bodyWanted() });
       if (!r.ok) return fail(r);
       const N = spec.msg(r.lang).releaseNotes;
       return out(r, (r) => {
@@ -2532,11 +2537,13 @@ function helpText() {
                                   restore brings an archived feature back with its roadmap entry and dependencies)
   feature flow <name> <requirements-first|design-first>   Set a feature's phase order (a bugfix keeps its own)
   catalog [--write]               Living catalog: every feature's ACs, superseded ones marked (_Supersedes:_); --write → .specs/SPECS.md
+                                  (--json: the structure; --include-body adds the markdown)
   export [feature] [--md] [--write]   One printable document for stakeholders — a feature (stories + EARS ACs, design, test plan,
                                   tasks with their verification, approvals, open clarifications) or, without one, the whole project;
                                   offline HTML (light/dark, print-ready) or --md; --write → .specs/exports/<feature|project>.html|.md
                                   --csv: the traceability matrix for a spreadsheet (UTF-8 BOM, the AUTO-GENERATED marker as its
                                   last record) → --write: .specs/exports/<feature|project>.rtm.csv
+                                  --json without --write: html / md give a preview (--include-body: the whole document)
                                   --gherkin: a BDD .feature — one Scenario per current AC (tags @US-n.AC-m @T-xx @<track>), its EARS
                                   clauses as Given (WHILE/WHERE/IF) · When (WHEN) · Then (SHALL), PT/ES in Gherkin's own dialect;
                                   no feature = one file per feature → --write: .specs/exports/<feature>.feature
@@ -2551,7 +2558,7 @@ function helpText() {
                                   change requests) · Fixed (bugfixes + root cause); --since <ISO date|last|all> (default: since the
                                   last written notes); --write → .specs/RELEASE-NOTES.md and stamps meta.changelogAt
                                   --milestone <name>: only that milestone's features (since: all by default) → --write:
-                                  .specs/RELEASE-NOTES.<milestone>.md (meta.changelogAt untouched)
+                                  .specs/RELEASE-NOTES.<milestone>.md (meta.changelogAt untouched); --json: + the markdown with --include-body
   milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]   Milestones (roadmap.json meta.milestones): a target date
                                   for a set of features, judged against their ETAs — on-track · at-risk · late · done; add replaces
                                   an existing one; rename / remove / archive of a feature follow; ROADMAP.md shows them

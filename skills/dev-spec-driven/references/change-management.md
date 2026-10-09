@@ -115,7 +115,7 @@ active and archived features alike.
 
 ## 6. The living catalog — `.specs/SPECS.md`
 
-`spec_catalog` (CLI `dev-spec catalog`) answers "what does the system do today?": every feature (active,
+`spec_export {format: "catalog"}` (CLI `dev-spec catalog`) answers "what does the system do today?": every feature (active,
 complete/finished, archived) with its status and every AC ID with a one-line EARS text, superseded ones marked. Since
 1.15 only a SHIPPED feature's `_Supersedes:_` retires the older AC (struck through; a finish recorded or the execution
 signed off — the release notes' rule); a draft's reads "to be superseded by … (not shipped yet)" and the AC stays current;
@@ -180,7 +180,7 @@ features (`dependentsPruned`) and warns (`incompleteDependency`, a `note`) when 
 they now read as unblocked in the roadmap although its work was never done. `spec_feature restore`
 moves it back and puts those back — only references to features that still exist, never one that would now
 close a cycle (the rest are listed in `skipped`). Archive is the reversible alternative to `remove` (which needs
-`confirm: true`). Archived features still count for `spec_coverage` and appear in the catalog.
+`confirm: true`). Archived features still count for `spec_scan {coverage: true}` and appear in the catalog.
 
 ## 9. Measuring it
 
@@ -245,7 +245,7 @@ US-1.AC-2,T-03,"Data Models"] [--supersedes D-1] [--discovery]`; `/spec-decide`)
   (`unknownAffects`, nothing written); `supersedes` must name entries already in the log.
 - **Where it shows up:** `spec_task_brief` inlines the current entries citing the task's ACs / T-IDs (bounded);
   the merge summary (`spec_finish`) and the stakeholder export get a Decisions section (and `spec_export {format:
-  "adr"}` turns the decisions into ADR files — §13); `spec_catalog` lists each
+  "adr"}` turns the decisions into ADR files — §13); `spec_export {format: "catalog"}` lists each
   feature's decisions (superseded ones marked); `trace_check` reports `_Affects:_` references that name nothing any
   more (`phantomAffects`, warnings); `spec_doctor` warns `decision-affects` (the same phantoms) and
   **`decision-affects-approved`** — a current decision recorded AFTER the approval of the requirements or the design it
@@ -302,7 +302,7 @@ http(s)/mailto, nothing external loaded) or `md`. `write: true` writes `.specs/e
 `project.<format>`) with the AUTO-GENERATED marker; a same-named hand-written file is never overwritten. It is a
 snapshot — regenerate it after the spec changes, never edit it.
 
-**Release notes (`/spec-changelog`).** `spec_changelog {since?, write?}` (CLI `dev-spec changelog [--since <ISO
+**Release notes (`/spec-changelog`).** `spec_export {format: "changelog", since?, write?}` (CLI `dev-spec changelog [--since <ISO
 date|last|all>] [--write]`) builds release notes from the spec data alone — no model, no git log:
 
 - **Added** — features shipped since `since` (a finish baseline recorded, or the `execution` sign-off approved), each
@@ -396,7 +396,7 @@ recorded patterns or its current ones). Only those few files are hashed (CRLF an
 
 ## 15. Milestones
 
-`/spec-milestone` — `spec_milestone {action, name?, date?, features?}` (CLI `dev-spec milestone [add <name>
+`/spec-milestone` — `spec_roadmap_edit {kind: "milestone", action, name?, date?, features?}` (CLI `dev-spec milestone [add <name>
 <YYYY-MM-DD> <features…> | rm <name> | list]`) keeps named target dates for sets of features in `roadmap.json →
 meta.milestones` (under the roadmap lock). `add` needs a name (letters of any script, digits, spaces, `. _ : # ( ) + -`,
 ≤ 60 characters), a real `YYYY-MM-DD` day and existing active features (a list's items are feature names — `User Login`

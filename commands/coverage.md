@@ -4,7 +4,7 @@ description: Brownfield — measure how much existing code the specs cover (file
 
 Use the **dev-spec-driven** skill brownfield coverage check. It takes no arguments: it measures the whole project.
 
-Run the `spec_coverage` MCP tool (CLI `dev-spec coverage`). Coverage is measured through the **`_Implements:_`**
+Run the `spec_scan {coverage: true}` MCP tool (CLI `dev-spec coverage`). Coverage is measured through the **`_Implements:_`**
 markers of every feature's tasks (active or archived): a code file counts as covered when some marker names it —
 the file itself, a folder containing it, or a glob. It reports `coveragePercent` (covered code files / code
 files; test files are counted apart), a per-top-level-folder breakdown (`byFolder`), the folders with no covered

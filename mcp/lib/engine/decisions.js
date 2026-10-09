@@ -56,7 +56,7 @@ function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, dayOf, today, de
 // of design.md — bug.md / design.md for a bugfix, spike.md for a spike) and re-checked by trace_check (phantomAffects,
 // warnings) and doctor. A later entry's _Supersedes: D-n_ retires D-n: the brief and doctor's decision-affects-approved skip
 // it, the catalog marks it. Readers: spec_task_brief (entries citing the task's ACs / T-IDs, bounded), spec_finish's merge
-// summary, spec_export, spec_catalog, spec_doctor, trace_check. HTML comments and fenced code never hold an entry.
+// summary, spec_export, spec_export {format: "catalog"}, spec_doctor, trace_check. HTML comments and fenced code never hold an entry.
 const DECISIONS_FILE = "decisions.md";
 const DECISION_TITLE_MAX = 200;
 const DECISION_TEXT_MAX = 20000;
@@ -519,7 +519,7 @@ function decisionSummaryLines(dir, lang) {
     return retired.has(e.id) ? `- ~~${head}~~ _(${D.superseded}: ${retired.get(e.id)})_` : `- ${head} _(${meta})_` + (text ? ": " + text : "");
   })];
 }
-// spec_catalog: { count, items: [{ id, title, kind, superseded? }] }.
+// spec_export {format: "catalog"}: { count, items: [{ id, title, kind, superseded? }] }.
 function catalogDecisions(dir) {
   const log = decisionLog(readIfExists(path.join(dir, DECISIONS_FILE)) || "");
   const retired = retiredDecisions(log);

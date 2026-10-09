@@ -59,7 +59,7 @@ then the codebase by concept and synonyms, the shared folders `structure.md` nam
 callers unchanged, in the task's own `_Implements:_` files — a unit outside them is a plan change: a converge task via
 `spec_append_tasks`, never a silent edit; the scope guard asks before such an edit), else create — local to the feature
 until a second or third use; never copy-paste. A refactor you notice outside the task is **filed, not done**:
-`spec_backlog {action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>"}` (CLI `dev-spec backlog
+`spec_roadmap_edit {kind: "backlog", action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>"}` (CLI `dev-spec backlog
 add …`) — one name per candidate: an existing name gets the new note appended to its entry.
 
 **Can't run the `_Verify:_` command yourself** (no shell, no runtime in this session)? **Do not tick the task** — not
@@ -83,7 +83,7 @@ report (the SubagentStop hook sends back a DONE whose report lacks each `_Verify
 needs — 0, or non-zero on an `_Expect: fail_` task). The report carries a **Reuse** block (searched, reused, extended,
 created and why); the reviewer checks every new unit for a duplicate in the existing codebase (a duplicate is
 Important); file the report's *Refactor candidates* and the reviewer's out-of-scope refactor ideas in the backlog
-(`spec_backlog add`, a `refactor:` note) — never in the task. Keep
+(`spec_roadmap_edit {kind: "backlog"} add`, a `refactor:` note) — never in the task. Keep
 the ledger. Stop at every `**Checkpoint:**` for human review, and go back to the right phase for any finding that would change an
 AC, the design or a planned test. Tasks the brief flags `inlineOnly` (+ai prompt/eval) run inline. If the
 host has no subagent tool, say so and run inline. Independent `[P]` tasks may run concurrently in separate

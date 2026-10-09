@@ -330,7 +330,8 @@ function specUpgrade(projectDir, opts = {}) {
       migrations.report = { file, written: true };
     }
   }
-  res.lines = upgradeLines(res, lang);
+  // 1.26: no `lines` in the result — the human report is upgradeLines(res, res.lang), rendered by the CLI from this very structure
+  // (it doubled the reply an agent reads: ~3k of ~7k characters for three features)
   return res;
 }
 
@@ -389,9 +390,9 @@ function upgradeMigrationLines(r, lang) {
   }
   return out;
 }
-// The human report — `lines` of the result, printed by the CLI (project language; next_action's recommendations stay in
-// each feature's own language, as everywhere).
-function upgradeLines(r, lang) {
+// The human report of a specUpgrade() result, printed by the CLI (project language; next_action's recommendations stay in
+// each feature's own language, as everywhere). lang: the result's own by default.
+function upgradeLines(r, lang = r.lang) {
   const U = i18n.msg(lang).upgrade;
   const P = i18n.msg(lang).phaseNames || {};
   const mode = !r.to ? "unknown" : r.from == null || compareSemver(r.from, r.to) < 0 ? "behind" : r.needsUpgrade ? "pending" : "current";

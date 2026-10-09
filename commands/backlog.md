@@ -7,7 +7,7 @@ Use the **dev-spec-driven** skill backlog.
 
 Args: $ARGUMENTS
 
-Manage the backlog with the `spec_backlog` MCP tool (CLI: `dev-spec backlog add "name" "note"` /
+Manage the backlog with the `spec_roadmap_edit {kind: "backlog"}` MCP tool (CLI: `dev-spec backlog add "name" "note"` /
 `dev-spec backlog rm "name"` / `dev-spec backlog`). These are features planned but not yet given a
 `.specs/<feature>/` folder, so the "what's left" in `.specs/ROADMAP.md` includes work not yet
 started. A feature created, restored or renamed under an item's name takes its place (the item is dropped:

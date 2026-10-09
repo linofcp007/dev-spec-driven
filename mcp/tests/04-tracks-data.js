@@ -173,7 +173,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, require, __dirname }) => {
     ok(lpSt.tracks === "core" && js(lpSt.missingPacks) === js(["data"]) && !chk(lpDoc, "data-sections").status && chk(lpDoc, "track-pack-missing").status === "warn" &&
       /\+data \(a track pack from before 1\.21 — 'data' is a reserved name now, and the built-in \+data track is NOT applied/.test(chk(lpDoc, "track-pack-missing").detail) &&
       /'etl' is a reserved name now: rename/.test(chk(lpDocA, "track-pack-missing").detail) && (lpUpF.attention || []).includes("track-pack-reserved") &&
-      lpUp.lines.some((l) => /Rename its track pack\(s\) from before 1\.21 — /.test(l)) && adopt.ok && js(adopt.adopted) === js(["data"]) && adopt.tracks === "core +data" &&
+      S.upgradeLines(lpUp).some((l) => /Rename its track pack\(s\) from before 1\.21 — /.test(l)) && adopt.ok && js(adopt.adopted) === js(["data"]) && adopt.tracks === "core +data" &&
       rd(lpMain.dir, "design.md").includes("## [DATA] Data Contracts & Schema Evolution") && chk(S.specDoctor(lp, "f-data"), "data-sections").status === "fail" &&
       drop.ok && js(drop.removedTracks) === js(["etl"]) && js(JSON.parse(rd(lpAlias.dir, ".state.json")).tracks) === js(["core"]),
       "1.21 F4: a pre-1.21 pack named 'data' / 'etl' is the feature's missing pack (tracks read core, the built-in +data is NOT applied, doctor and spec_upgrade say 'from before 1.21'); add-track data adopts the built-in track, --remove drops the alias pack (got " +

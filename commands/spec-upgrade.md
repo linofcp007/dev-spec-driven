@@ -15,7 +15,7 @@ If the plugin itself isn't updated yet, say how (above) and stop.
 
 **Steps**
 1. **Audit (read-only).** Call the `spec_upgrade` MCP tool `{}` (CLI: `dev-spec upgrade`). Show the result grouped
-   like its `lines`: the summary, then **blocked** (doctor fails), **needs attention** and **ok** — per feature its
+   by `group`: the summary, then **blocked** (doctor fails), **needs attention** and **ok** — per feature its
    status (not started · planning · executing · complete · finished), what the rules flag (failing checks, pending
    gates, artifacts changed since approval, approvals without history, unverified tasks, drift, criteria with bare
    `AC-n` IDs to renumber `US-<story>.AC-<n>`), next_action's step

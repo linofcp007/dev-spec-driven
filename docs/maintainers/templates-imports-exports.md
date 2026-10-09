@@ -269,7 +269,7 @@ trackers, ADRs, release notes, milestones).
   print rules. Approvals are flagged "changed since" by content fingerprint only — a file date is no evidence (as in
   finish). A change (1.21 review C5) exports as itself: its kind label, its criteria (change.md without the task blocks),
   one Tasks table, no design, the plan's approval row (`planPhase`); the project export lists its criteria, not stories. A story written as its own `## US-n` section appears once, under the stories.
-- **`spec_changelog`** reads the spec data only (no model, no git log). Added = features that shipped since `since`
+- **`spec_export {format: "changelog"}`** reads the spec data only (no model, no git log). Added = features that shipped since `since`
   (finish `{write}` recorded their baseline, or their execution sign-off was approved) with their user-story ACs (template
   criteria left out); Changed = the CHANGES shipped since then (kind `change` — 1.24 r6 G-I10: `changed.changes`, each with its
   summary and criteria; they were listed under Added as new features) + ACs superseded by a feature shipped since then + change
@@ -332,7 +332,7 @@ trackers, ADRs, release notes, milestones).
   parents first. Jira's Work item ID is the record's row number; a Parent names the FIRST record with that key. The
   AUTO-GENERATED marker is the LAST HEADER CELL (an empty column to leave unmapped) — a trailing record would become a
   work item.
-- **Milestones** — `roadmap.json → meta.milestones [{name, date, features, archived?}]` (`spec_milestone` / `dev-spec
+- **Milestones** — `roadmap.json → meta.milestones [{name, date, features, archived?}]` (`spec_roadmap_edit {kind: "milestone"}` / `dev-spec
   milestone` / /spec-milestone), under the roadmap lock; `milestoneStore()` sanitizes — an entry is valid only as add writes
   it (a name `RE_MILESTONE_NAME` accepts — letters of any script with their marks —, a date `isoTime` accepts as a real
   day, feature lists of slugs, one entry per identity; a hand-edited roadmap.json reaches ROADMAP.md / .html, where every
@@ -343,7 +343,7 @@ trackers, ADRs, release notes, milestones).
   "C" ≠ "C++"; never the slug, which collapsed them); the FILE name is `milestoneFileKey()` — the slug when it equals the
   key (1.16.0's names keep their file), else slug (or `milestone`) + 8 hex of the key's sha1, hashed too when another
   milestone would share it. Features: a list's items split on commas only ("User Login" is one name), a single string on
-  whitespace too (spec_depend's resolution). Adding an existing name updates date + features and keeps its `archived` list
+  whitespace too (spec_roadmap_edit {kind: "depend"}'s resolution). Adding an existing name updates date + features and keeps its `archived` list
   minus the slugs listed again. `milestoneStatuses()` (inside `roadmapExtras`) → stable codes `on-track` · `at-risk` (reasons
   `eta-after-date` · `eta-unknown` · `no-features`) · `late` · `done` + `eta`, `unknownEta`, `done`, `total`; ROADMAP.md /
   .html get a table between Features and Dependencies and late / at-risk attention lines. `milestonesFollow(rm, slug,
@@ -353,7 +353,7 @@ trackers, ADRs, release notes, milestones).
   (or a meta.milestones that is no list) exactly as it is — one hand-edit typo used to stop every entry from following (1.16
   verify NEW-1); the results then carry `milestonesInvalid` {count, names — the entry's name when add would accept it, else
   `#<position>` —, notList?}, and so do spec_roadmap (`milestoneInvalidInfo()`), a "Needs attention" line of ROADMAP.md / .html
-  (`🏁 meta.milestones`, `milestone.attention.invalid` / `notList`, EN/PT/ES) and the CLI roadmap tail. `spec_changelog {milestone}` → that milestone's features + its archived ones, `since`
+  (`🏁 meta.milestones`, `milestone.attention.invalid` / `notList`, EN/PT/ES) and the CLI roadmap tail. `spec_export {format: "changelog", milestone}` → that milestone's features + its archived ones, `since`
   defaulting to `all`, written to `RELEASE-NOTES.<milestoneFileKey>.md` without stamping `meta.changelogAt`
   (`changelogData(…, only)`).
 - CLI: switches `revoke`, `print-config`, `gherkin`, `adr` (1.25) (`spec.CLI_SWITCHES`); value flags `reason`, `expires`, `text`,

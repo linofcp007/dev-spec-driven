@@ -223,7 +223,7 @@ matrix.
   keeps the T-ID expected. Doctor's `tests-in-code` warns only for T-IDs made green by DONE tasks.
 - **`_Implements:_` of an OPEN task is the plan**: a missing file only named by open tasks is
   `plannedImplFiles`, not a gap; a done task's missing file (or any path outside the project) stays
-  `missingImplFiles`. `spec_coverage` = code files named in any `_Implements:_` (file, folder or glob) of any
+  `missingImplFiles`. `spec_scan {coverage: true}` = code files named in any `_Implements:_` (file, folder or glob) of any
   feature, active or archived. Every reader resolves a reference through `implementsPath()` (`:12` / `#L12` anchors
   dropped) — trace_check included, reporting the spelling the task wrote; an anchor alone names nothing (missing). A trailing
   ANNOTATION after a path-like token is the author's note (1.25.1 — `RE_IMPL_ANNOTATED`: " (the helper)", " — new export", " - new

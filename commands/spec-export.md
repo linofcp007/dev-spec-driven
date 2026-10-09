@@ -26,7 +26,8 @@ theme with a toggle, and prints cleanly (light on paper, no buttons, a page brea
 is escaped; links are kept only for http(s)/mailto, images are shown as their alt text, and nothing external is loaded —
 the file opens offline and can be attached to an email or printed to PDF.
 
-- Without `write` the document comes back as `content`: tell the user what it covers (and offer to write it).
+- Without `write` html / md come back as a markdown `preview` (+ `bytes`): tell the user what it covers and offer to write it
+  (`includeBody: true` returns the whole document as `content`).
 - With `write: true` (`--write`) it is written to **`.specs/exports/<feature>.html`** (or `.md`; the project:
   `project.html`; a feature slugged `project`: `project.feature.html`) carrying the AUTO-GENERATED marker — report the
   path. A same-named file dev-spec did not generate is never overwritten: the result is an error; tell the user.

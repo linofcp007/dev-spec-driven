@@ -23,6 +23,11 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails
   the suite), a `TOOL_ANNOTATIONS` entry in `mcp/server.js` (1.16 — mcp/test.js requires one per tool and snapshots `.specs/`
   around every read-only one), the tool count every doc states (below), and (usually) a thin command in `commands/`.
+- Folding a tool into another or renaming one (1.26) → keep the old name working: a `LEGACY_TOOLS` entry in `mcp/server.js`
+  (its OLD inputSchema — old callers keep their refusals — and `args`, the translation to the new tool), never a `runTool` case;
+  arguments that belong to one mode of the new tool → its `ARG_MODES` entry (refused elsewhere: `inapplicable-arguments`); the
+  alias = new-tool assertion in `mcp/tests/02-mcp-server-tools.js`; every doc that names the old tool (mcp.md → Folded tools).
+  A description stays within the budget (mcp.md → The description budget: `TOOLS_LIST_CAP`).
 - New command → a `commands/<name>.md` with `description` + `argument-hint` front matter (the hint ≤ 130 characters —
   autocomplete cuts a longer one, the body lists every flag; no hint at all when the command takes no argument, never an
   empty one — 1.25.1 review, `mcp/tests/17-docs-review7.js`); it is automatically an MCP

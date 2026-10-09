@@ -5,7 +5,7 @@ What happens to a feature after its tasks: the catalog, `_Supersedes:_`, the fin
 restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap files.
 
 ## Catalog, drift, restore, guard, steering (1.13)
-- **`SPECS.md` is AUTO-GENERATED** like the roadmap: `spec_catalog {write}` and `maybeRefreshCatalog()` use
+- **`SPECS.md` is AUTO-GENERATED** like the roadmap: `spec_export {format: "catalog", write}` and `maybeRefreshCatalog()` use
   the same `RE_AUTOGEN` / `isGeneratedOrAbsent()` guard, so a hand-written `.specs/SPECS.md` is never
   overwritten; once it exists, every roadmap refresh refreshes it too (a hand edit's: at the end of the turn — Roadmap files).
 - **`_Supersedes: <feature>/US-n.AC-m[, …]_`** on a criterion (same line, a sub-line or its table row) marks
@@ -181,7 +181,7 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   for spec_decide (the unquoted CLI `--affects "Decisions, reuse & risks"`), `entryRefs()` with ", " for a logged entry
   (trace's phantomAffects, doctor's decision-affects-approved). `_Supersedes:_ D-n`
   must name existing entries; a superseded entry is retired (the brief and `decision-affects-approved` skip it, the catalog
-  marks it). Readers: the brief (bounded), finish's merge summary, spec_export, spec_catalog (count + titles),
+  marks it). Readers: the brief (bounded), finish's merge summary, spec_export, spec_export {format: "catalog"} (count + titles),
   trace_check (`phantomAffects`, warnings — never a gap), doctor (`decision-affects`, and `decision-affects-approved` for
   a current decision recorded AFTER the approval of the requirements / design it names), and (1.25) the ADR export —
   `spec_export {format: "adr"}` (`exportAdr`, decisions.js): one MADR file per decision whose ADR number IS its D-number
@@ -223,7 +223,7 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   one "Circular dependency" line per cycle, the CLI roadmap names the first in its head line and the others in
   `roadmapTailLines`. `forecastData()` computes the components itself from the features' dependsOn: every member gets reason
   `cycle` — only `findCycle`'s first cycle used to (a → a hid b ↔ c), and a member the walk met second was overwritten with
-  `dependency`. `findCycle` stays the refusal's check (spec_depend, restore). **A dependency done but not signed off**
+  `dependency`. `findCycle` stays the refusal's check (spec_roadmap_edit {kind: "depend"}, restore). **A dependency done but not signed off**
   (review 6 G-I6) needs nothing: every task ticked IS phase `complete` (100%, detectPhase — the execution sign-off is finish's
   business), so its dependents are unblocked and chain their ETA from today (a test pins it).
 - **Overlaps** (`featureOverlaps()`): two ACTIVE features whose OPEN tasks plan the same files (`implementsKey`; a folder
@@ -231,7 +231,7 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   FINISHED feature recorded in its drift baseline. Not an overlap: features ordered by a dependency (either way,
   transitively — a finished pair included) or one declaring `_Supersedes:_` of the other's criteria. Bounded (`OVERLAP_MAX_KEYS` 500,
   `OVERLAP_MAX_GLOB_CHECKS`, `OVERLAP_MAX_PAIRS` 50), text reads only — nothing hashed, since SessionStart runs it.
-  Surfaces: ROADMAP.md "Needs attention" (each pair once), doctor warn `cross-feature-overlap` (fix with spec_depend or
+  Surfaces: ROADMAP.md "Needs attention" (each pair once), doctor warn `cross-feature-overlap` (fix with spec_roadmap_edit {kind: "depend"} or
   `_Supersedes:_`), one SessionStart line. Doctor runs `featureOverlaps(…, {only})` (a whole roadmap() walk) only when an
   OPEN active task of the feature has an `_Implements:_` — a pair needs one on its active side (1.22 review, a 30 features ×
   40 tasks project, a feature with none: doctor 236 → 64 ms, next_action 336 → 96 ms, spec_finish 257 → 75 ms); the answer is
@@ -257,7 +257,7 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
   --write` exited 0. `writeRoadmapFile()` now refuses (`broken: true`, `err.roadmapNotWritten` after the roadmap.json error) and
   keeps the last good file; `roadmapReport {write}` is then an error (MCP isError, CLI exit 1 — ROADMAP.html's refusal is not
   repeated), its read-only view a warning (`err.roadmapViewPartial`), and `maybeRefreshRoadmap` skips both files.
-- **`spec_depend`**: `dependsOn` REPLACES the list (`[]` / CLI `--clear` clears), `add`/`remove` (CLI
+- **`spec_roadmap_edit {kind: "depend"}`**: `dependsOn` REPLACES the list (`[]` / CLI `--clear` clears), `add`/`remove` (CLI
   `--add`/`--rm`, repeatable) edit it, `name` alone is a read (a bare `dev-spec depend <f>` used to clear the
   deps). Every dependency must be an existing feature.
 - **Roadmap files are generated, never hand-edited.** Default is **`ROADMAP.md`** (git-friendly,

@@ -211,7 +211,7 @@ refused by the engine: that task is not done. Never tick a task with open Critic
 
 **Refactor candidates are filed, never done in the task.** The report's **Reuse** block lists them (a smell, a
 duplicate, a tangled file the implementer noticed), and so do the reviewer's out-of-scope refactor ideas: file each
-one in the roadmap backlog — `spec_backlog {action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>
+one in the roadmap backlog — `spec_roadmap_edit {kind: "backlog", action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>
 — <the refactoring> — found in <feature> task N"}` (CLI `dev-spec backlog add refactor-<topic> "refactor: …"`) — and
 ledger `Task N: refactor candidate filed: refactor-<topic>`. One name per candidate (the topic, not the area): an `add`
 of a name already in the backlog appends its note to that entry (`exists: true`, `appended`) — right for the same
@@ -437,7 +437,7 @@ Turn count beats token price: the cheapest models take 2–3× the turns on mult
 | "I'll tick the task now and review later" | `tasks.md` `[x]` means reviewed. The roadmap reads it. |
 | "The implementer said the tests pass" | Tick with the evidence from its report (command, exit code, output) — no evidence, no claim. |
 | "The SubagentStop hook let it through, so it passed" | The gate reads the report's text — each `_Verify:_` command with the exit code the task needs — it never ran anything. Read it; record the run with `spec_complete_task`. |
-| "The implementer found a good refactor — let it do it in this task" | File it: `spec_backlog add` with a `refactor:` note. A refactor folded into a feature task makes the diff bigger and a regression unattributable. |
+| "The implementer found a good refactor — let it do it in this task" | File it: `spec_roadmap_edit {kind: "backlog"} add` with a `refactor:` note. A refactor folded into a feature task makes the diff bigger and a regression unattributable. |
 | "The new helper is tiny, no need to look for an existing one" | Tiny duplicates are how a codebase ends up with four retry wrappers. No **Reuse** block with the search in the report → send it back. |
 | "The reviewer is sure — skip the verify pass" | A reviewer's certainty is a claim. One cheap verify per finding costs less than one fix round spent on a false positive. |
 | "Unconfirmed means wrong — drop it" | Unconfirmed means not proven. It skips the fix loop, not the ledger: the checkpoint shows it and the final review triages it. |

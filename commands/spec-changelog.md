@@ -7,7 +7,7 @@ Use the **dev-spec-driven** skill, release notes.
 
 Args: $ARGUMENTS
 
-Call the `spec_changelog` MCP tool `{since?, milestone?, write?}` (CLI `dev-spec changelog [--since <ISO date|last|all>] [--milestone <name>] [--write]`).
+Call the `spec_export {format: "changelog"}` MCP tool `{since?, milestone?, write?}` (CLI `dev-spec changelog [--since <ISO date|last|all>] [--milestone <name>] [--write]`).
 It builds human release notes from the spec data alone — no model, no git log:
 
 - **Added** — features that shipped since `since` (`spec_finish {write: true}` recorded their baseline, or their
@@ -23,7 +23,7 @@ It builds human release notes from the spec data alone — no model, no git log:
 were written, `roadmap.json` `meta.changelogAt`; everything while none were written) or `all`. Headings are in the
 project language; IDs stay English.
 
-- Without `write` it returns the structure plus the markdown: show the notes, and point out a feature whose summary is
+- Without `write` it returns the structure (`includeBody: true` adds the markdown): show the notes, and point out a feature whose summary is
   still missing or a bugfix whose root cause isn't written (the notes say so).
 - With `write: true` (`--write`) it writes **`.specs/RELEASE-NOTES.md`** (AUTO-GENERATED) and stamps
   `meta.changelogAt`, so the next run starts from there. With nothing to report nothing is written or stamped (`note`).

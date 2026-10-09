@@ -459,7 +459,6 @@ function templates(projectDir, action, opts = {}) {
 }
 
 function listTemplates(projectDir, key, lng) {
-  const T = i18n.msg(lng).templates;
   const files = templateFileList(projectDir);
   const custom = [...new Set(files.filter((f) => f.key && f.key.startsWith("steering/") && !allTemplateKeys().includes(f.key)).map((f) => f.key))].sort();
   const keys = key ? [key] : [...allTemplateKeys(), ...custom];
@@ -470,12 +469,7 @@ function listTemplates(projectDir, key, lng) {
     return { artifact: k, file: k.startsWith("steering/") ? k : TEMPLATE_ARTIFACTS[k], source: eff ? "override" : "built-in", override: eff ? eff.path : null, overrides };
   });
   const ignored = files.filter((f) => !f.key).map((f) => f.rel);
-  const n = entries.filter((e) => e.source === "override").length;
-  const width = Math.max(...entries.map((e) => e.artifact.length));
-  const lines = [T.listHead(lng, n), ...entries.map((e) => "  " + (e.source === "override" ? "✎ " : "· ") + e.artifact.padEnd(width) + "  " +
-    (e.source === "override" ? T.override + "  " + e.override : T.builtIn))];
-  if (ignored.length) lines.push(T.ignored(ignored.join(", ")));
-  return { ok: true, action: "list", dir: path.join(specsRoot(projectDir), TEMPLATES_DIR), lang: lng, templates: entries, ignored, lines };
+  return { ok: true, action: "list", dir: path.join(specsRoot(projectDir), TEMPLATES_DIR), lang: lng, templates: entries, ignored };
 }
 
 function initTemplates(projectDir, key, lang, lng) {
@@ -506,9 +500,7 @@ function initTemplates(projectDir, key, lang, lng) {
       return { ok: false, error: T.writeFailed(rel, e.code || e.message), created, kept };
     }
   }
-  const lines = created.length ? [T.initDone(created.length), ...created.map((c) => "  + " + c)] : [T.initNothing];
-  if (created.length && kept.length) lines.push(T.initKept(kept.join(", ")));
-  return { ok: true, action: "init", dir: tdir, lang: lng, created, kept, lines };
+  return { ok: true, action: "init", dir: tdir, lang: lng, created, kept };
 }
 
 // The checks of one template text (raw: with its variables; the checks read it rendered with sample values).
@@ -563,8 +555,7 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
 }
 
 function checkTemplates(projectDir, key, lang, lng) {
-  const T = i18n.msg(lng).templates;
-  const P = T.problems;
+  const P = i18n.msg(lng).templates.problems;
   const inLang = templateFileList(projectDir).filter((f) => !lang || f.lang == null || templateLangChain(lang).includes(f.lang));
   const all = inLang.filter((f) => !key || f.key === key); // the files checked (and reported on)
   const problems = [];
@@ -639,17 +630,34 @@ function checkTemplates(projectDir, key, lang, lng) {
   }
   const errors = problems.filter((p) => p.severity === "error").length;
   const warnings = problems.length - errors;
-  const lines = [];
-  if (!checked.length && !problems.length) lines.push(T.checkNone);
-  else {
-    lines.push(T.checkHead(checked.length, errors, warnings));
-    problems.forEach((p) => lines.push("  " + (p.severity === "error" ? "✗ " : "▲ ") + p.file + (p.line ? ":" + p.line : "") + " — " + p.message));
-    checked.filter((c) => c.appends && c.appends.length).forEach((c) => lines.push("  · " + T.appends(c.file, c.appends.map((t) => "+" + t).join(", "))));
-  }
-  return { ok: true, action: "check", lang: lng, checked, problems, errors, warnings, verdict: errors ? "fail" : warnings ? "warn" : "pass", lines };
+  return { ok: true, action: "check", lang: lng, checked, problems, errors, warnings, verdict: errors ? "fail" : warnings ? "warn" : "pass" };
 }
 
-module.exports = { TEMPLATES_DIR, TEMPLATE_ARTIFACTS, TEMPLATE_CHAIN, TEMPLATE_VARS, RE_TEMPLATE_VAR,
+// The human report of a templates() result (list / init / check) in its language — printed by the CLI. 1.26: rendered from the
+// structure, never carried in it (the result an agent reads held every line twice: the structure and its rendering).
+function templatesLines(r) {
+  const T = i18n.msg(r.lang).templates;
+  if (r.action === "init") {
+    const lines = r.created.length ? [T.initDone(r.created.length), ...r.created.map((c) => "  + " + c)] : [T.initNothing];
+    if (r.created.length && r.kept.length) lines.push(T.initKept(r.kept.join(", ")));
+    return lines;
+  }
+  if (r.action === "check") {
+    if (!r.checked.length && !r.problems.length) return [T.checkNone];
+    const lines = [T.checkHead(r.checked.length, r.errors, r.warnings)];
+    r.problems.forEach((p) => lines.push("  " + (p.severity === "error" ? "✗ " : "▲ ") + p.file + (p.line ? ":" + p.line : "") + " — " + p.message));
+    r.checked.filter((c) => c.appends && c.appends.length).forEach((c) => lines.push("  · " + T.appends(c.file, c.appends.map((t) => "+" + t).join(", "))));
+    return lines;
+  }
+  const n = r.templates.filter((e) => e.source === "override").length;
+  const width = Math.max(0, ...r.templates.map((e) => e.artifact.length));
+  const lines = [T.listHead(r.lang, n), ...r.templates.map((e) => "  " + (e.source === "override" ? "✎ " : "· ") + e.artifact.padEnd(width) + "  " +
+    (e.source === "override" ? T.override + "  " + e.override : T.builtIn))];
+  if (r.ignored.length) lines.push(T.ignored(r.ignored.join(", ")));
+  return lines;
+}
+
+module.exports = { templatesLines, TEMPLATES_DIR, TEMPLATE_ARTIFACTS, TEMPLATE_CHAIN, TEMPLATE_VARS, RE_TEMPLATE_VAR,
   RE_TEMPLATE_KNOWN_VAR, RE_TEMPLATE_KNOWN_VAR_G, templateRel, steeringTemplateName, templateKey, templateKeyList,
   readTemplateFile, templateFileList, templateLangChain, templateOverride, templateVars, renderTemplate,
   trackRequirementsBlock, trackIdMap, trackTestRowsBlock, withTrackBlocks, scaffoldText, steeringScaffold,

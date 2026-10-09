@@ -45,7 +45,7 @@ Do the mechanical steps with the bundled engine instead of hand-editing files. T
 - **CLI (works anywhere):** `node cli/dev-spec.js <command>`.
   Below, `dev-spec <command>` stands for `node cli/dev-spec.js <command>` (a bare `dev-spec` works only when it is on
   PATH — `npm link` in the clone; a plugin install puts none there).
-- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 38 tools, plus one
+- **MCP (if your tool speaks MCP):** the `spec-driven` server exposes the same operations as 32 tools, plus one
   prompt per plugin command (slash commands in clients that show MCP prompts) and the specs as read-only
   `specs://` resources.
 

@@ -16,8 +16,8 @@ Target: $ARGUMENTS
 4. For each documented module, `spec_create` a feature and fill `requirements.md` + `design.md`
    describing what the code *does today* (mark as reverse-engineered; a login or admin module often takes `+sec`,
    anything holding personal data `+privacy`, a service that writes a database and publishes events `+dist`, an API other code calls `+api`, a user-facing screen `+ui`, a service with SLOs, alerts or rollouts `+obs`, an ETL job, a warehouse or dbt models `+data`, so their sections capture today's threat model and data inventory). Use `_Implements: path_`
-   markers so `trace` ties specs to real files — and so `spec_coverage` can count them.
-5. Run `spec_coverage` to see what's still undocumented (covered files / code files, per folder).
+   markers so `trace` ties specs to real files — and so `spec_scan {coverage: true}` can count them.
+5. Run `spec_scan {coverage: true}` to see what's still undocumented (covered files / code files, per folder).
 
 New features in this codebase: `spec_create {…, brownfield: true}` adds `integration-plan.md`. See
 `references/brownfield.md`. Respond in the user's language (EN/PT/ES).

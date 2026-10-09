@@ -944,7 +944,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, libSources, require, __di
     fs.writeFileSync(rmp, JSON.stringify(rmj, null, 2));
     const up = S.specUpgrade(pu, { apply: true });
     const upMd = fs.readFileSync(path.join(pu, ".specs", "UPGRADE.md"), "utf8");
-    const portOk = up.ok && !upMd.includes(S.DEV_SPEC) && upMd.includes("dev-spec done csv-export <n> --run") && up.lines.some((l) => l.includes(S.DEV_SPEC + " done csv-export <n> --run")) &&
+    const portOk = up.ok && !upMd.includes(S.DEV_SPEC) && upMd.includes("dev-spec done csv-export <n> --run") && S.upgradeLines(up).some((l) => l.includes(S.DEV_SPEC + " done csv-export <n> --run")) &&
       S.portableCli("run " + S.DEV_SPEC.replace(/"/g, "&quot;") + " drift x") === "run dev-spec drift x" && S.portableCli(S.DEV_SPEC + " done x 1 --run") === "dev-spec done x 1 --run";
     ok(quoteOk && viaShell === "ok" && viaBash !== "failed" && !/^failed/.test(viaBash) && !/^failed/.test(viaPs) && portOk,
       "1.21 F3: the runnable CLI line is quoted for bash AND PowerShell (double quotes; single quotes around \" $ ` !; a placeholder when a ' joins them; forward slashes) and runs as printed in the platform shell" +

@@ -138,7 +138,7 @@ exports.run = async ({
   const apDesc = (list.result.tools.find((t) => t.name === "spec_approve") || {}).description || "";
   ok(/`traceability` \(every AC has a test row, and no row cites an AC requirements\.md doesn't define\)/.test(docsGate("; test-plan: ", "; eval-plan: ")) &&
     !/test-plan|doesn't define/.test(docsGate("; tasks: ", "; tests (")) && /`traceability` \(every AC covered by a task, no phantom AC \/ T-IDs in tasks\)/.test(docsGate("; tasks: ", "; tests (")) &&
-    /test-plan: placeholders, every AC has a test, no row citing an AC requirements\.md does not define; eval-plan:/.test(apDesc),
+    !/tasks: [^;]*row citing/.test(apDesc), // 1.26: the per-phase check lists left spec_approve's description (the refusal names the failing ids; /approve lists them)
     "/approve + spec_approve: a test-plan row citing an undefined AC fails the TEST-PLAN gate's traceability (approvalChecks) — never listed under the tasks gate");
   // 1.20: the notes are CLAUDE.md (the index) + docs/maintainers/*.md — a moved section is read from its topic file, and
   // what no note may say is checked across all of them.
@@ -348,12 +348,13 @@ exports.run = async ({
       "full review D5: /spec-guard, /spec-init and the tooling reference pass guard as \"on\" / \"off\" / \"scope\" (the schema's string enum)");
     // D6: spec_approve's description lists every execution check (suite-evidence; a spike's spike / decision), one line.
     const d6Desc = list.result.tools.find((t) => t.name === "spec_approve").description;
-    ok(!/\n/.test(d6Desc) && /spec_finish's blockers:[^)]*\bsuite-evidence\b/.test(d6Desc) && /a spike: spike, decision/.test(d6Desc),
-      "full review D6: spec_approve's description names the execution gate's suite-evidence and a spike's spike / decision checks");
+    // (1.26: the per-phase check lists left the description — a refusal names its failing check ids; /approve lists each gate's)
+    ok(!/\n/.test(d6Desc) && /REFUSES it while the phase's checks fail/.test(d6Desc) && /spec_finish's blockers[\s\S]{0,400}`suite-evidence`/.test(dWs(dRead("commands", "approve.md"))),
+      "full review D6: spec_approve's description says the gate refuses while the phase's checks fail; /approve names the execution gate's suite-evidence");
     // 1.21 review A8: no tool description runs two sentences together (spec_approve read "…the user runs).WAIVERS:")
     const runTogether = list.result.tools.map((t) => [t.name, (t.description.match(/[a-z)\]`'"]\.[A-Z]{3,}/g) || [])]).filter((x) => x[1].length);
-    ok(!runTogether.length && /the user runs\)\. WAIVERS:/.test(d6Desc),
-      "1.21 review A8: every tool description leaves a space after a sentence before the next heading word (spec_approve's '…runs). WAIVERS:') (got " + JSON.stringify(runTogether) + ")");
+    ok(!runTogether.length && /[a-z)`]\. FAST-FORWARD:/.test(d6Desc),
+      "1.21 review A8: every tool description leaves a space after a sentence before the next heading word (spec_approve's '… FAST-FORWARD:') (got " + JSON.stringify(runTogether) + ")");
     // D7: the demo is in the 1.14 shape (stamp, stored tracks, the .gitignore init writes) — no upgrade notice — and its
     // +tdd feature records the Phase 4 red run, so executing it as written leaves no red-green warning.
     const d7Src = path.join(root, "examples", "demo-project");
