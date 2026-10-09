@@ -79,7 +79,7 @@ the engine's resolver), (2) the `dev-spec` CLI for any tool/terminal, (3) Claude
 requires `mcp/lib/spec.js` — never an engine module directly.
 When you add an operation, add it to the engine module of its concern first (see Layout), export it from the facade's
 object in `spec.js`, then wire it into server.js (tool) AND
-cli/dev-spec.js (subcommand) AND a test in the area's mcp/tests file. Keep the CLI and MCP behavior identical —
+cli/commands.js (subcommand — one entry of its table) AND a test in the area's mcp/tests file. Keep the CLI and MCP behavior identical —
 both call the same engine function with the same defaults (e.g. `roadmapReport()` backs `spec_roadmap`
 and `dev-spec roadmap`; `approvePhase()` has one default approver, `$USER`/`$USERNAME`/`user`). A tool that folds
 several CLI commands calls each one's function: `spec_roadmap_edit {kind: "depend"}` = `setDependency()` = `dev-spec depend`,
@@ -135,7 +135,8 @@ mcp/lib/engine/                ALL domain logic, one module per concern (index.j
                                corpus.generated.json — GENERATED: the built-in placeholder corpus)
 mcp/lib/i18n.js · i18n/        the localized content: en.js · pt.js · es.js · common.js · pt-br.js (the derivation)
 mcp/lib/prompts-resources.js   MCP prompts (= commands/*.md) + specs:// resources
-cli/dev-spec.js                the universal CLI over the same facade (the same defaults as MCP)
+cli/dev-spec.js                the universal CLI's entry point over the same facade (the same defaults as MCP) — its commands:
+                               cli/commands.js (ONE table: options, args, help, handler) · main(argv, io): cli/main.js
 hooks/                         hooks.json (auto-loaded) + guard / approval / observe / spec / stop / plan hooks + pre-commit
 commands/ · agents/            the slash commands (also the MCP prompts) · the plugin subagents
 skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) + references/ (read on demand)

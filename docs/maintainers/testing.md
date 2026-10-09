@@ -26,7 +26,15 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   `GATE_ORDER`, `approveBefore()`, `shipFeature()`, `child` / `abort()`, the handshake's `init` / `list`, and `require` /
   `__dirname` / `__filename` **as mcp/test.js's**: test code reads paths from `mcp/` (`require("./lib/i18n.js")`,
   `path.join(__dirname, "server.js")`) whichever file it lives in. `cli/tests/harness.js`: `ok`, `run(args)` (`node
-  cli/dev-spec.js <args>` with `SPEC_PROJECT_DIR` = `tmp`), `tmp`, `CLI`, and cli/test-cli.js's `require` / `__dirname`.
+  cli/dev-spec.js <args>` with `SPEC_PROJECT_DIR` = `tmp`), `tmp`, `CLI`, and cli/test-cli.js's `require` / `__dirname` — and
+  (1.27) **`runIn(args, {env, cwd, input})`** — the same `{ out, code }` IN the test process (cli/main.js `main`, the call's
+  environment and working folder applied for it and restored; ~100× cheaper than a process) — and **`spawnIn(args, {env, cwd,
+  input})`**, spawnSync's `{ stdout, stderr, status }` the same way (its `env` the whole environment, as spawnSync's). **Call the
+  CLI in-process unless the test needs a real process:** a `--run` that runs commands (it waits: runIn / spawnIn throw on a call
+  that doesn't settle at once — every helper sends `--run` calls to spawnSync), EPIPE, a real stdin pipe or a TTY, a process's
+  own timing or loaded modules (a preload), `DEV_SPEC_BUNDLE` (the facade picks the bundle at load), a lock held by another live
+  process, `__complete` and the completion scripts' shells, git running the merge driver. 16-conventions-cli-modules.js checks
+  runIn = run on a set of calls.
 - **How it runs.** A file is independent unless it declares `exports.deps` — the files it needs to have run first IN THE
   SAME PROCESS, because it reads a project folder they built or a value one of them returned (`return { vDir }` from
   `run` joins the context of the files after it) — say which in a comment above `deps`. A file and

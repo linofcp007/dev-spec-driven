@@ -87,7 +87,7 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   pre-commit lines all go through `i18n.msg(lang)`. Callers branch on stable fields — EARS `code` / `severity`,
   evidence `unverifiedReason` (and `spec_impact`'s task `evidence`), doctor check `id`, next_action `step` —
   never regex a `msg`. **The one exception: the CLI's help text.** `dev-spec --help` / `dev-spec help` and the command lines
-  of `help <command>` (`helpText()` in cli/dev-spec.js — `helpFor()` cuts a command's block out of it) are English in every
+  of `help <command>` (`helpText()` in cli/commands.js — every command entry's `help` lines; `helpFor()` prints one's) are English in every
   language, whatever `--lang` or the project language says: a command reference, like the command names and flags it
   lists. Only `help <command>`'s frame lines (`cliOutput.cmdHelp`: its options, the global flags, where the full help is)
   follow the project language. Don't document the help as localized; translating it means a `helpText` per language.
