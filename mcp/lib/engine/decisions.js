@@ -1,8 +1,9 @@
 "use strict";
 
 /**
- * dev-spec-driven engine — the decision log and the spike kind.
- * decisions.md (spec_decide, append-only) and spikes (question → investigate → decide).
+ * dev-spec-driven engine — the decision log, its ADR export and the spike kind.
+ * decisions.md (spec_decide, append-only), the log as MADR files (spec_export {format: "adr"}, 1.25) and spikes
+ * (question → investigate → decide).
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -20,7 +21,9 @@ let activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, dupl
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck;
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck,
+  backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
+  removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase, detectTracks, duplicateTaskNumbers,
   ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
@@ -29,7 +32,9 @@ function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, day, detectPhase
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck } = E); }
+  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck,
+  backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
+  removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot } = E); }
 
 // ---------------------------------------------------------------------------
 // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
@@ -522,6 +527,250 @@ function catalogDecisions(dir) {
 }
 
 // ---------------------------------------------------------------------------
+// 1.25 — the decision log as Architecture Decision Records: spec_export {format: "adr"} · `dev-spec export [feature] --adr [--write]`
+// ---------------------------------------------------------------------------
+// One MADR file per DECISION (https://adr.github.io/madr/ — 4.0's front matter `status` / `date`, then the title, Context and
+// Problem Statement, Decision Outcome with its Consequences, More Information), holding only the sections the log has text
+// for: the log records no options, drivers or pros and cons, so those sections are never written (nothing is invented).
+// LAYOUT: .specs/exports/adr/<feature>/NNNN-<kebab-title>.md + <feature>/index.md (an archived feature: adr/_archive/<slug>/);
+// the project export (no name) writes every feature's — archived ones too: an ADR log is history — and adr/index.md.
+// NUMBERING — per feature, the ADR number IS the decision's D-number (D-3 → 0003, ≥ 4 digits). The log is append-only and
+// numbers after its highest D-n, so a number never moves: a new decision takes the next one, a removed or left-out one leaves a
+// gap, nothing is renumbered (a sequence across features would shift with every removed feature and every merge of interleaved
+// dates). The name's title part is the title slugged (ASCII, ≤ ADR_SLUG_MAX; "decision" when nothing is left).
+// STATUS — front matter in MADR's own English words (machine-read, every language): accepted | superseded by ADR-NNNN (the
+// first later entry naming it in _Supersedes:_, retiredDecisions; "superseded" alone when that entry is no ADR); the visible
+// line is localized and links the newer ADR, which says "Supersedes ADR-NNNN" back.
+// DISCOVERIES (_Kind: discovery_ — a fact learnt, not a choice made) are no ADR: left out, named in the feature's index and in
+// the result's `excluded` (reason "discovery"); a supersession naming one links the decision log. A D-n written twice: the
+// first is exported (`excluded` reason "duplicate-id"); a decisions.md that is a link out of .specs/ is never read ("unsafe-file").
+// LINKS BACK (relative — they work in any clone): the feature folder, its decisions.md, every _Affects:_ reference to the file
+// that defines it (AC / EC / NFR / SC → requirements.md — a change: change.md —, T-ID → test-plan.md, a section → its file).
+// USER TEXT stays markdown, made inert where it sits in OUR structure: a link label's [ ] escaped (adrLabel), a table cell's |
+// (mdCell), a comment opener neutralized (it hid the rest of the file), a code fence a paragraph leaves open closed, its
+// headings moved below the section's (shiftHeadings); the front matter and the AUTO-GENERATED comment hold no user text, and no
+// file holds the date of the run — a re-run is byte-identical.
+// WRITE — all-or-nothing through the write gate: a linked adr folder / target, or a same-named file without the AUTO-GENERATED
+// marker (hand-written), refuses the whole export (nothing written); an unchanged file (line ends aside) is left alone; then
+// the scope's GENERATED ADR / index files no decision backs any more are removed (a decision removed from the log, a retitled
+// one, a removed / renamed / archived feature — project export), never a hand-written file nor a link, and the folders that
+// leaves empty. A feature export touches its own folder only (adr/index.md is the project export's).
+const ADR_DIR = "adr";
+const ADR_INDEX = "index.md";
+const ADR_SLUG_MAX = 60;
+const RE_ADR_NAME = /^\d{4,}-[a-z0-9-]*\.md$/; // a generated ADR's file name — with index.md, the only names the stale sweep weighs
+const adrNumber = (n) => String(n).padStart(4, "0");
+function adrFileName(n, title) {
+  const s = slugify(mdPlainText(title)).slice(0, ADR_SLUG_MAX).replace(/-+$/, "");
+  return adrNumber(n) + "-" + (s || "decision") + ".md";
+}
+const adrInert = (s) => String(s == null ? "" : s).replace(/<!--/g, "&lt;!--");
+// A link label: [ and ] escaped — outside code spans (backtickRuns, read left to right), a backslash escape already there kept
+// whole, a trailing lone backslash doubled (it would escape the closing bracket).
+function adrLabel(s) {
+  const t = adrInert(s).replace(/\s+/g, " ").trim();
+  const ticks = t.includes("`") ? backtickRuns(t) : null;
+  let out = "";
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (c === "`" && ticks) { const e = ticks.spanEnd(i); out += t.slice(i, e); i = e - 1; continue; }
+    if (c === "\\") { out += i + 1 < t.length ? c + t[++i] : "\\\\"; continue; }
+    out += c === "[" || c === "]" ? "\\" + c : c;
+  }
+  return out;
+}
+// A paragraph of the log under a heading of `level`: a code fence it leaves open closed, its own headings one level below.
+function adrBlock(text, level) {
+  let t = adrInert(text).trim();
+  if (!t) return "";
+  const st = { fence: null };
+  for (const l of t.split("\n")) fenceStep(st, l);
+  if (st.fence) t += "\n" + " ".repeat(st.fence.indent || 0) + st.fence.mark;
+  return squeezeBlankLines(shiftHeadings(t, level + 1)).trim();
+}
+const posixRel = (from, to) => path.relative(from, to).split(path.sep).join("/") || ".";
+
+// One feature's decision log → its ADR model { feature, archived, rel, lang, title, outDir, toFeature, kind, byId, adrs, excluded }.
+function adrModel(projectDir, f, archived) {
+  const { slug, dir } = f;
+  const st = stateFromFile(projectDir, statePath(dir));
+  const kind = st.kind || "feature";
+  const lang = normalizeLang(st.lang || projectLang(projectDir));
+  const rel = (archived ? "_archive/" : "") + slug;
+  const outDir = path.join(specsRoot(projectDir), EXPORT_DIR, ADR_DIR, ...rel.split("/"));
+  const read = (n) => readContained(projectDir, path.join(dir, n));
+  const m = { feature: slug, archived: !!archived, rel, lang, kind, outDir, toFeature: posixRel(outDir, dir), byId: new Map(), adrs: [], excluded: [],
+    title: specTitle(read("requirements.md") || read(SPIKE_FILE) || read("bug.md") || "", slug) };
+  const file = path.join(dir, DECISIONS_FILE);
+  const raw = read(DECISIONS_FILE);
+  if (raw == null) {
+    if (fs.existsSync(file)) m.excluded.push({ feature: slug, reason: "unsafe-file" });
+    return m;
+  }
+  const log = decisionLog(raw);
+  const retired = retiredDecisions(log);
+  let targets = null;
+  for (const e of log) {
+    if (m.byId.has(e.id)) { m.excluded.push({ feature: slug, id: e.id, title: e.title, reason: "duplicate-id" }); continue; }
+    const x = { id: e.id, n: e.n, title: e.title || e.id, date: e.at == null ? null : new Date(e.at).toISOString().slice(0, 10),
+      supersedes: e.supersedes.filter((s) => s !== e.id), supersededBy: retired.get(e.id) || null, entry: e, file: null };
+    m.byId.set(e.id, x);
+    if (e.kind === "discovery") { m.excluded.push({ feature: slug, id: e.id, title: e.title, reason: "discovery" }); continue; }
+    x.file = adrFileName(e.n, x.title);
+    if (e.affects.length && !targets) targets = decisionTargets(dir, kind);
+    x.affects = e.affects.length ? entryRefs(e.affects, targets).map((r) => {
+      const t = resolveAffect(r, targets);
+      if (!t.ok) return { ref: r };
+      const file = t.type === "test" ? "test-plan.md" : t.type === "section" ? t.file : kind === "change" ? CHANGE_FILE : "requirements.md";
+      return { ref: r, file };
+    }) : [];
+    m.adrs.push(x);
+  }
+  m.adrs.sort((a, b) => a.n - b.n);
+  return m;
+}
+// D-n as a link from `base` (a folder inside adr/, relative to the feature's folder): its ADR, else the log (a discovery), else text.
+function adrRef(m, id, base) {
+  const x = m.byId.get(id);
+  if (x && x.file) return `[ADR-${adrNumber(x.n)}](${path.posix.join(base, x.file)})`;
+  return x ? `[${id}](${path.posix.join(base, m.toFeature, DECISIONS_FILE)})` : id;
+}
+function adrStatusText(m, x, A, base) {
+  return x.supersededBy ? A.supersededBy(adrRef(m, x.supersededBy, base)) : A.accepted;
+}
+// A feature model → its documents [{ file, type: "adr" | "index", … content }] (none without an ADR).
+function adrDocs(m) {
+  const A = i18n.msg(m.lang).adr;
+  if (!m.adrs.length) return [];
+  const feature = `[${adrLabel(m.title)}](${m.toFeature}/) · \`.specs/${m.rel}/\``;
+  const docs = m.adrs.map((x) => {
+    const e = x.entry;
+    const by = x.supersededBy ? m.byId.get(x.supersededBy) : null;
+    const fm = by && by.file ? "superseded by ADR-" + adrNumber(by.n) : x.supersededBy ? "superseded" : "accepted";
+    const lines = ["---", "status: " + fm, ...(x.date ? ["date: " + x.date] : []), "---", "", `<!-- ${A.autogen} -->`, "", "# " + adrLabel(x.title), "",
+      `- **${A.labels.status}:** ${adrStatusText(m, x, A, ".")}`, ...(x.date ? [`- **${A.labels.date}:** ${x.date}`] : []),
+      ...(x.supersedes.length ? [`- **${A.labels.supersedes}:** ${x.supersedes.map((s) => adrRef(m, s, ".")).join(", ")}`] : [])];
+    const ctx = adrBlock(e.context, 2);
+    const dec = adrBlock(e.decision, 2);
+    const cons = adrBlock(e.consequences, 3);
+    if (ctx) lines.push("", "## " + A.h.context, "", ctx);
+    if (dec || cons) {
+      lines.push("", "## " + A.h.outcome);
+      if (dec) lines.push("", dec);
+      if (cons) lines.push("", "### " + A.h.consequences, "", cons);
+    }
+    const refs = x.affects.map((a) => (a.file ? `[${adrLabel(a.ref)}](${m.toFeature}/${a.file})` : adrLabel(a.ref)));
+    lines.push("", "## " + A.h.more, "", `- **${A.labels.feature}:** ${feature}`, `- **${A.labels.entry}:** [${x.id}](${m.toFeature}/${DECISIONS_FILE})`,
+      ...(refs.length ? [`- **${A.labels.affects}:** ${refs.join(", ")}`] : []));
+    return { file: path.join(m.outDir, x.file), type: "adr", feature: m.feature, ...(m.archived ? { archived: true } : {}), id: x.id, number: adrNumber(x.n),
+      title: x.title, status: x.supersededBy ? "superseded" : "accepted", ...(x.supersededBy ? { supersededBy: x.supersededBy } : {}), supersedes: x.supersedes,
+      date: x.date, lang: m.lang, content: lines.join("\n") + "\n" };
+  });
+  const head = (cols) => `| ${cols.join(" | ")} |\n|${cols.map(() => "---").join("|")}|`;
+  const rows = m.adrs.map((x) => `| [${adrNumber(x.n)}](${x.file}) | ${mdCell(adrLabel(x.title))} | ${mdCell(adrStatusText(m, x, A, "."))} | ${x.date || "—"} |`);
+  const disc = m.excluded.filter((z) => z.reason === "discovery").map((z) => z.id + (z.title ? " — " + adrInert(z.title).replace(/\s+/g, " ").trim() : ""));
+  const dup = [...new Set(m.excluded.filter((z) => z.reason === "duplicate-id").map((z) => z.id))];
+  const intro = A.indexIntro(`[${adrLabel(m.title)}](${m.toFeature}/) (\`.specs/${m.rel}/\`)`, `${m.toFeature}/${DECISIONS_FILE}`);
+  const index = [`<!-- ${A.autogen} -->`, "", "# " + A.indexTitle(adrLabel(m.title)), "", intro, "", head(A.cols), ...rows,
+    ...(disc.length ? ["", A.discoveries(disc.join("; "))] : []), ...(dup.length ? ["", A.duplicates(dup.join(", "))] : [])];
+  docs.push({ file: path.join(m.outDir, ADR_INDEX), type: "index", feature: m.feature, ...(m.archived ? { archived: true } : {}), lang: m.lang, content: index.join("\n") + "\n" });
+  return docs;
+}
+// The project's adr/index.md (project language): one row per ADR, every feature's.
+function adrProjectIndex(projectDir, models, lang, adrRoot) {
+  const A = i18n.msg(lang).adr;
+  const head = (cols) => `| ${cols.join(" | ")} |\n|${cols.map(() => "---").join("|")}|`;
+  const rows = [];
+  for (const m of models) {
+    const feature = mdCell(`[${adrLabel(m.title)}](${m.rel}/${ADR_INDEX})` + (m.archived ? ` _(${A.archived})_` : ""));
+    for (const x of m.adrs) {
+      rows.push(`| ${feature} | [${adrNumber(x.n)}](${m.rel}/${x.file}) | ${mdCell(adrLabel(x.title))} | ${mdCell(adrStatusText(m, x, A, m.rel))} | ${x.date || "—"} |`);
+    }
+  }
+  const md = [`<!-- ${A.autogen} -->`, "", "# " + A.indexTitle(adrLabel(path.basename(path.resolve(projectDir)))), "", A.projectIntro, "", head(A.projectCols), ...rows];
+  return { file: path.join(adrRoot, ADR_INDEX), type: "index", lang, content: md.join("\n") + "\n" };
+}
+// The generated files under `scopeDir` a write would remove: an ADR-named or index.md regular file carrying the AUTO-GENERATED
+// marker that the export no longer produces — in the feature's folder, or (project) adr/, its feature folders and
+// adr/_archive/'s. A link is never entered nor listed; a scope reached through a link is not read at all.
+function adrStaleFiles(projectDir, scopeDir, project, produced) {
+  if (!specsWriteContained(projectDir, scopeDir)) return [];
+  const out = [];
+  const files = (d) => {
+    for (const e of readDirCached(d) || []) {
+      const p = path.join(d, e.name);
+      if (e.isFile() && (e.name === ADR_INDEX || RE_ADR_NAME.test(e.name)) && !produced.has(p) && isGeneratedOrAbsent(p)) out.push(p);
+    }
+  };
+  const dirs = (d) => (readDirCached(d) || []).filter((e) => e.isDirectory() && !e.isSymbolicLink()).map((e) => e.name);
+  files(scopeDir);
+  if (project) {
+    for (const n of dirs(scopeDir)) {
+      if (n !== "_archive") files(path.join(scopeDir, n));
+      else for (const a of dirs(path.join(scopeDir, n))) files(path.join(scopeDir, n, a));
+    }
+  }
+  return out;
+}
+
+// spec_export {format: "adr", name?, write?} (exportSpecs hands it over). → { ok, scope, format, lang, dir, wrote, feature | features,
+// adrs, excluded, note?, documents [{file, type, feature, id, number, title, status, supersededBy?, supersedes, date, lang, content}],
+// stale } — with write: { files, written, unchanged, removed, documents (bytes, no content) } instead of the contents.
+function exportAdr(projectDir, opts, pl) {
+  const root = specsRoot(projectDir);
+  const adrRoot = path.join(root, EXPORT_DIR, ADR_DIR);
+  let models;
+  let scope;
+  if (opts.name != null && String(opts.name).trim() !== "") {
+    const f = existingFeature(projectDir, opts.name);
+    if (!f.ok) return { ok: false, error: f.error };
+    models = [adrModel(projectDir, f, false)];
+    scope = "feature";
+  } else {
+    if (!fs.existsSync(root)) return { ok: false, error: i18n.msg(pl).err.noSpecs(root) };
+    models = featureDirs(projectDir).map((x) => adrModel(projectDir, x, x.archived));
+    scope = "project";
+  }
+  const lang = scope === "feature" ? models[0].lang : pl;
+  const dir = scope === "feature" ? models[0].outDir : adrRoot;
+  const docs = models.flatMap(adrDocs);
+  if (scope === "project" && docs.length) docs.push(adrProjectIndex(projectDir, models, pl, adrRoot));
+  const stale = adrStaleFiles(projectDir, dir, scope === "project", new Set(docs.map((d) => d.file)));
+  const A = i18n.msg(lang).adr;
+  const adrs = docs.filter((d) => d.type === "adr").length;
+  const res = { ok: true, scope, format: "adr", lang, dir, wrote: false };
+  if (scope === "feature") res.feature = models[0].feature;
+  else res.features = [...new Set(models.filter((m) => m.adrs.length).map((m) => m.feature))];
+  Object.assign(res, { adrs, excluded: models.flatMap((m) => m.excluded) });
+  if (!adrs) res.note = A.nothing;
+  if (!opts.write) return { ...res, documents: docs, stale };
+  const X = i18n.msg(lang).stakeholderExport;
+  const rel = (p) => ".specs/" + path.relative(root, p).split(path.sep).join("/");
+  // A feature folder named 'exports' from before the name was reserved: never drop documents into someone's spec.
+  if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(root, EXPORT_DIR, n)))) return { ...res, ok: false, error: X.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
+  const linked = [dir, ...docs.map((d) => d.file)].find((p) => !specsWriteContained(projectDir, p));
+  if (linked) return { ...res, ok: false, error: X.exportsLinked(rel(linked)) };
+  const hand = docs.find((d) => !isGeneratedOrAbsent(d.file));
+  if (hand) return { ...res, ok: false, skipped: true, error: i18n.msg(lang).err.notGenerated(rel(hand.file)) };
+  const written = [];
+  const unchanged = [];
+  for (const d of docs) {
+    const text = i18n.portableCli(d.content);
+    const cur = readIfExists(d.file);
+    if (cur != null && cur.replace(/\r\n/g, "\n") === text) { unchanged.push(d.file); continue; }
+    writeFileAtomic(d.file, text);
+    written.push(d.file);
+  }
+  const removed = stale.filter((p) => removeSpecFile(p));
+  // the folders that leaves empty — a feature's, adr/_archive/, adr/ itself — never above adr/
+  for (const d0 of [...new Set(removed.map((p) => path.dirname(p)))].sort((a, b) => b.length - a.length)) {
+    for (let d = d0; d.length >= adrRoot.length && withinRoot(adrRoot, d) && removeEmptySpecDir(d);) d = path.dirname(d);
+  }
+  return { ...res, wrote: docs.length > 0 || removed.length > 0, files: docs.map((d) => d.file), written, unchanged, removed,
+    documents: docs.map(({ content, ...d }) => ({ ...d, bytes: Buffer.byteLength(i18n.portableCli(content), "utf8") })) };
+}
+
+// ---------------------------------------------------------------------------
 // The spike kind — spec_create {kind: "spike"} / `dev-spec spike "<name>" [--question …] [--timebox …]`
 // ---------------------------------------------------------------------------
 // An investigation with a question, a timebox and a DECISION — neither an unrecorded vibe session nor a spec with fake ACs.
@@ -778,7 +1027,8 @@ module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, DECISION_TEXT_MAX, RE_DEC
   RE_DECISION_LABEL, BRIEF_DECISIONS_MAX, BRIEF_DECISIONS_CHARS, RE_LEADING_BOM, blankHtmlComments, splitRefs, affectPieces, rejoinRefs, affectsRefs, AFFECTS_JOIN_MAX,
   normDecisionId, decisionLabelKey, decisionLog, retiredDecisions, decisionSectionKeys, decisionTargets, resolveAffect,
   trimBlanksEnd, safeSpecText, appendSpecText, decisionInput, decisionEntryLines, decide, decisionsTrace, affectsWarnings,
-  decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,
+  decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, ADR_DIR, ADR_INDEX, ADR_SLUG_MAX, RE_ADR_NAME, adrNumber,
+  adrFileName, adrInert, adrLabel, adrBlock, posixRel, adrModel, adrRef, adrStatusText, adrDocs, adrProjectIndex, adrStaleFiles, exportAdr, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,
   outcomeMarker, OUTCOME_SYN, normOutcome, spikeProse, spikeFilled, spikeOutcome, spikeParagraph, validIsoDay,
   spikeTimebox, todayIso, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeSeed, spikeDoctor, spikeNextAction,
   spikeFinish, __link };

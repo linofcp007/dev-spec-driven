@@ -364,7 +364,7 @@ const TOOLS = [
   {
     name: "spec_export",
     description:
-      "Stakeholder export: ONE self-contained, offline, printable document for people who don't read markdown folders (product, legal, clients). With `name`: that feature in its language — summary, user stories with their EARS acceptance criteria (superseded ones struck through), the requirements, the design (a bugfix: bug.md), the test plan, the tasks (done / verified), decisions, approvals and a traceability matrix. Without `name`: the whole project — the roadmap summary, each active feature's requirements digest and the living catalog. `format`: 'html' (default — light/dark, print-ready, every spec text escaped, no external URL), 'md', 'csv' (the requirements traceability matrix — RFC 4180, formula-safe, UTF-8 BOM; written as .rtm.csv), 'gherkin' (a .feature per feature: one Scenario per current criterion tagged @US-n.AC-m + its T-IDs, the EARS clauses as Given / When / Then verbatim — never invented behaviour; PT / ES in Gherkin's dialect) or 'jira' | 'linear' (a CSV for the tracker's own importer: feature → stories → tasks; nothing is sent anywhere). Without `write` the document comes back as `content`; `write: true` writes .specs/exports/<feature|project>.<format> (AUTO-GENERATED marker) and returns `file` + `bytes` — a hand-written file, or one reached through a link, is never overwritten (an error). CLI: dev-spec export [feature] [--md | --csv | --gherkin | --tracker jira|linear] [--write].",
+      "Stakeholder export: ONE self-contained, offline, printable document for product, legal and clients. With `name`: that feature in its language — summary, user stories with their EARS acceptance criteria (superseded ones struck through), the requirements, the design (a bugfix: bug.md), the test plan, the tasks (done / verified), decisions, approvals and a traceability matrix. Without `name`: the whole project — the roadmap summary, each active feature's requirements digest and the living catalog. `format`: 'html' (default — light/dark, print-ready, every spec text escaped, no external URL), 'md', 'csv' (the requirements traceability matrix — RFC 4180, formula-safe, UTF-8 BOM; written as .rtm.csv), 'gherkin' (a .feature per feature: one Scenario per current criterion tagged @US-n.AC-m + its T-IDs, the EARS clauses as Given / When / Then verbatim — never invented behaviour; PT / ES in Gherkin's dialect), 'jira' | 'linear' (a CSV for the tracker's own importer: feature → stories → tasks; nothing is sent anywhere) or 'adr' (decisions.md as MADR files — ADR number = D-n, discoveries left out — in .specs/exports/adr/<feature>/; a write removes the generated ones no decision backs). Without `write` the document comes back as `content`; `write: true` writes .specs/exports/<feature|project>.<format> (AUTO-GENERATED marker) and returns `file` + `bytes` — a hand-written file, or one reached through a link, is never overwritten (an error). CLI: dev-spec export [feature] [--md | --csv | --gherkin | --adr | --tracker jira|linear] [--write].",
     inputSchema: {
       type: "object",
       properties: {
@@ -447,7 +447,8 @@ const TOOLS = [
 // (spec_roadmap / spec_catalog / spec_export / spec_changelog / spec_metrics / spec_task_brief write with `write: true`,
 // spec_impact with `reopen`, spec_upgrade with `apply`, spec_templates / spec_tracks with `init` — so they are not read-only;
 // a read-only tool never touches .specs/ — mcp/test.js snapshots the tree around each). destructiveHint: only spec_feature
-// (`remove` deletes a feature folder) — every other writer only adds or updates what it owns. idempotentHint: a second
+// (`remove` deletes a feature folder) — every other writer only adds or updates what it owns (1.25: spec_export {format:
+// "adr"} also removes the ADR files it generated that no decision backs any more — never a hand-written one). idempotentHint: a second
 // identical call changes nothing more (a tick, an approval, an appended task or decision, finish's evidence each add a record:
 // false). openWorldHint: false everywhere — local files only, no network, no command, no git.
 const READ_ONLY = Object.freeze({ readOnlyHint: true, openWorldHint: false });
@@ -578,7 +579,7 @@ function runTool(name, args, extra) {
     case "spec_tracks": // the same engine call as the CLI's `tracks [list|init <name>|check] [name] [--lang]` / `signals [list|set|forget] …`
       return spec.trackPacks(pdir, args.action, { name: args.name, lang: args.lang, op: args.op, track: args.track, word: args.word, effect: args.effect });
 
-    case "spec_export": // the same engine call as the CLI's `export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write]`
+    case "spec_export": // the same engine call as the CLI's `export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write]`
       return spec.exportSpecs(pdir, { name: args.name, format: args.format, write: args.write === true });
     case "spec_changelog": // the same engine call as the CLI's `changelog [--since …] [--write]`
       return spec.changelog(pdir, { since: args.since, write: args.write === true, milestone: args.milestone });
