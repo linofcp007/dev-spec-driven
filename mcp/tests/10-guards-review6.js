@@ -395,4 +395,69 @@ exports.run = async ({ ok, S, tmp, rpc, payload, __dirname, require }) => {
         js({ staleStaged, stamp: fs.existsSync(stamp), fresh: fresh(), stagedFresh: staged === read(rmFile), names }) + ")");
     }
   }
+
+  // 1.24 r6 I-I4: the Stop hook's claim pre-filter — a message holding no claim pattern of any language (in its prose, as the engine
+  // reads it) ends the hook before the engine loads (~100 ms at the end of a turn). The build writes the patterns and the prose
+  // regexes into hooks/stop-claims.generated.json, stamped with the version and its sources' sizes; a missing or stale file → the
+  // engine decides, as before.
+  {
+    const filterFile = path.join(__dirname, "..", "hooks", "stop-claims.generated.json");
+    let f = null;
+    try { f = JSON.parse(fs.readFileSync(filterFile, "utf8")); } catch { /* none yet */ }
+    // (a) the hook's prose is the engine's, and no message the engine reads as a claim is filtered out — handwritten and generated
+    const hand = ["All done — every task is complete and the tests pass.", "Here is a summary of the layout.", "Task 3 is done.", "Feito. Todos os testes passam.",
+      "A tarefa 2 está concluída.", "Listo, todas las pruebas pasan.", "Hecho.", "**Status:** `DONE`", "`all tests pass`\nI ran it.", "```\nall tests pass\n```\nok",
+      "> Done — all tests pass", "<!-- done -->ok", "x\r\nDone.\r\n", "~~~\nDone\n~~~\nDone", "Should I mark task 3 done?", "Not verified yet.", "✅ Done", "Done" + "x".repeat(25000),
+      "```\n" + "a".repeat(30000) + "\n```\nAll tests pass.", "<!--" + "<!--".repeat(500) + " done", "`".repeat(3000) + "\nImplemented."];
+    let seed = 7;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const frags = ["All done", "done", "Feito", "concluída", "Listo", "terminado", "tests pass", "Task 2 is complete", "verified", "implemented", "not", "?", ".", " ",
+      "\n", "\r\n", "```", "~~~", "`", "<!--", "-->", "> ", "**", "Status: ", "DONE", "✅", "everything works", "x", "I've finished", "a tarefa 1 está feita", "y"];
+    const gen = [];
+    for (let i = 0; i < 2500; i++) { let m = ""; const n = 1 + Math.floor(rnd() * 12); for (let k = 0; k < n; k++) m += frags[Math.floor(rnd() * frags.length)] + (rnd() < 0.5 ? " " : ""); gen.push(m); }
+    const all = hand.concat(gen);
+    const proseDiff = f ? all.filter((m) => HU.claimProse(m, f.prose) !== E.stopProse(m)) : ["no filter file"];
+    const missed = f ? all.filter((m) => E.stopClaims(m).claim && !HU.claimMatch(m, f)) : ["no filter file"];
+    const filtered = f ? all.filter((m) => !HU.claimMatch(m, f)).length : 0;
+    const fresh = (() => { try { return require("../scripts/build.js").buildStopClaims(E) === fs.readFileSync(filterFile, "utf8").replace(/\r\n/g, "\n"); } catch { return false; } })();
+    ok(!proseDiff.length && !missed.length && filtered > 100 && fresh && f && js(f.claims) === js(E.stopClaimSources()),
+      "1.24 r6 I-I4: the Stop hook's pre-filter reads the message's prose exactly as the engine does and lets through every message the engine reads as a claim (" +
+      all.length + " messages, " + filtered + " sent away); hooks/stop-claims.generated.json is the build's (got " + js({ proseDiff: proseDiff.slice(0, 3), missed: missed.slice(0, 3), filtered, fresh }) + ")");
+
+    // (b) the hook: no claim → silent without the engine; a claim → the engine's block. A copy of the clone whose filter is missing,
+    // of another version or stamped with another source size → the engine decides (loaded) — the same answers.
+    const probe = path.join(tmp, "r6-ii4-probe.js"), out = path.join(tmp, "r6-ii4-probe.out");
+    fs.writeFileSync(probe, "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(Object.keys(require.cache).some((k) => /[\\\\/]mcp[\\\\/]lib[\\\\/]spec\\.js$/.test(k)))));\n");
+    const p = project("r6-ii4", "en", {}, ["Alpha"]);
+    fs.writeFileSync(path.join(p, ".specs", "alpha", "tasks.md"), "# Tasks\n\n- [x] 1. Build it\n  - _Requirements: US-1.AC-1_\n  - _Verify: `npm test`_\n");
+    S.recordSpecEdit(p, "alpha"); // ticked by hand just now, no evidence: a claim is sent back
+    const stopAt = (hooksDir, message) => {
+      try { fs.unlinkSync(out); } catch { /* none */ }
+      const r = spawnSync(process.execPath, ["-r", probe, path.join(hooksDir, "stop-hook.js")], { encoding: "utf8", env: hookEnv(), timeout: 30000,
+        input: js({ session_id: "s", cwd: p, hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: message }) });
+      let block = false; try { block = JSON.parse(r.stdout).decision === "block"; } catch { /* silent */ }
+      return (block ? "block" : r.stdout === "" ? "silent" : "?") + "/" + (fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "?");
+    };
+    const realHooks = path.join(__dirname, "..", "hooks");
+    const real = [stopAt(realHooks, "Here is a summary of the layout."), stopAt(realHooks, "All done — the tests pass.")];
+    const clone = path.join(tmp, "r6-ii4-clone");
+    fs.mkdirSync(path.join(clone, "mcp"), { recursive: true });
+    fs.cpSync(realHooks, path.join(clone, "hooks"), { recursive: true });
+    fs.cpSync(path.join(__dirname, "lib"), path.join(clone, "mcp", "lib"), { recursive: true, filter: (src) => path.basename(src) !== "spec.bundle.js" });
+    fs.copyFileSync(path.join(__dirname, "..", "package.json"), path.join(clone, "package.json"));
+    const cf = path.join(clone, "hooks", "stop-claims.generated.json"), cfText = fs.readFileSync(cf, "utf8");
+    const variants = {};
+    variants.copy = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout.")];
+    fs.writeFileSync(cf, cfText.replace(/"version": "[^"]+"/, "\"version\": \"0.0.1\""));
+    variants.version = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout."), stopAt(path.join(clone, "hooks"), "All done — the tests pass.")];
+    fs.writeFileSync(cf, cfText);
+    fs.appendFileSync(path.join(clone, "mcp", "lib", "engine", "guards.js"), "// edited\n");
+    variants.size = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout."), stopAt(path.join(clone, "hooks"), "All done — the tests pass.")];
+    fs.rmSync(cf);
+    variants.missing = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout."), stopAt(path.join(clone, "hooks"), "All done — the tests pass.")];
+    ok(js(real) === js(["silent/false", "block/true"]) && js(variants.copy) === js(["silent/false"]) &&
+      ["version", "size", "missing"].every((k) => js(variants[k]) === js(["silent/true", "block/true"])),
+      "1.24 r6 I-I4: the Stop hook sends a message with no claim away before the engine loads, and blocks a claim as the engine does; a copy of the clone reads its own filter; a filter of another version, stamped with another source size or missing → the engine decides, with the same answers (got " +
+      js({ real, variants }) + ")");
+  }
 };

@@ -109,6 +109,7 @@ hooks/stop-hook.js             end-of-turn: the stale ROADMAP.* / SPECS.md refre
                                a "done" claim with unverified recent ticks)
 hooks/plan-hook.js             plan-mode bridge (ExitPlanMode: one line of context suggesting /spec-import of the approved plan)
 hooks/precommit-check.js       optional git pre-commit validator (+ a stale ROADMAP.* / SPECS.md refreshed, re-staged when staged)
+hooks/stop-claims.generated.json GENERATED (npm run build, committed): the stop gate's claim patterns — the Stop hook's pre-filter
 AGENTS.md                      portable workflow for non-Claude agent tools
 .cursor/ .windsurf/ .github/copilot-instructions.md GEMINI.md  per-tool rule files (point to AGENTS.md)
 INTEGRATIONS.md                per-tool setup + MCP config snippets
@@ -171,9 +172,12 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
 
 ## The build (1.20) — the committed corpus, the on-demand bundle, and when to rebuild
 `scripts/build.js` (Node core only) builds two things from the sources:
-- **`npm run build`** (no argument) writes the COMMITTED placeholder corpus `mcp/lib/engine/corpus.generated.json`;
-  `node scripts/build.js --check` writes nothing and exits 1 while it is stale. Deterministic — the same sources give the same
-  bytes (sorted lists, no dates, LF; a CRLF or BOM checkout hashes the same).
+- **`npm run build`** (no argument) writes the COMMITTED placeholder corpus `mcp/lib/engine/corpus.generated.json` and (1.24 r6
+  I-I4) the COMMITTED `hooks/stop-claims.generated.json` — the Stop hook's claim pre-filter (guards.js `stopClaimFilter()`, stamped
+  with the version and the sizes of `STOP_FILTER_SOURCES`: the i18n files and guards.js — tasks-and-evidence.md → End-of-turn
+  evidence gate); `node scripts/build.js --check` writes nothing and exits 1 while either is stale. Deterministic — the same
+  sources give the same bytes (sorted lists, no dates, LF; a CRLF or BOM checkout hashes the same). Rebuild after editing a file
+  of `CORPUS_SOURCES` or of `STOP_FILTER_SOURCES` (guards.js is the only one not in both).
 - **`npm run build:bundle`** (`--bundle [--out <file.js>]`), also **`dev-spec bundle [--out <file.js>]`** (a plugin install has
   no npm), writes the one-file engine — by default `mcp/lib/spec.bundle.js`, which is **git-ignored and never committed** (2.7 MB,
   stale after every engine change: it would bloat the history and conflict on every parallel merge, for an opt-in gain on slow

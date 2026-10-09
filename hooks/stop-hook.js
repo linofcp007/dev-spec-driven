@@ -155,6 +155,23 @@ function refreshStale(dirs) {
   } catch { /* engine not found: nothing refreshed */ }
 }
 
+// 1.24 r6 I-I4 — the claim pre-filter (Stop only): the gate sends a turn back only when the closing message claims the work is done
+// or verified (stopCheck → stopClaims). hooks/stop-claims.generated.json (scripts/build.js) holds every language's claim patterns and
+// the engine's prose regexes; while its version is package.json's and every source it names still has the size it was built from (one
+// stat each), a message whose prose matches none of them — the engine's answer too: "no-claim" — ends the hook before the engine
+// loads (~100 ms). Missing, broken, stale, or any error → true: the engine decides, as before.
+function mayClaim(message) {
+  try {
+    const f = JSON.parse(fs.readFileSync(path.join(__dirname, "stop-claims.generated.json"), "utf8"));
+    const pkg = readJsonFile(path.join(__dirname, "..", "package.json"));
+    if (!f || !pkg || f.version !== pkg.version || !f.sources || typeof f.sources !== "object" || !Array.isArray(f.claims)) return true;
+    for (const [rel, size] of Object.entries(f.sources)) if (fs.statSync(path.join(__dirname, "..", ...rel.split("/"))).size !== size) return true;
+    return require("./hook-utils.js").claimMatch(message, f);
+  } catch {
+    return true;
+  }
+}
+
 // Older Claude Code versions send no last_assistant_message: the last assistant text of the transcript (JSONL), read from
 // its tail only.
 function lastAssistantText(file) {
@@ -217,6 +234,8 @@ function main(raw) {
   let message = typeof payload.last_assistant_message === "string" ? payload.last_assistant_message : "";
   if (!message.trim()) message = lastAssistantText(sub ? payload.agent_transcript_path || payload.transcript_path : payload.transcript_path);
   if (!message.trim()) return finish();
+  // Stop only (a subagent's DONE is read with its report and its status line): no claim pattern in the prose → nothing to say.
+  if (!sub && !mayClaim(message)) return finish();
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const s = spec.sessionProject({ cwd, anchors });
