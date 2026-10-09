@@ -104,6 +104,49 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
     return { status: r.status, stdout: r.stdout, engine: fs.existsSync(probeOut) ? fs.readFileSync(probeOut, "utf8") === "true" : null };
   };
 
+  // Finding 1, its cost — the work-shaped claims are larger patterns (47, ~14 K characters): compiled all together the Stop hook's
+  // pre-filter took ~50 ms (was ~14). Each language's trigger words (i18n stopGate.triggers) gate its patterns — in the engine
+  // (stopClaims) and in the hook (the build's `triggers` groups): the same answers as running every pattern, on handwritten and
+  // generated messages of the three languages; a message holding no trigger ends the hook before any claim pattern compiles.
+  {
+    const HU = require("../hooks/hook-utils.js");
+    const f = JSON.parse(fs.readFileSync(path.join(HOOKS, "stop-claims.generated.json"), "utf8"));
+    const gated = (m) => {
+      const prose = HU.claimProse(m, f.prose), idx = new Set();
+      for (const t of f.triggers || []) if (new RegExp(f.word.pre + t.source + f.word.post, "iu").test(prose)) t.claims.forEach((i) => idx.add(i));
+      return idx.size > 0 && HU.claimMatch(m, { ...f, claims: [...idx].sort((a, b) => a - b).map((i) => f.claims[i]) });
+    };
+    const hand = ["All tasks done.", "I've implemented task 3.", "Feito. Todos os testes passam.", "La tarea 2 está terminada.", "Tudo funcionando.", "Os testes estão passando.",
+      "Isso funciona.", "**Status:** DONE_WITH_CONCERNS", "Status: done", "Good to go.", "Ready for review.", "Pronto para merge", "Listo para el merge", "Todo probado.",
+      "Hecho ✅", "✅ Feito", "Implementado e verificado.", "Se han implementado todos los cambios.", "14/14 passing", "Everything works now.", "Fully tested.",
+      "Here is the summary of the layout.", "Done. I updated the README wording as you asked.", "I verified that the bug is in the parser."];
+    let seed = 11;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const frags = ["All", "tasks", "task 3", "is", "are", "done", "complete", "implemented", "verified", "I", "I've", "we", "the feature", "everything", "works", "tests", "pass",
+      "ready to merge", "good to go", "Status:", "DONE", "not", "?", ".", ",", "—", "\n", "✅", "a tarefa 2", "está", "foi", "feito", "concluída", "terminei", "implementei", "tudo",
+      "pronto para merge", "os testes", "passam", "a passar", "verdes", "funciona", "la tarea", "están", "terminada", "hecho", "listo", "he", "se ha", "completado", "terminé",
+      "las pruebas", "pasan", "en verde", "probado", "que", "de leer", "in src/a.ts", "x"];
+    const gen = [];
+    for (let i = 0; i < 2500; i++) { let m = ""; const n = 1 + Math.floor(rnd() * 10); for (let k = 0; k < n; k++) m += frags[Math.floor(rnd() * frags.length)] + (rnd() < 0.85 ? " " : ""); gen.push(m); }
+    const all = hand.concat(gen);
+    const differ = all.filter((m) => js(S.stopClaims(m)) !== js(S.stopClaims(m, { allPatterns: true })));
+    const filtered = all.filter((m) => S.stopClaims(m).claim && !gated(m));
+    const claims = all.filter((m) => S.stopClaims(m).claim).length;
+    // the hook: no trigger → silent, no engine; a trigger but no claim → silent, no engine; a claim → the engine's block
+    const p = project("r7-triggers");
+    const fe = S.createFeature(p, "Pay", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fe.dir, "tasks.md"), "- [ ] 1. [US1] Charge\n  - _Verify: npm test_\n");
+    S.completeTask(p, "pay", 1);
+    const stop = (m) => probed("stop-hook", { session_id: "s", cwd: p, hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: m });
+    const h = ["Here is the summary of the layout.", "Done. I updated the README wording as you asked.", "Tudo funcionando."].map(stop);
+    const blocked = (r) => { try { return JSON.parse(r.stdout).decision === "block"; } catch { return false; } };
+    ok(f.triggers && f.triggers.length === 3 && !differ.length && !filtered.length && claims > 300 &&
+      h[0].stdout === "" && h[0].engine === false && h[1].stdout === "" && h[1].engine === false && blocked(h[2]) && h[2].engine === true,
+      "1.25.1 (r7 finding 1): each language's trigger words gate its claim patterns — stopClaims answers as with every pattern, and the hook's gated pre-filter lets every claim through (" +
+      all.length + " messages, " + claims + " claims); no trigger, or a trigger without a claim, ends the Stop hook before the engine loads (got " +
+      js({ differ: differ.slice(0, 3), filtered: filtered.slice(0, 3), hook: h.map((r) => [r.engine, r.stdout.slice(0, 30)]) }) + ")");
+  }
+
   // Finding 4 — SessionStart (every session of every project: startup, resume, clear, compact) loaded the engine before asking whether
   // a dev-spec project was there: 132 vs 49 ms (`node -e 0`) in a repository without one. The raw probe runs first — the nearest
   // dev-spec .specs/ at or above the cwd (≤ SESSION_MAX_UP levels), the anchors — and only a hit loads the engine.

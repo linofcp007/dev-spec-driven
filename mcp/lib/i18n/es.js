@@ -3033,6 +3033,8 @@ const msg = {
         // "Listo para el merge" (1.25.1 — it claimed nothing)
         String.raw`list[oa]s?\s+para\s+(?:(?:el|la|un|una|hacer|hacer\s+el)\s+)?(?:merge|fusionar|integrar|integraci[óo]n|entrega|entregar|release|lanzamiento|despliegue|desplegar|producci[óo]n|revisi[óo]n|review|pr|pull\s+request)`,
       ],
+      // 1.25.1 — the words every claim above holds at least one of (see en.js).
+      triggers: [String.raw`${STOP_ES_DONE}|${STOP_ES_I}|probad[oa]s?|verdes?|funciona|pasan|pasaron|pasa|pasó|pasando`],
       negators: ["no", "nunca", "ni", "nada", "sin", "falta", "faltan", "ser", "cuando", "después", "antes", "si", "hasta", "voy", "vamos", "debo", "debe",
         "deben", "necesita", "necesitan", "tengo", "tenemos", "hay", "casi", "parcialmente", "pueda", "puedan", "aún", "todavía"],
       admissions: [

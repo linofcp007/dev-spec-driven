@@ -67,7 +67,7 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   strict `canonicalLang()` reading every surface validates with, and the MCP schemas' `lang` enum, `LANG_ENUM` in
   `mcp/server.js`, all derive from it: no enum to edit by hand), extends the classifier `SIGNALS` (`engine/tracks.js`;
   language guess in `engine/classify.js`), `ROADMAP_I18N` (`engine/roadmap-md.js`), the `TRACK_SECTIONS` synonyms (all
-  four tables, `engine/tracks.js`), the stop gate's `stopGate.claims` / `negators` / `admissions` and the `RE_*`
+  four tables, `engine/tracks.js`), the stop gate's `stopGate.claims` / `triggers` (1.25.1: a word of each claim) / `negators` / `admissions` and the `RE_*`
   matchers, then adds a test asserting a localized scaffold round-trips.
 
 ## Localization gotchas (from Conventions & gotchas)

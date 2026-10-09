@@ -3033,6 +3033,9 @@ const msg = {
         // "Pronto para merge" (1.25.1 — it claimed nothing)
         String.raw`pront[oa]s?\s+(?:para|pra)\s+(?:(?:o|a|um|uma|fazer|fazer\s+o)\s+)?(?:merge|integrar|integra[çc][ãa]o|entrega|entregar|release|lan[çc]amento|deploy|produ[çc][ãa]o|revis[ãa]o|review|pr|pull\s+request)`,
       ],
+      // 1.25.1 — the words every claim above holds at least one of (see en.js): pt-BR's own claims (funcionando, passando, rodando)
+      // included — pt-BR keeps pt's list raw.
+      triggers: [String.raw`${STOP_PT_DONE}|${STOP_PT_I}|testad[oa]s?|verdes?|funciona|funcionar|funcionando|passam|passaram|passa|passou|passar|passando|rodando`],
       negators: ["não", "nunca", "nem", "nada", "sem", "falta", "faltam", "ser", "quando", "depois", "antes", "se", "até", "vou", "vamos", "irei",
         "devo", "deve", "devem", "precisa", "precisam", "tenho", "temos", "quase", "parcialmente", "possa", "possam", "ainda"],
       admissions: [

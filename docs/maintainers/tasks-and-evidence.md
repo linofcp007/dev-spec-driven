@@ -573,9 +573,19 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   go", PT "pronto para merge", ES "listo para el merge", "Work complete —", EN negator "how" ("Here's how X is implemented:").
   Session scoping (only features this `session_id` touched) was left out: `.state.json` records no session — an MCP tick has none to
   record — and a new state key would need the merge driver. mcp/tests/10-guards-hooks-r7.js holds the review's 17 messages and the
-  claims to keep; mcp/tests/03-languages.js's pt-BR idempotency lint skips these raw keys (PT-PT words to match, never derived text). A spike is never
+  claims to keep; mcp/tests/03-languages.js's pt-BR idempotency lint skips these raw keys (PT-PT words to match, never derived text).
+  **Trigger words (1.25.1):** the work-shaped patterns are larger (47, ~14 K characters — 34 / ~3.8 K before): compiled all together
+  the Stop hook's pre-filter took ~50 ms (~14 before) and the engine's first `stopClaims` in a process ~10 ms more. Each language's
+  `stopGate.triggers` (a regex source, whole words, case-insensitive; pt-BR keeps pt's raw — it holds pt-BR's own `funcionando` /
+  `passando` / `rodando`) lists the words EVERY claim pattern of that language holds at least one of; `stopPatterns().triggers`
+  (base language → regex) gates them: a pattern runs only when the text holds a trigger of one of its languages (a language without
+  triggers: always), so the answer is the same (`stopClaims(m, {allPatterns: true})` runs every pattern — the test compares them on
+  ~2,500 generated messages). The build writes `triggers: [{lang, source, claims: [indexes]}]` into the claim filter (only when every
+  base language has triggers); the Stop hook (`mayClaim`) compiles the claims of the languages whose triggers the prose holds — none
+  → no claim. **A new claim pattern adds its word to its language's triggers.** Measured (Windows, min of 15, a recently active
+  project): no trigger 76 → 65 ms; "Done. I updated the README …" (a trigger, no claim) 213 ms (sent back) → 80 ms (silent). A spike is never
   held to the project checks here; a reason listing only checks has its own head line (`headSuite`). When you add a
-  language, add its six lists (claims, negators, admissions, fixed, zeroes, passNow — the regex ones are raw for pt-BR:
+  language, add its seven lists (claims, triggers, negators, admissions, fixed, zeroes, passNow — the regex ones are raw for pt-BR:
   i18n.js `defineDerivedLocale(MSG, {stopGate: …})`).
 - **spec-implementer (SubagentStop):** it never ticks tasks, so its gate is its REPORT: a DONE / DONE_WITH_CONCERNS for a
   task whose `_Verify:_` is runnable needs `.specs/<f>/.execution/task-N-report.md` (the LAST such path named in its reply,
@@ -649,7 +659,9 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   the clone and on a copy whose filter is missing / of another version / stamped with another size. Measured (p50 of 15
   interleaved fresh processes, a recently active project of 10 / 52 / ~150 features): no claim 162 / 163 / 163 → 59 / 59 / 59 ms;
   a claim 236 / 246 / 274 → 253 / 263 / 291 (the filter's ~12 ms compile before the engine — still the engine's answer).
-  `npm run build` after editing an i18n file or guards.js — the "1.20 build" test fails until the file is committed.
+  1.25.1: the hook's `mayClaim()` reads the file's `triggers` groups first (Claims → Trigger words): the alternation holds only the
+  patterns of the languages whose trigger words the prose holds, and none ends the hook (hook-utils.js `claimMatch` itself is unchanged
+  — it gets the subset). `npm run build` after editing an i18n file or guards.js — the "1.20 build" test fails until the file is committed.
 - **Scope guard:** `meta.guard` is `false | true | "scope"` (`guardLevel()`; the hook reads the same raw value;
   `guardInput()`: true / "on" → true, false / "off" → false, "scope" → "scope", strings case-insensitive). `scope` adds,
   once some feature holds approved (or forced) tasks with open ones, `scopeGuardDecision()`: a code file is allowed when

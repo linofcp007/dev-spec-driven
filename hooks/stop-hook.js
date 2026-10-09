@@ -166,7 +166,18 @@ function mayClaim(message) {
     const pkg = readJsonFile(path.join(__dirname, "..", "package.json"));
     if (!f || !pkg || f.version !== pkg.version || !f.sources || typeof f.sources !== "object" || !Array.isArray(f.claims)) return true;
     for (const [rel, size] of Object.entries(f.sources)) if (fs.statSync(path.join(__dirname, "..", ...rel.split("/"))).size !== size) return true;
-    return require("./hook-utils.js").claimMatch(message, f);
+    const hu = require("./hook-utils.js");
+    // 1.25.1: only the claim patterns of the languages whose trigger words the prose holds (f.triggers — as stopClaims runs them):
+    // none → no claim, with nothing but the small trigger regexes compiled (every pattern of every language cost ~35 ms).
+    if (Array.isArray(f.triggers) && f.triggers.length) {
+      const prose = hu.claimProse(message, f.prose);
+      const flags = String(f.word.flags).replace(/[gm]/g, "");
+      const idx = new Set();
+      for (const t of f.triggers) if (new RegExp(f.word.pre + t.source + f.word.post, flags).test(prose)) for (const i of t.claims) idx.add(i);
+      if (!idx.size) return false;
+      return hu.claimMatch(message, { ...f, claims: [...idx].sort((a, b) => a - b).map((i) => f.claims[i]) });
+    }
+    return hu.claimMatch(message, f);
   } catch {
     return true;
   }

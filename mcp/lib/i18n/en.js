@@ -3241,6 +3241,11 @@ const msg = {
         // "Ready to merge.", "Good to go." (1.25.1 — "Work complete — ready to merge." claimed nothing)
         String.raw`(?:ready|good)\s+(?:to\s+(?:merge|ship|release|deploy|go)|for\s+(?:(?:the|a)\s+)?(?:merge|merging|release|shipping|deploy(?:ment)?|review|pr|pull\s+request|production))`,
       ],
+      // 1.25.1 — the words every claim above holds at least one of (whole words, case-insensitive): a message holding none of a
+      // language's triggers runs none of its claim patterns (the engine's stopClaims, the Stop hook's pre-filter) — most closing messages
+      // claim nothing, and compiling every pattern of every language cost each Stop ~35 ms. A new claim pattern adds its word here
+      // (mcp/tests/10-guards-hooks-r7.js checks every claim test message is still read the same).
+      triggers: [String.raw`done|finished|complete|completed|implemented|verified|tested|green|pass|passes|passed|passing|works|ready|good|status`],
       // Up to 3 words before a claim, in the same sentence: it is negated or only a condition / a plan ("not done", "once the
       // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes). 1.25.1: "how" — "Here's how
       // the retry is implemented:" describes the code.

@@ -122,7 +122,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
     ok(stableLost.length === 0, "pD1: English-stable tokens survive unchanged in every pt-BR string — IDs, [SaaS]/[AI] tags, [NEEDS CLARIFICATION], > **TODO**, **Checkpoint:**, _Marker:_ tags, code spans, /spec-* commands, EARS keywords (" + stableLost.slice(0, 5).join(", ") + ")");
     // (the stop gate's regex sources are pt's kept RAW — i18n.js defineDerivedLocale —, never derived text: 1.25.1's "corre[çc]…"
     // and "num|numa" in them are PT-PT words to match, not a translation to redo)
-    const RAW_BR = /^MSG\.stopGate\.(?:claims|negators|admissions|fixed|zeroes|passNow)\[/;
+    const RAW_BR = /^MSG\.stopGate\.(?:claims|triggers|negators|admissions|fixed|zeroes|passNow)\[/;
     const notIdem = brPairs.filter(([w, , b]) => typeof b === "string" && !RAW_BR.test(w) && I.toPtBr(b) !== b).map(([w]) => w);
     ok(notIdem.length === 0, "pD1: the pt-BR transform is idempotent — a Brazilian string passes through unchanged (" + notIdem.slice(0, 5).join(", ") + ")");
     // (an array compares by its first element's kind: pt-BR's stop-gate pattern lists are pt's plus the Brazilian gerunds)
