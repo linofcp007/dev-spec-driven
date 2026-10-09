@@ -155,6 +155,7 @@ let SPEC = null;
 const loadSpec = () => SPEC || (SPEC = require(path.join(__dirname, "..", "mcp", "lib", "spec.js")));
 const spec = new Proxy({}, { get: (_, k) => loadSpec()[k], has: (_, k) => k in loadSpec() });
 const COMPLETION = require(path.join(__dirname, "completion.js")); // 1.25: `completion <shell>` (and the hidden __complete, above)
+const GIT = require(path.join(__dirname, "git.js")); // 1.27: every git call the CLI makes (one environment)
 
 const SERVER = path.resolve(__dirname, "..", "mcp", "server.js");
 const EVALS = path.resolve(__dirname, "..", "mcp", "evals", "run-evals.js");
@@ -1786,29 +1787,15 @@ async function main() {
       // (`<commit>..HEAD`: older commits are no work of this feature); a commit git no longer knows → the whole log, as before.
       const fb = spec.featureBranch(projectDir, fx.slug);
       const since = fb && fb.commit ? { base: fb.base, commit: fb.commit } : null;
-      let text = since ? b5Git([...logArgs, since.commit + "..HEAD", "--"]) : null;
+      let text = since ? GIT.gitText([...logArgs, since.commit + "..HEAD", "--"], { cwd: projectDir }) : null;
       const ranged = text != null;
-      if (!ranged) text = b5Git(logArgs);
+      if (!ranged) text = GIT.gitText(logArgs, { cwd: projectDir });
       if (text == null) return fail({ ok: false, error: spec.msg(spec.featureLang(projectDir, fx.slug)).gitLog.noGit });
       return report(text, { max, since: ranged ? since : null }); // null: the whole log on purpose — the engine applies no range of its own
     }
-    // Helpers of done --run / finish --run / init --check / log (function declarations: hoisted across this switch block).
-    // `git` is only ever read here: rev-parse, status, log — local, no network, no lock (GIT_OPTIONAL_LOCKS=0).
-    function b5Git(args) {
-      let r;
-      try {
-        r = spawnSync("git", args, { cwd: projectDir, encoding: "utf8", timeout: 30000, windowsHide: true, maxBuffer: 64 * 1024 * 1024,
-          env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" } });
-      } catch { return null; }
-      return !r || r.error || r.status !== 0 ? null : String(r.stdout || "");
-    }
-    // {commit, dirty} for evidence — {} without git / a repository / a commit (silently: git is optional).
-    function b5GitState() {
-      const commit = String(b5Git(["rev-parse", "--short", "HEAD"]) || "").trim();
-      if (!/^[0-9a-f]{4,40}$/i.test(commit)) return {};
-      const st = b5Git(["status", "--porcelain", "--", ".", ":(exclude).specs"]); // .specs/ (ticks, state) is not the code under test
-      return st == null ? { commit } : { commit, dirty: st.trim() !== "" };
-    }
+    // Helpers of done --run / finish --run / init --check (function declarations: hoisted across this switch block).
+    // {commit, dirty} for evidence — {} without git / a repository / a commit (silently: git is optional) — cli/git.js gitState.
+    function b5GitState() { return GIT.gitState(projectDir); }
     // Every --check occurrence (the shared parser keeps only the last value) → {name: command} (null-prototype: "__proto__" stays
     // a plain key the engine refuses), or undefined when none was given.
     function b5ChecksFlag() {
@@ -1874,7 +1861,7 @@ async function main() {
       timeoutFlag(); // --timeout <seconds>: an integer ≥ 1 (≤ TIMEOUT_MAX_S) — refused (exit 1) before anything runs
       const req = (typeof flags.shell === "string" && flags.shell.trim()) || (process.env.DEV_SPEC_SHELL || "").trim() || "";
       const needsGit = process.platform === "win32" && /^bash(?:\.exe)?$/i.test(req);
-      return spec.resolveRunShell(req, { gitExecPath: needsGit ? b5Git(["--exec-path"]) : null });
+      return spec.resolveRunShell(req, { gitExecPath: needsGit ? GIT.gitText(["--exec-path"], { cwd: projectDir }) : null });
     }
     // The shell a run uses, as a message names it (the platform default spelled out).
     function b5ShellName(sh) {
@@ -2206,13 +2193,12 @@ function mergeStateRun(baseF, oursF, theirsF, rel) {
     // Both sides dev-spec's own output: ours stays (the next dev-spec write regenerates it from the merged state). A hand-written
     // overview (no AUTO-GENERATED marker): git's own text merge, in place — its exit status is the number of conflicts.
     if (r.keepOurs) return flags.json ? console.log(JSON.stringify({ ok: true, kind: r.kind, kept: "ours" }, null, 2)) : undefined;
-    let g;
-    try { g = spawnSync("git", ["merge-file", "-L", "ours", "-L", "base", "-L", "theirs", oursF, baseF, theirsF], { encoding: "utf8", windowsHide: true, timeout: 30000 }); } catch (e) { g = { error: e }; }
-    const ran = !!g && !g.error && Number.isInteger(g.status) && g.status >= 0;
+    const g = GIT.gitRun(["merge-file", "-L", "ours", "-L", "base", "-L", "theirs", oursF, baseF, theirsF]);
+    const ran = !g.error && Number.isInteger(g.status) && g.status >= 0;
     process.exitCode = ran && g.status === 0 ? 0 : 1;
     // 1.23 review (L13): --json printed nothing here — the result of git's text merge (conflicts = its count of conflict hunks)
     if (flags.json) console.log(JSON.stringify(ran ? { ok: true, kind: r.kind, merged: "text", clean: g.status === 0, conflicts: g.status }
-      : { ok: false, kind: r.kind, merged: "text", error: String((g && g.error && g.error.message) || "git merge-file: exit " + (g && g.status)) }, null, 2));
+      : { ok: false, kind: r.kind, merged: "text", error: String((g.error && g.error.message) || "git merge-file: exit " + g.status) }, null, 2));
     return;
   }
   if (!r.ok) { // ours left as it is — with --json (1.23 review L13) the refusal is the JSON document on stdout too
@@ -2240,11 +2226,9 @@ function mergeStateRun(baseF, oursF, theirsF, rel) {
 // it) and this clone's git config (merge.dev-spec-state.name / .driver — per clone, never committed). Nothing without git.
 function mergeDriverSetup(uninstall) {
   const M = spec.msg(spec.projectLang(projectDir)).mergeState;
-  const git = (args) => {
-    try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", windowsHide: true, timeout: 30000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
-  };
+  const git = (args) => GIT.gitRun(args, { cwd: projectDir });
   const top = git(["rev-parse", "--show-toplevel"]);
-  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: uninstall ? M.noGitUninstall(projectDir) : M.noGit(projectDir) }); // 1.24 r6 B9: each names its own switch
+  if (!top.ok) return fail({ ok: false, error: uninstall ? M.noGitUninstall(projectDir) : M.noGit(projectDir) }); // 1.24 r6 B9: each names its own switch
   const file = path.join(projectDir, ".gitattributes");
   // 1.25.1 (review 7): never through a link — a .gitattributes that is a symbolic link (a cloned repository's) made --install write the
   // driver's lines into the file it points at, and --uninstall rewrite or delete it; a folder (or any other kind) there neither.
@@ -2263,11 +2247,11 @@ function mergeDriverSetup(uninstall) {
   const config = [];
   if (uninstall) {
     const r = git(["config", "--remove-section", key]); // exit 128: no such section — nothing to remove
-    if (r && !r.error && r.status === 0) config.push({ removed: key });
+    if (r.ok) config.push({ removed: key });
   } else {
     for (const [k, v] of [[key + ".name", "dev-spec: semantic merge of the spec state (.state.json, roadmap.json)"], [key + ".driver", driver]]) {
       const r = git(["config", k, v]);
-      if (!r || r.error || r.status !== 0) return fail({ ok: false, error: M.configFailed(String((r && (r.stderr || (r.error && r.error.message))) || "?").trim()) });
+      if (!r.ok) return fail({ ok: false, error: M.configFailed(String(r.stderr || (r.error && r.error.message) || "?").trim()) });
       config.push({ key: k, value: v });
     }
   }
@@ -2295,13 +2279,11 @@ function mergeDriverCommand() {
 // theirs' changes), .gitattributes names it while this clone has none, or not inside a git repository.
 function mergeDriverCheck() {
   const M = spec.msg(spec.projectLang(projectDir)).mergeState;
-  const git = (args) => {
-    try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", windowsHide: true, timeout: 30000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
-  };
+  const git = (args) => GIT.gitRun(args, { cwd: projectDir });
   const top = git(["rev-parse", "--show-toplevel"]);
-  if (!top || top.error || top.status !== 0) return fail({ ok: false, error: M.checkNoGit(projectDir) });
+  if (!top.ok) return fail({ ok: false, error: M.checkNoGit(projectDir) });
   const got = git(["config", "--get", spec.MERGE_DRIVER_KEY]); // exit 1: not set
-  const driver = got && !got.error && got.status === 0 ? String(got.stdout || "").trim() : null;
+  const driver = got.ok ? got.stdout.trim() : null;
   const s = spec.mergeDriverStatus(projectDir, { driver, cli: path.resolve(__filename) });
   const res = { ok: true, action: "check", status: s.status, current: s.status === "ok", named: s.named, attributes: s.attributes, driver: s.driver, script: s.script, cli: s.cli };
   if (!["ok", "none"].includes(s.status)) process.exitCode = 1;
@@ -2337,18 +2319,7 @@ function branchFlag() {
 // branchSwitch says why nothing was switched) · { repo: false } (not inside a work tree) · { repo: true, base, commit, current,
 // exists(name) } — read only (rev-parse, symbolic-ref: no lock, no network).
 function branchGitFacts() {
-  const g = (args) => {
-    try { return spawnSync("git", args, { cwd: projectDir, encoding: "utf8", timeout: 30000, windowsHide: true, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { return { error: e }; }
-  };
-  const inside = g(["rev-parse", "--is-inside-work-tree"]);
-  if (!inside || inside.error) return undefined;
-  if (inside.status !== 0 || String(inside.stdout || "").trim() !== "true") return { repo: false };
-  const sym = g(["symbolic-ref", "--quiet", "--short", "HEAD"]); // the branch HEAD names — an unborn one too; exit 1: detached
-  const base = sym && !sym.error && sym.status === 0 ? String(sym.stdout || "").trim() || null : null;
-  const rev = g(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]); // nothing yet in a repository without a commit
-  const sha = rev && !rev.error && rev.status === 0 ? String(rev.stdout || "").trim() : "";
-  return { repo: true, base, commit: /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(sha) ? sha : null, current: base,
-    exists: (name) => { const s = g(["rev-parse", "--verify", "--quiet", "refs/heads/" + name]); return !s || s.error ? null : s.status === 0; } };
+  return GIT.branchFacts(projectDir); // cli/git.js
 }
 // After the engine's create: run its branch.command (r.branch.args — git's arguments, never through a shell) → the human line, or
 // null. Adds to r.branch: switched (true / false), created (a new branch), current, error (git's first lines); sets exit 1 unless
@@ -2364,12 +2335,11 @@ function branchSwitch(r, git) {
     return null;
   }
   if (git === undefined) { b.switched = false; b.error = "git"; process.exitCode = 1; return B.cliGitMissing(b.command); }
-  let s;
-  try { s = spawnSync("git", b.args, { cwd: projectDir, encoding: "utf8", timeout: 30000, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }); } catch (e) { s = { error: e }; }
-  if (!s || s.error || s.status !== 0) {
-    const why = String((s && (s.stderr || (s.error && s.error.message))) || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" ").slice(0, 300);
+  const s = GIT.gitRun(b.args, { cwd: projectDir });
+  if (!s.ok) {
+    const why = String(s.stderr || (s.error && s.error.message) || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" ").slice(0, 300);
     b.switched = false;
-    b.error = why || "exit " + (s && s.status);
+    b.error = why || "exit " + s.status;
     process.exitCode = 1;
     return B.cliFailed(b.command, why);
   }
