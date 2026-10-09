@@ -286,7 +286,10 @@ const AI_SECTIONS = [
   { name: "Latency Budget", syn: ["latency budget", "orçamento de latência", "presupuesto de latencia"], tier: "extended" },
   { name: "Eval Strategy", syn: ["eval strategy", "estratégia de eval", "estrategia de eval", "estratégia de avaliação", "estrategia de evaluación"] },
   { name: "Safety & Abuse", syn: ["safety & abuse", "safety and abuse", "segurança e abuso", "seguridad y abuso"] },
-  { name: "Fallback & Degradation", syn: ["fallback", "degradação", "degradación"] },
+  // 1.25.1: the bare words are ordinary design words (loose — on an [AI] heading or under one): an unmarked "## Fallbacks" (a payment
+  // retry, a CDN's) satisfied the deleted [AI] section; the whole name stays strict (the reference's "## Section 7: Fallback & Degradation")
+  { name: "Fallback & Degradation", syn: ["fallback & degradation", "fallback and degradation", "fallback e degradação", "fallback e degradacao",
+    "fallback y degradación", "fallback y degradacion", "fallback", "degradação", "degradación"], loose: ["fallback", "degradação", "degradación"] },
   { name: "Observability for AI", syn: ["observability for ai", "observabilidade de ai", "observabilidade de ia", "observabilidad de ia"], tier: "extended" },
   { name: "Model Lifecycle", syn: ["model lifecycle", "ciclo de vida do modelo", "ciclo de vida del modelo"], tier: "extended" },
   { name: "Multi-modality", syn: ["multi-modality", "multimodality", "multimodalidade", "multimodalidad"], tier: "extended" },

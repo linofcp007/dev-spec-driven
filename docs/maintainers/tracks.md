@@ -528,6 +528,9 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   carries a marker carries another track's — built-in or a pack's): "### Qualidade dos dados (LGPD art. 6º, V)" under
   "## [PRIVACY] Fundamento de Licitude e Finalidade" is +privacy's text, never the deleted `[DATA] Qualidade dos Dados`; an
   unmarked top-level "## Data Quality" still satisfies it. Only for a track section (a `marker`), never a core one.
+  `AI_SECTIONS` "Fallback & Degradation" too (1.25.1): `fallback` / `degradação` / `degradación` alone are loose — an unmarked
+  "## Fallbacks" (a payment processor's) answered the deleted [AI] section; "Fallback & Degradation" / "… and …" / "Fallback e
+  Degradação" / "Fallback y Degradación" stay strict.
 - **Markers are case-sensitive tokens** everywhere (`headingHasMarker`, `inactiveMarkerLines`, `trackAcIds`,
   `extractSection`, the brief): `### Timeout [sec]` is prose, never +sec. `RE_STABLE_BRACKET` lists `SEC` / `PRIVACY`.
   `inactiveMarkerLines` also needs the marker to LEAD the heading (1.25.1 — `headingLeadMarkers`: "#### [SEC] Acceptance Criteria",

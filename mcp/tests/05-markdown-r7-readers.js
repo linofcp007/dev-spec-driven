@@ -40,4 +40,20 @@ exports.run = async ({ ok, S, tmp, require }) => {
     ok(tr2.totalAcs === 4 && tr2.inactiveAcs === undefined && !tr2.warnings.some((w) => w.kind === "inactiveAcs"),
       "1.25.1 (1): with the tracks on, every AC is required and there is no inactiveAcs warning (got " + js([tr2.totalAcs, tr2.inactiveAcs]) + ")");
   }
+
+  { // 1.25.1 (4): [AI] Fallback & Degradation — the bare words are loose (an [AI] heading or under one), the whole name strict
+    const st = (d) => E.sectionState(d, E.AI_SECTIONS, "[AI]").find((s) => s.section === "Fallback & Degradation").status;
+    const got = [
+      st("# D\n\n## Fallbacks\nRetry the card payment with a second processor.\n"),
+      st("# D\n\n## Degradación\nUn resumen.\n"),
+      st("# D\n\n## [AI] Fallbacks\nA templated summary when the model times out.\n"),
+      st("# D\n\n## [AI] Resilience\n\n### Fallback\nA cached answer.\n"),
+      st("# D\n\n## Fallback & Degradation\nA templated summary.\n"),
+      st("# D\n\n## Section 7: Fallback & Degradation\nA templated summary.\n"),
+      st("# D\n\n## Fallback e Degradação\nUm resumo.\n"),
+      st("# D\n\n## Fallback y Degradación\nUn resumen.\n"),
+    ];
+    ok(js(got) === js(["missing", "missing", "filled", "filled", "filled", "filled", "filled", "filled"]),
+      "1.25.1 (4): an unmarked '## Fallbacks' (a payment retry) no longer answers [AI] Fallback & Degradation; '## [AI] Fallbacks', a '### Fallback' under an [AI] heading and the full name (EN / PT / ES, 'Section 7:') do (got " + js(got) + ")");
+  }
 };
