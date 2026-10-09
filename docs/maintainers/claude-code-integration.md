@@ -22,10 +22,16 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   feature's `.state.json lastEditAt` stamp the stop gate reads as activity — `recordSpecEdit()`, 1.22 review), design.md →
   `designSaveCheck()` (active tracks' marker sections, Constitution Check, placeholders); it skips `/.execution/`,
   `.specs/templates/` (unless that folder is a pre-1.14 feature), `.specs/tracks/` (1.15, the same exception) and generated files.
+  **It no longer refreshes ROADMAP.md / SPECS.md (1.24 r6 I-I1):** any other spec save leaves the stamp
+  `.specs/.execution/roadmap-stale` (`markRoadmapStale`) and the Stop / SubagentStop hook refreshes once, at the end of the turn
+  (SessionStart, the next engine mutation and the pre-commit check too) — ~75 % of the save hook was the refresh (272 / 423 / 725 ms a
+  save at 10 / 50 / 150 features → ~130–180 ms); the files lag at most one turn, read by nothing that decides
+  (lifecycle.md → Roadmap files).
   It loads the engine LAZILY (1.22 review): only for SessionStart and a PostToolUse on a `.specs/` file outside `.execution/` —
   the plain path check runs first (an edit anywhere else cost the engine's ~100 ms load: 173 → 68 ms median per Write / Edit,
   `node -e 0` ≈ 61 ms; mcp/tests/10-guards-review.js asserts which events load it). The Stop / SubagentStop hook
-  follows the same rules (see End-of-turn evidence gate), and so do the 1.14 observe hook (it prints nothing at all and
+  follows the same rules (see End-of-turn evidence gate — 1.24 r6 I-I4: a closing message with no claim pattern ends it before the
+  engine loads, from the build's hooks/stop-claims.generated.json), and so do the 1.14 observe hook (it prints nothing at all and
   exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
   output is a permission decision).
 - **Which project a hook reads (1.23 review 5, M8): `sessionProject({cwd, anchors})`** (engine/guards.js, on the facade). The
@@ -43,8 +49,10 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   Folders are compared by text, then by real path (`sessionSame()`: git writes gitdir / commondir with long names, the payload
   may carry an 8.3 short name). No dev-spec folder near cwd → the first dev-spec anchor. → `{project, root, worktree}`;
   `sessionPath(s, p, cwd)` spells a payload path under `project` when it lies in `root` (the worktree's checkout). The guard,
-  stop and observe hooks keep a raw pre-check over the nearest `.specs/` above cwd and the anchors (a superset; the engine
-  loads only when it passes) and then ask the engine; the spec-hook stamps `lastEditAt` of a worktree's tasks.md save in the
+  stop and observe hooks keep a raw pre-check over the nearest `.specs/` above cwd (≤ `SESSION_MAX_UP` levels each — 1.24 r6 I2:
+  the observe hook's walk stopped at 12, and a `_Verify:_` run deeper below a nested project was never logged; inline, not
+  hook-utils.js's `nearestSpecs`, so its hot path requires nothing; mcp/tests/10-guards-review6.js checks every bound) and the
+  anchors (a superset; the engine loads only when it passes) and then ask the engine; the spec-hook stamps `lastEditAt` of a worktree's tasks.md save in the
   mapped project (its own state when that feature isn't there) and SessionStart reports the mapped project; the status line's
   `statusLineProject()` maps what it found the same way (`worktreeProject(dir, candidates)`).
 - **What the hooks share before the engine loads — `hooks/hook-utils.js` (1.24 review 6).** Not a hook (hooks.json never runs

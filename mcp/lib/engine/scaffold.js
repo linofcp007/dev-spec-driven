@@ -29,7 +29,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText; // 1.23 review 5 · 1.24 r6
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub; // 1.23 review 5 · 1.24 r6
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -47,7 +47,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   writeFileAtomic, writeIfAbsent, writeRoadmap,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
-  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText } = E); }
+  appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub } = E); }
 
 // 1.23 review 5 — the first of `files` a write would reach through a link (a .specs/<feature>/ or .specs/steering/ that is a
 // symbolic link / junction, or resolves outside the real .specs/ — specsWriteContained) → that folder as `.specs/<rel>/`, else
@@ -355,8 +355,9 @@ function steeringPlaceholders(root) {
     const text = readIfExists(path.join(dir, name));
     if (text == null) continue;
     const body = steeringFrontMatter(text).body;
-    const templates = i18n.LANGS.map((l) => i18n.steeringStub(name, l)).filter(Boolean);
-    if (artifactState({ text: body }, { template: templates }) === "placeholder") out.push({ file: name, placeholders: placeholderReport(body).length });
+    // a known stub verbatim in any language (whitespace aside): the corpus's hashes (1.24 r6 I-I2 — every language's stub was
+    // rendered here, loading pt.js, es.js and pt-BR into each English doctor / next_action), else artifactState's own reading
+    if (isSteeringStub(name, body) || artifactState({ text: body }) === "placeholder") out.push({ file: name, placeholders: placeholderReport(body).length });
   }
   return out;
 }

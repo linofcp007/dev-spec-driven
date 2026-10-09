@@ -11,6 +11,8 @@
  *   - editTargets — a Write / Edit target as the file system reads it, the engine's approvalEditTargets (C5).
  *   - approvalProjects — the projects an approval-shaped tool call may act on, for the approval hook's raw level read (C4).
  *   - sessionFlagFile — a tiny per-session marker in the OS temp folder (the guard hook's forced-approval note, once a session).
+ *   - claimProse / claimMatch — the stop gate's claim scan as the Stop hook's pre-filter (1.24 r6 I-I4), from the build's
+ *     hooks/stop-claims.generated.json.
  * mcp/tests/10-guards-review6.js checks the readings agree with the engine's.
  */
 
@@ -181,4 +183,34 @@ function sessionFlagFile(kind, sessionId) {
   return path.join(os.tmpdir(), "dev-spec-" + String(kind).replace(/[^a-z0-9-]/gi, "") + "-" + h + ".flag");
 }
 
-module.exports = { utf16OrUtf8, textOf, jsonOf, readText, readJson, isUtf16, isNetwork, shareOf, fsTargetPath, editTargets, nearestSpecs, approvalProjects, sessionFlagFile };
+// 1.24 r6 I-I4 — the stop gate's claim scan as the Stop hook's pre-filter, BEFORE the engine loads. f: hooks/stop-claims.generated.json
+// (scripts/build.js: the engine's own claim patterns, word wrapper and prose regexes — guards.js stopClaimFilter). claimProse is the
+// engine's stopProse run with those regexes (the message's tail without fenced code, HTML comments — core.js replaceHtmlCommentSpans'
+// scan —, inline code and quoted lines); claimMatch: does any claim pattern, word-bounded as stopPatterns compiles it, match that prose?
+// A superset of stopClaims' `claim` — negations and questions stay the engine's to judge. mcp/tests/10-guards-review6.js checks the
+// prose is the engine's on every input it tries, and that no message the engine reads as a claim is filtered out.
+function claimProse(message, p) {
+  const s = String(message == null ? "" : message).replace(/\r\n?/g, "\n");
+  const unfenced = s.slice(-p.max).replace(new RegExp(p.fence.source, p.fence.flags), "$1");
+  let out = "", at = 0;
+  for (let i = unfenced.indexOf("<!--"); i !== -1;) {
+    const j = unfenced.indexOf("-->", i + 4);
+    if (j === -1) break;
+    out += unfenced.slice(at, i) + " ";
+    at = j + 3;
+    i = unfenced.indexOf("<!--", at);
+  }
+  const quote = new RegExp(p.quote.source, p.quote.flags);
+  return (at ? out + unfenced.slice(at) : unfenced).replace(new RegExp(p.code.source, p.code.flags), " ")
+    .split("\n").filter((l) => !quote.test(l)).join("\n");
+}
+// ONE alternation of every pattern, each inside the word wrapper's group: a match exists at some position for some pattern exactly
+// when the alternation matches there (backtracking tries every alternative) — and it compiles once (34 patterns apart: ~19 ms).
+function claimMatch(message, f) {
+  if (!f.claims.length) return false;
+  const text = claimProse(message, f.prose);
+  return new RegExp(f.word.pre + "(?:" + f.claims.join(")|(?:") + ")" + f.word.post, String(f.word.flags).replace("g", "")).test(text);
+}
+
+module.exports = { utf16OrUtf8, textOf, jsonOf, readText, readJson, isUtf16, isNetwork, shareOf, fsTargetPath, editTargets, nearestSpecs, approvalProjects, sessionFlagFile,
+  claimProse, claimMatch };

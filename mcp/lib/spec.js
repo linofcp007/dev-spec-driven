@@ -73,7 +73,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   featurePlaceholders, finishFeature, FLOWS, forecastData, gateRefusal, globalConstraints, globFiles, glossaryEntries, guardCheck,
   guardEnabled, guardLevel, sessionProject, sessionPath, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
   isDevSpecDir, isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
-  manageFeature, markdownToHtml, matrixCsv, maybeRefreshCatalog, mdPlainText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
+  manageFeature, markdownToHtml, markRoadmapStale, matrixCsv, maybeRefreshCatalog, mdPlainText, refreshStaleRoadmap, ROADMAP_STALE_FILE, roadmapStale, staleGeneratedText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
   MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
@@ -221,6 +221,12 @@ module.exports = {
 
   catalog, // spec_catalog / `dev-spec catalog` (.specs/SPECS.md)
   maybeRefreshCatalog,
+  // 1.24 r6 I-I1 — the save hook's deferred ROADMAP.* / SPECS.md refresh (a stamp in .specs/.execution/, refreshed once a turn)
+  ROADMAP_STALE_FILE, // "roadmap-stale" — the stamp's name in .specs/.execution/ (the Stop hook and the pre-commit check stat it raw)
+  markRoadmapStale, // (projectDir) → true when the stamp is there — hooks/spec-hook.js on a spec save, instead of the refresh
+  roadmapStale, // (projectDir) → is the stamp there?
+  refreshStaleRoadmap, // (projectDir) → { refreshed } — the refresh, once, when stamped (Stop / SessionStart / pre-commit)
+  staleGeneratedText, // (projectDir, "ROADMAP.md" | "SPECS.md") → while stamped, the text the refresh would write (in memory), else null — the specs:// resources
   specUpgrade, // spec_upgrade / `dev-spec upgrade [--apply]` / `/spec-upgrade` (audit + safe migrations, .specs/UPGRADE.md)
   specVersionStatus, // roadmap.json meta.specVersion vs the engine — the SessionStart upgrade notice
   engineVersion,

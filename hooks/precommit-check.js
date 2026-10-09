@@ -10,6 +10,8 @@
  *   - <any>/.specs/<feature>/tasks.md         → traceability check (phantom refs block)
  *   - <any>/.specs/<feature>/change.md        → both (1.21 F5: a change holds its criteria and its tasks)
  * Nested `.specs/` folders (monorepos) are validated in place.
+ * First (1.24 r6 I-I1): a ROADMAP.md / SPECS.md left stale by spec saves in Claude Code is refreshed — and staged again when it
+ * was staged.
  *
  * Exit 0 = allow commit; exit 1 = block.
  * Install (PowerShell, run inside your repo; replace <PLUGIN> with this plugin's absolute path).
@@ -43,6 +45,31 @@ const root = (git(["rev-parse", "--show-toplevel"]) || process.cwd()).trim();
 const files = (git(["-c", "core.quotePath=false", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"]) || "")
   .split("\0")
   .filter(Boolean);
+
+// 1.24 r6 I-I1 — a ROADMAP.md / SPECS.md left stale by spec saves in Claude Code (the save hook's stamp, .specs/.execution/roadmap-stale;
+// the Stop hook refreshes at the end of the turn, and a commit made inside that turn comes first) is refreshed before the commit, and a
+// generated file that is STAGED is staged again — the commit holds the fresh one; an unstaged one stays unstaged. The root's .specs/
+// and every nested one a staged path names; one stat each — the engine loads only for a stamped one. Best-effort: never blocks.
+const ROADMAP_STALE = path.join(".specs", ".execution", "roadmap-stale");
+const GENERATED = ["ROADMAP.md", "ROADMAP.html", "SPECS.md"];
+function refreshStaleRoadmaps() {
+  const prefixes = new Set([""]); // repository-relative, "/"-ended ("" = the root)
+  for (const f of files) {
+    const i = f.indexOf(".specs/");
+    if (i === 0 || (i > 0 && f[i - 1] === "/")) prefixes.add(f.slice(0, i));
+  }
+  const stale = [...prefixes].filter((pre) => { try { return fs.statSync(path.join(root, pre, ROADMAP_STALE)).isFile(); } catch { return false; } });
+  if (!stale.length) return;
+  try {
+    const engine = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+    for (const pre of stale) {
+      engine.refreshStaleRoadmap(path.join(root, pre));
+      const again = GENERATED.map((g) => pre + ".specs/" + g).filter((g) => files.includes(g));
+      if (again.length) git(["add", "--", ...again]);
+    }
+  } catch { /* best-effort: the commit goes on */ }
+}
+refreshStaleRoadmaps();
 
 // The staged files this hook checks — a feature's requirements.md / tasks.md / change.md under a `.specs/` — found BEFORE the
 // engine loads: a commit that stages none (most commits) exits without paying for it (~130 ms — 1.22 review).

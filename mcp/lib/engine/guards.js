@@ -1432,10 +1432,13 @@ function setStopCheck(projectDir, on) {
 // The claim patterns of every language (i18n stopGate.claims / negators / admissions / fixed), compiled once: whole words
 // (unicode boundaries — JS \b never matched "concluído"), case-insensitive, ^/$ per line. Each claim pattern keeps the base
 // languages that list it (pt-BR is pt): the two negators the languages disagree on are read by language (stopNegates).
+// 1.24 r6 I-I4: the claim scan's parts the Stop hook's pre-filter reuses before the engine loads — scripts/build.js writes them, with
+// every language's claim patterns (stopClaimSources), into hooks/stop-claims.generated.json (stopClaimFilter).
+const STOP_WORD = Object.freeze({ pre: "(?<![\\p{L}\\p{N}_])(?:", post: ")(?![\\p{L}\\p{N}_])", flags: "gimu" });
 let STOP_PATTERNS = null;
 function stopPatterns() {
   if (STOP_PATTERNS) return STOP_PATTERNS;
-  const word = (src) => new RegExp("(?<![\\p{L}\\p{N}_])(?:" + src + ")(?![\\p{L}\\p{N}_])", "gimu");
+  const word = (src) => new RegExp(STOP_WORD.pre + src + STOP_WORD.post, STOP_WORD.flags);
   const all = (k) => [...new Set(i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {})[k] || []))]; // pt-BR repeats pt's patterns
   const langsOf = new Map();
   for (const l of i18n.LANGS) for (const src of (i18n.msg(l).stopGate || {}).claims || []) {
@@ -1508,15 +1511,36 @@ function stopZeroCount(text, start) {
 }
 // The message as prose: its last STOP_MESSAGE_MAX characters without fenced code, inline code, HTML comments and quoted
 // lines (> …) — a pasted command output or a quoted instruction claims nothing.
+// (?=(…))\2: the fence opener taken whole, never backtracked (a line of 20,000 backticks was quadratic — 1.17 H); the comments by
+// replaceHtmlCommentSpans (/<!--[\s\S]*?-->/g rescanned the rest from each unclosed "<!--"). The regexes are constants: the Stop
+// hook's pre-filter (hooks/hook-utils.js claimProse) runs the same ones from hooks/stop-claims.generated.json (1.24 r6 I-I4).
+const RE_STOP_FENCE = /(^|\n)[ \t]*(?=(`{3,}|~{3,}))\2[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[^\n]*(?=\n|$)|$)/g;
+const RE_STOP_CODE = /`[^`\n]*`/g;
+const RE_STOP_QUOTE = /^[ \t]*>/;
 function stopProse(message) {
   const s = String(message == null ? "" : message).replace(/\r\n?/g, "\n");
-  // (?=(…))\2: the fence opener taken whole, never backtracked (a line of 20,000 backticks was quadratic — 1.17 H); the
-  // comments by replaceHtmlCommentSpans (/<!--[\s\S]*?-->/g rescanned the rest from each unclosed "<!--").
-  const unfenced = s.slice(-STOP_MESSAGE_MAX).replace(/(^|\n)[ \t]*(?=(`{3,}|~{3,}))\2[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[^\n]*(?=\n|$)|$)/g, "$1");
+  const unfenced = s.slice(-STOP_MESSAGE_MAX).replace(RE_STOP_FENCE, "$1");
   return replaceHtmlCommentSpans(unfenced, () => " ")
-    .replace(/`[^`\n]*`/g, " ")
-    .split("\n").filter((l) => !/^[ \t]*>/.test(l)).join("\n");
+    .replace(RE_STOP_CODE, " ")
+    .split("\n").filter((l) => !RE_STOP_QUOTE.test(l)).join("\n");
 }
+// 1.24 r6 I-I4 — every language's claim patterns (i18n stopGate.claims; pt-BR's are pt's plus its own), once each, in
+// stopPatterns' order.
+function stopClaimSources() {
+  return [...new Set(i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {}).claims || []))];
+}
+// What the Stop hook's claim pre-filter needs to decide "no claim" before the engine loads (scripts/build.js →
+// hooks/stop-claims.generated.json): the claim patterns, the word wrapper stopPatterns compiles them with, and stopProse's
+// tail length and regexes. The hook answers "maybe" whenever any pattern matches the prose — a superset of stopClaims' claim
+// (negations and questions stay the engine's to judge).
+function stopClaimFilter() {
+  const re = (r) => ({ source: r.source, flags: r.flags });
+  return { word: { ...STOP_WORD }, prose: { max: STOP_MESSAGE_MAX, fence: re(RE_STOP_FENCE), code: re(RE_STOP_CODE), quote: re(RE_STOP_QUOTE) },
+    claims: stopClaimSources() };
+}
+// The mcp/lib files that make that filter (the patterns, the wrapper, the prose) — the generated file stamps their sizes, and the
+// hook takes it only while every size and package.json's version still match (else: the engine decides, as before).
+const STOP_FILTER_SOURCES = ["i18n.js", "i18n/common.js", "i18n/en.js", "i18n/es.js", "i18n/pt-br.js", "i18n/pt.js", "engine/guards.js"];
 // Does the message claim the work is done / verified? → { claim, admitted, claims: [matched text] }. A match does not count
 // when a negator or condition sits up to STOP_WINDOW words before it in the same clause ("not done", "once the tests
 // pass", "I'll verify"; words ending in n't / 'll too; a colon or a dash starts a new clause; "no" / "se" read by language —
@@ -1959,7 +1983,7 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE
   approvalExtras, mcpApprovalAction, approvalCommand, approvalGuardDecision, STOP_RECENT_HOURS, STOP_MESSAGE_MAX,
   STOP_MAX_FEATURES, STOP_TASKS_SHOWN, STOP_REPORT_MAX, STOP_WINDOW, guardLevel, guardInput, stopCheckEnabled,
   setStopCheck, stopPatterns, STOP_CLAUSE_SPAN, stopClauseStart, RE_ES_NO_NEXT, RE_ES_SE_NEXT, stopNegates,
-  stopPastFailure, stopZeroCount, stopProse, stopClaims, stopActivity, SPEC_EDIT_LOCK_WAIT_MS, recordSpecEdit, stopTaskLabel, stopCheck, implementerStopCheck,
+  stopPastFailure, stopZeroCount, STOP_WORD, RE_STOP_FENCE, RE_STOP_CODE, RE_STOP_QUOTE, stopProse, stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, SPEC_EDIT_LOCK_WAIT_MS, recordSpecEdit, stopTaskLabel, stopCheck, implementerStopCheck,
   scopeGuardDecision, APPROVAL_EDIT_TOOLS, RE_STATE_FILE, DEVSPEC_NAMES, devSpecGlob, isDevSpecWord, RE_COMSPEC_WORD, RE_APPROVAL_VERB,
   approvalPlain, APPROVAL_TEXT_PROGRAMS, APPROVAL_STDIN_RUNTIMES, APPROVAL_POSIX_SHELLS, withPositionals, stdinScriptAt,
   decodePwshEncoded, approvalSpecsProject, approvalUnparsed, guardTargetPath, SESSION_MAX_UP, sessionUsable, sessionSame, sessionSpecs,

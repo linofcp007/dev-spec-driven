@@ -142,6 +142,20 @@ function specWrite(file, text, opts = {}) {
   return true;
 }
 
+// 1.24 r6 I-I1 — a file under .specs/ removed (the roadmap's stale stamp): never through a linked folder on the way (the gate);
+// a link AT the path is removed as the link (unlink never follows). → true when removed, false when it wasn't there.
+function removeSpecFile(file) {
+  specsWriteGate(file);
+  forgetCached(file);
+  try {
+    fs.unlinkSync(file);
+    return true;
+  } catch (e) {
+    if (e.code === "ENOENT") return false;
+    throw e;
+  }
+}
+
 // Synchronous sleep (the engine is synchronous end to end): blocks this thread only, no busy loop.
 const SLEEP_CELL = new Int32Array(new SharedArrayBuffer(4));
 function sleepSync(ms) {
@@ -684,7 +698,13 @@ function specsWriteBlock(root, target, opts = {}) {
     // point) redirects it either
     const realRoot = realSpecsRoot(root);
     let real = null;
-    try { real = fs.realpathSync.native(deepest); } catch { /* unresolvable: refused below */ }
+    try { real = fs.realpathSync.native(deepest); } catch (e) {
+      // 1.24 r6: gone since its lstat (another process released its lock in between — the lock's waiter was refused as "a link"):
+      // judged by its folder, already walked, as an absent part is. Anything else unresolvable: refused below.
+      if (e && e.code === "ENOENT" && deepest !== root) {
+        try { real = path.join(fs.realpathSync.native(path.dirname(deepest)), path.basename(deepest)); } catch { real = null; }
+      }
+    }
     if (!realRoot || !real || real === realRoot || !withinRoot(realRoot, real)) return { kind: "link", at: deepest, file: deepest === target && !opts.dir };
   }
   return null;
@@ -984,7 +1004,7 @@ function isNetworkPath(p) {
 }
 
 module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
-  writeFileAtomic, specWrite, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
+  writeFileAtomic, specWrite, removeSpecFile, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
   specsWriteGate, gateRefusal, featureLangSafe, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
   LOCK_RECLAIM_STALE_MS, LOCK_NOTELESS_STALE_MS, LOCK_NESTED_MIN_MS, HELD_LOCKS, lockSnapshot, sameLockSnapshot,
   staleLock, reclaimStaleLock, releaseLock, lockWaitMs, withFeatureLock, withLockFile, acquireLockFile, featureLocked,

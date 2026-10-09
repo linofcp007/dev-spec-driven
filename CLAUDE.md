@@ -112,7 +112,9 @@ written by hand. IDs and markers stay English-stable (languages.md).
 - **Changed templates / tracks / i18n — the corpus? Run `npm run build`** and commit the regenerated
   `mcp/lib/engine/corpus.generated.json` (the built-in placeholder corpus). Precisely: after changing a file of
   `CORPUS_SOURCES` — `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` /
-  `tracks.js` — or package.json's version; mcp/test.js fails until then. Never edit it by hand. The one-file engine
+  `tracks.js` — or package.json's version; mcp/test.js fails until then. The same build writes the committed
+  `hooks/stop-claims.generated.json` (the Stop hook's claim pre-filter): rebuild after changing an i18n file or `engine/guards.js`
+  too. Never edit either by hand. The one-file engine
   (`mcp/lib/spec.bundle.js`) is git-ignored and built on demand (`dev-spec bundle`) — never commit it (architecture.md → The build).
 
 ## Layout (brief — the full tree: docs/maintainers/architecture.md → Layout)

@@ -34,7 +34,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   engine writes nothing there) and refuses (`specsWriteBlock`, lstat of each part below .specs/ + one realpath of the deepest
   that exists): **a link on the way** — a folder between .specs/ and the target (a feature folder, `.execution/`, `.history/`,
   `_archive/`, `_archive/<slug>/`) or the target itself that is a symbolic link / junction, or that resolves outside the real
-  .specs/ (another reparse point); **the wrong kind** — a file where a folder is needed (.specs itself, a feature path,
+  .specs/ (another reparse point; a part GONE between its lstat and that realpath — a lock another process released meanwhile — is
+  judged by its folder, as an absent part is: its waiter was refused as "a link", and one of two racing backlog adds was lost
+  now and then — mcp/tests/12-lifecycle-review6.js); **the wrong kind** — a file where a folder is needed (.specs itself, a feature path,
   `_archive`), a folder where a file is written (ROADMAP.md, an export). .specs/ itself may be a link (a project keeping its specs
   elsewhere): what is checked lies below it. A create-only write (`createOnly`) passes an existing target that is itself a link —
   "wx" never writes through it. The refusal is an Error (`code` ESPECSLINK / ESPECSKIND, `gate` {kind, rel, file}, the message in

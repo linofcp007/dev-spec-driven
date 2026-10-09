@@ -99,11 +99,15 @@ function isDevSpecProject(dir) {
 // Code (or the user) exported — every distinct one that is dev-spec's. A subagent working in a git worktree of the project
 // (parallel execution, waves) runs in the worktree's copy, whose git-ignored log is never merged back: the run is logged in
 // the main project too (feature review R4).
+// ≤ MAX_UP levels (1.24 r6 I2: it was 12 — a run 13+ folders below a nested project was never logged): the engine's
+// SESSION_MAX_UP, as the guard / stop hooks and hook-utils.js nearestSpecs walk (inline here: the hot path of every Bash call
+// requires nothing — mcp/tests/10-guards-review6.js checks every bound is SESSION_MAX_UP).
+const MAX_UP = 40;
 function projectDirsOf(payload) {
   const cands = [];
   if (typeof payload.cwd === "string" && payload.cwd.trim()) {
     let d = path.resolve(payload.cwd);
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < MAX_UP; i++) {
       if (fs.existsSync(path.join(d, ".specs"))) { cands.push(d); break; }
       const up = path.dirname(d);
       if (up === d) break;

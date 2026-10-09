@@ -17,7 +17,7 @@ let activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSi
   round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats, supersedesTrace, taskBlocks,
   taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf, unverifiedLabel, verificationStatus,
   waiverView,
-  featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles;
+  featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles, isSpikeDir, spikePhase;
 function __link(E) { ({ activeDesign, activeSectionTracks, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
@@ -25,7 +25,7 @@ function __link(E) { ({ activeDesign, activeSectionTracks, activeTasks, chainPla
   readRoadmap, roadmap, roleWaitList, round1, round2, sectionState, specsRoot, SPIKE_FILE, spikeInfo, statePath, stats,
   supersedesTrace, taskBlocks, taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf,
   unverifiedLabel, verificationStatus, waiverView,
-  featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles } = E); }
+  featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles, isSpikeDir, spikePhase } = E); }
 
 // ---------------------------------------------------------------------------
 // ROADMAP.md renderer — a single always-current overview of all features
@@ -684,11 +684,26 @@ const OVERLAP_MAX_REF_LEN = 512; // a longer reference is no path anyone plans �
 const OVERLAP_MAX_GLOB_WORK = 20000000; // DP cells over all glob comparisons (~0.2 s): the SessionStart hook runs this
 const OVERLAP_MAX_PAIRS = 50;
 const OVERLAP_FILES_SHOWN = 5;
-// feats: roadmap() features ({ name, phase, dependsOn }; default: roadmap(projectDir)'s). opts.only: the pairs one feature
-// is part of (an active pair either way; a finished pair on its active side). → { pairs: [{ a, b, kind: "active" |
-// "finished", files: [rel …], count }], truncated } — a: the active feature (roadmap order first); b: the other one.
+// 1.24 r6 I-I3 — the active features as featureOverlaps reads them, LIGHT: in roadmap()'s order (meta.order, then the name), each
+// one's name, whether it is complete — detectPhase's rule: every active task ticked; a spike: decided and its tasks, if any, ticked
+// (spikePhase) — and its dependsOn (roadmap.json's, as roadmap() reads it). Without a list, featureOverlaps (doctor's
+// cross-feature-overlap, the SessionStart line) went through roadmap() → listFeatures → detectPhase on EVERY feature: the planning
+// chain's artifacts and the placeholder corpus of each feature still being planned, for one bit. Reads tasks.md, .state.json and
+// roadmap.json only (mcp/tests/12-lifecycle-review6.js "I-I3" compares the pairs with roadmap()'s).
+function overlapFeatures(projectDir) {
+  const rm = readRoadmap(projectDir);
+  return featureDirs(projectDir).filter((f) => !f.archived).map((f) => {
+    const meta = rm.features[f.slug] || {};
+    const tasks = parseTasks(activeTasks(readIfExists(path.join(f.dir, "tasks.md")), detectTracks(f.dir)));
+    const complete = isSpikeDir(f.dir) ? spikePhase(f.dir, tasks) === "complete" : tasks.length > 0 && tasks.every((t) => t.done);
+    return { name: f.slug, phase: complete ? "complete" : "active", dependsOn: meta.dependsOn || [], order: meta.order != null ? meta.order : 999 };
+  }).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+}
+// feats: roadmap() features ({ name, phase, dependsOn }; default: overlapFeatures(projectDir) — the same three, read light).
+// opts.only: the pairs one feature is part of (an active pair either way; a finished pair on its active side). → { pairs: [{ a,
+// b, kind: "active" | "finished", files: [rel …], count }], truncated } — a: the active feature (roadmap order first); b: the other.
 function featureOverlaps(projectDir, feats, opts = {}) {
-  if (!Array.isArray(feats)) feats = roadmap(projectDir).features;
+  if (!Array.isArray(feats)) feats = overlapFeatures(projectDir);
   const root = specsRoot(projectDir);
   const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
   // A project path — not a [placeholder], a "TBD" / "n/a" / "none" / "-" stand-in, the project root or a path leaving it.
@@ -825,5 +840,5 @@ module.exports = { progressBar, mid, mlabel, cutText, ROADMAP_I18N, i18nLang, ht
   FORECAST_WINDOW_DAYS, FORECAST_MIN_TASKS, FORECAST_SPREAD, FC_DAY_MS, taskSize, taskCompletedAt, fcDay, fcWeekend,
   fcIso, fcWorkingDays, fcAddWorkingDays, velocityOf, forecastInput, forecastInputAt, archivedCompletions, rmvCycles, forecastData, featureVelocity, roadmapExtras,
   etaText, velocityText, roadmapTailLines, OVERLAP_MAX_KEYS, OVERLAP_MAX_GLOB_CHECKS, OVERLAP_MAX_REF_LEN,
-  OVERLAP_MAX_GLOB_WORK, OVERLAP_MAX_PAIRS, OVERLAP_FILES_SHOWN, featureOverlaps, overlapFiles, overlapAttention,
+  OVERLAP_MAX_GLOB_WORK, OVERLAP_MAX_PAIRS, OVERLAP_FILES_SHOWN, overlapFeatures, featureOverlaps, overlapFiles, overlapAttention,
   overlapDoctorDetail, __link };
