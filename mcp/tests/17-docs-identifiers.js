@@ -1,7 +1,7 @@
 "use strict";
-// Docs — 1.25.1 review prose guards: the maintainer notes cite live identifiers, the Node core list is what the code requires,
+// Docs — the maintainer notes cite live identifiers, the Node core list is what the code requires,
 // README's engine count is the engine's, and the model-facing prose (commands, SKILL.md) matches what the model can do.
-// (17-docs.js, 17-docs-review5.js and 17-docs-review6.js hold the docs' earlier guards.)
+// (17-docs.js and 17-docs-flows.js hold the docs' other guards.)
 
 const fs = require("fs");
 const path = require("path");
@@ -33,7 +33,7 @@ exports.run = async ({ ok, root, require }) => {
     ]);
     const words = new Set();
     for (const f of codeFiles(["mcp", "cli", "hooks", "scripts", "evals"], /\.(?:js|mjs|cjs|json|sh|ps1|bash|zsh|fish)$/)) {
-      if (path.basename(f) === "17-docs-review7.js") continue; // this file names the allowlisted ones itself
+      if (path.basename(f) === "17-docs-identifiers.js") continue; // this file names the allowlisted ones itself
       for (const m of fs.readFileSync(f, "utf8").matchAll(/[A-Za-z_$][\w$]*/g)) words.add(m[0]);
     }
     const RE_ID = /(?<![\w.$\/-])([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+|[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)+|[a-z][a-zA-Z0-9]*(?=\(\))|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+)(?![\w$-])/g;

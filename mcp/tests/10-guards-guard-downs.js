@@ -1,6 +1,6 @@
 "use strict";
-// Guards and hooks — 1.24 review 6: PowerShell's --%, merge-state / git restores / observed.jsonl as guard-downs, UTF-16 state in the hooks, the approval hook's projects and paths, track removal, the commands' front matter.
-// (10-guards-hooks.js holds the findings of review 5; this file those of review 6 — the Claude Code integration.)
+// Guards and hooks — the guard-downs: PowerShell's --%, merge-state / git restores / observed.jsonl, UTF-16 state in the hooks, the approval hook's projects and paths, track removal, the commands' front matter.
+// (10-guards-hooks.js holds the approval guard's tools and forms.)
 
 const fs = require("fs");
 const os = require("os");

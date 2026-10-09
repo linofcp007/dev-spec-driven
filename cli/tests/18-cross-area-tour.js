@@ -1,5 +1,5 @@
 "use strict";
-// Review regressions on the CLI — /spec-tour as a prompt, classify = the engine, a missing [PRIVACY] section, pipes.
+// Cross-area regressions on the CLI — /spec-tour as a prompt, classify = the engine, a missing [PRIVACY] section, pipes.
 
 const fs = require("fs");
 const path = require("path");

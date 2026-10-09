@@ -2,7 +2,7 @@
 "use strict";
 
 /**
- * dev-spec-driven — the plan-mode bridge (zero-dependency, 1.16).
+ * dev-spec-driven — the plan-mode bridge (zero-dependency).
  *
  * Wired from hooks/hooks.json as PostToolUse, matcher ExitPlanMode (https://code.claude.com/docs/en/hooks): when the user
  * approves a plan in Claude Code's plan mode, a dev-spec project gets ONE line of context for the agent — the approved plan can

@@ -1,7 +1,6 @@
 "use strict";
-// Gates — 1.24 review 6 regressions: phase order over a changed approved phase, the governance roadmap.json holds read fail closed, the bugfix design gate on bug.md.
-// (06-gates.js holds the gates area's earlier tests; this file the findings of the sixth review of the gates, the state and the
-// approvals.)
+// Gates — what an approval refuses: a later phase over an earlier one whose approved content changed, a roadmap.json it can't read
+// (the governance it holds fails closed), a bugfix design whose bug.md isn't filled. (06-gates.js holds the area's main tests.)
 
 const fs = require("fs");
 const path = require("path");

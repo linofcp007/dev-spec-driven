@@ -14,14 +14,14 @@ const CTX = {
   // invalidateReadCache).
   READ_CACHE: null, // Map(key → text | null | boolean | Dirent[]), only while a withReadCache scope runs
   GLOB_CACHE: null, // Map(key → { base, allowDir, result }) — globFiles results, same scope
-  XAC_MEMO: null, // 1.16 Q2: { root, table } — crossFeatureAcs' criteria table, same scope (dropped by any engine write)
+  XAC_MEMO: null, // { root, table } — crossFeatureAcs' criteria table, same scope (dropped by any engine write)
   // templates.js — the project's templates as template corpus (placeholder detection)
   TEMPLATE_SCOPE_ROOT: null, // the .specs/ folder of the current engine call (specsRoot), reset per read-cache scope
   TEMPLATE_MEMO: null, // { root, tdirKey, sets } — this call's parsed project templates
   // packs.js — the project's track packs
   PACK_MEMO: null, // { root, dirKey, reg } — the current call's track packs (withReadCache scope)
   GHOST_MARKERS: null, // Map(name → "[TOKEN]") — the missing packs' markers noteGhostPacks records (packs.js), same scope
-  // files.js — 1.25: the dry-run sink while withDryRun(fn) runs ({ files: Map(key → { file, text, dir? }), children: Map(folder key →
+  // files.js — the dry-run sink while withDryRun(fn) runs ({ files: Map(key → { file, text, dir? }), children: Map(folder key →
   // Map(name → "file" | "dir" | null)) }): every write primitive records into it instead of the disk, every reader sees it. Set and
   // cleared by withDryRun itself (not by withReadCache), so it never outlives the engine call that opened it.
   DRY_RUN: null,

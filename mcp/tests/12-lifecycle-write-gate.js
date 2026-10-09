@@ -1,7 +1,6 @@
 "use strict";
-// Lifecycle — review 6 regressions: the ONE write gate under .specs/ (linked folders and files, paths of the wrong kind), velocity after an archive, comment-proof names, rename vs the backlog, every dependency cycle.
-// (12-lifecycle.js and 12-lifecycle-review.js hold the area's earlier tests; this file the findings of the sixth review of the feature
-// lifecycle, the scaffolds and the write paths.)
+// Lifecycle — the ONE write gate under .specs/ (linked folders and files, paths of the wrong kind), velocity after an archive, comment-proof names, rename vs the backlog, every dependency cycle.
+// (12-lifecycle.js and 12-lifecycle-names-roadmap.js hold the area's other tests.)
 
 const fs = require("fs");
 const path = require("path");

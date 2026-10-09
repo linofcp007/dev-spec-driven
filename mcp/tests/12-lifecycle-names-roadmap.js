@@ -1,7 +1,6 @@
 "use strict";
-// Lifecycle — 1.23 review 5 regressions: appends after an open code fence, linked folders, one-line names, re-runs and slug cuts, active + archived twins, ROADMAP.md (Mermaid, stale deps, emoji cuts, a broken roadmap.json).
-// (12-lifecycle.js holds the lifecycle area's earlier tests; this file the findings of the 1.23 review 5 of create / archive / rename /
-// restore and the generated roadmap.)
+// Lifecycle — names and the generated roadmap: one-line names, re-runs and slug cuts, active + archived twins, appends after an open code fence, linked folders, ROADMAP.md (Mermaid, stale deps, emoji cuts, a broken roadmap.json).
+// (12-lifecycle.js holds the area's main tests.)
 
 const fs = require("fs");
 const path = require("path");

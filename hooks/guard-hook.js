@@ -4,14 +4,14 @@
 /**
  * dev-spec-driven — guard hook (opt-in, zero-dependency). Kiro's supervised mode, spec-shaped.
  *
- * Wired from hooks/hooks.json as PreToolUse (Write|Edit|NotebookEdit|Bash|PowerShell|Monitor — the shell tools since 1.25.1, review 7:
+ * Wired from hooks/hooks.json as PreToolUse (Write|Edit|NotebookEdit|Bash|PowerShell|Monitor — the shell tools since 1.25.1:
  * `sed -i src/a.ts`, `cat > src/a.ts <<EOF`, `Set-Content src\a.ts`, `cp x src/a.ts` edited code with no prompt; each file a command
  * writes — spec.shellWriteTargets, the approval guard's own reader — goes through the same check). It does NOTHING unless the
  * project turned guard mode on (`.specs/roadmap.json` meta.guard === true — spec_init {guard: true} /
- * `dev-spec init --guard on`; 1.16: while meta.guard is unset, the user's DEV_SPEC_GUARD_DEFAULT decides). When on, a
+ * `dev-spec init --guard on`; while meta.guard is unset, the user's DEV_SPEC_GUARD_DEFAULT decides). When on, a
  * code edit outside `.specs/` while no feature has approved, unfinished
  * tasks gets `permissionDecision: "ask"` with a localized reason — the human confirms or declines.
- * meta.guard === "scope" (1.14 — spec_init {guard: "scope"} / `dev-spec init --guard scope`) also asks, once tasks are
+ * meta.guard === "scope" (spec_init {guard: "scope"} / `dev-spec init --guard scope`) also asks, once tasks are
  * approved, for a code file no open task names in `_Implements:_` (the file, a folder above it or a glob; test files excepted),
  * naming the task to add it to. At both levels a test file is allowed while a feature has an approved test plan and is
  * unfinished (Phase 4), and any code file while a spike is under way (its prototype) — spec.guardCheck decides.
@@ -20,18 +20,18 @@
  * silently. It is cheap: guard off costs one small file read (the engine is loaded only when the guard is on),
  * and the decision reads roadmap.json plus each feature's .state.json / tasks.md — never a repo walk.
  * The edited file's path is the agent's: a network one (\\host\share\…) is never stat'ed or realpath'ed — inside / outside
- * is decided on its text (spec.networkPathInside), so no SMB connection goes to a host the agent named (1.16 verify NEW-3).
- * The candidate project folders (the payload's cwd, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the user's — and (1.25.1,
- * review 7: a monorepo whose packages/app/.specs has the guard on, the session at the repository's root) the nearest .specs/ above the
+ * is decided on its text (spec.networkPathInside), so no SMB connection goes to a host the agent named.
+ * The candidate project folders (the payload's cwd, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the user's — and (
+ * a monorepo whose packages/app/.specs has the guard on, the session at the repository's root) the nearest .specs/ above the
  * edited file's folder, never for a network path.
  */
 
 const fs = require("fs");
 const path = require("path");
 
-// 1.25.1 (review 7): the shell tools — the engine reads which files a command writes (spec.shellWriteTargets). Before it loads, a
+// the shell tools — the engine reads which files a command writes (spec.shellWriteTargets). Before it loads, a
 // command must hold an output redirection or the name of a program that writes, removes, moves, copies or extracts files (the
-// engine's readers — mcp/tests/10-guards-review7.js checks every one it reads matches) — read-only commands, test runs and git (the
+// engine's readers — mcp/tests/10-guards-shell-writes.js checks every one it reads matches) — read-only commands, test runs and git (the
 // edit guard leaves git to the user) exit here.
 const SHELLS = new Set(["Bash", "PowerShell", "Monitor"]);
 const RE_SHELL_WRITE = new RegExp("[>]|(?:^|[^\\w.-])(?:tee|sed|perl|ruby|g?awk|mawk|nawk|cp|mv|install|scp|ln|dd|rm|rmdir|unlink|shred|truncate|" +
@@ -59,7 +59,7 @@ function finish(obj) {
   process.stdout.write(JSON.stringify(obj), () => process.exit(0));
 }
 
-// The user's default (1.16 — the environment variable DEV_SPEC_GUARD_DEFAULT, e.g. from Claude Code's settings.json `env`):
+// The user's default (the environment variable DEV_SPEC_GUARD_DEFAULT, e.g. from Claude Code's settings.json `env`):
 // on / scope turns the guard on for a project whose roadmap.json leaves meta.guard unset. The engine (spec.guardLevel) reads
 // the same variable.
 function userGuardDefault() {
@@ -108,7 +108,7 @@ function main(raw) {
   if (event && event !== "PreToolUse") return finish();
   const ti = payload.tool_input || payload.toolInput || {};
   const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";
-  // 1.25.1 (review 7, finding 8): a shell command — only one that may write a file (an output redirection, a writer by name) goes on
+  // a shell command — only one that may write a file (an output redirection, a writer by name) goes on
   const command = SHELLS.has(tool) && typeof ti.command === "string" ? ti.command : null;
   if (command !== null && !RE_SHELL_WRITE.test(command)) return finish();
   const target = command !== null ? null : [ti.file_path, ti.notebook_path, ti.path].find((v) => typeof v === "string" && v.trim());
@@ -116,8 +116,8 @@ function main(raw) {
 
   // The raw pre-check: is the guard on in any project this edit may belong to — the session's dev-spec projects (probe.sessionProjects:
   // the nearest at or above the session's cwd — a cd'd subfolder, a worktree —, the project dir Claude Code or the user exported) and
-  // (1.25.1, finding 9 — a monorepo) the nearest one above the edited file's folder (a shell command's path-like words)? The engine
-  // then picks THE project (spec.sessionProject, 1.23 review 5: a worktree's copy of .specs/ maps to the checkout the MCP server writes
+  // (a monorepo) the nearest one above the edited file's folder (a shell command's path-like words)? The engine
+  // then picks THE project (spec.sessionProject: a worktree's copy of .specs/ maps to the checkout the MCP server writes
   // in) and spells the edited file under it.
   const PR = probe();
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
@@ -147,8 +147,8 @@ function main(raw) {
       if (r.note && !note) note = r.note;
     }
   }
-  // Allowed by a FORCED approval only: say so to the user (systemMessage never changes the permission flow) — once a session (1.24
-  // review 6, C-I8: it was printed on every code edit). Keyed by the payload's session_id: a marker in the OS temp folder holding the
+  // Allowed by a FORCED approval only: say so to the user (systemMessage never changes the permission flow) — once a session (it
+  // was printed on every code edit). Keyed by the payload's session_id: a marker in the OS temp folder holding the
   // note (another set of forced features shows it again); no session_id → every time, as before.
   const r = { note };
   if (r.note) {

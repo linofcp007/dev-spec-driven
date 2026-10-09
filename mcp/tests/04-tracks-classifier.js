@@ -1,6 +1,6 @@
 "use strict";
-// Tracks — 1.25.1 readers review: the classifier's AI product names, its everyday-word cues, "no more X" / "without X … is incomplete", the small-change size.
-// (04-tracks.js and 04-tracks-builtin.js hold the area's earlier tests; this file the fixes of the 1.25.1 readers review.)
+// Tracks — the classifier: its AI product names, its everyday-word cues, "no more X" / "without X … is incomplete", the small-change size.
+// (04-tracks.js and 04-tracks-builtin.js hold the area's other tests.)
 
 exports.run = async ({ ok, S, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the pack fragment reader) — read through mcp/test.js's require

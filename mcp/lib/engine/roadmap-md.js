@@ -18,7 +18,7 @@ let activeDesign, activeTasks, chainPlaceholders, changedSinceApproval, clarific
   taskDepsWaitList, taskMarkers, taskMarkerSpans, taskProse, taskSchedule, timeOf, unverifiedLabel, verificationStatus,
   waiverView,
   featureSize, trackSectionReport, sectionVerdict, featureDirs, findCycles, isSpikeDir, spikePhase;
-let today; // core.js — 1.25.1: the local calendar date (today / dayOf)
+let today; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ today, activeDesign, activeTasks, chainPlaceholders, changedSinceApproval,
   clarificationMarkers, detectTracks, duplicateTaskNumbers, flatText, FOLD_CASE, globMatcher, implementsRel,
   isImplementsGlob, isObj, isRecord, MILESTONE_ICON, milestoneAttention, milestoneInvalidInfo, milestoneLine,
@@ -38,17 +38,17 @@ function progressBar(pct, n) {
   return "▰".repeat(f) + "▱".repeat(n - f);
 }
 
-// A Mermaid node id: prefixed (1.23 review 5 — a feature slugged `end`, `graph` or `subgraph` is a flowchart keyword that broke
+// A Mermaid node id: prefixed (a feature slugged `end`, `graph` or `subgraph` is a flowchart keyword that broke
 // the graph) and made of id characters only. Its label (mlabel) never holds a raw quote.
 function mid(name) {
   return "f_" + String(name).replace(/[^a-z0-9]/gi, "_");
 }
 const mlabel = (name) => String(name).replace(/"/g, "#quot;").replace(/\r?\n/g, " ");
 // A dependsOn entry as the roadmap shows it: a feature slug as it is; anything else (a stale, hand-edited roadmap.json entry) quoted,
-// one line, without markup or table characters (1.23 review 5 — it reached ROADMAP.md's Deps column, its "blocked by" line and the
+// one line, without markup or table characters (it reached ROADMAP.md's Deps column, its "blocked by" line and the
 // Mermaid graph raw: a "|" broke the table, a "<img …>" was markup in the committed file).
 const depShown = (d) => (/^[\w.-]{1,80}$/.test(d) ? d : JSON.stringify(cutText(flatText(d), 60)).replace(/[<>`|]/g, "?"));
-// The first `max` UTF-16 units of `s`, never ending inside a surrogate pair (1.23 review 5: a task text cut at 42 units in the
+// The first `max` UTF-16 units of `s`, never ending inside a surrogate pair (a task text cut at 42 units in the
 // middle of an emoji wrote U+FFFD into the committed ROADMAP.md). Every display truncation goes through it.
 function cutText(s, max) {
   const t = String(s == null ? "" : s);
@@ -66,13 +66,13 @@ const ROADMAP_I18N = {
 };
 // "planned": broken into tasks, none done yet — 30% of the way, so ⬜ "not started" next to it read as a contradiction.
 Object.entries({ en: "planned", pt: "planeada", es: "planificada" }).forEach(([l, s]) => { ROADMAP_I18N[l].planned = s; });
-// What the gates flag (1.13): "needs attention" lines and the marker for a next task that is still only a placeholder.
+// What the gates flag: "needs attention" lines and the marker for a next task that is still only a placeholder.
 Object.entries({
   en: { sections: "mandatory sections missing/unfilled", placeholders: "template placeholders in the current phase", changedSince: "changed since approval — re-review", forced: "approved with --force (checks were failing)", placeholderTask: "(placeholder)" },
   pt: { sections: "secções obrigatórias em falta/por preencher", placeholders: "placeholders do template na fase atual", changedSince: "alterado desde a aprovação — rever de novo", forced: "aprovado com --force (havia verificações a falhar)", placeholderTask: "(por preencher)" },
   es: { sections: "secciones obligatorias que faltan/sin rellenar", placeholders: "placeholders de la plantilla en la fase actual", changedSince: "modificado desde la aprobación — revisar de nuevo", forced: "aprobado con --force (había verificaciones fallando)", placeholderTask: "(sin rellenar)" },
 }).forEach(([l, o]) => Object.assign(ROADMAP_I18N[l], o));
-// pt-BR (1.14 D1) is derived from pt like every i18n table (i18n.derivePtBr), plus the labels a word map can't get right.
+// pt-BR is derived from pt like every i18n table (i18n.derivePtBr), plus the labels a word map can't get right.
 // Derived on first use (a lazy getter, as in i18n.js): loading the engine never pays for a locale it doesn't render.
 let ROADMAP_PT_BR = null;
 Object.defineProperty(ROADMAP_I18N, "pt-BR", { enumerable: true, get: () => ROADMAP_PT_BR ||
@@ -87,7 +87,7 @@ function cleanTaskText(t) {
   return String(t || "").replace(/^(?:\[[^\]]*\]\s*)+/, "");
 }
 
-// 1.22 review — the per-feature ROW cache (in process: the MCP server refreshes ROADMAP.md after every tick, and on 30 features ×
+// the per-feature ROW cache (in process: the MCP server refreshes ROADMAP.md after every tick, and on 30 features ×
 // 40 tasks a tick took 313 ms against 13.8 without the refresh). A row is recomputed unless every input it reads is unchanged:
 // the feature's folder (each entry's size, mtime, ctime and inode — `.history/` one level down; `.execution/`, the lock and
 // temp files are scratch), the project inputs (roadmap.json, steering/, templates/, tracks/ — two levels), the feature's
@@ -163,7 +163,7 @@ function roadmapData(projectDir, opts = {}) {
 // One feature's row of roadmapData (what the renderers read; f: its roadmap() view). Pure on its inputs (rowStatSig's).
 function roadmapRow(projectDir, dir, f, rmv) {
   {
-    // tasks.md through readContained (1.23 review 5): its next task's text is copied into the committed ROADMAP.md / .html, and a
+    // tasks.md through readContained: its next task's text is copied into the committed ROADMAP.md / .html, and a
     // tasks.md linked to a file outside .specs/ put that file's checkbox lines there — such a file reads as absent.
     const raw = { "requirements.md": readIfExists(path.join(dir, "requirements.md")), "design.md": readIfExists(path.join(dir, "design.md")), "tasks.md": readContained(projectDir, path.join(dir, "tasks.md")) };
     const reqs = raw["requirements.md"] || "";
@@ -173,9 +173,9 @@ function roadmapRow(projectDir, dir, f, rmv) {
     const designTodo = /^>\s*\*\*TODO\*\*/m.test(activeDesign(design, tracks));
     const tasks = parseTasks(activeTasks(raw["tasks.md"], tracks));
     const done = tasks.filter((t) => t.done).length;
-    const sch = taskSchedule(taskBlocks(activeTasks(raw["tasks.md"], tracks) || "")); // 1.14 F3: next_task's rule
+    const sch = taskSchedule(taskBlocks(activeTasks(raw["tasks.md"], tracks) || "")); // next_task's rule
     const next = sch.next;
-    // Open tasks, none of which can start (a cycle, a _Depends:_ naming no task): shown blocked, never "ready" (review R7).
+    // Open tasks, none of which can start (a cycle, a _Depends:_ naming no task): shown blocked, never "ready".
     const depsBlocked = !next && done < tasks.length ? (sch.blocked.length ? sch.blocked : sch.skipped) : null;
     // The icon agrees with the percent: past the requirements (16–25% = design / test / eval plan) a feature is in
     // progress — ⬜ 'not started' only below that; tasks-ready (30%, nothing done) is 📋 planned.
@@ -188,18 +188,18 @@ function roadmapRow(projectDir, dir, f, rmv) {
     // the current phase's template placeholders, approvals recorded with --force.
     const st = readJson(statePath(dir)).data; // read-only here: no resolver pass (it re-reads roadmap.json per call)
     const approvals = isObj(st) && isObj(st.approvals) ? st.approvals : {};
-    // 1.21 F5: the size's rules and the stricter filled rule (a guidance-only section on an approved design is flagged too — a warn)
+    // the size's rules and the stricter filled rule (a guidance-only section on an approved design is flagged too — a warn)
     const size = featureSize(dir);
     const sections = trackSectionReport(design, tracks, { size, lang: isObj(st) && typeof st.lang === "string" ? st.lang : undefined })
       .flatMap(([, mark, rows]) => rows.filter((s) => sectionVerdict(s, { size }) !== "pass").map((s) => ({ ...s, mark })));
     const changed = changedSinceApproval(dir, approvals, tracks, isObj(st) ? st.kind : undefined);
     const placeholders = chainPlaceholders(dir, tracks, (isObj(st) && st.kind) || "feature", f.phase, true, raw).blocking.map((r) => r.file);
     const forced = PHASES.filter((p) => phaseActive(p, tracks) && approvals[p] && approvals[p].forced);
-    // 1.16 U3: the waivers of those forced approvals (reason, expiry, expired) — the attention line shows them
+    // the waivers of those forced approvals (reason, expiry, expired) — the attention line shows them
     const waivers = Object.fromEntries(forced.map((p) => [p, waiverView(approvals[p].waiver)]).filter(([, w]) => w));
     const overlaps = (rmv.overlaps || []).filter((p) => p.a === f.name); // its side of each cross-feature file overlap
-    const roleWait = roleWaitList(projectDir, dir, st, tracks); // 1.14 B3: sign-off rounds under way (some roles signed, some not)
-    const spikeTimebox = f.kind === "spike" ? spikeInfo(dir).timeboxPassed : null; // 1.14 C2: a spike past its timebox with no decision
+    const roleWait = roleWaitList(projectDir, dir, st, tracks); // sign-off rounds under way (some roles signed, some not)
+    const spikeTimebox = f.kind === "spike" ? spikeInfo(dir).timeboxPassed : null; // a spike past its timebox with no decision
     return { f, clar, done, total: tasks.length, next, depsBlocked, designTodo, state, unverified, unverifiedDetail, sections, changed, placeholders, forced, waivers, overlaps, roleWait, spikeTimebox };
   }
 }
@@ -210,7 +210,7 @@ function buildAttention(rows, t, lang) {
   const known = new Set(rows.map((r) => r.f.name)); // the active features: a dependsOn naming anything else is stale
   rows.forEach((r) => {
     if (r.f.blocked) a.push({ name: r.f.name, msg: `${t.blockedBy} ${r.f.unmetDeps.map(depShown).join(", ")}` });
-    // 1.23 review 5 — a dependency no feature answers to (a hand-edited roadmap.json, a folder deleted by hand) blocks forever and
+    // a dependency no feature answers to (a hand-edited roadmap.json, a folder deleted by hand) blocks forever and
     // is drawn nowhere: named (a name that is no slug shown quoted, one line, without markup), with the command that sets the list
     // again from the deps that do exist (`--clear` when none) — it works whatever the stale text holds (--rm can't name one with a space)
     const stale = (r.f.dependsOn || []).filter((d) => !known.has(d));
@@ -226,7 +226,7 @@ function buildAttention(rows, t, lang) {
     } else if (r.designTodo) a.push({ name: r.f.name, msg: t.designTodo });
     if (r.placeholders && r.placeholders.length) a.push({ name: r.f.name, msg: `${t.placeholders}: ${r.placeholders.join(", ")}` });
     if (r.changed && r.changed.length) a.push({ name: r.f.name, msg: `${t.changedSince}: ${r.changed.join(", ")}` });
-    // a forced approval with its waiver (1.16 U3): "design (waiver: <reason>, until 2026-12-31)" — an expired one reads EXPIRED
+    // a forced approval with its waiver: "design (waiver: <reason>, until 2026-12-31)" — an expired one reads EXPIRED
     if (r.forced && r.forced.length) a.push({ name: r.f.name, msg: `${t.forced}: ${r.forced.map((p) => (r.waivers && r.waivers[p] ? fm.waiver.roadmapItem(p, r.waivers[p].reason, r.waivers[p].expires, r.waivers[p].expired) : p)).join(", ")}` });
     if (r.roleWait && r.roleWait.length) a.push({ name: r.f.name, msg: fm.governance.roadmapAwaiting(r.roleWait.map((w) => `${w.phase} (${w.missing.join(", ")})`).join(", ")) }); // 1.14 B3
     // "2 task(s) ticked without verification evidence: #1 (latest run failed), #3" — the same localized per-task
@@ -257,19 +257,19 @@ function renderRoadmapMd(projectDir, lang, data) {
   const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
   const icon = { done: "✅", inprogress: "🟡", blocked: "⛔", planned: "📋", notstarted: "⬜" };
-  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang, rmv.milestonesInvalid)); // + late / at-risk / invalid milestones (1.16 E3)
+  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang, rmv.milestonesInvalid)); // + late / at-risk / invalid milestones
   const cell = (s) => String(s).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
   const depsCell = (f) => (f.dependsOn.length ? f.dependsOn.map((d) => depShown(d) + (f.unmetDeps.includes(d) ? " ✗" : " ✓")).join(", ") : "—");
   const nextCell = (r) => (r.f.percent === 100 ? "—" : r.f.blocked || r.depsBlocked ? t.blocked : r.next ? `#${r.next.number} ${cell(cutText(roadmapTaskText(r.next.text, t), 42))}` : "…");
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked && !r.depsBlocked);
-  const kindTag = (f) => (f.kind === "spike" ? " 🔬 " + i18n.msg(lang).spike.kind : ""); // 1.14 C2: spikes read apart
-  const specLink = (f) => `./${f.name}/${f.kind === "spike" ? SPIKE_FILE : f.kind === "change" ? "change.md" : "requirements.md"}`; // 1.21 F5: a change's one file
+  const kindTag = (f) => (f.kind === "spike" ? " 🔬 " + i18n.msg(lang).spike.kind : ""); // spikes read apart
+  const specLink = (f) => `./${f.name}/${f.kind === "spike" ? SPIKE_FILE : f.kind === "change" ? "change.md" : "requirements.md"}`; // a change's one file
 
   let md = `# ${t.roadmap} — ${proj}\n\n<!-- ${t.autogen} -->\n\n`;
   md += `**${t.progress}: ${rmv.overallPercent}%** ${progressBar(rmv.overallPercent)} · ${rmv.complete}/${rmv.total} ${t.complete} · ${tasksDone}/${tasksTotal} ${t.tasks}\n\n`;
   if (rows.length) md += `_${velocityText(rmv.velocity, lang)}_\n\n`; // forecasts: the project velocity (or "not enough data")
   md += `${t.legend}: ✅ ${t.done} · 🟡 ${t.inprogress} · ⛔ ${t.blocked} · 📋 ${t.planned} · ⬜ ${t.notstarted}\n`;
-  const cycs = rmvCycles(rmv); // 1.24 r6 (G6): every cycle, one line each (only the first was shown)
+  const cycs = rmvCycles(rmv); // every cycle, one line each (only the first was shown)
   if (cycs.length) md += "\n" + cycs.map((c) => `> ⚠ **${t.cycle}:** ${c.join(" → ")}`).join("\n") + "\n";
 
   md += `\n## ▶ ${t.nextup}\n`;
@@ -286,18 +286,18 @@ function renderRoadmapMd(projectDir, lang, data) {
     if (rows.some((r) => r.f.forecast && r.f.forecast.eta)) md += `\n${F.etaNote(Math.round(FORECAST_SPREAD * 100))}\n`;
   }
 
-  if ((rmv.milestones || []).length) { // 1.16 E3 — each milestone: its date vs the latest ETA of its open features
+  if ((rmv.milestones || []).length) { // each milestone: its date vs the latest ETA of its open features
     const MS = i18n.msg(lang).milestone;
     md += `\n## 🏁 ${MS.title}\n\n| ${MS.cols.join(" | ")} |\n|${MS.cols.map(() => "---").join("|")}|\n`;
     for (const m of rmv.milestones) {
       const feats = m.features.join(", ") + (m.archived ? ` (${MS.archivedLabel}: ${m.archived.join(", ")})` : "");
-      md += `| ${cell(m.name)} | ${cell(m.date)} | ${cell(feats || "—")} | ${m.done}/${m.total} | ${cell(m.eta || "—")} | ${MILESTONE_ICON[m.status]} ${MS.status[m.status]} |\n`; // every stored value through cell() (1.16 E review M2)
+      md += `| ${cell(m.name)} | ${cell(m.date)} | ${cell(feats || "—")} | ${m.done}/${m.total} | ${cell(m.eta || "—")} | ${MILESTONE_ICON[m.status]} ${MS.status[m.status]} |\n`; // every stored value through cell()
     }
   }
 
   md += `\n## ${t.deps}\n\n`;
   // Edges between existing features only (a stale / hand-edited dependsOn is listed under Needs attention instead — its text
-  // forged edges and labels here); node ids prefixed, labels without a raw quote (1.23 review 5).
+  // forged edges and labels here); node ids prefixed, labels without a raw quote.
   const live = new Set(rmv.features.map((f) => f.name));
   const edges = rmv.features.flatMap((f) => f.dependsOn.filter((d) => live.has(d)).map((d) => `  ${mid(d)}["${mlabel(d)}"] --> ${mid(f.name)}["${mlabel(f.name)}"]`));
   md += edges.length ? "```mermaid\ngraph LR\n" + [...new Set(edges)].join("\n") + "\n```\n" : `_${t.noDeps}_\n`;
@@ -317,7 +317,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
   const langAttr = normalizeLang(lang); // en | pt | es | pt-BR — a valid BCP 47 tag
   const { rmv, rows, tasksDone, tasksTotal } = data || roadmapData(projectDir);
   const proj = path.basename(path.resolve(projectDir));
-  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang, rmv.milestonesInvalid)); // + late / at-risk / invalid milestones (1.16 E3)
+  const attention = buildAttention(rows, t, lang).concat(milestoneAttention(rmv.milestones, lang, rmv.milestonesInvalid)); // + late / at-risk / invalid milestones
   const dot = { done: "var(--c-done)", inprogress: "var(--c-prog)", blocked: "var(--c-block)", planned: "var(--accent)", notstarted: "var(--c-muted)" };
   const label = { done: t.done, inprogress: t.inprogress, blocked: t.blocked, planned: t.planned, notstarted: t.notstarted };
   const nextUp = rows.filter((r) => r.f.percent < 100 && !r.f.blocked && !r.depsBlocked);
@@ -339,7 +339,7 @@ function renderRoadmapHtml(projectDir, lang, data) {
     .join("\n");
   const F = i18n.msg(lang).forecast;
   const anyEta = rows.some((r) => r.f.forecast && r.f.forecast.eta);
-  const MS = i18n.msg(lang).milestone; // 1.16 E3 — the milestones table (only when some exist)
+  const MS = i18n.msg(lang).milestone; // the milestones table (only when some exist)
   const msRows = (rmv.milestones || []).map((m) => `<tr><td>${htmlEsc(m.name)}</td><td>${htmlEsc(m.date)}</td><td>${htmlEsc(m.features.join(", ") || "—")}${m.archived ? ` <span class="tracks">${htmlEsc(MS.archivedLabel)}: ${htmlEsc(m.archived.join(", "))}</span>` : ""}</td>` +
     `<td>${m.done}/${m.total}</td><td class="eta">${htmlEsc(m.eta || "—")}</td><td class="ms-${m.status}">${MILESTONE_ICON[m.status]} ${htmlEsc(MS.status[m.status])}</td></tr>`).join("\n");
 
@@ -443,7 +443,7 @@ ${backList ? `<ul>${backList}</ul>` : `<p class="sub">${t.backlogEmpty}</p>`}
 }
 
 // ---------------------------------------------------------------------------
-// Roadmap forecasts (1.14). A task may carry `_Size: XS|S|M|L|XL_` (an English-stable marker, like _Verify:_) worth
+// Roadmap forecasts. A task may carry `_Size: XS|S|M|L|XL_` (an English-stable marker, like _Verify:_) worth
 // XS=1 S=2 M=3 L=5 XL=8 points; an unsized task counts as its feature's median sized task (M when none is sized). When a
 // task was ticked is recorded by spec_complete_task (state.ticks[n] = ISO — recordTick); a task ticked before 1.14 falls
 // back to its evidence (the first passing run, else the record's time); a tick made by hand has no time and is not counted.
@@ -485,7 +485,7 @@ function taskCompletedAt(state, block, dup) {
   const at = timeOf(rec.at);
   return at != null ? at : timeOf(rec.noteAt);
 }
-// The day a time falls on — 1.25.1 (review 7): the LOCAL calendar day (it was the UTC one: a task ticked at 00:30 in Lisbon counted
+// The day a time falls on — the LOCAL calendar day (it was the UTC one: a task ticked at 00:30 in Lisbon counted
 // the day before, "today" too), as the UTC midnight of that date, so the working-day arithmetic below (FC_DAY_MS steps, getUTCDay)
 // and fcIso stay exact — no daylight-saving hour in between.
 const fcDay = (t) => { const d = new Date(t); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
@@ -524,7 +524,7 @@ function velocityOf(completions, now) {
 function forecastInput(projectDir, name) {
   return forecastInputAt(path.join(specsRoot(projectDir), name));
 }
-// 1.24 r6 (G3) — the project velocity counts the ARCHIVED features' completions too: their ticks happened. Archiving a feature
+// the project velocity counts the ARCHIVED features' completions too: their ticks happened. Archiving a feature
 // shipped this week wiped the velocity (roadmap, spec_metrics) and every other feature's ETA with it ("not enough data"). An
 // archived folder last written before the window (its mtime — archiving writes its .state.json there, after every tick) holds no
 // completion inside it and is skipped unread — unless `now` is fixed (opts.now, the tests: every archived folder is read).
@@ -560,7 +560,7 @@ function forecastInputAt(dir) {
   return { completions, remaining: round2(open.reduce((s, b) => s + pts(b), 0)), open: open.length, unsized: open.filter((b) => !taskSize(b)).length };
 }
 // feats: roadmap() features ({ name, phase, percent, unmetDeps, dependsOn }). opts.now (ms / ISO) fixes "today" (tests);
-// opts.cycle: a cycle's features (no ETA) — 1.24 r6 (G6): every feature of EVERY dependency cycle (findCycles over the features'
+// opts.cycle: a cycle's features (no ETA) — every feature of EVERY dependency cycle (findCycles over the features'
 // dependsOn) gets reason "cycle" too; only roadmap()'s first cycle did, and a member the walk met second was overwritten with
 // "dependency". → { velocity, byFeature: { name → forecast } } — forecast: { eta, range: [low, high], workingDays,
 // remainingPoints, openTasks, unsizedTasks, pointsPerDay, velocity: "feature" | "project", after? } or { eta: null, reason:
@@ -573,7 +573,7 @@ function forecastData(projectDir, feats, opts = {}) {
   const input = Object.create(null);
   const feat = Object.create(null);
   for (const f of feats) { feat[f.name] = f; input[f.name] = forecastInput(projectDir, f.name); }
-  // the project's rate: every feature's completions, the archived ones' included (1.24 r6 G3)
+  // the project's rate: every feature's completions, the archived ones' included
   const velocity = velocityOf(Object.values(input).flatMap((x) => x.completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
   const inCycle = new Set(Array.isArray(opts.cycle) ? opts.cycle : []);
   for (const c of findCycles(Object.fromEntries(feats.map((f) => [f.name, Array.isArray(f.dependsOn) ? f.dependsOn : []])))) c.members.forEach((m) => inCycle.add(m));
@@ -631,7 +631,7 @@ function roadmapExtras(projectDir, rmv, opts = {}) {
   rmv.velocity = fc.velocity;
   for (const f of rmv.features) f.forecast = fc.byFeature[f.name];
   rmv.milestones = milestoneStatuses(projectDir, rmv.features, (opts.now != null && timeOf(opts.now)) || Date.now()); // 1.16 E3
-  const msBad = milestoneInvalidInfo(readRoadmap(projectDir)); // 1.16 verify NEW-1: stored entries no status is computed for
+  const msBad = milestoneInvalidInfo(readRoadmap(projectDir)); // stored entries no status is computed for
   if (msBad) rmv.milestonesInvalid = msBad;
   const ov = featureOverlaps(projectDir, rmv.features);
   rmv.overlaps = ov.pairs;
@@ -657,7 +657,7 @@ function velocityText(v, lang) {
 function roadmapTailLines(r, lang) {
   const F = i18n.msg(lang).forecast;
   const out = [];
-  // 1.24 r6 (G6): the cycles after the first (the CLI's head line names the first — `cycle`), one line each
+  // the cycles after the first (the CLI's head line names the first — `cycle`), one line each
   for (const c of rmvCycles(r).slice(1)) out.push(`⚠ ${i18nLang(lang).cycle}: ${c.join(" → ")}`);
   if (r.velocity && r.velocity.completed > 0) out.push(velocityText(r.velocity, lang));
   if ((r.features || []).some((f) => f.forecast && f.forecast.eta)) out.push(F.etaNote(Math.round(FORECAST_SPREAD * 100)));
@@ -672,7 +672,7 @@ function roadmapTailLines(r, lang) {
 }
 
 // ---------------------------------------------------------------------------
-// Cross-feature file overlap (1.14). Two ACTIVE features whose OPEN tasks plan the same files (_Implements:_, compared as
+// Cross-feature file overlap. Two ACTIVE features whose OPEN tasks plan the same files (_Implements:_, compared as
 // implementsKey — anchors, ./ and case where the file system folds it dropped; a folder covers every file under it, as in
 // next --batch; a glob covers what it matches and its literal folder), or an active feature planning a file a FINISHED
 // feature recorded in its drift baseline (state.finished.files): they land on the same files at merge time and one of
@@ -688,12 +688,12 @@ const OVERLAP_MAX_REF_LEN = 512; // a longer reference is no path anyone plans �
 const OVERLAP_MAX_GLOB_WORK = 20000000; // DP cells over all glob comparisons (~0.2 s): the SessionStart hook runs this
 const OVERLAP_MAX_PAIRS = 50;
 const OVERLAP_FILES_SHOWN = 5;
-// 1.24 r6 I-I3 — the active features as featureOverlaps reads them, LIGHT: in roadmap()'s order (meta.order, then the name), each
+// the active features as featureOverlaps reads them, LIGHT: in roadmap()'s order (meta.order, then the name), each
 // one's name, whether it is complete — detectPhase's rule: every active task ticked; a spike: decided and its tasks, if any, ticked
 // (spikePhase) — and its dependsOn (roadmap.json's, as roadmap() reads it). Without a list, featureOverlaps (doctor's
 // cross-feature-overlap, the SessionStart line) went through roadmap() → listFeatures → detectPhase on EVERY feature: the planning
 // chain's artifacts and the placeholder corpus of each feature still being planned, for one bit. Reads tasks.md, .state.json and
-// roadmap.json only (mcp/tests/12-lifecycle-review6.js "I-I3" compares the pairs with roadmap()'s).
+// roadmap.json only (mcp/tests/12-lifecycle-write-gate.js "I-I3" compares the pairs with roadmap()'s).
 function overlapFeatures(projectDir) {
   const rm = readRoadmap(projectDir);
   return featureDirs(projectDir).filter((f) => !f.archived).map((f) => {

@@ -1,5 +1,5 @@
 "use strict";
-// 1.25 create --branch [<name>] in a real git repository: switched to, base recorded; outside git; a branch that exists; git failing / missing; status, next-action, finish, log.
+// create --branch [<name>] in a real git repository: switched to, base recorded; outside git; a branch that exists; git failing / missing; status, next-action, finish, log.
 
 const fs = require("fs");
 const path = require("path");

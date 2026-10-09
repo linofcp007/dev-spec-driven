@@ -1,5 +1,5 @@
 "use strict";
-// Review regressions on the CLI — decide's repeated flags, approve --through's forced label, spike --flow.
+// Cross-area regressions on the CLI — decide's repeated flags, approve --through's forced label, spike --flow.
 
 const path = require("path");
 

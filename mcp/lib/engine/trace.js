@@ -52,7 +52,7 @@ const VAGUE_WORDS = [
   "intuitiva", "robusto", "robusta", "simples", "fácil de usar", "eficiente", "escalável", "escalavel",
   "tempo real", "limpo", "limpa", "ótimo", "otimo", "ótima", "conforme necessário",
   "conforme necessario", "flexível", "flexivel", "poderoso", "poderosa", "elegante", "adequadamente",
-  "confiável", "confiavel", "performático", "performática", // pt-BR (1.14 D1): fiável → confiável; the "performant" anglicism
+  "confiável", "confiavel", "performático", "performática", // pt-BR: fiável → confiável; the "performant" anglicism
   // ES
   "amigable", "adecuado", "adecuada", "sencillo", "sencilla", "fiable", "optimizado", "optimizada",
   "fácil de usar", "rápida", "intuitiva", "robusta", "moderna", "escalable", "tiempo real", "ligero",
@@ -104,7 +104,7 @@ const RE_MODAL_EN = new RegExp(B + "SHALL" + E, "iu");
 const RE_MODAL_CAPS = new RegExp(B + "(DEVE|DEVER[ÁA]|DEVEM|DEVER[ÃA]O|DEBE|DEBER[ÁA]|DEBEN|DEBER[ÁA]N)" + E, "u");
 const RE_MODAL_SYSTEM = new RegExp(B + "sistema\\s+(n[ãa]o\\s+|no\\s+)?(deve|dever[áa]|debe|deber[áa])" + E, "iu");
 // A list item that opens with a stable AC ID defines a criterion, whatever section it sits in — a checkbox item
-// (`- [ ] **US-1.AC-1** — …`) too, and an ID in single italics or a code span (1.14 full review Pa2). 1.24 review 6 (F1): an ID in
+// (`- [ ] **US-1.AC-1** — …`) too, and an ID in single italics or a code span. An ID in
 // brackets or parentheses too (`- [US-1.AC-1] …`, `- (US-1.AC-1) …`, `- [ ] [US-1.AC-1] …` — criterionLabel's openers): such an AC was
 // counted by trace_check and never linted, so `- [US-1.AC-1] User can log in` (no modal verb) passed the requirements approval.
 const RE_LIST_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?[[(]?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
@@ -119,7 +119,7 @@ const RE_AC_HEADING = /acceptance criteria|crit[ée]rios de aceita[çc][ãa]o|cr
 // ID or an EARS keyword in CAPITALS — not for any "if/will/se" in ordinary prose (PT/ES reflexive "se").
 const RE_EARS_CAPS = new RegExp(B + "(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|ONDE|CUANDO|MIENTRAS|SI|DONDE)" + E, "u");
 const RE_EARS_KEYWORD = new RegExp(B + "(WHEN|WHILE|IF|WHERE|QUANDO|ENQUANTO|SE|ONDE|CUANDO|MIENTRAS|SI|DONDE)" + E, "iu");
-// The ubiquitous form names ITS system (review 5): "THE <name> SHALL …" — the API, the billing service, the mobile app (one to
+// The ubiquitous form names ITS system: "THE <name> SHALL …" — the API, the billing service, the mobile app (one to
 // four words) —, PT "O / A / OS / AS <nome> (NÃO) DEVE(M) / DEVERÁ(ÃO)", ES "EL / LA / LOS / LAS <nombre> (NO) DEBE(N) /
 // DEBERÁ(N)"; only "THE SYSTEM" counted, so "THE API SHALL return 200" got a no-keyword note. Bounded (≤ 4 words): linear.
 const RE_UBIQUITOUS = new RegExp(B + "(?:THE[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}?SHALL|(?:O|A|OS|AS)[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}?(?:N[ÃA]O[^\\S\\n]+)?" +
@@ -127,18 +127,18 @@ const RE_UBIQUITOUS = new RegExp(B + "(?:THE[^\\S\\n]+(?:[^\\s]+[^\\S\\n]+){1,4}
 // The scaffold's own edge cases / NFRs / success criteria (EC-1, NFR-1, SC-001) are stable IDs too.
 const RE_STABLE_ID = /(?<![A-Za-z0-9])(US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)/;
 // …of which a criterion's OWN ID is never a bare `AC-n` (RE_BARE_AC — not the AC-n of a US-n.AC-n, nor of an importer's escaped
-// `US-7\.AC-1`: an ID-led line of imported prose, demoted so it defines nothing — review 4).
+// `US-7\.AC-1`: an ID-led line of imported prose, demoted so it defines nothing).
 const RE_BARE_AC = /(?<![A-Za-z0-9]|US-\d+\\?\.)AC-\d+(?!\d)/;
-// …and the stable IDs a criterion with no label may carry anywhere (EARS's no-id lint): never a T- ID (a test's — review 3), never
-// a sub-criterion ID (review 5, L31 — US-1.AC-1.2 is no US-1.AC-1).
+// …and the stable IDs a criterion with no label may carry anywhere (EARS's no-id lint): never a T- ID (a test's), never
+// a sub-criterion ID (US-1.AC-1.2 is no US-1.AC-1).
 const RE_FULL_ID_NO_T = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+(?!\.?\d)|EC-\d+|NFR-\d+|SC-\d+)/;
 
-// A unit that DEFINES an AC for the EARS linter (criterionBlocks {acUnits}) — 1.14 full review Pa2: only list items were
+// A unit that DEFINES an AC for the EARS linter (criterionBlocks {acUnits}) — only list items were
 // linted, so an AC written as a table row, a bold paragraph, a heading or a checkbox item was never EARS-checked while
 // trace_check counted it. A line (list marker / checkbox optional) or a heading that starts with its ID (bracketed or in parentheses
-// too — 1.24 review 6, F1); a table row with a cell that is exactly an AC ID.
+// too); a table row with a cell that is exactly an AC ID.
 const RE_LEAD_DEFINES_AC = /^(?:(?:\d+[.)]|[-*+])\s+)?(?:\[[ xX]\]\s+)?(?:\*\*|__|\*|_|`)?[[(]?(?:US-\d+\.AC-\d+|AC-\d+)(?!\d)/;
-const RE_CELL_AC = /^(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+(?:\.\d+)?|AC-\d+)(?:\*\*|__|\*|_|`)?$/; // (a sub-criterion ID too — review 5, L31: linted, then named)
+const RE_CELL_AC = /^(?:\*\*|__|\*|_|`)?(?:US-\d+\.AC-\d+(?:\.\d+)?|AC-\d+)(?:\*\*|__|\*|_|`)?$/; // (a sub-criterion ID too — linted, then named)
 
 // Strip HTML comments (possibly multi-line — commentLines) so template guidance doesn't count as real content,
 // then fold the surviving lines into criterion blocks.
@@ -172,9 +172,9 @@ function criterionBlocks(text, opts = {}) {
 
   const all = text.split(/\r?\n/);
   const cl = commentLines(all); // comments and fenced code as every reader sees them (a code span's "<!--" is text)
-  // review 5 (L32): an INDENTED code block (codeBlockLines over the visible text) is code like a fence — its lines define nothing
+  // an INDENTED code block (codeBlockLines over the visible text) is code like a fence — its lines define nothing
   const icode = codeBlockLines(cl.map((c) => (c.hidden ? "" : c.vis)));
-  // 1.25.1: a SETEXT heading (a one-line paragraph over === / ---, the ONE heading reader's — headingEntries) is a heading here too:
+  // a SETEXT heading (a one-line paragraph over === / ---, the ONE heading reader's — headingEntries) is a heading here too:
   // "Acceptance Criteria\n-------------------" opened no section (its criteria were linted outside an AC context, the strict rule),
   // its text read as a paragraph criterion and its underline as a break. Its text line is the heading; the underline is skipped.
   const setext = new Map(), underline = new Set();
@@ -182,7 +182,7 @@ function criterionBlocks(text, opts = {}) {
   // acUnits: a table row, heading or paragraph line led by an AC ID is a REFERENCE — never a criterion to lint — when a list
   // item defines that ID anywhere, or an earlier unit already did ("US-1.AC-2 depends on the IdP's error codes." in Notes, a
   // "| US-1.AC-1 | P1 |" coverage table); outside an acceptance-criteria context it defines one only when it reads like one
-  // (a modal verb or a capitalised EARS keyword). (Full review R5 — Pa2 linted those references and refused valid specs.)
+  // (a modal verb or a capitalised EARS keyword). (Pa2 linted those references and refused valid specs.)
   const leadId = (s) => { const m = s.match(/(?:US-\d+\.AC-\d+(?:\.\d+)?|AC-\d+)(?!\d)/); return m ? m[0] : null; }; // (US-1.AC-1.2 is its own unit)
   const listDefined = new Set();
   if (acUnits) all.forEach((raw, i) => {
@@ -197,8 +197,8 @@ function criterionBlocks(text, opts = {}) {
     unitDefined.add(id);
     return true;
   };
-  // acUnits — 1.24 review 6 (F2): every DEFINITION of a US-n.AC-m ID (criterionLabel's reading of the unit), a repeat included, in
-  // document order → `defs` [{ id, key, line }] (key: the ID by number — US-1.AC-01 is US-1.AC-1, F8). acDuplicates (ac-uniqueness)
+  // acUnits — every DEFINITION of a US-n.AC-m ID (criterionLabel's reading of the unit), a repeat included, in
+  // document order → `defs` [{ id, key, line }] (key: the ID by number — US-1.AC-01 is US-1.AC-1). acDuplicates (ac-uniqueness)
   // reads them: a list item led by its ID (a checkbox, an emphasis, a bracket before it — RE_LIST_DEFINES_AC), and a heading / table row
   // / paragraph line that defines one as above. Such a unit that repeats an ID already defined is a reference (above), never a
   // criterion — but a DEFINITION again, a duplicate, when it carries a modal verb (it states a criterion of its own), or, a heading in
@@ -219,7 +219,7 @@ function criterionBlocks(text, opts = {}) {
     if (c.fence === "open") return flush(); // an unclosed fence in a list item ends with the item (fenceStep)
     if (c.fence) return; // inside a fence: no content, no criteria ("const shall = 1")
     if (icode[i]) return flush(); // an indented code block: code, and the end of the criterion before it
-    if (underline.has(i)) return; // a setext heading's underline (1.25.1): no content, no break — an AC heading's body may follow
+    if (underline.has(i)) return; // a setext heading's underline: no content, no break — an AC heading's body may follow
     const line = c.vis;
     if (!line.trim()) {
       // A blank source line ends the criterion; a line that held only a comment does not. An AC heading's body may
@@ -308,7 +308,7 @@ function criterionBlocks(text, opts = {}) {
   };
 }
 const RE_US_AC_ONLY = /^US-(\d+)\.AC-(\d+)$/; // a criterion's US-n.AC-m label (never a sub-criterion's US-1.AC-1.2)
-// An AC ID by NUMBER (1.24 review 6, F8): "US-01.AC-01" → "US-1.AC-1" (anything else as it is). A zero-padded one (RE_PADDED_AC) is
+// An AC ID by NUMBER: "US-01.AC-01" → "US-1.AC-1" (anything else as it is). A zero-padded one (RE_PADDED_AC) is
 // EARS's `padded-id` warning; ac-uniqueness compares by this key.
 const acKey = (id) => { const m = RE_US_AC_ONLY.exec(id); return m ? "US-" + parseInt(m[1], 10) + ".AC-" + parseInt(m[2], 10) : id; };
 const RE_PADDED_AC = /^US-(?:0\d+\.AC-\d+|\d+\.AC-0\d+)$/;
@@ -317,7 +317,7 @@ const RE_PADDED_AC = /^US-(?:0\d+\.AC-\d+|\d+\.AC-0\d+)$/;
 function earsFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
-  const text = criteriaText(f.dir); // a change: its change.md without the task blocks (1.21 review C1)
+  const text = criteriaText(f.dir); // a change: its change.md without the task blocks
   const lng = featureLang(projectDir, f.slug);
   if (text == null) return { ok: false, error: i18n.msg(lng).err.requirementsMissing(f.slug) };
   return earsValidate(text, lng);
@@ -325,8 +325,8 @@ function earsFeature(projectDir, name) {
 
 // requirements.md defines AC IDs (trace_check's reading, requirementAcIds) that NO criterion EARS linted carries: those IDs,
 // shortened ("US-1.AC-1, US-1.AC-2 …"), else null. Doctor's `ears` check and the requirements / change-plan approvals fail on it
-// (1.14 full review Pa2) — an AC written only mid-sentence, or in a summary table, is counted yet never checked.
-// 1.24 review 6 (F1): per ID — it fired only when EARS linted no criterion at all, so beside one well-formed criterion an AC trace_check
+// an AC written only mid-sentence, or in a summary table, is counted yet never checked.
+// per ID — it fired only when EARS linted no criterion at all, so beside one well-formed criterion an AC trace_check
 // required but EARS never read (`- WHEN … the user sees an error (US-1.AC-1)`, a blockquoted AC, `- Login US-1.AC-1: …`) passed doctor
 // and the approval. A criterion carries an ID written in its own text (never a `_Supersedes:_` marker's nor another feature's
 // `<slug>/US-n.AC-m`, read as requirementAcIds reads them). `ears`: earsValidate's result for reqText (its non-enumerable `criteria`).
@@ -340,14 +340,14 @@ function earsUnlinted(reqText, ears, dir) {
   return miss.length ? shortIdList(miss) : null;
 }
 const shortIdList = (xs) => xs.slice(0, 5).join(", ") + (xs.length > 5 ? " …" : ""); // "US-1.AC-1, US-1.AC-2 …"
-// The mirror (1.22 review): EARS linted criteria but requirements.md defines no AC ID trace_check reads — a spec numbered with
+// The mirror: EARS linted criteria but requirements.md defines no AC ID trace_check reads — a spec numbered with
 // bare `AC-1`, `AC-2` (EARS took them as stable IDs) or with none at all traced 0 ACs, passed trace_check ("all 0 ACs covered")
 // and the requirements approval. → the criteria as labels — each one's bare AC ID, else "L<line>" — in document order
 // (the full list), else null. trace_check reports them as a gap (unidentifiedCriteria); doctor's `ears` and the requirements /
-// change-plan approvals fail on them. Only a criterion with NO stable ID counts (review 2): an NFR-n / EC-n / SC-nnn one has
+// change-plan approvals fail on them. Only a criterion with NO stable ID counts: an NFR-n / EC-n / SC-nnn one has
 // its own (trace_check's secondary warnings read it) — a performance spec of NFR-1, NFR-2 alone failed every gate. Its own:
-// the ID that LABELS it (ownStableId — review 3).
-// Review 4: each criterion is judged by its OWN ID — a criterion numbered with a bare AC-n (bareLabel) is listed whatever the rest
+// the ID that LABELS it (ownStableId).
+// each criterion is judged by its OWN ID — a criterion numbered with a bare AC-n (bareLabel) is listed whatever the rest
 // of the document defines: the early return for a document with any US-n.AC-m in it let `- AC-1: … (see US-1.AC-9)` through,
 // while the CITED ID became the only required criterion. One with no ID at all is listed only when the document defines no AC ID
 // trace_check reads (a stray unnumbered criterion next to US-n.AC-m ones stays EARS's no-id warn).
@@ -364,11 +364,11 @@ function earsUnidentified(reqText, ears, dir) {
 }
 // A criterion has a stable ID of its OWN when the ID that LABELS it (criterionLabel — its lead, or a table row's ID cell) is a
 // US-n.AC-m, EC-n, NFR-n or SC-nnn of this feature: not behind another feature's slug (`checkout/US-3.AC-2` — resolved as
-// requirementAcIds resolves it, `dir`), never in a `_Supersedes:_` marker. Review 3: ANY ID mentioned in the criterion counted —
+// requirementAcIds resolves it, `dir`), never in a `_Supersedes:_` marker. ANY ID mentioned in the criterion counted —
 // `- AC-1: WHEN … SHALL redirect (see EC-1)` or `… (T-01)` had "its own" ID (earsUnidentified null, doctor's ears passed, trace
 // counted 0 ACs with no gap, spec_upgrade's bareAcIds was []). A bare AC-n label is no ID whatever else the criterion cites, and
 // a T- ID (a test's) is never a criterion's.
-// Review 4: with NO label (criterionLabel null), a stable non-T ID anywhere in the criterion's own text is its ID — as earsValidate
+// with NO label (criterionLabel null), a stable non-T ID anywhere in the criterion's own text is its ID — as earsValidate
 // counts it (withStableId): `- THE SYSTEM SHALL answer … in 200 ms (NFR-1)`, `- **Latency (NFR-1):** …`, `- **[NFR-1]** …`,
 // `a. NFR-1: …` were unidentified (doctor's ears failed, the approval was refused) while EARS found their ID. Another feature's
 // `<slug>/US-n.AC-m` (stripForeignAcRefs) and a `_Supersedes:_` marker's IDs are never its own.
@@ -381,11 +381,11 @@ function ownStableId(text, dir) {
   return !lab.slug || notASlug(lab.slug) || featureRefTest(dir)(lab.slug) !== "other";
 }
 // The bare AC-n a criterion is numbered with: its label when that is one, else (no other label) a bare AC-n in its text.
-// Review 4: in its OWN text — never in a `_Supersedes:_` marker, behind a slash (another feature's `checkout/AC-2`, a URL's
+// in its OWN text — never in a `_Supersedes:_` marker, behind a slash (another feature's `checkout/AC-2`, a URL's
 // `/pages/AC-12`) or running into a letter / digit (`AC-230V mains`): each was read as the criterion's number, and every gate
 // (and spec_upgrade's renumber item) asked to renumber another feature's ID.
 const RE_BARE_AC_OWN = /(?<![A-Za-z0-9/]|US-\d+\\?\.)AC-\d+(?![A-Za-z0-9])/;
-// Review 5 (L31): a SUB-criterion ID (US-1.AC-1.2 — no ID trace_check reads, extractAcIds) is one too: its label, else one in its
+// a SUB-criterion ID (US-1.AC-1.2 — no ID trace_check reads, extractAcIds) is one too: its label, else one in its
 // own text (another feature's `<slug>/…` aside).
 const RE_BARE_LABEL = /^(?:AC-\d+|US-\d+\.AC-\d+\.\d+)$/;
 function bareLabel(text) {
@@ -396,7 +396,7 @@ function bareLabel(text) {
   return m ? m[0] : null;
 }
 // The bare `AC-n` IDs the criteria are numbered with — each linted criterion with no stable ID of its own that carries one — in
-// document order, once each ([] when none). spec_upgrade's renumber item (review 2): a feature approved before 1.22 with AC-1,
+// document order, once each ([] when none). spec_upgrade's renumber item: a feature approved before 1.22 with AC-1,
 // AC-2 … fails doctor's ears / traceability now, with no warning path. `dir`: the feature's folder (see ownStableId).
 function criteriaBareIds(reqText, dir) {
   const ev = earsValidate(reqText || "", "en");
@@ -415,7 +415,7 @@ function earsValidate(text, lang) {
   const G = i18n.msg(lang).gates;
   if (!text || !text.trim()) return { ok: false, error: i18n.msg(lang).err.noText };
   const issues = [];
-  const { cleaned, blocks } = criterionBlocks(text, { acUnits: true }); // every unit that defines an AC is linted (Pa2)
+  const { cleaned, blocks } = criterionBlocks(text, { acUnits: true }); // every unit that defines an AC is linted
   let acCount = 0;
   let withShall = 0;
   let withId = 0;
@@ -460,9 +460,9 @@ function earsValidate(text, lang) {
 
     // A bare `AC-1` is no stable ID: trace_check reads US-<story>.AC-<n> only (requirementAcIds) — a spec numbered AC-1, AC-2 …
     // traced 0 ACs and passed. Flagged no-id, naming the form to write.
-    // Review 3: the ID that LABELS the criterion decides (criterionLabel — `- AC-1: … (see EC-1)` is numbered with a bare AC-1
+    // the ID that LABELS the criterion decides (criterionLabel — `- AC-1: … (see EC-1)` is numbered with a bare AC-1
     // whatever it cites; a T- ID is a test's, never a criterion's); with no label, a stable ID anywhere in it still counts here.
-    // Review 4: the criterion's OWN text, as ownStableId reads it — never a `_Supersedes:_` marker's ID or another feature's
+    // the criterion's OWN text, as ownStableId reads it — never a `_Supersedes:_` marker's ID or another feature's
     // `<slug>/US-n.AC-m` (with no feature folder here, every resolvable slug is another's): EARS counted them, so a criterion
     // whose only ID was one stayed untraced with no warning while doctor named it.
     const own = stripSupersedes(b.text);
@@ -470,9 +470,9 @@ function earsValidate(text, lang) {
     if (lab ? RE_OWN_LABEL_ID.test(lab.id) : RE_FULL_ID_NO_T.test(stripForeignAcRefs(own))) withId++;
     else {
       const bare = bareLabel(b.text);
-      add("warn", "no-id", !bare ? M.noId : /^US-/.test(bare) ? M.subAcId(bare) : M.bareAcId(bare)); // review 5 (L31): a sub-criterion ID
+      add("warn", "no-id", !bare ? M.noId : /^US-/.test(bare) ? M.subAcId(bare) : M.bareAcId(bare)); // a sub-criterion ID
     }
-    // 1.24 review 6 (F8): a zero-padded US-n.AC-m in the criterion's own text — every reader compares AC IDs as written, so
+    // a zero-padded US-n.AC-m in the criterion's own text — every reader compares AC IDs as written, so
     // `US-1.AC-01` and a task's `US-1.AC-1` were an uncovered AC and a phantom with no word why. Named, with its canonical form.
     for (const id of extractAcIds(stripForeignAcRefs(own))) if (RE_PADDED_AC.test(id)) add("warn", "padded-id", M.paddedAcId(id, acKey(id)));
 
@@ -512,7 +512,7 @@ function extractAcIds(text) {
   // No trailing \b: AC IDs are often wrapped in markdown italics (`_US-1.AC-1_`) and `_`
   // counts as a word char, which would defeat \b. A leading non-alnum guard avoids
   // matching inside other tokens; greedy \d+ grabs the full number (AC-10, not AC-1).
-  // Review 5 (L31): a SUB-criterion ID — US-1.AC-1.2 — is no AC ID (it read as US-1.AC-1: two sub-criteria collapsed into one
+  // a SUB-criterion ID — US-1.AC-1.2 — is no AC ID (it read as US-1.AC-1: two sub-criteria collapsed into one
   // required AC, a task citing US-1.AC-1.1 covered both); EARS names it (no-id, RE_SUB_AC) — one stable ID per criterion.
   const ids = new Set();
   const re = /(?<![A-Za-z0-9])US-\d+\.AC-\d+(?!\.?\d)/g;
@@ -530,14 +530,14 @@ function extractTestIds(text) {
   while ((m = re.exec(text || "")) !== null) ids.add(m[0]);
   return ids;
 }
-// A text's T-IDs by NUMBER (review 5, L32 — T-01 is T-1, as the matrix and the test-code scan compare them) → Map(key → the first
+// A text's T-IDs by NUMBER (T-01 is T-1, as the matrix and the test-code scan compare them) → Map(key → the first
 // spelling).
 function testIdKeys(text) {
   const out = new Map();
   for (const id of extractTestIds(text)) { const k = tKey(id.slice(2)); if (!out.has(k)) out.set(k, id); }
   return out;
 }
-// Review 5 (M5) — what tasks.md's TASKS cite, the ONE reader trace_check, the matrix (and doctor, through trace_check) share: each
+// what tasks.md's TASKS cite, the ONE reader trace_check, the matrix (and doctor, through trace_check) share: each
 // task block's prose (taskProse — its line, its body, never a fenced example), another feature's `<slug>/US-n.AC-m` dropped
 // (stripForeignAcRefs — a slug that names no feature is this feature's only when requirements.md labels that ID with it).
 // trace_check read tasks.md WHOLE: "US-1.AC-2 is out of scope" in a Notes paragraph, or the title, covered US-1.AC-2 while the
@@ -564,7 +564,7 @@ function traceCheck(projectDir, name, opts = {}) {
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const dir = f.dir;
   // Strip HTML comments so example markers in template guidance don't count as real refs.
-  // 1.21 review C1: a change's change.md is read as two views — its criteria without the task blocks, its task blocks alone —
+  // a change's change.md is read as two views — its criteria without the task blocks, its task blocks alone —
   // or every task reference would count as a defined criterion and every criterion as covered by its own definition.
   const rawReqs = criteriaText(dir) || "";
   const rawTasks = tasksIdText(dir) || "";
@@ -576,23 +576,23 @@ function traceCheck(projectDir, name, opts = {}) {
   const tracks = detectTracks(dir);
   const blocks = taskBlocks(rawTasks);
 
-  // 1.24 review 6 (F9): the REQUIRED ACs are the ACTIVE requirements' (activeDesign — a removed track's [SaaS] / [AI] / … criteria are
+  // the REQUIRED ACs are the ACTIVE requirements' (activeDesign — a removed track's [SaaS] / [AI] / … criteria are
   // inactive, as the matrix, the export and tracks.md's removal rule read them), covered by the ACTIVE tasks (activeTasks — the matrix's
   // tasks): a feature that turned +saas off and deleted its +saas tasks failed traceability on criteria the matrix no longer listed.
   // Whatever requirements.md defines (active or not) is no phantom: a task or test row citing an inactive criterion is no typo.
   const activeReqs = activeDesign(rawReqs, tracks);
   const requiredAcs = requirementAcIds(activeReqs, dir);
   const definedAcs = activeReqs === rawReqs ? requiredAcs : requirementAcIds(rawReqs, dir);
-  // 1.25.1: never silently — the ACs an inactive section holds (a turned-off track's / a missing pack's) are a warning, inactiveAcs
+  // never silently — the ACs an inactive section holds (a turned-off track's / a missing pack's) are a warning, inactiveAcs
   const inactiveAcs = definedAcs === requiredAcs ? [] : [...definedAcs].filter((id) => !requiredAcs.has(id));
-  // review 5 (M5): what the TASKS cite — taskCitations, the matrix's reader (never a Notes paragraph or the title; never another
+  // what the TASKS cite — taskCitations, the matrix's reader (never a Notes paragraph or the title; never another
   // feature's `<slug>/US-n.AC-m`); the test plan without another feature's references either
   const cites = taskCitations(blocks, dir, rawReqs);
   const acsInTasks = cites.acs;
   const activeTaskText = activeTasks(rawTasks, tracks);
   const activeBlocks = activeTaskText === rawTasks ? blocks : taskBlocks(activeTaskText);
   const acsInActiveTasks = activeBlocks === blocks ? acsInTasks : taskCitations(activeBlocks, dir, rawReqs).acs;
-  // 1.24 review 6 (F3): an AC's test COVERAGE comes from the plan's test entries only (testPlanEntries — a T-ID's table row or list
+  // an AC's test COVERAGE comes from the plan's test entries only (testPlanEntries — a T-ID's table row or list
   // item, the matrix's `tests`), never from any mention: an AC named in the Coverage Check's "Gaps" list or under "Out of Scope"
   // counted as covered and the test-plan approval passed. Any mention still names an AC (phantoms, the justified gaps below).
   const acsInTestPlan = new Set();
@@ -602,14 +602,14 @@ function traceCheck(projectDir, name, opts = {}) {
   const uncoveredByTasks = [...requiredAcs].filter((id) => !acsInActiveTasks.has(id));
   // Reverse direction: AC IDs referenced by tasks that don't exist in requirements (typos).
   const phantomAcsInTasks = [...acsInTasks].filter((id) => !definedAcs.has(id));
-  // 1.22 review: criteria EARS lints but no AC ID this reader counts (a bare AC-1, or none) — 0 ACs used to be "all covered".
-  // (review 4: with AC IDs defined, a criterion numbered with a bare AC-n is still one — linted only when the text holds one;
-  // review 5, L31: or a sub-criterion ID, US-1.AC-1.2)
+  // criteria EARS lints but no AC ID this reader counts (a bare AC-1, or none) — 0 ACs used to be "all covered".
+  // (with AC IDs defined, a criterion numbered with a bare AC-n is still one — linted only when the text holds one;
+  // or a sub-criterion ID, US-1.AC-1.2)
   let ears = null;
   const earsOf = () => ears || (ears = earsValidate(rawReqs, "en"));
   const unidentified = !rawReqs.trim() || (definedAcs.size && !RE_BARE_AC.test(rawReqs) && !RE_SUB_AC.test(rawReqs)) ? null
     : earsUnidentified(rawReqs, earsOf(), dir);
-  // 1.24 review 6 (F-I8): beside US-n.AC-m criteria, a linted criterion with a modal verb and NO stable ID of its own (nor a bare /
+  // beside US-n.AC-m criteria, a linted criterion with a modal verb and NO stable ID of its own (nor a bare /
   // sub-criterion one — those are unidentifiedCriteria) is EARS's no-id warn only: nothing can trace it. The warning untracedCriteria
   // ("L<line>", only when some) names it — never a gap, never the verdict.
   const untraced = [];
@@ -622,7 +622,7 @@ function traceCheck(projectDir, name, opts = {}) {
   // Spec ↔ code: tasks may carry `_Implements: path/to/file_` markers. Verify the files exist.
   const implFiles = [];
   // The task-marker reader (taskMarkerSpans): `src/user_service.py` stays whole, and `_Implements: src/a.ts_;` /
-  // `(see _Implements: src/old.ts_).` are markers too (1.14 full review Pa1 — they read as no file at all).
+  // `(see _Implements: src/old.ts_).` are markers too (they read as no file at all).
   for (const v of taskMarkerValues(tasks, "implements")) {
     v.split(/[,;]/).map((s) => s.trim().replace(/^`|`$/g, "")).filter(Boolean).forEach((p) => { if (!implFiles.includes(p)) implFiles.push(p); });
   }
@@ -677,8 +677,8 @@ function traceCheck(projectDir, name, opts = {}) {
     uncoveredByTasks,
     phantomAcsInTasks,
     ...(unidentified ? { unidentifiedCriteria: unidentified } : {}), // only when there are some: the result is otherwise unchanged
-    ...(untraced.length ? { untracedCriteria: untraced } : {}), // a warning (F-I8) — likewise only when there are some
-    ...(inactiveAcs.length ? { inactiveAcs } : {}), // a warning (1.25.1) — the criteria of an inactive track section, never required
+    ...(untraced.length ? { untracedCriteria: untraced } : {}), // a warning — likewise only when there are some
+    ...(inactiveAcs.length ? { inactiveAcs } : {}), // a warning — the criteria of an inactive track section, never required
     implementsFiles: implFiles,
     missingImplFiles,
     plannedImplFiles,
@@ -690,11 +690,11 @@ function traceCheck(projectDir, name, opts = {}) {
     // Reverse: AC IDs the test plan names that requirements.md doesn't define (a typo, a removed criterion, a template
     // row for a track the requirements never got) — a fenced example is no reference (planIdText), as for tasks.
     const phantomAcsInTests = [...acsNamedInPlan].filter((id) => !definedAcs.has(id));
-    // 1.24 review 6 (F3): the uncovered ACs the plan NAMES outside its test entries (the Coverage Check's "Gaps (with justification)",
+    // the uncovered ACs the plan NAMES outside its test entries (the Coverage Check's "Gaps (with justification)",
     // "Out of Scope for Testing") — still gaps (no test covers them: approving the plan anyway is a forced approval), and a warning
     // that says the plan accounts for them.
     const justifiedTestGaps = uncoveredByTests.filter((id) => acsNamedInPlan.has(id));
-    // T-IDs by NUMBER (review 5, L32 — the matrix's and the test-code scan's rule): a task's T-1 is the plan's T-01; each is
+    // T-IDs by NUMBER (the matrix's and the test-code scan's rule): a task's T-1 is the plan's T-01; each is
     // reported as its own file spells it. The tasks' T-IDs are what the tasks cite (taskCitations).
     const planTestIds = testIdKeys(testPlan);
     const tasksTestIds = cites.tids;
@@ -723,7 +723,7 @@ function traceCheck(projectDir, name, opts = {}) {
   // no typos — traceGapLines names the change request and says to delete or update what cites them. Informational.
   const removedAt = new Map();
   const changes = stateFromFile(projectDir, statePath(dir)).changes;
-  const reqPhase = isChangeDir(dir) ? "tasks" : "requirements"; // 1.21 review C4: a change's criteria change with its plan (phase tasks)
+  const reqPhase = isChangeDir(dir) ? "tasks" : "requirements"; // a change's criteria change with its plan (phase tasks)
   (Array.isArray(changes) ? changes : []).forEach((c, i) => {
     if (isRecord(c) && c.phase === reqPhase && Array.isArray(c.removed)) for (const id of c.removed) if (typeof id === "string") removedAt.set(id, i + 1);
   });
@@ -732,14 +732,14 @@ function traceCheck(projectDir, name, opts = {}) {
 
   // Deep traceability — WARNINGS, never part of the verdict (above) nor of traceGaps(): the secondary IDs of
   // requirements.md and, with opts.code, the T-IDs of the project's test code.
-  Object.assign(result, traceSecondary(dir, activeReqs, activeBlocks, rawPlan, tracks, rawReqs)); // (F9: an inactive section's EC / NFR / SC is no warning)
-  // 1.14 F5 — opts.matrix: + the requirements traceability matrix (buildTraceMatrix); with code both share ONE walk.
+  Object.assign(result, traceSecondary(dir, activeReqs, activeBlocks, rawPlan, tracks, rawReqs)); // (an inactive section's EC / NFR / SC is no warning)
+  // opts.matrix: + the requirements traceability matrix (buildTraceMatrix); with code both share ONE walk.
   const scan = opts.code && opts.matrix ? (typeof opts.scan === "function" ? opts.scan() : opts.scan) || scanTestCode(projectDir) : opts.scan;
   if (opts.code) result.code = traceTestCode(projectDir, dir, testPlan, requiredAcs, scan);
   result.warnings = traceWarnings(result);
   Object.assign(result, supersedesTrace(projectDir, dir, rawReqs)); // informational: never a gap, never the verdict
-  Object.assign(result, decisionsTrace(dir, stateFromFile(projectDir, statePath(dir)).kind)); // 1.14 C2: phantom _Affects:_ (warnings)
-  if (opts.matrix) { const { ok: _ok, ...mx } = buildTraceMatrix(projectDir, f, { code: opts.code, scan }); result.matrix = mx; } // informational (F5)
+  Object.assign(result, decisionsTrace(dir, stateFromFile(projectDir, statePath(dir)).kind)); // phantom _Affects:_ (warnings)
+  if (opts.matrix) { const { ok: _ok, ...mx } = buildTraceMatrix(projectDir, f, { code: opts.code, scan }); result.matrix = mx; } // informational
   return result;
 }
 
@@ -784,10 +784,10 @@ function traceGapLines(tr, lang) {
 // trace_check `warnings` — ONE shape, the one traceGaps() returns: [{ kind, items: [id, …] }], only the non-empty
 // kinds, in this order. The secondary kinds are also top-level arrays (always present); the code kinds live in
 // result.code (present with opts.code). None of them changes the verdict. unresolvedImplGlobs (a top-level array too):
-// an _Implements:_ glob whose bounded walk stopped at its cap before any match. justifiedTestGaps (+tdd, a top-level array — 1.24
-// review 6, F3): uncovered ACs the test plan names only outside its test entries (a Gaps / Out of Scope note) — they stay
-// uncoveredByTests gaps; the warning says the plan accounts for them. untracedCriteria (only when some — F-I8): modal criteria with no
-// stable ID beside US-n.AC-m ones (L<line>). inactiveAcs (only when some — 1.25.1): the ACs requirements.md defines only in an
+// an _Implements:_ glob whose bounded walk stopped at its cap before any match. justifiedTestGaps (+tdd, a top-level array):
+// uncovered ACs the test plan names only outside its test entries (a Gaps / Out of Scope note) — they stay
+// uncoveredByTests gaps; the warning says the plan accounts for them. untracedCriteria (only when some): modal criteria with no
+// stable ID beside US-n.AC-m ones (L<line>). inactiveAcs (only when some): the ACs requirements.md defines only in an
 // inactive section (a turned-off track's, a missing pack's) — not required, named so they never vanish silently.
 const TRACE_WARNING_ORDER = ["uncoveredEdgeCases", "uncoveredNfr", "uncoveredSuccessCriteria", "phantomSecondary", "untracedCriteria", "inactiveAcs", "justifiedTestGaps", "plannedNotInCode", "inCodeNotInPlan", "unresolvedImplGlobs"];
 const TRACE_SECONDARY_KINDS = TRACE_WARNING_ORDER.slice(0, 4);
@@ -843,7 +843,7 @@ function secondaryDefinitions(reqText) {
 // SC by a test-plan row or a real (non-template) line of quickstart.md. phantomSecondary = IDs the tasks / test plan
 // cite that requirements.md never writes. The test plan counts only while +tdd is active: after add_track --remove tdd
 // it is an inactive artifact and must not silence (or raise) anything — the rest of traceCheck reads it only under tdd.
-// allReqText (1.24 review 6, F9): the WHOLE requirements when reqText is its active part — an ID only an inactive section (a removed
+// allReqText: the WHOLE requirements when reqText is its active part — an ID only an inactive section (a removed
 // track's) defines needs no coverage, and a task citing it is no phantom.
 function traceSecondary(dir, reqText, blocks, planText, tracks, allReqText) {
   const own = secondaryDefinitions(reqText);
@@ -863,7 +863,7 @@ function traceSecondary(dir, reqText, blocks, planText, tracks, allReqText) {
   for (const [k, id] of cited) if (!all.has(k)) out.phantomSecondary.push(id);
   return out;
 }
-// 1.25.1 — what else a plan writes as a test entry: a GFM table WITHOUT its outer pipes ("Test ID | Covers" over "--- | ---", then
+// what else a plan writes as a test entry: a GFM table WITHOUT its outer pipes ("Test ID | Covers" over "--- | ---", then
 // "T-01 | US-1.AC-1" — a row may drop them in a piped table too), a table whose T-IDs sit in a "Test ID" / "ID" column that is not the
 // first ("| # | Test ID | Covers |"), and a heading led by a T-ID ("### T-01 — expired token rejected" + its body, up to the next
 // heading, table or T-ID item). Each was read as no entry: coverage 0/N, the plan's ACs listed as justifiedTestGaps.
@@ -876,7 +876,7 @@ function testPlanEntries(planText) {
   let inTable = false;
   let idCol = 0; // the table's T-ID column: the one whose header reads Test ID / ID (EN / PT / ES), else the first
   let item = null; // the list entry being continued: { indent, blank, entry }
-  let head = null; // the T-ID heading entry being continued (1.25.1): its body lines join its text
+  let head = null; // the T-ID heading entry being continued: its body lines join its text
   const tidLead = (line) => RE_LIST_ITEM.test(line) && line.replace(RE_LIST_ITEM, "").replace(/^[\s*`_]+/, "").match(/^T-\d+(?!\d)/);
   const headLead = (line) => { const h = /^\s{0,3}#{1,6}\s+(.*)$/.exec(line); return h ? h[1].replace(/^[\s*`_[]+/, "").match(/^T-\d+(?!\d)/) : null; };
   // a pipe-less GFM table's header: a line with a pipe over a delimiter row
@@ -954,13 +954,13 @@ function specFeatureDirs(projectDir) {
 // collecting the T-IDs and AC IDs they name — plus each feature's own .specs/<feature>/tests/ (the folder +tdd and bugfix
 // scaffold for the failing tests), within the same caps; the rest of .specs/ stays skipped. Project-level (not per
 // feature), so doctor / finish reuse it; traceTestCode decides which files count for a feature.
-// 1.21.1 review: a test FIXTURE — data-like code (.sql, .ipynb) in a test folder whose name follows no test convention
+// a test FIXTURE — data-like code (.sql, .ipynb) in a test folder whose name follows no test convention
 // (isTestFixture: tests/fixtures/seed.sql) — is not read, nor counted (unless a plan names it: below); when more test files than CODE_TRACE_READ_CAP are
 // found, the ones NAMED like a test (testNamed) are read first, in walk order (below the cap nothing changes: every one,
 // in walk order); each is read up to SCAN_READ_BYTES characters (readFileHead: one bounded read — never the whole file).
-// 1.21.1 review 2: a fixture some feature's test plan CLAIMS in its File column (fixtureClaim: the file itself, or the
+// a fixture some feature's test plan CLAIMS in its File column (fixtureClaim: the file itself, or the
 // folder that directly holds it) is read like any test: pgTAP's test/sql/users.sql and a numbered tests/001_users.sql are
-// tests, not seed data, once a plan says so. An unclaimed fixture stays skipped — review 3: `tests/` claims
+// tests, not seed data, once a plan says so. An unclaimed fixture stays skipped — `tests/` claims
 // tests/001_users.sql, never tests/fixtures/seed.sql (a plan naming the common `tests/` made seed data a test). The files
 // read that way are returned in `fixtures`: traceTestCode counts their T-IDs only for the plan rows that claim them.
 // → { tids: Map(key → { id, files }), acs: Map(acId → { id, files }), fixtures: Set(rel), scanned, truncated }
@@ -1025,7 +1025,7 @@ function scanTestCode(projectDir) {
   }
   return { tids, acs, fixtures, scanned, truncated: truncated || readCapped };
 }
-// 1.21.1 review 3 — does the File cell path `p` claim the test FIXTURE `rel` (isTestFixture: a .sql / .ipynb in a test
+// does the File cell path `p` claim the test FIXTURE `rel` (isTestFixture: a .sql / .ipynb in a test
 // folder named like no test)? Only the file itself (`test/sql/users.sql`, or its trailing whole segments, as pathNames
 // matches a file) or the folder that DIRECTLY holds it (`db/tests/pgtap/` → db/tests/pgtap/users.sql; `tests/` →
 // tests/001_users.sql, never tests/fixtures/seed.sql). A path without an extension, or ending in `/`, is a folder.
@@ -1072,7 +1072,7 @@ function scannableTestPath(t) {
   if (t.endsWith("/")) return true;
   const ext = path.posix.extname(t).toLowerCase();
   // code in any language, or a test-only extension (.bats, Perl's .t) — a .sql / .ipynb fixture too: the plan naming it
-  // is what makes scanTestCode read it (1.21.1 review 2: pgTAP's test/sql/users.sql)
+  // is what makes scanTestCode read it (pgTAP's test/sql/users.sql)
   return ext === "" || GUARD_CODE_EXT.has(ext);
 }
 // A File cell token naming a non-code artifact — a document or data file, never source in any language (GUARD_CODE_EXT):
@@ -1095,7 +1095,7 @@ function codePathToken(t) {
 // verified outside test code, never expected in a test file; a row with no File cell, a template slot or a code path
 // keeps its T-ID expected in code.
 // files: every concrete test FILE the plan's File column names (a test path with an extension — never a folder), any row:
-// what the plan claims as its own (traceTestCode's cross-feature rule, 1.14 full review Pa5).
+// what the plan claims as its own (traceTestCode's cross-feature rule).
 function planFileScopes(planText) {
   const scopes = new Map();
   const files = new Set();
@@ -1129,7 +1129,7 @@ function fileCellTokens(e) {
   const tokens = raw.filter((t) => !/[[\]<>{}*?…]|\.\.\.|(?:^|\/)\.\.(?:\/|$)/.test(t)); // template slots out
   return { raw, tokens };
 }
-// 1.14 full review Pa6 — the tests this feature's plan checks OUTSIDE test code (planFileScopes' outside: every row's File
+// the tests this feature's plan checks OUTSIDE test code (planFileScopes' outside: every row's File
 // column names only non-code artifacts — load-test.md, evals/golden.json) whose artifact is still the scaffold: a
 // load-test.md holding template placeholders (artifactState), the scaffold's sample eval set. Judged once such a test is
 // due — a DONE task makes it green (greenDone), or every active task is done; a scaffold nobody filled in used to let the
@@ -1184,11 +1184,11 @@ function otherPlanTestFiles(projectDir, ownDir) {
 }
 // trace_check {code: true}: this feature's plan against the test code. T-IDs restart at T-01 in every plan, so a file
 // counts for THIS feature unless it sits in ANOTHER feature's .specs/<f>/tests/ or another feature's plan names that file
-// in its File column while this plan doesn't (1.14 full review Pa5); and a planned T-ID whose plan row's File
+// in its File column while this plan doesn't; and a planned T-ID whose plan row's File
 // column names a concrete test path counts only in that file / under that folder (pathNames: written from the project
 // root, the feature folder, a package folder, or a bare file name) — otherwise another feature's test with the same
 // number would pass it. Without a File path the match is by number across the project — never in a test fixture a plan
-// claims (1.21.1 review 3: such a file counts only for the rows of this plan that claim it — fixtureClaim).
+// claims (such a file counts only for the rows of this plan that claim it — fixtureClaim).
 //   testsInCode       { T-ID: [test files …] } — every T-ID found in files that count, keyed by this plan's spelling
 //   plannedNotInCode  this plan's T-IDs that no counting test file names (those checked outside test code left out)
 //   plannedOutsideCode  this plan's T-IDs whose every row's File column names only non-code artifacts (load-test.md,
@@ -1207,7 +1207,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
   const planned = new Map([...extractTestIds(planText)].map((id) => [tKey(id.slice(2)), id]));
   const { scopes, files: ownFiles, outside } = planFileScopes(planText);
   const inScope = (k, rel) => !scopes.has(k) || scopes.get(k).some((p) => pathNames(rel, p));
-  // 1.14 full review Pa5 — T-IDs restart at T-01 in every plan, so a test FILE another feature's plan (active or
+  // T-IDs restart at T-01 in every plan, so a test FILE another feature's plan (active or
   // archived) names in its File column is that feature's: it never counts for this plan's T-IDs unless this plan names
   // that file too. A folder (`test/`) claims nothing — it scopes, it doesn't own. Without it a new feature whose rows say
   // File `test/` passed the Phase 4 gate, doctor and trace --code on another feature's test/shortener.test.js.
@@ -1222,7 +1222,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
     return foreignMemo.get(rel);
   };
   const counts = (rel) => mine(rel) && !foreign(rel);
-  // 1.21.1 review 3 — a fixture read as a test (scanTestCode's `fixtures`: some plan claims it) counts ONLY for this plan's
+  // a fixture read as a test (scanTestCode's `fixtures`: some plan claims it) counts ONLY for this plan's
   // rows that claim it themselves (fixtureClaim over the row's own File paths): never for a row without a File cell, nor
   // for another feature whose plan never named it — seed data holding 'T-01' passed a feature's tests gate that way.
   const fx = s.fixtures instanceof Set ? s.fixtures : new Set();
@@ -1250,7 +1250,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.14 F5 — requirements traceability matrix (RTM): trace_check {matrix} · `dev-spec trace <f> --matrix | --csv` ·
+// requirements traceability matrix (RTM): trace_check {matrix} · `dev-spec trace <f> --matrix | --csv` ·
 // spec_export {format: "csv"} (.specs/exports/<slug>.rtm.csv) · an RTM section in the stakeholder export
 // ---------------------------------------------------------------------------
 //
@@ -1271,7 +1271,7 @@ function traceTestCode(projectDir, dir, planText, requiredAcs, scan) {
 //   approval    the requirements approval (at, by, forced) and whether THIS row changed since (the approved snapshot's text
 //               for the ID; an approval without a snapshot knows only whether the file changed: null = unknown)
 // status (stable codes):
-//   untraced    a trace gap names it — `gaps`: no-task (an AC no task cites), no-test (+tdd: an AC no test-plan ENTRY covers — 1.24 review 6, F3),
+//   untraced    a trace gap names it — `gaps`: no-task (an AC no task cites), no-test (+tdd: an AC no test-plan ENTRY covers),
 //               no-coverage (an EC / NFR no task or planned test covers; an SC no test-plan row or quickstart.md line) —
 //               exactly trace_check's gaps and its secondary warnings for that ID
 //   planned     traced, but no linked task is done yet — one is still open, or none is linked (a planned test only)
@@ -1284,7 +1284,7 @@ const RTM_TEXT_MAX = 1000; // characters of a criterion's one line (the matrix i
 const acNums = (id) => (String(id).match(/\d+/g) || []).map(Number);
 // Other features' _Supersedes:_ markers → Map(dirKey(target dir) + "\n" + AC → ["<feature>/<AC>" | "<feature>"]) — the
 // catalog's rule, built once per call (the project export passes it to every feature). `.live` (a Set of the same keys):
-// retired by at least one SHIPPED feature (featureShipped); a key outside it is only "to be superseded" (1.15). A feature
+// retired by at least one SHIPPED feature (featureShipped); a key outside it is only "to be superseded". A feature
 // archived without ever shipping (abandoned) declares nothing.
 function supersededByIndex(projectDir) {
   const out = new Map();
@@ -1325,7 +1325,7 @@ function shippedSupersedeKeys(projectDir, dir, state, reqRaw, cache) {
   return new Set(resolveSupersedes(projectDir, dir, supersedesMarkers(text), cache).valid.map((v) => dirKey(v.dir) + "\n" + v.ac));
 }
 // A feature that SHIPPED — a finish recorded, or its execution signed off (spec_export {format: "changelog"}'s rule). Only a shipped feature's
-// _Supersedes:_ retires the older criterion in the catalog, the export and the matrix (1.15): a draft's declaration is
+// _Supersedes:_ retires the older criterion in the catalog, the export and the matrix: a draft's declaration is
 // "to be superseded" — the catalog says what the system does today.
 function featureShipped(st) {
   return isObj(st) && (isObj(st.finished) || (isRecord(st.approvals) && isRecord(st.approvals.execution)));
@@ -1340,7 +1340,7 @@ function rtmEvidence(rec) {
   if (rec.stale === true) o.stale = true;
   return Object.keys(o).length ? o : null;
 }
-// 1.25.1 — the matrix's indexes. A row's key (an AC by its ID, an EC / NFR / SC by its number key — the `cites` rule), the keys an
+// the matrix's indexes. A row's key (an AC by its ID, an EC / NFR / SC by its number key — the `cites` rule), the keys an
 // item cites (its ACs, its secondary IDs: a Map's or a Set's keys), item lists → Map(key → the item indexes, ascending), and the
 // ascending union of index lists (the candidates of a row, in document order — the order the old full scans produced).
 const rtmKey = (row) => (row.kind === "ac" ? "a" + row.id : "s" + row.key);
@@ -1366,7 +1366,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const state = stateFromFile(projectDir, statePath(dir));
   const kind = state.kind === "bugfix" || state.kind === "spike" || state.kind === "change" ? state.kind : "feature";
   const read = (n) => readContained(projectDir, path.join(dir, n));
-  // 1.21 review C1 / C5: a change's criteria are its change.md without the task blocks, and its plan approval (phase tasks)
+  // a change's criteria are its change.md without the task blocks, and its plan approval (phase tasks)
   // signed them off — there is no requirements approval.
   const change = kind === "change";
   const fullReq = read("requirements.md") || "";
@@ -1398,12 +1398,12 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const blocks = taskBlocks(activeTasks(read("tasks.md") || "", tracks) || "");
   const dups = new Set(duplicateTaskNumbers(blocks));
   const evidence = isRecord(state.evidence) ? state.evidence : {};
-  const evMode = evidenceRule(projectDir); // 1.14 F1: the ONE verdict, in the project's evidence mode (unobserved under "observed")
-  const taskCites = taskCitations(blocks, dir, reqs); // trace_check's reader (review 5, M5): the tasks' prose, foreign references out
+  const evMode = evidenceRule(projectDir); // the ONE verdict, in the project's evidence mode (unobserved under "observed")
+  const taskCites = taskCitations(blocks, dir, reqs); // trace_check's reader: the tasks' prose, foreign references out
   const tinfo = taskCites.per; // { b, acs, sec, tids: Map(T-ID key → spelling) }
   const tasksAcs = taskCites.acs;
   const tasksSec = new Set(tinfo.flatMap((t) => [...t.sec.keys()]));
-  // 1.25.1 — the rows read INDEXES built once (rtmIndex): each row scanned every task, test entry, design section and decision —
+  // the rows read INDEXES built once (rtmIndex): each row scanned every task, test entry, design section and decision —
   // O(rows × (tasks + tests)): 2,800 stories took the matrix 6.4 s beside a 0.6 s trace. A row's key: rtmKey.
   const tasksBy = rtmIndex(tinfo, (t) => rtmKeys(t.acs, t.sec)), tasksByTid = rtmIndex(tinfo, (t) => t.tids.keys());
 
@@ -1412,10 +1412,10 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const planRaw = planOn ? read("test-plan.md") || "" : "";
   const planText = planIdText(planRaw);
   const entries = testPlanEntries(planRaw).map((e) => ({ ids: e.ids, acs: extractAcIds(stripForeignAcRefs(e.text, dir, reqs)), sec: secondaryIds(e.text) }));
-  // trace_check's uncoveredByTests set: the ACs the plan's test ENTRIES cite (1.24 review 6, F3 — never a Gaps / Out of Scope note)
+  // trace_check's uncoveredByTests set: the ACs the plan's test ENTRIES cite (never a Gaps / Out of Scope note)
   const planAcs = new Set(entries.flatMap((e) => [...e.acs]));
   const planSec = new Set(entries.flatMap((e) => [...e.sec.keys()]));
-  const entriesBy = rtmIndex(entries, (e) => rtmKeys(e.acs, e.sec)); // (1.25.1 — the rows' index)
+  const entriesBy = rtmIndex(entries, (e) => rtmKeys(e.acs, e.sec)); // (the rows' index)
   const quickSec = secondaryIds(realLines(read("quickstart.md") || "", RE_SECONDARY_ID_LINE).join("\n"));
   let code = null;
   if (opts.code && planOn) code = traceTestCode(projectDir, dir, planText, requirementAcIds(reqs, dir), opts.scan);
@@ -1429,8 +1429,8 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     dsecs = designSections(read("bug.md") || "").map(byFile("bug.md")).concat(dsecs.map(byFile(PHASE_FILE.design)));
   }
   const dinfo = dsecs.map((s) => { const hay = s.title + "\n" + s.body; return { title: s.title, acs: extractAcIds(hay), sec: secondaryIds(hay) }; });
-  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs (1.15)
-  // (1.25.1 — the rows' index: the sections citing a key, and each track marker's sections)
+  const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr)).map((tr) => ({ marker: trackMarker(tr), acs: trackAcIds(reqs, tr) })); // + track packs
+  // (the rows' index: the sections citing a key, and each track marker's sections)
   const dinfoBy = rtmIndex(dinfo, (d) => rtmKeys(d.acs, d.sec));
   for (const m of trackMarks) m.secs = dinfo.map((d, n) => (d.title.includes(m.marker) ? n : -1)).filter((n) => n >= 0);
 
@@ -1448,7 +1448,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     }
     return { id: e.id, title: e.title, kind: e.kind, acs, secIds };
   });
-  const decsBy = rtmIndex(decs, (d) => rtmKeys(d.acs, d.secIds)); // (1.25.1 — the rows' index)
+  const decsBy = rtmIndex(decs, (d) => rtmKeys(d.acs, d.secIds)); // (the rows' index)
 
   // _Supersedes:_ both ways.
   const own = resolveSupersedes(projectDir, dir, supersedesMarkers(reqs), new Map()).valid;
@@ -1468,11 +1468,11 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       const before = requirementIndex(snapReq);
       // (a change: the views' blank lines stand for task lines — a task added or moved is no change of the criteria)
       const cmp = (t) => (change ? t.split("\n").filter((l) => l.trim()).join("\n") : t);
-      // (1.25.1, review 7: whitespace only is no change — spec_impact's and changedSinceApproval's rule, wsText)
+      // (whitespace only is no change — spec_impact's and changedSinceApproval's rule, wsText)
       Object.assign(approval, { baseline: "snapshot", snapshot: snap.rel, changed: wsText(cmp(reqRaw), "requirements") !== wsText(cmp(snapReq), "requirements") });
       rowChanged = (row) => { const o = before.get(row.id); return !o || normWs(o.text) !== normWs(row.raw); };
     } else if (appr.fingerprint) {
-      const changed = !approvedContentSame(dir, apPhase, appr, change ? fullReq : reqRaw); // the shared test (gates.js — 1.25.1)
+      const changed = !approvedContentSame(dir, apPhase, appr, change ? fullReq : reqRaw); // the shared test (gates.js)
       Object.assign(approval, { baseline: "fingerprint-only", changed });
       rowChanged = () => (changed ? null : false); // THAT the file changed, not which criterion
     } else Object.assign(approval, { baseline: "none", changed: null });
@@ -1481,7 +1481,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
   const out = rows.map((row) => {
     const tests = [];
     const rk = rtmKey(row), seenT = new Set();
-    for (const n of entriesBy.get(rk) || []) { // (1.25.1: the entries citing the row, in plan order — the index)
+    for (const n of entriesBy.get(rk) || []) { // (the entries citing the row, in plan order — the index)
       for (const id of entries[n].ids) { const k = tKey(id.slice(2)); if (!seenT.has(k)) { seenT.add(k); tests.push({ id }); } }
     }
     if (code) for (const t of tests) {
@@ -1491,7 +1491,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
     }
     const testKeys = new Set(tests.map((t) => tKey(t.id.slice(2))));
     const tasks = [];
-    // (1.25.1) the tasks that cite the row or one of its tests — the indexes, in task order
+    // the tasks that cite the row or one of its tests — the indexes, in task order
     const cand = rtmMerge([tasksBy.get(rk), ...tests.map((tt) => tasksByTid.get(tKey(tt.id.slice(2))))]);
     for (const t of cand.map((n) => tinfo[n])) {
       const via = [];
@@ -1512,7 +1512,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       if (!tasksAcs.has(row.id)) gaps.push("no-task");
       if (planOn && !planAcs.has(row.id)) gaps.push("no-test");
     } else if (!row.secTemplate && (row.kind === "sc" ? !planSec.has(row.key) && !quickSec.has(row.key) : !tasksSec.has(row.key) && !planSec.has(row.key))) {
-      gaps.push("no-coverage"); // a scaffold's untouched EC/NFR/SC row is no gap — trace_check warns about none (review R11)
+      gaps.push("no-coverage"); // a scaffold's untouched EC/NFR/SC row is no gap — trace_check warns about none
     }
     const status = gaps.length ? "untraced" : !tasks.length || tasks.some((t) => !t.done) ? "planned" : tasks.some((t) => !t.verified) ? "implemented" : "verified";
     const design = rtmMerge([dinfoBy.get(rk), ...(row.kind === "ac" ? trackMarks.filter((m) => m.acs.has(row.id)).map((m) => m.secs) : [])]).map((n) => dinfo[n].title);
@@ -1532,7 +1532,7 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       supersededBy: row.kind === "ac" ? (supBy.get(dirKey(dir) + "\n" + row.id) || []).slice() : [],
       approval: approval ? { at: approval.at, by: approval.by, forced: approval.forced, changed: rowChanged(row) } : null,
     };
-    // Declared only by features not shipped yet: "to be superseded", never retired (1.15 — supersededByIndex().live); a
+    // Declared only by features not shipped yet: "to be superseded", never retired (supersededByIndex().live); a
     // retired AC names its shipped declarers only.
     const supKey = dirKey(dir) + "\n" + row.id;
     if (r.supersededBy.length && supBy.live && !supBy.live.has(supKey)) r.supersedePending = true;
@@ -1601,7 +1601,7 @@ function matrixCsv(matrices, lang, opts = {}) {
         feature: m.feature,
         id: r.id,
         kind: r.kind.toUpperCase(),
-        requirement: mdPlainText(r.text), // plain text: an escape / entity as the character (1.17 verification N3)
+        requirement: mdPlainText(r.text), // plain text: an escape / entity as the character
         status: R.status[r.status] || r.status,
         gaps: r.gaps.map((g) => R.gap[g === "no-coverage" && r.kind === "sc" ? "no-coverage-sc" : g] || g).join("; "),
         template: r.template ? R.yes : "",
@@ -1612,7 +1612,7 @@ function matrixCsv(matrices, lang, opts = {}) {
         evidence: r.tasks.filter((t) => t.evidence).map((t) => rtmEvidenceWords(t, lang)).join("; "),
         decisions: r.decisions.map((d) => `${d.id} ${mdPlainText(d.title)}`).join("; "),
         supersedes: r.supersedes.join("; "),
-        supersededBy: r.supersedePending ? R.toBeSupersededBy(r.supersededBy.join("; ")) : r.supersededBy.join("; "), // 1.15: pending reads apart
+        supersededBy: r.supersedePending ? R.toBeSupersededBy(r.supersededBy.join("; ")) : r.supersededBy.join("; "), // pending reads apart
         approvedAt: r.approval ? r.approval.at || "" : "",
         approvedBy: r.approval ? (r.approval.by || "—") + (r.approval.forced ? ` (${R.forced})` : "") : "",
         changed: r.approval ? yn(r.approval.changed) : "",
@@ -1630,14 +1630,14 @@ const RTM_ICON = { verified: "✅", implemented: "⚠", planned: "☐", untraced
 // <!-- … --> first, so an opener in one cell and a closer in a later one would swallow the cells between them.
 const rtmCell = (s) => mdCell(s).replace(/<!--/g, "&lt;!--");
 // The requirement's cell (the row's first text — only its ID before it, no backtick): an opener inside a code span stays as
-// written (commentInert's rule — "escape `<!--` in names" showed `&lt;!--` in the export's code; 1.17 verification N3).
+// written (commentInert's rule — "escape `<!--` in names" showed `&lt;!--` in the export's code).
 const rtmTextCell = (s) => inertOutsideCode(mdCell(s), false);
 function rtmMarkdown(mx, lang) {
   const R = i18n.msg(lang).rtm;
   const code = (s) => "`" + s + "`";
   const lines = [italic(R.legend)];
   const a = mx.approval;
-  const plan = mx.kind === "change"; // 1.21 review C5: a change's criteria are signed off with its plan (change.md)
+  const plan = mx.kind === "change"; // a change's criteria are signed off with its plan (change.md)
   lines.push("", a ? (plan ? R.planApprovedLine : R.approvedLine)(utcStamp(a.at), a.by == null ? "—" : a.by, a.forced) : plan ? R.planNotApproved : R.notApproved);
   if (!mx.rows.length) return lines.concat(["", italic(R.none)]).join("\n");
   const cols = ["id", "requirement", "status", "design", "tasks", "tests", "decisions"].map((c) => R.cols[c]);

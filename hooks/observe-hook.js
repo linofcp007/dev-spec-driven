@@ -6,7 +6,7 @@
  *
  * Wired from hooks/hooks.json for PostToolUse and PostToolUseFailure, matcher Bash|PowerShell (https://code.claude.com/docs/en/hooks) —
  * a PowerShell run is logged only with an explicit exit code (its response shape is undocumented). Both entries are `"async": true`
- * (1.25.1): it prints nothing and decides nothing, so Claude Code never waits for it — the docs: an async hook runs in the background,
+ * it prints nothing and decides nothing, so Claude Code never waits for it — the docs: an async hook runs in the background,
  * its decision fields have no effect, its timeout isn't enforced, and `claude -p` kills one still running at teardown (the last run
  * of a headless session may go unlogged).
  * spec_complete_task / spec_finish {evidence} record the {command, exitCode} an agent REPORTS; in Claude Code the harness
@@ -37,7 +37,7 @@ const MAX_FEATURES = 200; // feature folders pre-filtered, at most
 const MAX_TASKS_BYTES = 2 * 1024 * 1024; // a tasks.md past this is skipped
 
 // The project probe (mcp/lib/probe.js): the one dev-spec project rule, the session's candidate projects, a file read as the engine
-// reads it (UTF-8, or UTF-16 with a BOM — 1.24 review 6, C3: Windows PowerShell 5.1's Out-File). Required once the call is a completed
+// reads it (UTF-8, or UTF-16 with a BOM — Windows PowerShell 5.1's Out-File). Required once the call is a completed
 // Bash / PowerShell run: every other tool call exits before it loads.
 let P = null;
 const probe = () => P || (P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
@@ -55,8 +55,8 @@ function finish() {
 // checks the two agree): the run's command bodies — split at ` && ` and `;`, a `cd` / `set … pipefail` part dropped, leading
 // NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and quotes dropped, `\` read as `/`,
 // whitespace folded — must each appear in a tasks.md (or a meta.checks command) read the same way. A SUPERSET of the engine's
-// matcher (runProvesVerify — review 3: `node --test tests\x.test.js`, `CI=1 npm run lint`, a reversed join used to miss it): the
-// engine decides. Cheap: a few string passes, no parse. (Review 5: pipes unspaced, a word's leading `./` dropped, npm's aliases of
+// matcher (runProvesVerify — `node --test tests\x.test.js`, `CI=1 npm run lint`, a reversed join used to miss it): the
+// engine decides. Cheap: a few string passes, no parse. (pipes unspaced, a word's leading `./` dropped, npm's aliases of
 // `npm test`, `&&` however spaced, and chdir / pushd / popd / Set-Location / sl / Push-Location / Pop-Location parts too.)
 const norm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim()
   .replace(/ ?(\|+) ?/g, "$1").replace(/(^|[ ;&|(=])\.\//g, "$1").replace(/\bnpm (?:run(?:-script)? test|t|tst)(?=$|[ ;&|])/g, "npm test");
@@ -73,7 +73,7 @@ function bodies(cmd) {
 }
 
 // The projects a run belongs to: the session's dev-spec projects (probe.sessionProjects — the nearest dev-spec .specs/ at or above
-// the session's cwd, ≤ SESSION_MAX_UP levels (1.24 r6 I2: this walk stopped at 12), AND the project dir Claude Code or the user
+// the session's cwd, ≤ SESSION_MAX_UP levels (this walk stopped at 12), AND the project dir Claude Code or the user
 // exported), every distinct one. A subagent working in a git worktree of the project (parallel execution, waves) runs in the
 // worktree's copy, whose git-ignored log is never merged back: the run is logged in the main project too (feature review R4).
 const projectDirsOf = (payload) => probe().sessionProjects({ cwd: payload.cwd });
@@ -111,9 +111,9 @@ function exitCodeOf(payload, failure, strict) {
 // A `cd <dir>` part is dropped WHATEVER the folder — the Bash tool often runs a command from the project root that way. Only a
 // filter (a superset): the engine decides, with the ONE stripping function the reported run's lookup uses too
 // (spec.stripCdPrefix — the folder must be one of the run's projects: this one, or the one holding the cwd, a worktree's), and
-// then its matcher, what is logged (1.22 review — the hook stripped, the lookup didn't; a worktree's run reached only its own log).
+// then its matcher, what is logged (the hook stripped, the lookup didn't; a worktree's run reached only its own log).
 
-// 1.25.1 (review 7): a scaffold's untouched `_Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_` names
+// a scaffold's untouched `_Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_` names
 // `npm test` — every `npm test` loaded the engine (~100 ms: 152 vs 59 ms a Bash call) to log nothing. A WHOLE bracketed _Verify:_
 // value (backticks around it allowed) is a placeholder the engine never runs (tasks.js scanTaskMarkers: `^\[.*\]$` after the
 // backtick units are dropped) — taken out of the tasks text before the match. Only a whole value on its line: `[ -f a ] && npm test`
@@ -136,13 +136,13 @@ function mentioned(pdir, parts) {
     return false;
   }
   for (const d of dirs) {
-    // tasks.md — or, only when there is none, a change's change.md, which holds its tasks (1.21 F5). 1.22 review: one open per
+    // tasks.md — or, only when there is none, a change's change.md, which holds its tasks. One open per
     // feature (its size read from the open file) — a stat, a read and a change.md probe per feature cost +133 ms a Bash call
     // at 150 features.
     const raw = readTasksText(path.join(root, d.name, "tasks.md"));
     const got = raw === null ? readTasksText(path.join(root, d.name, "change.md")) : raw;
     if (typeof got !== "string") continue;
-    // (the " && " join of a task's commands — how done --run reports them — is never written whole: every part is, review R6)
+    // (the " && " join of a task's commands — how done --run reports them — is never written whole: every part is)
     if (has(got.replace(RE_VERIFY_PLACEHOLDER, " "))) return true;
   }
   return false;
@@ -175,7 +175,7 @@ function main(raw) {
     return finish();
   }
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
-  // The Bash tool, and on Windows the PowerShell tool (strict: its exit code must be explicit — review R5).
+  // The Bash tool, and on Windows the PowerShell tool (strict: its exit code must be explicit).
   if (payload.tool_name !== "Bash" && payload.tool_name !== "PowerShell") return finish();
   const strict = payload.tool_name === "PowerShell";
   const event = typeof payload.hook_event_name === "string" ? payload.hook_event_name : "";
@@ -191,7 +191,7 @@ function main(raw) {
   const dirs = projectDirsOf(payload);
   const parts = bodies(command);
   const hits = parts.length ? dirs.filter((d) => mentioned(d, parts)) : []; // the pre-filter, once per project
-  // 1.23 review 5 (M8): once some project passed the pre-filter, the session's project too (spec.sessionProject — a worktree's
+  // once some project passed the pre-filter, the session's project too (spec.sessionProject — a worktree's
   // copy mapped to the checkout the MCP server records in), when it isn't one of them already (no CLAUDE_PROJECT_DIR exported).
   if (hits.length) {
     spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));

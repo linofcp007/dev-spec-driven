@@ -1,7 +1,7 @@
 "use strict";
-// Lifecycle — 1.25 create --branch: a feature's own git branch (spec_create {branch}) — the name, its validation, the record, the merge driver, the readers.
+// Lifecycle — create --branch: a feature's own git branch (spec_create {branch}) — the name, its validation, the record, the merge driver, the readers.
 // The engine never runs git: these tests build the repository's FILES (HEAD, loose refs, packed-refs, a worktree's .git file) —
-// no git needed. cli/tests/12-lifecycle-1-25-branch.js runs the CLI in a real repository.
+// no git needed. cli/tests/12-lifecycle-branch.js runs the CLI in a real repository.
 
 const fs = require("fs");
 const path = require("path");

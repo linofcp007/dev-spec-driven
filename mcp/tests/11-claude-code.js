@@ -355,7 +355,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
       JSON.stringify(hp.map((h) => [h.status, h.stdout.slice(0, 50)])) + ")");
 
     // --- 1.16 C review: the status line agrees with spec_next_action; UNC, user defaults, import language, config guidance ---
-    // PARITY: the status line's step against next_action's, over the states a feature goes through. The mapping (spec.js statusNext):
+    // PARITY: the status line's step against next_action's, over the states a feature goes through. The mapping (doctor.js statusNext):
     // blocked → fix; tests → fix | approve; sign-off / finished → finished; every other code is next_action's own — and an end state
     // (finish, verify, sign-off, finished) may be next_action's `drift` (the status line never hashes the recorded files).
     const PARITY = { "re-review": ["re-review"], fill: ["fill"], fix: ["fix"], approve: ["approve"], tests: ["fix", "approve"], tasks: ["tasks"],

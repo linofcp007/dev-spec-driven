@@ -13,7 +13,7 @@
  * artifact names, features resolved through resolveFeature/existingFeature, no '..', no absolute path, no other
  * scheme, and never a symlink out of .specs/. The list comes in pages (RESOURCE_PAGE, then nextCursor).
  *
- * COMPLETIONS (1.16): completion/complete — a feature-naming prompt argument → the active features' slugs; the specs://
+ * COMPLETIONS: completion/complete — a feature-naming prompt argument → the active features' slugs; the specs://
  * templates' {slug} / {artifact} / {file} → the names that exist. Bounded (100 values), every input validated.
  *
  * mcp/server.js maps these results onto JSON-RPC (prompts/*, resources/*, completion/complete); the CLI (`dev-spec prompts`)
@@ -59,7 +59,7 @@ function parseFrontMatter(text) {
   if (end === -1) return { data, body: lines.join("\n"), frontMatter: false };
   for (let i = 1; i < end; i++) {
     // /^([A-Za-z0-9_-]+)[ \t]*:[ \t]*(.*?)[ \t]*$/ with the value read by a scan: the lazy value before [ \t]*$ rescanned a
-    // long blank run at each step (1.17 H). Its blanks at either end go; a line terminator in it: no value, as with `.`.
+    // long blank run at each step. Its blanks at either end go; a line terminator in it: no value, as with `.`.
     const m = /^([A-Za-z0-9_-]+)[ \t]*:/.exec(lines[i]);
     const rest = m ? lines[i].slice(m[0].length) : "";
     if (!m || /[\n\r\u2028\u2029]/.test(rest)) continue;
@@ -142,7 +142,7 @@ function getPrompt(name, args, opts = {}) {
   const root = toPosix(PLUGIN_ROOT);
   // split/join, not String.replace: a `$&` or `$1` in the arguments is text, not a replacement pattern — and the
   // arguments are inserted last, so a "$ARGUMENTS" or "${CLAUDE_PLUGIN_ROOT}" they contain stays as typed.
-  const body = c.body.replace(/^(?:[ \t]*\n)+/, "").trimEnd() // trimEnd: /\s+$/ rescanned a blank run from each unit (1.17 H)
+  const body = c.body.replace(/^(?:[ \t]*\n)+/, "").trimEnd() // trimEnd: /\s+$/ rescanned a blank run from each unit
     .split("${CLAUDE_PLUGIN_ROOT}").join(root)
     .split("$ARGUMENTS").join(args == null ? "" : args);
   const text = L.preamble(root + "/AGENTS.md", root + "/skills/dev-spec-driven/references/") + "\n\n" + body + "\n";
@@ -157,8 +157,8 @@ const MIME = "text/markdown";
 // The artifacts a feature resource can name (every other file of a feature folder is out of reach).
 const RESOURCE_ARTIFACTS = ["classification.md", "requirements.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md",
   "bug.md", "quickstart.md", "checklist.md", "integration-plan.md", "retro.md",
-  "spike.md", "decisions.md", "change.md"]; // 1.14 C2: a spike's spike.md, a feature's decision log · 1.21 F5: a change's one file
-// resources/list pages (1.23 — it was a hard cap of 500, the rest only reachable through the templates): this many per page,
+  "spike.md", "decisions.md", "change.md"]; // a spike's spike.md, a feature's decision log · 1.21 F5: a change's one file
+// resources/list pages (it was a hard cap of 500, the rest only reachable through the templates): this many per page,
 // then `nextCursor` (MCP pagination). The cursor is opaque to the client: "o:<offset>" in base64url; any other value is refused.
 const RESOURCE_PAGE = 500;
 const encodeCursor = (offset) => Buffer.from("o:" + offset, "utf8").toString("base64url");
@@ -194,7 +194,7 @@ function specsGuard(root) {
 }
 function readText(file) {
   try {
-    return spec.decodeText(fs.readFileSync(file)).replace(RE_BOM, ""); // a UTF-16 spec file too (1.22 review)
+    return spec.decodeText(fs.readFileSync(file)).replace(RE_BOM, ""); // a UTF-16 spec file too
   } catch {
     return null;
   }
@@ -307,7 +307,7 @@ function readResource(projectDir, uri) {
   switch (p.kind) {
     case "roadmap": {
       const md = path.join(root, "ROADMAP.md");
-      // 1.24 r6 I-I1: a generated file the save hook left stale (refreshed at the end of the turn) is served as the refresh would
+      // a generated file the save hook left stale (refreshed at the end of the turn) is served as the refresh would
       // write it now — rendered in memory, never the stale file
       if (inSpecs && inSpecs(md)) return found(spec.staleGeneratedText(pdir, "ROADMAP.md") ?? readText(md));
       if (!inSpecs || !inSpecs(path.join(root, "roadmap.json"))) return missing();
@@ -339,7 +339,7 @@ function readResource(projectDir, uri) {
 }
 
 // ---------------------------------------------------------------------------
-// Completions (completion/complete, 1.16 C3)
+// Completions (completion/complete)
 // ---------------------------------------------------------------------------
 
 const COMPLETION_MAX = 100; // values per answer (MCP: at most 100); `total` / `hasMore` say what was left out

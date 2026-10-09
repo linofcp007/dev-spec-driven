@@ -19,12 +19,12 @@ const { StringDecoder } = require("string_decoder"); // stdin framing (main): "\
 const fs = require("fs");
 const path = require("path");
 const spec = require("./lib/spec.js");
-// The `lang` enum of every tool: en · pt (European Portuguese) · es · pt-BR (Brazilian Portuguese, 1.14 D1) — spec.LANGS.
+// The `lang` enum of every tool: en · pt (European Portuguese) · es · pt-BR (Brazilian Portuguese) — spec.LANGS.
 const LANG_ENUM = spec.LANGS.slice();
 const content = require("./lib/prompts-resources.js"); // MCP prompts + resources
-// 1.27: the operations — for each tool, the engine call it makes (the CLI's very call) and the argument each option comes from
+// the operations — for each tool, the engine call it makes (the CLI's very call) and the argument each option comes from
 const OPS = require("./lib/operations.js");
-// 1.25.1 (review 7): the projectDir reading the approval hook shares (zero-dependency — a path or a local file:// URI): ONE parser
+// the projectDir reading the approval hook shares (zero-dependency — a path or a local file:// URI): ONE parser
 const HOOK_UTILS = require("../hooks/hook-utils.js");
 
 let VERSION = "0.0.0";
@@ -40,12 +40,12 @@ const SUPPORTED_PROTOCOLS = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-
 
 // --- Tool catalogue --------------------------------------------------------
 
-// The description budget (1.26 — the context diet): tools/list is what every client that loads its tools up front pays in
+// The description budget (the context diet): tools/list is what every client that loads its tools up front pays in
 // context on every session. A description says what a model needs to CHOOSE and CALL the tool: its purpose, when to use it
 // (vs a neighbour), the important arguments and the rules an agent must act on (evidence before claims, approvals are the
 // user's, never force without the user's consent). The reference detail — every output field, check id, format — lives in
 // references/tooling-reference.md; the result itself carries its stable codes. mcp/tests/02-mcp-server.js caps the whole list.
-// Every tool's projectDir (1.24 r6 A5): spec_init's says how the folder is chosen (tools/call → projectDirArg); every other tool
+// Every tool's projectDir: spec_init's says how the folder is chosen (tools/call → projectDirArg); every other tool
 // carries one short shared text.
 const PROJECT_DIR_INIT = Object.freeze({ type: "string", description: "Project folder — only spec_init creates a missing one: a path or a local file:// URI. Default: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR, else the client's first root, else the nearest folder with .specs/ up from the server's cwd, else the cwd. Relative: from the client's first root, else the cwd." });
 const PROJECT_DIR = Object.freeze({ type: "string", description: "Project folder" });
@@ -435,7 +435,7 @@ const TOOLS = [
 // (spec_roadmap / spec_export / spec_metrics / spec_task_brief write with `write: true`, spec_impact with `reopen`, spec_upgrade
 // with `apply`, spec_templates / spec_tracks with `init` — so they are not read-only; a read-only tool never touches .specs/ —
 // mcp/test.js snapshots the tree around each). destructiveHint (MCP: false = "only additive updates"): every tool one of whose
-// arguments removes or overwrites a record the user made (1.25.1, review 7 — only spec_feature carried it): spec_feature (remove
+// arguments removes or overwrites a record the user made (only spec_feature carried it): spec_feature (remove
 // deletes a feature folder), spec_export (adr: removes the generated ADR files no decision backs), spec_approve (revoke),
 // spec_complete_task (undo), spec_impact (reopen unticks), spec_roadmap_edit (rm; depend's dependsOn replaces the list, [] clears
 // it), spec_add_track (remove), spec_init (an empty check command removes it, approvalRoles {} clears them, a setting is
@@ -459,7 +459,7 @@ const TOOL_ANNOTATIONS = {
 // test fails on it anyway.
 for (const t of TOOLS) t.annotations = Object.prototype.hasOwnProperty.call(TOOL_ANNOTATIONS, t.name) ? TOOL_ANNOTATIONS[t.name] : writes(false, true);
 
-// --- Hidden aliases (1.26 — the tools folded into others) ----------------------------------------------------------------------
+// --- Hidden aliases (the tools folded into others) ----------------------------------------------------------------------
 // spec_list → spec_status (no name) · spec_backlog / spec_depend / spec_milestone → spec_roadmap_edit {kind} · spec_catalog /
 // spec_changelog → spec_export {format} · spec_coverage → spec_scan {coverage: true}. A tools/call by an old name still works:
 // its arguments are checked against the OLD schema (an old caller gets the very refusals it got — unknown, missing, invalid, by
@@ -492,11 +492,11 @@ function translateLegacy(legacy, args) {
   return { name: legacy.to, args: out };
 }
 
-// --- Arguments by mode (1.26) ----------------------------------------------------------------------------------------------
+// --- Arguments by mode ----------------------------------------------------------------------------------------------
 // A tool that took over others takes some arguments in one of its modes only — `kind` (spec_roadmap_edit), `format` (spec_export),
 // `coverage` (spec_scan). An argument the call's mode doesn't take is refused before anything runs (code inapplicable-arguments,
 // `inapplicable` [names] — before 1.26 it was another tool's argument, an unknown one), and a mode's `required` ones are missing
-// arguments. The mode key itself and projectDir go everywhere. fallback: the mode when the key is not given. 1.27: derived from the
+// arguments. The mode key itself and projectDir go everywhere. fallback: the mode when the key is not given. Derived from the
 // operations table (mcp/lib/operations.js) — a mode's arguments are its operation's — { tool: { key, fallback?, modes: {value:
 // [arguments]}, required?: {value: [arguments]} } }.
 const ARG_MODES = OPS.argModes();
@@ -524,7 +524,7 @@ const PLUGIN_UNLISTED = new Set(["spec_stop_check", "spec_log"]);
 
 // --- Tool dispatch ---------------------------------------------------------
 
-// The feature-lock wait (1.24 r6 A6). The engine is synchronous: a call waiting for a lock another LIVE process holds (a CLI
+// The feature-lock wait. The engine is synchronous: a call waiting for a lock another LIVE process holds (a CLI
 // `done`, another editor's server) froze the whole server — pings, every other tool, a pending approval's reply — for
 // DEV_SPEC_LOCK_WAIT_MS (10 s by default). The server waits MCP_LOCK_WAIT_MS instead, then answers the usual localized busy
 // refusal (retry in a moment); an explicit DEV_SPEC_LOCK_WAIT_MS (a slow network file system) still wins. Set in this process's
@@ -532,10 +532,10 @@ const PLUGIN_UNLISTED = new Set(["spec_stop_check", "spec_log"]);
 const MCP_LOCK_WAIT_MS = 2000;
 if (!/^\d{1,7}$/.test(String(process.env.DEV_SPEC_LOCK_WAIT_MS || "").trim())) process.env.DEV_SPEC_LOCK_WAIT_MS = String(MCP_LOCK_WAIT_MS);
 
-// extra (1.21 F1b — set by the server, never by a tool call): { dryRun } the preview before the user is asked,
-// { confirmation } the user's answer (elicitation), recorded with the approval, and (1.22 review) { preview } what that dry run
+// extra (set by the server, never by a tool call): { dryRun } the preview before the user is asked,
+// { confirmation } the user's answer (elicitation), recorded with the approval, and { preview } what that dry run
 // judged — the content fingerprint(s) and the failing checks the question showed: the engine refuses to record anything else.
-// spec_feature remove (1.23): { preview: {fingerprint} } — the folder the question named; another one now is not deleted.
+// spec_feature remove: { preview: {fingerprint} } — the folder the question named; another one now is not deleted.
 function runTool(name, args, extra) {
   args = args || {};
   // tools/call already checked projectDir (projectDirArg — and resolved it); these two stay as the last line before the engine.
@@ -550,7 +550,7 @@ function runTool(name, args, extra) {
     return { ok: false, error: argMessages().network(String(args.projectDir).trim()), code: "project-network" };
   }
   const pdir = spec.resolveProjectDir(args.projectDir);
-  // 1.27: the tool's operation (mcp/lib/operations.js) — the engine call the CLI makes too, each option read from its argument by the
+  // the tool's operation (mcp/lib/operations.js) — the engine call the CLI makes too, each option read from its argument by the
   // same table; a folded tool's mode (or the call's arguments) picks it. The server's own options are the extra ones it declares.
   const op = OPS.forTool(name, args);
   if (!op) throw new Error("Unknown tool: " + name);
@@ -576,19 +576,19 @@ function frame(msg) {
 function send(msg) {
   sendTo(batchSink, msg);
 }
-// A reply to a request that finished LATER (an approval waiting for the user — 1.21 F1b) goes where its request came from: the
+// A reply to a request that finished LATER (an approval waiting for the user) goes where its request came from: the
 // batch it arrived in (the batch's reply array waits for it) or straight out.
 function sendTo(sink, msg) {
   if (sink) sink.push(msg);
   else process.stdout.write(frame(msg));
 }
 
-// --- Human approvals over MCP elicitation (1.21 F1b) --------------------------------------------------------------------------
+// --- Human approvals over MCP elicitation --------------------------------------------------------------------------
 // With roadmap.json meta.approvalGuard ask | deny, an AGENT's approval — spec_approve (approve, revoke, fast-forward, force /
 // waiver), spec_feature remove {confirm}, spec_init lowering a protection: the approval guard's own reading of the call
 // (spec.approvalGuardDecision) — is the human's to make. In Claude Code the plugin's PreToolUse hook asks / refuses (and
 // mcp/servers.json sets SPEC_MCP_APPROVAL_HOOK=on: the server leaves `ask` to the hook — that path is unchanged; a `deny`-level
-// call that still reaches the server got past no hook — it is handled below as in any client, 1.22 review). In any other
+// call that still reaches the server got past no hook — it is handled below as in any client). In any other
 // MCP client:
 //   · the client advertised `elicitation` in initialize → the server asks its user (elicitation/create: the actions, the
 //     gate's state — forced checks, the waiver, the phases of a fast-forward — and a boolean `approve` + an optional `note`)
@@ -599,14 +599,14 @@ function sendTo(sink, msg) {
 //   · no elicitation: ask → today's behaviour (the call runs); deny → refused (`humanRequired: true` + the command the human
 //     runs in their own terminal) — a client that can't ask its user can't record an agent's approval.
 // A guardrail on the approve paths, as the hook is — never a sandbox.
-// spec_add_track (1.24 review 6, E3): turning +tdd / +ai off drops the gates they carry — asked like dropping a role.
+// spec_add_track: turning +tdd / +ai off drops the gates they carry — asked like dropping a role.
 const APPROVAL_TOOLS = new Set(["spec_approve", "spec_feature", "spec_init", "spec_add_track"]);
 const APPROVAL_HOOK = /^(?:on|1|true|yes)$/i.test(String(process.env.SPEC_MCP_APPROVAL_HOOK || "").trim());
 const ELICIT_TIMEOUT_MS = (() => {
   const n = Number(String(process.env.DEV_SPEC_ELICIT_TIMEOUT_MS || "").trim());
   return Number.isSafeInteger(n) && n >= 1 ? Math.min(n, 60 * 60 * 1000) : 5 * 60 * 1000;
 })();
-// While a question waits and the call carried a progressToken (1.23): notifications/progress at once, then every this many ms —
+// While a question waits and the call carried a progressToken: notifications/progress at once, then every this many ms —
 // a client whose tool-call timeout restarts on progress doesn't give up on the call while its user reads the question.
 const PROGRESS_EVERY_MS = 10 * 1000;
 let clientElicits = false; // initialize: the client declared capabilities.elicitation (form mode — 2025-11-25 adds url mode)
@@ -615,7 +615,7 @@ const serverRequests = new Map();
 let serverRequestSeq = 0;
 // → { rid, promise, cancel(reason) }. The promise resolves to the client's response, { timeout: true } (no answer within
 // timeoutMs) or { cancelled: true } (cancel(): the request that needed it was cancelled); the last two tell the client
-// (notifications/cancelled for our request id), so it can close the question. `late` (1.25.1, review 7 — roots/list): a timeout
+// (notifications/cancelled for our request id), so it can close the question. `late` (roots/list): a timeout
 // settles the promise but cancels nothing — the request stays open and an answer that comes later goes to late(response) (a
 // client slower than the timeout used to leave the default project on the server's cwd for the whole session).
 function clientRequest(method, params, timeoutMs, late) {
@@ -640,7 +640,7 @@ function clientRequest(method, params, timeoutMs, late) {
   process.stdout.write(frame({ jsonrpc: "2.0", id: rid, method, params })); // never into a batch reply: the client must see it now
   return { rid, promise, cancel: (reason) => done({ cancelled: true }, reason || "cancelled") };
 }
-// tools/call requests still running after their handler returned (1.23 — waiting for the user, or for the client's roots), by
+// tools/call requests still running after their handler returned (waiting for the user, or for the client's roots), by
 // request id (JSON-encoded: "1" and 1 are two ids) → { cancelled, cancel }. notifications/cancelled from the client marks one:
 // its question is withdrawn, nothing is recorded, and it gets no reply (MCP: a cancelled request is never answered).
 const inflight = new Map();
@@ -658,7 +658,7 @@ function progressTokenOf(params) {
   return typeof t === "string" || Number.isInteger(t) ? t : undefined;
 }
 // roadmap.json meta as the approval hook reads it: {} without a roadmap, undefined when it can't be read or parsed (unknown —
-// the guard's guard-down reading fails closed). Decoded as the engine reads it (spec.decodeText — 1.24 review 6, A4: a UTF-16
+// the guard's guard-down reading fails closed). Decoded as the engine reads it (spec.decodeText — a UTF-16
 // roadmap.json, Windows PowerShell 5.1's Out-File, read as UTF-8 was "unknown", and an unchanged spec_init setting was refused).
 function approvalMeta(pdir) {
   let text;
@@ -677,16 +677,16 @@ function approvalPolicy(toolName, args) {
   if (level === "off") return null;
   // SPEC_MCP_APPROVAL_HOOK=on (the Claude Code plugin): its PreToolUse hook asks — the server never asks twice. But at `deny` the
   // hook refuses every agent approval, so one that reaches the server means the hook did not run (disableAllHooks, a managed
-  // policy, a hook that failed open): deny must still refuse here (1.22 review) — it is "refused in every mode".
+  // policy, a hook that failed open): deny must still refuse here — it is "refused in every mode".
   if (APPROVAL_HOOK && level !== "deny") return null;
   let lang = spec.projectLang(pdir);
   if (typeof args.name === "string" && args.name.trim()) {
     const f = spec.existingFeature(pdir, args.name);
     if (f.ok) lang = spec.featureLang(pdir, f.slug);
   }
-  // plain (1.21 review A4): this client is not Claude Code (its hook would have answered — SPEC_MCP_APPROVAL_HOOK), so the command
+  // plain: this client is not Claude Code (its hook would have answered — SPEC_MCP_APPROVAL_HOOK), so the command
   // the user runs is the plain line, never `! …` (Claude Code's prefix: a PowerShell user can't run it), and the reason says so.
-  // resolveFeature (1.23): the question (and the command) name the feature the engine will act on — its slug — never the raw
+  // resolveFeature: the question (and the command) name the feature the engine will act on — its slug — never the raw
   // argument: slugify drops what isn't a-z / 0-9, so "alpha <any text in another script>" targets alpha and must read so.
   const resolveFeature = (n) => { const f = spec.existingFeature(pdir, n); return f.ok ? f.slug : null; };
   const d = spec.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: toolName, tool_input: args }, level, { lang, meta: approvalMeta(pdir), plain: true, resolveFeature });
@@ -705,11 +705,11 @@ async function elicitApproval(toolName, args, pol, flight, progressToken) {
   if (toolName === "spec_approve") {
     const pre = runTool(toolName, args, { dryRun: true });
     if (!pre || pre.ok === false || !pre.dryRun) return pre; // refused, an error, nothing to do: the engine's own answer — nobody is asked
-    // 1.22 review: the user judges THIS version — up to minutes pass before they answer; what is recorded must be what they saw
+    // the user judges THIS version — up to minutes pass before they answer; what is recorded must be what they saw
     // (the same content, per phase for a fast-forward, and — forced — no check failing that the question didn't name).
     if (!pre.revoke) preview = Array.isArray(pre.chain) ? { chain: pre.chain, fingerprints: pre.fingerprints }
       : Object.assign({ fingerprint: pre.fingerprint == null ? null : pre.fingerprint, failing: Array.isArray(pre.failing) ? pre.failing : [] }, pre.designFingerprint ? { designFingerprint: pre.designFingerprint } : {});
-    // 1.24 review 6: a revocation removes THE approval (and the waiting sign-offs) the question named — another one recorded
+    // a revocation removes THE approval (and the waiting sign-offs) the question named — another one recorded
     // while the user read it is not revoked in its place (the engine compares them: changed-since-preview, nothing written).
     else preview = { approvedAt: typeof pre.approvedAt === "string" ? pre.approvedAt : null, withdrawn: TYPE_CHECK.object(pre.withdrawn) ? pre.withdrawn : {} };
     if (Array.isArray(pre.chain)) details.push(E.phases(pre.chain.join(", ")));
@@ -720,10 +720,10 @@ async function elicitApproval(toolName, args, pol, flight, progressToken) {
     // remove's own preview (no confirm): a feature that doesn't exist is answered as it is — nobody is asked
     const pre = runTool(toolName, { action: "remove", name: args.name, projectDir: args.projectDir });
     if (pre && pre.ok === false && !pre.needsConfirm) return pre;
-    // 1.23: the user confirms deleting THIS folder — another feature renamed into the name, or files edited while the question
+    // the user confirms deleting THIS folder — another feature renamed into the name, or files edited while the question
     // waits, is not deleted (the engine compares the fingerprint under the folder's lock: changedSincePreview).
     if (pre && typeof pre.fingerprint === "string") preview = { fingerprint: pre.fingerprint };
-    // 1.24 r6 A-I8: how much it deletes — the preview's file count (the user weighs a scratch folder and weeks of work alike)
+    // how much it deletes — the preview's file count (the user weighs a scratch folder and weeks of work alike)
     if (pre && TYPE_CHECK.object(pre.wouldDelete) && Number.isSafeInteger(pre.wouldDelete.files)) details.push(E.removeSize(pre.wouldDelete.files, ".specs/" + pre.feature + "/"));
   }
   const q = clientRequest("elicitation/create", {
@@ -758,18 +758,18 @@ async function elicitApproval(toolName, args, pol, flight, progressToken) {
   const answer = TYPE_CHECK.object(r.content) ? r.content : {};
   if (r.action !== "accept" || answer.approve !== true) {
     const action = ["accept", "decline", "cancel"].includes(r.action) ? r.action : "cancel";
-    // 1.21 review A6: an accept without approve: true is its own answer (the user replied, Approve left unticked) — not "declined"
+    // an accept without approve: true is its own answer (the user replied, Approve left unticked) — not "declined"
     return refusal({ action }, action === "cancel" ? E.cancelled(list) : action === "accept" ? E.unapproved(list) : E.declined(list));
   }
   const note = typeof answer.note === "string" ? answer.note.replace(/\s+/g, " ").trim().slice(0, 500) : "";
   const confirmation = Object.assign({ via: "elicitation", at: new Date().toISOString() }, note ? { note } : {});
   const out = runTool(toolName, args, Object.assign({ confirmation }, preview ? { preview } : {}));
-  // 1.21 review A6: `confirmed` goes with a call that ran — never onto a failed one (a fast-forward stopped by a later gate, an
+  // `confirmed` goes with a call that ran — never onto a failed one (a fast-forward stopped by a later gate, an
   // error): the phases it did approve carry their own `confirmed` in .state.json.
   if (TYPE_CHECK.object(out) && out.ok !== false) out.confirmed = Object.assign({}, confirmation, { message: E.confirmed });
   return out;
 }
-// A tool's result: its JSON, COMPACT (1.24 r6 A-I1 — the indentation was ~22% of a reply's characters, which an agent pays in
+// A tool's result: its JSON, COMPACT (the indentation was ~22% of a reply's characters, which an agent pays in
 // context on every call; every client parses it), isError when it is a refusal ({ok: false}). The reply goes to `sink` — the
 // batch it came in, or straight out (null).
 function toolReply(id, out, sink) {
@@ -786,25 +786,25 @@ function error(id, code, message, data) {
 
 // Required arguments per tool, straight from the advertised inputSchema — a missing `name` must be an
 // error, not a folder called "undefined".
-// Groups of arguments of which ONE is required — a schema's `required` can't say "path or text" (spec_import, 1.16 C4): none
-// given → the group's first name is reported missing, as a required key would be. `unless`: the call needs none of them (1.25: a
+// Groups of arguments of which ONE is required — a schema's `required` can't say "path or text" (spec_import): none
+// given → the group's first name is reported missing, as a required key would be. `unless`: the call needs none of them (a
 // steering import — kiro-steering / cursor-rules — reads the tool's own folder when no path is given).
 const REQUIRED_ONE_OF = { spec_import: [{ names: ["path", "text"], unless: (a) => spec.STEERING_IMPORT_TOOLS.includes(a.tool) }] };
-// Required string arguments for which an empty (or whitespace-only) value is a real value, not "not given" (1.16 U review 5):
+// Required string arguments for which an empty (or whitespace-only) value is a real value, not "not given":
 // an empty git log is what `git log` prints in a repository without commits (→ 0 commits), an empty closing message claims
 // nothing (→ no-claim) — the CLI's `log <f> -` / `stop-check --message ""` accept them, so MCP does too.
 const EMPTY_OK = { spec_log: ["gitLog"], spec_stop_check: ["message"] };
 function missingArgs(toolName, args) {
-  const tool = toolDef(toolName); // a hidden alias: its OLD schema (1.26)
+  const tool = toolDef(toolName); // a hidden alias: its OLD schema
   if (!tool || !tool.inputSchema) return [];
   const emptyOk = hasOwn(EMPTY_OK, toolName) ? EMPTY_OK[toolName] : [];
   const given = (k) => !(args[k] === undefined || args[k] === null || (typeof args[k] === "string" && !args[k].trim() && !emptyOk.includes(k)));
   const missing = (Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []).filter((k) => !given(k));
   for (const group of hasOwn(REQUIRED_ONE_OF, toolName) ? REQUIRED_ONE_OF[toolName] : []) if (!group.unless(args) && !group.names.some(given)) missing.push(group.names[0]);
-  // 1.26: what the call's mode can't do without (ARG_MODES — spec_roadmap_edit {kind: "depend"} needs its feature's name)
+  // what the call's mode can't do without (ARG_MODES — spec_roadmap_edit {kind: "depend"} needs its feature's name)
   const mode = argMode(toolName, args);
   for (const k of mode ? mode.required : []) if (!given(k) && !missing.includes(k)) missing.push(k);
-  // 1.25.1: a NESTED object's `required` keys too (spec_finish evidence[n] {name, command, exitCode}, spec_append_tasks tasks[n].text)
+  // a NESTED object's `required` keys too (spec_finish evidence[n] {name, command, exitCode}, spec_append_tasks tasks[n].text)
   // — by their path (`evidence[0].command`): `evidence: [{}]` reached the engine, which answered "'undefined' is not a project check".
   for (const [k, s] of Object.entries(tool.inputSchema.properties || {})) if (given(k)) nestedMissing(s, args[k], k, missing);
   return missing;
@@ -825,19 +825,19 @@ function nestedMissing(schema, value, where, out) {
   for (const [k, s] of Object.entries(schema.properties)) if (hasOwn(value, k) && value[k] != null) nestedMissing(s, value[k], where + "." + k, out);
 }
 
-// Arguments the tool's inputSchema doesn't list (1.24 r6 A1) → { unknown: [{argument, didYouMean?}], valid } (valid: what the
+// Arguments the tool's inputSchema doesn't list → { unknown: [{argument, didYouMean?}], valid } (valid: what the
 // message lists — the tool's own names, and for a nested key the names its object takes). They used to be dropped, and the call
 // did something else than asked: spec_approve {revoked: true} RE-APPROVED changed content, spec_task_brief {task: 3} briefed the
-// next task, spec_export {feature} exported the whole project. Like the CLI's unknown flag (1.23), such a call is refused before
+// next task, spec_export {feature} exported the whole project. Like the CLI's unknown flag, such a call is refused before
 // anything runs. An absent or null value is "not given" (the rule of every argument) — never an error. The suggestion: a word
 // people type for an argument (ARG_ALIASES, when the tool takes it), else the nearest name (spec.closestName).
-// 1.25.1: NESTED keys too — an object whose schema lists `properties` (an array's items included): spec_append_tasks {tasks:
+// NESTED keys too — an object whose schema lists `properties` (an array's items included): spec_append_tasks {tasks:
 // [{text, verfy: "npm test"}]} appended a task with no _Verify:_ (then ticked "verified, nothing to verify"), spec_finish
 // {evidence: [{…, sumary}]} dropped the summary. The argument is the key's path (`tasks[0].verfy`), the suggestion too.
 const ARG_ALIASES = { feature: "name", slug: "name", task: "number", tasknumber: "number", project: "projectDir", dir: "projectDir",
   projectdirectory: "projectDir", untick: "undo", unapprove: "revoke" };
 function unknownArgs(toolName, args) {
-  const tool = toolDef(toolName); // a hidden alias: its OLD schema (1.26)
+  const tool = toolDef(toolName); // a hidden alias: its OLD schema
   const props = tool && tool.inputSchema && tool.inputSchema.properties ? tool.inputSchema.properties : {};
   const names = Object.keys(props);
   const unknown = [];
@@ -875,7 +875,7 @@ function nestedUnknown(schema, value, where, label, unknown, scopes) {
 // Argument TYPES, also straight from the inputSchema, checked before dispatch. A wrong type used to reach the
 // engine and be coerced: number 1.9 ticked task 1, name {a:1} created .specs/object-object/, cap "abc"
 // scanned 0 files, text 123 threw 'text.trim is not a function'. An argument the schema doesn't list is refused before
-// (unknownArgs — 1.24 r6; it used to be ignored — nested keys too since 1.25.1), and so is a missing nested required key.
+// (unknownArgs; it used to be ignored — nested keys too since 1.25.1), and so is a missing nested required key.
 const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
 // A network path in projectDir — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — made this
 // local server open an SMB/WebDAV connection to whatever host a tool call named (on Windows the redirector sends the
@@ -886,7 +886,7 @@ const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
 // Other device paths (`\\.\pipe\…`, `\\?\Volume{…}\…`) are no project folder either. A default projectDir (the
 // server's cwd, SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR) is the user's own config, not an argument, and the CLI is
 // user-driven: neither is restricted. (A drive letter mapped to a share can't be told apart without I/O.) The rule is the
-// engine's (spec.isNetworkPath — the status line and the plan-mode hook skip such a folder too, 1.16).
+// engine's (spec.isNetworkPath — the status line and the plan-mode hook skip such a folder too).
 const isNetworkPath = spec.isNetworkPath;
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const TYPE_CHECK = {
@@ -910,12 +910,12 @@ function argMessages(args) {
     return spec.msg("en").args;
   }
 }
-// projectDir as a tool argument (1.24 r6 A2 / A3), read WITHOUT any fs call → { none: true } not given (absent, blank, or a
+// projectDir as a tool argument, read WITHOUT any fs call → { none: true } not given (absent, blank, or a
 // variable left unexpanded — `${workspaceFolder}/x`, `$HOME`, `%CD%`: spec.unexpandedVar, the engine's own rule) · { dir } the
 // absolute folder it names (a local file:// URI — what roots/list hands a client — is its path; a RELATIVE path resolves from
 // the client's root when roots chose the default project, else from the server's working folder) · { code, message(A) } refused:
 // project-dotdot (a '..' segment — never resolved away first), project-network (a network / device path, a file:// URI naming a
-// host) or project-uri (a file:// URI that is no local folder path). 1.25.1 (review 7): hooks/hook-utils.js parseProjectDir reads it —
+// host) or project-uri (a file:// URI that is no local folder path). hooks/hook-utils.js parseProjectDir reads it —
 // the approval hook reads the same projectDir the same way.
 function parseProjectDir(v) {
   if (!projectDirGiven(v)) return { none: true };
@@ -926,9 +926,9 @@ function parseProjectDir(v) {
   if (r.code === "project-uri") return { code: r.code, message: (A) => A.projectUri(s) };
   return r.none ? { none: true } : { dir: r.dir };
 }
-// The tool call's projectDir, checked and resolved (1.24 r6 A2 / A3) → { args } (projectDir: the absolute folder; not given → the
+// The tool call's projectDir, checked and resolved → { args } (projectDir: the absolute folder; not given → the
 // client's root when roots gave the default project, else left out — the engine's default) or { refuse: {code, error} }. It names
-// an EXISTING folder, as the CLI's --project does (1.23 review L14): only spec_init creates one — a mistyped path used to get a
+// an EXISTING folder, as the CLI's --project does: only spec_init creates one — a mistyped path used to get a
 // whole new .specs/ tree (spec_create) and spec_list on a file answered {exists: false}.
 function projectDirArg(toolName, args) {
   const r = parseProjectDir(args.projectDir);
@@ -942,7 +942,7 @@ function projectDirArg(toolName, args) {
   try { st = fs.statSync(r.dir); } catch { st = null; }
   if (st && !st.isDirectory()) return { refuse: { code: "project-not-dir", error: argMessages().projectNotDir(r.dir) } };
   if (!st && toolName !== "spec_init") return { refuse: { code: "project-missing", error: argMessages().projectMissing(r.dir) } };
-  // 1.25.1 (review 7): spec_import reads the files its path names and returns them (dryRun: `preview`) — {projectDir: "<home>/.aws",
+  // spec_import reads the files its path names and returns them (dryRun: `preview`) — {projectDir: "<home>/.aws",
   // tool: "plan", path: "credentials", dryRun: true} returned the credentials. An explicit projectDir other than the default project
   // (env / roots / cwd) must hold a dev-spec .specs/ — spec_init there first; the engine refuses a hidden folder or a file that is no
   // document wherever the project is (importSourceAt).
@@ -972,7 +972,7 @@ function expectedType(schema, A) {
   if (schema.minimum != null && schema.maximum != null) d += " " + A.between(schema.minimum, schema.maximum); // 1.24 r6 A5
   else if (schema.minimum != null) d += " " + A.atLeast(schema.minimum);
   else if (schema.maximum != null) d += " " + A.atMost(schema.maximum);
-  if (schema.minItems != null) d += " " + A.atLeastItems(schema.minItems); // 1.25.1: spec_append_tasks.tasks
+  if (schema.minItems != null) d += " " + A.atLeastItems(schema.minItems); // spec_append_tasks.tasks
   return d;
 }
 function schemaIssues(schema, value, where, out) {
@@ -981,8 +981,8 @@ function schemaIssues(schema, value, where, out) {
   if (types.length && !types.some((t) => hasOwn(TYPE_CHECK, t) && TYPE_CHECK[t](value))) return bad();
   if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return bad();
   if (typeof value === "number" && schema.minimum != null && value < schema.minimum) return bad();
-  if (typeof value === "number" && schema.maximum != null && value > schema.maximum) return bad(); // 1.24 r6 A5: spec_next_task.max
-  if (Array.isArray(value) && schema.minItems != null && value.length < schema.minItems) return bad(); // 1.25.1: tasks: [] appended nothing
+  if (typeof value === "number" && schema.maximum != null && value > schema.maximum) return bad(); // spec_next_task.max
+  if (Array.isArray(value) && schema.minItems != null && value.length < schema.minItems) return bad(); // tasks: [] appended nothing
   if (Array.isArray(value) && schema.items) value.forEach((v, i) => schemaIssues(schema.items, v, `${where}[${i}]`, out));
   if (TYPE_CHECK.object(value) && schema.properties) propertyIssues(schema.properties, value, where + ".", out);
 }
@@ -995,7 +995,7 @@ function propertyIssues(props, obj, prefix, out) {
 }
 // [{ where, schema, value }] — formatted (and localized) only when there is something to report.
 function invalidArgs(toolName, args) {
-  const tool = toolDef(toolName); // a hidden alias: its OLD schema (1.26)
+  const tool = toolDef(toolName); // a hidden alias: its OLD schema
   if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return [];
   const out = [];
   propertyIssues(tool.inputSchema.properties, args, "", out);
@@ -1007,12 +1007,12 @@ function invalidArgs(toolName, args) {
 // matches it literally). Only the schema's own top-level keys are read; a value that folds to no member is left as given
 // (the enum error names it).
 const EXACT_ENUMS = { spec_import: new Set(["tool"]) };
-// 1.25: a string that also reads 'true' / 'false' (spec_create {branch}: 'true' = the default name, or the name itself) — a boolean
+// a string that also reads 'true' / 'false' (spec_create {branch}: 'true' = the default name, or the name itself) — a boolean
 // given for it becomes that string before validation (the schema stays one plain `type`, as guard's on / off: some MCP clients
 // reject a list-valued type).
 const BOOL_STRING_ARGS = { spec_create: new Set(["branch"]) };
 function foldEnumArgs(toolName, args) {
-  const tool = toolDef(toolName); // a hidden alias: its OLD schema (1.26)
+  const tool = toolDef(toolName); // a hidden alias: its OLD schema
   if (!tool || !tool.inputSchema || !tool.inputSchema.properties) return args;
   let out = args;
   for (const [k, s] of Object.entries(tool.inputSchema.properties)) {
@@ -1039,13 +1039,13 @@ function foldEnumArgs(toolName, args) {
   }
   return out;
 }
-// An argument error (1.24 r6 A-I2): {ok: false, error: <localized>, code: <stable, English>, …what it names} — callers branch
+// An argument error: {ok: false, error: <localized>, code: <stable, English>, …what it names} — callers branch
 // on the code: unknown-argument {unknown} · missing-arguments {missing} · invalid-arguments {invalid} · project-dotdot ·
 // project-network · project-uri · project-missing · project-not-dir.
 function argError(id, message, code, extra) {
   return toolReply(id, Object.assign({ ok: false, error: message, code }, extra || {}), batchSink);
 }
-// A tool that threw (a file system error: ENOTDIR, EACCES…) → the JSON result every other refusal is (1.23 — it was the bare
+// A tool that threw (a file system error: ENOTDIR, EACCES…) → the JSON result every other refusal is (it was the bare
 // text "ERROR: <message>"): {ok: false, error: <localized prefix + the message>, code: <the error's code, when it has one>}.
 function toolFailure(e, args) {
   const out = { ok: false, error: argMessages(args).toolFailed((e && e.message) || String(e)) };
@@ -1053,13 +1053,13 @@ function toolFailure(e, args) {
   return out;
 }
 
-// --- The default project from the client's roots (1.23) ---------------------------------------------------------------------
+// --- The default project from the client's roots ---------------------------------------------------------------------
 // With neither SPEC_PROJECT_DIR nor CLAUDE_PROJECT_DIR set (Claude Desktop, a global Cursor / Windsurf / Gemini config), the
 // default project was the server's cwd — an app or home folder, where spec_init then scaffolded .specs/. A client that declares
 // `roots` is asked once (roots/list, on the first request that needs the project) and its first local file:// root becomes the
 // default: tools/call without a projectDir gets it as one, and resources / prompts / completions read it. A network root
 // (file://host/…), one with '..', or no usable root → the old default (cwd). notifications/roots/list_changed asks again.
-// 1.25.1 (review 7): no answer within ROOTS_TIMEOUT_MS → the cwd for now, but the question stays open: an answer that comes later
+// no answer within ROOTS_TIMEOUT_MS → the cwd for now, but the question stays open: an answer that comes later
 // still sets the root (it was dropped, and the cwd stayed the default for the session). DEV_SPEC_ROOTS_TIMEOUT_MS (≥ 1, ≤ 60 000).
 const ROOTS_TIMEOUT_MS = (() => {
   const n = Number(String(process.env.DEV_SPEC_ROOTS_TIMEOUT_MS || "").trim());
@@ -1073,7 +1073,7 @@ let rootsDir; // undefined: not asked yet · null: no usable root · the folder
 let rootsWait = null; // the roots/list in flight
 let rootsGen = 0; // which ask an answer belongs to (initialize / list_changed start another: an older late answer is ignored)
 // A local file:// URI → its absolute path, else null (a host other than localhost, '..', a control character; on Windows a
-// drive path only — file:///C:/x, file:///c%3A/x). The approval hook's own reading (hooks/hook-utils.js — 1.25.1).
+// drive path only — file:///C:/x, file:///c%3A/x). The approval hook's own reading (hooks/hook-utils.js).
 const fileUriToPath = (uri) => HOOK_UTILS.fileUriToPath(uri);
 function firstFileRoot(res) {
   const roots = TYPE_CHECK.object(res) && TYPE_CHECK.object(res.result) && Array.isArray(res.result.roots) ? res.result.roots : [];
@@ -1100,7 +1100,7 @@ function rootsPending() {
 }
 const defaultProjectDir = () => rootsDir || spec.resolveProjectDir();
 // projectDir as a tool argument: given unless absent, blank or holding a variable left unexpanded — any `${`, a leading `$NAME`, a
-// `%NAME%` (spec.unexpandedVar, the engine's own rule — resolveProjectDir). 1.24 r6 A2: only a whole `${VAR}` was caught, so with
+// `%NAME%` (spec.unexpandedVar, the engine's own rule — resolveProjectDir). Only a whole `${VAR}` was caught, so with
 // the client's roots `$HOME` or `${workspaceFolder}/` went to the engine, which resolved the server's cwd instead of the root.
 const projectDirGiven = (v) => typeof v === "string" && !!v.trim() && !spec.unexpandedVar(v);
 // Run `msg` again once `wait` settled, its reply going where it would have gone (the batch it came in, or straight out). A
@@ -1143,7 +1143,7 @@ function handleContent(id, method, params) {
       if (!r.ok) return error(id, -32602, r.error); // unknown prompt / bad arguments: Invalid params (MCP)
       return result(id, { description: r.description, messages: r.messages });
     }
-    case "resources/list": { // pages (1.23): nextCursor while there are more; a cursor this server didn't hand out is Invalid params
+    case "resources/list": { // pages: nextCursor while there are more; a cursor this server didn't hand out is Invalid params
       const r = content.listResources(pdir, { cursor: p.cursor });
       if (!r.ok) return error(id, -32602, r.error);
       return result(id, r.nextCursor ? { resources: r.resources, nextCursor: r.nextCursor } : { resources: r.resources });
@@ -1156,7 +1156,7 @@ function handleContent(id, method, params) {
       if (!r.ok) return error(id, r.reason === "not-found" ? -32002 : -32602, r.error, { uri: typeof p.uri === "string" ? p.uri : null });
       return result(id, { contents: r.contents });
     }
-    case "completion/complete": { // 1.16 C3: feature slugs, artifact / steering names — an unknown ref or argument is Invalid params
+    case "completion/complete": { // feature slugs, artifact / steering names — an unknown ref or argument is Invalid params
       const r = content.complete(pdir, p, { lang, prompts: PROMPTS_ON });
       if (!r.ok) return error(id, -32602, r.error);
       return result(id, { completion: r.completion });
@@ -1169,7 +1169,7 @@ function handleContent(id, method, params) {
 function handle(msg) {
   if (!msg || typeof msg !== "object" || Array.isArray(msg)) return error(null, -32600, "Invalid Request");
   const { id, method, params } = msg;
-  // A notification is a message WITHOUT an id member: it never gets a response — and never runs a tool. Two change state (1.23):
+  // A notification is a message WITHOUT an id member: it never gets a response — and never runs a tool. Two change state:
   // notifications/cancelled withdraws a request still waiting (inflight), notifications/roots/list_changed forgets the roots.
   if (!hasOwn(msg, "id")) {
     if (method === "notifications/cancelled") onCancelled(params);
@@ -1177,8 +1177,8 @@ function handle(msg) {
     return;
   }
   // A JSON-RPC RESPONSE (result / error, no method) is never answered — whatever its id: a client's error response to a
-  // request it couldn't parse carries id null (checked before the id rule, full review R9). One that answers a request THIS
-  // server sent (elicitation/create — 1.21 F1b; roots/list — 1.23) settles it.
+  // request it couldn't parse carries id null (checked before the id rule). One that answers a request THIS
+  // server sent (elicitation/create; roots/list) settles it.
   if (typeof method !== "string" && (hasOwn(msg, "result") || hasOwn(msg, "error"))) {
     const cb = typeof id === "string" ? serverRequests.get(id) : undefined;
     if (cb) cb(msg);
@@ -1194,7 +1194,7 @@ function handle(msg) {
     return error(id, -32600, "Invalid Request: method must be a string"); // it was -32601 "Method not found: undefined"
   }
 
-  // 1.23: the default project may come from the client's roots — asked once, on the first request that reads the project.
+  // the default project may come from the client's roots — asked once, on the first request that reads the project.
   if (NEEDS_PROJECT.has(method)) {
     const wait = rootsPending();
     if (wait) return deferUntil(wait, msg, method === "tools/call");
@@ -1206,18 +1206,18 @@ function handle(msg) {
         const asked = params && params.protocolVersion;
         const proto = SUPPORTED_PROTOCOLS.includes(asked) ? asked : asked ? SUPPORTED_PROTOCOLS[SUPPORTED_PROTOCOLS.length - 1] : DEFAULT_PROTOCOL;
         const caps = TYPE_CHECK.object(params) && TYPE_CHECK.object(params.capabilities) ? params.capabilities : {};
-        // 1.21 F1b: a client that can ask its user (capabilities.elicitation) gets the approval guard's questions (elicitation/create)
+        // a client that can ask its user (capabilities.elicitation) gets the approval guard's questions (elicitation/create)
         // — in form mode: `{}` (2025-06-18) or `{form: {…}}` (2025-11-25); a client declaring url mode only can't show a form.
         const el = caps.elicitation;
         clientElicits = TYPE_CHECK.object(el) && (!Object.keys(el).length || TYPE_CHECK.object(el.form));
-        clientRoots = TYPE_CHECK.object(caps.roots); // 1.23: the default project from roots/list (rootsPending)
+        clientRoots = TYPE_CHECK.object(caps.roots); // the default project from roots/list (rootsPending)
         rootsDir = undefined;
-        rootsGen++; // 1.25.1: an answer to an earlier session's roots/list no longer applies
+        rootsGen++; // an answer to an earlier session's roots/list no longer applies
         rootsWait = null;
         return result(id, {
           protocolVersion: proto,
           serverInfo: SERVER_INFO,
-          // completions (1.16 C3): completion/complete for the prompts' feature argument and the specs:// template variables.
+          // completions: completion/complete for the prompts' feature argument and the specs:// template variables.
           capabilities: PROMPTS_ON
             ? { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} }
             : { tools: { listChanged: false }, resources: { listChanged: false, subscribe: false }, completions: {} },
@@ -1229,7 +1229,7 @@ function handle(msg) {
       }
       case "ping":
         return result(id, {});
-      case "tools/list": // 1.26: in Claude Code plugin mode without the two its hooks cover (PLUGIN_UNLISTED — still callable)
+      case "tools/list": // in Claude Code plugin mode without the two its hooks cover (PLUGIN_UNLISTED — still callable)
         return result(id, { tools: APPROVAL_HOOK ? TOOLS.filter((t) => !PLUGIN_UNLISTED.has(t.name)) : TOOLS });
       case "prompts/list": case "prompts/get": case "resources/list": case "resources/templates/list": case "resources/read":
       case "completion/complete":
@@ -1238,14 +1238,14 @@ function handle(msg) {
         const toolName = TYPE_CHECK.object(params) ? params.name : undefined;
         // No such tool — or no params / no name at all: JSON-RPC Invalid params (-32602), as MCP specifies for an unknown
         // tool. It used to be a SUCCESSFUL result {isError: true, "ERROR: Unknown tool: nope"}. Localized (project language).
-        if (typeof toolName !== "string" || !toolDef(toolName)) { // a listed tool, or a hidden alias (1.26 — LEGACY_TOOLS)
+        if (typeof toolName !== "string" || !toolDef(toolName)) { // a listed tool, or a hidden alias (LEGACY_TOOLS)
           const A = argMessages(TYPE_CHECK.object(params) && TYPE_CHECK.object(params.arguments) ? params.arguments : undefined);
           return error(id, -32602, typeof toolName === "string" && toolName.trim() ? A.unknownTool(toolName) : A.noTool);
         }
         const rawArgs = params.arguments;
         if (rawArgs != null && !TYPE_CHECK.object(rawArgs)) return argError(id, argMessages().notObject, "invalid-arguments", { invalid: ["arguments"] });
         const folded = foldEnumArgs(toolName, rawArgs || {});
-        // 1.24 r6 A1: an argument the schema doesn't list is refused FIRST — a misspelt required key reads as unknown (with its
+        // an argument the schema doesn't list is refused FIRST — a misspelt required key reads as unknown (with its
         // did-you-mean) rather than missing; nothing runs.
         const { unknown, valid } = unknownArgs(toolName, folded);
         if (unknown.length) return argError(id, argMessages(folded).unknownArgs(toolName, unknown, valid), "unknown-argument", { unknown });
@@ -1256,20 +1256,20 @@ function handle(msg) {
           const A = argMessages(folded);
           return argError(id, A.invalid(invalid.map((i) => A.item(i.where, expectedType(i.schema, A), shortJson(i.value))).join("; ")), "invalid-arguments", { invalid: invalid.map((i) => i.where) });
         }
-        // 1.26: a hidden alias (an old tool name) — checked above against its old schema, it runs as the new tool with its
+        // a hidden alias (an old tool name) — checked above against its old schema, it runs as the new tool with its
         // arguments translated (spec_list → spec_status, spec_backlog → spec_roadmap_edit {kind: "backlog"}…)
         const legacy = LEGACY.get(toolName);
         const call = legacy ? translateLegacy(legacy, folded) : { name: toolName, args: folded };
-        // 1.26: an argument of another mode of the tool (spec_roadmap_edit's kind, spec_export's format, spec_scan's coverage)
+        // an argument of another mode of the tool (spec_roadmap_edit's kind, spec_export's format, spec_scan's coverage)
         const off = inapplicableArgs(call.name, call.args);
         if (off) return argError(id, argMessages(folded).inapplicable(call.name, off.mode, off.names.join(", "), off.allowed), "inapplicable-arguments", { inapplicable: off.names });
-        // 1.24 r6 A2 / A3: projectDir checked and resolved — an existing folder (spec_init may create it), a file:// URI read as its
-        // path, a relative one from the client's root; not given → the client's root when its roots gave the default (1.23)
+        // projectDir checked and resolved — an existing folder (spec_init may create it), a file:// URI read as its
+        // path, a relative one from the client's root; not given → the client's root when its roots gave the default
         const pd = projectDirArg(call.name, call.args);
         if (pd.refuse) return argError(id, pd.refuse.error, pd.refuse.code);
         const args = pd.args;
-        // 1.21 F1b: an agent's approval under meta.approvalGuard ask | deny — asked of the user (elicitation: the reply comes
-        // later, the server keeps answering meanwhile) or refused (deny, a client that can't ask). 1.23: the call waits as an
+        // an agent's approval under meta.approvalGuard ask | deny — asked of the user (elicitation: the reply comes
+        // later, the server keeps answering meanwhile) or refused (deny, a client that can't ask). The call waits as an
         // inflight entry — cancelled by the client, its question is withdrawn and it gets no reply.
         const policy = approvalPolicy(call.name, args);
         if (policy && policy.elicit) {
@@ -1287,7 +1287,7 @@ function handle(msg) {
         try {
           out = policy && policy.refuse ? policy.refuse : runTool(call.name, args);
         } catch (e) {
-          out = toolFailure(e, args); // 1.23: JSON like every other result (it was the bare text "ERROR: …")
+          out = toolFailure(e, args); // JSON like every other result (it was the bare text "ERROR: …")
         }
         return toolReply(id, out, batchSink);
       }
@@ -1299,7 +1299,7 @@ function handle(msg) {
   }
 }
 
-// stdout errors (C4). A client that closes its read end first (it quit, `… | head -1`) made the next reply write fail with
+// stdout errors. A client that closes its read end first (it quit, `… | head -1`) made the next reply write fail with
 // EPIPE — an unhandled 'error' event: a stack trace on stderr and exit 1. Nobody is left to read a reply, so that is a quiet
 // exit 0 (EOF: Windows' wording for the same closed pipe; ERR_STREAM_DESTROYED: a write after it). Any other stdout error
 // is real: one line on stderr, exit 1.
@@ -1329,7 +1329,7 @@ function onLine(line) {
       later = msg.map(handle).filter((p) => p && typeof p.then === "function");
     } finally {
       batchSink = null;
-      // ONE array reply — once the requests still waiting (an approval the user is asked about, 1.21 F1b) have answered too.
+      // ONE array reply — once the requests still waiting (an approval the user is asked about) have answered too.
       const flush = () => { if (replies.length) process.stdout.write(frame(replies)); };
       if (later.length) Promise.all(later).then(flush, flush);
       else flush();
@@ -1342,7 +1342,7 @@ function onLine(line) {
 // they are (text pasted from Word / Docs / PDF) — so a valid request was cut in two, answered with two -32700 id:null
 // errors and never answered itself (the client hung). Bytes go through a StringDecoder: a multibyte UTF-8 character split
 // across two chunks stays whole.
-// The size of one incoming message (1.23): a line growing past it — a client that never sends "\n", or a runaway payload — used
+// The size of one incoming message: a line growing past it — a client that never sends "\n", or a runaway payload — used
 // to grow in memory until the process died. Past it the message is refused (-32600, id null: it can't be parsed for its id),
 // its bytes are skipped up to the next "\n", and the server keeps answering. Characters, after UTF-8 decoding; default 32 MiB
 // (an 8 MB ears_validate text is fine), DEV_SPEC_MCP_MAX_MESSAGE to change it (≥ 1024).
