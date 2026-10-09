@@ -52,6 +52,13 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   files. A new CLI command goes into the CLI summary of the three READMEs (the same file checks it against the CLI's
   command table), a new doctor check id into `references/tooling-reference.md`'s spec_doctor list (checked against the ids
   the engine emits).
+- New doctor check (or a new check an approval refuses on) → ONE entry of `DOCTOR_CHECKS` (engine/doctor.js — gates-and-approvals.md → Gates,
+  the check registry): its `id`, its `phase` when next_action should rank its failure by the chain (`CHECK_PHASE` is derived from
+  it), `applies` / `run` over the shared context (a view it needs that others need too → `CHECK_VIEWS`; one that reads the active
+  text of the tracks is `live`), and — when an approval must refuse on it — a `gate` probe plus its place in `GATES[phase]`. Its
+  strings go into the i18n tables, its id into `references/tooling-reference.md`'s spec_doctor list (mcp/tests/17-docs-review6.js
+  reads the registry). Never a check added outside the registry: mcp/tests/06-gates-registry.js resolves every id doctor emits and
+  every id a gate refuses on to ONE entry.
 - New track → a TEAM's track is a track pack (`.specs/tracks/<name>/`, no code — see Project-defined tracks); a BUILT-IN
   one → The track model (registries and its classifier `SIGNALS`: `engine/tracks.js`, the classifier code in `engine/classify.js`; its builders in the
   `i18n/<lang>.js` files) — 1.21: its sections' `tier`, any `TRACK_OVERLAPS` / `TRACK_TASK_OVERLAPS` / `CORE_SUPERSEDED_BY`

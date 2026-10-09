@@ -51,6 +51,25 @@ flows, the bugfix kind.
   tasks.md / test-plan.md (`TRACE_TASK_KINDS` / `TRACE_PLAN_KINDS`) are deferred — a warn, "not traced yet" — so the
   template's `_Requirements: US-1.AC-3…_` rows are no "typos?" at the requirements / design gate. Only
   `TRACE_VERDICT_KINDS` fail (testsNotMappedToTasks is listed, never failing — trace_check's verdict rule).
+- **The check registry (1.27) — a check is defined ONCE.** Every check spec_doctor runs and every check an approval runs is one
+  entry of `DOCTOR_CHECKS` (engine/doctor.js), in the doctor's order: its stable `id` (an entry emitting several lists them in
+  `emits`; `family` matches a track pack's `<name>-sections`), its `phase` (the chain position next_action ranks its failure by —
+  `CHECK_PHASE` is derived from the entries; none: the current phase), `applies(c)` / `run(c)` (the doctor's verdict: `{status,
+  detail}`, or `[{id, status, detail}]` for an entry that emits several), `gate` (what an approval requires of it: probes by name —
+  the phase's, else `all` — each `(c) → [[ok, detail, id?], …]`, the first failing condition of an id counts) and `warnsOnly` (the
+  doctor warns where the approval refuses — success-criteria, priorities, reproduction, constitution-check: the status line's
+  re-check of a forced approval leaves them out). `specDoctor` runs the entries over ONE context (`checkContext`: the feature, its
+  tracks, kind, language and `.state.json`, each artifact read once, the views `CHECK_VIEWS` derives on first use); `approvalChecks`
+  runs the probes `GATES[phase]` lists, in order, over a context of its own — first the artifact it signs off (missing or unreadable:
+  nothing to approve), the execution sign-off spec_finish's blockers; `nextAction` runs the doctor (`doctorRun`) and reads its
+  context — tracks, phase, state, size, flow, the gate walk, the approvals in force, the active tasks, the verification and project
+  check status — instead of computing them again. **A view that reads the active text of the tracks is `live`:** its inactive lines
+  include the missing packs' markers noted so far in the call (`ghostMarkers` — a cross-feature read: traceCheck's `_Supersedes:_`,
+  featureOverlaps, crossFeatureAcs may note another feature's), so it is kept only while those markers are the ones it was computed
+  under — every reader sees what computing it at its own point gives. An approval never reads the doctor's context for the same
+  reason (the doctor's nextGate runs after featureOverlaps). The refactor kept every result byte-identical (doctor, every gate,
+  next_action, finish, the status line, spec_upgrade); mcp/tests/06-gates-registry.js checks every id doctor emits and every id a
+  gate refuses on is registered, once.
 - **Approve gate.** `approvePhase()` runs `approvalChecks()` for that phase and refuses (`refused`, `failing`,
   `checks`) while any fails. `force:true` (CLI `--force`) records it anyway with `forced: true` + the failing
   ids — doctor's `approval-gates` and the roadmap keep flagging it; a clean re-approval replaces it. A phase

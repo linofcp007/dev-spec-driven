@@ -14,34 +14,35 @@ const i18n = require("../i18n.js");
 const { featureLocked } = require("./files.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, activeDesign, activeTasks, artifactReport, artifactState,
-  bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks, duplicateTaskNumbers,
-  earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection, extractTestIds,
-  featureLang, fingerprintMatches, finishFeature, hasProseOutsideBrackets, headingsOnly, inactiveTaskLines, isBugStep,
+  bugPlaceholders, criterionBlocks, designSections, detectTracks, duplicateTaskNumbers,
+  errs, evidenceRule, existingFeature, existsCached, extractSection, extractTestIds,
+  featureLang, fingerprintMatches, hasProseOutsideBrackets, headingsOnly, inactiveTaskLines, isBugStep,
   isInsideDir, isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap, maybeRefreshRoadmap, normalizeLang, own,
-  ownRecord, parseTasks, PHASE_FILE, phaseFile, PHASES, placeholderReport, placeholderSummary, planIdText, projectLang,
-  RE_LIST_ITEM, RE_TODO_SENTINEL, readIfExists, readJson, readRoadmap, readState, reasonInput, REPRO_SYN,
-  ROOT_CAUSE_SYN, SAMPLE_GOLDEN, specChangedSince, spikePhase, statePath, STEERING_GOVERNED,
+  ownRecord, parseTasks, PHASE_FILE, phaseFile, PHASES, placeholderReport, planIdText, projectLang,
+  RE_LIST_ITEM, RE_TODO_SENTINEL, readIfExists, readJson, readRoadmap, readState, reasonInput,
+  specChangedSince, spikePhase, statePath, STEERING_GOVERNED,
   steeringFingerprints, steeringImpact, steeringImpactLines, stripFencedCode, stripHtmlComments, taskBlocks,
-  taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf, today, dayOf, traceCheck, traceGapLines,
+  taskMarkers, taskVerification, testIndex, textFingerprint, timeOf, today, dayOf,
   uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap,
-  featureSize, trackSectionReport, sectionVerdict,
+  featureSize,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
-  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError, sameApprovedContent;
+  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError, sameApprovedContent,
+  approvalChecks, CHECK_PHASE; // 1.27: doctor.js (the check registry)
 function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport,
-  artifactState, bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks,
-  duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
-  extractTestIds, featureLang, fingerprintMatches, finishFeature, hasProseOutsideBrackets, headingsOnly,
+  artifactState, bugPlaceholders, criterionBlocks, designSections, detectTracks,
+  duplicateTaskNumbers, errs, evidenceRule, existingFeature, existsCached, extractSection,
+  extractTestIds, featureLang, fingerprintMatches, hasProseOutsideBrackets, headingsOnly,
   inactiveTaskLines, isBugStep, isInsideDir, isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap,
   maybeRefreshRoadmap, normalizeLang, own, ownRecord, parseTasks, PHASE_FILE, phaseFile, PHASES, placeholderReport,
-  placeholderSummary, planIdText, projectLang, RE_LIST_ITEM, RE_TODO_SENTINEL, readIfExists, readJson, readRoadmap,
-  readState, reasonInput, REPRO_SYN, ROOT_CAUSE_SYN, SAMPLE_GOLDEN, specChangedSince, spikePhase,
+  planIdText, projectLang, RE_LIST_ITEM, RE_TODO_SENTINEL, readIfExists, readJson, readRoadmap,
+  readState, reasonInput, specChangedSince, spikePhase,
   statePath, STEERING_GOVERNED, steeringFingerprints, steeringImpact, steeringImpactLines, stripFencedCode,
-  stripHtmlComments, taskBlocks, taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf,
-  today, dayOf, traceCheck, traceGapLines, uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic,
+  stripHtmlComments, taskBlocks, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf,
+  today, dayOf, uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic,
   writeRoadmap,
-  featureSize, trackSectionReport, sectionVerdict,
+  featureSize,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
-  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError, sameApprovedContent } = E); }
+  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError, sameApprovedContent, approvalChecks, CHECK_PHASE } = E); }
 
 // Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
 // is not a gate, not a phase and not a "changed since approval".
@@ -1483,7 +1484,8 @@ function featureFlow(dir, kind) {
   return flowOfState(readJson(statePath(dir)).data, kind);
 }
 const phaseOrder = (flow) => (flow === "design-first" ? DESIGN_FIRST_PHASES : PHASES);
-// PHASE_INDEX / CHECK_PHASE / chainArtifacts' idx on the flow's scale: design-first swaps the requirements (1) and design (2) slots.
+// PHASE_INDEX / CHECK_PHASE (each doctor check's phase — the check registry's, doctor.js) / chainArtifacts' idx on the flow's scale:
+// design-first swaps the requirements (1) and design (2) slots.
 const flowIndex = (i, flow) => (flow === "design-first" && (i === 1 || i === 2) ? 3 - i : i);
 const flowPhaseIndex = (phase, flow) => flowIndex(PHASE_INDEX[phase] || 0, flow);
 // A track pack's `<name>-sections` check (1.15) is a design check, as the built-in marker tracks' are.
@@ -1557,20 +1559,6 @@ function storeCreateFlow(dir, flow) {
   j.data.flow = flow;
   writeFileAtomic(statePath(dir), JSON.stringify(j.data, null, 2));
 }
-
-// The phase each doctor check belongs to (PHASE_INDEX scale) — next_action only puts the current phase's failures
-// (and earlier ones) first. A check not listed (placeholders: it only fails for the current phase or an earlier
-// one) counts as current.
-const CHECK_PHASE = { requirements: 1, ears: 1, clarifications: 1, "success-criteria": 1, priorities: 1, "ac-uniqueness": 1, reproduction: 1,
-  design: 2, mermaid: 2, "constitution-check": 2, "saas-sections": 2, "ai-sections": 2, "sec-sections": 2, "privacy-sections": 2, "dist-sections": 2, "api-sections": 2, "ui-sections": 2, "obs-sections": 2, "data-sections": 2, "root-cause": 2,
-  "test-plan": 3, "eval-plan": 4, traceability: 5, "duplicate-tasks": 5, "verify-pipes": 5, "malformed-markers": 5, verification: 6, "outside-code-artifacts": 6 };
-CHECK_PHASE["task-deps"] = 5; // 1.14 F3: the tasks phase (task dependencies)
-CHECK_PHASE["verify-suspicious"] = 5; // review 5: a garbled _Verify:_ value (a warn)
-CHECK_PHASE["verify-control"] = 5; // 1.25.1 (review 7): a _Verify:_ / project check holding a control character (a fail)
-Object.assign(CHECK_PHASE, { "evidence-moved": 6, "expect-value": 5 }); // 1.24 r6: a renumbered task's run (D1); an _Expect:_ value other than fail (D7)
-Object.assign(CHECK_PHASE, { glossary: 1, "cross-feature-acs": 1, "steering-changed-since-approval": 2 }); // 1.16 Q (warns only)
-Object.assign(CHECK_PHASE, { "design-tradeoffs": 2, "design-risks": 2, "design-reuse": 2 }); // 1.17 A1, 1.19 R1 (warns only)
-CHECK_PHASE["change-scope"] = 1; // 1.21 F5: a change's size (1–3 criteria, 1–3 tasks, core only) — its plan, from the start
 
 // 1.21 F5 — a change stays XS: 1–3 acceptance criteria, 1–3 tasks, no optional track (a +track is a design's worth of sections).
 // Past that it is a feature of size s — never ratcheted silently: doctor fails `change-scope`, the plan approval refuses, and the
@@ -1738,171 +1726,6 @@ function bugSectionFilled(md, syn) {
 }
 const CONSTITUTION_SYN = ["constitution check", "verificação da constituição", "verificacao da constituicao", "verificación de la constitución", "verificacion de la constitucion"];
 
-// What approving `phase` requires (the same checks doctor runs, scoped to that phase). → { artifact, file, checks }
-// where `checks` lists only the FAILING ones as { id, detail }; artifact=false = nothing to approve (the file is
-// missing, or its track is off) — an error even with force.
-function approvalChecks(projectDir, slug, dir, phase, tracks, kind, lang) {
-  const fm = i18n.msg(lang);
-  const m = fm.doctor, G = fm.gates;
-  const read = (x) => readIfExists(path.join(dir, x));
-  // r5 review: an artifact that exists but can't be read (a folder of that name, no permission, a file another program holds)
-  // is no artifact to judge — nothing to approve, flagged `unreadable` (approve says so) — never a TypeError on its null text.
-  const exists = (x) => fs.existsSync(path.join(dir, x)) && read(x) != null;
-  const checks = [];
-  const need = (id, ok, detail) => { if (!ok && !checks.some((c) => c.id === id)) checks.push({ id, detail }); };
-  const noPlaceholders = (x) => { const r = artifactReport(dir, x, tracks); need("placeholders", r.state !== "placeholder", placeholderSummary([r], lang)); };
-  const gaps = (tr, kinds) => traceGapLines({ ...Object.fromEntries(kinds.map((k) => [k, tr[k] || []])), removedAcs: tr.removedAcs }, lang).join("; ");
-  const nothing = (file) => ({ artifact: false, file, checks, ...(fs.existsSync(path.join(dir, file)) ? { unreadable: true } : {}) });
-  const bugfix = kind === "bugfix";
-  const label = (s) => `${fm.sectionNames[s.section] || s.section}:${fm.sectionStatus[s.status] || s.status}`;
-  switch (phase) {
-    case "classification":
-      if (!exists("classification.md")) return nothing("classification.md");
-      noPlaceholders("classification.md");
-      break;
-    case "requirements": {
-      if (!exists("requirements.md")) return nothing("requirements.md");
-      const reqs = read("requirements.md");
-      const ev = earsValidate(reqs, lang);
-      const errs = (ev.issues || []).filter((i) => i.severity === "error");
-      need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
-      const unlinted = earsUnlinted(reqs, ev, dir); // AC IDs trace_check counts, none linted (doctor's rule — Pa2)
-      need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted) : "");
-      const unidentified = earsUnidentified(reqs, ev, dir); // …and the mirror: criteria, but no AC ID trace_check counts (1.22 review)
-      need("ears", !unidentified, unidentified ? m.earsNoAcIds(shortIdList(unidentified)) : "");
-      noPlaceholders("requirements.md");
-      // r5 review: a bugfix's requirements gate also needs bug.md → Reproduction (below) — an open question there is no reproduction
-      const mk = [...clarificationMarkers(reqs), ...(bugfix ? clarificationMarkers(extractSection(read("bug.md") || "", REPRO_SYN) || "") : [])];
-      need("clarifications", !mk.length, m.clarificationsOpen(mk.length));
-      need("success-criteria", hasSuccessCriteria(activeDesign(reqs, tracks)), m.scMissing);
-      need("priorities", hasPriority(activeDesign(reqs, tracks)), m.prioritiesMissing);
-      const dups = acDuplicates(reqs);
-      need("ac-uniqueness", !dups.length, m.acDup(dups.join(", ")));
-      if (bugfix) need("reproduction", bugSectionFilled(read("bug.md"), REPRO_SYN), m.reproMissing);
-      break;
-    }
-    case "design": {
-      const design = read("design.md");
-      if (bugfix) {
-        // A bugfix has no design of its own: its Root Cause stands in for it.
-        if (!exists("bug.md")) return nothing("bug.md");
-        need("root-cause", bugSectionFilled(read("bug.md"), ROOT_CAUSE_SYN), m.rootCauseMissing);
-        // 1.24 review 6 (E8): this gate signs off bug.md — what doctor checks on it too: its Reproduction (the requirements gate read
-        // it, an edit since emptied it) and its placeholders (bugPlaceholders: the report's own slots, `> **TODO**`; quoted evidence
-        // such as [object Object] stays content) — a bug.md with `[correct behavior]` left was approved while doctor failed it.
-        need("reproduction", bugSectionFilled(read("bug.md"), REPRO_SYN), m.reproMissing);
-        noPlaceholders("bug.md");
-      } else {
-        if (design == null) return nothing("design.md");
-        noPlaceholders("design.md");
-        need("constitution-check", sectionFilled(activeDesign(design, tracks), CONSTITUTION_SYN), G.constitutionUnfilled);
-      }
-      if (design != null) {
-        // 1.21 F5: a NEW approval is held to the stricter rule — a section holding only the template's guidance is not filled —
-        // and a sized feature to its size (an optional extended section at S, a section another active track covers).
-        const size = featureSize(dir);
-        for (const [tr, , rows] of trackSectionReport(design, tracks, { size, lang })) {
-          const bad = rows.filter((s) => sectionVerdict(s, { size }) !== "pass");
-          need(tr + "-sections", !bad.length, bad.map(label).join("; "));
-        }
-      }
-      // C3: a design-first design is approved BEFORE the requirements are written — only its own open questions block it.
-      const reqMarkers = featureFlow(dir, kind) === "design-first" ? [] : clarificationMarkers(read("requirements.md") || "");
-      // r5 review: a bugfix's design IS bug.md — "Root Cause: probably X [NEEDS CLARIFICATION: …]" was approved (the gate read design.md)
-      const bugMarkers = bugfix ? clarificationMarkers(read("bug.md") || "") : [];
-      const mk = [...reqMarkers, ...bugMarkers, ...clarificationMarkers(design || "")];
-      need("clarifications", !mk.length, bugMarkers.length && mk.length === bugMarkers.length ? m.clarificationsOpenBug(mk.length) : m.clarificationsOpen(mk.length));
-      break;
-    }
-    case "test-plan": {
-      if (!phaseActive("test-plan", tracks) || !exists("test-plan.md")) return nothing("test-plan.md");
-      noPlaceholders("test-plan.md");
-      const tr = traceCheck(projectDir, slug);
-      need("traceability", !(tr.uncoveredByTests || []).length && !(tr.phantomAcsInTests || []).length, gaps(tr, ["uncoveredByTests", "phantomAcsInTests"]));
-      break;
-    }
-    case "eval-plan":
-      if (!phaseActive("eval-plan", tracks) || !exists("eval-plan.md")) return nothing("eval-plan.md");
-      noPlaceholders("eval-plan.md");
-      break;
-    case "tasks": {
-      if (kind === "change") { // 1.21 F5 — the plan of a change: ONE file holds its criteria and its tasks, one gate checks both
-        if (!exists(CHANGE_FILE)) return nothing(CHANGE_FILE);
-        const text = read(CHANGE_FILE);
-        const crit = changeViews(text).criteria; // 1.21 review C1: its criteria without the task blocks (line numbers kept)
-        const ev = earsValidate(crit, lang);
-        const errs = (ev.issues || []).filter((i) => i.severity === "error");
-        need("ears", !errs.length, errs.slice(0, 3).map((i) => `L${i.line} ${i.msg}`).join("; "));
-        const unlinted = earsUnlinted(crit, ev, dir);
-        need("ears", !unlinted, unlinted ? m.earsNoCriteria(unlinted, CHANGE_FILE) : "");
-        const unidentified = earsUnidentified(crit, ev, dir);
-        need("ears", !unidentified, unidentified ? m.earsNoAcIds(shortIdList(unidentified), CHANGE_FILE) : "");
-        noPlaceholders(CHANGE_FILE);
-        const mk = clarificationMarkers(text);
-        need("clarifications", !mk.length, m.clarificationsOpenPlan(mk.length)); // (1.21 verify V7: no design to resolve them before)
-        const dups = acDuplicates(crit);
-        need("ac-uniqueness", !dups.length, m.acDup(dups.join(", ")));
-        need("placeholders", parseTasks(text).some((t) => !isPlaceholderTask(t.text)), G.noRealTasks);
-        const sc = changeScope(dir, tracks, lang);
-        need("change-scope", sc.ok, sc.detail);
-        const tr = traceCheck(projectDir, slug);
-        const kinds = ["uncoveredByTasks", "phantomAcsInTasks", "phantomTestsInTasks"];
-        need("traceability", kinds.every((k) => !(tr[k] || []).length), gaps(tr, kinds));
-        const deps = taskDepsCheck(taskBlocks(text || ""), lang);
-        if (deps) need("task-deps", deps.status !== "fail", deps.detail);
-        break;
-      }
-      if (!exists("tasks.md")) return nothing("tasks.md");
-      noPlaceholders("tasks.md");
-      // No placeholder tasks: bracketed ones are in the report above; a list made ONLY of the scaffold's verbatim track
-      // tasks (isPlaceholderTask) is not a breakdown yet either — detectPhase's "tasks-ready" rule.
-      const active = parseTasks(activeTasks(read("tasks.md"), tracks));
-      need("placeholders", active.some((t) => !isPlaceholderTask(t.text)), G.noRealTasks);
-      const tr = traceCheck(projectDir, slug);
-      const kinds = ["uncoveredByTasks", "phantomAcsInTasks", "phantomTestsInTasks"];
-      need("traceability", kinds.every((k) => !(tr[k] || []).length), gaps(tr, kinds));
-      const deps = taskDepsCheck(taskBlocks(activeTasks(read("tasks.md"), tracks) || ""), lang); // 1.14 F3: doctor's task-deps
-      if (deps) need("task-deps", deps.status !== "fail", deps.detail);
-      break;
-    }
-    case "tests": {
-      // Phase 4 has no artifact of its own: it signs off the failing tests (+tdd) / the eval harness (+ai) that implement
-      // an active plan — nothing to approve without one (a core-only feature has no Phase 4).
-      const tdd = tracks.includes("tdd") && exists("test-plan.md");
-      const ai = tracks.includes("ai") && exists("eval-plan.md");
-      if (!phaseActive("tests", tracks) || (!tdd && !ai)) return nothing(tracks.includes("ai") && !tracks.includes("tdd") ? "eval-plan.md" : "test-plan.md");
-      if (tdd) {
-        // Every planned T-ID named by a test file (SKILL Phase 4: the T-ID in each failing test's name) — trace_check's
-        // own code scan, so a row scoped to a test path counts only there.
-        const planned = extractTestIds(planIdText(read("test-plan.md") || "")).size;
-        const tr = planned ? traceCheck(projectDir, slug, { code: true }) : null;
-        const missing = tr && tr.ok && tr.code ? tr.code.plannedNotInCode : [];
-        // Once tasks are ticked (executing / complete) the code exists: the refusal is worded as next_action's sign-off
-        // (name each existing test's T-ID), never "write each failing test".
-        const started = missing.length && ["executing", "complete"].includes(detectPhase(dir, tracks));
-        need("tests-in-code", planned > 0 && !missing.length, planned ? (started ? G.testsNotInCodeSignOff : G.testsNotInCode)(missing.join(", ")) : G.noPlannedTests);
-      }
-      if (ai) {
-        // The harness runs this feature's eval sets: evals/golden.json must be a set of its own, not the scaffold's sample.
-        const golden = readJson(path.join(dir, "evals", "golden.json"));
-        const items = golden.data && Array.isArray(golden.data.items) ? golden.data.items : null;
-        const sample = items && JSON.stringify(golden.data) === JSON.stringify(JSON.parse(SAMPLE_GOLDEN));
-        need("eval-sets", !!(items && items.length) && !sample, sample ? G.evalSetsSample : G.evalSetsMissing);
-      }
-      break;
-    }
-    case "execution": {
-      // The sign-off after a READY finish (commands/spec-finish.md): spec_finish's blockers are its failing checks —
-      // open or unverified tasks, pending gates, edits after approval, placeholders, a bugfix's missing root cause.
-      const fin = finishFeature(projectDir, slug, { gateOnly: true });
-      if (fin.ok) fin.checks.forEach((c) => need(c.id, false, c.detail));
-      break;
-    }
-    default:
-  }
-  return { artifact: true, checks };
-}
-
 // Multilingual heading matchers for the doctor / clarify checks.
 const RE_CONSTITUTION_CHECK = /constitution check|verifica[çc][ãa]o da constitui[çc][ãa]o|verificaci[óo]n de la constituci[óo]n/i;
 const RE_SUCCESS_CRITERIA = /success criteria|crit[ée]rios de sucesso|criterios de [ée]xito/i;
@@ -1919,7 +1742,7 @@ module.exports = { phaseActive, approvalsInForce, testsStaleText, roadmapGoverna
   roleGateView, roleLabel, roleWaitList, reReviewRoles, planFastForwardEnd, approveStepExtras, RE_TEST_REF, normWs,
   isApprovalRecord, legacyRecord, writeSnapshot, historyText, latestSnapshot, snapshotPhases, requirementIndex, impactReport,
   impactLines, gateWalk, gateArtifacts, pendingGateList, FLOWS, flowOfState, featureFlow, flowPhaseIndex, checkPhaseIndex,
-  positionPhase, flowOrderText, setFeatureFlowLocked, createFlow, storeCreateFlow, CHECK_PHASE, changeScope, chainArtifacts,
+  positionPhase, flowOrderText, setFeatureFlowLocked, createFlow, storeCreateFlow, changeScope, chainArtifacts,
   changedSinceApproval, approvedContentSame, realLines, hasSuccessCriteria, hasPriority, acDuplicates, sectionFilled,
-  bugSectionFilled, CONSTITUTION_SYN, approvalChecks, RE_CONSTITUTION_CHECK, RE_SUCCESS_CRITERIA, RE_INDEPENDENT_TEST,
+  bugSectionFilled, CONSTITUTION_SYN, RE_CONSTITUTION_CHECK, RE_SUCCESS_CRITERIA, RE_INDEPENDENT_TEST,
   RE_OUT_OF_SCOPE, RE_NFR, RE_EDGE_CASES, RE_TESTABILITY, __link };
