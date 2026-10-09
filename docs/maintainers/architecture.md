@@ -1,341 +1,265 @@
 # Architecture — layout, the module rule, config paths
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
-The full layout, how the engine's modules load and link, and where each config file points.
+The full layout, how the engine's modules load and link, the build, and where each config file points. The rules come
+first; how they came to be — the releases and review findings — is in History at the end.
 
 ## Layout
 ```
-.claude-plugin/plugin.json     manifest (skills, commands, mcpServers point here; NO hooks key — see gotcha)
-.claude-plugin/marketplace.json local marketplace for install
-mcp/servers.json               registers the `spec-driven` stdio server (plugin.json → mcpServers; deliberately NOT a root .mcp.json — see Config paths)
-skills/dev-spec-driven/SKILL.md the workflow (track routing engine, prose) — the decision-time rules, ≤ 5,000 words (1.21)
-skills/.../references/          deep library, read on demand — index.md lists every file; tool-catalog.md · track-checklists.md ·
-                               workflows.md hold what SKILL.md points to (1.21)
-commands/*.md                  55 slash commands (thin wrappers that invoke the skill/MCP) — also served as the MCP prompts
-agents/*.md                    plugin subagents, auto-discovered and dispatched as `dev-spec-driven:spec-implementer` /
-                               `dev-spec-driven:spec-reviewer` (subagent execution, its simplify mode) /
-                               `dev-spec-driven:spec-verifier` (one per finding before a fix round, 1.26) /
-                               `dev-spec-driven:spec-critic` (--deep) / `dev-spec-driven:spec-simplifier` (/spec-review simplify, 1.22)
-evals/                         plugin evals for `claude plugin eval` — maintainer-side, results ignored: triggering cases
-                               (tags triggering / negative) and behavioural cases (tag behavior: <case>/case.yaml + fixture.sh,
-                               built from evals/fixtures/ — lib.sh + project trees — with this plugin's own CLI); evals/README.md
-mcp/server.js                  MCP stdio protocol (JSON-RPC 2.0, newline-delimited) + argument validation against each inputSchema
-                               + the approval guard over MCP (1.21 F1b: elicitation/create to the client, its one async path)
-mcp/lib/spec.js                the engine's FACADE (1.18): the one public object every surface requires (server, CLI, hooks, tests) —
-                               the same keys as ever, each operation in ONE read-cache scope, the mutators under the feature lock;
-                               it loads the engine from its modules, or from a current bundle with DEV_SPEC_BUNDLE=1 (The build)
-mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle / npm run build:bundle): the engine + i18n modules
-                               in ONE file, for a slow file system — never committed
-mcp/lib/engine/                ALL domain logic, one module per concern (the module rule: see Three surfaces over ONE engine):
-  index.js                     the loader — MODULES in order → the namespace E (a name defined twice throws) → __link(E) for each
-  ctx.js                       CTX, the shared per-call state (read cache, glob cache, the call's .specs/ root, template /
-                               pack memos, ghost markers, the built-in corpus flag) — one object, mutated in place
-  core.js                      linear text scans (1.17 H), own-key lookup, blank facts; linear glob matching; the _Implements:_
-                               readers (implementsPath / Rel / Key, implementsTargets, globFiles)
-  files.js                     paths, create-only / atomic writes, JSON reads, the read cache (withReadCache), readFileHead (a
-                               file's first N characters in one bounded read — the code scans, 1.21.1), path containment
-                               (drive roots, 8.3 names, junctions, network paths); the feature and roadmap locks, folder moves
-                               under the lock, the .specs/.gitignore lock lines
-  state.js                     language resolution, the feature resolver (resolveFeature / existingFeature), .state.json,
-                               PHASES and their files, content fingerprints; roadmap.json (deps, backlog, meta.lang), the
-                               roadmap writers, RE_AUTOGEN; the semantic 3-way merge of .state.json / roadmap.json behind git's
-                               merge driver (1.21 F1a — mergeStateJson / mergeStateText / mergeAttributes, pure)
-  markdown.js                  comments (commentLines), fences (closesFence / fenceStep), headings, sections (extractSection),
-                               AC / T-ID readers; the template corpus, the bracket scan, artifact / feature / chain placeholders
-  corpus.generated.json        GENERATED (npm run build, committed): the built-in placeholder corpus markdown.js reads (The build)
-  tracks.js                    the track registries (built-in tables + the accessors that add packs: allTracks, trackMarker…),
-                               parseTracks, detectTracks, TRACK_SECTIONS, the inactive-section readers, and SIGNALS: one
-                               object per built-in track (tiers, concepts, hazards, cues) — the classifier's data (1.20)
-  classify.js                  the Phase 0 classifier (1.20): keyword machinery, negation, shadowing, CUE_KINDS (the generic
-                               cue mechanisms), guessLang; it derives SIGNAL_CONCEPTS / SIGNAL_HAZARDS / SIGNAL_CUES from SIGNALS
-  packs.js                     track packs (1.20): .specs/tracks/ load + validate (cached), ghost and legacy handling, render,
-                               spec_tracks
-  templates.js                 project templates (.specs/templates/), their placeholder corpus, spec_templates
-  scaffold.js                  spec_init, spec_create, the artifact skeletons, steering stubs, spec_add_track; scoped steering
-                               (front matter, the brief's steering, custom names), steering amendments (1.16 Q1)
-  tasks.js                     the tasks.md scanner (taskBlocks), task markers, _Depends:_ + waves (taskSchedule), spec_next_task;
-                               spec_complete_task (+ undo) with the bugfix gate, spec_append_tasks; spec_task_brief
-  evidence.js                  the evidence gate (taskVerification), run shells, red → green, observed runs, project checks,
-                               git-linked evidence
-  trace.js                     criterion blocks + the EARS linter; trace_check, its gaps and the deep warnings (EC / NFR / SC,
-                               T-IDs in test code); the requirements traceability matrix, its CSV and export section
-  gates.js                     the gate walk, pending gates, changedSinceApproval, flows, detectPhase;
-                               spec_approve (force, waivers, revoke, roles, the fast-forward); .history/ snapshots, spec_impact
-  doctor.js                    the check registry (1.27: DOCTOR_CHECKS, GATES — every doctor and approval check, approvalChecks),
-                               spec_doctor, spec_next_action, the design.md save check; spec_status (one feature, or the list), the status line,
-                               the plan-mode bridge, the DEV_SPEC_* defaults
-  quality.js                   cross-feature ACs (Q2), the glossary (Q3), design trade-offs / risks (A1) and reuse (1.19 R1),
-                               the brief's Reuse section (R2), the constraint nudge (A2), spec_clarify
-  finish.js                    spec_finish and the drift baseline (spec_drift); remove / rename / archive / restore;
-                               _Supersedes:_ and .specs/SPECS.md; spec_metrics (+ retro.md)
-  roadmap-md.js                ROADMAP.md / .html (roadmapData), forecasts, cross-feature overlaps
-  decisions.js                 decisions.md (spec_decide), its ADR export (spec_export format adr — 1.25) and the spike kind
-  export.js                    spec_export (the escaping markdown renderer, the document model, Gherkin, tracker CSV);
-                               spec_export {format: "changelog"} and spec_roadmap_edit {kind: "milestone"}
-  guards.js                    guard mode (meta.guard, the scope guard), the end-of-turn stop gate, the human approval guard
-                               and its shell lexer; CLI_SWITCHES
-  upgrade.js                   spec_upgrade (meta.specVersion, the audit, the migrations)
-  scan.js                      the brownfield scan and spec_scan {coverage: true}; the ONE notion of code (CODE_EXT, isCodeFile) and of a
-                               test file (isTestFile) the scan, coverage, the test-code scan and guard mode share (1.21.1)
-  import/                      spec_import: index.js (the entry point, task import) · common.js (the shared readers) · one
-                               parser per tool — kiro.js · speckit.js · openspec.js · plan.js (plan + execplan) · bmad.js ·
-                               fluidplan.js · steering.js (1.25: Kiro steering / Cursor rules → .specs/steering/)
-mcp/lib/i18n.js                the localized content's FACADE: assembles the tables (BUILD / STEERING / EVALS_README / MSG / BRIEF)
-                               — each language's file loads on its first use — and exports the public API — EN/PT/ES + pt-BR
-mcp/lib/i18n/                  en.js · pt.js · es.js (every table's block for that language) · common.js (language codes, the
-                               template test IDs) · pt-br.js (the pt-BR derivation: toPtBr, derivePtBr, defineDerivedLocale)
-mcp/lib/prompts-resources.js   MCP prompts (one per commands/*.md, read at runtime) + specs:// resources (read-only, confined)
-mcp/evals/run-evals.js         local eval harness (uses ANTHROPIC_API_KEY; --dry-run offline)
-mcp/test.js                    the MCP suite's entry point — `node mcp/test.js [--only <file|area|NN>] [--list]`
-mcp/tests/                     its files, one per area: NN-<area>[-<topic>].js (each exports run(ctx)) + harness.js (the
-                               server under test, ok / rpc / payload, the shared helpers) — see testing.md → The suites
-cli/dev-spec.js                universal CLI over mcp/lib/spec.js (cross-tool; also prints MCP configs, rule files and prompts) —
-                               1.27: the entry point alone (`__complete`, then main with the process's streams, exit once flushed)
-cli/commands.js                1.27: THE command table — each command's options, arguments, completion specs, help lines and
-                               handler; the flag lists, the help and the completion model derive from it (conventions.md → The CLI)
-cli/main.js                    1.27: main(argv, io) → the exit code — the parser, the checks every command shares, the dispatch;
-                               no process.exit, no state between calls (the CLI suite calls it in-process)
-cli/run.js · cli/git.js        1.27: done --run / finish --run's runs (the process tree, the verdict) · every git call (one gitRun)
-cli/completion.js              1.25 shell completion: the scripts `completion <shell>` prints (from the CLI's tables) and the hidden
-                               `__complete` (feature names, Node core only — answered before the engine loads)
-cli/completion/                its templates: dev-spec.bash · .zsh · .fish · .ps1 (conventions.md → Shell completion)
-cli/test-cli.js                the CLI suite's entry point — `node cli/test-cli.js` (never a top-level bin/: CLAUDE.md → Never ship a top-level bin/)
-cli/tests/                     its files: NN-<area>-<topic>.js (NN = the same area numbers as mcp/tests/) + harness.js
-scripts/build.js               `npm run build`: the committed corpus (--check: exit 1 when stale) · --bundle [--out]: the bundle
-scripts/test-runner.js         the runner both suites share: files → chains (deps) → parallel processes, --only / --list
-scripts/test-docker.js         both suites in Linux containers — `npm run test:docker` (local Docker, never hosted CI)
-hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|NotebookEdit) + approval-hook.js
-                               (^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track))$) · PostToolUse → spec-hook.js
-                               (Write|Edit) + observe-hook.js (Bash) + plan-hook.js (ExitPlanMode) · PostToolUseFailure (Bash) → observe-hook.js ·
-                               SessionStart → spec-hook.js · Stop + SubagentStop (matcher ^(dev-spec-driven:)?spec-(implementer|simplifier)$)
-                               → stop-hook.js
-hooks/guard-hook.js            opt-in guard mode (asks before code edits while no feature has approved tasks; scope level)
-hooks/approval-hook.js         opt-in human approval guard (meta.approvalGuard ask|deny: an agent's approval asks / is refused)
-hooks/observe-hook.js          harness-observed evidence (logs Bash runs of _Verify:_ / project-check commands; prints nothing)
-hooks/hook-utils.js            what the hooks share BEFORE the engine loads (1.24): UTF-8 / UTF-16 reads, a Write / Edit target as the
-                               file system reads it, the approval hook's candidate projects, a per-session marker — no hook itself
-hooks/spec-hook.js             save checks (requirements/tasks/design.md; any spec save stamps ROADMAP.* / SPECS.md stale — 1.24 r6
-                               I-I1) + SessionStart status (at most 20 features, then "+N more"), drift, upgrade and overlap lines
-hooks/stop-hook.js             end-of-turn: the stale ROADMAP.* / SPECS.md refreshed once, then the evidence gate (spec.stopCheck —
-                               a "done" claim with unverified recent ticks)
-hooks/plan-hook.js             plan-mode bridge (ExitPlanMode: one line of context suggesting /spec-adopt import of the approved plan)
-hooks/precommit-check.js       optional git pre-commit validator (+ a stale ROADMAP.* / SPECS.md refreshed, re-staged when staged)
-hooks/stop-claims.generated.json GENERATED (npm run build, committed): the stop gate's claim patterns — the Stop hook's pre-filter
-AGENTS.md                      portable workflow for non-Claude agent tools
-.cursor/ .windsurf/ .github/copilot-instructions.md GEMINI.md  per-tool rule files (point to AGENTS.md)
-INTEGRATIONS.md                per-tool setup + MCP config snippets
+.claude-plugin/plugin.json     manifest (skills, commands, mcpServers; NO hooks key — CLAUDE.md → Gotchas) · marketplace.json
+mcp/servers.json               registers the `spec-driven` stdio server (plugin.json → mcpServers; NOT a root .mcp.json — Config paths)
+skills/dev-spec-driven/SKILL.md the workflow — the decision-time rules, ≤ 5,000 words
+skills/.../references/          read on demand — index.md lists every file; tool-catalog.md · track-checklists.md · workflows.md
+                               hold what SKILL.md points to; tooling-reference.md every tool and doctor check id
+commands/*.md                  22 slash commands (only /spec and /spec-bugfix model-invocable) — also the MCP prompts
+agents/*.md                    5 subagents: `dev-spec-driven:spec-implementer` / `dev-spec-driven:spec-reviewer` (+ simplify
+                               mode) / `dev-spec-driven:spec-verifier` (one finding) / `dev-spec-driven:spec-critic` (--deep) /
+                               `dev-spec-driven:spec-simplifier`
+evals/                         plugin evals for `claude plugin eval` (maintainer-side): triggering / negative cases and behavioural
+                               ones (<case>/case.yaml + fixture.sh, built from evals/fixtures/ with this plugin's CLI); evals/README.md
+mcp/server.js                  MCP stdio (JSON-RPC 2.0, newline-delimited), argument validation, every tools/call through the
+                               operations table (`runTool`), the approval guard over MCP elicitation (its one async path)
+mcp/lib/spec.js                the engine's FACADE — every surface requires it; each operation in ONE read-cache scope, the
+                               mutators under the feature lock; the modules, or a current bundle with DEV_SPEC_BUNDLE=1
+mcp/lib/operations.js          THE operations table (`OPERATIONS`): each operation's MCP tool, CLI commands, arguments and engine
+                               call; requires nothing (mcp.md → The operations)
+mcp/lib/probe.js               THE dev-spec project rule (`isDevSpecProject`) and the walks — Node core only: the hooks, the status
+                               line, shell completion and the engine's `isDevSpecDir` (claude-code-integration.md)
+mcp/lib/latin1-scan.js         the stop gate's claim scan on a one-byte projection of a wide text (`latin1Text`) — Node core only
+mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): the engine + i18n in ONE file (The build)
+mcp/lib/engine/                ALL domain logic, one module per concern (The module rule):
+  index.js · ctx.js            the loader (MODULES → the namespace E → __link(E)) · CTX, the shared per-call state
+  core.js                      linear text scans, own-key lookup, globs, the _Implements:_ readers, calendar dates (today, dayOf)
+  files.js                     paths, the write gate (create-only / atomic writes), JSON reads, the read cache, readFileHead,
+                               path containment, the feature / roadmap locks, folder moves, resolveProjectDir
+  state.js                     languages, the feature resolver, .state.json, PHASES, fingerprints, roadmap.json and its
+                               writers, RE_AUTOGEN; the 3-way merge behind git's merge driver (mergeStateJson / mergeStateText)
+  markdown.js                  comments, fences, headings, sections, AC / T-ID readers; the placeholder corpus
+  corpus.generated.json        GENERATED (npm run build, committed): the built-in placeholder corpus (The build)
+  tracks.js · classify.js      the track registries + SIGNALS (the classifier's data) · the Phase 0 classifier (CUE_KINDS…)
+  packs.js · templates.js      track packs (.specs/tracks/) · project templates (.specs/templates/)
+  scaffold.js                  spec_init, spec_create, skeletons, steering stubs, spec_add_track, scoped steering, amendments
+  tasks.js                     the tasks.md scanner (taskBlocks), markers, _Depends:_ + waves, next / complete / append, the brief
+  evidence.js                  the evidence gate (taskVerification), run shells, red → green, observed runs, project checks
+  trace.js                     criterion blocks, the EARS linter, trace_check, the traceability matrix
+  gates.js                     the gate walk, pending gates, flows, detectPhase; spec_approve; .history/, spec_impact
+  doctor.js                    the check registry (DOCTOR_CHECKS, GATES, approvalChecks), spec_doctor, next_action, status,
+                               the status line, the plan-mode bridge, isDevSpecDir, the DEV_SPEC_* defaults
+  quality.js                   cross-feature ACs, glossary, trade-offs / risks / reuse, the constraint nudge, spec_clarify
+  finish.js                    spec_finish, drift, remove / rename / archive / restore, _Supersedes:_, SPECS.md, metrics
+  roadmap-md.js · decisions.js ROADMAP.md / .html, forecasts, overlaps · decisions.md, the ADR export, spikes
+  export.js                    spec_export (markdown, HTML, Gherkin, CSV, changelog), milestones
+  guards.js                    guard mode, the stop gate and its claim scan, the approval guard + shell lexer; CLI_SWITCHES
+  upgrade.js · scan.js         spec_upgrade · the brownfield scan, coverage, the ONE notion of code / test file (isCodeFile)
+  import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering
+mcp/lib/i18n.js · i18n/        the localized content: the facade (the tables, LAYOUTS — the structure every language shares)
+                               + en.js · pt.js · es.js (each language's `text`) · common.js · pt-br.js (the derivation)
+mcp/lib/prompts-resources.js   MCP prompts (= commands/*.md) + specs:// resources (read-only, confined)
+mcp/evals/run-evals.js         local eval harness (ANTHROPIC_API_KEY; --dry-run offline)
+mcp/test.js · mcp/tests/       the MCP suite: entry point + NN-<area>[-<topic>].js files + harness.js (testing.md → The suites)
+cli/dev-spec.js                the CLI's entry point alone (`bin`, every printed CLI line, git's merge driver, the status line)
+cli/main.js                    main(argv, io) → the exit code: the parser, the shared checks, the dispatch, `c.call`; no exit
+cli/commands.js                THE command table (`COMMANDS`): options, arguments, completion, help, handler — everything else
+                               derives from it (conventions.md → The CLI); `mcpConfigBlocks()`
+cli/run.js · cli/git.js        done --run / finish --run (`execCommand`, `runVerdict`) · every git call (`gitRun`)
+cli/completion.js · completion/ shell completion (+ the hidden `__complete`, before the engine loads) and the status line's
+                               pre-check · the bash / zsh / fish / PowerShell templates (conventions.md → Shell completion)
+cli/test-cli.js · cli/tests/   the CLI suite: entry point + NN-<area>-<topic>.js files + harness.js
+scripts/                       build.js (npm run build; --check; --bundle) · test-runner.js (--only, --list) · test-docker.js
+hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|NotebookEdit|Bash|PowerShell|Monitor) + approval-hook.js
+                               (approval tools, shells, Write / Edit / NotebookEdit, other MCP servers' file tools) ·
+                               PostToolUse → spec-hook.js (Write|Edit) + observe-hook.js (Bash|PowerShell, async) + plan-hook.js
+                               (ExitPlanMode) · PostToolUseFailure → observe-hook.js · SessionStart → spec-hook.js · Stop +
+                               SubagentStop (^(dev-spec-driven:)?spec-(implementer|simplifier)$) → stop-hook.js
+hooks/*-hook.js                guard (opt-in guard mode) · approval (opt-in human approval guard) · observe (logs _Verify:_ /
+                               check runs, prints nothing) · spec (save checks + SessionStart lines) · stop (stale roadmap
+                               refresh, then the evidence gate) · plan (the plan-mode bridge)
+hooks/hook-utils.js            what the hooks share before the engine loads (probe.js re-exported, the claim pre-filter…)
+hooks/precommit-check.js       optional git pre-commit validator (a stale ROADMAP.* / SPECS.md refreshed and re-staged)
+hooks/stop-claims.generated.json GENERATED (npm run build, committed): the stop gate's claim patterns, the Stop hook's pre-filter
+AGENTS.md · GEMINI.md · .cursor/ .windsurf/ .github/copilot-instructions.md   rule files for other tools · INTEGRATIONS.md
 ```
 
-## The module rule (1.18)
+## The module rule
 (The first half of **Three surfaces over ONE engine** — the engine-first rule and MCP / CLI parity — is in CLAUDE.md.)
 
-**The module rule (1.18 — `mcp/lib/engine/index.js`).** The engine is plain CommonJS modules, one per concern (Layout),
-behind two facades: `spec.js` (the public object — its keys, the `withReadCache` wrap of every function and the
-`featureLocked` mutators, exactly as when it was one file) and `i18n.js`. Inside the engine:
+The engine is plain CommonJS modules, one per concern, behind two facades: `spec.js` (the public object — the
+`withReadCache` wrap of every function, the `featureLocked` mutators) and `i18n.js`. `mcp/lib/engine/index.js` loads
+`MODULES` in order, merges every export into the namespace `E` (a name defined twice throws), then calls each module's
+`__link(E)`. Inside the engine:
 - **Load time — a DAG.** A name a module needs while it LOADS (a table or regex built from another module's constant —
-  `RE_HEADING_LEAD` from `MARKER_TRACKS`, `featureLocked(setFeatureFlow)`, `C3_PARSERS`, `TRACE_INFO_FIELDS.add(…)`) comes from a
-  destructured `require()` of the module that owns it, marked `// load time` — whatever their order in `MODULES`
-  (markdown.js loads tracks.js, listed after it; decisions / export / finish load trace.js, listed before them). Those
-  requires form a DAG — never a cycle (a cycle would hand out a half-built `module.exports`).
-- **Call time — any direction.** Every other name a module uses from another module is a `let` declared at its top and
-  assigned by `__link(E)` once EVERY module has loaded (`index.js` merges all exports into `E` — a name defined in two
-  modules throws — then links each module). Call sites keep their bare names, so moved code reads as it always did. Never
-  read a late-bound name while the module loads: it is `undefined` until `__link`. The bare `let` list and the `__link`
-  destructure name exactly the same names, each exported by some module, and never the parameter itself (`({ …, E } = E)`
-  assigns the parameter and leaves the module's `E` undefined — and `E` IS a name, trace.js's word-boundary fragment); a
-  module's private cache is a `let` WITH an initializer (`= null`, `= undefined`), so it never reads as a linked name.
-  mcp/test.js ("1.18 module rule") checks all of it from the sources, plus the load-time graph (acyclic, every engine →
-  engine / i18n → i18n require marked `// load time`) and that every module in `MODULES` is loaded.
-- **Exports — only what crosses the module's boundary (1.27).** A module's `module.exports` lists the names something
-  OUTSIDE it uses: another engine module (in its `let` list and `__link`, or a `// load time` require), the facade (`spec.js`
-  takes it from the engine), a surface (mcp/server.js, prompts-resources.js, the CLI, the hooks, scripts/ — build.js renders
-  the corpus and the stop-claim filter from `E` — and the eval harness) or a test that reaches an internal through the engine
-  (`require("./lib/engine/index.js").x`, or a script a test runs). Everything else is private to the module: a top-level
-  `function` / `const` only it calls, never exported — so `E` holds the engine's cross-module surface alone (856 names in 1.27;
-  2,083 before, 1,214 of them exported and used only inside their own module) and no name gets linked by accident. A module
-  links only the names its code uses. To call another module's helper: export it from the module that owns it, add it to your
-  `let` list and `__link`. When its last outside user goes: drop it from `module.exports` (an unused link from the `let` list and
-  `__link`). mcp/test.js ("1.27 module boundaries", mcp/tests/16-conventions.js) checks it from the sources with a small
-  zero-dependency scanner (code told from comments, strings, template and regex literals): (a) every linked name is used in the
-  module's code; (b) every exported name is used outside it — linked or required at load time by another module, taken by the
-  facade, read by a surface or a test (its code, or a string it runs); (c) every facade key is read by a surface or a test, and
-  every engine name the facade takes is used in it. An export kept with no outside use goes into that test's `EXPORT_ALLOW`
-  with its reason (none today). The facade keys only tests read (80 in 1.27) stay: the tests drive the engine through them.
-- **Shared mutable state lives in `engine/ctx.js`:** ONE object, `CTX`, mutated in place and never re-bound (a destructured
-  copy would go stale) — the read cache and everything else one engine call scopes (`CTX.READ_CACHE`, `CTX.GLOB_CACHE`,
-  `CTX.XAC_MEMO`, `CTX.TEMPLATE_SCOPE_ROOT`, `CTX.TEMPLATE_MEMO`, `CTX.PACK_MEMO`, `CTX.GHOST_MARKERS`, reset by
-  `withReadCache`; `CTX.BUILTIN_CORPUS_BUILD` while the built-in corpus renders). A module's own lazy caches (`TEMPLATE_SETS`,
-  `PACK_CACHE`, `KW_RE`, `STOP_PATTERNS`, `ENGINE_VERSION`…) stay private `let` / `const` in that module; a `let` another
-  module reads moves into `CTX`.
-- **A new module** goes into `MODULES` (index.js) — `mcp/test.js` checks the list matches the files, and that every
-  `mcp/lib` source requires only Node core or a relative file. `__dirname` in a module is `mcp/lib/engine/` (the clone's
-  root is three levels up: `approvalGuardDecision`'s cli path, `engineVersion`'s package.json).
+  `RE_HEADING_LEAD` from `MARKER_TRACKS`, `featureLocked(setFeatureFlow)`, `C3_PARSERS`) comes from a destructured `require()`
+  of its owner, marked `// load time`, whatever their order in `MODULES`. These requires form a DAG — a cycle would hand out a
+  half-built `module.exports`.
+- **Call time — any direction.** Every other name from another module is a bare `let` at the module's top, assigned by
+  `__link(E)` once every module has loaded; call sites keep their bare names. Never read one while the module loads (it is
+  `undefined` until `__link`). The `let` list and the `__link` destructure name exactly the same names, each exported by some
+  module, never the parameter itself (`({ …, E } = E)` leaves the module's `E` undefined — and `E` IS a name, trace.js's
+  word-boundary fragment); a module's private cache is a `let` WITH an initializer (`= null`), so it never reads as a link.
+- **Exports — only what crosses the module's boundary.** `module.exports` lists the names something OUTSIDE the module
+  uses: another module (its links or a load-time require), the facade, a surface (server.js, prompts-resources.js,
+  operations.js, the CLI, the hooks, scripts/ — build.js renders from `E` —, the eval harness) or a test reaching an internal
+  through `require("./lib/engine/index.js")`. Everything else is a private top-level `function` / `const`. To call another
+  module's helper: export it from its owner, add it to your `let` list and `__link`; when its last outside user goes, drop the
+  export (and the unused link). An export kept without an outside use goes into `EXPORT_ALLOW` with its reason (none today).
+- **Shared mutable state is `CTX` (`engine/ctx.js`):** ONE object, mutated in place, never re-bound (a destructured copy goes
+  stale) — what one engine call scopes (`CTX.READ_CACHE`, `CTX.GLOB_CACHE`, `CTX.XAC_MEMO`, `CTX.TEMPLATE_SCOPE_ROOT`,
+  `CTX.TEMPLATE_MEMO`, `CTX.PACK_MEMO`, `CTX.GHOST_MARKERS`, reset by `withReadCache`; `CTX.BUILTIN_CORPUS_BUILD`). A module's
+  own lazy caches (`TEMPLATE_SETS`, `PACK_CACHE`, `KW_RE`, `ENGINE_VERSION`…) stay private; a `let` another module reads moves
+  into `CTX`.
+- **A new module** goes into `MODULES`. `__dirname` in a module is `mcp/lib/engine/` (the clone's root is three levels up —
+  `approvalGuardDecision`'s CLI path, `engineVersion`'s package.json). Every `mcp/lib` source requires only Node core or a
+  relative file.
+- **Checked from the sources** (mcp/tests/16-conventions.js, no parser): "1.18 module rule" — the `let` lists, the links, the
+  load-time graph (acyclic, every engine → engine / i18n → i18n require marked), `MODULES` = the files, all loaded;
+  "1.27 module boundaries" — (a) every linked name is used, (b) every export is used outside its module, (c) every facade key
+  is read by a surface or a test and every engine name the facade takes is used.
+- **Beside the engine:** a zero-dependency module a process needs WITHOUT the engine (~100 ms to load) lives in `mcp/lib/`
+  and requires only Node core — `probe.js` (hook / status-line pre-checks; the engine reads it too), `latin1-scan.js` (the
+  claim scan), `operations.js` (requires nothing: the surfaces hand it the facade). The bundle doesn't hold them.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (stat, realpath, open + read — the open is the expensive part) — the engine is 22
-  modules (+ 8 importers) of 400–1,800 lines, not one per helper. Add to the module of the concept; a new file must earn
-  its load cost. **The compile cache:** the facade (spec.js, first line) calls `module.enableCompileCache()` (Node ≥ 22.8;
-  nothing on older ones): the compiled code of every module loaded after it is kept between processes in
-  `NODE_COMPILE_CACHE` or `<os.tmpdir()>/node-compile-cache/<node version>/` (one file per module, ~1.4 MB for the engine;
-  `NODE_DISABLE_COMPILE_CACHE=1` turns it off; it never throws). It saves the compile of the large modules but adds one
-  cache-file read per module — a tiny module loads SLOWER with it (36 one-line files: 23 ms → 51 ms), one more reason not to
-  add small files — and the first process after an update writes it (45–60 ms more, once). Measured for 1.18 (Windows,
-  Node 24, p50 of 40 interleaved fresh processes; 1.17 → the first split → with the cache and the lazy pt-BR below): guard
-  hook 220 → 260 → 238 ms, `dev-spec status` 211 → 243 → 224, SessionStart 345 → 380 → 364, the stop hook on a "done"
-  claim 252 → 284 → 231. Measure the same way: interleave the variants, fresh processes, p50 + spread — never one run. A
-  slow file system multiplies the per-file cost (tens of ms a file on a Docker Desktop bind mount): there the answer is the
-  one-file bundle the user builds (The build), never fewer, larger modules.
-- **i18n** follows the same shape: `i18n/en.js` / `pt.js` / `es.js` require `i18n/common.js` at load time and reach the
-  assembled `BUILD` / `MSG` through `__link` from `i18n.js`. The tables hold their `en` · `pt` · `es` keys from the start,
-  in that order; a language's file loads on the FIRST read of any table's entry for it (`loadLocale`: its blocks replace
-  the getters, then the `sectionNames` / `quality` / `designWeigh` merges, then its link) — a process pays only for the
-  languages it speaks — so engine code that needs a text of EVERY language (a heading matched in any language) reads it from
-  the pre-generated corpus, never by asking each language's table: the built-in tracks' task-block headings (`trackTaskHeadings`
-  → `builtinTaskHeadings`, 1.22 review) loaded pt.js, es.js and pt-BR into every English `list` (50–65 ms). pt-BR is derived
-  from pt on its first use (`defineDerivedLocale`), as before, and `i18n/pt-br.js`
-  itself loads only then (a table's `pt-BR` entry, `toPtBr`, `derivePtBr` — `ptbr()` in i18n.js). A group with raw entries
-  (MSG `stopGate`: the claim patterns) is derived entry by entry, so the stop gate's claim scan reads pt-BR's patterns
-  without a single toPtBr (its first call compiles the pt-BR word maps: ~17 ms).
+  costs ~0.65 ms before any compile (the open is the expensive part): 22 modules (+ 9 in import/) of a few hundred to a few
+  thousand lines, never one per helper. Add to the module of the concept; a new file must earn its load cost. The facade's
+  first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
+  `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
+  loads SLOWER with it. Measure by interleaving the variants in fresh processes, p50 + spread — never one run. On a slow file
+  system the answer is the bundle (The build), never fewer, larger modules.
+- **i18n** has the same shape: `i18n/en.js` / `pt.js` / `es.js` require `i18n/common.js` at load time and reach `BUILD` / `MSG`
+  through `__link`. A language's file loads on the FIRST read of any table's entry for it (`loadLocale`) — a process pays only
+  for the languages it speaks — so engine code needing a text of EVERY language reads the pre-generated corpus, never each
+  language's table (`trackTaskHeadings` → `builtinTaskHeadings`). pt-BR is derived from pt on first use
+  (`defineDerivedLocale`; `i18n/pt-br.js` loads only then — `ptbr()`); a group of raw entries (MSG `stopGate`, the claim
+  patterns) is derived entry by entry, so the stop gate reads pt-BR's patterns without toPtBr.
 
-## The build (1.20) — the committed corpus, the on-demand bundle, and when to rebuild
-`scripts/build.js` (Node core only) builds two things from the sources:
-- **`npm run build`** (no argument) writes the COMMITTED placeholder corpus `mcp/lib/engine/corpus.generated.json` and (1.24 r6
-  I-I4) the COMMITTED `hooks/stop-claims.generated.json` — the Stop hook's claim pre-filter (guards.js `stopClaimFilter()`, stamped
-  with the sizes of `STOP_FILTER_SOURCES`: the i18n files and guards.js — tasks-and-evidence.md → End-of-turn evidence gate);
-  `npm run check` (`node scripts/build.js --check`) writes nothing and exits 1 while either is stale. Deterministic — the same
-  sources give the same bytes (sorted lists, no dates, LF; a CRLF or BOM checkout hashes the same). Rebuild after editing a file
-  of `CORPUS_SOURCES` or of `STOP_FILTER_SOURCES` (guards.js is the only one not in both). **No version in either (1.26)** —
-  until 1.25.1 both were stamped with package.json's version, so every release rewrote them with the same content (and the
-  runtime refused a current file whose stamp was another version). What each holds is a function of its sources alone — the
-  corpus's render runs through `CORPUS_SOURCES` only (V8 coverage proves it: `engineVersion()`'s upgrade.js is not in the
-  list), the filter is `stopClaimFilter()` over `STOP_FILTER_SOURCES` — so the sources hash (the corpus) and the sizes (the
-  filter) say everything the version could, and a release that changes no source leaves both byte-identical. The version
-  never caught what those miss either: an edit that keeps a source's size (the filter) is caught by `npm run check` / the
-  suite comparing a fresh build, before a commit. `.gitattributes` marks both `linguist-generated=true` (collapsed in a forge's
-  diff, out of its language statistics — still LF, still diffable). The bundle (below) keeps its version stamp: it is never
-  committed, so it never churns.
-- **`npm run build:bundle`** (`--bundle [--out <file.js>]`), also **`dev-spec bundle [--out <file.js>]`** (a plugin install has
-  no npm), writes the one-file engine — by default `mcp/lib/spec.bundle.js`, which is **git-ignored and never committed** (2.7 MB,
-  stale after every engine change: it would bloat the history and conflict on every parallel merge, for an opt-in gain on slow
-  file systems only). The user who wants it builds it, once after each plugin update. `dev-spec bundle` replaces an existing
-  file only when it is a previous bundle (its header: `"use strict";` then `// GENERATED by scripts/build.js --bundle`) or with
-  `--force` (1.24 r6 B8 — `--out src/app.js` overwrote the user's file; `cliOutput.bundleNotOurs`). `build.js --bundle` itself
-  (a maintainer's script) does not ask. **Which engine ran** is never printed by the facade (hooks and the status line stay
-  silent) but it is recorded — `spec.engineSource` `{kind, requested, file, skipped: missing|other-version|stale|broken,
-  pathIgnored}` (1.24 r6 B-I1) — and `dev-spec version` shows it: the answer to "is my bundle used?".
-- **When to rebuild the corpus — precisely:** after changing a file of `CORPUS_SOURCES` — `mcp/lib/i18n.js`,
-  `mcp/lib/i18n/*.js` (every template, string, pt-BR rule), `engine/core.js`, `engine/markdown.js`, `engine/packs.js`,
-  `engine/tasks.js`, `engine/tracks.js` (a track) — never for `package.json`'s version alone (1.26). Any other engine file
-  needs no rebuild.
-  mcp/test.js ("1.20 build") fails with "run npm run build" until the regenerated file is committed; nothing at runtime goes
-  wrong meanwhile (below), it only goes slower. On a merge conflict in the file, take either side and run `npm run build`.
-- **The corpus.** The built-in part of the placeholder corpus (docs/maintainers/gates-and-approvals.md → Gates) —
-  `templateSets()`, `templateSetsBr()`, `templateTaskSet()`, the bug steps (`bugStepSet()`) — and the built-in tracks' task-block
-  headings in every language (`taskHeadings` {track: [heading…]}, read by `trackTaskHeadings` — 1.22 review: rendering them
-  loaded every language's file; `localeLoaded` clears tracks.js's `TASK_HEADINGS` with the corpus) — is the same in every process of
-  one engine, and rendering it (1,165 texts plus pt-BR's twins through toPtBr: ~200 ms) was the largest slice of a hook or
-  CLI call (1.19's SessionStart was ~20% slower than 1.18's for it). The build renders it ONCE with the engine's own
-  functions (`renderCorpusData()`: the sets' members, sorted) into the JSON file, stamped `sources` — a sha1 over
-  `CORPUS_SOURCES` (markdown.js): the eleven mcp/lib files the render runs through (no `version` since 1.26; a `version` key
-  an older build wrote is ignored). On the first
-  placeholder question a process reads the file (one `JSON.parse`, ~129 KB since 1.24 r6 — below) and uses it only while it matches the engine the
-  process LOADED: `sources` is the hash of the sources as they were at load. markdown.js stats every source as it loads (`LOADED_STATS`: size, mtime, ctime —
-  one stat each, no read, ~0.5 ms); the first question re-reads and hashes them (~2 ms natively) and trusts the file only
-  while every stat is still the load-time one (stat'ed after the hash). A language file i18n.js loads on first use (`onLocaleLoad`) that
-  changed since the engine loaded, after the corpus was trusted, drops it (`localeLoaded`: the sets render again). So a
-  long-lived process — the MCP server — under which a `git pull` / `npm run build` rewrote the sources AND the corpus renders
-  from the code it runs, never trusts the new corpus (1.20 review — the race mcp/tests/16-conventions-build.js reproduces in child
-  processes). Otherwise too — a clone hand-edited and not rebuilt, a missing or broken file — it renders exactly as before:
-  never a wrong answer, only a slower one (`builtinCorpusSource()`: `file` · `bundle` · `render`). An edit that keeps a
-  source's size, mtime AND ctime is the accepted limit. mcp/test.js proves `CORPUS_SOURCES` with V8 coverage (every
-  mcp/lib file whose functions run during `renderCorpusData()` is listed — a render that starts to depend on another module
-  makes that test name it), and that a rendered corpus decides every fresh scaffold text exactly as the committed one. The
-  per-project part (the project's templates, its track packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only
-  `.has()` is ever asked of these sets. A new builder or artifact goes into `templateCorpus()` as before — then rebuild.
-  **Every other all-language set a gate asks about (1.24 r6 I-I2 — review 6 finding I1)** is in the corpus too: rendered on first use,
-  they loaded pt.js, es.js and the derived pt-BR into every English doctor / next_action / done / finish / catalog. `steeringStubs`
-  ({file: [sha1 of the stub with its whitespace taken out]} — `isSteeringStub()`, doctor's steering check; hashes, not the 55 KB of
-  stubs), `diagrams` (the scaffold's Mermaid blocks, every language and size — `templateDiagramSet()`, doctor's mermaid check),
-  `sectionLines` / `sectionLinesBr` (the built-in track design blocks' line keys, EN / PT / ES, and pt-BR's own extra ones —
-  `sectionTemplateLines()`, a section's own lines), `bugSlots` (the bug report's slots — `bugTemplateSlots()`) and `templateReqs`
-  ({lang: [the all-track requirements.md, the bugfix's]} — `builtinTemplateReqs()`; their criteria are read LIVE by acIndex in
-  quality.js `builtinTemplateAcs`, so the corpus never depends on the criteria readers in trace.js / finish.js — V8 coverage would
-  have asked for them in `CORPUS_SOURCES`, and every edit there for a rebuild). `localeLoaded` drops them with the rest. A rule
-  for a new one: an engine set built from EVERY language's texts belongs here; a process must only load the languages it speaks
-  (mcp/tests/16-conventions-build.js "I-I2" runs an English doctor / next_action / done / finish / catalog in a child process and asserts
-  require.cache holds no pt.js, es.js or pt-br.js). The file grew from ~45 KB to ~129 KB (read + JSON.parse ~0.8 ms). Measured
-  (p50 of 11 interleaved fresh `dev-spec` processes, the reviewer's 52-feature English project, Windows 11, Node 24): doctor 423 →
-  339 ms, next-action 362 → 287, finish 382 → 314, catalog 364 → 296; status unchanged (214).
-- **The bundle.** Each engine and i18n module (`engine/**`, `i18n.js`, `i18n/*` — not the facade spec.js, not
-  prompts-resources.js) is its source VERBATIM inside `function (exports, require, module, __filename, __dirname)`, run by a
-  small module registry (`moduleRegistry()` in scripts/build.js, emitted with `Function.prototype.toString`). The bundle
-  exports `{ stamp: { version, files: [[rel, size, mtimeMs]…] }, load(root) }`: the facade passes its own folder as `root`,
-  so every module keeps its ORIGINAL `__filename` / `__dirname` (mcp/lib/…) wherever the bundle file lives — `engineVersion()`'s
-  package.json and the approval guard's CLI path read the same files. A relative require resolves inside the registry
-  (cached before the module runs, dropped if it throws — Node's semantics), a bare one (Node core) goes to Node: the load
-  order, the load-time DAG and `__link` are unchanged. Every module starts `"use strict";` (the build refuses one that
-  doesn't — the bundle is strict). The corpus rides along, rendered from these very sources: inside the bundle
-  `module.bundle` carries it (no sources hash then; under Node's own loader `module.bundle` is undefined).
-- **Which engine a process loads (the facade, `loadEngine()`).** The modules, by default. A bundle ONLY with
-  `DEV_SPEC_BUNDLE=1` (`1` / `true` / `yes` / `on`) — `DEV_SPEC_BUNDLE_PATH` names another file (taken only as an absolute path
-  to a `.js` file, else ignored: the default place) — and only while it is CURRENT: its version stamp is package.json's and
-  every module it holds still has the size and mtime it was built with — one `stat` per module, no read (38 stats: ~1 ms
-  natively, ~95 ms on a Docker Desktop bind mount, where one open + read costs more). A `git pull` / plugin update, even to
-  the same version, changes the files' mtimes: the old bundle is never run. **An edit that keeps a module's size AND its
-  mtime is undetectable by this check** (a same-length change within the file system's mtime granularity, a tool that
-  restores the mtime) — an accepted limit, the price of one stat per module and no read: rebuild the bundle after editing a
-  module (or leave DEV_SPEC_BUNDLE unset while you edit). Missing, broken, stale or of another version →
-  the modules, silently (hooks and the status line print nothing about it). Compare in the environment that built it: a
-  bundle built on the host and read through a bind mount may see other mtime precision — it is then simply ignored; build it
-  where it runs (`dev-spec bundle --out /tmp/…` in a container with a read-only mount). Opt-in because natively it gains
-  little (and loses without Node's compile cache, Node < 22.8). The MCP server takes it like every process.
-- **Guards.** `libSources()` (the source guards' file list) leaves `spec.bundle.js` out (a user-built one in mcp/lib); the
-  guards read scripts/build.js, where the registry is written. Both suites run on the modules (the harnesses drop
-  `DEV_SPEC_BUNDLE`, with every other `DEV_SPEC_*` of the shell — testing.md → Hermetic chains). The tests BUILD a bundle into tmp: mcp/tests/16-conventions-build.js ("1.20 bundle": the namespace, the
-  embedded corpus, the modules' paths, every stamp true; on a copy of the clone — none, current, unset / 0, a relative or
-  non-.js `DEV_SPEC_BUNDLE_PATH`, one elsewhere, a module touched or resized under the same mtime and put back, another
-  version, a broken bundle; the MCP server's handshake, lists and ten tool calls byte for byte) and
-  cli/tests/16-conventions-bundle.js (`dev-spec bundle --out`, then one session — 39 CLI commands and 7 hook events — on the
-  modules and on that bundle: the same output, exit codes and `.specs/` tree).
-- **Measured** (p50 of interleaved fresh processes, a 6-feature EN / PT / ES project, on a machine shared with other test
-  runs — the spread is wide, the ratios held run after run; 1.20 base → the corpus file → + the bundle with its staleness
-  check). Windows, Node 24: the SessionStart hook 431 → 301 → 304 ms (CPU 608 → 311 → 296 ms); a cold `require(spec.js)`
-  180 → 173 → 126 ms (the bundle without the compile cache: slower than the modules). Docker Desktop bind mount (the clone
-  mounted read-only, the bundle built into the container's /tmp), node:24-alpine: `require` 637 → 692 → 238 ms, SessionStart
-  1,278 → 914 → 557 ms — the check itself ~96 ms of it; node:18-alpine 742 → 665 → 367 and 1,353 → 1,073 → 697 ms. Rendering
-  the corpus in-process: ~95 ms (templateSets) + ~90 ms (templateSetsBr, the first bracket the EN / PT / ES sets don't know)
-  + ~15 ms (templateTaskSet — toPtBr in an English process); reading the file: ~2 ms plus the stamp.
+## The build — the committed corpus, the on-demand bundle, and when to rebuild
+`scripts/build.js` (Node core only):
+- **`npm run build`** writes two COMMITTED files — the placeholder corpus `mcp/lib/engine/corpus.generated.json` and
+  `hooks/stop-claims.generated.json` (the Stop hook's claim pre-filter: guards.js `stopClaimFilter()`, stamped with the sizes
+  of `STOP_FILTER_SOURCES` — tasks-and-evidence.md → End-of-turn evidence gate). `npm run check` exits 1 while either is stale.
+  Deterministic (sorted, no dates, LF; a CRLF / BOM checkout hashes the same) and version-free: the corpus is stamped
+  `sources`, a sha1 over `CORPUS_SOURCES`, so a release that changes no source leaves both byte-identical. Both are
+  `linguist-generated=true`. Never hand-edit; on a merge conflict take either side and rebuild.
+- **When to rebuild:** after changing a file of `CORPUS_SOURCES` — `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js`, `engine/core.js`,
+  `markdown.js`, `packs.js`, `tasks.js`, `tracks.js` — or of `STOP_FILTER_SOURCES` (those i18n files and `engine/guards.js`);
+  never for package.json's version alone. mcp/test.js ("1.20 build") fails with "run npm run build" until it is committed;
+  meanwhile the runtime only goes slower.
+- **The corpus** — the built-in placeholder sets (`templateSets()`, `templateSetsBr()`, `templateTaskSet()`, `bugStepSet()`),
+  the built-in tracks' task headings in every language (`taskHeadings`) and every other all-language set a gate asks about
+  (`steeringStubs` — hashes, `isSteeringStub()`; `diagrams` — `templateDiagramSet()`; `sectionLines` / `sectionLinesBr` —
+  `sectionTemplateLines()`; `bugSlots` — `bugTemplateSlots()`; `templateReqs` — `builtinTemplateReqs()`, whose criteria
+  quality.js `builtinTemplateAcs` reads live). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
+  an engine set built from EVERY language's texts belongs here — a process loads only the languages it speaks
+  (mcp/tests/16-conventions-build.js "I-I2" asserts an English doctor / next_action / done / finish / catalog loads no pt.js,
+  es.js or pt-br.js). A new builder or artifact goes into `templateCorpus()`, then rebuild. The per-project part (the
+  project's templates and packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only `.has()` is asked of the sets.
+- **The corpus is trusted only for the engine the process LOADED.** markdown.js stats every source as it loads
+  (`LOADED_STATS`: size, mtime, ctime); the first placeholder question hashes them and trusts the file only while every stat
+  is unchanged; a language file loaded later that changed drops it (`onLocaleLoad` → `localeLoaded`). So the long-lived MCP
+  server under a `git pull` / `npm run build` keeps rendering from the code it runs. A missing, broken or stale file → it
+  renders, never a wrong answer, only a slower one (`builtinCorpusSource()`: `file` · `bundle` · `render`). An edit keeping a
+  source's size, mtime AND ctime is the accepted limit. `CORPUS_SOURCES` is proven with V8 coverage: a render that starts to
+  depend on another mcp/lib file makes the test name it.
+- **`dev-spec bundle [--out <file.js>]`** (or `npm run build:bundle`) writes the one-file engine, by default
+  `mcp/lib/spec.bundle.js` — **git-ignored, never committed** (megabytes, stale after every engine change, a conflict on every
+  merge, for an opt-in gain on slow file systems). The user builds it after each plugin update. It replaces an existing file
+  only if that is a previous bundle (its `// GENERATED by scripts/build.js --bundle` header) or with `--force`
+  (`cliOutput.bundleNotOurs`). Each engine and i18n module is its source VERBATIM inside a function run by a small registry
+  (`moduleRegistry()`, emitted with `Function.prototype.toString`); `load(root)` keeps every module's ORIGINAL `__filename` /
+  `__dirname`; a relative require resolves in the registry (else Node's loader at its original path), a bare one goes to
+  Node — the load order, the DAG and `__link` are unchanged. Every module must start `"use strict";` (the build refuses it
+  otherwise). The corpus rides inside (`module.bundle`). The bundle keeps its version stamp.
+- **Which engine loads (`loadEngine()`):** the modules, unless `DEV_SPEC_BUNDLE=1` (`1` / `true` / `yes` / `on`;
+  `DEV_SPEC_BUNDLE_PATH` — an absolute `.js` path, else ignored — names another file) AND the bundle is current: its version is
+  package.json's and every module still has its built size and mtime (one `stat` each, no read). Missing, broken, stale or
+  another version → the modules, silently; `spec.engineSource` records which and why, and `dev-spec version` shows it. An
+  edit that keeps a module's size AND mtime is undetectable — rebuild after editing, or leave DEV_SPEC_BUNDLE unset. Build it
+  where it runs (a bind mount may see other mtime precision: the bundle is then ignored).
+- **Tests.** `libSources()` leaves `spec.bundle.js` out (the guards read scripts/build.js, where the registry is written).
+  Both suites run on the modules (the harnesses drop every `DEV_SPEC_*` — testing.md → Hermetic chains) and BUILD a bundle
+  into tmp: mcp/tests/16-conventions-build.js ("1.20 bundle" — the namespace, the corpus, the paths, every staleness case,
+  the MCP server byte for byte) and cli/tests/16-conventions-bundle.js (one CLI + hooks session on the modules and on the
+  bundle: the same output, exit codes and `.specs/` tree).
 
 ## Config paths: committable (relative) vs. host-installed (absolute)
-Two distinct distribution targets, deliberately kept separate — never conflate them:
+Two distribution targets, never conflated:
+- **In-repo dotfiles are committable and portable** — relative / workspace-relative, never a machine path:
+  - `mcp/servers.json` (plugin.json → `mcpServers`) → `${CLAUDE_PLUGIN_ROOT}/mcp/server.js`, env `SPEC_PROJECT_DIR`,
+    `SPEC_MCP_PROMPTS=off`, `SPEC_MCP_APPROVAL_HOOK=on`. Only `command` / `args` / `env`: Claude Code substitutes `${…}` there
+    only and documents no `cwd` (the server skips an unexpanded `${VAR}` — resolveProjectDir). NEVER a root `.mcp.json`: opened
+    as a normal project, this repo's root `.mcp.json` is a *project* server where `${CLAUDE_PLUGIN_ROOT}` is undefined.
+  - `.vscode/mcp.json` → `${workspaceFolder}/mcp/server.js`; `.cursor/mcp.json`, `.gemini/settings.json` → `mcp/server.js`.
+    `.vscode/mcp.json` is the one tracked file under `.vscode/` (`.vscode/*` then `!.vscode/mcp.json` — ignore by contents, not
+    the dir, or git can't re-include it).
+- **A USER's own project needs absolute paths**, generated on demand, never committed: `node cli/dev-spec.js mcp-config
+  <client>` (`claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all`) prints a config with the path
+  resolved from `__dirname` (`mcpConfigBlocks()` in `cli/commands.js`); `integrations/*` carry the literal
+  `/ABSOLUTE/PATH/TO/dev-spec-driven/…` placeholder. (There is **no** `install_host_context` symbol.)
+- **Rule files the same way:** `node cli/dev-spec.js rules <cursor|windsurf|copilot|gemini|agents>` prints that tool's rule
+  file with its bare `cli/dev-spec.js`, `mcp/server.js`, `AGENTS.md`, `skills/dev-spec-driven/…` and `references/…` paths made
+  absolute. So the committed rule files keep those paths BARE (no `<clone>/` prefix), keep the "Paths in this file point into
+  the dev-spec-driven clone" note true in the copy, and never talk about "the repo" — a test asserts all three.
 
-- **In-repo dotfiles are committable and portable.** They use relative / workspace-relative
-  references, never a machine path, so `git clone`/download Just Works:
-  - `mcp/servers.json` (referenced by `plugin.json` → `mcpServers`) → `${CLAUDE_PLUGIN_ROOT}/mcp/server.js` (env:
-    `SPEC_PROJECT_DIR`, `SPEC_MCP_PROMPTS=off`, `SPEC_MCP_APPROVAL_HOOK=on` — 1.21: the plugin's hook guards approvals there).
-    Only `command` / `args` / `env` (1.23 review 5): Claude Code substitutes `${…}` in a plugin stdio server's command, args and
-    env only and documents no `cwd` field — the `"cwd": "${CLAUDE_PROJECT_DIR}"` it carried was ignored, and honoured
-    unexpanded it would stop the server from starting; `SPEC_PROJECT_DIR` already names the project (and the server skips an
-    unexpanded `${VAR}` — resolveProjectDir).
-    It is deliberately NOT a root `.mcp.json`: when this repo is opened as a normal project, Claude Code
-    reads a root `.mcp.json` as a *project* server where `${CLAUDE_PLUGIN_ROOT}` is undefined, so it
-    failed with CONNECTION_CLOSED in every maintainer session (v1.11 moved it).
-  - `.vscode/mcp.json` → `${workspaceFolder}/mcp/server.js`
-  - `.cursor/mcp.json`, `.gemini/settings.json` → `mcp/server.js` (cwd-relative)
+## History
+How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`r6 B8`) here.
 
-  `.vscode/mcp.json` is the **one** tracked file under `.vscode/`; everything else there is gitignored
-  via a surgical exception (`.vscode/*` then `!.vscode/mcp.json` — must ignore by contents, not the
-  dir, or git can't re-include the file). Never commit an absolute path into these.
+### Layout
+- **v1.11** — the MCP registration moved from a root `.mcp.json` to `mcp/servers.json` (see Config paths).
+- **1.17 H** — the linear text scans now in core.js. **1.18** — the engine, one file until then, split into modules behind
+  the facade `mcp/lib/spec.js` (the same keys as ever).
+- **1.20** — the classifier's data became tracks.js `SIGNALS` with classify.js; packs.js; the build (corpus, bundle).
+- **1.21** — SKILL.md capped at ~5,000 words, with tool-catalog.md · track-checklists.md · workflows.md beside it (F3).
+  F1a: the semantic merge of the spec state behind git's merge driver. F1b: the approval guard over MCP elicitation.
+- **1.21.1** — readFileHead (bounded reads for the code scans); the scan's one notion of code and of a test file.
+- **1.22** — `dev-spec-driven:spec-simplifier` and the reviewer's simplify mode (/spec-review simplify).
+- **1.24** — hooks/hook-utils.js. **r6 I-I1:** any spec save stamps ROADMAP.* / SPECS.md stale. **r6 I-I4:**
+  hooks/stop-claims.generated.json.
+- **1.25** — shell completion (cli/completion.js, cli/completion/), import/steering.js, the ADR export of decisions.md.
+- **1.25.1 review 7** — the guard hook also guards shell writes (Bash / PowerShell / Monitor); the approval hook also
+  matches NotebookEdit and another MCP server's file tools.
+- **1.26** — the 55 commands folded into 22 (extending.md → The 1.26 command set); the reviewer's verify mode became
+  `dev-spec-driven:spec-verifier`.
+- **1.27** — mcp/lib/probe.js (one dev-spec project rule for every surface), mcp/lib/latin1-scan.js, mcp/lib/operations.js;
+  the CLI split from one file into cli/dev-spec.js (the entry point alone, 44 lines), cli/main.js, cli/commands.js (the
+  command table), cli/run.js, cli/git.js; the doctor check registry (`DOCTOR_CHECKS` / `GATES`, approvalChecks moved into
+  doctor.js); the shared i18n layouts (`LAYOUTS`).
 
-- **Installing into a USER's own project needs absolute paths.** Outside Claude Code there is no
-  `${CLAUDE_PLUGIN_ROOT}`, so the user's editor must point at *this clone's* absolute `mcp/server.js`.
-  That host-specific config is **generated on demand, never committed**: `node cli/dev-spec.js
-  mcp-config <client>` (`claude-desktop|claude-code|cursor|windsurf|vscode|gemini|codex|generic|all`) prints a ready
-  config with the absolute path resolved from `__dirname` (`mcpConfigBlocks()` in `cli/commands.js`). The
-  `integrations/*` templates carry the literal `/ABSOLUTE/PATH/TO/dev-spec-driven/…` placeholder as a
-  copy-paste fallback. (There is **no** `install_host_context` symbol — the mechanism is `mcp-config`.)
-- **Rule files the same way:** `node cli/dev-spec.js rules <cursor|windsurf|copilot|gemini|agents>` prints
-  that tool's rule file (`AGENTS.md`, `GEMINI.md`, …) with its bare `cli/dev-spec.js`, `mcp/server.js`,
-  `AGENTS.md`, `skills/dev-spec-driven/…` and `references/…` paths made absolute (own-key lookup of the
-  tool name). So the committed rule files must keep those paths BARE (no `<clone>/` prefix), keep the
-  "Paths in this file point into the dev-spec-driven clone" note true in the copy, and never talk about
-  "the repo" — a test asserts all three.
+### The module rule
+- **1.18** — the split and the rule (load-time DAG, `__link(E)`, `CTX`). Measured (Windows, Node 24, p50 of 40 interleaved
+  fresh processes; 1.17 → the first split → with the compile cache and the lazy pt-BR): guard hook 220 → 260 → 238 ms,
+  `dev-spec status` 211 → 243 → 224, SessionStart 345 → 380 → 364, the stop hook on a "done" claim 252 → 284 → 231. The
+  compile cache: ~1.4 MB for the engine, one file per module; 36 one-line files load in 51 ms with it against 23 ms without;
+  the first process after an update writes it (45–60 ms, once). The stop gate's first pt-BR claim scan compiles the word
+  maps: ~17 ms. Per-file cost on Windows ~0.65 ms (stat, realpath, open + read).
+- **1.22 review** — rendering the built-in tracks' task headings loaded pt.js, es.js and pt-BR into every English `list`
+  (50–65 ms): they moved into the corpus.
+- **1.27** — exports only what crosses a module's boundary: `E` went from 2,083 names (1,214 of them exported and used only
+  inside their own module) to ~860; 80 facade keys are read only by tests. probe.js, latin1-scan.js and operations.js
+  joined mcp/lib beside the engine.
+
+### The build
+- **1.19 → 1.20** — rendering the corpus (1,165 texts plus pt-BR's twins: ~200 ms) was the largest slice of a hook or CLI
+  call (1.19's SessionStart ~20 % slower than 1.18's for it); 1.20 renders it at build time and adds the opt-in bundle.
+- **1.20 review** — a long-lived process (the MCP server) under which `git pull` / `npm run build` rewrote the sources AND the
+  corpus trusted the new file for old code: the trust became the sources hash checked against the stats taken at load.
+- **1.20 measured** (p50 of interleaved fresh processes, a 6-feature EN / PT / ES project; base → the corpus file → + the
+  bundle). Windows, Node 24: SessionStart 431 → 301 → 304 ms (CPU 608 → 311 → 296); a cold `require(spec.js)` 180 → 173 → 126 ms
+  (the bundle without the compile cache: slower than the modules). Docker Desktop bind mount, node:24-alpine: `require`
+  637 → 692 → 238 ms, SessionStart 1,278 → 914 → 557 ms (the staleness check ~96 ms of it — 38 stats, ~1 ms natively);
+  node:18-alpine 742 → 665 → 367 and 1,353 → 1,073 → 697 ms. Rendering in-process ~95 ms (templateSets) + ~90 ms
+  (templateSetsBr) + ~15 ms (templateTaskSet); reading the file ~2 ms. The bundle: 2.7 MB.
+- **1.24 r6 I-I2 (review 6 finding I1)** — the other all-language sets (steering stubs, diagrams, section lines, bug slots,
+  template requirements) joined the corpus: rendered on first use they loaded every language into English processes. The
+  file grew from ~45 KB to ~129 KB (~0.8 ms to read). Measured (p50 of 11, a 52-feature English project, Windows 11, Node 24):
+  doctor 423 → 339 ms, next-action 362 → 287, finish 382 → 314, catalog 364 → 296; status unchanged (214).
+- **1.24 r6 I-I4** — the stop-claim filter, built with the corpus.
+- **1.24 r6 B8** — `dev-spec bundle --out src/app.js` overwrote the user's file: now only a previous bundle, or `--force`.
+  **1.24 r6 B-I1** — `spec.engineSource` records which engine loaded and why a bundle was skipped.
+- **1.26** — no version in either generated file: until 1.25.1 both carried package.json's version, so every release
+  rewrote them unchanged (and the runtime refused a current file stamped with another version). V8 coverage shows
+  `engineVersion()`'s upgrade.js is outside the render, so the sources hash says everything the version could.
+
+### Config paths
+- **v1.11** — `mcp/servers.json` replaced the root `.mcp.json` (CONNECTION_CLOSED in every maintainer session).
+- **1.21** — `SPEC_MCP_APPROVAL_HOOK=on` in the plugin's registration.
+- **1.23 review 5** — the `"cwd": "${CLAUDE_PROJECT_DIR}"` it carried was dropped: ignored by Claude Code, and honoured
+  unexpanded it would have stopped the server from starting.
