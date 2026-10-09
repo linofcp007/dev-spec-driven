@@ -207,7 +207,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   while every stat is still the load-time one (stat'ed after the hash). A language file i18n.js loads on first use (`onLocaleLoad`) that
   changed since the engine loaded, after the corpus was trusted, drops it (`localeLoaded`: the sets render again). So a
   long-lived process — the MCP server — under which a `git pull` / `npm run build` rewrote the sources AND the corpus renders
-  from the code it runs, never trusts the new corpus (1.20 review — the race mcp/tests/16-conventions.js reproduces in child
+  from the code it runs, never trusts the new corpus (1.20 review — the race mcp/tests/16-conventions-build.js reproduces in child
   processes). Otherwise too — a clone hand-edited and not rebuilt, a missing or broken file — it renders exactly as before:
   never a wrong answer, only a slower one (`builtinCorpusSource()`: `file` · `bundle` · `render`). An edit that keeps a
   source's size, mtime AND ctime is the accepted limit. mcp/test.js proves `CORPUS_SOURCES` with V8 coverage (every
@@ -225,7 +225,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   quality.js `builtinTemplateAcs`, so the corpus never depends on the criteria readers in trace.js / finish.js — V8 coverage would
   have asked for them in `CORPUS_SOURCES`, and every edit there for a rebuild). `localeLoaded` drops them with the rest. A rule
   for a new one: an engine set built from EVERY language's texts belongs here; a process must only load the languages it speaks
-  (mcp/tests/16-conventions.js "I-I2" runs an English doctor / next_action / done / finish / catalog in a child process and asserts
+  (mcp/tests/16-conventions-build.js "I-I2" runs an English doctor / next_action / done / finish / catalog in a child process and asserts
   require.cache holds no pt.js, es.js or pt-br.js). The file grew from ~45 KB to ~129 KB (read + JSON.parse ~0.8 ms). Measured
   (p50 of 11 interleaved fresh `dev-spec` processes, the reviewer's 52-feature English project, Windows 11, Node 24): doctor 423 →
   339 ms, next-action 362 → 287, finish 382 → 314, catalog 364 → 296; status unchanged (214).
@@ -254,7 +254,7 @@ behind two facades: `spec.js` (the public object — its keys, the `withReadCach
   little (and loses without Node's compile cache, Node < 22.8). The MCP server takes it like every process.
 - **Guards.** `libSources()` (the source guards' file list) leaves `spec.bundle.js` out (a user-built one in mcp/lib); the
   guards read scripts/build.js, where the registry is written. Both suites run on the modules (the harnesses drop
-  `DEV_SPEC_BUNDLE`). The tests BUILD a bundle into tmp: mcp/tests/16-conventions.js ("1.20 bundle": the namespace, the
+  `DEV_SPEC_BUNDLE`). The tests BUILD a bundle into tmp: mcp/tests/16-conventions-build.js ("1.20 bundle": the namespace, the
   embedded corpus, the modules' paths, every stamp true; on a copy of the clone — none, current, unset / 0, a relative or
   non-.js `DEV_SPEC_BUNDLE_PATH`, one elsewhere, a module touched or resized under the same mtime and put back, another
   version, a broken bundle; the MCP server's handshake, lists and ten tool calls byte for byte) and
