@@ -834,10 +834,10 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   have cues for credits (photo / film / course), "in charge of", a battery charge, a therapy / training session, a cron EXPRESSION
   helper; 'tool use' is weak. `-compatible` joined `ADJ_SUFFIX` ("the OpenAI-compatible endpoint"). Training / predicting with a
   model are gap keywords ("train … model", "model … trained", "predict … churn"; PT / ES through the VERB_STEMS trein- / entren-).
-  **Measured:** the differential (b7978f8 vs the fix) over 16,013 string literals of the test files, evals and the review's
-  phrasings: 67 decisions changed, each one a phrasing the fix targets (or a test message naming one of its words); a 14-frame
-  sweep of every keyword of both tables (30,674 texts): 345 changed — +ai off only for the lower-case claude / gemini / mistral /
-  copilot / rag / tool use, +ai on only for the new keywords.
+  **Measured:** the differential (b7978f8 vs the fix) over 16,125 string literals of the test files, evals and the review's
+  phrasings: 76 decisions changed (tracks or size), each one a phrasing the fix targets (or a test message naming one of its words);
+  a 14-frame sweep of every keyword of both tables (30,716 texts): 369 changed — +ai off only for the lower-case claude / gemini /
+  mistral / copilot / rag / tool use, +ai on only for the new keywords.
 - **Negation never vetoes a track**, it annotates it. "the system shall not hallucinate" negates
   `hallucinat` on a feature that is unmistakably `+ai`. So when a track is on *and* has negated
   keywords, `classify` emits a conflict note ("+ai is ON although 'llm' appeared negated") for the
