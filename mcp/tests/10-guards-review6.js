@@ -407,8 +407,8 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
 
   // 1.24 r6 I-I4: the Stop hook's claim pre-filter — a message holding no claim pattern of any language (in its prose, as the engine
   // reads it) ends the hook before the engine loads (~100 ms at the end of a turn). The build writes the patterns and the prose
-  // regexes into hooks/stop-claims.generated.json, stamped with the version and its sources' sizes; a missing or stale file → the
-  // engine decides, as before.
+  // regexes into hooks/stop-claims.generated.json, stamped with its sources' sizes (no version since 1.26); a missing or stale file →
+  // the engine decides, as before.
   {
     const filterFile = path.join(__dirname, "..", "hooks", "stop-claims.generated.json");
     let f = null;
@@ -457,16 +457,18 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
     const cf = path.join(clone, "hooks", "stop-claims.generated.json"), cfText = fs.readFileSync(cf, "utf8");
     const variants = {};
     variants.copy = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout.")];
-    fs.writeFileSync(cf, cfText.replace(/"version": "[^"]+"/, "\"version\": \"0.0.1\""));
+    // 1.26: the filter carries no version — another package.json version (a release that changed none of its sources) keeps it in use
+    const cpkg = path.join(clone, "package.json"), cpkgText = fs.readFileSync(cpkg, "utf8");
+    fs.writeFileSync(cpkg, cpkgText.replace(/"version":\s*"[^"]+"/, "\"version\": \"0.0.1\""));
     variants.version = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout."), stopAt(path.join(clone, "hooks"), "All done — the tests pass.")];
-    fs.writeFileSync(cf, cfText);
+    fs.writeFileSync(cpkg, cpkgText);
     fs.appendFileSync(path.join(clone, "mcp", "lib", "engine", "guards.js"), "// edited\n");
     variants.size = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout."), stopAt(path.join(clone, "hooks"), "All done — the tests pass.")];
     fs.rmSync(cf);
     variants.missing = [stopAt(path.join(clone, "hooks"), "Here is a summary of the layout."), stopAt(path.join(clone, "hooks"), "All done — the tests pass.")];
-    ok(js(real) === js(["silent/false", "block/true"]) && js(variants.copy) === js(["silent/false"]) &&
-      ["version", "size", "missing"].every((k) => js(variants[k]) === js(["silent/true", "block/true"])),
-      "1.24 r6 I-I4: the Stop hook sends a message with no claim away before the engine loads, and blocks a claim as the engine does; a copy of the clone reads its own filter; a filter of another version, stamped with another source size or missing → the engine decides, with the same answers (got " +
+    ok(js(real) === js(["silent/false", "block/true"]) && js(variants.copy) === js(["silent/false"]) && js(variants.version) === js(["silent/false", "block/true"]) &&
+      ["size", "missing"].every((k) => js(variants[k]) === js(["silent/true", "block/true"])),
+      "1.24 r6 I-I4: the Stop hook sends a message with no claim away before the engine loads, and blocks a claim as the engine does; a copy of the clone reads its own filter — under another package.json version too (1.26: no version stamp, a release that changes none of its sources keeps it); a filter stamped with another source size or missing → the engine decides, with the same answers (got " +
       js({ real, variants }) + ")");
   }
 

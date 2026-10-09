@@ -30,6 +30,7 @@ file goes into the topic map (`mcp/test.js` checks that the map and the folder a
 
 ```bash
 npm run build           # regenerate the placeholder corpus after changing templates / tracks / i18n (see below)
+npm run check           # …or only check that the committed generated files are current (writes nothing; exit 1 if stale)
 node mcp/test.js        # MCP server end-to-end (must end `0 failed`)
 node cli/test-cli.js    # universal CLI (must end `0 failed`)
 # or both:
@@ -51,10 +52,29 @@ file that reads what another built, when to start a new file).
 
 **Run `npm run build` after changing templates, tracks or i18n strings** — precisely, a file the placeholder corpus is
 rendered from: `mcp/lib/i18n.js`, `mcp/lib/i18n/*.js`, `mcp/lib/engine/core.js`, `markdown.js`, `packs.js`, `tasks.js`,
-`tracks.js` — and after bumping the version, then commit the regenerated `mcp/lib/engine/corpus.generated.json` with your
-change (the built-in placeholder corpus, rendered once instead of in every hook and CLI process; never edit it by hand).
-`mcp/test.js` fails ("run npm run build") while it differs from a fresh build; `node scripts/build.js --check` says whether
-it is current without writing anything. On a merge conflict in it, take either side and rebuild. The one-file engine for slow
+`tracks.js` (and `engine/guards.js` for the Stop hook's `hooks/stop-claims.generated.json`) — then commit the regenerated
+files with your change (the built-in placeholder corpus, rendered once instead of in every hook and CLI process; never edit
+them by hand). A version bump alone changes neither (they carry no version). `mcp/test.js` fails ("run npm run build") while
+one differs from a fresh build; `npm run check` (`node scripts/build.js --check`) says whether both are current without
+writing anything. On a merge conflict in one, take either side and rebuild.
+
+**Optional: a local pre-commit hook** — so a stale generated file never reaches a commit. Nothing installs it for you
+(no hosted automation, by design); add it to your own clone once:
+
+```bash
+hook="$(git rev-parse --git-path hooks)/pre-commit"   # .git/hooks/pre-commit — shared by every worktree of the clone
+cat > "$hook" <<'HOOK'
+#!/bin/sh
+# dev-spec-driven maintainers: refuse a commit while the generated corpus / stop-claim filter are stale
+if ! git diff --cached --quiet -- mcp/lib package.json; then
+  node scripts/build.js --check || { echo "run npm run build and stage the regenerated files" >&2; exit 1; }
+fi
+HOOK
+chmod +x "$hook"
+```
+
+It runs only when the commit touches `mcp/lib/` or package.json, and checks the working tree (stage what `npm run build`
+rewrote); `git commit --no-verify` skips it for a work-in-progress commit. The one-file engine for slow
 file systems (`npm run build:bundle` / `dev-spec bundle` → `mcp/lib/spec.bundle.js`) is git-ignored and built by the user
 who wants it — never commit it. See [docs/maintainers/architecture.md](./docs/maintainers/architecture.md) → The build.
 
@@ -84,8 +104,8 @@ For +ai changes, `node mcp/evals/run-evals.js <feature> --dry-run` validates the
 
 - Keep `SKILL.md` the source of truth for the workflow; commands stay thin wrappers.
 - Update `CHANGELOG.md` and bump the version in `package.json`, `.claude-plugin/plugin.json` **and**
-  `.claude-plugin/marketplace.json` together (`mcp/test.js` fails if they disagree) — then `npm run build` (the corpus
-  carries the version).
+  `.claude-plugin/marketplace.json` together (`mcp/test.js` fails if they disagree). A version bump alone needs no
+  `npm run build` (since 1.26 the generated files carry no version) — `npm run check` confirms it.
 - Validate both manifests and make sure `npm test` is green:
   - `claude plugin validate .claude-plugin/plugin.json` — the plugin (manifest + its components); it passes with
     one expected warning, `CLAUDE.md at the plugin root is not loaded as project context` (CLAUDE.md is these

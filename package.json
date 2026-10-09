@@ -23,6 +23,7 @@
   "scripts": {
     "build": "node scripts/build.js",
     "build:bundle": "node scripts/build.js --bundle",
+    "check": "node scripts/build.js --check",
     "test": "node mcp/test.js && node cli/test-cli.js",
     "test:docker": "node scripts/test-docker.js",
     "mcp": "node mcp/server.js",
