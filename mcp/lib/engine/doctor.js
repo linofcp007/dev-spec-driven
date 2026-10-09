@@ -39,7 +39,8 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
   branchView, evidenceMode, approvalGuardLevel; // branchView: 1.25 (create --branch); the last two: 1.25.1 (review 7 — observed-unguarded)
 let isPlaceholderTask, finishFeature, ghostMarkers; // 1.27: the check registry (the tasks gate, the execution gate, its live views)
 let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
-function __link(E) { ({ dayOf, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
+let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
+function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designWeighChecks, detectPhase,
@@ -1262,11 +1263,10 @@ const STATUS_MAX_UP = 40; // folders walked up from a status line's cwd looking 
 const STATUS_TEST_FILES = 20; // test files the status line reads for Phase 4's gate, at most (statusTestsGate)
 // (STATUS_DOCTOR_WARNS — the approve-gate checks the doctor only warns about — is the check registry's `warnsOnly`.)
 // A folder whose .specs/ dev-spec owns: roadmap.json, steering/, a generated ROADMAP.md (a v1.8-era project) or a feature folder (no
-// "." prefix) with its .state.json or classification.md — 1.27: THE rule, mcp/lib/probe.js isDevSpecProject (the hooks, the status
-// line's probe and the CLI's completion read the same one), here through the engine's reads (a dry run's folders — isDirSafe /
-// safeReaddir).
+// "." prefix) with its .state.json or classification.md — THE rule, mcp/lib/probe.js isDevSpecProject (the hooks, the status
+// line's probe and the CLI's completion read the same one), here through the engine's reads (files.js PROBE_IO: a dry run's folders
+// seen as made — the resolver's walk, files.js nearestProject, reads the same).
 const PROBE = require("../probe.js");
-const PROBE_IO = { isDir: (p) => isDirSafe(p), exists: (p) => fs.existsSync(p), head: (p) => readFileHead(p, 4000) || "", folders: (p) => safeReaddir(p) };
 function isDevSpecDir(dir) {
   return PROBE.isDevSpecProject(dir, PROBE_IO);
 }

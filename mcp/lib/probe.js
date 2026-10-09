@@ -6,7 +6,8 @@
  *
  * ONE rule for every surface (1.27): the hooks' pre-checks (hooks/*.js, hooks/hook-utils.js), the CLI's engine-free walks
  * (cli/completion.js — the status line's probe and the shell completion) and the engine itself (engine/doctor.js isDevSpecDir is
- * this rule read through the engine's view of the disk) — so a hook, the status line and the engine can never disagree on which
+ * this rule and engine/files.js nearestProject this walk, both read through the engine's view of the disk — files.js PROBE_IO, a
+ * dry run's folders seen as made) — so a hook, the status line and the engine can never disagree on which
  * .specs/ is dev-spec's. (Until 1.26 there were four variants: a .specs/ holding only a classified feature was a project to the Stop
  * and observe hooks, not to the edit guard or the status line; a generated ROADMAP.md counted for two hooks only.)
  *
@@ -22,10 +23,12 @@
  *
  * Exports:
  *   isDevSpecProject(dir, io?)       the rule (io: the engine passes its own reads — a dry run's folders; default: the disk)
- *   nearestDevSpec(start, {maxUp})   the nearest folder at or above start whose .specs/ is dev-spec's (≤ maxUp = SESSION_MAX_UP levels)
- *   nearestSpecs(start, {maxUp})     the nearest folder at or above start holding any .specs/ folder
- *   nearestProject(start)            the CLI's resolver walk (files.js nearestProject): start itself with any .specs/, else the nearest
- *                                    dev-spec one above it (≤ PROJECT_MAX_UP levels)
+ *   nearestDevSpec(start, {maxUp, io})   the nearest folder at or above start whose .specs/ is dev-spec's (≤ maxUp = SESSION_MAX_UP
+ *                                    levels)
+ *   nearestSpecs(start, {maxUp, io}) the nearest folder at or above start holding any .specs/ folder
+ *   nearestProject(start, {io})      the CLI's resolver walk (the engine's resolveProjectDir, through its own reads — files.js
+ *                                    nearestProject): start itself with any .specs/, else the nearest dev-spec one above it
+ *                                    (≤ PROJECT_MAX_UP levels)
  *   sessionAnchors(env) · sessionProjects({cwd, anchors})   the session resolution the hooks share before the engine loads
  *   usable · unexpandedVar · expandHome · isNetwork          reading a folder value as the engine does
  *   utf16OrUtf8 · textOf · jsonOf · readText · readJsonFile · isUtf16   a file as the engine reads it (files.js decodeText)
@@ -37,7 +40,7 @@ const fs = require("fs");
 const path = require("path");
 
 const SESSION_MAX_UP = 40; // folders a hook or the status line walks up (the engine's SESSION_MAX_UP and STATUS_MAX_UP)
-const PROJECT_MAX_UP = 64; // folders the CLI's resolver walks up (files.js PROJECT_MAX_UP)
+const PROJECT_MAX_UP = 64; // folders the CLI's resolver walks up (nearestProject — the engine's resolveProjectDir too)
 const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
 
 // A variable left unexpanded — any "${", a leading $NAME, a %NAME% (files.js unexpandedVar): such a value names no folder.
@@ -130,14 +133,16 @@ function isDevSpecProject(dir, io = DISK) {
 
 // ---- where it is ------------------------------------------------------------------------------------------------------------
 // The nearest folder at or above `start` (≤ opts.maxUp levels, default SESSION_MAX_UP) whose .specs/ is dev-spec's, else null. An
-// unusable start → null; a network path → itself when it is one (never walked up the share).
+// unusable start → null; a network path → itself when it is one (never walked up the share). opts.io: the disk as the rule reads it
+// (isDevSpecProject's io — default: the disk).
 function nearestDevSpec(start, opts = {}) {
   const s = usable(start);
   if (!s) return null;
-  if (isNetwork(s)) return isDevSpecProject(s) ? path.resolve(s) : null;
+  const io = opts.io || DISK;
+  if (isNetwork(s)) return isDevSpecProject(s, io) ? path.resolve(s) : null;
   let d = path.resolve(s);
   for (let i = 0, max = opts.maxUp || SESSION_MAX_UP; i < max; i++) {
-    if (isDevSpecProject(d)) return d;
+    if (isDevSpecProject(d, io)) return d;
     const up = path.dirname(d);
     if (up === d) break;
     d = up;
@@ -145,14 +150,16 @@ function nearestDevSpec(start, opts = {}) {
   return null;
 }
 // The nearest folder at or above `start` (≤ opts.maxUp levels, default SESSION_MAX_UP) holding a .specs/ folder at all — dev-spec's
-// or not —, else null. A network path is itself, as it is — never stat'ed here, nor walked (its reader decides).
+// or not —, else null. A network path is itself, as it is — never stat'ed here, nor walked (its reader decides). opts.io: as
+// nearestDevSpec's.
 function nearestSpecs(start, opts = {}) {
   const s = usable(start);
   if (!s) return null;
   if (isNetwork(s)) return s;
+  const io = opts.io || DISK;
   let d = path.resolve(s);
   for (let i = 0, max = opts.maxUp || SESSION_MAX_UP; i < max; i++) {
-    if (isDir(path.join(d, ".specs"))) return d;
+    if (io.isDir(path.join(d, ".specs"))) return d;
     const up = path.dirname(d);
     if (up === d) break;
     d = up;
@@ -161,11 +168,12 @@ function nearestSpecs(start, opts = {}) {
 }
 // The CLI's resolver walk (files.js nearestProject — where `dev-spec <cmd>` acts with no --project / SPEC_PROJECT_DIR /
 // CLAUDE_PROJECT_DIR): `start` itself when it holds any .specs/ folder (one made by hand before init), else the nearest folder above
-// it whose .specs/ is dev-spec's (≤ PROJECT_MAX_UP levels in all), else null. A network path → null (never walked).
-function nearestProject(start) {
+// it whose .specs/ is dev-spec's (≤ PROJECT_MAX_UP levels in all), else null. A network path → null (never walked). opts.io: as
+// nearestDevSpec's (the engine passes its own reads).
+function nearestProject(start, opts = {}) {
   const s = usable(start);
   if (!s || isNetwork(s)) return null;
-  return nearestSpecs(s, { maxUp: 1 }) || nearestDevSpec(s, { maxUp: PROJECT_MAX_UP });
+  return nearestSpecs(s, { maxUp: 1, io: opts.io }) || nearestDevSpec(s, { maxUp: PROJECT_MAX_UP, io: opts.io });
 }
 
 // ---- the session -------------------------------------------------------------------------------------------------------------

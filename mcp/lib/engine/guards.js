@@ -178,13 +178,6 @@ function sessionSame(a, b) {
     return FOLD_CASE ? rx.toLowerCase() === ry.toLowerCase() : rx === ry;
   } catch { return false; }
 }
-// A .specs/ dev-spec owns (isDevSpecDir — roadmap.json, steering/, a feature's .state.json — or, as the hooks read it, a feature
-// folder with its classification.md).
-function sessionSpecs(dir) {
-  if (isDevSpecDir(dir)) return true;
-  const root = path.join(dir, ".specs");
-  return safeReaddir(root).some((n) => !n.startsWith(".") && fs.existsSync(path.join(root, n, "classification.md")));
-}
 // The git checkout holding dir — the nearest .git at or above it → { top, commonDir, linked } (linked: a `git worktree add`
 // checkout: a .git FILE whose git dir has a commondir; a submodule's .git file has none — no worktree), or null (no git, a network
 // path — never stat'ed, a .git that can't be read). At most ~2 small reads.
@@ -226,12 +219,12 @@ function worktreeProject(near, anchors) {
     const wa = gitCheckoutOf(a);
     if (!wa || sessionSame(wa.top, w.top) || !sessionSame(wa.commonDir, w.commonDir)) continue;
     const m = path.join(wa.top, rel);
-    if (sessionSpecs(m)) return m;
+    if (isDevSpecDir(m)) return m;
   }
   if (w.linked && path.basename(w.commonDir).toLowerCase() === ".git") {
     const main = path.dirname(w.commonDir);
     const m = path.join(main, rel);
-    if (!sessionSame(main, w.top) && sessionSpecs(m)) return m;
+    if (!sessionSame(main, w.top) && isDevSpecDir(m)) return m;
   }
   return near;
 }
@@ -246,12 +239,12 @@ function sessionProject(opts = {}) {
   let near = null;
   if (sessionUsable(opts.cwd)) {
     const c = opts.cwd.trim();
-    if (isNetworkPath(c)) near = sessionSpecs(c) ? path.resolve(c) : null;
+    if (isNetworkPath(c)) near = isDevSpecDir(c) ? path.resolve(c) : null;
     else {
       let d = path.resolve(c);
       const stop = anchors.find((a) => !isNetworkPath(a) && withinRoot(a, d));
       for (let i = 0; i < SESSION_MAX_UP; i++) {
-        if (sessionSpecs(d)) { near = d; break; }
+        if (isDevSpecDir(d)) { near = d; break; }
         const up = path.dirname(d);
         // at the anchor (by text, as withinRoot read it — no real-path calls in the walk): never above it
         if (up === d || (stop && path.relative(stop, d) === "")) break;
@@ -263,7 +256,7 @@ function sessionProject(opts = {}) {
     const project = isNetworkPath(near) ? near : worktreeProject(near, anchors);
     return { project, root: near, worktree: !sessionSame(project, near) };
   }
-  for (const a of anchors) if (sessionSpecs(a)) return { project: a, root: a, worktree: false };
+  for (const a of anchors) if (isDevSpecDir(a)) return { project: a, root: a, worktree: false };
   return null;
 }
 // A payload path (absolute, or relative to cwd) → the same file in the session's project: a file in the worktree's checkout
@@ -2222,7 +2215,8 @@ const STOP_WINDOW = 3; // words before a claim, in its sentence, looked at for a
 
 // roadmap.json meta.guard → false | true | "scope" (anything else: off); unset → the user's GUARD_DEFAULT (1.16 C2), else off.
 // The user's default applies to a dev-spec project only (isDevSpecDir): roadmap.json without meta.guard, or no roadmap.json in a
-// .specs/ dev-spec owns (steering/ or a feature folder with its .state.json — a project made before roadmap.json) — never a folder
+// .specs/ dev-spec owns (steering/, a generated ROADMAP.md or a feature folder with its .state.json or classification.md — a project
+// made before roadmap.json) — never a folder
 // without one, nor another tool's .specs/. A roadmap.json that exists but doesn't parse: off (the guard never acts on a file it
 // can't read). hooks/guard-hook.js reads the same values raw, with the same rule.
 function guardLevel(projectDir) {

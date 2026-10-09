@@ -184,7 +184,8 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
   }
 
   // (e) one copy: no hook, hook-utils.js or cli/completion.js defines its own rule, walk, network test or JSON reader any more; the
-  // engine's isDevSpecDir is the probe's rule, its bounds the probe's
+  // engine's isDevSpecDir is the probe's rule and its resolver walk (files.js nearestProject) the probe's, both through the engine's
+  // reads (PROBE_IO); the engine's own walks' bounds are the probe's
   {
     const srcs = ["guard-hook.js", "stop-hook.js", "observe-hook.js", "spec-hook.js", "plan-hook.js", "approval-hook.js", "hook-utils.js"].map((f) => [f, fs.readFileSync(path.join(HOOKS, f), "utf8")])
       .concat([["cli/completion.js", fs.readFileSync(path.join(__dirname, "..", "cli", "completion.js"), "utf8")]]);
@@ -192,11 +193,15 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
     const copies = srcs.filter(([, s]) => RE_COPY.test(s)).map(([f, s]) => f + ": " + RE_COPY.exec(s)[0]);
     const eng = (f) => fs.readFileSync(path.join(__dirname, "lib", "engine", f), "utf8");
     const num = (f, name) => Number((new RegExp("const " + name + " = (\\d+);").exec(eng(f)) || [])[1]);
-    const bounds = { session: num("guards.js", "SESSION_MAX_UP"), status: num("doctor.js", "STATUS_MAX_UP"), project: num("files.js", "PROJECT_MAX_UP") };
-    all("1.27: the rule lives in mcp/lib/probe.js alone — no hook, hook-utils.js or cli/completion.js keeps a copy (got " + js(copies) + "); doctor.js isDevSpecDir is the probe's; the walks' bounds are the engine's (" + js(bounds) + ")", {
+    const bounds = { session: num("guards.js", "SESSION_MAX_UP"), status: num("doctor.js", "STATUS_MAX_UP") };
+    all("1.27: the rule lives in mcp/lib/probe.js alone — no hook, hook-utils.js or cli/completion.js keeps a copy (got " + js(copies) + "); doctor.js isDevSpecDir is the probe's rule, files.js nearestProject the probe's walk; the walks' bounds are the engine's (" + js(bounds) + ")", {
       noCopies: () => copies.length === 0,
       engineDelegates: () => /function isDevSpecDir\(dir\) \{\s*return PROBE\.isDevSpecProject\(dir, PROBE_IO\);/.test(eng("doctor.js")),
-      bounds: () => P.SESSION_MAX_UP === bounds.session && P.SESSION_MAX_UP === bounds.status && P.PROJECT_MAX_UP === bounds.project,
+      resolverDelegates: () => /function nearestProject\(start\) \{\s*return PROBE\.nearestProject\(start, \{ io: PROBE_IO \}\);/.test(eng("files.js")) &&
+        !/PROJECT_MAX_UP/.test(eng("files.js").replace(/\/\/[^\n]*/g, "")),
+      // the hooks' session walk (guards.js sessionProject / worktreeProject) asks isDevSpecDir itself — its own sessionSpecs rule is gone
+      sessionDelegates: () => !/function sessionSpecs\b/.test(eng("guards.js")) && /isDevSpecDir\(d\)/.test(eng("guards.js")),
+      bounds: () => P.SESSION_MAX_UP === bounds.session && P.SESSION_MAX_UP === bounds.status,
       autogen: () => (/const RE_AUTOGEN = (\/.+\/);/.exec(eng("state.js")) || [])[1] === String(P.RE_AUTOGEN),
       unexpanded: () => ["${X}", "$HOME/x", "%APPDATA%", "a/${B}/c", "plain", "~/x"].every((v) => P.unexpandedVar(v) === S.unexpandedVar(v) && HU.unexpandedVar(v) === S.unexpandedVar(v)),
     });

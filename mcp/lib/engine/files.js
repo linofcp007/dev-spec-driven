@@ -15,8 +15,8 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let errs, existingFeature, featureLang, isDevSpecDir, projectLang, roadmapPath;
-function __link(E) { ({ errs, existingFeature, featureLang, isDevSpecDir, projectLang, roadmapPath } = E); }
+let errs, existingFeature, featureLang, projectLang, roadmapPath;
+function __link(E) { ({ errs, existingFeature, featureLang, projectLang, roadmapPath } = E); }
 
 // ---------------------------------------------------------------------------
 // Paths & small fs helpers
@@ -30,7 +30,6 @@ function __link(E) { ({ errs, existingFeature, featureLang, isDevSpecDir, projec
 // through (a SPEC_PROJECT_DIR of "${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR" or "%CLAUDE_PROJECT_DIR%" created that
 // literal folder; only a whole "${VAR}" was caught).
 const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
-const PROJECT_MAX_UP = 64; // folders walked up from the working folder (a few stats each, never a walk down)
 function unexpandedVar(v) { return RE_UNEXPANDED_VAR.test(String(v == null ? "" : v).trim()); }
 // 1.25.1 (review 7): a leading ~ (alone, ~/ or ~ and a backslash) is the home folder — PowerShell 5.1 hands a native command its ~ as
 // typed, and an MCP client's argument or JSON config is never expanded: --project ~/zz / projectDir "~/zz" made a folder literally
@@ -47,19 +46,15 @@ function resolveProjectDir(arg) {
   const cwd = path.resolve(process.cwd());
   return nearestProject(cwd) || cwd;
 }
-// The nearest folder at or above `start` that holds a dev-spec .specs/ (isDevSpecDir: roadmap.json, steering/ or a feature's
-// .state.json) — `start` itself also with any .specs/ folder (one made by hand before init) — or null. A network path is never
-// walked (isNetworkPath: no stat goes up a share).
+// The project probe (mcp/lib/probe.js — the one dev-spec project rule every surface reads) through the engine's view of the disk: a
+// dry run's folders and files seen as made (isDirSafe, readFileHead, safeReaddir). doctor.js isDevSpecDir reads the rule with it.
+const PROBE = require("../probe.js");
+const PROBE_IO = { isDir: (p) => isDirSafe(p), exists: (p) => fs.existsSync(p), head: (p) => readFileHead(p, 4000) || "", folders: (p) => safeReaddir(p) };
+// The nearest folder at or above `start` that holds a dev-spec .specs/ (the probe's rule: roadmap.json, steering/, a generated
+// ROADMAP.md or a feature folder with its .state.json or classification.md) — `start` itself also with any .specs/ folder (one made
+// by hand before init) — or null, at most PROBE.PROJECT_MAX_UP levels up. A network path is never walked (no stat goes up a share).
 function nearestProject(start) {
-  if (isNetworkPath(start)) return null;
-  let dir = path.resolve(start);
-  for (let i = 0; i < PROJECT_MAX_UP; i++) {
-    if ((i === 0 && isDirSafe(path.join(dir, ".specs"))) || isDevSpecDir(dir)) return dir;
-    const up = path.dirname(dir);
-    if (up === dir) return null;
-    dir = up;
-  }
-  return null;
+  return PROBE.nearestProject(start, { io: PROBE_IO });
 }
 
 function specsRoot(projectDir) {
@@ -1175,4 +1170,4 @@ module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensu
   ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel, shapeError, withReadCache,
   readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, decodeText, existsCached,
   existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
-  FOLD_CASE, toPosix, isInsideDir, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, __link };
+  FOLD_CASE, toPosix, isInsideDir, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO, __link };

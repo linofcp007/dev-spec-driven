@@ -202,7 +202,7 @@ module.exports = {
   // 1.16 C — Claude Code integration: the status line, the plan-mode bridge, the user's DEV_SPEC_* defaults (fallbacks)
   statusLine,
   statusLineProject,
-  isDevSpecDir, // 1.24 r6 B7: does <dir>/.specs/ belong to dev-spec (roadmap.json, steering/, a feature's .state.json)? — the CLI refuses a project's .specs/ named as the project
+  isDevSpecDir, // does <dir>/.specs/ belong to dev-spec (mcp/lib/probe.js's rule: roadmap.json, steering/, a generated ROADMAP.md or a feature's .state.json / classification.md)? — the CLI refuses a project's .specs/ named as the project
   isNetworkPath,
   networkPathInside, // 1.16 verify NEW-3: the guard's (and the save hook's) text-only rule for a network path
   planBridge,
