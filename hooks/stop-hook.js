@@ -131,16 +131,20 @@ function mayClaim(message) {
     const hu = require("./hook-utils.js");
     // 1.25.1: only the claim patterns of the languages whose trigger words the prose holds (f.triggers — as stopClaims runs them):
     // none → no claim, with nothing but the small trigger regexes compiled (every pattern of every language cost ~35 ms).
-    // 1.27: the regexes scan a one-byte text (hook-utils claimScan — a wide character made them ~30 ms slower to compile)
-    const scan = hu.claimScan(hu.claimProse(message, f.prose), f);
+    // 1.27: the claim patterns scan a one-byte text (hook-utils claimScan — a wide character made them ~30 ms slower to compile). The
+    // few trigger regexes read the prose as it is (a one-byte copy when it holds nothing past U+00FF): on a wide one they cost less
+    // than the projection's table, and most messages trigger nothing.
+    const prose = hu.claimProse(message, f.prose);
+    const wide = /[^\x00-\xff]/.test(prose);
+    const text = wide ? prose : Buffer.from(prose, "latin1").toString("latin1");
     if (Array.isArray(f.triggers) && f.triggers.length) {
       const flags = String(f.word.flags).replace(/[gm]/g, "");
       const idx = new Set();
-      for (const t of f.triggers) if (new RegExp(scan.source(f.word.pre + t.source + f.word.post), flags).test(scan.text)) for (const i of t.claims) idx.add(i);
+      for (const t of f.triggers) if (new RegExp(f.word.pre + t.source + f.word.post, flags).test(text)) for (const i of t.claims) idx.add(i);
       if (!idx.size) return false;
-      return hu.claimMatch(message, { ...f, claims: [...idx].sort((a, b) => a - b).map((i) => f.claims[i]) }, scan);
+      return hu.claimMatch(message, { ...f, claims: [...idx].sort((a, b) => a - b).map((i) => f.claims[i]) }, hu.claimScan(text, f));
     }
-    return hu.claimMatch(message, f, scan);
+    return hu.claimMatch(message, f, hu.claimScan(text, f));
   } catch {
     return true;
   }

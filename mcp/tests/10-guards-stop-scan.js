@@ -7,7 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, __dirname, require, remeasure }) => {
+exports.run = async ({ ok, all, S, tmp, __dirname, require, remeasure }) => {
   const js = JSON.stringify;
   const L1 = require("./lib/latin1-scan.js");
   const HU = require("../hooks/hook-utils.js");
@@ -97,6 +97,30 @@ exports.run = async ({ ok, all, S, __dirname, require, remeasure }) => {
     ok(!refused.length && !accepted.length && rw === "[-\\x80]x\\x80",
       "1.27: latin1Table refuses \\P{…}, another property, a class range past ASCII, a stand-in, a cased non-Latin-1 literal or \\r in a pattern, and reads the claim patterns' forms (\\p{L} \\p{N} \\p{Extended_Pictographic}, a named dash or check mark, escaped ones, [^\\n], \\W{0,8}, escaped brackets); a named code point is rewritten to its stand-in (got " +
       js({ refused, accepted, rw }) + ")");
+  }
+
+  // (e) the Stop hook end to end on wide messages (a project with a tick and no evidence: a claim is sent back): no trigger word → silent
+  // before the engine loads (its triggers read the prose as it is), a trigger but no claim → silent too (the claims scan the projection),
+  // a claim with an em dash or an emoji → the engine's block
+  {
+    const p = path.join(tmp, "stop-scan-hook");
+    S.initProject(p, ["core"], "en");
+    const fe = S.createFeature(p, "Pay", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(fe.dir, "tasks.md"), "- [ ] 1. [US1] Charge\n  - _Verify: npm test_\n");
+    S.completeTask(p, "pay", 1);
+    const pre = path.join(tmp, "stop-scan-preload.js"), out = path.join(tmp, "stop-scan-preload.out");
+    fs.writeFileSync(pre, "process.on('exit', () => require('fs').writeFileSync(" + js(out) + ", String(Object.keys(require.cache).some((k) => /[\\\\/]mcp[\\\\/]lib[\\\\/]spec\\.js$/.test(k)))));\n");
+    const stop = (m) => {
+      try { fs.unlinkSync(out); } catch { /* none */ }
+      const r = spawnSync(process.execPath, ["-r", pre, path.join(__dirname, "..", "hooks", "stop-hook.js")], { encoding: "utf8", timeout: 30000,
+        env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, input: js({ session_id: "s", cwd: p, hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: m }) });
+      let block = false;
+      try { block = JSON.parse(r.stdout).decision === "block"; } catch { /* silent */ }
+      return (block ? "block" : r.stdout === "" ? "silent" : "?") + "/" + (fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "?");
+    };
+    const got = ["Here is the summary — the layout you asked about.", "Not finished yet — I need the API key first.", "Work complete — ready to merge.", "All tasks done ✅"].map(stop);
+    ok(js(got) === js(["silent/false", "silent/false", "block/true", "block/true"]),
+      "1.27: the Stop hook on wide messages — no trigger word: silent, no engine; a trigger without a claim: silent, no engine; a claim with an em dash or an emoji: the engine's block (got " + js(got) + ")");
   }
 
   // (d) the cliff, in fresh processes (the regexes compile once per process — what each Stop hook pays): a claim with an em dash scanned

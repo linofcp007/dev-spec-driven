@@ -48,8 +48,9 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   steering FILE, dot folders, a monorepo package classified / of another tool) and checks the probe, the engine (isDevSpecDir,
   statusLineProject, sessionProject, resolveProjectDir), statusProbe, the completion's resolver, the approval candidates and five
   hooks (60 runs, the engine load as the observable) agree; `~`; network paths; and that no hook or cli/completion.js keeps a copy.
-  Cost (median of 15, Windows, interleaved with 1.26): every hook's fast path within the noise (±3 ms — one small file, required
-  only past each hook's pre-filter).
+  Cost: one small file, required only past each hook's own pre-filter — ~1.4 ms to require it from a hook (a one-line module: ~0.6);
+  every hook's fast path stays where 1.26 had it (median of 21 and 31 interleaved fresh processes, time in the process, Windows,
+  Node 26: 0–4 ms apart, inside the run-to-run spread; bare node 27 ms, the fast paths 31–47 ms either way).
 - **Hooks never block and stay cheap.** Every hook exits 0 on any error or irrelevant event, emits at most
   one JSON object, has a 10 s timeout, and only acts on a `.specs/` dev-spec owns (the probe's `isDevSpecProject` — checked by
   PostToolUse AND SessionStart: another tool's `.specs/` gets no status block in every session). The PostToolUse hook:
@@ -84,9 +85,13 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   ª, number ², pictograph ©, space U+00A0, U+2028 / U+2029 `\r`, the rest U+009F; a pattern form the rewrite can't read (another
   property, `\P{…}`, a range past ASCII, a stand-in) makes it scan the text as it is — so the answers never change
   (mcp/tests/10-guards-stop-scan.js: stopClaims and the pre-filter alike on 3,000+ wide messages; `stopClaims(m, {plain: true})` is
-  the reference). guards.js `stopScan` (a Latin-1 prose: a one-byte copy) and hook-utils `claimScan` use it; the claim patterns,
-  triggers and admissions are built on first use (a message runs ~18 of ~47). guessLang still reads the prose itself (its INF
-  lookahead names “ — ~8 ms on a wide text, once a process)), and so do the 1.14 observe hook (it prints nothing at all and
+  the reference). guards.js `stopScan` (a Latin-1 prose: a one-byte copy) and hook-utils `claimScan` use it; the engine builds its
+  claim patterns, triggers and admissions on first use (a message runs ~18 of ~47). The hook's three trigger regexes read the prose as
+  it is (on a wide one they cost less than the projection's table, and most messages trigger nothing): only a triggered message's
+  claim alternation scans the projection. guessLang still reads the prose itself (its INF lookahead names “ — ~8 ms on a wide text,
+  once a process). Measured (the Stop hook in a project with an unverified tick, median of 21 interleaved fresh processes, time in the
+  process, Windows, Node 26): a claim with an em dash 344 → 273 ms, with an emoji 339 → 277 (an ASCII claim 245 → 249); a triggered
+  message without a claim, with an em dash, 84 → 74; no trigger word 51 → 50), and so do the 1.14 observe hook (it prints nothing at all and
   exits as soon as it has appended its line) and approval hook (silent unless `meta.approvalGuard` is on — its only
   output is a permission decision).
 - **Every hook runs in exec form (1.25.1, review 7): `{"type": "command", "command": "node", "args":
