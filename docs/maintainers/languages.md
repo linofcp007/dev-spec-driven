@@ -39,8 +39,9 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   writes the state file, and generates every artifact in that language; every feature operation, the
   CLI and the hooks read `featureLang()` so messages match the spec.
 - **English-STABLE tokens (the tooling matches them literally — never translate, in any language):**
-  AC/SC/test IDs (`US-1.AC-1`, `SC-001`, `T-01`, `EC-1`, `NFR-1`), decision IDs `D-n`, section markers
-  `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]` (case-sensitive), story/parallel tags `[US1]`/`[US2]`/`[shared]`/`[P]`, the
+  AC/SC/test IDs (`US-1.AC-1`, `SC-001`, `T-01`, `EC-1`, `NFR-1`), decision IDs `D-n`, the section markers of every
+  marker track — `[SaaS]`/`[AI]`/`[SEC]`/`[PRIVACY]`/`[DIST]`/`[API]`/`[UI]`/`[OBS]`/`[DATA]` (case-sensitive; `TRACK_MARKER` in
+  `engine/tracks.js`, rendered in `MARKER_TRACK_ORDER`, `i18n/common.js`) and a track pack's own, story/parallel tags `[US1]`/`[US2]`/`[shared]`/`[P]`, the
   unfilled sentinel `> **TODO**`, `[NEEDS CLARIFICATION]`, annotation tags `_Requirements:_`/`_Makes green:_`/
   `_Affects evals:_`/`_Emits metrics:_`/`_Implements:_`/`_Verify:_`/`_Expect:_`/`_Size:_`/`_Supersedes:_`, the
   decision-log markers `_Kind:_`/`_Date:_`/`_Affects:_` and the spike's `_Outcome:_` (values `go`/`no-go`/`pivot`),
@@ -66,13 +67,15 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   (each table's getter for it loads that file on first use), adds it to `BASE_LANGS` (`i18n/common.js` — `LANGS`, the
   strict `canonicalLang()` reading every surface validates with, and the MCP schemas' `lang` enum, `LANG_ENUM` in
   `mcp/server.js`, all derive from it: no enum to edit by hand), extends the classifier `SIGNALS` (`engine/tracks.js`;
-  language guess in `engine/classify.js`), `ROADMAP_I18N` (`engine/roadmap-md.js`), the `TRACK_SECTIONS` synonyms (all
-  four tables, `engine/tracks.js`), the stop gate's `stopGate.claims` / `negators` / `admissions` and the `RE_*`
-  matchers, then adds a test asserting a localized scaffold round-trips.
+  language guess in `engine/classify.js`), `ROADMAP_I18N` (`engine/roadmap-md.js`), the `TRACK_SECTIONS` synonyms (every
+  table in `TRACK_SECTIONS`, `engine/tracks.js` — one per marker track, listed under Localization gotchas below), the
+  stop gate's `stopGate.claims` / `negators` / `admissions` and the `RE_*` matchers, then adds a test asserting a localized
+  scaffold round-trips.
 
 ## Localization gotchas (from Conventions & gotchas)
-- **Multilingual headings:** the `TRACK_SECTIONS` tables (`SAAS_SECTIONS` / `AI_SECTIONS` / `SEC_SECTIONS` /
-  `PRIVACY_SECTIONS`) are `{name, syn:[…], loose?:[…]}` with EN/PT/ES synonyms; `extractSection` matches any synonym
+- **Multilingual headings:** the `TRACK_SECTIONS` tables (one per marker track: `SAAS_SECTIONS` / `AI_SECTIONS` /
+  `SEC_SECTIONS` / `PRIVACY_SECTIONS` / `DIST_SECTIONS` / `API_SECTIONS` / `UI_SECTIONS` / `OBS_SECTIONS` / `DATA_SECTIONS`)
+  are `{name, syn:[…], loose?:[…]}` with EN/PT/ES synonyms; `extractSection` matches any synonym
   (a `loose` one only in the track's context — see The track model). `clarify` uses `RE_CONSTITUTION_CHECK` (doctor's `constitution-check` reads `CONSTITUTION_SYN` through `sectionFilled`, the gate's reader, since 1.24 review 6),
   `RE_SUCCESS_CRITERIA`, `RE_INDEPENDENT_TEST`, `RE_OUT_OF_SCOPE`, `RE_NFR`, `RE_EDGE_CASES`,
   `RE_GLOBAL_CONSTRAINTS`; `addTrack` uses `RE_TESTABILITY` for the +tdd block heading. Add a synonym when
@@ -83,7 +86,11 @@ The EN templates are **not** frozen: 1.13 changed them on purpose (every templat
   `phase` stays English), CLI output (usage prefix, section labels, EARS severities included), hook and
   pre-commit lines all go through `i18n.msg(lang)`. Callers branch on stable fields — EARS `code` / `severity`,
   evidence `unverifiedReason` (and `spec_impact`'s task `evidence`), doctor check `id`, next_action `step` —
-  never regex a `msg`.
+  never regex a `msg`. **The one exception: the CLI's help text.** `dev-spec --help` / `dev-spec help` and the command lines
+  of `help <command>` (`helpText()` in cli/dev-spec.js — `helpFor()` cuts a command's block out of it) are English in every
+  language, whatever `--lang` or the project language says: a command reference, like the command names and flags it
+  lists. Only `help <command>`'s frame lines (`cliOutput.cmdHelp`: its options, the global flags, where the full help is)
+  follow the project language. Don't document the help as localized; translating it means a `helpText` per language.
 - **Runnable CLI lines (1.21 F3).** A plugin install puts no `dev-spec` on PATH (only `npm link` does), and the 1.19 eval
   run showed agents relaying `dev-spec done <f> <n> --run` to users who couldn't run it. So every message that tells
   someone to RUN the CLI writes `${DEV_SPEC} <command> …` (a quoted string: `" + DEV_SPEC + "`) — `DEV_SPEC` =

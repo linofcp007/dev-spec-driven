@@ -15,7 +15,9 @@
  * (persisted in `.specs/<feature>/.state.json` lang). `spec.js` resolves the lang and passes it.
  *
  * STABLE TOKENS — never translated, the tooling matches them literally:
- *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), section markers ([SaaS], [AI], [SEC], [PRIVACY], [DIST]),
+ *   AC/SC/test IDs (US-1.AC-1, SC-001, T-01, EC-1, NFR-1), every marker track's section marker ([SaaS], [AI], [SEC],
+ *   [PRIVACY], [DIST], [API], [UI], [OBS], [DATA] — engine/tracks.js TRACK_MARKER, rendered in MARKER_TRACK_ORDER) and a
+ *   track pack's own,
  *   story/parallel tags ([US1], [US2], [shared], [P]), the unfilled sentinel `> **TODO**`,
  *   `[NEEDS CLARIFICATION]`, the annotation tags `_Requirements:_ / _Makes green:_ /
  *   _Affects evals:_ / _Emits metrics:_ / _Implements:_`, `**Checkpoint:**`, the ```mermaid /
@@ -23,7 +25,8 @@
  *   Kind values (example / property).
  * EARS modal/keywords ARE localized (WHEN→QUANDO→CUANDO, THE SYSTEM SHALL→O SISTEMA DEVE→
  * EL SISTEMA DEBE, …) because earsValidate recognizes all three languages. Translated headings
- * are matched by the synonym tables (SAAS_SECTIONS/AI_SECTIONS/SEC_SECTIONS/PRIVACY_SECTIONS/DIST_SECTIONS) and RE_* matchers in the engine.
+ * are matched by the synonym tables (every table of TRACK_SECTIONS in engine/tracks.js — one per marker track, SAAS_SECTIONS …
+ * DATA_SECTIONS) and RE_* matchers in the engine.
  */
 
 const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli, FEATURE_SIZES } = require("./i18n/common.js");

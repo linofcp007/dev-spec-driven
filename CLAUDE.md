@@ -14,7 +14,7 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
   server). Never add a `.github/workflows/` for this project, never open PRs — merge locally and push.
   No user-facing text may steer users toward PRs or CI (a test scans the prose; CHANGELOG is exempt).
 - **Zero runtime dependencies.** The MCP server and all scripts use only Node core (`fs`, `path`, `os`,
-  `readline`, `string_decoder`, `child_process`, `crypto`, `module` — the compile cache —, built-in `fetch`). No `npm
+  `string_decoder`, `child_process`, `crypto`, `module` — the compile cache —, built-in `fetch`). No `npm
   install` required. Keep it that way.
 - Specs always live in `.specs/` (no alternate directory detection).
 
@@ -96,7 +96,8 @@ marked `// load time` (an acyclic graph); every other one is a bare `let` bound 
 
 **i18n:** every user-facing string lives in `mcp/lib/i18n/*` — `en.js` · `pt.js` · `es.js` hold the same keys (EN is the
 reference), assembled by the `mcp/lib/i18n.js` facade; pt-BR is DERIVED from pt (`i18n/pt-br.js`, `toPtBr`), never
-written by hand. IDs and markers stay English-stable (languages.md).
+written by hand. IDs and markers stay English-stable (languages.md). The one English-only output is the CLI's help text
+(`--help`, `help <command>`'s command lines — `helpText()`), whatever `--lang` says; only `help <command>`'s frame lines follow the project language.
 
 ## Gotchas that bite in every area
 - **Hooks: never reference `hooks/hooks.json` in `plugin.json`.** Claude Code auto-loads the standard

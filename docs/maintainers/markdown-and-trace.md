@@ -52,7 +52,8 @@ matrix.
   (`sectionContent()`, `isTableSep()`) — is `unfilled` (it was "filled"). **Doctor's `mermaid` (review 5, L28):**
   `mermaidState(design)` → present · template · missing — the fenced blocks (```` ``` ```` or `~~~`, any length) whose info
   string starts with `mermaid`, outside HTML comments, an empty one drawing nothing; `template` when each still holds the
-  scaffold's own diagram (`templateDiagrams()` — the core design builder's, EN / PT / ES, pt-BR's on a miss, whitespace folded).
+  scaffold's own diagram (`templateDiagramSet()` — the core design builder's, every language and design size, pt-BR's too,
+  whitespace folded; read from the committed corpus, `renderTemplateDiagrams()` when it is stale).
   It warns `doctor.mermaidTemplate` on a template diagram — except while design.md is still a later phase's template (a pass,
   as the weigh checks skip it). It was a substring test: a `~~~mermaid` fence warned, one quoted in a comment passed, the
   untouched template diagram passed. A project template's own diagram is not known (the limit).

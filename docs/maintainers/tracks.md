@@ -82,7 +82,7 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   SIGNALS.api — strong: contract-level words only (RESTful, OpenAPI, Swagger, GraphQL, gRPC, protobuf, API versioning, the API
   contract / spec, API consumers, third-party developers, a developer portal, contract tests, problem+json, RFC 9457,
   Idempotency-Key, rate-limit headers incl. `X-RateLimit-Remaining` / `-Limit` / `-Reset` by name, Retry-After, Sunset); weak
-  (anchors): the **ownership-ambiguous** names (`API_AMBIGUOUS`: a public / REST / HTTP / web / JSON / partner API, an API
+  (anchors): the **ownership-ambiguous** names (the ownership cue's `ambiguous`: a public / REST / HTTP / web / JSON / partner API, an API
   version, problem details — one concept `kind`), a breaking change, backward compatibility, an SDK / client library, ETag /
   If-Match, status codes, JSON Schema, cursor pagination, deprecation, an internal / management / admin API / API gateway / API
   docs; **generic**: api, endpoint, route, request (IRREGULAR_FORMS: the noun only, never "requested"), pagination.
@@ -98,8 +98,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   clause, a build verb whose direct object it is: "Build a REST API", "Criar uma API REST"). An ambiguous name is strong with an
   own cue, or (the API-kind names) when it opens its clause or follows a plain article + ≤ 2 lowercase adjectives ("REST API
   for the mobile app", "add rate limiting to the public API"); "Stripe REST API integration" stays weak. **1.19 verify 2:** an
-  ALL-CAPS organisation acronym is an owner too ("la API pública del BCE", "the ECB's public API" — `RE_API_ACRONYM`, never a
-  technical one: `API_TECH_ACRONYMS` REST / CRM / SDK / HR…); a past participle right after a determiner is an adjective, no
+  ALL-CAPS organisation acronym is an owner too ("la API pública del BCE", "the ECB's public API" — `RE_CUE_ACRONYM` in
+  engine/classify.js, never a technical one: the ownership cue's `techAcronyms` REST / CRM / SDK / HR…); a past participle right after a determiner is an adjective, no
   own verb ("Replace the deprecated Google Places API calls"); breaking compatibility as a VERB (`API_BREAK_VERBS`: break
   compatibility, quebrar a compatibilidade, romper la compatibilidad…) is a weak compat anchor and a hazard, so PT "não pode
   quebrar a compatibilidade da API pública" is +api like EN / ES. An API **key** stays
@@ -132,17 +132,17 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   tablero / cuadro de mando), menu, icon, widget, layout, theme. A dashboard is +ui's generic word only, never +obs's ("a
   metrics dashboard for sales"). **Cues (1.19 T review — `SIGNALS.ui.cues`: kinds sentence, near, text, clause — 1.20):** in a CLAUSE (`cueClause()`:
   CUE_BOUNDARY . ! ? ; : or a line break — a colon after a short label, ≤ 4 words, joins the label to what it introduces:
-  "Profile page: the GET /me handler…", "Sin backend: …") that says the work is backend-only (`RE_UI_BACKEND`: an HTTP method +
+  "Profile page: the GET /me handler…", "Sin backend: …") that says the work is backend-only (the `clause` cue's `mention`: an HTTP method +
   path, a request / route handler, an endpoint, the backend, an API — never "API keys" / "chave de API" —, a data layer /
   repository / SQL, "already exists" / já existe / ya existe) a page type and frontend / UI / UX are GENERIC ("a PATCH
   /me/preferences handler that the settings page calls; the UI already exists"); an empty state in a sentence about a state
   machine is weak ("the empty state blocks sales"). **1.19 verify 1** (the sentence-wide test lost +ui): a backend word does not
   count when a negator governs it (≤ 4 words back in the clause — no / not / without / n't / sem / não / nem / sin / ni; PT "no"
   is em + o: `lang` is the cue's 4th argument) — "no backend changes", "does not touch the backend", "needs no API changes" —
-  nor when it FOLLOWS the page word with a consumer verb between them (`UI_CONSUMER_VERBS`: "The landing page loads its
+  nor when it FOLLOWS the page word with a consumer verb between them (the `clause` cue's `consumers`: "The landing page loads its
   testimonials from the CMS API"; a backend word before the page — "a handler that the settings page calls" — or right after
   it — "the profile page backend", "the admin page's API" — still demotes); nothing is demoted in a text that says "frontend
-  only" / "apenas frontend" / "solo frontend" (`RE_UI_FRONTEND_ONLY`, tested once per text); "the frontend team" / "equipa de
+  only" / "apenas frontend" / "solo frontend" (a `text` cue, `then: "keep"`, tested once per text); "the frontend team" / "equipa de
   frontend" names a team (generic). The genericOnly note no longer offers "the frontend" as an anchor.
 - **+obs (1.19 T)** — the tenth built-in marker track `[OBS]` (observability & operability): TRACK_MARKER, `OBS_SECTIONS` (SLIs &
   SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health & Capacity — no section is named "Observability", +saas's;
