@@ -110,4 +110,32 @@ exports.run = async ({ ok, S, tmp, root }) => {
       "1.25.1 review 7: a test plan re-approved after a whitespace-only edit keeps the Phase 4 sign-off in force (no tests gate pending, next_action implement) and is no rework; a plan re-approved with a new T-ID still stales it and counts (got " +
       js([re0.ok, rT.ok, re1.ok, doc.pendingGates, na.step, rw0, rw1, re2.ok, doc2.pendingGates, rw2]) + ")");
   }
+
+  // Finding 6 — bugfixGate allowed every task up to the root-cause task's position: with tasks [the red test, the fix (_Makes green:_),
+  // "Document the root cause in bug.md"] and an empty Root Cause, the fix ticked. A fix is gated wherever it sits; the red test and
+  // the root-cause task itself still go through; once Root Cause is written the fix ticks.
+  {
+    const p = path.join(tmp, "proj-r7g-bugorder");
+    S.initProject(p, ["core"], "en");
+    const f = S.createFeature(p, "crash on save", ["core"], "Saving crashes", undefined, "en", "bugfix");
+    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks: crash on save\n\n## Phase: Fix\n" +
+      "- [ ] 1. [US1] Write regression test T-01 and watch it fail\n  - _Requirements: US-1.AC-1_\n" +
+      "- [ ] 2. [US1] Fix the crash in the save handler\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01_\n" +
+      "- [ ] 3. [US1] Document the root cause in bug.md\n  - _Requirements: US-1.AC-1_\n");
+    const t1 = S.completeTask(p, f.slug, 1);
+    const t2 = S.completeTask(p, f.slug, 2);
+    const t3 = S.completeTask(p, f.slug, 3);
+    const bp = path.join(f.dir, "bug.md");
+    fs.writeFileSync(bp, fs.readFileSync(bp, "utf8").replace(/(## Root Cause\n)[\s\S]*?(\n## )/, "$1save.js:42 reads handle.path before the null check (stack trace: TypeError at save.js:42); introduced by commit abc123.\n$2"));
+    const t2b = S.completeTask(p, f.slug, 2);
+    // a fix that is the first task, with no root-cause task: refused with its own message (never "only task 1 can be completed")
+    const g = S.createFeature(p, "crash on load", ["core"], "Loading crashes", undefined, "en", "bugfix");
+    fs.writeFileSync(path.join(g.dir, "tasks.md"), "# Tasks\n\n## Phase: Fix\n- [ ] 1. [US1] Fix the crash\n  - _Requirements: US-1.AC-1_\n  - _Makes green: T-01_\n");
+    const g1 = S.completeTask(p, g.slug, 1);
+    const pt = S.msg("pt").gates.bugGateFix(4), es = S.msg("es").gates.bugGateFix(4);
+    ok(t1.ok && t2.ok === false && /do task 3 first/.test(t2.error || "") && t3.ok && t3.rootCausePending === true && t2b.ok &&
+      g1.ok === false && /makes the regression test green — a fix/.test(g1.error || "") && /^A tarefa 4 /.test(pt) && /^La tarea 4 /.test(es),
+      "1.25.1 review 7: while bug.md → Root Cause is empty a fix (_Makes green:_) is refused wherever it sits — before a later root-cause task too ('do task 3 first'); the red test and the root-cause task go through; once Root Cause is written the fix ticks; a fix as task 1 gets bugGateFix (EN / PT / ES) (got " +
+      js([t1.ok, t2.ok, t2.error, t3.ok, t3.rootCausePending, t2b.ok, t2b.error, g1.ok, g1.error]) + ")");
+  }
 };

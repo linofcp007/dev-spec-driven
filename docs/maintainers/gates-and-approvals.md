@@ -127,6 +127,11 @@ flows, the bugfix kind.
   scaffolded before the short form, or one the user wrote) can be ticked
   (`rootCauseTaskIndex()`), but then returns `rootCausePending: true` + a note; once it is ticked the refusal of a
   later task is `bugGateTicked` ("the section is still empty"), never "do task N first".
+  **1.25.1 (review 7) — a fix is gated wherever it sits:** a task carrying `_Makes green:_` (it turns the regression test green)
+  is refused while Root Cause is unfilled even BEFORE the root-cause task — tasks [the red test, the fix, "Document the root cause in
+  bug.md"] let the fix tick first, the position rule alone (`pos <= rc`) allowed it. Its refusal names the root-cause task
+  (`bugGate` / `bugGateTicked`); a fix that is task 1 with no root-cause task gets `bugGateFix` ("only task 1 can be completed"
+  would name the task refused).
 
 ## Approval fingerprints and pending gates (from Conventions & gotchas)
 - **Approvals record a content fingerprint** of the phase's artifact (`artifactFingerprint`; tasks.md

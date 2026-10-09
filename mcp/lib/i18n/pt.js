@@ -1733,6 +1733,7 @@ const msg = {
       finishChanged: (list) => `alterados depois da aprovação (rever e voltar a aprovar): ${list}`,
       bugGate: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher. Nenhuma correção antes de a causa raiz estar escrita no bug.md — faz primeiro a tarefa ${first} (encontra a causa raiz com evidência e escreve-a lá).`,
       bugGateFirst: (n, first) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz está por preencher e nenhuma tarefa a escreve — só a tarefa ${first} pode ser concluída até a causa raiz estar escrita no bug.md (nenhuma correção antes da causa raiz).`,
+      bugGateFix: (n) => `A tarefa ${n} ainda não pode ser concluída: torna o teste de regressão verde — é uma correção — e bug.md → Causa Raiz está por preencher. Escreve lá primeiro a causa raiz, com a evidência (nenhuma correção antes de a causa raiz estar escrita no bug.md).`,
       bugGateTicked: (n, rc) => `A tarefa ${n} ainda não pode ser concluída: bug.md → Causa Raiz continua vazia — a tarefa ${rc} está marcada, mas o que ela entrega é essa secção. Escreve lá a causa raiz, com a evidência (nenhuma correção antes de a causa raiz estar escrita no bug.md).`,
       rootCauseTaskEmpty: (n) => `A tarefa ${n} está marcada, mas bug.md → Causa Raiz continua vazia — escreve lá a causa raiz, com a evidência: as tarefas seguintes (o teste de regressão, a correção) continuam recusadas até estar escrita.`,
       fill: (file, what, hint) => `Preenche ${file} — ${what}; depois ${hint}.`,

@@ -416,14 +416,19 @@ const RE_ROOT_CAUSE_TASK = /(?<![\p{L}])(?:root[\s-]+cause|causa[\s-]+ra[ií]z)(
 // the first task can be completed — the scaffold today: the red regression test, then the fix (bug.md's Root Cause is
 // gated at the design approval); the root-cause task is a tasks.md scaffolded before (reproduce · root cause · test · fix)
 // or one the user wrote. → null (allowed) or { gated: 'root-cause', error } (localized).
+// 1.25.1 (review 7): a FIX — a task carrying _Makes green:_ (it turns the regression test green) — is gated wherever it sits: with the
+// root-cause task written AFTER it (1 the red test · 2 the fix · 3 "document the root cause in bug.md") the position rule let the fix
+// tick before the root cause was written.
 function bugfixGate(dir, kind, blocks, task, lng) {
   if (kind !== "bugfix" || !task || bugSectionFilled(readIfExists(path.join(dir, "bug.md")), ROOT_CAUSE_SYN)) return null;
   const pos = blockPosition(blocks, task);
   const rc = rootCauseTaskIndex(blocks);
-  if (pos <= Math.max(rc, 0)) return null;
+  const fix = taskMarkers(task)["makes green"].length > 0;
+  if (pos <= Math.max(rc, 0) && !fix) return null;
   const GT = i18n.msg(lng).gates;
-  // The root-cause task already ticked with the section still empty: "do task 2 first" would name a task shown as done.
-  const error = rc === -1 ? GT.bugGateFirst(task.number, blocks[0].number)
+  // The root-cause task already ticked with the section still empty: "do task 2 first" would name a task shown as done. A fix that is
+  // the first task with no root-cause task: "only task 1 can be completed" would name the task refused.
+  const error = rc === -1 ? (pos <= 0 ? GT.bugGateFix(task.number) : GT.bugGateFirst(task.number, blocks[0].number))
     : blocks[rc].done ? GT.bugGateTicked(task.number, blocks[rc].number) : GT.bugGate(task.number, blocks[rc].number);
   return { gated: "root-cause", error };
 }

@@ -1818,6 +1818,7 @@ const msg = {
       finishChanged: (list) => `changed after their approval (re-review, then re-approve): ${list}`,
       bugGate: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled. No fix before the root cause is written in bug.md — do task ${first} first (find the root cause with evidence and write it there).`,
       bugGateFirst: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled and no task writes it — only task ${first} can be completed until the root cause is written in bug.md (no fix before the root cause).`,
+      bugGateFix: (n) => `Task ${n} can't be completed yet: it makes the regression test green — a fix — and bug.md → Root Cause is not filled. Write the root cause there, with its evidence, first (no fix before the root cause is written in bug.md).`,
       bugGateTicked: (n, rc) => `Task ${n} can't be completed yet: bug.md → Root Cause is still empty — task ${rc} is ticked, but its deliverable is that section. Write the root cause there, with its evidence (no fix before the root cause is written in bug.md).`,
       rootCauseTaskEmpty: (n) => `Task ${n} is ticked, but bug.md → Root Cause is still empty — write the root cause there, with its evidence: the tasks after it (the regression test, the fix) stay refused until it is written.`,
       fill: (file, what, hint) => `Fill ${file} — ${what}; then ${hint}.`,
