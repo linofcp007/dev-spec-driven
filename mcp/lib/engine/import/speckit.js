@@ -19,7 +19,7 @@ function __link(E) { ({ blankFacts, earsFromGwt, isLtUnit, isWsUnit, leftoverExt
 // Template guidance sections (Execution Flow, Quick Guidelines, checklists) are the tool's own, never imported.
 const SPECKIT_GUIDANCE = /^(?:execution flow|quick guidelines|review & acceptance checklist|execution status)\b/i;
 // spec-kit's summary — $1 of /^\*\*Input\*\*:\s*(?:User description:\s*)?"?(.+?)"?\s*$/im, by a scan (the lazy text before
-// "?\s*$ rescanned a long blank run at each step — 1.17 H). The choices in the engine's order; the text runs to the first
+// "?\s*$ rescanned a long blank run at each step). The choices in the engine's order; the text runs to the first
 // place where `"?`, blanks and a line end follow.
 function specKitInput(spec) {
   const F = blankFacts(spec), n = F.n;
@@ -43,7 +43,7 @@ function specKitInput(spec) {
 }
 // A spec-kit story heading → [text, number, title, priority] | null — what
 // /^user story\s+(\d+)\s*[-–—:.]?\s*(.*?)\s*(?:\((?:priority\s*:\s*)?(P\d)\))?\s*(?:🎯.*)?$/iu matched, the title read by a
-// scan (its lazy capture rescanned a long blank run at each step — 1.17 H). When no title end reads, nothing does.
+// scan (its lazy capture rescanned a long blank run at each step). When no title end reads, nothing does.
 const RE_SPECKIT_PRIORITY = /\((?:priority\s*:\s*)?(P\d)\)/iuy;
 function specKitStoryHeading(text) {
   const h = /^user story\s+(\d+)/iu.exec(text);
@@ -76,7 +76,7 @@ function parseSpecKit(dir, read, W) {
   const model = newImportModel();
   model.nameHint = path.basename(dir).replace(/^\d+[-_]/, "") || path.basename(dir);
   // /\s*\*?\((?:mandatory|optional|include if[^)]*)\)\*?\s*$/i dropped — read after the last ')' but the closing one (the
-  // only place it can match), from a blank run's start (?<!\s): each "(include if" and each blank rescanned the rest (1.17 H).
+  // only place it can match), from a blank run's start (?<!\s): each "(include if" and each blank rescanned the rest.
   const norm = (t) => {
     let e = stripEnd(t, isWsUnit).length;
     if (t[e - 1] === "*") e--;
@@ -97,12 +97,12 @@ function parseSpecKit(dir, read, W) {
     // body: the story's lines (all written into it: prose, scenarios, then whatever follows the scenarios).
     const storyFrom = (body, printed, title, priority) => {
       // \s*:?\s*(?:\*\*|__)?\s*:?\s*$ → \s*(?::\s*)?(?:(?:\*\*|__)\s*)?(?::\s*)?$ (the same lines): blank runs meeting with
-      // nothing between them backtracked exponentially (1.17 H).
+      // nothing between them backtracked exponentially.
       const at = body.findIndex((l) => /^\s*(?:\*\*|__)?acceptance scenarios(?:\*\*|__)?\s*(?::\s*)?(?:(?:\*\*|__)\s*)?(?::\s*)?$/i.test(l));
       const off = at === -1 ? 0 : at + 1;
       let scen = mdListItems(body.slice(off), true).filter((it) => at !== -1 || /\bthen\b|\bent[ãa]o\b|\bentonces\b/i.test(it.text));
       // Bulleted scenarios when there are no numbered ones — only under the explicit label, where a bullet can't be a note
-      // in the story's prose (kiro.js reads its criteria the same way; 1.22 review: they gave 0 criteria).
+      // in the story's prose (kiro.js reads its criteria the same way; they gave 0 criteria).
       if (!scen.length && at !== -1) scen = mdListItems(body.slice(off), false);
       const inScen = new Set(scen.flatMap((it) => it.at.map((r) => r + off)));
       const keep = (l, r) => !inScen.has(r) && !RE_MD_HR.test(l);
@@ -154,23 +154,23 @@ function parseSpecKit(dir, read, W) {
     });
     model.carried.push(...leftoverExtras(lines, hs, used)); // e.g. ### Non-Functional Requirements (NFR-001)
     for (const x of [...model.extra, ...model.carried]) for (const l of x.lines) for (const id of l.match(/(?<![A-Za-z0-9])(?:FR|SC)-\d+(?!\d)/g) || []) model.mapping[id] = id;
-    // 1.25.1: the functional requirements travel as prose — never silently: the ones no acceptance scenario covers are named
+    // the functional requirements travel as prose — never silently: the ones no acceptance scenario covers are named
     const frs = uncoveredFrs((model.extra.find((x) => x.key === "functional") || { lines: [] }).lines, model.stories.flatMap((s) => s.criteria.map((c) => c.raw)));
     if (frs.length) model.warnings.push(W.wUncoveredFr(frs.join(", ")));
   }
-  // 1.24 r6 (G-I3): research.md, data-model.md, contracts/ and quickstart.md are design — each under its own heading after plan.md
+  // research.md, data-model.md, contracts/ and quickstart.md are design — each under its own heading after plan.md
   // (they were skipped with a warning: "not imported"). Read through `read` like every source file: inside the project, a file
   // over the import cap refuses the import.
   const docs = specKitDesignDocs(dir, read, W, model);
   if (plan != null || docs) model.design = { text: [plan, docs].filter((x) => x != null).join("\n\n"), file: "plan.md" };
   if (plan == null) model.warnings.push(docs ? W.wNoPlanDocs("plan.md") : W.wNoDesign("plan.md"));
-  // 1.24 r6 (G-I1): a task's [USn] tag → _Requirements:_ (that story's ACs, resolved by importSpec), the paths it names → _Implements:_
+  // a task's [USn] tag → _Requirements:_ (that story's ACs, resolved by importSpec), the paths it names → _Implements:_
   if (tasks != null) model.tasks = { text: specKitTaskMarkers(tasks), file: "tasks.md" };
   else model.warnings.push(W.wNoTasks);
   return model;
 }
 
-// 1.25.1 — spec-kit's FR-xxx lines (the "Functional Requirements" section's) → the IDs NO acceptance scenario covers: a scenario covers
+// spec-kit's FR-xxx lines (the "Functional Requirements" section's) → the IDs NO acceptance scenario covers: a scenario covers
 // an FR that it cites, or whose every content word (≥ 4 letters, no modal / "system" / "users" filler, a plural folded) it holds — "FR-001:
 // System MUST allow users to create albums" is "they create an album named Trip"; "FR-002: … reorder albums by drag and drop", or an
 // FR still [NEEDS CLARIFICATION], is no scenario's. They were carried as prose with no warning, and nothing traced them.
@@ -193,7 +193,7 @@ function uncoveredFrs(frLines, scenarios) {
   return out;
 }
 
-// 1.24 r6 (G-I1) — spec-kit's tasks.md says which story a task serves ([US1]) and names the files it touches in its text: the import
+// spec-kit's tasks.md says which story a task serves ([US1]) and names the files it touches in its text: the import
 // kept both as prose, so trace_check found every criterion uncovered right after an import. Each task line (a checkbox outside fenced
 // code and HTML comments) gets the sub-lines it lacks: `_Requirements: US<n>_` for its [USn] tag (importSpec's refs turn US<n> into
 // that story's AC IDs, as for a hand-written one) and `_Implements: <paths>_` for the paths its text names (planPaths — the plan
@@ -233,7 +233,7 @@ function specKitTaskMarkers(text) {
   }
   return out.join(eol);
 }
-// 1.24 r6 (G-I3) — spec-kit's design documents beside plan.md, in its own order (research → data model → contracts → quickstart),
+// spec-kit's design documents beside plan.md, in its own order (research → data model → contracts → quickstart),
 // as design.md sections: `## <localized title>`, a provenance line, then the document — its first-line title dropped and every
 // other heading one level down (outside fenced code), so its sections stay under ours; a contract that is no markdown goes into a
 // fenced block (its language from the extension). contracts/ is read two levels deep, sorted, at most SPECKIT_CONTRACTS_MAX files of

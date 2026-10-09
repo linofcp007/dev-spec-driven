@@ -1,6 +1,6 @@
 "use strict";
-// Imports — review 6: spec-kit's [USn] task tags → _Requirements:_, the paths a task names → _Implements:_, and data-model.md / research.md / contracts/ / quickstart.md carried into design.md.
-// (13-imports.js and 13-imports-review.js hold the imports area's earlier tests; this file the improvements of the sixth review.)
+// Imports — spec-kit: its [USn] task tags → _Requirements:_, the paths a task names → _Implements:_, and data-model.md / research.md / contracts/ / quickstart.md carried into design.md.
+// (13-imports.js holds the area's main tests.)
 
 const fs = require("fs");
 const path = require("path");

@@ -115,7 +115,7 @@ const fin10 = runIn(["finish", "login-loop", "--write", "--project", w10f]);
 const fin10State = JSON.parse(fs.readFileSync(path.join(bf10.dir, ".state.json"), "utf8"));
 ok(fin10.code === 0 && /Drift baseline recorded: 1 implementing file\(s\)/.test(fin10.out) && Object.keys(fin10State.finished.files).join() === "src/auth.js" &&
   runIn(["drift", "--project", w10f]).code === 0, "finish --write on a ready feature records the drift baseline (and prints it); drift is then clean");
-const finDay10 = fin10State.finished.at.slice(0, 10);
+const finDay10 = S10.dayOf(fin10State.finished.at); // the LOCAL calendar date the engine prints (never the UTC one)
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "fix\r\n");
 const drClean = runIn(["drift", "login-loop", "--project", w10f]);
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "two\n");

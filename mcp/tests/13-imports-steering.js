@@ -1,7 +1,7 @@
 "use strict";
-// Imports — 1.25: another tool's steering (kiro-steering · cursor-rules → .specs/steering/) and spec_import {dryRun: true}.
+// Imports — another tool's steering (kiro-steering · cursor-rules → .specs/steering/) and spec_import {dryRun: true}.
 // The dry run: the whole pipeline in the write gate's dry-run sink (engine/files.js withDryRun), nothing written.
-// (13-imports.js and its review files hold the imports area's earlier tests; 13-imports.js is past 1,500 lines.)
+// (13-imports.js holds the area's main tests; it is past 1,500 lines.)
 
 const fs = require("fs");
 const path = require("path");

@@ -25,7 +25,7 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
   decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame;
-let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
+let dayOf; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
@@ -61,7 +61,7 @@ function nextTask(projectDir, name, opts = {}) {
   const tracks = detectTracks(f.dir);
   const text = activeTasks(raw, tracks); // a removed track's task block is inactive, never "next"
   const blocks = taskBlocks(text || "");
-  const sch = taskSchedule(blocks); // 1.14 F3: the next OPEN task whose _Depends:_ are all done
+  const sch = taskSchedule(blocks); // the next OPEN task whose _Depends:_ are all done
   const next = sch.next;
   const res = {
     ok: true,
@@ -107,7 +107,7 @@ function parallelBatch(tasksText, max, tracks) {
     if (b.done) continue;
     if (!b.parallel || b.phase !== first.phase || b.checkpoint !== first.checkpoint) break;
     if (isPromptTask(b, taskMarkers(b), tracks || [])) break;
-    if (sch.graph.waitsOn(i).length) break; // 1.14 F3: it waits on an open task (or on one of this batch)
+    if (sch.graph.waitsOn(i).length) break; // it waits on an open task (or on one of this batch)
     const imp = keys(taskMarkers(b).implements);
     if (!imp.length || imp.some(overlaps)) break;
     files.push(...imp);
@@ -117,13 +117,13 @@ function parallelBatch(tasksText, max, tracks) {
 }
 
 // ---------------------------------------------------------------------------
-// Task dependencies and execution waves (1.14 F3)
+// Task dependencies and execution waves
 // ---------------------------------------------------------------------------
 // `_Depends: 3, 5_` (English-stable; `#3` or `3`, separated by commas, semicolons or spaces; the task line or a sub-line,
 // never fenced code — taskMarkers reads it like every marker) names tasks of the SAME tasks.md that must be done first.
 // Every reader works on ONE view — the active tasks (activeTasks) — and follows resolveTask's duplicate-number rule: a
 // dependency on number n is done once EVERY task numbered n is done; a number no active task carries never is.
-//   - next (taskSchedule): the first open task in tasks order (taskDepGraph: by section in file order, then by number — 1.24 r6
+//   - next (taskSchedule): the first open task in tasks order (taskDepGraph: by section in file order, then by number
 //     D6; parseTasks' public list stays by number) whose _Depends:_ are all done —
 //     only the task resolveTask answers for its number is a candidate. A tasks.md without _Depends:_ gets exactly the task it
 //     got before (the first open one). `skipped` = the tasks passed over, `blocked` = the tasks that can never start as things
@@ -166,7 +166,7 @@ function taskDependsSpec(block) {
 }
 // The dependency view of a task list (blocks in file order): numbers → blocks, each block's _Depends:_, which numbers are
 // done, and the tasks order: by SECTION (taskSections — a phase heading and the checkpoint closing it, in file order), then by
-// number (stable). 1.24 r6 D6: by number alone, a task spec_append_tasks put into an EARLIER phase (numbered after every task)
+// number (stable). By number alone, a task spec_append_tasks put into an EARLIER phase (numbered after every task)
 // came after a later phase's tasks — next served Phase 2 past Phase 1's checkpoint. parseTasks' public order stays by number;
 // within a section (a tasks.md without phases: one section) the number decides, as before.
 function taskSections(blocks) {
@@ -417,7 +417,7 @@ const RE_ROOT_CAUSE_TASK = /(?<![\p{L}])(?:root[\s-]+cause|causa[\s-]+ra[ií]z)(
 // the first task can be completed — the scaffold today: the red regression test, then the fix (bug.md's Root Cause is
 // gated at the design approval); the root-cause task is a tasks.md scaffolded before (reproduce · root cause · test · fix)
 // or one the user wrote. → null (allowed) or { gated: 'root-cause', error } (localized).
-// 1.25.1 (review 7): a FIX — a task carrying _Makes green:_ (it turns the regression test green) — is gated wherever it sits: with the
+// a FIX — a task carrying _Makes green:_ (it turns the regression test green) — is gated wherever it sits: with the
 // root-cause task written AFTER it (1 the red test · 2 the fix · 3 "document the root cause in bug.md") the position rule let the fix
 // tick before the root cause was written.
 function bugfixGate(dir, kind, blocks, task, lng) {
@@ -456,7 +456,7 @@ function taskNumber(v) {
   return Number.isSafeInteger(n) ? n : NaN;
 }
 // The task number a caller ASKED FOR (spec_complete_task / spec_task_brief {number}, the CLI's done / undone / brief word) →
-// the integer, or NaN: an integer ≥ 0 — the tools' schema minimum (1.22 review: `-1` read "must be an integer"). Not ≥ 1: the
+// the integer, or NaN: an integer ≥ 0 — the tools' schema minimum (`-1` read "must be an integer"). Not ≥ 1: the
 // scanner reads a hand-written "0." task and next serves it, so refusing 0 would loop next → complete. A refusal says it in
 // the MCP validator's words (args), so both surfaces refuse the same values alike.
 function askedTaskNumber(v) { const n = taskNumber(v); return n >= 0 ? n : NaN; }
@@ -464,7 +464,7 @@ function taskNumberError(lang, v) {
   const A = i18n.msg(lang).args;
   return A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(typeof v === "number" ? v : String(v))));
 }
-// Review 5 (P3) — tasks.md written back as the bytes it holds. readIfExists decodes a file as UTF-8 (UTF-16 by its BOM), so a
+// tasks.md written back as the bytes it holds. readIfExists decodes a file as UTF-8 (UTF-16 by its BOM), so a
 // tasks.md in another encoding — Windows' ANSI code page, what Windows PowerShell 5.1's Set-Content / Add-Content write ("sessão"
 // is E3 there) — reads with a U+FFFD for each such byte, and writing that TEXT back made every one of them U+FFFD for good:
 // ticking one task destroyed the accents of the whole file. Now a tick / untick (and spec_impact --reopen) changes the
@@ -528,17 +528,17 @@ function checkboxBytes(file, text, boxes, ch) {
   return buf;
 }
 
-// opts.ranBy "cli" (1.14 F1): the CLI's `done --run` ran the command itself — the record's observed stamp is "cli". The MCP
+// opts.ranBy "cli": the CLI's `done --run` ran the command itself — the record's observed stamp is "cli". The MCP
 // server never passes it (and normalizeEvidence keeps no caller-given `observed`): a reported run is looked up in the
 // harness's log (observedRun).
-// The options form (1.27): completeTask(projectDir, { name, number, evidence, …opts }) — what both surfaces call
+// The options form: completeTask(projectDir, { name, number, evidence, …opts }) — what both surfaces call
 // (mcp/lib/operations.js: an undo has no evidence hole); the positional form stays the same call.
 function completeTask(projectDir, name, number, evidence, opts = {}) {
   if (isObj(name)) ({ name, number, evidence, ...opts } = name);
   if (opts && opts.undo === true) return untickTask(projectDir, name, number, { reason: opts.reason, evidence }); // 1.16 U1
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
-  // 1.16 U1: a reason explains an undo — a tick records evidence instead (refused, never silently dropped).
+  // a reason explains an undo — a tick records evidence instead (refused, never silently dropped).
   if (opts && opts.reason != null) return { ok: false, error: i18n.msg(featureLang(projectDir, f.slug)).undo.reasonNeedsUndo };
   const file = path.join(f.dir, "tasks.md");
   const text = readIfExists(file);
@@ -557,7 +557,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const EG = i18n.msg(lng).evidenceGate;
   const ev = normalizeEvidence(evidence);
   if (ev && ev.error) return { ok: false, error: ev.error === "badExit" ? EV.badExit(ev.value) : ev.error === "noContent" ? EG.noContent : EV.needsExit };
-  // 1.24 r6 D4: a passing run whose summary shows no test ran (a glob, a path or a filter that matched nothing — vacuousRun) proves
+  // a passing run whose summary shows no test ran (a glob, a path or a filter that matched nothing — vacuousRun) proves
   // nothing: refused before anything is recorded (couldNotRun "no-tests", stable). `done --run` (ranBy "cli") read the whole output.
   const vacuous = ev && ev.command && ev.exitCode === 0 && !(opts && opts.ranBy === "cli") ? vacuousRun(ev.summary) : null;
   if (vacuous) return { ok: false, couldNotRun: "no-tests", error: EV.noTests(n, vacuous.text) };
@@ -571,22 +571,22 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const gate = bugfixGate(f.dir, state.kind, blocks, task, lng);
   if (gate) return { ok: false, ...gate };
   const key = String(n);
-  // 1.14 F1: every run {command, exitCode} is stamped observed: true | false (the harness's log) | "cli" (`done --run`), and
+  // every run {command, exitCode} is stamped observed: true | false (the harness's log) | "cli" (`done --run`), and
   // every result of this call carries it (stable).
   const verifyCmds = taskMarkers(task).verify;
-  // Review 3: a run whose command holds an absolute `cd` is stamped with the project root it was read against (runRootStamp — the
+  // a run whose command holds an absolute `cd` is stamped with the project root it was read against (runRootStamp — the
   // project, or a git worktree of it holding this feature): its verdict is then the same on another machine.
   const runRoot = ev && ev.command && ev.exitCode != null ? runRootStamp(ev.command, projectDir, f.slug) : undefined;
   if (runRoot) ev.root = runRoot;
-  // 1.24 r6 D-I5: when the task's own latest recorded run FAILED (or its record is stale), only a run the harness logged after it is
+  // when the task's own latest recorded run FAILED (or its record is stale), only a run the harness logged after it is
   // this report's — a pass logged before the failure stamped a later, un-run pass report observed. (After a recorded pass, the same
   // logged run reported again in another spelling is still that run.)
   const prevOwn = ownEvidence(state.evidence || {}, task, dup);
   const prevAt = isRecord(prevOwn) && prevOwn.exitCode != null && (prevOwn.exitCode !== 0 || prevOwn.stale === true) ? Date.parse(prevOwn.at) : NaN;
-  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy, verifyCmds, prevAt); // an observed run of ITS _Verify:_ (1.22 review)
+  const observed = observedStamp(projectDir, f.slug, ev, opts && opts.ranBy, verifyCmds, prevAt); // an observed run of ITS _Verify:_
   if (observed !== undefined) ev.observed = observed;
   const withObserved = (r) => (observed !== undefined ? Object.assign(r, { observed }) : r);
-  // _Expect: fail_ (B5): a red run {command, exitCode ≠ 0} is the proof; a passing run is refused unless a red run of this
+  // _Expect: fail_: a red run {command, exitCode ≠ 0} is the proof; a passing run is refused unless a red run of this
   // _Verify:_ was recorded before it (the fix made the test green); a could-not-run exit (127, 9009…) is refused like a failure.
   const xf = expectsFail(task) ? expectFailRun(ev, ownEvidence(state.evidence || {}, task, dup), verifyCmds, projectDir) : null;
   // The run is stored with expected: "fail" (metrics count a red run as a pass, an unexpected pass as a failure) — except the
@@ -600,7 +600,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   const failed = !!ev && ev.exitCode != null && (xf ? xf.refused : ev.exitCode !== 0);
   const alreadyDone = task.done;
   const now = new Date().toISOString();
-  // 1.22 review — `done --run` (ranBy "cli") hands over the stamps taken BEFORE its run: when it started (the run's `at`) and
+  // `done --run` (ranBy "cli") hands over the stamps taken BEFORE its run: when it started (the run's `at`) and
   // the _Verify:_ commands it ran (the record's `verify` stamp: a _Verify:_ edited while it ran makes the record stale-evidence).
   // They were taken after the run — an edit made meanwhile read as tested.
   const cli = !!opts && opts.ranBy === "cli";
@@ -613,7 +613,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     state.evidence[key] = storeEvidence(state.evidence[key], task, dup, ev, run && cliStart ? cliStart.at : now, run ? ranVerify : undefined, projectDir);
   }
   const ticks = !alreadyDone && !failed;
-  // Review 5 (P3): the tick changes the checkbox's byte and nothing else — found BEFORE anything is written: a box the bytes
+  // the tick changes the checkbox's byte and nothing else — found BEFORE anything is written: a box the bytes
   // don't show where the text has it is refused with nothing recorded (never half a tick).
   const tickBytes = ticks ? checkboxBytes(file, text, [task], "x") : null;
   if (tickBytes === false) return { ok: false, error: E.tasksNotText(tasksFileName(f.dir)) };
@@ -631,7 +631,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     lines[task.line] = raw.slice(0, task.col) + "x" + raw.slice(task.col + 1);
     updated = lines.join("\n");
     // Replaced atomically: a reader in another process (status, a hook, a second server) never catches a truncated
-    // tasks.md — it used to refuse a real task as "not found" mid-write. The file's own bytes with the box's changed (P3).
+    // tasks.md — it used to refuse a real task as "not found" mid-write. The file's own bytes with the box's changed.
     writeFileAtomic(file, tickBytes || updated);
   }
   if (updated !== text || ev) maybeRefreshRoadmap(projectDir);
@@ -639,9 +639,9 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   // its unverified note say how to fix the task (redPhaseHint) — never only "re-run it" / "fix the code first".
   const redHint = redPhaseHint(task, f.slug, lng);
   // Never tick on a failure; a failed re-check of a ticked task stays recorded (it is now unverified).
-  if (failed && xf) return withObserved(expectFailRefusal(n, ev, alreadyDone, lng)); // B5: a pass (unexpected-pass) or a command that couldn't run
+  if (failed && xf) return withObserved(expectFailRefusal(n, ev, alreadyDone, lng)); // a pass (unexpected-pass) or a command that couldn't run
   if (failed) {
-    // 1.24 r6 D7: an _Expect:_ value other than fail (`failure`, `red`…) — the refusal names it: the task is must-pass as written
+    // an _Expect:_ value other than fail (`failure`, `red`…) — the refusal names it: the task is must-pass as written
     const unknown = unknownExpectValues(task);
     const hint = unknown.length ? EV.unknownExpect(n, unknown) : redHint;
     const out = { ok: false, recorded: true, error: (alreadyDone ? EV.failedTicked(n, ev.exitCode) : EV.failed(n, ev.exitCode)) + (hint ? " " + hint : "") };
@@ -651,7 +651,7 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
   }
   const tracksNow = detectTracks(f.dir);
   const tasks = parseTasks(activeTasks(updated, tracksNow)); // done/total/next as status counts them
-  const sch = taskSchedule(taskBlocks(activeTasks(updated, tracksNow) || "")); // 1.14 F3: next_task's rule
+  const sch = taskSchedule(taskBlocks(activeTasks(updated, tracksNow) || "")); // next_task's rule
   const next = sch.next;
   const runnable = taskMarkers(task).verify.length > 0;
   const entry = ownEvidence(state.evidence || {}, task, dup);
@@ -675,10 +675,10 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
       : reason === "manual-note-on-runnable-verify" ? EG.manualOnRunnable(n, f.slug)
       : reason === "duplicate-number" ? EG.duplicateNumber(n)
       : reason === "stale-evidence" ? (entry && entry.stale ? (entry.staleBy === "undo" ? i18n.msg(lng).undo.staleNote(n, f.slug, runnable) : i18n.msg(lng).impact.staleNote(n, f.slug, runnable)) : EG.staleEvidence(n, f.slug, runnable))
-      : reason === "unexpected-pass" ? i18n.msg(lng).redGreen.unexpectedPassNote(n, f.slug) // B5: _Expect: fail_, but the latest run passed
-      // 1.22 review: the run recorded is not a run of the task's _Verify:_ command(s)
+      : reason === "unexpected-pass" ? i18n.msg(lng).redGreen.unexpectedPassNote(n, f.slug) // _Expect: fail_, but the latest run passed
+      // the run recorded is not a run of the task's _Verify:_ command(s)
       : reason === "command-mismatch" ? EG.commandMismatch(n, f.slug, String((ev && ev.command) || (entry && entry.command) || ""), verifyCmds.join(" · "), expectsFail(task))
-      // 1.14 F1 (meta.evidence "observed"): the harness never saw the run — and, when it never saw any run here, why (no hook)
+      // meta.evidence "observed": the harness never saw the run — and, when it never saw any run here, why (no hook)
       : reason === "unobserved" ? (expectsFail(task) ? i18n.msg(lng).observed.unobservedRedNote(n, f.slug) : i18n.msg(lng).observed.unobservedNote(n, f.slug)) +
         (observedAny(projectDir) ? "" : " " + i18n.msg(lng).observed.neverObserved) // an _Expect: fail_ task: its RED run must be observed
       : EV.missing(n, f.slug); // no-evidence: only ever a runnable _Verify:_
@@ -700,8 +700,8 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     res.pipeMasked = true;
     res.note = [res.note, i18n.msg(lng).verifyPipe.completeNote(n, ev.command)].filter(Boolean).join(" ");
   }
-  if (xf) expectFailResult(res, xf, n, lng); // B5: expected: "fail" (+ redRecorded / the pass-after-red note)
-  // 1.14 F3: ticked while some of its _Depends:_ are still open — a warning, never a refusal (a tick records what happened;
+  if (xf) expectFailResult(res, xf, n, lng); // expected: "fail" (+ redRecorded / the pass-after-red note)
+  // ticked while some of its _Depends:_ are still open — a warning, never a refusal (a tick records what happened;
   // the work may have been done in another order). waitsOn: stable. No task left that can start: blocked, as next_task says.
   const early = ticks ? openDependenciesOf(text, tracksNow, task) : [];
   if (early.length) {
@@ -712,10 +712,10 @@ function completeTask(projectDir, name, number, evidence, opts = {}) {
     if (sch.blocked.length) res.blocked = sch.blocked;
     res.note = [res.note, taskDepsBlockedNote(sch, f.slug, lng)].filter(Boolean).join(" ");
   }
-  return withObserved(res); // 1.14 F1: the observed stamp on every result
+  return withObserved(res); // the observed stamp on every result
 }
 
-// 1.16 U1 — undo a tick: spec_complete_task {undo: true, reason?} / `dev-spec undone <feature> <n> [--reason "…"]` (both reach
+// undo a tick: spec_complete_task {undo: true, reason?} / `dev-spec undone <feature> <n> [--reason "…"]` (both reach
 // it through completeTask, under the feature lock). The task goes back to open: the checkbox of the line it resolves to — the
 // TICKED task of that number (several ticked tasks sharing it → refused, duplicateTicked: which tick was the mistake is
 // unknowable), else the one resolveTask answers — is reset at
@@ -753,7 +753,7 @@ function untickTask(projectDir, name, number, opts = {}) {
   const blocks = taskBlocks(text);
   const same = blocks.filter((b) => b.number === n);
   if (!same.length) return { ok: false, error: E.taskNotFound(n, tasksFileName(f.dir)) };
-  // 1.16 U review 2: several TICKED tasks share the number — undo can't know which tick was the mistake (done ticks the first
+  // several TICKED tasks share the number — undo can't know which tick was the mistake (done ticks the first
   // OPEN one, so "the first ticked" was usually the right tick of another task: its proof went stale). Refused, nothing
   // changed; duplicateTicked + tasks [{number, line, text}] are stable. Renumber them first (doctor warns duplicate-tasks).
   const ticked = same.filter((b) => b.done);
@@ -771,7 +771,7 @@ function untickTask(projectDir, name, number, opts = {}) {
     return { done: tasks.filter((t) => t.done).length, total: tasks.length, next: next && { number: next.number, text: next.text } };
   };
   if (!task.done) return { ok: true, feature: f.slug, number: n, unticked: false, alreadyOpen: true, evidenceStale: false, ...progress(text), note: U.alreadyOpen(n) };
-  // Review 5 (P3): the checkbox's own byte, found before anything is written (refused with nothing changed when it can't be).
+  // the checkbox's own byte, found before anything is written (refused with nothing changed when it can't be).
   const untickBytes = checkboxBytes(file, text, [task], " ");
   if (untickBytes === false) return { ok: false, error: E.tasksNotText(tasksFileName(f.dir)) };
   const key = String(n);
@@ -795,7 +795,7 @@ function untickTask(projectDir, name, number, opts = {}) {
   writeFileAtomic(file, untickBytes || updated);
   maybeRefreshRoadmap(projectDir);
   const runnable = taskMarkers(task).verify.length > 0;
-  // 1.16 U review 1: an _Expect: fail_ task keeps its red run (redProof reads through staleBy "undo"): once the fix is in, the
+  // an _Expect: fail_ task keeps its red run (redProof reads through staleBy "undo"): once the fix is in, the
   // re-tick's passing run is the fix going green — the note must not ask for a red run that can no longer happen. redKept: stable.
   const red = staled && expectsFail(task) ? redProof(rec, taskMarkers(task).verify, rec, projectDir) : null; // (rec's own pass: review 2's grandfathering)
   const notes = [U.unticked(n, f.slug, runnable, staled && !red)];
@@ -812,10 +812,10 @@ function untickTask(projectDir, name, number, opts = {}) {
 // line-only view public through spec_status) projects it, and completeTask ticks the line it resolves.
 // Task-looking lines inside HTML comments (single- or multi-line) or fenced code are NOT tasks.
 // A task line → [line, lead, box, number, text] | null: /^(\s*[-*+]\s*\[)([ xX])\]\s*(\d+)\.(?!\d)\s*(.*)$/ ("1.1 sub-step" is
-// not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator — 1.17 H). Any GFM bullet
-// (1.22 review: `* [ ] 1.` / `+ [ ] 1.` read as ZERO tasks, silently); an ordered-list checkbox (`1. [ ] text`) is no task —
+// not task 1), its text read by headRest (\s*(.*)$ rescanned a long blank run before a line terminator). Any GFM bullet
+// (`* [ ] 1.` / `+ [ ] 1.` read as ZERO tasks, silently); an ordered-list checkbox (`1. [ ] text`) is no task —
 // doctor's unread-tasks names it (unreadTaskLines).
-// 1.24 r6 D3: its text is every character to the end of the scanner's line (which holds no "\n" and no trailing CR) — a U+2028 /
+// its text is every character to the end of the scanner's line (which holds no "\n" and no trailing CR) — a U+2028 /
 // U+2029 inside it (pasted from a PDF, Word, a JSON string) is an ordinary character, as a markdown reader reads it: headRest
 // refused such a line (a line terminator to `.`), so the task vanished from complete_task / brief while the active view read it.
 const RE_TASK_LINE_HEAD = /^(\s*[-*+]\s*\[)([ xX])\]\s*(\d+)\.(?!\d)/;
@@ -829,7 +829,7 @@ function taskLine(s) {
   m.push(s.slice(q));
   return m;
 }
-// A line without its trailing CRs — every one of them (1.24 r6 D3: "\r\r\n", a CRLF file converted to CRLF again, kept a "\r" on
+// A line without its trailing CRs — every one of them ("\r\r\n", a CRLF file converted to CRLF again, kept a "\r" on
 // each line and no task was read). A loop, not /\r+$/ (quadratic on a long run of CRs followed by text).
 function dropTrailingCr(l) {
   let e = l.length;
@@ -840,7 +840,7 @@ const RE_CHECKPOINT = /^\s*\*\*Checkpoint:?\*\*:?\s*/i;
 const COMMENT_MASK = "\u0001";
 // CommonMark fence opener: a backtick fence's info string can't hold a backtick ("```npm test``` must pass"
 // is inline code, not a fence); a tilde fence's can. The fence run is taken whole ((?=(…))\2): giving it back never
-// helps, and a long run followed by a backtick or a line terminator was quadratic (1.17 H).
+// helps, and a long run followed by a backtick or a line terminator was quadratic.
 const RE_TASK_FENCE_OPEN = /^(\s*)(?:(?=(`{3,}))\2[^`]*|(?=(~{3,}))\3.*)$/;
 // Read like a markdown reader, in document order: fenced code first, then — outside code — HTML comments,
 // where an `inline code span` wins over a "<!--"/"-->" inside it. Comments are blanked IN PLACE (same
@@ -881,7 +881,7 @@ function scanTaskLines(tasksText) {
   const out = [];
   const st = { fence: null };
   let comment = false;
-  // Review 5 — CommonMark's INDENTED code block: outside every list, a line indented 4+ columns after a blank line (or a heading,
+  // CommonMark's INDENTED code block: outside every list, a line indented 4+ columns after a blank line (or a heading,
   // or at the top) is code, and so is each line after it while it stays indented or blank: its `    - [ ] 1. example` is no
   // task (resolveTask's "first open task 1" ticked the example above the real one). Inside a list — a task's sub-lines, a nested
   // task, `- Phase A` then `    - [ ] 1.` — the indentation is the item's own, as before. listStep reads each line once it is
@@ -1020,7 +1020,7 @@ function backtickRuns(s) {
 // verification) — the last few results are kept by text. Callers get their own copies (they may annotate them).
 const TASK_BLOCKS_MEMO = new Map();
 const TASK_BLOCKS_MEMO_MAX = 32;
-// 1.24 r6 D1 — the tasks.md a block was read from, for ownRecord's renumber rule (evidence.js): every block taskBlocks() hands
+// the tasks.md a block was read from, for ownRecord's renumber rule (evidence.js): every block taskBlocks() hands
 // out → the blocks of that read, and taskPeerStamps(block) → their task stamps (taskStamp: the text, ≤ 500 characters) — one
 // Set per scan, computed on first use and shared by its copies. A block built any other way (or copied by a caller) has none:
 // ownRecord then keeps its older rule.
@@ -1105,7 +1105,7 @@ function scanTaskBlocks(tasksText, ownLines) {
       curInd = indentCols(line);
       hold(i);
     } else if (cur && RE_LIST_BOX_LINE.test(line) && indentCols(line) <= curInd) {
-      // 1.25.1 (review 7): a checkbox item at the task's own indentation (or less, or quoted) is a SIBLING, never its body — a
+      // a checkbox item at the task's own indentation (or less, or quoted) is a SIBLING, never its body — a
       // mistyped task right under it (`- [ ] 2 B`, `- [ ] 2) B`, `- [~] 2. B`) became task 1's body text, markers included, and
       // vanished from every tool; now it is no task's and doctor's unread-tasks names it. A deeper one is a sub-step (the body's).
       cur = null;
@@ -1121,7 +1121,7 @@ function scanTaskBlocks(tasksText, ownLines) {
 }
 
 // The phase headings the task scanner reads → Map(line index → { level, text } | { underlineOf: the heading's line }): an ATX heading
-// at the margin (`## Phase 1`, as ever) and — 1.25.1 (review 7) — a SETEXT one ("Phase A" underlined by "===" / "---", its text at
+// at the margin (`## Phase 1`, as ever) and — a SETEXT one ("Phase A" underlined by "===" / "---", its text at
 // the margin) as the ONE heading reader takes it (headingEntries: never in a comment or a fence). The scanner read ATX only while
 // activeTasks / the section readers read setext too: every task's phase was null (taskSchedule served a later section's task
 // first) and spec_append_tasks never found a setext phase. Its underline line is part of the heading (never a task's body).
@@ -1139,10 +1139,10 @@ function taskHeadings(tasksText, scan) {
   return out;
 }
 
-// 1.22 review — checkbox list lines the ONE scanner does not read as tasks: an ordered-list checkbox (`1. [ ] text`), an
+// checkbox list lines the ONE scanner does not read as tasks: an ordered-list checkbox (`1. [ ] text`), an
 // unnumbered one outside every task block (`- [ ] text`) — never ticked, briefed or verified (a sub-step checkbox in a task's
 // body is that task's). Comments and fenced code hold none. → [{ line (1-based), text }] — doctor's unread-tasks warn.
-// 1.25.1 (review 7): any one-character box (`- [~] 2.`, `- [-] 2.`, `- [/] 2.` — a task-list app's states) and a quoted one
+// any one-character box (`- [~] 2.`, `- [-] 2.`, `- [/] 2.` — a task-list app's states) and a quoted one
 // (`> - [ ] 1.`) are named too — they were skipped silently; a letter or digit in the brackets (`- [a](…)`) is no box.
 const RE_LIST_BOX_LINE = /^\s*(?:>\s*)*(?:[-*+]|\d{1,9}[.)])\s*\[(?:[ xX]|[^\]\p{L}\p{N}\s])\]/u;
 function unreadTaskLines(tasksText) {
@@ -1150,7 +1150,7 @@ function unreadTaskLines(tasksText) {
   const held = new Array(src.split("\n").length).fill(false);
   scanTaskBlocks(src, held);
   const out = [];
-  // (review 5: a checkbox line in an INDENTED code block — 4+ spaces after a blank line, outside a list — is named too: indenting
+  // (a checkbox line in an INDENTED code block — 4+ spaces after a blank line, outside a list — is named too: indenting
   // real tasks that way reads as zero tasks)
   scanTaskLines(src).forEach((ln, i) => {
     if ((!ln.code || ln.indented) && !ln.task && !held[i] && RE_LIST_BOX_LINE.test(ln.vis)) out.push({ line: i + 1, text: ln.vis.trim().slice(0, 80) });
@@ -1212,7 +1212,7 @@ function tasksProseText(tasksText) {
   return scanTaskLines(tasksText).map((l) => (l.code ? "" : l.vis)).join("\n");
 }
 
-// 1.21 review C1 — a CHANGE keeps its criteria AND its tasks in ONE file, change.md (read through the requirements.md /
+// a CHANGE keeps its criteria AND its tasks in ONE file, change.md (read through the requirements.md /
 // tasks.md alias): read whole, a task's `_Requirements: US-1.AC-7_` counted as a DEFINED criterion and every AC as covered by
 // its own definition — trace_check could never fail. Two views of the text, line for line (the other lines blanked, so a line
 // number still points into change.md): `criteria` = the file WITHOUT its task blocks (what EARS, trace's required ACs, the scope
@@ -1231,7 +1231,7 @@ function criteriaText(dir) {
   const text = readIfExists(path.join(dir, "requirements.md"));
   return text != null && isChangeDir(dir) ? changeViews(text).criteria : text;
 }
-// The file a feature's tasks live in, as messages name it: tasks.md, or a change's change.md (1.21 review C10).
+// The file a feature's tasks live in, as messages name it: tasks.md, or a change's change.md.
 const tasksFileName = (dir) => (isChangeDir(dir) ? CHANGE_FILE : "tasks.md");
 // …and its tasks text for the readers of IDs in it (trace_check): tasks.md, or a change's task blocks alone.
 function tasksIdText(dir) {
@@ -1244,10 +1244,10 @@ function tasksIdText(dir) {
 // the brief, the evidence gate, the bugfix gate, red-green, overlaps, the guard), trace_check's and implementsRefs'
 // _Implements:_, _Size:_ and the templates check. The value ends at the first `_` (`*`) that closes the italics — one
 // followed by whitespace, the end of the line, or closing punctuation first: `(_Verify: npm test_)`, `… _Verify: x_.`,
-// `_Implements: src/a.ts_;` (1.14 full review Pa1 — those yielded NO marker: a task whose check fails ticked as "nothing
+// `_Implements: src/a.ts_;` (those yielded NO marker: a task whose check fails ticked as "nothing
 // to verify", and a done task's missing file passed trace_check). An underscore inside the value survives
 // (`src/keys_util.js`, `src/__init__.py`). Linear: a line's closers are found once, its openers walk them with a cursor.
-// Review 5 (M4) — what a markdown reader reads as italics, never more:
+// what a markdown reader reads as italics, never more:
 //   - a `_` opener after a letter, a digit or another `_` opens nothing (CommonMark: intraword `_` is no emphasis; `__Verify: x__`
 //     is bold, and read as italics its value was `x_` — `done --run` ran `npm test_`);
 //   - an EMPTY marker (`_Verify:_`, `*Implements:*`) is a span with an empty value: a title naming a marker ("Document the
@@ -1256,8 +1256,8 @@ function tasksIdText(dir) {
 //   - a closer is searched only before the next opener (else the end of the line) — the value never swallows a marker after it;
 //   - inline code is code: a `_` / `*` inside a code span never closes a marker (``_Verify: `npm test -- -g "a_ b"`_`` was cut at
 //     `"a`), and a label inside one opens none.
-const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emits metrics", "Implements", "Verify", "Expect", "Size", "Depends"]; // _Depends:_ (1.14 F3)
-// 1.24 r6 D9 — bold-italic: `***Verify: x***` opens at its third `*` (exactly two before it — `**Verify:**` stays a bold label, no
+const TASK_MARKER_LABELS = ["Requirements", "Makes green", "Affects evals", "Emits metrics", "Implements", "Verify", "Expect", "Size", "Depends"]; // _Depends:_
+// bold-italic: `***Verify: x***` opens at its third `*` (exactly two before it — `**Verify:**` stays a bold label, no
 // marker); a closer may be followed by `*` (`**_Verify: x_**`), quotes (`("_Verify: x_")`, “…”, ‘…’, «…»), a dash (`_Verify: x_—`)
 // — CommonMark's right-flanking rule (a closer followed by punctuation); and a run of `*` closes at its first star.
 const RE_TASK_MARKER_OPEN = new RegExp("(?:(?<![_\\p{L}\\p{N}])_|(?<![*\\p{L}\\p{N}_])\\*|(?<=(?:^|[^*\\p{L}\\p{N}_])\\*\\*)\\*)(" + TASK_MARKER_LABELS.join("|") + "):[ \\t]*", "giu");
@@ -1265,8 +1265,8 @@ const MARKER_CLOSE_PUNCT = new Set([".", ",", ";", ":", "!", "?", ")", "]", "*",
 // → [{ key (the label, lower-case), value (untrimmed), start, end }], in line order.
 // A closer followed directly by whitespace / the end ("plain") wins over one followed by closing punctuation, when one exists
 // before the next marker opener (else the end of the line): `_Verify: python -c "import a_; print(1)"_` keeps its whole
-// command, `(_Verify: npm test_), _Implements: a.js_` still closes at "test_)" (full review R7 — Pa1 cut the first at "a_;").
-// 1.22 review — memoized by line (bounded; a line past MARKER_MEMO_LINE_MAX characters is scanned every time): one ROADMAP.md
+// command, `(_Verify: npm test_), _Implements: a.js_` still closes at "test_)" (Pa1 cut the first at "a_;").
+// memoized by line (bounded; a line past MARKER_MEMO_LINE_MAX characters is scanned every time): one ROADMAP.md
 // refresh reads the same task lines over and over (status, the schedule, verification, sizes, every roadmap row) and each scan
 // built a RegExp and two passes — ~45 ms of every refresh on 30 features × 40 tasks. The result is FROZEN: callers share it.
 const MARKER_SPANS_MEMO = new Map();
@@ -1311,7 +1311,7 @@ function scanMarkerSpans(s) {
   for (let i = s.length - 1; i >= 0; i--) ok[i] = /\s/.test(s[i]) || (MARKER_CLOSE_PUNCT.has(s[i]) && ok[i + 1]);
   const plain = { _: [], "*": [] }, punct = { _: [], "*": [] };
   for (let j = 0; j < s.length; j++) {
-    if (s[j] === "*" && s[j - 1] === "*") continue; // r6 D9: a run of `*` closes at its first star (`***Verify: x***` → x)
+    if (s[j] === "*" && s[j - 1] === "*") continue; // a run of `*` closes at its first star (`***Verify: x***` → x)
     if ((s[j] === "_" || s[j] === "*") && ok[j + 1] && !(inCode && inCode[j])) (j + 1 === s.length || /\s/.test(s[j + 1]) ? plain : punct)[s[j]].push(j);
   }
   const cursor = { plain: { _: 0, "*": 0 }, punct: { _: 0, "*": 0 } };
@@ -1358,7 +1358,7 @@ function withoutTaskMarkers(line) {
   return out + s.slice(at);
 }
 const WHOLE_VALUE_MARKERS = new Set(["emits metrics", "affects evals", "verify", "expect"]); // commas belong to the value
-// 1.22 review — memoized by the block's own lines (taskProse, bounded); every caller gets its own copy of the lists.
+// memoized by the block's own lines (taskProse, bounded); every caller gets its own copy of the lists.
 const TASK_MARKERS_MEMO = new Map();
 const TASK_MARKERS_MEMO_MAX = 4096;
 function taskMarkers(block) {
@@ -1391,16 +1391,16 @@ function scanTaskMarkers(prose) {
   }
   return out;
 }
-// Marker-shaped text on a task's own lines that yielded NO marker (1.14 full review Pa1): "Verify:" / "Implements:" /
+// Marker-shaped text on a task's own lines that yielded NO marker: "Verify:" / "Implements:" /
 // "Makes green:" / "Expect:" outside every parsed marker and every code span — `**Verify:** npm test`, `Verify: npm test` —
-// and (1.24 r6 D2) an EMPTY marker written apart from its value: `_Verify:_ npm test`, `- _Verify:_ `npm test``, `*Verify:*
+// and an EMPTY marker written apart from its value: `_Verify:_ npm test`, `- _Verify:_ `npm test``, `*Verify:*
 // npm test` (emptyLabelValues — review 5 made `_Verify:_` an empty span, which hid them). The tools read nothing there (no check
 // to run, no file to trace). → [{ number, labels }] — doctor's malformed-markers warn.
 // "depends:" only before a task number ("depends: 3", "Depends: #3, 5") — prose like "(depends: the schema from task 1)" is
 // prose (feature review R8).
 const RE_MARKER_WORD = /(?<![\p{L}\p{N}])(verify|implements|makes[ \t]+green|expect|depends(?=[ \t]*:[ \t*_]*#?\d))[ \t]*:/giu;
 const MARKER_WORD_LABEL = { verify: "Verify", implements: "Implements", "makes green": "Makes green", expect: "Expect", depends: "Depends" };
-// 1.24 r6 D2 — the empty markers of a line followed by a value: a code span right after one (any line), or plain text after the
+// the empty markers of a line followed by a value: a code span right after one (any line), or plain text after the
 // line's ONLY empty marker whose first word is no marker noun — a title naming markers is prose ("Document the _Verify:_ and
 // _Implements:_ markers": two empty markers; "the _Verify:_ marker in the README"; PT / ES "marcador", "etiqueta"). → [keys]
 const MARKER_NOUNS = new Set(["marker", "markers", "label", "labels", "tag", "tags", "field", "fields", "line", "lines", "spelling", "spellings",
@@ -1454,7 +1454,7 @@ function malformedMarkers(blocks) {
   return out;
 }
 
-// Review 5 — a _Verify:_ value that looks garbled (doctor's verify-suspicious warn; `done --run` would run it exactly as written):
+// a _Verify:_ value that looks garbled (doctor's verify-suspicious warn; `done --run` would run it exactly as written):
 // it starts with `_` or `*` (a marker's delimiter read into the value), it holds a code span INSIDE it (`` `npm test` and `npm run
 // lint` `` — two commands written as one; the whole-value span is dropped before), or a quote has no partner (an odd count of `"`;
 // of `'` not between two letters — `it's` is a word). → [{ number, values }]
@@ -1576,7 +1576,7 @@ function testIndex(planText) {
   return map;
 }
 
-// design.md split into its level-2 sections (nested `###` content stays in the body) — the ONE heading reader's (review 5, M2:
+// design.md split into its level-2 sections (nested `###` content stays in the body) — the ONE heading reader's (
 // headingEntries — a setext "Title\n---" or an indented "  ## Title" is a section too; its title drops a closing "##", as
 // weighSectionHead's does).
 function designSections(designText) {
@@ -1609,7 +1609,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // served as next. An explicit number still reaches the whole file (like complete_task).
     const sch = taskSchedule(activeBlocks);
     block = sch.next;
-    if (!block && activeBlocks.some((b) => !b.done)) { // 1.14 F3: open tasks, none can start — say why, never "all done"
+    if (!block && activeBlocks.some((b) => !b.done)) { // open tasks, none can start — say why, never "all done"
       return { ok: true, feature: slug, lang: lng, tracks: trackLabel(tracks), task: null, ...(sch.blocked.length ? { blocked: sch.blocked } : { skipped: sch.skipped }),
         note: taskDepsBlockedNote(sch, slug, lng) };
     }
@@ -1621,7 +1621,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     if (!block) return { ok: false, error: E.taskNotFound(n, tasksFileName(dir)) };
   }
 
-  const reqText = criteriaText(dir) || ""; // a change: its change.md without the task blocks (1.21 review C1)
+  const reqText = criteriaText(dir) || ""; // a change: its change.md without the task blocks
   const planText = readIfExists(path.join(dir, "test-plan.md")) || "";
   const mk = taskMarkers(block);
   // The task's OWN text — fenced code under it is an example (taskProse): its AC/T IDs are never the task's (they gave the
@@ -1647,8 +1647,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   const testIds = [...extractTestIds(blockText)];
   const testRows = testIds.filter((id) => tests.has(id)).map((id) => tests.get(id));
   const unresolved = { acs: acIds.filter((id) => !acs.has(id)), tests: testIds.filter((id) => !tests.has(id)) };
-  const dec = briefDecisions(dir, acIds, testIds, blockText); // 1.14 C2: decisions.md entries citing the task's IDs (bounded)
-  // 1.16 Q3: the glossary entries the task's text and its criteria use (a term or an avoided word; bounded)
+  const dec = briefDecisions(dir, acIds, testIds, blockText); // decisions.md entries citing the task's IDs (bounded)
+  // the glossary entries the task's text and its criteria use (a term or an avoided word; bounded)
   const gloss = briefGlossary(root, [blockText, ...acceptanceCriteria.map((a) => a.text)].join("\n"));
 
   // Which loop the implementer follows; +ai prompt work stays with the controller (evals cost money,
@@ -1669,7 +1669,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // The files as the design spells them: `src/payment.js:10` / `#L10` / backticks never appear there (implementsRel, the
   // way briefSteering reads them) — the raw spelling left the design section out.
   const impFiles = mk.implements.map(implementsRel).filter(Boolean);
-  // Review 5 (M15) — IDs and files as whole words: a substring test took US-1.AC-1 for US-1.AC-10 and T-1 for T-10, quoted that
+  // IDs and files as whole words: a substring test took US-1.AC-1 for US-1.AC-10 and T-1 for T-10, quoted that
   // section and pushed the one about the task's own criterion out of the budget. An AC ID ends before a non-digit (and never
   // follows another feature's `x/`), a T-ID is read by its number (T-01 = T-1, tKey's rule), a file needs a boundary on both
   // sides (its basename may follow a folder). The sections naming one of the task's IDs fill the budget first.
@@ -1680,9 +1680,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     .map((x) => new RegExp("(?<![\\w-])" + reEsc(x) + "(?![\\w-])"));
   const idHit = (s) => idNeedles.some((r) => r.test(s.title + "\n" + s.body));
   // A task proving a +sec / +privacy criterion reads that track's design sections (threat model, authz, retention…).
-  // … and a track pack's (1.15) — its sections are the rigor its criteria were written for.
+  // … and a track pack's — its sections are the rigor its criteria were written for.
   const trackMarks = ["sec", "privacy", "dist", "api", "ui", "obs", "data", ...packTracks()].filter((tr) => tracks.includes(tr) && acIds.some((id) => trackAcIds(reqText, tr).has(id))).map((tr) => trackMarker(tr));
-  // 1.19 R2 — search before you write: the design's Reuse & Integration entries naming this task's files / folders / ACs, and the
+  // search before you write: the design's Reuse & Integration entries naming this task's files / folders / ACs, and the
   // existing source files next to its _Implements:_ targets (names only; bounded).
   const reuse = briefReuse(projectDir, designText, mk.implements, acIds);
   const reuseShown = reuse.entries.length > 0 || reuse.total > 0 || reuse.files.length > 0;
@@ -1702,14 +1702,14 @@ function taskBrief(projectDir, name, number, opts = {}) {
     if (mk["emits metrics"].length && syn(SAAS_SECTIONS, "Observability")) return true;
     if (mk["emits metrics"].length && obsTelemetry.length && s.title.includes(obsMarker) && obsTelemetry.some((y) => title.includes(y))) return true;
     if (mk["affects evals"].length && (syn(AI_SECTIONS, "Prompt Architecture") || syn(AI_SECTIONS, "Eval Strategy"))) return true;
-    if (trackMarks.some((m) => s.title.includes(m))) return true; // the case-sensitive marker (C4)
+    if (trackMarks.some((m) => s.title.includes(m))) return true; // the case-sensitive marker
     return false;
   };
   let budget = BRIEF_DESIGN_BUDGET;
   const included = [];
   const omitted = [];
   const wanted = sections.filter(want);
-  for (const s of [...wanted.filter(idHit), ...wanted.filter((x) => !idHit(x))]) { // the task's own IDs first (M15)
+  for (const s of [...wanted.filter(idHit), ...wanted.filter((x) => !idHit(x))]) { // the task's own IDs first
     if (s.body.length <= budget) { included.push(s); budget -= s.body.length; }
     else omitted.push(s);
   }
@@ -1730,9 +1730,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
   };
   // The runnable _Verify:_ commands that pipe into another one: their exit code is the pipeline's LAST command's.
   const pipes = verifyPipes(block);
-  const expectFail = expectsFail(block); // B5: _Expect: fail_ — the brief's Verification section says the run must fail
-  const checks = projectChecks(projectDir).checks; // B5: roadmap.json meta.checks — part of the definition of done
-  const deps = briefDependencies(activeBlocks, block); // 1.14 F3: its _Depends:_ and where each stands
+  const expectFail = expectsFail(block); // _Expect: fail_ — the brief's Verification section says the run must fail
+  const checks = projectChecks(projectDir).checks; // roadmap.json meta.checks — part of the definition of done
+  const deps = briefDependencies(activeBlocks, block); // its _Depends:_ and where each stands
 
   const md = i18n.renderBrief({
     feature: slug,
@@ -1771,7 +1771,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // self-ignoring scratch: no repo config needed
     writeIfAbsent(paths.ledger, t.ledgerHeader(slug));    // the ledger is appended by the controller, never reset
-    writeFileAtomic(paths.brief, md);                     // derived artifact: regenerated on every call (1.24 r6: through the write gate)
+    writeFileAtomic(paths.brief, md);                     // derived artifact: regenerated on every call (through the write gate)
   }
   const includeBrief = opts.includeBrief != null ? !!opts.includeBrief : !write;
 
@@ -1804,13 +1804,13 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });
   if (pipes.length) res.verifyPipes = pipes; // stable: branch on it, never on the brief's text
   if (expectFail) res.expect = "fail"; // B5 (kept with write:true, like verify): the run must exit non-zero
-  if (checks.length) res.projectChecks = checks; // B5: [{name, command}] the definition of done names
+  if (checks.length) res.projectChecks = checks; // [{name, command}] the definition of done names
   if (deps.length) res.dependsOn = deps.map((d) => ({ number: d.number, status: d.status })); // 1.14 F3 (kept with write:true: identifiers only)
   if (dec.items.length) res.decisions = dec.items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, affects: x.affects })); // 1.14 C2
   if (dec.omitted.length) res.decisionsOmitted = dec.omitted;
   if (gloss.items.length) res.glossary = gloss.items.map((g) => ({ term: g.term, definition: g.definition, avoid: g.avoid })); // 1.16 Q3
   if (gloss.omitted.length) res.glossaryOmitted = gloss.omitted;
-  if (reuseShown) res.reuse = reuse; // 1.19 R2: {state, total, entries, omitted, files, more}
+  if (reuseShown) res.reuse = reuse; // {state, total, entries, omitted, files, more}
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   else if (write) {
@@ -1819,9 +1819,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // IDs it cites (refs) and the unresolved ones, markers, the bugfix gate — never the spec text the brief quotes (AC
     // texts, test rows, design sections, steering, bug.md). includeBrief:true returns everything, brief included.
     res.refs = { acs: acceptanceCriteria.map((a) => a.id), tests: testRows.map((r) => r.id) };
-    if (res.decisions) res.refs.decisions = res.decisions.map((x) => x.id); // 1.14 C2: the IDs only (their text is in the brief)
-    if (res.glossary) res.refs.glossary = res.glossary.map((g) => g.term); // 1.16 Q3: the terms only (the entries are in the brief)
-    // 1.19 R2: the nearby files (identifiers) and how many design entries the brief quotes — never the entries' text
+    if (res.decisions) res.refs.decisions = res.decisions.map((x) => x.id); // the IDs only (their text is in the brief)
+    if (res.glossary) res.refs.glossary = res.glossary.map((g) => g.term); // the terms only (the entries are in the brief)
+    // the nearby files (identifiers) and how many design entries the brief quotes — never the entries' text
     if (res.reuse) res.refs.reuse = { entries: res.reuse.entries.length, files: res.reuse.files };
     for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse"]) delete res[k];
   }
@@ -1885,7 +1885,7 @@ function newTaskSpec(t, i, A, D) {
       stored = /^`|`$/.test(verify) ? `${fence} ${verify} ${fence}` : verify;
     }
   }
-  // full review Ga6: _Makes green:_ (planned T-IDs — appendTasks checks them against test-plan.md), _Expect: fail_ (a red
+  // _Makes green:_ (planned T-IDs — appendTasks checks them against test-plan.md), _Expect: fail_ (a red
   // task: its proof is a FAILING run) and _Size:_ (XS…XL, the forecasts' points). "t-1" is T-1; T-01 and T-1 are one test.
   const makesGreen = [];
   for (const id of list(t.makesGreen, /[,;\s]+/)) {
@@ -1899,7 +1899,7 @@ function newTaskSpec(t, i, A, D) {
     size = String(t.size).trim().toUpperCase();
     if (!Object.prototype.hasOwnProperty.call(SIZE_POINTS, size)) return { error: A.badSize(i, String(t.size).trim()) };
   }
-  // 1.14 F3: _Depends:_ — task numbers (3, "3", "#3"; "3,5" split like the other lists). appendTasks checks each names a task:
+  // _Depends:_ — task numbers (3, "3", "#3"; "3,5" split like the other lists). appendTasks checks each names a task:
   // an active one, or one this call appends.
   const depends = [];
   const depSeen = new Set();
@@ -1938,7 +1938,7 @@ function newTaskSpec(t, i, A, D) {
 // The number a NEW task takes — spec_append_tasks and a track's template tasks (spec_add_track, a track pack's block) alike: after
 // every number in use, tasks.md's and any evidence record or tick time a removed task left behind in the state (`state`: .state.json's
 // data; none for a fresh scaffold). A new task must never inherit an old run — ticked by hand it read verified on the removed task's
-// evidence — nor an old completion time the forecasts would count (1.25.1, review 7: the track blocks numbered after tasks.md alone).
+// evidence — nor an old completion time the forecasts would count (the track blocks numbered after tasks.md alone).
 function nextTaskNumber(tasksText, state) {
   const used = (o) => Object.keys(isRecord(o) ? o : {}).filter((k) => /^\d{1,15}$/.test(k)).map(Number);
   const st = isRecord(state) ? state : {};
@@ -1962,7 +1962,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   if (state.invalid) return { ok: false, error: state.invalid };
 
   const items = [];
-  const DP = M.taskDeps; // 1.14 F3: `depends`
+  const DP = M.taskDeps; // `depends`
   if (!Array.isArray(tasks) || !tasks.length) return { ok: false, error: A.noTasks };
   for (let i = 0; i < tasks.length; i++) {
     const t = newTaskSpec(tasks[i], i + 1, A, DP);
@@ -1973,7 +1973,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   // must be one requirements.md writes (secondaryDefinitions — trace_check's phantomSecondary rule: SC-1 names SC-001).
   const cited = [...new Set(items.flatMap((t) => t.requirements))];
   if (cited.length) {
-    const reqText = criteriaText(dir); // a change: its criteria, never an existing task's reference (1.21 review C1)
+    const reqText = criteriaText(dir); // a change: its criteria, never an existing task's reference
     if (reqText == null) return { ok: false, error: M.err.requirementsMissing(slug) };
     const known = acIndex(reqText);
     const secondary = cited.some((id) => /^(?:EC|NFR|SC)-\d+$/.test(id)) ? secondaryDefinitions(reqText).all : new Set();
@@ -1985,7 +1985,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     const phantom = cited.filter((id) => !isKnown(id));
     if (phantom.length) return { ok: false, error: A.phantom(phantom.join(", "), isChangeDir(dir) ? CHANGE_FILE : "requirements.md"), phantom };
   }
-  // full review Ga6: every _Makes green:_ T-ID must be planned in test-plan.md (its IDs as every reader takes them —
+  // every _Makes green:_ T-ID must be planned in test-plan.md (its IDs as every reader takes them —
   // planIdText: comments and fenced examples out; T-01 = T-1), like an AC must exist in requirements.md.
   const citedTests = [...new Set(items.flatMap((t) => t.makesGreen))];
   if (citedTests.length) {
@@ -2017,7 +2017,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   const norm = normTaskHeading(heading);
   // A turned-off track's task heading is hidden wherever it appears (activeTasks matches it by text).
   const offTrack = markerTracks().find((t) => !tracks.includes(t) && (isPackTrack(t) ? heading.includes(trackMarker(t)) : trackTaskHeadings(t).has(norm))) ||
-    (ghostMarkers().find(([, m]) => heading.includes(m)) || [])[0]; // + a saved track pack the project lacks now (1.15)
+    (ghostMarkers().find(([, m]) => heading.includes(m)) || [])[0]; // + a saved track pack the project lacks now
   if (offTrack) return { ok: false, error: A.inactiveHeading(heading, "+" + offTrack) };
 
   // Line-exact editing: split on "\n" only, so every existing line keeps its own ending (CRLF stays CRLF); new
@@ -2044,7 +2044,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   const before = taskBlocks(raw);
   let n = nextTaskNumber(raw, state) - 1;
   const numbered = items.map((t) => ({ ...t, number: ++n }));
-  // 1.14 F3: every `depends` names an ACTIVE task or a task of this call (by the number it gets here), never the task itself.
+  // every `depends` names an ACTIVE task or a task of this call (by the number it gets here), never the task itself.
   const withDeps = numbered.some((t) => t.depends.length);
   if (withDeps) {
     const known = new Set(taskBlocks(activeTasks(raw, tracks) || "").map((b) => b.number));
@@ -2131,13 +2131,13 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
       same(taskDependsSpec(b).numbers, t.depends);
     if (!fits) return { ok: false, error: A.unsafe(t.number) };
   }
-  // 1.14 F3: no new dependency cycle — one through a task of this call (a pre-existing cycle is doctor's task-deps).
+  // no new dependency cycle — one through a task of this call (a pre-existing cycle is doctor's task-deps).
   if (withDeps) {
     const cyc = dependencyCycles(taskDepGraph(taskBlocks(activeTasks(updated, tracks) || "")), false).filter((c) => c.some((x) => newNums.has(x)));
     if (cyc.length) return { ok: false, error: DP.cycleDepends(cyc.map((c) => c.map((x) => "#" + x).join(", ")).join("; ")), cycles: cyc };
   }
 
-  // Review 5 (P3): written in the file's own encoding — refused, nothing written, when its bytes are no text in it (a code page).
+  // written in the file's own encoding — refused, nothing written, when its bytes are no text in it (a code page).
   const bytes = tasksRewrite(file, raw, updated);
   if (!bytes) return { ok: false, error: M.err.tasksNotText(tasksFileName(dir)) };
   writeFileAtomic(file, bytes);
@@ -2153,12 +2153,12 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     heading: phase,
     headingCreated: !target,
     appended: numbered.map((t) => ({ number: t.number, text: t.lineText, story: t.story, parallel: t.parallel, requirements: t.requirements, implements: t.implements, verify: t.verify,
-      makesGreen: t.makesGreen, expectFail: t.expectFail, size: t.size, depends: t.depends })), // full review Ga6: _Makes green:_ / _Expect: fail_ / _Size:_; 1.14 F3: _Depends:_
+      makesGreen: t.makesGreen, expectFail: t.expectFail, size: t.size, depends: t.depends })), // _Makes green:_ / _Expect: fail_ / _Size:_; _Depends:_
     total: now.length,
     remaining: now.filter((t) => !t.done).length,
     needsReapproval,
   };
-  const tf = tasksFileName(dir); // a change's tasks are in change.md (1.21 review C10)
+  const tf = tasksFileName(dir); // a change's tasks are in change.md
   if (tf !== "tasks.md") res.file = tf;
   if (needsReapproval) res.note = A.reapprove(slug, tf);
   return res;

@@ -23,7 +23,7 @@
  */
 
 const path = require("path");
-// 1.25 — `dev-spec __complete features|archived [--project <dir>]`: the completion scripts' hidden call on Tab (feature names),
+// `dev-spec __complete features|archived [--project <dir>]`: the completion scripts' hidden call on Tab (feature names),
 // answered BEFORE anything else loads — cli/completion.js reads .specs/ itself — since it runs on every Tab (≈ node's own startup).
 if (process.argv[2] === "__complete") return require(path.join(__dirname, "completion.js")).complete(process.argv.slice(3));
 

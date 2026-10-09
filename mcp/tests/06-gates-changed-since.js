@@ -1,6 +1,6 @@
 "use strict";
-// Gates — 1.25.1 review 7 (engine core): ONE "changed since approval" test for every reader (the edit guard, the traceability matrix, the Phase 4 stamp, the rework count), the bugfix fix gated before the root cause.
-// (06-gates.js holds the gates area's earlier tests; this file the engine-core findings of the seventh review.)
+// Gates — ONE "changed since approval" test for every reader (the edit guard, the traceability matrix, the Phase 4 stamp, the rework count), the bugfix fix gated before the root cause.
+// (06-gates.js holds the area's main tests.)
 
 const fs = require("fs");
 const path = require("path");

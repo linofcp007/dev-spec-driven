@@ -27,7 +27,7 @@
  *   (1/0, yes/no, on/off); any other value exits 2.
  *   The report is text only: --json is a usage error (exit 2; --json=false is accepted, as the CLI reads it).
  *   Any other --flag (a typo: --dryrun), a value flag without its value or a second word after the feature is a usage
- *   error too (1.23 review: they were ignored, and a mistyped --dry-run ran a LIVE, paid eval).
+ *   error too (they were ignored, and a mistyped --dry-run ran a LIVE, paid eval).
  *
  * Exit code: 0 normally; 1 if a set falls below its threshold (real run only) or a set / thresholds.json
  * is invalid (dry or live — then no model is called; a set with no items is invalid too: it can't pass what it never
@@ -66,7 +66,7 @@ function parseArgs(argv) {
 // it explicitly, any other `=value` is a usage error. They are read with `=== true`, never by truthiness: the string
 // "false" is truthy, so `--set-baseline=false` overwrote evals/baseline.json and `--dry-run=false` dry-ran.
 const BOOL_FLAGS = ["dry-run", "set-baseline", "require-live"];
-// 1.23 review — every flag the harness reads (--json and --help included); any other is refused with a did-you-mean (exit 2)
+// every flag the harness reads (--json and --help included); any other is refused with a did-you-mean (exit 2)
 // before anything runs: a mistyped switch (--dryrun) used to be ignored, and the eval ran LIVE (paid API calls).
 const KNOWN_FLAGS = [...VALUE_FLAGS, ...BOOL_FLAGS, "json", "help"];
 function unknownFlag(flags) {
@@ -229,7 +229,7 @@ async function main() {
   // (an unexpanded "${VAR}" is ignored) > cwd.
   const projectDir = spec.resolveProjectDir(typeof flags.project === "string" ? flags.project : undefined);
   T = spec.msg(spec.projectLang(projectDir)).evals;
-  // --json (1.22 review): the harness prints a text report only — a JSON request is a usage error (exit 2) before anything
+  // --json: the harness prints a text report only — a JSON request is a usage error (exit 2) before anything
   // runs, never that report on stdout as if it were the JSON asked for. --json=false is the switch off (the CLI's rule).
   if (flags.json !== undefined) {
     const v = flags.json === true ? "true" : String(flags.json).trim().toLowerCase();
@@ -243,7 +243,7 @@ async function main() {
       process.exit(2);
     }
   }
-  // 1.23 review: --help prints the usage and runs nothing (it was ignored: `dev-spec evals <f> --help` ran the eval, live with a key)
+  // --help prints the usage and runs nothing (it was ignored: `dev-spec evals <f> --help` ran the eval, live with a key)
   if (flags.help !== undefined && flags.help !== false && !/^(?:false|0|no|off)$/i.test(String(flags.help).trim())) {
     console.log(T.usage);
     return;
@@ -438,7 +438,7 @@ async function main() {
       }
     }
     if (on("set-baseline")) {
-      // 1.25.1 (review 7): through the engine's write gate (spec.writeSpecFile) — never a raw write that follows a link under .specs/
+      // through the engine's write gate (spec.writeSpecFile) — never a raw write that follows a link under .specs/
       const w = spec.writeSpecFile(baselineFile, JSON.stringify({ at: new Date().toISOString(), model, sets: report.sets }, null, 2));
       if (w && w.ok === false) { console.error(w.error); process.exit(1); }
       console.log(T.baselineWritten(path.relative(projectDir, baselineFile)));

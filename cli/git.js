@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * git, as the CLI runs it (1.27) — ONE way: `gitRun(args, {cwd})`. The engine never runs git (MCP reads the repository's files);
+ * git, as the CLI runs it — ONE way: `gitRun(args, {cwd})`. The engine never runs git (MCP reads the repository's files);
  * the CLI reads what git says where a command needs it — the commit a `done --run` / `finish --run` is made on (`gitState`),
  * `log` (the commits citing a task), Git Bash's folder (`--exec-path`), a feature's own branch (`branchFacts`, then `git switch`)
  * — and writes only where the user asked it to: `merge-state --install / --uninstall` (git config), the switch to a feature's

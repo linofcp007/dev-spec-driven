@@ -32,7 +32,7 @@ function markEmptyHeadings(lines, hs, used) {
 }
 
 // bmad — BMAD-METHOD docs (v4 docs/…, v6 _bmad-output/…): see the block comment above.
-// 1.17 H — the heads below are read by a regex up to their separator, the text after it by a scan: their \s*…\s*(.*)$ tails
+// the heads below are read by a regex up to their separator, the text after it by a scan: their \s*…\s*(.*)$ tails
 // rescanned a long blank run from each blank they gave back.
 // /^(?:story\s+)?(\d+)\.(\d+)\s*(?:[:.\-–—]\s*)?(.*)$/i → [text, epic, story, title] | null
 const RE_BMAD_STORY_START = /^(?:story\s+)?(\d+)\.(\d+)/i;
@@ -194,7 +194,7 @@ function parseBmad(dir, read0, W, src) {
       markRange(used, h.i, hi);
       const body = lines.slice(lo, hi);
       // /^\s*(?:#{1,6}\s+|\*\*|__)?\s*acceptance criteria/i as \s*(?:(?:#{1,6}\s|\*\*|__)\s*)? (the same lines): blank runs meeting
-      // around an absent marker backtracked quadratically (1.17 H)
+      // around an absent marker backtracked quadratically
       const acAt = body.findIndex((l) => /^\s*(?:(?:#{1,6}\s|\*\*|__)\s*)?acceptance criteria/i.test(l));
       const prose = tidyLines(body.slice(0, acAt === -1 ? body.length : acAt).filter((l) => !/^\s*#/.test(l)));
       const acs = acAt === -1 ? [] : acItems(body.slice(acAt + 1));
@@ -262,7 +262,7 @@ function parseBmad(dir, read0, W, src) {
     const units = checkboxUnits(st.tasks.lines, st.tasks.lo, st.tasks.hi);
     if (!units.length) return;
     out.push("", `## US-${n}: ${st.title}`);
-    // 1.22 review — BMAD writes the (AC: n) references on a task, not on each of its subtasks: a nested unit that names none
+    // BMAD writes the (AC: n) references on a task, not on each of its subtasks: a nested unit that names none
     // of its own carries its parent's (the nearest unit above it with a smaller indent; a grandchild its inherited ones).
     const parents = []; // [{ indent, req }] the open units above the current one
     units.forEach((u, j) => {
@@ -294,7 +294,7 @@ function parseBmad(dir, read0, W, src) {
   const design = [arch != null ? arch.trimEnd() : null, ...(designParts.length ? ["", ...designParts] : [])].filter((x) => x != null);
   if (tidyLines(design).length) model.design = { text: tidyLines(design).join("\n"), file: archFile ? path.basename(archFile) : "Dev Notes" };
   else model.warnings.push(W.wNoDesign("architecture.md"));
-  model.nameFallback = model.nameHint; // the folder's name: for a title that slugifies to nothing (importSpec, 1.22 review)
+  model.nameFallback = model.nameHint; // the folder's name: for a title that slugifies to nothing (importSpec)
   if (model.title) model.nameHint = model.title; // the product's name, not "docs"
   if (storyFiles.length === 1 && !prdFiles.length && ordered.length === 1) {
     model.sourceFile = storyFiles[0];

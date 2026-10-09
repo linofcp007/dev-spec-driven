@@ -18,8 +18,8 @@ function __link(E) { ({ clauseScanner, earsThen, firstParagraph, leftoverExtras,
 
 // A Kiro criterion is usually EARS already ("WHEN … THEN the system SHALL …") — kept verbatim; a WHEN/IF … THEN
 // without SHALL gets its response rewritten. A spec written in Portuguese / Spanish (QUANDO … ENTÃO … / CUANDO … ENTONCES …)
-// the same way, in its language (full review Pb1: only the English keywords were read). Read as
-// /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i by clauseScanner (1.17 H): [lang, the condition keyword, THEN, …].
+// the same way, in its language (only the English keywords were read). Read as
+// /^(WHEN|IF|WHILE|WHERE)\s+(.+?),?\s+THEN\s+(.+)$/i by clauseScanner: [lang, the condition keyword, THEN, …].
 const KIRO_COND = [
   ["en", /(WHEN|IF|WHILE|WHERE)(?=\s)/iy, /THEN(?=\s)/iy, { when: "when", if: "if", while: "while", where: "where" }],
   ["pt", /(QUANDO|SE|ENQUANTO|ONDE)(?=\s)/iy, /ENT[ÃA]O(?=\s)/iy, { quando: "when", se: "if", enquanto: "while", onde: "where" }],
@@ -40,7 +40,7 @@ const RE_KIRO_REQ_TITLE = /^(?:requirements?(?:\s+document)?|(?:documento\s+de\s
 const RE_KIRO_INTRO = /^(?:introduction\b|introdu[çc][ãa]o(?![\p{L}\p{N}_])|introducci[óo]n(?![\p{L}\p{N}_]))/iu;
 const RE_KIRO_REQS = /^(?:requirements\b|requisitos\s*$)/i;
 // A Kiro story heading → [text, word, number, title] | null — /^(requirement|…)\s+(\d+)\s*[:.\-–—]?\s*(.*)$/i with the
-// title read by a scan (the two \s* around the optional dash backtracked quadratically before a line break — 1.17 H).
+// title read by a scan (the two \s* around the optional dash backtracked quadratically before a line break).
 const RE_KIRO_STORY_HEAD = /^(requirement|requisito|hist[óo]ria\s+de\s+(?:utilizador|usu[áa]rio)|historia\s+de\s+usuario)\s+(\d+)/i;
 function kiroStoryHeading(text) {
   const h = RE_KIRO_STORY_HEAD.exec(text);
@@ -96,7 +96,7 @@ function parseKiro(dir, read, W) {
       markRange(used, h.i, hi); // prose, criteria AND what follows them are all written into the story
       const body = lines.slice(lo, hi);
       // "#### Acceptance Criteria" (or a bold "**Acceptance Criteria:**" label) opens the criteria.
-      // (?=(\s+))\1: the heading's blanks taken whole — \s+.* rescanned a long blank run from each of its units (1.17 H).
+      // (?=(\s+))\1: the heading's blanks taken whole — \s+.* rescanned a long blank run from each of its units.
       const acAt = body.findIndex((l) => /^\s*(?:#{1,6}(?=(\s+))\1|\*\*|__).*(?:acceptance criteria|crit[ée]rios de aceita|criterios de aceptaci)/i.test(l));
       const off = acAt === -1 ? 0 : acAt + 1;
       const acBody = body.slice(off);

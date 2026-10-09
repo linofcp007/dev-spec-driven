@@ -18,7 +18,7 @@ function __link(E) { ({ COVERAGE_CAP, FOLD_CASE, isInsideDir, readCacheKey, real
   tasksProseText, toPosix, WALK_STOP, walkProject, withinRoot } = E); }
 
 // ---------------------------------------------------------------------------
-// Linear text scans (1.17 H). Regexes such as /^#{1,6}\s+(.*?)\s*$/, /\/+$/ or /\s*\r?\n\s*/g backtracked quadratically
+// Linear text scans. Regexes such as /^#{1,6}\s+(.*?)\s*$/, /\/+$/ or /\s*\r?\n\s*/g backtracked quadratically
 // (or worse) on a line holding a long run of one character — a heading with 100,000 spaces stalled the MCP server or a
 // hook. Each scan here returns byte for byte what the regex it replaces returned; the pattern is quoted beside each use.
 // "Whitespace" is JavaScript's \s (= what String.prototype.trim removes), one UTF-16 unit at a time.
@@ -356,7 +356,7 @@ function globFolderNames(g) {
 }
 // The code files one reference names (keys of `code`): the file itself, every code file under a folder, or a
 // glob's matches. `path/to/file.js:12` and `#L12` anchors are dropped; a path outside the project names nothing.
-// 1.25.1: a trailing ANNOTATION after the path — " (the helper)", " — new export", " - new export" — is the author's note, never part
+// a trailing ANNOTATION after the path — " (the helper)", " — new export", " - new export" — is the author's note, never part
 // of the path: `_Implements: src/lib/a.ts (the helper)_` was a missing file that blocked finish. Only after a path-like token (no
 // whitespace in it — backticks around it allowed); a path with spaces is read as written.
 const RE_IMPL_ANNOTATED = /^`?([^`\s]+)`?\s+(?:\(|[—–]|-\s)/;
@@ -395,7 +395,7 @@ function colonLineAnchorAt(s) {
 // `src/payment.js:10`, `./src/payment.js#L50` and `SRC/Payment.js` (on Windows / macOS) compare as one file.
 const implementsRel = (ref) => stripEnd(implementsPath(stripEnds(String(ref).trim(), isBacktickUnit)).replace(/^(?:\.\/)+/, ""), isSlashUnit);
 const implementsKey = (ref) => (FOLD_CASE ? implementsRel(ref).toLowerCase() : implementsRel(ref));
-// sorted (optional — coverage builds it once per call, 1.22 review): code's keys, sorted. A folder's files are then found by a
+// sorted (optional — coverage builds it once per call): code's keys, sorted. A folder's files are then found by a
 // binary search (keysWithPrefix) instead of a scan of every key; the same files, in key order instead of the map's.
 function implementsTargets(root, ref, code, fold, sorted) {
   const p = implementsPath(ref);
@@ -435,7 +435,7 @@ function blankFacts(s) {
 }
 
 // ---------------------------------------------------------------------------
-// Did-you-mean (1.24 r6) — the one edit distance behind every suggestion: a track (suggestTrack), a tool argument (the MCP
+// Did-you-mean — the one edit distance behind every suggestion: a track (suggestTrack), a tool argument (the MCP
 // server's unknown-argument refusal). Words are short (names, keys), so the O(a·b) table is cheap.
 // ---------------------------------------------------------------------------
 
@@ -464,7 +464,7 @@ function closestName(word, candidates, limit) {
   return best ? best.c : null;
 }
 
-// 1.25.1 (review 7) — THE calendar date (YYYY-MM-DD) of a moment, as the person working reads it on a calendar: the LOCAL date.
+// THE calendar date (YYYY-MM-DD) of a moment, as the person working reads it on a calendar: the LOCAL date.
 // `new Date().toISOString().slice(0, 10)` (eleven places, two helpers) is the UTC date — something written between 00:00 and 01:00
 // in Lisbon (UTC+1 in summer) was dated the day before. now: a Date, a timestamp (ms) or an ISO string (a stored instant); omitted /
 // undefined: this moment (a test passes its own). A YYYY-MM-DD string is a calendar date already: returned as it is, never shifted

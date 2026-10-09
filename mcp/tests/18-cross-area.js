@@ -1,5 +1,5 @@
 "use strict";
-// Whole-plugin review regressions whose findings span several areas — one assertion per finding.
+// Regressions whose findings span several areas (the 1.14 packages' reviews) — one assertion per finding.
 // A new test goes to the file of its area, not here.
 
 const fs = require("fs");

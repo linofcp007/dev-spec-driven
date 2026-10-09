@@ -8,9 +8,9 @@
  * tree) of spec files before a commit:
  *   - <any>/.specs/<feature>/requirements.md  → EARS lint (errors block the commit)
  *   - <any>/.specs/<feature>/tasks.md         → traceability check (phantom refs block)
- *   - <any>/.specs/<feature>/change.md        → both (1.21 F5: a change holds its criteria and its tasks)
+ *   - <any>/.specs/<feature>/change.md        → both (a change holds its criteria and its tasks)
  * Nested `.specs/` folders (monorepos) are validated in place.
- * First (1.24 r6 I-I1): a ROADMAP.md / SPECS.md left stale by spec saves in Claude Code is refreshed — and staged again when it
+ * First: a ROADMAP.md / SPECS.md left stale by spec saves in Claude Code is refreshed — and staged again when it
  * was staged.
  *
  * Exit 0 = allow commit; exit 1 = block.
@@ -46,7 +46,7 @@ const files = (git(["-c", "core.quotePath=false", "diff", "--cached", "--name-on
   .split("\0")
   .filter(Boolean);
 
-// 1.24 r6 I-I1 — a ROADMAP.md / SPECS.md left stale by spec saves in Claude Code (the save hook's stamp, .specs/.execution/roadmap-stale;
+// a ROADMAP.md / SPECS.md left stale by spec saves in Claude Code (the save hook's stamp, .specs/.execution/roadmap-stale;
 // the Stop hook refreshes at the end of the turn, and a commit made inside that turn comes first) is refreshed before the commit, and a
 // generated file that is STAGED is staged again — the commit holds the fresh one; an unstaged one stays unstaged. The root's .specs/
 // and every nested one a staged path names; one stat each — the engine loads only for a stamped one. Best-effort: never blocks.
@@ -72,7 +72,7 @@ function refreshStaleRoadmaps() {
 refreshStaleRoadmaps();
 
 // The staged files this hook checks — a feature's requirements.md / tasks.md / change.md under a `.specs/` — found BEFORE the
-// engine loads: a commit that stages none (most commits) exits without paying for it (~130 ms — 1.22 review).
+// engine loads: a commit that stages none (most commits) exits without paying for it (~130 ms).
 const CHECKED = new Set(["requirements.md", "tasks.md", "change.md"]);
 const specFiles = files.filter((f) => {
   if (!f.startsWith(".specs/") && !f.includes("/.specs/")) return false;
@@ -80,7 +80,7 @@ const specFiles = files.filter((f) => {
   // Project templates are no feature's spec (dev-spec templates check) — unless .specs/templates/ is a pre-1.14 feature (.state.json).
   const tplAt = f.match(/^(.*?)\.specs\/templates\//);
   if (tplAt && !fs.existsSync(path.join(root, tplAt[1], ".specs", "templates", ".state.json"))) return false;
-  // Track packs (1.15) neither (dev-spec tracks check) — unless .specs/tracks/ is a pre-1.15 feature (.state.json).
+  // Track packs neither (dev-spec tracks check) — unless .specs/tracks/ is a pre-1.15 feature (.state.json).
   const packAt = f.match(/^(.*?)\.specs\/tracks\//);
   return !(packAt && !fs.existsSync(path.join(root, packAt[1], ".specs", "tracks", ".state.json")));
 });
@@ -101,11 +101,11 @@ for (const f of specFiles) {
   const lang = spec.featureLang(featureProject, feature);
   const PF = spec.msg(lang).precommit;
 
-  // (1.21 F5: a change's change.md holds its criteria AND its tasks — both checks run on it)
+  // (a change's change.md holds its criteria AND its tasks — both checks run on it)
   if (base === "requirements.md" || base === "change.md") {
     const text = stagedContent(f);
     if (text == null) continue;
-    // 1.21 review C1: a change's criteria are its change.md WITHOUT the task blocks (a task line is never linted as one)
+    // a change's criteria are its change.md WITHOUT the task blocks (a task line is never linted as one)
     const r = spec.earsValidate(base === "change.md" ? spec.changeViews(text).criteria : text, lang);
     if (r.ok) {
       const errs = r.issues.filter((i) => i.severity === "error");

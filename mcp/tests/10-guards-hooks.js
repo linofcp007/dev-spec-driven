@@ -1,6 +1,6 @@
 "use strict";
-// Guards and hooks — 1.23 review 5: the approval guard's tools and forms (Monitor, Write / Edit of the state files, launchers, fail closed), the edit guard's paths, worktree-aware hooks, the subagent gates' reports.
-// (10-guards.js holds the area's earlier tests, 10-guards-review.js the 1.22 review's; this file the findings of review 5.)
+// Guards and hooks — the approval guard's tools and forms (Monitor, Write / Edit of the state files, launchers, fail closed), the edit guard's paths, worktree-aware hooks, the subagent gates' reports.
+// (10-guards.js holds the area's main tests, 10-guards-stop-gate.js the stop gate's.)
 
 const fs = require("fs");
 const path = require("path");

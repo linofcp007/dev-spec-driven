@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * dev-spec shell completion (1.25) — two jobs, both for cli/dev-spec.js:
+ * dev-spec shell completion — two jobs, both for cli/dev-spec.js:
  *
  *   complete(args)        `dev-spec __complete features|archived [--project <dir>]` — the hidden call the completion scripts
  *                         make on Tab where a command takes a feature: one slug per line, nothing else, exit 0 always. It runs
@@ -11,7 +11,7 @@
  *                         cli/tests/16-conventions-completion.js checks that they agree on several layouts and that no engine
  *                         module is loaded. It costs about Node's own startup (it runs on every Tab).
  *   script(shell, model)  the completion script `dev-spec completion <shell>` prints — the template in cli/completion/ filled
- *                         with the CLI's own tables (the model cli/dev-spec.js builds from COMMAND_OPTIONS, COMMAND_ARGS,
+ *                         with the CLI's own tables (the model cli/commands.js builds from COMMAND_OPTIONS, COMMAND_ARGS,
  *                         FLAG_VALUES and the facade's value lists): commands, their flags, flag values, positional values.
  *
  * Specs (a positional or a flag value): words to offer, space-separated, or a source the SCRIPT resolves on Tab — @feature /
@@ -28,7 +28,7 @@ const SCRIPT_SOURCES = new Set(["@feature", "@archived", "@command", "@file", "@
 
 // ---- the hidden lister (no engine) ----------------------------------------------------------------------------------------
 
-// The project probe (mcp/lib/probe.js — 1.27): the one dev-spec project rule (doctor.js isDevSpecDir is the same), the CLI's resolver
+// The project probe (mcp/lib/probe.js): the one dev-spec project rule (doctor.js isDevSpecDir is the same), the CLI's resolver
 // walk (files.js nearestProject), unexpandedVar / expandHome / isNetwork as files.js reads them. Required on first use: `help`,
 // `completion <shell>` and the other commands that never look for a project load nothing of mcp/lib for it.
 let PROBE = null;
@@ -42,14 +42,14 @@ function resolveProject(arg, env) {
   const P = probe();
   const e = env || process.env;
   const usable = (v) => (v != null && String(v).trim() && !P.unexpandedVar(v) ? String(v).trim() : null);
-  // Windows: `--project "C:\dir\"` reaches node as `C:\dir"` — the CLI drops the trailing quote (1.23 review L14)
+  // Windows: `--project "C:\dir\"` reaches node as `C:\dir"` — the CLI drops the trailing quote
   const flag = typeof arg === "string" && process.platform === "win32" ? arg.replace(/"+$/, "") : arg;
   const dir = usable(flag) || usable(e.SPEC_PROJECT_DIR) || usable(e.CLAUDE_PROJECT_DIR);
   if (dir) return path.resolve(P.expandHome(dir));
   const cwd = path.resolve(process.cwd());
   return P.nearestProject(cwd) || cwd;
 }
-// doctor.js statusLineProject's null rule (1.25.1, review 7) — the status line's pre-check, before the engine loads: is there a
+// doctor.js statusLineProject's null rule — the status line's pre-check, before the engine loads: is there a
 // folder holding a dev-spec .specs/ at or above one of the candidates (the probe's SESSION_MAX_UP levels — statusLineProject's
 // STATUS_MAX_UP; an empty / non-string / whole-${VAR} / over-long / network candidate skipped)? false → the engine would answer null
 // (an empty line): nothing to load. true → the engine decides (it also maps a worktree to its checkout, which only ever starts from a
@@ -63,7 +63,7 @@ function statusProbe(candidates) {
   return false;
 }
 
-// 1.25.1 (review 7) — the status line command `statusline --print-config` prints (and /spec-statusline writes into settings.json).
+// the status line command `statusline --print-config` prints (and /spec-statusline writes into settings.json).
 // In a plugin's versioned folder (…/dev-spec-driven/<version>/cli/dev-spec.js) the plain `node "<that path>" statusline` broke at the
 // first plugin update (Claude Code removes the old folder 14 days later): the command finds the newest installed <version> holding
 // cli/dev-spec.js at each run — the completion scripts' rule (numeric parts, a missing part 0) — in a node one-liner that holds no

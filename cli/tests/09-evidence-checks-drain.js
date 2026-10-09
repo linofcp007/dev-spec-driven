@@ -21,7 +21,7 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
   const gp = path.join(tmp, "frga-proj");
   Sga.initProject(gp, ["core"], "en");
 
-  // 1.21.1 languages: finish --run --shell pwsh runs the project checks as PowerShell (the same b5Exec as done --run): a
+  // 1.21.1 languages: finish --run --shell pwsh runs the project checks as PowerShell (the same runner as done --run, cli/run.js): a
   // passing and a failing check, both recorded with their exit codes. Skipped where pwsh isn't installed (the Linux containers).
   let hasPwsh = false;
   try { hasPwsh = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], { encoding: "utf8", windowsHide: true, timeout: 60000 }).status === 0; } catch { /* no pwsh */ }

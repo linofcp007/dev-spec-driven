@@ -21,7 +21,7 @@ let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValid
   specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription, taskMarkerValues,
   tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel, trackMarker,
   trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection, writeIfAbsent;
-let today; // core.js — 1.25.1: the local calendar date (today / dayOf)
+let today; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, existsCached,
   extractAcIds, extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements,
   isInsideDir, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
@@ -34,7 +34,7 @@ function __link(E) { ({ today, acDuplicates, artifactState, bugSectionFilled, cu
   writeIfAbsent } = E); }
 
 // ---------------------------------------------------------------------------
-// Project templates — .specs/templates/ (1.14): a team's own scaffolds over the built-in i18n ones
+// Project templates — .specs/templates/: a team's own scaffolds over the built-in i18n ones
 // ---------------------------------------------------------------------------
 //
 // `.specs/templates/<artifact>.md` replaces the built-in template of that artifact (TEMPLATE_ARTIFACTS);
@@ -72,8 +72,8 @@ const TEMPLATE_ARTIFACTS = Object.freeze({
   "test-plan": "test-plan.md", "eval-plan": "eval-plan.md", "load-test": "load-test.md", quickstart: "quickstart.md",
   checklist: "checklist.md", "integration-plan": "integration-plan.md",
   bug: "bug.md", "bug-requirements": "requirements.md", "bug-test-plan": "test-plan.md", "bug-tasks": "tasks.md",
-  spike: "spike.md", "spike-tasks": "tasks.md", // 1.14 C2 — the spike kind's scaffolds
-  change: "change.md", // 1.21 F5 — a change's one file (kind change, size xs)
+  spike: "spike.md", "spike-tasks": "tasks.md", // the spike kind's scaffolds
+  change: "change.md", // a change's one file (kind change, size xs)
 });
 // The chain artifacts a gate reads — a template of theirs with no slot at all scaffolds an approvable file (check warns).
 const TEMPLATE_CHAIN = new Set(["requirements", "design", "test-plan", "eval-plan", "tasks", "bug", "bug-requirements", "bug-test-plan", "bug-tasks", "change"]);
@@ -151,7 +151,7 @@ function templateFileList(projectDir) {
 
 // → { key, text, rel } of the project's template for `key` in language `lang` (its <lang>/ file first), or null. Only the
 // files templateFileList knows (exact names, no linked folder) — the list, the corpus and the scaffolds read the same ones.
-// A regional variant falls back to its family's folder before the shared one (full review Pb8): a pt-BR feature reads
+// A regional variant falls back to its family's folder before the shared one: a pt-BR feature reads
 // templates/pt-BR/<a>.md, then templates/pt/<a>.md, then templates/<a>.md, then the built-in.
 function templateLangChain(lang) {
   const l = normalizeLang(lang);
@@ -237,7 +237,7 @@ function trackTestRowsBlock(tr, lang, used, map, tracks) {
 }
 // An overridden design.md / requirements.md / tasks.md / test-plan.md + the active tracks' blocks it doesn't carry (the
 // rule above). reqText: () => the feature's requirements.md (tasks and test rows follow the IDs it defines for a track).
-// opts (1.15): only — the tracks to add blocks for (a built-in scaffold: its track packs; the i18n builders wrote the rest);
+// opts: only — the tracks to add blocks for (a built-in scaffold: its track packs; the i18n builders wrote the rest);
 // planText: () => the feature's test-plan.md (a track pack's tasks make its planned tests green); vars: { name, slug } for a pack
 // fragment's {{name}} / {{slug}}. A track pack's criteria go right after the US-1 criteria (insertPackRequirements) and its
 // checklist items at the end of checklist.md.
@@ -295,7 +295,7 @@ function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
 }
 // The scaffold of one artifact → { text, template } — the project's template (variables substituted; opts.tracks: the track
 // blocks it lacks) when there is one (template = its .specs/templates/… path), else builtIn() (template null) + the blocks of the
-// active track packs (1.15) — the built-in builders only know the built-in tracks.
+// active track packs — the built-in builders only know the built-in tracks.
 function scaffoldText(projectDir, key, lang, vars, builtIn, opts = {}) {
   const o = templateOverride(projectDir, key, lang);
   const packVars = { name: vars && vars.name != null ? String(vars.name) : undefined, slug: vars && vars.slug != null ? String(vars.slug) : undefined };
@@ -366,7 +366,7 @@ function buildProjectTemplateSets(root) {
     const p = hit.parsed;
     merge(sets.brackets, p.brackets);
     p.code.forEach((x) => sets.code.add(x));
-    if (f.key === "tasks" || f.key === "change") merge(sets.tasks, p.tasks); // 1.21 F5: change.md holds the change's tasks
+    if (f.key === "tasks" || f.key === "change") merge(sets.tasks, p.tasks); // change.md holds the change's tasks
     if (f.key === "bug-tasks") merge(sets.bugSteps, p.tasks);
     if (f.key === "bug") merge(sets.bugSlots, p.brackets);
   }
@@ -385,7 +385,7 @@ function projectTemplateSets() {
 function projectTemplateHas(kind, key) {
   const ps = projectTemplateSets();
   if (ps && (kind === "code" ? ps.code.has(key) : setOrWildcard(ps[kind], key))) return true;
-  // + the track packs' blocks (1.15): their slots, code-span slots and task lines are template text too
+  // + the track packs' blocks: their slots, code-span slots and task lines are template text too
   if (kind !== "brackets" && kind !== "code" && kind !== "tasks") return false;
   const pk = packCorpusSets();
   return !!pk && (kind === "code" ? pk.code.has(key) : setOrWildcard(pk[kind], key));
@@ -424,9 +424,9 @@ function builtInTemplate(key, lang, tracks) {
     case "bug-requirements": return i18n.bugRequirements({ name: a.name, summary: a.summary }, lang);
     case "bug-test-plan": return i18n.bugTestPlan(a.name, lang);
     case "bug-tasks": return i18n.bugTasks(a.name, lang);
-    case "spike": return i18n.msg(lang).spike.report({ name: a.name, question: a.summary }); // 1.14 C2: {{summary}} = the spike's question
+    case "spike": return i18n.msg(lang).spike.report({ name: a.name, question: a.summary }); // {{summary}} = the spike's question
     case "spike-tasks": return i18n.msg(lang).spike.tasks(a.name);
-    case "change": return i18n.change({ name: a.name, summary: a.summary }, lang); // 1.21 F5: a change's one file
+    case "change": return i18n.change({ name: a.name, summary: a.summary }, lang); // a change's one file
     default: return null;
   }
 }
@@ -524,12 +524,12 @@ function checkTemplateText(k, raw, rendered, fileLang, lng, add) {
   }
   if (k === "design") {
     if (!RE_CONSTITUTION_CHECK.test(rendered)) add("warn", "constitution-missing", P["constitution-missing"]);
-    // 1.17 A1: no Alternatives & Trade-offs / Risks heading — doctor would warn on every feature scaffolded from it.
+    // no Alternatives & Trade-offs / Risks heading — doctor would warn on every feature scaffolded from it.
     if (weighSection(rendered, TRADEOFFS_SYN) == null) add("warn", "tradeoffs-missing", P["tradeoffs-missing"]);
     if (weighSection(rendered, RISKS_SYN) == null) add("warn", "risks-missing", P["risks-missing"]);
-    // 1.19 R1: no Reuse & Integration heading — doctor would warn (design-reuse) on every feature scaffolded from it.
+    // no Reuse & Integration heading — doctor would warn (design-reuse) on every feature scaffolded from it.
     if (weighSection(rendered, REUSE_SYN) == null) add("warn", "reuse-missing", P["reuse-missing"]);
-    for (const tr of markerTracks()) { // + the track packs (1.15)
+    for (const tr of markerTracks()) { // + the track packs
       const marker = trackMarker(tr);
       if (!headingHasMarker(raw, marker)) continue; // no heading of the track: the engine appends its whole block
       for (const sec of trackSectionTable(tr)) {
@@ -633,7 +633,7 @@ function checkTemplates(projectDir, key, lang, lng) {
   return { ok: true, action: "check", lang: lng, checked, problems, errors, warnings, verdict: errors ? "fail" : warnings ? "warn" : "pass" };
 }
 
-// The human report of a templates() result (list / init / check) in its language — printed by the CLI. 1.26: rendered from the
+// The human report of a templates() result (list / init / check) in its language — printed by the CLI. Rendered from the
 // structure, never carried in it (the result an agent reads held every line twice: the structure and its rendering).
 function templatesLines(r) {
   const T = i18n.msg(r.lang).templates;

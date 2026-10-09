@@ -1,6 +1,6 @@
 "use strict";
-// Guards and hooks — 1.25.1 review 7 (the hooks): the stop gate's claims, the hooks' command form, the observe hook's async run and its placeholder pre-filter, SessionStart's dev-spec probe.
-// (10-guards-review6.js holds the findings of review 6; this file those of review 7 on hooks/stop-, observe-, spec- and plan-hook.js.)
+// Guards and hooks — what the hooks cost and how they run: the stop gate's work-shaped claims, the hooks' exec form, the observe hook's async run and its placeholder pre-filter, SessionStart's dev-spec probe.
+// (10-guards-guard-downs.js holds the other hook pre-filters.)
 
 const fs = require("fs");
 const path = require("path");

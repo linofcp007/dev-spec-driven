@@ -1,5 +1,5 @@
 "use strict";
-// Guards and hooks — 1.25.1 review 7: one reader of shell file operations (fed scripts, globbed / variable targets, links), MCP file tools, the shared projectDir parser, fail closed, the edit guard on the shell and in a monorepo, observed evidence without the approval guard.
+// Guards and hooks — one reader of shell file operations (fed scripts, globbed / variable targets, links), MCP file tools, the shared projectDir parser, fail closed, the edit guard on the shell and in a monorepo, observed evidence without the approval guard.
 
 const fs = require("fs");
 const os = require("os");

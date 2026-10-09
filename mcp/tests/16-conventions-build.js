@@ -326,6 +326,24 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
       I2.msg("pt").hook.sessionHeader === I.msg("pt").hook.sessionHeader,
       "1.20 bundle: a bundle built on demand (scripts/build.js --bundle, into tmp) holds every engine and i18n module (" + built.modules + "), each stamped with its size and mtime — the modules' namespace, the corpus it embeds (source 'bundle'), and their own paths wherever the bundle file lives: engineVersion reads package.json, the approval guard names cli/dev-spec.js as on the modules (got " +
       js({ modules: built.modules, version: Bn.stamp.version, stampsTrue, source: E2.builtinCorpusSource(), cmd: [apCmd(E), apCmd(E2)] }) + ")");
+    // Self-contained: every relative require of a bundled module, at load time or on first use (doctor.js / files.js → probe.js,
+    // guards.js → latin1-scan.js), names a bundled module — the bundle opens no mcp/lib module from disk (its point on a slow file
+    // system). operations.js, the surfaces' table, is no engine module.
+    {
+      const files = B.bundledFiles();
+      const outside = [];
+      for (const rel of files) {
+        const src = fs.readFileSync(path.join(libDir, ...rel.split("/")), "utf8").split("\n").filter((l) => !/^\s*(?:\/\/|\/?\*)/.test(l)).join("\n"); // code lines
+        for (const m of src.matchAll(/\brequire\((["'])(\.\.?\/[^"']+)\1\)/g)) {
+          const key = path.posix.normalize(path.posix.join(path.posix.dirname(rel), m[2].endsWith(".js") ? m[2] : m[2] + ".js"));
+          if (!files.includes(key)) outside.push(rel + " → " + m[2]);
+        }
+      }
+      all("1.27 bundle: self-contained — every relative require of a bundled module names a bundled one (got " + js({ outside, files: files.length }) + ")", {
+        none: () => outside.length === 0, helpers: () => files.includes("probe.js") && files.includes("latin1-scan.js"),
+        surfaces: () => !files.includes("operations.js") && !files.includes("spec.js") && !files.includes("prompts-resources.js"),
+      });
+    }
 
     // The facade takes a bundle only with DEV_SPEC_BUNDLE=1 and only while it is current. On the clone (no bundle of its own):
     // none → the modules; one built for it → the bundle (no engine module file loaded); unset or 0 → the modules; an invalid

@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * dev-spec-driven engine — project-defined track packs (.specs/tracks/<name>/, 1.15).
+ * dev-spec-driven engine — project-defined track packs (.specs/tracks/<name>/).
  * Load and validate a pack (cached per call and across calls), the pack registry the track accessors read (tracks.js), the
  * missing and legacy packs (ghost markers, reserved names / markers), render a pack's blocks (design sections, criteria, task
  * block, test rows, checklist items, steering stub), its placeholder corpus; spec_tracks. Guide: references/project-tracks.md.
@@ -27,7 +27,7 @@ function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, existsCa
   trackAcIds, trackMarker, trackTaskHeading, VALID_TRACKS, writeIfAbsent, nextTaskNumber } = E); }
 
 // ---------------------------------------------------------------------------
-// Project-defined tracks (1.15) — track packs in .specs/tracks/<name>/
+// Project-defined tracks — track packs in .specs/tracks/<name>/
 // ---------------------------------------------------------------------------
 // Six tracks are built in; a project adds its own domain rigor (+a11y, +mobile, +dbmigration…) as a folder:
 // .specs/tracks/<name>/track.json (JSON — `//` and `/* */` comments allowed) + optional markdown fragments: requirements.md
@@ -113,7 +113,7 @@ function stripJsonComments(text) {
 // items: { frel, abs, name, lang, state: "file" (+ size) | "linked" (a link, or a folder where a file belongs) | "unknown" }. Every
 // allowlisted file is lstat'ed: a regular file, never a link. Its folder chain is already checked (.specs/tracks/ is no link, the pack
 // folder's real path is inside .specs/, a <lang>/ folder is no link), so a regular file's real path stays inside too — no per-file
-// realpath (F4 review R9: it was the loader's biggest cost). sig: every entry with size / mtime / ctime / inode — the key of the
+// realpath (it was the loader's biggest cost). sig: every entry with size / mtime / ctime / inode — the key of the
 // cross-call pack cache (PACK_CACHE): an edit changes it and is picked up by the next call.
 function packScan(dir, rel) {
   const items = [], sig = [];
@@ -182,7 +182,7 @@ function packTableRows(text) {
       if (RE_TABLE_SEPARATOR.test((lines[i + 1] || "").trim())) return; // the header row
     }
     if (RE_TABLE_SEPARATOR.test(t)) return;
-    // (1.25.1) a "\|" is a pipe inside a cell (GFM; tableCells' rule) — "a \| b" in a Description split the row into seven cells
+    // a "\|" is a pipe inside a cell (GFM; tableCells' rule) — "a \| b" in a Description split the row into seven cells
     const cells = t.slice(1, t.endsWith("|") && !t.endsWith("\\|") && t.length > 1 ? -1 : undefined).split(/(?<!\\)\|/).map((c) => c.trim());
     if (cells.length !== 6) bad.push(i + 1);
     else rows.push({ cells, line: i + 1 });
@@ -259,7 +259,7 @@ function packLocalized(v, field, ok, rule, jrel, err, warn) {
 }
 
 // One pack folder → { entry, pack?, problems } — pack only when it is valid. A folder whose scan (packScan's sig) is unchanged since
-// an earlier call is served from PACK_CACHE (F4 review R9: 20 packs × 4 languages cost ~100 ms per call); its real path is checked
+// an earlier call is served from PACK_CACHE (20 packs × 4 languages cost ~100 ms per call); its real path is checked
 // every time.
 const PACK_CACHE = new Map(); // readCacheKey(pack dir) → { sig, entry, pack, problems } — across calls, bounded
 function loadPack(dir, folder, rel, realSpecs) {
@@ -298,7 +298,7 @@ function loadPackScan(scan, folder, rel, problem) {
   if (jf.tooBig) { err(jrel, "too-big", { file: PACK_JSON, max: PACK_LIMITS.jsonBytes }); return done(); }
   const stripped = stripJsonComments(jf.text);
   let j = null;
-  // The reason is a code the project's language renders (review 5: V8's JSON.parse text is English), and a syntax error names its
+  // The reason is a code the project's language renders (V8's JSON.parse text is English), and a syntax error names its
   // line — stripJsonComments keeps the line breaks, so the parser's position maps to the file's line.
   if (stripped == null) { err(jrel, "json-invalid", { why: "comment" }); return done(); }
   try {
@@ -326,7 +326,7 @@ function loadPackScan(scan, folder, rel, problem) {
     else token = bare;
   }
 
-  // A rule is a code (+ its limit) — trackPacks.rule renders it in the project's language (review 5)
+  // A rule is a code (+ its limit) — trackPacks.rule renders it in the project's language
   const textRule = { id: "text", max: PACK_LIMITS.textLen };
   const title = packLocalized(j.title, "title", (s) => packTextOk(s, PACK_LIMITS.textLen), textRule, jrel, err, warn);
   let description = null;
@@ -368,7 +368,7 @@ function loadPackScan(scan, folder, rel, problem) {
       // (a section name keys the localized-name lookups: never an Object.prototype key such as "constructor")
       const names = packLocalized(s.name, f + ".name", (x) => packTextOk(x, PACK_LIMITS.textLen) && !PROTO_KEYS.has(x.trim().toLowerCase()), textRule, jrel, err, warn);
       // A name / synonym is matched as headingMatches reads a heading: after its lead (numbering "2 " / "1.2 ", "Section 3",
-      // an emoji, a dash) — the same strip here, or "2 Offline Modes" could never match its own heading (F4 review R4). Nothing
+      // an emoji, a dash) — the same strip here, or "2 Offline Modes" could never match its own heading. Nothing
       // left after the lead → invalid; a lead stripped → a warning (it is ignored when matching).
       let leadWarned = false;
       const key = (x, field) => {
@@ -404,11 +404,11 @@ function loadPackScan(scan, folder, rel, problem) {
       }
       const clash = sections.find((o) => nameKeys.some((x) => o.nameKeys.includes(x)));
       if (clash) { err(jrel, "section-duplicate", { name: names.en }); return; }
-      // Every pack synonym is MARKER-BOUND (F4 review R7): it names the section only on a heading carrying the pack's marker, or on an
+      // Every pack synonym is MARKER-BOUND: it names the section only on a heading carrying the pack's marker, or on an
       // unmarked heading nested under one — never the core design's own "## Architecture" / "## Testing Strategy". (`loose` is kept
       // for symmetry with the built-in tables; for a pack every synonym already behaves as one.)
       const all = [...new Set([...nameKeys, ...syn, ...loose])];
-      // 1.24 review 6 (F7): two sections one heading can answer — a key equal to, a word-prefix of or inflected from another section's
+      // two sections one heading can answer — a key equal to, a word-prefix of or inflected from another section's
       // (synonymsOverlap — headingTextMatches' rule): "## [MOB] Offline Sync" filled "Offline" too, so its own section could go. An error.
       let overlap = null;
       for (const o of sections) { for (const y of o.syn) { const x = all.find((k) => synonymsOverlap(k, y)); if (x) { overlap = { o, heading: x.length >= y.length ? x : y }; break; } } if (overlap) break; }
@@ -463,7 +463,7 @@ function loadPackScan(scan, folder, rel, problem) {
         const m = v.match(/^(ac|t)(\d{1,3})$/);
         if (!m) continue;
         const max = m[1] === "ac" ? nAc : fl === "tasks.md" ? nT : 0;
-        // Named with the language context and where the count comes from (F4 review R10): a root tasks.md checked for the pt/
+        // Named with the language context and where the count comes from: a root tasks.md checked for the pt/
         // features reads pt/requirements.md's criteria.
         const from = m[1] === "ac" ? (req ? req.rel : "") : fl === "tasks.md" ? (plan ? plan.rel : req ? req.rel : "") : "";
         if (+m[2] < 1 || +m[2] > max) err(fr.rel, "fragment-ref", { file: fl, ref: "{{" + v + "}}", n: max, ctx, from, kind: m[1] });
@@ -554,14 +554,14 @@ function packMarkersFor(tracks) {
 // The track packs a feature once used that the project lacks now (this engine call): [[name, marker]] — their sections, criteria
 // and task blocks are INACTIVE like a removed track's (inactiveMarkerLines / inactiveTaskLines). Filled by detectTracks from each
 // feature's .state.json packMarkers — EVERY recorded pack that is no valid pack now, whether the feature still lists it or turned
-// it off before the pack went (F4 review R1: an off-then-deleted pack's sections came back to life); a marker that is a valid
+// it off before the pack went (an off-then-deleted pack's sections came back to life); a marker that is a valid
 // pack's or reserved is never one. Dropped with the read-cache scope.
 function noteGhostPacks(st) {
   if (!CTX.READ_CACHE || !isObj(st) || !isObj(st.packMarkers)) return;
   const valid = allTracks();
   for (const n of Object.keys(st.packMarkers)) {
     const m = st.packMarkers[n];
-    // (a pre-1.17 pack named like a built-in track — 'dist' — is a missing pack too: legacyPackName, 1.17 D review)
+    // (a pre-1.17 pack named like a built-in track — 'dist' — is a missing pack too: legacyPackName)
     if (typeof m !== "string" || !RE_PACK_NAME.test(n) || (valid.includes(n) && !legacyPackName(st, n))) continue;
     const token = m.length > 2 && m.startsWith("[") && m.endsWith("]") ? m.slice(1, -1) : "";
     if (!RE_PACK_MARKER.test(token) || RE_PACK_MARKER_RESERVED.test(token) || packRegistry().byToken.has(token)) continue;
@@ -571,14 +571,14 @@ function noteGhostPacks(st) {
 }
 const ghostMarkers = () => (CTX.GHOST_MARKERS ? [...CTX.GHOST_MARKERS] : []);
 // A saved (non-built-in) track name that is a track pack's: a valid pack now, or one recorded in the state's packMarkers (a pack the
-// feature used) — never a reserved word (F4 review R6: a hand-typed "gdpr" / "security" / a typo is no pack; the list then falls
-// back to the files as in 1.14) — except a pre-1.17 pack of a name reserved since (legacyPackName, 1.17 D review).
+// feature used) — never a reserved word (a hand-typed "gdpr" / "security" / a typo is no pack; the list then falls
+// back to the files as in 1.14) — except a pre-1.17 pack of a name reserved since (legacyPackName).
 function savedPackName(st, n) {
   if (legacyPackName(st, n)) return true;
   if (VALID_TRACKS.includes(n) || !RE_PACK_NAME.test(n) || packReservedName(n)) return false;
   return isPackTrack(n) || (isObj(st) && isObj(st.packMarkers) && Object.prototype.hasOwnProperty.call(st.packMarkers, n));
 }
-// A track pack from before 1.17 whose name is reserved now (1.17 D review): 1.15 / 1.16 accepted a pack named 'dist', 'kafka',
+// A track pack from before 1.17 whose name is reserved now: 1.15 / 1.16 accepted a pack named 'dist', 'kafka',
 // 'consistency', 'microservices', 'distributed'… — 1.17 reserves them (the built-in +dist track and its TRACK_ALIASES), so the
 // pack is invalid ('name-reserved'). A feature that used it recorded the name in .state.json packMarkers (only a VALID pack is
 // ever recorded there): it stays that feature's MISSING pack — inactive, listed by doctor's track-pack-missing with the reason
@@ -589,7 +589,7 @@ function legacyPackName(st, n) {
   return typeof n === "string" && RE_PACK_NAME.test(n) && packReservedName(n) && isObj(st) && isObj(st.packMarkers) &&
     Object.prototype.hasOwnProperty.call(st.packMarkers, n);
 }
-// A track pack whose MARKER is a built-in track's now (1.19 T review): 1.15–1.18 accepted a pack of any name with the marker [UI],
+// A track pack whose MARKER is a built-in track's now: 1.15–1.18 accepted a pack of any name with the marker [UI],
 // [API] or [OBS] (before 1.17, [DIST]) — 'webui' with [UI], 'contracts' with [API]. The marker is reserved since, so the pack is
 // invalid ('marker-reserved') and the feature's missing pack; its '## [UI] …' headings would pass for the built-in track's. → the
 // built-in track whose marker the feature's .state.json packMarkers records for pack n (n no valid pack now), else null. Adding
@@ -602,14 +602,14 @@ function legacyPackMarkerTrack(st, n) {
   for (const tr of MARKER_TRACKS) if (TRACK_MARKER[tr] === m) return tr;
   return null;
 }
-// The dev-spec release that reserved a pack name a feature still records (1.19 T): the +api / +ui / +obs names and their aliases
+// The dev-spec release that reserved a pack name a feature still records: the +api / +ui / +obs names and their aliases
 // became reserved in 1.19, +dist's in 1.17 — the doctor / upgrade messages say "a track pack from before <that release>".
 const TRACK_RESERVED_SINCE = { dist: "1.17", api: "1.19", ui: "1.19", obs: "1.19", data: "1.21" };
 function packReservedSince(n) {
   const tr = Object.prototype.hasOwnProperty.call(TRACK_ALIASES, n) ? TRACK_ALIASES[n] : n;
   return Object.prototype.hasOwnProperty.call(TRACK_RESERVED_SINCE, tr) ? TRACK_RESERVED_SINCE[tr] : "1.17";
 }
-// A feature's saved tracks naming a pack the project no longer has (deleted, now invalid, or — 1.17 — its name reserved since):
+// A feature's saved tracks naming a pack the project no longer has (deleted, now invalid, or — its name reserved since):
 // inactive, kept in .state.json.
 function missingPackTracks(dir) {
   const st = readJson(statePath(dir)).data;
@@ -689,7 +689,7 @@ function packRequirementsBlock(pack, lang, existing, vars) {
   return lines.join("\n");
 }
 // requirements.md + a pack's criteria block, placed right after the US-1 criteria (before the next story / section heading) —
-// appended at the end when the text has no US-1 criterion. The heading is a REAL one: never inside an HTML comment (F4 review R3 —
+// appended at the end when the text has no US-1 criterion. The heading is a REAL one: never inside an HTML comment (
 // a template's `<!-- Add more stories like this: ### US-2 … -->` swallowed the block) nor fenced code.
 function insertPackRequirements(text, block) {
   const lines = text.split("\n");
@@ -719,7 +719,7 @@ function packPlanRows(planText, acs) {
 // The task block — `## Story US-1 — [MARKER] <title>`, numbered after the last task — or null when tasks.md already has it (a
 // heading carrying the marker). Each task cites the pack's criteria as requirements.md defines them (trackAcIds; none yet → the
 // track's criterion slot) and, on a +tdd plan with the pack's rows, makes their tests green.
-// start: the first task's number (spec_add_track: nextTaskNumber over tasks.md AND the state — 1.25.1); default: after tasks.md's last.
+// start: the first task's number (spec_add_track: nextTaskNumber over tasks.md AND the state); default: after tasks.md's last.
 function packTaskBlock(pack, tasksText, reqText, planText, lang, vars, first) {
   if (trackTaskHeading(pack.name, tasksText)) return null;
   const P = i18n.msg(lang).trackPacks;
@@ -796,10 +796,10 @@ function trackSteeringStub(file, lang) {
 
 // The pack blocks as template corpus (placeholder detection): every text a valid pack scaffolds, in every language — its brackets,
 // code-span slots and task lines are template text until a feature edits them. Read straight from the pack's sources (the section
-// guidance, the fragments' items / rows, the i18n defaults) — never by rendering whole blocks (F4 review R9) — with {{title}} /
+// guidance, the fragments' items / rows, the i18n defaults) — never by rendering whole blocks — with {{title}} /
 // {{marker}} filled in and the FEATURE's values ({{name}} {{slug}} {{acN}} {{acs}} {{tN}} {{tests}}) kept as variables: a key holding
 // one is a LINEAR wildcard (packWildcard → wildcardMatch, the project templates' rule), so `[the {{name}} screens]` still reads as
-// a slot once it became `[the Login screens]` (F4 review R2). Built on first use per call and cached across calls by the packs' scan
+// a slot once it became `[the Login screens]`. Built on first use per call and cached across calls by the packs' scan
 // signatures (PACK_CORPUS_CACHE — any edit to a pack changes the key).
 const RE_PACK_WILD_VAR = /\{\{\s*(?:ac\d{1,3}|acs|t\d{1,3}|tests|name|slug)\s*\}\}/i;
 const RE_PACK_WILD_VAR_G = new RegExp(RE_PACK_WILD_VAR.source, "gi");
@@ -859,7 +859,7 @@ function localizePackProblem(p, K) {
   return out;
 }
 function trackPacks(projectDir, action, opts = {}) {
-  // 1.21 F2 — the project's classifier signal overrides (.specs/classifier.json): an action of this tool, not a tool of its own
+  // the project's classifier signal overrides (.specs/classifier.json): an action of this tool, not a tool of its own
   if (action != null && String(action).trim().toLowerCase() === "signals") return signalOverrides(projectDir, opts.op, opts);
   const pl = projectLang(projectDir);
   let lang = null;
