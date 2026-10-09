@@ -3,115 +3,192 @@
 /**
  * dev-spec-driven i18n — English (en) — the canonical reference: PT and ES mirror its structure (same sections, IDs, markers and slots).
  *
- * Every table's en block: the artifact builders (BUILD), the steering stubs, the evals README, the tool messages (MSG
+ * Every table's en block: the layouts' text (`text` — mcp/lib/i18n.js LAYOUTS render it), the artifact builders it writes
+ * whole (BUILD), the steering stubs, the evals README, the tool messages (MSG
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
-const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded, stopLineClaim } = require("./common.js"); // load time
+const { DEV_SPEC, stopLineClaim } = require("./common.js"); // load time
 // The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
 let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
 
 // ===========================================================================
-// Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
-// internally consistent (every template AC planned and tasked) — the gates would otherwise flag the scaffold.
+// The layouts' text — mcp/lib/i18n.js LAYOUTS (and approvalAction) render it, the same structure in every language: what
+// each scaffold section SAYS, never which sections come, in what order or under which track / size. A value with a slot inside
+// a sentence is a function of it. pt-BR derives from the rendered pt output (toPtBr over each builder's whole text).
 // ===========================================================================
-const build = {
-    classification(a) {
-      const sig = a.signals || { tdd: [], saas: [], ai: [] };
-      const sigLine = (t) =>
-        a.tracks.includes(t)
-          ? `- **+${t}:** ${[...new Set(sig[t] || [])].slice(0, 6).join(", ") || "[signal]"} — [why it applies]`
-          : null;
-      const signalLines = signalTracks(a.tracks).map(sigLine).filter(Boolean).join("\n") || "- none beyond core";
-      return (
-`# Classification: ${a.name}
-
-## Mode
-Spec
-
-## Active Tracks
-${a.label}
-
-## Signals
-${signalLines}
-
-## Blast Radius
-[What breaks if this is wrong? Who is affected? Recoverable? How fast?]
-${a.tracks.includes("saas") ? "\n## Hot Path?\n[Yes/No — if yes, load-test.md is required.]\n" : ""}${a.tracks.includes("ai") ? "\n## Autonomy Level\n[Advisory | Semi-autonomous | Autonomous]\n" : ""}${a.tracks.includes("saas") || a.tracks.includes("ai") ? "\n## Volume / Cost Projection\n- Launch / 6mo / 2yr: [load, ~$/month]\n" : ""}
-## Compliance Tags
-[GDPR | PCI | HIPAA | SOC2 | none]
-
-${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
-      );
+const text = {
+  // trackDesignBlock — each built-in track's design sections, in order: [heading, guidance]. The layout writes "## <marker>
+  // <heading>" (the track's [SaaS] / [AI] … marker), this TODO line and the guidance; +tdd's Testability Notes take neither.
+  designTodo: "> **TODO** — replace with real values (remove this line when done).",
+  designBlocks: {
+    tdd: [
+      ["Testability Notes", `- **Seams:** [where test doubles inject]
+- **Determinism:** [clocks, randomness, IDs abstracted how]
+- **Side effects to isolate:** [network, fs, time, external services]
+- **Test data strategy:** [factories, fixtures, seeds]`],
+    ],
+    saas: [
+      ["Performance Budget", "- P50/P95/P99 latency targets · max DB query time · max memory/request · throughput target."],
+      ["Scale Design", "- Concurrent users (launch/6mo/2yr) · data growth · hot paths · caching (TTL+invalidation) · queue strategy · indexes · sharding."],
+      ["Multi-tenancy Model", "- Isolation (pooled/siloed/bridged) · how tenant_id is enforced · noisy-neighbor limits · export/delete (GDPR)."],
+      ["Observability", "- Metrics (name each) · structured logs (events+fields) · traces (spans) · alerts (metric→threshold→who) · dashboard panels."],
+      ["Cost Envelope", "- $/1000 users/month (compute/storage/network/3p) · cost-critical paths · cost metric + alert threshold."],
+    ],
+    ai: [
+      ["1. Model Strategy", "Primary / fallback model · features used · context-window usage · why not another model."],
+      ["2. Prompt Architecture", "System prompt · user template (variables) · few-shot source · versioning (prompts/vN.md, not inline)."],
+      ["3. Token Economics", "Typical in/out tokens · cost/call · cost/user action · cost/1000 users/month · regression threshold."],
+      ["4. Latency Budget", "Time to first token · total response time · end-to-end user-perceived latency."],
+      ["5. Eval Strategy", "Golden set · adversarial set · regression set · grading method · ship threshold · eval frequency."],
+      ["6. Safety & Abuse", "Injection defense · content moderation · jailbreak resistance · PII handling · rate limiting."],
+      ["7. Fallback & Degradation", "Provider outage · rate-limit hit · garbage output detection · cost circuit breaker."],
+      ["8. Observability for AI", "Per-call logging (prompt version, model, tokens, cost, latency, ids) · metrics · sampled prompts · traces · alerts."],
+      ["9. Model Lifecycle", "Pinned IDs · deprecation awareness · eval-gated migration plan · pin policy."],
+      ["10. Multi-modality (if applicable)", "Input types · size/count limits · token counting per type · validation pipeline."],
+    ],
+    sec: [
+      ["Threat Model", "- Assets · actors · trust boundaries · entry points · STRIDE per component / boundary (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) → mitigation · residual risk."],
+      ["Security Requirements", "- Target OWASP ASVS level (L1 / L2 / L3) and why · the ASVS controls and OWASP Top 10 risks in scope → how the design meets each."],
+      ["Authentication & Authorization", "- Who may do what (role / permission matrix) · authentication (session, token, MFA) · object-level checks, deny by default · session lifetime and revocation."],
+      ["Secrets & Key Management", "- Secrets the feature needs · where they live (a secret store — never code, logs or tickets) · rotation · encryption at rest / in transit and who owns the keys."],
+      ["Security Testing", "- SAST · dependency and secret scanning · DAST when exposed · one abuse-case test per material threat — all runnable locally before the merge."],
+    ],
+    privacy: [
+      ["Personal Data Inventory", "- Each personal data field · category (special categories — Art. 9 — flagged) · source · where it is stored · who can read it."],
+      ["Lawful Basis & Purpose", "- Purpose per processing activity · its lawful basis (Art. 6: consent, contract, legal obligation, vital interests, public task, legitimate interests) · how consent is recorded and withdrawn."],
+      ["Retention & Deletion", "- Retention period per data category and why · the deletion / anonymization job · backups and logs · legal holds."],
+      ["Data Subject Rights", "- Access · rectification · erasure · restriction · portability · objection — how each request is verified, served and answered within one month."],
+      ["Processors & International Transfers", "- Processors / sub-processors and their Art. 28 contracts · where the data is stored and processed · transfers outside the EEA and their safeguard (adequacy decision, standard contractual clauses)."],
+      ["DPIA (when required — Art. 35)", "- Required? (high risk: large-scale special categories, systematic monitoring, profiling with legal effects…) · if yes: risks → measures → residual risk; if not: why not."],
+    ],
+    dist: [
+      ["Consistency Model", "- What must be atomic (one transaction) · is ACID required, at which isolation level and why · where consistency is strong and where eventual · the staleness the business accepts · read-your-writes needs."],
+      ["Cross-system Writes", "- Every write that touches more than one system (DB + broker, DB + cache, DB + external API) → its mitigation: transactional outbox (+ relay / CDC), inbox, saga with compensations — or the risk explicitly accepted, and by whom."],
+      ["Delivery & Idempotency", "- Delivery guarantee (at-least-once) · idempotency keys or natural idempotency · deduplication (inbox table, unique constraint) · retry policy (exponential backoff + jitter, max attempts, what is never retried) · DLQ / poison messages · ordering needs."],
+      ["Concurrency", "- Race conditions on each shared record · optimistic (version column) or pessimistic (SELECT … FOR UPDATE) locking · unique constraints · isolation anomalies ruled out (lost update, write skew) · lock timeouts and deadlocks."],
+      ["Failure Modes", "- Partial failures and timeouts per dependency · what happens when each dependency is down (degrade, queue, fail fast) · network partitions: the CAP / PACELC trade-off chosen · recovery and reconciliation (replay, compensation, a reconciliation job)."],
+    ],
+    api: [
+      ["API Contract", "- Style (REST / GraphQL / gRPC) · resources and operations (method + path, or query / mutation / RPC) · request and response schemas · where the contract file lives (OpenAPI document, .proto files, GraphQL schema) — written first, reviewed before the handlers · auth scopes per operation."],
+      ["Versioning & Compatibility", "- Versioning strategy (URL / header / date) · what is a breaking change here (a removed or renamed field, a new required input, a changed type or status code, tighter validation) · additive-only changes within a version · deprecation: the Deprecation / Sunset headers, the notice period, how clients are told."],
+      ["Error Model", "- Error format: application/problem+json (RFC 9457 — type, title, status, detail, instance) · the stable error codes clients may branch on · validation errors per field · the status codes each operation returns · no stack trace or internal detail in a response."],
+      ["Pagination, Idempotency & Concurrency", "- Pagination: an opaque cursor with a stable order and a maximum page size (or offset, and why) · Idempotency-Key on non-idempotent creates (its scope, how long a key is kept, a reused key with another body → 422) · ETag / If-Match on updates (412 on a stale version) · long-running operations (202 + a status resource)."],
+      ["Rate Limits & Quotas", "- Limits per client / key / tenant and their windows · 429 with Retry-After and the RateLimit headers · quotas and how a client reads what it has left · what is exempt."],
+    ],
+    ui: [
+      ["Design System Usage", "- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours."],
+      ["UI States", "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept)."],
+      ["Accessibility", "- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass)."],
+      ["Responsiveness & i18n", "- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue."],
+      ["UI Performance Budget", "- Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users)."],
+    ],
+    obs: [
+      ["SLIs & SLOs", "- The user journeys that matter → their SLIs (availability, latency, correctness) · the SLO of each over a window (e.g. 99.5 % of valid requests under 800 ms, 28 days) · the error budget and what happens when it is spent · burn-rate alerts (fast and slow)."],
+      ["Telemetry", "- Metrics (RED per endpoint / USE per resource, one business counter; bounded label cardinality) · structured logs with a correlation / trace ID — no personal data · traces with the context propagated across calls and queues (OpenTelemetry) · the metrics each task emits."],
+      ["Alerting & Runbooks", "- Each alert: the symptom (an SLO burn, not a cause), threshold, severity and who is paged · every page links a runbook (triage, mitigate, verify) · what is a ticket, not a page · dashboards per journey."],
+      ["Rollout & Rollback", "- Feature flags (who owns each, when it is removed) · the canary / progressive rollout steps and the metrics that gate each step · rollback criteria (e.g. an error rate above the baseline) and how long a rollback takes · migrations that can be rolled back (expand / contract)."],
+      ["Health & Capacity", "- Liveness vs readiness checks (what each verifies — never a dependency in liveness) · the capacity signals (saturation, queue depth, pool usage) and their thresholds · the expected load and where the first bottleneck is."],
+    ],
+    data: [
+      ["Data Contracts & Schema Evolution", "- Each dataset produced or consumed: its producer, its consumers and the contract's owner · the schema (columns, types, nullability, keys, units) and where it lives (a schema file, a dbt model's YAML, a registry) · the compatibility rule (additive changes only; a removed or renamed column → a new version with a deprecation window) · how a breaking change is caught before it ships."],
+      ["Data Quality", "- The checks per dataset: not-null keys, uniqueness, accepted values and ranges, referential integrity, row-count and volume anomalies, freshness · where each runs (at ingestion, after each transformation, before publishing) · what a failure does (quarantine the rows, stop the load, alert the owner) — no bad row reaches a consumer silently."],
+      ["Pipeline Idempotency & Backfills", "- The unit of work (a partition: a day, an hour, a batch ID) and how a re-run replaces it (overwrite the partition or MERGE on a key — never a blind append) · late-arriving data: the lookback window and how late rows are merged · the backfill procedure (range, parallelism, cost, a dry run, who approves it) · large volumes: references/distributed-data-patterns.md."],
+      ["Lineage & Ownership", "- Sources → transformations → consumers (a lineage diagram or the dbt DAG) · the owner of each dataset and who is told when it breaks · the freshness SLA consumers rely on · the history each table keeps (slowly changing dimensions: type 1 overwrites, type 2 keeps versions)."],
+      ["Retention & Cost", "- Retention per dataset and storage tier (the raw zone vs the curated one; hot / warm / cold) — personal data follows references/privacy-track.md · partitioning and clustering so a query scans only what it needs · the expected storage and query cost per month and the alert when it drifts."],
+    ],
+  },
+  // trackTasks — each built-in track's template tasks (none for +tdd — it only adds markers): the story heading and each task's
+  // text, in the order of the layout's TRACK_TASK_PLAN (the criteria each task implements and makes green, its fixed markers).
+  trackTasks: {
+    saas: {
+      heading: "Story US-1 — Observability & Scale",
+      tasks: [
+        "Emit metrics, add dashboard, configure alerts",
+        "Load test — verify performance budget from design.md (hot path only)",
+        "Enforce tenant isolation — every query scoped by tenant_id",
+      ],
     },
-
-    requirements(a) {
-      // Track criteria sit under [SaaS]/[AI] headings: inactive (not a gate, not a placeholder) once the track is off.
-      const saasAc = a.tracks.includes("saas")
-        ? "\n\n#### [SaaS] Acceptance Criteria (EARS)\n5. **US-1.AC-5** — WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT return any record whose tenant_id != A.\n6. **US-1.AC-6** — THE SYSTEM SHALL respond within [N]ms at P95."
-        : "";
-      const aiAc = a.tracks.includes("ai")
-        ? "\n\n#### [AI] Acceptance Criteria (EARS)\n7. **US-1.AC-7** — THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.\n8. **US-1.AC-8** — IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.\n9. **US-1.AC-9** — THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size."
-        : "";
-      const secAc = a.tracks.includes("sec")
-        ? "\n\n#### [SEC] Acceptance Criteria (EARS)\n10. **US-1.AC-10** — IF an unauthenticated request reaches a protected endpoint, THEN THE SYSTEM SHALL reject it with 401 and return no protected data.\n11. **US-1.AC-11** — IF an authenticated user requests a resource they are not authorized to access, THEN THE SYSTEM SHALL deny it with 403 and record a security audit event.\n12. **US-1.AC-12** — THE SYSTEM SHALL NOT include secrets, credentials, session tokens or stack traces in any response or log entry."
-        : "";
-      const privacyAc = a.tracks.includes("privacy")
-        ? "\n\n#### [PRIVACY] Acceptance Criteria (EARS)\n13. **US-1.AC-13** — WHEN a data subject requests a copy of their personal data, THE SYSTEM SHALL export it in a structured, machine-readable format within one month.\n14. **US-1.AC-14** — WHEN a data subject's erasure request is accepted, THE SYSTEM SHALL delete or irreversibly anonymize their personal data in every store within one month.\n15. **US-1.AC-15** — WHEN a record's retention period ends, THE SYSTEM SHALL delete or anonymize it."
-        : "";
-      const distAc = a.tracks.includes("dist")
-        ? "\n\n#### [DIST] Acceptance Criteria (EARS)\n16. **US-1.AC-16** — IF publishing [the event] fails after the database transaction commits, THEN THE SYSTEM SHALL still deliver it later, at least once, without losing it (transactional outbox).\n17. **US-1.AC-17** — WHEN the same message is delivered more than once, THE SYSTEM SHALL apply its effect exactly once (idempotent consumer).\n18. **US-1.AC-18** — WHEN two requests update the same [entity] concurrently, THE SYSTEM SHALL NOT lose either update (optimistic locking or a unique constraint).\n19. **US-1.AC-19** — IF [the dependency] is unavailable, THEN THE SYSTEM SHALL [degrade / retry with exponential backoff and jitter] and SHALL NOT block [the critical path]."
-        : "";
-      const apiAc = a.tracks.includes("api")
-        ? "\n\n#### [API] Acceptance Criteria (EARS)\n20. **US-1.AC-20** — IF a request omits [a required field] or sends it malformed, THEN THE SYSTEM SHALL respond 400 with an application/problem+json body that names the field and carries a stable error code.\n21. **US-1.AC-21** — WHEN a client repeats [a create request] with the same Idempotency-Key and body, THE SYSTEM SHALL return the first response without applying the effect again.\n22. **US-1.AC-22** — IF an update carries an If-Match ETag that no longer matches the resource, THEN THE SYSTEM SHALL respond 412 and leave the resource unchanged.\n23. **US-1.AC-23** — IF a change to the contract would break an existing client, THEN THE SYSTEM SHALL ship it only in a new [API version] and keep the current version working until its announced Sunset date."
-        : "";
-      const uiAc = a.tracks.includes("ui")
-        ? "\n\n#### [UI] Acceptance Criteria (EARS)\n24. **US-1.AC-24** — WHEN a user operates [the view] with the keyboard alone, THE SYSTEM SHALL make every action reachable and operable in a logical focus order, with a visible focus indicator.\n25. **US-1.AC-25** — IF a submitted form has invalid fields, THEN THE SYSTEM SHALL keep every value the user entered, identify each error in text next to its field and move focus to an error summary.\n26. **US-1.AC-26** — WHILE [the list] has no items, THE SYSTEM SHALL show an empty state that explains why and offers the next action.\n27. **US-1.AC-27** — IF loading [the data] fails, THEN THE SYSTEM SHALL show an error message with a Retry action and keep the content already shown."
-        : "";
-      const obsAc = a.tracks.includes("obs")
-        ? "\n\n#### [OBS] Acceptance Criteria (EARS)\n28. **US-1.AC-28** — THE SYSTEM SHALL emit [the request metric] with its latency, outcome and a correlation ID for every [request], and log each error with that correlation ID and no personal data.\n29. **US-1.AC-29** — WHEN the error-budget burn rate of [the SLO] exceeds [14.4]× over [one hour], THE SYSTEM SHALL page the on-call engineer with a link to the runbook.\n30. **US-1.AC-30** — IF the canary's error rate exceeds [the baseline] by [N] percentage points, THEN THE SYSTEM SHALL stop the rollout and roll back to the previous version automatically.\n31. **US-1.AC-31** — WHILE [a dependency] is unavailable, THE SYSTEM SHALL report itself not ready (readiness check) while staying live, and recover without a restart once it is back."
-        : "";
-      const dataAc = a.tracks.includes("data") // +data (1.21 F4)
-        ? "\n\n#### [DATA] Acceptance Criteria (EARS)\n32. **US-1.AC-32** — WHEN a batch contains a row that violates [a data-quality rule], THE SYSTEM SHALL quarantine that row with the rule it failed and SHALL NOT load it into [the target table].\n33. **US-1.AC-33** — IF the job is re-run for a partition that was already loaded, THEN THE SYSTEM SHALL produce the same result as a single run, with no duplicate and no missing rows (an idempotent re-run and backfill).\n34. **US-1.AC-34** — IF the newest data in [the table] is older than [its freshness SLA], THEN THE SYSTEM SHALL alert [the owner] and mark the table stale for its consumers.\n35. **US-1.AC-35** — WHEN the schema of [the source] changes, THE SYSTEM SHALL accept an additive, backward-compatible change and SHALL reject a breaking change (a removed or renamed column, a narrowed type) before any row reaches [the consumers]."
-        : "";
-      // 1.21 F5 — size S: one story, two core criteria (WHEN · IF…THEN), every track criterion kept; no US-2, edge-case, NFR or
-      // assumptions block (the IF…THEN criterion is the error path). M / L / no size: the full template below.
-      if (a.size === "s") {
-        return (
-`# Feature: ${a.name}
-
-## Summary
-${a.summary || "[1-2 sentences: what this does and why it matters]"}
-
-## User Story
-
-### US-1 (P1 — MVP): [Story Title]
-**As a** [role], **I want** [capability], **so that** [benefit].
-**Independent Test:** Can be fully tested by [specific action] and delivers [specific value].
-
-#### Acceptance Criteria (EARS)
-1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
-2. **US-1.AC-2** — IF [error condition] THEN THE SYSTEM SHALL [recovery]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}${dataAc}
-
-## Success Criteria (measurable, technology-agnostic)
-- **SC-001** — [e.g., 90% of users complete [task] in under [N] seconds]
-
-## Out of Scope
-- [What this feature does NOT include]
-
-<!-- Size S: one story. Every AC contains SHALL and is testable; keep stable AC IDs. Mark any ambiguity inline with a
-     bracketed marker like  [NEEDS CLARIFICATION: which provider?] . A second story, edge cases or NFRs mean size m. -->
-`
-        );
-      }
-      return (
-`# Feature: ${a.name}
-
-## Summary
-${a.summary || "[1-2 sentences: what this does and why it matters]"}
-
-## User Stories (prioritized — each independently testable)
+    ai: {
+      heading: "Story US-1 — AI",
+      tasks: ["Prompt v1 + eval harness wiring (separate task per prompt change)", "Cost monitoring — emit cost metric + alert"],
+    },
+    sec: {
+      heading: "Story US-1 — Security",
+      tasks: [
+        "Threat model the feature (STRIDE per trust boundary); record each mitigation in design.md",
+        "Enforce authentication and object-level authorization on every endpoint (deny by default)",
+        "Keep secrets out of code, responses and logs — secret store + log redaction",
+        "Security testing — SAST, dependency audit and the abuse-case tests, runnable locally",
+      ],
+    },
+    privacy: {
+      heading: "Story US-1 — Privacy",
+      tasks: [
+        "Personal data inventory + lawful basis per purpose in design.md; update the privacy notice",
+        "Data subject requests — access/export and erasure end to end, across every store and processor",
+        "Retention — scheduled deletion/anonymization of records past their retention period",
+      ],
+    },
+    dist: {
+      heading: "Story US-1 — Data Consistency",
+      tasks: [
+        "Transactional outbox — write the outbox row in the same transaction as the state change; a relay (polling or CDC) publishes it and marks it sent",
+        "Idempotent consumer — an inbox / processed-message table keyed by the message ID, written in the same transaction as the effect",
+        "Concurrency control — a version column (optimistic locking) or a unique constraint; a conflict is an error, never a silent overwrite",
+        "Resilience — timeouts, retries with exponential backoff + jitter (never a non-idempotent call without a key), a DLQ, the degraded path when a dependency is down",
+        "Failure-injection tests — crash between the commit and the publish, duplicate delivery, concurrent updates, a dependency down — runnable locally",
+      ],
+    },
+    api: {
+      heading: "Story US-1 — API Contract",
+      tasks: [
+        "Contract first — the OpenAPI document / .proto files / GraphQL schema in the repo, reviewed before the handlers (the file is this task's Implements marker)",
+        "Error model — every error an application/problem+json body with a stable code; a validation error names each field",
+        "Idempotency and concurrency — an Idempotency-Key on creates (the stored response replayed), ETag / If-Match on updates (412 on a stale version)",
+        "Compatibility gate — a breaking-change diff of the contract against the published version, runnable locally; anything removed is deprecated with a Sunset date",
+        "Contract tests — the implementation checked against the contract (every documented status code, schema and header), runnable locally",
+      ],
+    },
+    ui: {
+      heading: "Story US-1 — User Interface",
+      tasks: [
+        "Build the view from design-system components and tokens — a new component only through the system (documented, reviewed)",
+        "UI states — loading, empty, error with Retry, partial, offline, permission denied, success — per the state matrix in design.md",
+        "Forms and keyboard — values kept on an error, errors in text with a summary, a logical focus order, a visible focus",
+        "Accessibility checks — an automated check (axe or equivalent) runnable locally + a manual keyboard and screen-reader pass (findings in the report)",
+        "Responsiveness, i18n and the performance budget — the breakpoints, text expansion, RTL, locale formats; LCP / INP / CLS within budget",
+      ],
+    },
+    obs: {
+      heading: "Story US-1 — Operability",
+      tasks: [
+        "SLIs, SLOs and burn-rate alerts — defined in code / config next to the service, each alert linked to its runbook",
+        "Telemetry — the metrics, structured logs with the correlation ID (no personal data) and trace spans the design names",
+        "Rollout — a feature flag and a canary / progressive rollout gated on the SLO metrics; automatic rollback on the criteria in design.md",
+        "Health checks — liveness and readiness endpoints (a dependency down → not ready, still live); capacity signals with thresholds",
+        "Operability tests — fault injection (a dependency down, a slow dependency), an alert firing in a staged failure, a rollback drill — runnable locally or in staging",
+      ],
+    },
+    data: {
+      heading: "Story US-1 — Data Pipeline",
+      tasks: [
+        "Data contract first — each dataset's schema (columns, types, nullability, keys), owner and compatibility rule in the repo, reviewed before the transformations",
+        "Data-quality checks — not-null, unique, accepted ranges, row counts and freshness at ingestion and before publishing; a failing row quarantined with its rule, never loaded",
+        "Idempotent loads — each run replaces its partition (overwrite or MERGE on a key, never a blind append); late-arriving rows merged within the lookback window",
+        "Backfill — the procedure for a date range (parallelism, cost, a dry run), rehearsed on one partition and compared with a single run",
+        "Lineage, ownership and retention — sources → transformations → consumers documented, an owner per dataset, the retention and partitioning from design.md applied",
+      ],
+    },
+  },
+  // requirements — the title, the Summary, then the user stories (size S: the one story) up to the core criteria; the active
+  // tracks' criteria (each under "#### <marker> <trackAcsHeading>", numbered and given its TEMPLATE_ACS ID by the layout); the rest.
+  requirements: {
+    title: (name) => `# Feature: ${name}`,
+    summary: "## Summary",
+    summarySlot: "[1-2 sentences: what this does and why it matters]",
+    stories: `## User Stories (prioritized — each independently testable)
 
 Priorities: **P1** = critical, a viable MVP on its own · **P2** = secondary · **P3** = enhancement.
 Each story must deliver standalone value if shipped alone.
@@ -125,9 +202,8 @@ Each story must deliver standalone value if shipped alone.
 1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
 2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
 3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
-4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}${dataAc}
-
-### US-2 (P2): [Story Title]
+4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]`,
+    end: `### US-2 (P2): [Story Title]
 **As a** [role], **I want** [capability], **so that** [benefit].
 **Independent Test:** [how to test this alone]
 
@@ -154,271 +230,108 @@ Outcomes the feature must achieve — business/UX, not implementation. Quantify 
 <!-- EARS: every AC contains SHALL/DEVE/DEBE and is testable; avoid vague terms; keep stable AC IDs.
      Mark any ambiguity inline with a bracketed marker like  [NEEDS CLARIFICATION: which provider?] .
      The design phase is gated — it cannot start while any such marker remains unresolved. -->
-`
-      );
+`,
+    storyS: `## User Story
+
+### US-1 (P1 — MVP): [Story Title]
+**As a** [role], **I want** [capability], **so that** [benefit].
+**Independent Test:** Can be fully tested by [specific action] and delivers [specific value].
+
+#### Acceptance Criteria (EARS)
+1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
+2. **US-1.AC-2** — IF [error condition] THEN THE SYSTEM SHALL [recovery]`,
+    endS: `## Success Criteria (measurable, technology-agnostic)
+- **SC-001** — [e.g., 90% of users complete [task] in under [N] seconds]
+
+## Out of Scope
+- [What this feature does NOT include]
+
+<!-- Size S: one story. Every AC contains SHALL and is testable; keep stable AC IDs. Mark any ambiguity inline with a
+     bracketed marker like  [NEEDS CLARIFICATION: which provider?] . A second story, edge cases or NFRs mean size m. -->
+`,
+    trackAcsHeading: "Acceptance Criteria (EARS)",
+    trackAcs: {
+      saas: [
+        "WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT return any record whose tenant_id != A.",
+        "THE SYSTEM SHALL respond within [N]ms at P95.",
+      ],
+      ai: [
+        "THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.",
+        "IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.",
+        "THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size.",
+      ],
+      sec: [
+        "IF an unauthenticated request reaches a protected endpoint, THEN THE SYSTEM SHALL reject it with 401 and return no protected data.",
+        "IF an authenticated user requests a resource they are not authorized to access, THEN THE SYSTEM SHALL deny it with 403 and record a security audit event.",
+        "THE SYSTEM SHALL NOT include secrets, credentials, session tokens or stack traces in any response or log entry.",
+      ],
+      privacy: [
+        "WHEN a data subject requests a copy of their personal data, THE SYSTEM SHALL export it in a structured, machine-readable format within one month.",
+        "WHEN a data subject's erasure request is accepted, THE SYSTEM SHALL delete or irreversibly anonymize their personal data in every store within one month.",
+        "WHEN a record's retention period ends, THE SYSTEM SHALL delete or anonymize it.",
+      ],
+      dist: [
+        "IF publishing [the event] fails after the database transaction commits, THEN THE SYSTEM SHALL still deliver it later, at least once, without losing it (transactional outbox).",
+        "WHEN the same message is delivered more than once, THE SYSTEM SHALL apply its effect exactly once (idempotent consumer).",
+        "WHEN two requests update the same [entity] concurrently, THE SYSTEM SHALL NOT lose either update (optimistic locking or a unique constraint).",
+        "IF [the dependency] is unavailable, THEN THE SYSTEM SHALL [degrade / retry with exponential backoff and jitter] and SHALL NOT block [the critical path].",
+      ],
+      api: [
+        "IF a request omits [a required field] or sends it malformed, THEN THE SYSTEM SHALL respond 400 with an application/problem+json body that names the field and carries a stable error code.",
+        "WHEN a client repeats [a create request] with the same Idempotency-Key and body, THE SYSTEM SHALL return the first response without applying the effect again.",
+        "IF an update carries an If-Match ETag that no longer matches the resource, THEN THE SYSTEM SHALL respond 412 and leave the resource unchanged.",
+        "IF a change to the contract would break an existing client, THEN THE SYSTEM SHALL ship it only in a new [API version] and keep the current version working until its announced Sunset date.",
+      ],
+      ui: [
+        "WHEN a user operates [the view] with the keyboard alone, THE SYSTEM SHALL make every action reachable and operable in a logical focus order, with a visible focus indicator.",
+        "IF a submitted form has invalid fields, THEN THE SYSTEM SHALL keep every value the user entered, identify each error in text next to its field and move focus to an error summary.",
+        "WHILE [the list] has no items, THE SYSTEM SHALL show an empty state that explains why and offers the next action.",
+        "IF loading [the data] fails, THEN THE SYSTEM SHALL show an error message with a Retry action and keep the content already shown.",
+      ],
+      obs: [
+        "THE SYSTEM SHALL emit [the request metric] with its latency, outcome and a correlation ID for every [request], and log each error with that correlation ID and no personal data.",
+        "WHEN the error-budget burn rate of [the SLO] exceeds [14.4]× over [one hour], THE SYSTEM SHALL page the on-call engineer with a link to the runbook.",
+        "IF the canary's error rate exceeds [the baseline] by [N] percentage points, THEN THE SYSTEM SHALL stop the rollout and roll back to the previous version automatically.",
+        "WHILE [a dependency] is unavailable, THE SYSTEM SHALL report itself not ready (readiness check) while staying live, and recover without a restart once it is back.",
+      ],
+      data: [
+        "WHEN a batch contains a row that violates [a data-quality rule], THE SYSTEM SHALL quarantine that row with the rule it failed and SHALL NOT load it into [the target table].",
+        "IF the job is re-run for a partition that was already loaded, THEN THE SYSTEM SHALL produce the same result as a single run, with no duplicate and no missing rows (an idempotent re-run and backfill).",
+        "IF the newest data in [the table] is older than [its freshness SLA], THEN THE SYSTEM SHALL alert [the owner] and mark the table stale for its consumers.",
+        "WHEN the schema of [the source] changes, THE SYSTEM SHALL accept an additive, backward-compatible change and SHALL reject a breaking change (a removed or renamed column, a narrowed type) before any row reaches [the consumers].",
+      ],
     },
-
-    trackDesignBlock(track) {
-      if (track === "tdd") {
-        return `
-## Testability Notes
-- **Seams:** [where test doubles inject]
-- **Determinism:** [clocks, randomness, IDs abstracted how]
-- **Side effects to isolate:** [network, fs, time, external services]
-- **Test data strategy:** [factories, fixtures, seeds]
-`;
-      }
-      if (track === "saas") {
-        return `
-## [SaaS] Performance Budget
-> **TODO** — replace with real values (remove this line when done).
-- P50/P95/P99 latency targets · max DB query time · max memory/request · throughput target.
-
-## [SaaS] Scale Design
-> **TODO** — replace with real values (remove this line when done).
-- Concurrent users (launch/6mo/2yr) · data growth · hot paths · caching (TTL+invalidation) · queue strategy · indexes · sharding.
-
-## [SaaS] Multi-tenancy Model
-> **TODO** — replace with real values (remove this line when done).
-- Isolation (pooled/siloed/bridged) · how tenant_id is enforced · noisy-neighbor limits · export/delete (GDPR).
-
-## [SaaS] Observability
-> **TODO** — replace with real values (remove this line when done).
-- Metrics (name each) · structured logs (events+fields) · traces (spans) · alerts (metric→threshold→who) · dashboard panels.
-
-## [SaaS] Cost Envelope
-> **TODO** — replace with real values (remove this line when done).
-- $/1000 users/month (compute/storage/network/3p) · cost-critical paths · cost metric + alert threshold.
-`;
-      }
-      if (track === "ai") {
-        return `
-## [AI] 1. Model Strategy
-> **TODO** — replace with real values (remove this line when done).
-Primary / fallback model · features used · context-window usage · why not another model.
-
-## [AI] 2. Prompt Architecture
-> **TODO** — replace with real values (remove this line when done).
-System prompt · user template (variables) · few-shot source · versioning (prompts/vN.md, not inline).
-
-## [AI] 3. Token Economics
-> **TODO** — replace with real values (remove this line when done).
-Typical in/out tokens · cost/call · cost/user action · cost/1000 users/month · regression threshold.
-
-## [AI] 4. Latency Budget
-> **TODO** — replace with real values (remove this line when done).
-Time to first token · total response time · end-to-end user-perceived latency.
-
-## [AI] 5. Eval Strategy
-> **TODO** — replace with real values (remove this line when done).
-Golden set · adversarial set · regression set · grading method · ship threshold · eval frequency.
-
-## [AI] 6. Safety & Abuse
-> **TODO** — replace with real values (remove this line when done).
-Injection defense · content moderation · jailbreak resistance · PII handling · rate limiting.
-
-## [AI] 7. Fallback & Degradation
-> **TODO** — replace with real values (remove this line when done).
-Provider outage · rate-limit hit · garbage output detection · cost circuit breaker.
-
-## [AI] 8. Observability for AI
-> **TODO** — replace with real values (remove this line when done).
-Per-call logging (prompt version, model, tokens, cost, latency, ids) · metrics · sampled prompts · traces · alerts.
-
-## [AI] 9. Model Lifecycle
-> **TODO** — replace with real values (remove this line when done).
-Pinned IDs · deprecation awareness · eval-gated migration plan · pin policy.
-
-## [AI] 10. Multi-modality (if applicable)
-> **TODO** — replace with real values (remove this line when done).
-Input types · size/count limits · token counting per type · validation pipeline.
-`;
-      }
-      if (track === "sec") {
-        return `
-## [SEC] Threat Model
-> **TODO** — replace with real values (remove this line when done).
-- Assets · actors · trust boundaries · entry points · STRIDE per component / boundary (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) → mitigation · residual risk.
-
-## [SEC] Security Requirements
-> **TODO** — replace with real values (remove this line when done).
-- Target OWASP ASVS level (L1 / L2 / L3) and why · the ASVS controls and OWASP Top 10 risks in scope → how the design meets each.
-
-## [SEC] Authentication & Authorization
-> **TODO** — replace with real values (remove this line when done).
-- Who may do what (role / permission matrix) · authentication (session, token, MFA) · object-level checks, deny by default · session lifetime and revocation.
-
-## [SEC] Secrets & Key Management
-> **TODO** — replace with real values (remove this line when done).
-- Secrets the feature needs · where they live (a secret store — never code, logs or tickets) · rotation · encryption at rest / in transit and who owns the keys.
-
-## [SEC] Security Testing
-> **TODO** — replace with real values (remove this line when done).
-- SAST · dependency and secret scanning · DAST when exposed · one abuse-case test per material threat — all runnable locally before the merge.
-`;
-      }
-      if (track === "privacy") {
-        return `
-## [PRIVACY] Personal Data Inventory
-> **TODO** — replace with real values (remove this line when done).
-- Each personal data field · category (special categories — Art. 9 — flagged) · source · where it is stored · who can read it.
-
-## [PRIVACY] Lawful Basis & Purpose
-> **TODO** — replace with real values (remove this line when done).
-- Purpose per processing activity · its lawful basis (Art. 6: consent, contract, legal obligation, vital interests, public task, legitimate interests) · how consent is recorded and withdrawn.
-
-## [PRIVACY] Retention & Deletion
-> **TODO** — replace with real values (remove this line when done).
-- Retention period per data category and why · the deletion / anonymization job · backups and logs · legal holds.
-
-## [PRIVACY] Data Subject Rights
-> **TODO** — replace with real values (remove this line when done).
-- Access · rectification · erasure · restriction · portability · objection — how each request is verified, served and answered within one month.
-
-## [PRIVACY] Processors & International Transfers
-> **TODO** — replace with real values (remove this line when done).
-- Processors / sub-processors and their Art. 28 contracts · where the data is stored and processed · transfers outside the EEA and their safeguard (adequacy decision, standard contractual clauses).
-
-## [PRIVACY] DPIA (when required — Art. 35)
-> **TODO** — replace with real values (remove this line when done).
-- Required? (high risk: large-scale special categories, systematic monitoring, profiling with legal effects…) · if yes: risks → measures → residual risk; if not: why not.
-`;
-      }
-      if (track === "dist") {
-        return `
-## [DIST] Consistency Model
-> **TODO** — replace with real values (remove this line when done).
-- What must be atomic (one transaction) · is ACID required, at which isolation level and why · where consistency is strong and where eventual · the staleness the business accepts · read-your-writes needs.
-
-## [DIST] Cross-system Writes
-> **TODO** — replace with real values (remove this line when done).
-- Every write that touches more than one system (DB + broker, DB + cache, DB + external API) → its mitigation: transactional outbox (+ relay / CDC), inbox, saga with compensations — or the risk explicitly accepted, and by whom.
-
-## [DIST] Delivery & Idempotency
-> **TODO** — replace with real values (remove this line when done).
-- Delivery guarantee (at-least-once) · idempotency keys or natural idempotency · deduplication (inbox table, unique constraint) · retry policy (exponential backoff + jitter, max attempts, what is never retried) · DLQ / poison messages · ordering needs.
-
-## [DIST] Concurrency
-> **TODO** — replace with real values (remove this line when done).
-- Race conditions on each shared record · optimistic (version column) or pessimistic (SELECT … FOR UPDATE) locking · unique constraints · isolation anomalies ruled out (lost update, write skew) · lock timeouts and deadlocks.
-
-## [DIST] Failure Modes
-> **TODO** — replace with real values (remove this line when done).
-- Partial failures and timeouts per dependency · what happens when each dependency is down (degrade, queue, fail fast) · network partitions: the CAP / PACELC trade-off chosen · recovery and reconciliation (replay, compensation, a reconciliation job).
-`;
-      }
-      if (track === "api") {
-        return `
-## [API] API Contract
-> **TODO** — replace with real values (remove this line when done).
-- Style (REST / GraphQL / gRPC) · resources and operations (method + path, or query / mutation / RPC) · request and response schemas · where the contract file lives (OpenAPI document, .proto files, GraphQL schema) — written first, reviewed before the handlers · auth scopes per operation.
-
-## [API] Versioning & Compatibility
-> **TODO** — replace with real values (remove this line when done).
-- Versioning strategy (URL / header / date) · what is a breaking change here (a removed or renamed field, a new required input, a changed type or status code, tighter validation) · additive-only changes within a version · deprecation: the Deprecation / Sunset headers, the notice period, how clients are told.
-
-## [API] Error Model
-> **TODO** — replace with real values (remove this line when done).
-- Error format: application/problem+json (RFC 9457 — type, title, status, detail, instance) · the stable error codes clients may branch on · validation errors per field · the status codes each operation returns · no stack trace or internal detail in a response.
-
-## [API] Pagination, Idempotency & Concurrency
-> **TODO** — replace with real values (remove this line when done).
-- Pagination: an opaque cursor with a stable order and a maximum page size (or offset, and why) · Idempotency-Key on non-idempotent creates (its scope, how long a key is kept, a reused key with another body → 422) · ETag / If-Match on updates (412 on a stale version) · long-running operations (202 + a status resource).
-
-## [API] Rate Limits & Quotas
-> **TODO** — replace with real values (remove this line when done).
-- Limits per client / key / tenant and their windows · 429 with Retry-After and the RateLimit headers · quotas and how a client reads what it has left · what is exempt.
-`;
-      }
-      if (track === "ui") {
-        return `
-## [UI] Design System Usage
-> **TODO** — replace with real values (remove this line when done).
-- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours.
-
-## [UI] UI States
-> **TODO** — replace with real values (remove this line when done).
-- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).
-
-## [UI] Accessibility
-> **TODO** — replace with real values (remove this line when done).
-- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass).
-
-## [UI] Responsiveness & i18n
-> **TODO** — replace with real values (remove this line when done).
-- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue.
-
-## [UI] UI Performance Budget
-> **TODO** — replace with real values (remove this line when done).
-- Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users).
-`;
-      }
-      if (track === "obs") {
-        return `
-## [OBS] SLIs & SLOs
-> **TODO** — replace with real values (remove this line when done).
-- The user journeys that matter → their SLIs (availability, latency, correctness) · the SLO of each over a window (e.g. 99.5 % of valid requests under 800 ms, 28 days) · the error budget and what happens when it is spent · burn-rate alerts (fast and slow).
-
-## [OBS] Telemetry
-> **TODO** — replace with real values (remove this line when done).
-- Metrics (RED per endpoint / USE per resource, one business counter; bounded label cardinality) · structured logs with a correlation / trace ID — no personal data · traces with the context propagated across calls and queues (OpenTelemetry) · the metrics each task emits.
-
-## [OBS] Alerting & Runbooks
-> **TODO** — replace with real values (remove this line when done).
-- Each alert: the symptom (an SLO burn, not a cause), threshold, severity and who is paged · every page links a runbook (triage, mitigate, verify) · what is a ticket, not a page · dashboards per journey.
-
-## [OBS] Rollout & Rollback
-> **TODO** — replace with real values (remove this line when done).
-- Feature flags (who owns each, when it is removed) · the canary / progressive rollout steps and the metrics that gate each step · rollback criteria (e.g. an error rate above the baseline) and how long a rollback takes · migrations that can be rolled back (expand / contract).
-
-## [OBS] Health & Capacity
-> **TODO** — replace with real values (remove this line when done).
-- Liveness vs readiness checks (what each verifies — never a dependency in liveness) · the capacity signals (saturation, queue depth, pool usage) and their thresholds · the expected load and where the first bottleneck is.
-`;
-      }
-      if (track === "data") {
-        return `
-## [DATA] Data Contracts & Schema Evolution
-> **TODO** — replace with real values (remove this line when done).
-- Each dataset produced or consumed: its producer, its consumers and the contract's owner · the schema (columns, types, nullability, keys, units) and where it lives (a schema file, a dbt model's YAML, a registry) · the compatibility rule (additive changes only; a removed or renamed column → a new version with a deprecation window) · how a breaking change is caught before it ships.
-
-## [DATA] Data Quality
-> **TODO** — replace with real values (remove this line when done).
-- The checks per dataset: not-null keys, uniqueness, accepted values and ranges, referential integrity, row-count and volume anomalies, freshness · where each runs (at ingestion, after each transformation, before publishing) · what a failure does (quarantine the rows, stop the load, alert the owner) — no bad row reaches a consumer silently.
-
-## [DATA] Pipeline Idempotency & Backfills
-> **TODO** — replace with real values (remove this line when done).
-- The unit of work (a partition: a day, an hour, a batch ID) and how a re-run replaces it (overwrite the partition or MERGE on a key — never a blind append) · late-arriving data: the lookback window and how late rows are merged · the backfill procedure (range, parallelism, cost, a dry run, who approves it) · large volumes: references/distributed-data-patterns.md.
-
-## [DATA] Lineage & Ownership
-> **TODO** — replace with real values (remove this line when done).
-- Sources → transformations → consumers (a lineage diagram or the dbt DAG) · the owner of each dataset and who is told when it breaks · the freshness SLA consumers rely on · the history each table keeps (slowly changing dimensions: type 1 overwrites, type 2 keeps versions).
-
-## [DATA] Retention & Cost
-> **TODO** — replace with real values (remove this line when done).
-- Retention per dataset and storage tier (the raw zone vs the curated one; hot / warm / cold) — personal data follows references/privacy-track.md · partitioning and clustering so a query scans only what it needs · the expected storage and query cost per month and the alert when it drifts.
-`;
-      }
-      return "";
-    },
-
-    design(a) {
-      const extra = ["tdd", ...MARKER_TRACK_ORDER].filter((t) => a.tracks.includes(t)).map((t) => BUILD.en.trackDesignBlock(t)).join("");
-      if (a.size) return BUILD.en.sizedDesign(a, extra);
-      return (
-`# Design: ${a.name}
-
-## Overview
-[How this integrates with the existing system. Key decisions and rationale.]
-
-## Architecture
+  },
+  // classification — its headings and slots; the layout lists a signal line per active track (signalTracks: +tdd, the marker
+  // tracks, then a project's packs) and the Hot Path / Autonomy / Volume sections only with +saas / +ai.
+  classification: {
+    title: (name) => `# Classification: ${name}`,
+    mode: "## Mode\nSpec",
+    activeTracks: "## Active Tracks",
+    signals: "## Signals",
+    signalSlot: "[signal]",
+    whySlot: "[why it applies]",
+    noSignals: "- none beyond core",
+    blastRadius: "## Blast Radius\n[What breaks if this is wrong? Who is affected? Recoverable? How fast?]",
+    hotPath: "## Hot Path?\n[Yes/No — if yes, load-test.md is required.]",
+    autonomy: "## Autonomy Level\n[Advisory | Semi-autonomous | Autonomous]",
+    volume: "## Volume / Cost Projection\n- Launch / 6mo / 2yr: [load, ~$/month]",
+    compliance: "## Compliance Tags\n[GDPR | PCI | HIPAA | SOC2 | none]",
+    summary: "## Summary",
+  },
+  // design — every core section (a heading and its body). The layout picks them by size: no size → the 1.20 design; s → the
+  // three weigh sections merged into `decisions`; m / l → the shorter reuse table, and a core section a track supersedes left out
+  // (CORE_SUPERSEDED_BY). The active tracks' sections (designBlocks) go after Complexity Tracking, then the footer.
+  design: {
+    title: (name) => `# Design: ${name}`,
+    overview: "## Overview\n[How this integrates with the existing system. Key decisions and rationale.]",
+    architecture: `## Architecture
 \`\`\`mermaid
 graph TD
     A[Component] -->|action| B[Component]
     B -->|query| C[(Database)]
-\`\`\`
-
-## Reuse & Integration
+\`\`\``,
+    reuse: `## Reuse & Integration
 <!-- Search before you write (references/code-reuse-and-quality.md): what this feature takes from the codebase before
      it adds anything. One row per unit, with its path. Reuse = an existing module, component, helper or service used
      as is; Extend = an existing unit this feature changes (its callers keep working); New = nothing existing fits —
@@ -429,344 +342,290 @@ graph TD
 | Extend | [existing unit this feature changes] | [its path] | [the change — existing callers keep working] |
 | New | [new unit] | [where it will live] | [why nothing existing fits — what was searched] |
 
-**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]
+**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]`,
+    reuseSized: `## Reuse & Integration
+<!-- Search before you write (references/code-reuse-and-quality.md): what this feature takes from the codebase before
+     it adds anything. One row per unit, with its path — Reuse (used as is), Extend (changed; its callers keep working)
+     or New (nothing existing fits — say what was searched). A greenfield project says so in one line. -->
+| Kind | What | Where (path) | Why / notes |
+|---|---|---|---|
+| [Reuse / Extend / New] | [the unit] | [its path] | [why — for New: what was searched] |
 
-## Alternatives & Trade-offs
+**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]`,
+    decisions: `## Decisions, reuse & risks
+<!-- One short answer each. What this reuses (with its path) — or "nothing to reuse"; the option chosen, the one
+     rejected and why — or "no alternative worth weighing"; what could go wrong and how it is caught — or "no material
+     risk, because X". Blank is not an answer. -->
+- **Reuse:** [existing module or helper reused, with its path — or nothing to reuse]
+- **Decision:** [the option chosen, the one rejected and why]
+- **Risk:** [what could go wrong and how it is caught — or no material risk, because …]`,
+    alternatives: `## Alternatives & Trade-offs
 <!-- The options weighed for each key decision — e.g. strong vs eventual consistency, monolith vs service, sync vs
      async, optimistic vs pessimistic locking. At least two per decision (one option alone was never weighed), what
      choosing wrong would cost, the one chosen and why. One row per option. -->
 | Decision | Option | Pros | Cons | Cost if wrong | Chosen |
 |---|---|---|---|---|---|
 | [key decision] | [option A] | [pros] | [cons] | [cost of being wrong] | [✓ — why] |
-| [key decision] | [option B] | [pros] | [cons] | [cost of being wrong] | [✗ — why not] |
-
-## Data Models
+| [key decision] | [option B] | [pros] | [cons] | [cost of being wrong] | [✗ — why not] |`,
+    dataModels: `## Data Models
 \`\`\`typescript
 interface Entity {
   id: string;
   // fields with comments explaining purpose
 }
-\`\`\`
-
-## API Contracts
+\`\`\``,
+    apiContracts: `## API Contracts
 ### POST /api/resource
 - **Request:** \`{ field: type }\`
 - **Response (200):** \`{ field: type }\`
-- **Errors:** 400 (validation), 401 (auth), 404 (not found)
-
-## Security Considerations
-[Auth, validation, data exposure risks]
-
-## Error Handling
-[Strategy per failure mode from requirements]
-
-## Testing Strategy
-- Unit / Integration / E2E: [what each covers]
-
-## Risks
+- **Errors:** 400 (validation), 401 (auth), 404 (not found)`,
+    security: "## Security Considerations\n[Auth, validation, data exposure risks]",
+    errorHandling: "## Error Handling\n[Strategy per failure mode from requirements]",
+    errorHandlingSized: `## Error Handling
+Each IF…THEN criterion in requirements.md already names a failure and its recovery — add here only what spans them (retries, fallbacks, the messages users see), or leave it at that.`,
+    testing: "## Testing Strategy\n- Unit / Integration / E2E: [what each covers]",
+    risks: `## Risks
 <!-- What could make this design wrong or the delivery late — technical, delivery, data, business. One row per risk;
      an honest "no material risk, because X" is fine — blank is not. -->
 | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|---|---|---|---|
-| [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |
-
-## Constitution Check
+| [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |`,
+    constitution: `## Constitution Check
 Verify this design against each principle in \`steering/constitution.md\`. GATE: must pass before
 implementation; re-check after any design change.
 - [ ] [Principle 1] — complies
 - [ ] [Principle 2] — complies
-(If a principle cannot be met, do NOT silently break it — record it in Complexity Tracking below.)
-
-## Complexity Tracking
+(If a principle cannot be met, do NOT silently break it — record it in Complexity Tracking below.)`,
+    complexity: `## Complexity Tracking
 Justify anything that violates a constitution principle or adds non-obvious complexity. Empty is good.
 | What | Why it's needed | Simpler alternative rejected because |
-|---|---|---|
-| [e.g., second cache layer] | [reason] | [why the simple option fails] |
-${extra}
-<!-- Tracks active: ${a.label}. Mandatory track sections above must have real
-     content — an honest "not needed because X" is fine; blank is not. -->
-`
-      );
-    },
-
-    // 1.21 F5 — the design of a SIZED feature (a.size s | m | l; xs is a change, no design). Every size: Complexity Tracking
-    // without the example row the placeholder gate refused, Error Handling pointing at the IF…THEN criteria (never asked twice),
-    // and a core section a track's own sections supersede left out (CORE_SUPERSEDED_BY). M / L: Reuse & Integration with one
-    // example row. S: the three weigh sections merged into ONE "Decisions, reuse & risks" section (designWeighChecks reads it),
-    // no Data Models / API Contracts / Security Considerations / Testing Strategy examples. The track blocks (`extra`) are the
-    // full ones — the engine keeps a size's tiers and drops the sections another active track covers (engine/scaffold.js).
-    sizedDesign(a, extra) {
-      const s = a.size === "s";
-      const out = [`# Design: ${a.name}`, "", "## Overview", "[How this integrates with the existing system. Key decisions and rationale.]", "",
-        "## Architecture", "```mermaid", "graph TD", "    A[Component] -->|action| B[Component]", "    B -->|query| C[(Database)]", "```", ""];
-      if (s) {
-        out.push("## Decisions, reuse & risks",
-          "<!-- One short answer each. What this reuses (with its path) — or \"nothing to reuse\"; the option chosen, the one",
-          "     rejected and why — or \"no alternative worth weighing\"; what could go wrong and how it is caught — or \"no material",
-          "     risk, because X\". Blank is not an answer. -->",
-          "- **Reuse:** [existing module or helper reused, with its path — or nothing to reuse]",
-          "- **Decision:** [the option chosen, the one rejected and why]",
-          "- **Risk:** [what could go wrong and how it is caught — or no material risk, because …]", "");
-      } else {
-        out.push("## Reuse & Integration",
-          "<!-- Search before you write (references/code-reuse-and-quality.md): what this feature takes from the codebase before",
-          "     it adds anything. One row per unit, with its path — Reuse (used as is), Extend (changed; its callers keep working)",
-          "     or New (nothing existing fits — say what was searched). A greenfield project says so in one line. -->",
-          "| Kind | What | Where (path) | Why / notes |", "|---|---|---|---|",
-          "| [Reuse / Extend / New] | [the unit] | [its path] | [why — for New: what was searched] |", "",
-          "**Module boundaries:** [where the new code lives, what it exposes and what it may import — features depend on shared code, never the reverse]", "",
-          "## Alternatives & Trade-offs",
-          "<!-- The options weighed for each key decision — e.g. strong vs eventual consistency, monolith vs service, sync vs",
-          "     async, optimistic vs pessimistic locking. At least two per decision (one option alone was never weighed), what",
-          "     choosing wrong would cost, the one chosen and why. One row per option. -->",
-          "| Decision | Option | Pros | Cons | Cost if wrong | Chosen |", "|---|---|---|---|---|---|",
-          "| [key decision] | [option A] | [pros] | [cons] | [cost of being wrong] | [✓ — why] |",
-          "| [key decision] | [option B] | [pros] | [cons] | [cost of being wrong] | [✗ — why not] |", "",
-          "## Data Models", "```typescript", "interface Entity {", "  id: string;", "  // fields with comments explaining purpose", "}", "```", "");
-        if (!coreSuperseded(a, "apiContracts")) out.push("## API Contracts", "### POST /api/resource", "- **Request:** `{ field: type }`", "- **Response (200):** `{ field: type }`",
-          "- **Errors:** 400 (validation), 401 (auth), 404 (not found)", "");
-        if (!coreSuperseded(a, "securityConsiderations")) out.push("## Security Considerations", "[Auth, validation, data exposure risks]", "");
-      }
-      if (!coreSuperseded(a, "errorHandling")) out.push("## Error Handling",
-        "Each IF…THEN criterion in requirements.md already names a failure and its recovery — add here only what spans them (retries, fallbacks, the messages users see), or leave it at that.", "");
-      if (!s && !coreSuperseded(a, "testingStrategy")) out.push("## Testing Strategy", "- Unit / Integration / E2E: [what each covers]", "");
-      if (!s) out.push("## Risks",
-        "<!-- What could make this design wrong or the delivery late — technical, delivery, data, business. One row per risk;",
-        "     an honest \"no material risk, because X\" is fine — blank is not. -->",
-        "| Risk | Likelihood | Impact | Mitigation | Owner |", "|---|---|---|---|---|",
-        "| [what could go wrong] | [low / medium / high] | [low / medium / high] | [how we prevent or detect it] | [who watches it] |", "");
-      out.push("## Constitution Check", "Verify this design against each principle in `steering/constitution.md`. GATE: must pass before",
-        "implementation; re-check after any design change.", "- [ ] [Principle 1] — complies", "- [ ] [Principle 2] — complies",
-        "(If a principle cannot be met, do NOT silently break it — record it in Complexity Tracking below.)", "",
-        "## Complexity Tracking", "Justify anything that violates a constitution principle or adds non-obvious complexity. Empty is good.",
-        "| What | Why it's needed | Simpler alternative rejected because |", "|---|---|---|");
-      return out.join("\n") + "\n" + extra + `
-<!-- Tracks active: ${a.label} · size ${a.size}. Mandatory track sections above must have real content — an honest
-     "n/a — <why it does not apply>" is fine; blank or the template's guidance line is not. -->
-`;
-    },
-
-    tasks(a) {
-      const green = a.tracks.includes("tdd") ? templateTests(a.tracks) : null; // each template test made green by one task
-      const evalMarker = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
-      const metricMarker = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
-      let n = 0;
-      const id = () => ++n;
-      // 1.21 F5 — size S: one core task (US-1's two criteria), then the track blocks (the engine keeps, per track, the tasks
-      // that implement a criterion — engine/scaffold.js trimTrackTasks); no setup / foundational / US-2 / polish phases.
-      if (a.size === "s") {
-        const green1 = a.tracks.includes("tdd") ? templateTests(a.tracks, "s") : null;
-        let body =
-`## Story US-1 (P1 — MVP)
-- [ ] ${id()}. [US1] [Core behavior for US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2_${greenLine(green1, "US-1.AC-1", "US-1.AC-2")}${metricMarker}${evalMarker}
-  - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
-**Checkpoint:** US-1 is fully functional and independently testable/shippable.
-`;
-        for (const t of MARKER_TRACK_ORDER) {
-          if (!a.tracks.includes(t)) continue;
-          const block = BUILD.en.trackTasks({ track: t, start: n + 1, green: green1 });
-          body += block;
-          n += (block.match(/^- \[ \] \d+\./gm) || []).length;
-        }
-        return (
-`# Tasks: ${a.name}
-
-<!-- Tracks: ${a.label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_) and a
-     _Verify: <command>_ — spec_complete_task records its result as the task's evidence. Use _Implements: path_ to tie a
-     task to a real source file. -->
-
-## Global Constraints
-<!-- Exact values every task must respect, copied verbatim from the spec/steering — spec_task_brief inlines this section
-     into every task brief. -->
-- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]
-
-${body}`
-        );
-      }
-      let phases =
-`## Phase: Setup
-- [ ] ${id()}. [shared][P] [project/dev setup if needed — deps, scaffolding]
-
-## Phase: Foundational (blocks all stories)
-- [ ] ${id()}. [shared] [Models, schemas, indexes shared across stories]
-  - _Requirements: US-1.AC-1_${metricMarker}
-
-## Story US-1 (P1 — MVP)
-- [ ] ${id()}. [US1] [Core behavior for US-1]
-  - _Requirements: US-1.AC-1, US-1.AC-2, US-1.AC-3_${greenLine(green, "US-1.AC-1", "US-1.AC-2", "US-1.AC-3")}${evalMarker}
-  - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
-- [ ] ${id()}. [US1][P] [parallelizable task — different file, no deps]
-  - _Requirements: US-1.AC-4_${greenLine(green, "US-1.AC-4")}
-**Checkpoint:** US-1 is fully functional and independently testable/shippable.
-`;
-      for (const t of MARKER_TRACK_ORDER) {
-        if (!a.tracks.includes(t)) continue;
-        const block = BUILD.en.trackTasks({ track: t, start: n + 1, green });
-        phases += block;
-        n += (block.match(/^- \[ \] \d+\./gm) || []).length;
-      }
-      phases +=
-`
-## Story US-2 (P2)
-- [ ] ${id()}. [US2] [Behavior for US-2]
-  - _Requirements: US-2.AC-1_${greenLine(green, "US-2.AC-1")}
-**Checkpoint:** US-2 works without breaking US-1.
-
-## Phase: Polish (cross-cutting)
-- [ ] ${id()}. [shared][P] [docs, cleanup, edge-case hardening]
-`;
-      return (
-`# Tasks: ${a.name}
-
-<!-- Tracks: ${a.label}. Organized by user story so each is independently shippable
+|---|---|---|`,
+    complexityExample: "| [e.g., second cache layer] | [reason] | [why the simple option fails] |",
+    footer: (label) => `<!-- Tracks active: ${label}. Mandatory track sections above must have real
+     content — an honest "not needed because X" is fine; blank is not. -->`,
+    footerSized: (label, size) => `<!-- Tracks active: ${label} · size ${size}. Mandatory track sections above must have real content — an honest
+     "n/a — <why it does not apply>" is fine; blank or the template's guidance line is not. -->`,
+  },
+  // tasks — headings, the template tasks' text and the comments; the layout numbers the tasks, writes their [US1] / [shared] / [P]
+  // tags, _Requirements:_ / _Makes green:_ / _Verify:_ lines and the markers of +saas / +ai, and inserts the track blocks after
+  // US-1 (size s: one story, then the track blocks).
+  tasks: {
+    title: (name) => `# Tasks: ${name}`,
+    intro: (label) => `<!-- Tracks: ${label}. Organized by user story so each is independently shippable
      (P1 first). Each task is tagged with its story: [US1]/[US2] or [shared] for cross-cutting work.
      [P] = parallelizable (different files, no deps). Every task carries _Requirements:_; TDD tasks
      carry _Makes green:_. Use _Implements: path_ to tie a task to a real source file. A **Checkpoint**
      marks where a story is independently testable.
      If the stories are NOT independently shippable, they were mis-sliced — re-slice them, or fall
-     back to a technical-layer layout (Foundation→Logic→API→…) keeping the [US1] tags. -->
-
-## Global Constraints
+     back to a technical-layer layout (Foundation→Logic→API→…) keeping the [US1] tags. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_) and a
+     _Verify: <command>_ — spec_complete_task records its result as the task's evidence. Use _Implements: path_ to tie a
+     task to a real source file. -->`,
+    constraints: `## Global Constraints
 <!-- Exact values every task must respect, copied verbatim from the spec/steering (version floors,
      naming rules, limits, formats) — spec_task_brief inlines this section into every task brief.
      Give each task a _Verify: <command>_: spec_complete_task records its result as the task's evidence. -->
-- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]
+- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]`,
+    constraintsS: `## Global Constraints
+<!-- Exact values every task must respect, copied verbatim from the spec/steering — spec_task_brief inlines this section
+     into every task brief. -->
+- [e.g. Node >= 20 · no new runtime dependencies · API field names in snake_case]`,
+    setup: "## Phase: Setup",
+    setupTask: "[project/dev setup if needed — deps, scaffolding]",
+    foundational: "## Phase: Foundational (blocks all stories)",
+    foundationalTask: "[Models, schemas, indexes shared across stories]",
+    story1: "## Story US-1 (P1 — MVP)",
+    coreTask: "[Core behavior for US-1]",
+    verify: "[command that proves it, e.g. npm test -- path/to/file.test.js]",
+    parallelTask: "[parallelizable task — different file, no deps]",
+    checkpoint1: "US-1 is fully functional and independently testable/shippable.",
+    story2: "## Story US-2 (P2)",
+    story2Task: "[Behavior for US-2]",
+    checkpoint2: "US-2 works without breaking US-1.",
+    polish: "## Phase: Polish (cross-cutting)",
+    polishTask: "[docs, cleanup, edge-case hardening]",
+  },
+  // testPlan — the heading and the text around the traceability matrix; rows: the layer names and descriptions
+  // templateTestRows (i18n/common.js) writes the template's rows with.
+  testPlan: {
+    title: (name) => `# Test Plan: ${name}`,
+    head: `## Strategy
+- **Test runner:** []
+- **Mocking approach:** []
+- **Coverage target:** []
+- **Critical paths requiring 100% branch coverage:** []
 
-${phases}`
-      );
+## Traceability Matrix
+
+<!-- Kind — example: one concrete input → expected output; the default for event-driven criteria (WHEN …, IF … THEN).
+     property: an invariant checked over many generated inputs (fast-check, Hypothesis, jqwik, gopter, FsCheck); use it
+     for ubiquitous criteria (THE SYSTEM SHALL always …), WHILE (state-driven) criteria and any "never / for every" rule —
+     tenant isolation, an encode → decode round-trip, totals that always balance. Values stay example / property.
+     Put the Test ID in the test's name (test("T-01 …"), def test_T01_…) so trace_check {code: true} finds it. -->
+
+| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |
+|---------|-------|------|-------------|-----------------|------|`,
+    tail: `## Coverage Check
+Every AC must appear in at least one "Covers" cell. Gaps (with justification):
+- [none]
+
+## Test Data & Fixtures
+- []
+
+## Out of Scope for Testing
+- []
+`,
+    rows: {
+      integration: "integration",
+      load: "load",
+      behavior: "[behavior]",
+      acSlot: "[the AC IDs this test covers]",
+      recovery: "[error condition → recovery]",
+      property: "[always-true property]",
+      tenant: "tenant A never reads tenant B's records",
+      latency: "P95 latency within the performance budget",
+      golden: "golden set ≥ the quality threshold",
+      injection: "adversarial: injected instructions are ignored",
+      cost: "cost per request within budget",
+      unauthenticated: "abuse case: an unauthenticated request gets 401 and no data",
+      forbidden: "abuse case: user B never reads user A's resource (403 + audit event)",
+      noSecrets: "no secret, token or stack trace in any response or log",
+      exportData: "a subject's export holds all of their personal data, machine-readable",
+      erasure: "after erasure no store still holds the subject's personal data",
+      retention: "records past their retention period are deleted or anonymized",
+      outboxCrash: "crash between the DB commit and the publish: the event is still delivered",
+      duplicateDelivery: "the same message delivered twice (or N times) has exactly one effect",
+      lostUpdate: "concurrent updates to the same record: no update is lost silently",
+      dependencyDown: "a dependency down: degrade / retry with backoff, the critical path is not blocked",
+      contract: "contract",
+      problemJson: "contract test: a request missing a required field gets 400 problem+json naming it",
+      idempotencyReplay: "a create replayed with the same Idempotency-Key has one effect and returns the first response",
+      staleEtag: "an update with a stale If-Match gets 412 and changes nothing",
+      breakingDiff: "breaking-change diff: the contract against the published version reports no breaking change",
+      component: "component",
+      visual: "visual",
+      keyboardA11y: "keyboard-only walk-through + an automated accessibility check (axe): every action reachable, focus visible, no violation",
+      formErrors: "a form with invalid fields: every value kept, each error named in text, focus on the summary",
+      emptyState: "visual regression of the view's states: the empty state explains why and offers the next action",
+      loadError: "a failed load: an error with Retry, the content already shown kept",
+      telemetry: "every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log",
+      burnAlert: "a staged failure burns the error budget: the burn-rate alert fires and pages with the runbook link",
+      rollbackDrill: "rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back",
+      readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart",
+      dataQuality: "data-quality checks on fixture batches: a null key, a duplicate and an out-of-range row are quarantined with their rule, the valid rows load",
+      idempotentRerun: "a partition re-run or backfilled twice leaves the same rows as one run — no duplicate, no gap",
+      freshness: "a partition older than the freshness SLA: the freshness check fails and alerts the owner",
+      schemaChange: "schema-change compatibility: an added optional column passes, a removed / renamed column or a narrowed type is rejected before the load",
     },
+  },
+  // checklist — the items: the core four, +tdd's, then per marker track its sections item (n: the design sections to fill —
+  // the track's design block, or a sized feature's count) and two more; saasLoadOnly replaces +saas's third with +obs on a sized
+  // feature (+obs checks the telemetry). done: the closing two.
+  checklist: {
+    title: (name, label) => `# Checklist: ${name}
 
-    // A track's template task block (none for +tdd — it only adds markers). Shared by tasks() and
-    // spec_add_track, so a feature escalated later gets the very same tasks. a = { track, start, green? } — green
-    // (templateTests) only on a greenfield +tdd scaffold, whose test plan holds those T-IDs.
-    trackTasks(a) {
-      let n = a.start - 1;
-      const id = () => ++n;
-      if (a.track === "saas") {
-        return `
-## Story US-1 — Observability & Scale
-- [ ] ${id()}. [US1] Emit metrics, add dashboard, configure alerts
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Load test — verify performance budget from design.md (hot path only)
-  - _Requirements: US-1.AC-6_${greenLine(a.green, "US-1.AC-6")}
-- [ ] ${id()}. [US1] Enforce tenant isolation — every query scoped by tenant_id
-  - _Requirements: US-1.AC-5_${greenLine(a.green, "US-1.AC-5")}
-`;
-      }
-      if (a.track === "ai") {
-        return `
-## Story US-1 — AI
-- [ ] ${id()}. [US1] Prompt v1 + eval harness wiring (separate task per prompt change)
-  - _Requirements: US-1.AC-7, US-1.AC-8_
-  - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
-- [ ] ${id()}. [US1] Cost monitoring — emit cost metric + alert
-  - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
-`;
-      }
-      if (a.track === "sec") {
-        return `
-## Story US-1 — Security
-- [ ] ${id()}. [US1] Threat model the feature (STRIDE per trust boundary); record each mitigation in design.md
-  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
-- [ ] ${id()}. [US1] Enforce authentication and object-level authorization on every endpoint (deny by default)
-  - _Requirements: US-1.AC-10, US-1.AC-11_${greenLine(a.green, "US-1.AC-10", "US-1.AC-11")}
-- [ ] ${id()}. [US1] Keep secrets out of code, responses and logs — secret store + log redaction
-  - _Requirements: US-1.AC-12_${greenLine(a.green, "US-1.AC-12")}
-- [ ] ${id()}. [US1] Security testing — SAST, dependency audit and the abuse-case tests, runnable locally
-  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
-`;
-      }
-      if (a.track === "privacy") {
-        return `
-## Story US-1 — Privacy
-- [ ] ${id()}. [US1] Personal data inventory + lawful basis per purpose in design.md; update the privacy notice
-  - _Requirements: US-1.AC-13, US-1.AC-14, US-1.AC-15_
-- [ ] ${id()}. [US1] Data subject requests — access/export and erasure end to end, across every store and processor
-  - _Requirements: US-1.AC-13, US-1.AC-14_${greenLine(a.green, "US-1.AC-13", "US-1.AC-14")}
-- [ ] ${id()}. [US1] Retention — scheduled deletion/anonymization of records past their retention period
-  - _Requirements: US-1.AC-15_${greenLine(a.green, "US-1.AC-15")}
-`;
-      }
-      if (a.track === "dist") {
-        return `
-## Story US-1 — Data Consistency
-- [ ] ${id()}. [US1] Transactional outbox — write the outbox row in the same transaction as the state change; a relay (polling or CDC) publishes it and marks it sent
-  - _Requirements: US-1.AC-16_${greenLine(a.green, "US-1.AC-16")}
-- [ ] ${id()}. [US1] Idempotent consumer — an inbox / processed-message table keyed by the message ID, written in the same transaction as the effect
-  - _Requirements: US-1.AC-17_${greenLine(a.green, "US-1.AC-17")}
-- [ ] ${id()}. [US1] Concurrency control — a version column (optimistic locking) or a unique constraint; a conflict is an error, never a silent overwrite
-  - _Requirements: US-1.AC-18_${greenLine(a.green, "US-1.AC-18")}
-- [ ] ${id()}. [US1] Resilience — timeouts, retries with exponential backoff + jitter (never a non-idempotent call without a key), a DLQ, the degraded path when a dependency is down
-  - _Requirements: US-1.AC-19_${greenLine(a.green, "US-1.AC-19")}
-- [ ] ${id()}. [US1] Failure-injection tests — crash between the commit and the publish, duplicate delivery, concurrent updates, a dependency down — runnable locally
-  - _Requirements: US-1.AC-16, US-1.AC-17, US-1.AC-18, US-1.AC-19_
-`;
-      }
-      if (a.track === "api") {
-        return `
-## Story US-1 — API Contract
-- [ ] ${id()}. [US1] Contract first — the OpenAPI document / .proto files / GraphQL schema in the repo, reviewed before the handlers (the file is this task's Implements marker)
-  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
-- [ ] ${id()}. [US1] Error model — every error an application/problem+json body with a stable code; a validation error names each field
-  - _Requirements: US-1.AC-20_${greenLine(a.green, "US-1.AC-20")}
-- [ ] ${id()}. [US1] Idempotency and concurrency — an Idempotency-Key on creates (the stored response replayed), ETag / If-Match on updates (412 on a stale version)
-  - _Requirements: US-1.AC-21, US-1.AC-22_${greenLine(a.green, "US-1.AC-21", "US-1.AC-22")}
-- [ ] ${id()}. [US1] Compatibility gate — a breaking-change diff of the contract against the published version, runnable locally; anything removed is deprecated with a Sunset date
-  - _Requirements: US-1.AC-23_${greenLine(a.green, "US-1.AC-23")}
-- [ ] ${id()}. [US1] Contract tests — the implementation checked against the contract (every documented status code, schema and header), runnable locally
-  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
-`;
-      }
-      if (a.track === "ui") {
-        return `
-## Story US-1 — User Interface
-- [ ] ${id()}. [US1] Build the view from design-system components and tokens — a new component only through the system (documented, reviewed)
-  - _Requirements: US-1.AC-24, US-1.AC-25, US-1.AC-26, US-1.AC-27_
-- [ ] ${id()}. [US1] UI states — loading, empty, error with Retry, partial, offline, permission denied, success — per the state matrix in design.md
-  - _Requirements: US-1.AC-26, US-1.AC-27_${greenLine(a.green, "US-1.AC-26", "US-1.AC-27")}
-- [ ] ${id()}. [US1] Forms and keyboard — values kept on an error, errors in text with a summary, a logical focus order, a visible focus
-  - _Requirements: US-1.AC-24, US-1.AC-25_${greenLine(a.green, "US-1.AC-24", "US-1.AC-25")}
-- [ ] ${id()}. [US1] Accessibility checks — an automated check (axe or equivalent) runnable locally + a manual keyboard and screen-reader pass (findings in the report)
-  - _Requirements: US-1.AC-24, US-1.AC-25_
-- [ ] ${id()}. [US1] Responsiveness, i18n and the performance budget — the breakpoints, text expansion, RTL, locale formats; LCP / INP / CLS within budget
-  - _Requirements: US-1.AC-24, US-1.AC-26, US-1.AC-27_
-`;
-      }
-      if (a.track === "obs") {
-        return `
-## Story US-1 — Operability
-- [ ] ${id()}. [US1] SLIs, SLOs and burn-rate alerts — defined in code / config next to the service, each alert linked to its runbook
-  - _Requirements: US-1.AC-29_${greenLine(a.green, "US-1.AC-29")}
-- [ ] ${id()}. [US1] Telemetry — the metrics, structured logs with the correlation ID (no personal data) and trace spans the design names
-  - _Requirements: US-1.AC-28_${greenLine(a.green, "US-1.AC-28")}
-  - _Emits metrics: requests_total, request_duration_seconds, errors_total_
-- [ ] ${id()}. [US1] Rollout — a feature flag and a canary / progressive rollout gated on the SLO metrics; automatic rollback on the criteria in design.md
-  - _Requirements: US-1.AC-30_${greenLine(a.green, "US-1.AC-30")}
-- [ ] ${id()}. [US1] Health checks — liveness and readiness endpoints (a dependency down → not ready, still live); capacity signals with thresholds
-  - _Requirements: US-1.AC-31_${greenLine(a.green, "US-1.AC-31")}
-- [ ] ${id()}. [US1] Operability tests — fault injection (a dependency down, a slow dependency), an alert firing in a staged failure, a rollback drill — runnable locally or in staging
-  - _Requirements: US-1.AC-28, US-1.AC-29, US-1.AC-30, US-1.AC-31_
-`;
-      }
-      if (a.track === "data") {
-        return `
-## Story US-1 — Data Pipeline
-- [ ] ${id()}. [US1] Data contract first — each dataset's schema (columns, types, nullability, keys), owner and compatibility rule in the repo, reviewed before the transformations
-  - _Requirements: US-1.AC-35_${greenLine(a.green, "US-1.AC-35")}
-- [ ] ${id()}. [US1] Data-quality checks — not-null, unique, accepted ranges, row counts and freshness at ingestion and before publishing; a failing row quarantined with its rule, never loaded
-  - _Requirements: US-1.AC-32, US-1.AC-34_${greenLine(a.green, "US-1.AC-32", "US-1.AC-34")}
-- [ ] ${id()}. [US1] Idempotent loads — each run replaces its partition (overwrite or MERGE on a key, never a blind append); late-arriving rows merged within the lookback window
-  - _Requirements: US-1.AC-33_${greenLine(a.green, "US-1.AC-33")}
-- [ ] ${id()}. [US1] Backfill — the procedure for a date range (parallelism, cost, a dry run), rehearsed on one partition and compared with a single run
-  - _Requirements: US-1.AC-33_
-- [ ] ${id()}. [US1] Lineage, ownership and retention — sources → transformations → consumers documented, an owner per dataset, the retention and partitioning from design.md applied
-  - _Requirements: US-1.AC-32, US-1.AC-33, US-1.AC-34, US-1.AC-35_
-`;
-      }
-      return "";
-    },
+Tracks: ${label}. Tick before calling the feature done.`,
+    core: [
+      "Requirements: every AC is testable, has a stable ID, no vague terms (run `ears`).",
+      "Design: respects the project constitution (no principle violated).",
+      "Design: at least one Mermaid diagram; security + error handling covered.",
+      "Traceability: every AC maps to a task (run `trace`).",
+    ],
+    tdd: ["TDD: all planned tests written and red for the right reason before code.", "TDD: test commits land before implementation commits."],
+    saas: [
+      (n) => `SaaS: ${n} mandatory design sections filled (no TODO).`,
+      "SaaS: tenant isolation enforced (`WHERE tenant_id = ?`).",
+      "SaaS: metrics/logs/alerts emitted; load test meets budget (hot path).",
+    ],
+    ai: [
+      (n) => `AI: ${n} mandatory design sections filled (no TODO).`,
+      "AI: golden ≥ threshold, adversarial safety 100%, regression maintained.",
+      "AI: prompts versioned in prompts/vN.md; cost within budget.",
+    ],
+    sec: [
+      (n) => `SEC: ${n} mandatory design sections filled (no TODO) — threat model reviewed.`,
+      "SEC: authentication + object-level authorization enforced, deny by default; no secret in code or logs.",
+      "SEC: SAST, dependency audit and abuse-case tests clean on a local run.",
+    ],
+    privacy: [
+      (n) => `PRIVACY: ${n} mandatory design sections filled (no TODO) — DPIA decision recorded.`,
+      "PRIVACY: access/export and erasure work end to end, across every store and processor.",
+      "PRIVACY: retention job scheduled; privacy notice and records of processing updated.",
+    ],
+    dist: [
+      (n) => `DIST: ${n} mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.`,
+      "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.",
+      "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.",
+    ],
+    api: [
+      (n) => `API: ${n} mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.`,
+      "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.",
+      "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.",
+    ],
+    ui: [
+      (n) => `UI: ${n} mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.`,
+      "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.",
+      "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.",
+    ],
+    obs: [
+      (n) => `OBS: ${n} mandatory design sections filled (no TODO) — each SLO has an error budget, each alert a runbook, the rollback criteria are numbers.`,
+      "OBS: the metrics, structured logs (correlation ID, no personal data) and traces the design names are emitted — seen, not assumed.",
+      "OBS: an alert fired in a staged failure, a rollback drill done and the health checks verified with a dependency down.",
+    ],
+    data: [
+      (n) => `DATA: ${n} mandatory design sections filled (no TODO) — every dataset has a schema, an owner and a compatibility rule; every check says what a failure does.`,
+      "DATA: the data-quality checks run at ingestion and before publishing — a bad row quarantined, never loaded; the freshness alert reaches the owner.",
+      "DATA: a partition re-run and a backfill rehearsed on real-sized data give the same rows as one run; retention and partitioning applied as designed.",
+    ],
+    saasLoadOnly: "SaaS: load test meets budget (hot path).",
+    done: ["Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`)."],
+  },
+  // approvalActions — what the approval guard says an agent wants to do (msg.approvalGuard.action — its decision tree is the
+  // layout's): one sentence per case; asRole / onBehalf / forced follow an approval or a revocation.
+  approvalActions: {
+    remove: (feature) => `permanently delete the feature '${feature}' (its .specs/ folder, approvals and history)`,
+    partial: "run a tool call the approval guard received only in part (its input was cut off) that names dev-spec or .specs/",
+    fed: "feed a shell a script the approval guard can't see (piped from a file or a program, or a process substitution) in a command that names dev-spec or .specs/",
+    specsArg: "run a program the approval guard doesn't know on .specs/, its roadmap.json or a .state.json (it may change them)",
+    error: "run a tool call the approval guard could not check (it failed) while the approval guard is on",
+    project: "act on a project folder (projectDir) the approval guard can't read",
+    tooLong: (length) => `run a shell command too long for the approval guard to read (${length} characters) that names dev-spec or .specs/`,
+    unreadable: "run a shell command that names the dev-spec CLI with an approval word in a form the approval guard can't read (an unknown launcher, a glob, a variable or a joined string)",
+    roadmapEdit: "edit .specs/roadmap.json by hand (it holds the approval guard and the project's gates)",
+    stateEdit: (feature) => `edit the .state.json of '${feature}' by hand — its approvals, evidence and history`,
+    stateShell: (feature) => `change the .state.json of '${feature}' from the shell — its approvals, evidence and history`,
+    observedFeature: (feature) => `write the harness-observed run log of '${feature}' (.execution/observed.jsonl) by hand — the runs the gates trust as evidence`,
+    observedProject: "write the project's harness-observed run log (.specs/.execution/observed.jsonl) by hand — the runs the gates trust as evidence",
+    trackOff: (tracks, feature) => `turn off ${tracks} on '${feature}' — the gates it carries (the test / eval plan, Phase 4's failing tests or evals) stop being required`,
+    evidence: "switch the evidence mode (meta.evidence) back to reported",
+    stopCheck: "turn off the end-of-turn evidence gate (meta.stopCheck)",
+    guardLower: (from, to) => `lower the edit guard (meta.guard) from ${from} to ${to}`,
+    guardSet: (to) => `set the edit guard (meta.guard) to ${to}`,
+    rolesClear: "clear the approval roles (meta.approvalRoles)",
+    rolesDrop: (roles) => `drop required approval roles (${roles}) from meta.approvalRoles`,
+    rolesReplace: "replace the approval roles (meta.approvalRoles)",
+    checkRemove: (name) => `remove the project check '${name}' (meta.checks)`,
+    checkChange: (name) => `change the command of the project check '${name}' (meta.checks)`,
+    roadmapShell: "change .specs/roadmap.json from the shell — write, move or delete it (it holds the approval guard and the project's gates)",
+    specsEdit: "move or delete .specs/ or a folder in it with a file tool (it holds roadmap.json and the features' .state.json)",
+    specsShell: "change .specs/ from the shell — write, move or delete through a glob, a variable or a whole folder that may reach roadmap.json or a feature's .state.json",
+    link: "link a name to .specs/ or to a file in it (a symbolic link, junction or hard link) — writes through the link would reach roadmap.json and the .state.json files unseen",
+    lower: (from, to) => `lower the approval guard from ${from} to ${to}`,
+    revoke: (phase, feature) => `revoke the approval of the ${phase} phase of '${feature}'`,
+    approve: (phase, feature) => `approve the ${phase} phase of '${feature}'`,
+    approveThrough: (feature, through) => `approve every phase of '${feature}' through ${through}`,
+    asRole: (role) => ` as ${role}`,
+    onBehalf: (by) => ` in the name of '${by}'`,
+    forced: " — FORCED (--force)",
+  },
+};
 
+// ===========================================================================
+// The artifact builders this language writes whole — one template each, nothing to share (every other one renders the
+// `text` block above through mcp/lib/i18n.js LAYOUTS). EN is the canonical reference; since 1.13 its templates are
+// internally consistent (every template AC planned and tasked) — the gates would otherwise flag the scaffold.
+// ===========================================================================
+const build = {
     bugReport(a) {
       return `# Bug: ${a.name}
 
@@ -839,7 +698,7 @@ ${a.summary || "[one line: the bug being fixed]"}
       // Every bugfix, any size: two tasks — the red regression test, then the fix. No "reproduce" / "root cause" tasks: the
       // requirements gate already needs bug.md → Reproduction (check `reproduction`) and the design gate its Root Cause
       // (`root-cause`), both before the tasks can be approved, so after the tasks approval the next task is the red test (they
-      // were tasks 1–2 of every bugfix but an XS one — 1.21 F5 — and next_action named them for work already done and gated).
+      // were tasks 1–2 of every bugfix but an XS one — and next_action named them for work already done and gated).
       // The execution gate (bugfixGate) still lets only task 1 through while Root Cause is empty. The iron law holds. A tasks.md
       // scaffolded with the four tasks stays as it is and valid (markdown.js LEGACY_BUG_STEPS; bugfixGate's root-cause task).
       return `# Tasks: ${name}
@@ -865,62 +724,6 @@ ${a.summary || "[one line: the bug being fixed]"}
   - _Verify: [full test suite command]_
 **Checkpoint:** the bug no longer reproduces and the full suite is green.
 `;
-    },
-
-    testPlan(name, tracks, acs, size) {
-      const rows = templateTestRows(tracks, (t, layer, kind, desc, ac, file) => `| ${t} | ${layer} | ${kind} | ${desc} | ${ac} | \`${file}\` |`,
-        { integration: "integration", load: "load", behavior: "[behavior]", acSlot: "[the AC IDs this test covers]", recovery: "[error condition → recovery]", property: "[always-true property]",
-          tenant: "tenant A never reads tenant B's records", latency: "P95 latency within the performance budget",
-          golden: "golden set ≥ the quality threshold", injection: "adversarial: injected instructions are ignored", cost: "cost per request within budget",
-          unauthenticated: "abuse case: an unauthenticated request gets 401 and no data", forbidden: "abuse case: user B never reads user A's resource (403 + audit event)",
-          noSecrets: "no secret, token or stack trace in any response or log", exportData: "a subject's export holds all of their personal data, machine-readable",
-          erasure: "after erasure no store still holds the subject's personal data", retention: "records past their retention period are deleted or anonymized",
-          outboxCrash: "crash between the DB commit and the publish: the event is still delivered", duplicateDelivery: "the same message delivered twice (or N times) has exactly one effect",
-          lostUpdate: "concurrent updates to the same record: no update is lost silently", dependencyDown: "a dependency down: degrade / retry with backoff, the critical path is not blocked",
-          contract: "contract", problemJson: "contract test: a request missing a required field gets 400 problem+json naming it", idempotencyReplay: "a create replayed with the same Idempotency-Key has one effect and returns the first response",
-          staleEtag: "an update with a stale If-Match gets 412 and changes nothing", breakingDiff: "breaking-change diff: the contract against the published version reports no breaking change",
-          component: "component", visual: "visual", keyboardA11y: "keyboard-only walk-through + an automated accessibility check (axe): every action reachable, focus visible, no violation",
-          formErrors: "a form with invalid fields: every value kept, each error named in text, focus on the summary", emptyState: "visual regression of the view's states: the empty state explains why and offers the next action",
-          loadError: "a failed load: an error with Retry, the content already shown kept",
-          telemetry: "every request emits the metric, a structured log line and a trace with one correlation ID; no personal data in the log",
-          burnAlert: "a staged failure burns the error budget: the burn-rate alert fires and pages with the runbook link", rollbackDrill: "rollback drill: a canary whose error rate crosses the threshold stops the rollout and rolls back",
-          readiness: "fault injection: a dependency down → readiness fails, liveness passes, recovery without a restart",
-          dataQuality: "data-quality checks on fixture batches: a null key, a duplicate and an out-of-range row are quarantined with their rule, the valid rows load",
-          idempotentRerun: "a partition re-run or backfilled twice leaves the same rows as one run — no duplicate, no gap",
-          freshness: "a partition older than the freshness SLA: the freshness check fails and alerts the owner",
-          schemaChange: "schema-change compatibility: an added optional column passes, a removed / renamed column or a narrowed type is rejected before the load" }, acs, size);
-      return (
-`# Test Plan: ${name}
-
-## Strategy
-- **Test runner:** []
-- **Mocking approach:** []
-- **Coverage target:** []
-- **Critical paths requiring 100% branch coverage:** []
-
-## Traceability Matrix
-
-<!-- Kind — example: one concrete input → expected output; the default for event-driven criteria (WHEN …, IF … THEN).
-     property: an invariant checked over many generated inputs (fast-check, Hypothesis, jqwik, gopter, FsCheck); use it
-     for ubiquitous criteria (THE SYSTEM SHALL always …), WHILE (state-driven) criteria and any "never / for every" rule —
-     tenant isolation, an encode → decode round-trip, totals that always balance. Values stay example / property.
-     Put the Test ID in the test's name (test("T-01 …"), def test_T01_…) so trace_check {code: true} finds it. -->
-
-| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |
-|---------|-------|------|-------------|-----------------|------|
-${rows}
-
-## Coverage Check
-Every AC must appear in at least one "Covers" cell. Gaps (with justification):
-- [none]
-
-## Test Data & Fixtures
-- []
-
-## Out of Scope for Testing
-- []
-`
-      );
     },
 
     evalPlan(name) {
@@ -972,8 +775,8 @@ Measured P50/P95/P99 ≤ budget at target throughput, error rate < [0.1]%.
       );
     },
 
-    // 1.21 F5 — a change (kind "change", size xs): ONE file holds the whole plan — summary, 1–3 EARS criteria, the approach and
-    // 1–3 tasks with _Verify:_. The engine reads it as the feature's requirements AND tasks (engine/files.js specAlias).
+    // a change (kind "change", size xs): ONE file holds the whole plan — summary, 1–3 EARS criteria, the approach and
+    // 1–3 tasks with _Verify:_. The engine reads it as the feature's requirements AND tasks (engine/files.js changeAlias).
     change(a) {
       return `# Change: ${a.name}
 
@@ -1022,31 +825,6 @@ end-to-end. Keep it concrete; anyone should be able to follow it.
 - [ ] Success Criteria (SC-…) are observably met.
 `
       );
-    },
-
-    checklist(a) {
-      const items = [
-        "Requirements: every AC is testable, has a stable ID, no vague terms (run `ears`).",
-        "Design: respects the project constitution (no principle violated).",
-        "Design: at least one Mermaid diagram; security + error handling covered.",
-        "Traceability: every AC maps to a task (run `trace`).",
-      ];
-      // 1.21 F5: a sized feature's section counts (a.sectionCounts — the size's tiers, the overlaps merged) and, with +obs on, the
-      // +saas line without the telemetry +obs already checks (one line, not two). No size: the counts and lines as ever.
-      const cnt = (t, n) => (a.sectionCounts && a.sectionCounts[t] != null ? a.sectionCounts[t] : n);
-      if (a.tracks.includes("tdd")) items.push("TDD: all planned tests written and red for the right reason before code.", "TDD: test commits land before implementation commits.");
-      if (a.tracks.includes("saas")) items.push("SaaS: " + cnt("saas", 5) + " mandatory design sections filled (no TODO).", "SaaS: tenant isolation enforced (`WHERE tenant_id = ?`).", a.size && a.tracks.includes("obs") ? "SaaS: load test meets budget (hot path)." : "SaaS: metrics/logs/alerts emitted; load test meets budget (hot path).");
-      if (a.tracks.includes("ai")) items.push("AI: " + cnt("ai", 10) + " mandatory design sections filled (no TODO).", "AI: golden ≥ threshold, adversarial safety 100%, regression maintained.", "AI: prompts versioned in prompts/vN.md; cost within budget.");
-      if (a.tracks.includes("sec")) items.push("SEC: " + cnt("sec", 5) + " mandatory design sections filled (no TODO) — threat model reviewed.", "SEC: authentication + object-level authorization enforced, deny by default; no secret in code or logs.", "SEC: SAST, dependency audit and abuse-case tests clean on a local run.");
-      if (a.tracks.includes("privacy")) items.push("PRIVACY: " + cnt("privacy", 6) + " mandatory design sections filled (no TODO) — DPIA decision recorded.", "PRIVACY: access/export and erasure work end to end, across every store and processor.", "PRIVACY: retention job scheduled; privacy notice and records of processing updated.");
-      if (a.tracks.includes("dist")) items.push("DIST: " + cnt("dist", 5) + " mandatory design sections filled (no TODO) — every cross-system write has its mitigation (outbox / inbox / saga) or an accepted risk.", "DIST: consumers idempotent (inbox or a unique key in the effect's transaction); retries with backoff + jitter and a DLQ; nothing non-idempotent retried blindly.", "DIST: failure-injection tests (crash between commit and publish, duplicate delivery, concurrent updates, dependency down) green on a local run.");
-      if (a.tracks.includes("api")) items.push("API: " + cnt("api", 5) + " mandatory design sections filled (no TODO) — the contract file (OpenAPI / .proto / GraphQL schema) is in the repo and named by a task's Implements marker.", "API: errors are problem+json with stable codes; creates take an Idempotency-Key; updates honour If-Match; list endpoints page with a stable cursor.", "API: contract tests and the breaking-change diff against the published version green on a local run; anything removed is deprecated with a Sunset date.");
-      if (a.tracks.includes("ui")) items.push("UI: " + cnt("ui", 5) + " mandatory design sections filled (no TODO) — every state of the state matrix designed; new components entered through the design system.", "UI: WCAG 2.2 AA — the automated accessibility check clean on a local run, plus a manual keyboard and screen-reader pass with its findings fixed.", "UI: responsive at every breakpoint, strings in the catalogue (text expansion, RTL checked); LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 measured.");
-      if (a.tracks.includes("obs")) items.push("OBS: " + cnt("obs", 5) + " mandatory design sections filled (no TODO) — each SLO has an error budget, each alert a runbook, the rollback criteria are numbers.", "OBS: the metrics, structured logs (correlation ID, no personal data) and traces the design names are emitted — seen, not assumed.", "OBS: an alert fired in a staged failure, a rollback drill done and the health checks verified with a dependency down.");
-      if (a.tracks.includes("data")) items.push("DATA: " + cnt("data", 5) + " mandatory design sections filled (no TODO) — every dataset has a schema, an owner and a compatibility rule; every check says what a failure does.", "DATA: the data-quality checks run at ingestion and before publishing — a bad row quarantined, never loaded; the freshness alert reaches the owner.", "DATA: a partition re-run and a backfill rehearsed on real-sized data give the same rows as one run; retention and partitioning applied as designed.");
-      items.push("Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`).");
-      return "# Checklist: " + a.name + "\n\nTracks: " + a.label + ". Tick before calling the feature done.\n\n" +
-        items.map((i) => "- [ ] " + i).join("\n") + "\n";
     },
 
     integrationPlan(name) {
@@ -1104,19 +882,19 @@ const steering = {
       "# Security Standards\n\n## Assurance Level\n- Target OWASP ASVS level: [L1 | L2 | L3] — why: []\n\n## Threat Modeling\n- Method: STRIDE per component and trust boundary, reviewed at every design change.\n- Where threat models live: each +sec feature's design.md → Threat Model.\n\n## Authentication & Authorization\n- Identity provider / session model: []\n- Authorization model (RBAC / ABAC / ownership checks), deny by default: []\n\n## Secrets & Cryptography\n- Secret store: [] — never in code, in committed config, in logs or in tickets.\n- Encryption at rest / in transit (TLS version, key rotation): []\n\n## Secure Coding Rules\n- Validate input at trust boundaries; encode output; parameterized queries only.\n- No secrets, tokens or stack traces in responses or logs.\n\n## Security Testing (local)\n- SAST: [] · dependency audit: [] · secret scan: [] · DAST (exposed services): []\n- Every material threat has an abuse-case test.\n\n## Vulnerability Handling\n- Fix deadlines per severity (critical / high / medium): [] · who triages: []\n",
     "privacy.md":
       "# Privacy Standards (GDPR)\n\n## Roles\n- Controller: [] · DPO / privacy contact: [] · supervisory authority: []\n\n## Principles (GDPR Art. 5)\n- Lawfulness, fairness and transparency · purpose limitation · data minimisation · accuracy · storage limitation · integrity and confidentiality · accountability.\n\n## Records of Processing (Art. 30)\n- Where the record of processing activities lives: []\n\n## Lawful Bases in Use (Art. 6)\n- [processing activity → lawful basis]\n\n## Retention Schedule\n| Data category | Retention period | Deletion method |\n|---|---|---|\n| | | |\n\n## Data Subject Requests\n- Channel · identity verification · one-month deadline (Art. 12(3)) · owner: []\n\n## Processors & Transfers\n- Approved processors (Art. 28 contracts): [] · transfers outside the EEA and their safeguard: []\n\n## Privacy by Design (Art. 25)\n- Defaults: collect the minimum, pseudonymize where possible, no personal data in logs.\n\n## Breach Response\n- Notify the supervisory authority within 72 hours (Art. 33) · runbook: []\n",
-    // 1.17 D — +dist: the team's defaults for delivery, cross-system writes, idempotency, retries, locking and consistency.
+    // +dist: the team's defaults for delivery, cross-system writes, idempotency, retries, locking and consistency.
     "distributed.md":
       "# Distributed Systems & Data Consistency Standards\n\n## Delivery Guarantee\n- Default: at-least-once — every consumer is idempotent. Exactly-once is an effect of idempotency, never a broker promise.\n- Ordering: per key (partition / message group) only where a feature says so: []\n\n## Cross-system Writes\n- A write that touches more than one system (DB + broker, DB + cache, DB + external API) goes through a transactional outbox (or CDC) — never \"commit, then publish\".\n- Business transactions across services: a saga with one compensation per step; orchestration or choreography: []\n\n## Idempotency\n- Idempotency key source (client header / message ID / natural key): [] · where processed keys live (inbox table / unique constraint) and for how long: []\n\n## Retry Policy (defaults)\n- Exponential backoff with jitter · max attempts: [] · per-call timeout: []\n- Never retried: a non-idempotent call without a key, a validation error (a 4xx — but 408 and 429 are retriable, honouring Retry-After) · poison messages → DLQ after [] attempts, with an alert.\n\n## Locking Policy\n- Default: optimistic locking (a version column); pessimistic (SELECT … FOR UPDATE) only for short, hot sections · lock timeout: []\n\n## Consistency Defaults\n- Default isolation level: [] · where eventual consistency is accepted and the maximum staleness: [] · read-your-writes for the user who wrote.\n\n## Observability\n- Outbox lag, consumer lag, DLQ depth and retry counts are metrics with alerts: []\n",
-    // 1.19 T — +api: the team's defaults for the contract, versioning, errors, pagination, idempotency and limits.
+    // +api: the team's defaults for the contract, versioning, errors, pagination, idempotency and limits.
     "api.md":
       "# API Standards\n\n## Style & Contract\n- Style: [REST | GraphQL | gRPC] · the contract lives in: [openapi.yaml | proto/ | schema.graphql] — written first, reviewed before the handlers.\n- Naming: plural nouns for collections · [snake_case | camelCase] fields · ISO 8601 UTC timestamps · IDs as strings.\n\n## Versioning & Compatibility\n- Strategy: [URL /v1 | header | date] · only additive changes within a version · a breaking change ships as a new version.\n- Deprecation: the Deprecation and Sunset headers, at least [6 months] of notice, a changelog entry, usage tracked per client.\n\n## Errors\n- application/problem+json (RFC 9457): type, title, status, detail, instance + a stable `code`; a validation error lists each field. No stack trace in a response.\n\n## Pagination, Idempotency & Concurrency\n- Cursor pagination (an opaque cursor, at most [100] items per page) · an Idempotency-Key on every non-idempotent create, kept for [24 h] · ETag / If-Match on updates (412 on a stale version).\n\n## Rate Limits\n- Per [API key | user | IP]: [N] requests per [window] · 429 with Retry-After and the RateLimit headers.\n\n## Checks (local)\n- Contract tests: [command] · breaking-change diff against the published contract: [command].\n",
-    // 1.19 T — +ui: the team's defaults for the design system, the states, accessibility, responsiveness / i18n and the performance budget.
+    // +ui: the team's defaults for the design system, the states, accessibility, responsiveness / i18n and the performance budget.
     "ui.md":
       "# UI Standards\n\n## Design System\n- Components: [library / Storybook URL] · tokens: [colour, spacing, type — where they live] · a new component enters the system first (documented, reviewed), never as a one-off.\n\n## States\n- Every view designs: loading · empty · error (with Retry) · partial · offline · permission denied · success.\n- Forms: inline errors + a summary, values kept on an error, the submit button never the only feedback.\n\n## Accessibility\n- Target: WCAG 2.2 AA · keyboard operable, visible focus · every control named · contrast 4.5:1 (text) / 3:1 (UI) · targets ≥ 24×24 px · prefers-reduced-motion honoured.\n- Checks: [axe / Lighthouse command] on every local run · a manual keyboard + screen-reader pass ([NVDA / VoiceOver]) per feature.\n\n## Responsiveness & i18n\n- Breakpoints: [360 / 768 / 1280 px] · text expansion +30–40 % · RTL: [yes / no] · dates, numbers and currency through the locale.\n\n## Performance Budget\n- Core Web Vitals (p75): LCP ≤ 2.5 s · INP ≤ 200 ms · CLS ≤ 0.1 · JS per route ≤ [170 KB gz] · measured by: [Lighthouse locally / RUM].\n",
-    // 1.21 F4 — +data: the team's defaults for data contracts, quality checks, idempotent loads and backfills, lineage, retention and cost.
+    // +data: the team's defaults for data contracts, quality checks, idempotent loads and backfills, lineage, retention and cost.
     "data.md":
       "# Data Pipeline Standards\n\n## Contracts & Schemas\n- Where schemas live: [dbt YAML | a schema registry | schemas/] · compatibility: additive changes only; a breaking change ships as a new version with [N weeks] of deprecation.\n- Naming: [snake_case] tables and columns · timestamps in UTC · the layers: [raw → staging → marts].\n\n## Data Quality\n- Every dataset: not-null and unique keys, accepted values and ranges, row-count anomaly checks · they run at ingestion and before publishing · a failure: [quarantine the rows | stop the load] and alert the owner.\n- Tool: [dbt tests | Great Expectations | SQL checks] · command: [command].\n\n## Idempotency & Backfills\n- Every job re-runnable for a partition: overwrite the partition or MERGE on a key — never a blind append · late-arriving data: a lookback window of [N days].\n- Backfills: a dry run first · at most [N] partitions in parallel · the cost estimated and approved by [role].\n\n## Lineage & Ownership\n- Every dataset has an owner and a freshness SLA · lineage lives in: [dbt docs | the data catalog] · consumers hear of a breaking change [N days] ahead.\n\n## Retention & Cost\n- Retention per layer: raw [N days] · curated [N months] — personal data per privacy.md · partitioned by [date], clustered by [key] · cost budget: [$ per month], with an alert at [N] %.\n",
-    // 1.16 Q3 — the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
+    // the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
     "glossary.md":
       "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
   };
@@ -1133,7 +911,7 @@ const evalsReadme = "# Evals\n\n" +
     "Item shape: `{ id, input, expect: { type, value|rubric } }`. Grader types: contains | equals | regex | refuse | judge.\n" +
     "The system prompt is read from the latest `../prompts/vN.md` (its `## System` section).\n";
 
-// 1.25.1 — what the stop gate's claims (msg.stopGate.claims) are made of. A claim is about the WORK — a task, the feature, the fix,
+// what the stop gate's claims (msg.stopGate.claims) are made of. A claim is about the WORK — a task, the feature, the fix,
 // everything, the tests — never a bare verb: "I verified that the bug is in the parser", "the migration was completed in 2023", "The
 // pay() function is implemented in src/pay.ts" were sent back while any recent tick was unverified (one more round-trip a turn).
 const STOP_EN_DONE = String.raw`(?:done|finished|complete|completed|implemented|verified)`;
@@ -1156,7 +934,6 @@ const STOP_EN_ING = String.raw`(?!\s+(?!implementing|fixing|building|wiring|writ
 // ===========================================================================
 const msg = {
     initNote: "Stubs are placeholders. The skill fills them with real content (see references/steering-templates.md).",
-    createNote: (lang) => null, // EN feature: no extra note
     addTrackNote: (tr, slug) => `Added +${tr}. Fill the new design sections, then re-run /spec-doctor ${slug}.`,
     addTrackAlready: (tr) => `already on +${tr}`,
     notes: {
@@ -1170,9 +947,9 @@ const msg = {
       failedTicked: (n, code) => `Task ${n} is already ticked, but its re-verification failed (exit ${code}) — recorded; it now counts as unverified until a passing run is recorded.`,
       badExit: (v) => `exitCode must be an integer (got '${v}').`,
       needsExit: "Evidence that names a command needs its exit code — or give only a summary for a manual check.",
-      // 1.24 r6 D7 — the failed-run refusal of a task whose _Expect:_ value is no `fail` (unknownExpect)
+      // the failed-run refusal of a task whose _Expect:_ value is no `fail` (unknownExpect)
       unknownExpect: (n, values) => `Task ${n} carries ${values.map((v) => "_Expect: " + v + "_").join(", ")} — the marker knows only \`fail\`, so as written the task must PASS. If its run must fail (a test written before its fix), write _Expect: fail_.`,
-      // 1.24 r6 D4 — spec_complete_task: a passing run whose summary shows no test ran (couldNotRun "no-tests")
+      // spec_complete_task: a passing run whose summary shows no test ran (couldNotRun "no-tests")
       noTests: (n, what) => `Task ${n}: the run passed, but its output shows no test ran (${what}) — a run that tests nothing proves nothing (a glob, a path or a filter that matches no test). Nothing was recorded; the task stays open. Fix the _Verify:_ command (or the test it names), then record a run that executes the test.`,
     },
     finish: {
@@ -1201,25 +978,25 @@ const msg = {
       changedByDate: (list, slug) => `judged by file date only (approved before content fingerprints — a clone or copy resets file dates, so this may be no edit at all): ${list} — re-review, then re-approve to track it by content (/approve ${slug} <phase>)`,
       untrackedApproval: (list, slug) => `approved before change tracking — nothing about the signed-off file was recorded, so an edit can't be detected: ${list} — re-approve to start tracking it (/approve ${slug} design)`,
     },
-    // 1.21 F5 — right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.
+    // right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.
     sizes: {
       spikeNoSize: "A spike is timeboxed, not sized — create it without a size (its timebox bounds it).",
       changeSize: (size) => `kind "change" is size xs — for size ${size} create a feature: spec_create {kind: "feature", size: "${size}"}.`,
       changeTracks: (list) => `A change (size xs) is core-only — a track (${list}) makes it a feature of size s: spec_create {size: "s", tracks} (a short design with the tracks' sections, a task per criterion).`,
       changeNoTracks: (slug) => `'${slug}' is a change (size xs, core-only) — a track makes it a feature: create one of size s (spec_create {size: "s", tracks}) and archive this change (spec_feature {action: "archive"}).`,
-      // 1.21 review C9 — spec_create on an EXISTING change named with tracks: nothing is added, never silently
+      // spec_create on an EXISTING change named with tracks: nothing is added, never silently
       tracksIgnored: (list, slug) => `Tracks not added — ${list}: '${slug}' is a change (size xs, core-only); a track makes it a feature — create one of size s (spec_create {size: "s", tracks}) and archive this change (spec_feature {action: "archive"}).`,
       changeCreated: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call (spec_approve {name: "${slug}", through: "tasks"}); after the tasks, spec_finish and the execution sign-off.`,
-      // 1.24 r6: the same note on the CLI (createFeature {cli: true}) — the CLI's own approve / finish lines
+      // the same note on the CLI (createFeature {cli: true}) — the CLI's own approve / finish lines
       changeCreatedCli: (slug) => `'${slug}' is a change (size xs): ONE file, .specs/${slug}/change.md — its summary, 1–3 EARS criteria, the approach and 1–3 tasks with _Verify:_. Fill it, then approve the plan in one call: ${DEV_SPEC} approve ${slug} --through tasks; after the tasks, ${DEV_SPEC} finish ${slug} and the execution sign-off.`,
       sizeKept: (kept, asked) => `This feature's size is ${kept} — kept it (asked for ${asked}): a size is chosen once, when the feature is created.`,
       noGate: (phase, slug) => `'${slug}' is a change: its only approvals are the plan (phase tasks — change.md) and the execution sign-off — there is no ${phase} phase to approve.`,
       scope: (acs, tasks, maxAcs, maxTasks, extra) => `a change is XS — 1–${maxAcs} acceptance criteria and 1–${maxTasks} tasks, core only; change.md has ${acs} criteria and ${tasks} task(s)${extra ? ` and the track(s) ${extra}` : ""} — create it as a feature of size s instead (spec_create {size: "s"}) and archive this change`,
       scopeOk: (acs, tasks) => `XS: ${acs} criteria, ${tasks} task(s)`,
       approvePlan: (slug) => `Review & approve the plan (change.md: its criteria, approach and tasks) — spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks).`,
-      // P3 — size XS / S: the whole plan filled, then ONE approval call (each gate still runs, in order)
+      // size XS / S: the whole plan filled, then ONE approval call (each gate still runs, in order)
       planFastForward: (slug, size, list) => `Size ${size}: fill the whole plan first — ${list} — then approve it in one call: spec_approve {name: "${slug}", through: "tasks"} (/approve ${slug} --through tasks; CLI: ${DEV_SPEC} approve ${slug} --through tasks). Each phase's gate still runs, in order; the first that refuses stops it and says why.`,
-      // 1.21 review C3 — the Phase 4 tests gate (+tdd / +ai) needs work that comes AFTER the plan: the one call ends before it
+      // the Phase 4 tests gate (+tdd / +ai) needs work that comes AFTER the plan: the one call ends before it
       planFastForwardTests: (slug, size, list, through, what) => `Size ${size}: fill the whole plan first — ${list} — then approve it through ${through} in one call: spec_approve {name: "${slug}", through: "${through}"} (/approve ${slug} --through ${through}; CLI: ${DEV_SPEC} approve ${slug} --through ${through}). Each phase's gate still runs, in order. Then Phase 4, whose gate needs work that comes after the plan: ${({ tdd: "write the failing tests", ai: "write the eval harness and the feature's own eval sets", both: "write the failing tests and the feature's own eval sets" })[what] || "write the failing tests"} (/spec ${slug} tests), approve tests (/approve ${slug} tests), then the tasks (/approve ${slug} tasks).`,
       templateApproved: (list) => `only the template's guidance left in: ${list} — the design was approved before 1.21's stricter rule, so this warns; its next approval asks for your own text there (or one line "n/a — <why it does not apply>")`,
       sectionsPassSized: (filled, covered, optional) => `filled: ${filled}` + (covered ? ` · covered by another track's section: ${covered}` : "") + (optional ? ` · optional at this size, left out: ${optional}` : ""),
@@ -1241,14 +1018,14 @@ const msg = {
     },
     kindKept: (kept, asked) => `'${kept}' is already the kind of this feature — kept it (asked for '${asked}'). Start a new one for a different kind.`,
     langKept: (kept, asked) => `This feature is already in '${kept}' — kept it (asked for '${asked}'). One feature, one language.`,
-    // 1.23 review 5 — spec_create on an existing folder (a re-run) says so; a new feature whose slug an archived one holds too is noted.
+    // spec_create on an existing folder (a re-run) says so; a new feature whose slug an archived one holds too is noted.
     createExisted: (slug) => `'${slug}' already exists — nothing was re-created (its files were kept; a re-run only adds the tracks it lacks).`,
     createSummaryKept: "The summary given was not written: the feature's files already hold one.",
     createArchivedTwin: (slug) => `An archived feature is named '${slug}' too (.specs/_archive/${slug}) — to restore it later, rename one of them first.`,
-    // 1.21 F3 — spec_create {kind: "bugfix"} prefill: reproduction · rootCause · condition · behaviour (the input names stay English).
+    // spec_create {kind: "bugfix"} prefill: reproduction · rootCause · condition · behaviour (the input names stay English).
     bugPrefill: {
       bugOnly: (key) => `${key} is a bugfix's input — pass kind: "bugfix" (it prefills bug.md and the regression criterion).`,
-      // 1.21 review A8: the CLI names its flag (--root-cause, not the MCP key rootCause) and its own way to make a bugfix
+      // the CLI names its flag (--root-cause, not the MCP key rootCause) and its own way to make a bugfix
       bugOnlyCli: (flag) => `${flag} is a bugfix's input — create it as a bugfix: ${DEV_SPEC} bugfix "<name>" ${flag} "…" (or --kind bugfix); it prefills bug.md and the regression criterion.`,
       oneLine: (key, max) => `${key} must be one line of at most ${max} characters (it goes into the EARS criterion).`,
       skipped: (list) => `Not prefilled — ${list}: the file already existed or came from a project template (create-only); write those texts into it yourself.`,
@@ -1263,7 +1040,7 @@ const msg = {
       tasksMissing: (slug) => `tasks.md not found for '${slug}'`,
       requirementsMissing: (slug) => `requirements.md not found for '${slug}'`,
       taskNotFound: (n, file = "tasks.md") => `Task ${n} not found in ${file}`,
-      // review 5 (P3): a tasks.md whose bytes are not UTF-8 / UTF-16 text (Windows' ANSI code page) is never rewritten
+      // a tasks.md whose bytes are not UTF-8 / UTF-16 text (Windows' ANSI code page) is never rewritten
       tasksNotText: (file = "tasks.md") => `${file} is not saved as UTF-8 (its accented letters are in another encoding — Windows' ANSI code page, what Windows PowerShell 5.1's Set-Content / Add-Content write): nothing was changed, so those letters stay intact. Save ${file} as UTF-8 (VS Code: "Reopen with Encoding" → Windows 1252, then "Save with Encoding" → UTF-8) and retry.`,
       featureBusy: (slug, rel) => `Another dev-spec process is updating '${slug}' right now (${rel || `.specs/${slug}/.lock`}) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.`,
       roadmapBusy: "Another dev-spec process is updating .specs/roadmap.json right now (.specs/.roadmap.lock) — nothing was changed; retry in a moment. If no other editor or dev-spec command is running, delete that file.",
@@ -1284,7 +1061,7 @@ const msg = {
       noSpecs: (root) => `No .specs/ at ${root}`,
       notGenerated: (file) => `${file} exists and was not generated by dev-spec — left untouched.`,
       specsLinked: (rel) => `Refused to write into ${rel}: that folder is a link (a symbolic link, a junction) or resolves outside .specs/ — replace it with a plain folder, then retry. Nothing was written.`,
-      // 1.24 r6 — the write gate (engine/files.js specsWriteGate): a FILE that is a link, a path of the wrong kind
+      // the write gate (engine/files.js specsWriteGate): a FILE that is a link, a path of the wrong kind
       specsLinkedFile: (rel) => `Refused to write ${rel}: that file is a link (a symbolic link) or resolves outside .specs/ — replace it with a plain file, then retry. It was not written.`,
       specsNotFolder: (rel) => `${rel} is a file where dev-spec needs a folder — rename or move it, then retry. Nothing was written there.`,
       specsNotFile: (rel) => `${rel} is a folder where dev-spec writes a file — rename or move it, then retry. It was not written.`,
@@ -1311,14 +1088,14 @@ const msg = {
       substantial: "No track signals matched but the description is substantial — consider whether +tdd applies (correctness/edge cases).",
       weakOnly: (list) => `On from weak signals only — double-check: ${list}.`,
       possible: (t, sig) => `Possible +${t} — weak signal '${sig}' (needs corroboration; not auto-enabled).`,
-      // (1.19 T) what an anchor names, per track — +dist's wording unchanged
+      // what an anchor names, per track — +dist's wording unchanged
       genericOnly: (t, list) => `Possible +${t} — only app-level words (${list}): none names ${({ api: "an API contract (a public API, OpenAPI / GraphQL / gRPC, a breaking change…)",
         ui: "a UI concern of its own (a design system, accessibility, a UI component, an empty or loading state…)", obs: "an operability concern (an SLO, alerting, on-call, a runbook, a rollout…)",
         data: "a data pipeline concern (a warehouse, an ETL / ELT job, data-quality checks, a backfill, lineage…)" })[t] ||
         "a second system (a broker, another service, a webhook…)"}; not auto-enabled.`,
       keptOff: (t, kw) => `+${t} kept off — '${kw}' appeared negated.`,
       onAlthough: (t, quoted, list) => `+${t} is ON although ${quoted} appeared negated — enabled by: ${list}. Confirm this is intentional.`,
-      // 1.21 F2 — the project's signal overrides (.specs/classifier.json) and classify --explain
+      // the project's signal overrides (.specs/classifier.json) and classify --explain
       overridesApplied: (list) => `This project's signal overrides changed the reading (.specs/classifier.json): ${list.map((o) => `'${o.word}' for +${o.track} → ${({ off: "no signal", weak: "a weak signal", strong: "a strong signal" })[o.effect]}`).join(", ")} — ${DEV_SPEC} signals list shows them all.`,
       overridesInvalid: (code, n) => `.specs/classifier.json ${code === "invalid-entries" ? `holds ${n} invalid entr${n === 1 ? "y" : "ies"} (ignored)` : `is ignored (${({ "invalid-json": "not valid JSON", "invalid-shape": "no \"signals\" list", "too-big": "too big", "not-a-file": "not a regular file", unreadable: "unreadable" })[code] || code})`} — ${DEV_SPEC} signals list says what to fix.`,
       explainHead: "Matched keywords (track · keyword · table tier → final tier):",
@@ -1328,7 +1105,7 @@ const msg = {
       explainOverride: (o, min) => `  +${o.track} '${o.word}' → ${o.effect} · ${o.origin === "set" ? "set by hand" : `learned, ${o.count} correction(s)`}${o.active ? "" : ` · pending (${o.count} of ${min})`}${o.applied ? " · applied here" : ""}`,
       explainNoOverrides: "Project signal overrides: none (.specs/classifier.json).",
     },
-    // 1.21 F2 — spec_tracks {action: "signals"} / dev-spec signals, and what spec_create learns from a Phase 0 correction
+    // spec_tracks {action: "signals"} / dev-spec signals, and what spec_create learns from a Phase 0 correction
     signals: {
       learnedPending: (t, w, e, n, min) => `Phase 0 correction recorded: '${w}' ${e === "off" ? `suggested +${t} and you left it off` : `was only a hint for +${t} and you added it`} (${n} of ${min} — after ${min} consistent corrections it ${e === "off" ? `no longer suggests +${t}` : `becomes ${({ weak: "a weak", strong: "a strong" })[e]} +${t} signal`} in this project; ${DEV_SPEC} signals list).`,
       learnedActive: (t, w, e, n) => `Learned from ${n} consistent Phase 0 corrections: '${w}' ${e === "off" ? `no longer suggests +${t}` : `is ${({ weak: "a weak", strong: "a strong" })[e]} +${t} signal`} in this project (.specs/classifier.json — undo: ${DEV_SPEC} signals forget ${t} "${w}").`,
@@ -1350,7 +1127,7 @@ const msg = {
       fileWarning: (rel, code, n) => `${rel} ${code === "invalid-entries" ? `holds ${n} invalid entr${n === 1 ? "y" : "ies"} — they are ignored, and the file is never rewritten until you fix or remove them by hand` : `is ignored and never rewritten — ${({ "invalid-json": "it is not valid JSON", "invalid-shape": "it holds no \"signals\" list", "too-big": "it is too big (64 KB at most)", "not-a-file": "it is not a regular file", unreadable: "it can't be read" })[code] || code}; fix it by hand or delete it`}.`,
       problem: (i, code) => `  entry ${i + 1}: ${({ "invalid-entry": "invalid (track, word, effect off|weak|strong, count ≥ 1, origin learned|set)", duplicate: "a duplicate of an earlier entry", "too-many": "beyond the 200-override bound" })[code] || code}`,
     },
-    // (1.21 F5: template = only the scaffold's guidance left · na-short = an n/a without a reason of ≥ 4 words)
+    // (template = only the scaffold's guidance left · na-short = an n/a without a reason of ≥ 4 words)
     sectionStatus: { missing: "missing", unfilled: "unfilled", template: "only the template's guidance", "na-short": "n/a without a reason (4+ words)" },
     sectionNames: {},
     precommit: {
@@ -1369,8 +1146,8 @@ const msg = {
       steeringOk: "core steering present (incl. constitution)",
       requirementsMissing: "requirements.md missing",
       clarificationsOpen: (n) => `${n} unresolved [NEEDS CLARIFICATION] — resolve before design`,
-      clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change (1.21 verify V7)
-      clarificationsOpenBug: (n) => `${n} unresolved [NEEDS CLARIFICATION] in bug.md — resolve them before approving its Reproduction / Root Cause`, // a bugfix (r5 review)
+      clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change
+      clarificationsOpenBug: (n) => `${n} unresolved [NEEDS CLARIFICATION] in bug.md — resolve them before approving its Reproduction / Root Cause`, // a bugfix
       clarificationsNone: "none open",
       scPresent: "present",
       scMissing: "no measurable SC-### success criteria",
@@ -1401,11 +1178,11 @@ const msg = {
     next: {
       fixChecks: (ids, slug) => `Fix blocking checks (${ids}) — run /spec-doctor ${slug} for details.`,
       reReview: (files) => `Re-review: ${files} changed after the last approval — re-approve the affected phase.`,
-      // 1.22 review: an approved artifact that was deleted — nothing to re-approve until it is back
+      // an approved artifact that was deleted — nothing to re-approve until it is back
       approvedMissing: (files, slug, phase) => `${files} was approved but no longer exists — restore it (it was deleted after its approval) or, if it is gone for good, withdraw that approval: /approve ${slug} ${phase} --revoke.`,
-      // r5 review: .state.json doesn't parse / has the wrong shape (error: readState's localized message) — the one step
+      // .state.json doesn't parse / has the wrong shape (error: readState's localized message) — the one step
       stateInvalid: (error, slug) => `${error} Until it is repaired nothing can be approved, ticked or finished, and the approvals, ticks and evidence it holds can't be read — fix it by hand or restore it from git (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on), then /spec-doctor ${slug}.`,
-      // 1.24 review 6 (E4): roadmap.json doesn't parse / has the wrong shape (error: roadmapError's localized message) — the one step
+      // roadmap.json doesn't parse / has the wrong shape (error: roadmapError's localized message) — the one step
       roadmapInvalid: (error, slug) => `${error} Until it is repaired nothing can be approved, revoked or finished — the approval roles and project checks it holds can't be read. Fix it by hand or restore it from git (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on), then /spec-doctor ${slug}.`,
       approveRequirements: (slug) => `Review & approve requirements — /approve ${slug} requirements.`,
       approveDesign: (slug) => `Review & approve design — /approve ${slug} design.`,
@@ -1423,7 +1200,7 @@ const msg = {
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). Decide: the spec is now wrong → /spec-change ${slug} impact (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
       // but predates a later change: re-confirm it — never "sign it off" as if there were none).
-      // signOff.role (1.14, meta.approvalRoles.execution): the role to sign as; signOff.missing / signed: the roles still missing / signed.
+      // signOff.role (meta.approvalRoles.execution): the role to sign as; signOff.missing / signed: the roles still missing / signed.
       finished: (slug, day, total, signOff) => `'${slug}' is finished (${day}) — its ${total} implementing file(s) are unchanged since.` +
         (!signOff ? ` Nothing left to do here — /spec-report drift ${slug} checks it after later changes.`
           : signOff.why ? ` Its execution sign-off (${signOff.at}) predates ${signOff.why} — re-confirm it: /approve ${slug} execution${signOff.role ? " --role " + signOff.role : ""}.`
@@ -1454,7 +1231,7 @@ const msg = {
       rateLimit: "Specify rate limits (per-user / per-tenant / global).",
       aiQuality: "Specify output-quality target and refusal behavior for the AI path.",
       aiCost: "Specify a cost ceiling per request ($/tokens).",
-      // 1.21 verify V6 — a change (one change.md) is asked only what its doctor checks
+      // a change (one change.md) is asked only what its doctor checks
       changeSummary: "Write the change's Summary in change.md: what changes and why, in one line.",
       changeCriteria: "Write 1–3 EARS acceptance criteria in change.md (1. **US-1.AC-1** — WHEN … THE SYSTEM SHALL …).",
       changeApproach: "Write the Approach in change.md: what the change touches, and why that is all of it.",
@@ -1490,20 +1267,20 @@ const msg = {
         "unexpected-pass": "run passed, but _Expect: fail_ needs a red run",
         unobserved: "run not observed by the harness", // 1.14 F1 (meta.evidence: observed)
         "command-mismatch": "the run recorded is not its _Verify:_ command" }, // 1.22 review
-      // 1.22 review — the run recorded for a task is not a run of its _Verify:_ command(s): it ticks, but proves nothing.
-      // review 2: several _Verify:_ commands → every one of them, in one run; a prefix the _Verify:_ holds is never dropped; an
-      // _Expect: fail_ task: the red run BEFORE the fix lands (review 3: a red run of another command never counts — with the fix in,
+      // the run recorded for a task is not a run of its _Verify:_ command(s): it ticks, but proves nothing.
+      // several _Verify:_ commands → every one of them, in one run; a prefix the _Verify:_ holds is never dropped; an
+      // _Expect: fail_ task: the red run BEFORE the fix lands (a red run of another command never counts — with the fix in,
       // it is set aside for the red run)
       commandMismatch: (n, slug, ran, verify, red) => `Task ${n}: the run recorded (\`${ran}\`) is not a run of its _Verify:_ command (${verify}) — it is ticked, but stays unverified until a ${red ? "FAILING " : ""}run of that command is recorded (the command as written — with several _Verify:_ commands, every one of them in ONE run joined with \` && \`; a \`cd <project root> &&\`, \`set -o pipefail;\` or VAR=value of your own in front is fine (a cd anywhere else is another run), but never drop one the _Verify:_ holds)` +
         (red ? ` — record it BEFORE the fix lands, while the test still fails: ${DEV_SPEC} done ${slug} ${n} --run (a red run of another command never counts; with the fix already in, set it aside — git stash push -- <the fix's files>, not a bare git stash: it would take tasks.md and .state.json too — for that run, then restore it).` : `: ${DEV_SPEC} done ${slug} ${n} --run`),
       duplicateTasks: (list) => `task numbers used more than once: ${list} — complete/brief pick the first open one; renumber them`,
-      // 1.24 r6 D1 — doctor evidence-moved: a run recorded under a number whose task was renumbered
+      // doctor evidence-moved: a run recorded under a number whose task was renumbered
       evidenceMoved: (list, slug) => `runs recorded under a task number belong to a task that now has another number (renumbered): ${list} — evidence is kept by number, so neither task reads that run any more; record the moved task's own run: ${DEV_SPEC} done ${slug} <n> --run`,
     },
-    // 1.14 F1 — harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").
+    // harness-observed evidence (hooks/observe-hook.js; roadmap.json meta.evidence "reported" | "observed").
     observed: {
       on: "Evidence mode OBSERVED — a task whose _Verify:_ holds a command is verified only by a passing run the harness saw (in Claude Code the plugin's observe hook logs every Bash run of a _Verify:_ or project-check command) or that dev-spec done --run / finish --run made itself; a project check's run likewise (roadmap.json meta.evidence). An MCP-only client has no such hook: record its runs with " + DEV_SPEC + " done <feature> <n> --run. With the PowerShell tool alone (Windows without Git Bash) a run is logged only when Claude Code reports its exit code — record the others with --run too.",
-      // 1.25.1 (review 7): observed evidence is only as strong as the approval guard
+      // observed evidence is only as strong as the approval guard
       unguarded: "Observed evidence is only as strong as the approval guard, and it is off (meta.approvalGuard): an agent appending one line to an .execution/observed.jsonl forges an observed run. Turn it on — " + DEV_SPEC + " init --approval-guard ask (or deny) — so writing that log is asked or refused.",
       off: "Evidence mode REPORTED — the runs an agent reports verify as given (roadmap.json meta.evidence); each record still says whether the harness observed it.",
       badValue: (v) => `--evidence takes reported or observed (got '${v}').`,
@@ -1531,7 +1308,7 @@ const msg = {
       bugfixNeedsTdd: "A bugfix is always test-first — +tdd can't be removed from it.",
       notActive: (list) => `Not active: ${list} — nothing to remove.`,
       removed: (list, slug) => `Removed ${list} from the active tracks. No file was deleted — the inactive artifacts stay in place and count again if you re-add the track. Re-run /spec-doctor ${slug}.`,
-      // 1.21 review C7 — a sized design's section the removed track covered, written back (heading + TODO + guidance)
+      // a sized design's section the removed track covered, written back (heading + TODO + guidance)
       restoredSections: (list) => `The removed track covered these sections of the remaining tracks — added back to design.md, to be filled: ${list}.`,
       addedOnCreate: (slug, list) => `'${slug}' already existed: added ${list} (artifacts, design sections, steering, tasks) — nothing was overwritten.`,
       designTitle: (name) => `# Design: ${name}`,
@@ -1553,28 +1330,28 @@ const msg = {
       arrayOf: (t) => `an array (each item ${t})`,
       oneOf: (list) => `one of: ${list}`,
       atLeast: (n) => `≥ ${n}`,
-      atMost: (n) => `≤ ${n}`, // 1.24 r6 A5: a schema `maximum`
-      between: (lo, hi) => `between ${lo} and ${hi}`, // 1.24 r6 A5: `minimum` and `maximum`
-      atLeastItems: (n) => `with at least ${n} item${n === 1 ? "" : "s"}`, // 1.25.1: a schema `minItems` (spec_append_tasks.tasks)
-      // 1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
+      atMost: (n) => `≤ ${n}`, // a schema `maximum`
+      between: (lo, hi) => `between ${lo} and ${hi}`, // `minimum` and `maximum`
+      atLeastItems: (n) => `with at least ${n} item${n === 1 ? "" : "s"}`, // a schema `minItems` (spec_append_tasks.tasks)
+      // a top-level argument the tool's inputSchema doesn't list (it was dropped, and the call did something else)
       unknownArgs: (tool, items, valid) => `Unknown argument${items.length > 1 ? "s" : ""} for ${tool}: ${items.map((u) => u.argument + (u.didYouMean ? ` (did you mean ${u.didYouMean}?)` : "")).join(", ")} — nothing was done. ${tool} takes: ${valid}.`,
-      // 1.26: an argument of another mode of a tool that folded several into one (spec_roadmap_edit kind, spec_export format, spec_scan coverage)
+      // an argument of another mode of a tool that folded several into one (spec_roadmap_edit kind, spec_export format, spec_scan coverage)
       inapplicable: (tool, mode, names, allowed) => `${tool} {${mode}} does not take ${names} — nothing was done. With ${mode} it takes: ${allowed || "no other argument"}.`,
       notObject: "arguments must be a JSON object.",
       dotdot: "projectDir must not contain '..' path segments.",
       network: (dir) => `projectDir must be a local folder — a network or device path (${dir}) is refused, so a tool call can never point this local server at another machine; open the project locally (or start the server with it as the working directory).`,
-      // 1.24 r6 A3: projectDir names an existing folder (the CLI's --project rule) — spec_init alone creates one
+      // projectDir names an existing folder (the CLI's --project rule) — spec_init alone creates one
       projectMissing: (dir) => `projectDir ${dir}: no such folder — check the path (only spec_init creates a project folder).`,
       projectNotDir: (dir) => `projectDir ${dir} is a file, not a folder.`,
-      // 1.25.1 (review 7): spec_import reads (and, dry, returns) the files its path names — only in the default project or a dev-spec one
+      // spec_import reads (and, dry, returns) the files its path names — only in the default project or a dev-spec one
       projectNoSpecs: (dir) => `projectDir ${dir} holds no dev-spec project (a .specs/ with roadmap.json, steering/ or a feature) — spec_import reads files only in the default project or one spec_init set up: run spec_init with this projectDir first.`,
       projectUri: (uri) => `projectDir ${uri} is not a local file:// URI of a folder (file:///C:/path on Windows, file:///path elsewhere).`,
-      // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params) — 1.14 full review S2.
+      // tools/call naming no tool of tools/list (JSON-RPC -32602 Invalid params).
       unknownTool: (name) => `Unknown tool: ${name} — tools/list lists the tools this server provides.`,
       noTool: "tools/call needs params.name — the tool to call (tools/list lists them).",
-      // 1.23: a tool that threw (a file system error…) — the JSON result {ok: false, error, code}, like every other refusal
+      // a tool that threw (a file system error…) — the JSON result {ok: false, error, code}, like every other refusal
       toolFailed: (why) => `The tool failed: ${why}`,
-      // 1.23: an incoming line past the server's cap (JSON-RPC -32600, the line skipped, the server keeps running)
+      // an incoming line past the server's cap (JSON-RPC -32600, the line skipped, the server keeps running)
       tooLarge: (n, max) => `Invalid Request: a message of ${n}+ characters passes this server's limit of ${max} (DEV_SPEC_MCP_MAX_MESSAGE) — it was skipped.`,
     },
     // Valid JSON with the wrong shape (.specs/roadmap.json, .specs/<feature>/.state.json).
@@ -1597,7 +1374,7 @@ const msg = {
       unticks: "'unticks' must be an array", // 1.16 U1 (undone ticks)
     },
     depend: {
-      // 1.23 review 5 — ROADMAP.md / .html "Needs attention": a dependsOn naming no feature (a stale or hand-edited roadmap.json entry)
+      // ROADMAP.md / .html "Needs attention": a dependsOn naming no feature (a stale or hand-edited roadmap.json entry)
       roadmapStale: (feature, list, args) => `depends on ${list}, which is no feature (a stale or hand-edited .specs/roadmap.json entry) — set the list again without it: ${DEV_SPEC} depend ${feature} ${args}`,
       unknown: (list) => `Every dependency must be an existing feature — not found: ${list}`,
     },
@@ -1606,7 +1383,7 @@ const msg = {
       usage: "Usage: node run-evals.js <feature> [--dry-run] [--set-baseline] [--require-live] [--model=ID] [--project=DIR] [--max-items=N]",
       noEvalsDir: (slug, dir) => `No evals/ dir for '${slug}' at ${dir}`,
       requireLive: "eval harness: ANTHROPIC_API_KEY is not set and --require-live was given — refusing to fall back to a dry run.",
-      // 1.23 review: a mistyped switch (--dryrun) or a stray word ran a LIVE, paid eval — refused before anything runs
+      // a mistyped switch (--dryrun) or a stray word ran a LIVE, paid eval — refused before anything runs
       unknownFlag: (flag, suggestion) => `eval harness: unknown option ${flag}` + (suggestion ? ` — did you mean ${suggestion}?` : "") + " Nothing ran.",
       extraArg: (word) => `eval harness: unexpected argument '${word}' — one feature per run. Nothing ran.`,
       header: (slug) => `dev-spec-driven evals — feature '${slug}'`,
@@ -1680,17 +1457,17 @@ const msg = {
     },
     featureOps: {
       removeNeedsConfirm: (slug, n) => `Removing '${slug}' permanently deletes .specs/${slug}/ (${n} file(s)). Nothing was deleted — pass confirm: true to delete it, or archive it instead (reversible).`,
-      // 1.24 r6: a feature folder that is a link — remove deletes the link alone
+      // a feature folder that is a link — remove deletes the link alone
       removeNeedsConfirmLink: (slug) => `.specs/${slug}/ is a link (a symbolic link, a junction): removing '${slug}' deletes only the link — the folder it points at and its files are kept. Nothing was deleted — pass confirm: true to remove the link.`,
-      // 1.23: a remove the user confirmed over MCP whose folder is no longer the one they were shown (renamed into the name, edited)
+      // a remove the user confirmed over MCP whose folder is no longer the one they were shown (renamed into the name, edited)
       removeChangedSincePreview: (slug) => `Nothing deleted: .specs/${slug}/ changed after the user was asked to confirm its removal (another feature renamed into the name, or files edited while the question waited) — their confirmation covered the folder they were shown. Ask them again.`,
       backlogNotFound: (name, known) => `'${name}' is not in the backlog${known ? ` (backlog: ${known})` : " (the backlog is empty)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' already has a spec (.specs/${slug}/) — the backlog is for features without one yet (status: ${DEV_SPEC} status ${slug}).`,
-      // 1.19 R review 5: add of a name already in the backlog keeps its entry and appends the new note (exists: true, appended)
+      // add of a name already in the backlog keeps its entry and appends the new note (exists: true, appended)
       backlogAppended: (name) => `'${name}' is already in the backlog — the new note was appended to its note.`,
       backlogKept: (name) => `'${name}' is already in the backlog with that note — nothing changed.`,
       backlogNoteFull: (name, max) => `'${name}' is already in the backlog and its note would pass ${max} characters — the new note was not added: file it under another name.`,
-      // 1.19 verify 5: a NEW entry's note past the same cap
+      // a NEW entry's note past the same cap
       backlogNoteLong: (name, max) => `The note for '${name}' passes ${max} characters — nothing was added to the backlog: shorten the note.`,
     },
     // CLI human output (--json output is the structured result, never localized).
@@ -1755,24 +1532,24 @@ const msg = {
       usage: (syntax) => `usage: ${syntax}`,
       unknownCommand: (c) => `unknown command '${c}'. Run \`${DEV_SPEC} help\`.`,
       unknownClient: (c, known) => `unknown client '${c}'. Known: ${known}`,
-      // 1.22 review: --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
+      // --json on a command that prints text only (help, rules, mcp-config, evals) — a usage error, never that text
       noJson: (c) => `--json is not available for '${c}': it prints text only. Run it without --json.`,
-      // 1.23 review: each command takes its own options and arguments — one it doesn't read is an error, never silently ignored
+      // each command takes its own options and arguments — one it doesn't read is an error, never silently ignored
       flagNotFor: (flag, c, list) => `${flag} is not an option of '${c}'` + (list ? ` (its options: ${list})` : " (it takes none)") + `. Run \`${DEV_SPEC} help\`.`,
       extraArgs: (c, extra) => `'${c}' got unexpected argument(s): ${extra}. Run \`${DEV_SPEC} help\` for its syntax.`,
       needsRun: (flag) => `${flag} only applies with --run (how the commands run) — add --run, or leave ${flag} out.`,
       runOrEvidence: "--run records the run it makes; --evidence / --exit / --cmd report a run made elsewhere — pass one or the other.",
-      // 1.23 review: --project names an existing folder (init alone creates it)
+      // --project names an existing folder (init alone creates it)
       projectEmpty: "--project is empty — name the project folder, or leave --project out (the nearest folder above this one with a .specs/, else this one).",
       projectUnexpanded: (v) => `--project ${v} holds a variable that was never expanded — pass the folder itself.`,
       projectMissing: (dir) => `--project ${dir}: no such folder — check the path (only init creates a project folder).`,
       projectNotDir: (dir) => `--project ${dir} is a file, not a folder.`,
-      // 1.24 r6 B1: SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked like --project when one of them chose the project
+      // SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR are checked like --project when one of them chose the project
       projectEnvMissing: (name, dir) => `${name}=${dir}: no such folder — fix or unset the variable (only init creates a project folder).`,
       projectEnvNotDir: (name, dir) => `${name}=${dir} is a file, not a folder — fix or unset the variable.`,
-      // 1.24 r6 B7: a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
+      // a project's own .specs/ folder named as the project (label: "--project <dir>" or "<VARIABLE>=<dir>")
       projectIsSpecs: (label, parent) => `${label} is the .specs folder of the project ${parent} — name the project folder itself: ${parent}`,
-      // 1.24 r6 B-I1: `dev-spec version` / --version / -V (the codes — engine.source, bundle.skipped, project.source — stay English in --json)
+      // `dev-spec version` / --version / -V (the codes — engine.source, bundle.skipped, project.source — stay English in --json)
       version: {
         head: (v) => `dev-spec-driven ${v || "(unknown version)"}`,
         cli: (f) => `  CLI:      ${f}`,
@@ -1791,26 +1568,26 @@ const msg = {
           missing: "            the folder does not exist (init creates it)",
         },
       },
-      // 1.24 r6 B-I3: `<command> --help` / -h / help <command> — the frame around that command's lines of the help
+      // `<command> --help` / -h / help <command> — the frame around that command's lines of the help
       cmdHelp: {
         options: (list) => `  Its options: ${list}`,
         none: "  It takes no option of its own.",
         global: "  Every command: --json · --project <dir> · --help (-h) · --version (-V)",
         all: `  Every command and the details: ${DEV_SPEC} help`,
       },
-      // 1.24 r6 B-I9: an argument "-" read from a terminal (a TTY) — one stderr line before the CLI waits
+      // an argument "-" read from a terminal (a TTY) — one stderr line before the CLI waits
       stdinHint: "reading from the terminal — type or paste the text, then Ctrl+D on a line of its own (Windows: Ctrl+Z, then Enter).",
-      // 1.24 r6 B9: ears <path> naming no file (and no feature of that name)
+      // ears <path> naming no file (and no feature of that name)
       earsNoFile: (file) => `${file}: no such file — ears takes a feature name, a markdown file, --text "…" or - (stdin).`,
-      // 1.24 r6 B8: bundle --out onto an existing file that is no previous bundle
+      // bundle --out onto an existing file that is no previous bundle
       bundleNotOurs: (file) => `${file} exists and is not a dev-spec bundle — nothing was written. Choose another --out, or add --force to overwrite it.`,
-      // 1.24 r6 B5: a single-value flag given twice (the last value used to win silently)
+      // a single-value flag given twice (the last value used to win silently)
       flagTwice: (flag) => `${flag} was given more than once — it takes a single value: give it once.`,
-      // 1.24 r6 B6: a bounded integer flag's upper end, after args.atLeast (--timeout ≤ Node's timer limit)
+      // a bounded integer flag's upper end, after args.atLeast (--timeout ≤ Node's timer limit)
       atMost: (n) => `, at most ${n}`,
-      // 1.24 r6 B3: done --run / finish --run settled at the command's exit while a background process still held its output
+      // done --run / finish --run settled at the command's exit while a background process still held its output
       runHeldOpen: (code) => `⚠ the command exited (${code}), but a process it started in the background kept its output open — the run was recorded at that exit; what that process prints later is not in the evidence.`,
-      // 1.25 completion: the `dev-spec` a completion script defines finds no CLI any more (written into the script when it is generated)
+      // completion: the `dev-spec` a completion script defines finds no CLI any more (written into the script when it is generated)
       completionGone: (cli) => `${cli} is gone and no newer copy of the plugin was found — save the completion script again from the current CLI (its completion --help says how), or remove it from your shell profile.`,
     },
 
@@ -1831,9 +1608,9 @@ const msg = {
       approveUnreadable: (phase, slug, file) => `Nothing to approve: ${file} in '${slug}' can't be read (a folder of that name, no permission, or another program holding it) — make it a readable file, then approve '${phase}'.`, // r5 review
       approveForced: (ids) => `Approved with force — the failing checks are recorded with the approval: ${ids}.`,
       phaseOrder: (list, slug, first) => `earlier phases are not approved yet: ${list} — approve them first, in order (/approve ${slug} ${first})`,
-      // 1.24 review 6 (E1): an earlier phase whose approved content changed since its approval
+      // an earlier phase whose approved content changed since its approval
       phaseOrderChanged: (list, slug, first) => `earlier phases changed since their approval: ${list} — re-review them (spec_impact) and re-approve them first, in order (/approve ${slug} ${first})`,
-      // 1.24 review 6 (E4): roadmap.json can't be read (detail: roadmapError's message) — approve / revoke / the fast-forward refuse
+      // roadmap.json can't be read (detail: roadmapError's message) — approve / revoke / the fast-forward refuse
       roadmapUnreadable: (detail) => `${detail} Nothing recorded: the approval roles and project checks this file holds can't be read — approvals, revocations and spec_finish refuse until it is repaired (conflict markers from a merge? resolve them; ${DEV_SPEC} merge-state --install merges it by meaning from then on).`,
       // …doctor's `roadmap` check and spec_finish's `roadmap` blocker
       roadmapCheck: (detail) => `${detail} The approval roles and project checks it holds can't be read: approvals, revocations and spec_finish refuse until it is repaired.`,
@@ -1873,9 +1650,9 @@ const msg = {
       evalSetsSample: "evals/golden.json is still the scaffold's sample set — write this feature's golden cases, run the harness and record the baseline",
       evalSetsMissing: "evals/golden.json is missing or holds no eval items ({\"items\": […]}) — write this feature's golden set first",
       testsGateChecks: (ids) => `(the approve gate checks this: ${ids})`,
-      // 1.22 review: a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan whose approval changed since) — pending again.
+      // a Phase 4 sign-off the plan outgrew (a T-ID planned since, a plan whose approval changed since) — pending again.
       testsStale: (day, missing, plans) => `The Phase 4 sign-off of ${day} no longer covers the plan (${[missing ? `planned since: ${missing}` : null, plans ? `approval changed since: ${plans}` : null].filter(Boolean).join("; ")}) — the tests phase is to be approved again.`,
-      // 1.22 review: an approval the user confirmed over MCP whose content (or, forced, its failing checks) changed after the question.
+      // an approval the user confirmed over MCP whose content (or, forced, its failing checks) changed after the question.
       changedSincePreview: (phase, slug, grown) => (grown
         ? `Nothing recorded: since the user was asked to confirm '${phase}' of '${slug}', its gate fails more checks (${grown}) than the question named — ask them again.`
         : `Nothing recorded: '${phase}' of '${slug}' changed after the user was asked to confirm it — their confirmation covered the version they were shown. Ask them again, so they confirm what is there now.`),
@@ -1912,7 +1689,7 @@ const msg = {
       pathRequired: "path required — the folder (or a file) of the spec to import.",
       outside: (p) => `'${p}' is outside the project — spec_import only reads inside the project directory.`,
       notFound: (p) => `'${p}' not found.`,
-      // 1.25.1 (review 7): never a hidden folder or file but the importers' own; a file named as the source is a document format
+      // never a hidden folder or file but the importers' own; a file named as the source is a document format
       hidden: (p, part) => `'${p}' is in a hidden folder or is a hidden file (${part}) — spec_import reads none but the importers' own: .kiro/, .cursor/, .cursorrules, .fluidplan/, .agent/ (Codex), .claude/plans/.`,
       notSource: (p) => `'${p}' is no spec source spec_import reads — name a .md / .markdown / .mdc / .txt / .json / .yaml / .yml file, or the source's folder.`,
       nothing: (tool, p) => `No ${tool} spec files found in '${p}'.`,
@@ -1953,18 +1730,18 @@ const msg = {
       wRemoved: (name) => `REMOVED requirement '${name}' was not imported`,
       wRenamed: (from, to) => `RENAMED requirement '${from}' → '${to}' (imported under the new name)`,
       wSkipped: (files) => `not imported (left in place): ${files}`,
-      // 1.24 r6 (G-I3): spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
+      // spec-kit's design documents beside plan.md → design.md sections (their headings; the provenance line)
       skDocs: { research: "Research", dataModel: "Data Model", contracts: "Contracts", quickstart: "Quickstart" },
       skFrom: (file) => `> From spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `no ${file} in the source — design.md holds the design documents found beside it (research, data model, contracts, quickstart) without the plan`,
-      // 1.25.1: spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
+      // spec-kit's functional requirements are carried as prose (## Functional Requirements) — no criterion traces the ones no scenario covers
       wUncoveredFr: (list) => `functional requirements no acceptance scenario covers — carried as prose under "Functional Requirements", so no task or test traces them: ${list}. Turn each into an EARS criterion with an AC ID (or cite it in one) before approving the requirements`,
       wUnreadable: (file) => `${file} points outside the project — skipped`,
       done: (tool, rel, slug, label, lang) => `Imported ${tool} ${rel} → feature '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  mapping: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
     },
 
-    // 1.25 — spec_import kiro-steering / cursor-rules (another tool's steering → .specs/steering/), and the CLI's lines for both
+    // spec_import kiro-steering / cursor-rules (another tool's steering → .specs/steering/), and the CLI's lines for both
     // imports' --dry-run. The `skipped` reason codes (exists, duplicate, name, own, too-large, empty, outside, unreadable) stay English.
     importSteering: {
       note: (tool, rel, date) => `<!-- Imported from ${tool} ${rel} on ${date}. -->`,
@@ -2022,7 +1799,7 @@ const msg = {
       noTestPlan: (slug) => `makesGreen needs a test plan: .specs/${slug}/test-plan.md does not exist (add +tdd first). Nothing was written.`,
     },
 
-    // 1.14 F3 — task dependencies (`_Depends: 3, 5_`, English-stable) and execution waves: doctor task-deps, the "no task can
+    // task dependencies (`_Depends: 3, 5_`, English-stable) and execution waves: doctor task-deps, the "no task can
     // start" note (next_task / next_action / brief / complete_task), the early-tick warning, the brief's section,
     // spec_append_tasks `depends`, the CLI's next --waves lines. Task numbers and #n stay as written.
     taskDeps: {
@@ -2056,7 +1833,7 @@ const msg = {
     impact: {
       badPhase: (p, known) => `Unknown phase '${p}' for spec_impact. Known: ${known}.`,
       reopenTasks: "reopen applies to requirements, design, test-plan and eval-plan — a change to tasks.md is reviewed and re-approved; it reopens nothing.",
-      // 1.21 review C4 — a change: ONE approved artifact (change.md, its plan — phase tasks) holds its criteria and its tasks
+      // a change: ONE approved artifact (change.md, its plan — phase tasks) holds its criteria and its tasks
       changePhase: (phase, slug) => `'${slug}' is a change: its criteria and its tasks are one file, change.md, approved as the plan (phase tasks) — there is no ${phase} phase. spec_impact {name: "${slug}"} (phase tasks, the default) diffs both: the criteria by ID, the tasks by number.`,
       // --phase test-plan: a REMOVED planned test — its tasks still name its T-ID in _Makes green:_.
       retireTests: {
@@ -2104,7 +1881,7 @@ const msg = {
       nothingToVerify: "nothing to verify (no _Verify:_ command, nothing recorded)",
       staleSpec: "the spec changed since this evidence; spec_impact reopened the task",
       uncovered: (list) => `new, no task cites them yet: ${list}`,
-      // roles (1.14): the roles that haven't signed the changed content yet (meta.approvalRoles) — each signs again, the first named.
+      // roles: the roles that haven't signed the changed content yet (meta.approvalRoles) — each signs again, the first named.
       reReview: (slug, phase, roles) => `review the change, then re-approve: /approve ${slug} ${phase}` + (roles && roles.length ? ` --role ${roles[0]} (each role signs the new content: ${roles.join(", ")})` : ""),
     },
     // spec_metrics + the retrospective (retro.md). Durations use the same units everywhere (m/h/d).
@@ -2260,7 +2037,7 @@ const msg = {
       off: "Guard mode OFF — code edits are not gated.",
       badValue: (v) => `--guard takes on, off or scope (got '${v}').`,
     },
-    // 1.14 F2 — the human approval guard (hooks/approval-hook.js, PreToolUse · roadmap.json meta.approvalGuard off|ask|deny ·
+    // the human approval guard (hooks/approval-hook.js, PreToolUse · roadmap.json meta.approvalGuard off|ask|deny ·
     // spec_init {approvalGuard} · `dev-spec init --approval-guard`). `ask` is read by the USER (the permission prompt), `deny` by
     // the AGENT (+ `denyUser`, the line the user sees). The "dev-spec approval guard" prefix stays English, like "dev-spec guard".
     approvalGuard: {
@@ -2270,64 +2047,22 @@ const msg = {
       },
       off: "Approval guard OFF — an agent's approval calls are not gated (roadmap.json meta.approvalGuard).",
       badValue: (v) => `--approval-guard takes off, ask or deny (got '${v}').`,
-      action: (a) => {
-        const f = a.feature || "?";
-        if (a.kind === "remove") return `permanently delete the feature '${f}' (its .specs/ folder, approvals and history)`;
-        // 1.23 review 5: a shell command the guard can't read — too long (a.length characters) or in a form it can't follow
-        if (a.kind === "unreadable") {
-          if (a.why === "partial") return "run a tool call the approval guard received only in part (its input was cut off) that names dev-spec or .specs/"; // 1.24 review 6
-          // 1.25.1 (review 7): a script fed to a shell out of sight; an unknown program on .specs/ files; the hook's own failure; a projectDir
-          if (a.why === "fed") return "feed a shell a script the approval guard can't see (piped from a file or a program, or a process substitution) in a command that names dev-spec or .specs/";
-          if (a.why === "specs-arg") return "run a program the approval guard doesn't know on .specs/, its roadmap.json or a .state.json (it may change them)";
-          if (a.why === "error") return "run a tool call the approval guard could not check (it failed) while the approval guard is on";
-          if (a.why === "project") return "act on a project folder (projectDir) the approval guard can't read";
-          return a.why === "too-long" ? `run a shell command too long for the approval guard to read (${a.length} characters) that names dev-spec or .specs/`
-            : "run a shell command that names the dev-spec CLI with an approval word in a form the approval guard can't read (an unknown launcher, a glob, a variable or a joined string)";
-        }
-        // guard-down: lowering this guard, or weakening what it stands for (a.setting — the spec_init / `init` setting, or a
-        // shell write of roadmap.json)
-        if (a.kind === "guard-down") {
-          // 1.23 review 5: a hand edit with the Write / Edit tool
-          if (a.setting === "roadmap" && a.source === "edit") return "edit .specs/roadmap.json by hand (it holds the approval guard and the project's gates)";
-          if (a.setting === "state") return a.source === "edit" ? `edit the .state.json of '${f}' by hand — its approvals, evidence and history`
-            : `change the .state.json of '${f}' from the shell — its approvals, evidence and history`; // 1.24 review 6: merge-state, git restore, a redirection
-          // 1.24 review 6: the harness-observed run log; turning off a gated track
-          if (a.setting === "observed") return (a.feature ? `write the harness-observed run log of '${a.feature}' (.execution/observed.jsonl)` : "write the project's harness-observed run log (.specs/.execution/observed.jsonl)") +
-            " by hand — the runs the gates trust as evidence";
-          if (a.setting === "track") return `turn off ${(a.tracks || []).map((t) => "+" + t).join(", ")} on '${f}' — the gates it carries (the test / eval plan, Phase 4's failing tests or evals) stop being required`;
-          if (a.setting === "evidence") return "switch the evidence mode (meta.evidence) back to reported";
-          if (a.setting === "stopCheck") return "turn off the end-of-turn evidence gate (meta.stopCheck)";
-          if (a.setting === "guard") return a.from ? `lower the edit guard (meta.guard) from ${a.from} to ${a.to}` : `set the edit guard (meta.guard) to ${a.to}`;
-          if (a.setting === "roles") {
-            if (!a.to || !Object.keys(a.to).length) return "clear the approval roles (meta.approvalRoles)";
-            return Array.isArray(a.removed) ? `drop required approval roles (${a.removed.join(", ")}) from meta.approvalRoles` : "replace the approval roles (meta.approvalRoles)";
-          }
-          if (a.setting === "check") return a.to == null ? `remove the project check '${a.name}' (meta.checks)` : `change the command of the project check '${a.name}' (meta.checks)`;
-          if (a.setting === "roadmap") return "change .specs/roadmap.json from the shell — write, move or delete it (it holds the approval guard and the project's gates)";
-          // 1.25.1 (review 7): a glob / variable / whole-folder write or removal under .specs/; a link made to .specs/
-          if (a.setting === "specs") return a.source === "edit" ? "move or delete .specs/ or a folder in it with a file tool (it holds roadmap.json and the features' .state.json)"
-            : "change .specs/ from the shell — write, move or delete through a glob, a variable or a whole folder that may reach roadmap.json or a feature's .state.json";
-          if (a.setting === "link") return "link a name to .specs/ or to a file in it (a symbolic link, junction or hard link) — writes through the link would reach roadmap.json and the .state.json files unseen";
-          return `lower the approval guard from ${a.from} to ${a.to}`;
-        }
-        if (a.revoke) return `revoke the approval of the ${a.phase || "?"} phase of '${f}'` + (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "");
-        return (a.through ? `approve every phase of '${f}' through ${a.through}` : `approve the ${a.phase || "?"} phase of '${f}'`) +
-          (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "") +
-          (a.force ? " — FORCED (--force)" : "");
-      },
-      ask: (list, force) => `dev-spec approval guard: the agent wants to ${list}.` + (force ? " ⚠ FORCE: the phase's checks are bypassed — a failing gate would be recorded as approved anyway." : "") +
-        " Approvals are yours — allow this only if you approve it yourself. (meta.approvalGuard: ask — " + DEV_SPEC + " init --approval-guard deny refuses agent approvals outright.)",
+      // level "deny": a form the guard can't read is asked about, never refused outright (it may be no approval at all)
+      ask: (list, force, level) => `dev-spec approval guard: the agent wants to ${list}.` + (force ? " ⚠ FORCE: the phase's checks are bypassed — a failing gate would be recorded as approved anyway." : "") +
+        " Approvals are yours — allow this only if you approve it yourself." + (level === "deny"
+          ? " (meta.approvalGuard: deny — the guard can't read this command, so it asks you instead of refusing it.)"
+          : " (meta.approvalGuard: ask — " + DEV_SPEC + " init --approval-guard deny refuses agent approvals outright.)"),
       // command: the line the human runs, or null (a change with no dev-spec command — a shell write of roadmap.json)
       deny: (list, command) => `dev-spec approval guard: refused — approvals are the human's, and an agent may not ${list}. ` +
         (command ? `Stop and ask the user to run it themselves, in their own terminal or in Claude Code with the ! prefix (it runs as the user, not as your tool call): ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
       denyUser: (list, command) => `dev-spec approval guard refused an agent's request to ${list}.` + (command ? ` To approve it yourself: ${command}` : " Make that change yourself if you want it."),
-      // 1.21 review A4 — the MCP server's refusal (a client outside Claude Code, without elicitation): the plain command, no `!`
+      // the MCP server's refusal (a client outside Claude Code, without elicitation): the plain command, no `!`
       denyMcp: (list, command) => `dev-spec approval guard: refused — approvals are the human's, and an agent may not ${list}. ` +
         (command ? `Stop and ask the user to run it themselves, in their own terminal: ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
     },
-    // 1.21 F1b — human approvals over MCP elicitation (mcp/server.js: spec_approve, spec_feature remove, spec_init lowering a guard,
+    // human approvals over MCP elicitation (mcp/server.js: spec_approve, spec_feature remove, spec_init lowering a guard,
     // while meta.approvalGuard is ask | deny and the MCP client can ask its user — elicitation/create). `message` and the field
     // titles are read by the USER (the client's dialog); the refusals by the AGENT. list = approvalGuard.action's text.
     elicit: {
@@ -2336,23 +2071,23 @@ const msg = {
       forced: (ids) => `⚠ FORCED: the phase's checks fail (${ids}) — it would be recorded as approved anyway.`,
       waiver: (reason, expires) => "Waiver: " + [reason ? `"${reason}"` : null, expires ? `until ${expires}` : null].filter(Boolean).join(" ") + ".",
       phases: (list) => `Phases to approve, in order: ${list}.`,
-      // 1.24 r6 A-I8: what a spec_feature remove deletes (remove's preview: wouldDelete.files)
+      // what a spec_feature remove deletes (remove's preview: wouldDelete.files)
       removeSize: (n, rel) => `This deletes ${rel} for good — ${n} file${n === 1 ? "" : "s"}.`,
       approveTitle: "Approve",
       approveDesc: "Tick it to record this; leave it unticked (or decline) to refuse.",
       noteTitle: "Note",
       noteDesc: "Optional — recorded with the approval (one line).",
       declined: (list) => `The user declined in the MCP client: nothing recorded (${list}). Do not retry it another way — ask the user what should change.`,
-      // 1.21 review A6: action "accept" without approve: true — the user answered, but did not tick Approve
+      // action "accept" without approve: true — the user answered, but did not tick Approve
       unapproved: (list) => `The user answered in the MCP client without ticking Approve: nothing recorded (${list}). Do not retry it another way — ask the user whether they approve it.`,
       cancelled: (list) => `The user dismissed the confirmation: nothing recorded (${list}). Ask the user before trying again.`,
       timedOut: (s, list) => `No answer from the user within ${s} s: nothing recorded (${list}). Ask the user to approve it themselves.`,
       failed: (why, list) => `The MCP client could not ask the user (${why}): nothing recorded (${list}). Ask the user to run the approval themselves.`,
       confirmed: "Confirmed by the user in the MCP client (elicitation).",
-      // 1.23: notifications/progress while the question waits (the call carried a progressToken)
+      // notifications/progress while the question waits (the call carried a progressToken)
       waiting: "Waiting for the user's answer in the MCP client…",
     },
-    // 1.21 F1a — git's merge driver for the spec state (`dev-spec merge-state`): doctor's merge-conflicts and the CLI's lines. The
+    // git's merge driver for the spec state (`dev-spec merge-state`): doctor's merge-conflicts and the CLI's lines. The
     // words ours / theirs / base and "mergeConflicts" stay English (git's and the file's own terms).
     mergeState: {
       doctor: (n, list) => `${n} merge conflict(s) the dev-spec merge driver left unresolved — ${list}. Each kept ours: pick the right value in the file (its "mergeConflicts" list shows base / ours / theirs), then delete "mergeConflicts".`,
@@ -2363,11 +2098,11 @@ const msg = {
       parseError: (side, why) => `dev-spec merge-state: ${side} is not valid JSON (${why}) — nothing merged, ours left as it is; merge the file by hand.`,
       unreadable: (file) => `cannot read ${file}.`,
       noGit: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --install writes that repository's own git config.`,
-      // 1.24 r6 B9: --uninstall's own words (it said what --install writes)
+      // --uninstall's own words (it said what --install writes)
       noGitUninstall: (dir) => `${dir} is not inside a git repository (or git is not installed) — merge-state --uninstall removes that repository's own git config and .gitattributes lines; there is nothing to remove here.`,
       attrsAdded: (file) => `${file}: the merge driver's lines added (commit it — the whole team gets them):`,
       attrsKept: (file) => `${file}: the merge driver's lines are already there.`,
-      // 1.25.1 (review 7): --install / --uninstall never write through a link
+      // --install / --uninstall never write through a link
       attrsNotFile: (file) => `${file} is a link or not a regular file — merge-state never writes through it (it would change the file it points at): replace it with a plain .gitattributes and run it again.`,
       attrsRemoved: (file) => `${file}: the merge driver's lines removed (commit it).`,
       attrsNone: (file) => `${file}: no merge driver line to remove.`,
@@ -2375,7 +2110,7 @@ const msg = {
       configRemoved: (key) => `git config: ${key} removed.`,
       configFailed: (why) => `git config failed: ${why}`,
       teamNote: `git config is per clone: every teammate runs ${DEV_SPEC} merge-state --install once — and again after each plugin update (git runs the driver by this plugin folder's path, which an update moves; ${DEV_SPEC} merge-state --check tells). Without it, git falls back to its text merge.`,
-      // 1.21 review A3 — merge-state --check (read only) and the SessionStart hook's line: is the configured driver still THIS clone's?
+      // merge-state --check (read only) and the SessionStart hook's line: is the configured driver still THIS clone's?
       checkOk: (script) => `The spec state's merge driver is installed and runs this clone's CLI (${script}).`,
       checkNone: `The spec state's merge driver is not installed here and .gitattributes doesn't name it — nothing to check (to install it: ${DEV_SPEC} merge-state --install).`,
       checkNotInstalled: (file) => `${file} names the dev-spec-state merge driver, but this clone's git config has none — git falls back to its text merge (a .state.json both branches changed conflicts). Install it: ${DEV_SPEC} merge-state --install`,
@@ -2437,9 +2172,9 @@ const msg = {
         drift: (n, slug) => `Decide on the drift: ${n} implementing file(s) changed since finish — ${DEV_SPEC} drift ${slug}`,
         stale: (slug) => `It changed after its finish — finish it again: /spec-finish ${slug}`,
         packReserved: (list, slug, since) => `Rename its track pack(s) from before ${since || "1.17"} — ${list}: the name is reserved now, so the track is inactive (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
-        // 1.19 T review: a pack whose marker is a built-in track's now
+        // a pack whose marker is a built-in track's now
         packMarkerReserved: (list, slug, since, tracks) => `Change the marker of its track pack(s) from before ${since || "1.19"} — ${list}: the marker is a built-in track's now, so the pack is inactive; or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${tracks} (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
-        // 1.22 review 2: criteria numbered with bare AC-n IDs (approved before 1.22) — renumber, then re-approve
+        // criteria numbered with bare AC-n IDs (approved before 1.22) — renumber, then re-approve
         bareAcIds: (list, slug, file = "requirements.md") => `Renumber the criteria ${file} numbers with bare IDs (${list}) as US-<story>.AC-<n> — and their references in ${file === "change.md" ? "its tasks' _Requirements:_ (in change.md too)" : "tasks.md and test-plan.md"} — then re-approve: since 1.22 a bare AC-n is no ID trace_check reads, so doctor (ears, traceability) fails and the approval is refused (details: ${DEV_SPEC} doctor ${slug})`,
         critic: (files) => `Review it with the spec-critic agent (read-only), phase by phase: ${files || "—"}`,
         converge: (files) => "Run the spec-reviewer converge pass (the done tasks against their ACs)" + (files ? `, then the spec-critic agent on ${files}` : ""),
@@ -2495,7 +2230,7 @@ const msg = {
         tplSteering: "A steering file: .specs/steering/{file} (a .md file).",
       },
       err: {
-        // 1.23: resources/list pages (nextCursor) — a cursor this server did not hand out (JSON-RPC -32602)
+        // resources/list pages (nextCursor) — a cursor this server did not hand out (JSON-RPC -32602)
         badCursor: "resources/list: invalid cursor — pass back the nextCursor of the previous page as it is.",
         noPromptName: "prompts/get needs the prompt `name` (a string).",
         badPromptArgs: 'prompts/get: `arguments` must be an object of strings, e.g. {"args": "login"}.',
@@ -2508,7 +2243,7 @@ const msg = {
       },
     },
 
-    // 1.16 C — Claude Code integration: the status line (`dev-spec statusline`), the plan-mode bridge (hooks/plan-hook.js),
+    // Claude Code integration: the status line (`dev-spec statusline`), the plan-mode bridge (hooks/plan-hook.js),
     // spec_import {text} and the MCP completion/complete errors. Phase names and step codes stay English-stable.
     claudeCode: {
       statusLine: {
@@ -2563,7 +2298,7 @@ const msg = {
       },
     },
 
-    // +sec / +privacy (1.14): what their tools report beyond the shared track messages.
+    // +sec / +privacy: what their tools report beyond the shared track messages.
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
       sectionNames: {},
@@ -2596,18 +2331,18 @@ const msg = {
       },
     },
 
-    // Marker-shaped text on a task line that yields no marker (doctor malformed-markers, 1.14 full review Pa1).
+    // Marker-shaped text on a task line that yields no marker (doctor malformed-markers).
     markerSyntax: {
-      // 1.22 review — checkbox lines the task scanner does not read as tasks (doctor unread-tasks).
+      // checkbox lines the task scanner does not read as tasks (doctor unread-tasks).
       unreadTasks: (list) => `checkbox lines that are not tasks: ${list} — a task line is "- [ ] N. text" (a -, * or + bullet, then its number); these are never ticked, briefed or verified. Number them (or make them sub-steps of a task); a line indented 4+ spaces after a blank line, outside a list, is a code block — unindent it.`,
       doctor: (list) => `marker-shaped text on a task line yields no marker: ${list} — the tools read nothing there (no check runs, no file is traced). Write it as _Verify: <command>_ / _Implements: <path>_ / _Depends: 3_ (italics, the value inside).`,
-      // review 5 — a _Verify:_ value that looks garbled (doctor verify-suspicious)
+      // a _Verify:_ value that looks garbled (doctor verify-suspicious)
       suspiciousVerify: (list) => `a _Verify:_ command looks garbled: ${list} — it starts with _ or * (a marker's delimiter read into it), holds a code span inside it (two commands written as one: give each its own _Verify:_; a command substitution reads better as $(…)), or has a quote with no partner. done --run runs it exactly as written: fix the marker.`,
-      // 1.24 r6 D7 — an _Expect:_ value other than fail (doctor expect-value)
+      // an _Expect:_ value other than fail (doctor expect-value)
       expectValue: (list) => `an _Expect:_ value the tools don't know: ${list} — the only value is fail (_Expect: fail_: the task's run must FAIL, a test written before its fix); any other value leaves a task whose run must pass. Write _Expect: fail_, or drop the marker.`,
     },
     // A T-ID the test plan checks outside test code (load-test.md, evals/*.json) whose artifact is still the scaffold (doctor
-    // outside-code-artifacts, a spec_finish warning — 1.14 full review Pa6).
+    // outside-code-artifacts, a spec_finish warning).
     outsideCode: {
       doctor: (list) => `tests planned outside test code point at an artifact that is still a template: ${list} — fill it in (the real load run, the feature's own eval set) before calling them verified.`,
     },
@@ -2619,7 +2354,7 @@ const msg = {
       doctor: (list) => `a _Verify:_ command pipes into another one — a failing check can exit 0 (a pipeline reports its LAST command's code): ${list}. Drop the pipe or use \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Task ${n}: the recorded command pipes into another one (\`${cmd}\`) — its exit 0 is the LAST command's, so this pass may hide a failing check. Drop the pipe (or use \`set -o pipefail\` under bash) and re-run.`,
     },
-    // 1.25.1 (review 7): a _Verify:_ / project check command holding a control character (shown with \u escapes) — doctor fails
+    // a _Verify:_ / project check command holding a control character (shown with \u escapes) — doctor fails
     // verify-control; done --run / finish --run run nothing
     verifyControl: {
       doctor: (list) => `a command holds a control character (an escape sequence, a carriage return…) — a terminal shows another command than the one that runs: ${list}. Retype it as plain text; done --run / finish --run refuse it.`,
@@ -2672,7 +2407,7 @@ const msg = {
       },
     },
 
-    // Project-defined tracks (1.15) — track packs in .specs/tracks/<name>/: the blocks they scaffold, spec_tracks / `dev-spec tracks`,
+    // Project-defined tracks — track packs in .specs/tracks/<name>/: the blocks they scaffold, spec_tracks / `dev-spec tracks`,
     // doctor's track-pack-missing. The markers ([A11Y]), IDs, `> **TODO**` and the check codes stay English.
     trackPacks: {
       acHeading: "Acceptance Criteria (EARS)",
@@ -2689,9 +2424,9 @@ const msg = {
       missing: (list) => `track pack(s) not available: ${list} — the track is inactive for this feature until the pack is back (${DEV_SPEC} tracks check).`,
       missingAbsent: (name) => `+${name} (no .specs/tracks/${name}/ in this project)`,
       missingInvalid: (name, codes) => `+${name} (the pack is invalid: ${codes})`,
-      // 1.17 D review: a pack from before 1.17 whose name is reserved now
+      // a pack from before 1.17 whose name is reserved now
       missingReserved: (name, slug, builtIn, since) => `+${name} (a track pack from before ${since || "1.17"} — '${name}' is a reserved name now${builtIn ? `, and the built-in +${name} track is NOT applied to this feature` : ""}: rename .specs/tracks/${name}/ (and its marker, if that is reserved too), then ${DEV_SPEC} add-track ${slug} <new-name> and ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; to adopt the built-in track instead: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
-      // 1.19 T review: a pack from before 1.19 (1.17 for [DIST]) whose MARKER is a built-in track's now
+      // a pack from before 1.19 (1.17 for [DIST]) whose MARKER is a built-in track's now
       missingReservedMarker: (name, marker, track, slug, since) => `+${name} (a track pack from before ${since || "1.19"} — its marker ${marker} is the built-in +${track} track's now, so the pack is ignored and its ${marker} sections don't count as +${track}'s: change the marker in .specs/tracks/${name}/track.json and in this feature's ${marker} headings, or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${track} (its sections are appended, the pack leaves this feature); to drop the pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
       badAction: (a) => `Unknown tracks action '${a}' — one of: list, init, check, signals.`,
       nameRequired: "tracks init needs a name — " + DEV_SPEC + " tracks init <name> (spec_tracks {action: \"init\", name}).",
@@ -2828,7 +2563,7 @@ const msg = {
       taskStatus: { done: "✅ done", open: "☐ open" },
       verification: { verified: "verified", nothing: "nothing to verify", open: "—", unverified: (why) => "⚠ not verified" + (why ? ` (${why})` : "") },
       phases: { classification: "Classification", requirements: "Requirements", design: "Design", "test-plan": "Test plan", "eval-plan": "Eval plan", tests: "Tests (Phase 4)", tasks: "Tasks", execution: "Execution sign-off" },
-      planPhase: "Plan (change.md)", // a change's tasks phase: its whole plan (1.21 review C5)
+      planPhase: "Plan (change.md)", // a change's tasks phase: its whole plan
       criteria: "Acceptance criteria",
       forced: (ids) => `approved with --force (failing: ${ids})`,
       changedSince: "changed since this approval — to be re-reviewed",
@@ -2851,7 +2586,7 @@ const msg = {
       wrote: (file) => `✎ wrote ${file}`,
       exportsIsFeature: (dir) => `${dir} is a feature folder from before dev-spec reserved the name 'exports' (it holds requirements.md / .state.json) — move or rename that folder by hand, then export again.`,
       exportsLinked: (rel) => `Refused to write ${rel}: .specs/exports/ or that file is a link (a symbolic link, a junction) or resolves outside .specs/ — replace it with a plain folder / file, then export again. Nothing was written.`,
-      // 1.26: html / md without write — a preview, not the whole document (an agent paid ~18k characters for a template-only feature)
+      // html / md without write — a preview, not the whole document (an agent paid ~18k characters for a template-only feature)
       previewHint: (n, rel) => `A preview (the document's first ${n} characters, as markdown). write: true (--write) writes ${rel}; includeBody: true (--include-body) returns the whole document.`,
     },
     // Requirements traceability matrix (trace_check {matrix} / `dev-spec trace --matrix | --csv` / spec_export {format: "csv"}):
@@ -2889,7 +2624,7 @@ const msg = {
       projectLegend: "Requirement IDs (AC / EC / NFR / SC) per feature, by traceability status — each feature's export has its matrix.",
       approvedLine: (at, by, forced) => `Requirements approved ${at} by ${by}${forced ? " (with --force)" : ""}.`,
       notApproved: "Requirements not approved yet.",
-      // 1.21 review C5 — a change: its criteria are signed off with its plan (change.md, phase tasks)
+      // a change: its criteria are signed off with its plan (change.md, phase tasks)
       planApprovedLine: (at, by, forced) => `Plan (change.md) approved ${at} by ${by}${forced ? " (with --force)" : ""}.`,
       planNotApproved: "Plan (change.md) not approved yet.",
       changedSincePlan: "changed since the plan approval",
@@ -2926,8 +2661,8 @@ const msg = {
       badSince: (v) => `since: '${v}' is not an ISO date (YYYY-MM-DD, or a full ISO timestamp), 'last' or 'all'.`,
       noLast: "No release notes were written yet (roadmap.json meta.changelogAt is unset) — every change is listed.",
     },
-    // 1.16 E1 — Gherkin export (spec_export {format: "gherkin"}): the comment lines of the .feature file — the Gherkin keywords
-    // are Gherkin's own dialect (spec.js GHERKIN_DIALECT), the steps the spec's EARS clauses.
+    // Gherkin export (spec_export {format: "gherkin"}): the comment lines of the .feature file — the Gherkin keywords
+    // are Gherkin's own dialect (export.js GHERKIN_DIALECT), the steps the spec's EARS clauses.
     gherkin: {
       autogen: "AUTO-GENERATED by dev-spec — do not edit by hand. Regenerate: spec_export {format: \"gherkin\"} (dev-spec export <feature> --gherkin).",
       source: (rel) => `Source: ${rel} — one scenario per current acceptance criterion; EARS → Given (WHILE / WHERE / IF) · When (WHEN) · Then (the SHALL clause).`,
@@ -2940,7 +2675,7 @@ const msg = {
       wroteMany: (n, scenarios) => `✎ wrote ${n} .feature file(s) — ${scenarios} scenario(s)`,
       noFeatures: "No active feature with acceptance criteria to export.",
     },
-    // 1.16 E2 — tracker CSV (spec_export {format: "jira" | "linear"}): the text dev-spec adds to the work items; the column
+    // tracker CSV (spec_export {format: "jira" | "linear"}): the text dev-spec adds to the work items; the column
     // names are the importers' own (English — never translated).
     trackerCsv: {
       autogen: "AUTO-GENERATED by dev-spec — do not edit by hand; leave this column unmapped. Regenerate: spec_export {format: \"jira\" | \"linear\"} (dev-spec export --tracker jira|linear).",
@@ -2949,7 +2684,7 @@ const msg = {
       taskLine: (rel, n) => `dev-spec task #${n} — ${rel}`,
       wrote: (file, n) => `✎ wrote ${file} — ${n} work item(s)`,
     },
-    // 1.25 — the decision log as Architecture Decision Records (spec_export {format: "adr"}): MADR's section headings and the
+    // the decision log as Architecture Decision Records (spec_export {format: "adr"}): MADR's section headings and the
     // labels around them. The front matter (status / date and their values), ADR numbers, D-n IDs and file names stay English.
     adr: {
       autogen: "AUTO-GENERATED by dev-spec from the decision log (.specs/<feature>/decisions.md) — record decisions there (spec_decide), never in this file. Regenerate: spec_export {format: \"adr\"} (dev-spec export --adr --write).",
@@ -2970,7 +2705,7 @@ const msg = {
       stale: (file) => `stale: ${file} — --write removes it (no decision backs it any more)`,
       summary: (n, w, u, r) => `ADRs: ${n} — ${w} file(s) written · ${u} unchanged · ${r} removed`,
     },
-    // 1.16 E3 — milestones (spec_roadmap_edit {kind: "milestone"}; roadmap.json meta.milestones): the status codes stay English (on-track · at-risk ·
+    // milestones (spec_roadmap_edit {kind: "milestone"}; roadmap.json meta.milestones): the status codes stay English (on-track · at-risk ·
     // late · done), these are their labels.
     milestone: {
       title: "Milestones",
@@ -3023,13 +2758,13 @@ const msg = {
       signedForced: (ids) => `Signed off with force — the failing checks are recorded with the sign-off: ${ids}.`,
       stillPending: (phase, missing) => `'${phase}' stays pending until every role has signed off its current content — ${missing}.`,
       approvedByRoles: (phase, roles) => `'${phase}' is approved — every role signed off the current content: ${roles}.`,
-      // r5 review: one person signing a phase for two required roles — a warning, never a refusal
+      // one person signing a phase for two required roles — a warning, never a refusal
       sameSigner: (by, phase, roles) => `Note: ${by} signed '${phase}' for several roles (${roles}) — role sign-offs are meant to come from different people.`,
       staleSignOffs: (list) => `sign-offs made before the artifact changed no longer count (re-sign the current content): ${list}`,
       resigning: (list) => `re-sign in progress (the phase stays approved as it was until every role has signed the new content): ${list}`,
       unsigned: (list) => `approved without the role sign-offs now required (approved before the roles were configured or changed — counted as approved by an unknown role; ask each role to re-sign): ${list}`,
       approveRoles: (phase, slug, missing, signed, first) => `Review & sign off '${phase}' — ${missing}${signed ? ` (signed: ${signed})` : ""}: /approve ${slug} ${phase} --role ${first}.`,
-      // 1.21 review A1 — every required role signed the current content, yet the phase has no approval (the sign-offs were recorded
+      // every required role signed the current content, yet the phase has no approval (the sign-offs were recorded
       // apart: on two branches git merged, or before a role was dropped). Any of them signs again and the phase is approved.
       signedAll: (roles) => `every role signed: ${roles} — not approved yet`,
       signoffsComplete: (list, cmd) => `every role signed off, but the phase was never approved (the sign-offs were recorded apart — on two merged branches, or before a role was dropped): ${list} — one of those roles signs again to complete it: ${cmd}`,
@@ -3048,20 +2783,20 @@ const msg = {
       ffWhyRole: (roles, slug, phase, through, given) => (given ? `'${given}' is not a role that signs off '${phase}' (roles: ${roles})` : `'${phase}' is signed off per role (${roles})`) +
         ` — nothing was recorded for '${phase}'. Run the fast-forward again as the role you sign for: /approve ${slug} --through ${through} --role <role> (CLI: ${DEV_SPEC} approve ${slug} --through ${through} --role <role>); it resumes at '${phase}'.`,
       ffHint: (slug, list, role) => `Every planning artifact through tasks is filled and passes its gate — fast-forward: /approve ${slug} --through tasks${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through tasks${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate.`,
-      // 1.21 review C3 — a size xs / s plan whose Phase 4 tests gate is still ahead: the call ends before it
+      // a size xs / s plan whose Phase 4 tests gate is still ahead: the call ends before it
       ffHintTests: (slug, list, through, role) => `Every planning artifact through ${through} is filled and passes its gate — fast-forward: /approve ${slug} --through ${through}${role ? " --role " + role : ""} (CLI: ${DEV_SPEC} approve ${slug} --through ${through}${role ? " --role " + role : ""}) approves ${list} in order, each through its own gate. Then Phase 4: write the failing tests / eval sets (/spec ${slug} tests), approve tests, then the tasks.`,
       batch: (n) => `  batch approvals (fast-forward): ${n}`,
     },
 
-    // 1.16 U — undo a tick (spec_complete_task {undo} / `dev-spec undone`), revoke an approval (spec_approve {revoke} /
+    // undo a tick (spec_complete_task {undo} / `dev-spec undone`), revoke an approval (spec_approve {revoke} /
     // `approve --revoke`) and the waiver a forced approval carries (reason / expires).
     undo: {
       unticked: (n, slug, runnable, stale) => `Task ${n} is open again (unticked).` +
         (stale ? ` Its recorded evidence no longer counts — ticking it again needs ${runnable ? `a new run of its _Verify:_ command: ${DEV_SPEC} done ${slug} ${n} --run` : "new evidence"}.` : ""),
       alreadyOpen: (n) => `Task ${n} is not ticked — nothing to undo.`,
-      // 1.16 U review 1: an _Expect: fail_ task keeps its red run through an undo (the fix may already be in)
+      // an _Expect: fail_ task keeps its red run through an undo (the fix may already be in)
       redKept: (n, slug, day) => `Its red run of ${day} (the _Expect: fail_ proof) is kept: ticking it again needs a new run of its _Verify:_ command — once the fix is in, a passing run counts as the fix going green: ${DEV_SPEC} done ${slug} ${n} --run.`,
-      // 1.16 U review 2: several ticked tasks share the number — refused
+      // several ticked tasks share the number — refused
       duplicateTicked: (n, list) => `Several ticked tasks share number ${n} (${list}) — undo can't tell which tick was the mistake. Renumber them first so each number is unique (doctor: duplicate-tasks), then undo the one ticked by mistake. Nothing was changed.`,
       duplicateItem: (line, text) => `line ${line}: "${text}"`,
       reopened: (slug) => `'${slug}' was finished or signed off — once the task is done again, finish it again (/spec-finish ${slug}) and sign it off again (/approve ${slug} execution).`,
@@ -3082,15 +2817,15 @@ const msg = {
       signOffsToo: (roles) => `The role sign-offs waiting for it were withdrawn too: ${roles}.`,
       laterStay: (list, phase) => `Nothing cascades: the later phases stay approved (${list}); approving another phase is refused (phase-order) until '${phase}' is approved again.`,
       notApproved: (phase, slug) => `'${phase}' is not approved for ${slug} and no role sign-off is waiting for it — nothing to revoke.`,
-      // 1.24 review 6: a revoke confirmed over MCP whose approval / waiting sign-offs changed after the question (preview)
+      // a revoke confirmed over MCP whose approval / waiting sign-offs changed after the question (preview)
       changedSincePreview: (phase, slug) => `Nothing revoked: what '${phase}' of ${slug} holds changed after the user was asked to confirm revoking it (approved again, or revoked, meanwhile) — ask them again, so they confirm what is there now.`,
-      // r5 review: with approval roles configured for the phase, a revocation names a listed role; before the approval it withdraws that role's own sign-off
+      // with approval roles configured for the phase, a revocation names a listed role; before the approval it withdraws that role's own sign-off
       roleRequired: (phase, slug, roles) => `'${phase}' is signed off per role (${roles}) — a revocation names the role revoking it: /approve ${slug} ${phase} --revoke --role <role>. Nothing recorded.`,
       noSignOff: (role, phase, slug, waiting) => `'${role}' has no sign-off waiting for '${phase}' of ${slug} — nothing to withdraw (waiting: ${waiting}); a role withdraws only its own sign-off.`,
       phaseRequired: "Name the phase whose approval to revoke.",
       noThrough: "revoke takes one phase — not through (the fast-forward).",
       noForce: "revoke takes no force or expires — it removes an approval; reason says why.",
-      // 1.16 U review 3: a revocation after the finish / the execution sign-off (drift's stale line, next_action's sign-off step)
+      // a revocation after the finish / the execution sign-off (drift's stale line, next_action's sign-off step)
       driftWhy: (list) => `approval revoked: ${list} (approve it again before finishing again)`,
       signOffWhy: (list) => `the revocation of ${list}`,
     },
@@ -3107,7 +2842,7 @@ const msg = {
       finishWarn: (list, slug) => `waivers expired on forced approvals: ${list} — re-approve those phases without force, or renew the waiver (${DEV_SPEC} approve ${slug} <phase> --force --reason "…" --expires 30d)`,
     },
 
-    // Roadmap forecasts (_Size:_ points → velocity → ETA) and cross-feature file overlaps (spec.js: forecastData, featureOverlaps).
+    // Roadmap forecasts (_Size:_ points → velocity → ETA) and cross-feature file overlaps (roadmap-md.js: forecastData, featureOverlaps).
     forecast: {
       colEta: "ETA",
       etaCell: (eta, low, high) => `${eta}${low ? ` (${low}…${high})` : ""}`,
@@ -3130,7 +2865,7 @@ const msg = {
       },
     },
 
-    // 1.14 B5 — red → green (_Expect: fail_), project checks (roadmap.json meta.checks) + the finish suite run, `dev-spec log`.
+    // red → green (_Expect: fail_), project checks (roadmap.json meta.checks) + the finish suite run, `dev-spec log`.
     redGreen: {
       passRefused: (n) => `Task ${n} expects its test to FAIL (_Expect: fail_), but the run passed (exit 0) — the test doesn't fail yet, so it tests nothing. Make it fail for the right reason (an assertion, "not implemented" — not a typo or a missing import), then record that run. Not marking it done.`,
       passTicked: (n) => `Task ${n} is ticked, but it expects its test to FAIL (_Expect: fail_) and this run passed (exit 0) with no red run recorded before it — the test tests nothing: recorded; the task now counts as unverified until a failing (red) run is recorded.`,
@@ -3140,10 +2875,10 @@ const msg = {
       redRecorded: (n, code) => `  ✓ red run recorded for task ${n} (exit ${code}) — the test fails before its fix, as _Expect: fail_ expects.`,
       shellNotRed: (cmd) => `the default Windows shell (cmd.exe) could not run \`${cmd}\` as written — that is no red test (_Expect: fail_). Nothing was recorded; the task stays open.`,
       pwshNotRed: (cmd, what) => `PowerShell could not parse \`${cmd}\` (${what}) — the command never ran, so that is no red test (_Expect: fail_). Nothing was recorded; the task stays open. Windows PowerShell 5.1 has no && / || (use ; or pwsh 7).`,
-      // full review Ga2: a non-zero run whose output shows the test never ran (a missing test file, module or script…).
+      // a non-zero run whose output shows the test never ran (a missing test file, module or script…).
       cantRunOutput: (n, code, what, ticked) => `Task ${n}: the run exited ${code}, but its output shows the test never ran (${what}) — that is no red test (_Expect: fail_): a missing test file, module or script is not the right reason. Write the test so it fails on an assertion (or "not implemented"), then record that run. ` + (ticked ? "Recorded; the task now counts as unverified." : "Not marking it done."),
       notRed: (cmd, what) => `\`${cmd}\` failed, but its output shows the test never ran (${what}) — that is no red test (_Expect: fail_): a missing test file, module or script is not the right reason. Nothing was recorded; the task stays open. Write the test so it fails on an assertion (or "not implemented"); then run done --run again.`,
-      // 1.23 review: a crash (exit 128 + SIGSEGV / SIGABRT…, a Windows crash code such as 0xC0000005) is a failed run, never a red test
+      // a crash (exit 128 + SIGSEGV / SIGABRT…, a Windows crash code such as 0xC0000005) is a failed run, never a red test
       crashNotRed: (n, code, ticked) => `Task ${n}: the run crashed (exit ${code} — a signal such as SIGSEGV / SIGABRT, or a Windows crash code) — that is no red test (_Expect: fail_): a crash is not the test failing for the right reason. Make the test fail on an assertion (or "not implemented"), then record that run. ` + (ticked ? "Recorded; the task now counts as unverified." : "Not marking it done."),
       prRed: "the expected red run (_Expect: fail_)",
       prRedKept: (code, day) => `red run before the fix: exit ${code}${day ? " on " + day : ""}`,
@@ -3183,7 +2918,7 @@ const msg = {
       posixOnWindows: (name, cmd, kinds) => `the project check '${name}' (\`${cmd}\`) uses POSIX shell syntax (${kinds.map((k) => ({ "single-quotes": "single quotes '…'", variable: "$VARIABLES" })[k] || k).join(", ")}) that cmd.exe — the default shell of --run on Windows — reads differently, often without failing. Nothing was run. Re-run with --shell bash (Git Bash; or set DEV_SPEC_SHELL=bash), with --shell pwsh for a PowerShell command (or hand PowerShell the script in double quotes: pwsh -NoProfile -Command "…") — or --shell cmd to run it under cmd.exe anyway.`,
       pwshInPosix: (name, cmd, kinds, shell) => `the project check '${name}' (\`${cmd}\`) hands PowerShell a script holding ${kinds.map((k) => ({ variable: "$VARIABLES", backtick: "backticks" })[k] || k).join(" and ")} outside single quotes, but a POSIX shell (${shell}) runs the line and expands them first — \`exit $LASTEXITCODE\` becomes a bare \`exit\` (exit 0), so a failing check could be recorded as passing. Nothing was run. For a POSIX shell put the script in single quotes, or run the checks with --shell pwsh (or DEV_SPEC_SHELL=pwsh) and write the bare PowerShell.`,
     },
-    // full review Ga1 / Ga9 / Ga10 — `done --run` / `finish --run`: a command that could not run (the shell never started, a
+    // `done --run` / `finish --run`: a command that could not run (the shell never started, a
     // signal, --timeout, output over the buffer, WSL's bash launcher) is refused and NOTHING is recorded (never an exit 1).
     runGate: {
       taskRefused: (cmd, why) => `\`${cmd}\` could not run (${why}) — nothing was recorded; the task stays open.`,
@@ -3199,7 +2934,7 @@ const msg = {
       },
       wslBash: (p) => `--shell ${p} is WSL's bash.exe launcher: it runs the command inside a Linux distribution (or fails with "execvpe(/bin/bash) failed"), not in a shell on this machine — used as you asked; a run WSL can't start is not recorded. For a shell on this machine use Git Bash: --shell bash finds it (Git for Windows).`,
       wslExe: (p) => `--shell ${p} is wsl.exe, which is no shell (it rejects the -c every shell run uses) — refused, nothing was run. Name WSL's bash.exe by its path to run inside WSL, or use --shell bash for Git Bash.`,
-      // 1.24 r6 D4 — done --run: a command that passed without running a test (couldNotRun "no-tests")
+      // done --run: a command that passed without running a test (couldNotRun "no-tests")
       noTests: (cmd, what) => `\`${cmd}\` passed, but its output shows no test ran (${what}) — a run that tests nothing proves nothing (a glob, a path or a filter that matches no test). Nothing was recorded; the task stays open. Fix the _Verify:_ command (or the test it names), then run done --run again.`,
       noGitBash: "--shell bash: no Git Bash was found (git --exec-path, %ProgramFiles%\\Git\\bin\\bash.exe, PATH) — a bash.exe in System32 or WindowsApps is WSL's launcher, which runs the command inside a Linux distribution, so it is never used. Nothing was run. Install Git for Windows, or pass --shell with the full path of a bash.exe.",
     },
@@ -3216,12 +2951,12 @@ const msg = {
       noGit: "git is not available here, or this is not a git repository with commits — dev-spec log reads `git log`. Or pipe a log in: git log --name-only --relative | " + DEV_SPEC + " log <feature> -",
     },
 
-    // 1.14 C1 — the evidence gate at the end of a turn (hooks/stop-hook.js on Stop / SubagentStop, `dev-spec stop-check`) and the
+    // the evidence gate at the end of a turn (hooks/stop-hook.js on Stop / SubagentStop, `dev-spec stop-check`) and the
     // scope guard (roadmap.json meta.guard = "scope"). claims / negators / admissions are regex sources the engine applies from
     // EVERY language (an agent may answer in another language than the project's) as whole words, case-insensitive. Conservative
     // on purpose: a claim counts only outside code and quotes, not in a question, and not after a negator or a condition.
     stopGate: {
-      // 1.25.1: no bare verb — "verified", "implemented", "completed" alone claimed "I verified that the bug is in the parser" and
+      // no bare verb — "verified", "implemented", "completed" alone claimed "I verified that the bug is in the parser" and
       // "the migration was completed in 2023" (STOP_EN_* above, common.js stopLineClaim).
       claims: [
         String.raw`all\s+(?:done|finished|complete|completed|implemented|verified|green)`,
@@ -3249,16 +2984,16 @@ const msg = {
         String.raw`[1-9]\d*\s*(?:\/\s*\d+\s+)?(?:tests?\s+)?(?:passing|passed)`,
         String.raw`(?:everything|it|all|this)\s+(?:now\s+)?works`,
         String.raw`(?:fully|thoroughly)\s+tested|tested\s+and\s+(?:working|verified)`,
-        // "Ready to merge.", "Good to go." (1.25.1 — "Work complete — ready to merge." claimed nothing)
+        // "Ready to merge.", "Good to go." ("Work complete — ready to merge." claimed nothing)
         String.raw`(?:ready|good)\s+(?:to\s+(?:merge|ship|release|deploy|go)|for\s+(?:(?:the|a)\s+)?(?:merge|merging|release|shipping|deploy(?:ment)?|review|pr|pull\s+request|production))`,
       ],
-      // 1.25.1 — the words every claim above holds at least one of (whole words, case-insensitive): a message holding none of a
+      // the words every claim above holds at least one of (whole words, case-insensitive): a message holding none of a
       // language's triggers runs none of its claim patterns (the engine's stopClaims, the Stop hook's pre-filter) — most closing messages
       // claim nothing, and compiling every pattern of every language cost each Stop ~35 ms. A new claim pattern adds its word here
-      // (mcp/tests/10-guards-hooks-r7.js checks every claim test message is still read the same).
+      // (mcp/tests/10-guards-hooks-cost.js checks every claim test message is still read the same).
       triggers: [String.raw`done|finished|complete|completed|implemented|verified|tested|green|pass|passes|passed|passing|works|ready|good|status`],
       // Up to 3 words before a claim, in the same sentence: it is negated or only a condition / a plan ("not done", "once the
-      // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes). 1.25.1: "how" — "Here's how
+      // tests pass", "I'll verify"). Words ending in n't / 'll count too (the engine checks those suffixes). "how" — "Here's how
       // the retry is implemented:" describes the code.
       negators: ["not", "never", "no", "nothing", "nor", "none", "without", "cannot", "will", "would", "should", "must", "need", "needs", "to",
         "going", "gonna", "can", "could", "may", "might", "until", "unless", "before", "once", "when", "whenever", "after", "if", "whether",
@@ -3275,7 +3010,7 @@ const msg = {
       // A failure named after (or before) one of these words is history, not an admission: "I fixed the 2 failing tests",
       // "Previously 4 tests failed", "the 3 failures from yesterday are fixed" (stopPastFailure — a negator before the word keeps it).
       fixed: ["fixed", "resolved", "repaired", "addressed", "previously", "formerly", "earlier"],
-      // 1.22 review — a count of ZERO right before an admission makes it none ("0 tests failing", "no tests fail", "none of the
+      // a count of ZERO right before an admission makes it none ("0 tests failing", "no tests fail", "none of the
       // tests fail", "zero tests failed"): it says nothing is failing. Regex sources, read just before the admission.
       zeroes: [String.raw`0|zero|no|none(?:\s+of(?:\s+(?:the|these|those|them|my|our))?)?`],
       // …and a failure that "now passes" in the same clause is one already fixed ("the 2 failing tests now pass").
@@ -3294,12 +3029,12 @@ const msg = {
         noRun: (file, cmds) => `its report (${file}) doesn't show the _Verify:_ run — the exact command and its exit code: ${cmds}.`,
         notPassing: (file, cmds) => `its report (${file}) shows no passing run (exit 0) of ${cmds} — a DONE task's _Verify:_ must pass.`,
         notFailing: (file, cmds) => `its report (${file}) shows no failing run (a non-zero exit code) of ${cmds} — the task is marked _Expect: fail_: its proof is the red run.`,
-        // 1.25.1 (review 7): the codes are read per run — the LAST run of each _Verify:_ command decides
+        // the codes are read per run — the LAST run of each _Verify:_ command decides
         lastNotPassing: (file, cmds) => `its report (${file}) ends on a failing run of ${cmds} — the last run of it the report shows exits non-zero; a DONE task's _Verify:_ must pass on the final code.`,
         lastNotFailing: (file, cmds) => `its report (${file}) ends on a passing run of ${cmds} — the task is marked _Expect: fail_: the last run of it the report shows must be the red one (a non-zero exit code).`,
         todo: "Run the command on the final code and put the command, its exit code and the last lines of its output in the report — or report BLOCKED / NEEDS_CONTEXT if it can't pass. (Evidence before claims: the controller ticks the task only with that run.)",
       },
-      // 1.22 — the spec-simplifier's DONE (SubagentStop): its report must end with the final passing runs.
+      // the spec-simplifier's DONE (SubagentStop): its report must end with the final passing runs.
       simplifier: {
         head: (slug) => `dev-spec evidence gate: you report the simplification pass of '${slug}' as DONE, but`,
         noReport: (file) => `its report (${file}) does not exist.`,
@@ -3339,7 +3074,7 @@ const msg = {
       },
     },
 
-    // 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).
+    // the decision log (.specs/<feature>/decisions.md, spec_decide) and the spike kind (investigate → decide).
     // IDs (D-n), the markers (_Kind:_ _Date:_ _Affects:_ _Supersedes:_ _Outcome:_) and their values stay English.
     decisions: {
       header: (name) => `# Decisions: ${name}
@@ -3420,7 +3155,7 @@ _Outcome: [go | no-go | pivot]_
 `,
       badTimebox: (v) => `timebox must be an end date (YYYY-MM-DD) or a duration from today (e.g. 3d, 2w, 8h) — got ${v}.`,
       spikeOnly: (arg) => `${arg} only applies to a spike (kind: "spike").`,
-      // 1.24 r6 B9: the CLI names its flag and its own way to make a spike (as bugPrefill.bugOnlyCli does)
+      // the CLI names its flag and its own way to make a spike (as bugPrefill.bugOnlyCli does)
       spikeOnlyCli: (flag) => `${flag} only applies to a spike — create it as one: ${DEV_SPEC} spike "<name>" ${flag} "…" (or --kind spike).`,
       tracksIgnored: (list) => `A spike is core-only — tracks ignored (${list}); give them to the feature you spec after a 'go'.`,
       noTracks: (slug) => `'${slug}' is a spike — it has no tracks. After a 'go', spec the real feature with its tracks (spec_create).`,
@@ -3471,7 +3206,7 @@ _Outcome: [go | no-go | pivot]_
       cliUntil: (d) => `  timebox: until ${d}`,
     },
 
-    // Flows (1.14 C3) — design-first. The flow values (requirements-first · design-first) and phase tokens stay English-stable.
+    // Flows — design-first. The flow values (requirements-first · design-first) and phase tokens stay English-stable.
     flow: {
       required: (slug, known) => `flow required — one of: ${known} (spec_feature {action: "flow", name: "${slug}", flow}; CLI: ${DEV_SPEC} feature flow ${slug} <flow>).`,
       kindRefused: (slug, kind) => `'${slug}' is a ${kind}: it follows its own fixed phase order — the flow applies to features only.`,
@@ -3484,7 +3219,7 @@ _Outcome: [go | no-go | pivot]_
       nextNote: (order) => `(design-first flow: ${order})`,
       laterPhase: (detail) => `requirements.md is a later phase (design-first) — ${detail}`,
     },
-    // 1.25 — a feature's own git branch (spec_create {branch} / create --branch). Branch names, commands and git's own words stay as given.
+    // a feature's own git branch (spec_create {branch} / create --branch). Branch names, commands and git's own words stay as given.
     branch: {
       invalid: (name) => `'${name}' is not a branch name dev-spec can hand to git: letters, digits, '.', '_', '+', '-' and '/' only (no space, quote or shell character), no '..' or '//', no part starting with '.' or ending with '.lock', not starting with '-' or '/', not ending with '/' or '.', not HEAD — at most 200 characters.`,
       empty: "branch: give a name, or true for the default (feature/<slug> · fix/<slug> for a bugfix · spike/<slug> for a spike).",
@@ -3505,7 +3240,7 @@ _Outcome: [go | no-go | pivot]_
       cliFailed: (command, why) => `  ▲ ${command} failed${why ? `: ${why}` : ""} — the branch is recorded; run the command once that is fixed.`,
       cliTrackWord: (word) => `--branch ${word}: '${word}' is a track — put the tracks before --branch (create "<name>" ${word} --branch), or write --branch=${word} for a branch of that name.`,
     },
-    // spec_import plan · execplan · bmad (1.14 C3). Headings in the feature's language; IDs and markers stay English-stable.
+    // spec_import plan · execplan · bmad. Headings in the feature's language; IDs and markers stay English-stable.
     importPlans: {
       plansDir: "Claude Code plan mode keeps plans under plansDirectory (default ~/.claude/plans — outside the project): copy the plan into the project first, or set plansDirectory to a folder inside it.",
       several: (dir, list) => `'${dir}' holds several documents (${list}) — pass the one to import.`,
@@ -3519,7 +3254,7 @@ _Outcome: [go | no-go | pivot]_
       wUnknownAc: (story, task, list) => `${story}, '${task}': AC reference(s) ${list} match no criterion of that story — kept as written`,
       wWorkflow: (list) => `BMAD workflow records not imported (left in place): ${list}`,
     },
-    // 1.17 F — spec_import {tool: "fluidplan"}: the text the import writes (decisions.md entries, design.md, tasks.md bodies) and its
+    // spec_import {tool: "fluidplan"}: the text the import writes (decisions.md entries, design.md, tasks.md bodies) and its
     // warnings. fluidplan's own EN / FR labels are read by the engine (FP_SEC …), never here. [NEEDS CLARIFICATION], the D-n IDs and
     // the _Requirements:_ / _Implements:_ / _Verify:_ / _Depends:_ markers stay English-stable.
     importFluidplan: {
@@ -3568,7 +3303,7 @@ _Outcome: [go | no-go | pivot]_
     },
   };
 
-// 1.16 Q — spec quality: steering amendments (Q1), cross-feature acceptance criteria (Q2), the glossary (Q3). One group per
+// spec quality: steering amendments, cross-feature acceptance criteria, the glossary. One group per
 // language, merged into MSG (pt-BR derives from pt's). Check ids, reason codes and file names stay English.
 const quality = {
     steeringChange: { modified: "changed", removed: "removed" },
@@ -3603,8 +3338,8 @@ const quality = {
     briefGlossaryOmitted: (list) => `More entries apply (size) — read them in .specs/steering/glossary.md: ${list}`,
   };
 
-// 1.17 A — every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
-// section state: missing · template · empty · few · filled) and spec_clarify's consistency nudge (A2). pt-BR derives from pt.
+// every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
+// section state: missing · template · empty · few · filled) and spec_clarify's consistency nudge. pt-BR derives from pt.
 const designWeigh = {
     "design-tradeoffs": {
       filled: (n) => (n ? `${n} option(s) weighed` : "written as prose (no option list — the options weighed in a paragraph, or why this design has no key decision)"),
@@ -3620,7 +3355,7 @@ const designWeigh = {
       empty: () => "Risks is empty — an honest 'no material risk, because X' is fine; blank is not",
       few: () => "Risks lists no risk",
     },
-    // 1.19 R1 — the Reuse & Integration section (states as above, plus `integration`: a brownfield feature's integration-plan.md
+    // the Reuse & Integration section (states as above, plus `integration`: a brownfield feature's integration-plan.md
     // → Integration Points stands in for it).
     "design-reuse": {
       filled: (n) => (n ? `${n} item(s) named (reused / extended / new)` : "written (no row or bullet — 'greenfield: nothing to reuse yet' counts)"),
@@ -3656,7 +3391,7 @@ const brief = {
     evals: "## Evals affected",
     metrics: "## Metrics to emit",
     files: "## Files (_Implements:_)",
-    // 1.19 R2 — search before you write: the design's Reuse & Integration entries for this task, and the files next to its own
+    // search before you write: the design's Reuse & Integration entries for this task, and the files next to its own
     reuse: "## Reuse — search before you write",
     reuseRule: "Before writing any helper, component, client, validator or formatter, search the codebase by concept and synonyms (references/code-reuse-and-quality.md): reuse, then extend, then create. A unit to extend outside this task's files (_Implements:_) is never edited silently — stop and ask (NEEDS_CONTEXT), or create locally and name it in the report. Your report's **Reuse** block says what you reused, extended or created, and why.",
     reuseEntries: "The design's Reuse & Integration entries for this task — reuse or extend these before writing anything new:",
@@ -3700,7 +3435,7 @@ const brief = {
       ],
     },
     metricsRule: "Every metric listed above is actually emitted — show the evidence in the report.",
-    // full review Ga7: the definition of done of an _Expect: fail_ (red) task — replaces the loop's green-making rules.
+    // the definition of done of an _Expect: fail_ (red) task — replaces the loop's green-making rules.
     redRules: [
       "This is a RED task: write (or keep) the planned test(s) exactly as the test plan describes them — no production code and no fix in this task.",
       "Run them: they must FAIL for the right reason — an assertion or \"not implemented\". A missing test file, module or script, a typo or a command that doesn't run is no red test (it is refused as one).",
@@ -3716,4 +3451,4 @@ const brief = {
     alreadyDone: (n) => `Task ${n} is already marked done.`,
   };
 
-module.exports = { build, steering, evalsReadme, msg, quality, designWeigh, brief, __link };
+module.exports = { text, build, steering, evalsReadme, msg, quality, designWeigh, brief, __link };

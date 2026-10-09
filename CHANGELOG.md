@@ -3,6 +3,56 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.27.0] — 2026-10-10
+
+Structure, no new features. The seventh review's architecture pass found a split monolith: one 2,000-name global namespace,
+a CLI that was a 1,329-line `switch`, CLI ↔ MCP parity kept by hand in comments, i18n builders copied three times, four
+definitions of "is this a dev-spec project?", a 400-line doctor. Every result stays the same — each refactor was checked
+against snapshots of its outputs (61,836 i18n renders, 20,648 approval-gate results, 744 CLI help/usage outputs) and the
+two suites.
+
+### Changed
+- **The CLI is one command table and one call**: `cli/dev-spec.js` 2,676 → 44 lines (the entry point); `cli/commands.js`
+  (52 commands: options, help, completion and handler in one entry — the help, the flag tables and the completion model are
+  derived from it), `cli/main.js` `main(argv, io)`, `cli/run.js` (the `--run` executor and process-tree kill, unit-tested),
+  `cli/git.js` (one git runner: `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, a 64 MB buffer, a 30 s timeout). The
+  completion scripts list the same rows in the table's order (re-generate a saved one to get the new order).
+- **One operations table** (`mcp/lib/operations.js`): 40 operations naming the MCP tool, the CLI command(s), the engine
+  function and every argument ↔ flag ↔ option with its default; the server's 32-case dispatch is gone and the CLI runs its
+  operations through it. `createFeature` and `completeTask` also take an options object.
+- **One check registry**: `spec_doctor` (400 → 3 lines) and the approval gates read the same 49 check entries
+  (`DOCTOR_CHECKS` / `GATES`); `next_action` reads the doctor's context instead of recomputing it (~9% faster on 40 features).
+- **One dev-spec project rule** (`mcp/lib/probe.js`, zero-dependency): the hooks, the status line, the CLI's completion and
+  the engine read it — a `.specs/` holding `roadmap.json`, `steering/`, a generated `ROADMAP.md` or a feature folder with its
+  `.state.json` or `classification.md`. A `.specs/` holding only a classified feature is now a project everywhere (the guard
+  and the status line didn't see it); the Stop and plan hooks no longer count dot folders.
+- **The engine's module boundaries**: the shared namespace 2,083 → 856 names (each module exports only what crosses a
+  boundary), 13 dead declarations and 26 unused links removed, and a test fails on a new unused export or link.
+- **i18n**: nine builders (requirements, design, tasks, test plan, classification, checklist, the track blocks, the approval
+  guard's action) are written once in `mcp/lib/i18n.js`; the locale files hold strings; one test checks the EN / PT / ES key
+  trees, value kinds and function arities (2,800 keys).
+
+### Performance
+- **The Stop gate's two-byte cliff is gone**: a closing message with an em dash, a curly quote or an emoji made the claim
+  scan ~110 ms slower (V8 compiles each regex again for two-byte strings); it now scans a one-byte projection with the same
+  answers (checked on 3,023 messages) — the engine's scan 122 → 49 ms, a fenced one 145 → 19 ms.
+- **The CLI suite runs ~3× faster**: 1,723 of its 1,970 CLI calls run in-process.
+
+### Fixed
+- At `approvalGuard: deny`, the prompt for a command the guard can't read (`{approve,}`, a glob, a fed script) said
+  "meta.approvalGuard: ask — … init --approval-guard deny refuses agent approvals outright" in a project already at deny; it
+  now names deny and says the guard asks because it can't read the command (EN / PT / ES; the hook's fail-closed prompt too).
+  Found by the release's end-to-end run in Claude Code.
+
+### Docs and tests (maintainers)
+- The maintainer notes state the current rules first (~51% of the words) and keep each rule's history in a `## History`
+  section at the end; the layout lists the 1.27 modules. ~2,430 release / review tags left the code comments.
+- Test files are named by topic, not by review round (29 renamed or merged; area 18 is "cross-area").
+- Two date checks compared the local calendar date with UTC and failed between the two midnights — fixed.
+
+### Tests
+- `node mcp/test.js` 2170 assertions (was 2146), `node cli/test-cli.js` 630 (was 615).
+
 ## [1.26.0] — 2026-10-09
 
 The context diet. The seventh review measured what the plugin costs a session before it does any work: 15 of its commands

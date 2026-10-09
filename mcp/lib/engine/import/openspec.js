@@ -17,7 +17,7 @@ function __link(E) { ({ blankFacts, earsFromClauses, earsFromGwt, firstParagraph
   stripHtmlComments, tidyLines, toPosix, trimClause, unusedLines } = E); }
 
 // $1 of each match of /FROM:\s*`?(?:#+\s*)?Requirement:\s*([^`\n]+?)`?\s*$/gim (head: its part up to the colon, global) — by
-// a scan: the lazy name before `?\s*$ rescanned a long blank run at each step (1.17 H).
+// a scan: the lazy name before `?\s*$ rescanned a long blank run at each step.
 function renamedRequirementNames(s, head) {
   const F = blankFacts(s), n = F.n;
   const nextTws = new Int32Array(n + 1), nextStop = new Int32Array(n + 1), lastLt = new Int32Array(n + 1);
@@ -49,7 +49,7 @@ function renamedRequirementNames(s, head) {
 // OpenSpec: a capability (openspec/specs/<capability>/spec.md) or a change (openspec/changes/<id>/ — proposal.md,
 // tasks.md, design.md, specs/<capability>/spec.md with ADDED/MODIFIED/REMOVED/RENAMED Requirements).
 // A scenario clause "- **WHEN** …" → [line, keyword, text] | null — /^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?\s*:?\s*(.*)$/i
-// with the text read by a scan (\s*:?\s*(.*)$ backtracked quadratically before a line break — 1.17 H).
+// with the text read by a scan (\s*:?\s*(.*)$ backtracked quadratically before a line break).
 const RE_OS_CLAUSE_HEAD = /^\s*[-*+]\s+(?:\*\*|__)?(GIVEN|WHEN|THEN|AND|BUT)(?:\*\*|__)?/i;
 function openSpecClause(line) {
   const h = RE_OS_CLAUSE_HEAD.exec(line);
@@ -111,7 +111,7 @@ function parseOpenSpec(dir, read, W) {
     const used = new Set();
     const h1 = hs.find((h) => h.level === 1);
     if (h1) used.add(h1.i);
-    if (!model.title && h1) { // h1.text.replace(/\s+specification$/i, ""), without rescanning a blank run from each unit (1.17 H)
+    if (!model.title && h1) { // h1.text.replace(/\s+specification$/i, ""), without rescanning a blank run from each unit
       const sp = h1.text.search(/specification$/i);
       let w0 = sp;
       while (w0 > 0 && isWsUnit(h1.text[w0 - 1])) w0--;
@@ -199,4 +199,4 @@ function parseOpenSpec(dir, read, W) {
   return model;
 }
 
-module.exports = { renamedRequirementNames, RE_OS_CLAUSE_HEAD, openSpecClause, parseOpenSpec, __link };
+module.exports = { parseOpenSpec, __link };

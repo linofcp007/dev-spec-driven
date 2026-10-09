@@ -393,10 +393,10 @@ exports.run = async ({ ok, remeasure, rpc, payload, S, tmp, list, require }) => 
       I.msg(l).drift.hookLine("csv-export", 2), I.msg(l).governance.ffHint("csv-export", "design, tasks")];
     const want = ["done csv-export 2 --run", "finish csv-export --run", "drift csv-export", "approve csv-export --through tasks"];
     const perLang = ["en", "pt", "es", "pt-BR"].map((l) => run(l).every((m, k) => m.includes(I.DEV_SPEC + " " + want[k]) && !/(?<![\w/.-])dev-spec (?:done|finish|drift|approve) /.test(m)));
-    // 1.21 review A2: the command list is the CLI's own — every `case "<name>":` label of cli/dev-spec.js (a hand-written list went
-    // stale: `dev-spec signals …` and `dev-spec merge-state --install` slipped through) — and a message builder is called with
+    // 1.21 review A2: the command list is the CLI's own — every command and alias of its table, cli/commands.js (a hand-written list
+    // went stale: `dev-spec signals …` and `dev-spec merge-state --install` slipped through) — and a message builder is called with
     // several argument shapes (strings, lists, records, numbers), so one that maps a list is swept too, not skipped.
-    const cliCommands = [...new Set([...fs.readFileSync(path.join(__dirname, "..", "..", "cli", "dev-spec.js"), "utf8").matchAll(/^\s*case "([a-z][a-z0-9-]*)":/gm)].map((m) => m[1]))];
+    const cliCommands = [...require(path.resolve(__dirname, "..", "..", "cli", "commands.js")).COMMAND_INDEX.keys()];
     const RE_BARE = new RegExp("(?<![\\w/.-])dev-spec (" + cliCommands.join("|") + ")(?![\\w-])(?! —)");
     const ALLOWED = new Set(["observed.on", "metrics.retroText.followUpsNote", "catalog.autogen", "approvalGuard.on.ask", "approvalGuard.on.deny", "upgrade.md.autogen",
       "upgrade.md.intro", "trackPacks.initJson", "stakeholderExport.autogen", "rtm.autogen", "releaseNotes.autogen", "gherkin.autogen", "trackerCsv.autogen",
@@ -470,5 +470,49 @@ exports.run = async ({ ok, remeasure, rpc, payload, S, tmp, list, require }) => 
       accents[0].langHint === "pt-BR" && !("langHint" in accents[1]) && JSON.stringify(br.tracks) === JSON.stringify(S.classify(brText, {}).tracks),
       "1.24 r6 H-I4: Brazilian wording gets langHint 'pt-BR' (lang stays 'pt'; MCP = engine) — você / usuário / arquivo / tela / cadastro, 'o time', eletrônico; European wording, ES, EN and an explicit pt-BR get none (got " +
       JSON.stringify([br.lang, br.langHint, team.langHint, eu.langHint, es.langHint, explicitBr.langHint, explicitPt.langHint, accents.map((r) => r.langHint)]) + ")");
+  }
+
+  { // 1.27 — ONE global EN / PT / ES parity check. Every authored block of i18n/<lang>.js (text, build, steering, evalsReadme, msg
+    // with its quality / designWeigh groups, brief) has the same key tree in the three languages, the same kind of value at every
+    // key, the same arity for every function and the same length for every list — the layouts (i18n.js LAYOUTS) read the text
+    // block's lists by position. The documented exceptions, and nothing else: the maps EN leaves empty because they are an
+    // identity in English (msg.sectionNames, msg.secPrivacy.sectionNames — merged into it —, msg.cliOutput.words: PT and ES map
+    // the same English keys), and the stop gate's pattern lists (regex sources — as many as each language needs).
+    const I = require("./lib/i18n.js");
+    const IDENTITY = ["msg.sectionNames", "msg.secPrivacy.sectionNames", "msg.cliOutput.words"];
+    const ANY_LENGTH = ["msg.stopGate.claims", "msg.stopGate.negators", "msg.stopGate.admissions", "msg.stopGate.fixed"];
+    const kind = (v) => (v === null ? "null" : Array.isArray(v) ? "array" : v instanceof RegExp ? "regexp" : typeof v);
+    const shapeOf = (l) => {
+      I.msg(l); // the language's file loads on first use — its layouts and the merged groups in place
+      const blocks = require("./lib/i18n/" + l + ".js");
+      const shape = new Map(), identity = {}, patterns = [];
+      const walk = (v, at) => {
+        const k = kind(v);
+        if (IDENTITY.includes(at)) { identity[at] = k === "object" ? Object.keys(v).sort() : k; return; }
+        if (ANY_LENGTH.includes(at)) { shape.set(at, k); if (k === "array") patterns.push(...v.filter((p) => typeof p !== "string").map(() => at)); return; }
+        shape.set(at, k === "function" ? "function/" + v.length : k === "array" ? "array/" + v.length : k);
+        if (k === "object") for (const key of Object.keys(v)) walk(v[key], at + "." + key);
+        if (k === "array") v.forEach((x, i) => walk(x, at + "[" + i + "]"));
+      };
+      for (const b of Object.keys(blocks)) if (b !== "__link") walk(blocks[b], b);
+      return { shape, identity, patterns, blocks: Object.keys(blocks).filter((b) => b !== "__link").sort().join() };
+    };
+    const P = { en: shapeOf("en"), pt: shapeOf("pt"), es: shapeOf("es") };
+    const problems = [];
+    for (const o of ["pt", "es"]) {
+      if (P[o].blocks !== P.en.blocks) problems.push(`${o} blocks ${P[o].blocks} ≠ en ${P.en.blocks}`);
+      for (const [at, v] of P.en.shape) if (!P[o].shape.has(at)) problems.push(`${o} lacks ${at}`); else if (P[o].shape.get(at) !== v) problems.push(`${at}: en ${v}, ${o} ${P[o].shape.get(at)}`);
+      for (const at of P[o].shape.keys()) if (!P.en.shape.has(at)) problems.push(`${o} adds ${at}`);
+    }
+    for (const at of IDENTITY) {
+      if (!Array.isArray(P.en.identity[at]) || P.en.identity[at].length) problems.push(`en ${at} is no empty map (${JSON.stringify(P.en.identity[at])})`);
+      if (!Array.isArray(P.pt.identity[at]) || !P.pt.identity[at].length || P.pt.identity[at].join("|") !== (P.es.identity[at] || []).join("|")) problems.push(`${at}: PT and ES map other keys`);
+    }
+    for (const l of ["en", "pt", "es"]) if (P[l].patterns.length) problems.push(`${l} has a stop-gate pattern that is no string (${P[l].patterns[0]})`);
+    ok(!problems.length && P.en.shape.size > 2000 && P.en.blocks === "brief,build,designWeigh,evalsReadme,msg,quality,steering,text" &&
+      ANY_LENGTH.every((at) => P.en.shape.get(at) === "array" && P.pt.shape.get(at) === "array" && P.es.shape.get(at) === "array"),
+      "1.27: EN / PT / ES parity — every authored block has ONE key tree (" + P.en.shape.size + " keys), the same value kinds, function arities and list lengths in the three languages; " +
+      "the only exceptions are the identity maps EN leaves empty (sectionNames, secPrivacy.sectionNames, cliOutput.words — PT and ES map the same keys) and the stop gate's pattern lists (got " +
+      JSON.stringify(problems.slice(0, 8)) + ")");
   }
 };

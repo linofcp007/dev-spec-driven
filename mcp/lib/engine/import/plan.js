@@ -20,7 +20,7 @@ function __link(E) { ({ closesFence, colonLineAnchorAt, earsFromGwt, earsThen, f
   shortTitle, stripEnd, stripHashComment, stripHtmlComments, tidyLines, toPosix, trimClause } = E); }
 
 // ---------------------------------------------------------------------------
-// spec_import (1.14 C3) — three more sources, with the same guarantees (a NEW feature, the source only read and inside the project,
+// spec_import — three more sources, with the same guarantees (a NEW feature, the source only read and inside the project,
 // mapping + warnings, the localized "Imported from" note, tracks auto-classified unless given):
 //   plan      a Markdown plan: Claude Code plan mode (plansDirectory — default ~/.claude/plans, OUTSIDE the project: copy the
 //             plan in, or point plansDirectory inside it) or Cursor (.cursor/plans/*.plan.md — YAML front matter name /
@@ -61,10 +61,10 @@ function planItem(l) {
   return rest == null ? null : [l, h[1], box ? box[1] : undefined, rest];
 }
 // A single backticked name reads as a file with one of these extensions (`package.json`); a name with a folder part needs none.
-// 1.21.1: the code extensions are CODE_EXT's (engine/scan.js — the one list of code) and the test-only ones (a .bats suite),
+// the code extensions are CODE_EXT's (engine/scan.js — the one list of code) and the test-only ones (a .bats suite),
 // so a plan's `Greeter.psm1` or `deploy.bats` is a file like its `server.ts` — except the ones a prose token wears as often as
 // a file does (PLAN_EXT_AMBIGUOUS: `conf.d` is a folder, `this.el` a view's element, `color.r`, `args.cmd`, `obj.m`, `x.v`,
-// `a.s`, `re.re` are object fields — 1.21.1 review; Perl's .t needs its t/ folder anyway): such a name counts only with a
+// `a.s`, `re.re` are object fields; Perl's .t needs its t/ folder anyway): such a name counts only with a
 // folder part (`scripts/build.cmd`). The rest: documents, config and data a plan names (PowerShell's .psd1).
 const PLAN_EXT_AMBIGUOUS = new Set(["d", "s", "v", "f", "t", "m", "r", "el", "re", "sc", "cmd"]);
 const PLAN_FILE_EXT = new Set([...[...CODE_EXT, ...TEST_EXTRA_EXT].map((e) => e.slice(1)).filter((e) => !PLAN_EXT_AMBIGUOUS.has(e)),
@@ -80,7 +80,7 @@ function planPaths(text) {
   const add = (raw, spanned) => {
     const p0 = String(raw).trim().replace(/^\.\//, "");
     // .replace(/(?::\d+(?:[-:]\d+)*|#L\d+(?:-L?\d+)?)$/, "") — the leftmost of the two anchors, found without rescanning a
-    // long run of ":1" from each of its units (1.17 H): a "#L…" one can only start at the last '#'.
+    // long run of ":1" from each of its units: a "#L…" one can only start at the last '#'.
     const h = p0.lastIndexOf("#"), c = colonLineAnchorAt(p0);
     const hl = h !== -1 && /^#L\d+(?:-L?\d+)?$/.test(p0.slice(h)) ? h : -1;
     const cut = c === -1 ? hl : hl === -1 ? c : Math.min(c, hl);
@@ -97,7 +97,7 @@ function planPaths(text) {
   };
   const s = String(text || "");
   for (const m of s.matchAll(/`([^`\n]+)`/g)) add(m[1], true);
-  // Linear (full review Pb6): a link text holds no '[' (each '[' scans only up to the next bracket — "[" × N was quadratic)
+  // Linear: a link text holds no '[' (each '[' scans only up to the next bracket — "[" × N was quadratic)
   // and a link target is bounded (add() refuses a path over 200 characters anyway).
   const rest = s.replace(/`[^`\n]*`/g, " ").replace(/\[([^[\]\n]*)\]\(([^)\s]{1,256})\)/g, " $1 $2 ");
   for (const tok of rest.split(/\s+/)) {
@@ -107,7 +107,7 @@ function planPaths(text) {
   return out;
 }
 // A token's wrapping punctuation dropped — a plain scan: the anchored regex (/[)…]+$/) rescanned a long run of ')' from every
-// position (full review Pb6).
+// position.
 const PLAN_TOKEN_LEAD = new Set(["(", '"', "'", "[", "{", "<", "*", "_"]);
 const PLAN_TOKEN_TRAIL = new Set([")", '"', "'", "]", "}", ">", ".", ",", ";", ":", "!", "?", "*", "_"]);
 function planTokenTrim(tok) {
@@ -117,7 +117,7 @@ function planTokenTrim(tok) {
   return tok.slice(a, b);
 }
 // A shell command a step names (a backticked span, or a line of its code block) — the first that reads as a CHECK (a test, lint,
-// build or curl run) becomes the task's _Verify:_. A `$ ` prompt is dropped; one line only. Review 4: a leading `cd <dir> &&` is
+// build or curl run) becomes the task's _Verify:_. A `$ ` prompt is dropped; one line only. A leading `cd <dir> &&` is
 // KEPT (the runner / check test reads the command after it) — dropping it imported "run `cd packages/web && npm test`" as
 // `_Verify: npm test_`: `done --run` ran it at the project root, and the natural run (with its cd) read command-mismatch.
 const RE_PLAN_RUNNER = /^(?:npm|npx|pnpm|yarn|bun|bunx|node|deno|python3?|py|pytest|uv|poetry|go|cargo|make|mvn|gradle|\.\/gradlew|dotnet|bundle|rake|rspec|rails|php|composer|phpunit|vendor\/bin\/phpunit|swift|xcodebuild|ctest|tox|nox|ruff|mypy|eslint|tsc|jest|vitest|mocha|playwright|cypress|curl|mix|flutter|dart|sbt|zig|just)\b/;
@@ -135,12 +135,12 @@ function planCommand(candidates) {
 function planCommandOnly(text) {
   const t = String(text).replace(/\*\*|__/g, "").trim();
   // \s*:?\s* → \s*(?::\s*)? and \s*(?:word)?\s* → \s*(?:word\s*)? (the same lines): blank runs meeting around an absent
-  // token backtracked quadratically (1.17 H).
-  // 1.22 review — and a trailing "and expect …" clause ("Run `npm test` and expect all tests to pass."; PT "e esperar …", ES
+  // token backtracked quadratically.
+  // and a trailing "and expect …" clause ("Run `npm test` and expect all tests to pass."; PT "e esperar …", ES
   // "y esperar …"): what the run should show, still no criterion. One start (^); the clause opens on a comma or a letter, never
   // on a blank (no two blank runs meet around it); `[^`]*` then an optional [.;] and $: linear.
   const m = t.match(/^(?:run|execute|corre|correr|executa|executar|ejecuta|ejecutar)?\s*(?::\s*)?`([^`]+)`\s*(?:(?:passes|succeeds|is green|should pass|passa|pasa)\s*)?(?:,\s*)?(?:(?:and|e|y)\s+(?:expect|esperar|espera|confirm|check|verify|verificar|verifica|comprobar|comprueba)\b[^`]*)?[.;]?$/i);
-  // (review 4: "Run `cd packages/web && npm test`" is command-only too — its runner read after the leading `cd <dir> &&`, as planCommand)
+  // ("Run `cd packages/web && npm test`" is command-only too — its runner read after the leading `cd <dir> &&`, as planCommand)
   return !!(m && RE_PLAN_RUNNER.test(m[1].trim().replace(/^\$\s+/, "").replace(/^cd\s+\S+\s*&&\s*/, "")));
 }
 // A criterion as written in a plan → EARS when it already reads like one: a modal requirement (kept), Given/When/Then, or a
@@ -311,12 +311,12 @@ function planFrontMatter(lines) {
     const s = String(v).trim();
     if (/^"(?:[^"\\]|\\.)*"$/.test(s)) return s.slice(1, -1).replace(/\\(["\\/])/g, "$1").replace(/\\n/g, " ").replace(/\\t/g, " ");
     if (/^'(?:[^']|'')*'$/.test(s)) return s.slice(1, -1).replace(/''/g, "'");
-    return stripHashComment(s); // s.replace(/\s+#.*$/, "") (1.17 H)
+    return stripHashComment(s); // s.replace(/\s+#.*$/, "")
   };
   const data = Object.create(null); // a key named __proto__ is a plain key
   let list = null, item = null;
   // The key: value / list entry patterns below read their text by headRest — \s*(.*)$ rescanned a long blank run before a
-  // line terminator (1.17 H).
+  // line terminator.
   for (let i = 1; i < end; i++) {
     const l = lines[i];
     if (!l.trim() || /^\s*#/.test(l)) continue;
@@ -360,7 +360,7 @@ function planStory(model, title, criteria) {
 }
 // A plan / ExecPlan wrapped whole in one ```md fence (PLANS.md's own examples are) → its inside.
 // What /^\s*(`{3,}|~{3,})\s*(?:md|markdown)?\s*\r?\n([\s\S]*?)\r?\n\1\s*$/i took as the inside ($2), by a scan — that pattern
-// backtracked quadratically over a long fence run or blank run (1.17 H). The closing fence can only be the text's last
+// backtracked quadratically over a long fence run or blank run. The closing fence can only be the text's last
 // non-blank run (on a line of its own); the inside starts after the opening line's newline: the last one of the blanks after
 // "md" / "markdown" when the word is there, else the last one of the blanks after the fence (the engine's order), as long as
 // the inside does not run past the closing fence.
@@ -421,7 +421,7 @@ function parsePlan(dir, read, W, src) {
   model.title = (typeof fmData.name === "string" && fmData.name.trim()) || cleanTitle(h1 && h1.text) || null;
   const stem = path.basename(doc.file).replace(/\.md$/i, "").replace(/\.plan$/i, "").replace(/[-_][0-9a-f]{6,}$/i, "");
   model.nameHint = model.title || stem;
-  model.nameFallback = stem; // a title that slugifies to nothing names the feature after its file (importSpec, 1.22 review)
+  model.nameFallback = stem; // a title that slugifies to nothing names the feature after its file (importSpec)
   // The title is no section ("# Plan: Add dark mode" is not a Plan-of-work heading its sub-sections inherit).
   const stepsHead = (t) => !RE_PLAN_CRITERIA.test(t) && RE_PLAN_STEPS.test(t);
   const approachSteps = !hs.some((h) => h !== h1 && stepsHead(planHeadingText(h.text))); // no Steps section: an Approach is one
@@ -533,7 +533,7 @@ function parseExecPlan(dir, read, W, src) {
   const used = new Set();
   const h1 = hs[0] && hs[0].level === 1 ? hs[0] : null; // the title: a first heading of level 1 (never a later '# Steps')
   if (h1) { used.add(h1.i); model.title = h1.text.replace(/^exec\s*plan\s*[:—–-]\s*/i, "").trim() || null; }
-  model.nameFallback = path.basename(doc.file).replace(/\.md$/i, ""); // a title that slugifies to nothing (1.22 review)
+  model.nameFallback = path.basename(doc.file).replace(/\.md$/i, ""); // a title that slugifies to nothing
   model.nameHint = model.title || model.nameFallback;
   const sec = planSections(lines, hs, (t, h) => (h === h1 ? null : (RE_EXEC_SECTION.find(([, re]) => re.test(t)) || [null])[0]));
   const ranges = (kind) => hs.map((h, k) => (sec.kinds[k] === kind ? sec.direct(k) : null)).filter(Boolean);
@@ -621,9 +621,5 @@ function parseExecPlan(dir, read, W, src) {
   return model;
 }
 
-module.exports = { RE_PLAN_CHECKBOX_HEAD, planCheckbox, RE_PLAN_ITEM_HEAD, RE_PLAN_ITEM_BOX, planItem, PLAN_EXT_AMBIGUOUS, PLAN_FILE_EXT,
-  PLAN_NOT_FILES, PLAN_BARE_FILES, planPaths, PLAN_TOKEN_LEAD, PLAN_TOKEN_TRAIL, planTokenTrim, RE_PLAN_RUNNER,
-  RE_PLAN_CHECK, planCommand, planCommandOnly, PLAN_COND, earsFromPlanText, planBlocks, checkboxUnits, markUnit,
-  unitProse, unitCode, planTaskLines, planDone, planHeadingText, planSections, headingUnit, unusedMarkdown,
-  planFrontMatter, singleDoc, planStory, unwrapDocFence, RE_PLAN_CRITERIA, RE_PLAN_STEPS, RE_PLAN_APPROACH,
-  RE_PLAN_SUMMARY, parsePlan, RE_EXEC_SECTION, parseExecPlan, __link };
+module.exports = { PLAN_EXT_AMBIGUOUS, PLAN_FILE_EXT, planPaths, planCommand, planCommandOnly, earsFromPlanText,
+  checkboxUnits, unitProse, planTaskLines, planDone, planHeadingText, planStory, parsePlan, parseExecPlan, __link };

@@ -2,7 +2,7 @@
 
 /**
  * dev-spec-driven engine — the decision log, its ADR export and the spike kind.
- * decisions.md (spec_decide, append-only), the log as MADR files (spec_export {format: "adr"}, 1.25) and spikes
+ * decisions.md (spec_decide, append-only), the log as MADR files (spec_export {format: "adr"}) and spikes
  * (question → investigate → decide).
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
@@ -14,7 +14,7 @@ const { BOM_CHAR } = require("./state.js"); // load time
 const { TRACE_INFO_FIELDS } = require("./trace.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
-  existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
+  existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
   readIfExists, readJson,
@@ -25,7 +25,7 @@ let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTra
   backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
   removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers,
-  ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList, forgetCached,
+  ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
   readIfExists, readJson,
@@ -37,7 +37,7 @@ function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, dayOf, today, de
   removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot } = E); }
 
 // ---------------------------------------------------------------------------
-// 1.14 C2 — the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
+// the decision log (.specs/<feature>/decisions.md, spec_decide) · the spike kind (investigate → decide)
 // ---------------------------------------------------------------------------
 //
 // decisions.md is COMMITTED with the spec (the .execution/ ledger is self-ignored scratch): a localized header, then one
@@ -62,7 +62,7 @@ const DECISION_TITLE_MAX = 200;
 const DECISION_TEXT_MAX = 20000;
 // A "## D-3 — Title" heading → [line, hashes, number, title] | null — what
 // /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)[ \t]*(?:[—–:-]+[ \t]*)?(.*?)[ \t]*$/ matched; the title is read by a scan (the lazy title
-// before [ \t]*$ was quadratic on a long blank run — 1.17 H).
+// before [ \t]*$ was quadratic on a long blank run).
 const RE_DECISION_HEAD_START = /^(#{2,3})[ \t]+D-(\d{1,6})(?!\d)/;
 const isBlankUnit = (c) => c === " " || c === "\t";
 function decisionHead(line) {
@@ -87,7 +87,7 @@ function stripClosingHashes(s) {
 }
 // A whole-line `_Label: value_` marker (a list item too) → { label, value } | null — what
 // /^\s*(?:[-*+]\s+)?_(Label…):[ \t]*(.*)_\s*$/i matched ($1, $2): `head` reads up to the colon, the value is scanned (the
-// pattern's [ \t]*(.*)_ backtracked quadratically on a value with a long blank run and no closing "_" — 1.17 H).
+// pattern's [ \t]*(.*)_ backtracked quadratically on a value with a long blank run and no closing "_").
 function underscoreMarkerLine(line, head) {
   const h = head.exec(line);
   if (!h) return null;
@@ -109,9 +109,9 @@ const RE_DECISION_LABEL = new RegExp("^\\s*\\*\\*(" + Object.values(DECISION_LAB
 const BRIEF_DECISIONS_MAX = 5; // entries a brief carries…
 const BRIEF_DECISIONS_CHARS = 2000; // …and the characters of their titles + texts (the most recent kept first)
 const RE_LEADING_BOM = new RegExp("^" + BOM_CHAR);
-// HTML comments blanked line for line (line numbers hold) — /<!--[\s\S]*?-->/g by replaceHtmlCommentSpans (1.17 H).
+// HTML comments blanked line for line (line numbers hold) — /<!--[\s\S]*?-->/g by replaceHtmlCommentSpans.
 const blankHtmlComments = (s) => replaceHtmlCommentSpans(String(s || ""), (m) => m.replace(/[^\n]/g, ""));
-// An `_Affects:_` value → its pieces: split at "," / ";" OUTSIDE a backtick-quoted span (1.22 review: a section heading holding a
+// An `_Affects:_` value → its pieces: split at "," / ";" OUTSIDE a backtick-quoted span (a section heading holding a
 // comma or a semicolon — the size-S "Decisions, reuse & risks", "[API] Pagination, Idempotency & Concurrency" — is written
 // `quoted` by decisionEntryLines), each piece trimmed and its backticks stripped. → [{ text, start, end }] (start / end: the
 // piece's span in the value, so affectsRefs can rejoin pieces from the value itself). A backtick with no closing one is text.
@@ -128,7 +128,7 @@ function affectPieces(v) {
 }
 const cleanRef = (s) => stripEnds(String(s).trim(), isBacktickUnit).trim();
 const splitRefs = (v) => affectPieces(v).map((p) => p.text);
-// 1.22 review — the unquoted form (`decide --affects "Decisions, reuse & risks"`, a hand-written entry): a piece that names nothing
+// the unquoted form (`decide --affects "Decisions, reuse & risks"`, a hand-written entry): a piece that names nothing
 // is joined with the pieces after it (at most AFFECTS_JOIN_MAX, the longest first) when together they name something. texts: the
 // pieces; join(i, j) → the text of pieces i..j together; ok(text) → it resolves (resolveAffect). → the references
 const AFFECTS_JOIN_MAX = 8;
@@ -226,7 +226,7 @@ function decisionSectionKeys(text) {
   const base = stripEnd(base0, unitIn(":.")).trim(); // /[:.]+$/
   const keys = new Set(base ? [base] : []);
   let t = base;
-  const lead = headingLeadRe(); // + the track packs' markers (1.15)
+  const lead = headingLeadRe(); // + the track packs' markers
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, "").trim(); }
   if (t) keys.add(t);
   return keys;
@@ -234,8 +234,8 @@ function decisionSectionKeys(text) {
 // What an _Affects:_ reference may name in this feature (see the header comment).
 function decisionTargets(dir, kind) {
   const read = (x) => readIfExists(path.join(dir, x)) || "";
-  const req = criteriaText(dir) || ""; // a change: its criteria without the task blocks (1.21 review C1)
-  // (1.21 verify V7: a change has no design — its own sections, change.md's Summary / Acceptance Criteria / Approach / Tasks)
+  const req = criteriaText(dir) || ""; // a change: its criteria without the task blocks
+  // (a change has no design — its own sections, change.md's Summary / Acceptance Criteria / Approach / Tasks)
   const files = kind === "spike" ? [SPIKE_FILE] : kind === "bugfix" ? ["bug.md", "design.md"] : kind === "change" ? [CHANGE_FILE] : ["design.md"];
   const sections = new Map(); // key → { title, file }
   for (const file of files) {
@@ -264,7 +264,7 @@ function resolveAffect(ref, t) {
   return hit ? { ref: hit.title, type: "section", ok: true, file: hit.file } : { ref: r, type: "section", ok: false };
 }
 
-// A line without its trailing spaces / tabs — a scan, not /[ \t]+$/ (quadratic on a long run of blanks inside the line; 1.17 F).
+// A line without its trailing spaces / tabs — a scan, not /[ \t]+$/ (quadratic on a long run of blanks inside the line).
 function trimBlanksEnd(l) {
   let e = l.length;
   while (e > 0 && (l[e - 1] === " " || l[e - 1] === "\t")) e--;
@@ -286,7 +286,7 @@ function safeSpecText(s) {
   return stripEnds(out.join("\n"), unitIn("\n")); // /^\n+|\n+$/g
 }
 
-// `raw` (a spec file's text) with `addition` appended — THE append of every spec writer (1.23 review 5: spec_decide's entry,
+// `raw` (a spec file's text) with `addition` appended — THE append of every spec writer (spec_decide's entry,
 // spec_add_track's mandatory sections and task block, the covered sections a track removal restores, the importer's design body +
 // track blocks). A code block `raw` leaves open at its end (a snippet pasted by hand) is closed first, by appending its closer —
 // nothing is rewritten: whatever followed it was code to every reader (the decision entry was written unreadable and its D-n
@@ -362,7 +362,7 @@ function decisionEntryLines(e, D) {
     "",
     `- _Kind: ${e.kind}_`,
     `- _Date: ${e.at}_`,
-    ...(e.affects.length ? [`- _Affects: ${e.affects.map(quoteRef).join(", ")}_`] : []), // 1.22 review: a heading with a "," / ";" quoted
+    ...(e.affects.length ? [`- _Affects: ${e.affects.map(quoteRef).join(", ")}_`] : []), // a heading with a "," / ";" quoted
     ...(e.supersedes.length ? [`- _Supersedes: ${e.supersedes.join(", ")}_`] : []),
     ...para(D.labels.context, e.context),
     ...para(e.kind === "discovery" ? D.labels.discovery : D.labels.decision, e.decision),
@@ -392,7 +392,7 @@ function decide(projectDir, name, input) {
   const badSup = sup.filter((x) => !x.id || !known.has(x.id)).map((x) => x.s);
   if (badSup.length) return { ok: false, unknownSupersedes: badSup, error: D.badSupersedes(badSup.join(", ")) };
   const targets = decisionTargets(dir, kind);
-  // 1.22 review: each value's pieces, rejoined where together they name a heading (an unquoted "Decisions, reuse & risks")
+  // each value's pieces, rejoined where together they name a heading (an unquoted "Decisions, reuse & risks")
   const okRef = (r) => resolveAffect(r, targets).ok;
   const refs = [...new Set(inp.affectItems.flatMap((v) => affectsRefs(v, okRef)))];
   const resolved = refs.map((r) => resolveAffect(r, targets));
@@ -527,7 +527,7 @@ function catalogDecisions(dir) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.25 — the decision log as Architecture Decision Records: spec_export {format: "adr"} · `dev-spec export [feature] --adr [--write]`
+// the decision log as Architecture Decision Records: spec_export {format: "adr"} · `dev-spec export [feature] --adr [--write]`
 // ---------------------------------------------------------------------------
 // One MADR file per DECISION (https://adr.github.io/madr/ — 4.0's front matter `status` / `date`, then the title, Context and
 // Problem Statement, Decision Outcome with its Consequences, More Information), holding only the sections the log has text
@@ -793,7 +793,7 @@ const SPIKE_SYN = {
   decision: ["decision", "decisão", "decisao", "decisión"],
   followUp: ["follow-up", "follow up", "seguimento", "seguimiento"],
 };
-// /^\s*(?:[-*+]\s+)?_Outcome:[ \t]*(.*)_\s*$/i ($1 = value), scanned (underscoreMarkerLine — 1.17 H).
+// /^\s*(?:[-*+]\s+)?_Outcome:[ \t]*(.*)_\s*$/i ($1 = value), scanned (underscoreMarkerLine).
 const RE_OUTCOME_HEAD = /^\s*(?:[-*+]\s+)?_Outcome:/i;
 const outcomeMarker = (line) => underscoreMarkerLine(line, RE_OUTCOME_HEAD);
 // _Outcome:_ values (English-stable go | no-go | pivot; the PT / ES words and yes / no read too).
@@ -915,16 +915,16 @@ function spikeDoctor(projectDir, f) {
   }
   const dupTasks = duplicateTaskNumbers(taskBlocks(readIfExists(path.join(dir, "tasks.md")) || ""));
   if (dupTasks.length) add("duplicate-tasks", "warn", i18n.msg(lng).evidenceGate.duplicateTasks(dupTasks.map((n) => "#" + n).join(", ")));
-  const unread = unreadTasksDetail(readIfExists(path.join(dir, "tasks.md")) || ""); // 1.22 review: checkbox lines that are no tasks
+  const unread = unreadTasksDetail(readIfExists(path.join(dir, "tasks.md")) || ""); // checkbox lines that are no tasks
   if (unread) add("unread-tasks", "warn", i18n.msg(lng).markerSyntax.unreadTasks(unread));
   const depsCheck = taskDepsCheck(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""), lng); // 1.14 F3
   if (depsCheck) add("task-deps", depsCheck.status, depsCheck.detail);
   for (const c of decisionDoctorChecks(projectDir, slug, dir, st, "spike", lng)) add(c.id, c.status, c.detail);
   const wExp = waiverExpiredCheck(st.approvals, tracks, slug, lng); // 1.16 U3 (a forced execution sign-off)
   if (wExp) add(wExp.id, wExp.status, wExp.detail);
-  const mc = mergeConflictsCheck(projectDir, slug, st, lng); // 1.21 F1a: conflicts the merge driver left unresolved
+  const mc = mergeConflictsCheck(projectDir, slug, st, lng); // conflicts the merge driver left unresolved
   if (mc) add(mc.id, mc.status, mc.detail);
-  const rmc = roadmapGovernanceCheck(projectDir, lng); // 1.24 review 6 (E4): roadmap.json unreadable — its roles (the sign-off's) unknown
+  const rmc = roadmapGovernanceCheck(projectDir, lng); // roadmap.json unreadable — its roles (the sign-off's) unknown
   if (rmc) add(rmc.id, rmc.status, rmc.detail);
   const fails = checks.filter((c) => c.status === "fail");
   const warns = checks.filter((c) => c.status === "warn");
@@ -941,7 +941,7 @@ function spikeNextAction(projectDir, f, opts = {}) {
   const doc = opts.doctor && opts.doctor.ok ? opts.doctor : spikeDoctor(projectDir, f);
   const s = spikeInfo(dir);
   const spikeBlocks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks) || "");
-  const sch = taskSchedule(spikeBlocks); // 1.14 F3: next_task's rule (_Depends:_ all done)
+  const sch = taskSchedule(spikeBlocks); // next_task's rule (_Depends:_ all done)
   const next = sch.next;
   const late = s.timeboxPassed ? " " + N.timeboxPassed(s.timeboxPassed) : "";
   const res = { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), phase: detectPhase(dir, tracks), verdict: doc.verdict, gatesOk: true, pendingGates: [], changedSinceApproval: [] };
@@ -996,7 +996,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   const dec = decisionSummaryLines(dir, lng);
   if (dec.length) body.push(...dec, "");
   if (blocks.length) body.push(F.prTasks, ...blocks.map((b) => `- [${b.done ? "x" : " "}] ${b.number}. ${cleanTaskText(b.text)}`), "");
-  const forcedList = forcedApprovalList(readState(projectDir, slug).approvals, tracks); // 1.16 U3: a forced execution sign-off
+  const forcedList = forcedApprovalList(readState(projectDir, slug).approvals, tracks); // a forced execution sign-off
   if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), "");
   body.push(F.prChecks, ...SP.finish.checks.map((c) => "- [ ] " + c), "");
   body.push(F.prSpec, ...[SPIKE_FILE, DECISIONS_FILE, "tasks.md"].filter((x) => fs.existsSync(path.join(dir, x))).map((x) => "- `.specs/" + slug + "/" + x + "`"));
@@ -1007,7 +1007,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   if (write) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (1.24 r6: through the write gate)
+    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (through the write gate)
   }
   const ready = blockers.length === 0;
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null; // "finished" (catalog, next_action)
@@ -1021,13 +1021,7 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   return res;
 }
 
-module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, DECISION_TEXT_MAX, RE_DECISION_HEAD_START, isBlankUnit,
-  decisionHead, stripClosingHashes, underscoreMarkerLine, RE_DECISION_MARKER_HEAD, decisionMarker, DECISION_LABELS,
-  RE_DECISION_LABEL, BRIEF_DECISIONS_MAX, BRIEF_DECISIONS_CHARS, RE_LEADING_BOM, blankHtmlComments, splitRefs, affectPieces, rejoinRefs, affectsRefs, AFFECTS_JOIN_MAX,
-  normDecisionId, decisionLabelKey, decisionLog, retiredDecisions, decisionSectionKeys, decisionTargets, resolveAffect,
-  trimBlanksEnd, safeSpecText, appendSpecText, decisionInput, decisionEntryLines, decide, decisionsTrace, affectsWarnings,
-  decisionDoctorChecks, briefDecisions, decisionSummaryLines, catalogDecisions, ADR_DIR, ADR_INDEX, ADR_SLUG_MAX, RE_ADR_NAME, adrNumber,
-  adrFileName, adrInert, adrLabel, adrBlock, posixRel, adrModel, adrRef, adrStatusText, adrDocs, adrProjectIndex, adrStaleFiles, exportAdr, SPIKE_FILE, SPIKE_SYN, RE_OUTCOME_HEAD,
-  outcomeMarker, OUTCOME_SYN, normOutcome, spikeProse, spikeFilled, spikeOutcome, spikeParagraph, validIsoDay,
-  spikeTimebox, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeSeed, spikeDoctor, spikeNextAction,
-  spikeFinish, __link };
+module.exports = { DECISIONS_FILE, DECISION_TITLE_MAX, decisionLog, retiredDecisions, safeSpecText, appendSpecText,
+  decisionEntryLines, decide, decisionsTrace, affectsWarnings, decisionDoctorChecks, briefDecisions, decisionSummaryLines,
+  catalogDecisions, exportAdr, SPIKE_FILE, validIsoDay, spikeInfo, isSpikeDir, spikePhase, spikeCreateInput, spikeDoctor,
+  spikeNextAction, spikeFinish, __link };

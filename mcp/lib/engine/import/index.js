@@ -21,7 +21,7 @@ let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, 
   requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines, slugify, stripHtmlComments, testIndex,
   toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs, unknownTracksError, withTrackBlocks,
   writeFileAtomic, appendSpecText, flatText, specNameText, importSteering, isDryRun, STEERING_IMPORT_TOOLS, withDryRun;
-let today; // core.js — 1.25.1: the local calendar date (today / dayOf)
+let today; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ today, BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
   isInsideDir, isLtUnit, isPackTrack, isWsUnit, markerTracks, maybeRefreshRoadmap, normalizeLang, own, packOf,
@@ -39,15 +39,15 @@ function __link(E) { ({ today, BOM_CHAR, classify, closesFence, decodeText, conf
 // imported content. Requirement/story N, criterion/scenario M → US-N.AC-M; scenarios become ONE EARS criterion
 // where possible (else the text is kept with [NEEDS CLARIFICATION]); spec-kit FR-xxx / SC-xxx lines keep their IDs.
 
-// C3: + plan · execplan · bmad; 1.17 F: + fluidplan; 1.25: + kiro-steering · cursor-rules (→ .specs/steering/ files, import/steering.js)
+// + plan · execplan · bmad; + fluidplan; + kiro-steering · cursor-rules (→ .specs/steering/ files, import/steering.js)
 const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD", fluidplan: "fluidplan",
   "kiro-steering": "Kiro steering", "cursor-rules": "Cursor rules" };
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
-const TEXT_IMPORT_TOOLS = ["plan", "execplan", "fluidplan"]; // 1.16 C4: the single-document sources spec_import {text} accepts (1.17 F: a fluidplan PLAN.md, DECISIONS.md after it)
-// An imported line never opens an HTML comment (1.17 F review): every parser reads its source without its comments, so a `<!--`
+const TEXT_IMPORT_TOOLS = ["plan", "execplan", "fluidplan"]; // the single-document sources spec_import {text} accepts (a fluidplan PLAN.md, DECISIONS.md after it)
+// An imported line never opens an HTML comment: every parser reads its source without its comments, so a `<!--`
 // left in the text was an unclosed one — plain text there, but in the files written it paired with a later `-->` (the
 // `<!-- <tool>: … -->` line under a converted criterion) and hid every criterion between.
-// Outside inline code spans only (1.17 verification N3): a code span's `<!--` is text to every comment reader (commentLines —
+// Outside inline code spans only: a code span's `<!--` is text to every comment reader (commentLines —
 // the same pairing, backtickRuns, line by line) and a code span shows its text verbatim — "escape `<!--` in user names" became
 // `&lt;!--` in requirements.md and the exports (1.16 kept it). The written line starts with the text or follows a prefix of the
 // importer's without backticks, so the pairing read here is the file's.
@@ -63,7 +63,7 @@ function inertBlock(lines) {
 
 const RE_IMPORT_TASK_HEAD = /^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?/;
 // line.replace(/_Requirements:\s*(.+?)_(?=\s|$)/g, fn) — fn(match, list) — by a scan: the lazy list rescanned a long blank run
-// at each step, and each marker the rest of a line with no closing "_" (1.17 H). As the engine: the list runs from the first
+// at each step, and each marker the rest of a line with no closing "_". As the engine: the list runs from the first
 // non-blank to the first "_" followed by a blank or the end, never over a line terminator — else, when that "_" comes
 // right after the blanks, the list is their last one.
 function replaceRequirementsMarkers(s, fn) {
@@ -92,8 +92,8 @@ function replaceRequirementsMarkers(s, fn) {
   }
   return at ? out + s.slice(at) : s;
 }
-// s.replace(/_LABEL:\s*([^_\n]+)_/g, fn) — fn(match, list) — by a scan (the blanks before the list backtracked quadratically —
-// 1.17 H): the list runs from the first non-blank to the next "_" (never a line feed) — else, when that "_" comes right after
+// s.replace(/_LABEL:\s*([^_\n]+)_/g, fn) — fn(match, list) — by a scan (the blanks before the list backtracked
+// quadratically): the list runs from the first non-blank to the next "_" (never a line feed) — else, when that "_" comes right after
 // the blanks, the list is their last one (not a line feed).
 function replaceUnderscoreList(s, label, fn) {
   const open = "_" + label + ":";
@@ -146,7 +146,7 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
     }
     // Any one-character state is a task: Kiro marks one in progress `[-]` (also `[~]`, `[/]` elsewhere). Only x/X is
     // done — anything else imports as open, never dropped into the previous task's body.
-    const h = RE_IMPORT_TASK_HEAD.exec(l); // /^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?\s+(.*)$/, its text scanned (1.17 H)
+    const h = RE_IMPORT_TASK_HEAD.exec(l); // /^(\s*)[-*+]\s+\[([ xX~\-/])\](\*)?\s+(.*)$/, its text scanned
     const text = h && restAfterBlanks(l, h[0].length, true);
     const m = text == null ? null : [l, h[1], h[2], h[3], text];
     if (m) {
@@ -206,7 +206,7 @@ function importTasks(text, refs, name, lng, W, mapping, warnings) {
     }
     out.push(owner || !inert.has(i) ? rewrite(l, null, i + 1) : l); // owner here = a parent (see above)
   });
-  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n", count: n, anyRefs }; // trimEnd: /\s*$/ is quadratic (1.17 F review)
+  return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n", count: n, anyRefs }; // trimEnd: /\s*$/ is quadratic
 }
 
 // The scaffold's template tasks.md that spec_import keeps when the source has none: each _Requirements:_ keeps only the
@@ -221,7 +221,7 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
   const I = i18n.msg(lng).importSpec;
   const T = i18n.msg(lng).tracks;
   const known = requirementAcIds(reqText || "");
-  const marked = markerTracks(); // + the track packs (1.15): their task block is the heading carrying their marker
+  const marked = markerTracks(); // + the track packs: their task block is the heading carrying their marker
   const trackKnown = Object.fromEntries(marked.map((tr) => [tr, trackAcIds(reqText || "", tr)]));
   const testsFor = new Map(); // AC → the planned T-IDs covering it, in plan order
   for (const [tid, r] of testIndex(planText || "")) {
@@ -238,7 +238,7 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
     }
     if (/^\s*#{1,6}\s/.test(line) || /^\s*[-*+]\s+\[[ xX-]\]/.test(line)) acs = [];
     const fits = section ? trackKnown[section] : known;
-    // /_Requirements:\s*([^_\n]+)_/g then /_Makes green:\s*([^_\n]+)_/g, by a scan (1.17 H)
+    // /_Requirements:\s*([^_\n]+)_/g then /_Makes green:\s*([^_\n]+)_/g, by a scan
     const fitted = replaceUnderscoreList(line, "Requirements", (m, ids) => {
       const keep = ids.split(/[,;]/).map((s) => s.trim()).filter((id) => fits.has(id));
       acs = acs.concat(keep);
@@ -252,7 +252,7 @@ function fitTemplateTasks(tasksText, reqText, planText, lng) {
 }
 const C3_PARSERS = { plan: parsePlan, execplan: parseExecPlan, bmad: parseBmad, fluidplan: parseFluidplan };
 
-// 1.25 — spec_import {dryRun: true} / `dev-spec import … --dry-run`: the WHOLE pipeline (every tool, the steering ones too) runs in
+// spec_import {dryRun: true} / `dev-spec import … --dry-run`: the WHOLE pipeline (every tool, the steering ones too) runs in
 // the write gate's dry-run sink (files.js withDryRun) — the same reads, checks, refusals, classification and rendering as a real
 // import, nothing written: no file, folder, lock or roadmap refresh. The result is the real one plus `dryRun: true` and `preview`
 // — the files it would write into the feature's folder (the steering folder for a steering import), each with its size and its
@@ -283,7 +283,7 @@ function dryRunResult(r, writes) {
   }
   return { ok: true, dryRun: true, ...r, preview };
 }
-// 1.25.1 (review 7) — what an import may read: spec_import {projectDir: "<home>/.aws", tool: "plan", path: "credentials", dryRun}
+// what an import may read: spec_import {projectDir: "<home>/.aws", tool: "plan", path: "credentials", dryRun}
 // returned the file in its preview. Inside the project still, and now never through a hidden folder or file (a path segment
 // starting with ".") but the importers' own — IMPORT_DOT_ROOTS as the path's first segment, and .claude/plans/ (a plansDirectory
 // set inside the project) — and a FILE named as the source is a document format (IMPORT_SOURCE_EXT, or .cursorrules); every file
@@ -309,16 +309,16 @@ const importFileKind = (file, exts) => path.basename(file).toLowerCase() === ".c
 // then by real path (a symlink out) — never hidden (importHiddenPart), a named file of a document format, and each file through
 // `read` (inside the project, never hidden, a known kind; over IMPORT_MAX_BYTES characters → its name in `tooLarge`, never cut).
 // → { refused } | { realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge }. A refusal carries a stable `code`:
-// import-outside · import-not-found · import-hidden · import-not-source. 1.25: shared with the steering import (import/steering.js).
+// import-outside · import-not-found · import-hidden · import-not-source. Shared with the steering import (import/steering.js).
 function importSourceAt(projectDir, t, source, W, lang0) {
   const C = i18n.msg(lang0).claudeCode.importText;
   const root = path.resolve(projectDir);
   const readWarnings = [];
-  const tooLarge = new Set(); // the source files over IMPORT_MAX_BYTES characters (1.23 review 5 — refused, never cut)
+  const tooLarge = new Set(); // the source files over IMPORT_MAX_BYTES characters (refused, never cut)
   const abs = path.resolve(root, String(source).trim());
   const shown = String(source).trim();
-  // A leading ~ is the home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans (C3) and
-  // that its text can be imported instead (1.16 C4).
+  // A leading ~ is the home folder (outside), never a folder named "~"; a plan's refusal says where plan mode keeps plans and
+  // that its text can be imported instead.
   const outside = () => ({ refused: { ok: false, code: "import-outside", error: W.outside(shown) + (t === "plan" ? " " + i18n.msg(lang0).importPlans.plansDir + " " + C.orText : "") } });
   const notFound = () => ({ refused: { ok: false, code: "import-not-found", error: W.notFound(shown) } });
   const hidden = (part) => ({ refused: { ok: false, code: "import-hidden", error: W.hidden(shown, part) } });
@@ -347,7 +347,7 @@ function importSourceAt(projectDir, t, source, W, lang0) {
       }
       const st = fs.statSync(real);
       if (!st.isFile()) return null;
-      // 1.23 review 5 — a source file over the cap refuses the import (never cut: the steps past it were lost). Stat'ed first:
+      // a source file over the cap refuses the import (never cut: the steps past it were lost). Stat'ed first:
       // a text holds at least one character per 3 bytes, so a file over 3 × the cap is over it without being read whole.
       const big = () => { tooLarge.add(toPosix(path.relative(realRoot, real))); return null; };
       if (st.size > 3 * IMPORT_MAX_BYTES) return big();
@@ -361,16 +361,16 @@ function importSourceAt(projectDir, t, source, W, lang0) {
 
 function importRun(projectDir, tool, source, opts) {
   // The language of the import's own text (warnings, design.md's Decisions heading…): explicit, else the project's configured one,
-  // else — a brand-new project (1.16 C2) — the user's DEV_SPEC_DEFAULT_LANG, spec_create's resolution (configuredLang).
+  // else — a brand-new project — the user's DEV_SPEC_DEFAULT_LANG, spec_create's resolution (configuredLang).
   const lang0 = normalizeLang(opts.lang || configuredLang(projectDir) || projectLang(projectDir));
   const W = i18n.msg(lang0).importSpec;
   // Exact names only — the values spec_import's schema enum allows, so the CLI accepts exactly what MCP does
   // (no aliases, no case folding: 'speckit' / 'Kiro' are refused on both surfaces).
   const t = typeof tool === "string" && own(IMPORT_TOOLS, tool) ? tool : null;
   if (!t) return { ok: false, error: W.unknownTool(tool == null ? "" : tool, Object.keys(IMPORT_TOOLS).join(", ")) };
-  // 1.25: a steering source (.kiro/steering/, .cursor/rules/, .cursorrules) → .specs/steering/ files, no feature (`text` is refused below)
+  // a steering source (.kiro/steering/, .cursor/rules/, .cursorrules) → .specs/steering/ files, no feature (`text` is refused below)
   if (STEERING_IMPORT_TOOLS.includes(t) && opts.text == null) return importSteering(projectDir, t, source, opts, lang0);
-  // 1.16 C4 — the plan-mode bridge: `text` imports a single-document source (a plan / an ExecPlan) from its markdown, no file
+  // the plan-mode bridge: `text` imports a single-document source (a plan / an ExecPlan) from its markdown, no file
   // needed — Claude Code keeps plans in plansDirectory (~/.claude/plans by default, outside the project), so the plan the user
   // approved is passed as text. Same parser, same mapping, same guarantees; nothing is read from disk for it.
   const C = i18n.msg(lang0).claudeCode.importText;
@@ -383,7 +383,7 @@ function importRun(projectDir, tool, source, opts) {
   } else if (source == null || !String(source).trim()) return { ok: false, error: W.pathRequired + (TEXT_IMPORT_TOOLS.includes(t) ? " " + C.orText : "") };
   const root = path.resolve(projectDir);
   let readWarnings = [];
-  let tooLarge = new Set(); // the source files over IMPORT_MAX_BYTES characters (1.23 review 5 — refused, never cut)
+  let tooLarge = new Set(); // the source files over IMPORT_MAX_BYTES characters (refused, never cut)
   let realRoot, realSrc, isFileSrc, dir, rel, read;
   if (inline) {
     try { realRoot = fs.realpathSync.native(root); } catch { realRoot = root; } // a project folder not created yet is fine
@@ -391,7 +391,7 @@ function importRun(projectDir, tool, source, opts) {
     isFileSrc = true;
     dir = realRoot;
     rel = C.label;
-    // 1.23 review 5 — a text over the cap is refused, never cut (the cut dropped a plan's Steps and the import kept the scaffold's
+    // a text over the cap is refused, never cut (the cut dropped a plan's Steps and the import kept the scaffold's
     // tasks, saying no steps list was found)
     if (opts.text.length > IMPORT_MAX_BYTES) return { ok: false, tooLarge: true, error: W.tooLarge(C.label, IMPORT_MAX_BYTES) };
     const doc = opts.text.replace(new RegExp("^" + BOM_CHAR), "");
@@ -400,23 +400,23 @@ function importRun(projectDir, tool, source, opts) {
     const at = importSourceAt(projectDir, t, source, W, lang0);
     if (at.refused) return at.refused;
     ({ realRoot, realSrc, isFileSrc, dir, rel, read, readWarnings, tooLarge } = at);
-  } // inline (1.16 C4) or a path
+  } // inline or a path
   // C3 parsers also get the file named (a plan among several), the language and the real root: { file, lang, root }.
   const parse = own(C3_PARSERS, t) ? C3_PARSERS[t] : t === "kiro" ? parseKiro : t === "spec-kit" ? parseSpecKit : parseOpenSpec;
-  const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot, inline }); // inline: no file to name (1.17 F review)
+  const model = parse(dir, read, W, { file: isFileSrc ? realSrc : null, lang: lang0, root: realRoot, inline }); // inline: no file to name
   if (tooLarge.size) return { ok: false, tooLarge: true, error: W.tooLarge([...tooLarge].join(", "), IMPORT_MAX_BYTES) }; // nothing created
   if (!model) return { ok: false, error: W.nothing(IMPORT_TOOLS[t], rel) };
-  if (model.error) return { ok: false, error: model.error }; // C3: a folder of several plans — name the file
-  // C3: a single-document source shows its file; inline text (1.16 C4) has none — `source` null, `inline` true.
+  if (model.error) return { ok: false, error: model.error }; // a folder of several plans — name the file
+  // a single-document source shows its file; inline text has none — `source` null, `inline` true.
   const srcRel = inline ? null : model.sourceFile ? toPosix(path.relative(realRoot, model.sourceFile)) : rel;
 
-  // The source's title never opens an HTML comment in the files' titles (1.17 F review) — escaped before its slug is taken, as it
-  // always was; a name the caller gives keeps its slug and is made inert when written (specNameText, below — 1.24 r6). Even in a
+  // The source's title never opens an HTML comment in the files' titles — escaped before its slug is taken, as it
+  // always was; a name the caller gives keeps its slug and is made inert when written (specNameText, below). Even in a
   // code span: the name reaches design.md / tasks.md too, whose decision-target reader (blankHtmlComments) sees no code spans.
   const given = opts.name != null && !!String(opts.name).trim();
-  // One line (flatText, 1.23 review 5): a line break in a name opened a heading in every file's title.
+  // One line (flatText): a line break in a name opened a heading in every file's title.
   let name = given ? flatText(opts.name) : model.nameHint == null ? model.nameHint : flatText(String(model.nameHint).replace(/<!--/g, "&lt;!--"));
-  // 1.22 review — a title with no Latin letter or digit (# Добавить тёмную тему, # 添加深色主题) names no folder: a document read
+  // a title with no Latin letter or digit (# Добавить тёмную тему, # 添加深色主题) names no folder: a document read
   // from a file falls back to the name the parser had without the title (its file's — `nameFallback`); inline text has none,
   // and says to pass a name. (A name the caller gives is theirs: resolveFeature's own error.)
   if (!given && name != null && String(name).trim() && !slugify(name)) {
@@ -433,20 +433,20 @@ function importRun(projectDir, tool, source, opts) {
   const evidence = [model.title, model.summary, ...model.stories.flatMap((s) => [s.title, ...s.prose, ...s.quote, ...s.criteria.map((c) => c.raw)]),
     ...model.extra.flatMap((x) => x.lines)].filter(Boolean).join("\n");
   // Read in the source's own language when it shows one (an English plan imported into a PT project reads "no LLM" as a
-  // negation), else in the project's configured language (full review Pb2); an explicit lang wins. The project's signal overrides
-  // (1.21 F2 — .specs/classifier.json) apply as for spec_classify / spec_create (projectDir); an import never learns from them.
+  // negation), else in the project's configured language; an explicit lang wins. The project's signal overrides
+  // (.specs/classifier.json) apply as for spec_classify / spec_create (projectDir); an import never learns from them.
   const cls = classify(evidence, { name, lang: opts.lang, fallbackLang: configuredLang(projectDir), projectDir });
-  // refresh: false — the roadmap is refreshed ONCE, after the imported files are written (1.23 review 5: every import rendered
+  // refresh: false — the roadmap is refreshed ONCE, after the imported files are written (every import rendered
   // ROADMAP.md twice, each a walk over every feature)
-  const cr = createFeature(projectDir, name, pt.given ? pt.tracks : cls.tracks, model.summary || undefined, cls, opts.lang, undefined, { refresh: false });
+  const cr = createFeature(projectDir, { name, tracks: pt.given ? pt.tracks : cls.tracks, summary: model.summary || undefined, cls, lang: opts.lang, refresh: false });
   if (!cr.ok) return cr;
-  // 1.24 r6 (G4): from here on the name is WRITTEN (every title, decisions.md's header, a pack's {{name}}): inert to HTML comments
+  // from here on the name is WRITTEN (every title, decisions.md's header, a pack's {{name}}): inert to HTML comments
   // like createFeature's — a name the caller gives too ("Import <!-- x" opened a comment in every imported file's title)
   name = specNameText(name);
   const lng = cr.lang;
   const L = i18n.msg(lng).importSpec;
   const warnings = [...readWarnings, ...model.warnings];
-  if (cr.archivedTwin) warnings.push(i18n.msg(lng).createArchivedTwin(cr.slug)); // an archived feature has this slug too (1.23 review 5)
+  if (cr.archivedTwin) warnings.push(i18n.msg(lng).createArchivedTwin(cr.slug)); // an archived feature has this slug too
   const note = inline ? i18n.msg(lng).claudeCode.importText.note(IMPORT_TOOLS[t], today())
     : L.note(IMPORT_TOOLS[t], srcRel, today());
   const mapping = {};
@@ -460,7 +460,7 @@ function importRun(projectDir, tool, source, opts) {
   const noCriteria = [];
   // Every imported line is written inert to HTML comments (commentInert — the parsers read their sources without comments, so a
   // `<!--` left is an unclosed one): one criterion's `<!--` and a later `-->` (another criterion's, or the `<!-- <tool>: … -->`
-  // line under a converted one) hid the criteria between (1.17 F review, every importer). A block of imported lines closes a
+  // line under a converted one) hid the criteria between (every importer). A block of imported lines closes a
   // fence it leaves open (inertBlock) — it swallowed every criterion after it.
   const req = [L.featureTitle(name), "", note, "", L.summary, model.summary ? commentInert(model.summary) : L.summaryPlaceholder, "", L.stories];
   model.stories.forEach((s, idx) => {
@@ -497,9 +497,9 @@ function importRun(projectDir, tool, source, opts) {
   const put = (file, content) => { writeFileAtomic(path.join(cr.dir, file), content); if (!written.includes(file)) written.push(file); };
   put("requirements.md", req.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n"); // trimEnd: no /\s*$/ backtracking
   // A source with no criteria at all (an OpenSpec change of proposal.md + tasks.md): requirements.md defines no AC — said
-  // once, so no one approves requirements that trace nothing (1.14 full review Pa4).
+  // once, so no one approves requirements that trace nothing.
   if (!requirementAcIds(readIfExists(path.join(cr.dir, "requirements.md")) || "", cr.dir).size) warnings.push(W.wNoCriteriaAtAll);
-  // 1.15 track packs (F4 review R8): the import replaced the scaffold's requirements.md — each pack's [MARKER] criteria go back in,
+  // track packs: the import replaced the scaffold's requirements.md — each pack's [MARKER] criteria go back in,
   // after the imported US-1 criteria, as spec_create writes them (a pack's scaffold always has its criteria); its test rows and its
   // task block follow below, citing the IDs the criteria got here.
   const packs = cr.tracks.filter(isPackTrack);
@@ -514,7 +514,7 @@ function importRun(projectDir, tool, source, opts) {
     let out = text;
     for (const tr of packs) {
       const b = packTaskBlock(packOf(tr), out, readIfExists(reqFile) || "", readIfExists(path.join(cr.dir, "test-plan.md")) || "", lng, packVars);
-      if (b) out = appendSpecText(out, b, { trim: true }); // an open code fence at the end closed first (1.23 review 5)
+      if (b) out = appendSpecText(out, b, { trim: true }); // an open code fence at the end closed first
     }
     return out;
   };
@@ -522,7 +522,7 @@ function importRun(projectDir, tool, source, opts) {
   // its T-01…T-05 rows covered US-1.AC-3 / US-1.AC-4 / US-2.AC-1 the feature doesn't have — "(typos?)" in trace_check,
   // and a doctor FAIL once real tasks were imported. Re-planned from the imported ACs: the plan `spec_add_track tdd`
   // gives this feature (scaffoldTestPlan — one generic row per AC). Scaffold output, not imported text (not in `imported`).
-  // A test plan scaffolded from the project's own template (.specs/templates/) is the team's format: kept as it is (1.14).
+  // A test plan scaffolded from the project's own template (.specs/templates/) is the team's format: kept as it is.
   if (cr.created.includes("test-plan.md") && !(cr.templates && cr.templates["test-plan.md"])) {
     let plan = scaffoldTestPlan(cr.dir, name, lng, cr.tracks);
     if (packs.length) plan = withTrackBlocks("test-plan", plan, cr.tracks, lng, () => readIfExists(reqFile) || "", { only: packs, vars: packVars }); // + the packs' rows
@@ -536,15 +536,15 @@ function importRun(projectDir, tool, source, opts) {
     // The active tracks' mandatory sections, unless the imported design already has them.
     const blocks = cr.tracks.filter((x) => x !== "core").filter((x) => (x === "tdd" ? !RE_TESTABILITY.test(body) : !headingHasMarker(body, trackMarker(x))))
       .map((x) => trackDesignBlock(x, lng, { name, slug: cr.slug })).join("");
-    // The blocks follow the body as every spec writer appends (appendSpecText — 1.23 review 5): a design that ends inside an open code
+    // The blocks follow the body as every spec writer appends (appendSpecText): a design that ends inside an open code
     // block (a ```mermaid never closed) had the track sections written into it, and doctor read them all 'missing'.
     put("design.md", [i18n.msg(lng).tracks.designTitle(name), "", note, "", blocks ? appendSpecText(body, blocks, { trim: true }) : body].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n");
   }
 
-  let taskCount = 0; // 1.25: the imported tasks (`counts.tasks`) — none when the scaffold's tasks.md is kept
+  let taskCount = 0; // the imported tasks (`counts.tasks`) — none when the scaffold's tasks.md is kept
   if (model.tasks && model.tasks.numbered) {
     taskCount = model.taskKeys.length;
-    // 1.17 F (fluidplan): the parser numbered its tasks itself — its _Depends:_ name those numbers, its _Requirements:_ the AC IDs
+    // fluidplan: the parser numbered its tasks itself — its _Depends:_ name those numbers, its _Requirements:_ the AC IDs
     // the stories above got — so the text is written as it is (importTasks would renumber, and read a title's leading "10 " as an id).
     model.taskKeys.forEach((k, j) => { mapping[k] = "task " + (j + 1); });
     put("tasks.md", withPackTasks([L.tasksTitle(name), "", note, "", model.tasks.text].join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n"));
@@ -561,7 +561,7 @@ function importRun(projectDir, tool, source, opts) {
     };
     const tk = importTasks(model.tasks.text, refs, name, lng, W, mapping, warnings);
     taskCount = tk.count;
-    // C3: a synthesized task list (plan / ExecPlan / BMAD) — one task per source item, in order: its item → the new task number.
+    // a synthesized task list (plan / ExecPlan / BMAD) — one task per source item, in order: its item → the new task number.
     if (Array.isArray(model.taskKeys) && model.taskKeys.length === tk.count) {
       model.taskKeys.forEach((k, j) => { mapping[k] = "task " + (j + 1); });
       for (const [k, j] of model.taskAliases || []) mapping[k] = "task " + (j + 1); // an ExecPlan step Progress already lists
@@ -584,7 +584,7 @@ function importRun(projectDir, tool, source, opts) {
       if (fitted !== orig) writeFileAtomic(tp, fitted);
     }
   }
-  // 1.17 F (fluidplan): the settled decisions → decisions.md, in spec_decide's format (its header, D-n entries — decisionLog reads
+  // fluidplan: the settled decisions → decisions.md, in spec_decide's format (its header, D-n entries — decisionLog reads
   // them back). An _Affects:_ AC the requirements don't define (none should) is left out rather than written as a phantom.
   if (Array.isArray(model.decisions) && model.decisions.length) {
     const D = i18n.msg(lng).decisions;
@@ -597,8 +597,8 @@ function importRun(projectDir, tool, source, opts) {
   const clsText = readIfExists(clsFile);
   if (clsText != null) put("classification.md", clsText.replace(/^(#\s[^\n]*\n)/, (h1) => `${h1}\n${note}\n`));
   if (model.skipped.length) warnings.push(W.wSkipped(model.skipped.join(", ")));
-  if (!isDryRun()) maybeRefreshRoadmap(projectDir); // 1.25: a dry run renders no roadmap (it would only be recorded, at a walk's cost)
-  // 1.25 — what the mapping holds, counted (a dry run shows them before anything is written): stories, criteria, tasks, decisions
+  if (!isDryRun()) maybeRefreshRoadmap(projectDir); // a dry run renders no roadmap (it would only be recorded, at a walk's cost)
+  // what the mapping holds, counted (a dry run shows them before anything is written): stories, criteria, tasks, decisions
   const decisionIds = new Set(Object.values(mapping).filter((v) => /^D-\d+$/.test(v)));
   const counts = { stories: model.stories.length, criteria: model.stories.reduce((n, s) => n + s.criteria.length, 0), tasks: taskCount,
     decisions: Array.isArray(model.decisions) && model.decisions.length ? model.decisions.length : decisionIds.size };
@@ -608,9 +608,9 @@ function importRun(projectDir, tool, source, opts) {
     dir: cr.dir,
     tool: t,
     toolName: IMPORT_TOOLS[t],
-    source: srcRel, // C3: the file, for a single-document source (a plan, an ExecPlan, one BMAD story); else the folder
-    ...(inline ? { inline: true } : {}), // 1.16 C4: imported from text (spec_import {text}) — source is null
-    ...(cr.userDefaults ? { userDefaults: cr.userDefaults } : {}), // 1.16 C2: the language a new project took from DEV_SPEC_DEFAULT_LANG
+    source: srcRel, // the file, for a single-document source (a plan, an ExecPlan, one BMAD story); else the folder
+    ...(inline ? { inline: true } : {}), // imported from text (spec_import {text}) — source is null
+    ...(cr.userDefaults ? { userDefaults: cr.userDefaults } : {}), // the language a new project took from DEV_SPEC_DEFAULT_LANG
     tracks: cr.tracks,
     label: cr.label,
     lang: lng,
@@ -622,6 +622,4 @@ function importRun(projectDir, tool, source, opts) {
   };
 }
 
-module.exports = { IMPORT_TOOLS, IMPORT_MAX_BYTES, TEXT_IMPORT_TOOLS, IMPORT_DOT_ROOTS, IMPORT_SOURCE_EXT, IMPORT_READ_EXT, importHiddenPart, commentInert, inertBlock, RE_IMPORT_TASK_HEAD,
-  replaceRequirementsMarkers, replaceUnderscoreList, importTasks, fitTemplateTasks, C3_PARSERS, DRY_RUN_FILE_CHARS, DRY_RUN_TOTAL_CHARS,
-  importSpec, dryRunResult, importSourceAt, importRun, __link };
+module.exports = { IMPORT_TOOLS, IMPORT_MAX_BYTES, importHiddenPart, importSpec, importSourceAt, __link };

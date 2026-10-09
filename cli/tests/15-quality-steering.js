@@ -4,11 +4,11 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const SQ = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = (v) => JSON.stringify(v);
   const q = path.join(tmp, "p16q-proj");
-  const r = (args) => run([...args, "--project", q]);
+  const r = (args) => runIn([...args, "--project", q]);
   const reqOf = (slug, body) => fs.writeFileSync(path.join(q, ".specs", slug, "requirements.md"), "# Feature: " + slug + "\n\n### US-1 (P1): Story\n#### Acceptance Criteria (EARS)\n" + body);
   const constitution = path.join(q, ".specs", "steering", "constitution.md");
   SQ.initProject(q, ["core"], "en");
@@ -59,16 +59,16 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   const dg = r(["doctor", "alpha"]);
   const qp = path.join(tmp, "p16q-pt");
   SQ.initProject(qp, ["core"], "pt");
-  const sgPt = run(["steering", "glossary.md", "--project", qp]);
+  const sgPt = runIn(["steering", "glossary.md", "--project", qp]);
   ok(sg.code === 0 && stubOk && /\d+\. requirements\.md:6: 'client' — the glossary says Customer \(a person or company with a signed contract\)\. Use "Customer"/.test(cl.out) &&
     /\n## Glossary \(terms this task uses\)\n.*\n- \*\*Customer\*\* — a person or company with a signed contract _\(avoid: client, user\)_\n/.test(br.out) &&
     /\n {2}▲ glossary — 1 use\(s\) of words the glossary says to avoid — 'client' → Customer \(requirements\.md:6\)/.test(dg.out) &&
     sgPt.code === 0 && /^# Glossário\n/.test(fs.readFileSync(path.join(qp, ".specs", "steering", "glossary.md"), "utf8")),
     "1.16 Q3 CLI: steering glossary.md writes the stub (PT with --project in a PT project); clarify asks about the avoided word with file:line; brief quotes the entry; doctor warns glossary (got " + js([cl.out.slice(-300), dg.out.match(/glossary —.*/)]) + ")");
-  const help = run(["help"]).out;
-  const doc0 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const help = runIn(["help"]).out;
+  const doc0 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   ok(/impact \[feature\] --phase steering/.test(help) && /impact \[feature\] --phase steering/.test(doc0) && /glossary\.md/.test(help) && /glossary\.md/.test(doc0),
-    "1.16 Q CLI: help and the docblock document `impact [feature] --phase steering` and the glossary.md steering template");
+    "1.16 Q CLI: help and the command table document `impact [feature] --phase steering` and the glossary.md steering template");
   // 1.16 Q review 6: a glossary past 300 entries says so — clarify prints the note, --json carries glossaryTruncated.
   let big = "# Glossary\n\n- **Customer** — a person or company with a signed contract. _Avoid: client, user_\n";
   for (let i = 0; i < 304; i++) big += `- **Term${i}** — definition ${i}. _Avoid: zzword${i}_\n`;

@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
 // A4.2 — a _Verify:_ that pipes reports the pipeline's LAST exit code. `done --run` prints ONE localized hint before running
 // (it still runs — here the failing first command is masked, so the task ticks: exactly the problem), then the engine's
 // pipeMasked note. A quoted '|' and '||' get no hint. Brief and doctor name the piped tasks. Commands run in cmd.exe and sh alike.
@@ -19,7 +19,7 @@ fs.writeFileSync(tasksA4, "# Tasks\n\n" +
   "- [ ] 2. [US1] Quoted pipe\n  - _Verify: node -e \"console.log('a|b')\"_\n" +
   "- [ ] 3. [US1] Or-chain\n  - _Verify: node -e \"process.exit(0)\" || node -e \"process.exit(1)\"_\n" +
   "- [ ] 4. [US1] JSON run\n  - _Verify: node -e \"process.exit(0)\" | node -e \"process.exit(0)\"_\n");
-const ra4 = (args) => run([...args, "--project", pa4]);
+const ra4 = (args) => (args.includes("--run") ? run : runIn)([...args, "--project", pa4]); // a --run waits for its commands: spawned
 const hintRe = /pipes into another command: the shell reports only the LAST command's exit code/;
 const brA4 = ra4(["brief", "pipes", "4"]);
 const brQA4 = ra4(["brief", "pipes", "2"]);

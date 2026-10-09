@@ -5,12 +5,12 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, runIn, tmp, CLI, require, __dirname }) => {
 // 1.13 WP1: `done --run` verifies the very task it ticks; zero-padded numbers; --exit alone; --shell; localized output
 const w1p = path.join(tmp, "wp1-proj");
 fs.mkdirSync(w1p, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
 const w1Read = (f) => fs.readFileSync(path.join(w1p, ".specs", f, "tasks.md"), "utf8");
-run(["create", "Dup", "core", "--project", w1p]);
+runIn(["create", "Dup", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "dup", "tasks.md"),
   "- [x] 3. a\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. b\n  - _Verify: node -e \"process.exit(7)\"_\n");
 const w1Dup = run(["done", "dup", "3", "--run", "--project", w1p]);
@@ -19,32 +19,32 @@ ok(w1Dup.code === 1 && /process\.exit\(7\)/.test(w1Dup.out) && !/process\.exit\(
   "done --run on a duplicated number runs the _Verify:_ of the task it would tick (exit 7 → recorded, stays open, exit 1)");
 // The cmd.exe / --shell bash hint only when cmd.exe itself failed (an unknown command, its own syntax error) — a check that
 // ran and failed (exit 7 above) needs a code fix, not another shell: it used to print the hint on every failed run.
-run(["create", "Nocmd", "core", "--project", w1p]);
+runIn(["create", "Nocmd", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "nocmd", "tasks.md"), "- [ ] 1. n\n  - _Verify: no-such-command-dsd --check_\n");
 const w1No = run(["done", "nocmd", "1", "--run", "--project", w1p]);
 ok(!/--shell bash/.test(w1Dup.out) && w1No.code === 1 && (process.platform === "win32") === /--shell bash/.test(w1No.out) && /- \[ \] 1\. n/.test(w1Read("nocmd")),
   "a check that ran and failed prints no shell hint; a command cmd.exe could not run (unknown command) prints the --shell bash hint on Windows (only there)");
 // A red-phase task (its test must FAIL) with a must-pass _Verify:_: `done --run` explains how to fix the task, not only "fix the code".
-run(["create", "Red", "core", "--project", w1p]);
+runIn(["create", "Red", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "red", "tasks.md"), "- [ ] 1. [US1] Write regression test T-01 and watch it fail for the right reason\n  - _Verify: node -e \"process.exit(1)\"_\n");
 const w1Red = run(["done", "red", "1", "--run", "--project", w1p]);
 ok(w1Red.code === 1 && /Task 1 writes a test that must FAIL \(the red phase\)/.test(w1Red.out) && /Mark task 1 with _Expect: fail_/.test(w1Red.out) && /node "[^"]*dev-spec\.js" done red 1 --run\. Or move the command/.test(w1Red.out) && !/--shell bash/.test(w1Red.out),
   "done --run on a red-phase task: the refusal says to mark it _Expect: fail_ (or move the _Verify:_ to the fix task) (no shell hint)");
-run(["create", "Pad", "core", "--project", w1p]);
+runIn(["create", "Pad", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "pad", "tasks.md"), "- [ ] 01. First\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 02. Second\n- [ ] 03. Third\n");
 const w1P1 = run(["done", "pad", "01", "--run", "--project", w1p]);
-const w1P2 = run(["done", "pad", "2", "--project", w1p]);
+const w1P2 = runIn(["done", "pad", "2", "--project", w1p]);
 ok(w1P1.code === 0 && /Task 1 done \(verified\)\. 1\/3/.test(w1P1.out) && w1P2.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Third/.test(w1P2.out) &&
   /- \[x\] 01\. First\n[\s\S]*- \[x\] 02\. Second/.test(w1Read("pad")), "done finds zero-padded tasks ('01' with --run, and 2 for '02.')");
-const w1Exit = run(["done", "pad", "3", "--exit", "0", "--project", w1p]);
+const w1Exit = runIn(["done", "pad", "3", "--exit", "0", "--project", w1p]);
 ok(w1Exit.code === 1 && /exit code alone/.test(w1Exit.out) && /- \[ \] 03\. Third/.test(w1Read("pad")), "done --exit 0 alone (no --cmd, no --evidence) is rejected and ticks nothing");
 // No runnable _Verify:_ and nothing recorded: verified (doctor's verdict — never verified:false without a reason), flagged
 // nothingToVerify, so the human line never says "(verified)" for a task nothing checked (w1P2 above).
-const w1J = run(["done", "pad", "3", "--json", "--project", w1p]);
+const w1J = runIn(["done", "pad", "3", "--json", "--project", w1p]);
 const w1Jr = (() => { try { return JSON.parse(w1J.out); } catch { return {}; } })();
 ok(w1J.code === 0 && w1Jr.verified === true && w1Jr.nothingToVerify === true && w1Jr.unverifiedReason === undefined && w1Jr.note === undefined,
   "done --json on a task with no _Verify:_ and no evidence: verified + nothingToVerify, no unverifiedReason (the human line prints no '(verified)')");
-run(["create", "Sh", "core", "--project", w1p]);
+runIn(["create", "Sh", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "sh", "tasks.md"), "- [ ] 1. t\n  - _Verify: node -e \"process.exit(0)\"_\n");
 const w1Sh = run(["done", "sh", "1", "--run", "--shell", "no-such-shell-dsd", "--project", w1p]);
 ok(w1Sh.code === 1 && /no-such-shell-dsd/.test(w1Sh.out) && !/--shell bash/.test(w1Sh.out) && /- \[ \] 1\. t/.test(w1Read("sh")),
@@ -58,12 +58,12 @@ ok(w1EnvOnly.status === 1 && /no-such-shell-dsd/.test(w1EnvOnly.stdout + w1EnvOn
   "DEV_SPEC_SHELL picks the shell, --shell beats it; with --json the run log goes to stderr and stdout stays one JSON document");
 // Windows' default shell (cmd.exe) has no single quotes: `node -e 'process.exit(1)'` exits 0 there, so a _Verify:_ written for a
 // POSIX shell is refused before anything runs (unless --shell / DEV_SPEC_SHELL picks one) — never a false "verified".
-run(["create", "Posix", "core", "--project", w1p]);
+runIn(["create", "Posix", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "posix", "tasks.md"), "- [ ] 1. q\n  - _Verify: node -e 'process.exit(1)'_\n");
 const w1Px = run(["done", "posix", "1", "--run", "--project", w1p]);
 const w1PxState = () => JSON.parse(fs.readFileSync(path.join(w1p, ".specs", "posix", ".state.json"), "utf8"));
 if (process.platform === "win32") {
-  run(["create", "Plicas", "core", "--lang", "pt", "--project", w1p]);
+  runIn(["create", "Plicas", "core", "--lang", "pt", "--project", w1p]);
   fs.writeFileSync(path.join(w1p, ".specs", "plicas", "tasks.md"), "- [ ] 1. q\n  - _Verify: echo $HOME_\n");
   const w1PxPt = run(["done", "plicas", "1", "--run", "--project", w1p]);
   const w1PxOpen = /- \[ \] 1\. q/.test(w1Read("posix")) && !(w1PxState().evidence || {})["1"]; // before --shell cmd ticks it
@@ -76,14 +76,14 @@ if (process.platform === "win32") {
   ok(w1Px.code === 1 && /process\.exit\(1\)/.test(w1Px.out) && /- \[ \] 1\. q/.test(w1Read("posix")) && w1PxState().evidence["1"].exitCode === 1,
     "POSIX: done --run runs a single-quoted _Verify:_ under /bin/sh as written (a failing check fails)");
 }
-run(["create", "Tarefas", "core", "--lang", "pt", "--project", w1p]);
+runIn(["create", "Tarefas", "core", "--lang", "pt", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "tarefas", "tasks.md"), "- [ ] 1. um\n- [ ] 2. dois\n");
-const w1Pt = run(["done", "tarefas", "1", "--project", w1p]);
-ok(/Tarefa 1 feita\. 1\/2\s+próxima → #2 dois/.test(w1Pt.out) && /tem de ser um inteiro/.test(run(["done", "tarefas", "x", "--project", w1p]).out) &&
-  /já estava feita/.test(run(["done", "tarefas", "1", "--project", w1p]).out), "done output and refusals follow the feature language (PT)");
+const w1Pt = runIn(["done", "tarefas", "1", "--project", w1p]);
+ok(/Tarefa 1 feita\. 1\/2\s+próxima → #2 dois/.test(w1Pt.out) && /tem de ser um inteiro/.test(runIn(["done", "tarefas", "x", "--project", w1p]).out) &&
+  /já estava feita/.test(runIn(["done", "tarefas", "1", "--project", w1p]).out), "done output and refusals follow the feature language (PT)");
 // A `_Verify:_` inside a fenced example under a task is documentation, never the task's command: done --run refuses
 // (noRunnable) and runs nothing.
-run(["create", "Fenced", "core", "--project", w1p]);
+runIn(["create", "Fenced", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "fenced", "tasks.md"), "- [ ] 1. Document the task markers in the README\n  ```md\n  - [ ] 9. Example task\n" +
   "    - _Verify: node -e \"require('fs').writeFileSync('FENCED-VERIFY-RAN.txt','x')\"_\n  ```\n");
 const w1Fence = spawnSync(process.execPath, [CLI, "done", "fenced", "1", "--run", "--project", w1p], { encoding: "utf8", cwd: w1p });
@@ -91,49 +91,49 @@ ok(w1Fence.status === 1 && /task 1 has no runnable _Verify: <command>_ marker/.t
   /- \[ \] 1\. Document/.test(w1Read("fenced")), "done --run never executes a _Verify:_ from a fenced example under the task (noRunnable, nothing ran, task open)");
 // Review fixes: the second "3." never borrows the first one's passing run; "--exit 0" without --cmd can't clear
 // a recorded failure; a one-line ```code``` span doesn't hide the tasks below it.
-run(["create", "Dup Two", "core", "--project", w1p]);
+runIn(["create", "Dup Two", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "dup-two", "tasks.md"),
   "- [ ] 3. a\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. b\n  - _Verify: node -e \"process.exit(7)\"_\n");
 const w1D1 = run(["done", "dup-two", "3", "--run", "--project", w1p]);
-const w1D2 = run(["done", "dup-two", "3", "--project", w1p]);
-const w1DDoc = run(["doctor", "dup-two", "--project", w1p]);
+const w1D2 = runIn(["done", "dup-two", "3", "--project", w1p]);
+const w1DDoc = runIn(["doctor", "dup-two", "--project", w1p]);
 ok(w1D1.code === 0 && /Task 3 done \(verified\)\. 1\/2/.test(w1D1.out) && w1D2.code === 0 && /Task 3 done\. 2\/2/.test(w1D2.out) && !/\(verified\)/.test(w1D2.out) &&
   /renumber/.test(w1D2.out) && /verification — .*#3 \(number shared with another task\)/.test(w1DDoc.out),
   "done on the second '3.' (its exit-7 _Verify:_ never ran) is not '(verified)'; doctor flags it");
-run(["create", "Claim", "core", "--project", w1p]);
+runIn(["create", "Claim", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "claim", "tasks.md"), "- [ ] 1. docs\n- [ ] 2. x\n");
-const w1C1 = run(["done", "claim", "1", "--cmd", "npm run lint", "--exit", "2", "--evidence", "lint failed", "--project", w1p]);
-const w1C2 = run(["done", "claim", "1", "--evidence", "fixed it", "--exit", "0", "--project", w1p]);
+const w1C1 = runIn(["done", "claim", "1", "--cmd", "npm run lint", "--exit", "2", "--evidence", "lint failed", "--project", w1p]);
+const w1C2 = runIn(["done", "claim", "1", "--evidence", "fixed it", "--exit", "0", "--project", w1p]);
 ok(w1C1.code === 1 && w1C2.code === 0 && /Task 1 done\. 1\/2/.test(w1C2.out) && !/\(verified\)/.test(w1C2.out) && /latest recorded run failed \(exit 2\)/.test(w1C2.out),
   "--evidence + --exit 0 without --cmd after a failed run ticks but stays unverified (a claimed exit code is not a run)");
-run(["create", "Fence", "core", "--project", w1p]);
+runIn(["create", "Fence", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "fence", "tasks.md"), "## Phase: Build\n- [x] 1. Wire the CLI\n  ```npm test```\n- [ ] 2. Write docs\n- [ ] 3. Release\n");
-const w1FSt = run(["status", "fence", "--project", w1p]);
-const w1FDone = run(["done", "fence", "2", "--project", w1p]);
+const w1FSt = runIn(["status", "fence", "--project", w1p]);
+const w1FDone = runIn(["done", "fence", "2", "--project", w1p]);
 ok(/phase=executing/.test(w1FSt.out) && /1\/3/.test(w1FSt.out) && w1FDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Release/.test(w1FDone.out),
   "status/done see the tasks below a one-line ```code``` span (not a fence)");
 // Round 2: renumbering a duplicated number can't hand one task's passing run to the other; a copy-paste
 // duplicate (same title, other _Verify:_) can't borrow it either; an inline "<!--" hides no task line.
-run(["create", "Rn", "core", "--project", w1p]);
+runIn(["create", "Rn", "core", "--project", w1p]);
 const w1RnTasks = path.join(w1p, ".specs", "rn", "tasks.md");
 fs.writeFileSync(w1RnTasks, "- [ ] 3. a\n  - _Verify: node -e \"process.exit(7)\"_\n- [ ] 3. b\n  - _Verify: node -e \"process.exit(0)\"_\n");
-const w1Rn = [run(["done", "rn", "3", "--run", "--project", w1p]), run(["done", "rn", "3", "--project", w1p]), run(["done", "rn", "3", "--run", "--project", w1p])];
+const w1Rn = [run(["done", "rn", "3", "--run", "--project", w1p]), runIn(["done", "rn", "3", "--project", w1p]), run(["done", "rn", "3", "--run", "--project", w1p])];
 fs.writeFileSync(w1RnTasks, fs.readFileSync(w1RnTasks, "utf8").replace("- [x] 3. b", "- [x] 4. b"));
-const w1RnDoc = run(["doctor", "rn", "--project", w1p]);
+const w1RnDoc = runIn(["doctor", "rn", "--project", w1p]);
 ok(w1Rn[0].code === 1 && w1Rn[2].code === 0 && /\(verified\)/.test(w1Rn[2].out) && /verification — .*#3 \(latest run failed\), #4/.test(w1RnDoc.out),
   "done --run on a duplicated number, then renumbering: #3 keeps its own failed run (never the other task's pass)");
-run(["create", "Copy Dup", "core", "--project", w1p]);
+runIn(["create", "Copy Dup", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "copy-dup", "tasks.md"),
   "- [ ] 3. Run the checks\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 3. Run the checks\n  - _Verify: node -e \"process.exit(7)\"_\n");
 const w1Cp1 = run(["done", "copy-dup", "3", "--run", "--project", w1p]);
-const w1Cp2 = run(["done", "copy-dup", "3", "--project", w1p]);
+const w1Cp2 = runIn(["done", "copy-dup", "3", "--project", w1p]);
 ok(/Task 3 done \(verified\)\. 1\/2/.test(w1Cp1.out) && /Task 3 done\. 2\/2/.test(w1Cp2.out) && !/\(verified\)/.test(w1Cp2.out) &&
-  /verification — .*#3 \(number shared with another task\)/.test(run(["doctor", "copy-dup", "--project", w1p]).out),
+  /verification — .*#3 \(number shared with another task\)/.test(runIn(["doctor", "copy-dup", "--project", w1p]).out),
   "a copy-paste duplicate (same number and title, exit-7 _Verify:_ never run) is not '(verified)'");
-run(["create", "Cm", "core", "--project", w1p]);
+runIn(["create", "Cm", "core", "--project", w1p]);
 fs.writeFileSync(path.join(w1p, ".specs", "cm", "tasks.md"), "- [x] 1. Strip <!-- markers in the parser\n- [ ] 2. Handle the `-->` closer\n- [ ] 3. Docs\n");
-const w1CmSt = run(["status", "cm", "--project", w1p]);
-const w1CmDone = run(["done", "cm", "2", "--project", w1p]);
+const w1CmSt = runIn(["status", "cm", "--project", w1p]);
+const w1CmDone = runIn(["done", "cm", "2", "--project", w1p]);
 ok(/Tasks: 1\/3\s+next → #2/.test(w1CmSt.out) && w1CmDone.code === 0 && /Task 2 done\. 2\/3\s+next → #3 Docs/.test(w1CmDone.out),
   "an inline '<!--' in a task's text hides no task below it (status and done agree)");
 
@@ -145,7 +145,7 @@ const hasShell = (sh) => { try { return spawnSync(sh, ["-NoProfile", "-NonIntera
 const hasPwsh = hasShell("pwsh"), hasWinPs = process.platform === "win32" && hasShell("powershell");
 const lp = path.join(tmp, "l121-pwsh-run");
 fs.mkdirSync(lp, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
-run(["create", "Pwsh", "core", "--project", lp]);
+runIn(["create", "Pwsh", "core", "--project", lp]);
 const lpRead = () => fs.readFileSync(path.join(lp, ".specs", "pwsh", "tasks.md"), "utf8");
 const lpEv = () => { try { return JSON.parse(fs.readFileSync(path.join(lp, ".specs", "pwsh", ".state.json"), "utf8")).evidence || {}; } catch { return {}; } };
 fs.writeFileSync(path.join(lp, ".specs", "pwsh", "tasks.md"), [
@@ -187,8 +187,8 @@ if (hasWinPs) {
 // double-quoted pwsh script BEFORE pwsh starts: `exit $LASTEXITCODE` became a bare `exit` → 0, a failing check recorded as
 // passing. done --run / finish --run refuse it before anything runs (no pwsh needed); the single-quoted script runs as written.
 const rp = path.join(tmp, "l121-posix-pwsh");
-run(["init", "core", "--check", "unit=pwsh -NoProfile -Command \"node -e 'process.exit(3)'; exit $LASTEXITCODE\"", "--project", rp]);
-run(["create", "Posix", "core", "--project", rp]);
+runIn(["init", "core", "--check", "unit=pwsh -NoProfile -Command \"node -e 'process.exit(3)'; exit $LASTEXITCODE\"", "--project", rp]);
+runIn(["create", "Posix", "core", "--project", rp]);
 fs.writeFileSync(path.join(rp, ".specs", "posix", "tasks.md"), [
   "- [ ] 1. double-quoted pwsh script", "  - _Verify: pwsh -NoProfile -Command \"node -e 'process.exit(3)'; exit $LASTEXITCODE\"_",
   "- [ ] 2. single-quoted pwsh script", "  - _Verify: pwsh -NoProfile -Command 'node -e \"process.exit(3)\"; exit $LASTEXITCODE'_",
@@ -245,7 +245,7 @@ if (hasWinPs) {
 // "[-] Describe Foo failed". Both are recorded red now, the task ticked.
 const rm2 = path.join(tmp, "l121-mixed-pester");
 fs.mkdirSync(rm2, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
-run(["create", "Mixed", "core", "--project", rm2]);
+runIn(["create", "Mixed", "core", "--project", rm2]);
 fs.writeFileSync(path.join(rm2, ".specs", "mixed", "tasks.md"), [
   "- [ ] 1. [US1] Write T-01 and watch it fail", "  - _Verify: node t/pester-mixed.js_", "  - _Expect: fail_",
   "- [ ] 2. [US1] Write T-05 and watch it fail", "  - _Verify: node t/pester-quoted.js_", "  - _Expect: fail_", ""].join("\n"));
@@ -271,10 +271,10 @@ ok(rm1.code === 0 && /red run recorded for task 1/.test(rm1.out) && rmEv()["1"] 
 // (command-mismatch); `--run` (the CLI runs the _Verify:_ itself) verifies.
 const cm = path.join(tmp, "122-cmd-mismatch");
 fs.mkdirSync(cm, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
-run(["create", "Proof", "core", "--project", cm]);
+runIn(["create", "Proof", "core", "--project", cm]);
 fs.writeFileSync(path.join(cm, ".specs", "proof", "tasks.md"), "- [ ] 1. a\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. b\n  - _Verify: node -e \"process.exit(0)\"_\n");
-const cm1 = run(["done", "proof", "1", "--cmd", "echo hello", "--exit", "0", "--project", cm]);
-const cm1j = JSON.parse(run(["done", "proof", "1", "--cmd", "echo hello", "--exit", "0", "--json", "--project", cm]).out);
+const cm1 = runIn(["done", "proof", "1", "--cmd", "echo hello", "--exit", "0", "--project", cm]);
+const cm1j = JSON.parse(runIn(["done", "proof", "1", "--cmd", "echo hello", "--exit", "0", "--json", "--project", cm]).out);
 const cm2 = run(["done", "proof", "2", "--run", "--project", cm]);
 ok(cm1.code === 0 && /Task 1 done\. 1\/2/.test(cm1.out) && !/\(verified\)/.test(cm1.out) && /is not a run of its _Verify:_ command/.test(cm1.out) &&
   cm1j.verified === false && cm1j.unverifiedReason === "command-mismatch" && cm2.code === 0 && /Task 2 done \(verified\)/.test(cm2.out),
@@ -287,16 +287,16 @@ ok(cm1.code === 0 && /Task 1 done\. 1\/2/.test(cm1.out) && !/\(verified\)/.test(
 const SR2 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const dm = path.join(tmp, "122r2-done-run-multi");
 fs.mkdirSync(dm, { recursive: true }); // 1.23 review: --project names an existing folder (only init creates one)
-run(["create", "Multi", "core", "--project", dm]);
+runIn(["create", "Multi", "core", "--project", dm]);
 fs.mkdirSync(path.join(dm, "t"), { recursive: true });
 fs.writeFileSync(path.join(dm, "t", "ok.js"), "process.exit(0)\n");
 const winPath = process.platform === "win32" ? "node t" + String.fromCharCode(92) + "ok.js" : "node t/ok.js";
 fs.writeFileSync(path.join(dm, ".specs", "multi", "tasks.md"), "- [ ] 1. a\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Verify: node --version_\n" +
   "- [ ] 2. b\n  - _Verify: " + winPath + "_\n  - _Verify: node --version_\n- [ ] 3. c\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Verify: node --version_\n");
-// (run() hands back stdout and stderr together: the JSON document, then the commands it ran)
+// (runIn() hands back stdout and stderr together: the JSON document, then the commands it ran)
 const dmJ = (n) => { const r = run(["done", "multi", n, "--run", "--json", "--project", dm]); try { return JSON.parse(r.out.slice(0, r.out.indexOf("\n}") + 2)); } catch { return { raw: r.out }; } };
 const dm1 = dmJ("1"), dm2 = dmJ("2");
-const dm3 = JSON.parse(run(["done", "multi", "3", "--cmd", "node --version", "--exit", "0", "--json", "--project", dm]).out);
+const dm3 = JSON.parse(runIn(["done", "multi", "3", "--cmd", "node --version", "--exit", "0", "--json", "--project", dm]).out);
 const evDm = JSON.parse(fs.readFileSync(path.join(dm, ".specs", "multi", ".state.json"), "utf8")).evidence;
 const vDm = (n) => SR2.taskBrief(dm, "multi", n).verify;
 ok(dm1.ok && dm1.verified === true && dm2.ok && dm2.verified === true && evDm["1"].observed === "cli" &&
@@ -322,7 +322,7 @@ ok(/^\$ node -e "process\.exit\(0\)"$/m.test(sm1) && /^\$ node --version\r?\nv\d
 {
   const vp = path.join(tmp, "r6-done-run-vacuous");
   fs.mkdirSync(path.join(vp, "tests"), { recursive: true });
-  run(["create", "Vac", "core", "--project", vp]);
+  runIn(["create", "Vac", "core", "--project", vp]);
   fs.writeFileSync(path.join(vp, "tests", "syn.test.js"), "const t = require('node:test');\nt.test('T-01', () => { let x = ; });\n");
   fs.writeFileSync(path.join(vp, "tests", "real.test.js"), "const t = require('node:test');\nt.test('T-02', () => {});\n");
   // (task 1: a runner's own zero-count summary — node --test prints "# tests 0" when its glob matches no file; Node 18 / 20 have no

@@ -40,20 +40,20 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
   withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr, catalog } = E); }
 
 // ---------------------------------------------------------------------------
-// 1.14 B2 — stakeholder export (spec_export) · release notes from the specs (spec_export {format: "changelog"})
+// stakeholder export (spec_export) · release notes from the specs (spec_export {format: "changelog"})
 // ---------------------------------------------------------------------------
 
 // .specs/exports/ holds spec_export's documents: a reserved name (RESERVED_SLUGS), never a feature folder.
 const EXPORT_DIR = "exports";
-// csv (1.14 F5): the requirements traceability matrix; 1.16 E1 gherkin, E2 jira / linear; 1.25 adr: the decision log as MADR files
+// csv: the requirements traceability matrix; 1.16 E1 gherkin, E2 jira / linear; 1.25 adr: the decision log as MADR files
 // (decisions.js — exportAdr); 1.26 catalog (SPECS.md — catalog(), finish.js) and changelog (the release notes — changelog() below):
 // the two documents spec_export {format: "catalog"} / spec_export {format: "changelog"} returned before spec_export took them as formats.
 const EXPORT_FORMATS = ["html", "md", "csv", "gherkin", "jira", "linear", "adr", "catalog", "changelog"];
-// 1.26: html / md without write and without includeBody — a markdown preview of the document, not the document (an 18.5k-character
+// html / md without write and without includeBody — a markdown preview of the document, not the document (an 18.5k-character
 // HTML for a template-only feature landed in the agent's context on every call): its first EXPORT_PREVIEW_CHARS characters.
 const EXPORT_PREVIEW_CHARS = 1500;
 const SUMMARY_SYN = ["summary", "resumo", "resumen"];
-const CRITERIA_SYN = ["acceptance criteria", "critérios de aceitação", "criterios de aceitacao", "critérios de aceite", "criterios de aceptación", "criterios de aceptacion"]; // a change's criteria (1.21 review C5)
+const CRITERIA_SYN = ["acceptance criteria", "critérios de aceitação", "criterios de aceitacao", "critérios de aceite", "criterios de aceptación", "criterios de aceptacion"]; // a change's criteria
 const SUCCESS_SYN = ["success criteria", "critérios de sucesso", "criterios de sucesso", "criterios de éxito", "criterios de exito"];
 
 // --- markdown → HTML (zero-dep) for the subset the artifacts use ---
@@ -61,12 +61,12 @@ const SUCCESS_SYN = ["success criteria", "critérios de sucesso", "criterios de 
 // inline code, **strong** / _em_ / ~~del~~ and links. EVERY text run is escaped (htmlEsc): raw HTML in a spec (a <script> in
 // a criterion) is shown as text, never run. A link keeps an http(s) / mailto target only — javascript:, data:, a relative
 // path keep just their text — and an image becomes its alt text: an exported document never loads anything.
-// A list item → [line, indent, marker, text] | null: /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/ with its text read by headRest (1.17 H).
+// A list item → [line, indent, marker, text] | null: /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/ with its text read by headRest.
 const expItem = (line) => headRest(line, /^(\s*)([-*+]|\d{1,9}[.)])/, true);
 const RE_EXP_RULE = /^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const RE_EXP_BLOCK = /^(?:#{1,6}\s|\s*\||\s{0,3}>)/; // a heading, table row or quote: ends a list at the margin
 // A table's header separator row. \s*\|?\s* → \s*(?:\|\s*)? (same rows): two blank runs meeting with no pipe between them
-// backtracked quadratically (1.17 H).
+// backtracked quadratically.
 const RE_EXP_SEP = /^\s*(?:\|\s*)?:?-+:?\s*(?:\|\s*:?-+:?\s*)*(?:\|\s*)?$/;
 function expInline(text) {
   const slots = [];
@@ -75,7 +75,7 @@ function expInline(text) {
   // Spans are bounded (4000 / 2000 chars): an unclosed `, * or ~~ used to rescan the rest of the paragraph from every opener.
   s = replaceCodeSpans(s, (m, tick, body) => put("<code>" + htmlEsc(body.trim()) + "</code>"), 4002); // /(`+)([^`]|[^`][\s\S]{0,4000}?[^`])\1(?!`)/g
   const target = "(<[^<>\\s]*>|[^()\\s]*(?:\\([^()\\s]*\\)[^()\\s]*)*)(?:\\s+\"[^\"]*\")?";
-  // A label holds no '[' (full review Pb6): "[" × N rescanned the rest of the paragraph from every '[' — quadratic. A nested
+  // A label holds no '[': "[" × N rescanned the rest of the paragraph from every '[' — quadratic. A nested
   // "[a [b] c](url)" never matched as a whole either (its first ']' is no "](").
   s = s.replace(new RegExp("!\\[([^\\[\\]]*)\\]\\(" + target + "\\)", "g"), (m, alt) => alt);
   s = s.replace(new RegExp("\\[([^\\[\\]]+)\\]\\(" + target + "\\)", "g"), (m, label, url) => {
@@ -84,11 +84,11 @@ function expInline(text) {
   });
   // An entity reference is text in markdown (`&lt;!--` — how spec_decide stores a comment opener — reads "<!--"): kept as
   // is, never escaped again into a literal "&lt;". It can only ever render as a character, never as markup. After an odd run
-  // of backslashes its '&' is escaped: `\&lt;` is the text "&lt;" (1.17 verification N3).
+  // of backslashes its '&' is escaped: `\&lt;` is the text "&lt;".
   s = s.replace(/(?<!(?:^|[^\\])(?:\\\\)*\\)&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/g, (m) => put(m));
   // Any ASCII punctuation escaped with a backslash is that character (CommonMark) — not only markup characters: an import
-  // writes `US-3\.AC-1`, `T\-800`, `_Verify\:` to keep IDs and markers inert, and the export showed the backslashes (1.17
-  // verification N3). After htmlEsc, an escaped `<` `>` `&` `"` reads `\&lt;` … — the backslash goes, the entity stays.
+  // writes `US-3\.AC-1`, `T\-800`, `_Verify\:` to keep IDs and markers inert, and the export showed the backslashes.
+  // After htmlEsc, an escaped `<` `>` `&` `"` reads `\&lt;` … — the backslash goes, the entity stays.
   s = htmlEsc(s)
     .replace(/\*\*(?=\S)([\s\S]{0,2000}?\S)\*\*/g, "<strong>$1</strong>")
     .replace(/(?<![\p{L}\p{N}_\\])__(?=\S)([\s\S]{0,2000}?\S)__(?![\p{L}\p{N}_])/gu, "<strong>$1</strong>")
@@ -106,7 +106,7 @@ const MD_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: St
 // and an entity reference (&lt; &gt; &amp; &quot; &apos; &nbsp;, &#n; &#xh;) its character — an unknown name, and a numeric one
 // naming a control character or a line separator (the outputs are line-based), stay as written.
 // A code span is kept whole, backticks included (nothing is decoded inside one). Markup (emphasis, links) is left as it is.
-// Linear: one pass per line, each code span skipped once (1.17 verification N3 — the Gherkin export printed `NFR\-2`,
+// Linear: one pass per line, each code span skipped once (the Gherkin export printed `NFR\-2`,
 // `US-3\.AC-1` and `&lt;!--` that the importer writes to keep IDs and comment openers inert).
 function mdPlainText(s) {
   const text = String(s == null ? "" : s);
@@ -380,13 +380,13 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const read = (n) => readContained(projectDir, path.join(dir, n)); // a linked artifact is skipped, never copied out
   const tracks = detectTracks(dir);
   const st = stateFromFile(projectDir, statePath(dir));
-  const kind = st.kind === "bugfix" || st.kind === "spike" || st.kind === "change" ? st.kind : "feature"; // 1.14 C2: + spike; 1.21 review C5: + change
+  const kind = st.kind === "bugfix" || st.kind === "spike" || st.kind === "change" ? st.kind : "feature"; // + spike; + change
   const SP = M.spike;
-  // 1.21 review C5: a change's criteria are its change.md WITHOUT the task blocks (its tasks are the Tasks table, once)
+  // a change's criteria are its change.md WITHOUT the task blocks (its tasks are the Tasks table, once)
   const reqRaw = kind === "change" ? changeViews(read("requirements.md") || "").criteria : read("requirements.md") || "";
   const reqs = activeDesign(reqRaw, tracks); // a removed track's [SaaS]/[AI]/… criteria are inactive — not part of the spec
   const status = statusFeature(projectDir, slug);
-  // 1.23 review 5 — the Tasks table copies each task's text into the document: a tasks.md (a change's change.md) linked to a file
+  // the Tasks table copies each task's text into the document: a tasks.md (a change's change.md) linked to a file
   // outside .specs/ is skipped like every other artifact here (`read`), never copied out through statusFeature's plain read.
   const tasksContained = !existsCached(path.join(dir, "tasks.md")) || read("tasks.md") != null;
   const tasks = status.ok && tasksContained ? status.tasks.list : [];
@@ -395,13 +395,13 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const catF = cat.features.find((x) => x.feature === slug && !x.archived);
   const marks = new Map((catF ? catF.acs : []).map((a) => [a.id, a]));
   const meta = [[X.meta.id, "`" + slug + "`"], [X.meta.kind, X.kind[kind] || SP.kind], [X.meta.tracks, trackLabel(tracks)], [X.meta.phase, P[phase] || phase],
-    [X.meta.progress, X.progress(done, tasks.length, featurePercent(phase, done, tasks.length, flowOfState(st)))]]; // + the flow (C3); a spike's kind label (C2)
+    [X.meta.progress, X.progress(done, tasks.length, featurePercent(phase, done, tasks.length, flowOfState(st)))]]; // + the flow; a spike's kind label
   if (catF) meta.push([X.meta.status, M.catalog.status[catF.status] + (catF.finishedAt ? " · " + dayOf(catF.finishedAt) : "")]);
   meta.push([X.meta.lang, lang]);
 
   const blocks = [];
   const bugText = kind === "bugfix" ? read("bug.md") : null;
-  const spikeText = kind === "spike" ? read(SPIKE_FILE) : null; // 1.14 C2: a spike — its question is the summary, spike.md its body
+  const spikeText = kind === "spike" ? read(SPIKE_FILE) : null; // a spike — its question is the summary, spike.md its body
   const summary = sectionText(reqs, SUMMARY_SYN) || (bugText != null ? sectionText(bugText, SUMMARY_SYN) : null) || (kind === "spike" ? spikeInfo(dir).question : null);
   blocks.push({ id: "summary", h: X.sections.summary, md: summary || italic(X.noSummary) });
   if (kind !== "spike" && kind !== "change") { // a change has no stories: its criteria are its own section (below)
@@ -435,7 +435,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   });
   const head = (cols) => `| ${cols.join(" | ")} |\n|${cols.map(() => "---").join("|")}|\n`;
   blocks.push({ id: "tasks", h: X.sections.tasks, md: taskRows.length ? head(X.cols.task) + taskRows.join("\n") : italic(X.noTasks) });
-  // 1.14 F5 — the requirements traceability matrix: one row per AC / EC / NFR / SC (a spike has no requirements).
+  // the requirements traceability matrix: one row per AC / EC / NFR / SC (a spike has no requirements).
   if (kind !== "spike") blocks.push({ id: "rtm", h: M.rtm.title, md: rtmMarkdown(buildTraceMatrix(projectDir, f), lang) });
   const dec = read("decisions.md");
   if (dec != null) blocks.push({ id: "decisions", h: X.sections.decisions, md: artifactBody(dec) || italic(X.none) });
@@ -454,7 +454,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
       const notes = [];
       if (a.forced === true) notes.push(X.forced((Array.isArray(a.failing) ? a.failing.join(", ") : "") || "—"));
       if (PHASE_FILE[p] && (changed.includes(phaseFile(p, kind)) || (p === "design" && changed.includes("design.md")))) notes.push(X.changedSince);
-      if (p === "tests" && pending.has(p)) notes.push(X.changedSince); // 1.22 review: a Phase 4 sign-off the plan outgrew (pending again)
+      if (p === "tests" && pending.has(p)) notes.push(X.changedSince); // a Phase 4 sign-off the plan outgrew (pending again)
       aRows.push(`| ${phaseLabel(p)} | ${mdCell(a.by == null ? "—" : String(a.by))} | ${utcStamp(a.at)} | ${mdCell(notes.join("; ") || "—")} |`);
     } else if (pending.has(p)) aRows.push(`| ${phaseLabel(p)} | — | — | ${X.pending} |`);
   }
@@ -489,13 +489,13 @@ function exportProjectDoc(projectDir, lang, cat) {
   });
   const blocks = [{ id: "roadmap", h: X.sections.roadmap, md: rows.length ? head(X.cols.roadmap) + rows.join("\n") : italic(X.noFeatures),
     children: rmv.backlog.length ? [{ h: X.sections.backlog, md: rmv.backlog.map((b) => `- **${flatText(b.name)}**${b.note ? " — " + flatText(b.note) : ""}`).join("\n") }] : [] }];
-  // 1.14 F5 — traceability at a glance: each active feature's requirement count by matrix status.
+  // traceability at a glance: each active feature's requirement count by matrix status.
   blocks.push({ id: "rtm", h: M.rtm.projectTitle, md: rtmProjectMarkdown(projectDir, lang, rmv.features.map((f) => ({ slug: f.name, dir: path.join(root, f.name) }))) });
   // Every active feature's requirements digest — summary, stories with their ACs, success criteria — on its own page.
   for (const f of rmv.features) {
     const dir = path.join(root, f.name);
     const tracks = detectTracks(dir);
-    const kind = f.kind === "bugfix" || f.kind === "spike" || f.kind === "change" ? f.kind : "feature"; // 1.14 C2: + spike (its question is the summary); 1.21 review C5: + change
+    const kind = f.kind === "bugfix" || f.kind === "spike" || f.kind === "change" ? f.kind : "feature"; // + spike (its question is the summary); + change
     const reqFull = readContained(projectDir, path.join(dir, "requirements.md")) || "";
     const reqRaw = kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change: change.md without its task blocks
     const reqs = activeDesign(reqRaw, tracks);
@@ -506,7 +506,7 @@ function exportProjectDoc(projectDir, lang, cat) {
     const line = [X.kind[kind] || M.spike.kind, f.tracks, P[f.phase] || f.phase, X.progress(c.tasksDone, c.tasks, f.percent)].concat(f.blocked ? [X.blocked(f.unmetDeps.join(", "))] : []).join(" · ");
     const stories = exportStories(reqs, X, new Map((catF ? catF.acs : []).map((a) => [a.id, a])));
     const sc = sectionText(reqs, SUCCESS_SYN);
-    // a change has no stories: its acceptance criteria section instead (1.21 review C5)
+    // a change has no stories: its acceptance criteria section instead
     const kids = kind === "spike" ? [] : kind === "change" ? [{ h: X.criteria, md: sectionText(reqs, CRITERIA_SYN) || italic(X.noStories) }]
       : [{ h: X.sections.stories, md: stories.length ? "" : italic(X.noStories), children: stories }];
     blocks.push({ id: "f-" + f.name, cls: "feature", h: titledSlug(specTitle(reqRaw, f.name), f.name), md: italic(line) + "\n\n" + (summary || italic(X.noSummary)),
@@ -634,11 +634,11 @@ ${EXPORT_JS}
 // stakeholders — a feature (in its language) or the whole project (in the project language). Without write the content
 // comes back; write puts it in .specs/exports/<slug>.<format> (project.<format>; a feature slugged 'project':
 // project.feature.<format> — a dot never appears in a slug, so no feature lands on another's file) with the AUTO-GENERATED
-// marker, never over a same-named file dev-spec did not generate. 1.14 F5 — format 'csv': the requirements traceability
+// marker, never over a same-named file dev-spec did not generate. Format 'csv': the requirements traceability
 // matrix of the feature (the project: of every active feature) as .specs/exports/<slug>.rtm.csv (project.rtm.csv;
-// project.feature.rtm.csv) — matrixCsv's document form: UTF-8 BOM, the marker as its last record. 1.16: 'gherkin' (exportGherkin),
-// 'jira' | 'linear' (trackerCsv); 1.25: 'adr' — the decision log as MADR files under .specs/exports/adr/ (exportAdr, decisions.js).
-// 1.26: 'catalog' → catalog() and 'changelog' → changelog() — the very results (and --json) of `dev-spec catalog` / `changelog`;
+// project.feature.rtm.csv) — matrixCsv's document form: UTF-8 BOM, the marker as its last record. 'gherkin' (exportGherkin),
+// 'jira' | 'linear' (trackerCsv); 'adr' — the decision log as MADR files under .specs/exports/adr/ (exportAdr, decisions.js).
+// 'catalog' → catalog() and 'changelog' → changelog() — the very results (and --json) of `dev-spec catalog` / `changelog`;
 // opts.includeBody: false (the MCP default — the surfaces pass it) — html / md return {bytes, preview, hint} instead of `content`,
 // catalog / changelog leave their markdown out (the structure carries the same data). Omitted: the whole document (callers in code).
 function exportSpecs(projectDir, opts = {}) {
@@ -652,10 +652,10 @@ function exportSpecs(projectDir, opts = {}) {
   if (fmt === "changelog") return changelog(projectDir, { since: opts.since, milestone: opts.milestone, write: opts.write === true, includeBody: opts.includeBody });
   const root = specsRoot(projectDir);
   if (fmt === "gherkin") return exportGherkin(projectDir, opts, pl);
-  if (fmt === "adr") return exportAdr(projectDir, opts, pl); // 1.25: one MADR file per decision (decisions.js)
+  if (fmt === "adr") return exportAdr(projectDir, opts, pl); // one MADR file per decision (decisions.js)
   let doc;
   let base;
-  const tracker = TRACKERS.includes(fmt); // 1.16 E2 — one CSV for the tool's importer
+  const tracker = TRACKERS.includes(fmt); // one CSV for the tool's importer
   if (opts.name != null && String(opts.name).trim() !== "") {
     const f = existingFeature(projectDir, opts.name);
     if (!f.ok) return { ok: false, error: f.error, code: f.code };
@@ -683,7 +683,7 @@ function exportSpecs(projectDir, opts = {}) {
   if (doc.scope === "feature") res.feature = doc.feature; else res.features = doc.features;
   if (tracker) res.records = doc.records.length; // work items: features + stories + tasks
   if (!opts.write && opts.includeBody === false && (fmt === "html" || fmt === "md")) {
-    // 1.26: the preview reads as text whatever the format — the markdown rendering of the same document model (an HTML document
+    // the preview reads as text whatever the format — the markdown rendering of the same document model (an HTML document
     // opens with its stylesheet: its first characters say nothing about the spec)
     const md = fmt === "md" ? content : exportMd(doc);
     let cut = Math.min(md.length, EXPORT_PREVIEW_CHARS);
@@ -694,16 +694,16 @@ function exportSpecs(projectDir, opts = {}) {
   }
   if (!opts.write) { res.content = content; return res; }
   const exDir = path.dirname(file);
-  // 1.22 review — never through a link: .specs/exports/ (or the document) linked or resolving outside .specs/ is refused
+  // never through a link: .specs/exports/ (or the document) linked or resolving outside .specs/ is refused
   // before anything is read or written through it (every format, the project's documents too).
   if (!specsWriteContained(projectDir, file)) return { ...res, ok: false, error: i18n.msg(doc.lang).stakeholderExport.exportsLinked(".specs/" + EXPORT_DIR + "/" + base + "." + ext) };
   // A feature folder named 'exports' from before the name was reserved: never drop documents into someone's spec.
   if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(doc.lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
   if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: i18n.msg(doc.lang).err.notGenerated(".specs/" + EXPORT_DIR + "/" + base + "." + ext) };
-  writeFileAtomic(file, i18n.portableCli(content)); // committed: `dev-spec`, never a machine path (1.21 F3)
+  writeFileAtomic(file, i18n.portableCli(content)); // committed: `dev-spec`, never a machine path
   return { ...res, wrote: true, bytes: Buffer.byteLength(content, "utf8") };
 }
-// spec_export {format: "gherkin"} (1.16 E1): a feature → .specs/exports/<slug>.feature ({content | wrote, file, bytes,
+// spec_export {format: "gherkin"}: a feature → .specs/exports/<slug>.feature ({content | wrote, file, bytes,
 // scenarios, skipped, unsplit}); no name → one .feature per active feature (spikes skipped) as `documents` [{feature, lang,
 // file, scenarios, skipped, unsplit, content | bytes}] — Gherkin holds one Feature per file. A write is all-or-nothing: a
 // same-named file dev-spec did not generate refuses the whole export (named), nothing written.
@@ -736,7 +736,7 @@ function exportGherkin(projectDir, opts, pl) {
     return res;
   }
   const exDir = path.join(root, EXPORT_DIR);
-  // 1.22 review — all-or-nothing: a linked .specs/exports/ or one linked target refuses the whole export, named.
+  // all-or-nothing: a linked .specs/exports/ or one linked target refuses the whole export, named.
   const linked = docs.find((d) => !specsWriteContained(projectDir, d.file));
   if (linked) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsLinked(".specs/" + EXPORT_DIR + "/" + path.basename(linked.file)) };
   if (["requirements.md", ".state.json"].some((n) => fs.existsSync(path.join(exDir, n)))) return { ...res, ok: false, error: i18n.msg(lang).stakeholderExport.exportsIsFeature(".specs/" + EXPORT_DIR + "/") };
@@ -750,7 +750,7 @@ function exportGherkin(projectDir, opts, pl) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.16 E1 — Gherkin export: spec_export {format: "gherkin"} · `dev-spec export [f] --gherkin` → .specs/exports/<slug>.feature
+// Gherkin export: spec_export {format: "gherkin"} · `dev-spec export [f] --gherkin` → .specs/exports/<slug>.feature
 // ---------------------------------------------------------------------------
 //
 // One `Feature:` per feature (its title; the summary as the description; the active tracks as tags — a track's marker, else
@@ -767,7 +767,7 @@ function exportGherkin(projectDir, opts, pl) {
 // Gherkin's own dialect: `# language: pt` / `# language: es` + its keywords (GHERKIN_DIALECT — Gherkin's tokens, not
 // dev-spec prose). A spike (no acceptance criteria) has no Gherkin: named, it is refused; the project export skips it.
 // `keywords`: EVERY keyword of the dialect, as Gherkin's gherkin-languages.json lists them for en / pt / es (compared with
-// cucumber/gherkin main — 1.16 E review m6; step keywords without their trailing space, the "*" step aside) — the words
+// cucumber/gherkin main; step keywords without their trailing space, the "*" step aside) — the words
 // the description guard checks (a summary line starting with one of them gets the summary label in front); the other
 // fields are the ones the export writes.
 const GHERKIN_DIALECT = {
@@ -814,7 +814,7 @@ function ghMask(s) {
   }
   return out;
 }
-// Markdown emphasis MARKUP out of a criterion (1.16 E review m5): a run of * or _ counts only when it pairs with a run of the
+// Markdown emphasis MARKUP out of a criterion: a run of * or _ counts only when it pairs with a run of the
 // same character — an opener (followed by a non-space, not preceded by a letter or digit) before a closer (preceded by a
 // non-space, not followed by a letter or digit), CommonMark's flanking rules otherwise — and only its paired characters go
 // (** with ** first, then * with *; a pair never crosses another). Code spans (`…`, any backtick run up to the next run of
@@ -838,7 +838,7 @@ function ghStripEmphasis(s) {
   for (let i = 0; i < n;) {
     if (codeEnd.has(i)) { i = codeEnd.get(i); continue; }
     const c = s[i];
-    // a backslash escape (`\*`, `\_`) is a literal character, never a delimiter (1.17 verification N3 — mdPlainText drops the
+    // a backslash escape (`\*`, `\_`) is a literal character, never a delimiter (mdPlainText drops the
     // backslash afterwards; a paired `\*x\*` was markup, and left `\x\`)
     if (c === "\\" && i + 1 < n && s[i + 1] !== "`" && /[!-/:-@[-`{-~]/.test(s[i + 1])) { i += 2; continue; }
     if (c !== "*" && c !== "_") { i++; continue; }
@@ -914,7 +914,7 @@ function earsSteps(raw, lang) {
       // else the last determiner before the modal ("the system shall", "o sistema deve"); neither → no clean split.
       let runStart = modalAt;
       if (mod[1] === mod[1].toUpperCase()) {
-        const trimmed = region.trimEnd(); // /\s+$/ rescanned a blank run from each of its units (1.17 H)
+        const trimmed = region.trimEnd(); // /\s+$/ rescanned a blank run from each of its units
         const words = trimmed.split(" ");
         let end = trimmed.length;
         for (let w = words.length - 1; w >= 0 && words[w] && words[w] === words[w].toUpperCase() && /\p{Lu}/u.test(words[w]); w--) {
@@ -948,7 +948,7 @@ function earsSteps(raw, lang) {
     }
     if (!conds.length && resp) resp = withLead(resp); // "(THEN THE SYSTEM SHALL …"
   }
-  // The response must start with its subject (1.16 E review m4): "WHEN a payment fails, the cart, including discounts,
+  // The response must start with its subject: "WHEN a payment fails, the cart, including discounts,
   // SHALL be kept" has none after its last comma — cut there it read When "a payment fails, the cart, including
   // discounts" + Then "SHALL be kept" — so the criterion stays one Then with its whole text.
   const rmask = ghMask(resp);
@@ -981,16 +981,16 @@ function gherkinFeature(projectDir, f, opts = {}) {
   const D = GHERKIN_DIALECT[i18n.baseLang(lang)] || GHERKIN_DIALECT.en;
   const tracks = detectTracks(dir);
   const reqFull = readContained(projectDir, path.join(dir, "requirements.md")) || "";
-  const reqRaw = state.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without the task blocks (1.21 review C1)
+  const reqRaw = state.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without the task blocks
   const reqs = activeDesign(reqRaw, tracks);
   const idx = requirementIndex(reqs);
   const mx = buildTraceMatrix(projectDir, f, { supBy: opts.supBy });
   const byTrack = markerTracks().filter((tr) => tracks.includes(tr)).map((tr) => ({ tag: ghTag(tr), acs: trackAcIds(reqs, tr) }));
-  const lines = [`# language: ${i18n.baseLang(lang)}`, `# ${G.autogen}`, `# ${G.source(".specs/" + slug + "/" + (state.kind === "change" ? CHANGE_FILE : "requirements.md"))}`]; // a change: its one file (1.21 verify V7)
+  const lines = [`# language: ${i18n.baseLang(lang)}`, `# ${G.autogen}`, `# ${G.source(".specs/" + slug + "/" + (state.kind === "change" ? CHANGE_FILE : "requirements.md"))}`]; // a change: its one file
   const ftags = gherkinFeatureTags(tracks, state.kind);
   if (ftags.length) lines.push(ftags.join(" "));
-  // Gherkin is plain text: markdown escapes and entities are written as the characters a reader sees (mdPlainText — 1.17
-  // verification N3: `NFR\-2`, `US-3\.AC-1`, `&lt;!--` from an import reached the steps as written).
+  // Gherkin is plain text: markdown escapes and entities are written as the characters a reader sees (mdPlainText
+  // `NFR\-2`, `US-3\.AC-1`, `&lt;!--` from an import reached the steps as written).
   lines.push(`${D.feature}: ${ghLine(mdPlainText(titledSlug(specTitle(reqRaw, slug), slug)))}`);
   const summary = sectionText(reqs, SUMMARY_SYN) || (state.kind === "bugfix" ? sectionText(readContained(projectDir, path.join(dir, "bug.md")) || "", SUMMARY_SYN) : null);
   if (summary) {
@@ -1039,7 +1039,7 @@ function gherkinFeature(projectDir, f, opts = {}) {
 const gherkinBase = (slug) => (slug === "project" ? "project.feature" : slug) + ".feature";
 
 // ---------------------------------------------------------------------------
-// 1.16 E2 — tracker CSV: spec_export {format: "jira" | "linear"} · `dev-spec export [f] --tracker jira|linear` →
+// tracker CSV: spec_export {format: "jira" | "linear"} · `dev-spec export [f] --tracker jira|linear` →
 // .specs/exports/<slug>.<tracker>.csv (the project: project.<tracker>.csv — every active feature). Nothing is sent anywhere:
 // the file is for the tool's own CSV importer. One record per feature (the parent), per user story (a child of its
 // feature) and per task (a child of its story through its [USn] tag, else of the feature) — parents before their children.
@@ -1070,7 +1070,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
   const state = stateFromFile(projectDir, statePath(dir));
   const kind = state.kind === "bugfix" || state.kind === "spike" || state.kind === "change" ? state.kind : "feature";
   const reqFull = readContained(projectDir, path.join(dir, "requirements.md")) || "";
-  const reqRaw = kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without the task blocks (1.21 review C1)
+  const reqRaw = kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without the task blocks
   const reqs = activeDesign(reqRaw, tracks);
   const blocks = taskBlocks(activeTasks(readContained(projectDir, path.join(dir, "tasks.md")) || "", tracks) || "");
   const base = [slug, ...tracks.filter((t) => t !== "core")].concat(kind === "feature" ? [] : [kind]);
@@ -1101,7 +1101,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
       const k = dirKey(dir) + "\n" + a.id;
       const by = marks.get(k);
       const note = !by ? "" : " — " + (marks.live && !marks.live.has(k) ? X.toBeSupersededBy(by.join(", ")) : X.supersededBy(((marks.liveBy && marks.liveBy.get(k)) || by).join(", ")));
-      // the criterion as a reader sees it (mdPlainText — an import's `NFR\-2` / `&lt;!--` read as written; 1.17 verification N3)
+      // the criterion as a reader sees it (mdPlainText — an import's `NFR\-2` / `&lt;!--` read as written)
       return `- ${a.id} — ${mdPlainText(acOneLine(a.text, a.id, Infinity))}${note}${placeholderReport(a.text).length ? ` (${X.template})` : ""}`;
     });
     const st = blocks.filter((b) => b.story && b.story.toUpperCase() === "US" + n);
@@ -1110,7 +1110,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
       status: status(st.filter((b) => b.done).length, st.length), labels: cap(base.concat(own.map((a) => a.id))) } });
   }
   const storyKey = new Map(stories.map((s) => [s.n, s.rec.key]));
-  // Each record's key is unique (1.16 E review m3): a task number used twice (doctor's duplicate-tasks) keeps it for its
+  // Each record's key is unique: a task number used twice (doctor's duplicate-tasks) keeps it for its
   // first task, the next ones get an occurrence suffix — `<slug>/#3`, `<slug>/#3 (2)` — never two work items with one ID.
   const seen = new Map();
   const tasks = blocks.map((b) => {
@@ -1121,7 +1121,7 @@ function trackerRecords(projectDir, f, lang, supBy) {
     const occ = (seen.get(String(b.number)) || 0) + 1;
     seen.set(String(b.number), occ);
     return { key: `${slug}/#${b.number}${occ > 1 ? ` (${occ})` : ""}`, parent, type: parent === slug ? "task" : "subtask", summary: `#${b.number} ${ghLine(mdPlainText(withoutTaskMarkers(cleanTaskText(b.text)))) || ghLine(b.text)}`,
-      description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/" + (kind === "change" ? CHANGE_FILE : "tasks.md"), b.number), // a change: its one file (1.21 verify V7)
+      description: prose.map((l) => l.trim()).filter(Boolean).join("\n") + "\n\n" + T.taskLine(".specs/" + slug + "/" + (kind === "change" ? CHANGE_FILE : "tasks.md"), b.number), // a change: its one file
       status: b.done ? "done" : "open", labels: cap(base.concat([...extractAcIds(prose.join("\n"))])), estimate: size ? SIZE_POINTS[size] : null };
   });
   // Each story's tasks right after it, then the feature-level ones — parents always before their children.
@@ -1177,7 +1177,7 @@ function oneLiner(s, max = 200) {
   if (!t) return null;
   if (t.length > max) {
     const first = t.split(/(?<=[.!?])\s+(?=\p{Lu})/u)[0];
-    t = first.length <= max ? first : cutText(t, max - 1).replace(/\s+\S*$/, "") + "…"; // cutText: never half an emoji (1.23 review 5)
+    t = first.length <= max ? first : cutText(t, max - 1).replace(/\s+\S*$/, "") + "…"; // cutText: never half an emoji
   }
   return t;
 }
@@ -1189,7 +1189,7 @@ function releaseAcs(reqs) {
 // What shipped since `since` (ms, or null = everything). A feature ships when spec_finish {write} records its baseline or its
 // execution sign-off is approved; one that already shipped before `since` (a finish, a sign-off or an execution approval in
 // its history at or before it) is not new — its change requests speak for it instead.
-// only (1.16 E3): a Set of feature slugs — a milestone's (its features and the ones archived since) — the notes are scoped to.
+// only: a Set of feature slugs — a milestone's (its features and the ones archived since) — the notes are scoped to.
 function changelogData(projectDir, since, only) {
   const inWin = (t) => t != null && (since == null || t > since);
   const cache = new Map();
@@ -1197,12 +1197,12 @@ function changelogData(projectDir, since, only) {
   const fixed = [];
   const superseded = [];
   const changeRequests = [];
-  const changes = []; // 1.24 r6 (G-I10): the shipped changes (kind "change")
+  const changes = []; // the shipped changes (kind "change")
   const shipped = new Set();
   const srcs = featureDirs(projectDir).filter((s) => !only || only.has(s.slug)).map((s) => ({ ...s, st: stateFromFile(projectDir, statePath(s.dir)) }));
   for (const s of srcs) {
     const st = s.st;
-    if (st.kind === "spike") continue; // 1.14 C2: a spike ships nothing (its decision is not a release note)
+    if (st.kind === "spike") continue; // a spike ships nothing (its decision is not a release note)
     const fin = isObj(st.finished) ? timeOf(st.finished.at) : null;
     const exe = isRecord(st.approvals) && isRecord(st.approvals.execution) ? timeOf(st.approvals.execution.at) : null;
     const events = [fin, exe].filter(inWin);
@@ -1211,13 +1211,13 @@ function changelogData(projectDir, since, only) {
     const firstFin = isObj(st.finished) ? timeOf(st.finished.firstAt) : null; // a re-finished feature shipped at its first finish
     const before = since != null && ([fin, firstFin, exe].some((t) => t != null && t <= since) ||
       // a role's partial sign-off approves nothing (the phase waits for every role) — only a completed one shipped it
-      hist.some((h) => isApprovalRecord(h) && h.phase === "execution" && timeOf(h.at) != null && timeOf(h.at) <= since)); // a revocation (1.16) shipped nothing either
+      hist.some((h) => isApprovalRecord(h) && h.phase === "execution" && timeOf(h.at) != null && timeOf(h.at) <= since)); // a revocation shipped nothing either
     if (before) continue;
     shipped.add(s.dir);
     const at = Math.max(...events);
     const tracks = detectTracks(s.dir);
     const reqFull = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
-    const reqRaw = st.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without its task blocks (1.21 review C1)
+    const reqRaw = st.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without its task blocks
     const reqs = activeDesign(reqRaw, tracks);
     const kind = st.kind === "bugfix" || st.kind === "change" ? st.kind : "feature";
     const entry = { feature: s.slug, title: specTitle(reqRaw, s.slug), kind, at: new Date(at).toISOString(), event: at === fin ? "finished" : "execution-approved" };
@@ -1230,7 +1230,7 @@ function changelogData(projectDir, since, only) {
     } else {
       entry.summary = sectionFirstParagraph(reqs, SUMMARY_SYN);
       entry.acs = releaseAcs(reqs);
-      // 1.24 r6 (G-I10): a shipped CHANGE (kind "change", one change.md) changes what exists — "Changed", never "Added"
+      // a shipped CHANGE (kind "change", one change.md) changes what exists — "Changed", never "Added"
       (kind === "change" ? changes : added).push(entry);
     }
     // The earlier criteria this shipped feature replaces (_Supersedes:_), each with the criterion that replaces it.
@@ -1248,7 +1248,7 @@ function changelogData(projectDir, since, only) {
       const ids = (k) => (Array.isArray(c[k]) ? c[k].filter((x) => typeof x === "string" || typeof x === "number").map(String) : []);
       const cr = { feature: s.slug, n: i + 1, at: new Date(timeOf(c.at)).toISOString(), phase: typeof c.phase === "string" ? c.phase : "requirements",
         added: ids("added"), modified: ids("modified"), removed: ids("removed"), reopened: Array.isArray(c.reopened) ? c.reopened.filter((n) => Number.isSafeInteger(n)) : [] };
-      const chg = s.st.kind === "change"; // a change's criteria change with its plan (phase tasks; 1.21 review C4) — its criteria view
+      const chg = s.st.kind === "change"; // a change's criteria change with its plan (phase tasks) — its criteria view
       if (cr.phase === "requirements" || (chg && cr.phase === "tasks")) { // the current text of the requirement IDs it added or modified
         const raw = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
         const idx = requirementIndex(chg ? changeViews(raw).criteria : raw);
@@ -1266,7 +1266,7 @@ function renderReleaseNotes(d, lang, proj, scope, now, ms) {
   const N = M.releaseNotes;
   const code = (s) => "`" + s + "`";
   const name = (e) => (slugify(e.title) === e.feature ? e.title : `${e.title} (${code(e.feature)})`);
-  const title = ms ? M.milestone.notesTitle(N.title(proj), ms.name) : N.title(proj); // 1.16 E3: a milestone's notes
+  const title = ms ? M.milestone.notesTitle(N.title(proj), ms.name) : N.title(proj); // a milestone's notes
   const scopeLine = ms ? M.milestone.notesScope(ms.name, ms.date, ms.features.concat(ms.archived || []).join(", ")) + " · " + scope : scope;
   let md = `# ${title}\n\n<!-- ${ms ? M.milestone.notesAutogen : N.autogen} -->\n\n_${scopeLine} · ${N.generated(dayOf(now))}_\n\n## ${N.added}\n\n`;
   if (!d.added.length) md += italic(N.none) + "\n\n";
@@ -1275,7 +1275,7 @@ function renderReleaseNotes(d, lang, proj, scope, now, ms) {
     if (a.acs.length) md += a.acs.map((x) => `- **${x.id}** — ${x.text}`).join("\n") + "\n\n";
   }
   const lines = [];
-  for (const c of d.changed.changes || []) { // 1.24 r6 (G-I10): a shipped change — its summary, then its criteria
+  for (const c of d.changed.changes || []) { // a shipped change — its summary, then its criteria
     lines.push(`- **${name(c)}**${c.summary ? " — " + c.summary : ""}`);
     for (const x of c.acs || []) lines.push(`  - **${x.id}** — ${x.text}`);
   }
@@ -1294,7 +1294,7 @@ function renderReleaseNotes(d, lang, proj, scope, now, ms) {
 // data, in the project language. since: an ISO date / timestamp, 'last' (the default: roadmap.json meta.changelogAt, stamped by
 // the last written notes — everything while unset) or 'all'. write: .specs/RELEASE-NOTES.md (AUTO-GENERATED, never over a
 // hand-written one) + meta.changelogAt, both under the roadmap lock; with nothing to report nothing is written or stamped.
-// 1.16 E3 — milestone: the notes of that milestone's features only (its features + the ones archived since it was set);
+// milestone: the notes of that milestone's features only (its features + the ones archived since it was set);
 // `since` then defaults to 'all' (the milestone's whole history — 'last' / a date still narrow it), and write goes to
 // .specs/RELEASE-NOTES.<milestoneFileKey>.md (the slug, + a short hash when it loses part of the name; AUTO-GENERATED, never
 // over a hand-written one) WITHOUT stamping meta.changelogAt (the project's own notes keep their 'last').
@@ -1338,7 +1338,7 @@ function changelog(projectDir, opts = {}) {
   const res = { ok: true, lang, since: sinceIso, sinceSource, generatedAt: now, added: d.added, changed: d.changed, fixed: d.fixed, counts, file, wrote: false };
   if (ms) res.milestone = { name: ms.name, date: ms.date, features: ms.features.slice(), ...(ms.archived ? { archived: ms.archived.slice() } : {}) };
   if (note) res.note = note;
-  if (!opts.write) return opts.includeBody === false ? res : { ...res, markdown }; // 1.26: the markdown only on request (spec_export {includeBody})
+  if (!opts.write) return opts.includeBody === false ? res : { ...res, markdown }; // the markdown only on request (spec_export {includeBody})
   if (!fs.existsSync(root)) return { ...res, ok: false, error: M.err.noSpecs(root) };
   if (!counts.added && !counts.changed && !counts.fixed) return { ...res, note: (ms ? M.milestone.nothingToWrite : N.nothingToWrite)(".specs/" + fileName) };
   const w = withRoadmapLock(projectDir, () => {
@@ -1358,7 +1358,7 @@ function changelog(projectDir, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.16 E3 — milestones: spec_roadmap_edit {kind: "milestone", action: add | rm | list} · `dev-spec milestone [add <name> <YYYY-MM-DD> <features…> |
+// milestones: spec_roadmap_edit {kind: "milestone", action: add | rm | list} · `dev-spec milestone [add <name> <YYYY-MM-DD> <features…> |
 // rm <name> | list]`, stored in roadmap.json → meta.milestones [{name, date, features, archived?}] (under the roadmap lock).
 // A name: letters (any script, with their marks), digits, spaces and . _ : # ( ) + - (≤ 60 characters, starting with a
 // letter or a digit), unique by its identity (milestoneKey — Unicode kept: "Sprint α" ≠ "Sprint β"); its release notes'
@@ -1379,14 +1379,13 @@ function changelog(projectDir, opts = {}) {
 // ROADMAP.md / .html show a Milestones table when any exists, and "Needs attention" lists the at-risk / late ones.
 // ---------------------------------------------------------------------------
 const MILESTONE_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_roadmap_edit {kind: "milestone"} enum (server.js reads it from here)
-const MILESTONE_STATUSES = ["on-track", "at-risk", "late", "done"];
 const MILESTONE_MAX = 50;
 const MILESTONE_FEATURES_MAX = 200;
 const RE_MILESTONE_NAME = /^[\p{L}\p{N}][\p{L}\p{N}\p{M} ._:#()+-]{0,59}$/u;
 const RE_ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 // A milestone's name as stored and validated: one line, whitespace runs folded, NFC (a decomposed "é" is the composed one).
 const milestoneName = (name) => (name == null ? "" : String(name)).normalize("NFC").replace(/\s+/g, " ").trim();
-// A milestone's IDENTITY (1.16 E review M1): its name, Unicode kept — NFKC, lower-case, the accents of LATIN letters folded
+// A milestone's IDENTITY: its name, Unicode kept — NFKC, lower-case, the accents of LATIN letters folded
 // (Lançamento = lancamento, as the 1.16.0 slug key had it), runs of separators (whitespace _ - . : # ( )) as one '-'. Every
 // other letter, digit, mark and '+' counts: "Sprint α" ≠ "Sprint β", "Релиз 2026" ≠ "Бета 2026", "C" ≠ "C++" (the slug
 // key made each pair one milestone — adding the second silently replaced the first).
@@ -1414,7 +1413,7 @@ const strList = (v) => Array.isArray(v) && v.every((x) => typeof x === "string")
 const slugList = (v) => strList(v) && v.every((x) => x !== "" && slugify(x) === x); // feature slugs, as add stores them
 // roadmap.json → meta.milestones → { list: [{ name, date, features, archived? }], invalid } (invalid: the stored value is
 // not a list of such entries — its valid ones are still listed). An entry is valid only as `add` writes it (1.16 E review
-// M2 — a hand-edited roadmap.json reaches ROADMAP.md / .html): a name RE_MILESTONE_NAME accepts, a date that is a real
+// a hand-edited roadmap.json reaches ROADMAP.md / .html): a name RE_MILESTONE_NAME accepts, a date that is a real
 // YYYY-MM-DD day, lists of feature slugs; a second entry with the same identity (milestoneKey) is invalid too.
 // Also → `valid` (per stored entry: true | false — milestonesFollow edits the valid ones in place) and `bad` (null, or
 // { count, names, notList? } — milestoneInvalidInfo: what ROADMAP.md's "Needs attention" and the lifecycle results report).
@@ -1438,7 +1437,7 @@ function milestoneStore(rm) {
   });
   return { list, invalid: names.length > 0, valid, bad: names.length ? { count: names.length, names } : null };
 }
-// The invalid part of meta.milestones → null | { count, names, notList? } (1.16 verify NEW-1): spec_roadmap's
+// The invalid part of meta.milestones → null | { count, names, notList? }: spec_roadmap's
 // `milestonesInvalid`, a "Needs attention" line of ROADMAP.md / .html and the CLI roadmap, and the lifecycle results.
 function milestoneInvalidInfo(rm) {
   const b = milestoneStore(rm).bad;
@@ -1553,7 +1552,7 @@ function milestone(projectDir, action, opts = {}) {
     const date = opts.date == null ? "" : String(opts.date).trim();
     if (!RE_ISO_DAY.test(date) || isoTime(date) == null) return { ok: false, error: MS.badDate(date) };
     // A list's items are names (a feature called "User Login" is one) split on commas only; a single string — the engine's
-    // shorthand — on whitespace and commas too, as spec_roadmap_edit {kind: "depend"} reads it (1.16 E review m2).
+    // shorthand — on whitespace and commas too, as spec_roadmap_edit {kind: "depend"} reads it.
     const asked = (opts.features == null ? [] : Array.isArray(opts.features) ? opts.features.flatMap((x) => String(x == null ? "" : x).split(",")) : String(opts.features).split(/[\s,]+/))
       .map((x) => x.trim()).filter(Boolean);
     if (!asked.length) return { ok: false, error: MS.noFeatures };
@@ -1569,8 +1568,8 @@ function milestone(projectDir, action, opts = {}) {
     return mutate((list) => {
       const i = list.findIndex((x) => milestoneKey(x.name) === milestoneKey(name));
       if (i < 0 && list.length >= MILESTONE_MAX) return { ok: false, error: MS.tooMany(MILESTONE_MAX) };
-      // An update keeps the features archived since the milestone was set (its release notes still cover them — 1.16 E
-      // review m1), minus any now listed as active again.
+      // An update keeps the features archived since the milestone was set (its release notes still cover them),
+      // minus any now listed as active again.
       const archived = i >= 0 && list[i].archived ? list[i].archived.filter((s) => !features.includes(s)) : [];
       const entry = { name, date, features, ...(archived.length ? { archived } : {}) };
       if (i >= 0) list[i] = entry; else list.push(entry);
@@ -1587,7 +1586,7 @@ function milestone(projectDir, action, opts = {}) {
 }
 // A feature's lifecycle in meta.milestones (pruneRoadmapRefsLocked / restore, under the roadmap lock): rename → the new slug
 // (active lists only), archive → moved to `archived`, remove → dropped, restore → back from `archived`. Every VALID stored
-// entry is edited in place; an invalid one (a hand-edit typo — 1.16 verify NEW-1: one bad date used to stop every entry from
+// entry is edited in place; an invalid one (a hand-edit typo — one bad date used to stop every entry from
 // following) is left exactly as it is, and so is a meta.milestones that is no list. → { changed: the names of the milestones
 // changed, invalid: milestoneInvalidInfo | null }.
 function milestonesFollow(rm, slug, how, to) {
@@ -1614,15 +1613,6 @@ function milestonesFollow(rm, slug, how, to) {
   return { changed, invalid: store.bad ? { ...store.bad, names: store.bad.names.slice() } : null };
 }
 
-module.exports = { EXPORT_DIR, EXPORT_FORMATS, SUMMARY_SYN, SUCCESS_SYN, expItem, RE_EXP_RULE, RE_EXP_BLOCK, RE_EXP_SEP,
-  expInline, RE_MD_ESCAPE, MD_ENTITIES, mdPlainText, nextPlainStop, expFence, expCells, expTable, expList, expBlocks,
-  markdownToHtml, shiftHeadings, squeezeBlankLines, artifactBody, sectionText, specTitle, titledSlug, mdCell, utcStamp,
-  italic, exportAcLine, exportStories, requirementSections, exportFeatureDoc, exportProjectDoc, exportMd, EXPORT_CSS,
-  EXPORT_JS, exportHtml, exportSpecs, exportGherkin, GHERKIN_DIALECT, GHERKIN_BLOCK_KINDS, GHERKIN_STEP_KINDS,
-  ghRiskyLine, GHERKIN_COND, GHERKIN_THEN, RE_GH_KEYWORD, RE_GH_MODAL, RE_GH_DET, ghMask, ghStripEmphasis,
-  GHERKIN_LANG_KEYWORDS, earsSteps, ghLine, ghTag, gherkinFeatureTags, gherkinFeature, gherkinBase, TRACKERS,
-  TRACKER_LABELS_MAX, TRACKER_SUMMARY_MAX, TRACKER_STATUS, trackerRecords, trackerCsv, isoTime, oneLiner, releaseAcs,
-  changelogData, renderReleaseNotes, changelog, MILESTONE_ACTIONS, MILESTONE_STATUSES, MILESTONE_MAX,
-  MILESTONE_FEATURES_MAX, RE_MILESTONE_NAME, RE_ISO_DAY, milestoneName, milestoneKey, milestoneFileKey, strList,
-  slugList, milestoneStore, milestoneInvalidInfo, findMilestone, milestoneStatuses, milestoneAttention, MILESTONE_ICON,
-  milestoneLine, milestonesNow, milestone, milestonesFollow, __link };
+module.exports = { EXPORT_DIR, EXPORT_FORMATS, mdPlainText, markdownToHtml, shiftHeadings, squeezeBlankLines, specTitle,
+  mdCell, utcStamp, italic, exportSpecs, earsSteps, TRACKERS, oneLiner, changelog, MILESTONE_ACTIONS, milestoneInvalidInfo,
+  milestoneStatuses, milestoneAttention, MILESTONE_ICON, milestoneLine, milestone, milestonesFollow, __link };

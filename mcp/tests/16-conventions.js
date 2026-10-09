@@ -539,8 +539,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
   // the BMAD importer — it matched only the exact "status:" form). A class letter quantified right after an anchor, a group
   // opener or an alternation, with no backslash, is the tell.
   {
-    const srcFiles = [...libSources().map((f) => path.relative(root, f)), "mcp/server.js", "cli/dev-spec.js",
-      "hooks/guard-hook.js", "hooks/stop-hook.js", "hooks/spec-hook.js", "hooks/observe-hook.js", "hooks/approval-hook.js",
+    const srcFiles = [...libSources().map((f) => path.relative(root, f)), "mcp/server.js", "cli/dev-spec.js", "cli/main.js", "cli/commands.js",
+      "cli/run.js", "cli/git.js", "cli/completion.js", "hooks/guard-hook.js", "hooks/stop-hook.js", "hooks/spec-hook.js", "hooks/observe-hook.js", "hooks/approval-hook.js",
       "hooks/plan-hook.js", "hooks/precommit-check.js", "scripts/build.js"].filter((f) => fs.existsSync(path.join(root, f)));
     const lit = /(^|[=(,:!&|?;{}\s])\/((?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+)\/([dgimsuvy]*)/gm;
     const stripped = /(^|[(|^?:])(?:s[*+?]|d[+*]|w[+*])|[^\\\p{L}](?:s[*+])(?:[\p{L}:$)]|$)/u;
@@ -664,6 +664,141 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     const notLoaded = [...modules, path.join(engDir, "ctx.js")].filter((f) => !require.cache[f]).map(rel);
     ok(modules.length >= 20 && notLoaded.length === 0,
       "1.18 module rule: every module in engine/index.js MODULES is loaded once the facade is (got " + JSON.stringify({ modules: modules.length, notLoaded }) + ")");
+  }
+
+  // 1.27 module boundaries, read from the sources with a small scanner (no parser, zero dependencies: it tells code from comments,
+  // strings, template and regex literals — a `/` after a name that is no keyword, a number, a literal, `)`, `]` or `}` divides).
+  // (a) Every name an engine module links (its bare `let` list) is used in its own code — the list, __link and module.exports
+  // aside: a name linked and never used is a dead link. (b) Every name an engine module exports is used OUTSIDE it: linked or
+  // required at load time by another engine module, read by the facade (spec.js), a surface (mcp/server.js, prompts-resources.js,
+  // operations.js — 1.27: the engine calls both surfaces make —, mcp/evals/, the CLI, the hooks, scripts/) or a test (its code, or a
+  // string it runs — a child's script). A name only its own
+  // module reads is no export: drop it from module.exports (E, the merged namespace, holds only what crosses a module boundary).
+  // EXPORT_ALLOW keeps one with no outside use — each with its reason. (c) The facade: each key is read by a surface or a test,
+  // and each name it takes from the engine is used in it.
+  {
+    const EXPORT_ALLOW = new Map([]); // name → why it stays exported with no outside use
+    const BEFORE_EXPR = new Set(["return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do", "else", "yield", "await"]);
+    const idStart = (c) => (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c === 95 || c === 36 || c > 127;
+    const digit = (c) => c >= 48 && c <= 57;
+    const idPart = (c) => idStart(c) || digit(c);
+    // → { names: the names the code uses, props: the property names (after `.` / `?.`), strs: the literals' raw text }
+    const scan = (src) => {
+      const names = new Set(), props = new Set(), strs = [], n = src.length, tpl = [];
+      let i = src.startsWith("#!") ? src.indexOf("\n") : 0, prev = "", prevName = "", depth = 0;
+      if (i < 0) i = n;
+      const regexOk = () => !(prev === "num" || prev === "str" || prev === "re" || prev === ")" || prev === "]" || prev === "}" ||
+        (prev === "id" && !BEFORE_EXPR.has(prevName)));
+      const template = () => { // from just after a backtick (or a substitution's `}`) to the closing backtick or the next `${`
+        const from = i;
+        for (; i < n; i++) {
+          const ch = src[i];
+          if (ch === "\\") i++;
+          else if (ch === "`") { strs.push(src.slice(from, i++)); prev = "str"; return; } else if (ch === "$" && src[i + 1] === "{") { strs.push(src.slice(from, i)); i += 2; tpl.push(depth++); prev = "{"; return; }
+        }
+        strs.push(src.slice(from));
+      };
+      while (i < n) {
+        const c = src.charCodeAt(i), ch = src[i];
+        if (c <= 32 || c === 0xa0 || c === 0xfeff) { i++; continue; }
+        if (ch === "/" && src[i + 1] === "/") { i = src.indexOf("\n", i); if (i < 0) i = n; continue; }
+        if (ch === "/" && src[i + 1] === "*") { const e = src.indexOf("*/", i + 2); i = e < 0 ? n : e + 2; continue; }
+        if (ch === "'" || ch === "\"") {
+          let j = i + 1;
+          for (; j < n && src[j] !== ch && src[j] !== "\n"; j++) if (src[j] === "\\") j++;
+          strs.push(src.slice(i + 1, j)); i = j + 1; prev = "str"; continue;
+        }
+        if (ch === "`") { i++; template(); continue; }
+        if (ch === "/" && regexOk()) {
+          let j = i + 1, cls = false;
+          for (; j < n && src[j] !== "\n"; j++) {
+            if (src[j] === "\\") j++;
+            else if (cls) cls = src[j] !== "]";
+            else if (src[j] === "[") cls = true;
+            else if (src[j] === "/") break;
+          }
+          for (j++; j < n && idPart(src.charCodeAt(j)); j++);
+          i = j; prev = "re"; continue;
+        }
+        if (idStart(c)) {
+          let j = i + 1;
+          while (j < n && idPart(src.charCodeAt(j))) j++;
+          prevName = src.slice(i, j);
+          (prev === "." || prev === "?." ? props : names).add(prevName);
+          i = j; prev = "id"; continue;
+        }
+        if (digit(c) || (ch === "." && digit(src.charCodeAt(i + 1)))) {
+          let j = i + 1;
+          while (j < n && (idPart(src.charCodeAt(j)) || src[j] === ".")) j++;
+          i = j; prev = "num"; continue;
+        }
+        if (ch === "." && src[i + 1] === "." && src[i + 2] === ".") { i += 3; prev = "..."; continue; }
+        if (ch === "?" && src[i + 1] === "." && !digit(src.charCodeAt(i + 2))) { i += 2; prev = "?."; continue; }
+        if (ch === "{") depth++;
+        else if (ch === "}") {
+          if (tpl.length && tpl[tpl.length - 1] === depth - 1) { tpl.pop(); depth--; i++; template(); continue; }
+          depth--;
+        }
+        i++; prev = ch;
+      }
+      return { names, props, strs };
+    };
+    const codeNames = (src) => scan(src).names;
+    const words = (strs) => strs.join(" ").replace(/\\./g, " ").match(/[A-Za-z_$][\w$]*/g) || []; // an escape (\n) never glues onto a name
+    const engDir = path.join(__dirname, "lib", "engine");
+    const rel = (f) => path.relative(root, f).split(path.sep).join("/");
+    const listNames = (text) => text.replace(/\/\/[^\n]*/g, "").split(",").map((s) => s.trim()).filter(Boolean);
+    const mods = libSources({ i18n: false }).filter((f) => f.startsWith(engDir + path.sep) && f !== path.join(engDir, "index.js")).map((f) => {
+      const src = fs.readFileSync(f, "utf8").replace(/\r\n/g, "\n");
+      const linked = [], loadTime = [];
+      let exported = [];
+      const code = src
+        .replace(/^let ([^;]*);/gm, (all, list) => (list.includes("=") ? all : (linked.push(...listNames(list)), "")))
+        .replace(/^function __link\([^)]*\)\s*\{\s*\(\{[^}]*\}\s*=\s*[A-Za-z_$][\w$]*\s*\);\s*\}/m, "")
+        .replace(/^module\.exports = \{([^}]*)\};/m, (all, list) => { exported = listNames(list).filter((x) => x !== "__link"); return ""; });
+      for (const m of src.matchAll(/^(?:const|let|var)\s+\{([^}]*)\}\s*=\s*require\((["'])(\.\.?\/[^"']+)\2\)/gm))
+        loadTime.push({ to: path.resolve(path.dirname(f), m[3].endsWith(".js") ? m[3] : m[3] + ".js"), names: listNames(m[1]).map((x) => x.split(":")[0].trim()) });
+      return { f, linked, exported, loadTime, used: codeNames(code) };
+    });
+    const linkedBy = new Map(), required = new Set();
+    for (const m of mods) {
+      for (const x of m.linked) (linkedBy.get(x) || linkedBy.set(x, new Set()).get(x)).add(m.f);
+      for (const r of m.loadTime) for (const x of r.names) required.add(r.to + "|" + x);
+    }
+    const listDir = (d, keep = () => true) => fs.readdirSync(d).filter((x) => x.endsWith(".js") && keep(x)).map((x) => path.join(d, x));
+    const consumers = [path.join(__dirname, "server.js"), path.join(__dirname, "lib", "prompts-resources.js"), path.join(__dirname, "lib", "operations.js"), path.join(__dirname, "test.js"),
+      ...listDir(path.join(__dirname, "evals")), ...listDir(path.join(__dirname, "tests")), ...listDir(path.join(root, "cli")),
+      ...listDir(path.join(root, "cli", "tests")), ...listDir(path.join(root, "hooks")), ...listDir(path.join(root, "scripts"))];
+    const outside = new Set();
+    for (const f of consumers) {
+      const s = scan(fs.readFileSync(f, "utf8"));
+      for (const set of [s.names, s.props, words(s.strs)]) for (const x of set) outside.add(x);
+    }
+    const facadeSrc = fs.readFileSync(path.join(__dirname, "lib", "spec.js"), "utf8").replace(/\r\n/g, "\n");
+    let fromEngine = [];
+    const facadeCode = facadeSrc.replace(/^const \{([^}]*)\} = engine;/m, (all, list) => { fromEngine = listNames(list); return ""; });
+    const facadeUses = codeNames(facadeCode);
+    const keysBlock = (facadeSrc.match(/^module\.exports = \{\n([\s\S]*?)\n\};/m) || ["", ""])[1];
+    const facadeKeys = [...keysBlock.matchAll(/^ {2}([A-Za-z_$][\w$]*)\s*[,:]/gm)].map((m) => m[1]).concat(/^module\.exports\.withReadCache = /m.test(facadeSrc) ? ["withReadCache"] : []);
+    const deadLinks = [], localOnly = [];
+    for (const m of mods) {
+      for (const x of m.linked) if (!m.used.has(x)) deadLinks.push(rel(m.f) + ": " + x);
+      for (const x of m.exported) {
+        const by = linkedBy.get(x);
+        if (!((by && [...by].some((o) => o !== m.f)) || required.has(m.f + "|" + x) || facadeUses.has(x) || outside.has(x) || EXPORT_ALLOW.has(x))) localOnly.push(rel(m.f) + ": " + x);
+      }
+    }
+    const unreadKeys = facadeKeys.filter((k) => !outside.has(k)), unusedFromEngine = fromEngine.filter((x) => !facadeUses.has(x));
+    const exportsTotal = mods.reduce((n, m) => n + m.exported.length, 0), linkedTotal = mods.reduce((n, m) => n + m.linked.length, 0);
+    all("1.27 module boundaries: (a) every name an engine module links is used in it, (b) every name it exports is used outside it (another module's link / load-time require, the facade, a surface or a test), (c) every facade key is read by a surface or a test and every engine name the facade takes is used in it (got " +
+      JSON.stringify({ modules: mods.length, exportsTotal, linkedTotal, facadeKeys: facadeKeys.length, deadLinks, localOnly, unreadKeys, unusedFromEngine }) + ")", {
+      scanned: () => mods.length >= 30 && exportsTotal > 300 && linkedTotal > 300 && facadeKeys.length > 150 && fromEngine.length > 150,
+      "(a) no dead link": () => deadLinks.length === 0,
+      "(b) no export only its own module uses": () => localOnly.length === 0,
+      "(c) every facade key read outside": () => unreadKeys.length === 0,
+      "(c) every engine name the facade takes is used": () => unusedFromEngine.length === 0,
+      "EXPORT_ALLOW: each entry still an export, with a reason": () => [...EXPORT_ALLOW].every(([x, why]) => why && mods.some((m) => m.exported.includes(x))),
+    });
   }
 
   // 1.18 load time (review): the facade turns on Node's module compile cache where Node has it (22.8+; NODE_DISABLE_COMPILE_CACHE

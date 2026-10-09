@@ -2,7 +2,7 @@
 "use strict";
 
 /**
- * dev-spec-driven — the plan-mode bridge (zero-dependency, 1.16).
+ * dev-spec-driven — the plan-mode bridge (zero-dependency).
  *
  * Wired from hooks/hooks.json as PostToolUse, matcher ExitPlanMode (https://code.claude.com/docs/en/hooks): when the user
  * approves a plan in Claude Code's plan mode, a dev-spec project gets ONE line of context for the agent — the approved plan can
@@ -15,7 +15,6 @@
  * the engine loaded only then; stdin bounded (PAYLOAD_MAX — a longer payload is ignored); nothing is written.
  */
 
-const fs = require("fs");
 const path = require("path");
 
 const PAYLOAD_MAX = 4 * 1024 * 1024; // characters of the hook payload read (an approved plan rides in it)
@@ -30,41 +29,11 @@ function finish(obj) {
   process.stdout.write(JSON.stringify(obj), () => process.exit(0));
 }
 
-// The hooks run in EVERY project: only a .specs/ that dev-spec owns (roadmap.json, steering/, or a feature folder with its
-// .state.json / classification.md) is looked at.
-function isDevSpecProject(dir) {
-  const root = path.join(dir, ".specs");
-  try {
-    if (!fs.statSync(root).isDirectory()) return false;
-  } catch {
-    return false;
-  }
-  if (fs.existsSync(path.join(root, "roadmap.json")) || fs.existsSync(path.join(root, "steering"))) return true;
-  try {
-    return fs.readdirSync(root, { withFileTypes: true }).some((d) => d.isDirectory() &&
-      (fs.existsSync(path.join(root, d.name, ".state.json")) || fs.existsSync(path.join(root, d.name, "classification.md"))));
-  } catch {
-    return false;
-  }
-}
-
-// A network path (UNC `\\host\share`, `//host/share`, `\\?\UNC\…`, `\\.\UNC\…`, other device paths) is never stat'ed: it would
-// open an SMB connection to whatever host the payload names and block this hook until an unreachable host times out. Local:
-// `\\?\C:\…` / `\\.\C:\…` and WSL's `\\wsl$\…` / `\\wsl.localhost\…`. The engine's rule (spec.isNetworkPath), inlined so the
-// engine is only loaded inside a dev-spec project.
-function isNetworkPath(p) {
-  const s = String(p).trim();
-  if (!/^[\\/]{2}/.test(s)) return false;
-  let rest = s.slice(2);
-  if (/^[?.][\\/]/.test(rest)) {
-    rest = rest.slice(2);
-    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false;
-    if (!/^UNC[\\/]/i.test(rest)) return true;
-    rest = rest.slice(4);
-  }
-  const host = rest.split(/[\\/]/)[0].toLowerCase();
-  return host !== "wsl$" && host !== "wsl.localhost";
-}
+// The hooks run in EVERY project: only a .specs/ that dev-spec owns is looked at — the project probe (mcp/lib/probe.js: the one
+// rule, the session's projects as every hook reads them, the engine's network-path rule), required once the tool is ExitPlanMode.
+// A network path (UNC `\\host\share`, `//host/share`, `\\?\UNC\…`, other device paths) is never stat'ed here: it would open an SMB
+// connection and block this hook until an unreachable host times out (`\\?\C:\…` and WSL's `\\wsl$\…` are local).
+const probe = () => require(path.join(__dirname, "..", "mcp", "lib", "probe.js"));
 
 function main(raw) {
   if (ran) return; // stdin 'end' and the safety-net timer must not both run it
@@ -81,12 +50,11 @@ function main(raw) {
   if (event && event !== "PostToolUse") return finish();
   if ((payload.tool_name || payload.toolName) !== "ExitPlanMode") return finish();
 
-  // The project: the session's cwd, else the project dir Claude Code (or the user) exported.
-  const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null;
-  const pdir = [cwd, process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]
-    .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim()) && !isNetworkPath(v))
-    .map((v) => path.resolve(v))
-    .find(isDevSpecProject);
+  // The project: the session's first dev-spec project (probe.sessionProjects — the nearest at or above the session's cwd, then the
+  // project dir Claude Code or the user exported), network folders left out.
+  const P = probe();
+  const local = (v) => (v && !P.isNetwork(v) ? v : null);
+  const pdir = P.sessionProjects({ cwd: local(P.usable(payload.cwd)), anchors: P.sessionAnchors().filter(local) })[0];
   if (!pdir) return finish();
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));

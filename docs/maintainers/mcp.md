@@ -1,267 +1,296 @@
 # The MCP server — tools, capabilities, arguments, protocol
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
-What the server advertises and validates, and how it frames messages.
+What the server advertises and validates, and how it frames messages. The rules come first; how they came to be — the
+releases and review findings — is in History at the end.
 
-## MCP tools (in `mcp/lib/engine/`, exported by `mcp/lib/spec.js`, dispatched by `mcp/server.js`)
-`spec_init` · `spec_classify` · `spec_create` · `spec_status` · `spec_next_task` · `spec_task_brief` · `spec_finish` ·
-`spec_complete_task` · `ears_validate` · `trace_check` · `spec_doctor` · `spec_approve` · `steering_scaffold` · `spec_roadmap` ·
-`spec_roadmap_edit` · `spec_scan` · `spec_clarify` · `spec_next_action` · `spec_add_track` · `spec_feature` · `spec_import` ·
-`spec_append_tasks` · `spec_impact` · `spec_metrics` · `spec_drift` · `spec_upgrade` · `spec_templates` · `spec_tracks` ·
-`spec_export` · `spec_decide` · `spec_stop_check` · `spec_log` (**32 total** — 30 listed in Claude Code plugin mode, below; `mcp/test.js`
-asserts the exact count — verify with an `initialize` + `tools/list` handshake against `mcp/server.js`). All tools are pure-local file ops on
-`.specs/` (or a read-only codebase scan for brownfield / `trace --code` / import); none hit the network, run a command or
-call git. Scaffolders never overwrite an existing file; mutators edit only what they own (checkboxes, appended tasks and
-track sections, appended `decisions.md` entries, `.state.json` / `roadmap.json`, generated `ROADMAP.*` / `SPECS.md` /
-`UPGRADE.md` / `RELEASE-NOTES.md` / `.specs/exports/*`, templates `init` copies) and never rewrite spec prose. The
-observed-run log (`.execution/observed.jsonl`, F1) is written only by `hooks/observe-hook.js` through `observeRun()` —
-no tool writes it, and no tool accepts an `observed` stamp from its caller.
-**The description budget (1.23, tightened in 1.26 — the context diet).** `tools/list` is what every client that loads its tools up
-front pays in context on every session — it had grown to ~124k characters (~31k tokens); 1.23 brought it to 76k, 1.26 to ~43k
-(38 tools / 75,909 → 32 / ~43,000). A description says what a model needs to CHOOSE and CALL the tool: its purpose, when to use it
-vs a neighbour, the important arguments and the rules an agent must act on (evidence before claims, approvals are the user's, never
-force without the user's consent, what a refusal means) — at most 2,500 characters, one line, in English. Never a catalogue the
-result already carries (check ids, result keys, reason codes), version history or a long example: the reference detail lives in
-`references/tooling-reference.md` and the topic files. Property descriptions are as short (often a few words). `mcp/tests/02-mcp-server.js`
-holds the whole list under `TOOLS_LIST_CAP` (44,500 — the 1.26 size + ~3%; the clone's CLI path counted as `dev-spec`); the tests
-that pin a description's wording (a rule) name it — `mcp/tests/harness.js` pins spec_complete_task's nothingToVerify / unverified
-sentences, 17-docs the runnable `done … --run` line, the no-subagent rule, finish's "A green run is EVIDENCE" and approve's "an
-explicit yes for THAT phase". `projectDir` (1.24 r6 A5) is described on every tool: `spec_init`'s (`PROJECT_DIR_INIT`) says how the
-folder is chosen (see Argument validation → projectDir), every other tool shares the bare `PROJECT_DIR` ("Project folder"); the
-track names share `TRACK_ITEM`.
-Roadmap/deps persist in `.specs/roadmap.json`; cross-feature deps are cycle-checked and must name existing features.
+## MCP tools
+The logic is the engine's (`mcp/lib/engine/`, behind `mcp/lib/spec.js`); `mcp/server.js` advertises the tools — 32, the
+`tool`s of the operations table, 30 listed in plugin mode — and runs each through that table (`mcp/test.js` asserts the
+count; a `tools/list` handshake lists them).
+- **Local file operations only**: `.specs/`, or a read-only codebase scan (brownfield, `trace --code`, import) — no network,
+  no command, no git. Scaffolders never overwrite a file; mutators edit only what they own (checkboxes, appended tasks, track
+  sections and decisions, `.state.json` / `roadmap.json`, the generated files — `ROADMAP.*`, `SPECS.md`, `UPGRADE.md`,
+  `RELEASE-NOTES.md`, `.specs/exports/*` — and copied templates), never spec prose. Cross-feature dependencies are
+  cycle-checked and must name existing features.
+- **The observed-run log** (`.execution/observed.jsonl`): only `hooks/observe-hook.js` writes it (`observeRun()`); no tool
+  accepts an `observed` stamp from its caller.
 
-**Folded tools and their hidden aliases (1.26).** Seven tools became modes of four: `spec_list` → `spec_status` without `name` (the
-same `listFeatures` result — the CLI's `status` without a feature is `list`); `spec_backlog` / `spec_depend` / `spec_milestone` →
-`spec_roadmap_edit {kind: "backlog" | "depend" | "milestone"}` (destructive: rm, dependsOn replaces; `spec_roadmap` stays the
-read + ROADMAP.md writer); `spec_catalog` / `spec_changelog` → `spec_export {format: "catalog" | "changelog"}` (`exportSpecs` hands
-them to `catalog()` / `changelog()` — the very results of `dev-spec catalog` / `changelog --json`); `spec_coverage` → `spec_scan
-{coverage: true}`. The CLI keeps its commands (list, backlog, depend, milestone, catalog, changelog, coverage) — parity is the same
-engine function and defaults behind both. **Hidden aliases** (`LEGACY_TOOLS`, server.js): a `tools/call` by an old name still
-works — its arguments are checked against the OLD schema (`toolDef()` returns the alias's; an old caller gets the very refusals it
-got: `spec_depend` without name is `missing-arguments`, `spec_catalog {includeBody}` an unknown argument named by `spec_catalog`),
-then translated (`translateLegacy`) and the NEW tool runs: the result is the new tool's. Never listed, never completed
-(completion/complete knows prompts and resources only), no `runTool` case of their own (02-mcp-server's guard counts the cases
-against tools/list). `mcp/tests/02-mcp-server-tools.js` asserts each alias = its new tool.
-**Arguments by mode (`ARG_MODES`).** A folded tool takes some arguments in one of its modes only — `kind`, `format` (default html),
-`coverage` (default false). An argument the call's mode doesn't take is refused before anything runs: code `inapplicable-arguments`,
-`inapplicable` [names], `args.inapplicable` (localized: "spec_roadmap_edit {kind: "backlog"} does not take dependsOn — nothing was
-done. With kind: "backlog" it takes: action, name, note."). Checked after the type checks (the mode key's enum first); a mode's
-`required` (depend → `name`) are `missing-arguments`. The mode key and `projectDir` go everywhere.
-**Plugin mode's list (1.26).** With `SPEC_MCP_APPROVAL_HOOK=on` (mcp/servers.json — the Claude Code plugin) `tools/list` leaves out
-`PLUGIN_UNLISTED` — `spec_stop_check` (the Stop hook decides it at every turn's end) and `spec_log` (the CLI reads git) — ~2k
-characters for nothing in every session; both still answer `tools/call` by name.
-**Lean replies (1.26).** A result never carries its human rendering beside the same data: `spec_export` html / md without `write`
-return `{bytes, preview, truncated, hint}` — the first 1,500 characters of the document's markdown rendering (an HTML document
-opens with its stylesheet) — unless `includeBody: true` (a template-only feature's HTML was ~18.5k characters per call); catalog /
-changelog leave their markdown out unless `includeBody`; `spec_upgrade` and `spec_templates` carry no `lines` (`upgradeLines(r)` /
-`templatesLines(r)` render the CLI's human report from the structure). The engine's own default (the option omitted) keeps the
-document — code callers; both surfaces pass it explicitly: MCP `includeBody: args.includeBody === true`, the CLI `bodyWanted()`
-(its human output always prints the document, `--json` only with `--include-body`), so `--json` stays the MCP result.
+### The description budget
+`tools/list` is paid in context on every session. A description holds what a model needs to CHOOSE and CALL the tool —
+purpose, when vs a neighbour, the key arguments, the rules an agent must act on (evidence before claims, approvals are the
+user's, never force without consent, what a refusal means): ≤ 2,500 characters, one line, English; never a catalogue the
+result carries (check ids, keys, reason codes), version history or a long example (`references/tooling-reference.md` holds
+those). `mcp/tests/02-mcp-server.js` caps the whole list at `TOOLS_LIST_CAP` (44,500 — today's size + ~3%, the CLI path
+counted as `dev-spec`); `mcp/tests/harness.js` and 17-docs pin some sentences (spec_complete_task's, spec_finish's,
+spec_approve's). Every tool shares `PROJECT_DIR` but `spec_init` (`PROJECT_DIR_INIT`: how the folder is chosen); track
+names share `TRACK_ITEM`.
 
-**Capabilities (1.14 — no longer tools-only).** `initialize` advertises `tools {listChanged: false}`, `prompts
-{listChanged: false}`, `resources {listChanged: false, subscribe: false}` and (1.16) `completions {}`; the logic lives in
-`mcp/lib/prompts-resources.js`, server.js only maps it onto JSON-RPC. `SPEC_MCP_PROMPTS=off|0|false|no` drops the
-prompts capability (and `prompts/*` answers -32601): `mcp/servers.json` sets it for the Claude Code plugin, whose own
-slash commands are the same files — without it Claude Code lists every command twice (`/mcp__…__spec-change`).
-- **Prompts** = `commands/*.md`, read at runtime (never a hardcoded list — a new command is a new prompt): name = file
-  name without `.md`, description = front-matter `description`, one optional `args` argument described from
-  `argument-hint` (front matter parsed by hand: BOM/CRLF, quoted values, block scalars). `prompts/get` renders the body
-  with `$ARGUMENTS` ← args (split/join — `$&` stays literal) and `${CLAUDE_PLUGIN_ROOT}` resolved to this clone, after a
-  one-line localized preamble for agents without the skill (follow AGENTS.md; where references/ lives). CLI parity:
-  `dev-spec prompts [name] [--args "…"]`.
-- **Resources**: `specs://roadmap` (ROADMAP.md, else rendered in memory from roadmap.json), `specs://catalog`
-  (SPECS.md), `specs://steering/<file>`, `specs://feature/<slug>/<artifact>` for the allowlisted artifacts of each
-  ACTIVE feature (classification, requirements, design, test-plan, eval-plan, load-test, tasks, bug, quickstart,
-  checklist, integration-plan, retro, spike, decisions, change — `RESOURCE_ARTIFACTS`: add a new artifact there);
-  `resources/templates/list` gives the two templates. The list comes in pages (1.23 — a hard cap of 500 until then):
-  `RESOURCE_PAGE` (500) resources, then `nextCursor` while there are more (MCP pagination; the cursor is opaque — base64url of
-  `o:<offset>` — and only the exact form handed out is accepted: another is `-32602`, `promptsResources.err.badCursor`).
-  `resources/read` parses the URI segment by segment (percent-decoded; `..`, separators, `:` and control characters refused — never a URL
-  parser, which would resolve `feature/../x`), resolves features through `resolveFeature`/`existingFeature`, reads
-  allowlisted names only and never follows a symlink/junction out of `.specs/` (lstat + realpath).
-- **Error codes**: an unknown prompt or bad prompt arguments, and an invalid / refused URI → `-32602` (Invalid params);
-  a well-formed URI naming nothing → `-32002` (Resource not found); a `resources/read` error carries `data.uri`
-  (JSON-RPC `error()` takes an optional `data`). Prompts and resources use the default project (SPEC_PROJECT_DIR /
-  CLAUDE_PROJECT_DIR / the client's first root / the nearest dev-spec project at or above cwd / cwd — see Protocol → the
-  default project from roots, and `resolveProjectDir` in conventions.md) — neither request carries a projectDir — and speak its
-  language.
+### The operations
+`OPERATIONS` (`mcp/lib/operations.js` — Node core only, requiring nothing: each surface hands it the facade) is ONE table
+both surfaces run through, so a tool and its CLI command are the SAME call: one entry per engine operation (40, asserted by
+`mcp/tests/02-mcp-server-tools.js`). The file's header documents the fields — `id`, `tool` (several operations of one tool
+told apart by a `mode` or a `when(args)` test), `legacy`, `cli`, `engine`, `args` (`mcp`, `cli` / `pos`, `type`, `join`,
+`cmd`, `parsed`, `modes`, `required`), `internal`, `cliOnly`, `call(S, dir, o)`: THE engine call, written once.
+- **runTool has no dispatch of its own**: `forTool(name, args)` picks the operation, `run(op, spec, dir, "mcp", read, own)`
+  reads its options by the shared rule (`options()`: a switch is true only when given true) and makes the call; runTool
+  itself reads only `projectDir`. The CLI does the same through `c.call(id, given)` (cli/main.js). An option the operation
+  doesn't declare is thrown.
+- `createFeature` / `completeTask` take an options object; their positional forms still work (told apart by type —
+  `featureLocked` reads either).
+- **Parity is structural**: `mcp/tests/02-mcp-server-tools.js` (every tool and alias runs an operation, every argument mapped
+  and typed, server.js calls no operation's engine function, each operation on twin projects answers MCP and the CLI alike)
+  and `cli/tests/02-surfaces-parity.js` (every command runs one through `c.call` or is a known non-operation, every flag is
+  mapped, no handler calls the facade itself).
 
-**Human approvals over MCP elicitation (1.21 F1b).** A client that declares `capabilities.elicitation` in `initialize` in form
-mode — `{}` (2025-06-18) or `{form: {…}}` (2025-11-25); `{url: {…}}` alone can't show a form and counts as no elicitation —
-(`clientElicits`) gets, while `roadmap.json → meta.approvalGuard` is `ask` or `deny`, an `elicitation/create` request before
-an AGENT's approval runs — the calls the approval hook guards, read by the same pure `spec.approvalGuardDecision()` (a synthetic
-PreToolUse payload): `spec_approve` (approve, revoke, `through`, force / waiver), `spec_feature {action: "remove", confirm: true}`,
-`spec_init` lowering a protection, `spec_add_track {remove: true}` turning +tdd / +ai off (1.24 review 6 — the gates they carry).
-A revoke's question carries its preview too (the dry run's `approvedAt` / `withdrawn`: another approval recorded while the user
-reads it is not revoked in its place). `approvalPolicy()` (server.js) decides: guard off, `SPEC_MCP_APPROVAL_HOOK=on` at `ask`
-(mcp/servers.json sets it for the Claude Code plugin — its PreToolUse hook asks there, so that path is unchanged and nothing is
-asked twice), a network / `..` projectDir (runTool refuses it) → the call runs as before. At `deny` the env var no longer waves
-the call through (1.22 review): the hook refuses every agent approval, so one that reaches the server got past no hook
-(disableAllHooks, a managed policy, a hook that failed open) — it is handled as in any client. Otherwise: elicitation → ask; no elicitation → `ask`
-runs as today, `deny` is refused (`{ok: false, refused, humanRequired: true, approvalGuard: "deny", command, error}` — the
-server asks `approvalGuardDecision(…, {plain: true})` (1.21 review A4): `command` is the plain runnable line, WITHOUT Claude Code's
-`! ` prefix (a PowerShell / cmd.exe user can't run `! node …`), and `error` is `approvalGuard.denyMcp` — "in their own terminal",
-never the `!` prefix; the Claude Code hook keeps its `!` form). The question (`msg.elicit`, the feature's language — else the
-project's): `summary` (approvalGuardDecision's action line — 1.23: with `opts.resolveFeature`, the feature an action names is the
-slug the engine resolves, never the raw argument: slugify drops text in other scripts, which must not reach the human's question;
-the `command` names the slug too) + the gate from a **dry run** — `spec.approvePhase(…, {dryRun: true})`
-runs every check and writes nothing (approve → `{dryRun, failing, checks, role?, waiver?}`, revoke → `{dryRun, revoke}`, through
-→ `{dryRun, chain}`); a remove's question also says how much it deletes (1.24 r6 A-I8: `elicit.removeSize` — `.specs/<slug>/`
-and the file count of remove's own preview, `wouldDelete.files`); a gate that refuses anyway (or an error, or a fast-forward with nothing to do) is answered as it is and
-NOBODY is asked. `requestedSchema`: `approve` (boolean, default false, required) + `note` (string ≤ 500). Only `action:
-"accept"` with `content.approve === true` runs the call, with `confirmation` {via: "elicitation", at, note?} (a one-line note)
-recorded as `confirmed` on the approval, its history record, a role's sign-off and a revocation record (`confirmationOf()`,
-gates.js — never a tool argument) — and with `preview` (1.22 review), what the dry run judged: `{fingerprint,
-designFingerprint?, failing}` / a fast-forward's `{chain, fingerprints}`; the engine records nothing else (content edited while
-the question waited, or — forced — a check failing that the question didn't name → `changedSincePreview: true`, code
-`changed-since-preview`; gates-and-approvals.md → the dry run). `spec_feature` remove (1.23): its preview (`removePreview`,
-finish.js) carries `fingerprint` — `featureFolderFingerprint()`: the folder's identity (device + inode / file ID + birth time,
-kept across a rename) and every entry under it (path, size, mtime; lstat; the feature's own `.lock` left out) — passed back as
-`preview: {fingerprint}`; `removeFeatureLocked` compares it under the folder's lock and refuses another folder (a feature renamed
-into the name while the question waited — the confirmation used to delete it) or an edited one: `changedSincePreview`, code
-`changed-since-preview`, `featureOps.removeChangedSincePreview`, nothing deleted. The result gains `confirmed` (+ a localized `message`) only when it isn't `ok: false` (1.21
-review A6 — a fast-forward a later gate stopped: the phases it approved carry their own `confirmed` in .state.json). Decline /
-cancel / an accept without approve / a client error / no answer within `DEV_SPEC_ELICIT_TIMEOUT_MS` (default 300000, ≤ 1 h) →
-`{ok: false, declined: true, approvalGuard, action | elicitationError | timedOut, error}` (localized — an accept without approve
-has its own text, `elicit.unapproved`: the user answered without ticking Approve, `action: "accept"`), nothing recorded; a timeout also sends the client
-`notifications/cancelled {requestId, reason: "timeout"}`. **Cancellation (1.23):** the waiting call is an `inflight` entry (by its
-JSON-encoded request id); the client's `notifications/cancelled {requestId}` for it withdraws the question (the server's own
-`notifications/cancelled` for `dev-spec-<n>`, so the client can close it), records nothing — an Approve the user clicks
-afterwards is ignored — and sends NO reply to the cancelled request (MCP). It used to keep waiting and record the approval of a
-call the client had given up on (a client tool-call timeout shorter than the 5-minute question). **Progress (1.23):** a call
-carrying `_meta.progressToken` gets `notifications/progress {progressToken, progress: 0, 1, …, message: elicit.waiting}` at once
-and every `PROGRESS_EVERY_MS` (10 s) while its question waits — a client whose tool-call timeout restarts on progress keeps
-the call. A guardrail on the approve paths, like the hook — not a sandbox.
-**Known limit — `SPEC_MCP_APPROVAL_HOOK=on` at `ask` (1.25.1, review 7, documented, not changed).** The plugin's server leaves an
-`ask`-level approval to the PreToolUse hook; when the hook does not run (`disableAllHooks`, a managed policy, a hook that failed
-open) the call runs without asking anyone. Eliciting there instead is not clean: the server can't tell whether the hook ran —
-Claude Code declares elicitation, so a call the hook already put to the user would be asked a second time; telling them apart
-needs a hook→server handshake (a stamp per call) this release does not add. `deny` is unaffected (refused whenever it reaches
-the server). A team that needs the guard to hold with hooks disabled sets `approvalGuard: deny` (the human runs the approval).
+### Folded tools
+`spec_list` → `spec_status` without `name` (`listFeatures`); `spec_backlog` / `spec_depend` / `spec_milestone` →
+`spec_roadmap_edit {kind}` (destructive: rm, dependsOn replaces; `spec_roadmap` stays the reader + ROADMAP.md writer);
+`spec_catalog` / `spec_changelog` → `spec_export {format}`, running `catalog()` / `changelog()` — the very calls of `dev-spec
+catalog` / `changelog --json`; `spec_coverage` → `spec_scan {coverage: true}`. The CLI keeps its commands (list, backlog,
+depend, milestone, catalog, changelog, coverage); each mode is an operation.
 
-**Argument validation (server.js).** Before dispatch, `tools/call` arguments are checked against the
-tool's advertised `inputSchema`, in this order — `arguments` that isn't an object; then **unknown arguments** (1.24 r6 A1,
-`unknownArgs`): a top-level key the schema's `properties` don't list is refused, nothing runs. They used to be ignored, and a
-misspelt key changed what the call did — `spec_approve {revoked: true}` RE-APPROVED changed content, `spec_task_brief {task: 3}`
-briefed the next task, `spec_export {feature}` exported the whole project; the CLI refuses an unknown flag since 1.23. The
-reply lists them with a did-you-mean: a word people type for an argument (`ARG_ALIASES` — feature / slug → name, task → number,
-project / dir → projectDir, untick → undo, unapprove → revoke — when the tool takes it), else `spec.closestName` (core.js — the
-optimal-string-alignment distance, ≤ max(1, ⌊length / 3⌋) edits, case-insensitive: the CLI's flag rule; suggestTrack uses it
-too). Checked before the required keys, so a misspelt required key (`nmae`) reads as unknown with its fix, not as missing. A
-`null` unknown key is "not given", like any argument. **Nested keys too (1.25.1, review 7):** an object whose schema lists
-`properties` — an array's items included — refuses a key it doesn't list, by its path (`tasks[0].verfy`, did-you-mean
-`tasks[0].verify`; the message lists the keys that object takes, `tasks[] {text, …}`): `verfy` appended a task with no
-`_Verify:_` (which then ticked "verified, nothing to verify"), `evidence[0].sumary` dropped the summary. An object declared with
-`additionalProperties` (spec_init `checks`) takes any key. Every
-`args.X` runTool reads must be in its tool's schema — a key it doesn't list would now be refused, never read (a guard in
-02-mcp-server.js parses runTool's `case`s). Then required keys (`missingArgs` — a nested object's `required` too, by path:
-`evidence[0].command`, `tasks[0].text`; `evidence: [{}]` reached the engine as "'undefined' is not a project check"), then types (`invalidArgs` — `integer` means
-a *safe* integer, so `1.9` / `1e21` never become task 1), `enum`, `minimum`, `maximum` (1.24 r6 A5 — `spec_next_task.max` ≤ 8;
-the message reads "between 1 and 8"), `minItems` (1.25.1 — `spec_append_tasks.tasks`, `args.atLeastItems`), array `items` and nested
-object properties. A task `number` (spec_task_brief, spec_complete_task) carries `minimum: 0` (1.22 review — `-1` read "must
-be an integer"; 0 is a task number: next serves a hand-written task 0, so refusing it looped next → complete); the engine
-refuses the CLI's raw word in these same words (`msg(lang).args` —
-conventions.md → CLI boolean switches), and a roadmap `order` past the safe range alike. It iterates the SCHEMA's keys, never the caller's (`__proto__` arguments are ignored);
-an absent or `null` value means "not given". `REQUIRED_ONE_OF` (spec_import: `path` or `text`) is a group `{names, unless}` —
-1.25: `unless` the tool is a steering one (`spec.STEERING_IMPORT_TOOLS`: its path defaults to the tool's own folder). Last, **projectDir** (`projectDirArg` — 1.24 r6 A2 / A3), read without any fs call
-first (`parseProjectDir`): not given — absent, blank, or holding a variable a client left unexpanded (`spec.unexpandedVar`: any
-`${`, a leading `$NAME`, a `%NAME%` — only a whole `${VAR}` was caught, so with roots `$HOME` / `${workspaceFolder}/` went to the
-server's cwd) → the client's root when roots gave the default project, else left out (the engine's default); a relative `..`
-(never resolved away first), or a network `projectDir` (`isNetworkPath`: UNC `\\host\share`, `//host/share`, `\\?\UNC\…`,
-`\\.\UNC\…` and other device paths — refused before ANY fs call, argument errors included, so a tool call can't make
-the server open an SMB connection to a host it names or hang on an unreachable one; `\\?\C:\…` and WSL's `\\wsl$` /
-`\\wsl.localhost` are local), or a `file://` URI naming a host, is refused; a local `file://` URI (what roots/list hands a
-client) is its path (`fileUriToPath`) — 1.25.1 (review 7): both read by hooks/hook-utils.js (`HOOK_UTILS.parseProjectDir` /
-`fileUriToPath`, zero-dependency), the very parser the approval hook reads the projectDir with (it read a `file://` URI as a relative
-folder and let an approval of that project through); server.js keeps the codes' localized messages; a RELATIVE path resolves from the client's root when roots chose the default (it went to
-the server's cwd — `.` from Claude Desktop scaffolded the app folder), else from the server's working folder. The folder must
-EXIST, as the CLI's `--project` (1.23 review L14): a missing one is refused (`project-missing`) — only `spec_init` creates one —
-and so is a file (`project-not-dir`): `spec_create` into a mistyped path built the whole tree there, the list (`spec_status` without name, then spec_list) on a file
-answered `{exists: false}`, a `file://` projectDir ended in ENOENT. The engine receives the absolute folder; `resolveProjectDir`
-is unchanged. The default projectDir (cwd / env / roots) and the CLI are not restricted by these rules. **spec_import (1.25.1,
-review 7)** reads the files its path names and returns them (`dryRun`: `preview`) — `{projectDir: "<home>/.aws", path:
-"credentials"}` returned the credentials: an explicit projectDir other than the default project (`sameFolder` by real path) must hold
-a dev-spec `.specs/` (`spec.isDevSpecDir` — `SPECS_REQUIRED`), else `project-no-specs` (`args.projectNoSpecs`: run spec_init there
-first); the engine refuses hidden folders and non-documents everywhere (templates-imports-exports.md → spec_import stays inside the
-project). The `initialize` instructions say so ("Everything is local: writes stay in .specs/, reads inside the project…" — the
-old "All file ops are local to the project's .specs/ directory" was not true of the scans and the import) and name spec_next_action
-as the "where am I / what now?" call for clients without the skill.
-**Stable codes (1.24 r6 A-I2).** Every argument error is the tool's JSON `{ok: false, error, code, …}` (`argError`), `isError:
-true`: `unknown-argument` (+ `unknown` [{argument, didYouMean?}]) · `missing-arguments` (+ `missing` [names]) ·
-`invalid-arguments` (+ `invalid` — the paths, e.g. `["number", "evidence.exitCode"]`; arguments that aren't an object:
-`["arguments"]`) · `inapplicable-arguments` (1.26, + `inapplicable` — another mode's arguments, see Arguments by mode) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` · `project-no-specs` (1.25.1, spec_import). Callers branch
-on the code (English, stable); the message is in the project language — the default project's for a projectDir refusal. The feature resolver's refusals (1.25.1, review 7 — `resolveFeature` / `existingFeature`, state.js) carry their code too, on
-every tool and the CLI's `--json`: `feature-not-found` · `feature-name-invalid` (no usable slug) · `feature-name-reserved` (they were
-`{ok: false, error}` alone); an operation that hands such a refusal back keeps the code (`{ok: false, error: f.error, code: f.code}`).
-Messages are localized in the project language (`msg(lang).args`). The engine
-still validates what schemas can't express (track names, AC IDs, paths). String enums the engine case-folds
-(`phase`, `lang`, `kind`, `action`) are trimmed + lowercased first (`foldEnumArgs`) — the CLI passes `Design` / `PT`
-straight to the engine and the 1.12 MCP accepted them; `spec_import`'s `tool` stays exact on both surfaces
-(`EXACT_ENUMS`). The engine and the CLI fold `backlog`'s action too (`ADD` adds on every surface).
-A schema `type` is always ONE string, never a list (`["string", "boolean"]` — not every MCP client handles list-valued
-types): `spec_init`'s `guard` is a plain string enum `on | off | scope`, and `foldEnumArgs` turns a boolean into
-`"on"` / `"off"` for any string enum holding both (the pre-1.14 `guard: true` keeps working). A free string that also reads
-`'true'` / `'false'` (1.25 — `spec_create {branch}`: `'true'` = the default branch name, else the name) is listed in
-`BOOL_STRING_ARGS`: a boolean given for it becomes its word (`"true"` / `"false"`) before validation, and the engine reads the
-words (any case) — `branch: true` works, the schema stays `type: "string"`.
-A tool that THROWS (a file system error — `.specs` being a file) answers the JSON every other refusal is
-(1.23 — it was the bare text `ERROR: <message>`): `toolFailure()` → `{ok: false, error: args.toolFailed(<message>), code: <the
-error's code, e.g. ENOTDIR>}` with `isError: true`, in the project's language.
-**Compact results (1.24 r6 A-I1).** A tool's result text is `JSON.stringify(out)` — no indentation (`toolReply`, argument errors
-included). The indentation was what every agent paid in context on every call: measured on a realistic feature (core +tdd
-+saas +sec — spec_doctor, spec_status, spec_task_brief, spec_next_action, trace_check {matrix}, spec_status without name (then spec_list), spec_roadmap,
-spec_create {includeBody}) the replies went from 40,529 to 31,435 characters (−22%; trace_check −42%, spec_status −32%; a reply
-that is mostly embedded markdown, create's bodies, barely changes). Every client parses the text as JSON; nothing reads its layout.
+### Hidden aliases
+`LEGACY_TOOLS` (server.js) keeps the seven old names callable: a call's arguments are checked against the OLD schema
+(`toolDef()`: an old caller gets its old refusals), translated (`translateLegacy`), and the new tool runs and answers. Never
+listed, never completed, no operation of their own — each is in the `legacy` of the operation it lands on;
+`mcp/tests/02-mcp-server-tools.js` asserts alias = new tool = its operation's call.
 
-## Protocol (from Conventions & gotchas)
-- **Protocol**: stdio transport is newline-delimited JSON; messages must not contain embedded
-  newlines (tool descriptions are single-line strings). Framing splits on `\n` ONLY (a `StringDecoder` keeps multibyte
-  characters whole across chunks; one trailing `\r` is dropped) — never `readline`, which also splits on U+2028 / U+2029,
-  both legal raw inside a JSON string (text pasted from Word / PDF): a valid request was cut in two and never answered.
-  Replies escape U+2028 / U+2029 (`frame()`) so readline-based clients survive them. `initialize` echoes the client's
-  `protocolVersion` when supported (`SUPPORTED_PROTOCOLS`: 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25 — 1.23), else answers
-  with the latest; default `2024-11-05`. One message is at most `MAX_MESSAGE` characters (1.23 — default 32 MiB,
-  `DEV_SPEC_MCP_MAX_MESSAGE`, ≥ 1024): a line growing past it (a client that never sends `\n`) used to grow until the process
-  died; now it is refused ONCE with -32600 (id null — it can't be parsed for its id; `args.tooLarge`, localized), its bytes are
-  skipped up to the next `\n` (sent whole or in chunks) and the server keeps answering.
-  A message without an `id` member is a notification: never a reply (and never runs a tool) — two change state (1.23):
-  `notifications/cancelled` (see Human approvals → Cancellation) and `notifications/roots/list_changed`. An `id` must be a string or
-  an integer — null, an object, an array, a boolean or a fraction gets -32600 (id null); an id without a string `method`
-  gets -32600, except a client's JSON-RPC response (`result` / `error`, no method), which is ignored whatever its id (checked
-  before the id rule — a client's error reply carries id null). A JSON-RPC batch gets ONE array
-  reply; `null`/malformed input gets -32600/-32700; an unknown method -32601; an unknown tool (or `tools/call` without a
-  name) -32602, localized (`args.unknownTool` / `args.noTool`); prompts/resources use -32602 / -32002 (see Capabilities).
-- **Server-initiated requests (1.21 F1b).** The server is synchronous except for TWO paths: an approval waiting for the user,
-  and (1.23) the first request that needs the project while the client's roots are asked. `clientRequest()` writes
-  `{id: "dev-spec-<n>", method: "elicitation/create" | "roots/list", params}` straight to stdout (never into a batch reply),
-  keeps its handler in `serverRequests` and a timer, and returns `{rid, promise, cancel}`; a client RESPONSE (result / error, no
-  method) whose string id is there settles it — any other response is still ignored; a timeout or `cancel()` settles it too and
-  sends the client `notifications/cancelled` for `dev-spec-<n>`. The handler returns a Promise then; the event loop stays
-  free, so every other request (a ping, another tool) is answered meanwhile, and the late reply goes where its request came from
-  (`sendTo(sink, …)`): straight out, or into its batch — `onLine` sends a batch's ONE array only once every request of it that
-  waits has answered. On stdin close the server still exits after its flush (a pending question dies with the session).
-- **The default project from roots (1.23).** With neither SPEC_PROJECT_DIR nor CLAUDE_PROJECT_DIR naming a folder (`envDirSet`:
-  set, and not an unexpanded `${VAR}` / `$VAR` / `%VAR%`) — Claude Desktop, a global Cursor / Windsurf / Gemini config — the
-  default project was the server's cwd: an app or home folder, where spec_init scaffolded `.specs/`. A client that declares
-  `capabilities.roots` is asked `roots/list` ONCE, on the first request of `NEEDS_PROJECT` (tools/call, prompts/*, resources/*,
-  completion/complete) — `rootsPending()` returns the wait and `deferUntil()` runs the request again once it settled, its reply
-  going to its sink (a tools/call waits as an `inflight` entry: cancelled meanwhile, it never runs). Its first LOCAL `file://`
-  root (`fileUriToPath`: no host but localhost, no `..`, no network path, on Windows a drive — `file:///C:/x`, VS Code's
-  `file:///c%3A/x`) is `rootsDir`: a tool call without its own projectDir (absent, blank or holding an unexpanded variable —
-  1.24 r6 A2: `spec.unexpandedVar`, any `${` / a leading `$NAME` / `%NAME%`, no longer a whole `${VAR}` only) gets it as
-  `projectDir`, a RELATIVE projectDir resolves from it (1.24 r6 A2 — Argument validation → projectDir), and resources / prompts /
-  completions / argument messages read it (`defaultProjectDir()`). No usable root, an
-  error or no answer within `ROOTS_TIMEOUT_MS` (5 s; `DEV_SPEC_ROOTS_TIMEOUT_MS`, ≤ 60 s) → `null`, the old default (cwd), not
-  asked again until `notifications/roots/list_changed` — but (1.25.1, review 7) a timeout no longer cancels the request: an answer
-  that comes later still sets `rootsDir` (`clientRequest`'s `late` handler; it was dropped, and the cwd stayed the default for the
-  session), unless another ask started since (`rootsGen` — initialize, list_changed). The engine's `resolveProjectDir` is
-  untouched — the server passes the root as projectDir.
-- **The feature-lock wait (1.24 r6 A6).** The engine is synchronous: a call waiting for a feature lock another LIVE process holds
-  (a CLI `done`, another editor's server — conventions.md → the locks) froze the WHOLE server — pings, every other tool, a
-  pending approval's reply — for `DEV_SPEC_LOCK_WAIT_MS` (10 s by default). At start the server sets that variable to
-  `MCP_LOCK_WAIT_MS` (2 s) in its own environment when the user didn't set it: the engine reads it at every acquisition
-  (`lockWaitMs`), the server starts no child process, and an explicit `DEV_SPEC_LOCK_WAIT_MS` (a slow network file system) still
-  wins. Past it the call gets the usual localized busy refusal (`busy: true` — retry in a moment) — a lock is held for
-  milliseconds, so 2 s only fails on a real collision, where the client retrying beats a frozen server. Nothing else changes:
-  the CLI and the hooks keep 10 s (a terminal waiting freezes nothing else).
+### Arguments by mode
+`ARG_MODES` (server.js) is derived from the table (`argModes()`): a mode — of `kind`, `format` (default html) or `coverage`
+(default false) — takes its operation's MCP arguments (export's `includeBody`: html / md only). Another mode's argument is
+refused before anything runs: `inapplicable-arguments` (`inapplicable` [names]; `args.inapplicable` names what the mode
+takes). A mode's `required` (depend → `name`) are `missing-arguments`; the mode key and `projectDir` go everywhere.
+
+### Plugin mode's list
+With `SPEC_MCP_APPROVAL_HOOK=on` (mcp/servers.json — the Claude Code plugin) `tools/list` omits `PLUGIN_UNLISTED`:
+`spec_stop_check` (the Stop hook decides it) and `spec_log` (the CLI reads git). Both still answer `tools/call`.
+
+### Lean replies
+A result never carries its human rendering beside the same data: `spec_export` html / md without `write` returns `{bytes,
+preview, truncated, hint}` (the first `EXPORT_PREVIEW_CHARS` of the markdown rendering) unless `includeBody: true`; catalog /
+changelog leave their markdown out unless `includeBody`; `spec_upgrade` / `spec_templates` carry no `lines`
+(`upgradeLines(r)` / `templatesLines(r)` render the CLI's report). The engine's default (the option omitted) keeps the
+document for code callers; both surfaces pass the option (the CLI's `bodyWanted()`), so `--json` stays the MCP result.
+
+## Capabilities
+`initialize` advertises `tools`, `prompts`, `resources` (no `listChanged`, no `subscribe`) and `completions`; the logic is
+`mcp/lib/prompts-resources.js`. `SPEC_MCP_PROMPTS=off|0|false|no` drops prompts (`prompts/*` → -32601) — mcp/servers.json
+sets it for the plugin, whose slash commands are the same files (Claude Code would list each twice).
+- **Prompts** = `commands/*.md`, read at runtime (a new command is a new prompt): the file name, its front-matter
+  `description`, one optional `args` from `argument-hint` (front matter parsed by hand: BOM / CRLF, quotes, block scalars).
+  `prompts/get` replaces `$ARGUMENTS` by split/join (`$&` stays literal) and `${CLAUDE_PLUGIN_ROOT}` by this clone, after a
+  one-line localized preamble. CLI: `dev-spec prompts`.
+- **Resources**: `specs://roadmap`, `specs://catalog`, `specs://steering/<file>`, `specs://feature/<slug>/<artifact>` (an
+  ACTIVE feature's `RESOURCE_ARTIFACTS` — add a new artifact there). `resources/list` pages by `RESOURCE_PAGE` (500) with an
+  opaque `nextCursor` (base64url of `o:<offset>`; another form → -32602). `resources/read` parses the URI segment by segment
+  (percent-decoded; `..`, separators, `:`, control characters refused — never a URL parser, which resolves `feature/../x`),
+  resolves features via `resolveFeature` / `existingFeature`, reads allowlisted names only, never through a symlink /
+  junction out of `.specs/` (lstat + realpath).
+- **Completions**: feature slugs for a prompt's one-word feature `args`; the values of `{slug}`, `{artifact}`, `{file}`.
+- **Errors**: a bad prompt, URI or completion ref → -32602; a well-formed URI naming nothing → -32002 (`data.uri`). No
+  projectDir in these requests: the default project (Protocol → the default project from roots), in its language.
+
+## Human approvals over MCP elicitation
+A guardrail on the approve paths, like the approval hook — not a sandbox.
+- **What is asked.** While `meta.approvalGuard` is `ask` or `deny`, a client that declares `capabilities.elicitation` in form
+  mode (`clientElicits`: `{}` or `{form: {…}}`, not `{url: {…}}` alone) is asked (`elicitation/create`) before an AGENT's
+  approval runs — the calls the approval hook guards, by the same `spec.approvalGuardDecision()`: `spec_approve` (approve,
+  revoke, `through`, force / waiver), `spec_feature` remove, `spec_init` lowering a protection, `spec_add_track {remove:
+  true}` dropping +tdd / +ai.
+- **`approvalPolicy()`** (server.js): nothing is asked with the guard off, for a projectDir runTool refuses, or at `ask` under
+  `SPEC_MCP_APPROVAL_HOOK=on` (the plugin's hook asks — never twice); `deny` holds even there (a call that reaches the server
+  got past no hook). Without elicitation `ask` runs and `deny` refuses (`humanRequired: true`; `command`, with `{plain:
+  true}`, is the runnable line WITHOUT Claude Code's `! ` prefix).
+- **The question** (`msg.elicit`, the feature's language): the action `summary`, naming the slug the engine resolves
+  (`opts.resolveFeature`), never the raw argument, plus the gate from a **dry run** (`spec.approvePhase(…, {dryRun: true})` —
+  gates-and-approvals.md → the dry run); a remove's says how much it deletes (`elicit.removeSize`). A gate that refuses
+  anyway, an error or a fast-forward with nothing to do is answered as it is — NOBODY is asked. `requestedSchema`: `approve`
+  (boolean, default false, required) + `note` (≤ 500).
+- **Only `action: "accept"` with `content.approve === true` runs the call**, recording `confirmation` {via: "elicitation", at,
+  note?} as `confirmed` (`confirmationOf()`, gates.js — never a tool argument) and passing `preview`, what the dry run judged:
+  content edited, another approval recorded or an unnamed check failing by then records nothing (`changed-since-preview`). A
+  remove's preview is its folder's `featureFolderFingerprint()` (identity kept across a rename, every entry), compared under
+  the folder's lock (`removeFeatureLocked`).
+- **Any other answer** — decline, cancel, accept without approve (`elicit.unapproved`), a client error, none within
+  `DEV_SPEC_ELICIT_TIMEOUT_MS` (5 min, ≤ 1 h) — is `{ok: false, declined: true, …}`, nothing recorded. `confirmed` goes only
+  on a result that isn't `ok: false`.
+- **Cancellation**: the waiting call is an `inflight` entry; the client's `notifications/cancelled` withdraws its question,
+  records nothing and gets NO reply (MCP). **Progress**: a call with `_meta.progressToken` gets `notifications/progress`
+  (`elicit.waiting`) every `PROGRESS_EVERY_MS` (10 s) while it waits.
+- **Known limit — `SPEC_MCP_APPROVAL_HOOK=on` at `ask`** (documented, not changed): if the hook doesn't run
+  (`disableAllHooks`, a managed policy, a hook that failed open) the call runs unasked — eliciting would ask twice where it
+  did (no hook→server stamp tells them apart). For a guard that holds with hooks disabled: `approvalGuard: deny`.
+
+## Argument validation
+`tools/call` arguments are checked against the tool's advertised `inputSchema` (an alias: its old one) before anything runs —
+over the SCHEMA's keys, never the caller's (`__proto__` is ignored); an absent or `null` value is "not given". In order:
+1. **`arguments` not an object** → `invalid-arguments`.
+2. **Folding** (`foldEnumArgs`): the enums the engine case-folds (`phase`, `lang`, `kind`, `action`) are trimmed + lowercased
+   to their member, a `lang` alias canonicalized (the CLI passes `Design` / `PT` straight through); `spec_import`'s `tool`
+   stays exact (`EXACT_ENUMS`). A schema `type` is ONE string, never a list (some clients reject one): a boolean becomes
+   `"on"` / `"off"` for an on / off enum (spec_init `guard`), `"true"` / `"false"` for a `BOOL_STRING_ARGS` string
+   (`spec_create {branch}`).
+3. **Unknown arguments** (`unknownArgs`) — a misspelt key must never change what the call does: refused, with a did-you-mean
+   (`ARG_ALIASES` — feature → name, task → number… — else `spec.closestName`: optimal-string-alignment, ≤ max(1, ⌊length /
+   3⌋) edits, the CLI's flag rule, suggestTrack's too), before the required check (`nmae` reads as unknown with its fix).
+   Nested keys too, by path (`tasks[0].verfy`), unless `additionalProperties` (spec_init `checks`). Every `mcp` argument of a
+   tool's operations must be in its schema (02-mcp-server.js checks the table).
+4. **Required** (`missingArgs`): `required` (a blank string is not given, except `EMPTY_OK`), nested ones by path
+   (`evidence[0].command`), a `REQUIRED_ONE_OF` group (spec_import: `path` or `text`, `unless` a steering tool —
+   `spec.STEERING_IMPORT_TOOLS`) and the mode's.
+5. **Types** (`invalidArgs`): `integer` = a *safe* integer (`1.9` / `1e21` never become task 1), `enum`, `minimum`, `maximum`
+   (`spec_next_task.max` ≤ 8), `minItems`, items, nested properties. A task `number` has `minimum: 0` (next serves a
+   hand-written task 0); the engine refuses the CLI's raw words alike (`msg(lang).args` — conventions.md → CLI boolean
+   switches).
+6. **The mode** (an alias translated first): `inapplicable-arguments` (Arguments by mode).
+7. **projectDir** (below). The engine validates the rest (track names, AC IDs, paths).
+
+### projectDir
+`projectDirArg` reads it with no fs call first (`parseProjectDir`, over `HOOK_UTILS.parseProjectDir` / `fileUriToPath` of
+hooks/hook-utils.js — the approval hook's own parser):
+- **Not given** — absent, blank, an unexpanded variable (`spec.unexpandedVar`: any `${`, a leading `$NAME`, `%NAME%`) → the
+  client's root when roots gave the default project, else left out.
+- **Refused before ANY fs call**: a `..` segment (`project-dotdot`); a network or device path (`isNetworkPath`:
+  `\\host\share`, `//host/share`, `\\?\UNC\…`, `\\.\UNC\…`) or a `file://` URI naming a host (`project-network`) — no SMB
+  connection to a host a call names; `\\?\C:\…` and `\\wsl$` / `\\wsl.localhost` are local; a `file://` URI that is no local
+  folder (`project-uri`).
+- A local `file://` URI is its path; a relative path resolves from the client's root (when roots chose the default) or the
+  server's folder. The folder must EXIST, like the CLI's `--project`: `project-missing` (only `spec_init` creates one),
+  `project-not-dir`. The default projectDir and the CLI are not restricted.
+- **spec_import** returns what it reads, so an explicit projectDir that isn't the default project (`sameFolder`) must hold a
+  dev-spec `.specs/` (`spec.isDevSpecDir`, `SPECS_REQUIRED`), else `project-no-specs` (templates-imports-exports.md →
+  spec_import stays inside the project) — as the `initialize` instructions say ("Everything is local: writes stay in the
+  project's .specs/, reads inside the project …").
+
+### Stable codes
+An argument error is the tool's JSON `{ok: false, error, code, …}` (`argError`, `isError: true`): `unknown-argument`
+(+ `unknown` [{argument, didYouMean?}]) · `missing-arguments` (+ `missing`) · `invalid-arguments` (+ `invalid`, the paths) ·
+`inapplicable-arguments` · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` ·
+`project-no-specs`. Callers branch on the code (English); the message is in the project language. The feature resolver's
+refusals carry `feature-not-found` · `feature-name-invalid` · `feature-name-reserved`, on every tool and the CLI's `--json`.
+- **A tool that THROWS** answers JSON too: `toolFailure()` → `args.toolFailed`, the error's code (e.g. ENOTDIR).
+- **Compact results**: the result text is `JSON.stringify(out)`, unindented (`toolReply`) — indentation was ~22% of what an
+  agent pays per reply; clients parse JSON, nothing reads the layout.
+
+## Protocol
+- **Framing.** Newline-delimited JSON over stdio. Input splits on `\n` ONLY (a `StringDecoder` keeps multibyte characters
+  whole; a trailing `\r` is dropped) — never `readline`: it also splits on U+2028 / U+2029, legal raw in JSON strings, and
+  cut a request in two; replies escape both (`frame()`). Past `MAX_MESSAGE` characters (32 MiB; `DEV_SPEC_MCP_MAX_MESSAGE`,
+  ≥ 1024) a message gets -32600 once (`args.tooLarge`) and the rest of its line is skipped. On stdin close the server exits
+  after its flush.
+- **`initialize`** echoes a supported `protocolVersion` (`SUPPORTED_PROTOCOLS`: 2024-11-05 … 2025-11-25), else the latest;
+  default `2024-11-05`. Its instructions name spec_next_action as the "where am I / what now?" call.
+- **Messages.** No `id` member = a notification: no reply, no tool run. An `id` that isn't a string or an integer → -32600
+  (id null); no string `method` → -32600, except a client's response (`result` / `error`), ignored whatever its id. A batch
+  gets ONE array; malformed input -32600 / -32700; an unknown method -32601; an unknown tool -32602 (`args.unknownTool`).
+- **Server-initiated requests** (an approval waiting for the user, a request waiting for the client's roots): `clientRequest()`
+  writes `{id: "dev-spec-<n>", …}` straight to stdout (never into a batch) and keeps its handler in `serverRequests`; the
+  client's response settles it, as do a timeout and `cancel()` (sending `notifications/cancelled`, unless a `late` handler —
+  roots/list's — keeps listening). Other requests are answered meanwhile; a late reply goes where its request came from
+  (`sendTo(sink, …)`), and a batch's array waits for all of it (`onLine`).
+- **The default project from roots.** With no usable SPEC_PROJECT_DIR / CLAUDE_PROJECT_DIR (`envDirSet`), a client that
+  declares `capabilities.roots` is asked `roots/list` ONCE, on the first `NEEDS_PROJECT` request (`rootsPending()`,
+  `deferUntil()`). Its first LOCAL `file://` root (`fileUriToPath`: no host but localhost, no `..`, a drive on Windows) is
+  `rootsDir`: the projectDir of a call without one, the base of a relative one, the project of resources / prompts /
+  completions (`defaultProjectDir()`). No usable root, an error or no answer within `ROOTS_TIMEOUT_MS` (5 s;
+  `DEV_SPEC_ROOTS_TIMEOUT_MS`, ≤ 60 s) → the cwd until `roots/list_changed`, though a later answer still counts unless another
+  ask started since (`rootsGen`). The engine's `resolveProjectDir` is untouched.
+- **The feature-lock wait.** The engine is synchronous, so a call waiting for a lock another LIVE process holds
+  (conventions.md → the locks) freezes the whole server: the server sets `DEV_SPEC_LOCK_WAIT_MS` to `MCP_LOCK_WAIT_MS` (2 s)
+  unless the user set it (the engine reads it per acquisition, `lockWaitMs`), then answers the usual busy refusal (`busy:
+  true`). The CLI and the hooks keep 10 s.
+
+## History
+How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
+
+### MCP tools
+- **1.14 F1** — the observed-run log: only the observe hook writes `.execution/observed.jsonl`, so no tool can forge an
+  `observed` stamp.
+- **1.23** — the description budget: `tools/list` had grown to ~124k characters (~31k tokens); descriptions cut to what it
+  takes to choose and call the tool brought it to 76k.
+- **1.24 r6 A5** — `projectDir` described on every tool (`PROJECT_DIR_INIT` for spec_init, the shared `PROJECT_DIR`
+  elsewhere).
+- **1.26 (the context diet)** — 38 tools / 75,909 characters → 32 / ~43,000; `TOOLS_LIST_CAP` set at that size + ~3%. Seven
+  tools folded into modes of four (spec_list, spec_backlog, spec_depend, spec_milestone, spec_catalog, spec_changelog,
+  spec_coverage), each kept callable as a hidden alias checked against its old schema; `ARG_MODES` added; plugin mode stopped
+  listing `spec_stop_check` / `spec_log` (~2k characters every session). Lean replies: a template-only feature's HTML export
+  was ~18.5k characters per call (now a preview unless `includeBody`); spec_upgrade / spec_templates dropped their `lines`.
+- **1.27** — the operations table (`mcp/lib/operations.js`, 40 entries) both surfaces run through: runTool lost its own
+  dispatch, the CLI's handlers call `c.call(id, given)`, `ARG_MODES` is derived from it (`argModes()`); `createFeature` /
+  `completeTask` take an options object; the structural parity tests (`mcp/tests/02-mcp-server-tools.js`,
+  `cli/tests/02-surfaces-parity.js`).
+
+### Capabilities
+- **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.
+- **1.16** — `completions {}` (completion/complete).
+- **1.23** — `resources/list` in pages (`RESOURCE_PAGE`, `nextCursor`); until then a hard cap of 500, the rest reachable only
+  through the templates.
+
+### Human approvals over MCP elicitation
+- **1.21 F1b** — introduced: a client that can elicit is asked before an agent's approval runs, previewed by a dry run, the
+  answer recorded as `confirmed`; without elicitation `ask` runs as before and `deny` refuses.
+- **1.21 review A4** — the `deny` refusal's `command` became the plain line (`{plain: true}`): the `! ` prefix is Claude
+  Code's, unrunnable in PowerShell / cmd.exe; the Claude Code hook keeps its `!` form.
+- **1.21 review A6** — `confirmed` only on a result that isn't `ok: false` (a fast-forward a later gate stopped carried it;
+  the phases it approved carry their own `confirmed` in .state.json); an accept without approve got its own text instead of
+  "declined".
+- **1.22 review** — at `deny`, `SPEC_MCP_APPROVAL_HOOK=on` no longer waves the call through (one that reaches the server got
+  past no hook: disableAllHooks, a managed policy, a hook that failed open); the confirmation carries the dry run's `preview`,
+  so content edited while the question waited is never recorded as approved.
+- **1.23** — the question (and `command`) name the slug the engine resolves, never the raw argument; `spec_feature` remove is
+  previewed with a folder fingerprint — the confirmation used to delete a feature renamed into the name while the question
+  waited; cancellation — the call used to keep waiting and record the approval of a call the client had given up on (a client
+  tool-call timeout shorter than the 5-minute question); progress notifications while a question waits.
+- **1.24 review 6** — `spec_add_track {remove: true}` turning +tdd / +ai off is asked like any approval (the gates they
+  carry); a revoke is previewed (`approvedAt` / `withdrawn`), so an approval recorded meanwhile is not revoked in its place.
+- **1.24 r6 A-I8** — a remove's question says how much it deletes (`elicit.removeSize`).
+- **1.25.1 review 7** — the Known limit (`SPEC_MCP_APPROVAL_HOOK=on` at `ask` with the hook not running) documented, not
+  changed: eliciting there would ask twice without a hook→server handshake.
+
+### Argument validation
+- **1.12** — the MCP accepted `Design` / `PT`; `foldEnumArgs` keeps it so.
+- **1.14** — `guard` gained `scope` and became a string enum; the pre-1.14 `guard: true` keeps working through the boolean →
+  `"on"` / `"off"` fold.
+- **1.22 review** — a task `number` got `minimum: 0`: `-1` read "must be an integer", and refusing 0 looped next → complete.
+- **1.23** — a tool that throws answers JSON (`toolFailure()`; it was the bare text `ERROR: <message>`); the CLI refuses an
+  unknown flag.
+- **1.23 review L14** — projectDir must exist, like the CLI's `--project`: spec_create into a mistyped path built the whole
+  tree there, the list (`spec_status` without name, then spec_list) on a file answered `{exists: false}`, a `file://`
+  projectDir ended in ENOENT.
+- **1.24 r6 A1** — unknown arguments refused. They were ignored, and a misspelt key changed what the call did:
+  `spec_approve {revoked: true}` RE-APPROVED changed content, `spec_task_brief {task: 3}` briefed the next task,
+  `spec_export {feature}` exported the whole project.
+- **1.24 r6 A2 / A3** — projectDir read without any fs call; a network path refused before any (an SMB connection to a host
+  a call names, a hang on an unreachable one); an unexpanded variable is any `${` / leading `$NAME` / `%NAME%` — only a whole
+  `${VAR}` was caught, so with roots `$HOME` / `${workspaceFolder}/` went to the server's cwd; a relative projectDir resolves
+  from the client's root — it went to the server's cwd, and `.` from Claude Desktop scaffolded the app folder.
+- **1.24 r6 A5** — `maximum` checked (`spec_next_task.max` ≤ 8, the message "between 1 and 8").
+- **1.24 r6 A-I2** — every argument error carries a stable `code`.
+- **1.24 r6 A-I1** — compact results: on a realistic feature (core +tdd +saas +sec — spec_doctor, spec_status,
+  spec_task_brief, spec_next_action, trace_check {matrix}, the list, spec_roadmap, spec_create {includeBody}) the replies went
+  from 40,529 to 31,435 characters (−22%; trace_check −42%, spec_status −32%; create's embedded markdown barely changed).
+- **1.25** — `REQUIRED_ONE_OF`'s `unless` (a steering import defaults its path); `BOOL_STRING_ARGS` for `spec_create
+  {branch}`.
+- **1.25.1 review 7** — nested unknown keys refused (`verfy` appended a task with no `_Verify:_`, which then ticked "verified,
+  nothing to verify"; `evidence[0].sumary` dropped the summary); nested required keys (`evidence: [{}]` reached the engine as
+  "'undefined' is not a project check"); `minItems` (`tasks: []` appended nothing); projectDir parsing moved to
+  hooks/hook-utils.js and shared with the approval hook, which read a `file://` URI as a relative folder and let an approval
+  of that project through; spec_import needs a dev-spec project behind an explicit projectDir — `{projectDir: "<home>/.aws",
+  path: "credentials"}` returned the credentials; the `initialize` instructions corrected (the old "All file ops are local to
+  the project's .specs/ directory" was not true of the scans and the import); the feature resolver's refusals got their codes
+  (they were `{ok: false, error}` alone).
+- **1.26** — `inapplicable-arguments` (Arguments by mode): another mode's argument used to be another tool's, an unknown one.
+
+### Protocol
+- **1.21 F1b** — the first server-initiated request (`elicitation/create`): the server answers other requests while one
+  waits, and a batch's array waits for its late replies.
+- **1.23** — `2025-11-25` supported; `MAX_MESSAGE` (a line growing past it grew until the process died); notifications that
+  change state (`cancelled`, `roots/list_changed`); the default project from roots — without SPEC_PROJECT_DIR /
+  CLAUDE_PROJECT_DIR it was the server's cwd, an app or home folder where spec_init scaffolded `.specs/`.
+- **1.24 r6 A2** — the unexpanded-variable rule widened for a call relying on the roots (Argument validation above).
+- **1.24 r6 A6** — the feature-lock wait: a call waiting for another process's lock (a CLI `done`, another editor's server)
+  froze the whole server — pings, every tool, a pending approval's reply — for `DEV_SPEC_LOCK_WAIT_MS` (10 s); the server now
+  waits `MCP_LOCK_WAIT_MS` (2 s), where the client retrying beats a frozen server.
+- **1.25.1 review 7** — a `roots/list` timeout no longer cancels the request: a later answer was dropped and the cwd stayed
+  the default for the session (`late` handler, `rootsGen`).

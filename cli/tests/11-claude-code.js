@@ -6,17 +6,19 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   const S16 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = JSON.stringify;
   const OPTS = ["DEV_SPEC_DEFAULT_LANG", "CLAUDE_PLUGIN_OPTION_DEFAULT_LANG", "DEV_SPEC_STOP_CHECK", "CLAUDE_PLUGIN_OPTION_STOP_CHECK",
     "DEV_SPEC_GUARD_DEFAULT", "CLAUDE_PLUGIN_OPTION_GUARD_DEFAULT"];
-  // A CLI run with stdin (closed at once when none is given), no DEV_SPEC_* default and no project folder from this process.
+  // A CLI run with stdin (closed at once when none is given), no DEV_SPEC_* default and no project folder from this process —
+  // in-process (1.27), or a process of its own with o.spawn (a time "for the whole process").
   const cli = (args, o = {}) => {
     const env = { ...process.env };
     for (const k of OPTS.concat(["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "COLUMNS"])) delete env[k];
     const t0 = Date.now();
-    const r = spawnSync(process.execPath, [CLI, ...args], { input: o.input == null ? "" : o.input, encoding: "utf8", env: { ...env, ...(o.env || {}) }, cwd: o.cwd || tmp, timeout: 30000 });
+    const opts = { input: o.input == null ? "" : o.input, encoding: "utf8", env: { ...env, ...(o.env || {}) }, cwd: o.cwd || tmp, timeout: 30000 };
+    const r = o.spawn ? spawnSync(process.execPath, [CLI, ...args], opts) : spawnIn(args, opts);
     return { out: r.stdout || "", err: r.stderr || "", code: r.status, ms: Date.now() - t0 };
   };
   const none = fs.mkdtempSync(path.join(os.tmpdir(), "p16c-cli-none-")); // no .specs/ at or above it
@@ -86,7 +88,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
   for (let i = 1; i < 50; i++) fs.cpSync(path.join(s50, ".specs", "feature-0"), path.join(s50, ".specs", "feature-" + i), { recursive: true });
   // The bound: 8 s, or 4× the same process on the 1-feature project run just before it (the machine is shared with the parallel
   // runner — 1.20 review); a timing-only miss is measured once more.
-  const measure50 = () => { const base = cli(["statusline", "--json"], { input: js({ cwd: sp }) }).ms; return { r: cli(["statusline", "--json"], { input: js({ cwd: s50 }) }), base }; };
+  const measure50 = () => { const base = cli(["statusline", "--json"], { input: js({ cwd: sp }), spawn: true }).ms; return { r: cli(["statusline", "--json"], { input: js({ cwd: s50 }), spawn: true }), base }; };
   let m50 = measure50();
   if (m50.r.code === 0 && m50.r.ms >= Math.max(8000, 4 * m50.base)) m50 = measure50();
   const r50 = m50.r;
@@ -136,10 +138,12 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
     () => im[4].code === 1, () => /The plan text is empty/.test(im[4].err), () => imj, () => imj.ok === true, () => imj.inline === true,
     () => imj.source === null, () => imj.feature === "json-mode",
   ]);
-  const help16 = run(["help"]).out;
-  const doc16 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+  const help16 = runIn(["help"]).out;
+  // 1.27: the help IS the command table's (cli/commands.js) — the entries of statusline and import hold those lines
+  const T16 = require(path.join(__dirname, "commands.js"));
+  const doc16 = ["statusline", "import"].map((n) => T16.commandFor(n).help).join("\n");
   ok([help16, doc16].every((t) => /statusline \[--print-config\]/.test(t) && /import <plan\|execplan\|fluidplan> - \| --text "<markdown>"/.test(t)) && S16.CLI_SWITCHES.has("print-config"),
-    "1.16: help and the header docblock document statusline [--print-config] and import <plan|execplan> - | --text; print-config is one of spec.CLI_SWITCHES");
+    "1.16: help and the command table document statusline [--print-config] and import <plan|execplan> - | --text; print-config is one of spec.CLI_SWITCHES");
   // 1.16 C review 5: a UNC folder in the session JSON is never stat'ed (an unreachable host hung the status line for minutes) —
   // a TEST-NET address (192.0.2.1, never routed), a child process with its own timeout; silent and fast on every platform.
   // "Fast" is relative (1.20 review — a flat 10 s flaked under the parallel runner: 13 s with the machine full, ~0.4 s alone):
@@ -190,7 +194,8 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
     const layouts = [[none], [pr], [path.join(pr, "src", "deep")], [none, pr], ["", none], ["${CLAUDE_PROJECT_DIR}", pr], ["//fileserver/share/p"], [hand], [path.join(hand, ".specs")], [null, 7, none]];
     const disagree = layouts.filter((c) => C.statusProbe(c) !== (S16.statusLineProject(c) !== null));
     const pre = path.join(tmp, "r7-sl-preload.js");
-    fs.writeFileSync(pre, "process.on('exit', () => { const sep = String.fromCharCode(92); const m = Object.keys(require.cache).filter((f) => f.split(sep).join('/').includes('/mcp/lib/')); process.stderr.write('LOADED ' + m.length); });");
+    // (1.27: the engine-free project probe, mcp/lib/probe.js, is no engine module — statusProbe runs it)
+    fs.writeFileSync(pre, "process.on('exit', () => { const sep = String.fromCharCode(92); const m = Object.keys(require.cache).filter((f) => f.split(sep).join('/').includes('/mcp/lib/') && !f.split(sep).join('/').endsWith('/mcp/lib/probe.js')); process.stderr.write('LOADED ' + m.length); });");
     const envNo = { ...process.env };
     for (const k of ["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "COLUMNS"]) delete envNo[k];
     const loaded = (args, input, cwd) => spawnSync(process.execPath, ["-r", pre, CLI, ...args], { encoding: "utf8", input: input || "", cwd: cwd || none, env: envNo });
@@ -210,7 +215,7 @@ exports.run = ({ ok, all, run, tmp, CLI, require, __dirname }) => {
       slProj.status === 0 && /login/.test(slProj.stdout) && !/LOADED 0$/.test(slProj.stderr) &&
       help.status === 0 && /universal spec-driven CLI/.test(help.stdout) && /LOADED 0$/.test(help.stderr) && /LOADED 0$/.test(dashHelp.stderr) &&
       s < v && s <= Math.max(250, 2.5 * n),
-      "1.25.1 r7: statusline outside a dev-spec project prints nothing without loading any mcp/lib module (statusProbe agrees with statusLineProject on " + layouts.length +
+      "1.25.1 r7: statusline outside a dev-spec project prints nothing without loading any engine module (statusProbe agrees with statusLineProject on " + layouts.length +
       " layouts), a project still gets its line; the bare help loads none either; statusline (no project) " + Math.round(s) + " ms vs node -e 0 " + Math.round(n) + " ms and `version` (the engine) " + Math.round(v) +
       " ms (got " + js([disagree, slNone.status, slNone.stderr.slice(-40), slProj.stdout.slice(0, 80), slProj.stderr.slice(-20), help.stderr.slice(-20), dashHelp.stderr.slice(-20)]) + ")");
   }

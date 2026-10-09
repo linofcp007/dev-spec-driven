@@ -1,16 +1,17 @@
 "use strict";
 
 /**
- * dev-spec shell completion (1.25) — two jobs, both for cli/dev-spec.js:
+ * dev-spec shell completion — two jobs, both for cli/dev-spec.js:
  *
  *   complete(args)        `dev-spec __complete features|archived [--project <dir>]` — the hidden call the completion scripts
  *                         make on Tab where a command takes a feature: one slug per line, nothing else, exit 0 always. It runs
- *                         BEFORE the engine loads (cli/dev-spec.js hands it over first thing): Node core only, a small mirror of
- *                         the engine's resolveProjectDir (files.js) and listFeatures (doctor.js / state.js isFeatureFolder) —
- *                         cli/tests/16-conventions-completion.js checks that they agree on several layouts and that no module of
- *                         mcp/lib is loaded. It costs about Node's own startup (it runs on every Tab).
+ *                         BEFORE the engine loads (cli/dev-spec.js hands it over first thing): Node core and mcp/lib/probe.js only
+ *                         (the engine-free project probe — the one dev-spec project rule, the CLI's resolver walk), a small mirror
+ *                         of the engine's resolveProjectDir (files.js) and listFeatures (doctor.js / state.js isFeatureFolder) —
+ *                         cli/tests/16-conventions-completion.js checks that they agree on several layouts and that no engine
+ *                         module is loaded. It costs about Node's own startup (it runs on every Tab).
  *   script(shell, model)  the completion script `dev-spec completion <shell>` prints — the template in cli/completion/ filled
- *                         with the CLI's own tables (the model cli/dev-spec.js builds from COMMAND_OPTIONS, COMMAND_ARGS,
+ *                         with the CLI's own tables (the model cli/commands.js builds from COMMAND_OPTIONS, COMMAND_ARGS,
  *                         FLAG_VALUES and the facade's value lists): commands, their flags, flag values, positional values.
  *
  * Specs (a positional or a flag value): words to offer, space-separated, or a source the SCRIPT resolves on Tab — @feature /
@@ -27,80 +28,42 @@ const SCRIPT_SOURCES = new Set(["@feature", "@archived", "@command", "@file", "@
 
 // ---- the hidden lister (no engine) ----------------------------------------------------------------------------------------
 
-// files.js: RE_UNEXPANDED_VAR / PROJECT_MAX_UP / resolveProjectDir / nearestProject / isNetworkPath; doctor.js isDevSpecDir.
-const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
-const PROJECT_MAX_UP = 64;
-const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+// The project probe (mcp/lib/probe.js): the one dev-spec project rule (doctor.js isDevSpecDir is the same), the CLI's resolver
+// walk (files.js nearestProject), unexpandedVar / expandHome / isNetwork as files.js reads them. Required on first use: `help`,
+// `completion <shell>` and the other commands that never look for a project load nothing of mcp/lib for it.
+let PROBE = null;
+const probe = () => PROBE || (PROBE = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
 const exists = (p) => { try { fs.statSync(p); return true; } catch { return false; } };
-const readdir = (p) => { try { return fs.readdirSync(p); } catch { return []; } };
-function isNetworkPath(p) {
-  const s = String(p).trim();
-  if (!/^[\\/]{2}/.test(s)) return false;
-  let rest = s.slice(2);
-  if (/^[?.][\\/]/.test(rest)) {
-    rest = rest.slice(2);
-    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false;
-    if (!/^UNC[\\/]/i.test(rest)) return true;
-    rest = rest.slice(4);
-  }
-  const host = rest.split(/[\\/]/)[0].toLowerCase();
-  return host !== "wsl$" && host !== "wsl.localhost";
-}
-function isDevSpecDir(dir) {
-  const root = path.join(dir, ".specs");
-  if (!isDir(root)) return false;
-  if (exists(path.join(root, "roadmap.json")) || isDir(path.join(root, "steering"))) return true;
-  return readdir(root).some((n) => !n.startsWith(".") && exists(path.join(root, n, ".state.json")));
-}
-function nearestProject(start) {
-  if (isNetworkPath(start)) return null;
-  let dir = path.resolve(start);
-  for (let i = 0; i < PROJECT_MAX_UP; i++) {
-    if ((i === 0 && isDir(path.join(dir, ".specs"))) || isDevSpecDir(dir)) return dir;
-    const up = path.dirname(dir);
-    if (up === dir) return null;
-    dir = up;
-  }
-  return null;
-}
-// files.js expandHome (1.25.1): a leading ~ (alone, ~/ or ~ and a backslash) is the home folder — the CLI expands --project with it.
-const RE_HOME_PREFIX = /^~(?=$|[\\/])/;
-function expandHome(p) {
-  const s = String(p == null ? "" : p);
-  return RE_HOME_PREFIX.test(s) ? path.join(require("os").homedir(), s.slice(1)) : s;
-}
+const expandHome = (p) => probe().expandHome(p);
 // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one with a dev-spec .specs/ >
-// the working folder (an empty value or one holding an unexpanded variable falls through) — the CLI's resolution.
+// the working folder (an empty value or one holding an unexpanded variable falls through) — the CLI's resolution (files.js
+// resolveProjectDir).
 function resolveProject(arg, env) {
+  const P = probe();
   const e = env || process.env;
-  const usable = (v) => (v != null && String(v).trim() && !RE_UNEXPANDED_VAR.test(String(v).trim()) ? String(v).trim() : null);
-  // Windows: `--project "C:\dir\"` reaches node as `C:\dir"` — the CLI drops the trailing quote (1.23 review L14)
+  const usable = (v) => (v != null && String(v).trim() && !P.unexpandedVar(v) ? String(v).trim() : null);
+  // Windows: `--project "C:\dir\"` reaches node as `C:\dir"` — the CLI drops the trailing quote
   const flag = typeof arg === "string" && process.platform === "win32" ? arg.replace(/"+$/, "") : arg;
   const dir = usable(flag) || usable(e.SPEC_PROJECT_DIR) || usable(e.CLAUDE_PROJECT_DIR);
-  if (dir) return path.resolve(expandHome(dir));
+  if (dir) return path.resolve(P.expandHome(dir));
   const cwd = path.resolve(process.cwd());
-  return nearestProject(cwd) || cwd;
+  return P.nearestProject(cwd) || cwd;
 }
-// doctor.js statusLineProject's null rule (1.25.1, review 7) — the status line's pre-check, before the engine loads: is there a
-// folder holding a dev-spec .specs/ at or above one of the candidates (STATUS_MAX_UP levels; an empty / non-string / whole-${VAR} /
-// over-long / network candidate skipped)? false → the engine would answer null (an empty line): nothing to load. true → the engine
-// decides (it also maps a worktree to its checkout, which only ever starts from a folder this walk finds).
-const STATUS_MAX_UP = 40;
+// doctor.js statusLineProject's null rule — the status line's pre-check, before the engine loads: is there a
+// folder holding a dev-spec .specs/ at or above one of the candidates (the probe's SESSION_MAX_UP levels — statusLineProject's
+// STATUS_MAX_UP; an empty / non-string / whole-${VAR} / over-long / network candidate skipped)? false → the engine would answer null
+// (an empty line): nothing to load. true → the engine decides (it also maps a worktree to its checkout, which only ever starts from a
+// folder this walk finds).
 function statusProbe(candidates) {
+  const P = probe();
   for (const c of Array.isArray(candidates) ? candidates : []) {
-    if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096 || isNetworkPath(c)) continue;
-    let dir = path.resolve(expandHome(c.trim()));
-    for (let i = 0; i < STATUS_MAX_UP; i++) {
-      if (isDevSpecDir(dir)) return true;
-      const up = path.dirname(dir);
-      if (up === dir) break;
-      dir = up;
-    }
+    const u = P.usable(c);
+    if (u && !P.isNetwork(u) && P.nearestDevSpec(P.expandHome(u), { maxUp: P.SESSION_MAX_UP })) return true;
   }
   return false;
 }
 
-// 1.25.1 (review 7) — the status line command `statusline --print-config` prints (and /spec-statusline writes into settings.json).
+// the status line command `statusline --print-config` prints (and /spec-statusline writes into settings.json).
 // In a plugin's versioned folder (…/dev-spec-driven/<version>/cli/dev-spec.js) the plain `node "<that path>" statusline` broke at the
 // first plugin update (Claude Code removes the old folder 14 days later): the command finds the newest installed <version> holding
 // cli/dev-spec.js at each run — the completion scripts' rule (numeric parts, a missing part 0) — in a node one-liner that holds no

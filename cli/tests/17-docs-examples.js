@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, __dirname }) => {
   // A copy resets every file date, like a clone: the demo's approvals must hold by content fingerprint (an approval
   // without one fell back to mtime and flagged every approved file as changed after any checkout).
   const repo15 = path.join(__dirname, "..");
@@ -15,14 +15,14 @@ exports.run = ({ ok, run, tmp, __dirname }) => {
   const cmds15 = [["doctor api-keys", ["doctor", "api-keys"]], ["trace api-keys --code", ["trace", "api-keys", "--code"]], ["roadmap", ["roadmap"]], ["clarify api-keys", ["clarify", "api-keys"]]];
   const diff15 = [];
   for (const [heading, args] of cmds15) {
-    const r = run([...args, "--project", demo15]);
+    const r = runIn([...args, "--project", demo15]);
     const got = r.out.replace(/\r\n/g, "\n").replace(/\s+$/, ""), want = block15(heading);
     if (r.code !== 0 || got !== want) diff15.push(heading + " (exit " + r.code + "): " + JSON.stringify(got.slice(0, 300)));
   }
   ok(diff15.length === 0 && /verdict=PASS/.test(block15("doctor api-keys")) && !/[▲✗]/.test(block15("doctor api-keys")),
     "examples/README.md: doctor (PASS, no warnings) / trace --code / roadmap / clarify print exactly the pasted outputs on a fresh copy of the demo (differs: " + diff15.join(" | ") + ")");
   // The committed ROADMAP.md is what `roadmap --write` generates now (it said 70% while the engine said 19%).
-  run(["roadmap", "--write", "--html", "--project", demo15]);
+  runIn(["roadmap", "--write", "--html", "--project", demo15]);
   const rm15 = (p) => fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
   ok(rm15(path.join(demo15, ".specs", "ROADMAP.md")) === rm15(path.join(repo15, "examples", "demo-project", ".specs", "ROADMAP.md")),
     "the demo's committed .specs/ROADMAP.md matches what roadmap --write generates");

@@ -19,7 +19,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir, errs,
   evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs, featureFlow,
   featureLang, featurePercent, featureShipped, featureVelocity, findCycle, FOLD_CASE, forcedApprovalList, forecastInput,
-  forgetCached, globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord, isBacktickUnit,
+  globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord, isBacktickUnit,
   isDirSafe, isFeatureFolder, isGeneratedOrAbsent, isImplementsGlob, isInsideDir, isObj, isRecord, isRedRun,
   legacySlugify, listFeatures, locateFeatures, LOCK_FILE, maybeRefreshRoadmap, milestonesFollow, moveDirOrBusy,
   normalizeLang, ownEvidence, parseTasks, pendingGateList, PHASES, placeholderReport, placeholderSummary, planIdText,
@@ -31,13 +31,13 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
-let today, dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
+let today, dayOf; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
   featureFlow, featureLang, featurePercent, featureShipped, featureVelocity, findCycle, FOLD_CASE, forcedApprovalList,
-  forecastInput, forgetCached, globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord,
+  forecastInput, globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord,
   isBacktickUnit, isDirSafe, isFeatureFolder, isGeneratedOrAbsent, isImplementsGlob, isInsideDir, isObj, isRecord,
   isRedRun, legacySlugify, listFeatures, locateFeatures, LOCK_FILE, maybeRefreshRoadmap, milestonesFollow,
   moveDirOrBusy, normalizeLang, ownEvidence, parseTasks, pendingGateList, PHASES, placeholderReport, placeholderSummary,
@@ -70,7 +70,7 @@ function sectionFirstParagraph(md, synonyms) {
 // Markdown helpers for the merge summary: multi-line output collapsed to one line; a code span whose fence is
 // longer than any backtick run inside it.
 function oneLine(s) {
-  return String(s || "").replace(/(?<!\s)\s*\r?\n\s*/g, " ⏎ ").trim(); // (?<!\s): a blank run is read from its start only (1.17 H)
+  return String(s || "").replace(/(?<!\s)\s*\r?\n\s*/g, " ⏎ ").trim(); // (?<!\s): a blank run is read from its start only
 }
 function codeSpan(s) {
   const text = oneLine(s);
@@ -81,7 +81,7 @@ function codeSpan(s) {
 // A commit title's text: the first sentence, at most `max` characters. Abbreviations like "e.g." / "i.e." / "p. ej." don't
 // end a sentence. A longer sentence is cut at its LAST clause boundary that fits — a comma, a semicolon or a dash (— –) —
 // and reads whole there (no ellipsis); only when no boundary leaves at least a third of the budget is it cut at a word
-// boundary, with "…" (counted in `max`). 1.21 F3: the 1.19 eval run's merge title ran to ~90 characters, cut mid-clause.
+// boundary, with "…" (counted in `max`). The 1.19 eval run's merge title ran to ~90 characters, cut mid-clause.
 // Lengths are UTF-16 units (an emoji counts two — the line is never longer in code points); a cut never splits a surrogate pair.
 function shortTitle(text, max = 72) {
   const first = String(text || "").split(/(?<!\b(?:e\.g|i\.e|ex|etc|ej|vs|p)\.)(?<=[.!?])\s+(?=\p{Lu})/u)[0].trim();
@@ -93,7 +93,7 @@ function shortTitle(text, max = 72) {
   const cut = cutAt(first, max - 1);
   return cutAt(cut, Math.max(cut.lastIndexOf(" "), Math.floor(max / 2))).replace(/[,;:\s—–-]+$/, "") + "…";
 }
-// s cut at `end` — one unit earlier when `end` falls inside a surrogate pair (1.21 review A5: the word-boundary fallback cut an emoji
+// s cut at `end` — one unit earlier when `end` falls inside a surrogate pair (the word-boundary fallback cut an emoji
 // in two and merge-summary.md got a lone high surrogate), and without a zero-width joiner left dangling at the end.
 function cutAt(s, end) {
   const hi = (c) => c >= 0xd800 && c <= 0xdbff, lo = (c) => c >= 0xdc00 && c <= 0xdfff;
@@ -111,7 +111,7 @@ function commitTitle(prefix, text) {
   return prefix + shortTitle(text, Math.max(24, COMMIT_TITLE_MAX - prefix.length));
 }
 
-// 1.25 — a ready feature started on its own branch: the two local options named with it (" Branch x (from main): 1. merge it into
+// a ready feature started on its own branch: the two local options named with it (" Branch x (from main): 1. merge it into
 // main locally — git switch main, then git merge x · 2. keep the branch."); a base no shell could take unquoted is not put in a
 // command (the generic line). → "" without a branch.
 function finishBranchLine(branch, lng) {
@@ -126,20 +126,20 @@ function finishFeature(projectDir, name, opts = {}) {
   const lng = featureLang(projectDir, slug);
   const F = i18n.msg(lng).finish;
   const tracks = detectTracks(dir);
-  // B5: spec_finish {evidence} — the project checks' runs, recorded BEFORE the readiness is computed (the same call can make
+  // spec_finish {evidence} — the project checks' runs, recorded BEFORE the readiness is computed (the same call can make
   // the feature ready); all-or-nothing, under the feature lock.
   let recordedChecks = null;
   if (opts.evidence != null) {
-    // ranBy "cli": `finish --run` (1.14 F1; never from MCP) — with runStart {at, code} (1.22 review): the stamps taken BEFORE it ran
+    // ranBy "cli": `finish --run` (never from MCP) — with runStart {at, code}: the stamps taken BEFORE it ran
     const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng, opts.ranBy, opts.ranBy === "cli" ? opts.runStart : undefined);
     if (rc.error) return { ok: false, error: rc.error };
     recordedChecks = rc.recorded;
   }
   const state = readState(projectDir, slug);
   const kind = state.kind || "feature";
-  // 1.25: the feature's own git branch (create --branch) — named in the result (`branch`) and in the merge summary
+  // the feature's own git branch (create --branch) — named in the result (`branch`) and in the merge summary
   const branch = opts.gateOnly ? null : branchView(projectDir, state);
-  if (kind === "spike") { // 1.14 C2: ready once the decision is written
+  if (kind === "spike") { // ready once the decision is written
     const sr = spikeFinish(projectDir, f, opts, recordedChecks);
     if (branch && sr && sr.ok !== false) {
       sr.branch = branch;
@@ -159,11 +159,11 @@ function finishFeature(projectDir, name, opts = {}) {
   const vs = verificationStatus(projectDir, slug, dir);
   const G = i18n.msg(lng).gates;
   // placeholders / root-cause get their own, more precise blockers below.
-  // (r5 review: `state` — .state.json unreadable — is its own blocker, first; the approvals it holds are unknown, so no pending gate
+  // (`state` — .state.json unreadable — is its own blocker, first; the approvals it holds are unknown, so no pending gate
   // nor change since approval is reported from it: they read "every phase awaiting approval")
   const stateBad = !!state.invalid;
   const failing = doc.ok ? doc.checks.filter((c) => c.status === "fail" && c.id !== "placeholders" && c.id !== "root-cause" && c.id !== "state" && c.id !== "roadmap").map((c) => c.id) : [];
-  // 1.24 review 6 (E4): roadmap.json unreadable — its project checks (meta.checks: suite-evidence) and approval roles are unknown
+  // roadmap.json unreadable — its project checks (meta.checks: suite-evidence) and approval roles are unknown
   // (read as none, spec_finish was ready with the checks never run): its own blocker, like `state`
   const roadmapBad = doc.ok && Array.isArray(doc.checks) ? doc.checks.find((c) => c.id === "roadmap" && c.status === "fail") : null;
   const pendingGates = stateBad ? [] : doc.pendingGates || [];
@@ -175,14 +175,14 @@ function finishFeature(projectDir, name, opts = {}) {
   const changed = stateBad ? [] : cs.changed.filter((x) => !cs.byDate.includes(x));
   if (cs.byDate.length) warnings.push(F.changedByDate(cs.byDate.join(", "), slug));
   if (cs.untracked.length) warnings.push(F.untrackedApproval(cs.untracked.map((u) => `${u.phase} (${u.file})`).join(", "), slug));
-  // 1.14 B3: phases approved without the role sign-offs now required (approved before the roles) — a warning, never a blocker.
+  // phases approved without the role sign-offs now required (approved before the roles) — a warning, never a blocker.
   const unsigned = doc.ok && isObj(doc.unsignedRoles) ? Object.entries(doc.unsignedRoles) : [];
   if (unsigned.length) warnings.push(i18n.msg(lng).governance.unsigned(unsigned.map(([p, l]) => `${p} (${l.join(", ")})`).join(", ")));
-  // 1.14 full review Pa6: a test planned outside test code whose artifact (load-test.md, an eval set) is still the scaffold —
+  // a test planned outside test code whose artifact (load-test.md, an eval set) is still the scaffold —
   // doctor's outside-code-artifacts warn, repeated here as a warning (never a blocker).
   const ocWarn = doc.ok && Array.isArray(doc.checks) ? doc.checks.find((c) => c.id === "outside-code-artifacts") : null;
   if (ocWarn) warnings.push(ocWarn.detail);
-  // 1.16 U3: the forced approvals (each a waived gate, with its waiver when one was recorded) — the merge summary lists them,
+  // the forced approvals (each a waived gate, with its waiver when one was recorded) — the merge summary lists them,
   // an expired waiver is a warning (never a blocker; doctor warns waiver-expired).
   const forcedList = forcedApprovalList(state.approvals, tracks);
   const expiredW = forcedList.filter((x) => x.waiver && x.waiver.expired);
@@ -194,7 +194,7 @@ function finishFeature(projectDir, name, opts = {}) {
   const blocked = [];
   const block = (id, detail) => blocked.push({ id, detail });
   if (stateBad) block("state", state.invalid); // r5 review (localized: readState's message — fix it by hand)
-  if (roadmapBad) block("roadmap", roadmapBad.detail); // 1.24 review 6 (E4)
+  if (roadmapBad) block("roadmap", roadmapBad.detail); // 1.24 review 6
   if (failing.length) block("doctor", F.doctor(failing.join(", ")));
   if (rootCauseMissing) block("root-cause", G.finishRootCause);
   if (leftovers.length) block("placeholders", G.finishPlaceholders(placeholderSummary(leftovers, lng)));
@@ -202,11 +202,11 @@ function finishFeature(projectDir, name, opts = {}) {
   if (!blocks.length) block("tasks", F.noTasks);
   if (open.length) block("open-tasks", F.open(open.map((n) => "#" + n).join(", ")));
   if (vs.unverified.length) block("verification", F.unverified(unverifiedLabel(vs, lng)));
-  // B5: meta.checks set → every check needs a passing run since the feature's last task activity (suiteStatus).
+  // meta.checks set → every check needs a passing run since the feature's last task activity (suiteStatus).
   const suite = suiteStatus(projectDir, state, dir);
   if (suite.missing.length) block("suite-evidence", i18n.msg(lng).projectChecks.blocker(suiteLabel(suite.missing, lng), slug));
   if (suite.invalid.length) warnings.push(i18n.msg(lng).projectChecks.invalidStored(suite.invalid.join(", ")));
-  if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for (1.14 B3)
+  if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);
 
@@ -241,7 +241,7 @@ function finishFeature(projectDir, name, opts = {}) {
       const ev = ownEvidence(vs.evidence, b, dups.has(b.number)); // never the other "N."'s run
       const hasVerify = taskMarkers(b).verify.length > 0;
       // A record with nothing to show (a v1.12 bare {exitCode: 0}) prints its exit code — never a dangling " — ".
-      // full review Ga8: an _Expect: fail_ task's red run is labelled as the EXPECTED failure (a bare "→ exit 1" read as a
+      // an _Expect: fail_ task's red run is labelled as the EXPECTED failure (a bare "→ exit 1" read as a
       // failing check), and a passing re-run after the fix names the red run it keeps as the proof.
       const RG = i18n.msg(lng).redGreen;
       const redTag = ev && expectsFail(b) ? (isRedRun(ev) ? RG.prRed : ev.exitCode === 0 && isRedRun(ev.red) ? RG.prRedKept(ev.red.exitCode, dayOf(ev.red.at)) : "") : "";
@@ -252,14 +252,14 @@ function finishFeature(projectDir, name, opts = {}) {
     }
     body.push("");
   }
-  if (suite.items.length) body.push(...suiteSummaryLines(suite.items, lng), ""); // B5: the project checks' recorded runs
+  if (suite.items.length) body.push(...suiteSummaryLines(suite.items, lng), ""); // the project checks' recorded runs
   const testIds = [...testIndex(readIfExists(path.join(dir, "test-plan.md")) || "").keys()];
   if (testIds.length) body.push(F.prTests, testIds.join(", "), "");
-  const decLines = decisionSummaryLines(dir, lng); // 1.14 C2: decisions.md
+  const decLines = decisionSummaryLines(dir, lng); // decisions.md
   if (decLines.length) body.push(...decLines, "");
-  if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), ""); // 1.16 U3: the waived gates
+  if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), ""); // the waived gates
   body.push(F.prChecks, ...checks.map((c) => "- [ ] " + c), "");
-  const specFiles = ["requirements.md", "change.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE] // 1.21 F5: a change's one file
+  const specFiles = ["requirements.md", "change.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE] // a change's one file
     .filter((x) => fs.existsSync(path.join(dir, x)));
   body.push(F.prSpec, ...specFiles.map((x) => "- `.specs/" + slug + "/" + x + "`"));
   const mergeSummary = body.join("\n") + "\n";
@@ -270,7 +270,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (write) {
     ensureDir(exDir);
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (1.24 r6: through the write gate)
+    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (through the write gate)
   }
   const ready = blockers.length === 0;
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
@@ -295,17 +295,17 @@ function finishFeature(projectDir, name, opts = {}) {
     wrote: write,
   };
   if (baseline) res.baseline = baseline;
-  if (branch) res.branch = branch; // 1.25: {name, base, commit, at, current, exists} — option 1 merges `name` into `base` locally
-  if (forcedList.length) res.waivers = waiverResult(forcedList); // 1.16 U3: [{phase, failing, reason?, expires?, expired}]
-  if (suite.items.length) res.suiteChecks = suite.items; // B5: [{name, command, status, exitCode?, at?, …}] — status is a stable code
-  if (recordedChecks) res.recordedChecks = recordedChecks; // B5: the runs this call recorded
-  if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // 1.14 B3: the roles each pending phase waits for
+  if (branch) res.branch = branch; // {name, base, commit, at, current, exists} — option 1 merges `name` into `base` locally
+  if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
+  if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code
+  if (recordedChecks) res.recordedChecks = recordedChecks; // the runs this call recorded
+  if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // the roles each pending phase waits for
   if (opts.includeBody != null ? !!opts.includeBody : !write) res.mergeSummary = mergeSummary;
   return res;
 }
 
 // ---------------------------------------------------------------------------
-// Metrics & retrospective (1.13) — derived only from .state.json, .history/ and the artifacts (local, no cost).
+// Metrics & retrospective — derived only from .state.json, .history/ and the artifacts (local, no cost).
 // Legacy state never throws: what can't be derived is null.
 // ---------------------------------------------------------------------------
 
@@ -327,8 +327,8 @@ function featureMetrics(projectDir, slug, dir) {
   // A state whose shape was refused (readState drops a non-list approvalHistory) can't say how many approvals were
   // made: approvals/rework unknown (null). A missing history is an empty one (createFeature doesn't seed the key).
   const lost = !!state.invalid && !Array.isArray(state.approvalHistory);
-  // A role sign-off that didn't complete its phase (`partial`, 1.14 B3) is no approval: not counted, never a lead time.
-  const history = lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isApprovalRecord(h) && typeof h.phase === "string"); // + no revocation (1.16 U2)
+  // A role sign-off that didn't complete its phase (`partial`) is no approval: not counted, never a lead time.
+  const history = lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isApprovalRecord(h) && typeof h.phase === "string"); // + no revocation
   // Approvals made before the change history (a feature upgraded mid-flight): the `legacy` records approvePhase seeds,
   // and approved phases with no history entry at all (not re-approved since). Each is counted once (its latest
   // approval — earlier ones were overwritten), so their rework is unknown: `rework` is then a lower bound.
@@ -347,10 +347,10 @@ function featureMetrics(projectDir, slug, dir) {
   }
   // First approval of each phase: the history; a phase approved only before 1.13 falls back to its (latest) approval —
   // approximate, like a seeded legacy record (the phase may have been approved earlier).
-  // r5 review: an approval of the SAME content as the phase's previous approval (fingerprint + designFingerprint — a role re-signing,
+  // an approval of the SAME content as the phase's previous approval (fingerprint + designFingerprint — a role re-signing,
   // a fast-forward re-run, a revoke then re-approve) changed nothing: no rework. A phase without a fingerprint (tests) counts as before.
-  // 1.25.1 (review 7): "the same content" is sameApprovedContent's — a re-approval after a whitespace-only edit (an editor's
-  // trailing-whitespace trim: the same wsFingerprint, 1.24 review 6) is no rework either.
+  // "the same content" is sameApprovedContent's — a re-approval after a whitespace-only edit (an editor's
+  // trailing-whitespace trim: the same wsFingerprint) is no rework either.
   const first = {}, count = {}, lastRec = {};
   for (const h of history || []) {
     const t = timeOf(h.at);
@@ -386,7 +386,7 @@ function featureMetrics(projectDir, slug, dir) {
     if (t != null) leadTime.complete = { at: isoOf(t), hours: hoursFrom(created, t), ...(!stamps.length || !everyTask ? { approximate: true } : {}) };
   }
   // Finished, when recorded: the earliest of the execution phase's first approval (gated on spec_finish's readiness since
-  // 1.13 — a forced one is counted in forcedApprovals) and the finish spec_finish {write} records on a READY feature
+  // a forced one is counted in forcedApprovals) and the finish spec_finish {write} records on a READY feature
   // (state.finished.at; finishedAt: an older spelling).
   const finishes = [first.execution ? first.execution.t : null, isRecord(state.finished) ? timeOf(state.finished.at) : null, timeOf(state.finishedAt)].filter((t) => t != null);
   const fin = finishes.length ? Math.min(...finishes) : null;
@@ -402,9 +402,9 @@ function featureMetrics(projectDir, slug, dir) {
   // The evidence gate's rules: a pass is {command, exitCode: 0} — a bare {exitCode: 0} (v1.12) proves nothing, so it
   // is no run at all — while any non-zero exit code is a failed run (the gate's failed-run), with or without a command.
   const exitOf = (h) => (h.exitCode == null ? null : Number(h.exitCode));
-  // B5: an _Expect: fail_ run (expected: "fail") passes when it FAILED as expected — its red run met the expectation.
+  // an _Expect: fail_ run (expected: "fail") passes when it FAILED as expected — its red run met the expectation.
   const isPass = (h) => !!h.command && (h.expected === "fail" ? isRedRun({ ...h, exitCode: exitOf(h) }) : exitOf(h) === 0);
-  const isRun = (h) => isPass(h) || (exitOf(h) != null && (exitOf(h) !== 0 || (h.expected === "fail" && !!h.command))); // B5: an unexpected pass is a failed run
+  const isRun = (h) => isPass(h) || (exitOf(h) != null && (exitOf(h) !== 0 || (h.expected === "fail" && !!h.command))); // an unexpected pass is a failed run
   let runs = 0, passing = 0;
   for (const slot of Object.values(evidence)) {
     for (const r of evidenceRecords(slot)) {
@@ -422,8 +422,8 @@ function featureMetrics(projectDir, slug, dir) {
     leadTime,
     approvalsTotal: history ? history.length + unseeded.length : null,
     rework, reworkByPhase, reworkLowerBound: rework != null && legacyPhases.length > 0, legacyPhases, forcedApprovals,
-    batchApprovals: history ? history.filter((h) => h.batch === true).length : null, // 1.14 B3: approvals made by a fast-forward
-    // 1.16 U: approvals revoked (spec_approve {revoke} — a withdrawn role sign-off is none) and ticks undone (spec_complete_task {undo})
+    batchApprovals: history ? history.filter((h) => h.batch === true).length : null, // approvals made by a fast-forward
+    // approvals revoked (spec_approve {revoke} — a withdrawn role sign-off is none) and ticks undone (spec_complete_task {undo})
     revokedApprovals: lost ? null : (Array.isArray(state.approvalHistory) ? state.approvalHistory : []).filter((h) => isRecord(h) && h.revoked === true && h.partial !== true).length,
     untickedTasks: Array.isArray(state.unticks) ? state.unticks.length : 0,
     changeRequests: changes.length, reopenedTasks: reopened.length, reopenedTasksUnique: new Set(reopened).size,
@@ -454,7 +454,7 @@ function metrics(projectDir, name, opts = {}) {
     const lng = featureLang(projectDir, f.slug);
     const M = i18n.msg(lng).metrics;
     const res = { ok: true, scope: "feature", lang: lng, ...featureMetrics(projectDir, f.slug, f.dir) };
-    res.velocity = featureVelocity(projectDir, f.slug, opts); // 1.14 B4 — points / working day over the forecast window
+    res.velocity = featureVelocity(projectDir, f.slug, opts); // points / working day over the forecast window
     if (write) {
       const file = path.join(f.dir, "retro.md");
       const rel = path.relative(projectDir, file).split(path.sep).join("/");
@@ -486,7 +486,7 @@ function metrics(projectDir, name, opts = {}) {
     batchApprovals: sum((m) => m.batchApprovals), // 1.14 B3
     changeRequests: sum((m) => m.changeRequests), reopenedTasks: sum((m) => m.reopenedTasks), openClarifications: sum((m) => m.openClarifications),
     evidenceRuns: runs, evidencePassing: passing, evidencePassRate: runs ? round1((passing / runs) * 100) : null };
-  // 1.14 B4 — the project velocity (every feature's completions: the roadmap forecasts' rate — 1.24 r6 G3: the archived ones' too)
+  // the project velocity (every feature's completions: the roadmap forecasts' rate — the archived ones' too)
   const now = (opts.now != null && timeOf(opts.now)) || Date.now();
   const velocity = velocityOf(list.features.flatMap((x) => forecastInput(projectDir, x.name).completions).concat(archivedCompletions(projectDir, now, opts.now != null)), now);
   return { ok: true, scope: "project", lang: lng, specsDir: list.specsDir, features, aggregates, totals, velocity };
@@ -549,13 +549,13 @@ function metricsLines(r) {
 // ---------------------------------------------------------------------------
 
 // Drop a feature slug from roadmap.json: its own entry and any dependsOn that referenced it.
-// archived (1.16 E3): an archive — the feature moves to its milestones' `archived` list instead of leaving them (a remove
+// archived: an archive — the feature moves to its milestones' `archived` list instead of leaving them (a remove
 // drops it; a rename renames it). → milestonesFollow's { changed, invalid }.
 function pruneRoadmapRefs(projectDir, slug, renameTo, archived) {
   return withRoadmapLock(projectDir, () => pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived), (b) => { throw new Error(roadmapBusyResult(projectDir, b).error); });
 }
 // A lifecycle result's milestone fields: milestonesUpdated (the names changed) and milestonesInvalid ({ count, names, notList? }
-// — stored entries left as they are, 1.16 verify NEW-1).
+// — stored entries left as they are).
 const milestoneResult = (ms) => ({ ...(ms && ms.changed.length ? { milestonesUpdated: ms.changed } : {}), ...(ms && ms.invalid ? { milestonesInvalid: ms.invalid } : {}) });
 function pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived) {
   const rm = readRoadmap(projectDir);
@@ -577,13 +577,13 @@ function pruneRoadmapRefsLocked(projectDir, slug, renameTo, archived) {
 
 // remove / archive / rename / restore: the folder's lock (withMoveLock), then the roadmap lock around the move and the
 // roadmap.json prune, the feature re-resolved under them (it may have moved meanwhile); the ROADMAP.md refresh after both.
-// opts.preview (1.23 — the MCP server only, never a tool argument): {fingerprint} of removePreview, the folder the user was asked
+// opts.preview (the MCP server only, never a tool argument): {fingerprint} of removePreview, the folder the user was asked
 // about over elicitation; another folder under that name now, or the same one edited since, is refused (changedSincePreview).
 function removeFeature(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
   sweepTombstones(f.root);
-  // 1.24 r6 (G1) — a feature folder that is a LINK (a symbolic link, a junction): only the link goes — the folder it points at and
+  // a feature folder that is a LINK (a symbolic link, a junction): only the link goes — the folder it points at and
   // its files stay — under the roadmap lock alone: the feature lock would be created THROUGH the link (it was: a .lock left in the
   // target), and the write gate refuses that lock anyway.
   if (isLinkEntry(f.dir)) {
@@ -618,7 +618,7 @@ function removeLinkedFeatureLocked(projectDir, name, opts = {}) {
 // The folder a remove would delete, as one sha1: its identity (device + inode / file ID + birth time — kept across a rename, so
 // another feature renamed into this name differs) and every entry under it (relative path, size, mtime; lstat — a link is one
 // entry, never followed; the feature's own .lock left out: the remove holds it). null when the folder can't be read. A feature
-// folder that is itself a link (1.24 r6): the link's identity and its target — what a remove deletes.
+// folder that is itself a link: the link's identity and its target — what a remove deletes.
 function featureFolderFingerprint(dir) {
   let st;
   try { st = fs.lstatSync(dir); } catch { return null; }
@@ -677,7 +677,7 @@ function removeFeatureLocked(projectDir, name, opts = {}) {
   if (inUse) return inUse;
   try { fs.rmSync(tomb, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 }); } catch { /* left as a tombstone: swept later */ }
   const ms = pruneRoadmapRefs(projectDir, slug);
-  return { ok: true, action: "remove", feature: slug, ...milestoneResult(ms) }; // 1.16 E3: dropped from its milestones
+  return { ok: true, action: "remove", feature: slug, ...milestoneResult(ms) }; // dropped from its milestones
 }
 
 function archiveFeature(projectDir, name) {
@@ -707,7 +707,7 @@ function archiveFeatureLocked(projectDir, name, moved) {
   // is met at 100%). Measured before the move, in the feature's own language.
   const tracks = detectTracks(dir);
   const tasks = parseTasks(activeTasks(readIfExists(path.join(dir, "tasks.md")), tracks));
-  const percent = featurePercent(detectPhase(dir, tracks), tasks.filter((t) => t.done).length, tasks.length, featureFlow(dir)); // C3: + the flow
+  const percent = featurePercent(detectPhase(dir, tracks), tasks.filter((t) => t.done).length, tasks.length, featureFlow(dir)); // + the flow
   const R = i18n.msg(featureLang(projectDir, slug)).restore;
   invalidateReadCache(); // a folder moved or removed: the per-call read cache can't follow it
   const inUse = moveDirOrBusy(projectDir, slug, dir, dest);
@@ -744,7 +744,7 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   const oldDir = from.dir;
   const newDir = to.dir;
   if (fs.existsSync(newDir)) return { ok: false, error: errs(projectDir).alreadyExists(newSlug) };
-  // 1.23 review 5 — never onto an ARCHIVED feature's slug: the two could then neither be archived (alreadyArchived) nor restored
+  // never onto an ARCHIVED feature's slug: the two could then neither be archived (alreadyArchived) nor restored
   // (activeExists) without another rename — and the archived records naming that slug would read as this feature.
   if (fs.existsSync(path.join(to.root, "_archive", newSlug))) return { ok: false, archivedName: true, error: errs(projectDir).renameArchived(newSlug) };
   const bad = roadmapError(projectDir);
@@ -759,7 +759,7 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   const ms = pruneRoadmapRefs(projectDir, oldSlug, newSlug);
   for (const s of plan.supersedes) writeFileAtomic(s.file, s.text);
   for (const r of plan.records) writeFileAtomic(r.file, JSON.stringify(r.state, null, 2));
-  // 1.24 r6 (G5): the feature has a folder under the new name — a backlog item of that name is no longer planned-but-unspecced
+  // the feature has a folder under the new name — a backlog item of that name is no longer planned-but-unspecced
   // (create and restore drop it the same way; it was listed twice in ROADMAP.md, under Features and under Backlog)
   const fromBacklog = pruneBacklog(projectDir, newSlug);
   const res = { ok: true, action: "rename", from: oldSlug, to: newSlug };
@@ -847,7 +847,7 @@ function renameSupersedesRefs(projectDir, fromDir, raw, oldKey, newSlug) {
     const line = (raw.slice(0, offset).match(/\n/g) || []).length + 1;
     if (!(visible.get(line) || "").includes("_Supersedes:")) return whole; // inside a comment or fenced code: no marker
     // (^|[,;])(\s*`?\s*)([^,;`/]+?)(\s*\/\s*)(US-…) with the lead taken whole ((?=(…))\2) and the name read up to its last
-    // non-blank unit: the same references, without the cubic backtracking over a long blank run (1.17 H). (The old pattern
+    // non-blank unit: the same references, without the cubic backtracking over a long blank run. (The old pattern
     // also read a lone blank before the '/' as a name — "" names no feature, so nothing was ever rewritten there.)
     const nv = value.replace(/(^|[,;])(?=(\s*`?\s*))\2([^,;`/\s](?:[^,;`/]*[^,;`/\s])?)(\s*\/\s*)(US-\d+\.AC-\d+)/g, (t, sep, lead, name, slash, ac) => {
       if (!hitsOld(name.trim(), ac)) return t;
@@ -866,7 +866,7 @@ function removePreview(projectDir, name) {
   // Same order as removeFeature: never preview (and promise) a delete that the confirmed call would refuse.
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };
-  // 1.24 r6 (G1): a feature folder that is a link — the remove deletes the link alone: nothing under it is counted (it used to
+  // a feature folder that is a link — the remove deletes the link alone: nothing under it is counted (it used to
   // count the target's files as "would delete"), and the preview says so (`link: true`).
   if (isLinkEntry(f.dir)) {
     return { ok: false, needsConfirm: true, action: "remove", feature: f.slug, link: true, wouldDelete: { dir: f.dir, files: 0, entries: [], link: true },
@@ -888,7 +888,7 @@ function removePreview(projectDir, name) {
     action: "remove",
     feature: f.slug,
     wouldDelete: { dir: f.dir, files, entries: safeReaddir(f.dir).sort() },
-    fingerprint: featureFolderFingerprint(f.dir), // 1.23: what the MCP server's question showed — removeFeature's opts.preview
+    fingerprint: featureFolderFingerprint(f.dir), // what the MCP server's question showed — removeFeature's opts.preview
     error: i18n.msg(featureLang(projectDir, f.slug)).featureOps.removeNeedsConfirm(f.slug, files),
   };
 }
@@ -901,14 +901,14 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
       // Deleting a spec folder can't be undone: without an explicit confirm (MCP confirm:true, CLI --yes)
       // nothing is deleted and the caller gets what WOULD be.
       if (opts.confirm !== true) return removePreview(projectDir, name);
-      return removeFeature(projectDir, name, opts.preview ? { preview: opts.preview } : {}); // preview: the MCP server's question (1.23)
+      return removeFeature(projectDir, name, opts.preview ? { preview: opts.preview } : {}); // preview: the MCP server's question
     case "archive":
       return archiveFeature(projectDir, name);
     case "rename":
       return renameFeature(projectDir, name, arg);
     case "restore":
       return restoreFeature(projectDir, name);
-    case "flow": // C3: opts.flow (MCP `flow`), else the positional value (CLI `feature flow <name> <flow>`)
+    case "flow": // opts.flow (MCP `flow`), else the positional value (CLI `feature flow <name> <flow>`)
       return setFeatureFlowLocked(projectDir, name, opts.flow != null ? opts.flow : arg);
     default:
       return { ok: false, error: errs(projectDir).badAction };
@@ -931,7 +931,7 @@ const SUP_NL = "\\r?\\n(?![ \\t]*(?:\\r?\\n|$|(?:[-*+]|\\d+[.)])[ \\t]|#{1,6}[ \
 // The value never runs into a second marker (an unclosed one before it stays unclosed).
 // The blanks after the colon: all of them (the value starts at its first other unit) — or, only when that finds no closing
 // "_", all but the last one when the next unit is that "_" (`_Supersedes: _`: a one-blank value). That is what
-// `_Supersedes:[ \t]*(…+?)_` read, without rescanning the value from each of a long blank run's units (1.17 H).
+// `_Supersedes:[ \t]*(…+?)_` read, without rescanning the value from each of a long blank run's units.
 const RE_SUPERSEDES_SRC = "_Supersedes:(?:[ \\t]*(?=[^ \\t])|[ \\t]*?(?=[ \\t]_))((?:(?!_Supersedes:)[^\\r\\n]|" + SUP_NL + ")+?)_(?=[\\s.,;:!?)\\]*`|'\"]|$)";
 // Safety net: a marker never closed runs to the end of its criterion — its foreign ID must never become one of this
 // feature's ACs; supersedesMarkers reports it (reason `unterminated`).
@@ -1039,7 +1039,7 @@ function acOneLine(text, id, max = 200) { // max: the length cap (spec_export sh
   // it ("… days (_Supersedes: …_)." → "… days.").
   let s = String(text || "").replace(new RegExp("(?:(?:^|\\s)[-*+]\\s+)?(?:" + RE_SUPERSEDES_SRC + "|" + RE_SUPERSEDES_OPEN_SRC + ")", "gi"), "\u0000")
     .replace(/(\*\*|__|\*|~~)\s*\u0000\s*\1/g, "\u0000")
-    .replace(/(?<!\s)\s*\(\s*\u0000\s*\)/g, "").replace(/(?<!\s)\s*\u0000\s*(?=[.,;:!?]|$)/g, "").replace(/\u0000/g, " ").replace(/\s+/g, " ").trim(); // (?<!\s): a blank run read from its start only (1.17 H)
+    .replace(/(?<!\s)\s*\(\s*\u0000\s*\)/g, "").replace(/(?<!\s)\s*\u0000\s*(?=[.,;:!?]|$)/g, "").replace(/\u0000/g, " ").replace(/\s+/g, " ").trim(); // (?<!\s): a blank run read from its start only
   if (s.startsWith("|")) s = s.split("|").map((c) => c.trim()).filter((c) => c && c.replace(/[*_`]/g, "") !== id).join(" — ");
   const esc = id.replace(/\./g, "\\.");
   s = s.replace(new RegExp("^(?:\\*\\*|__|\\*|_)?" + esc + "(?:\\*\\*|__|\\*|_)?\\s*(?:[—–:-]\\s*)?"), "").replace(new RegExp("\\s*\\(" + esc + "\\)"), "");
@@ -1053,11 +1053,11 @@ function catalogData(projectDir) {
     const tracks = detectTracks(s.dir);
     const state = stateFromFile(projectDir, statePath(s.dir));
     const reqFull = readContained(projectDir, path.join(s.dir, "requirements.md")) || "";
-    const reqRaw = state.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without its task blocks (1.21 review C1)
+    const reqRaw = state.kind === "change" ? changeViews(reqFull).criteria : reqFull; // a change's criteria: change.md without its task blocks
     return { ...s, tracks, phase: detectPhase(s.dir, tracks), reqRaw, state };
   });
   // Superseded ACs, keyed by the target folder (dirKey: case-folded where the file system is) + ID → the
-  // "<feature>/<AC>" that replaces them. 1.15: only a SHIPPED declaring feature (featureShipped) retires the AC; one still in
+  // "<feature>/<AC>" that replaces them. Only a SHIPPED declaring feature (featureShipped) retires the AC; one still in
   // flight marks it "to be superseded" (supersedePending) — the catalog says what the system does today; one archived
   // without ever shipping (abandoned) declares nothing.
   const supBy = new Map(); // key → every declarer (drafts included)
@@ -1096,7 +1096,7 @@ function catalogData(projectDir) {
     // unapproved criterion edit is not "what the system does today"), a ticked task's latest run failed / its _Verify:_
     // never ran (verificationStatus), or it changed since the finish (staleFinish: a change request or re-approval, then —
     // the cheap checks first, only for a feature still finished — an _Implements:_ file the baseline never recorded, the
-    // bounded walk next_action and drift do). 1.16 U review 3: nor while a gate is pending (pendingGateList — a revoked approval,
+    // bounded walk next_action and drift do). Nor while a gate is pending (pendingGateList — a revoked approval,
     // a phase that became due after the finish: next_action asks for the approval, spec_finish refuses) — existence checks only.
     if (fin && !s.archived && s.phase === "complete") {
       const appr = isObj(s.state.approvals) ? s.state.approvals : {};
@@ -1111,7 +1111,7 @@ function catalogData(projectDir) {
     const f = { feature: s.slug, kind, status, phase: s.phase, tracks: trackLabel(s.tracks), archived: s.archived, acs };
     if (fin) f.finishedAt = fin;
     if (arch && s.archived) f.archivedAt = arch;
-    f.decisions = catalogDecisions(s.dir); // 1.14 C2: decisions.md — { count, items: [{ id, title, kind, supersededBy? }] }
+    f.decisions = catalogDecisions(s.dir); // decisions.md — { count, items: [{ id, title, kind, supersededBy? }] }
     if (kind === "spike") { const si = spikeInfo(s.dir); f.spike = { question: si.question, outcome: si.outcome }; } // 1.14 C2
     return f;
   });
@@ -1126,7 +1126,7 @@ function catalogData(projectDir) {
   const pending = currentAcs.filter((a) => a.supersedePending).length;
   const totals = { features: features.length, acs: all.length, current: currentAcs.length, superseded, pending };
   const data = { lang, features, totals };
-  const xac = crossFeatureAcs(projectDir); // 1.16 Q2: near-duplicate / conflicting criteria across the active features
+  const xac = crossFeatureAcs(projectDir); // near-duplicate / conflicting criteria across the active features
   data.crossAcs = { pairs: xac.pairs, truncated: xac.truncated };
   data.markdown = renderCatalogMd(data, lang, path.basename(path.resolve(projectDir)));
   return data;
@@ -1140,7 +1140,7 @@ function renderCatalogMd(data, lang, proj) {
   let md = `# ${C.title(proj)}\n\n<!-- ${C.autogen} -->\n\n> ${C.intro}\n\n${C.totals(t.features, t.acs, t.current, t.superseded, t.pending)}\n`;
   if (!data.features.length) md += `\n_${C.noFeatures}_\n`;
   for (const f of data.features) {
-    const SP = i18n.msg(lang).spike; // 1.14 C2: a spike reads apart (its question + decision instead of ACs)
+    const SP = i18n.msg(lang).spike; // a spike reads apart (its question + decision instead of ACs)
     md += `\n## ${icon[f.status]} ${f.feature} — ${C.status[f.status]}${f.status === "active" ? ` (${P[f.phase] || f.phase})` : ""}${f.kind === "spike" ? " · 🔬 " + SP.kind : ""}\n\n`;
     const meta = [f.tracks, f.finishedAt ? C.finishedOn(dayOf(f.finishedAt)) : null, f.archivedAt ? C.archivedOn(dayOf(f.archivedAt)) : null].filter(Boolean);
     md += `_${meta.join(" · ")}_\n\n`;
@@ -1163,7 +1163,7 @@ function renderCatalogMd(data, lang, proj) {
   }
   return md + renderCrossAcsMd(data.crossAcs, lang); // 1.16 Q2 (only when there is a pair)
 }
-// spec_export {format: "catalog", write} / `dev-spec catalog [--write]`: the structure (+ markdown unless writing — 1.26: and unless
+// spec_export {format: "catalog", write} / `dev-spec catalog [--write]`: the structure (+ markdown unless writing — and unless
 // opts.includeBody is false, the MCP default: the structure carries the same data). Writing never replaces a same-named file
 // dev-spec didn't generate (the roadmap's guard) — the result is then an error.
 function catalog(projectDir, opts = {}) {
@@ -1175,7 +1175,7 @@ function catalog(projectDir, opts = {}) {
     const E = i18n.msg(data.lang).err;
     if (!fs.existsSync(root)) return { ...res, ok: false, error: E.noSpecs(root) };
     if (!isGeneratedOrAbsent(file)) return { ...res, ok: false, skipped: true, error: E.notGenerated("SPECS.md") };
-    writeFileAtomic(file, i18n.portableCli(data.markdown)); // committed: `dev-spec`, never a machine path (1.21 F3)
+    writeFileAtomic(file, i18n.portableCli(data.markdown)); // committed: `dev-spec`, never a machine path
     res.wrote = true;
   } else if (opts.includeBody !== false) res.markdown = data.markdown;
   return res;
@@ -1334,11 +1334,11 @@ function restoreFeatureLocked(projectDir, name, moved) {
     writeFileAtomic(statePath(to), JSON.stringify(st, null, 2));
   }
   let msInvalid = null;
-  { // 1.16 E3: back into the milestones that kept it as archived (under the roadmap lock, like the edges above)
+  { // back into the milestones that kept it as archived (under the roadmap lock, like the edges above)
     const rmm = readRoadmap(projectDir);
     const ms = milestonesFollow(rmm, slug, "restore");
     if (ms.changed.length) { writeRoadmap(projectDir, rmm); restored.milestones = ms.changed; }
-    msInvalid = ms.invalid; // invalid stored entries were left as they are (1.16 verify NEW-1)
+    msInvalid = ms.invalid; // invalid stored entries were left as they are
   }
   const fromBacklog = pruneBacklog(projectDir, slug); // the feature has a folder again, like createFeature
   const res = { ok: true, action: "restore", feature: slug, from: "_archive/" + slug, restored, skipped };
@@ -1354,7 +1354,7 @@ function restoreFeatureLocked(projectDir, name, moved) {
 // --- drift since finish ---
 
 // Content hash of a file, CRLF-normalized on the raw bytes, or null (missing / not a file / unreadable): the sha1 of its bytes
-// with each 0x0D that precedes a 0x0A dropped. 1.22 review: read in FILE_HASH_CHUNK pieces (readSync), never whole — the old
+// with each 0x0D that precedes a 0x0A dropped. Read in FILE_HASH_CHUNK pieces (readSync), never whole — the old
 // readFileSync().toString("latin1") returned null for a file of 512 MiB or more (V8's string limit: recorded "missing", then
 // "unchanged" forever) and held every file in memory twice (100 MiB: 270 MiB RSS per next_action). A CR ending a piece is
 // carried to the next one (dropped there when it starts with LF). The digests are the old function's, byte for byte.
@@ -1468,7 +1468,7 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
 // the catalog kept calling it finished. tasksText: the ACTIVE tasks (what a finish records). opts.newFiles === false skips
 // the _Implements:_ walk (state only): SessionStart's bounded drift check and the catalog, refreshed after every mutation.
 // → null (no baseline, or still current) | { finishedAt, since: [{ kind: "change-request", n, at } | { kind: "approval",
-// phase, at } | { kind: "untick", task, at } (1.16 U1) | { kind: "revoke", phase, at } (1.16 U review 3)], newFiles: [rel …] }
+// phase, at } | { kind: "untick", task, at } | { kind: "revoke", phase, at }], newFiles: [rel …] }
 function staleFinish(projectDir, st, tasksText, opts = {}) {
   const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
   if (!fin) return null;
@@ -1485,7 +1485,7 @@ function staleFinish(projectDir, st, tasksText, opts = {}) {
   return { finishedAt: typeof fin.at === "string" ? fin.at : null, since, newFiles };
 }
 // What changed the spec after time t: change requests, and approvals of any phase but `except`.
-// 1.22 review: an approval newer than t that signed off the SAME content as the approval of its phase in force at t (a
+// an approval newer than t that signed off the SAME content as the approval of its phase in force at t (a
 // byte-identical re-approval, a role re-signing) changed nothing — it is skipped, and so is a revocation of that phase between
 // the two (the phase is back as it was). Content = the fingerprint (+ designFingerprint): a phase without one (tests) always counts.
 function changesSince(st, t, except) {
@@ -1502,13 +1502,13 @@ function changesSince(st, t, except) {
     if (sameApprovedContent(a, approvalInForceAt(hist, phase, t))) { unchanged.set(phase, at); continue; }
     out.push({ kind: "approval", phase, at: a.at });
   }
-  // 1.16 U1: a task unticked after t (spec_complete_task {undo}) — the work was reopened: a finish or a sign-off older than it no
+  // a task unticked after t (spec_complete_task {undo}) — the work was reopened: a finish or a sign-off older than it no
   // longer speaks for the feature once the task is done again.
   for (const u of Array.isArray(st.unticks) ? st.unticks : []) {
     const at = isRecord(u) && Number.isSafeInteger(u.n) ? timeOf(u.at) : null;
     if (at != null && at > t) out.push({ kind: "untick", task: u.n, at: u.at });
   }
-  // 1.16 U review 3: an approval revoked after t (spec_approve {revoke}) — the phase is pending again, so a finish or a sign-off
+  // an approval revoked after t (spec_approve {revoke}) — the phase is pending again, so a finish or a sign-off
   // older than it no longer speaks for the feature (the catalog kept calling it finished, drift said clean). Only a revocation
   // that removed an approval (a `partial` one withdrew waiting sign-offs: nothing was approved) and never of `except`.
   for (const h of hist) {
@@ -1517,7 +1517,7 @@ function changesSince(st, t, except) {
   }
   return out;
 }
-// 1.22 review — the approval record of `phase` in force at time t: its latest approval record (never a partial sign-off) at or
+// the approval record of `phase` in force at time t: its latest approval record (never a partial sign-off) at or
 // before t, unless a revocation of that phase came after it (still at or before t). → the record | null
 function approvalInForceAt(hist, phase, t) {
   let rec = null, recAt = -Infinity, revAt = -Infinity;
@@ -1531,7 +1531,7 @@ function approvalInForceAt(hist, phase, t) {
   return rec && recAt > revAt ? rec : null;
 }
 // An approval and a history record signed off the same content: both fingerprinted, the same fingerprint and designFingerprint —
-// or (1.24 review 6, E-I5) both carrying the whitespace-insensitive ones, equal: a re-approval after a whitespace-only edit changed nothing.
+// or both carrying the whitespace-insensitive ones, equal: a re-approval after a whitespace-only edit changed nothing.
 const sameApprovedContent = (a, rec) => isRecord(a) && isRecord(rec) && ((typeof a.fingerprint === "string" && !!a.fingerprint &&
   a.fingerprint === rec.fingerprint && (a.designFingerprint || null) === (rec.designFingerprint || null)) ||
   (typeof a.wsFingerprint === "string" && !!a.wsFingerprint && a.wsFingerprint === rec.wsFingerprint && (a.designWsFingerprint || null) === (rec.designWsFingerprint || null)));
@@ -1677,13 +1677,8 @@ function baselineDrift(root, rootReal, fin) {
   return { unchanged, changed, missing, nowPresent, ignored, drifted: changed.length + missing.length + nowPresent.length > 0 };
 }
 
-module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, COMMIT_TITLE_MAX, commitTitle, finishFeature, METRIC_PHASES, timeOf, round1,
-  round2, isoOf, hoursFrom, featureMetrics, stats, metrics, fmtHours, metricsLines, pruneRoadmapRefs, milestoneResult,
-  pruneRoadmapRefsLocked, removeFeature, TOMBSTONE_PREFIX, TOMBSTONE_SWEEP_AGE_MS, sweepTombstones, removeFeatureLocked, featureFolderFingerprint,
-  archiveFeature, archiveFeatureLocked, renameFeature, renameFeatureLocked, renamePlan, renameSupersedesRefs,
-  removePreview, manageFeature, SUP_NL, RE_SUPERSEDES_SRC, RE_SUPERSEDES_OPEN_SRC, stripSupersedes, blockLines, lineMap,
-  criterionAc, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, acOneLine,
-  catalogData, renderCatalogMd, catalog, maybeRefreshCatalog, archiveRecord, reinsertDep, archivedFeature,
-  restoreFeature, restoreFeatureLocked, fileHash, projectFile, realRootOf, BASELINE_CAP, baselineFiles,
-  recordFinishBaseline, staleFinish, changesSince, approvalInForceAt, sameApprovedContent, revokedSinceList, executionSignOffStale, signOffWhyText,
-  staleFinishText, drift, baselineDrift, __link };
+module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, commitTitle, finishFeature, timeOf, round1, round2,
+  stats, metrics, metricsLines, removeFeature, archiveFeature, renameFeature, manageFeature, stripSupersedes, blockLines,
+  lineMap, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, acOneLine, catalogData,
+  catalog, maybeRefreshCatalog, restoreFeature, fileHash, realRootOf, baselineFiles, recordFinishBaseline, staleFinish,
+  changesSince, sameApprovedContent, executionSignOffStale, signOffWhyText, staleFinishText, drift, baselineDrift, __link };

@@ -16,13 +16,13 @@ function closedEarly(CLI, args, env) {
   });
 }
 
-exports.run = async ({ ok, all, run, tmp, CLI }) => {
+exports.run = async ({ ok, all, run, runIn, spawnIn, tmp, CLI }) => {
   // 1.24 r6 B2: a stdout reader that stops early (`export --md | head -1`) ended in an unhandled 'error' (EPIPE) with a stack
   // trace and exit 1 — the CLI now ends quietly with the status the command set (as the MCP server does since 1.22).
   {
     const p = path.join(tmp, "r6b2-epipe");
-    run(["init", "--project", p]);
-    run(["create", "Login", "--project", p]);
+    runIn(["init", "--project", p]);
+    runIn(["create", "Login", "--project", p]);
     const req = path.join(p, ".specs", "login", "requirements.md");
     let s = "# Requirements: Login\n\n## User Stories\n\n### US-1 — sign in\n\n#### Acceptance Criteria\n";
     for (let i = 1; i <= 3000; i++) s += "- **US-1.AC-" + i + "** — WHEN the user signs in from device number " + i + " THE SYSTEM SHALL open a session for that device\n";
@@ -43,13 +43,14 @@ exports.run = async ({ ok, all, run, tmp, CLI }) => {
     const ROOT = path.join(path.dirname(CLI), "..");
     const pkgVersion = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
     const pt = path.join(tmp, "r6i1-pt");
-    run(["init", "--lang", "pt", "--project", pt]);
+    runIn(["init", "--lang", "pt", "--project", pt]);
     const env0 = { ...process.env };
     for (const k of ["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "DEV_SPEC_BUNDLE", "DEV_SPEC_BUNDLE_PATH"]) delete env0[k];
     const neutral = path.join(tmp, "r6i1-cwd");
     fs.mkdirSync(neutral, { recursive: true });
-    const v = (args, env) => {
-      const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", cwd: neutral, env: { ...env0, ...(env || {}) } });
+    const v = (args, env) => { // in-process (1.27) — but a bundle: the facade chooses it when it loads (a process of its own)
+      const opts = { encoding: "utf8", cwd: neutral, env: { ...env0, ...(env || {}) } };
+      const r = opts.env.DEV_SPEC_BUNDLE ? spawnSync(process.execPath, [CLI, ...args], opts) : spawnIn(args, opts);
       let j = null;
       try { j = JSON.parse(r.stdout); } catch { /* text */ }
       return { code: r.status, out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", j };
@@ -73,7 +74,7 @@ exports.run = async ({ ok, all, run, tmp, CLI }) => {
 
     // The bundle: used when current, else skipped with the reason — missing, another version, broken.
     const bfile = path.join(tmp, "r6i1-bundle", "spec.bundle.js");
-    run(["bundle", "--out", bfile]);
+    runIn(["bundle", "--out", bfile]);
     const other = path.join(tmp, "r6i1-bundle", "other.js"), broken = path.join(tmp, "r6i1-bundle", "broken.js");
     fs.writeFileSync(other, "module.exports = { stamp: { version: \"0.0.1\", files: [[\"i18n.js\", 1, 1]] }, load: () => null };\n");
     fs.writeFileSync(broken, "throw new Error('not a bundle');\n");
@@ -92,9 +93,9 @@ exports.run = async ({ ok, all, run, tmp, CLI }) => {
   // COMMAND_OPTIONS), never the whole help — and `status -h` no longer looked for a feature named "h".
   {
     const p = path.join(tmp, "r6i3-help");
-    run(["init", "--project", p]);
-    run(["create", "Login", "--project", p]);
-    const h = (args) => run([...args, "--project", p]);
+    runIn(["init", "--project", p]);
+    runIn(["create", "Login", "--project", p]);
+    const h = (args) => runIn([...args, "--project", p]);
     const st = h(["status", "--help"]), stH = h(["status", "-h"]), done = h(["done", "login", "1", "-h"]), ap = h(["approve", "--help"]), apHelp = h(["help", "approve"]);
     const na = h(["na", "-h"]), whole = h(["-h"]), unknown = h(["frobnicate", "--help"]);
     const tasks = fs.readFileSync(path.join(p, ".specs", "login", "tasks.md"), "utf8");
@@ -114,7 +115,7 @@ exports.run = async ({ ok, all, run, tmp, CLI }) => {
   // Ctrl+Z Enter); piped input prints none. (A TTY can't be faked here: the piped side is what this asserts.)
   {
     const p = path.join(tmp, "r6i9-stdin");
-    run(["init", "--project", p]);
+    runIn(["init", "--project", p]);
     const r = spawnSync(process.execPath, [CLI, "ears", "-", "--project", p], { encoding: "utf8", input: "- **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL open a session\n" });
     const S = require(path.join(path.dirname(CLI), "..", "mcp", "lib", "i18n.js"));
     const hints = ["en", "pt", "es", "pt-BR"].map((l) => S.msg(l).cliOutput.stdinHint);
@@ -130,12 +131,12 @@ exports.run = async ({ ok, all, run, tmp, CLI }) => {
   {
     const ESC = String.fromCharCode(27), BEL = String.fromCharCode(7), CSI1 = String.fromCharCode(0x9b), CR = String.fromCharCode(13);
     const p = path.join(tmp, "r7-ctl");
-    run(["init", "--project", p]);
-    run(["create", "Esc", "core", "--project", p]);
+    runIn(["init", "--project", p]);
+    runIn(["create", "Esc", "core", "--project", p]);
     const tasks = path.join(p, ".specs", "esc", "tasks.md");
     const evil = "node -e \"require('fs').writeFileSync('ran.txt','x')\" " + ESC + "[2K" + CR + "$ npm test";
     fs.writeFileSync(tasks, "# Tasks\n\n## Phase: Build\n- [ ] 1. [US1] Title " + ESC + "]0;pwned" + BEL + "done " + CSI1 + "31m\n  - _Verify: " + evil + "_\n- [ ] 2. [US1] Plain\n");
-    const cli = (args) => spawnSync(process.execPath, [CLI, ...args, "--project", p], { encoding: "utf8" });
+    const cli = (args) => (args.includes("--run") ? spawnSync(process.execPath, [CLI, ...args, "--project", p], { encoding: "utf8" }) : spawnIn([...args, "--project", p])); // a --run: spawned
     const raw = (s) => [...String(s)].filter((ch) => { const c = ch.charCodeAt(0); return (c < 32 && c !== 9 && c !== 10 && c !== 13) || (c >= 0x7f && c <= 0x9f); }).length;
     const done = cli(["done", "esc", "1", "--run", "--json"]);
     let dj = null;

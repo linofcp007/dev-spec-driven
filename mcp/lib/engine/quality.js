@@ -2,8 +2,8 @@
 
 /**
  * dev-spec-driven engine — spec quality: cross-feature criteria, glossary, design weigh, clarify.
- * 1.16 Q2 cross-feature acceptance criteria, Q3 the glossary, 1.17 A1 the design's trade-offs and risks, A2 the
- * constraint nudge, and spec_clarify.
+ * Cross-feature acceptance criteria, the glossary, the design's trade-offs and risks, the constraint nudge, and
+ * spec_clarify.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -12,31 +12,31 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders, clarificationMarkers,
+let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clarificationMarkers,
   criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs, featureLang, ghostMarkers,
   headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord, markerTracks, normalizeLang,
   OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock, packTracks, placeholderReport,
   projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE, RE_SUCCESS_CRITERIA,
   RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile, replaceHtmlCommentSpans,
-  savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnd, stripEnds,
+  savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter, stripEnds,
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs;
-function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, atxHeading, bracketPlaceholders,
+function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
   markerTracks, normalizeLang, OPTIONAL_TRACKS, packDesignBlock, packOf, packRegistry, packRequirementsBlock,
   packTracks, placeholderReport, projectLang, RE_EDGE_CASES, RE_INDEPENDENT_TEST, RE_LIST_ITEM, RE_NFR, RE_OUT_OF_SCOPE,
   RE_SUCCESS_CRITERIA, RE_TODO_SENTINEL, readCacheKey, readContained, readIfExists, readJson, readTemplateFile,
   replaceHtmlCommentSpans, savedTracks, scanTaskLines, specsRoot, stateFromFile, statePath, steeringFrontMatter,
-  stripEnd, stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
+  stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs } = E); }
 
 // ---------------------------------------------------------------------------
-// 1.16 Q — spec quality: steering amendments (Q1) · cross-feature acceptance criteria (Q2) · the glossary (Q3)
+// spec quality: steering amendments · cross-feature acceptance criteria · the glossary
 // ---------------------------------------------------------------------------
 
 // --- Q2: cross-feature acceptance criteria — near-duplicates and likely conflicts ---
@@ -205,7 +205,7 @@ function templateShapeTable(texts) {
   return { skel, shapes };
 }
 // Every built-in template criterion (EN / PT / pt-BR / ES, every built-in track, the bugfix requirements) — process-wide. 1.24 r6
-// I-I2: the requirement templates come from the corpus (markdown.js builtinTemplateReqs — acIndex reads them here, live) —
+// the requirement templates come from the corpus (markdown.js builtinTemplateReqs — acIndex reads them here, live) —
 // rendering every language's here loaded pt.js, es.js and pt-BR into every English doctor / next_action. Kept while that list is
 // the same array (a corpus dropped under a long-lived process hands out a new one).
 let XAC_TEMPLATES = null; // { docs, table }
@@ -241,7 +241,7 @@ const jaccard = (a, b) => {
 // and the pairs computed from it: table.results) is reused while no signature changed and no feature declares _Supersedes:_
 // (XAC_TABLE_CACHE). A feature whose tracks are inferred from its files (no saved list, pre-1.13) or that recorded track-pack
 // markers (ghost markers are per call) is never cached; the other features' rows and the table are keyed by the call's
-// ghost-marker set too (1.16 verify NEW-2). Cached rows were built after readContained's containment check; the
+// ghost-marker set too. Cached rows were built after readContained's containment check; the
 // signature carries the inode.
 const XAC_FEATURE_CACHE = new Map(); // readCacheKey(feature dir) → { stateSig, ctx, kind, lang, tracks, reqSig, ghosts, rows, hasSup } | { archived, reqSig, hasSup }
 const XAC_FEATURE_CACHE_MAX = 5000;
@@ -268,7 +268,7 @@ function xacContextSig(projectDir) {
 function xacFeatureRows(projectDir, s, state, tracks, tmplOf) {
   const full = readContained(projectDir, path.join(s.dir, "requirements.md"));
   if (!full) return { rows: [], hasSup: false };
-  const raw = state.kind === "change" ? changeViews(full).criteria : full; // a change's criteria: change.md without its task blocks (1.21 review C1)
+  const raw = state.kind === "change" ? changeViews(full).criteria : full; // a change's criteria: change.md without its task blocks
   const lng = typeof state.lang === "string" ? state.lang : projectLang(projectDir);
   const rows = [];
   for (const e of acIndex(activeDesign(raw, tracks)).values()) {
@@ -332,7 +332,7 @@ function xacTable(projectDir) {
   }
   // The ghost markers of this call (missing packs a feature's packMarkers still name — noted by detectTracks in pass 1, per call):
   // they make a heading inactive in EVERY feature's requirements.md, so a feature's cached rows and the cached table hold only
-  // for the same set (1.16 verify NEW-2: a removed feature took the last ghost of a deleted pack with it, and a long-lived
+  // for the same set (a removed feature took the last ghost of a deleted pack with it, and a long-lived
   // process kept the rows computed with its [MARKER] sections dropped — a fresh process reported the conflict).
   const ghosts = ghostMarkers().map(([n, m]) => n + "=" + m).sort().join(",");
   // Pass 2: each feature's rows — from the cache while its requirements.md and the ghost markers are unchanged too.
@@ -512,7 +512,7 @@ function glossaryEntry(cur) {
   const avoid = [];
   const seen = new Set([foldTerm(term)]);
   // /_Avoid:[ \t]*([^_]*)_/ read as _Avoid:([^_]*)_ minus the leading blanks: the same matches, without the quadratic
-  // rescan of a long blank run (1.17 H).
+  // rescan of a long blank run.
   const rest = cur.rest.join(" ").replace(/_Avoid:([^_]*)_/gi, (m, list0) => {
     const list = stripStart(list0, unitIn(" \t"));
     for (const w0 of list.split(/[,;]/)) {
@@ -530,7 +530,7 @@ const RE_WORD_BEFORE = "(?<![\\p{L}\\p{N}_])", RE_WORD_AFTER = "(?![\\p{L}\\p{N}
 // One case-insensitive regex for a word list (longest first; a plural "s" / "es" allowed; spaces match any whitespace).
 const wordListRe = (words, capture) => new RegExp(RE_WORD_BEFORE + (capture ? "(" : "(?:") + words.slice().sort((a, b) => b.length - a.length)
   .map((w) => escRe(w).replace(/\s+/g, "\\s+")).join("|") + ")(?:e?s)?" + RE_WORD_AFTER, "giu");
-// --- the template text a glossary check never reads (1.16 Q review) ---
+// --- the template text a glossary check never reads ---
 // A fresh scaffold is the tool's words, not the user's: "## User Stories", "As a [role]…", the tracks' template criteria ("a
 // user of tenant A…"), a slot's own example ("[e.g., 90% of users…]"). Every visible line the templates write — the built-in
 // ones (templateCorpus, in the feature's language; pt-BR through toPtBr), the project's (.specs/templates/) and its track packs'
@@ -603,7 +603,7 @@ function glossBuiltinLines(lang) {
     put(() => i18n.design(a, base));
   }
   for (const tr of VALID_TRACKS) put(() => i18n.trackDesignBlock(tr, base));
-  // 1.21 F5 — the sized scaffolds' own lines (S's one story, the merged weigh section, the Error Handling pointer) and a change
+  // the sized scaffolds' own lines (S's one story, the merged weigh section, the Error Handling pointer) and a change
   for (const size of ["s", "m"]) {
     for (const tracks of [["core"], VALID_TRACKS]) {
       const a = { name: "x", tracks, label: trackLabel(tracks), slug: "x", summary: "", size };
@@ -688,7 +688,7 @@ function glossaryHits(dir, gl, opts = {}) {
   const slotless = (s) => (s.includes("[") ? bracketPlaceholders(s, new Set()).reduce((a, p) => a.split(p).join(" ".repeat(p.length)), s) : s);
   const hits = new Map();
   let total = 0;
-  for (const file of isChangeDir(dir) ? [CHANGE_FILE] : ["requirements.md", "design.md"]) { // a change: its one file, named as such (1.21 verify V6)
+  for (const file of isChangeDir(dir) ? [CHANGE_FILE] : ["requirements.md", "design.md"]) { // a change: its one file, named as such
     const text = readIfExists(path.join(dir, file));
     if (text == null) continue;
     scanTaskLines(text).forEach((l, i) => {
@@ -733,7 +733,7 @@ function briefGlossary(root, text) {
   return { items, omitted };
 }
 
-// 1.17 A1 — every design weighs its choices: the core "Alternatives & Trade-offs" and "Risks" sections, found by weighSection()
+// every design weighs its choices: the core "Alternatives & Trade-offs" and "Risks" sections, found by weighSection()
 // (a synonym that NAMES the heading — see below), so hand-written and PT/ES designs are recognized. Doctor only WARNS
 // (design-tradeoffs / design-risks) — never an approval check — and only on a design not approved yet or approved by 1.17+
 // (`weigh: true` on the approval, A review 3): a design approved before 1.17 is never flagged. A fresh scaffold's sections are
@@ -754,7 +754,7 @@ const RISKS_SYN = ["risks", "risk", "known risks", "key risks", "main risks", "o
   "avaliação de riscos", "avaliacao de riscos", "matriz de riscos", "registo de riscos", "registro de riscos",
   "riesgos", "riesgo", "riesgos conocidos", "principales riesgos", "análisis de riesgos", "analisis de riesgos", "evaluación de riesgos",
   "evaluacion de riesgos", "matriz de riesgos", "registro de riesgos"];
-// 1.19 R1 — every design names what it REUSES: the core "Reuse & Integration" section (the existing modules / components /
+// every design names what it REUSES: the core "Reuse & Integration" section (the existing modules / components /
 // helpers / services it uses, what it extends, what is new and why nothing existing fits, where the new code lives). Found by
 // weighSection() like the two above; "Integration points" is the brownfield habit (and integration-plan.md's own heading — a
 // brownfield feature's filled Integration Points stand in for a missing or empty design section, designReuseFallback()).
@@ -771,8 +771,8 @@ const REUSE_SYN = ["reuse", "code reuse", "reuse of existing code", "reused comp
   "integracion con el codigo existente", "integración con el sistema existente", "integracion con el sistema existente"];
 // [id, synonyms, the fewest entries that count as weighed, the approval stamp the check needs]: a decision needs at least two
 // options; one honest line about the risks (a table row, a bullet, or "no material risk, because X") is enough, and so is one
-// about reuse ("Greenfield: nothing to reuse yet"). The stamp (R1): a design approval made before a check existed never has it,
-// and is never flagged by that check — `weigh` (1.17: trade-offs, risks), `reuse` (1.19). A 1.17 / 1.18 approval (weigh
+// about reuse ("Greenfield: nothing to reuse yet"). The stamp: a design approval made before a check existed never has it,
+// and is never flagged by that check — `weigh` (trade-offs, risks), `reuse`. A 1.17 / 1.18 approval (weigh
 // without reuse) is still held to the trade-offs and risks, never to the reuse section.
 const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2, "weigh"], ["design-risks", RISKS_SYN, 0, "weigh"], ["design-reuse", REUSE_SYN, 0, "reuse"]];
 const DESIGN_WEIGH_IDS = new Set(DESIGN_WEIGH.map(([id]) => id));
@@ -783,11 +783,7 @@ const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19" };
 // of … e / ou / de … y / o / en …) — never a modifier: "## Risk-based rate limiting", "## Options parser", "## Riskiest
 // assumptions" are other sections. Trailing emphasis, emoji or closing #s are fine (no letter or digit after the synonym).
 const RE_WEIGH_HEADING_REST = /^(?:[^\p{L}\p{N}]*$|\s*[:,;(\[/&+|—–.]|\s+-(?=\s|$)|\s+(?:and|or|vs|versus|for|of|to|in|on|per|with|e|ou|de|do|da|dos|das|para|por|em|no|na|com|y|o|u|del|en|con)(?![\p{L}\p{N}]))/u;
-function weighHeadingMatches(line, syns) {
-  const m = atxHeading(line, 2, 6, "raw"); // /^#{2,6}\s+(.*)$/ — never the H1 title (it carries the feature name)
-  return !!m && weighTextMatches(m.text, syns);
-}
-// The same test on a heading's text (a headingEntries entry — ATX or setext; the caller keeps the H1 out).
+// The test on a heading's text (a headingEntries entry — ATX or setext; the caller keeps the H1 out).
 function weighTextMatches(text, syns) {
   let t = String(text).toLowerCase();
   const lead = headingLeadRe();
@@ -803,7 +799,7 @@ function weighSection(md, syns) {
 // The section weighSection reads → { level, title (atxHeading's trimmed text — designSections' title for a `##` one), body }
 // or null. (R review 2: the brief leaves THIS section — never another one a synonym names — out of "Design context", and only
 // when its Reuse part quotes all of it.)
-// The headings come from the ONE heading reader (review 5, M2 — headingEntries: never in a comment or a fence, setext and indented
+// The headings come from the ONE heading reader (headingEntries: never in a comment or a fence, setext and indented
 // ATX too): a "## Risks" section commented out read as written. The title is the entry's text (closing "#"s dropped) — as
 // designSections reads it.
 function weighSectionHead(md, syns) {
@@ -817,7 +813,7 @@ function weighSectionHead(md, syns) {
   return { level: start.level, title: start.text, body: lines.slice(start.body, end ? end.i : lines.length).join("\n") };
 }
 // A unit's text is a generic slot word (TODO, TBD, TBC, FIXME, "…", "a definir" — isGenericSlot; "Pending", "[TBD]" — 1.24 review 6,
-// F4: genericAnswer, writtenContent's rule), emphasis and trailing punctuation aside: a Risks section saying "Pending." is no answer.
+// genericAnswer, writtenContent's rule), emphasis and trailing punctuation aside: a Risks section saying "Pending." is no answer.
 const genericUnit = (s) => genericAnswer(s);
 // What a design section holds (A review 6): `entries` = table data rows (a table's header and separator rows skipped) + list items
 // at the section's outermost list level (indented up to 3 spaces; deeper ones are that item's pros / cons) — or, when that is
@@ -840,7 +836,7 @@ function designBody(body) {
     inTable = false;
     const li = l.match(/^( *)(?:[-*+]|\d+[.)])\s+(\S.*)$/);
     if (li) { if (genericUnit(li[2])) generic++; else items.push(li[1].length); continue; }
-    // (?=[^*\n]*\p{L}): the bold run's letter found by one look ahead — [^*\n]*\p{L}[^*\n]* backtracked quadratically (1.17 H)
+    // (?=[^*\n]*\p{L}): the bold run's letter found by one look ahead — [^*\n]*\p{L}[^*\n]* backtracked quadratically
     if (/^#{3,6}\s+\S/.test(l) || /^ {0,3}\*\*(?=[^*\n]*\p{L})[^*\n]*\*\*/u.test(l)) { heads++; continue; }
     if (genericUnit(l)) { generic++; continue; }
     proseWords += (l.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
@@ -849,7 +845,6 @@ function designBody(body) {
   const listed = top <= 3 ? items.filter((n) => n < top + 2).length : 0;
   return { entries: Math.max(rows + listed, heads), proseWords, generic };
 }
-const designEntries = (body) => designBody(body).entries;
 // A trade-offs section with no option list passes on a written paragraph of at least this many words: the options weighed in
 // prose, or the honest "No key decision here: the feature only reads existing data" (A review 6 — the escape Risks has).
 const WEIGH_PROSE_WORDS = 3;
@@ -866,7 +861,7 @@ function designWeighState(design, syn, min) {
   if (!b.entries && b.proseWords >= (min ? WEIGH_PROSE_WORDS : 1)) return { status: "filled", entries: 0, prose: true };
   return { status: "few", entries: b.entries };
 }
-// 1.19 R1 — a brownfield feature's integration-plan.md: its filled "Integration Points" (the existing components / modules the
+// a brownfield feature's integration-plan.md: its filled "Integration Points" (the existing components / modules the
 // feature touches — REUSE_SYN names that heading) answer the reuse question when the design has no Reuse & Integration section
 // or leaves it empty. A design section still holding its template slots stays a warn (the placeholder gate owns it).
 function designReuseFallback(integrationPlan) {
@@ -875,13 +870,13 @@ function designReuseFallback(integrationPlan) {
   return st.status === "filled" ? st : null;
 }
 // The doctor checks over an (active) design → [{ id, status: pass | warn, detail, state, entries }] — design-tradeoffs,
-// design-risks, design-reuse (DESIGN_WEIGH order). A design approved before a check existed (A review 3; R1) — what that check
+// design-risks, design-reuse (DESIGN_WEIGH order). A design approved before a check existed (A review 3) — what that check
 // would warn passes, with a note: the sections are asked of a design from its next approval on, never of one already signed off
 // (a finished feature following the advice would re-open its re-review, changed-since-approval, stale finish and execution
 // sign-off). opts.approval = the design approval record (approvals.design) — each check reads its own stamp (`weigh` / `reuse`);
 // opts.legacy = true (the 1.17 form) treats every check as approved before it. opts.integrationPlan = integration-plan.md's text
 // (designReuseFallback — state "integration").
-// 1.21 F5 — a SIZE S design merges the three into ONE section, "Decisions, reuse & risks" (the sized builders write it): a
+// a SIZE S design merges the three into ONE section, "Decisions, reuse & risks" (the sized builders write it): a
 // design with none of the three sections of its own and that merged one has each check read it — one entry or a line of prose
 // answers each (min 0: "nothing to reuse", "no alternative worth weighing", "no material risk" are answers).
 const WEIGH_MERGED_SYN = ["decisions, reuse & risks", "decisions, reuse and risks", "decisões, reutilização e riscos", "decisoes, reutilizacao e riscos",
@@ -904,11 +899,8 @@ function designWeighChecks(design, lang, opts = {}) {
     return { id, status: st.status === "filled" ? "pass" : "warn", detail, state: st.status, entries: st.entries };
   });
 }
-// A design approval made before 1.17 (A review 3): an approval record without the `weigh` stamp approvePhase adds since 1.17.
-// With a stamp name (R1): made before that stamp's check existed — `reuse` for the 1.19 design-reuse check.
-const designApprovedBeforeWeigh = (approvals, stamp = "weigh") => isRecord(approvals && approvals.design) && approvals.design[stamp] !== true;
 
-// 1.19 R2 — the task brief's "Reuse" section: search before you write, starting where the plan points. Two bounded parts:
+// the task brief's "Reuse" section: search before you write, starting where the plan points. Two bounded parts:
 // the design's Reuse & Integration entries that name this task's files (the file, a sibling in its folder, a folder above it),
 // its folders or its acceptance criteria; and the existing source files in the folders of its _Implements:_ targets (names
 // only) — where a duplicate would most likely hide. Read-only: one bounded directory read per folder, never a walk, never a
@@ -1097,7 +1089,7 @@ function reuseQuotedSection(sections, design, reuse) {
 // (the ones naming this task, bounded), omitted (matching ones left out for size), files, more (nearby files beyond the cap),
 // truncated (only when true: a folder was read up to its cap — `more` is "at least") }.
 function briefReuse(projectDir, design, implementsList, acIds) {
-  // 1.21 F5: a size S design's merged "Decisions, reuse & risks" section answers for a Reuse section it doesn't have
+  // a size S design's merged "Decisions, reuse & risks" section answers for a Reuse section it doesn't have
   const syn = design != null && weighSection(design, REUSE_SYN) == null && weighSection(design, WEIGH_MERGED_SYN) != null ? WEIGH_MERGED_SYN : REUSE_SYN;
   const body = design == null ? null : weighSection(design, syn);
   const state = design == null ? "missing" : designWeighState(design, syn, 0).status;
@@ -1124,7 +1116,7 @@ const RE_RATE_LIMIT = /rate[\s-]?limit|throttl|limites? de (?:pedidos|taxa|solic
 const RE_ACCESS_DENIED = /unauth(?:enticated|ori[sz]ed)|forbidden|(?<!\d)40[13](?!\d)|\bden(?:y|ies|ied)\b|\breject|n[ãa]o (?:autenticad|autorizad)|no (?:autenticad|autorizad)|\brecus|\brejeit|\bdeneg|\brechaz/i;
 // +privacy: a data subject right written as a criterion (erasure / export / portability), EN/PT/ES.
 const RE_SUBJECT_RIGHTS = /erasure|delet|export|portab|apag|elimin|supres|borrar|borrad/i;
-// 1.17 A2 — the constraint nudge: the words that make consistency a design question, by concept (a queue, events, async work,
+// the constraint nudge: the words that make consistency a design question, by concept (a queue, events, async work,
 // concurrency, transactions, retries) plus STRONG phrases that can only mean it (a message queue, an event bus, publishing an
 // event, a background job, concurrent writes, a race condition, a distributed transaction, a webhook, Kafka…). A weak word alone
 // is often something else — "click event", "Retry button", "Images load async", a statement listing "transactions" — so the
@@ -1231,7 +1223,7 @@ function userSpecText(text, tracks, sets) {
 // fires it, nor does a template criterion the spec keeps as written). Answered (A review 2) anywhere in that text — /clarify folds
 // the answer into requirements.md, and /grill asks in Phase 1 while design.md is still a template. Only for a plain feature (a
 // bugfix restores behaviour; a spike has no design) and not with +dist (its Consistency Model / Delivery & Idempotency sections
-// ask the same, 1.17 D).
+// ask the same).
 function constraintNudge(projectDir, dir, reqs, tracks, kind, lang) {
   if (kind !== "feature" || tracks.includes("dist")) return null;
   const lng = normalizeLang(lang || "en");
@@ -1252,8 +1244,8 @@ function constraintNudge(projectDir, dir, reqs, tracks, kind, lang) {
   if (RE_CONSISTENCY_ANSWER.test(text) || RE_ACID.test(text)) return null;
   return { code: "consistency-unstated", signals };
 }
-// +dist (1.17 D): a criterion about duplicated / redelivered messages, and one about a dependency being down, EN/PT/ES.
-// (1.17 D review: + "arrives twice" / "duas vezes" / "dos veces", a redelivery; + "goes down", "unreachable", ES "está caído" — the
+// +dist: a criterion about duplicated / redelivered messages, and one about a dependency being down, EN/PT/ES.
+// (+ "arrives twice" / "duas vezes" / "dos veces", a redelivery; + "goes down", "unreachable", ES "está caído" — the
 // ES template's own word —, pt-BR "fora do ar", PT "em baixo" / "inacessível". Literal alternations: linear.)
 const RE_DIST_DELIVERY = /idempot|duplicat|duplica|dedup|exactly[ -]once|at[ -]least[ -]once|exatamente uma vez|pelo menos uma vez|exactamente una vez|al menos una vez|more than once|mais de uma vez|más de una vez|twice|duas vezes|dos veces|re-?deliver|reentreg/i;
 const RE_DIST_FAILURE = /unavailable|is down|goes down|went down|unreachable|timeout|timed out|times out|indispon[íi]ve|n[ãa]o est[áa] dispon[íi]vel|fora do ar|(?:est[áa]|estiver|fica|ficar) em baixo|inacess[íi]vel|no est[áa] disponible|est[áa] ca[íi]d[oa]|se cae|inalcanzable|tempo limite|tiempo de espera|partition|parti[çc][ãa]o|partici[óo]n/i;
@@ -1261,7 +1253,7 @@ function clarify(projectDir, name) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const dir = f.dir;
-  // 1.21 verify V6 — clarify asks what THIS kind / size's doctor asks, never more: a change (one change.md) is read as its
+  // clarify asks what THIS kind / size's doctor asks, never more: a change (one change.md) is read as its
   // criteria view (changeViews — the task blocks out; lines still point into change.md) and asked only about its own sections,
   // its EARS and its markers; a size s feature (one story — "a second story, edge cases or NFRs mean size m") is not asked for
   // edge cases or NFRs. It looped needs-clarification on a change doctor passed (/grill confirms with spec_clarify).
@@ -1281,7 +1273,7 @@ function clarify(projectDir, name) {
 
   // Author-marked ambiguities take priority — resolve every [NEEDS CLARIFICATION] first (a change: anywhere in change.md).
   const markers = clarificationMarkers(full);
-  // r5 review: a bugfix's bug.md too — its Reproduction / Root Cause are what its requirements / design gates sign off (they refuse on these)
+  // a bugfix's bug.md too — its Reproduction / Root Cause are what its requirements / design gates sign off (they refuse on these)
   if (kind === "bugfix") markers.push(...clarificationMarkers(readIfExists(path.join(dir, "bug.md")) || ""));
   markers.forEach((mk) => add(q.resolveMarker(mk)));
 
@@ -1307,7 +1299,7 @@ function clarify(projectDir, name) {
   const tbd = [];
   // Comments are blanked, not deleted: their newlines stay, so `i` is the real line — the same index `drop` and
   // artifactReport's items use (stripping a multi-line comment shifted every TBD below it). The comments: /<!--[\s\S]*?-->/g
-  // by replaceHtmlCommentSpans (1.17 H).
+  // by replaceHtmlCommentSpans.
   replaceHtmlCommentSpans(full, (m) => m.replace(/[^\r\n]/g, " ")).split(/\r?\n/).forEach((l, i) => { if (!drop.has(i) && /(?<![\p{L}])TBD(?![\p{L}])/u.test(l.slice(0, 2000))) tbd.push({ line: i + 1, text: "TBD" }); });
   const slots = [...active.items, ...tbd].sort((a, b) => a.line - b.line);
   if (slots.length) {
@@ -1337,7 +1329,7 @@ function clarify(projectDir, name) {
   if (tracks.includes("sec") && !/secret|segredo|secreto|credential|credencia|token/i.test(reqs)) add(QP.secSecrets);
   if (tracks.includes("privacy") && !RE_SUBJECT_RIGHTS.test(reqs)) add(QP.privacyRights);
   if (tracks.includes("privacy") && !/retention|reten[çc][ãa]o|retenci[óo]n|conserva[çc][ãa]o|conservaci[óo]n/i.test(reqs)) add(QP.privacyRetention);
-  // 1.17 A2 — the constraint nudge (one question, bounded): the user's text of the spec names queues / events / concurrency /
+  // the constraint nudge (one question, bounded): the user's text of the spec names queues / events / concurrency /
   // transactions (two concepts, or one strong phrase), and neither requirements.md nor design.md states a consistency model,
   // a delivery guarantee or idempotency (A review 1 / 2 / 7).
   const nudge = constraintNudge(projectDir, dir, reqs, tracks, (readJson(statePath(dir)).data || {}).kind || "feature", featureLang(projectDir, name));
@@ -1346,7 +1338,7 @@ function clarify(projectDir, name) {
   if (tracks.includes("dist") && !RE_DIST_FAILURE.test(reqs)) add(QP.distFailure);
   return clarifyResult(projectDir, f, tracks, fm, add, questions, nudge);
 }
-// The glossary questions and the result, for every kind. 1.16 Q3 — the glossary: every word it says to avoid that
+// The glossary questions and the result, for every kind. The glossary: every word it says to avoid that
 // requirements.md / design.md use (a change: change.md) — at most 10 questions, then one pointing at doctor. No glossary →
 // nothing asked.
 function clarifyResult(projectDir, f, tracks, fm, add, questions, nudge) {
@@ -1363,7 +1355,7 @@ function clarifyResult(projectDir, f, tracks, fm, add, questions, nudge) {
   if (gl && gl.truncated) Object.assign(res, { glossaryTruncated: { read: gl.entries.length, total: gl.total }, glossaryNote: Q.glossaryTruncated(gl.entries.length, gl.total) });
   return res;
 }
-// 1.21 verify V6 — a change's own questions (doctor's view of a change): its Summary and Approach written, 1–3 EARS criteria, its
+// a change's own questions (doctor's view of a change): its Summary and Approach written, 1–3 EARS criteria, its
 // XS scope (change-scope's detail) — never stories, success criteria, priorities, edge cases, NFRs, IF…THEN or a track's questions.
 const CHANGE_SUMMARY_SYN = ["summary", "resumo", "resumen"];
 const CHANGE_APPROACH_SYN = ["approach", "abordagem", "enfoque"];
@@ -1379,21 +1371,6 @@ function clarifyChange(projectDir, f, c) {
   return clarifyResult(projectDir, f, tracks, fm, add, questions, null);
 }
 
-module.exports = { XAC_DUPLICATE, XAC_CONFLICT, XAC_TRIGGER, XAC_RESPONSE, XAC_MIN_WORDS, XAC_MAX_CRITERIA,
-  XAC_MAX_COMPARISONS, XAC_MAX_PAIRS, XAC_STOP, XAC_MODALS, RE_XAC_SYS_MODAL, RE_XAC_MODAL, XAC_TRIGGER_NEG, RE_XAC_NT,
-  RE_XAC_CANNOT, RE_XAC_NEG, RE_XAC_IDS, xacNumber, xacStem, xacWords, RE_XAC_NUM, xacNumbers, acShape, xacClauseSim,
-  xacOpposed, acSkeleton, templateShapeTable, builtinTemplateAcs, projectTemplateAcs, jaccard, XAC_FEATURE_CACHE,
-  XAC_FEATURE_CACHE_MAX, XAC_RACY_MS, xacStatSig, xacContextSig, xacFeatureRows, xacTable, crossFeatureAcs,
-  crossFeatureAcsOf, comparePair, crossAcItem, crossAcDoctorDetail, renderCrossAcsMd, GLOSSARY_FILE,
-  GLOSSARY_MAX_ENTRIES, GLOSSARY_MAX_AVOID, GLOSSARY_MAX_HITS, GLOSSARY_BRIEF_MAX, GLOSSARY_BRIEF_CHARS,
-  RE_GLOSSARY_ITEM, escRe, foldTerm, glossaryEntries, glossaryEntry, RE_WORD_BEFORE, RE_WORD_AFTER, wordListRe,
-  GLOSS_TEMPLATE_LINES, glossLineKey, glossPatternSegs, glossVisibleLines, glossAddLines, glossNewSet,
-  glossBuiltinLines, glossProjectLines, glossSpans, glossUserParts, glossaryHits, briefGlossary, TRADEOFFS_SYN,
-  RISKS_SYN, DESIGN_WEIGH, DESIGN_WEIGH_IDS, RE_WEIGH_HEADING_REST, weighHeadingMatches, weighSection, weighSectionHead, genericUnit,
-  designBody, designEntries, WEIGH_PROSE_WORDS, designWeighState, designWeighChecks, designApprovedBeforeWeigh,
-  REUSE_SYN, WEIGH_MERGED_SYN, DESIGN_WEIGH_STAMPS, designReuseFallback, BRIEF_REUSE_MAX_ENTRIES, BRIEF_REUSE_CHARS, BRIEF_REUSE_MAX_FILES,
-  BRIEF_REUSE_MAX_DIRS, BRIEF_REUSE_DIR_ENTRIES, RE_REUSE_PATH, reuseUnits, reuseInsideRel, reuseProbe, reuseTargets, reuseEntryMatches,
-  readDirBounded, reuseNearbyFiles, reuseQuotedSection, briefReuse,
-  RE_RATE_LIMIT, RE_ACCESS_DENIED, RE_SUBJECT_RIGHTS, CONSTRAINT_KINDS, CONSTRAINT_SIGNALS, CONSTRAINT_RE,
-  constraintSignalRe, RE_CONSISTENCY_ANSWER, RE_ACID, CONSTRAINT_MAX_WORDS, userSpecText, constraintNudge,
-  RE_DIST_DELIVERY, RE_DIST_FAILURE, clarify, clarifyResult, CHANGE_SUMMARY_SYN, CHANGE_APPROACH_SYN, clarifyChange, __link };
+module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
+  TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, REUSE_SYN, reuseQuotedSection, briefReuse,
+  clarify, __link };

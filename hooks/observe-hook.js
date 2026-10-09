@@ -6,7 +6,7 @@
  *
  * Wired from hooks/hooks.json for PostToolUse and PostToolUseFailure, matcher Bash|PowerShell (https://code.claude.com/docs/en/hooks) —
  * a PowerShell run is logged only with an explicit exit code (its response shape is undocumented). Both entries are `"async": true`
- * (1.25.1): it prints nothing and decides nothing, so Claude Code never waits for it — the docs: an async hook runs in the background,
+ * it prints nothing and decides nothing, so Claude Code never waits for it — the docs: an async hook runs in the background,
  * its decision fields have no effect, its timeout isn't enforced, and `claude -p` kills one still running at teardown (the last run
  * of a headless session may go unlogged).
  * spec_complete_task / spec_finish {evidence} record the {command, exitCode} an agent REPORTS; in Claude Code the harness
@@ -36,15 +36,11 @@ const MAX_COMMAND = 4000; // no _Verify:_ / project-check command is longer (the
 const MAX_FEATURES = 200; // feature folders pre-filtered, at most
 const MAX_TASKS_BYTES = 2 * 1024 * 1024; // a tasks.md past this is skipped
 
-// A JSON file as the engine reads it: UTF-8, or UTF-16 with a BOM (1.24 review 6, C3 — Windows PowerShell 5.1's Out-File: a UTF-16
-// file read as UTF-8 didn't parse), decoded by hook-utils.js — required only for such a file (the hot path stays cheap). Throws on a
-// missing or broken file.
-function readJsonFile(file) {
-  const buf = fs.readFileSync(file);
-  if (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))) return require("./hook-utils.js").jsonOf(buf);
-  const t = buf.toString("utf8");
-  return JSON.parse(t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
-}
+// The project probe (mcp/lib/probe.js): the one dev-spec project rule, the session's candidate projects, a file read as the engine
+// reads it (UTF-8, or UTF-16 with a BOM — Windows PowerShell 5.1's Out-File). Required once the call is a completed
+// Bash / PowerShell run: every other tool call exits before it loads.
+let P = null;
+const probe = () => P || (P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
 
 let done = false;
 let ran = false;
@@ -59,8 +55,8 @@ function finish() {
 // checks the two agree): the run's command bodies — split at ` && ` and `;`, a `cd` / `set … pipefail` part dropped, leading
 // NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and quotes dropped, `\` read as `/`,
 // whitespace folded — must each appear in a tasks.md (or a meta.checks command) read the same way. A SUPERSET of the engine's
-// matcher (runProvesVerify — review 3: `node --test tests\x.test.js`, `CI=1 npm run lint`, a reversed join used to miss it): the
-// engine decides. Cheap: a few string passes, no parse. (Review 5: pipes unspaced, a word's leading `./` dropped, npm's aliases of
+// matcher (runProvesVerify — `node --test tests\x.test.js`, `CI=1 npm run lint`, a reversed join used to miss it): the
+// engine decides. Cheap: a few string passes, no parse. (pipes unspaced, a word's leading `./` dropped, npm's aliases of
 // `npm test`, `&&` however spaced, and chdir / pushd / popd / Set-Location / sl / Push-Location / Pop-Location parts too.)
 const norm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim()
   .replace(/ ?(\|+) ?/g, "$1").replace(/(^|[ ;&|(=])\.\//g, "$1").replace(/\bnpm (?:run(?:-script)? test|t|tst)(?=$|[ ;&|])/g, "npm test");
@@ -76,54 +72,11 @@ function bodies(cmd) {
   return out;
 }
 
-// The hooks run in EVERY project: only a .specs/ that dev-spec owns (roadmap.json, steering/, a generated ROADMAP.md, or a
-// feature folder with its .state.json / classification.md).
-function isDevSpecProject(dir) {
-  const root = path.join(dir, ".specs");
-  try {
-    if (!fs.statSync(root).isDirectory()) return false;
-  } catch {
-    return false;
-  }
-  if (fs.existsSync(path.join(root, "roadmap.json")) || fs.existsSync(path.join(root, "steering"))) return true;
-  try {
-    const rm = fs.readFileSync(path.join(root, "ROADMAP.md"), "utf8");
-    if (/AUTO-GE(?:NERATED|RADO|NERADO) (?:by|por) dev-spec/.test(rm.slice(0, 4000))) return true;
-  } catch { /* no roadmap */ }
-  try {
-    return fs.readdirSync(root, { withFileTypes: true }).some((d) => d.isDirectory() &&
-      (fs.existsSync(path.join(root, d.name, ".state.json")) || fs.existsSync(path.join(root, d.name, "classification.md"))));
-  } catch {
-    return false;
-  }
-}
-
-// The projects a run belongs to: the nearest folder holding .specs/ at or above the session's cwd AND the project dir Claude
-// Code (or the user) exported — every distinct one that is dev-spec's. A subagent working in a git worktree of the project
-// (parallel execution, waves) runs in the worktree's copy, whose git-ignored log is never merged back: the run is logged in
-// the main project too (feature review R4).
-// ≤ MAX_UP levels (1.24 r6 I2: it was 12 — a run 13+ folders below a nested project was never logged): the engine's
-// SESSION_MAX_UP, as the guard / stop hooks and hook-utils.js nearestSpecs walk (inline here: the hot path of every Bash call
-// requires nothing — mcp/tests/10-guards-review6.js checks every bound is SESSION_MAX_UP).
-const MAX_UP = 40;
-function projectDirsOf(payload) {
-  const cands = [];
-  if (typeof payload.cwd === "string" && payload.cwd.trim()) {
-    let d = path.resolve(payload.cwd);
-    for (let i = 0; i < MAX_UP; i++) {
-      if (fs.existsSync(path.join(d, ".specs"))) { cands.push(d); break; }
-      const up = path.dirname(d);
-      if (up === d) break;
-      d = up;
-    }
-  }
-  for (const v of [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR]) {
-    if (typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim())) cands.push(path.resolve(v));
-  }
-  const key = (d) => (process.platform === "win32" || process.platform === "darwin" ? d.toLowerCase() : d);
-  const seen = new Set();
-  return cands.filter((d) => !seen.has(key(d)) && seen.add(key(d)) && isDevSpecProject(d));
-}
+// The projects a run belongs to: the session's dev-spec projects (probe.sessionProjects — the nearest dev-spec .specs/ at or above
+// the session's cwd, ≤ SESSION_MAX_UP levels (this walk stopped at 12), AND the project dir Claude Code or the user
+// exported), every distinct one. A subagent working in a git worktree of the project (parallel execution, waves) runs in the
+// worktree's copy, whose git-ignored log is never merged back: the run is logged in the main project too (feature review R4).
+const projectDirsOf = (payload) => probe().sessionProjects({ cwd: payload.cwd });
 
 function toCode(v) {
   if (typeof v === "number" && Number.isSafeInteger(v)) return v;
@@ -158,13 +111,9 @@ function exitCodeOf(payload, failure, strict) {
 // A `cd <dir>` part is dropped WHATEVER the folder — the Bash tool often runs a command from the project root that way. Only a
 // filter (a superset): the engine decides, with the ONE stripping function the reported run's lookup uses too
 // (spec.stripCdPrefix — the folder must be one of the run's projects: this one, or the one holding the cwd, a worktree's), and
-// then its matcher, what is logged (1.22 review — the hook stripped, the lookup didn't; a worktree's run reached only its own log).
+// then its matcher, what is logged (the hook stripped, the lookup didn't; a worktree's run reached only its own log).
 
-// A tasks.md written as UTF-16 (a BOM: FF FE / FE FF — Windows PowerShell 5.1) is read as the engine reads it (files.js
-// decodeText, 1.22 review) without loading the engine for this pre-filter: hook-utils.js textOf (shared since 1.24 review 6), required
-// only for such a file; anything else is UTF-8.
-const textOfBuf = (buf) => (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff)) ? require("./hook-utils.js").textOf(buf) : buf.toString("utf8"));
-// 1.25.1 (review 7): a scaffold's untouched `_Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_` names
+// a scaffold's untouched `_Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_` names
 // `npm test` — every `npm test` loaded the engine (~100 ms: 152 vs 59 ms a Bash call) to log nothing. A WHOLE bracketed _Verify:_
 // value (backticks around it allowed) is a placeholder the engine never runs (tasks.js scanTaskMarkers: `^\[.*\]$` after the
 // backtick units are dropped) — taken out of the tasks text before the match. Only a whole value on its line: `[ -f a ] && npm test`
@@ -176,7 +125,7 @@ function mentioned(pdir, parts) {
   const root = path.join(pdir, ".specs");
   const has = (text) => { const t = norm(text); return parts.every((x) => t.includes(x)); };
   try {
-    const rm = readJsonFile(path.join(root, "roadmap.json"));
+    const rm = probe().readJsonFile(path.join(root, "roadmap.json"));
     const checks = rm && rm.meta && typeof rm.meta === "object" ? rm.meta.checks : null;
     if (checks && typeof checks === "object" && Object.values(checks).some((c) => typeof c === "string" && has(c))) return true;
   } catch { /* no or broken roadmap.json: no project checks */ }
@@ -187,13 +136,13 @@ function mentioned(pdir, parts) {
     return false;
   }
   for (const d of dirs) {
-    // tasks.md — or, only when there is none, a change's change.md, which holds its tasks (1.21 F5). 1.22 review: one open per
+    // tasks.md — or, only when there is none, a change's change.md, which holds its tasks. One open per
     // feature (its size read from the open file) — a stat, a read and a change.md probe per feature cost +133 ms a Bash call
     // at 150 features.
     const raw = readTasksText(path.join(root, d.name, "tasks.md"));
     const got = raw === null ? readTasksText(path.join(root, d.name, "change.md")) : raw;
     if (typeof got !== "string") continue;
-    // (the " && " join of a task's commands — how done --run reports them — is never written whole: every part is, review R6)
+    // (the " && " join of a task's commands — how done --run reports them — is never written whole: every part is)
     if (has(got.replace(RE_VERIFY_PLACEHOLDER, " "))) return true;
   }
   return false;
@@ -207,7 +156,7 @@ function readTasksText(file) {
     if (size > MAX_TASKS_BYTES) return false;
     const buf = Buffer.alloc(size);
     const n = fs.readSync(fd, buf, 0, size, 0);
-    return textOfBuf(n === size ? buf : buf.subarray(0, n)); // a UTF-16 (BOM) file too — Windows PowerShell 5.1 writes them
+    return probe().textOf(n === size ? buf : buf.subarray(0, n)); // a UTF-16 (BOM) file too, as the engine reads it (files.js decodeText) — Windows PowerShell 5.1 writes them
   } catch {
     return false;
   } finally {
@@ -226,7 +175,7 @@ function main(raw) {
     return finish();
   }
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
-  // The Bash tool, and on Windows the PowerShell tool (strict: its exit code must be explicit — review R5).
+  // The Bash tool, and on Windows the PowerShell tool (strict: its exit code must be explicit).
   if (payload.tool_name !== "Bash" && payload.tool_name !== "PowerShell") return finish();
   const strict = payload.tool_name === "PowerShell";
   const event = typeof payload.hook_event_name === "string" ? payload.hook_event_name : "";
@@ -242,7 +191,7 @@ function main(raw) {
   const dirs = projectDirsOf(payload);
   const parts = bodies(command);
   const hits = parts.length ? dirs.filter((d) => mentioned(d, parts)) : []; // the pre-filter, once per project
-  // 1.23 review 5 (M8): once some project passed the pre-filter, the session's project too (spec.sessionProject — a worktree's
+  // once some project passed the pre-filter, the session's project too (spec.sessionProject — a worktree's
   // copy mapped to the checkout the MCP server records in), when it isn't one of them already (no CLAUDE_PROJECT_DIR exported).
   if (hits.length) {
     spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));

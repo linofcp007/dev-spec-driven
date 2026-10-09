@@ -5,12 +5,13 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
 // C2 — `dev-spec decide` (= spec_decide) and `dev-spec spike` / `create --kind spike` (= spec_create {kind: "spike"}), EN / PT.
 const Sc2 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const jsonC2 = (s) => { try { return JSON.parse(s); } catch { return null; } };
-const rc2 = (args) => {
-  const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } });
+const rc2 = (args) => { // in-process (1.27), but a --run — it waits for its commands: spawned
+  const o = { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } };
+  const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...args], o) : spawnIn(args, o);
   return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
 };
 
@@ -104,10 +105,10 @@ ok(skPt.code === 0 && /  pergunta: Redis ou Memcached\?\n  timebox: até \d{4}-\
   docPt.code === 1 && /✗ decision — spike\.md → Decisão ainda não está escrita/.test(docPt.out),
   "PT: spike prints pergunta / timebox até; decide writes '# Decisões:' (a spike section as _Affects:_); doctor speaks Portuguese (got " + JSON.stringify([skPt.out, docPt.out.slice(0, 200)]) + ")");
 
-// help and the header docblock document spike and decide.
+// help and the command table document spike and decide.
 const hC2 = rc2(["help"]).out;
-const docC2 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+const docC2 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
 ok(['spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]', 'decide <feature> --title "…" --decision "…"', "--kind feature|bugfix|spike"].every((w) => hC2.includes(w)) &&
   ['spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d]', 'decide <feature> --title "…" --decision "…"'].every((w) => docC2.includes(w)),
-  "help and the header docblock document spike, decide and --kind spike");
+  "help and the command table document spike, decide and --kind spike");
 };

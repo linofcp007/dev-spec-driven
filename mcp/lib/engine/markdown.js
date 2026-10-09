@@ -44,7 +44,7 @@ function stripHtmlComments(s) {
 }
 // HTML comments as a markdown reader sees them, line by line — the ONE comment rule of stripHtmlComments, criterionBlocks
 // and visibleLines (the tasks scanner, scanTaskLines, adds its own list-item / paragraph reach). Fenced code (fenceStep)
-// and inline code spans are code: a "<!--" there is text (1.14 full review Pa3 — an AC saying "contains `<!--`" hid every
+// and inline code spans are code: a "<!--" there is text (an AC saying "contains `<!--`" hid every
 // criterion down to the next "-->" from EARS, trace_check and the placeholder scan). A "<!--" outside code opens a
 // comment only when a "-->" outside code follows it, on its line or a later one (one that never closes is text); an open
 // comment ends at the first "-->", whatever it sits in (inside a comment nothing is code). Linear.
@@ -117,7 +117,7 @@ function commentLines(lines) {
 // Fenced code blocks blanked line for line (the fence lines too) — criterionBlocks' fence rule, so an ID in a ``` example
 // is never a real one. Lines are kept (as empty ones): line-based rules — a table row, a marker's wrap — read the same.
 // An unclosed fence inside a list item ends with the item (fenceStep).
-// An INDENTED code block is code too (review 5, L32): "Example:\n\n    US-1.AC-7 …" defined a required AC (and an EARS no-modal error).
+// An INDENTED code block is code too: "Example:\n\n    US-1.AC-7 …" defined a required AC (and an EARS no-modal error).
 function stripFencedCode(s) {
   const lines = String(s || "").split("\n");
   const code = codeBlockLines(lines);
@@ -152,27 +152,27 @@ function codeBlockLines(lines) {
 // requirements.md's own AC IDs as the tools read them: outside HTML comments and fenced code, `_Supersedes:_`
 // references (another feature's ACs) left out — and so is any `<feature>/US-n.AC-m` (the _Supersedes:_ / _Affects:_ syntax)
 // written in prose: "rules of checkout/US-3.AC-2 stay as they are" names checkout's criterion, never one of this feature's
-// (1.22 review: it was a required AC no task covered). `dir`: the feature's folder — see stripForeignAcRefs.
+// (it was a required AC no task covered). `dir`: the feature's folder — see stripForeignAcRefs.
 function requirementAcIds(reqText, dir) {
   return extractAcIds(stripForeignAcRefs(stripSupersedes(stripTitleLines(stripFencedCode(stripHtmlComments(reqText)))), dir));
 }
-// A level-1 heading — the document's title, written from the feature's name — never defines a criterion (1.23.1: a name holding
+// A level-1 heading — the document's title, written from the feature's name — never defines a criterion (a name holding
 // `US-9.AC-1`, bold or not, made one more required AC no task covered). Blanked line by line, so line numbers stay put.
 const RE_TITLE_LINE = /^ {0,3}#(?:[^\S\n][^\n]*)?$/gm;
 function stripTitleLines(text) {
   return String(text || "").replace(RE_TITLE_LINE, "");
 }
 // `<slug>/US-n.AC-m` (blanks around the slash allowed, as _Supersedes:_ reads it) → removed when <slug> names ANOTHER feature.
-// The slug is one token starting at a token start (linear: a match starts only there). Never a feature (review 2 — the
+// The slug is one token starting at a token start (linear: a match starts only there). Never a feature (the
 // feature's own ID was dropped, its required ACs went to 0): a token that is itself an ID ("US-1.AC-1/US-1.AC-2", "AC-1 /
 // US-1.AC-2"), a story ("US-1 / US-1.AC-1"), a priority ("**P1/US-1.AC-1**"), a number ("1.1/US-1.AC-1"), no letter at all.
 // With `dir` — a feature folder under <project>/.specs/ (or its _archive/) — the slug is resolved as _Supersedes:_ validation
 // resolves it (locateFeatures: active or archived): another feature → removed; this feature (`login/US-1.AC-1`) → kept; NO
-// feature of that name (review 3 — "keep the rules of billing/US-3.AC-2" with no billing feature was a required AC no task
+// feature of that name ("keep the rules of billing/US-3.AC-2" with no billing feature was a required AC no task
 // covered) → this feature's only when the same ID LABELS one of the text's criteria (criterionLabelIds: "5. Step-2/US-1.AC-5 —
 // WHEN …"), else a foreign reference, removed. Without `dir` (a pure reader: a template, a pack's numbering, an import's task
 // fitting) every token of a slug's shape counts as another feature's — the limit: there "Step-2/US-1.AC-1" reads as one.
-// labelText (review 5, M5 — a text that CITES criteria: tasks.md, the test plan): the criteria whose labels decide a slug that
+// labelText (a text that CITES criteria: tasks.md, the test plan): the criteria whose labels decide a slug that
 // names no feature are requirements.md's, not the citing text's own (a task line labels no criterion).
 const RE_FOREIGN_AC = /(?<![\p{L}\p{N}_.-])([\p{L}\p{N}][\p{L}\p{N}_.-]*)[^\S\n]*\/[^\S\n]*(US-\d+\.AC-\d+)(?!\d)/gu;
 const RE_ID_TOKEN_END = /(?<![A-Za-z0-9])(?:US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)$/;
@@ -212,17 +212,12 @@ function featureRefTest(dir) {
     return memo.get(slug);
   };
 }
-// The pre-review-3 reading (does the slug name ANOTHER feature?) — kept for its callers.
-function otherFeatureTest(dir) {
-  const k = featureRefTest(dir);
-  return (slug) => k(slug) === "other";
-}
-// Review 3 — the ID that LABELS a criterion: the one that leads it (after a heading mark, a list marker, a checkbox, an emphasis /
+// the ID that LABELS a criterion: the one that leads it (after a heading mark, a list marker, a checkbox, an emphasis /
 // bracket opener — `- **US-1.AC-1** — WHEN …`, `1. NFR-2: THE SYSTEM SHALL …`, `### US-1.AC-3: …`, `- [ ] (EC-1) IF …`), with the
 // token before a slash in front of it (`login/US-1.AC-1`, `P1/US-1.AC-1`); for a table row with no lead label, its cell that is
 // exactly such an ID. An ID cited later in the criterion ("… (see EC-1)", "… (T-01)") labels nothing. → {id, slug} | null.
-// Review 5 (L31): a sub-criterion ID (US-1.AC-1.2) is a label of its own — never its parent's US-1.AC-1 — and no stable ID (bareLabel).
-// 1.24 review 6 (F1): an emphasis AND a bracket opener (`- **[NFR-1]** …`) lead a label too — the EARS unit readers accept the same leads.
+// a sub-criterion ID (US-1.AC-1.2) is a label of its own — never its parent's US-1.AC-1 — and no stable ID (bareLabel).
+// an emphasis AND a bracket opener (`- **[NFR-1]** …`) lead a label too — the EARS unit readers accept the same leads.
 const RE_LEAD_LABEL = /^[ \t]*(?:#{1,6}[ \t]+)?(?:(?:\d+[.)]|[-*+])[ \t]+)?(?:\[[ xX]\][ \t]+)?(?:\*\*|__|\*|_|`)?[[(]?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?!\d)/u;
 const RE_CELL_LABEL = /^(?:\*\*|__|\*|_|`)?(?:([\p{L}\p{N}][\p{L}\p{N}_.-]{0,200}?)[^\S\n]*\/[^\S\n]*)?(US-\d+\.AC-\d+\.\d+|US-\d+\.AC-\d+|AC-\d+|T-\d+|EC-\d+|NFR-\d+|SC-\d+)(?:\*\*|__|\*|_|`)?$/u;
 function criterionLabel(text) {
@@ -268,7 +263,7 @@ function planIdText(planText) {
   return stripFencedCode(stripHtmlComments(planText));
 }
 
-// Count unresolved [NEEDS CLARIFICATION: ...] markers in real content (not template comments). 1.24 review 6 (F11): never in fenced or
+// Count unresolved [NEEDS CLARIFICATION: ...] markers in real content (not template comments). Never in fenced or
 // indented code either (stripFencedCode — every other reader's rule): an example of how to mark an open point blocked the design.
 function clarificationMarkers(md) {
   const text = stripFencedCode(stripHtmlComments(md));
@@ -317,10 +312,10 @@ function bugStepSet() {
 }
 function isBugStep(text) {
   const d = taskDescription(text);
-  return bugStepSet().has(d) || projectTemplateHas("bugSteps", d); // + the project's bug-tasks template (1.14)
+  return bugStepSet().has(d) || projectTemplateHas("bugSteps", d); // + the project's bug-tasks template
 }
 // A scaffold task: its whole description is a [bracketed placeholder] (after the known tags), or it is
-// still the verbatim text of a +saas/+ai template task — or of a task of the project's tasks template (1.14).
+// still the verbatim text of a +saas/+ai template task — or of a task of the project's tasks template.
 function isPlaceholderTask(text) {
   const rest = taskDescription(text);
   return /^\[[^\]]*\]$/.test(rest) || templateTaskSet().has(rest) || projectTemplateHas("tasks", rest);
@@ -360,7 +355,7 @@ function fenceStep(st, line) {
 // indented under it, a lazy continuation before any blank line). → [{ ids: [T-ID …], text, cells, header }]
 const tableCells = (line) => line.trim().replace(/^\|/, "").replace(/\|\s*$/, "").split(/(?<!\\)\|/).map((c) => c.trim());
 
-// The headings of a markdown text as a reader of its STRUCTURE sees them — the ONE heading reader (review 5, M2): never in fenced
+// The headings of a markdown text as a reader of its STRUCTURE sees them — the ONE heading reader: never in fenced
 // code ("# comment" in a bash block) nor in an HTML comment (a section commented out, `<!--` … `## [SEC] Threat Model` … `-->`, was
 // read as present and filled — doctor passed it; commentLines' rule: a "<!--" with no "-->" after it is text). An ATX heading
 // indented 0–3 spaces ("#"s, then a blank or a tab; its closing "#" sequence dropped, its trailing comment too) and a SETEXT
@@ -417,11 +412,11 @@ function headingIndex(lines) {
 // "Section 1:" — the form references/mandatory-ai-design-sections.md uses) and emphasis, and end at a word
 // boundary ("fix" ≠ "Fixtures").
 // An emoji (with its variation selector / joiner / skin tone) before or after the marker is decoration too:
-// "## 🔐 [SEC] Threat Model" (full review Pb4).
+// "## 🔐 [SEC] Threat Model".
 const headingLeadSource = (markers) => "^(?:[\\s*_—–:-]+|[\\p{Extended_Pictographic}\\u{1F3FB}-\\u{1F3FF}\\u{FE0E}\\u{FE0F}\\u{200D}\\u{20E3}]+|\\[(?:" + markers.join("|") +
   ")\\]|(?:section|sec[çc][ãa]o|se[çc][ãa]o|secci[óo]n)\\s+\\d+[.:)]?(?=\\s|$)|\\d+(?:\\.\\d+)*[.):]?(?=\\s))";
 const RE_HEADING_LEAD = new RegExp(headingLeadSource(MARKER_TRACKS), "u");
-// + the project's track packs' markers (1.15), lower-cased as the heading text is: [A-Z0-9] tokens (validated) — regex-safe.
+// + the project's track packs' markers, lower-cased as the heading text is: [A-Z0-9] tokens (validated) — regex-safe.
 let HEADING_LEAD_PACKS = { key: "", re: RE_HEADING_LEAD };
 function headingLeadRe() {
   const packs = packRegistry().packs;
@@ -430,7 +425,7 @@ function headingLeadRe() {
   if (HEADING_LEAD_PACKS.key !== key) HEADING_LEAD_PACKS = { key, re: new RegExp(headingLeadSource(MARKER_TRACKS.concat(packs.map((p) => p.token.toLowerCase()))), "u") };
   return HEADING_LEAD_PACKS.re;
 }
-// inflect (the marker tracks' sections — full review Pb4): an English inflection of the synonym's last word names the same
+// inflect (the marker tracks' sections): an English inflection of the synonym's last word names the same
 // section — "Threat Modeling" / "Threat Modelling" / "Threat Models" are the Threat Model.
 const RE_SYN_INFLECTION = /^(?:s|es|ing|ling)(?![\p{L}\p{N}])/u;
 function headingMatches(line, syns, inflect) {
@@ -444,7 +439,7 @@ function headingTextMatches(text, syns, inflect) {
   for (let prev = null; prev !== t;) { prev = t; t = t.replace(lead, ""); }
   return syns.some((s) => t.startsWith(s) && (!/[\p{L}\p{N}]/u.test(t.charAt(s.length)) || (inflect && RE_SYN_INFLECTION.test(t.slice(s.length)))));
 }
-// 1.24 review 6 (F7): can ONE heading answer both a section named / synonymed `x` and one named `y`? — headingTextMatches' rule (the
+// can ONE heading answer both a section named / synonymed `x` and one named `y`? — headingTextMatches' rule (the
 // synonym STARTS the heading, word-bounded, an English inflection allowed on a track section): only when one key equals the other or
 // is a word-prefix of it ("offline" / "offline sync") or its inflection ("model" / "modeling notes"). Two such sections of ONE track
 // are answered by the longer one's heading: "## [MOB] Offline Sync" filled "Offline" too, so deleting the "Offline" section passed.
@@ -470,21 +465,21 @@ function sectionOverlaps(sections) {
 
 // marker = "[SaaS]" / "[AI]": a heading carrying the track marker wins, so "[AI] Observability for AI"
 // can no longer stand in for "[SaaS] Observability". Unmarked headings are the fallback (hand-written
-// designs), but never one that carries the OTHER track's marker. Markers are case-sensitive tokens (C4).
-// `loose` (C4): the synonyms of a track section that are ordinary words in a design ("Processors", "Retention",
+// designs), but never one that carries the OTHER track's marker. Markers are case-sensitive tokens.
+// `loose`: the synonyms of a track section that are ordinary words in a design ("Processors", "Retention",
 // "Conservação", "Data inventory", "Avaliação de impacto") — they name the section only on a heading that carries the
 // marker, or on an unmarked heading nested under a heading that does (the track's context: `## [PRIVACY] Processing` →
 // `### Processors`). Without that, deleting a `[PRIVACY]` heading let a core heading like "## Processors and queues"
 // satisfy "Processors & International Transfers" and doctor passed a section nobody wrote. The other synonyms are
 // unambiguous and keep the unmarked fallback anywhere (hand-written and PT/ES designs without markers, the reference
-// templates' "## Observability" / "## Section 1: Model Strategy") — except inside ANOTHER track's section (1.21 review B5: an
+// templates' "## Observability" / "## Section 1: Model Strategy") — except inside ANOTHER track's section (an
 // unmarked heading whose nearest marked enclosing heading carries another marker belongs to that section).
 function extractSection(md, synonyms, marker, loose) {
   const syns = (Array.isArray(synonyms) ? synonyms : [synonyms]).map((s) => s.toLowerCase());
   const looseSet = new Set((loose || []).map((s) => s.toLowerCase()));
   const strict = looseSet.size ? syns.filter((s) => !looseSet.has(s)) : syns;
   const lines = (md || "").split(/\r?\n/);
-  // The headings as the ONE heading reader sees them (review 5, M2: never in a comment or a fence; setext and indented ATX too);
+  // The headings as the ONE heading reader sees them (never in a comment or a fence; setext and indented ATX too);
   // a heading's marker is read in its visible text (never a trailing comment's). The H1 title is never a section.
   const heads = headingEntries(lines);
   const matches = (h, list) => h.level >= 2 && headingTextMatches(h.text, list || syns, !!marker); // a track section's heading may inflect its name
@@ -509,8 +504,8 @@ function extractSection(md, synonyms, marker, loose) {
     }
     return inCtx.get(i) === true;
   };
-  const MARKERS = markerTracks().map((t) => trackMarker(t)); // + the track packs' (1.15)
-  // 1.21 review B5 — the mirror of inTrackContext: the nearest enclosing heading that carries a marker carries ANOTHER track's — the
+  const MARKERS = markerTracks().map((t) => trackMarker(t)); // + the track packs'
+  // the mirror of inTrackContext: the nearest enclosing heading that carries a marker carries ANOTHER track's — the
   // heading is part of that track's section ("## [PRIVACY] Lawful Basis" → "### Data quality (LGPD art. 6, V)" never stands in for a
   // deleted [DATA] Data Quality). Tried last (only on a heading whose name matches); every heading's context marker comes from ONE
   // linear pass (a stack of the enclosing headings), on first use.
@@ -544,12 +539,12 @@ function extractSection(md, synonyms, marker, loose) {
 }
 
 // The indent is read within its line ([^\S\n\r\u2028\u2029], not \s — a line start of a long blank run rescanned the whole
-// run, 1.17 H): the line holding the '>' matches either way, and every reader only asks whether one does.
+// run): the line holding the '>' matches either way, and every reader only asks whether one does.
 const RE_TODO_SENTINEL = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*/m;
 const ROOT_CAUSE_SYN = ["root cause", "causa raiz", "causa raíz"];
 const REPRO_SYN = ["reproduction", "reprodução", "reproducao", "reproducción", "reproduccion"];
 // A track's mandatory sections → [{ section, status }] (+ `tier` "core" | "extended" on a SIZED feature). Statuses: missing ·
-// unfilled (the `> **TODO**` sentinel is still there, or nothing was written — blank is not an answer) · template (1.21 F5:
+// unfilled (the `> **TODO**` sentinel is still there, or nothing was written — blank is not an answer) · template (
 // nothing but the template's own guidance lines — deleting the sentinel and keeping the scaffold's bullet used to pass) ·
 // filled; on a sized feature (opts.size) also na (the section's own text is ONE "n/a — <reason of ≥ 4 words>" line) and
 // na-short (an n/a with a shorter reason, or none). The verdict is sectionVerdict's; opts.lang adds that language's template
@@ -559,8 +554,8 @@ function sectionState(design, sections, marker, opts = {}) {
     const out = (status) => (opts.size ? { section: sec.name, status, tier: sec.tier === "extended" ? "extended" : "core" } : { section: sec.name, status });
     const body = extractSection(design, sec.syn, marker, sec.loose);
     if (body == null) return out("missing");
-    // review 5 (M2 / L28): the sentinel as a reader sees it (a commented-out or quoted-in-code one is none), and nothing but
-    // structure — sub-headings, a rule, an empty table — is nothing written; nor (1.24 review 6, F4) a generic slot / punctuation line
+    // the sentinel as a reader sees it (a commented-out or quoted-in-code one is none), and nothing but
+    // structure — sub-headings, a rule, an empty table — is nothing written; nor a generic slot / punctuation line
     if (RE_TODO_SENTINEL.test(stripFencedCode(stripHtmlComments(body)))) return out("unfilled");
     const content = writtenContent(body);
     if (!content.prose.length && !content.code.length) return out("unfilled");
@@ -570,13 +565,13 @@ function sectionState(design, sections, marker, opts = {}) {
     return out("filled");
   });
 }
-// 1.21 F5 — the section's lines the USER wrote: visible (comments out), not blank, not a line of a track design block as the
+// the section's lines the USER wrote: visible (comments out), not blank, not a line of a track design block as the
 // scaffold writes it (the built-in tracks' in EN / PT / ES — pt-BR's too for a pt-BR feature — and this project's track packs'):
 // a key per line, whitespace folded, lower-cased, a list bullet or quote marker dropped. Exact lines only — a guidance line the
-// user edited is theirs. Fenced code is the user's too (1.21 review C2 — no track block holds a fence: a section answered by a
+// user edited is theirs. Fenced code is the user's too (no track block holds a fence: a section answered by a
 // ```json schema, an OpenAPI ```yaml or a ```mermaid diagram read as "only the template's guidance"): its content lines count,
 // its fence lines don't. A pack's guidance line holding the feature's {{name}} / {{slug}} (the scaffold filled them in) is a
-// LINEAR wildcard (wildcardMatch, the project templates' rule — never a regex built from template text; 1.21 review C6).
+// LINEAR wildcard (wildcardMatch, the project templates' rule — never a regex built from template text).
 const sectionLineKey = (s) => String(s).replace(/^\s*(?:[-*+]|\d+[.)]|>)\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
 let SECTION_TEMPLATE_LINES = null; // process-wide: the built-in track blocks (EN / PT / ES)
 let SECTION_TEMPLATE_LINES_BR = null; // … their pt-BR twins, built on the first pt-BR feature
@@ -596,7 +591,7 @@ function addSectionLines(set, text, wild) {
   }
 }
 // The built-in track design blocks' line keys → a sorted list: group "base" (EN / PT / ES), or "pt-BR" — only its lines the base
-// set lacks (a pt-BR section is read against both). 1.24 r6 I-I2: read from the corpus (builtinCorpus) — rendered, they loaded
+// set lacks (a pt-BR section is read against both). Read from the corpus (builtinCorpus) — rendered, they loaded
 // pt.js and es.js into every English gate that reads a section.
 function renderSectionLines(group) {
   const lines = (langs) => {
@@ -631,13 +626,13 @@ function sectionTemplateLines(lang) {
   return { sets, wild };
 }
 function sectionOwnLines(body, lang) {
-  const { prose, code } = writtenContent(body); // (1.24 review 6, F4: a TBD beside the guidance line is no line of the author's)
+  const { prose, code } = writtenContent(body); // (a TBD beside the guidance line is no line of the author's)
   if (!prose.length) return code;
   const { sets, wild } = sectionTemplateLines(lang);
   return prose.filter((l) => { const k = sectionLineKey(l); return !sets.some((s) => s.has(k)) && !wild.some((w) => wildcardMatch(w, k)); }).concat(code);
 }
 // A section's content lines → { prose, code }: visible (comments out), not blank, outside fences (prose) or inside one (code — its
-// fence lines are no content). Structure is no content (review 5, L28): a heading (ATX or setext, its underline too), a thematic
+// fence lines are no content). Structure is no content: a heading (ATX or setext, its underline too), a thematic
 // break, a table's header and separator rows — a section of sub-headings, a rule or an empty table read as "filled".
 // A table's separator row ("|---|:--:|", "--- | ---"): every cell dashes with optional colons — cell by cell (linear).
 const isTableSep = (l) => {
@@ -661,13 +656,13 @@ function sectionContent(body) {
   });
   return { prose, code };
 }
-// 1.24 review 6 (F4) — what a section's author WROTE: sectionContent() minus the prose lines that answer nothing — a generic slot
+// what a section's author WROTE: sectionContent() minus the prose lines that answer nothing — a generic slot
 // word (genericAnswer: TODO / TBD / TBC / FIXME / "…" / "a definir", "Pending" / "Pendente" / "Pendiente" / "to be decided" …, after
 // list / quote / checkbox markers, emphasis, a wrapping bracket and trailing punctuation: "- TBD", "**TBD**", "[TBD]", "- [ ] TODO",
 // "> TBD", "Pending.") and a line with no letter or digit ("-", "—", "...", "| - | - |"); a table row answers when one of its cells
 // does. A section holding only those read as filled — a [SEC] Threat Model "TBD" approved the design, a bugfix's Root Cause "TBD"
 // passed the iron law. A real one-word answer stays: "N/A", "None.", "No." (the honest "nothing here" a Risks section asks for; a
-// sized feature's na / na-short rule reads its own text). Fenced code is the author's (review C2). The ONE reader of sectionState,
+// sized feature's na / na-short rule reads its own text). Fenced code is the author's. The ONE reader of sectionState,
 // sectionOwnLines and — through hasProseOutsideBrackets — gates.js's sectionFilled / bugSectionFilled and the spike / decision prose.
 // → { prose, code }. Linear.
 const RE_PENDING_ANSWER = /^(?:pending|pendente|pendiente|to be (?:defined|determined|decided|confirmed|written)|(?:a|por) (?:decidir|determinar|confirmar|preencher|rellenar))$/iu;
@@ -690,7 +685,7 @@ function writtenContent(body) {
   const { prose, code } = sectionContent(body);
   return { prose: prose.filter(lineAnswers), code };
 }
-// A design's Mermaid diagram as doctor's `mermaid` check reads it (review 5, L28) → "present" | "template" | "missing": the fenced
+// A design's Mermaid diagram as doctor's `mermaid` check reads it → "present" | "template" | "missing": the fenced
 // blocks (``` or ~~~, any length) whose info string starts with "mermaid", outside HTML comments; "template" when every one still
 // holds the scaffold's own diagram (any language — whitespace folded). It was a substring test for "```mermaid": a ~~~mermaid fence
 // warned "missing", a "```mermaid" mentioned in a comment passed, and the untouched "A[Component] → C[(Database)]" passed.
@@ -707,7 +702,7 @@ function mermaidBlocks(text) {
   }
   return out.map((b) => b.join(" ").replace(/\s+/g, " ").trim());
 }
-// The scaffold's own diagrams (every language, pt-BR's too; each design size) → a sorted list. 1.24 r6 I-I2: read from the corpus
+// The scaffold's own diagrams (every language, pt-BR's too; each design size) → a sorted list. Read from the corpus
 // (builtinCorpus) — rendered, doctor's mermaid check loaded pt.js, es.js and pt-BR into every English process.
 function renderTemplateDiagrams() {
   const set = new Set();
@@ -739,7 +734,7 @@ function naAnswer(own) {
   const words = own[0].slice(m[0].length).match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || [];
   return words.length >= NA_REASON_WORDS ? "na" : "na-short";
 }
-// 1.21 F5 — the active marker tracks' mandatory sections as every gate reads them (doctor `<track>-sections`, the design
+// the active marker tracks' mandatory sections as every gate reads them (doctor `<track>-sections`, the design
 // approval, the design save check, status, the roadmap) → [[track, marker, rows]]. On a SIZED feature a section two active tracks
 // both ask for (TRACK_OVERLAPS) that the design leaves out is `covered` (+ `by`: the headings that answer it) once one of the
 // covering sections is there — the sized scaffold writes only those. opts: { size, lang }.
@@ -758,7 +753,7 @@ function trackSectionReport(design, tracks, opts = {}) {
 }
 // One section row's verdict → "pass" | "warn" | "fail". Size S: an EXTENDED-tier section may be absent (the scaffold leaves it
 // out). "template" fails a new approval — opts.approved (the design is approved already): a warn, never a fail on a phase signed
-// off before the stricter rule (1.21). na / covered answer the section; unfilled and na-short never do.
+// off before the stricter rule. na / covered answer the section; unfilled and na-short never do.
 function sectionVerdict(row, opts = {}) {
   switch (row.status) {
     case "filled": case "na": case "covered": return "pass";
@@ -804,7 +799,7 @@ function isGenericSlot(inner) {
 // The stub `spec_init` writes for a steering file with no template (the file name is the user's; the slot is fixed).
 const unknownSteeringStub = (f) => `# ${f.replace(/\.md$/, "")}\n\n[fill me in]\n`;
 // The bracket texts the 1.12.1 templates rendered (and the current ones no longer do) — extracted ONCE from
-// `git show main:mcp/lib/i18n.js` (1.12.1) by rendering every builder (classification, requirements, design + the
+// `git show main:mcp/lib/i18n.js` by rendering every builder (classification, requirements, design + the
 // track blocks, tasks, test plan, eval plan, load test, quickstart, checklist, integration plan, the bugfix templates,
 // the prompt stub, the steering stubs; EN/PT/ES; every track combination; a dummy name) and reading each bracket as
 // templateBracketKeys does. A 1.12 spec that still holds one of them is still a template there; the texts the current
@@ -941,8 +936,8 @@ function templateCorpus(langs) {
       add(() => i18n.checklist(a, l));
     }
     add(() => i18n.testPlan("x", l, VALID_TRACKS, ["US-1.AC-1"]));
-    add(() => i18n.testPlan("x", l, ["core", "tdd"], [])); // requirements that define no AC yet: one generic row (Pa4)
-    // 1.21 F5 — the sized builders (s: one story, the merged weigh section; m / l: the trimmed core design) and the change's one
+    add(() => i18n.testPlan("x", l, ["core", "tdd"], [])); // requirements that define no AC yet: one generic row
+    // the sized builders (s: one story, the merged weigh section; m / l: the trimmed core design) and the change's one
     // file. Their slots differ from the unsized ones only in the core parts — the track blocks and criteria are the same
     // texts — so core alone, core +tdd and every track render each of them. (The bugfix tasks have one form for every size —
     // bugTasks below; the four-task form they replaced held no slot the current one doesn't.)
@@ -1004,7 +999,7 @@ function renderTemplateSets() {
   } finally { CTX.BUILTIN_CORPUS_BUILD--; }
   return { brackets, code };
 }
-// pt-BR (1.14 D1) renders every pt template through i18n.toPtBr, whose rules never cross a line: its slots are exactly the
+// pt-BR renders every pt template through i18n.toPtBr, whose rules never cross a line: its slots are exactly the
 // pt corpus's visible bracket lines transformed one by one (the corpus is not rendered a fourth time). Built on the first
 // bracket the EN/PT/ES sets don't know — checking a fresh EN/PT/ES scaffold never pays for it; only pt-BR's own keys are kept.
 let TEMPLATE_SETS_BR = null;
@@ -1031,20 +1026,20 @@ function renderTemplateSetsBr(base) {
 }
 
 // ---------------------------------------------------------------------------
-// The pre-generated built-in corpus (1.20)
+// The pre-generated built-in corpus
 // ---------------------------------------------------------------------------
 // The built-in part of the corpus — templateSets, templateSetsBr, templateTaskSet, the bug steps — is the same in every
 // process of one engine, and rendering it (1,165 texts, their pt-BR twins through toPtBr: ~200 ms) was the biggest slice of
 // a hook or CLI call. scripts/build.js (`npm run build`) renders it ONCE with the functions above (renderCorpusData) into
 // engine/corpus.generated.json, stamped with the hash of CORPUS_SOURCES — every file the render runs through (mcp/test.js
-// proves the list with V8 coverage) — and nothing else: no version (1.26 — the render never reads it, so a release that changes
+// proves the list with V8 coverage) — and nothing else: no version (the render never reads it, so a release that changes
 // no source keeps the same file). A process reads that file (one JSON.parse) only while the stamp matches the engine it LOADED
 // (the sources as they were at load — LOADED_STATS below); otherwise —
 // a hand-edited clone that wasn't rebuilt, a missing or broken file, sources updated under a running process — it renders
 // as before: a slower answer, never a wrong one. Inside spec.bundle.js the corpus is the copy the build embedded beside the
 // very sources it was rendered from (module.bundle — undefined under Node's own loader). The per-project part (the
 // project's templates, its track packs: projectTemplateHas, packCorpusSets) stays computed per call. Only .has() is ever
-// asked of these sets. 1.24 r6 I-I2 (review 6, I1): every OTHER all-language template set a gate asks about comes from it too —
+// asked of these sets. Every OTHER all-language template set a gate asks about comes from it too —
 // the steering stubs (isSteeringStub), the scaffold's diagrams (templateDiagramSet), the track design blocks' lines
 // (sectionTemplateLines), the bug report's slots (bugTemplateSlots) and the requirement templates (builtinTemplateReqs): rendered,
 // they loaded pt.js, es.js and pt-BR into every English doctor / next_action / done / finish / catalog (~78 ms a call).
@@ -1066,7 +1061,7 @@ function corpusSourcesHash(libDir) {
   for (const rel of CORPUS_SOURCES) h.update(rel + "\0").update(sourceText(fs.readFileSync(path.join(dir, ...rel.split("/"))))).update("\0");
   return h.digest("hex");
 }
-// The stamp's inputs as this process LOADED them (1.20 review). A long-lived process — the MCP server — keeps the code it
+// The stamp's inputs as this process LOADED them. A long-lived process — the MCP server — keeps the code it
 // loaded while a `git pull` or `npm run build` rewrites the sources AND the corpus under it: compared with the files as they
 // are at its first placeholder question, the old code would trust a corpus rendered from the NEW sources (a reworded slot of
 // its own fresh scaffold would then read as the user's text). So every source's size, mtime and ctime are taken as the engine
@@ -1088,9 +1083,9 @@ function renderCorpusData() {
   const base = renderTemplateSets(), br = renderTemplateSetsBr(base);
   return { brackets: sort(base.brackets), code: sort(base.code), bracketsBr: sort(br.brackets), codeBr: sort(br.code),
     tasks: sort(renderTemplateTasks()), bugSteps: sort(new Set(renderBugSteps())),
-    // 1.22 review: every built-in track's template task headings, all languages (trackTaskHeadings — tracks.js)
+    // every built-in track's template task headings, all languages (trackTaskHeadings — tracks.js)
     taskHeadings: Object.fromEntries(VALID_TRACKS.map((t) => [t, sort(renderTrackTaskHeadings(t))])),
-    // 1.24 r6 I-I2: the gates' other all-language sets
+    // the gates' other all-language sets
     steeringStubs: renderSteeringStubs(), diagrams: renderTemplateDiagrams(), sectionLines: renderSectionLines("base"),
     sectionLinesBr: renderSectionLines("pt-BR"), bugSlots: renderBugSlots(), templateReqs: renderTemplateReqs() };
 }
@@ -1106,7 +1101,7 @@ function builtinCorpus() {
     const b = module.bundle; // set by spec.bundle.js's module registry only
     const data = b ? b.corpus() : JSON.parse(fs.readFileSync(path.join(__dirname, CORPUS_FILE), "utf8"));
     // (The modules) the sources' hash, the sources unchanged since the engine loaded — stat'ed AFTER the hash read them, so a
-    // file rewritten before or while it was hashed is never trusted. No version (1.26): a `version` key an older build wrote is
+    // file rewritten before or while it was hashed is never trusted. No version: a `version` key an older build wrote is
     // ignored — the hash alone decides, and an older corpus of the same sources is the same corpus.
     if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
       taskHeadingsShape(data.taskHeadings) && taskHeadingsShape(data.steeringStubs) && taskHeadingsShape(data.templateReqs) && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
@@ -1118,7 +1113,7 @@ function builtinCorpus() {
 }
 const builtinCorpusSource = () => { builtinCorpus(); return BUILTIN_CORPUS_FROM; };
 // A built-in track's template task headings from the trusted corpus (normalized, every language), or null: trackTaskHeadings
-// renders them then (1.22 review — rendered, they load pt.js, es.js and pt-BR into an English process).
+// renders them then (rendered, they load pt.js, es.js and pt-BR into an English process).
 function builtinTaskHeadings(tr) {
   const c = builtinCorpus();
   return c && Object.prototype.hasOwnProperty.call(c.taskHeadings, tr) ? c.taskHeadings[tr] : null;
@@ -1131,11 +1126,11 @@ function localeLoaded(rel) {
   BUILTIN_CORPUS_FROM = "render";
   TEMPLATE_SETS = TEMPLATE_SETS_BR = TEMPLATE_TASKS = BUG_STEPS = null;
   STEERING_STUBS = TEMPLATE_DIAGRAMS = SECTION_TEMPLATE_LINES = SECTION_TEMPLATE_LINES_BR = BUG_SLOTS = TEMPLATE_REQS = null; // 1.24 r6 I-I2
-  TASK_HEADINGS.clear(); // tracks.js's per-track sets, read from it (1.22 review)
+  TASK_HEADINGS.clear(); // tracks.js's per-track sets, read from it
 }
 if (LOADED_STATS) i18n.onLocaleLoad(localeLoaded);
-// …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas, 1.14).
-// A bracket longer than SLOT_MAX is no template's slot (only a generic one — "[TODO: …]" — can be that long): never keyed (review 5).
+// …and the slots of the project's own templates (.specs/templates/ — projectTemplateHas).
+// A bracket longer than SLOT_MAX is no template's slot (only a generic one — "[TODO: …]" — can be that long): never keyed.
 const isTemplatePlaceholder = (inner) => {
   if (String(inner).length > SLOT_MAX) return isGenericSlot(inner);
   const k = placeholderKey(inner);
@@ -1190,14 +1185,14 @@ function bracketPlaceholders(line, refs) {
   const found = [];
   scanBrackets(line, refs, isCodeSlot, (inner, raw, i, j, s) => {
     if (!isTemplatePlaceholder(raw)) return false;
-    // 1.25.1: an EMPTY ([] / [ ]) or ELLIPSIS ([...] / […]) bracket is a slot only where a template writes one — a field's whole value
+    // an EMPTY ([] / [ ]) or ELLIPSIS ([...] / […]) bracket is a slot only where a template writes one — a field's whole value
     if (RE_BARE_SLOT.test(raw) && !wholeValueAt(s, i, j)) return false;
     found.push("[" + inner + "]");
     return true;
   });
   return found;
 }
-// 1.25.1 — every empty / ellipsis slot the templates write is a field's WHOLE value: the line's own (after a list marker, a checkbox
+// every empty / ellipsis slot the templates write is a field's WHOLE value: the line's own (after a list marker, a checkbox
 // or a quote: "- []", "1. []"), a label's after its colon ("- **Test runner:** []", "Secret store: [] — never in code…", "SAST: [] ·
 // dependency audit: []"), a table cell's or an item of a " · " field list. Anywhere else it is the user's text — "THE SYSTEM SHALL
 // return HTTP 200 with an empty array []", "… append [...]", "returns a []string" (glued to the text after it) failed placeholders
@@ -1217,8 +1212,8 @@ function wholeValueAt(s, i, j) {
 // part of it), false = not (its nested groups are visited in turn — a template sentence half edited keeps its `[N]`).
 // Syntax (links, reference links, footnotes, callouts, wiki links, glued indexing, the list checkbox) and the exempt
 // contents (stable tags / IDs, NEEDS CLARIFICATION, the legacy core-only answer) are skipped whole, never visited.
-// codeSlot(body) says which code spans are unwrapped; every other span is blanked (columns kept). Linear per line (review 5,
-// P5): every "[" learns its closer from ONE stack pass (it rescanned to its closer at every nesting level), the groups are
+// codeSlot(body) says which code spans are unwrapped; every other span is blanked (columns kept). Linear per line:
+// every "[" learns its closer from ONE stack pass (it rescanned to its closer at every nesting level), the groups are
 // walked with an explicit stack (one recursion per level overflowed the call stack: a 24 KB line of nested "[a [a …]]" threw
 // RangeError out of ears_validate, doctor and approve), and a group longer than SLOT_MAX is looked up nowhere — no template slot,
 // reference label or marker is that long, and keying each level's inner text made the walk quadratic.
@@ -1256,13 +1251,13 @@ function scanBrackets(line, refs, codeSlot, visit) {
       let skip = after === "(" || /[\p{L}\p{N}_]/u.test(before) ||
         (inner.startsWith("[") && inner.endsWith("]")) || inner.startsWith("^") || inner.startsWith("!") ||
         (short && (refs.has(inner.trim().toLowerCase()) || RE_STABLE_BRACKET.test(inner) || RE_LEGACY_ANSWER.test(inner) ||
-          isPackMarkerBracket(inner))) || /^NEEDS[ _-]CLARIFICATION/i.test(inner); // a track pack's [MARKER] (1.15) is as stable as [SaaS]
+          isPackMarkerBracket(inner))) || /^NEEDS[ _-]CLARIFICATION/i.test(inner); // a track pack's [MARKER] is as stable as [SaaS]
       let end = j;
       if (after === "[") { // reference link [x][y]: both halves are syntax
         const k = closer[j + 1];
         if (k !== -1) { skip = true; end = k; }
       }
-      if (!skip && !visit(inner, line.slice(i + 1, j), i, j, s)) { // rawInner: code spans intact (columns kept); the group's place (1.25.1)
+      if (!skip && !visit(inner, line.slice(i + 1, j), i, j, s)) { // rawInner: code spans intact (columns kept); the group's place
         frames.push([end + 1, to], [i + 1, j]); // the group's inside next, then the rest of this range
         break;
       }
@@ -1306,7 +1301,7 @@ const RE_MANUAL_VERIFY = /_Verify:\s*`?\[\s*manual\b/i;
 // to them) — counting them made doctor FAIL and next_action say "fill tasks.md" in the middle of execution. Only the
 // tasks approval gate asks for one real task beyond them (approvalChecks, isPlaceholderTask — detectPhase's rule).
 function artifactReport(dir, file, tracks, preloaded) {
-  useTemplateScopeOf(dir); // the project's templates are template text too (1.14)
+  useTemplateScopeOf(dir); // the project's templates are template text too
   const raw = preloaded !== undefined ? preloaded : readIfExists(path.join(dir, file)); // preloaded: null = missing
   if (raw == null) return { file, state: "missing", items: [], empty: false };
   const lines = raw.split(/\r?\n/);
@@ -1343,14 +1338,14 @@ function placeholderSummary(reports, lang) {
 // fail the gates, `later` are informational. blockingOnly skips reading the later ones (the roadmap refresh runs on
 // every mutation, for every feature — file reads are its cost).
 function chainPlaceholders(dir, tracks, kind, phase, blockingOnly, texts) {
-  const cur = flowPhaseIndex(phase, featureFlow(dir, kind)); // C3: on the flow's scale (chainArtifacts' idx follows it)
+  const cur = flowPhaseIndex(phase, featureFlow(dir, kind)); // on the flow's scale (chainArtifacts' idx follows it)
   const all = chainArtifacts(dir, tracks, kind).filter((a) => !blockingOnly || a.idx <= cur)
     .map((a) => ({ ...artifactReport(dir, a.file, tracks, texts ? texts[a.file] : undefined), idx: a.idx })).filter((r) => r.state === "placeholder");
   return { all, blocking: all.filter((r) => r.idx <= cur), later: all.filter((r) => r.idx > cur) };
 }
 // Some prose (written content — writtenContent) once brackets (nested too), HTML comments and the TODO sentinel are set aside: a root cause written as
 // nothing but "[the cause, with evidence]" is not written yet — whatever the bracket says. A bracket group is set aside when it
-// closes on its own line (its nested groups with it); an unbalanced "[" or "]" stays. ONE pass (review 5, P5): a stack of the
+// closes on its own line (its nested groups with it); an unbalanced "[" or "]" stays. ONE pass: a stack of the
 // open "[" (emptied at each line break) marks each closed group in a difference array — removing the innermost groups again and
 // again until nothing changed was quadratic in the nesting (60 KB of nested "[a" in bug.md: 2.9 s).
 function hasProseOutsideBrackets(body) {
@@ -1372,7 +1367,7 @@ function hasProseOutsideBrackets(body) {
     else if (was && !cut) from = j;
   }
   if (!cut) outside.push(t.slice(from));
-  // 1.24 review 6 (F4): "prose" is WRITTEN content (writtenContent — never a generic slot line, TBD / TODO / "Pending." / "…", a
+  // "prose" is WRITTEN content (writtenContent — never a generic slot line, TBD / TODO / "Pending." / "…", a
   // punctuation-only line or bare structure) — a Root Cause "TBD" passed the iron law, a Constitution Check "TBD" its gate.
   const w = writtenContent(outside.join(" "));
   return w.prose.length > 0 || w.code.some((l) => RE_WORD_CHAR.test(l));
@@ -1386,7 +1381,7 @@ function hasProseOutsideBrackets(body) {
 // → the `items` (placeholderReport(text) entries) that still count.
 function bugPlaceholders(text, items) {
   const lines = String(text || "").split(/\r?\n/);
-  const heads = headingEntries(lines); // the ONE heading reader (review 5, M2): setext and indented headings, never one in a comment
+  const heads = headingEntries(lines); // the ONE heading reader: setext and indented headings, never one in a comment
   const headAt = new Map(heads.map((h) => [h.i, h]));
   const slots = bugTemplateSlots();
   const unitCache = new Map();
@@ -1403,14 +1398,14 @@ function bugPlaceholders(text, items) {
     }
     return unitCache.get(key);
   };
-  const isSlot = (k) => slots.has(k) || projectTemplateHas("bugSlots", k); // + the slots of the project's bug.md template (1.14)
+  const isSlot = (k) => slots.has(k) || projectTemplateHas("bugSlots", k); // + the slots of the project's bug.md template
   return (items || []).filter((p) => p.kind !== "bracket" || isSlot(placeholderKey(String(p.text).slice(1, -1))) || !unitHasProse(p.line - 1));
 }
 // (hasProseOutsideBrackets: the blank lines above a sentinel line are no longer part of what is blanked — they hold no
 // bracket, letter or digit, so its answer is the same; 1.17 H, as RE_TODO_SENTINEL)
 const RE_TODO_SENTINEL_LINE = /^[^\S\n\r\u2028\u2029]*>\s*\*\*TODO\*\*.*$/gm;
 // Every bracketed slot of the bug report template, in every language (the Summary slot included: built without one) — from the
-// corpus (1.24 r6 I-I2), rendered when it can't be trusted.
+// corpus, rendered when it can't be trusted.
 let BUG_SLOTS = null;
 function renderBugSlots() {
   const set = new Set();
@@ -1427,7 +1422,7 @@ function bugTemplateSlots() {
   return (BUG_SLOTS = new Set(c ? c.bugSlots : renderBugSlots()));
 }
 
-// 1.24 r6 I-I2 — the steering stubs of every language (doctor's steering check: a steering file whose body is still one of them
+// the steering stubs of every language (doctor's steering check: a steering file whose body is still one of them
 // verbatim, whitespace aside, is a template — scaffold.js steeringPlaceholders): per known file, the sha1 of each stub with its
 // whitespace taken out (artifactState's comparison), from the corpus — never every language's text rendered to compare one file.
 const squashText = (x) => String(x).replace(/\s+/g, "");
@@ -1447,7 +1442,7 @@ function isSteeringStub(file, text) {
   const hs = typeof file === "string" && Object.prototype.hasOwnProperty.call(STEERING_STUBS, file) ? STEERING_STUBS[file] : null;
   return !!hs && hs.includes(stubHash(text));
 }
-// 1.24 r6 I-I2 — the built-in requirement templates (EN / PT / pt-BR / ES: every built-in track's requirements.md, the bugfix's)
+// the built-in requirement templates (EN / PT / pt-BR / ES: every built-in track's requirements.md, the bugfix's)
 // whose criteria the cross-feature check (quality.js builtinTemplateAcs) sets aside: { lang: [text…] }, in render order. The texts
 // themselves (i18n only): their criteria are read live (acIndex), so the corpus never depends on the criteria readers.
 function renderTemplateReqs() {
@@ -1468,18 +1463,14 @@ function builtinTemplateReqs() {
   return (TEMPLATE_REQS = i18n.LANGS.flatMap((l) => (Object.prototype.hasOwnProperty.call(by, l) ? by[l] : []).map((t) => [t, l])));
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs, RE_NOT_A_SLUG, RE_ID_TOKEN_END,
-  notASlug, featureRefTest, RE_LEAD_LABEL, RE_CELL_LABEL, criterionLabel, criterionLabelIds,
-  otherFeatureTest, featureProjectDir, planIdText, clarificationMarkers,
-  templateTaskSet, bugStepSet, isBugStep, isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells,
-  headingEntries, headingIndex, headingLeadSource, RE_HEADING_LEAD, headingLeadRe, RE_SYN_INFLECTION, headingMatches, headingTextMatches, synonymsOverlap, sectionOverlaps, extractSection,
-  sectionContent, writtenContent, genericAnswer, lineAnswers, isTableSep, SLOT_MAX, bracketCloser, mermaidBlocks, mermaidState,
-  RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionLineKey, sectionOwnLines, RE_NA_LEAD, NA_REASON_WORDS, naAnswer,
-  trackSectionReport, sectionVerdict, RE_STABLE_BRACKET, RE_REF_DEFINITION, RE_LEGACY_ANSWER,
-  RE_LIST_CHECKBOX, placeholderKey, isGenericSlot, unknownSteeringStub, LEGACY_TEMPLATE_PLACEHOLDERS, templateCorpus,
-  templateBracketKeys, templateSets, templateSetsBr, CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData,
-  builtinCorpusSource, builtinTaskHeadings, isTemplatePlaceholder, isCodeSlot, visibleLines, placeholderReport,
-  bracketPlaceholders, scanBrackets, artifactState, headingsOnly, RE_MANUAL_VERIFY, artifactReport, featurePlaceholders,
-  placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, RE_TODO_SENTINEL_LINE,
-  bugTemplateSlots, renderBugSlots, renderSectionLines, renderTemplateDiagrams, templateDiagramSet, renderSteeringStubs, isSteeringStub,
+module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs,
+  notASlug, featureRefTest, criterionLabel, planIdText, clarificationMarkers, templateTaskSet, bugStepSet, isBugStep,
+  isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells, headingEntries, headingIndex,
+  RE_HEADING_LEAD, headingLeadRe, headingMatches, synonymsOverlap, sectionOverlaps, extractSection, genericAnswer,
+  mermaidState, RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionOwnLines, trackSectionReport,
+  sectionVerdict, isGenericSlot, unknownSteeringStub, templateCorpus, templateBracketKeys, templateSets, templateSetsBr,
+  CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData, builtinCorpusSource, builtinTaskHeadings,
+  isTemplatePlaceholder, placeholderReport, bracketPlaceholders, artifactState, headingsOnly, artifactReport,
+  featurePlaceholders, placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, bugTemplateSlots,
+  renderBugSlots, renderSectionLines, renderTemplateDiagrams, templateDiagramSet, renderSteeringStubs, isSteeringStub,
   renderTemplateReqs, builtinTemplateReqs, __link };

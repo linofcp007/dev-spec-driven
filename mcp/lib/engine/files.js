@@ -15,8 +15,8 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let errs, existingFeature, featureLang, isDevSpecDir, projectLang, roadmapPath;
-function __link(E) { ({ errs, existingFeature, featureLang, isDevSpecDir, projectLang, roadmapPath } = E); }
+let errs, existingFeature, featureLang, projectLang, roadmapPath;
+function __link(E) { ({ errs, existingFeature, featureLang, projectLang, roadmapPath } = E); }
 
 // ---------------------------------------------------------------------------
 // Paths & small fs helpers
@@ -26,13 +26,12 @@ function __link(E) { ({ errs, existingFeature, featureLang, isDevSpecDir, projec
 // argument (CLI --project, a tool's projectDir) > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the
 // working folder that holds a dev-spec .specs/ (nearestProject — run from a subfolder, a command used to start a SECOND,
 // nested .specs/ there) > the working folder itself (a project not set up yet: init creates it there).
-// 1.23 review: a value holding a variable left unexpanded — any "${", a leading $NAME, a %NAME% — is unusable and falls
+// a value holding a variable left unexpanded — any "${", a leading $NAME, a %NAME% — is unusable and falls
 // through (a SPEC_PROJECT_DIR of "${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR" or "%CLAUDE_PROJECT_DIR%" created that
 // literal folder; only a whole "${VAR}" was caught).
 const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
-const PROJECT_MAX_UP = 64; // folders walked up from the working folder (a few stats each, never a walk down)
 function unexpandedVar(v) { return RE_UNEXPANDED_VAR.test(String(v == null ? "" : v).trim()); }
-// 1.25.1 (review 7): a leading ~ (alone, ~/ or ~ and a backslash) is the home folder — PowerShell 5.1 hands a native command its ~ as
+// a leading ~ (alone, ~/ or ~ and a backslash) is the home folder — PowerShell 5.1 hands a native command its ~ as
 // typed, and an MCP client's argument or JSON config is never expanded: --project ~/zz / projectDir "~/zz" made a folder literally
 // named "~" in the working folder. ~user stays as written (no user database lookup). cli/completion.js mirrors it.
 const RE_HOME_PREFIX = /^~(?=$|[\\/])/;
@@ -47,19 +46,15 @@ function resolveProjectDir(arg) {
   const cwd = path.resolve(process.cwd());
   return nearestProject(cwd) || cwd;
 }
-// The nearest folder at or above `start` that holds a dev-spec .specs/ (isDevSpecDir: roadmap.json, steering/ or a feature's
-// .state.json) — `start` itself also with any .specs/ folder (one made by hand before init) — or null. A network path is never
-// walked (isNetworkPath: no stat goes up a share).
+// The project probe (mcp/lib/probe.js — the one dev-spec project rule every surface reads) through the engine's view of the disk: a
+// dry run's folders and files seen as made (isDirSafe, readFileHead, safeReaddir). doctor.js isDevSpecDir reads the rule with it.
+const PROBE = require("../probe.js");
+const PROBE_IO = { isDir: (p) => isDirSafe(p), exists: (p) => fs.existsSync(p), head: (p) => readFileHead(p, 4000) || "", folders: (p) => safeReaddir(p) };
+// The nearest folder at or above `start` that holds a dev-spec .specs/ (the probe's rule: roadmap.json, steering/, a generated
+// ROADMAP.md or a feature folder with its .state.json or classification.md) — `start` itself also with any .specs/ folder (one made
+// by hand before init) — or null, at most PROBE.PROJECT_MAX_UP levels up. A network path is never walked (no stat goes up a share).
 function nearestProject(start) {
-  if (isNetworkPath(start)) return null;
-  let dir = path.resolve(start);
-  for (let i = 0; i < PROJECT_MAX_UP; i++) {
-    if ((i === 0 && isDirSafe(path.join(dir, ".specs"))) || isDevSpecDir(dir)) return dir;
-    const up = path.dirname(dir);
-    if (up === dir) return null;
-    dir = up;
-  }
-  return null;
+  return PROBE.nearestProject(start, { io: PROBE_IO });
 }
 
 function specsRoot(projectDir) {
@@ -70,16 +65,16 @@ function specsRoot(projectDir) {
   return root;
 }
 
-// Every writer below goes through the write gate first (specsWriteGate, below — 1.24 r6): a folder or file under .specs/ is
+// Every writer below goes through the write gate first (specsWriteGate, below): a folder or file under .specs/ is
 // never created or written through a link, nor over a path of the other kind.
 function ensureDir(p) {
   specsWriteGate(p, { dir: true });
-  if (CTX.DRY_RUN) { dryPut(p, null, true); return; } // 1.25: a dry run records the folder, creates nothing
+  if (CTX.DRY_RUN) { dryPut(p, null, true); return; } // a dry run records the folder, creates nothing
   mkdirp(p);
 }
 
 // ---------------------------------------------------------------------------
-// 1.25 — the DRY-RUN sink (spec_import {dryRun}). withDryRun(fn) runs fn with every write primitive of this module —
+// the DRY-RUN sink (spec_import {dryRun}). withDryRun(fn) runs fn with every write primitive of this module —
 // writeFileAtomic, writeIfAbsent, ensureDir, specWrite, removeSpecFile — recording what it WOULD write in CTX.DRY_RUN instead
 // of touching the disk, and every reader of this module — readRaw (readIfExists, readJson), existsRaw (existsCached),
 // readDirCached, safeReaddir, isDirSafe — seeing those writes over the disk: the operation runs its whole pipeline (the gate's
@@ -157,7 +152,7 @@ function mkdirp(p) {
 
 function writeIfAbsent(file, content) {
   specsWriteGate(file, { createOnly: true }); // the file itself may be a link: the "wx" create below never writes through it
-  if (CTX.DRY_RUN) { // 1.25: create-only in the sink too — a file there (on the disk or written earlier in the dry run) stays
+  if (CTX.DRY_RUN) { // create-only in the sink too — a file there (on the disk or written earlier in the dry run) stays
     const e = dryEntry(file);
     if (e ? e.dir || e.text !== null : fs.existsSync(file)) return false;
     dryPut(file, content);
@@ -181,7 +176,7 @@ function writeIfAbsent(file, content) {
 // removed — the best-effort roadmap/catalog refreshes and the hook swallow it, and they used to leave one
 // full-size `<file>.<pid>.<ts>.tmp` in the committed .specs/ per call. On Windows a brief lock (a scanner, an
 // indexer, a preview pane) is retried first.
-// 1.25.1 (review 7) — atomic, durable, and never torn in place:
+// atomic, durable, and never torn in place:
 //   - the temp file is created exclusively ("wx": never written through a link planted at its name), written whole and fsynced
 //     BEFORE the rename (without it a crash right after the rename could leave the new name with no data — the rename's metadata
 //     may reach the disk first); after the rename the folder is fsynced where the platform can (POSIX; Windows can't open a
@@ -203,9 +198,9 @@ function fsyncDir(dir) {
   }
 }
 function writeFileAtomic(file, content) {
-  if (!existsRaw(file)) { const a = changeAlias(file); if (a) file = a; } // 1.21 F5: a change's tasks.md / requirements.md is its change.md
+  if (!existsRaw(file)) { const a = changeAlias(file); if (a) file = a; } // a change's tasks.md / requirements.md is its change.md
   specsWriteGate(file); // never through a link (a linked folder on the way, or the file itself), never over a folder
-  if (CTX.DRY_RUN) { dryPut(file, content); return; } // 1.25: recorded, not written
+  if (CTX.DRY_RUN) { dryPut(file, content); return; } // recorded, not written
   forgetCached(file);
   mkdirp(path.dirname(file));
   const data = Buffer.isBuffer(content) ? content : ArrayBuffer.isView(content) ? Buffer.from(content.buffer, content.byteOffset, content.byteLength)
@@ -235,7 +230,7 @@ function writeFileAtomic(file, content) {
   }
   fsyncDir(path.dirname(file));
 }
-// 1.24 r6 (G2 / G-I2) — THE write call for an engine module writing a spec file by any other means than writeFileAtomic /
+// THE write call for an engine module writing a spec file by any other means than writeFileAtomic /
 // writeIfAbsent / ensureDir: no module outside this one touches the disk with fs.writeFileSync / appendFileSync / renameSync /
 // mkdirSync (mcp/tests/16-conventions.js guards it). opts.append: append `text` (a log line, the lock lines of .specs/.gitignore)
 // — the target is never a link (the gate lstats it; O_NOFOLLOW where the platform has it), created when absent, its folder must
@@ -245,7 +240,7 @@ function specWrite(file, text, opts = {}) {
   if (opts.createOnly) return writeIfAbsent(file, text);
   if (!opts.append) return writeFileAtomic(file, text);
   specsWriteGate(file);
-  if (CTX.DRY_RUN) { dryPut(file, (readRaw(file) || "") + String(text)); return true; } // 1.25: the appended text, recorded
+  if (CTX.DRY_RUN) { dryPut(file, (readRaw(file) || "") + String(text)); return true; } // the appended text, recorded
   forgetCached(file);
   const C = fs.constants;
   const fd = fs.openSync(file, C.O_WRONLY | C.O_APPEND | C.O_CREAT | (C.O_NOFOLLOW || 0), 0o666);
@@ -258,11 +253,11 @@ function specWrite(file, text, opts = {}) {
   return true;
 }
 
-// 1.24 r6 I-I1 — a file under .specs/ removed (the roadmap's stale stamp): never through a linked folder on the way (the gate);
+// a file under .specs/ removed (the roadmap's stale stamp): never through a linked folder on the way (the gate);
 // a link AT the path is removed as the link (unlink never follows). → true when removed, false when it wasn't there.
 function removeSpecFile(file) {
   specsWriteGate(file);
-  if (CTX.DRY_RUN) { const had = existsRaw(file); dryPut(file, null); return had; } // 1.25: recorded as removed
+  if (CTX.DRY_RUN) { const had = existsRaw(file); dryPut(file, null); return had; } // recorded as removed
   forgetCached(file);
   try {
     fs.unlinkSync(file);
@@ -272,7 +267,7 @@ function removeSpecFile(file) {
     throw e;
   }
 }
-// 1.25 — a folder under .specs/ removed when it is EMPTY (the ADR export's emptied feature folders): through the gate (never a
+// a folder under .specs/ removed when it is EMPTY (the ADR export's emptied feature folders): through the gate (never a
 // link on the way, never the folder itself a link — rmdir would drop a Windows junction); one still holding anything stays. →
 // true when removed, false otherwise (absent, not empty, refused).
 function removeEmptySpecDir(dir) {
@@ -341,13 +336,13 @@ const sameLockSnapshot = (a, b) => !!a && !!b && a.raw === b.raw && a.ino === b.
 function staleLock(lock) {
   const snap = lockSnapshot(lock);
   if (!snap) return null;
-  // r5 review: the age of a lock dated in the FUTURE (another machine's clock on a shared folder, a copied file) counts as well — it
+  // the age of a lock dated in the FUTURE (another machine's clock on a shared folder, a copied file) counts as well — it
   // never aged, and blocked the feature until the clock caught up (a day ahead: a day). Symmetric with a clock that is behind.
   const age = Math.abs(Date.now() - snap.mtimeMs);
   let info = null;
   try { info = JSON.parse(snap.raw); } catch { /* being written, or not ours */ }
   let stale = age > LOCK_STALE_MS || (!isObj(info) && snap.raw != null && age > LOCK_NOTELESS_STALE_MS);
-  // r5 review: a note naming THIS process (this host, this pid) on a lock written BEFORE this process started was left by an earlier
+  // a note naming THIS process (this host, this pid) on a lock written BEFORE this process started was left by an earlier
   // process that had the same pid — a recycled pid, a container's pid 1 with a fixed hostname: its holder is gone (it waited
   // LOCK_STALE_MS). One written since may be another engine instance or worker thread of this very process: respected, as before.
   if (isObj(info) && info.host === require("os").hostname() && info.pid === process.pid && snap.mtimeMs < PROCESS_START_MS - 1000) stale = true;
@@ -411,13 +406,13 @@ function withFeatureLock(dir, fn, opts = {}) {
 function withLockFile(lock, fn, opts = {}) {
   const key = readCacheKey(lock);
   if (HELD_LOCKS.has(key)) return fn();
-  // 1.24 r6 (G1) — the lock is the first write into the folder: a feature folder (or _archive/<slug>/) that is a link is refused
+  // the lock is the first write into the folder: a feature folder (or _archive/<slug>/) that is a link is refused
   // HERE, once, before the lock exists and before fn writes anything (the lock, the ticks, approvals, briefs and decisions all
   // landed in the folder the link points at). → opts.onRefused(error) | the refusal result ({ ok: false, linked: true, error }).
   // (A path of the wrong kind is the lock's own business: a folder named .lock is a stale lock that can't be removed — busy, stuck.)
   const refused = lockGateError(lock);
   if (refused && refused.gate.kind === "link") return opts.onRefused ? opts.onRefused(refused) : gateRefusal(refused);
-  if (CTX.DRY_RUN) return fn(); // 1.25: a dry run writes nothing — no lock file either (its writes go to the sink)
+  if (CTX.DRY_RUN) return fn(); // a dry run writes nothing — no lock file either (its writes go to the sink)
   ensureLockIgnore(specsDirOf(path.dirname(lock))); // before the lock exists: one left by a killed process is never committable
   const waitMs = Number.isSafeInteger(opts.waitMs) && opts.waitMs >= 0 ? opts.waitMs : lockWaitMs();
   const now0 = Date.now();
@@ -448,7 +443,7 @@ function withLockFile(lock, fn, opts = {}) {
       } else if (e.readOnly && ++denied < 10) {
         /* the folder refused the note's temp file: maybe transient (a scanner) — retry below, then run unlocked */
       } else if (!e.readOnly && (e.code === "EPERM" || e.code === "EACCES" || e.code === "EBUSY")) {
-        // r5 review: the temp file was written, the lock itself refused — Windows answers that for a lock being deleted (another
+        // the temp file was written, the lock itself refused — Windows answers that for a lock being deleted (another
         // holder's release, a scanner's open handle on it): a held lock, waited for until the deadline (busy). After 10 such answers
         // in a row it ran UNLOCKED, beside the next holder.
         denied = 0;
@@ -478,7 +473,7 @@ function withLockFile(lock, fn, opts = {}) {
     releaseLock(lock, mine); // only our own: after a folder move the old path is empty — or another process's lock
   }
 }
-// The write gate on a lock file, with the lock file's own TRANSIENT refusals retried (1.25.1): on Windows a lock another holder is
+// The write gate on a lock file, with the lock file's own TRANSIENT refusals retried: on Windows a lock another holder is
 // releasing sits "delete pending" for a moment, and lstat / realpath of it answer EPERM — the gate read that as "unreadable, maybe
 // a link" and the waiter was refused (2 of 180 contended backlog adds failed with "…/.roadmap.lock: that file is a link"). Only a
 // refusal naming the lock FILE itself is retried (a linked folder on the way is refused at once); a real link at the lock path
@@ -509,7 +504,7 @@ function acquireLockFile(lock, note, mine) {
     linked = true;
   } catch (e) {
     if (e.code === "EEXIST" || e.code === "ENOENT") throw e; // held (or a temp name taken: retried) / no folder: the caller decides
-    // r5 review: no file at all can be created here — a read-only folder (or file system): the caller runs unlocked, as before
+    // no file at all can be created here — a read-only folder (or file system): the caller runs unlocked, as before
     if (!tmpWritten && (e.code === "EACCES" || e.code === "EPERM" || e.code === "EROFS")) { e.readOnly = true; throw e; }
     // no hard links here: the O_EXCL create below throws the real reason (EEXIST held; EPERM / EACCES: a lock being deleted)
   } finally {
@@ -538,10 +533,10 @@ function featureLocked(fn, when) {
   const run = function (projectDir, name) {
     const args = arguments;
     if (when && !when(args)) return fn.apply(this, args);
-    const f = existingFeature(projectDir, name);
+    const f = existingFeature(projectDir, isObj(name) ? name.name : name); // the options form: (projectDir, { name, … })
     if (!f.ok) return fn.apply(this, args);
     return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: (b) => featureBusyResult(projectDir, f.slug, null, b),
-      onRefused: (e) => gateRefusal(e, featureLangSafe(projectDir, f.slug)) }); // a linked feature folder: refused up front (1.24 r6)
+      onRefused: (e) => gateRefusal(e, featureLangSafe(projectDir, f.slug)) }); // a linked feature folder: refused up front
   };
   Object.defineProperty(run, "name", { value: fn.name });
   return run;
@@ -589,7 +584,7 @@ function renameDirSync(from, to) {
     }
   }
 }
-// A folder entry that is a symbolic link / junction removed — the link alone, never what it points at (1.24 r6: remove of a
+// A folder entry that is a symbolic link / junction removed — the link alone, never what it points at (remove of a
 // linked feature folder). unlink takes a link to a folder on every platform Node runs on (libuv removes a Windows junction /
 // directory symlink as the reparse point it is); rmdir is the fallback where it answers EPERM / EISDIR.
 function removeLinkEntry(p) {
@@ -631,10 +626,10 @@ const ROADMAP_LOCK_FILE = ".roadmap.lock";
 const LOCK_IGNORE_LINES = [LOCK_FILE, LOCK_FILE + LOCK_RECLAIM_SUFFIX, ROADMAP_LOCK_FILE, ROADMAP_LOCK_FILE + LOCK_RECLAIM_SUFFIX,
   "*.[0-9]*.[0-9]*.tmp", ".removing-*/"];
 function ensureLockIgnore(specsDir) {
-  if (!specsDir || CTX.DRY_RUN) return; // 1.25: housekeeping a dry run skips (its raw writes would bypass the sink)
+  if (!specsDir || CTX.DRY_RUN) return; // housekeeping a dry run skips (its raw writes would bypass the sink)
   const file = path.join(specsDir, ".gitignore");
   try {
-    // 1.24 r6 (G2): a committed .specs/.gitignore that is a link is left alone \u2014 the lock lines were appended to the file it
+    // a committed .specs/.gitignore that is a link is left alone \u2014 the lock lines were appended to the file it
     // points at (a user's config elsewhere). The gate throws: caught below, like any other reason not to write.
     specsWriteGate(file);
     let cur = null;
@@ -715,7 +710,7 @@ function withReadCache(fn) {
   CTX.XAC_MEMO = null;
   CTX.TEMPLATE_SCOPE_ROOT = null; // the call's project (specsRoot) and its parsed templates live as long as the scope
   CTX.TEMPLATE_MEMO = null;
-  CTX.PACK_MEMO = null; // … and its track packs (1.15)
+  CTX.PACK_MEMO = null; // … and its track packs
   CTX.GHOST_MARKERS = null;
   try {
     return fn();
@@ -735,7 +730,7 @@ const DIR_KEY = "\u0000dir:";
 // A spec file whose CONTENT is copied out — decisions.md (appended and rewritten), the export's documents, the release notes —
 // must be a regular file whose real path stays inside the project's .specs/: a committed symlink out (decisions.md ->
 // ~/.ssh/id_rsa) is never followed (the specs:// resources refuse it the same way). Absent → true (nothing to follow).
-// Within a read-cache scope the verdict is memoized per file and the root's real path per root (1.16 Q review: the cross-feature
+// Within a read-cache scope the verdict is memoized per file and the root's real path per root (the cross-feature
 // criteria and supersededByIndex read every requirements.md in one call — two real-path walks per file were a third of it).
 const CONTAINED_KEY = "\u0000contained:";
 function specsFileContained(projectDir, file) {
@@ -760,11 +755,11 @@ function specsFileContainedNow(projectDir, file) {
     return false;
   }
 }
-// 1.22 review — a file the engine is about to WRITE below .specs/ (an export's document): no folder between .specs/ and it,
+// a file the engine is about to WRITE below .specs/ (an export's document): no folder between .specs/ and it,
 // nor the file itself, is a link (a symbolic link, a junction), and each resolves inside the real .specs/ — a committed
 // `.specs/exports -> /etc` or `.specs/exports/project.html -> ~/.bashrc` is refused, nothing written. A part that doesn't
 // exist yet passes (it will be created inside); a path outside .specs/ → false. Uncached: a write's own check.
-// 1.24 r6: the write gate's link verdict (specsWriteBlock) — a path of the wrong kind is not a link: the gate itself refuses it
+// the write gate's link verdict (specsWriteBlock) — a path of the wrong kind is not a link: the gate itself refuses it
 // when the write comes (its own message).
 function specsWriteContained(projectDir, file) {
   const root = specsRoot(projectDir);
@@ -775,7 +770,7 @@ function specsWriteContained(projectDir, file) {
 }
 
 // ---------------------------------------------------------------------------
-// THE write gate (1.24 r6 — G1 / G2 / G7 / G-I2): every file and folder the engine writes below a project's .specs/
+// THE write gate: every file and folder the engine writes below a project's .specs/
 // ---------------------------------------------------------------------------
 // writeFileAtomic, writeIfAbsent, ensureDir and specWrite call specsWriteGate before they touch the disk, and withLockFile
 // checks its lock's path the same way before the lock exists — so every engine writer is gated, whichever module calls it
@@ -787,7 +782,7 @@ function specsWriteContained(projectDir, file) {
 //     written into the user's shell profile. (A create-only write may meet a target that is itself a link: "wx" never
 //     writes through it.)
 //   • the wrong KIND — a file where a folder is needed (.specs itself, a feature path, _archive), a folder where a file is
-//     written (ROADMAP.md, an export): the raw EEXIST / ENOTDIR / EISDIR reached the user (G7).
+//     written (ROADMAP.md, an export): the raw EEXIST / ENOTDIR / EISDIR reached the user.
 // .specs/ itself may be a link (a project keeping its specs elsewhere): what is checked lies BELOW it. A path outside every
 // .specs/ is not gated (the engine writes nothing there). A refusal throws an Error — code ESPECSLINK / ESPECSKIND, a message
 // in the project's language, `gate` { kind, rel } — that the facade (spec.js) answers as { ok: false, linked | wrongKind: true,
@@ -847,7 +842,7 @@ function specsWriteBlock(root, target, opts = {}) {
     const realRoot = realSpecsRoot(root);
     let real = null;
     try { real = fs.realpathSync.native(deepest); } catch (e) {
-      // 1.24 r6: gone since its lstat (another process released its lock in between — the lock's waiter was refused as "a link"):
+      // gone since its lstat (another process released its lock in between — the lock's waiter was refused as "a link"):
       // judged by its folder, already walked, as an absent part is. Anything else unresolvable: refused below.
       if (e && e.code === "ENOENT" && deepest !== root) {
         try { real = path.join(fs.realpathSync.native(path.dirname(deepest)), path.basename(deepest)); } catch { real = null; }
@@ -896,10 +891,10 @@ function gateRefusal(e, lang) {
 }
 // readIfExists for such a file: null when it is not contained (skipped, as if absent).
 function readContained(projectDir, file) {
-  const f = (!existsRaw(file) && changeAlias(file)) || file; // 1.21 F5: a change's change.md is checked as itself
+  const f = (!existsRaw(file) && changeAlias(file)) || file; // a change's change.md is checked as itself
   return specsFileContained(projectDir, f) ? readRaw(f) : null;
 }
-// 1.21 F5 — a CHANGE (kind "change", size xs) keeps its requirements AND its tasks in ONE file, change.md: every reader and
+// a CHANGE (kind "change", size xs) keeps its requirements AND its tasks in ONE file, change.md: every reader and
 // writer of a feature's requirements.md / tasks.md reaches it through this alias, so the engine's many readers of those two
 // files (EARS, trace, the tasks scanner, the evidence gate, finish, the roadmap, the exports, the hooks) work on it unchanged.
 // Only when the file itself is absent, its folder holds change.md and that folder's .state.json says kind "change" — a plain
@@ -927,10 +922,10 @@ function readIfExists(file) {
   const a = changeAlias(file);
   return a ? readRaw(a) : null;
 }
-// 1.21.1 review — the first maxChars characters of a file, UTF-8 decoded, from ONE bounded read of the disk: never the whole
+// the first maxChars characters of a file, UTF-8 decoded, from ONE bounded read of the disk: never the whole
 // file then a slice (a 177 MB tests/fixtures/db.sql cost every trace / doctor / finish / approve 249 ms and 179 MB). The
 // brownfield scan, the test-code scan and the status line's tests gate read code this way. The cap is in CHARACTERS (UTF-16
-// units), as the slice it replaced was — review 2: a byte cap lost a T-ID behind 150,000 accented letters. So it reads up to
+// units), as the slice it replaced was — a byte cap lost a T-ID behind 150,000 accented letters. So it reads up to
 // 4 bytes a character (a unit is at most 3 UTF-8 bytes; a surrogate pair is 4 bytes for 2 units), decodes, then slices.
 // null when the file can't be read. Uncached (not the read cache): these readers visit each file once per call.
 let HEAD_BUF = null; // one scratch buffer, reused (the reads are synchronous)
@@ -956,7 +951,7 @@ function readFileHead(file, maxChars) {
   }
 }
 function readRaw(file) {
-  if (CTX.DRY_RUN) { const e = dryEntry(file); if (e) return e.dir ? null : e.text; } // 1.25: what the dry run wrote
+  if (CTX.DRY_RUN) { const e = dryEntry(file); if (e) return e.dir ? null : e.text; } // what the dry run wrote
   const k = CTX.READ_CACHE ? readCacheKey(file) : null;
   if (k !== null && CTX.READ_CACHE.has(k)) return CTX.READ_CACHE.get(k);
   let text;
@@ -968,15 +963,15 @@ function readRaw(file) {
   if (k !== null) CTX.READ_CACHE.set(k, text);
   return text;
 }
-// A file's bytes (the first n of buf) as text, the way a Windows editor or shell wrote them (1.22 review): a UTF-16 BOM decides
+// A file's bytes (the first n of buf) as text, the way a Windows editor or shell wrote them: a UTF-16 BOM decides
 // — FF FE is UTF-16LE (Windows PowerShell 5.1's `>` / Out-File, Notepad's "Unicode"), FE FF UTF-16BE (swapped, then read as LE) —
 // anything else is UTF-8. Read as UTF-8, a UTF-16 file was NUL-interleaved noise: a Pester tests/Login.Tests.ps1 naming T-01 was
 // never found (the tests gate never passed), a UTF-16 requirements.md traced 0 ACs. The BOM is kept as the U+FEFF a UTF-8 BOM
 // reads as, so every reader that drops one drops this one too (a rewrite of such a file is UTF-8). Every reader of spec / test
 // text goes through it: readRaw (readIfExists, readContained), readFileHead, the importer, the resources, the save hooks.
-// 1.25.1 — CR-only line endings (classic Mac, some exporters): a text holding a CR and no LF at all has its CRs read as line breaks.
+// CR-only line endings (classic Mac, some exporters): a text holding a CR and no LF at all has its CRs read as line breaks.
 // Every reader splits on "\n" (or \r?\n): such a requirements.md was ONE line — trace 0 ACs beside 13 planned tests, doctor's
-// placeholders failed, status said phase requirements. A text with any LF is left alone ("\r\r\n" keeps its reading — 1.24 r6 D3).
+// placeholders failed, status said phase requirements. A text with any LF is left alone ("\r\r\n" keeps its reading).
 function decodeText(buf, n = buf.length) {
   return crOnlyToLf(decodeBytes(buf, n));
 }
@@ -990,7 +985,7 @@ function decodeBytes(buf, n) {
 }
 const crOnlyToLf = (t) => (t.includes("\r") && !t.includes("\n") ? t.replace(/\r/g, "\n") : t);
 // fs.existsSync, served from the same scope (the per-feature file probes of listFeatures / detectPhase / detectTracks) — a
-// change's requirements.md / tasks.md exist as its change.md (changeAlias, 1.21 F5).
+// change's requirements.md / tasks.md exist as its change.md (changeAlias).
 function existsCached(p) {
   return existsRaw(p) || !!changeAlias(p);
 }
@@ -1005,7 +1000,7 @@ function existsRaw(p) {
 }
 // fs.readdirSync(d, { withFileTypes: true }) sorted by name, served from the same scope (walkProject); null = unreadable.
 function readDirCached(d) {
-  if (CTX.DRY_RUN) return dryListing(d, readDirDisk(d)); // 1.25: the disk's listing (cached) + the dry run's writes
+  if (CTX.DRY_RUN) return dryListing(d, readDirDisk(d)); // the disk's listing (cached) + the dry run's writes
   return readDirDisk(d);
 }
 function readDirDisk(d) {
@@ -1029,10 +1024,10 @@ function forgetCached(file, opts = {}) {
   let k = readCacheKey(file);
   CTX.READ_CACHE.delete(k);
   CTX.READ_CACHE.delete(CONTAINED_KEY + k);
-  CTX.XAC_MEMO = null; // 1.16 Q2: any write may change a criterion, a state or a template — the cross-feature table is rebuilt
+  CTX.XAC_MEMO = null; // any write may change a criterion, a state or a template — the cross-feature table is rebuilt
   // A write under .specs/templates/ (templates init) changes the project's template corpus.
   if (CTX.TEMPLATE_MEMO && (k === CTX.TEMPLATE_MEMO.tdirKey || k.startsWith(CTX.TEMPLATE_MEMO.tdirKey + path.sep))) CTX.TEMPLATE_MEMO = null;
-  // … and a write under .specs/tracks/ (tracks init) changes the project's track packs (1.15).
+  // … and a write under .specs/tracks/ (tracks init) changes the project's track packs.
   if (CTX.PACK_MEMO && (k === CTX.PACK_MEMO.dirKey || k.startsWith(CTX.PACK_MEMO.dirKey + path.sep))) CTX.PACK_MEMO = null;
   for (;;) {
     CTX.READ_CACHE.delete(EXISTS_KEY + k);
@@ -1070,7 +1065,7 @@ function safeReaddir(p) {
   } catch {
     names = [];
   }
-  return CTX.DRY_RUN ? dryListing(p, names.map((name) => ({ name }))).map((e) => e.name) : names; // 1.25: + the dry run's writes
+  return CTX.DRY_RUN ? dryListing(p, names.map((name) => ({ name }))).map((e) => e.name) : names; // + the dry run's writes
 }
 
 // Is `p` the root itself or inside it? path.relative, not `root + sep`: a drive root (C:\, or Q:\ from subst) already
@@ -1118,7 +1113,7 @@ function plainUnc(p) {
   const m = /^[\\/]{2}[?.][\\/]UNC[\\/]/i.exec(s);
   return m ? "\\\\" + s.slice(m[0].length) : s;
 }
-// Is network path p inside network folder root — decided on the TEXT alone, never a stat or realpath (1.16 verify NEW-3)?
+// Is network path p inside network folder root — decided on the TEXT alone, never a stat or realpath?
 // Both are read as Windows paths (a UNC path is one): `\\?\UNC\` = `\\`, / = \, `..` resolved, case folded (SMB host and share
 // names are case-insensitive). A local root or p → false. → the relative path ("" for root itself) | null.
 function networkPathInside(root, p) {
@@ -1133,7 +1128,7 @@ function networkPathInside(root, p) {
 // `C:\Users\ADMINI~1\…`, a junction, a symlink); null when it is outside. The text comparison answers first; the real
 // paths are read only when it says "outside" (the guard hook calls this on every edit). Never throws.
 // A NETWORK path on either side (isNetworkPath — an agent's Write to `\\host\share\a.js`, an absolute `_Implements:_`) is decided
-// on the text alone (1.16 verify NEW-3): a realpath / stat of it opens an SMB connection to the host it names before the permission
+// on the text alone: a realpath / stat of it opens an SMB connection to the host it names before the permission
 // prompt — hanging on an unreachable host, and on Windows sending the user's NTLM credentials. Inside only under the same
 // `\\host\share\…` prefix as root (a project living on a share stays guarded), the `\\?\UNC\` spelling read as the plain one.
 function insideDirAlias(root, p) {
@@ -1169,15 +1164,10 @@ function isNetworkPath(p) {
   return host !== "wsl$" && host !== "wsl.localhost";
 }
 
-module.exports = { resolveProjectDir, unexpandedVar, expandHome, nearestProject, specsRoot, ensureDir, withDryRun, isDryRun, dryRunRefused, dryWrites, dryPut,
-  dryEntry, dryListing, readDirDisk, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
-  writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
-  specsWriteGate, gateRefusal, featureLangSafe, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
-  LOCK_RECLAIM_STALE_MS, LOCK_NOTELESS_STALE_MS, LOCK_NESTED_MIN_MS, HELD_LOCKS, lockSnapshot, sameLockSnapshot,
-  staleLock, reclaimStaleLock, releaseLock, lockWaitMs, withFeatureLock, withLockFile, acquireLockFile, featureLocked,
-  featureBusyResult, withMoveLock, DIR_RENAME_RETRY_MS, renameDirSync, removeLinkEntry, moveDirOrBusy, ROADMAP_LOCK_FILE,
-  LOCK_IGNORE_LINES, ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel,
-  shapeError, withReadCache, readCacheKey, EXISTS_KEY, DIR_KEY, CONTAINED_KEY, specsFileContained,
-  specsFileContainedNow, specsWriteContained, readContained, readIfExists, readFileHead, readRaw, decodeText, existsCached, existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, globWalkReaches,
-  invalidateReadCache, safeReaddir, withinRoot, isDirSafe, FOLD_CASE, toPosix, isInsideDir, realPathLoose, plainUnc,
-  networkPathInside, insideDirAlias, isNetworkPath, __link };
+module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensureDir, withDryRun, isDryRun, writeIfAbsent,
+  writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, specsWriteBlock, gateRefusal, LOCK_FILE, withFeatureLock,
+  featureLocked, featureBusyResult, withMoveLock, renameDirSync, removeLinkEntry, moveDirOrBusy, LOCK_IGNORE_LINES,
+  ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel, shapeError, withReadCache,
+  readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, decodeText, existsCached,
+  existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
+  FOLD_CASE, toPosix, isInsideDir, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO, __link };

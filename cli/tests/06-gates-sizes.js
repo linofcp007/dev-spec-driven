@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, tmp, require, __dirname }) => {
+exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const p = path.join(tmp, "p121-sizes");
   S.initProject(p, ["core"], "en");
@@ -13,7 +13,7 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
   const has = (slug, f) => fs.existsSync(path.join(p, ".specs", slug, f));
 
   // create --size s: the same scaffold spec_create {size: "s"} writes (engine), --json carries size
-  const cli = run(["create", "Cli small", "tdd", "sec", "--size", "S", "--json", "--project", p]);
+  const cli = runIn(["create", "Cli small", "tdd", "sec", "--size", "S", "--json", "--project", p]);
   const eng = S.createFeature(p, "Engine small", ["core", "tdd", "sec"], undefined, undefined, undefined, undefined, { size: "s" });
   const j = JSON.parse(cli.out);
   const same = ["requirements.md", "design.md", "tasks.md", "test-plan.md", "checklist.md"].every((f) => rd("cli-small", f).replace(/Cli small|cli-small/g, "X") === rd(eng.slug, f).replace(/Engine small|engine-small/g, "X"));
@@ -22,17 +22,17 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     JSON.stringify({ code: cli.code, size: j.size, same }) + ")");
 
   // a change: --size xs (and --kind change) → ONE change.md; the plan approved with --through tasks; the refusals exit 1
-  const ch = run(["create", "Footer typo", "--size", "xs", "--summary", "fix a typo in the footer", "--project", p]);
-  const kindCh = run(["create", "Header typo", "--kind", "change", "--json", "--project", p]);
+  const ch = runIn(["create", "Footer typo", "--size", "xs", "--summary", "fix a typo in the footer", "--project", p]);
+  const kindCh = runIn(["create", "Header typo", "--kind", "change", "--json", "--project", p]);
   const txt = "# Change: footer\n\n## Summary\nFix the footer string.\n\n## Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show \"Copyright 2026 Acme\".\n\n" +
     "## Approach\nOne string in footer.html.\n\n## Tasks\n- [ ] 1. [US1] Fix the footer string\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n";
   fs.writeFileSync(path.join(p, ".specs", "footer-typo", "change.md"), txt);
-  const ap = run(["approve", "footer-typo", "--through", "tasks", "--project", p]);
-  const reqAp = run(["approve", "footer-typo", "requirements", "--project", p]);
+  const ap = runIn(["approve", "footer-typo", "--through", "tasks", "--project", p]);
+  const reqAp = runIn(["approve", "footer-typo", "requirements", "--project", p]);
   const done = run(["done", "footer-typo", "1", "--run", "--project", p]);
-  const fin = run(["finish", "footer-typo", "--project", p]);
-  const bad = run(["create", "Bad", "--size", "xl", "--project", p]);
-  const tracked = run(["create", "Tracked", "sec", "--kind", "change", "--project", p]);
+  const fin = runIn(["finish", "footer-typo", "--project", p]);
+  const bad = runIn(["create", "Bad", "--size", "xl", "--project", p]);
+  const tracked = runIn(["create", "Tracked", "sec", "--kind", "change", "--project", p]);
   ok(ch.code === 0 && /is a change \(size xs\): ONE file/.test(ch.out) && fs.readdirSync(path.join(p, ".specs", "footer-typo")).filter((n) => n.endsWith(".md")).join() === "change.md" &&
     JSON.parse(kindCh.out).kind === "change" && ap.code === 0 && reqAp.code === 1 && /there is no requirements phase/.test(reqAp.out) && done.code === 0 &&
     /^- \[x\] 1\. /m.test(rd("footer-typo", "change.md")) && fin.code === 0 && bad.code === 1 && /size must be one of: xs, s, m, l/.test(bad.out) && tracked.code === 1 && /\+sec/.test(tracked.out),
@@ -55,9 +55,9 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     JSON.stringify({ saved: savedCtx, obs: fs.existsSync(obsLog) }).slice(0, 600) + ")");
 
   // classify prints the suggested size (the same sizeNote spec_classify returns); status marks an optional section ○ at size s
-  const cls = run(["classify", "add a CSV export button to the orders page", "--project", p]);
-  const clsJ = JSON.parse(run(["classify", "add a CSV export button to the orders page", "--json", "--project", p]).out);
-  const st = run(["status", "cli-small", "--project", p]);
+  const cls = runIn(["classify", "add a CSV export button to the orders page", "--project", p]);
+  const clsJ = JSON.parse(runIn(["classify", "add a CSV export button to the orders page", "--json", "--project", p]).out);
+  const st = runIn(["status", "cli-small", "--project", p]);
   ok(cls.code === 0 && /^Suggested size s — one unit of work/m.test(cls.out) && clsJ.suggestedSize === "s" && clsJ.sizeReason === "single-unit" &&
     st.code === 0 && /○ Security Requirements \(optional at this size\)/.test(st.out) && /◐ Threat Model \(unfilled\)/.test(st.out),
     "1.21 F5 (CLI): classify prints the suggested size (--json: suggestedSize / sizeReason, as spec_classify); status marks a size s feature's optional extended section ○ and its core one ◐ while unfilled (got " +
@@ -72,14 +72,14 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
     "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer text \"Copyright\".\n" +
     "2. **US-1.AC-2** — WHEN the footer renders THE SYSTEM SHALL show the year 2026.\n\n## Approach\nTwo strings in templates/footer.html.\n\n## Tasks\n";
   const task = (n, reqs) => `- [ ] ${n}. [US1] Fix string ${n}\n  - _Requirements: ${reqs}_\n  - _Verify: node -e "process.exit(0)"_\n`;
-  run(["create", "Footer", "--kind", "change", "--project", q]);
+  runIn(["create", "Footer", "--kind", "change", "--project", q]);
 
   // C1: the save hook traces a change's task blocks against its criteria alone — a phantom is named, never "all covered"
   qwr("footer", "change.md", HEAD.replace(/2\. \*\*US-1\.AC-2\*\*[^\n]*\n/, "") + task(1, "US-1.AC-1, US-1.AC-7"));
   const qHook = spawnSync(process.execPath, [path.join(hookDir, "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", cwd: q,
     tool_input: { file_path: path.join(q, ".specs", "footer", "change.md") } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: q, SPEC_PROJECT_DIR: q } });
   const qCtx = (() => { try { return JSON.parse(qHook.stdout).hookSpecificOutput.additionalContext; } catch { return qHook.stdout; } })();
-  const qTrace = run(["trace", "footer", "--project", q]);
+  const qTrace = runIn(["trace", "footer", "--project", q]);
   ok(qHook.status === 0 && /US-1\.AC-7/.test(qCtx) && !/all 1 ACs covered/.test(qCtx) && qTrace.code === 1 && /US-1\.AC-7/.test(qTrace.out),
     "1.21 review C1 (CLI, hooks): saving a change.md whose task cites a phantom AC names it (the save hook's trace), and `trace` exits 1 (got " + JSON.stringify({ ctx: String(qCtx).slice(0, 300), trace: qTrace.code }) + ")");
   // … and its EARS line lints the criteria alone: a task line with a modal verb is no criterion (it read "2 criteria" + a vague warning)
@@ -92,14 +92,14 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
 
   // C4 / C5: impact without a phase diffs the change's plan; the matrix and the export read it as a change
   qwr("footer", "change.md", HEAD + task(1, "US-1.AC-1") + task(2, "US-1.AC-2"));
-  const qAp = run(["approve", "footer", "--through", "tasks", "--project", q]);
+  const qAp = runIn(["approve", "footer", "--through", "tasks", "--project", q]);
   run(["done", "footer", "1", "--run", "--project", q]);
   qwr("footer", "change.md", qrd("footer", "change.md").replace("the footer text \"Copyright\"", "the footer text \"Copyright 2026 Acme\""));
-  const qImp = run(["impact", "footer", "--project", q]);
-  const qImpReq = run(["impact", "footer", "--phase", "requirements", "--project", q]);
-  const qMx = run(["trace", "footer", "--matrix", "--project", q]);
-  const qExp = run(["export", "footer", "--md", "--project", q]);
-  const qRe = run(["impact", "footer", "--reopen", "--project", q]);
+  const qImp = runIn(["impact", "footer", "--project", q]);
+  const qImpReq = runIn(["impact", "footer", "--phase", "requirements", "--project", q]);
+  const qMx = runIn(["trace", "footer", "--matrix", "--project", q]);
+  const qExp = runIn(["export", "footer", "--md", "--project", q]);
+  const qRe = runIn(["impact", "footer", "--reopen", "--project", q]);
   ok(qAp.code === 0 && qImp.code === 0 && /Impact: footer · tasks/.test(qImp.out) && /~ US-1\.AC-1/.test(qImp.out) && /--phase tasks --reopen/.test(qImp.out) &&
     qImpReq.code === 1 && /one file, change\.md/.test(qImpReq.out) && /plan \(change\.md\) approved/.test(qMx.out) &&
     /\*\*Kind:\*\* change \(size xs\)/.test(qExp.out) && !/^## Design/m.test(qExp.out) && /Plan \(change\.md\)/.test(qExp.out) &&
@@ -109,16 +109,16 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
 
   // C3 / C9 / C10: next-action names the call through test-plan; create on an existing change with a track says so; messages name
   // change.md; the usage lists --kind change / --size; status says what doctor says on an unsized feature
-  run(["create", "Export csv", "tdd", "--size", "s", "--project", q]);
-  const qNa = run(["next-action", "export-csv", "--project", q]);
-  const qAgain = run(["create", "Footer", "saas", "--project", q]);
-  const qApp = run(["append-tasks", "footer", "--task", "Third string", "--req", "US-1.AC-1", "--project", q]);
-  const qNf = run(["undone", "footer", "9", "--project", q]);
-  const qHelp = run(["help"]);
-  run(["create", "Login", "sec", "--project", q]);
+  runIn(["create", "Export csv", "tdd", "--size", "s", "--project", q]);
+  const qNa = runIn(["next-action", "export-csv", "--project", q]);
+  const qAgain = runIn(["create", "Footer", "saas", "--project", q]);
+  const qApp = runIn(["append-tasks", "footer", "--task", "Third string", "--req", "US-1.AC-1", "--project", q]);
+  const qNf = runIn(["undone", "footer", "9", "--project", q]);
+  const qHelp = runIn(["help"]);
+  runIn(["create", "Login", "sec", "--project", q]);
   qwr("login", "design.md", qrd("login", "design.md").split("\n").filter((l) => !/^> \*\*TODO\*\*/.test(l)).join("\n"));
-  const qSt = run(["status", "login", "--project", q]);
-  const qDoc = run(["doctor", "login", "--project", q]);
+  const qSt = runIn(["status", "login", "--project", q]);
+  const qDoc = runIn(["doctor", "login", "--project", q]);
   ok(qNa.code === 0 && /--through test-plan/.test(qNa.out) && /\/spec export-csv tests/.test(qNa.out) && qAgain.code === 0 && /Tracks not added — \+saas/.test(qAgain.out) &&
     /Appended to change\.md/.test(qApp.out) && /change\.md changed after its approval/.test(qApp.out) && qNf.code === 1 && /not found in change\.md/.test(qNf.out) &&
     /--kind feature\|bugfix\|spike\|change, --size xs\|s\|m\|l/.test(qHelp.out) && /◐ Threat Model \(only the template's guidance\)/.test(qSt.out) &&
@@ -128,24 +128,24 @@ exports.run = ({ ok, run, tmp, require, __dirname }) => {
 
   // --- 1.21 verify (CLI) — the change kind at the seams ---
   const v = path.join(tmp, "p121-verify");
-  const vInit = run(["init", "--roles", "tasks=tech+qa", "--project", v]);
+  const vInit = runIn(["init", "--roles", "tasks=tech+qa", "--project", v]);
   const ONE = "# Change: footer\n\n## Summary\nFix the footer text.\n\n## Acceptance Criteria (EARS)\n" +
     "1. **US-1.AC-1** — WHEN any page renders THE SYSTEM SHALL show the footer text \"Copyright\".\n\n## Approach\nOne string in templates/footer.html.\n\n## Tasks\n" +
     "- [ ] 1. [US1] Fix the footer string\n  - _Requirements: US-1.AC-1_\n  - _Verify: node -e \"process.exit(0)\"_\n";
-  run(["create", "Footer", "--kind", "change", "--project", v]);
+  runIn(["create", "Footer", "--kind", "change", "--project", v]);
   fs.writeFileSync(path.join(v, ".specs", "footer", "change.md"), ONE);
   // V4: tech's sign-off of change.md counts — next-action asks for qa only, doctor calls nothing stale
-  const vTech = run(["approve", "footer", "tasks", "--role", "tech", "--project", v]);
-  const vNa = run(["next-action", "footer", "--project", v]);
-  const vDoc = run(["doctor", "footer", "--project", v]);
+  const vTech = runIn(["approve", "footer", "tasks", "--role", "tech", "--project", v]);
+  const vNa = runIn(["next-action", "footer", "--project", v]);
+  const vDoc = runIn(["doctor", "footer", "--project", v]);
   ok(vInit.code === 0 && vTech.code === 0 && /missing role: qa \(signed: tech\)/.test(vNa.out) && !/tech, qa/.test(vNa.out) && !/no longer count/.test(vDoc.out),
     "1.21 verify V4 (CLI): init --roles tasks=tech+qa, a change signed by tech — next-action asks for qa alone, doctor calls no sign-off stale (got " +
     JSON.stringify({ tech: vTech.code, na: vNa.out.slice(0, 300), doc: vDoc.out.split("\n").filter((l) => /role|sign/i.test(l)) }) + ")");
 
   // V6: `clarify` on a change = spec_clarify — clear once written; the template's slots named change.md:<line>
-  const vClear = run(["clarify", "footer", "--json", "--project", v]);
-  run(["create", "Header", "--kind", "change", "--project", v]);
-  const vTmpl = run(["clarify", "header", "--project", v]);
+  const vClear = runIn(["clarify", "footer", "--json", "--project", v]);
+  runIn(["create", "Header", "--kind", "change", "--project", v]);
+  const vTmpl = runIn(["clarify", "header", "--project", v]);
   ok(JSON.stringify(JSON.parse(vClear.out)) === JSON.stringify(S.clarify(v, "footer")) && JSON.parse(vClear.out).verdict === "clear" &&
     /change\.md:13 \[the change\]/.test(vTmpl.out) && !/requirements\.md|Success Criteria|edge cases|non-functional/i.test(vTmpl.out),
     "1.21 verify V6 (CLI): clarify on a change prints what spec_clarify returns — clear once written; a template's slots named change.md:<line>, no feature-only question (got " +

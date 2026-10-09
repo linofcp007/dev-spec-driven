@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * dev-spec-driven engine — spec_import kiro-steering · cursor-rules (1.25).
+ * dev-spec-driven engine — spec_import kiro-steering · cursor-rules.
  * Another tool's steering becomes dev-spec steering: Kiro's `.kiro/steering/*.md` (its front matter IS dev-spec's — kept) and
  * Cursor's project rules (`.cursor/rules/*.mdc`, the legacy `.cursorrules`) with their front matter mapped onto it. Each file →
  * `.specs/steering/<name>.md`, create-only: an existing steering file is never overwritten (skipped, reported).
@@ -15,7 +15,7 @@ const i18n = require("../../i18n.js");
 let artifactState, customSteeringError, existsRaw, flatText, frontMatterScalar, frontMatterValues, headRest, IMPORT_MAX_BYTES,
   IMPORT_TOOLS, importSourceAt, isSteeringStub, linkedSpecsFolder, parseTracks, readIfExists, slugify, specsRoot, steeringFrontMatter,
   stripHtmlComments, toPosix, writeIfAbsent;
-let today; // core.js — 1.25.1: the local calendar date (today / dayOf)
+let today; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ today, artifactState, customSteeringError, existsRaw, flatText, frontMatterScalar, frontMatterValues, headRest,
   IMPORT_MAX_BYTES, IMPORT_TOOLS, importSourceAt, isSteeringStub, linkedSpecsFolder, parseTracks, readIfExists, slugify, specsRoot,
   steeringFrontMatter, stripHtmlComments, toPosix, writeIfAbsent } = E); }
@@ -209,6 +209,4 @@ function steeringText(t, text, legacy, L, from, date, warn) {
   return lines.join("\n") + "\n\n" + note + "\n\n" + body + "\n";
 }
 
-module.exports = { STEERING_IMPORT_TOOLS, STEERING_IMPORT_DEFAULTS, STEERING_IMPORT_MAX_FILES, STEERING_IMPORT_MAX_CHARS,
-  STEERING_SOURCE_EXT, ruleFrontMatter, cursorGlobs, yamlQuoted, globQuoted, steeringTargetName, importSteering, steeringText,
-  __link };
+module.exports = { STEERING_IMPORT_TOOLS, importSteering, __link };

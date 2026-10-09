@@ -13,7 +13,7 @@
 
 const path = require("path");
 
-// 1.21 F3 — the CLI line a person can RUN. A plugin install puts no `dev-spec` on PATH (only `npm link` does), so a message
+// the CLI line a person can RUN. A plugin install puts no `dev-spec` on PATH (only `npm link` does), so a message
 // that tells someone to run the CLI names THIS clone's script — `${DEV_SPEC} done <f> <n> --run` in every language, never
 // a bare `dev-spec done …` (the 1.19 eval run relayed exactly that to a user, who could not run it). The path is resolved
 // from this file's place (mcp/lib/i18n/ → the clone root), with forward slashes (bash, PowerShell and cmd.exe all read
@@ -46,7 +46,7 @@ function portableCli(text) {
 }
 
 // The AUTHORED locales (one hand-written block each in BUILD / STEERING / MSG / BRIEF / EVALS_README — i18n/<lang>.js) and
-// every locale the engine speaks: pt-BR (1.14 D1) is DERIVED from pt — see "pt-BR — a derived locale" in i18n/pt-br.js.
+// every locale the engine speaks: pt-BR is DERIVED from pt — see "pt-BR — a derived locale" in i18n/pt-br.js.
 const BASE_LANGS = ["en", "pt", "es"];
 const LANGS = [...BASE_LANGS, "pt-BR"];
 // The strict reading every surface validates with (MCP `lang` enum, CLI --lang, templates): a known code or alias → the
@@ -77,20 +77,22 @@ function baseLang(l) {
 // T-02 unmapped).
 const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4", "US-2.AC-1"], saas: ["US-1.AC-5", "US-1.AC-6"], ai: ["US-1.AC-7", "US-1.AC-8", "US-1.AC-9"],
   sec: ["US-1.AC-10", "US-1.AC-11", "US-1.AC-12"], privacy: ["US-1.AC-13", "US-1.AC-14", "US-1.AC-15"],
-  dist: ["US-1.AC-16", "US-1.AC-17", "US-1.AC-18", "US-1.AC-19"], // +dist (1.17 D)
-  api: ["US-1.AC-20", "US-1.AC-21", "US-1.AC-22", "US-1.AC-23"], // +api (1.19 T)
-  ui: ["US-1.AC-24", "US-1.AC-25", "US-1.AC-26", "US-1.AC-27"], // +ui (1.19 T)
-  obs: ["US-1.AC-28", "US-1.AC-29", "US-1.AC-30", "US-1.AC-31"], // +obs (1.19 T)
-  data: ["US-1.AC-32", "US-1.AC-33", "US-1.AC-34", "US-1.AC-35"] }; // +data (1.21 F4)
+  dist: ["US-1.AC-16", "US-1.AC-17", "US-1.AC-18", "US-1.AC-19"], // +dist
+  api: ["US-1.AC-20", "US-1.AC-21", "US-1.AC-22", "US-1.AC-23"], // +api
+  ui: ["US-1.AC-24", "US-1.AC-25", "US-1.AC-26", "US-1.AC-27"], // +ui
+  obs: ["US-1.AC-28", "US-1.AC-29", "US-1.AC-30", "US-1.AC-31"], // +obs
+  data: ["US-1.AC-32", "US-1.AC-33", "US-1.AC-34", "US-1.AC-35"] }; // +data
 // The optional tracks whose template criteria / tasks / sections follow the core ones, in track order.
 const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
-// The tracks classification.md lists signals for: +tdd, the built-in marker tracks, then a project's track packs (1.15 — any
+// Each one's section marker as the templates write it — [SaaS], [AI], [SEC] … (English-stable; engine/tracks.js TRACK_MARKER).
+const MARKER_TAG = Object.fromEntries(MARKER_TRACK_ORDER.map((t) => [t, "[" + (t === "saas" ? "SaaS" : t.toUpperCase()) + "]"]));
+// The tracks classification.md lists signals for: +tdd, the built-in marker tracks, then a project's track packs (any
 // other name in the feature's track list), in its order.
 function signalTracks(tracks) {
   const builtIn = ["core", "tdd", ...MARKER_TRACK_ORDER];
   return ["tdd", ...MARKER_TRACK_ORDER, ...(tracks || []).filter((t) => typeof t === "string" && !builtIn.includes(t))];
 }
-// 1.21 F5 — feature sizes (spec_create {size}): xs is the one-file change (change.md), s a one-story scaffold, m / l today's
+// feature sizes (spec_create {size}): xs is the one-file change (change.md), s a one-story scaffold, m / l today's
 // chain with the duplicates merged. No size = the 1.20 scaffolds, byte for byte (every builder takes `a.size` undefined).
 const FEATURE_SIZES = ["xs", "s", "m", "l"];
 // The core template criteria of a size: S keeps one story with two criteria — AC-1 (WHEN) and AC-2 (IF…THEN, the error path);
@@ -99,7 +101,7 @@ const SIZE_CORE_ACS = { s: ["US-1.AC-1", "US-1.AC-2"] };
 function coreTemplateAcs(size) {
   return Object.prototype.hasOwnProperty.call(SIZE_CORE_ACS, size) ? SIZE_CORE_ACS[size] : TEMPLATE_ACS.core;
 }
-// Core design sections a track's own sections supersede on a SIZED scaffold (P4 — DATA: a track that owns a concern the core
+// Core design sections a track's own sections supersede on a SIZED scaffold (DATA: a track that owns a concern the core
 // design also asks about): the builders leave the core section out when one of its tracks is on. Keys = the core sections every
 // language's design builder names; values = the tracks that supersede them. A new built-in track adds its entry here.
 const CORE_SUPERSEDED_BY = { apiContracts: ["api"], errorHandling: ["api"], securityConsiderations: ["sec"], testingStrategy: ["tdd"] };
@@ -131,7 +133,7 @@ function templateTestRows(tracks, row, L, acs, size) {
   if (Array.isArray(acs)) return row("T-01", "unit", "example", L.behavior, L.acSlot, "tests/unit/...");
   const T = templateTests(tracks, size);
   const r = (ac, layer, desc, file, kind = "example") => row(T[ac], layer, kind, desc, ac, file);
-  // 1.21 F5: size S — its two core criteria (AC-2 is the IF…THEN error path there)
+  // size S — its two core criteria (AC-2 is the IF…THEN error path there)
   const rows = size === "s" ? [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", "unit", L.recovery, "tests/unit/...")]
     : [r("US-1.AC-1", "unit", L.behavior, "tests/unit/..."), r("US-1.AC-2", L.integration, L.behavior, "tests/integration/..."),
       r("US-1.AC-3", "unit", L.recovery, "tests/unit/..."), r("US-1.AC-4", "unit", L.property, "tests/unit/...", "property"),
@@ -144,26 +146,26 @@ function templateTestRows(tracks, row, L, acs, size) {
     r("US-1.AC-11", L.integration, L.forbidden, "tests/integration/...", "property"), r("US-1.AC-12", L.integration, L.noSecrets, "tests/integration/...", "property"));
   if (T["US-1.AC-13"]) rows.push(r("US-1.AC-13", L.integration, L.exportData, "tests/integration/..."), r("US-1.AC-14", L.integration, L.erasure, "tests/integration/..."),
     r("US-1.AC-15", "unit", L.retention, "tests/unit/..."));
-  // +dist (1.17 D): failure-injection tests; "exactly one effect" and "no lost update" hold for every delivery count /
+  // +dist: failure-injection tests; "exactly one effect" and "no lost update" hold for every delivery count /
   // interleaving → property.
   if (T["US-1.AC-16"]) rows.push(r("US-1.AC-16", L.integration, L.outboxCrash, "tests/integration/..."),
     r("US-1.AC-17", L.integration, L.duplicateDelivery, "tests/integration/...", "property"), r("US-1.AC-18", L.integration, L.lostUpdate, "tests/integration/...", "property"),
     r("US-1.AC-19", L.integration, L.dependencyDown, "tests/integration/..."));
-  // +api (1.19 T): contract tests against the spec; an Idempotency-Key replay has one effect however often it is repeated → property;
+  // +api: contract tests against the spec; an Idempotency-Key replay has one effect however often it is repeated → property;
   // the breaking-change diff compares the contract with the published one.
   if (T["US-1.AC-20"]) rows.push(r("US-1.AC-20", L.contract, L.problemJson, "tests/contract/..."),
     r("US-1.AC-21", L.integration, L.idempotencyReplay, "tests/integration/...", "property"), r("US-1.AC-22", L.integration, L.staleEtag, "tests/integration/..."),
     r("US-1.AC-23", L.contract, L.breakingDiff, "tests/contract/..."));
-  // +ui (1.19 T): a keyboard-only walk-through + an automated accessibility check (e2e); a form keeps every value for any set of
+  // +ui: a keyboard-only walk-through + an automated accessibility check (e2e); a form keeps every value for any set of
   // invalid fields → property; the view's states under visual regression; a failed load keeps what was shown.
   if (T["US-1.AC-24"]) rows.push(r("US-1.AC-24", "e2e", L.keyboardA11y, "tests/e2e/..."),
     r("US-1.AC-25", L.component, L.formErrors, "tests/component/...", "property"), r("US-1.AC-26", L.visual, L.emptyState, "tests/visual/..."),
     r("US-1.AC-27", L.component, L.loadError, "tests/component/..."));
-  // +obs (1.19 T): every request emits its telemetry → property; an alert fires in a staged failure, a rollback drill, fault injection.
+  // +obs: every request emits its telemetry → property; an alert fires in a staged failure, a rollback drill, fault injection.
   if (T["US-1.AC-28"]) rows.push(r("US-1.AC-28", L.integration, L.telemetry, "tests/integration/...", "property"),
     r("US-1.AC-29", L.integration, L.burnAlert, "tests/integration/..."), r("US-1.AC-30", L.integration, L.rollbackDrill, "tests/integration/..."),
     r("US-1.AC-31", L.integration, L.readiness, "tests/integration/..."));
-  // +data (1.21 F4): data-quality checks on fixture batches and an idempotent re-run hold for every batch / every re-run → property; a
+  // +data: data-quality checks on fixture batches and an idempotent re-run hold for every batch / every re-run → property; a
   // stale partition fires the freshness alert; the schema-change compatibility check runs against the published schema (contract).
   if (T["US-1.AC-32"]) rows.push(r("US-1.AC-32", L.integration, L.dataQuality, "tests/integration/...", "property"),
     r("US-1.AC-33", L.integration, L.idempotentRerun, "tests/integration/...", "property"), r("US-1.AC-34", L.integration, L.freshness, "tests/integration/..."),
@@ -171,7 +173,7 @@ function templateTestRows(tracks, row, L, acs, size) {
   return rows.join("\n");
 }
 
-// 1.25.1 — the stop gate's line-start claim (each language's stopGate.claims builds its own from its words): "Done.", "✅ Feito",
+// the stop gate's line-start claim (each language's stopGate.claims builds its own from its words): "Done.", "✅ Feito",
 // "Hecho — 12 tests pass", "Completed task 3". The word opening its line (after markup or an emoji) claims the work only when it
 // stands alone on that line (punctuation, markup or an emoji after it), an emoji follows it, the rest of the line names the tests /
 // tasks / verification (`tested`), or the work itself follows it (`work`). "Done. I updated the README as you asked." and "Listo,
@@ -184,5 +186,5 @@ function stopLineClaim(words, tested, work) {
     String.raw`|(?=[ \t]*[.,!:—–-][^\n]*?(?<![\p{L}\p{N}_])${tested}(?![\p{L}\p{N}_]))|\s+${work})`;
 }
 
-module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, signalTracks, templateTests, greenLine, templateTestRows,
+module.exports = { BASE_LANGS, LANGS, LANG_ALIASES, canonicalLang, normalizeLang, baseLang, TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, signalTracks, templateTests, greenLine, templateTestRows,
   cliQuote, cliPrefix, DEV_SPEC_SCRIPT, DEV_SPEC, portableCli, FEATURE_SIZES, SIZE_CORE_ACS, coreTemplateAcs, CORE_SUPERSEDED_BY, coreSuperseded, stopLineClaim };

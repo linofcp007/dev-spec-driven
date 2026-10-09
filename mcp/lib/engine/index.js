@@ -8,8 +8,10 @@
  * trace.js, listed before them), as long as those requires stay ACYCLIC: a cycle would hand out a half-built module.exports.
  * Everything else it calls lives in a bare `let` it declares and __link(E) assigns once every module has loaded (the `let`
  * list and the __link destructure name the same names): call-time use only, in any direction. Shared mutable state lives
- * in ./ctx.js, one object mutated in place (never re-bound). A new module goes into MODULES below; a new name must not exist
- * in another module (checked here). mcp/test.js ("1.18 module rule") checks the rest.
+ * in ./ctx.js, one object mutated in place (never re-bound). A module exports only the names something outside it uses
+ * (another module, the facade, a surface, a test) and links only the names it uses. A new module goes into MODULES
+ * below; a new name must not exist in another module (checked here). mcp/test.js ("1.18 module rule", "1.27 module
+ * boundaries") checks the rest.
  */
 
 const MODULES = ["./core.js", "./files.js", "./state.js", "./markdown.js", "./tracks.js", "./classify.js", "./packs.js",

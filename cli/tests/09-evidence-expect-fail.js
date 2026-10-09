@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
 // B5 — `done --run` honours _Expect: fail_ (+ records the git commit), `init --check` / `finish --run` (meta.checks), `dev-spec log`.
 // Commands run in cmd.exe and sh alike (node -e "…" in double quotes); git runs isolated from the user's config and is optional.
 const Sb5 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -13,8 +13,8 @@ const b5cfg = path.join(tmp, "b5-gitconfig");
 fs.writeFileSync(b5cfg, "");
 const b5Env = { ...process.env, SPEC_PROJECT_DIR: tmp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: b5cfg, HOME: tmp, XDG_CONFIG_HOME: tmp,
   GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
-const rb5 = (args, input) => {
-  const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: b5Env, input });
+const rb5 = (args, input) => { // in-process (1.27), but a --run — it waits for its commands: spawned
+  const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: b5Env, input }) : spawnIn(args, { env: b5Env, input });
   return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", stderr: r.stderr || "", code: r.status };
 };
 const gitB5 = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: b5Env });
@@ -176,9 +176,9 @@ if (hasGitB5) {
     JSON.stringify(lg.out.slice(0, 500)) + ")");
 } else ok(true, "dev-spec log over a real git repository — skipped (git is not available)");
 
-// help and the header docblock document the new command and flags.
+// help and the command table document the new command and flags.
 const hB5 = rb5(["help"]).out;
-const docB5 = fs.readFileSync(CLI, "utf8").split("*/")[0];
+const docB5 = require(path.join(path.dirname(CLI), "commands.js")).helpText();
 ok(["log <feature> [--max N] [-]", "--check name=\"cmd\"", "finish <feature> [--write] [--include-body] [--run]", "_Expect: fail_"].every((w) => hB5.includes(w) && docB5.includes(w)),
-  "help and the header docblock document log, init --check, finish --run and _Expect: fail_");
+  "help and the command table document log, init --check, finish --run and _Expect: fail_");
 };

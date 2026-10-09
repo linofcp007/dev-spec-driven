@@ -12,13 +12,13 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
-  extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest, isBacktickUnit,
+  extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest, isBacktickUnit,
   isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap, realPathLoose,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
   traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps;
-let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
+let dayOf; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ dayOf, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
-  existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest,
+  existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
   taskProse, timeOf, tKey, toPosix, traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps } = E); }
@@ -30,7 +30,7 @@ function normalizeEvidence(ev) {
   if (typeof ev === "string") return ev.trim() ? { summary: ev.slice(0, 2000), manual: true } : null;
   if (typeof ev !== "object") return null;
   const out = {};
-  // Kept up to OBSERVED_MAX_COMMAND (review 2: cut at 500, a faithful report of a long _Verify:_ — or of the ` && ` join of a
+  // Kept up to OBSERVED_MAX_COMMAND (cut at 500, a faithful report of a long _Verify:_ — or of the ` && ` join of a
   // task's commands — was compared truncated and read command-mismatch); still bounded, like the observed log's commands.
   if (ev.command != null && String(ev.command).trim()) out.command = String(ev.command).slice(0, OBSERVED_MAX_COMMAND);
   if (ev.exitCode != null && ev.exitCode !== "") {
@@ -39,7 +39,7 @@ function normalizeEvidence(ev) {
     out.exitCode = parseInt(raw, 10);
   }
   if (ev.summary != null && String(ev.summary).trim()) out.summary = String(ev.summary).slice(0, 2000);
-  Object.assign(out, gitEvidence(ev)); // B5: the commit the run was made on (+ dirty) — `done --run` fills it; a malformed value is dropped
+  Object.assign(out, gitEvidence(ev)); // the commit the run was made on (+ dirty) — `done --run` fills it; a malformed value is dropped
   if (out.command && out.exitCode == null) return { error: "needsExit" };
   // A bare exit code proves nothing ({exitCode: 0} used to verify a task on its own).
   if (!out.command && !out.summary) return out.exitCode != null ? { error: "noContent" } : null;
@@ -52,7 +52,7 @@ function normalizeEvidence(ev) {
 // Why a task is NOT verified — a stable reason code (null = verified):
 //   no-evidence · failed-run (the latest recorded run failed; only a later PASSING run clears it) ·
 //   manual-note-on-runnable-verify (the task's _Verify:_ holds a command, but only a note was given) ·
-//   duplicate-number · stale-evidence · command-mismatch (1.22 review: the passing run — an _Expect: fail_ task's red run — is
+//   duplicate-number · stale-evidence · command-mismatch (the passing run — an _Expect: fail_ task's red run — is
 //   not a run of the task's _Verify:_ command; see taskEvidenceIssue / runProvesVerify).
 // `runnable` = the task's _Verify:_ is a real command (not a [bracketed placeholder/manual note]): then
 // only {command, exitCode: 0} verifies it. A check with no command may be attested by a summary. An exit
@@ -64,28 +64,28 @@ function evidenceIssue(e, runnable, expectFail) {
   if (!e || typeof e !== "object" || Array.isArray(e)) return "no-evidence";
   // spec_impact --reopen: the spec this record proved changed — only a new run (or, without a runnable _Verify:_, a new note) clears it.
   if (e.stale === true) return "stale-evidence";
-  if (expectFail) return expectFailIssue(e, runnable); // _Expect: fail_ (B5): a red run is the proof, a pass is unexpected-pass
+  if (expectFail) return expectFailIssue(e, runnable); // _Expect: fail_: a red run is the proof, a pass is unexpected-pass
   if (e.exitCode != null && e.exitCode !== 0) return "failed-run";
   if (runnable) return e.command && e.exitCode === 0 ? null : "manual-note-on-runnable-verify";
   return e.exitCode === 0 || !!e.summary ? null : "no-evidence";
 }
-// 1.22 review — WHICH command a run proves. The reported command was never compared with the task's _Verify:_ (nor a finish
+// WHICH command a run proves. The reported command was never compared with the task's _Verify:_ (nor a finish
 // run's with its project check): `{command: "echo hello", exitCode: 0}` verified a task whose _Verify:_ is `npm test`. A run
-// proves a task's runnable _Verify:_ only when it runs EVERY one of its commands (review 2: one of two proved both — `done
+// proves a task's runnable _Verify:_ only when it runs EVERY one of its commands (one of two proved both — `done
 // --run` runs them all, joined with ` && `, and that is how a run of several is recorded), each compared as proofSteps()
-// reads it, in the folder the _Verify:_ runs it in (review 3 — proofCommands), and nothing else; the CLI's own run (`done
+// reads it, in the folder the _Verify:_ runs it in (proofCommands), and nothing else; the CLI's own run (`done
 // --run` / `finish --run` — observed "cli": it ran the commands itself) always counts. Anything else ticks but stays
 // unverified — reason `command-mismatch` (a finish run of another command reads `changed`).
 // proofSteps(cmd): the command with its whitespace folded and a code span or quotes around the WHOLE command dropped, then
-// (review 2) `\` read as `/` and the quotes around a plain argument dropped — `node --test tests\x.test.js`, `node --test
+// `\` read as `/` and the quotes around a plain argument dropped — `node --test tests\x.test.js`, `node --test
 // "tests/x.test.js"` and `node --test tests/x.test.js` are one command (a Windows report of the _Verify:_ read as another one,
 // and an _Expect: fail_ task's red run then proved nothing) —, split at ` && ` outside quotes into STEPS: a `cd <dir>`
 // (cmd.exe's `cd /d` too; the folder without its quotes), a `set … -o pipefail`, or a command with its leading NAME=value
 // assignments apart and a trailing `2>&1` dropped (a `cd <dir>;` / `set -o pipefail;` at a step's start is a step of its own).
-// Review 3: a command substitution — a backtick span or `$(…)` — is never split, unquoted or stripped inside (flatCommand
+// a command substitution — a backtick span or `$(…)` — is never split, unquoted or stripped inside (flatCommand
 // dropped every backtick first: ``cd `: && npm test` `` read as `cd :` and a `npm test`, though bash runs npm test inside the
 // substitution and the run's exit code is cd's).
-// Review 5 (L9 + improvements) — spellings that run the same command read as one:
+// Spellings that run the same command read as one:
 //   - quotes: a quoted word whose content holds none of $ ` \ ! " ' means the same in single or double quotes (bash and
 //     PowerShell): `node -e 'process.exit(0)'` is `node -e "process.exit(0)"` (unquotePlainArgs writes it double-quoted);
 //   - spacing: `&&`, `||`, `;` and a pipe read the same however they are spaced (`npm run build&&npm test`) — proofOps;
@@ -119,8 +119,8 @@ function proofSubstEnd(s, i) {
   }
   return s.length;
 }
-// `"x"` / `'x'` → x when x is a plain argument (RE_PLAIN_ARG), → `"x"` when x reads the same in either quotes (RE_QUOTE_SAFE —
-// review 5) — a left-to-right scan (a quote inside another one is kept; a substitution is copied whole), linear. Run before
+// `"x"` / `'x'` → x when x is a plain argument (RE_PLAIN_ARG), → `"x"` when x reads the same in either quotes (RE_QUOTE_SAFE) — a
+// left-to-right scan (a quote inside another one is kept; a substitution is copied whole), linear. Run before
 // `\` is read as `/` (a backslash inside the quotes is what tells the two quotes apart).
 function unquotePlainArgs(s) {
   let out = "", i = 0;
@@ -136,7 +136,7 @@ function unquotePlainArgs(s) {
   }
   return out;
 }
-// Review 5 (L9) — the shell's operators in one spelling, outside quotes and substitutions: ` && `, ` || `, ` | ` and `; ` (a
+// the shell's operators in one spelling, outside quotes and substitutions: ` && `, ` || `, ` | ` and `; ` (a
 // trailing `;` keeps no space), however the run spaced them; and a leading `./` dropped from a word that names a path below the
 // folder (see RE_PLAIN_ARG's note). s: whitespace already folded to single spaces. Linear (a word is read at most twice).
 function proofOps(s) {
@@ -192,7 +192,7 @@ function proofSteps(cmd) {
   let s = proofUnwrapCode(String(cmd == null ? "" : cmd).replace(/\s+/g, " ").trim());
   const q = /^(["'])([\s\S]*)\1$/.exec(s);
   if (q && !q[2].includes(q[1])) s = q[2].trim(); // quotes around the WHOLE command
-  s = proofOps(unquotePlainArgs(s).split(String.fromCharCode(92)).join("/")); // review 5: quotes read before `\` is `/`; operators
+  s = proofOps(unquotePlainArgs(s).split(String.fromCharCode(92)).join("/")); // quotes read before `\` is `/`; operators
   const steps = [];
   for (let part of splitAndSteps(s)) {
     const env = [];
@@ -204,13 +204,13 @@ function proofSteps(cmd) {
       if ((m = RE_PROOF_ENV.exec(part))) { env.push([m[1], m[2]]); part = part.slice(m[0].length).trim(); continue; }
       break;
     }
-    const body = part.replace(/\s+2>&1$/, "").trim().replace(RE_NPM_TEST, "npm test"); // review 5: npm's own aliases of `npm test`
+    const body = part.replace(/\s+2>&1$/, "").trim().replace(RE_NPM_TEST, "npm test"); // npm's own aliases of `npm test`
     if (body) steps.push({ t: "cmd", env, body });
     else if (env.length) steps.push({ t: "cmd", env: [], body: env.map(([k, v]) => k + "=" + v).join(" ") }); // only assignments: a command of its own
   }
   return steps;
 }
-// Review 3 — the FOLDER each command runs in. `cd` folders were compared as text: `cd C:/…/proj/packages/web && npm test` and
+// the FOLDER each command runs in. `cd` folders were compared as text: `cd C:/…/proj/packages/web && npm test` and
 // `cd ./packages/web && npm test` were no run of `cd packages/web && npm test` (the absolute form a regression), and a run's own
 // cd was passed over wherever it went: `cd ../other-project && npm test` proved `npm test`, `cd .. && cd packages/web && npm
 // test` proved `cd packages/web && npm test`. Now both sides are walked from the project root (`base` — proofBase; without one,
@@ -275,7 +275,7 @@ function proofCommands(steps, base) {
   let cur = base ? { drive: base.drive, segs: base.segs.slice() } : { drive: null, segs: [] };
   let pf = false, at; // the folder key, computed once per folder
   const out = [];
-  const pushed = []; // review 5: pushd / Push-Location's stack (a copy of each folder left — cdInto extends a folder in place)
+  const pushed = []; // pushd / Push-Location's stack (a copy of each folder left — cdInto extends a folder in place)
   for (const s of steps) {
     if (s.t === "cd" && s.push) pushed.push(cur && { drive: cur.drive, segs: cur.segs.slice() });
     if (s.t === "popd") { cur = pushed.length ? pushed.pop() : null; at = undefined; continue; } // an empty stack: popd fails
@@ -313,9 +313,7 @@ function commandsCoverVerify(run, keys) {
   }
   return reach[n * size + full] === 1;
 }
-// Two commands with the same proofKey (from the same project root) are one command to the evidence gate.
-const proofKey = (cmd, root) => JSON.stringify(proofCommands(proofSteps(cmd), proofBase(root)));
-// 1.25.1 (review 7) — a command no shell runs as written: a `&&`, `||`, `|` or `|&` with no command after it (`npm test &&`,
+// a command no shell runs as written: a `&&`, `||`, `|` or `|&` with no command after it (`npm test &&`,
 // `npm test |`) or none before it (`&& npm test`, `a; || b`), or right after another one (`a && && b`, `a | ; b`). proofSteps drops
 // the empty step, so a REPORTED `npm test &&` read as a run of `npm test`: runProvesVerify now refuses it (it proves no _Verify:_).
 // Quotes and substitutions are skipped whole (a quote left open hides the rest — cmd.exe runs `node -e "x`: no verdict on quoting
@@ -352,7 +350,7 @@ function runProvesVerify(r, verify, root) {
   if (!isRecord(r) || typeof r.command !== "string") return false;
   if (r.observed === "cli") return true; // `done --run` / `finish --run` ran exactly those commands
   if (r.command.length > PROOF_MAX_CHARS || (verify || []).some((v) => typeof v === "string" && v.length > PROOF_MAX_CHARS)) return false;
-  if (proofIncomplete(r.command)) return false; // 1.25.1: `npm test &&` is no run of `npm test` (proofIncomplete)
+  if (proofIncomplete(r.command)) return false; // `npm test &&` is no run of `npm test` (proofIncomplete)
   const base = proofBase(typeof r.root === "string" && r.root ? r.root : root);
   const keys = [];
   const known = new Set();
@@ -379,7 +377,7 @@ const isRecord = (v) => v != null && typeof v === "object" && !Array.isArray(v);
 function evidenceRecords(slot) {
   return isRecord(slot) ? [slot, ...(Array.isArray(slot.others) ? slot.others.filter(isRecord) : [])] : [];
 }
-// 1.24 r6 D1 — the fallback (a record of this number stamped with another text: a title edit) never takes a record stamped with
+// the fallback (a record of this number stamped with another text: a title edit) never takes a record stamped with
 // the text of ANOTHER block of the same tasks.md (taskPeerStamps — the blocks of the read `block` came from): that task was
 // renumbered, and the record is its run. Inserting a task at the top and renumbering the list handed the old task 1's passing
 // `npm test` to the new task 1 (same _Verify:_) — ticked with no evidence, it read verified. A pure title edit leaves no block
@@ -395,7 +393,7 @@ function ownRecord(slot, block, dup) {
   const moved = (r) => !!peers && typeof r.task === "string" && peers.has(r.task); // (r.task !== text here)
   return recs.find((r) => !r.shared && fits(r) && (r === slot || r.task != null) && !moved(r));
 }
-// 1.24 r6 D1 — doctor `evidence-moved`: records a renumbering left under a number that is no longer their task's — stamped with
+// doctor `evidence-moved`: records a renumbering left under a number that is no longer their task's — stamped with
 // the text of a block of ANOTHER number and of no block of their own number (blocks: the active tasks). Neither task reads such
 // a record any more (ownRecord), so the moved task needs a new run. → [{ from, to, text }] (one per record), by number.
 function movedEvidence(blocks, evidence) {
@@ -426,13 +424,13 @@ function taskEvidenceIssue(evidence, block, dup, root) {
   const verify = taskMarkers(block).verify;
   const xf = expectsFail(block);
   const reason = evidenceIssue(e, verify.length > 0, xf);
-  // 1.22 review: the run that proves a runnable _Verify:_ must BE a run of its commands (runProvesVerify) — `echo hello` with
+  // the run that proves a runnable _Verify:_ must BE a run of its commands (runProvesVerify) — `echo hello` with
   // exit 0 verified a task whose _Verify:_ is `npm test`. It ticks, but stays unverified: command-mismatch. An _Expect: fail_
   // task: its red proof (redProof — a red run of its _Verify:_, or, once a passing run of the _Verify:_ is the latest, the red
   // run it carries of any command recorded before the command rule: review 2's grandfathering, narrowed by review 3 to runs
   // without the cmdRule stamp). Its latest run a pass (of another command) with no such red proof
   // is still unexpected-pass — a red run of another command carried forward (recordEvidence) doesn't change that.
-  // Review 4 (upgrade safety): a record whose latest run predates the rule (preRuleRun: no cmdRule stamp — recorded by a dev-spec
+  // upgrade safety: a record whose latest run predates the rule (preRuleRun: no cmdRule stamp — recorded by a dev-spec
   // older than 1.22) keeps the verdict it had then: any command with exit 0 (an _Expect: fail_ task: any red run on record)
   // proves it. Judging it now turned tasks an earlier release verified (`npx jest x` for `_Verify: npm test -- x`, a Windows
   // path) unverified after a plugin update, and blocked /spec-finish; only runs recorded under the rule are held to it.
@@ -449,9 +447,9 @@ function taskEvidenceIssue(evidence, block, dup, root) {
 // worse than no record, and passes (`nothingToVerify`: nothing was run or attested, so no surface calls it a check); only
 // its own failed run or stale record counts against it. (spec_complete_task used to answer verified:false with no reason
 // for such a task while doctor, finish and the roadmap passed it.)
-// mode (1.14 F1): the project's evidenceMode — "observed" verifies a runnable _Verify:_ only when the run that proves it was
+// mode: the project's evidenceMode — "observed" verifies a runnable _Verify:_ only when the run that proves it was
 // observed by the harness or made by the CLI (observedProof), else reason `unobserved`; "reported" / absent: today's rule.
-// Review 3: the rule's `root` (evidenceRule: the project folder) is the folder a run's `cd`s are resolved from (runProvesVerify).
+// the rule's `root` (evidenceRule: the project folder) is the folder a run's `cd`s are resolved from (runProvesVerify).
 function taskVerification(evidence, block, dup, mode) {
   const rule = typeof mode === "string" ? { mode } : mode || {}; // evidenceRule(): { mode, since, root }
   if (taskMarkers(block).verify.length) {
@@ -482,15 +480,15 @@ function recordEvidence(prev, ev, at, stamp, verify, root) {
   }
   let hist = p && Array.isArray(p.history) ? p.history.filter((h) => h && typeof h === "object") : [];
   if (!hist.length && pRun) hist = [runOf(p)]; // a v1.12 record: its run seeds the history
-  // Review 3: every run recorded from now on is stamped `cmdRule` (CMD_RULE) — it was recorded under the command rule (runProvesVerify),
+  // every run recorded from now on is stamped `cmdRule` (CMD_RULE) — it was recorded under the command rule (runProvesVerify),
   // so redProof never grandfathers it as a red proof of another command.
   const run = runOf({ ...ev, at, cmdRule: CMD_RULE });
   const rec = { ...run, history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
-  // B5: an _Expect: fail_ task's red run stays its proof (`red`) when a later run passes — its fix made the test green.
-  // (verify — the task's _Verify:_ values, 1.22 review: the red run of THAT command, never a red run of another one — unless
+  // an _Expect: fail_ task's red run stays its proof (`red`) when a later run passes — its fix made the test green.
+  // (verify — the task's _Verify:_ values: the red run of THAT command, never a red run of another one — unless
   // this run is a passing run of the _Verify:_ and the red run on record predates the command rule: redProof's grandfathering).
-  // Review 2: with none of the _Verify:_, such a pre-rule red run of another command is carried forward too (an exit 127 in
-  // between dropped it, and the fix's passing run was then refused again); review 3: a red run recorded under the rule (cmdRule)
+  // with none of the _Verify:_, such a pre-rule red run of another command is carried forward too (an exit 127 in
+  // between dropped it, and the fix's passing run was then refused again); a red run recorded under the rule (cmdRule)
   // of another command is never carried — it can never prove anything.
   const keep = ev.keepRed === true ? redProof(p, verify, ev, root) || legacyRedRun(p) : null;
   if (keep) rec.red = keep;
@@ -499,8 +497,8 @@ function recordEvidence(prev, ev, at, stamp, verify, root) {
 // evidence[n] after a run/note for `block`: its own record, updated, becomes the latest; every OTHER task's
 // record under that number is kept in `others` (newest first, bounded) — never discarded, so a renumbering
 // can't hand one task's passing run to the other, nor lose the other's failed run.
-// verifyRan (1.22 review — `done --run`): the verify stamp of the commands that RAN (read before the run), not of tasks.md now.
-// root (review 3): the project folder (runProvesVerify's).
+// verifyRan (`done --run`): the verify stamp of the commands that RAN (read before the run), not of tasks.md now.
+// root: the project folder (runProvesVerify's).
 function storeEvidence(slot, block, dup, ev, at, verifyRan, root) {
   const own = ownRecord(slot, block, dup);
   const stamp = { task: taskStamp(block), verify: typeof verifyRan === "string" ? verifyRan : verifyStamp(block) };
@@ -511,8 +509,8 @@ function storeEvidence(slot, block, dup, ev, at, verifyRan, root) {
 }
 function runOf(e) {
   const r = {};
-  // expected: "fail" (_Expect: fail_), commit / dirty (the git state `done --run` saw) — B5; observed (true | false | "cli": the
-  // harness — or the CLI itself — saw the run, 1.14 F1); absent on older records. Review 3: cmdRule (recorded under the command
+  // expected: "fail" (_Expect: fail_), commit / dirty (the git state `done --run` saw); observed (true | false | "cli": the
+  // harness — or the CLI itself — saw the run); absent on older records. cmdRule (recorded under the command
   // rule — never grandfathered by redProof) and root (the project folder its absolute `cd`s are read against — runRootStamp).
   for (const k of ["command", "exitCode", "summary", "at", "expected", "commit", "dirty", "observed", "cmdRule", "root"]) if (e[k] != null) r[k] = e[k];
   return r;
@@ -529,14 +527,14 @@ function verificationStatus(projectDir, slug, dir) {
   const evidence = stateEvidence(projectDir, slug);
   const withVerify = blocks.filter((b) => taskMarkers(b).verify.length);
   const dups = new Set(duplicateTaskNumbers(blocks));
-  const mode = evidenceRule(projectDir); // 1.14 F1: meta.evidence "observed" — an unobserved run verifies nothing
+  const mode = evidenceRule(projectDir); // meta.evidence "observed" — an unobserved run verifies nothing
   const unverifiedDetail = [];
   for (const b of blocks) {
     if (!b.done || unverifiedDetail.some((d) => d.number === b.number)) continue;
     const { reason } = taskVerification(evidence, b, dups.has(b.number), mode); // the rule every `verified` shares
     // specChanged: the task's OWN record was marked stale by spec_impact --reopen (same code, a more precise label).
     if (reason) unverifiedDetail.push({ number: b.number, reason, ...(specChangedSince(evidence, b, dups.has(b.number), reason) ? { specChanged: true } : {}),
-      ...(untickedSince(evidence, b, dups.has(b.number), reason) ? { unticked: true } : {}) }); // 1.16 U1: unticked since the record
+      ...(untickedSince(evidence, b, dups.has(b.number), reason) ? { unticked: true } : {}) }); // unticked since the record
   }
   return { withVerify: withVerify.length, evidence, unverified: unverifiedDetail.map((d) => d.number), unverifiedDetail };
 }
@@ -548,14 +546,14 @@ function verificationStatus(projectDir, slug, dir) {
 // stack frame's "test_runner/test:960:18" (file:line) is not "test: 960".
 const RE_COUNT_KW = "(?:tests?|pass(?:ed|es|ing)?|fail(?:ed|s|ing|ures?)?|ok|errors?)";
 const RE_COUNT_LINE = new RegExp(`(?<![\\p{L}\\p{N}_])(?:\\d+\\s*${RE_COUNT_KW}|${RE_COUNT_KW}:?\\s+\\d+)(?![\\p{L}_])`, "iu");
-// 1.21.1 — terminal colour codes: PowerShell 7 (and Pester under it) colours its output even when it is captured
+// terminal colour codes: PowerShell 7 (and Pester under it) colours its output even when it is captured
 // ("\e[91m[-] T-01 …\e[0m", "\e[97mTests Passed: 0, \e[0m\e[91mFailed: 1"), and so do runners forced to (FORCE_COLOR). They
 // are dropped before a run is summarized or read for could-not-run phrases: CSI sequences (ESC [ … final byte) and OSC ones
 // (ESC ] … BEL / ESC \). Built from char codes — never a raw control character (or its escape through an editor) in source.
 const ESC = String.fromCharCode(27), BEL = String.fromCharCode(7);
 const RE_ANSI = new RegExp(ESC + "\\[[0-9;?]*[ -/]*[@-~]|" + ESC + "\\][^" + BEL + ESC + "]{0,2000}(?:" + BEL + "|" + ESC + "\\\\)?", "g");
 const stripAnsi = (s) => (s.indexOf(ESC) === -1 ? s : s.replace(RE_ANSI, ""));
-// 1.24 r6 D8 — a test file that doesn't parse: the caret line and the "SyntaxError:" line under it (CANT_RUN_OUTPUT's caret frame)
+// a test file that doesn't parse: the caret line and the "SyntaxError:" line under it (CANT_RUN_OUTPUT's caret frame)
 // are kept like the assertion line below, so the stored summary still reads could-not-run (completeTask and cantRunRecord re-read
 // it); a caret line longer than a summary line keeps its caret (its padding dropped).
 const RE_CARET_LINE = /^[ \t#]{0,400}\^{1,400}$/;
@@ -565,10 +563,10 @@ function summarizeRunOutput(output, max = 500) {
     .filter((l) => l.trim());
   const frameAt = lines.findIndex((l, i) => i > 0 && RE_SYNTAX_ERROR_LINE.test(l) && RE_CARET_LINE.test(lines[i - 1]));
   const frame = frameAt > 0 && !RE_ASSERTION_RAN.test(lines.join("\n")) ? [frameAt - 1, frameAt] : [];
-  // (1.21.1 review: Pester's "a block / file failed before its tests" lines — RE_PESTER_NOT_RUN — are kept like count lines, so a
+  // (Pester's "a block / file failed before its tests" lines — RE_PESTER_NOT_RUN — are kept like count lines, so a
   // recorded summary still shows the test never ran)
   const counts = lines.map((l, i) => (RE_COUNT_LINE.test(l) || RE_PESTER_NOT_RUN.test(l) ? i : -1)).filter((i) => i >= 0).slice(-3);
-  // 1.21.1 review 2 — a run whose output shows a test RAN keeps that sign in its summary: a mixed Pester run (one block's
+  // a run whose output shows a test RAN keeps that sign in its summary: a mixed Pester run (one block's
   // BeforeAll failed — its NOT_RUN line kept above —, another block's test failed on an assertion) was summarized without the
   // "[-] Greeter.T-01 … 99ms" line, and the stored summary then read "never ran" (the red proof refused, recorded as a failed
   // run). The first line RE_ASSERTION_RAN reads (line by line) joins the kept lines whenever they don't show a run already.
@@ -599,7 +597,7 @@ function summarizeRunOutput(output, max = 500) {
 // "… is not recognized as an internal or external command"), a syntax error cmd.exe raised ("The syntax of the command is
 // incorrect", "… was unexpected at this time"), a path it could not resolve ("The system cannot find the path specified").
 // EN / PT / ES Windows wording. A check that ran and failed (`node tests/x.js` → exit 1) is none: it printed the hint on
-// every failed run. Review 4: cmd.exe writes these in the console's OEM code page (850 on a PT / ES Windows) and the CLI
+// every failed run. cmd.exe writes these in the console's OEM code page (850 on a PT / ES Windows) and the CLI
 // decodes a run's output as UTF-8, so each accented letter arrives as U+FFFD — every accented class takes it too: a PT
 // Windows' "O sistema não conseguiu localizar o caminho especificado" never matched (an _Expect: fail_ task was ticked on it).
 const RE_CMD_SHELL_FAILURE = new RegExp([
@@ -608,7 +606,7 @@ const RE_CMD_SHELL_FAILURE = new RegExp([
   "was unexpected at this time", "n[ãa\uFFFD]o era esperad[oa] (?:nesta altura|neste momento)", "era inesperad[oa] neste momento", "no se esperaba en este momento",
   "cannot find the path specified", "n[ãa\uFFFD]o (?:pode|consegue|conseguiu) (?:encontrar|localizar) o caminho especificado", "no puede (?:encontrar|hallar) la ruta especificada",
   "the filename, directory name, or volume label syntax is incorrect",
-  // review 5 (L10): the same message on a PT-PT / PT-BR / ES Windows, read between its fixed ends (a bounded gap). Both word
+  // the same message on a PT-PT / PT-BR / ES Windows, read between its fixed ends (a bounded gap). Both word
   // orders Windows ships — "A sintaxe do nome …" and "O nome …, … ou a sintaxe da etiqueta …" (ES: "El nombre de archivo, el
   // nombre de directorio o la sintaxis de la etiqueta del volumen no son correctos", as Spanish Windows prints it) — and its
   // verb forms (está / é / estão / são, no es / no son), old PT-PT spelling (incorrecta) and OEM-decoded accents (U+FFFD).
@@ -618,7 +616,7 @@ const RE_CMD_SHELL_FAILURE = new RegExp([
 function windowsShellFailure(output, code) {
   return code === 9009 || RE_CMD_SHELL_FAILURE.test(String(output == null ? "" : output).slice(0, 200000));
 }
-// full review Ga9 — the shell `dev-spec done --run` / `finish --run` runs a command with. requested: --shell / DEV_SPEC_SHELL
+// the shell `dev-spec done --run` / `finish --run` runs a command with. requested: --shell / DEV_SPEC_SHELL
 // ("" = the platform default: cmd.exe on Windows, /bin/sh elsewhere). On Windows a bare `bash` resolves to Git Bash — never
 // to WSL's launcher (C:\Windows\System32\bash.exe, …\WindowsApps\bash.exe): PATH lists it first from PowerShell / cmd, and it
 // runs the command inside a Linux distribution or fails ("execvpe(/bin/bash) failed", exit 1 for every command — a passing
@@ -635,7 +633,7 @@ function isWslLauncher(p) {
   const s = String(p == null ? "" : p).trim().replace(/^"|"$/g, "");
   return /^(?:bash|wsl)(?:\.exe)?$/i.test(path.win32.basename(s)) && RE_WSL_LAUNCHER_DIR.test(s);
 }
-// 1.21.1 — PowerShell as the run shell (`--shell pwsh` / `powershell`, a path to either, DEV_SPEC_SHELL=pwsh). Node's shell
+// PowerShell as the run shell (`--shell pwsh` / `powershell`, a path to either, DEV_SPEC_SHELL=pwsh). Node's shell
 // option would run `<shell> -c "<cmd>"` — pwsh 7 and Windows PowerShell 5.1 both accept it — but that loads the user's
 // profile (slow; it may print, prompt or change the folder). The result carries `pwsh: true` and `args`: the CLI runs
 // `<shell> -NoProfile -NonInteractive -Command <cmd>` itself — the command ONE argument, quoted by Node's Windows rules, which
@@ -645,7 +643,7 @@ const PWSH_RUN_ARGS = ["-NoProfile", "-NonInteractive", "-Command"];
 const RE_PWSH_PROGRAM = /^(?:pwsh|powershell)(?:\.exe)?$/i;
 const isPwshShell = (p) => RE_PWSH_PROGRAM.test(path.win32.basename(String(p == null ? "" : p).trim().replace(/^"|"$/g, "")));
 const pwshShell = (shell) => ({ shell, cmd: false, pwsh: true, args: PWSH_RUN_ARGS.slice() });
-// 1.21.1 review — a POSIX shell runs the command (`posix: true`): the default /bin/sh off Windows, bash / sh / zsh / dash /
+// a POSIX shell runs the command (`posix: true`): the default /bin/sh off Windows, bash / sh / zsh / dash /
 // ksh / fish… named or by path, Git Bash, WSL's bash. It expands `$…` outside single quotes BEFORE a pwsh program sees its
 // script (posixPwshScript): `pwsh -Command "…; exit $LASTEXITCODE"` became a bare `exit` → 0 — a failing check recorded passed.
 const isPosixShellName = (p) => POSIX_SHELLS.has(path.win32.basename(String(p == null ? "" : p).trim().replace(/^"|"$/g, "")).toLowerCase().replace(/\.exe$/, ""));
@@ -657,7 +655,7 @@ function resolveRunShell(requested, opts = {}) {
   if (!req) return { shell: true, cmd: true }; // Node's default there: %ComSpec% (cmd.exe)
   if (/^(?:.*[\\/])?cmd(?:\.exe)?$/i.test(req)) return { shell: req, cmd: true }; // --shell cmd / a ComSpec path: cmd.exe anyway
   // wsl.exe is no shell: Node runs `<shell> -c "<cmd>"` and wsl.exe rejects -c (exit 4294967295 — a bogus failed run, or a
-  // fake red proof) — refused, a bare `wsl` too. Only WSL's bash.exe, named by its path, is used as given (1.15).
+  // fake red proof) — refused, a bare `wsl` too. Only WSL's bash.exe, named by its path, is used as given.
   if (/^(?:.*[\\/])?wsl(?:\.exe)?$/i.test(req.replace(/^"|"$/g, ""))) return { error: "wsl-exe", path: req };
   if (/[\\/]/.test(req)) {
     const shell = req.replace(/^"(.*)"$/, "$1"); // a quoted path: the quotes are no part of it (spawn would miss the file)
@@ -679,7 +677,7 @@ function resolveRunShell(requested, opts = {}) {
   for (const c of cands) if (!isWslLauncher(c) && exists(c)) return { shell: c, cmd: false, resolved: true, posix: true };
   return { error: "no-git-bash" };
 }
-// 1.21.1 — a PowerShell program's own script is PowerShell, not POSIX: `$` inside a double-quoted word of it is never flagged
+// a PowerShell program's own script is PowerShell, not POSIX: `$` inside a double-quoted word of it is never flagged
 // (`pwsh -NoProfile -Command "Invoke-Pester ./tests -CI; exit $LASTEXITCODE"` was refused as "variable"). cmd.exe hands such a
 // word to the program intact — it expands no `$`, and `;` / `&` inside quotes are no separators to it. The script is every
 // word after -Command / -c (any abbreviation, `-` or `/`), -CommandWithArgs / -cwa or -EncodedCommand of pwsh / powershell
@@ -730,7 +728,7 @@ function pwshTracker() {
     reset() { n = 0; ps = null; script = false; skipValue = false; wrap = {}; },
   };
 }
-// 1.21.1 review 2 — a word before the program: a `VAR=value` assignment, a wrapper that runs the rest of the line (env, exec,
+// a word before the program: a `VAR=value` assignment, a wrapper that runs the rest of the line (env, exec,
 // command, nohup, time, busybox, wsl, sudo, doas, nice, ionice, timeout, setsid, stdbuf — the approval guard's list minus its
 // launchers), a wrapper's option (its value too: `sudo -u root`, `nice -n 10`, `timeout -s KILL`) or positional (`timeout 60`).
 // st: the caller's state object ({} per command). → true when the word is no program. shellScript and pwshTracker share it.
@@ -783,7 +781,7 @@ function posixShellSyntax(cmd) {
   endCommand();
   return ["single-quotes", "variable"].filter((k) => found.has(k));
 }
-// 1.21.1 review — the mirror for a POSIX shell (resolveRunShell's `posix`: /bin/sh off Windows, bash, Git Bash…): it expands
+// the mirror for a POSIX shell (resolveRunShell's `posix`: /bin/sh off Windows, bash, Git Bash…): it expands
 // `$…` and backticks OUTSIDE single quotes — inside double quotes too — before a pwsh / powershell program gets its script, so
 // `pwsh -NoProfile -Command "npm test; exit $LASTEXITCODE"` ran `npm test; exit ` (exit 0: a failing check recorded as passed)
 // and `$_` / `$x` vanished. → the stable codes found in such a script ("variable" | "backtick"; [] = nothing): refused before
@@ -792,7 +790,7 @@ function posixShellSyntax(cmd) {
 // (`pwsh -File build.ps1 "$HOME"`) are the calling shell's own. The lexer: `;` `&` `|` `(` `)` and line breaks outside quotes
 // end a command, single quotes are literal, a backslash escapes the next character (inside double quotes only $ ` " \ and a
 // line break).
-// 1.21.1 review 2: a redirection outside quotes (`> "$OUT"`, `2>&1`, `< in`) and its target are the outer shell's, never the
+// a redirection outside quotes (`> "$OUT"`, `2>&1`, `< in`) and its target are the outer shell's, never the
 // script's; a `#` starting a word outside quotes comments out the rest of the line; a POSIX shell's own `-c` script (`bash -c
 // "pwsh -c \"$x\""` — the value lexShell / shellScript read) is analysed in turn, up to 3 levels.
 const POSIX_DQ_ESCAPES = new Set(["$", "`", '"', String.fromCharCode(92), "\n"]);
@@ -849,7 +847,7 @@ function posixPwshScan(s, depth) {
 // its LAST command's, so a failing check exits 0 and would be recorded as a passing run. → true for an unquoted single `|`
 // (`|&` too); never `||` (or), a `|` inside '…' / "…", an escaped one (`\|`, cmd.exe's `^|`), the `>|` redirection, or one
 // inside $(…) / `…` (a substitution's status is not the command's).
-// C4 — what used to be false negatives:
+// what used to be false negatives:
 // - pipefail counts only when a `set -o pipefail` (`set -eo pipefail`, `set -euo pipefail`, `set -e -o pipefail` …) RUNS
 //   BEFORE the pipe, or the shell is started with `-o pipefail`. The bare word anywhere (`set +o pipefail; …`, `tee
 //   pipefail.log`, a trailing `# pipefail later`) switched the check off.
@@ -864,8 +862,6 @@ function verifyPipeMasked(cmd) {
 const POSIX_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish"]);
 const PWSH_SHELLS = new Set(["pwsh", "powershell"]);
 const SHELL_WRAPPERS = new Set(["env", "command", "exec", "nohup", "time", "busybox", "wsl", "sudo", "doas", "nice", "ionice", "timeout", "setsid", "stdbuf"]);
-// every wrapper option that takes a value (per wrapper: WRAPPER_OPTION_VALUES — wrapperStep reads that)
-const WRAPPER_ARG_OPTS = new Set([...WRAPPER_OPTION_VALUES.values()].flat());
 // Split a command line into words and operators the way a shell reads it — enough to find pipes, `set` and shell scripts.
 // A word keeps its unquoted value `v` and its spelling as written (`raw`, quotes and escapes included — programName reads it).
 function lexShell(s) {
@@ -1009,7 +1005,7 @@ function pipeMaskedIn(s, pipefailAtStart, kind, depth) {
 function verifyPipes(block) {
   return taskMarkers(block).verify.filter(verifyPipeMasked);
 }
-// 1.25.1 (review 7) — a command holding a control character (an ESC / OSC sequence, a lone CR, a backspace… — every C0 but tab,
+// a command holding a control character (an ESC / OSC sequence, a lone CR, a backspace… — every C0 but tab,
 // DEL, every C1): a terminal shows something else than what runs — a cloned tasks.md could print `$ npm test` while `done --run`
 // ran another command. `done --run` / `finish --run` refuse such a _Verify:_ / project check (nothing runs), spec_init refuses
 // such a check (validCheckCmd), doctor fails `verify-control`. Built from char codes (never a raw control character in the source).
@@ -1025,7 +1021,7 @@ function verifyControls(block) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.14 B5 — evidence: red → green (_Expect: fail_), the project's check commands (roadmap.json meta.checks) with a recorded
+// evidence: red → green (_Expect: fail_), the project's check commands (roadmap.json meta.checks) with a recorded
 // full-suite run at finish, and git-linked evidence. The engine never runs a command nor git: `dev-spec done --run` /
 // `finish --run` execute, `dev-spec log` feeds `git log` text to taskCommits() — an agent can pass the same text.
 // ---------------------------------------------------------------------------
@@ -1035,7 +1031,7 @@ function verifyControls(block) {
 function expectsFail(block) {
   return !!block && taskMarkers(block).expect.some((v) => /^fail$/i.test(stripEnds(v, isBacktickUnit).trim()));
 }
-// 1.24 r6 D7 — the _Expect:_ values of a task that are no `fail` (the only value the marker knows): `_Expect: failure_`, `red`,
+// the _Expect:_ values of a task that are no `fail` (the only value the marker knows): `_Expect: failure_`, `red`,
 // PT `falha` left a must-pass task, silently — its red run was refused as a plain failed run. → [values] (backticks dropped):
 // doctor expect-value names them, and completeTask's failed-run refusal too (unknownExpect, stable).
 function unknownExpectValues(block) {
@@ -1044,7 +1040,7 @@ function unknownExpectValues(block) {
 // Exit codes of a shell that could not run the command at all — never a red test: 126 (not executable), 127 (command not
 // found, POSIX shells), 9009 (cmd.exe: "… is not recognized as an internal or external command").
 const CANT_RUN_EXIT = new Set([126, 127, 9009]);
-// full review Ga2 / Ga9 — the OUTPUT of a run that never exercised the check, whatever its exit code: the shell or its
+// the OUTPUT of a run that never exercised the check, whatever its exit code: the shell or its
 // launcher could not start it (`wsl`: WSL's bash.exe relay with no Linux distribution / no /bin/bash; `spawn`: a spawn error
 // Node reported), or the test runner found nothing to run (`test`: a missing test file, module or script, no test collected).
 // Such a run is no red test — the brief says so: "not a missing file or import" — so on an _Expect: fail_ task it is
@@ -1067,21 +1063,21 @@ const CANT_RUN_OUTPUT = [
   ["test", /\bMissing script: [^\n]{0,120}/, "npm missing script"], // npm run / npm test without that script
   ["test", /\bNo rule to make target [^\n]{0,200}/, "make missing target"], // make <missing target>
   ["test", /\bnpm (?:ERR!|error) (?:code )?ENOENT\b/, "npm no package.json"], // npm with no package.json
-  // PowerShell (1.21.1) — the command is unknown (Invoke-Pester without Pester installed, a typo): pwsh 7 "…is not recognized
+  // PowerShell — the command is unknown (Invoke-Pester without Pester installed, a typo): pwsh 7 "…is not recognized
   // as a name of a cmdlet", Windows PowerShell 5.1 "…as the name of a cmdlet" (its console wraps long lines, so blanks between
   // the words), pwsh's pt-BR / es wording ("não é reconhecido como um nome de um cmdlet", "no se reconoce como nombre de un
   // cmdlet"); a module that isn't installed; the execution policy refusing a script (and an unsigned one); a script path
   // pwsh / powershell can't find; Pester 5+ finding no test file. A test that RAN and failed on such an error — the function
   // under test doesn't exist yet: "[-] Get-Greeting.T-01 … 12ms" then "The term 'Get-Greeting' is not recognized" — stays
-  // red (RE_ASSERTION_RAN / pesterRan below). Every blank run between words is followed by a literal (1.21.1 review: `de\s+
-  // (?:um\s+)?\s*cmdlet` — two blank runs meeting — took 58 s on 200,000 blanks). Review 4: an accented class takes U+FFFD too
+  // red (RE_ASSERTION_RAN / pesterRan below). Every blank run between words is followed by a literal (`de\s+
+  // (?:um\s+)?\s*cmdlet` — two blank runs meeting — took 58 s on 200,000 blanks). An accented class takes U+FFFD too
   // (Windows PowerShell 5.1 writes in the OEM code page, decoded as UTF-8 — see RE_CMD_SHELL_FAILURE).
   ["test", /(?:['"][^'"\r\n]{1,200}['"]\s+)?(?:is\s+not\s+recognized\s+as\s+(?:a|the)\s+name\s+of\s+a|n[ãa\uFFFD]o\s+[ée\uFFFD]\s+reconhecido\s+como\s+(?:um\s+)?nome\s+de(?:\s+um)?|no\s+se\s+reconoce\s+como\s+(?:el\s+)?nombre\s+de(?:\s+un)?)\s+cmdlet\b/i, "pwsh unknown command"],
   ["test", /\bThe\s+specified\s+module\s+['"][^'"\r\n]{1,300}['"]\s+was\s+not\s+loaded\b|\bO\s+m[óo\uFFFD]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]\s+n[ãa\uFFFD]o\s+foi\s+carregado\b|\bNo\s+se\s+carg[óo\uFFFD]\s+el\s+m[óo\uFFFD]dulo\s+especificado\s+['"][^'"\r\n]{1,300}['"]/i, "pwsh module not loaded"],
   ["test", /\bcannot\s+be\s+loaded\s+because\s+running\s+scripts\s+is\s+disabled\s+on\s+this\s+system\b|\bporque\s+a\s+execu[çc\uFFFD][ãa\uFFFD]o\s+de\s+scripts\s+(?:est[áa\uFFFD]|foi)\s+(?:desabilitad|desativad)[ao]\s+neste\s+sistema\b|\bporque\s+la\s+ejecuci[óo\uFFFD]n\s+de\s+scripts\s+est[áa\uFFFD]\s+deshabilitada\s+en\s+este\s+sistema\b|\bis\s+not\s+digitally\s+signed\.\s+You\s+cannot\s+run\s+this\s+script\b/i, "pwsh execution policy"],
   ["test", /\bThe\s+argument\s+['"][^'"\r\n]{1,400}['"]\s+(?:is\s+not\s+recognized\s+as\s+(?:the|a)\s+name\s+of\s+a\s+script\s+file|to\s+the\s+-File\s+parameter\s+does\s+not\s+exist)\b/i, "pwsh -File path"],
   ["test", /\bNo test files were found and no scriptblocks were provided\b/, "Pester no test files"], // Pester 5 / 6: no *.Tests.ps1 under the path
-  // 1.24 r6 D5 — a runner that is not there, or a project that is none (each was recorded as an _Expect: fail_ task's red proof):
+  // a runner that is not there, or a project that is none (each was recorded as an _Expect: fail_ task's red proof):
   // `python -m <runner>` without it ("<python>: No module named pytest" — a test's own import is ModuleNotFoundError above), PHP's
   // missing script (vendor/bin/phpunit before composer install), npm / npx's unknown package (E404) or bin, dash's script it can't
   // open (`sh <missing>.sh`, exit 2), go without a module, cargo without a manifest, dotnet without a project, ruby's missing
@@ -1097,7 +1093,7 @@ const CANT_RUN_OUTPUT = [
   ["test", /\berror MSB100[39]: [^\n]{0,200}/, "dotnet no project"],
   ["test", /\bcannot load such file -- [^\n]{1,300}/, "ruby cannot load"],
   ["test", /\bthere is no POM in this directory\b[^\n]{0,200}/, "maven no POM"],
-  // 1.24 r6 D8 — a test file that doesn't parse: the compiler's caret frame, then "SyntaxError:" (node — CJS and ESM —, python), as
+  // a test file that doesn't parse: the compiler's caret frame, then "SyntaxError:" (node — CJS and ESM —, python), as
   // node --test shows it under either reporter (each line "# "-prefixed in TAP). A SyntaxError a test RAN into (JSON.parse in the
   // code under test) has no caret frame — still red. pytest says a test file failed to import / parse as a collection error.
   ["test", /^[ \t#]{0,400}\^{1,400}[ \t]{0,40}\r?\n(?:[ \t#]{0,8}\r?\n)?[ \t#]{0,8}SyntaxError: [^\r\n]{0,200}/m, "syntax error (caret frame)"],
@@ -1107,12 +1103,12 @@ const CANT_RUN_OUTPUT = [
 // launcher writes UTF-16).
 // Output that shows tests RAN and an assertion failed ("not ok 1", AssertionError, pytest's "E   assert", jest's
 // "Expected:" / expect(…)): a genuine red run, even when its message quotes a runner phrase ("expected: Cannot find module
-// 'foo-plugin'") — the `test` kind never applies to it (full review R6).
-// 1.21.1 — Pester's shapes too: a failed TEST line "[-] Get-Greeting.T-01 greets by name 12ms (9ms|3ms)" (Pester 3–6; never
+// 'foo-plugin'") — the `test` kind never applies to it.
+// Pester's shapes too: a failed TEST line "[-] Get-Greeting.T-01 greets by name 12ms (9ms|3ms)" (Pester 3–6; never
 // a block's "[-] Error occurred in Describe block …" / "[-] Discovery in … failed" / "[-] <file> failed with:"), "Expected
 // 'Hello, Ana', but got 'Hello'." / "Expected strings to be the same, but they were different." / Pester 3's "Expected string
-// length 10 but was 5.", and "But was:" (Pester, NUnit). Every quantifier next to another one is bounded (1.21.1 review).
-// 1.24 r6 D8: node --test's FILE-level `not ok 1 - tests/x.test.js` (the subtest named after a .js / .mjs / .cjs / .ts / .mts /
+// length 10 but was 5.", and "But was:" (Pester, NUnit). Every quantifier next to another one is bounded.
+// node --test's FILE-level `not ok 1 - tests/x.test.js` (the subtest named after a .js / .mjs / .cjs / .ts / .mts /
 // .cts / .jsx / .tsx file: it failed outside any test — a missing import, a syntax error) is no assertion that ran: under the TAP
 // reporter (Node 18–22's default when piped) such a broken file was the red proof, under the spec reporter could-not-run. A test
 // whose own name ends in such a file name reads the same (a known limit).
@@ -1121,7 +1117,7 @@ const RE_ASSERTION_RAN = /^[ \t]*not ok \d{1,9}(?!\d)(?! - [^\r\n]{0,500}\.[cm]?
 // ran as failed too — a BeforeAll that failed on a module that isn't there, a test file that doesn't parse. RE_PESTER_NOT_RUN
 // is how Pester says so: "Container failed: N" (Pester 5+, a file's top-level BeforeAll or its discovery), "BeforeAll \
 // AfterAll failed: N" and "[-] Describe <name> failed" / "[-] Context <name> failed" (Pester 5+, a block's BeforeAll —
-// 1.21.1 review: no "Container failed" there), "[-] Discovery in … failed" (a file that doesn't parse), Pester 3 / 4's "[-]
+// no "Container failed" there), "[-] Discovery in … failed" (a file that doesn't parse), Pester 3 / 4's "[-]
 // Error occurred in Describe block" / "… in test script '…'". Then the count proves no assertion — and without any sign a
 // test ran (RE_ASSERTION_RAN's "[-] <test> 12ms"…), such a line alone shows the run never exercised the test (couldNotRunOutput).
 const RE_PESTER_FAILED = /^[ \t]*(?:Tests Passed: \d{1,9}, |Passed: \d{1,9} )Failed: [1-9]/m;
@@ -1140,7 +1136,7 @@ function couldNotRunOutput(output) {
   const nr = ran ? null : s.match(RE_PESTER_NOT_RUN); // a Pester block / file that failed before its tests, and no test that ran
   return nr ? { kind: "test", text: one(nr) } : null;
 }
-// 1.24 r6 D4 + D-I2 — a PASS that ran no test: a glob, a path or a filter that matched nothing proves nothing (node --test exits 0
+// a PASS that ran no test: a glob, a path or a filter that matched nothing proves nothing (node --test exits 0
 // with "tests 0"). The runners' own words: node --test "ℹ tests 0" / "# tests 0", go "[no tests to run]" / "[no test files]", cargo
 // "running 0 tests", mocha "0 passing", jest "No tests found", pytest "no tests ran" / "collected 0 items", vitest "No test files
 // found", unittest "Ran 0 tests", Pester "Tests Passed: 0, Failed: 0", RSpec "0 examples, 0 failures", PHPUnit "No tests
@@ -1173,7 +1169,7 @@ function vacuousRun(output) {
   }
   return null;
 }
-// 1.21.1 review — PowerShell's OWN parse error: the -Command script never ran (Windows PowerShell 5.1 has no `&&` / `||`: "The
+// PowerShell's OWN parse error: the -Command script never ran (Windows PowerShell 5.1 has no `&&` / `||`: "The
 // token '&&' is not a valid statement separator in this version.", its "+ CategoryInfo : ParserError:" and
 // FullyQualifiedErrorId; pwsh 7's "ParserError:" block — "Unexpected token ')' in expression or statement.", "Missing closing
 // '}' in …"). The pwsh counterpart of windowsShellFailure: the CLI asks it only when PowerShell runs the line (--shell pwsh /
@@ -1207,7 +1203,7 @@ function cantRunRecord(r) {
   if (!isRecord(r) || typeof r.command !== "string" || r.command.trim() === "" || !Number.isInteger(r.exitCode)) return false;
   return CANT_RUN_EXIT.has(r.exitCode) || (r.exitCode !== 0 && !!couldNotRunOutput(r.summary));
 }
-// 1.23 review — the exit code of a run that CRASHED: a POSIX shell reports a child killed by SIGILL / SIGABRT / SIGBUS / SIGFPE /
+// the exit code of a run that CRASHED: a POSIX shell reports a child killed by SIGILL / SIGABRT / SIGBUS / SIGFPE /
 // SIGSEGV as 128 + the signal (132 · 134 · 135 · 136 · 139), Windows as an NTSTATUS — access violation, stack buffer overrun,
 // stack overflow, illegal instruction, integer divide by zero, a breakpoint — read as an unsigned or a signed 32-bit number.
 // A crash is a failed run (a re-check that crashes leaves the task unverified) but never a red test — it didn't fail for the
@@ -1222,20 +1218,20 @@ function isRedRun(r) {
 }
 // The red proof a record holds: its latest run, or `red` — the red run kept when a later run passed (recordEvidence). A
 // stale record (spec_impact --reopen: the spec it proved changed) proves nothing any more. One an UNDO made stale (staleBy
-// "undo", 1.16 U review 1) keeps its red run: unticking changed neither the spec nor the test, and once the fix is in that red
+// "undo") keeps its red run: unticking changed neither the spec nor the test, and once the fix is in that red
 // run can't be made again — the task was stuck on unexpected-pass for good. The record itself still reads stale-evidence
 // (evidenceIssue checks `stale` first), so a re-tick needs a new run: a pass is then the fix going green (expectFailRun's
 // passAfterRed), and the red run is carried into the new record as `red`. Callers pass the task's OWN record (ownEvidence /
 // ownRecord), which an edited _Verify:_ no longer matches — its red run proves nothing for the new command.
-// verify (1.22 review): the task's runnable _Verify:_ values — given, a red run of ANOTHER command proves nothing (runProvesVerify).
-// pass (review 2 — grandfathering, as observedProof's R2): a passing run of the _Verify:_ itself (runProvesVerify — the CLI's
+// the task's runnable _Verify:_ values — given, a red run of ANOTHER command proves nothing (runProvesVerify).
+// pass (grandfathering, as observedProof's R2): a passing run of the _Verify:_ itself (runProvesVerify — the CLI's
 // "cli" stamp too) — the record's own latest run, or the run being recorded; given, a red run on record of another command that
-// was recorded BEFORE the command rule existed counts (review 3: only one without the `cmdRule` stamp recordEvidence puts on
+// was recorded BEFORE the command rule existed counts (only one without the `cmdRule` stamp recordEvidence puts on
 // every run since — `npm test -- tests/other.test.js` or `false` with exit 1, then the passing run of the _Verify:_, verified a
 // task with no red run of its own test). A pre-rule red run reported in another form than the _Verify:_ (`tests\x.test.js`,
 // `--test-reporter=tap`) left the task stuck once the fix was in — its passing `done --run` was refused as unexpected-pass,
 // and the only way out was reverting the fix.
-// root (review 3): the project folder the runs' `cd`s are resolved from (runProvesVerify).
+// root: the project folder the runs' `cd`s are resolved from (runProvesVerify).
 function redProof(e, verify, pass, root) {
   if (!isRecord(e) || (e.stale === true && e.staleBy !== "undo")) return null;
   const red = (r) => isRedRun(r) && (!verify || runProvesVerify(r, verify, root));
@@ -1244,11 +1240,11 @@ function redProof(e, verify, pass, root) {
   if (!verify || !isRecord(pass) || pass.exitCode !== 0 || !runProvesVerify(pass, verify, root)) return null;
   return legacyRedRun(e);
 }
-// Review 3 — the version of the command rule a run was recorded under (recordEvidence stamps `cmdRule` on every run); a run
+// the version of the command rule a run was recorded under (recordEvidence stamps `cmdRule` on every run); a run
 // without it predates the rule (redProof's grandfathering, recordEvidence's carry-forward). Never taken from a caller
 // (normalizeEvidence copies no such field).
 const CMD_RULE = 1;
-// Review 4 — a run recorded BEFORE the command rule (no cmdRule stamp): its verdict is the pre-1.22 one, any command proves it
+// a run recorded BEFORE the command rule (no cmdRule stamp): its verdict is the pre-1.22 one, any command proves it
 // (taskEvidenceIssue, observedProof, suiteStatus — upgrade safety). Only the runs recordEvidence / recordFinishChecks stamp are
 // judged by runProvesVerify.
 const preRuleRun = (r) => isRecord(r) && r.cmdRule == null;
@@ -1265,7 +1261,7 @@ function legacyRedRun(e) {
 function expectFailIssue(e, runnable) {
   // A could-not-run latest run is a failed re-check even while the red run it carries forward stays on record (so the
   // pass after the fix is still accepted as the green one).
-  // full review Ga2: a could-not-run OUTPUT too (a missing test file…). 1.25.1 (review 7): and a CRASH (crashExit — exit 139, an
+  // a could-not-run OUTPUT too (a missing test file…). And a CRASH (crashExit — exit 139, an
   // access violation): a re-run that segfaulted fell through to the red run carried forward and the task stayed verified.
   const cantRun = cantRunRecord(e) || (typeof e.command === "string" && e.command.trim() !== "" && crashExit(e.exitCode));
   if (!cantRun && redProof(e)) return null; // (taskEvidenceIssue then asks whether that red run is one of the _Verify:_ commands)
@@ -1277,9 +1273,9 @@ function expectFailIssue(e, runnable) {
 // completeTask's reading of one run on an _Expect: fail_ task (prev = the task's own record before it): `refused` — a pass
 // with no red run of this _Verify:_ on record, or a command that could not run; `red` — this run is the red proof;
 // `passAfterRed` — a pass once the red run is on record (the fix made the test green: the red run stays the proof).
-// verify (1.22 review): the task's _Verify:_ values — a red run of ANOTHER command still ticks (it is no could-not-run run) but
+// the task's _Verify:_ values — a red run of ANOTHER command still ticks (it is no could-not-run run) but
 // is no red proof (`red` false: the red run already on record is carried forward), and only a red run of the _Verify:_ itself
-// makes a later pass "the fix going green" — or (review 2) a red run of any command recorded before the command rule (review 3:
+// makes a later pass "the fix going green" — or a red run of any command recorded before the command rule (
 // no cmdRule stamp), when this pass is a run of the _Verify:_ itself (redProof's grandfathering).
 function expectFailRun(ev, prev, verify, root) {
   const run = !!ev && ev.exitCode != null && !!ev.command;
@@ -1291,11 +1287,11 @@ function expectFailRun(ev, prev, verify, root) {
 function expectFailRefusal(n, ev, ticked, lng) {
   const X = i18n.msg(lng).redGreen;
   if (ev.exitCode === 0) return { ok: false, recorded: true, expected: "fail", unexpectedPass: true, error: ticked ? X.passTicked(n) : X.passRefused(n) };
-  // couldNotRun (stable): "exit-code" (126 / 127 / 9009) · "output" (full review Ga2: its summary shows the test never ran —
+  // couldNotRun (stable): "exit-code" (126 / 127 / 9009) · "output" (its summary shows the test never ran —
   // a missing test file, module or script, no test collected, a shell that could not start).
   const out = !CANT_RUN_EXIT.has(ev.exitCode) ? couldNotRunOutput(ev.summary) : null;
   if (out) return { ok: false, recorded: true, expected: "fail", couldNotRun: "output", error: X.cantRunOutput(n, ev.exitCode, out.text, ticked) };
-  // 1.23 review: a crash (crashExit) ran and failed — recorded as a failed run, refused as the red proof ("crash", stable)
+  // a crash (crashExit) ran and failed — recorded as a failed run, refused as the red proof ("crash", stable)
   if (crashExit(ev.exitCode)) return { ok: false, recorded: true, expected: "fail", couldNotRun: "crash", error: X.crashNotRed(n, ev.exitCode, ticked) };
   return { ok: false, recorded: true, expected: "fail", couldNotRun: "exit-code", error: X.cantRun(n, ev.exitCode, ticked) };
 }
@@ -1313,7 +1309,7 @@ function redGreenGaps(blocks, evidence, root) {
   const proven = new Set();
   for (const b of blocks) {
     const own = ownEvidence(evidence, b, dups.has(b.number));
-    // (review 4: a record whose latest run predates the command rule is read by the pre-1.22 rule — any red run on record)
+    // (a record whose latest run predates the command rule is read by the pre-1.22 rule — any red run on record)
     if (!expectsFail(b) || !redProof(own, preRuleRun(own) ? null : taskMarkers(b).verify, own, root)) continue;
     for (const id of extractTestIds(taskProse(b).join(" "))) proven.add(tKey(id.slice(2)));
   }
@@ -1330,7 +1326,7 @@ function gitEvidence(ev) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.14 F1 — harness-observed evidence. In Claude Code the plugin's hooks/observe-hook.js (PostToolUse and PostToolUseFailure,
+// harness-observed evidence. In Claude Code the plugin's hooks/observe-hook.js (PostToolUse and PostToolUseFailure,
 // matcher Bash) sees every Bash run: a run of a task's runnable _Verify:_ command (or the " && " join of a task's commands) or
 // of a project check (roadmap.json meta.checks) is appended — one JSON line {command, exitCode, at, event, session} — to a
 // git-ignored, size-bounded log: .specs/<feature>/.execution/observed.jsonl for a task's command, .specs/.execution/
@@ -1363,7 +1359,7 @@ function evidenceSince(projectDir) {
   return !l.parseError && isObj(l.rm.meta) ? timeOf(l.rm.meta.evidenceSince) : null;
 }
 // The rule taskVerification applies: { mode, since } (a bare mode string is accepted too).
-// (review 3: + root — the project folder, the one runProvesVerify resolves a run's `cd`s from)
+// (+ root — the project folder, the one runProvesVerify resolves a run's `cd`s from)
 function evidenceRule(projectDir) {
   const mode = evidenceMode(projectDir);
   return mode === "observed" ? { mode, since: evidenceSince(projectDir), root: projectDir } : { mode, root: projectDir };
@@ -1417,9 +1413,9 @@ function readObservedLog(file) {
 // Did the harness observe this run? → { observed: boolean, at? } — true when the LATEST observed run of the command within
 // OBSERVED_WINDOW_MS exited with this code (a report of exit 0 after an observed exit 1 is not what the harness saw). slug: the
 // feature's log; null: the project checks' log.
-// opts.expected (1.22 review): the commands the run must be one of — the task's _Verify:_ values, or [the check's command]; a
+// opts.expected: the commands the run must be one of — the task's _Verify:_ values, or [the check's command]; a
 // reported run of another command (another task's or check's, which the harness may well have seen) is never observed here.
-// Review 3 — ONE matcher on both sides: the logged run that counts is the latest one that is itself a run of the expected
+// ONE matcher on both sides: the logged run that counts is the latest one that is itself a run of the expected
 // commands (runProvesVerify, from the project root — what the matcher accepts in reported mode: `node --test tests\x.test.js`,
 // `npm test && npm run build` for [build, test], `CI=1 npm run lint`), never only one spelled the same as the report — those read
 // `unobserved` in observed mode while reported mode verified them. With no `expected`, the reported command itself is what the
@@ -1438,7 +1434,7 @@ function observedRun(projectDir, slug, command, exitCode, opts = {}) {
   const file = observedLogFile(projectDir, slug);
   if (!file) return { observed: false };
   const now = Number.isFinite(opts.now) ? opts.now : Date.now();
-  // 1.24 r6 D-I5: opts.after (ms) — the task's own latest recorded run: a logged run no newer than it is not the reported run (the
+  // opts.after (ms) — the task's own latest recorded run: a logged run no newer than it is not the reported run (the
   // harness saw an EARLIER one — a pass logged before the failure on record stamped a later, un-run pass report observed)
   const after = Number.isFinite(opts.after) ? opts.after : -Infinity;
   const entries = readObservedLog(file).filter((e) => { const t = Date.parse(e.at); return Number.isFinite(t) && t > after && t >= now - OBSERVED_WINDOW_MS && t <= now + 5 * 60 * 1000; });
@@ -1467,7 +1463,7 @@ function proofPlainParts(cmd) {
   if (steps.length < 2 || steps.length > PROOF_MAX_STEPS || !steps.every((s) => s.t === "cmd")) return null;
   return steps.map((s) => [...s.env.map(([k, v]) => k + "=" + v), s.body].join(" "));
 }
-// A command as the log stores it: whitespace runs folded (review 3: backticks are kept — a substitution is no plain text).
+// A command as the log stores it: whitespace runs folded (backticks are kept — a substitution is no plain text).
 const observedKey = (s) => String(s == null ? "" : s).replace(/\s+/g, " ").trim();
 // Was any run ever observed in this project (a log with an entry, project or active feature)? The "MCP-only client" note.
 function observedAny(projectDir) {
@@ -1477,17 +1473,17 @@ function observedAny(projectDir) {
 }
 // The stamp of a reported run: "cli" when the CLI ran it itself (`done --run`, `finish --run`), else what the log says about a
 // run of the EXPECTED command (expected: the task's _Verify:_ values / [the check's command] — observedRun).
-// after (1.24 r6 D-I5, ms): the task's own latest recorded run — only a run logged after it is this report's (observedRun).
+// after (ms): the task's own latest recorded run — only a run logged after it is this report's (observedRun).
 function observedStamp(projectDir, slug, ev, ranBy, expected, after) {
   if (!ev || typeof ev.command !== "string" || !ev.command.trim() || !Number.isInteger(ev.exitCode)) return undefined;
   return ranBy === "cli" ? "cli" : observedRun(projectDir, slug, ev.command, ev.exitCode, { expected, root: ev.root, after }).observed;
 }
-// 1.22 review — `cd <dir> && <cmd>` (or `;`) → <cmd> when <dir> — resolved from cwd; Git Bash's /c/… read as C:/… on Windows —
+// `cd <dir> && <cmd>` (or `;`) → <cmd> when <dir> — resolved from cwd; Git Bash's /c/… read as C:/… on Windows —
 // is one of `roots` (project folders); any other folder keeps the whole command (another run, which then matches nothing).
 // ONE function for both sides: the observe hook's log (observeRun: the project AND the project holding the run's cwd — a
 // subagent in a git worktree logs `cd <worktree> && npm test` in the main project's log too) and the reported run's lookup
 // (observedRun) — the hook used to strip it while the lookup didn't, so reporting the exact command that ran read unobserved.
-// (review 5: cmd.exe's `cd /d` / `chdir` / `pushd` and PowerShell's `Set-Location` / `sl` / `Push-Location` [-Path] too)
+// (cmd.exe's `cd /d` / `chdir` / `pushd` and PowerShell's `Set-Location` / `sl` / `Push-Location` [-Path] too)
 const RE_CD_STRIP = /^(?:cd|chdir|pushd|sl|set-location|push-location)\s+(?:\/d\s+|-(?:literal)?path\s+|-lp\s+)?(?:"([^"]*)"|'([^']*)'|([^\s;&|]+))\s*(?:&&|;)\s*([\s\S]+)$/i;
 function stripCdPrefix(cmd, roots, cwd) {
   const s = String(cmd == null ? "" : cmd).trim();
@@ -1504,7 +1500,7 @@ function stripCdPrefix(cmd, roots, cwd) {
   const at = norm(path.resolve(typeof cwd === "string" && cwd ? cwd : list[0], target));
   return list.includes(at) ? m[4].trim() : s;
 }
-// Review 3 — the project root a recorded run's ABSOLUTE `cd`s are read against, stamped on the run (`root`) when its command
+// the project root a recorded run's ABSOLUTE `cd`s are read against, stamped on the run (`root`) when its command
 // holds one, so the verdict is the same on another machine (the path is the recording machine's) and after a worktree is
 // gone: the project folder — or, when the run's first absolute cd lands in a git worktree of the SAME repository (the same
 // common git dir) that holds this feature's folder (a subagent's run in its worktree, `cd <worktree> && npm test`), that
@@ -1530,7 +1526,7 @@ function runRootStamp(command, projectDir, slug) {
     const a = gitCommonDir(wt), b = gitCommonDir(pdir);
     return a && b && key(a) === key(b) ? wt : null;
   };
-  // Review 4: a worktree INSIDE the project (`.claude/worktrees/<name>`, `.worktrees/<name>`) is its own root — the cd was read as
+  // a worktree INSIDE the project (`.claude/worktrees/<name>`, `.worktrees/<name>`) is its own root — the cd was read as
   // a folder of the main project, so `cd <repo>/.claude/worktrees/agent-1 && npm test` read command-mismatch for `_Verify: npm test_`.
   if (within(pdir, at) !== null) {
     const wt = at === pdir ? null : worktree();
@@ -1583,9 +1579,9 @@ function specsProjectOf(dir) {
 // An _Expect: fail_ task whose red proof was recorded BEFORE the project switched to "observed" (since) counts once the fix's
 // passing run of it was observed: re-making the red run would mean breaking the fixed code again (feature review R2 — the task
 // stayed unobserved for good and the note sent the user round in circles).
-// verify (1.22 review): the task's _Verify:_ values — only an observed run OF one of them proves it (an observed run of another
+// the task's _Verify:_ values — only an observed run OF one of them proves it (an observed run of another
 // task's command — or another check's — proves nothing here).
-// Review 4: a run recorded before the command rule (preRuleRun) is read as it was then — any observed run of any command; a record
+// a run recorded before the command rule (preRuleRun) is read as it was then — any observed run of any command; a record
 // whose latest run predates the rule is judged as a whole by the pre-1.22 rule (its red proof: any red run on record).
 function observedProof(e, expectFail, since, verify, root) {
   const v = preRuleRun(e) ? null : verify;
@@ -1594,13 +1590,13 @@ function observedProof(e, expectFail, since, verify, root) {
   if (seen(run)) return true;
   return !!(expectFail && since != null && isRecord(run) && timeOf(run.at) != null && timeOf(run.at) < since && seen(e) && e.exitCode === 0);
 }
-// Review 3 — the cheap text test run before a tasks.md is parsed (here, and — a copy, as it runs before the engine loads — in
+// the cheap text test run before a tasks.md is parsed (here, and — a copy, as it runs before the engine loads — in
 // hooks/observe-hook.js): the run's command bodies as no matcher reading tells apart — split at ` && ` and `;`, a `cd` /
 // `set … pipefail` part dropped, leading NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and
 // quotes dropped, `\` read as `/`, whitespace folded (observedNorm) — must each appear in the normalized text. A SUPERSET of
 // runProvesVerify (every transformation keeps a body a substring of its _Verify:_'s normalized text): a run the matcher accepts
 // always passes it. → the bodies ([] — a run of cds / pipefail only — matches nothing).
-// (review 5: also pipes unspaced, a `./` at a word's start dropped, npm's aliases of `npm test` read as it, `&&` split however
+// (also pipes unspaced, a `./` at a word's start dropped, npm's aliases of `npm test` read as it, `&&` split however
 // spaced, and a part that is cmd.exe's / PowerShell's change of folder — chdir, pushd, popd, Set-Location, sl, Push-Location,
 // Pop-Location — dropped like `cd`: the matcher's review-5 readings, so the filter stays a superset of it)
 const observedNorm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim()
@@ -1617,7 +1613,7 @@ function observedBodies(cmd) {
   return out;
 }
 // hooks/observe-hook.js, once its cheap text pre-filter found the command's bodies in a tasks.md or meta.checks: one log line per
-// target the run belongs to — each non-archived feature with a task the run is a run of (review 3: runProvesVerify, the matcher
+// target the run belongs to — each non-archived feature with a task the run is a run of (runProvesVerify, the matcher
 // the verdict uses — one of its runnable _Verify:_ commands, or all of them joined in any order; `node --test tests\x.test.js`,
 // `npm test && npm run build`, `CI=1 npm run lint` were logged nowhere: the log took only the _Verify:_ as written or its in-order
 // join), and the project log when it is a run of a project check. Never creates a feature folder (a feature renamed or removed
@@ -1636,7 +1632,7 @@ function observeRun(projectDir, run) {
   const bodies = observedBodies(key);
   if (!bodies.length) return { recorded: [] };
   const mentions = (text) => { const t = observedNorm(text); return bodies.every((b) => t.includes(b)); };
-  // (review 4: or ONE plain ` && ` step of a value — observedRun's step-by-step fallback (proofPlainParts) looks them up, and they
+  // (or ONE plain ` && ` step of a value — observedRun's step-by-step fallback (proofPlainParts) looks them up, and they
   // were never logged: `_Verify: npm run build && npm test_` run as two Bash calls read unobserved while reported mode verified it)
   const proves = (list) => runProvesVerify({ command: key }, list, pdir) ||
     (list.length === 1 && (proofPlainParts(list[0]) || []).some((p) => runProvesVerify({ command: key }, [p], pdir)));
@@ -1663,7 +1659,7 @@ function appendObserved(exDir, entry) {
     if (!isDirSafe(path.dirname(exDir))) return null; // the feature folder (or .specs/) must exist — never recreated here
     writeIfAbsent(path.join(exDir, ".gitignore"), "*\n"); // .execution/ (created through the write gate) ignores itself
     const file = path.join(exDir, OBSERVED_LOG);
-    specWrite(file, JSON.stringify(entry) + "\n", { append: true }); // 1.24 r6: never appended through a link
+    specWrite(file, JSON.stringify(entry) + "\n", { append: true }); // never appended through a link
     trimObservedLog(file);
     return file;
   } catch {
@@ -1689,7 +1685,7 @@ function trimObservedLog(file) {
 }
 // The feature's last task activity (ms): the last tick completeTask stamped (lastTickAt) or the newest recorded task run. A
 // box ticked by hand in tasks.md leaves no time; null = nothing known (then any passing check run counts). A stamp in the
-// future is ignored, as the stop gate's stopActivity does (full review Ga4): a .state.json committed from a machine with a
+// future is ignored, as the stop gate's stopActivity does: a .state.json committed from a machine with a
 // fast clock made every check run "before the last task activity" until that time had passed.
 function lastTaskActivity(state) {
   let best = null;
@@ -1710,9 +1706,9 @@ function lastTaskActivity(state) {
 const CHECK_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,39}$/;
 const CHECKS_MAX = 20;
 const validCheckName = (k) => typeof k === "string" && CHECK_NAME_RE.test(k) && !PROTO_KEYS.has(k.toLowerCase());
-const validCheckCmd = (v) => typeof v === "string" && v.trim() !== "" && !/[\r\n]/.test(v) && !commandHasControl(v) && v.trim().length <= 500; // 1.25.1: no control character
+const validCheckCmd = (v) => typeof v === "string" && v.trim() !== "" && !/[\r\n]/.test(v) && !commandHasControl(v) && v.trim().length <= 500; // no control character
 // → { checks: [{name, command}] (stored order), invalid: [names of malformed entries — ignored], unsafe: [the stored ones whose
-// command holds a control character — 1.25.1: finish --run runs nothing while one is there, doctor fails verify-control] }
+// command holds a control character — finish --run runs nothing while one is there, doctor fails verify-control] }
 function projectChecks(projectDir) {
   const l = loadRoadmap(projectDir);
   const raw = !l.parseError && isObj(l.rm.meta) ? l.rm.meta.checks : undefined;
@@ -1768,9 +1764,9 @@ function writeChecks(projectDir, nc) {
 // ran them, validated all-or-nothing, then recorded in .state.json → finishChecks[name]: the latest run {command, exitCode,
 // summary, at, commit?, dirty?} stamped `check` (the meta.checks command it ran for — an edited command makes it `changed`)
 // plus a short history. A failed run is recorded too (it stays a blocker). → { recorded } | { error }
-// ranBy "cli" (1.14 F1): `finish --run` ran the checks itself — each run is stamped observed: "cli"; otherwise the harness's
+// ranBy "cli": `finish --run` ran the checks itself — each run is stamped observed: "cli"; otherwise the harness's
 // project-check log says whether it saw each run (observed: true | false).
-// runStart (1.22 review — `finish --run` only, ranBy "cli"): { at, code } taken BEFORE the checks ran (runStartStamp) — the run's
+// runStart (`finish --run` only, ranBy "cli"): { at, code } taken BEFORE the checks ran (runStartStamp) — the run's
 // `at` is when it started and its `code` stamp the implementing files as they were then, so an edit made while a long suite ran
 // reads code-changed (it used to be stamped after the run: tested); its `check` stamp is the command that ran.
 function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStart) {
@@ -1790,10 +1786,10 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
     if (typeof it.command !== "string" || !it.command.trim()) return bad(P.needsCommand);
     const code = it.exitCode == null ? "" : String(it.exitCode).trim();
     if (!/^-?\d+$/.test(code)) return bad(P.needsExit);
-    const run = { command: it.command.trim().slice(0, OBSERVED_MAX_COMMAND), exitCode: parseInt(code, 10), ...gitEvidence(it) }; // (review 2: never cut before it is compared)
-    const root = runRootStamp(run.command, projectDir, slug); // review 3: the folder its absolute cds are read against
+    const run = { command: it.command.trim().slice(0, OBSERVED_MAX_COMMAND), exitCode: parseInt(code, 10), ...gitEvidence(it) }; // (never cut before it is compared)
+    const root = runRootStamp(run.command, projectDir, slug); // the folder its absolute cds are read against
     if (root) run.root = root;
-    run.observed = observedStamp(projectDir, null, run, ranBy, [byName.get(it.name)]); // 1.14 F1 — an observed run of THIS check's command (1.22 review)
+    run.observed = observedStamp(projectDir, null, run, ranBy, [byName.get(it.name)]); // an observed run of THIS check's command
     if (typeof it.summary === "string" && it.summary.trim()) run.summary = it.summary.slice(0, 2000);
     // (a CLI run's `check` is the command it ran — meta.checks when it started; edited meanwhile, the run reads `changed`)
     runs.push({ name: it.name, check: start ? run.command : byName.get(it.name), run });
@@ -1802,13 +1798,13 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
   if (state.invalid) return { error: state.invalid };
   const at = start ? start.at : new Date().toISOString();
   const fc = isObj(state.finishChecks) ? state.finishChecks : {};
-  // full review Ga3: each run is stamped `code` — a hash of the feature's implementing files as they are now (the set the
+  // each run is stamped `code` — a hash of the feature's implementing files as they are now (the set the
   // finish baseline records); code edited after the run makes it `code-changed`. No stamp when the walk was capped.
-  // 1.22 review: `finish --run` passes the stamp taken BEFORE the checks ran.
+  // `finish --run` passes the stamp taken BEFORE the checks ran.
   const code = start ? start.code : suiteCodeStamp(projectDir, dir);
   for (const r of runs) {
     const prev = Object.prototype.hasOwnProperty.call(fc, r.name) && isRecord(fc[r.name]) ? fc[r.name] : null;
-    const run = runOf({ ...r.run, at, cmdRule: CMD_RULE }); // review 4: recorded under the command rule (suiteStatus judges it by it)
+    const run = runOf({ ...r.run, at, cmdRule: CMD_RULE }); // recorded under the command rule (suiteStatus judges it by it)
     const hist = prev && prev.check === r.check && Array.isArray(prev.history) ? prev.history.filter(isRecord) : [];
     fc[r.name] = { ...run, check: r.check, ...(code ? { code } : {}), history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
   }
@@ -1818,10 +1814,10 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
 }
 // Each project check's standing (spec_finish's suite-evidence blocker, doctor's warn): pass — its latest run exited 0, for
 // the command meta.checks names now, at or after the feature's last task activity · no-run · failed · changed (meta.checks'
-// command changed since the run, or the run is of another command — 1.22 review) · before-last-tick · code-changed (full review Ga3: the run's `code` stamp no longer matches
+// command changed since the run, or the run is of another command) · before-last-tick · code-changed (the run's `code` stamp no longer matches
 // the feature's implementing files — code edited after the checks ran; a run recorded without a stamp keeps the older rule).
 // dir: the feature folder (the stamp is only compared with it). → { items, missing (not pass), invalid, lastActivity }
-// · unobserved (1.14 F1, only with roadmap.json meta.evidence "observed": a passing run the harness never saw — observed is
+// · unobserved (only with roadmap.json meta.evidence "observed": a passing run the harness never saw — observed is
 // neither true nor "cli").
 function suiteStatus(projectDir, state, dir) {
   const { checks, invalid } = projectChecks(projectDir);
@@ -1840,8 +1836,8 @@ function suiteStatus(projectDir, state, dir) {
     const it = { name, command, exitCode: r.exitCode, at: typeof r.at === "string" ? r.at : null, ranCommand: r.command, ...runOf({ summary: r.summary, ...gitEvidence(r) }) };
     if (r.observed === true || r.observed === false || r.observed === "cli") it.observed = r.observed; // 1.14 F1
     const t = Date.parse(r.at);
-    // changed: meta.checks' command changed since the run — or (1.22 review) the run was of ANOTHER command (runProvesVerify:
-    // `{name: "test", command: "echo ok"}` made check test pass); review 4: a run recorded before that rule (no cmdRule stamp —
+    // changed: meta.checks' command changed since the run — or the run was of ANOTHER command (runProvesVerify:
+    // `{name: "test", command: "echo ok"}` made check test pass); a run recorded before that rule (no cmdRule stamp —
     // preRuleRun) keeps the pre-1.22 reading (its `check` stamp alone), as a task's run does
     it.status = r.check !== command || (!preRuleRun(r) && !runProvesVerify(r, [command], projectDir)) ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick"
       : codeChanged(r) ? "code-changed" : observedOnly && r.observed !== true && r.observed !== "cli" ? "unobserved" : "pass";
@@ -1849,7 +1845,7 @@ function suiteStatus(projectDir, state, dir) {
   });
   return { items, missing: items.filter((i) => i.status !== "pass"), invalid, lastActivity: last != null ? new Date(last).toISOString() : null };
 }
-// The code a project check run tested (full review Ga3): one sha1 over the feature's implementing files — the ACTIVE tasks'
+// The code a project check run tested: one sha1 over the feature's implementing files — the ACTIVE tasks'
 // _Implements:_ set the finish baseline records (baselineFiles: files, folders expanded, globs, inside the project, bounded),
 // each file's CRLF-normalized content hash (fileHash; a missing file counts as missing). null when the walk was capped (a
 // partial set proves nothing) — the run is then judged by the older rule alone.
@@ -1862,7 +1858,7 @@ function suiteCodeStamp(projectDir, dir) {
   for (const rel of files.slice().sort()) h.update(rel + "\u0000" + (fileHash(path.resolve(root, rel)) || "-") + "\n");
   return h.digest("hex");
 }
-// 1.22 review — the stamps of a CLI run taken BEFORE it runs (`done --run` / `finish --run`): { ok, at (now, ISO), code (the
+// the stamps of a CLI run taken BEFORE it runs (`done --run` / `finish --run`): { ok, at (now, ISO), code (the
 // feature's suiteCodeStamp, or null when the walk was capped) }. They were taken after the run, so an edit made while a long
 // run went on read as tested (a code stamp of the edited files; a later `at`).
 function runStartStamp(projectDir, name) {
@@ -1981,7 +1977,7 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   const tracks = detectTracks(dir);
   const blocks = taskBlocks(activeTasks(tasksText, tracks) || "");
   const commits = parseGitLog(logText);
-  // 1.25.1 (review 7): a feature started on its own branch (create --branch) recorded the commit it started from, and the CLI reads
+  // a feature started on its own branch (create --branch) recorded the commit it started from, and the CLI reads
   // `git log <commit>..HEAD` — a log handed in (spec_log {gitLog}, `log <f> -`) is read the same way: cut at that commit when it holds
   // it (it and every commit after it in the newest-first list are older work), and labelled `since` either way (spec_log's description
   // names the range). opts.since: what the CLI read — {base, commit} the range, null the whole log on purpose (git no longer knows it).
@@ -2046,7 +2042,7 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   }
   const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
   const lines = [G.head(slug, commits.length, citing, truncated)];
-  // 1.25: since {base, commit} — the log read from the feature's start (`git log <commit>..HEAD`: its branch record), above
+  // since {base, commit} — the log read from the feature's start (`git log <commit>..HEAD`: its branch record), above
   if (since) lines.push(i18n.msg(lng).branch.logSince(since.base, since.commit.slice(0, 7)));
   for (const t of info) {
     const list = t.commits.slice(0, 5).map((c) => G.commitRef(commits[c.idx].short, cut(commits[c.idx].subject, 60), c.via.join(", ")));
@@ -2083,7 +2079,7 @@ function specChangedSince(evidence, block, dup, reason) {
   const own = ownEvidence(evidence, block, dup);
   return isRecord(own) && own.stale === true && own.staleBy !== "undo";
 }
-// 1.16 U1: stale-evidence because the task was unticked after this record (spec_complete_task {undo}: staleBy "undo") — the
+// stale-evidence because the task was unticked after this record (spec_complete_task {undo}: staleBy "undo") — the
 // same code, its own label (undo.label): a re-tick needs a new run.
 function untickedSince(evidence, block, dup, reason) {
   if (reason !== "stale-evidence") return false;
@@ -2091,24 +2087,14 @@ function untickedSince(evidence, block, dup, reason) {
   return isRecord(own) && own.stale === true && own.staleBy === "undo";
 }
 
-module.exports = { normalizeEvidence, evidenceIssue, taskStamp, verifyStamp, isRecord, evidenceRecords, ownRecord, movedEvidence,
-  ownEvidence, taskEvidenceIssue, taskVerification, EVIDENCE_HISTORY, EVIDENCE_OTHERS, recordEvidence, storeEvidence,
-  runOf, stateEvidence, verificationStatus, RE_COUNT_KW, RE_COUNT_LINE, RE_ANSI, stripAnsi, RE_CARET_LINE, RE_SYNTAX_ERROR_LINE, summarizeRunOutput,
-  RE_CMD_SHELL_FAILURE, windowsShellFailure, RE_WSL_LAUNCHER_DIR, isWslLauncher, PWSH_RUN_ARGS, RE_PWSH_PROGRAM,
-  isPwshShell, isPosixShellName, resolveRunShell, PWSH_VALUE_OPTS, PWSH_VALUE_ALIASES, RE_PWSH_COMMAND_OPT, pwshOption,
-  pwshTracker, WRAPPER_OPTION_VALUES, WRAPPER_POSITIONALS, wrapperStep, posixShellSyntax, POSIX_DQ_ESCAPES, posixPwshScript,
-  posixPwshScan,
-  verifyPipeMasked, RE_CMD_CONTROL, commandHasControl, controlVisible, verifyControls, POSIX_SHELLS, PWSH_SHELLS, SHELL_WRAPPERS, WRAPPER_ARG_OPTS, lexShell, programName, setPipefail,
-  shellScript, pipeMaskedIn, verifyPipes, expectsFail, unknownExpectValues, CANT_RUN_EXIT, CANT_RUN_OUTPUT, RE_ASSERTION_RAN,
-  RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput, VACUOUS_OUTPUT, RE_TESTS_RAN, vacuousRun, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh,
-  cantRunRecord, CRASH_EXIT, crashExit, isRedRun, redProof, CMD_RULE, legacyRedRun, expectFailIssue, expectFailRun, expectFailRefusal, expectFailResult, redGreenGaps,
-  gitEvidence, OBSERVED_LOG, OBSERVED_MAX_BYTES, OBSERVED_WINDOW_MS, OBSERVED_MAX_COMMAND, OBSERVED_MAX_FEATURES,
-  EVIDENCE_MODES, evidenceMode, evidenceSince, evidenceRule, evidenceModeInput, setEvidenceMode,
-  observedLogFile, readObservedLog, observedRun, observedAny, observedStamp, RE_CD_STRIP, stripCdPrefix, runRootStamp, gitCommonDir, specsProjectOf,
-  RE_PLAIN_ARG, RE_PROOF_CD, RE_PROOF_PIPEFAIL, RE_PROOF_ENV, PROOF_MAX_STEPS, PROOF_MAX_KEYS, unquotePlainArgs, splitAndSteps,
-  proofSteps, proofSubstAt, proofSubstEnd, proofUnwrapCode, parseProofDir, joinProofDir, RE_PROOF_OPAQUE_DIR, cdInto, proofBase,
-  proofFolderKey, proofCommands, proofCommandIs, commandsCoverVerify, proofKey, proofIncomplete, runProvesVerify, observedProof,
-  observeRun, observedNorm, RE_OBSERVED_ENV, observedBodies, observedKey, proofPlainParts, appendObserved, trimObservedLog, lastTaskActivity, CHECK_NAME_RE, CHECKS_MAX, validCheckName,
-  validCheckCmd, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks, suiteStatus,
-  suiteCodeStamp, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, GITLOG_MAX_COMMITS, parseGitLog,
-  taskCommits, unverifiedLabel, specChangedSince, untickedSince, __link };
+module.exports = { normalizeEvidence, taskStamp, isRecord, evidenceRecords, ownRecord, movedEvidence, ownEvidence,
+  taskVerification, EVIDENCE_HISTORY, EVIDENCE_OTHERS, storeEvidence, stateEvidence, verificationStatus, RE_ANSI,
+  summarizeRunOutput, windowsShellFailure, isWslLauncher, isPwshShell, resolveRunShell, pwshOption, posixShellSyntax,
+  posixPwshScript, verifyPipeMasked, commandHasControl, controlVisible, verifyControls, verifyPipes, expectsFail,
+  unknownExpectValues, CANT_RUN_OUTPUT, RE_ASSERTION_RAN, RE_PESTER_FAILED, RE_PESTER_NOT_RUN, pesterRan, couldNotRunOutput,
+  vacuousRun, RE_PWSH_PARSE_FAILURE, pwshParseFailure, runsPwsh, crashExit, isRedRun, redProof, expectFailRun,
+  expectFailRefusal, expectFailResult, gitEvidence, OBSERVED_MAX_BYTES, evidenceMode, evidenceRule, evidenceModeInput,
+  setEvidenceMode, observedRun, observedAny, observedStamp, stripCdPrefix, runRootStamp, proofIncomplete, runProvesVerify,
+  observeRun, observedNorm, observedBodies, projectChecks, checksInput, checksPlanError, writeChecks, recordFinishChecks,
+  suiteStatus, runStartStamp, runStartOf, suiteLabel, commitTag, suiteSummaryLines, b5DoctorChecks, parseGitLog, taskCommits,
+  unverifiedLabel, specChangedSince, untickedSince, __link };

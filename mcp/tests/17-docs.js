@@ -159,7 +159,7 @@ exports.run = async ({
   // exit code names the stale baseline; none says drift alone.
   const docsDriftExit = [["tooling-reference.md", docsRef("tooling-reference.md"), /`drift` \(drift, a stale baseline or an unreadable state\) exit 1/],
     ["AGENTS.md", docsAgents, /\(exit 1 on drift or a stale baseline\)/], ["commands/spec-report.md", docsRead("commands", "spec-report.md"), /exit 1 on drift or a stale baseline/],
-    ["change-management.md", docsRef("change-management.md"), /exit 1 on drift or a stale baseline/], ["cli/dev-spec.js", docsRead("cli", "dev-spec.js"), /\(exit 1 on drift or a stale baseline\)/],
+    ["change-management.md", docsRef("change-management.md"), /exit 1 on drift or a stale baseline/], ["cli/commands.js (the CLI help)", docsRead("cli", "commands.js"), /\(exit 1 on drift or a stale baseline\)/],
     ["docs/maintainers/conventions.md", docsConventions, /`drift` \(drift, a stale baseline or an error\)/]];
   const docsDriftBad = docsDriftExit.filter(([, t, re]) => !re.test(docsWs(t)) || /`drift` \(drift\)/.test(docsWs(t))).map(([f]) => f)
     .concat(/`drift` \(drift\)/.test(docsNotes) ? ["the maintainer notes (CLAUDE.md + docs/maintainers/)"] : []);
@@ -187,7 +187,7 @@ exports.run = async ({
       ["no PR / CI steering", /No user-facing text may steer users toward PRs or CI/], ["zero runtime dependencies", /\*\*Zero runtime dependencies\.\*\* The MCP server and all scripts use only Node core/],
       ["specs in .specs/", /Specs always live in `\.specs\/`/], ["never a top-level bin/", /## Never ship a top-level `bin\/` .*rejects\*\* any plugin shipping a top-level `bin\/`/],
       ["hooks.json never in plugin.json", /\*\*Hooks: never reference `hooks\/hooks\.json` in `plugin\.json`\.\*\*/],
-      ["engine first, then tool AND subcommand AND test", /add it to the engine module of its concern first .* then wire it into server\.js \(tool\) AND cli\/dev-spec\.js \(subcommand\) AND a test in the area's mcp\/tests file\. Keep the CLI and MCP behavior identical/],
+      ["engine first, then the operations table, tool AND subcommand AND test", /add it to the engine module of its concern first .* then give it ONE entry in the operations table, `mcp\/lib\/operations\.js` .* and wire it into server\.js .* AND cli\/commands\.js .*`c\.call\(\)`\) AND a test in the area's mcp\/tests file\. Both surfaces make the table's call, so the CLI and MCP behavior stay identical/],
       ["i18n in mcp/lib/i18n/, pt-BR derived", /every user-facing string lives in `mcp\/lib\/i18n\/\*` — `en\.js` · `pt\.js` · `es\.js` .* pt-BR is DERIVED from pt/],
       ["the heredoc backslash gotcha", /\*\*Shell heredocs eat backslashes\.\*\*/], ["the U+FEFF gotcha", /\*\*Never write a literal U\+FEFF into source\.\*\*/],
       ["the module rule", /\*\*The module rule \(1\.18\), in short:\*\* .*`\/\/ load time`.*`__link\(E\)`/],
@@ -328,7 +328,7 @@ exports.run = async ({
     const d2Ex = ((dRef("verification.md").split("## Red → green")[1] || "").match(/```markdown\n([\s\S]*?)\n```/) || [])[1] || "";
     ok(/_Expect: fail_/.test(d2Ex) && !/_Makes green:/.test(d2Ex), "full review D2: verification.md's _Expect: fail_ example has no _Makes green:_ on the red task");
     // D3: design section examples use the template's heading ("Data Models"); decide refuses "Data Model" on a fresh scaffold.
-    const d3Surfaces = [dRead("cli", "dev-spec.js"), dRead("mcp", "server.js"), dRead("commands", "spec-change.md"), dRef("change-management.md")];
+    const d3Surfaces = [dRead("cli", "commands.js"), dRead("mcp", "server.js"), dRead("commands", "spec-change.md"), dRef("change-management.md")];
     const d3p = path.join(tmp, "fr-d3");
     S.initProject(d3p, ["core"], "en");
     S.createFeature(d3p, "Keys", ["core"]);
@@ -540,7 +540,7 @@ exports.run = async ({
       "1.22 review P11: INTEGRATIONS' stop-gate row names spec_stop_check first (CLI as the alternative); tool-catalog.md lists spec_stop_check and spec_log; the Cursor / Windsurf / Copilot / Gemini rule files spell out `dev-spec <command>` and the MCP stop-check");
     // P12: Spanish terminology follows es.js — "el gate de evidencia" (never "la puerta"), and a command's ES description says
     // "función", never "feature" (languages.md → Terminology). (1.24 review 6: the command descriptions carry no ES tail any
-    // more — 10-guards-review6 checks they stay short English; kept as a guard should a Spanish one come back.) 1.26: the ES
+    // more — 10-guards-guard-downs checks they stay short English; kept as a guard should a Spanish one come back.) 1.26: the ES
     // README is README.es.md, whole — its release notes ("Novedades de la …") moved to CHANGELOG.md, the controller's.
     const esOutsideNews = docsSec("es");
     const esDescFeature = fs.readdirSync(path.join(root, "commands")).filter((f) => f.endsWith(".md")).filter((f) => {

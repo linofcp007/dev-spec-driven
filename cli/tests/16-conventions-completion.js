@@ -53,26 +53,23 @@ function readScript(text, shell) {
 // A shell that runs: the first of the candidates that answers --version.
 const probe = (cands) => cands.filter(Boolean).find((b) => { try { return spawnSync(b, ["--version"], { encoding: "utf8", timeout: 20000 }).status === 0; } catch { return false; } });
 
-exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
+exports.run = async ({ ok, all, remeasure, run, runIn, tmp, CLI }) => {
   const ROOT = path.join(path.dirname(CLI), "..");
   const S = require(path.join(ROOT, "mcp", "lib", "spec.js"));
   const C = require(path.join(ROOT, "cli", "completion.js"));
-  const src = fs.readFileSync(CLI, "utf8");
-  // The CLI's tables as it holds them: the literal block from GLOBAL_OPTIONS to checkCommandArgs (COMMAND_OPTIONS, COMMAND_ARGS,
-  // FLAG_VALUES, EVALS_SWITCHES), evaluated alone.
-  const block = src.slice(src.indexOf("const GLOBAL_OPTIONS"), src.indexOf("function checkCommandArgs"));
-  const T = new Function(block + "; return { GLOBAL_OPTIONS, COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES, EVALS_SWITCHES };")();
+  // The CLI's tables (1.27): its command table, cli/commands.js, and what it derives (COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES…).
+  const T = require(path.join(ROOT, "cli", "commands.js"));
   const cliFwd = fwd(path.resolve(CLI));
   const gen = (shell, env) => spawnSync(process.execPath, [CLI, "completion", shell], { encoding: "utf8", env: env || cleanEnv(), cwd: tmp });
   const scripts = {};
   for (const sh of SHELLS) scripts[sh] = gen(sh);
 
-  // 1.25 completion: every shell's script holds every command (COMMAND_OPTIONS, + help and evals — every `case` label of the CLI)
-  // and, for each command, every flag of its COMMAND_OPTIONS (+ --json --project --help): a new command or flag completes with
-  // nothing else to touch. `__complete` (hidden) is no command of the list.
+  // 1.25 completion: every shell's script holds every command (COMMAND_OPTIONS, + help and evals — every command and alias of the
+  // CLI's table) and, for each command, every flag of its COMMAND_OPTIONS (+ --json --project --help): a new command or flag
+  // completes with nothing else to touch. `__complete` (hidden) is no command of the list.
   {
     const want = [...new Set([...Object.keys(T.COMMAND_OPTIONS), "evals", "help"])];
-    const cases = [...src.matchAll(/^ {4}case "([a-z][a-z-]*)":/gm)].map((m) => m[1]);
+    const cases = [...T.COMMAND_INDEX.keys()];
     const missing = {};
     for (const sh of SHELLS) {
       const r = scripts[sh];
@@ -118,9 +115,9 @@ exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
   // with nothing on stdout (text only); pwsh = powershell; it reads no project (a mistyped SPEC_PROJECT_DIR in a profile's
   // environment refuses nothing); `completion --help` gives the install lines with this CLI's path, PowerShell first.
   {
-    const none = run(["completion"]), bad = run(["completion", "tcsh"]), j = spawnSync(process.execPath, [CLI, "completion", "bash", "--json"], { encoding: "utf8", env: cleanEnv() });
+    const none = runIn(["completion"]), bad = runIn(["completion", "tcsh"]), j = spawnSync(process.execPath, [CLI, "completion", "bash", "--json"], { encoding: "utf8", env: cleanEnv() });
     const pw = gen("pwsh"), env = gen("bash", { ...cleanEnv(), SPEC_PROJECT_DIR: path.join(tmp, "c125-nope") });
-    const help = run(["completion", "--help"]);
+    const help = runIn(["completion", "--help"]);
     all("1.25 completion: `completion` needs a shell (usage, exit 1), refuses another (naming powershell, bash, zsh, fish), refuses --json (stdout empty), takes pwsh for powershell, ignores a mistyped SPEC_PROJECT_DIR, and its --help gives the install lines with this CLI's path — PowerShell first (got " +
       JSON.stringify([none.code, none.out.slice(0, 120), bad.code, bad.out.slice(0, 160), j.status, j.stdout, pw.status, env.status, env.stderr, help.out.slice(0, 400)]) + ")", [
       () => none.code === 1, () => /completion <powershell\|bash\|zsh\|fish>/.test(none.out), () => bad.code === 1, () => /tcsh/.test(bad.out),
@@ -147,9 +144,9 @@ exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
 
   // A project with active, archived, hidden, reserved and hand-made folders.
   const p = path.join(tmp, "c125-proj");
-  run(["init", "--project", p]);
-  for (const n of ["Login", "Logout", "Billing", "Reports"]) run(["create", n, "--project", p]);
-  run(["feature", "archive", "billing", "--project", p]);
+  runIn(["init", "--project", p]);
+  for (const n of ["Login", "Logout", "Billing", "Reports"]) runIn(["create", n, "--project", p]);
+  runIn(["feature", "archive", "billing", "--project", p]);
   const sp = path.join(p, ".specs");
   for (const d of [".hidden", "_tmp", "My Notes", "exports", path.join("templates"), path.join("_archive", "old-thing"), path.join("_archive", ".x")]) fs.mkdirSync(path.join(sp, d), { recursive: true });
   fs.writeFileSync(path.join(sp, "templates", ".state.json"), "{}"); // a feature made before "templates" was reserved stays one
@@ -204,14 +201,15 @@ exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
   }
 
   // 1.25 completion: __complete never errs (an unknown word, no word, a second word, a missing project: nothing, exit 0), never loads a
-  // module of mcp/lib (a preload lists the loaded modules at exit), and costs about node's own startup — well under a command that
-  // loads the engine (medians of 5; bounded relative to `node -e 0` measured here, as testing.md asks).
+  // module of mcp/lib but the engine-free project probe (1.27: mcp/lib/probe.js — a preload lists the loaded modules at exit), and costs
+  // about node's own startup — well under a command that loads the engine (medians of 5; bounded relative to `node -e 0` measured here,
+  // as testing.md asks).
   {
     const env0 = cleanEnv();
     const q = (args, cwd) => spawnSync(process.execPath, [CLI, "__complete", ...args], { encoding: "utf8", cwd: cwd || p, env: env0 });
     const odd = [q(["nope"]), q([]), q(["features", "extra"]), q(["features", "--project", path.join(tmp, "c125-missing")])];
     const pre = path.join(tmp, "c125-preload.js");
-    fs.writeFileSync(pre, "process.on('exit', () => { const sep = String.fromCharCode(92); const m = Object.keys(require.cache).filter((f) => f.split(sep).join('/').includes('/mcp/lib/')); process.stderr.write('LOADED ' + JSON.stringify(m)); });");
+    fs.writeFileSync(pre, "process.on('exit', () => { const sep = String.fromCharCode(92); const m = Object.keys(require.cache).filter((f) => f.split(sep).join('/').includes('/mcp/lib/') && !f.split(sep).join('/').endsWith('/mcp/lib/probe.js')); process.stderr.write('LOADED ' + JSON.stringify(m)); });");
     const pl = spawnSync(process.execPath, ["-r", pre, CLI, "__complete", "features"], { encoding: "utf8", cwd: p, env: env0 });
     const time = (args) => { const t0 = process.hrtime.bigint(); spawnSync(process.execPath, args, { cwd: p, env: env0 }); return Number(process.hrtime.bigint() - t0) / 1e6; };
     const node0 = [], fast = [], list = [];
@@ -219,7 +217,7 @@ exports.run = async ({ ok, all, remeasure, run, tmp, CLI }) => {
     const [n, f, l] = [median(node0), median(fast), median(list)];
     ok(odd.every((r) => r.status === 0 && r.stdout === "" && r.stderr === "") && /LOADED \[\]$/.test(pl.stderr) && pl.stdout.split("\n").includes("login") &&
       f < l && f <= Math.max(250, 2.5 * n),
-      "1.25 completion: __complete answers nothing (exit 0) to an unknown / missing / extra word or a missing project, loads no mcp/lib module, and takes " + Math.round(f) +
+      "1.25 completion: __complete answers nothing (exit 0) to an unknown / missing / extra word or a missing project, loads no mcp/lib module but the probe, and takes " + Math.round(f) +
       " ms (node -e 0: " + Math.round(n) + " ms; `list`, which loads the engine: " + Math.round(l) + " ms) (got " + JSON.stringify([odd.map((r) => [r.status, r.stdout, r.stderr]), pl.stderr.slice(-300)]) + ")");
   }
 
