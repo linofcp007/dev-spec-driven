@@ -8,9 +8,9 @@
  */
 const i18n = require("../../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let backtickRuns, closesFence, headingIndex, headRest, indentOf, isLtUnit, isWsUnit, RE_EARS_KEYWORD, RE_FENCE,
+let backtickRuns, closesFence, headingEntries, headRest, indentOf, isLtUnit, isWsUnit, RE_EARS_KEYWORD, RE_FENCE,
   RE_MODAL, restAfterBlanks, shortTitle, stripEnd, wsOrUnitIn;
-function __link(E) { ({ backtickRuns, closesFence, headingIndex, headRest, indentOf, isLtUnit, isWsUnit,
+function __link(E) { ({ backtickRuns, closesFence, headingEntries, headRest, indentOf, isLtUnit, isWsUnit,
   RE_EARS_KEYWORD, RE_FENCE, RE_MODAL, restAfterBlanks, shortTitle, stripEnd, wsOrUnitIn } = E); }
 
 // `<!--` (and, with `closers`, `-->`) → `&lt;!--` / `--&gt;` outside inline code spans, line by line. Linear.
@@ -32,9 +32,17 @@ function inertOutsideCode(text, closers) {
   }).join("\n");
 }
 
-// Headings outside fenced code: [{ i, level, text }].
+// Headings outside fenced code and HTML comments: [{ i, level, text }] — the ONE heading reader's (1.25.1 — headingEntries: a SETEXT
+// heading and an ATX one indented 1–3 spaces too; the importers read only margin ATX headings, so "Requirements\n============" or
+// "  ## Story 1" imported as prose). A setext heading is normalized IN PLACE — its line rewritten as the ATX heading it is, its
+// underline blanked — so every parser's [h.i + 1, …) ranges, used-line marks and carried lines read it as an ATX one (the
+// underline was carried as a stray "====="). A margin ATX heading's text is read as before (mdHeadingParts).
 function mdHeadings(lines) {
-  return headingIndex(lines).map((i) => ({ i, ...mdHeadingParts(lines[i]) }));
+  return headingEntries(lines).map((e) => {
+    if (e.atx && e.indent === 0) return { i: e.i, ...mdHeadingParts(lines[e.i]) };
+    if (!e.atx) { lines[e.i] = "#".repeat(e.level) + " " + e.text; if (e.i + 1 < lines.length) lines[e.i + 1] = ""; }
+    return { i: e.i, level: e.level, text: e.text.trim() };
+  });
 }
 // "## Title ##" → { level, text }: what /^(#{1,6})\s+(.*?)\s*#*\s*$/ captured (text trimmed), read by a scan — that pattern
 // backtracked cubically on a heading holding a long run of spaces (a 3,000-space heading took 10 s; 1.17 F review). The line

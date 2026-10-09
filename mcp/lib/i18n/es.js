@@ -1835,6 +1835,7 @@ const msg = {
       skDocs: { research: "Investigación", dataModel: "Modelo de datos", contracts: "Contratos", quickstart: "Inicio rápido" },
       skFrom: (file) => `> De spec-kit \`${file}\`.`,
       wNoPlanDocs: (file) => `no hay ${file} en el origen — design.md tiene los documentos de diseño encontrados a su lado (investigación, modelo de datos, contratos, inicio rápido) sin el plan`,
+      wUncoveredFr: (list) => `requisitos funcionales que ningún escenario de aceptación cubre — quedaron como texto en "Requisitos Funcionales", así que ninguna tarea ni prueba los traza: ${list}. Convierte cada uno en un criterio EARS con un ID de AC (o cítalo en uno) antes de aprobar los requisitos`,
       wUnreadable: (file) => `${file} apunta fuera del proyecto — omitido`,
       done: (tool, rel, slug, label, lang) => `Importado de ${tool} ${rel} → función '${slug}' [${label}] (${lang})`,
       mapping: (n, sample) => `  correspondencia: ${n} ID(s)` + (sample ? ` — ${sample}` : ""),
