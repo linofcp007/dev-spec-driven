@@ -580,7 +580,14 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   every one of those commands (backticks / whitespace flattened) and the exit code the task needs ("exit 0", "exit code:
   1", "exited with code 0", "exit status 2", PT "código de saída", ES "código de salida"): an exit 0 for a must-pass
   `_Verify:_` (`notPassing` — "DONE … exit code: 1" was allowed), a non-zero exit for an `_Expect: fail_` task
-  (`notFailing`); any matching code in the report counts, so a report showing the red run and then the green one passes.
+  (`notFailing`). **1.25.1 (review 7) — per run:** any exit 0 anywhere passed "Ran `npm test` → exit code: 1 … Ran `npm run
+  lint` → exit code: 0". `verifyRunCodes()` reads the report line by line: a mention is a code span (the `_Verify:_` commands it
+  proves by `runProvesVerify` — one of them or a ` && ` join of all —, else another command; a span that is itself an exit code,
+  "`exit 0`", is none; an incomplete one, `npm test &&`, runs nothing) or a `_Verify:_` command's own text on the line (a
+  transcript's `$ npm test`); an exit code belongs to the last mention before it on its line, else the first after it there
+  ("exit 0 from `npm test`"), else the last mention above (an output block under its command); a code inside a command
+  (`process.exit(0)`) is none. EACH `_Verify:_` command needs a run with a code (`noRun`), and its LAST run decides — red then
+  green passes, green then red is `lastNotPassing` (`_Expect: fail_`: `lastNotFailing`, the last run must be the red one).
   STATUS BLOCKED / NEEDS_CONTEXT, no report path, or no runnable `_Verify:_` → allowed. **1.23 review 5 (M16):** a `_Verify:_`
   command is shown when the flattened report holds its text OR a command the report writes in a code span
   (`reportCommandSpans()`, ≤ 500 spans of ≤ 4000 characters) is a run of it by the evidence gate's matcher (`runProvesVerify`

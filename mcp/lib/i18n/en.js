@@ -3246,6 +3246,9 @@ const msg = {
         noRun: (file, cmds) => `its report (${file}) doesn't show the _Verify:_ run — the exact command and its exit code: ${cmds}.`,
         notPassing: (file, cmds) => `its report (${file}) shows no passing run (exit 0) of ${cmds} — a DONE task's _Verify:_ must pass.`,
         notFailing: (file, cmds) => `its report (${file}) shows no failing run (a non-zero exit code) of ${cmds} — the task is marked _Expect: fail_: its proof is the red run.`,
+        // 1.25.1 (review 7): the codes are read per run — the LAST run of each _Verify:_ command decides
+        lastNotPassing: (file, cmds) => `its report (${file}) ends on a failing run of ${cmds} — the last run of it the report shows exits non-zero; a DONE task's _Verify:_ must pass on the final code.`,
+        lastNotFailing: (file, cmds) => `its report (${file}) ends on a passing run of ${cmds} — the task is marked _Expect: fail_: the last run of it the report shows must be the red one (a non-zero exit code).`,
         todo: "Run the command on the final code and put the command, its exit code and the last lines of its output in the report — or report BLOCKED / NEEDS_CONTEXT if it can't pass. (Evidence before claims: the controller ticks the task only with that run.)",
       },
       // 1.22 — the spec-simplifier's DONE (SubagentStop): its report must end with the final passing runs.

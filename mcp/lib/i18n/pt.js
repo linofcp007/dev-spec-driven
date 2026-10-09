@@ -3029,6 +3029,8 @@ const msg = {
         noRun: (file, cmds) => `o relatório (${file}) não mostra a execução do _Verify:_ — o comando exato e o seu exit code: ${cmds}.`,
         notPassing: (file, cmds) => `o relatório (${file}) não mostra nenhuma execução com sucesso (exit 0) de ${cmds} — o _Verify:_ de uma tarefa DONE tem de passar.`,
         notFailing: (file, cmds) => `o relatório (${file}) não mostra nenhuma execução a falhar (um exit code diferente de zero) de ${cmds} — a tarefa tem _Expect: fail_: a prova é a execução vermelha.`,
+        lastNotPassing: (file, cmds) => `o relatório (${file}) termina numa execução a falhar de ${cmds} — a última execução dele que o relatório mostra sai com um exit code diferente de zero; o _Verify:_ de uma tarefa DONE tem de passar no código final.`,
+        lastNotFailing: (file, cmds) => `o relatório (${file}) termina numa execução com sucesso de ${cmds} — a tarefa tem _Expect: fail_: a última execução dele que o relatório mostra tem de ser a vermelha (um exit code diferente de zero).`,
         todo: "Corre o comando no código final e põe no relatório o comando, o exit code e as últimas linhas do output — ou reporta BLOCKED / NEEDS_CONTEXT se não puder passar. (Evidência antes de afirmações: o controlador só marca a tarefa com essa execução.)",
       },
       simplifier: {
