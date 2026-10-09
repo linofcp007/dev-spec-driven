@@ -211,8 +211,9 @@ store the setting but don't enforce it.
 
 **Observed evidence (the log is always on; the rule is opt-in).** A PostToolUse hook (`hooks/observe-hook.js`, the Bash tool — and PowerShell when it reports an exit code)
 silently logs each run of a task's `_Verify:_` command or a project check to a git-ignored `.execution/observed.jsonl`,
-so every recorded run says whether Claude Code actually saw it (`observed`). To verify tasks only with runs the
-harness saw (or that `dev-spec done --run` made):
+so every recorded run says whether Claude Code actually saw it (`observed`). It runs in the background (`async`): Claude
+never waits for it — in a headless `claude -p` session, the run made just before the session ends may go unlogged. To
+verify tasks only with runs the harness saw (or that `dev-spec done --run` made):
 
 ```powershell
 node "$plugin\cli\dev-spec.js" init --evidence observed   # or spec_init {evidence: "observed"}; --evidence reported to go back

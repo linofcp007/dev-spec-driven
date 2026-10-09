@@ -5,7 +5,10 @@
  * dev-spec-driven — harness-observed evidence (zero-dependency). "Evidence before claims", seen where the command runs.
  *
  * Wired from hooks/hooks.json for PostToolUse and PostToolUseFailure, matcher Bash|PowerShell (https://code.claude.com/docs/en/hooks) —
- * a PowerShell run is logged only with an explicit exit code (its response shape is undocumented).
+ * a PowerShell run is logged only with an explicit exit code (its response shape is undocumented). Both entries are `"async": true`
+ * (1.25.1): it prints nothing and decides nothing, so Claude Code never waits for it — the docs: an async hook runs in the background,
+ * its decision fields have no effect, its timeout isn't enforced, and `claude -p` kills one still running at teardown (the last run
+ * of a headless session may go unlogged).
  * spec_complete_task / spec_finish {evidence} record the {command, exitCode} an agent REPORTS; in Claude Code the harness
  * sees every Bash run, so this hook logs the runs that matter — a task's runnable _Verify:_ command (or the " && " join of a
  * task's commands) or a project check (roadmap.json meta.checks) — and the engine then stamps each reported run

@@ -79,4 +79,19 @@ exports.run = async ({ ok, S, tmp, __dirname }) => {
       "1.25.1 (r7 finding 2): every hooks.json entry is exec form — command 'node', args [${CLAUDE_PLUGIN_ROOT}/hooks/<script>] (an existing script), timeout 10 — and runs as Claude Code spawns it (no shell); INSTALL.md and the README's quick start (EN / PT / ES) require Claude Code 2.1.139+ (got " +
       js({ n: entries.length, bad, spawned: spawned.map((r) => r.status + ":" + r.stdout.slice(0, 30)), quick: quick.map(req) }) + ")");
   }
+
+  // Finding 3 — the observe hook prints nothing and decides nothing, yet ran synchronously after every Bash / PowerShell call: both of
+  // its entries (PostToolUse, PostToolUseFailure — the docs exclude no event from `async`) run in the background now. Every other hook
+  // answers something (a decision, context) and stays synchronous.
+  {
+    const cfg = JSON.parse(fs.readFileSync(path.join(HOOKS, "hooks.json"), "utf8")).hooks;
+    const all = Object.entries(cfg).flatMap(([ev, list]) => list.flatMap((e) => e.hooks.map((h) => ({ ev, matcher: e.matcher, script: path.basename((h.args || [""])[0]), async: h.async }))));
+    const obs = all.filter((x) => x.script === "observe-hook.js");
+    const asyncOthers = all.filter((x) => x.script !== "observe-hook.js" && x.async !== undefined);
+    const src = fs.readFileSync(path.join(HOOKS, "observe-hook.js"), "utf8");
+    ok(js(obs.map((x) => x.ev + "/" + x.matcher + "/" + x.async)) === js(["PostToolUse/^(Bash|PowerShell)$/true", "PostToolUseFailure/^(Bash|PowerShell)$/true"]) && !asyncOthers.length &&
+      !/process\.stdout\.write/.test(src),
+      "1.25.1 (r7 finding 3): both observe-hook entries are async (PostToolUse and PostToolUseFailure, Bash|PowerShell) — it writes nothing to stdout; no other hook is async (got " +
+      js({ obs, asyncOthers }) + ")");
+  }
 };

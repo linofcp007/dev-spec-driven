@@ -673,6 +673,14 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   creates a feature folder. Bounded: past `OBSERVED_MAX_BYTES` (64 KB) the log keeps its newest lines up to half of that
   (replaced atomically; a concurrent append can lose one line — that run then reads unobserved and is run again); a
   command over `OBSERVED_MAX_COMMAND` (4000) is never logged; at most `OBSERVED_MAX_FEATURES` (200) feature folders.
+- **Async (1.25.1, review 7).** Both hooks.json entries are `"async": true`: the hook prints nothing and decides nothing, yet
+  Claude Code waited for it after every Bash / PowerShell call (+60–190 ms). The hooks reference (Run hooks in the background):
+  `async` is a field of any `type: "command"` hook — no event is excluded, PostToolUseFailure included —; an async hook runs in the
+  background, its decision fields have no effect, its `timeout` is not enforced (kept at 10 as documentation), and under `claude -p`
+  Claude Code kills one still running at teardown (outcome `cancelled`) — the LAST run of a headless session may go unlogged (under
+  `meta.evidence: "observed"` that run then reads `unobserved`; `done --run` makes it observed). Ordering: the line lands within
+  ~0.2 s of the run, long before the model's next call (a model round-trip away); only a spec_complete_task issued in the SAME
+  parallel batch as its run could read the log first (that run then reads `unobserved` — record it again, or `done --run`).
 - **The hook** exits 0 at once unless the tool is `Bash` / `PowerShell` on one of the two events and a project is found —
   EVERY distinct dev-spec one (`isDevSpecProject`) among the nearest folder holding `.specs/` at or above the payload's `cwd`
   and `CLAUDE_PROJECT_DIR` / `SPEC_PROJECT_DIR`: a subagent working in a git worktree of the project runs in the worktree's
