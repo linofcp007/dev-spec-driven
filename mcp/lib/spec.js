@@ -66,27 +66,27 @@ function loadEngine() {
 }
 const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalGuardDecision, approvalGuardLevel,
   approvalRolesOf, approvePhase, archiveFeature, artifactState, backlog, BACKLOG_ACTIONS, catalog, changelog,
-  checklistMd, clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, vacuousRun, coverage, crashExit, createFeature,
+  clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, vacuousRun, coverage, crashExit, createFeature,
   crossFeatureAcs, csvCell, decide, decisionLog, designSaveCheck, detectPhase, detectTracks, drift, earsFeature,
   earsSteps, earsValidate, engineVersion, etaText, evidenceMode, existingFeature, expectsFail, EXPORT_FORMATS,
-  exportSpecs, extractSection, featureFlow, featureLang, featureLocked, featureOverlaps, featurePercent,
-  featurePlaceholders, finishFeature, FLOWS, forecastData, gateRefusal, globalConstraints, globFiles, glossaryEntries, guardCheck,
-  guardEnabled, guardLevel, sessionProject, sessionPath, shellWriteTargets, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
+  exportSpecs, extractSection, featureLang, featureLocked, featureOverlaps, featurePercent,
+  featurePlaceholders, finishFeature, FLOWS, forecastData, gateRefusal, globFiles, glossaryEntries, guardCheck,
+  guardEnabled, guardLevel, sessionProject, sessionPath, shellWriteTargets, impactLines, impactReport, implementsTargets, importSpec, initProject,
   isDevSpecDir, isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
-  manageFeature, markdownToHtml, markRoadmapStale, matrixCsv, maybeRefreshCatalog, mdPlainText, refreshStaleRoadmap, ROADMAP_STALE_FILE, roadmapStale, staleGeneratedText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
+  manageFeature, markdownToHtml, markRoadmapStale, matrixCsv, maybeRefreshCatalog, mdPlainText, refreshStaleRoadmap, ROADMAP_STALE_FILE, roadmapStale, staleGeneratedText, MERGE_ATTRIBUTE_LINES,
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, templatesLines, upgradeLines, milestone,
-  MILESTONE_ACTIONS, MILESTONE_STATUSES, milestoneLine, networkPathInside, nextAction, nextTask, normalizeLang,
-  normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, PACK_LIMITS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
+  MILESTONE_ACTIONS, networkPathInside, nextAction, nextTask, normalizeLang,
+  normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
   recordSpecEdit, runStartStamp,
-  parseGitLog, parseTasks, parseTracks, phasePercent, PHASES, placeholderKey, placeholderReport, planBridge, planPaths,
+  parseGitLog, parseTasks, parseTracks, PHASES, placeholderReport, planBridge, planPaths,
   posixPwshScript, posixShellSyntax, projectChecks, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
   renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, unexpandedVar, expandHome, resolveRunShell, resolveTask, restoreFeature,
   roadmap, roadmapData, roadmapReport, roadmapTailLines, RTM_STATUSES, scaffoldSteeringFile, scanCodebase, scanTestCode,
   setDependency, SIGNAL_CONCEPTS, SIGNALS, SIZE_POINTS, slugify, specDoctor, specsRoot, specUpgrade, specVersionStatus,
-  spikeInfo, statusFeature, statusLine, statusLineProject, steeringFingerprints, steeringFrontMatter, steeringGlobMatch, STEERING_IMPORT_TOOLS,
-  STOP_RECENT_HOURS, stopCheck, stopCheckEnabled, stopClaims, stripHtmlComments, summarizeRunOutput, supersedesMarkers,
+  spikeInfo, statusFeature, statusLine, statusLineProject, steeringFrontMatter, steeringGlobMatch, STEERING_IMPORT_TOOLS,
+  STOP_RECENT_HOURS, stopCheck, stopCheckEnabled, stopClaims, stripHtmlComments, summarizeRunOutput,
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
-  taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
+  taskWaves, TEMPLATE_ARTIFACTS, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
   changeViews, closestName, today, dayOf, decodeText, featureBranch, IMPORT_TOOLS,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, commandHasControl, controlVisible, windowsShellFailure, withFeatureLock, withinRoot,
@@ -113,8 +113,6 @@ module.exports = {
   initProject,
   scaffoldSteeringFile,
   createFeature: featureLocked(createFeature), // re-run on an EXISTING feature: new tracks via applyTracks (spec_add_track's path), locked like it
-  checklistMd,
-  integrationPlanMd,
   listFeatures,
   statusFeature,
   nextTask,
@@ -127,7 +125,6 @@ module.exports = {
   taskMarkers, // a task block's English-stable markers ({ requirements, "makes green", …, verify, expect }) — taskMarkerSpans' reading
   decodeText, // a file's bytes as text: a UTF-16 BOM (FF FE / FE FF) decides, else UTF-8 (1.22 review — the hooks, the resources, `ears <file>`)
   stripHtmlComments, // text minus HTML comments as every reader sees it (code spans and fenced code keep their "<!--")
-  globalConstraints,
   taskDependsSpec, // 1.14 F3: a task block's _Depends:_ → { declared, numbers, invalid }
   taskSchedule, // 1.14 F3: task blocks → { next, skipped, blocked } — THE next-task rule (dependencies all done)
   taskWaves, // 1.14 F3: task blocks (+ tracks) → { waves: [[numbers…]…], cycles, blocked } — spec_next_task {waves}
@@ -142,7 +139,6 @@ module.exports = {
   addTrack: featureLocked(addTrack),
   nextAction,
   specDoctor,
-  phasePercent,
   featurePercent,
   readRoadmap,
   setDependency,
@@ -183,9 +179,7 @@ module.exports = {
   detectPhase,
   isPlaceholderTask,
   placeholderReport,
-  templateBracketKeys,
   templateSets,
-  placeholderKey,
   isTemplatePlaceholder,
   artifactState,
   extractSection,
@@ -240,7 +234,6 @@ module.exports = {
   specVersionStatus, // roadmap.json meta.specVersion vs the engine — the SessionStart upgrade notice
   engineVersion,
   compareSemver,
-  supersedesMarkers,
   supersedesWarnings,
   restoreFeature, // spec_feature restore / `dev-spec feature restore`
   drift, // spec_drift / `dev-spec drift` / SessionStart
@@ -275,7 +268,6 @@ module.exports = {
   templateKey, // "requirements.md" / "steering/tech" → the template key, or null (the allowlist)
   TEMPLATE_ARTIFACTS,
   trackPacks, // 1.15 — spec_tracks / `dev-spec tracks [list|init <name>|check]`: the project's track packs (.specs/tracks/<name>/)
-  PACK_LIMITS, // 1.15 — a track pack's bounds (sizes, counts)
 
   exportSpecs, // spec_export / `dev-spec export` — the stakeholder document (.specs/exports/, offline HTML or markdown)
   changelog, // spec_export {format: "changelog"} / `dev-spec changelog` — release notes from the specs (.specs/RELEASE-NOTES.md + meta.changelogAt)
@@ -290,8 +282,6 @@ module.exports = {
   TRACKERS: Object.freeze(TRACKERS.slice()), // 1.16 E2 — the tracker CSV formats (export --tracker)
   milestone, // 1.16 E3 — spec_roadmap_edit {kind: "milestone"} / `dev-spec milestone [add|rm|list]` (roadmap.json meta.milestones)
   MILESTONE_ACTIONS, // the spec_roadmap_edit {kind: "milestone"} `action` enum (rm and its alias remove)
-  MILESTONE_STATUSES: Object.freeze(MILESTONE_STATUSES.slice()), // on-track · at-risk · late · done
-  milestoneLine, // one milestone (with its status) as a localized line — CLI
 
   approvalRolesOf, // roadmap.json meta.approvalRoles, sanitized ({} = single approvals) — team governance (approvals by role)
   parseApprovalRolesText, // `init --roles requirements=product,design=tech+security` → the object spec_init {approvalRoles} takes
@@ -301,7 +291,6 @@ module.exports = {
   featureOverlaps, // cross-feature file overlap pairs (roadmap attention, doctor, SessionStart)
   crossFeatureAcs, // 1.16 Q2: near-duplicate / conflicting acceptance criteria across the active features ({only}: one feature's pairs)
   glossaryEntries, // 1.16 Q3: .specs/steering/glossary.md → { file, entries: [{ term, definition, avoid }] } | null (takes the .specs root)
-  steeringFingerprints, // 1.16 Q1: (specsRoot, featureDir, tracks) → { file: fingerprint } of the steering a requirements / design approval records (opts.match: + steeringMatch, the fileMatch files' patterns)
   taskSize, // a task block's _Size:_ (XS|S|M|L|XL) or null
   SIZE_POINTS, // XS=1 S=2 M=3 L=5 XL=8
   etaText, // "2026-10-05 (10-03…10-08)" for a forecast (CLI: cli=true)
@@ -328,7 +317,6 @@ module.exports = {
   spikeInfo, // a spike folder → { questionFilled, decisionFilled, outcome, question, rationale, timebox, timeboxPassed }
 
   FLOWS: Object.freeze(FLOWS.slice()), // the phase orders spec_create {flow} / spec_feature {action: "flow"} take (requirements-first = the default)
-  featureFlow: (projectDir, name) => { const f = existingFeature(projectDir, name); return f.ok ? featureFlow(f.dir) : null; }, // a feature's flow (null: no such feature)
   planPaths, // the file paths a plan step names (spec_import plan → _Implements:_)
 
   // 1.14 F1 — harness-observed evidence
@@ -347,7 +335,6 @@ module.exports = {
   mergeAttributes, // (.gitattributes text, remove) → { text, changed, lines } — the driver's lines added / removed (pure)
   MERGE_DRIVER, // "dev-spec-state" — the git config merge.<driver>.* name
   MERGE_ATTRIBUTE_LINES, // the .gitattributes lines --install writes
-  MERGE_CONFLICTS_KEY, // "mergeConflicts" — the list a conflicted merge leaves in the file (doctor fails merge-conflicts)
   // 1.21 review A3 — is the installed driver still THIS clone's? (a plugin update moves the plugin folder; git then drops theirs)
   mergeDriverStatus, // (projectDir, {driver?, cli?}) → { status: ok | none | not-installed | other | missing, named, attributes, driver, script, cli } (read only)
   mergeDriverScript, // the driver command → the script it runs (the word before `merge-state`), or null (pure)

@@ -1379,7 +1379,6 @@ function changelog(projectDir, opts = {}) {
 // ROADMAP.md / .html show a Milestones table when any exists, and "Needs attention" lists the at-risk / late ones.
 // ---------------------------------------------------------------------------
 const MILESTONE_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_roadmap_edit {kind: "milestone"} enum (server.js reads it from here)
-const MILESTONE_STATUSES = ["on-track", "at-risk", "late", "done"];
 const MILESTONE_MAX = 50;
 const MILESTONE_FEATURES_MAX = 200;
 const RE_MILESTONE_NAME = /^[\p{L}\p{N}][\p{L}\p{N}\p{M} ._:#()+-]{0,59}$/u;
@@ -1622,7 +1621,7 @@ module.exports = { EXPORT_DIR, EXPORT_FORMATS, SUMMARY_SYN, SUCCESS_SYN, expItem
   ghRiskyLine, GHERKIN_COND, GHERKIN_THEN, RE_GH_KEYWORD, RE_GH_MODAL, RE_GH_DET, ghMask, ghStripEmphasis,
   GHERKIN_LANG_KEYWORDS, earsSteps, ghLine, ghTag, gherkinFeatureTags, gherkinFeature, gherkinBase, TRACKERS,
   TRACKER_LABELS_MAX, TRACKER_SUMMARY_MAX, TRACKER_STATUS, trackerRecords, trackerCsv, isoTime, oneLiner, releaseAcs,
-  changelogData, renderReleaseNotes, changelog, MILESTONE_ACTIONS, MILESTONE_STATUSES, MILESTONE_MAX,
+  changelogData, renderReleaseNotes, changelog, MILESTONE_ACTIONS, MILESTONE_MAX,
   MILESTONE_FEATURES_MAX, RE_MILESTONE_NAME, RE_ISO_DAY, milestoneName, milestoneKey, milestoneFileKey, strList,
   slugList, milestoneStore, milestoneInvalidInfo, findMilestone, milestoneStatuses, milestoneAttention, MILESTONE_ICON,
   milestoneLine, milestonesNow, milestone, milestonesFollow, __link };
