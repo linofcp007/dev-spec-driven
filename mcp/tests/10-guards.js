@@ -1070,8 +1070,11 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require, __dirname }) => 
     try { mre = new RegExp(apCfg.matcher); } catch { /* checked below */ }
     const scripts = Object.values(hooksCfg).flat().flatMap((e) => e.hooks.map((h) => (/\$\{CLAUDE_PLUGIN_ROOT\}\/(hooks\/[\w.-]+\.js)/.exec(h.command) || [])[1]));
     ok(mre && hooksCfg.PreToolUse[0].hooks[0].command.includes("guard-hook.js") && apCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/approval-hook.js"' && apCfg.hooks[0].timeout === 10 &&
-      names.concat(["Bash", "PowerShell", "Monitor", "Write", "Edit", "mcp__spec-driven__spec_feature", "mcp__plugin_dev-spec-driven_spec-driven__spec_init"]).every((n) => mre.test(n)) &&
-      ["NotebookEdit", "BashOutput", "mcp__spec-driven__spec_status", "mcp__spec-driven__spec_approve_all", "WebFetch", "xBash", "MonitorX", "Read"].every((n) => !mre.test(n)) &&
+      names.concat(["Bash", "PowerShell", "Monitor", "Write", "Edit", "mcp__spec-driven__spec_feature", "mcp__plugin_dev-spec-driven_spec-driven__spec_init",
+        // 1.25.1 (review 7): NotebookEdit and another MCP server's file tools (by the verb in the name — never dev-spec's own tools)
+        "NotebookEdit", "mcp__filesystem__write_file", "mcp__desktop-commander__edit_block", "mcp__filesystem__move_file", "mcp__x__str-replace"]).every((n) => mre.test(n)) &&
+      ["BashOutput", "mcp__spec-driven__spec_status", "mcp__spec-driven__spec_approve_all", "WebFetch", "xBash", "MonitorX", "Read", "mcp__spec-driven__spec_create",
+        "mcp__plugin_dev-spec-driven_spec-driven__spec_append_tasks", "mcp__linear__get_issue"].every((n) => !mre.test(n)) &&
       scripts.length >= 6 && scripts.every((s) => s && fs.existsSync(path.join(__dirname, "..", s))),
       "feature F2: hooks.json wires hooks/approval-hook.js as PreToolUse (timeout 10) after the guard, its anchored matcher covering Bash, PowerShell, Monitor (1.23), Write / Edit (1.23: .specs/roadmap.json, .state.json) and spec_approve / spec_feature / spec_init under any MCP prefix only; every hook command names an existing script (got " +
       JSON.stringify([apCfg.matcher, scripts]) + ")");

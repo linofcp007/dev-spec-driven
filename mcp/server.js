@@ -21,6 +21,8 @@ const spec = require("./lib/spec.js");
 // The `lang` enum of every tool: en · pt (European Portuguese) · es · pt-BR (Brazilian Portuguese, 1.14 D1) — spec.LANGS.
 const LANG_ENUM = spec.LANGS.slice();
 const content = require("./lib/prompts-resources.js"); // MCP prompts + resources
+// 1.25.1 (review 7): the projectDir reading the approval hook shares (zero-dependency — a path or a local file:// URI): ONE parser
+const HOOK_UTILS = require("../hooks/hook-utils.js");
 
 let VERSION = "0.0.0";
 try {
@@ -898,20 +900,16 @@ function argMessages(args) {
 // absolute folder it names (a local file:// URI — what roots/list hands a client — is its path; a RELATIVE path resolves from
 // the client's root when roots chose the default project, else from the server's working folder) · { code, message(A) } refused:
 // project-dotdot (a '..' segment — never resolved away first), project-network (a network / device path, a file:// URI naming a
-// host) or project-uri (a file:// URI that is no local folder path).
+// host) or project-uri (a file:// URI that is no local folder path). 1.25.1 (review 7): hooks/hook-utils.js parseProjectDir reads it —
+// the approval hook reads the same projectDir the same way.
 function parseProjectDir(v) {
   if (!projectDirGiven(v)) return { none: true };
   const s = v.trim();
-  if (RE_DOTDOT.test(s)) return { code: "project-dotdot", message: (A) => A.dotdot };
-  let p = s;
-  if (/^file:/i.test(s)) {
-    const host = /^file:\/\/([^/?#]*)/i.exec(s);
-    if (host && host[1] && host[1].toLowerCase() !== "localhost") return { code: "project-network", message: (A) => A.network(s) };
-    p = fileUriToPath(s);
-    if (!p) return { code: "project-uri", message: (A) => A.projectUri(s) };
-  }
-  if (isNetworkPath(p)) return { code: "project-network", message: (A) => A.network(s) };
-  return { dir: path.resolve(rootsDir || process.cwd(), p) };
+  const r = HOOK_UTILS.parseProjectDir(s, rootsDir || process.cwd());
+  if (r.code === "project-dotdot") return { code: r.code, message: (A) => A.dotdot };
+  if (r.code === "project-network") return { code: r.code, message: (A) => A.network(s) };
+  if (r.code === "project-uri") return { code: r.code, message: (A) => A.projectUri(s) };
+  return r.none ? { none: true } : { dir: r.dir };
 }
 // The tool call's projectDir, checked and resolved (1.24 r6 A2 / A3) → { args } (projectDir: the absolute folder; not given → the
 // client's root when roots gave the default project, else left out — the engine's default) or { refuse: {code, error} }. It names
@@ -1037,20 +1035,8 @@ let clientRoots = false; // initialize: the client declared capabilities.roots
 let rootsDir; // undefined: not asked yet · null: no usable root · the folder
 let rootsWait = null; // the roots/list in flight
 // A local file:// URI → its absolute path, else null (a host other than localhost, '..', a control character; on Windows a
-// drive path only — file:///C:/x, file:///c%3A/x).
-function fileUriToPath(uri) {
-  const m = /^file:\/\/([^/?#]*)(\/[^?#]*)$/i.exec(String(uri).trim());
-  if (!m || (m[1] && m[1].toLowerCase() !== "localhost")) return null;
-  let p;
-  try { p = decodeURIComponent(m[2]); } catch { return null; }
-  if (/[\u0000-\u001f\u007f]/.test(p)) return null;
-  if (process.platform === "win32") {
-    if (!/^\/[A-Za-z]:(\/|$)/.test(p)) return null;
-    p = p.slice(1);
-  }
-  if (RE_DOTDOT.test(p) || isNetworkPath(p)) return null;
-  return path.resolve(p);
-}
+// drive path only — file:///C:/x, file:///c%3A/x). The approval hook's own reading (hooks/hook-utils.js — 1.25.1).
+const fileUriToPath = (uri) => HOOK_UTILS.fileUriToPath(uri);
 function firstFileRoot(res) {
   const roots = TYPE_CHECK.object(res) && TYPE_CHECK.object(res.result) && Array.isArray(res.result.roots) ? res.result.roots : [];
   for (const r of roots) {

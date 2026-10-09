@@ -12,7 +12,7 @@
         ]
       },
       {
-        "matcher": "^(Bash|PowerShell|Monitor|Write|Edit|(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track))$",
+        "matcher": "^(Bash|PowerShell|Monitor|Write|Edit|NotebookEdit|(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track)|mcp__.+__(?!spec_|steering_scaffold|ears_validate|trace_check)[\\w-]*?([Ww]rite|[Ee]dit|[Cc]reate|[Mm]ove|[Rr]ename|[Dd]elete|[Rr]emove|[Cc]opy|[Aa]ppend|[Pp]atch|[Rr]eplace|[Ss]ave|[Pp]ut|[Uu]pload|[Mm]kdir|[Tt]ouch|[Tt]runcate|[Uu]nlink|[Ii]nsert)[\\w-]*)$",
         "hooks": [
           {
             "type": "command",

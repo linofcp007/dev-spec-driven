@@ -2269,6 +2269,11 @@ const msg = {
         // 1.23 review 5: a shell command the guard can't read — too long (a.length characters) or in a form it can't follow
         if (a.kind === "unreadable") {
           if (a.why === "partial") return "run a tool call the approval guard received only in part (its input was cut off) that names dev-spec or .specs/"; // 1.24 review 6
+          // 1.25.1 (review 7): a script fed to a shell out of sight; an unknown program on .specs/ files; the hook's own failure; a projectDir
+          if (a.why === "fed") return "feed a shell a script the approval guard can't see (piped from a file or a program, or a process substitution) in a command that names dev-spec or .specs/";
+          if (a.why === "specs-arg") return "run a program the approval guard doesn't know on .specs/, its roadmap.json or a .state.json (it may change them)";
+          if (a.why === "error") return "run a tool call the approval guard could not check (it failed) while the approval guard is on";
+          if (a.why === "project") return "act on a project folder (projectDir) the approval guard can't read";
           return a.why === "too-long" ? `run a shell command too long for the approval guard to read (${a.length} characters) that names dev-spec or .specs/`
             : "run a shell command that names the dev-spec CLI with an approval word in a form the approval guard can't read (an unknown launcher, a glob, a variable or a joined string)";
         }
@@ -2292,6 +2297,10 @@ const msg = {
           }
           if (a.setting === "check") return a.to == null ? `remove the project check '${a.name}' (meta.checks)` : `change the command of the project check '${a.name}' (meta.checks)`;
           if (a.setting === "roadmap") return "change .specs/roadmap.json from the shell — write, move or delete it (it holds the approval guard and the project's gates)";
+          // 1.25.1 (review 7): a glob / variable / whole-folder write or removal under .specs/; a link made to .specs/
+          if (a.setting === "specs") return a.source === "edit" ? "move or delete .specs/ or a folder in it with a file tool (it holds roadmap.json and the features' .state.json)"
+            : "change .specs/ from the shell — write, move or delete through a glob, a variable or a whole folder that may reach roadmap.json or a feature's .state.json";
+          if (a.setting === "link") return "link a name to .specs/ or to a file in it (a symbolic link, junction or hard link) — writes through the link would reach roadmap.json and the .state.json files unseen";
           return `lower the approval guard from ${a.from} to ${a.to}`;
         }
         if (a.revoke) return `revoke the approval of the ${a.phase || "?"} phase of '${f}'` + (a.role ? ` as ${a.role}` : "") + (a.by ? ` in the name of '${a.by}'` : "");

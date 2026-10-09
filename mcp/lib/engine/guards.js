@@ -10,6 +10,7 @@
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
@@ -143,13 +144,13 @@ function approvalEditTargets(fp, cwd, win = process.platform === "win32") {
   let abs;
   try { abs = path.resolve(base, s); } catch { return [s]; }
   const out = [abs];
-  if (win && /~\d/.test(abs)) {
-    let real = null;
-    try { real = fs.realpathSync.native(abs); } catch {
-      try { real = path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs)); } catch { real = null; }
-    }
-    if (real && real !== abs) out.push(real);
+  // 1.25.1 (review 7): on every platform, the real path — a folder linked to .specs/ (`ln -s .specs sx`, a junction) or to a feature
+  // folder: `sx/roadmap.json` IS .specs/roadmap.json — as well as an 8.3 short name (the file's, else its folder's + the name)
+  let real = null;
+  try { real = fs.realpathSync.native(abs); } catch {
+    try { real = path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs)); } catch { real = null; }
   }
+  if (real && real !== abs) out.push(real);
   return out;
 }
 
@@ -293,8 +294,9 @@ function setGuard(projectDir, on) {
 // (spec_init {approvalGuard} / `init --approval-guard`), weakening what it stands for (spec_init / `init`: evidence observed →
 // reported, clearing or dropping approval roles, removing or changing a project check, turning the stop gate or the edit guard
 // down) or a shell command writing .specs/roadmap.json — asks the user (ask: a permission prompt) or is refused with the command
-// the human runs (deny: in their own terminal, or with Claude Code's `!` prefix). Raising or adding stays allowed. A guardrail on
-// the approve paths, not a sandbox: a script, a variable or the Write tool can still reach .specs/ files.
+// the human runs (deny: in their own terminal, or with Claude Code's `!` prefix). Raising or adding stays allowed. A guardrail
+// against accidents and casual workarounds, not a sandbox: an inline or written script, a variable set by an earlier tool call can
+// still reach .specs/ files (docs/maintainers/claude-code-integration.md → Known limits).
 // approvalGuardDecision is PURE (reads nothing): the hook reads the level and meta (one raw read of roadmap.json) and passes them in.
 // ---------------------------------------------------------------------------
 
@@ -307,7 +309,17 @@ const RE_APPROVAL_MCP = /^(?:mcp__.+__)?(spec_approve|spec_feature|spec_init|spe
 const APPROVAL_SHELL_TOOLS = new Set(["Bash", "PowerShell", "Monitor"]);
 // 1.23 review 5: the file-editing tools — a hand edit of a feature's approvals (.specs/**/.state.json) or of .specs/roadmap.json
 // (the guard's own level, the project's gates) is a guard-down action like a shell write of it. MultiEdit: an older tool name.
-const APPROVAL_EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit"]);
+const APPROVAL_EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]); // NotebookEdit (notebook_path): 1.25.1
+// 1.25.1 (review 7): another MCP server's file tools — filesystem's write_file / edit_file / move_file, Desktop Commander's write_file /
+// edit_block, … — matched by the verb in the tool's name, never by the server (hooks/hooks.json's matcher is the same set); dev-spec's
+// own tools (spec_*, steering_scaffold, ears_validate, trace_check) are never one. Their path-like arguments are read as an Edit's path.
+const RE_MCP_FILE_TOOL = /^mcp__.+__[\w-]*?(?:write|edit|create|move|rename|delete|remove|copy|append|patch|replace|save|put|upload|mkdir|touch|truncate|unlink|insert)/i;
+const RE_DEVSPEC_MCP_TOOL = /__(?:spec_[a-z_]+|steering_scaffold|ears_validate|trace_check)$/;
+const RE_MCP_PATH_KEY = /path|file|source|src|dest|target|from|^to$|dir|folder|name|uri|location/i;
+// The `unreadable` reasons that ask at both levels (never refused outright — it may be no approval at all): a form the lexer can't
+// follow, a partial payload, a script fed to a shell out of sight, an unknown program run on .specs/ files (1.25.1), the hook's own
+// failure past its pre-check, a projectDir the hook can't read (1.25.1).
+const APPROVAL_ASK_WHYS = ["unparsed", "partial", "fed", "specs-arg", "error", "project"];
 const RE_STATE_FILE = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)+\.state\.json$/i;
 // 1.24 review 6 (C6): the harness-observed run log (hooks/observe-hook.js appends the runs Claude Code SAW: .specs/<f>/.execution/
 // observed.jsonl, .specs/.execution/observed.jsonl for a project check) — an agent writing it forges observed evidence.
@@ -411,7 +423,12 @@ const RE_COMSPEC_WORD = /^(?:\$env:comspec|\$\{env:comspec\}|%comspec%)$/i;
 // line continuations taken out (`dev\-spec`, `d'e'v-spec`, `dev`-spec`), PowerShell's / JavaScript's string joints too
 // (`"cli/dev" + "-spec.js"` — 1.23 review 5). Or (1.23) a glob together with an approval word: the glob may name the CLI. The
 // hook's own pre-check is the same test.
-const RE_APPROVAL_CANDIDATE = /dev-?spec|\.specs/i;
+// 1.25.1 (review 7): or the files the guard stands on by name (`find . -name roadmap.json -delete`), or a glob / brace expansion that
+// may name .specs (`.s*/road*.json`, `.spec?/…`) or stand beside a writer / remover (PowerShell's `Remove-Item * -Recurse` reaches
+// .specs/). The hook's pre-check (approval-hook.js candidate) is the same test — mcp/tests/10-guards-review7.js checks they agree.
+const RE_APPROVAL_CANDIDATE = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
+const RE_APPROVAL_DOT_GLOB = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*[*?[{]/;
+const RE_APPROVAL_WRITE_WORD = /(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|remove-item|ri|mv|move|move-item|mi|cp|copy|copy-item|cpi|set-content|sc|add-content|ac|clear-content|clc|out-file|new-item|ni|tee|robocopy|xcopy|rsync)(?=[\s;&|)]|$)/i;
 // The words that make a CLI call an approval or a guard-down (approve, feature remove, init's guard-down flags).
 const RE_APPROVAL_VERB = /(?:^|[^\w-])(?:approve|remove|--approval-guard|--stop-check|--evidence|--guard|--roles|--check)(?![\w-])/i;
 const approvalPlain = (text) => String(text).replace(/(["'])\s*\+\s*\1/g, "").replace(/[\\`^]\r?\n|['"\\`^]/g, "");
@@ -419,7 +436,7 @@ const approvalPlain = (text) => String(text).replace(/(["'])\s*\+\s*\1/g, "").re
 const RE_PWSH_ENCODED = /(?:^|\s)[-/]e[a-z]*\s+([A-Za-z0-9+/]{8,}={0,2})(?=\s|$)/gi;
 const approvalCandidate = (text) => {
   const t = approvalPlain(text);
-  if (RE_APPROVAL_CANDIDATE.test(t) || (/[*?[]/.test(t) && RE_APPROVAL_VERB.test(t))) return true;
+  if (RE_APPROVAL_CANDIDATE.test(t) || (/[*?[{]/.test(t) && (RE_APPROVAL_VERB.test(t) || RE_APPROVAL_DOT_GLOB.test(t) || RE_APPROVAL_WRITE_WORD.test(t)))) return true;
   if (!/powershell|pwsh/i.test(t)) return false;
   let n = 0;
   for (const m of t.matchAll(RE_PWSH_ENCODED)) {
@@ -442,15 +459,34 @@ const APPROVAL_STDIN_RUNTIMES = new Set(["node", "nodejs", "bun"]);
 // .specs/roadmap.json as a write target (R1): a redirection's target, or the file a writer program names.
 const RE_ROADMAP_FILE = /(?:^|[\\/])\.specs[\\/]+roadmap\.json$/i;
 const RE_SPECS_DIR = /(?:^|[\\/])\.specs[\\/]*$/i;
+// The programs whose operands are written (each one) — 1.25.1 (review 7): + sponge, dos2unix / unix2dos (in place), the PowerShell
+// file cmdlets read by their parameters (shellSegOps).
 const APPROVAL_WRITERS_ANY = new Set(["tee", "truncate", "rm", "unlink", "shred", "del", "erase", "remove-item", "ri", "set-content", "sc",
   "add-content", "ac", "out-file", "clear-content", "clc", "new-item", "ni", "mv", "move", "move-item", "mi", "ren", "rename", "rename-item",
-  "rni", "dd"]);
+  "rni", "dd", "sponge", "dos2unix", "unix2dos", "tee-object", "export-csv", "epcsv", "export-clixml"]);
 // Deleting .specs/ or moving it away takes roadmap.json with it (the guard reads a missing file as off).
-const APPROVAL_REMOVERS = new Set(["rm", "rmdir", "rd", "del", "erase", "remove-item", "ri"]);
+const APPROVAL_REMOVERS = new Set(["rm", "rmdir", "rd", "del", "erase", "remove-item", "ri", "unlink"]);
 const APPROVAL_MOVERS = new Set(["mv", "move", "move-item", "mi", "ren", "rename", "rename-item", "rni"]);
-const APPROVAL_WRITERS_TARGET =new Set(["cp", "copy", "copy-item", "cpi", "install", "ln", "rsync", "xcopy", "robocopy"]); // the LAST path is written
+const APPROVAL_WRITERS_TARGET =new Set(["cp", "copy", "copy-item", "cpi", "install", "ln", "rsync", "xcopy", "robocopy", "scp"]); // the LAST path is written
 const APPROVAL_WRITERS_INPLACE = new Set(["sed", "perl", "ruby"]); // with -i / --in-place
 const RE_DEST_OPTION = /^-(?:destination|dest|t|-target-directory)$/i;
+// 1.25.1 (review 7): the other programs that write the files they name — editors run with their commands (ed, ex, vim -c …), awk -i
+// inplace, the downloaders' output files (curl -o, wget -O / -P), the archivers' extraction folders and members (tar -x -C, unzip -d,
+// 7z x -o, Expand-Archive), patch, sort -o, uniq's output, iconv -o, xxd's output, zip's archive — and the link makers (ln, mklink,
+// New-Item -ItemType SymbolicLink / Junction / HardLink, subst, junction, fsutil hardlink, mount --bind).
+const APPROVAL_WRITERS_OTHER = new Set(["ed", "red", "ex", "vi", "vim", "nvim", "view", "awk", "gawk", "mawk", "nawk", "curl", "wget", "tar", "bsdtar",
+  "unzip", "7z", "7za", "7zr", "expand-archive", "patch", "sort", "uniq", "iconv", "xxd", "zip", "base64", "mklink", "subst", "junction", "fsutil",
+  "mount", "git", "find", "cd", "chdir", "pushd", "popd", "sl", "set-location", "push-location", "pop-location"]);
+// 1.25.1 (review 7, fail closed): the programs known to only READ the files they name (beyond the text-only ones) — interpreters (their
+// inline scripts are a known limit), JSON / text tools, checksums, PowerShell's readers. Any OTHER program run on .specs/ itself,
+// roadmap.json, a .state.json or an observed log — a glob or a variable that may be one — asks (`unreadable`, why "specs-arg").
+const APPROVAL_READERS = new Set(["node", "nodejs", "bun", "deno", "python", "python3", "py", "pypy", "pypy3", "php", "lua", "jq", "yq", "gojq", "jless",
+  "fx", "cut", "tr", "od", "hexdump", "md5sum", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum", "shasum", "cksum", "b2sum", "md5",
+  "nl", "column", "fold", "fmt", "strings", "tac", "rev", "paste", "join", "comm", "expand", "unexpand", "pr", "look", "split", "csplit", "du", "df",
+  "open", "xdg-open", "explorer", "start", "invoke-item", "ii", "certutil", "npm", "npx", "pnpm", "yarn", "make", "for", "in", "case", "select",
+  "do", "done", "esac", "while", "until", "if", "then", "else", "elif", "fi", "function", "return", "exit", "export", "declare", "local", "readonly",
+  "typeset", "set", "unset", "shift", "wait", "sleep", "chmod", "chown", "attrib", "icacls", "touch", "mkdir", "md"]);
+const RE_PS_READER = /^(?:get|select|where|foreach|measure|format|out-string|out-null|out-host|write|convertfrom|convertto|test|resolve|join|split|compare|sort|group|import|show|find|search|read|wait|trace|start-sleep)(?:-|$)|^[%?]$/;
 
 // "off" | "ask" | "deny" (any case, trimmed), else undefined — spec_init {approvalGuard} / `init --approval-guard`.
 function approvalGuardInput(v) {
@@ -471,7 +507,17 @@ function rawApprovalGuard(text) {
 function approvalGuardLevel(projectDir) {
   const l = loadRoadmap(projectDir);
   if (l.parseError) return rawApprovalGuard(readIfExists(roadmapPath(projectDir)));
+  if (approvalRoadmapGone(projectDir)) return "ask";
   return (isObj(l.rm.meta) && approvalGuardInput(l.rm.meta.approvalGuard)) || "off";
+}
+// 1.25.1 (review 7): a .specs/ holding features (a feature folder with its .state.json) but no roadmap.json — every engine write that
+// makes a feature writes roadmap.json, so it was deleted (a route the guard didn't see, or by hand): the approval guard's level is
+// unknown, and it FAILS CLOSED at ask (the hook reads it the same way) until roadmap.json is back. (The engine's next roadmap write
+// recreates it with the default meta — off: deleting it from the shell is itself a guard-down.)
+function approvalRoadmapGone(projectDir) {
+  const root = specsRoot(projectDir);
+  if (fs.existsSync(path.join(root, "roadmap.json"))) return false;
+  return safeReaddir(root).some((n) => !n.startsWith(".") && fs.existsSync(path.join(root, n, ".state.json")));
 }
 // Inside initProject's roadmap lock. Off is the default (absent = off): no write when the effective value doesn't change.
 function setApprovalGuard(projectDir, level) {
@@ -562,15 +608,22 @@ function stdinShellMode(words, raw) {
 // returned) — pushing every simple command it finds (nested ones too) into segs.
 function shellLexList(s, start, mode, segs, inSub, depth) {
   const bash = mode === "bash", ps = mode === "ps", cmdm = mode === "cmd";
-  let words = [], raws = [], redirs = [], herestrings = [], segDocs = [];
+  let words = [], raws = [], redirs = [], herestrings = [], segDocs = [], writes = [], procs = [], stdinRedir = false;
   let cur = "", raw = "", has = false, quoted = false, redir = null, paren = 0, arith = 0; // arith: the paren level inside (( … ))
-  const heredocs = []; // bash: bodies waiting for the next newline — { delim, strip, quoted, shell }
+  // 1.25.1 (review 7): the pipeline — the simple command a `|` feeds (pipeIn: the one before it, lastSeg: the last one this list ended)
+  let pipeIn = null, lastSeg = null;
+  const heredocs = []; // bash: bodies waiting for the next newline — { delim, strip, quoted, shell, body }
   const add = (t, r) => { cur += t; raw += r === undefined ? t : r; has = true; };
   const endWord = () => {
     if (has) {
-      if (redir === "<<" || redir === "<<-") { const h = { delim: cur, strip: redir === "<<-", quoted, shell: null }; heredocs.push(h); segDocs.push(h); }
+      if (redir === "<<" || redir === "<<-") { const h = { delim: cur, strip: redir === "<<-", quoted, shell: null, body: null }; heredocs.push(h); segDocs.push(h); }
       else if (redir && redir.startsWith("<<<")) herestrings.push(cur);
-      else if (redir) redirs.push(cur, raw);
+      else if (redir) {
+        redirs.push(cur, raw);
+        // 1.25.1: an OUTPUT redirection's target (> >> >| &> 2> *> <>) is written; `2>&1` / `>&-` duplicate or close a descriptor
+        if (redir.includes(">")) { if (!(/&$/.test(redir) && /^(?:\d+|-)?$/.test(cur))) writes.push(cur, raw); }
+        else stdinRedir = true; // `< file`: the command reads its stdin from a file
+      }
       else { words.push(cur); raws.push(raw); }
       redir = null;
     }
@@ -587,9 +640,19 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       const sh = segDocs.length || herestrings.length ? stdinShellMode(words, raws) : null;
       for (const h of segDocs) h.shell = sh;
       seg.stdinShell = sh;
+      // 1.25.1 (review 7): what the reader of writes and of fed scripts needs — the output redirections' targets, the heredocs (their
+      // bodies once read), the process substitutions <( … ) / >( … ) among the words, a `< file` stdin, and the command a `|` feeds in
+      seg.writes = writes;
+      seg.docs = segDocs;
+      seg.procs = procs;
+      seg.stdinRedir = stdinRedir;
+      seg.pipeFrom = pipeIn;
+      pipeIn = null;
+      lastSeg = seg;
       segs.push(seg);
     }
-    words = []; raws = []; redirs = []; herestrings = []; segDocs = [];
+    words = []; raws = []; redirs = []; herestrings = []; segDocs = []; writes = []; procs = []; stdinRedir = false;
+    return segs.length ? segs[segs.length - 1] : null;
   };
   // A `$(` whose text starts at `from` → its nested command list; returns the index of its `)` (or the end), -1 past the depth bound.
   const subst = (from) => (depth < APPROVAL_LEX_DEPTH ? shellLexList(s, from, mode, segs, true, depth + 1) : -1);
@@ -614,8 +677,9 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
         if ((h.strip ? line.replace(/^\t+/, "") : line) === h.delim) { end = p; next = Math.min(e + 1, s.length); break; }
         p = e + 1;
       }
+      h.body = s.slice(pos, end); // 1.25.1: kept — `cat <<'EOF' | bash` feeds it to a shell
       if (depth < APPROVAL_LEX_DEPTH && end > pos) {
-        const body = s.slice(pos, end);
+        const body = h.body;
         if (h.shell) shellLexList(body, 0, h.shell, segs, false, depth + 1); // `bash <<'EOF'`: the body IS the script
         else if (!h.quoted) shellSubstitutionsIn(body, "bash", segs, depth + 1); // unquoted: its $( ) / `…` run
       }
@@ -746,7 +810,16 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
     }
     if (c === " " || c === "\t") { endWord(); continue; }
     if (bash && c === "&" && n === ">") continue; // &> / &>>: the redirection below
-    if (bash && (c === "<" || c === ">") && n === "(") { endWord(); continue; } // <( … ) / >( … ): a process substitution
+    if (bash && (c === "<" || c === ">") && n === "(") { // <( … ) / >( … ): a process substitution
+      // 1.25.1 (review 7): its commands are read as a nested list (they run), and the seg keeps its text — `bash <(echo '…')`,
+      // `source <(…)` run that text as a script. It stands as a word ("") or as a redirection's target (`bash < <(…)`).
+      const at = redir ? -1 : (endWord(), words.length);
+      const e = subst(i + 2);
+      if (e < 0) { endWord(); continue; }
+      procs.push({ at, text: s.slice(i + 2, e), out: c === ">", stdin: !!redir && !redir.includes(">") });
+      has = true; i = e;
+      continue;
+    }
     if (bash && c === "<" && n === "<" && s[i + 2] !== "<" && arith && paren >= arith) { add("<<"); i++; continue; } // (( 1 << 2 )): a shift, no heredoc
     if (c === "<" || c === ">") { // a redirection: its target is no word of the command
       let op = "";
@@ -757,7 +830,8 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       else {
         op += c;
         k = i + 1;
-        if (s[k] === c) { op += c; k++; }
+        if (c === "<" && s[k] === ">") { op += ">"; k++; } // <> opens the file for reading AND writing (1.25.1)
+        else if (s[k] === c) { op += c; k++; }
         else if (c === ">" && s[k] === "|") { op += "|"; k++; }
         if (s[k] === "&") { op += "&"; k++; }
       }
@@ -765,7 +839,14 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       i = k - 1;
       continue;
     }
-    if (c === "(") { endSeg(); paren++; if (n === "(" && !arith) arith = paren + 1; continue; }
+    if (c === "(") {
+      // 1.25.1 (review 7): a simple command ended by `(` — its next one is a ( … ) argument list (PowerShell: `New-Object X('…')`)
+      const had = words.length > 0 || has;
+      const sg = endSeg();
+      if (had && sg) sg.openParen = true;
+      paren++; if (n === "(" && !arith) arith = paren + 1;
+      continue;
+    }
     if (c === ")") {
       if (inSub && paren === 0) { endSeg(); return i; }
       endSeg();
@@ -773,7 +854,17 @@ function shellLexList(s, start, mode, segs, inSub, depth) {
       if (paren < arith) arith = 0;
       continue;
     }
-    if (";&|{}".includes(c)) { endSeg(); continue; }
+    // 1.25.1 (review 7): in Bash `{` / `}` are reserved words only standing alone (`{ cmd; }`); inside a word they are brace expansion
+    // (`{approve,}`, `{.specs,x}/roadmap.json`, find's `{}`) — the word keeps them (it was cut there: `{approve,} …` read as no CLI call).
+    if (bash && (c === "{" || c === "}") && (has || (n !== undefined && !/[\s;&|)]/.test(n)))) { add(c); continue; }
+    if (c === "|") { // a pipe feeds the next simple command (`||` is no pipe; `|&` pipes stderr too)
+      endSeg();
+      if (n === "|") { i++; pipeIn = null; continue; }
+      if (bash && n === "&") i++;
+      pipeIn = lastSeg;
+      continue;
+    }
+    if (";&{}".includes(c)) { endSeg(); if (c === ";" || c === "&") pipeIn = null; continue; }
     add(c);
   }
   endSeg();
@@ -863,6 +954,10 @@ function gitWriteTargets(words, k) {
   if (sub === "merge-file") return has("-p", "--stdout") ? [] : plain(["-L"]).slice(0, 1);
   if (sub === "rm") return has("--cached") ? [] : plain(["--pathspec-from-file"]);
   if (sub === "mv") return plain([]);
+  // 1.25.1 (review 7): `git clean -fdx .specs` deletes the untracked files it names (unless -n / --dry-run); `git stash push -- .specs`
+  // puts them back to HEAD (a pathspec — the other stash forms name no file: a known limit)
+  if (sub === "clean") return has("-n", "--dry-run") || args.some((a) => /^-[A-Za-z]*n/.test(a) && !a.startsWith("--")) ? [] : plain(["-e", "--exclude"]);
+  if (sub === "stash" && /^(?:push|save|-)/.test(String(args[0] || "-"))) return plain(["-m", "--message", "--pathspec-from-file"]).filter((a) => a !== "push" && a !== "save");
   return [];
 }
 // A simple command that writes a file the approval guard stands on → its guard-down actions ([] = none): .specs/roadmap.json (R1:
@@ -871,37 +966,568 @@ function gitWriteTargets(words, k) {
 // of=…), sed / perl -i on it, cp / Copy-Item / ln / install onto it (the last path, a -Destination / -t value, or a folder receiving
 // a file of that name), deleting or moving .specs/ away (roadmap.json with it), and git's in-place writers (gitWriteTargets). Reading
 // it (cat, jq, git show, cp FROM it) is no write. The paths are read as the file system reads them (approvalPathText).
-function specsWriteActions(words, raw) {
+// 1.25.1 (review 7): read ONCE for both guards (shellSegOps → shellOpActions here; shellOpPaths for the edit guard's code files) — and
+// beyond the exact paths: a target that is a glob, a brace expansion or a variable (`.specs/road*.json`, `.spec?/…`, `{.specs,x}/…`,
+// `D=.specs; cp t $D/roadmap.json`), a remover / mover on a folder or glob under .specs/ (`rm -rf .specs/<feature>`, `rm -rf .specs/*`,
+// `find .specs … -delete`, `git clean … .specs`), the extractors and copiers into .specs/ (rsync, tar -C, unzip -d, robocopy, xcopy, cp
+// -r), the editors and downloaders (ed, ex, vim, awk -i inplace, curl -o, wget -O, sponge…), a link to .specs/ (ln -s, mklink, New-Item
+// -ItemType Junction…), PowerShell's file cmdlets by their parameters and the [IO.File] methods, a target fed by a pipe (`gci .specs
+// -Filter roadmap.json | Remove-Item`, `find … | xargs rm`), and — fail closed — a program the guard doesn't know run on .specs/,
+// roadmap.json or a .state.json (`unreadable`, why "specs-arg": ask). ctx: { vars (assigned earlier in the command), cwd (an earlier cd) }.
+function specsWriteActions(words, raw, ctx, mode, nextSeg) {
+  const m = mode === "ps" || mode === "cmd" ? mode : "bash";
   const out = [];
-  const add = (hit) => { if (hit) out.push(Object.assign({ kind: "guard-down", setting: hit.setting, source: "shell" }, hit.setting === "roadmap" ? {} : { feature: hit.feature || null })); };
-  for (const t of words.redirs || []) add(approvalGuardedFile(t));
-  const k = programAt(words, raw);
-  if (k < 0) return out;
-  const p = approvalProgram(words[k]);
-  const texts = (i) => [words[i], (raw && raw[i]) || ""];
-  const hit = (i) => { for (const w of texts(i)) { const h = approvalGuardedFile(w); if (h) return h; } return null; };
-  const args = [];
-  for (let i = k + 1; i < words.length; i++) args.push(i);
-  const specsDir = (i) => texts(i).some((w) => RE_SPECS_DIR.test(approvalPathText(w)));
-  if (APPROVAL_WRITERS_ANY.has(p)) args.forEach((i) => add(hit(i)));
-  if (APPROVAL_REMOVERS.has(p) && args.some(specsDir)) add({ setting: "roadmap" });
-  if (APPROVAL_MOVERS.has(p) && args.filter((i) => !words[i].startsWith("-")).slice(0, -1).some(specsDir)) add({ setting: "roadmap" }); // .specs/ as a source
-  if (APPROVAL_WRITERS_INPLACE.has(p) && args.some((i) => /^(?:-[A-Za-z]*i|--in-place)/.test(words[i]))) args.forEach((i) => add(hit(i)));
-  if (APPROVAL_WRITERS_TARGET.has(p)) {
-    const pos = args.filter((i) => !words[i].startsWith("-") && !RE_DEST_OPTION.test(words[i - 1] || ""));
-    const dest = args.filter((i) => RE_DEST_OPTION.test(words[i - 1] || "") || /^--target-directory=/.test(words[i]));
-    const last = pos.length > 1 ? pos[pos.length - 1] : null;
-    const targets = dest.concat(last == null ? [] : [last]);
-    const destText = (i) => words[i].replace(/^--target-directory=/, "");
-    for (const t of targets) {
-      add(hit(t));
-      // a folder receiving a file of a guarded name: `cp roadmap.json .specs/`, `cp x/.state.json .specs/alpha/`
-      for (const s of pos) if (s !== t) add(approvalGuardedFile(destText(t).replace(/[\\/]+$/, "") + "/" + words[s].replace(/^.*[\\/]/, "")));
-    }
-  }
-  if (p === "git") for (const t of gitWriteTargets(words, k)) add(approvalGuardedFile(t) || approvalGuardedDir(t));
+  for (const o of shellSegOps(words, raw || words, m, nextSeg)) out.push(...shellOpActions(o, m, ctx));
   const seen = new Set();
   return out.filter((a) => { const key = JSON.stringify(a); return !seen.has(key) && seen.add(key); });
+}
+
+// --- the shell's file operations (1.25.1, review 7) ---------------------------------------------------------------------------
+const SHELL_VAR = "\u0001"; // in a path: a variable left unresolved ($X, ${X}, $env:X, %X%) — it may hold anything but is never read as .specs
+const SHELL_ANY = "\u0002"; // in a path: any chain of folders, dot folders included (find descends into .specs/, a recursive listing)
+const GUARDED_NAMES = ["roadmap.json", ".state.json", "observed.jsonl"];
+const RE_SHELL_WILD = /[*?[\u0001\u0002]/;
+// A path word with the variables the same command assigned put in (`D=.specs; … $D/roadmap.json`), any other one marked SHELL_VAR.
+function shellVarText(w, vars) {
+  return String(w).replace(/\$\{(?:env:)?([A-Za-z_]\w*)\}|\$\{[^{}]*\}|\$(?:env:)?([A-Za-z_]\w*)|\$[0-9@*#?$!]|%([A-Za-z_]\w*)%/gi, (m, a, b, c) => {
+    const k = String(a || b || c || "").toLowerCase();
+    return k && vars && own(vars, k) ? vars[k] : SHELL_VAR;
+  });
+}
+// Bash's brace expansion of a word (`{.specs,x}/roadmap.json`, `roadmap.json{,}`, `appro{v,}e`) → its words (at most `cap`); a group
+// without a comma — or after a `$` — stays as it is.
+function braceExpand(s, cap = 32) {
+  let depth = 0, open = -1;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "{" && s[i - 1] !== "$") { if (depth++ === 0) open = i; }
+    else if (c === "}" && depth && --depth === 0) {
+      const body = s.slice(open + 1, i), parts = [];
+      for (let j = 0, d = 0, from = 0; j <= body.length; j++) {
+        if (j === body.length || (body[j] === "," && d === 0)) { parts.push(body.slice(from, j)); from = j + 1; }
+        else if (body[j] === "{") d++;
+        else if (body[j] === "}" && d) d--;
+      }
+      if (parts.length < 2) continue;
+      const out = [];
+      for (const part of parts) for (const e of braceExpand(s.slice(0, open) + part + s.slice(i + 1), cap)) { if (out.length >= cap) return out; out.push(e); }
+      return out;
+    }
+  }
+  return [s];
+}
+// One path segment read as a glob → a RegExp (case folded — a superset where the file system keeps case), or null. Bash (dotglob
+// off): a leading * ? [ never matches a dot; PowerShell / cmd.exe wildcards do. SHELL_VAR / SHELL_ANY match anything.
+function shellGlobRe(seg, mode) {
+  let re = "";
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg[i];
+    if (c === "*" || c === SHELL_VAR || c === SHELL_ANY) re += "[\\s\\S]*";
+    else if (c === "?") re += "[\\s\\S]";
+    else if (c === "[") {
+      const end = seg.indexOf("]", i + 2);
+      if (end < 0) { re += "\\["; continue; }
+      re += "[" + seg.slice(i + 1, end).replace(/^[!^]/, "^").replace(/[\\\]]/g, "\\$&") + "]";
+      i = end;
+    } else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
+  }
+  const lead = mode === "bash" && /^[*?[]/.test(seg) ? "(?!\\.)" : "";
+  try { return new RegExp("^" + lead + re + "$", "i"); } catch { return null; }
+}
+// May the segment be `name`? A plain one equals it (case folded); a glob may match it; a variable never stands for .specs (varOk false).
+function shellSegCould(seg, name, mode, varOk) {
+  if (!RE_SHELL_WILD.test(seg)) return seg.toLowerCase() === name;
+  if (!varOk && seg.includes(SHELL_VAR)) return false;
+  const re = shellGlobRe(seg, mode);
+  return !!re && re.test(name);
+}
+// A path (its variables already put in) → what it may name: { text, wild, specs (the first segment that is or may be .specs, else -1),
+// dir (it is — or may be — .specs itself), guarded (approvalGuardedFile: an exact path), may (it may be roadmap.json, a .state.json or an
+// observed log there), name (its last segment may be one of those names, wherever it lies), folder (it may be a folder: no extension),
+// execution (inside an .execution/ folder), lock (a lock file) }.
+function shellPathFacts(t0, mode) {
+  const t = approvalPathText(t0);
+  const segs = t.split("/").filter(Boolean);
+  const n = segs.length;
+  const wild = RE_SHELL_WILD.test(t);
+  let specs = -1;
+  for (let i = 0; i < n && specs < 0; i++) if (shellSegCould(segs[i], ".specs", mode, false)) specs = i;
+  const last = n ? segs[n - 1] : "";
+  const could = (name) => shellSegCould(last, name, mode, true);
+  const guarded = wild ? null : approvalGuardedFile(t);
+  const may = !!guarded || (wild && specs >= 0 && ((specs === n - 2 && could("roadmap.json")) || (specs < n - 1 && could(".state.json")) ||
+    (specs < n - 2 && shellSegCould(segs[n - 2], ".execution", mode, true) && could("observed.jsonl")))) ||
+    // a guarded name in a folder an unknown variable names (`$DIR/roadmap.json`, `$F/.state.json`): it may be there — fail closed
+    (n >= 2 && !RE_SHELL_WILD.test(last) && segs.slice(0, -1).some((s) => s.includes(SHELL_VAR)) && GUARDED_NAMES.includes(last.toLowerCase()));
+  const tail = wild ? last.replace(/^[\s\S]*[*?\]\u0001\u0002]/, "") : last;
+  return { text: t, wild, specs, dir: specs >= 0 && specs === n - 1, guarded, may, name: GUARDED_NAMES.some(could),
+    folder: wild ? !/\.[A-Za-z0-9]{1,10}$/.test(tail) : !/^[^.][\s\S]*\.[A-Za-z0-9]{1,10}$/.test(last),
+    execution: specs >= 0 && segs.slice(specs + 1).some((s) => s.toLowerCase() === ".execution"), lock: !wild && /\.lock$/i.test(last) };
+}
+// A path word → its readings: each brace expansion (Bash), as written and — after a `cd` earlier in the same command — under that folder.
+function shellPathReadings(w, mode, ctx) {
+  const t = shellVarText(w, ctx && ctx.vars);
+  const out = [];
+  for (const a of mode === "bash" ? braceExpand(t) : [t]) {
+    out.push(shellPathFacts(a, mode));
+    if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:|\u0001)/.test(a)) out.push(shellPathFacts(ctx.cwd + "/" + a, mode));
+  }
+  return out;
+}
+// The operands of a POSIX-style command from words[from] → { pos: [indices], val: {option: {i} | {text}}, flags: [words] }: `--` ends the
+// options, `--x=v` carries its value, an option in `takes` takes the next word; `slash` (cmd.exe, robocopy, xcopy): `/x` is an option.
+function shellOperands(words, from, takes, slash) {
+  const pos = [], val = Object.create(null), flags = [];
+  for (let i = from, dd = false; i < words.length; i++) {
+    const w = words[i];
+    const opt = !dd && w.length > 1 && (w[0] === "-" || (slash && /^\/(?:[A-Za-z?]{1,3}|[A-Z]{2,})(?::\S*)?$/.test(w)));
+    if (!opt) { pos.push(i); continue; }
+    if (w === "--") { dd = true; continue; }
+    const eq = /^(--?[A-Za-z][\w-]*)=([\s\S]*)$/.exec(w);
+    if (eq) { val[eq[1]] = { text: eq[2] }; continue; }
+    flags.push(w);
+    if (takes && takes.has(w) && i + 1 < words.length) val[w] = { i: ++i };
+  }
+  return { pos, val, flags };
+}
+const shellTakes = (list) => new Set(list.split(" "));
+const SHELL_TAKES = {
+  cp: shellTakes("-t --target-directory -S --suffix"), mv: shellTakes("-t --target-directory -S --suffix"), ln: shellTakes("-t --target-directory -S --suffix"),
+  install: shellTakes("-t --target-directory -S --suffix -m --mode -o --owner -g --group"), scp: shellTakes("-P -i -o -F -c -l -S -J"),
+  rsync: shellTakes("-e --rsh --rsync-path --exclude --include --filter -f --exclude-from --include-from --files-from --log-file --partial-dir --temp-dir -T --backup-dir --suffix --chmod --chown --link-dest --compare-dest --copy-dest -B --block-size --max-size --min-size --timeout --port --password-file --out-format --iconv --bwlimit --info --debug -M --remote-option"),
+  truncate: shellTakes("-s --size -r --reference"), shred: shellTakes("-n --iterations -s --size --random-source"),
+  sed: shellTakes("-e -f --expression --file -l --line-length"), perl: shellTakes("-e -E -I -M -m"), ruby: shellTakes("-e -r -I -C -E"),
+  awk: shellTakes("-f -v -F -i -e -l -E --include --source --load --file --assign --field-separator"),
+  editor: shellTakes("-c --cmd -S -u -U -i -T -w -W -t -q"), unzip: shellTakes("-d -P -I -O"), zip: shellTakes("-b -n -t -tt -x -i -O --out"),
+  patch: shellTakes("-p -i --input -o --output -d --directory -r --reject-file -B --prefix -D --ifdef -F --fuzz -V -z --suffix -Y --basename-prefix"),
+  uniq: shellTakes("-f -s -w --skip-fields --skip-chars --check-chars"), mount: shellTakes("-o -t -L -U"),
+};
+// PowerShell: the aliases of the file cmdlets (in the PowerShell tool, `rm` IS Remove-Item), and the switch parameters among the ones
+// they take (any other parameter takes the next word).
+const PS_FILE_ALIASES = { rm: "remove-item", del: "remove-item", erase: "remove-item", rd: "remove-item", rmdir: "remove-item", ri: "remove-item",
+  cp: "copy-item", copy: "copy-item", cpi: "copy-item", mv: "move-item", move: "move-item", mi: "move-item", ren: "rename-item", rni: "rename-item",
+  ni: "new-item", sc: "set-content", ac: "add-content", clc: "clear-content", tee: "tee-object", epcsv: "export-csv" };
+const PS_FILE_CMDLETS = new Set(["remove-item", "copy-item", "move-item", "rename-item", "new-item", "set-content", "add-content", "clear-content",
+  "out-file", "tee-object", "export-csv", "export-clixml", "expand-archive"]);
+const PS_SWITCHES = new Set(["recurse", "force", "confirm", "whatif", "passthru", "nonewline", "append", "noclobber", "container", "asbytestream",
+  "verbose", "debug", "usetransaction", "wait", "r", "fo"]);
+// A PowerShell command's parameters from words[from] → { named: {name: {i} | {text} | {sw} | {missing}}, pos: [indices] }. `-Name:value`
+// carries its value; a parameter whose value is a ( … ) expression ends the lexer's simple command (missing).
+function psParams(words, from) {
+  const named = Object.create(null), pos = [];
+  for (let i = from; i < words.length; i++) {
+    const m = /^-([A-Za-z][\w-]*)(?::([\s\S]*))?$/.exec(words[i]);
+    if (!m) { pos.push(i); continue; }
+    const n = m[1].toLowerCase();
+    const isSwitch = PS_SWITCHES.has(n) || (n.length >= 3 && [...PS_SWITCHES].some((s) => s.startsWith(n)));
+    if (m[2]) named[n] = { text: m[2] };
+    else if (isSwitch && m[2] === undefined) named[n] = { sw: true };
+    else if (i + 1 < words.length && /^-[A-Za-z]/.test(words[i + 1])) named[n] = { sw: true }; // followed by another parameter
+    else named[n] = i + 1 < words.length ? { i: ++i } : { missing: true };
+  }
+  return { named, pos };
+}
+const RE_NET_FILE = /^\[(?:system\.)?io\.(file|directory)\]::(\w+)$/i;
+// find's options that take the next word (its producer side: `find .specs -maxdepth 1 -name roadmap.json`), Get-ChildItem's too.
+const RE_FIND_VALUE = /^-(?:maxdepth|mindepth|type|newer|anewer|cnewer|size|[acm]time|[acm]min|user|group|uid|gid|perm|regextype|printf|fstype|links|inum|samefile|depth|exclude|attributes|d)$/i;
+const RE_NAME_FILTER = /^-(?:i?name|i?path|i?wholename|i?regex|filter|include|fi|inc)$/i;
+// The paths a command lists (the producer of a pipe — `find .specs -name roadmap.json`, `gci .specs -Filter roadmap.json`, `echo …`):
+// each named folder, with a name filter below it (directly and deeper — SHELL_ANY).
+function shellProducedPaths(seg) {
+  const words = seg, raw = seg.raw || seg;
+  const k = programAt(words, raw);
+  if (k < 0) return [];
+  const paths = [], filters = [];
+  for (let i = k + 1; i < words.length; i++) {
+    const w = words[i];
+    if (RE_NAME_FILTER.test(w) && i + 1 < words.length) { filters.push(words[++i]); continue; }
+    if (/^-(?:path|literalpath|lp)$/i.test(w) && i + 1 < words.length) { paths.push(words[++i]); continue; }
+    if (/^[-(!)]/.test(w)) { if (RE_FIND_VALUE.test(w)) i++; continue; }
+    paths.push(w);
+  }
+  if (!paths.length) paths.push(".");
+  return paths.flatMap((p) => (filters.length ? filters.flatMap((f) => [p + "/" + f, p + "/" + SHELL_ANY + "/" + f]) : [p]));
+}
+// A simple command → its file operations: [{ op, paths: [[cooked, raw]], sources?, recursive?, archive?, kind?, producer? }] — op: write
+// (its content), replace (removed or replaced as a whole: rm, a move's source, an extracted member, git's restores — op git), into (a
+// folder receiving files: the sources, or everything — archive), link (the target a link is made to), piped (the targets come from the
+// pipe: kind write | replace), unknown (an argument of a program the guard doesn't know). nextSeg: the lexer's next simple command (a
+// PowerShell ( … ) argument — `-Destination (Join-Path .specs roadmap.json)`, `[IO.File]::WriteAllText('…', …)`).
+function shellSegOps(words, raw, mode, nextSeg) {
+  const ops = [];
+  const pair = (i) => [words[i], (raw && raw[i]) || words[i]];
+  const vpair = (v) => (!v ? null : v.i !== undefined ? pair(v.i) : v.text !== undefined ? [v.text, v.text] : null);
+  const W = words.writes || [];
+  for (let i = 0; i < W.length; i += 2) ops.push({ op: "write", paths: [[W[i], W[i + 1]]] });
+  const net = mode === "ps" ? words.findIndex((w) => RE_NET_FILE.test(w)) : -1;
+  if (net >= 0) return ops.concat(netFileOps(RE_NET_FILE.exec(words[net]), nextSeg));
+  const k = programAt(words, raw);
+  if (k < 0) return ops;
+  let p = approvalProgram(words[k]);
+  if (mode === "ps" && own(PS_FILE_ALIASES, p)) p = PS_FILE_ALIASES[p];
+  const xargs = words.slice(0, k).some((w) => /^(?:xargs|parallel)$/.test(approvalProgram(w)));
+  const piped = (kind) => { if (words.pipeFrom) ops.push({ op: "piped", kind, producer: words.pipeFrom }); };
+  const posOf = (o) => o.pos.filter((i) => !(xargs && /^(?:\{\}|%|@)$/.test(words[i])));
+  const slash = mode !== "bash";
+  if (PS_FILE_CMDLETS.has(p)) return ops.concat(psFileOps(p, words, raw, k, nextSeg, piped));
+  if (p === "dd") { for (let i = k + 1; i < words.length; i++) if (/^of=/i.test(words[i])) ops.push({ op: "write", paths: [pair(i)] }); return ops; }
+  if (["tee", "truncate", "shred", "sponge", "dos2unix", "unix2dos"].includes(p)) {
+    const pos = posOf(shellOperands(words, k + 1, SHELL_TAKES[p]));
+    if (pos.length) ops.push({ op: "write", paths: pos.map(pair) }); else if (xargs) piped("write");
+    return ops;
+  }
+  if (["rm", "unlink", "rmdir", "del", "erase", "rd"].includes(p)) {
+    const pos = posOf(shellOperands(words, k + 1, null, slash));
+    if (pos.length) ops.push({ op: "replace", paths: pos.map(pair) }); else if (xargs) piped("replace");
+    return ops;
+  }
+  if (["mv", "move", "cp", "install", "scp", "copy", "ln"].includes(p)) {
+    const o = shellOperands(words, k + 1, SHELL_TAKES[p === "move" ? "mv" : p === "copy" ? "cp" : p], slash);
+    const t = o.val["-t"] || o.val["--target-directory"];
+    const pos = posOf(o);
+    const dest = t ? vpair(t) : pos.length > 1 ? pair(pos[pos.length - 1]) : null;
+    const src = (t || pos.length < 2 ? pos : pos.slice(0, -1)).map(pair);
+    const recursive = p === "mv" || p === "move" || o.flags.some((f) => /^-[A-Za-z]*[rRa]/.test(f) && !f.startsWith("--")) || o.flags.some((f) => /^--(?:recursive|archive)$/.test(f));
+    if (p === "ln") { if (src.length) ops.push({ op: "link", paths: src }); }
+    else if ((p === "mv" || p === "move") && src.length) ops.push({ op: "replace", paths: src });
+    if (dest) ops.push({ op: "write", paths: [dest] }, { op: "into", paths: [dest], sources: src, recursive });
+    else if (!pos.length && xargs && p !== "ln") piped(p === "mv" || p === "move" ? "replace" : "write");
+    return ops;
+  }
+  if (p === "ren" || p === "rename") {
+    const pos = shellOperands(words, k + 1, null, slash).pos;
+    if (mode === "cmd" && pos.length >= 2) {
+      const dir = words[pos[0]].replace(/[^\\/]*$/, ""), rdir = pair(pos[0])[1].replace(/[^\\/]*$/, "");
+      ops.push({ op: "replace", paths: [pair(pos[0])] }, { op: "write", paths: [[dir + words[pos[1]], rdir + words[pos[1]]]] });
+    } else if (pos.length) ops.push({ op: "replace", paths: pos.map(pair) }); // rename <expression | from to> <files…>: superset
+    return ops;
+  }
+  if (p === "rsync" || p === "xcopy" || p === "robocopy") {
+    const o = shellOperands(words, k + 1, SHELL_TAKES.rsync, p !== "rsync");
+    if (p === "rsync" && o.pos.length > 1) {
+      const dest = pair(o.pos[o.pos.length - 1]);
+      ops.push({ op: "write", paths: [dest] }, { op: "into", paths: [dest], sources: o.pos.slice(0, -1).map(pair), recursive: true, contents: true });
+    } else if (p === "xcopy" && o.pos.length > 1) {
+      ops.push({ op: "write", paths: [pair(o.pos[1])] }, { op: "into", paths: [pair(o.pos[1])], sources: [pair(o.pos[0])], recursive: o.flags.some((f) => /^\/[se]$/i.test(f)), contents: true });
+    } else if (p === "robocopy" && o.pos.length > 1) { // robocopy <source> <destination> [<files>…]: the files (else all) land in the destination
+      const files = o.pos.slice(2).map(pair);
+      ops.push({ op: "into", paths: [pair(o.pos[1])], sources: files.length ? files : [["*", "*"]], recursive: o.flags.some((f) => /^\/(?:s|e|mir)$/i.test(f)) });
+    }
+    return ops;
+  }
+  if (p === "mklink" || p === "junction") { // mklink [/D|/H|/J] <link> <target>
+    const pos = shellOperands(words, k + 1, null, true).pos;
+    if (pos.length >= 2) ops.push({ op: "write", paths: [pair(pos[0])] }, { op: "link", paths: [pair(pos[1])] });
+    return ops;
+  }
+  if (p === "subst") { const pos = shellOperands(words, k + 1, null, true).pos; if (pos.length >= 2) ops.push({ op: "link", paths: [pair(pos[1])] }); return ops; }
+  if (p === "fsutil") { // fsutil hardlink create <new> <existing>
+    if (/^hardlink$/i.test(words[k + 1] || "") && /^create$/i.test(words[k + 2] || "") && words.length > k + 4) ops.push({ op: "write", paths: [pair(k + 3)] }, { op: "link", paths: [pair(k + 4)] });
+    return ops;
+  }
+  if (p === "mount") {
+    const o = shellOperands(words, k + 1, SHELL_TAKES.mount);
+    if (o.flags.some((f) => /^(?:--r?bind|-B)$/.test(f)) && o.pos.length >= 2) ops.push({ op: "link", paths: [pair(o.pos[0])] }, { op: "write", paths: [pair(o.pos[1])] });
+    return ops;
+  }
+  if (p === "sed" || p === "perl" || p === "ruby") {
+    const o = shellOperands(words, k + 1, SHELL_TAKES[p]);
+    const inplace = o.flags.some((f) => (p === "sed" ? /^-[nrEsuz]*i/ : /^-[pnlaws0]*i/).test(f)) || o.flags.concat(Object.keys(o.val)).some((f) => /^--in-place/.test(f));
+    if (!inplace) return ops;
+    const script = Object.keys(o.val).some((x) => /^(?:-e|-E|-f|--expression|--file)$/.test(x));
+    const files = posOf(o).slice(script ? 0 : 1);
+    if (files.length) ops.push({ op: "write", paths: files.map(pair) }); else if (xargs) piped("write");
+    return ops;
+  }
+  if (["awk", "gawk", "mawk", "nawk"].includes(p)) {
+    const o = shellOperands(words, k + 1, SHELL_TAKES.awk);
+    const inc = ["-i", "--include"].map((x) => vpair(o.val[x])).filter(Boolean).map((x) => x[0]);
+    if (!inc.some((v) => /^inplace$/i.test(v)) && !o.flags.some((f) => /^-iinplace$/i.test(f))) return ops;
+    const prog = ["-f", "--file", "-e", "--source", "-E"].some((x) => o.val[x]);
+    const files = (prog ? o.pos : o.pos.slice(1)).filter((i) => !/^[A-Za-z_]\w*=/.test(words[i]));
+    if (files.length) ops.push({ op: "write", paths: files.map(pair) });
+    return ops;
+  }
+  if (["ed", "red", "ex", "vi", "vim", "nvim", "view"].includes(p)) {
+    const pos = shellOperands(words, k + 1, SHELL_TAKES.editor).pos.filter((i) => !words[i].startsWith("+"));
+    if (pos.length) ops.push({ op: "write", paths: pos.map(pair) });
+    return ops;
+  }
+  if (p === "curl" || p === "wget") {
+    const long = p === "curl" ? /^--(output|dump-header|cookie-jar|trace|trace-ascii|stderr|etag-save|libcurl|output-dir)(?:=([\s\S]*))?$/
+      : /^--(output-document|output-file|append-output|directory-prefix)(?:=([\s\S]*))?$/;
+    const short = p === "curl" ? /^-([A-Za-z]*?)([oDc])([\s\S]*)$/ : /^-([A-Za-z]*?)([OoaP])([\s\S]*)$/;
+    for (let i = k + 1; i < words.length; i++) {
+      const w = words[i];
+      let m = long.exec(w), dir = false, v = null;
+      if (m) { dir = /dir/.test(m[1]); v = m[2] !== undefined ? [m[2], m[2]] : i + 1 < words.length ? pair(++i) : null; }
+      else if (!w.startsWith("--") && (m = short.exec(w))) { dir = m[2] === "P"; v = m[3] ? [m[3], m[3]] : i + 1 < words.length ? pair(++i) : null; }
+      if (v) ops.push(dir ? { op: "into", paths: [v], archive: true } : { op: "write", paths: [v] });
+    }
+    return ops;
+  }
+  if (p === "tar" || p === "bsdtar") return ops.concat(tarOps(words, k, pair));
+  if (p === "unzip") {
+    const o = shellOperands(words, k + 1, SHELL_TAKES.unzip);
+    const d = vpair(o.val["-d"]) || (o.flags.map((f) => /^-d(.+)$/.exec(f)).filter(Boolean).map((m) => [m[1], m[1]])[0]);
+    if (d) ops.push({ op: "into", paths: [d], archive: true });
+    if (o.pos.length > 1) ops.push({ op: "replace", paths: o.pos.slice(1).map(pair) });
+    return ops;
+  }
+  if (p === "7z" || p === "7za" || p === "7zr") {
+    const cmd = String(words[k + 1] || "").toLowerCase();
+    const o = shellOperands(words, k + 2, null);
+    if (cmd === "x" || cmd === "e") {
+      for (const f of o.flags) { const m = /^-o([\s\S]+)$/.exec(f); if (m) ops.push({ op: "into", paths: [[m[1], m[1]]], archive: true }); }
+      if (o.pos.length > 1) ops.push({ op: "replace", paths: o.pos.slice(1).map(pair) });
+    } else if (["a", "u", "d", "rn"].includes(cmd) && o.pos.length) ops.push({ op: "write", paths: [pair(o.pos[0])] });
+    return ops;
+  }
+  if (p === "zip") {
+    const o = shellOperands(words, k + 1, SHELL_TAKES.zip);
+    const out = vpair(o.val["-O"]) || vpair(o.val["--out"]);
+    if (out) ops.push({ op: "write", paths: [out] }); else if (o.pos.length) ops.push({ op: "write", paths: [pair(o.pos[0])] });
+    return ops;
+  }
+  if (p === "patch") {
+    const o = shellOperands(words, k + 1, SHELL_TAKES.patch);
+    for (const x of ["-o", "--output", "-r", "--reject-file"]) { const v = vpair(o.val[x]); if (v) ops.push({ op: "write", paths: [v] }); }
+    if (o.pos.length) ops.push({ op: "write", paths: [pair(o.pos[0])] });
+    return ops;
+  }
+  if ((p === "sort" || p === "iconv" || p === "base64") && mode !== "ps") {
+    for (let i = k + 1; i < words.length; i++) {
+      const m = /^(?:-o|--output)(?:=?([\s\S]+))?$/.exec(words[i]);
+      if (m) { const v = m[1] ? [m[1], m[1]] : i + 1 < words.length ? pair(++i) : null; if (v) ops.push({ op: "write", paths: [v] }); }
+    }
+    return ops;
+  }
+  if (p === "uniq" || p === "xxd") { const pos = shellOperands(words, k + 1, SHELL_TAKES.uniq).pos; if (pos.length >= 2) ops.push({ op: "write", paths: [pair(pos[1])] }); return ops; }
+  if (p === "git") {
+    let dir = null;
+    for (let i = k + 1; i < words.length && words[i].startsWith("-"); i++) if (words[i] === "-C" && i + 1 < words.length) dir = words[++i]; else if (GIT_VALUE_OPTIONS.has(words[i])) i++;
+    const targets = gitWriteTargets(words, k);
+    if (targets.length) ops.push({ op: "git", paths: targets.map((t) => [t, t]).concat(dir ? targets.map((t) => [dir + "/" + t, dir + "/" + t]) : []) });
+    return ops;
+  }
+  if (p === "find") return ops.concat(findFileOps(words, raw, k, pair));
+  if (!shellKnownProgram(p, words[k], raw[k], mode)) {
+    const args = [];
+    for (let i = k + 1; i < words.length; i++) {
+      const w = words[i].replace(/^-{1,2}[A-Za-z][\w-]*[=:]/, "");
+      if (w && !w.startsWith("-") && !/\s/.test(w)) args.push([w, String(raw[i] || w).replace(/^-{1,2}[A-Za-z][\w-]*[=:]/, "")]);
+    }
+    // its ( … ) argument list too (PowerShell: `New-Object IO.StreamWriter('.specs/roadmap.json')`)
+    if (words.openParen && nextSeg) for (const x of nextSeg.join(" ").split(",")) { const w = x.trim(); if (w && !/\s/.test(w)) args.push([w, w]); }
+    if (args.length) ops.push({ op: "unknown", paths: args });
+  }
+  return ops;
+}
+// A program the approval guard knows what it does with the files it names (a reader, a writer read above, a shell, a launcher, the CLI).
+function shellKnownProgram(p, word, rawWord, mode) {
+  return APPROVAL_TEXT_PROGRAMS.has(p) || APPROVAL_READERS.has(p) || APPROVAL_WRITERS_ANY.has(p) || APPROVAL_REMOVERS.has(p) || APPROVAL_MOVERS.has(p) ||
+    APPROVAL_WRITERS_TARGET.has(p) || APPROVAL_WRITERS_INPLACE.has(p) || APPROVAL_WRITERS_OTHER.has(p) || APPROVAL_SHELLS.has(p) ||
+    APPROVAL_WRAPPERS.has(p) || APPROVAL_STDIN_SHELLS.has(p) || PS_FILE_CMDLETS.has(p) || RE_PS_READER.test(p) || p === "source" || p === "." ||
+    p === "[[" || p === "]]" || isDevSpecWord(word) || isDevSpecWord(rawWord || "");
+}
+// tar: the mode (x — extract; c r u A — write the archive) and its value letters (f C T X K N g b F H L V, in the order they come) in the
+// first word (old style: `xzf b.tar`) or a -bundle; --extract / --get, --create …, -C / --directory, -f / --file. → its operations: the
+// extraction folder (into, archive) and the members named (replace); the archive written in a writing mode.
+function tarOps(words, k, pair) {
+  const ops = [], dirs = [], members = [];
+  let extract = false, create = false, archive = null;
+  const VAL = "fCTXKNgbFHLV";
+  for (let i = k + 1; i < words.length; i++) {
+    const w = words[i];
+    let m;
+    if ((m = /^--(extract|get|create|append|update|catenate|concatenate|directory|file)(?:=([\s\S]*))?$/.exec(w))) {
+      if (m[1] === "extract" || m[1] === "get") extract = true;
+      else if (m[1] === "directory" || m[1] === "file") { const v = m[2] !== undefined ? [m[2], m[2]] : i + 1 < words.length ? pair(++i) : null; if (v) (m[1] === "file" ? (archive = v) : dirs.push(v)); }
+      else create = true;
+      continue;
+    }
+    const bundle = /^-[A-Za-z]+$/.test(w) ? w.slice(1) : i === k + 1 && /^[A-Za-z]{1,8}$/.test(w) && /[xtcruA]/.test(w) ? w : null;
+    if (bundle) {
+      for (const c of bundle) {
+        if (c === "x") extract = true;
+        else if ("cruA".includes(c)) create = true;
+        if (VAL.includes(c) && i + 1 < words.length) { const v = pair(++i); if (c === "f") archive = v; else if (c === "C") dirs.push(v); }
+      }
+      continue;
+    }
+    if (w.startsWith("-")) continue;
+    members.push(pair(i));
+  }
+  if (extract) { if (dirs.length) ops.push({ op: "into", paths: dirs, archive: true }); if (members.length) ops.push({ op: "replace", paths: members }); }
+  if (create && archive) ops.push({ op: "write", paths: [archive] });
+  return ops;
+}
+// find: the starting points (before the expression) and its name tests; -delete, or -exec / -execdir / -ok a remover, a mover, a writer
+// or a shell → those paths (each start with each name, directly and deeper) are replaced / written; -fprint / -fls FILE writes FILE.
+function findFileOps(words, raw, k, pair) {
+  const ops = [];
+  let i = k + 1;
+  while (i < words.length && /^-(?:[HLP]|D|O\d*)$/.test(words[i])) i += words[i] === "-D" ? 2 : 1;
+  const starts = [];
+  for (; i < words.length && !/^[-(!,)]/.test(words[i]); i++) starts.push(words[i]);
+  const names = [];
+  let kind = null;
+  for (; i < words.length; i++) {
+    const w = words[i];
+    if (/^-i?(?:name|path|wholename)$/.test(w) && i + 1 < words.length) { names.push(words[++i]); continue; }
+    if (/^-(?:fprint0?|fls|fprintf)$/.test(w) && i + 1 < words.length) { ops.push({ op: "write", paths: [pair(++i)] }); if (w === "-fprintf") i++; continue; }
+    if (w === "-delete") { kind = "replace"; continue; }
+    if (/^-(?:exec|execdir|ok|okdir)$/.test(w)) {
+      let e = i + 1;
+      while (e < words.length && words[e] !== ";" && words[e] !== "+") e++;
+      const sub = words.slice(i + 1, e), subRaw = (raw || words).slice(i + 1, e);
+      const sk = programAt(sub, subRaw);
+      const sp = sk >= 0 ? approvalProgram(sub[sk]) : "";
+      if (APPROVAL_REMOVERS.has(sp) || APPROVAL_MOVERS.has(sp) || APPROVAL_SHELLS.has(sp)) kind = "replace";
+      else if (!kind && (APPROVAL_WRITERS_ANY.has(sp) || APPROVAL_WRITERS_INPLACE.has(sp) || APPROVAL_WRITERS_TARGET.has(sp) || APPROVAL_WRITERS_OTHER.has(sp))) kind = "write";
+      i = e;
+    }
+  }
+  if (!kind) return ops;
+  const paths = (starts.length ? starts : ["."]).flatMap((s) => (names.length ? names.flatMap((n) => [s + "/" + n, s + "/" + SHELL_ANY + "/" + n]) : [s]));
+  ops.push({ op: kind, paths: paths.map((t) => [t, t]) });
+  return ops;
+}
+// PowerShell's file cmdlets, read by their parameters (unique prefixes and aliases included): the paths they remove, write, move or
+// link to; a value given as a `( … )` expression is the next simple command — Join-Path is read, any other one is unknown.
+function psFileOps(p, words, raw, k, nextSeg, piped) {
+  const ops = [];
+  const { named, pos } = psParams(words, k + 1);
+  const split = (pr) => { const a = String(pr[0]).split(","), b = String(pr[1]).split(","); return a.map((x, j) => [x.trim(), (b.length === a.length ? b[j] : x).trim()]).filter((x) => x[0]); };
+  const exprPath = () => {
+    if (!nextSeg) return [];
+    const nk = programAt(nextSeg, nextSeg.raw || nextSeg);
+    if (nk >= 0 && approvalProgram(nextSeg[nk]) === "join-path") {
+      const parts = nextSeg.slice(nk + 1).filter((w) => !/^-/.test(w));
+      return parts.length ? [[parts.join("/"), parts.join("/")]] : [];
+    }
+    ops.push({ op: "unknown", paths: nextSeg.filter((w) => !/^-/.test(w) && !/\s/.test(w)).map((w) => [w, w]) });
+    return [];
+  };
+  const get = (...names) => {
+    const out = [];
+    for (const [k2, v] of Object.entries(named)) {
+      if (!names.some((n) => n === k2 || (k2.length >= 3 && n.startsWith(k2)))) continue;
+      if (v.i !== undefined) out.push(...split([words[v.i], (raw && raw[v.i]) || words[v.i]]));
+      else if (v.text !== undefined) out.push(...split([v.text, v.text]));
+      else if (v.missing) out.push(...exprPath());
+    }
+    return out;
+  };
+  const at = (j) => (pos[j] !== undefined ? split([words[pos[j]], (raw && raw[pos[j]]) || words[pos[j]]]) : []);
+  const path0 = get("path", "literalpath", "lp", "pspath", "filepath", "fullname").concat(at(0));
+  if (p === "remove-item") { if (path0.length) ops.push({ op: "replace", paths: path0 }); else piped("replace"); }
+  else if (["set-content", "add-content", "clear-content", "out-file", "tee-object", "export-csv", "export-clixml"].includes(p)) {
+    if (path0.length) ops.push({ op: "write", paths: path0 }); else piped("write");
+  } else if (p === "new-item") {
+    const names = get("name");
+    let items = path0.length ? path0 : names.length ? [[".", "."]] : [];
+    if (names.length) items = items.flatMap((d) => names.map((n) => [d[0] + "/" + n[0], d[1] + "/" + n[1]]));
+    if (items.length) ops.push({ op: "write", paths: items });
+    if (/symbolic|junction|hard/i.test(get("itemtype", "type").map((x) => x[0]).join(" "))) { const t = get("value", "target"); if (t.length) ops.push({ op: "link", paths: t }); }
+  } else if (p === "copy-item" || p === "move-item") {
+    const dest = get("destination").concat(at(1));
+    const recursive = p === "move-item" || Object.keys(named).some((n) => n === "r" || (n.length >= 3 && "recurse".startsWith(n)));
+    if (p === "move-item") { if (path0.length) ops.push({ op: "replace", paths: path0 }); else piped("replace"); }
+    if (dest.length) ops.push({ op: "write", paths: dest }, { op: "into", paths: dest, sources: path0.length ? path0 : [["*", "*"]], recursive });
+  } else if (p === "rename-item") {
+    const nn = get("newname").concat(at(1));
+    if (path0.length) ops.push({ op: "replace", paths: path0 }); else piped("replace");
+    for (const src of path0.length ? path0 : [["", ""]]) {
+      const d0 = String(src[0]).replace(/[^\\/]*$/, ""), d1 = String(src[1]).replace(/[^\\/]*$/, "");
+      for (const n of nn) ops.push({ op: "write", paths: [[d0 + n[0], d1 + n[1]]] });
+    }
+  } else if (p === "expand-archive") {
+    const d = get("destinationpath").concat(at(1));
+    if (d.length) ops.push({ op: "into", paths: d, archive: true });
+  }
+  return ops;
+}
+// [IO.File]:: / [IO.Directory]:: methods (PowerShell): their arguments are the next simple command (`('.specs/roadmap.json', '{}')`).
+function netFileOps(m, nextSeg) {
+  const args = nextSeg ? nextSeg.join(" ").split(",").map((x) => x.trim()).filter(Boolean).map((x) => [x, x]) : [];
+  const kind = m[1].toLowerCase(), meth = m[2].toLowerCase();
+  if (!args.length) return [];
+  if (meth === "delete") return [{ op: "replace", paths: [args[0]] }];
+  if (meth === "move") return [{ op: "replace", paths: [args[0]] }].concat(args[1] ? [{ op: "write", paths: [args[1]] }, { op: "into", paths: [args[1]], sources: [args[0]], recursive: true }] : []);
+  if (meth === "copy") return args[1] ? [{ op: "write", paths: [args[1]] }] : [];
+  if (meth === "replace") return [{ op: "replace", paths: [args[0]] }].concat(args[1] ? [{ op: "write", paths: args.slice(1, 3) }] : []);
+  if (meth === "createsymboliclink") return [{ op: "write", paths: [args[0]] }].concat(args[1] ? [{ op: "link", paths: [args[1]] }] : []);
+  if (/^(?:write|append|create|open|set|encrypt|decrypt)/.test(meth) && kind === "file") return [{ op: "write", paths: [args[0]] }];
+  if (/^(?:read|exists|get|enumerate)/.test(meth)) return [];
+  return [{ op: "unknown", paths: args }];
+}
+// One file operation → the approval guard's actions ([] = none): a guarded file written, removed, replaced or received (its setting —
+// roadmap, state, observed), .specs/ itself removed or moved away (roadmap), any other glob / folder / variable write or removal that may
+// reach them (setting "specs"), a link made to .specs/ or under it ("link"), an unknown program run on them (unreadable "specs-arg").
+// What stays allowed: reading, writing a spec document (no guarded name), anything inside an .execution/ folder but the observed log,
+// a lock file.
+const shellDown = (setting, extra) => Object.assign({ kind: "guard-down", setting, source: "shell" }, extra || {});
+const shellHit = (h) => shellDown(h.setting, h.setting === "roadmap" ? {} : { feature: h.feature || null });
+function shellOpActions(o, mode, ctx) {
+  const out = [];
+  if (o.op === "piped") {
+    for (const t of shellProducedPaths(o.producer)) out.push(...shellOpActions({ op: o.kind, paths: [[t, t]] }, mode, ctx));
+    return out;
+  }
+  for (const pr of o.paths || []) {
+    for (const f of [...new Set(pr)].flatMap((t) => shellPathReadings(t, mode, ctx))) {
+      if (o.op === "write") {
+        if (f.guarded) out.push(shellHit(f.guarded));
+        else if (f.may) out.push(shellDown("specs"));
+      } else if (o.op === "replace" || o.op === "git") {
+        const h = f.guarded || (o.op === "git" && !f.wild ? approvalGuardedDir(f.text) : null);
+        if (h) out.push(shellHit(h));
+        else if (f.dir && !f.wild) out.push(shellDown("roadmap"));
+        else if (f.specs >= 0 && !f.execution && !f.lock && (f.may || f.folder || f.dir)) out.push(shellDown("specs"));
+      } else if (o.op === "into") {
+        // (a destination that reads as a file — an extension, no glob — is the write above, not a folder receiving files)
+        if ((f.specs < 0 && !f.dir) || f.execution || (!f.folder && !f.wild && !/[\\/]$/.test(pr[0]))) continue;
+        if (o.archive) { out.push(shellDown("specs")); continue; }
+        for (const sp of o.sources || []) {
+          const base = shellVarText(sp[0], ctx && ctx.vars).replace(/[\\/]+$/, "");
+          const names = [base.replace(/^[\s\S]*[\\/]/, "") || "*"];
+          if (o.contents && shellPathFacts(base, mode).folder) names.push("*"); // xcopy / robocopy / rsync copy a folder's CONTENTS
+          for (const name of names) {
+            for (const sf of shellPathReadings(f.text + "/" + name, mode, null)) {
+              if (sf.guarded) out.push(shellHit(sf.guarded));
+              else if (sf.may || (o.recursive && sf.folder)) out.push(shellDown("specs"));
+            }
+          }
+        }
+      } else if (o.op === "link") {
+        if (f.guarded || f.specs >= 0) out.push(shellDown("link"));
+      } else if (o.op === "unknown") {
+        if (f.guarded || f.dir || f.may || (!f.wild && f.name)) out.push({ kind: "unreadable", why: "specs-arg", source: "shell" });
+      }
+    }
+  }
+  return out;
+}
+// The paths of an operation that a code edit is (the edit guard — shellWriteTargets): written, replaced, received (the sources' names
+// in the folder). Variables put in; one standing first ($TMP/x.ts) — anywhere — is left out. git's restores are not read here: the edit
+// guard leaves git to the user (`git checkout -- src/a.ts`, a stash, a merge — no prompt on git).
+function shellOpPaths(o, mode, ctx) {
+  if (!["write", "replace", "into"].includes(o.op)) return [];
+  const out = [];
+  const read = (t) => {
+    for (const a of mode === "bash" ? braceExpand(shellVarText(t, ctx && ctx.vars)) : [shellVarText(t, ctx && ctx.vars)]) {
+      if (!a || a.startsWith(SHELL_VAR) || /^(?:\/dev\/|\$null$|nul$|con$)/i.test(a)) continue;
+      const h = (/^~(?=$|[\\/])/.test(a) ? os.homedir() + a.slice(1) : a).split(SHELL_VAR).join("_").split(SHELL_ANY).join("_");
+      out.push(h);
+      if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:)/.test(h)) out.push(ctx.cwd + "/" + h);
+    }
+  };
+  for (const pr of o.paths || []) {
+    if (o.op !== "into") { read(pr[0]); continue; }
+    for (const sp of o.sources || []) { const name = String(sp[0]).replace(/[\\/]+$/, "").replace(/^[\s\S]*[\\/]/, ""); if (name && !/[*?]/.test(name)) read(String(pr[0]).replace(/[\\/]+$/, "") + "/" + name); }
+  }
+  return out;
 }
 const approvalStr = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const approvalTruthy = (v) => v === true || (typeof v === "string" && !/^(?:false|0|no|off)$/i.test(v.trim()));
@@ -1019,28 +1645,45 @@ function cliApprovalAction(args, level, meta) {
 // 'cli/dev-spec.js','approve',…` (startProcessLine), `find … -exec node cli/dev-spec.js approve … ;` (findExecActions), and the
 // wrappers winpty / flock (+ `flock … -c "…"`, `script -c "…"`) — all allowed at deny before. One simple command's nested
 // actions are deduplicated (a quoted script is read both as a word and as the joined rest).
-function shellApprovalActions(command, level, depth, mode, meta) {
+// 1.25.1 (review 7): ctx — { vars, cwd } — carries what the command set before each simple command (a variable assigned, a `cd`) into
+// the reading of its paths, and `collect` (shellWriteTargets — the edit guard) receives every file operation, nested scripts included
+// (read whatever they name). Text fed to a shell as its script (a pipe, a process substitution, xargs → sh -c) is read as that shell's
+// script when it is visible, else it is unreadable (why "fed": ask). PowerShell's `node <cli> @('approve', …)`: the array's elements.
+function shellApprovalActions(command, level, depth, mode, meta, ctx) {
   const out = [];
   const segs = shellCommandWords(command, mode);
   const namesCli = /dev-?spec/i.test(approvalPlain(command));
+  const c = ctx || { vars: Object.create(null), cwd: "" };
+  const want = (script) => !!script && (c.collect ? true : approvalCandidate(script));
   segs.forEach((words, si) => {
     const raw = words.raw || words;
+    shellTrack(words, raw, mode, c);
     const at = devSpecWordAt(words, raw);
-    if (at >= 0) out.push(...cliApprovalAction(words.slice(at + 1), level, meta));
+    if (at >= 0) {
+      let args = words.slice(at + 1);
+      if (mode === "ps" && args.length && args[args.length - 1] === "@" && segs[si + 1]) {
+        args = args.slice(0, -1).concat(segs[si + 1].join(" ").split(",").map((x) => x.trim()).filter(Boolean));
+      }
+      out.push(...cliApprovalAction(args, level, meta));
+    }
     // 1.23 review 5 (L20): the CLI fed to a JavaScript runtime on stdin — `cat cli/dev-spec.js | node - approve …`,
     // `node - approve … < cli/dev-spec.js` — when the command names the CLI somewhere.
     const sa = at < 0 && namesCli ? stdinScriptAt(words, raw) : -1;
     if (sa >= 0) out.push(...cliApprovalAction(words.slice(sa + 1), level, meta));
-    out.push(...specsWriteActions(words, raw));
+    if (c.collect) for (const o of shellSegOps(words, raw, mode, segs[si + 1])) c.collect(o, mode, c);
+    else out.push(...specsWriteActions(words, raw, c, mode, segs[si + 1]));
     if (depth >= APPROVAL_SHELL_DEPTH) return;
     const nested = [], seen = new Set();
     const add = (acts) => { for (const a of acts) { const k = JSON.stringify(a); if (!seen.has(k)) { seen.add(k); nested.push(a); } } };
-    const lex = (script, m) => { if (script && approvalCandidate(script)) add(shellApprovalActions(script, level, depth + 1, m, meta)); };
+    const lex = (script, m) => { if (want(script)) add(shellApprovalActions(script, level, depth + 1, m, meta, c)); };
+    const fed = shellFedScript(words, raw);
+    if (fed && fed.script != null) lex(fed.script, fed.mode);
+    else if (fed && fed.unknown && !c.collect) add([{ kind: "unreadable", why: "fed", source: "shell" }]);
     const end = at >= 0 ? at : words.length;
     const prog = at >= 0 ? -1 : programAt(words, raw);
     let shell = null, posix = false;
     for (let j = 0; j < end; j++) {
-      if (shell && /\s/.test(words[j]) && approvalCandidate(words[j])) add(shellApprovalActions(words[j], level, depth + 1, shell, meta));
+      if (shell && /\s/.test(words[j]) && want(words[j])) add(shellApprovalActions(words[j], level, depth + 1, shell, meta, c));
       // 1.23 review 5 (L20): `sh -c 'node "$0" approve x tasks' cli/dev-spec.js` — a POSIX shell's -c script with its positional
       // parameters ($0 … $9, "$@", $*) taken from the words after it, then read as a script.
       if (posix && words[j] === "-c" && j + 1 < end && /\$(?:[0-9@*]|\{[0-9@*]\})/.test(words[j + 1])) lex(withPositionals(words[j + 1], raw.slice(j + 2, end)), "bash");
@@ -1055,10 +1698,138 @@ function shellApprovalActions(command, level, depth, mode, meta) {
       if (APPROVAL_START_PROCESS.has(p) && (p !== "start" || mode === "ps")) lex(startProcessLine(words, raw, j, segs[si + 1]), "cmd");
     }
     add(findExecActions(words, raw, level, meta));
-    if (words.stdinShell) for (const h of words.herestrings || []) if (approvalCandidate(h)) add(shellApprovalActions(h, level, depth + 1, words.stdinShell, meta));
+    if (words.stdinShell) for (const h of words.herestrings || []) if (want(h)) add(shellApprovalActions(h, level, depth + 1, words.stdinShell, meta, c));
     out.push(...nested);
   });
   return out;
+}
+// What a simple command sets for the ones after it (ctx): a variable (`D=.specs`, `export D=…`, `set D=…` — cmd.exe, `$d = '.specs'` —
+// PowerShell; its value with the variables known so far put in) and the folder a `cd` / `pushd` / `Set-Location` moves to (relative to
+// the previous one; `cd` alone, `cd -`, `popd`: forgotten). Text only, nothing evaluated.
+function shellTrack(words, raw, mode, ctx) {
+  if (!ctx || !words.length) return;
+  const set = (name, value) => { ctx.vars[String(name).replace(/^env:/i, "").toLowerCase()] = shellVarText(String(value), ctx.vars); };
+  let m;
+  if (mode === "ps") {
+    if ((m = /^\$([A-Za-z_][\w:]*)=([\s\S]*)$/.exec(words[0]))) set(m[1], m[2] !== "" ? m[2] : words[1] || "");
+    else if ((m = /^\$([A-Za-z_][\w:]*)$/.exec(words[0])) && words[1] === "=") set(m[1], words[2] || "");
+  } else {
+    const lead = /^(?:export|declare|local|readonly|typeset|set)$/i.test(words[0]) ? 1 : 0;
+    if (lead || /^[A-Za-z_]\w*=/.test(words[0])) for (const w of words.slice(lead)) if ((m = /^([A-Za-z_]\w*)=([\s\S]*)$/.exec(w))) set(m[1], m[2]);
+  }
+  const k = programAt(words, raw);
+  const p = k >= 0 ? approvalProgram(words[k]) : "";
+  if (/^(?:popd|pop-location)$/.test(p)) { ctx.cwd = ""; return; }
+  if (!/^(?:cd|chdir|pushd|sl|set-location|push-location)$/.test(p)) return;
+  const t = words.slice(k + 1).find((w) => !/^-[A-Za-z]|^\/d$/i.test(w)); // past cmd's /d, PowerShell's -Path / -LiteralPath
+  const dir = t === undefined ? "" : shellVarText(t, ctx.vars);
+  if (!dir || dir === "-" || /^~/.test(dir) || dir.includes(SHELL_VAR)) { ctx.cwd = ""; return; }
+  ctx.cwd = /^(?:[\\/]|[A-Za-z]:)/.test(dir) || !ctx.cwd ? dir : ctx.cwd + "/" + dir;
+}
+// Text fed to a shell as its script (1.25.1, review 7) — the simple command is a shell with no script of its own reading stdin (bash /
+// sh -s / no operand, cmd without /c, pwsh / powershell without -Command / -File or with `-Command -`, `iex` / Invoke-Expression without
+// an argument, xargs feeding `sh -c` its script) or `source` / `.` / a shell running a process substitution (`bash <(…)`). → { script,
+// mode } when the text is visible (piped from echo / printf / Write-Output / a PowerShell string / a heredoc to cat, or such a process
+// substitution), { unknown: true } when it isn't (`cat x | bash`, `curl … | sh`, `bash < file`), null when nothing is fed.
+function shellFedScript(words, raw) {
+  const k = programAt(words, raw);
+  if (k < 0) return null;
+  const p = approvalProgram(words[k]);
+  const procs = words.procs || [];
+  const mode = p === "cmd" ? "cmd" : /^(?:pwsh|powershell|iex|invoke-expression)$/.test(p) ? "ps" : "bash";
+  const fromProc = (pr) => { const t = shellProcText(pr.text); return t == null ? { unknown: true } : { script: t, mode }; };
+  if (p === "source" || p === ".") {
+    const pr = procs.find((x) => x.at === k + 1 && !x.out);
+    if (pr) return fromProc(pr);
+    if (!/^(?:\/dev\/stdin|-|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/.test(words[k + 1] || "")) return null;
+  } else if (APPROVAL_POSIX_SHELLS.has(p) || p === "fish") {
+    let operand = -1, cAt = -1, sFlag = false, dash = false;
+    for (let i = k + 1; i < words.length; i++) {
+      const w = words[i];
+      if (w === "-") { dash = true; break; }
+      if (w === "--") { operand = i + 1 < words.length ? i + 1 : -1; break; }
+      if (/^-[A-Za-z]+$/.test(w)) { if (w.includes("c")) { cAt = i; break; } if (w.includes("s")) sFlag = true; continue; }
+      if (/^[-+]o$/.test(w) || w === "--rcfile" || w === "--init-file") { i++; continue; }
+      if (/^(?:--|\+)/.test(w)) continue;
+      operand = i;
+      break;
+    }
+    if (cAt >= 0) {
+      // xargs / parallel hand `sh -c` its script: the -c ends the command, or its script is the replace string ({} — or -I's)
+      const under = words.slice(0, k).some((w) => /^(?:xargs|parallel)$/.test(approvalProgram(w)));
+      const script = words[cAt + 1];
+      const repl = words.slice(0, k).map((w, i, a) => (/^-(?:I|i|-replace)$/.test(a[i - 1] || "") ? w : null)).filter(Boolean);
+      if (!under || (script !== undefined && !/\{\}/.test(script) && !repl.some((r) => script.includes(r)))) return null;
+    } else if (!dash && !sFlag && operand >= 0) {
+      const pr = procs.find((x) => x.at === operand && !x.out);
+      return pr ? fromProc(pr) : null; // a script file
+    }
+  } else if (p === "cmd") {
+    if (restScript(words, raw, k, "cmd")) return null;
+  } else if (p === "pwsh" || p === "powershell") {
+    const r = restScript(words, raw, k, p);
+    if (r && r.script.trim() !== "-") return null;
+    if (!r) {
+      for (let i = k + 1; i < words.length; i++) {
+        const w = words[i];
+        if (!/^[-/]/.test(w)) return null; // pwsh's positional is -File
+        const o = pwshOption(w);
+        if (o === "file") { if (words[i + 1] !== "-") return null; break; }
+        if (o === "value") i++;
+      }
+    }
+  } else if (p === "iex" || p === "invoke-expression") {
+    if (words.length > k + 1) return null; // a script argument: read as the shell's word
+  } else return null;
+  const pr = procs.find((x) => x.stdin);
+  if (pr) return fromProc(pr);
+  if ((words.docs || []).length || (words.herestrings || []).length) return null; // a heredoc / here-string: read where the lexer meets it
+  if (words.pipeFrom) { const t = shellProducedText(words.pipeFrom); return t == null ? { unknown: true } : { script: t, mode }; }
+  return words.stdinRedir ? { unknown: true } : null;
+}
+// The text a simple command prints, when it can be read from the command itself — echo / print / Write-Output / write (its words;
+// escapes read as `echo -e` would), printf (its format with the arguments put in), cat (or nothing) with a heredoc / here-string, a
+// PowerShell string expression ('…', '…' + '…') — else null.
+function shellProducedText(seg) {
+  const words = seg, raw = seg.raw || seg;
+  const k = programAt(words, raw);
+  const docs = (seg.docs || []).map((h) => h.body).filter((b) => typeof b === "string").concat(seg.herestrings || []);
+  const p = k >= 0 ? approvalProgram(words[k]) : "";
+  const unesc = (t) => t.replace(/\\(n|t|r|\\)/g, (m, e) => ({ n: "\n", t: "\t", r: "\r", "\\": "\\" })[e]);
+  if (docs.length && (k < 0 || (p === "cat" && words.slice(k + 1).every((w) => w === "-")))) return docs.join("\n");
+  if (k < 0) return null;
+  if (k === 0 && (/\s/.test(words[0]) || words[1] === "+")) return words.filter((w) => w !== "+").join(words[1] === "+" ? "" : " "); // a PowerShell string
+  if (/^(?:echo|echo\.|print|write-output|write)$/.test(p)) {
+    let i = k + 1;
+    while (i < words.length && /^-[neE]+$/.test(words[i])) i++;
+    return unesc(words.slice(i).join(" "));
+  }
+  if (p === "printf") {
+    const args = words.slice(k + 1);
+    if (args[0] === "--") args.shift();
+    if (args[0] === "-v") return null; // printf -v VAR: prints nothing
+    const fmt = args.shift() || "";
+    const text = fmt.replace(/%(?:[-+ #0]*\d*(?:\.\d+)?)([sbqdiouxXcfeEgG%])/g, (m, c) => (c === "%" ? "%" : args.length ? args.shift() : ""));
+    return unesc(text) + (args.length ? " " + args.join(" ") : "");
+  }
+  return null;
+}
+// A process substitution's text → the text it prints (every simple command in it prints visible text — shellProducedText), or null.
+function shellProcText(text) {
+  const segs = shellCommandWords(text, "bash");
+  if (!segs.length) return "";
+  const parts = segs.map(shellProducedText);
+  return parts.some((x) => x == null) ? null : parts.join("\n");
+}
+// 1.25.1 (review 7) — the edit guard on the shell (hooks/guard-hook.js, Bash / PowerShell / Monitor): the files a command writes, removes,
+// replaces or copies into (shellSegOps — the approval guard's own reader; nested scripts read too), as it names them (relative to its
+// cwd — and, after a `cd` in the command, to that folder too), `~` expanded; a path that starts with an unknown variable is left out
+// ($TMP/x.ts). Bounded: 64 paths. guardCheck decides which are code.
+function shellWriteTargets(command, mode) {
+  const out = [];
+  const ctx = { vars: Object.create(null), cwd: "", collect: (o, m, c) => { for (const p of shellOpPaths(o, m, c)) if (out.length < 64) out.push(p); } };
+  shellApprovalActions(String(command == null ? "" : command).slice(0, APPROVAL_COMMAND_MAX), "deny", 0, mode === "ps" ? "ps" : "bash", {}, ctx);
+  return [...new Set(out)];
 }
 // A word of a joined script: one holding whitespace is quoted again ("C:\My Tools\cli\dev-spec.js"), so the script keeps its words.
 const joinScriptWords = (list) => list.map((w) => (/\s/.test(w) && !w.includes('"') ? '"' + w + '"' : w)).join(" ");
@@ -1209,7 +1980,7 @@ function approvalCommand(a, cli) {
   else if (a.kind === "guard-down") {
     // a write / edit of the file itself (1.24: or of the harness-observed log — evidence is recorded by the harness, never by hand):
     // the user makes it
-    if (a.setting === "roadmap" || a.setting === "state" || a.setting === "observed") return null;
+    if (a.setting === "roadmap" || a.setting === "state" || a.setting === "observed" || a.setting === "specs" || a.setting === "link") return null;
     if (a.setting === "track") words.push("add-track", name(a.feature), ...(Array.isArray(a.tracks) ? a.tracks : []).map((t) => word(t, "<track>")), "--remove");
     else if (a.setting === "evidence") words.push("init", "--evidence", "reported");
     else if (a.setting === "stopCheck") words.push("init", "--stop-check", "off");
@@ -1277,17 +2048,17 @@ function approvalGuardDecision(payload, level, opts = {}) {
       // know, a string built by concatenation, a glob, a variable) — the user is asked instead of the call being allowed.
       if (!actions.length && approvalUnparsed(head, mode)) actions = [{ kind: "unreadable", why: "unparsed", source: "shell" }];
     }
-  } else if (APPROVAL_EDIT_TOOLS.has(tool) && typeof ti.file_path === "string") {
+  } else if (APPROVAL_EDIT_TOOLS.has(tool) && (typeof ti.file_path === "string" || typeof ti.notebook_path === "string")) {
     // 1.23 review 5: a hand edit of .specs/roadmap.json or of a feature's .state.json (its approvals, evidence, history); 1.24 review 6:
-    // of a harness-observed log (C6), the path read as the file system reads it — `./`, `..`, a stream, an 8.3 short name (C5).
-    for (const t of approvalEditTargets(ti.file_path, payload.cwd)) {
-      const h = approvalGuardedFile(t);
-      if (!h) continue;
-      actions = [Object.assign({ kind: "guard-down", setting: h.setting, source: "edit" }, h.setting === "roadmap" ? {} : { feature: h.feature || null },
-        { project: approvalSpecsProject(t) })];
-      break;
-    }
+    // of a harness-observed log (C6), the path read as the file system reads it — `./`, `..`, a stream, an 8.3 short name (C5) — and
+    // (1.25.1) through a link to .specs/ (the real path of its folder).
+    actions = approvalEditActions([typeof ti.file_path === "string" ? ti.file_path : ti.notebook_path], payload.cwd, false);
+  } else if (RE_MCP_FILE_TOOL.test(tool) && !RE_DEVSPEC_MCP_TOOL.test(tool)) {
+    // 1.25.1 (review 7): another MCP server's file tool — each path-like argument read as an Edit's path; a move / rename / delete of
+    // .specs/ itself, of a folder or a glob under it, too
+    actions = approvalEditActions(approvalPathArgs(ti, opts.uriPath), payload.cwd, /(?:move|rename|delete|remove|unlink)/i.test(tool.replace(/^mcp__.+__/, "")));
   }
+  if (opts.projectUnreadable === true && actions.length) actions.push({ kind: "unreadable", why: "project", source: "mcp" });
   if (!actions.length) return allow("not-an-approval", { tool });
   if (typeof opts.resolveFeature === "function") {
     actions = actions.map((a) => {
@@ -1312,7 +2083,8 @@ function approvalGuardDecision(payload, level, opts = {}) {
   const command = commands.length ? (plain ? "" : "! ") + commands.join(" && ") : null;
   // summary (1.21 F1b): the actions as one localized line — what the MCP server's elicitation asks the user about.
   // A command the guard could not follow (why: "unparsed") is never refused outright — it may be no approval at all: ask.
-  const decision = actions.every((a) => a.kind === "unreadable" && (a.why === "unparsed" || a.why === "partial")) ? "ask" : lvl;
+  // (1.25.1: a script fed to a shell out of sight, an unknown program run on .specs/ files, the hook's own failure — the same)
+  const decision = actions.every((a) => a.kind === "unreadable" && APPROVAL_ASK_WHYS.includes(a.why)) ? "ask" : lvl;
   const res = { decision, why: "approval", level: lvl, tool, actions, force, command, summary: text,
     reason: decision === "deny" ? (plain ? A.denyMcp(text, command) : A.deny(text, command)) : A.ask(text, force) };
   if (decision === "deny") res.userNote = A.denyUser(text, command);
@@ -1322,6 +2094,39 @@ function approvalGuardDecision(payload, level, opts = {}) {
 function approvalSpecsProject(fp) {
   const m = /^(.*?)[\\/]*\.specs[\\/]/i.exec(String(fp));
   return m && m[1] ? m[1] : null;
+}
+// Edited paths (a Write / Edit / NotebookEdit target, an MCP file tool's path arguments) → the guard-down actions: the first one that is
+// .specs/roadmap.json, a .state.json or an observed log (as the file system reads it — approvalEditTargets); with `whole` (a move /
+// rename / delete tool) also .specs/ itself, a folder or a glob under it (not an .execution/ folder, a lock).
+function approvalEditActions(paths, cwd, whole) {
+  for (const p of paths) {
+    for (const t of approvalEditTargets(p, cwd)) {
+      const h = approvalGuardedFile(t);
+      if (h) return [Object.assign({ kind: "guard-down", setting: h.setting, source: "edit" }, h.setting === "roadmap" ? {} : { feature: h.feature || null }, { project: approvalSpecsProject(t) })];
+      if (!whole) continue;
+      const f = shellPathFacts(t, "ps");
+      if ((f.dir || (f.specs >= 0 && (f.folder || f.may))) && !f.execution && !f.lock) return [{ kind: "guard-down", setting: "specs", source: "edit", project: approvalSpecsProject(t + "/") }];
+    }
+  }
+  return [];
+}
+// An MCP tool's arguments → the strings that may be paths: the values (strings, or arrays / objects of them, 3 levels deep) of keys
+// named like one (path, file, source, destination, target, from, to, dir…), one line each, at most 32; a file:// URI read as its path
+// (uriPath — hook-utils.js fileUriToPath, the hook's and the MCP server's one reading).
+function approvalPathArgs(ti, uriPath) {
+  const out = [];
+  const walk = (v, keyed, depth) => {
+    if (out.length >= 32 || depth > 3) return;
+    if (typeof v === "string") {
+      if (!keyed || !v.trim() || v.length > 4096 || /[\r\n]/.test(v)) return;
+      const s = v.trim();
+      const u = /^file:\/\//i.test(s) && typeof uriPath === "function" ? uriPath(s) : null;
+      out.push(u || s);
+    } else if (Array.isArray(v)) v.forEach((x) => walk(x, keyed, depth + 1));
+    else if (isObj(v)) for (const [k, x] of Object.entries(v)) walk(x, keyed || RE_MCP_PATH_KEY.test(k), depth + 1);
+  };
+  walk(ti, false, 0);
+  return out;
 }
 // 1.23 review 5 (fail closed) — a shell command that names the CLI (dev-spec, a glob that may be it, a string joined from pieces)
 // together with an approval word, in a simple command whose program is no text-only program (echo, git, grep, cat…), or a
@@ -1341,9 +2146,34 @@ function cliSubcommandUnread(words, at, mode) {
   }
   const sub = words[i];
   if (sub === undefined) return mode === "ps" || words.slice(0, at).some((w) => /^(?:xargs|parallel)$/.test(approvalProgram(w)));
-  return sub === "" || RE_APPROVAL_VAR_WORD.test(sub) || /^\$(?:[@*#?!0-9]|\{[@*#0-9])/.test(sub) || /\$\(|`/.test(sub) || (mode === "ps" && /^@[A-Za-z_]/.test(sub));
+  return sub === "" || RE_APPROVAL_VAR_WORD.test(sub) || /^\$(?:[@*#?!0-9]|\{[@*#0-9])/.test(sub) || /\$\(|`/.test(sub) || (mode === "ps" && /^@(?:[A-Za-z_]|$)/.test(sub));
+}
+// 1.25.1 (review 7): in Bash the CLI's subcommand word is a glob or a brace expansion (`{approve,}`, `appro?e`, `app[r]ove`,
+// `appro{v,}e`) that may expand to a subcommand the guard stands on — the shell expands it (a glob, when a file of that name exists),
+// the guard can't know to what: unreadable, whatever approval word the text holds.
+const CLI_GUARDED_COMMANDS = ["approve", "feature", "init", "add-track", "merge-state"];
+function cliSubcommandGlob(words, at) {
+  let i = at + 1;
+  for (; i < words.length; i++) {
+    const m = /^--([A-Za-z][\w-]*)(=[\s\S]*)?$/.exec(words[i]);
+    if (!m) break;
+    if (m[2] === undefined && !CLI_SWITCHES.has(m[1].toLowerCase()) && i + 1 < words.length) i++;
+  }
+  const sub = words[i];
+  if (typeof sub !== "string" || !/[*?[{]/.test(sub)) return false;
+  return braceExpand(sub).some((x) => {
+    if (!/[*?[]/.test(x)) return CLI_GUARDED_COMMANDS.includes(x.toLowerCase());
+    const re = shellGlobRe(x, "bash");
+    return !re || CLI_GUARDED_COMMANDS.some((c) => re.test(c));
+  });
 }
 function approvalUnparsed(command, mode) {
+  if (mode === "bash") {
+    for (const words of shellCommandWords(command, mode)) {
+      const at = devSpecWordAt(words, words.raw || words);
+      if (at >= 0 && cliSubcommandGlob(words, at)) return true;
+    }
+  }
   const plain = approvalPlain(command);
   // the approval word in the plain text — a ${X:-approve} / ${X:=…} default too — or in the raw text (`printf 'approve\nalpha'`)
   if (!RE_APPROVAL_VERB.test(plain.replace(/:[-=+?]/g, " ")) && !RE_APPROVAL_VERB.test(String(command))) return false;
@@ -1991,4 +2821,11 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, RE
   decodePwshEncoded, approvalSpecsProject, approvalUnparsed, guardTargetPath, SESSION_MAX_UP, sessionUsable, sessionSame, sessionSpecs,
   gitCheckoutOf, worktreeProject, sessionProject, sessionPath, stopReportFile, reportCommandSpans, readStopReport,
   RE_OBSERVED_FILE, APPROVAL_GATED_TRACKS, approvalGatedTracks, approvalPathText, approvalGuardedFile, approvalGuardedDir, GIT_VALUE_OPTIONS,
-  gitWriteTargets, approvalEditTargets, RE_PS_STOP_AFTER_CLI, cliSubcommandUnread, __link };
+  gitWriteTargets, approvalEditTargets, RE_PS_STOP_AFTER_CLI, cliSubcommandUnread,
+  // 1.25.1 (review 7): the shell's file operations, fed scripts, MCP file tools, the edit guard on the shell
+  APPROVAL_WRITERS_OTHER, APPROVAL_READERS, RE_PS_READER, RE_APPROVAL_DOT_GLOB, RE_APPROVAL_WRITE_WORD, RE_MCP_FILE_TOOL, RE_DEVSPEC_MCP_TOOL,
+  RE_MCP_PATH_KEY, APPROVAL_ASK_WHYS, approvalRoadmapGone, SHELL_VAR, SHELL_ANY, GUARDED_NAMES, shellVarText, braceExpand, shellGlobRe,
+  shellSegCould, shellPathFacts, shellPathReadings, shellOperands, SHELL_TAKES, PS_FILE_ALIASES, PS_FILE_CMDLETS, PS_SWITCHES, psParams,
+  shellProducedPaths, shellSegOps, shellKnownProgram, tarOps, findFileOps, psFileOps, netFileOps, shellOpActions, shellOpPaths, shellTrack,
+  shellFedScript, shellProducedText, shellProcText, shellWriteTargets, CLI_GUARDED_COMMANDS, cliSubcommandGlob, approvalEditActions,
+  approvalPathArgs, __link };
