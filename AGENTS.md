@@ -94,6 +94,7 @@ dev-spec catalog [--write]                     # living catalog of every feature
 dev-spec export [feature] [--md|--csv] [--write]   # one offline, printable document (HTML / markdown) for stakeholders, or the traceability matrix as CSV → .specs/exports/
 dev-spec export [feature] --gherkin [--write]  # BDD: one Gherkin .feature per feature — a scenario per current AC, its EARS clauses as Given / When / Then
 dev-spec export [feature] --tracker jira|linear [--write]   # a CSV for Jira's / Linear's importer (feature → stories → tasks; nothing is sent)
+dev-spec export [feature] --adr [--write]      # the decision log as ADRs: one MADR file per decision (ADR number = its D-n) → .specs/exports/adr/<feature>/
 dev-spec changelog [--since <date|last|all>] [--milestone <name>] [--write]   # release notes from the specs (Added / Changed / Fixed) → .specs/RELEASE-NOTES.md
 dev-spec drift [feature]                       # implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)
 dev-spec upgrade [--apply]                     # after updating dev-spec-driven: audit .specs/ against the new rules (read-only); --apply = the safe migrations + .specs/UPGRADE.md

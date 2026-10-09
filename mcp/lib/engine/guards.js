@@ -326,6 +326,7 @@ CLI_SWITCHES.add("revoke"); // 1.16 U2: approve <feature> <phase> --revoke (the 
 CLI_SWITCHES.add("gherkin"); // 1.16 E1: export [f] --gherkin (= spec_export {format: "gherkin"})
 CLI_SWITCHES.add("install").add("uninstall"); // 1.21 F1a: merge-state --install / --uninstall (the git merge driver's setup)
 CLI_SWITCHES.add("explain"); // 1.21 F2: classify "<text>" --explain (= spec_classify {explain: true})
+CLI_SWITCHES.add("adr"); // 1.25: export [f] --adr (= spec_export {format: "adr"})
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",

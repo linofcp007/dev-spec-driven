@@ -89,7 +89,7 @@ Pure Node core — **no `npm install`, no network, no cost.** Tools:
 | `spec_clarify` | Surface requirement ambiguities/gaps before design (with a glossary: every word it says to avoid) |
 | `spec_metrics` | Lead times, rework, forced approvals, change requests, evidence pass rate; `write` creates a pre-filled `retro.md` |
 | `spec_catalog` | Living catalog of every feature's ACs, superseded ones marked (`_Supersedes:_` of a shipped feature; a draft's reads "to be superseded"), plus possible duplicate / conflicting criteria across active features; `write` → `.specs/SPECS.md` |
-| `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`), a Gherkin `.feature` per feature (`"gherkin"`: one scenario per acceptance criterion, its EARS clauses as Given / When / Then) or a CSV for Jira / Linear's importer (`"jira"` · `"linear"`: the feature, its stories, its tasks); `write` → `.specs/exports/` |
+| `spec_export` | One self-contained, offline, printable document (HTML or markdown) of a feature or of the whole project, for stakeholders — or the traceability matrix as CSV (`format: "csv"`), a Gherkin `.feature` per feature (`"gherkin"`: one scenario per acceptance criterion, its EARS clauses as Given / When / Then) a CSV for Jira / Linear's importer (`"jira"` · `"linear"`: the feature, its stories, its tasks) or the decision log as Architecture Decision Records (`"adr"`: one MADR file per decision, ADR number = its D-n); `write` → `.specs/exports/` |
 | `spec_changelog` | Release notes from the specs — Added / Changed / Fixed since a date or the last notes; `milestone` scopes them to a milestone's features; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Implementing files changed, missing or new since `spec_finish` recorded its baseline |
 | `spec_stop_check` | The end-of-turn evidence gate for MCP-only clients: would this closing message ("done", "verified") be sent back — ticked tasks without evidence, project checks without a passing run? |
@@ -514,7 +514,7 @@ create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
-catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
+catalog [--write] · export [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
 ```
@@ -608,7 +608,7 @@ Apenas Node nativo — **sem `npm install`, sem rede, sem custo.** Ferramentas:
 | `spec_clarify` | Expõe ambiguidades/lacunas dos requisitos antes do design (com um glossário: cada palavra que ele manda evitar) |
 | `spec_metrics` | Lead times, retrabalho, aprovações forçadas, pedidos de alteração, taxa de sucesso da evidência; `write` cria um `retro.md` pré-preenchido |
 | `spec_catalog` | Catálogo vivo dos ACs de todas as funcionalidades, com os substituídos assinalados (`_Supersedes:_` de uma funcionalidade entregue; o de um rascunho fica como "substituição prevista"), e os possíveis critérios duplicados / em conflito entre funcionalidades ativas; `write` → `.specs/SPECS.md` |
-| `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`), um `.feature` Gherkin por funcionalidade (`"gherkin"`: um cenário por critério de aceitação, com as cláusulas EARS como Dado / Quando / Então) ou um CSV para o importador do Jira / Linear (`"jira"` · `"linear"`: a funcionalidade, as histórias, as tarefas); `write` → `.specs/exports/` |
+| `spec_export` | Um documento autocontido, offline e imprimível (HTML ou markdown) de uma funcionalidade ou do projeto inteiro, para stakeholders — ou a matriz de rastreabilidade em CSV (`format: "csv"`), um `.feature` Gherkin por funcionalidade (`"gherkin"`: um cenário por critério de aceitação, com as cláusulas EARS como Dado / Quando / Então) um CSV para o importador do Jira / Linear (`"jira"` · `"linear"`: a funcionalidade, as histórias, as tarefas) ou o registo de decisões como Architecture Decision Records (`"adr"`: um ficheiro MADR por decisão, número do ADR = o seu D-n); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de versão a partir das specs — Added / Changed / Fixed desde uma data ou desde as últimas notas; `milestone` restringe-as às funcionalidades de um marco; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Ficheiros de implementação alterados, em falta ou novos desde que o `spec_finish` registou a baseline |
 | `spec_stop_check` | O gate de evidência do fim do turno para clientes só MCP: esta mensagem final ("feito", "verificado") seria devolvida — tarefas marcadas sem evidência, verificações do projeto sem execução bem-sucedida? |
@@ -1063,7 +1063,7 @@ create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
-catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
+catalog [--write] · export [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
 ```
@@ -1157,7 +1157,7 @@ Solo Node nativo — **sin `npm install`, sin red, sin coste.** Herramientas:
 | `spec_clarify` | Expone ambigüedades/lagunas de los requisitos antes del diseño (con un glosario: cada palabra que manda evitar) |
 | `spec_metrics` | Lead times, retrabajo, aprobaciones forzadas, solicitudes de cambio, tasa de éxito de la evidencia; `write` crea un `retro.md` prerrellenado |
 | `spec_catalog` | Catálogo vivo de los ACs de todas las funciones, con los sustituidos señalados (`_Supersedes:_` de una función entregada; el de un borrador queda "por sustituir"), y los posibles criterios duplicados / en conflicto entre funciones activas; `write` → `.specs/SPECS.md` |
-| `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`), un `.feature` Gherkin por función (`"gherkin"`: un escenario por criterio de aceptación, con las cláusulas EARS como Dado / Cuando / Entonces) o un CSV para el importador de Jira / Linear (`"jira"` · `"linear"`: la función, sus historias, sus tareas); `write` → `.specs/exports/` |
+| `spec_export` | Un documento autocontenido, offline e imprimible (HTML o markdown) de una función o del proyecto entero, para stakeholders — o la matriz de trazabilidad en CSV (`format: "csv"`), un `.feature` Gherkin por función (`"gherkin"`: un escenario por criterio de aceptación, con las cláusulas EARS como Dado / Cuando / Entonces) un CSV para el importador de Jira / Linear (`"jira"` · `"linear"`: la función, sus historias, sus tareas) o el registro de decisiones como Architecture Decision Records (`"adr"`: un archivo MADR por decisión, número del ADR = su D-n); `write` → `.specs/exports/` |
 | `spec_changelog` | Notas de la versión desde las specs — Added / Changed / Fixed desde una fecha o desde las últimas notas; `milestone` las limita a las funciones de un hito; `write` → `.specs/RELEASE-NOTES.md` |
 | `spec_drift` | Archivos de implementación cambiados, ausentes o nuevos desde que `spec_finish` registró la línea base |
 | `spec_stop_check` | El gate de evidencia del final del turno para clientes solo MCP: ¿este mensaje final ("hecho", "verificado") se devolvería — tareas marcadas sin evidencia, comprobaciones del proyecto sin una ejecución correcta? |
@@ -1617,7 +1617,7 @@ create [--brownfield] [--flow design-first] [--kind spike|change] [--size xs|s|m
 trace [--code] [--matrix|--csv] · clarify · ears · next [--batch] [--waves] · next-action · brief · done [--run] · undone
 append-tasks [--depends 3,5] · approve [--force [--reason] [--expires]] [--revoke] [--role] [--through] · impact [--reopen] · metrics [--write]
 finish [--write] [--run] · decide · add-track [--remove] · feature <remove|archive|rename|restore|flow>
-catalog [--write] · export [--md|--csv|--gherkin|--tracker jira|linear] [--write] · changelog [--milestone]
+catalog [--write] · export [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] · changelog [--milestone]
 drift · stop-check · log · upgrade [--apply] · roadmap · milestone · depend · backlog · scan · coverage · evals
 mcp-config <client> · rules <tool> · prompts · statusline [--print-config] · merge-state [--install|--uninstall|--check] · bundle [--out] · version
 ```

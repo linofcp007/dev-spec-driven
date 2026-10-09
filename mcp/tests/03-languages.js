@@ -323,7 +323,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
     const RE_BARE = new RegExp("(?<![\\w/.-])dev-spec (" + cliCommands.join("|") + ")(?![\\w-])(?! —)");
     const ALLOWED = new Set(["observed.on", "metrics.retroText.followUpsNote", "catalog.autogen", "approvalGuard.on.ask", "approvalGuard.on.deny", "upgrade.md.autogen",
       "upgrade.md.intro", "trackPacks.initJson", "stakeholderExport.autogen", "rtm.autogen", "releaseNotes.autogen", "gherkin.autogen", "trackerCsv.autogen",
-      "trackerCsv.featureLine", "milestone.notesAutogen", "gitLog.noGit", "decisions.header",
+      "trackerCsv.featureLine", "milestone.notesAutogen", "gitLog.noGit", "decisions.header", "adr.autogen", // 1.25: the ADR files' marker
       "mergeState.conflictHead", "mergeState.parseError"]); // the driver's own stderr lines, named by the product ("dev-spec merge-state: <file>: …")
     const ARG_SHAPES = [["x", "y", "z"], [["x"], ["y"], ["z"]], [[{ word: "w", track: "t", effect: "off", phase: "p" }], "y", "z"], [1, 2, 3], [{ x: 1 }, "y", "z"]];
     const bare = {}, runnable = {};

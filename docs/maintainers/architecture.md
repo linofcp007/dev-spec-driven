@@ -67,7 +67,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (the mod
   finish.js                    spec_finish and the drift baseline (spec_drift); remove / rename / archive / restore;
                                _Supersedes:_ and .specs/SPECS.md; spec_metrics (+ retro.md)
   roadmap-md.js                ROADMAP.md / .html (roadmapData), forecasts, cross-feature overlaps
-  decisions.js                 decisions.md (spec_decide) and the spike kind
+  decisions.js                 decisions.md (spec_decide), its ADR export (spec_export format adr — 1.25) and the spike kind
   export.js                    spec_export (the escaping markdown renderer, the document model, Gherkin, tracker CSV);
                                spec_changelog and spec_milestone
   guards.js                    guard mode (meta.guard, the scope guard), the end-of-turn stop gate, the human approval guard

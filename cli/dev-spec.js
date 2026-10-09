@@ -80,6 +80,7 @@
  *                                      [--csv] the traceability matrix as CSV (UTF-8 BOM) → .specs/exports/<feature|project>.rtm.csv
  *                                      [--gherkin] one Gherkin .feature per feature (a scenario per AC, EARS → Given/When/Then) → <feature>.feature
  *                                      [--tracker jira|linear] a CSV for the tracker's importer (feature → stories → tasks) → <feature|project>.<tracker>.csv
+ *                                      [--adr] the decision log as MADR files (ADR number = D-n) → .specs/exports/adr/<feature>/NNNN-<title>.md
  *   changelog [--since d|last|all] [--write]  Release notes from the specs → .specs/RELEASE-NOTES.md (+ meta.changelogAt);
  *                                      --milestone <name>: that milestone's features only → .specs/RELEASE-NOTES.<milestone>.md
  *   milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]  Milestones in roadmap.json (meta.milestones): each one's
@@ -493,7 +494,7 @@ const COMMAND_OPTIONS = {
   prompts: { options: ["args"] },
   templates: { options: ["lang"] },
   tracks: { options: ["lang"] },
-  export: { options: ["md", "html", "csv", "gherkin", "tracker", "write"] },
+  export: { options: ["md", "html", "csv", "gherkin", "adr", "tracker", "write"] },
   changelog: { options: ["since", "write", "milestone"] },
   log: { options: ["max"], max: 2 }, // <feature> [-]
   "stop-check": { options: ["message", "agent"] },
@@ -1538,21 +1539,35 @@ async function main() {
     }
 
     case "export": {
-      // dev-spec export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write] — the stakeholder document (= spec_export
+      // dev-spec export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write] — the stakeholder document (= spec_export
       // {name, format, write}): printed on stdout, or written to .specs/exports/ (never over a hand-written file → exit 1). No
-      // feature = the whole project (--gherkin: one .feature per feature). --tracker takes the tool's name (the MCP format).
-      const syntax = "dev-spec export [feature] [--md|--csv|--gherkin|--tracker jira|linear] [--write]";
+      // feature = the whole project (--gherkin: one .feature per feature; --adr: every feature's ADRs + adr/index.md). --tracker
+      // takes the tool's name (the MCP format).
+      const syntax = "dev-spec export [feature] [--md|--csv|--gherkin|--adr|--tracker jira|linear] [--write]";
       const tracker = flags.tracker === undefined ? null : String(flags.tracker).trim().toLowerCase();
-      if (pos.length > 1 || [on("md"), on("html"), on("csv"), on("gherkin"), tracker !== null].filter(Boolean).length > 1) usage(syntax);
+      if (pos.length > 1 || [on("md"), on("html"), on("csv"), on("gherkin"), on("adr"), tracker !== null].filter(Boolean).length > 1) usage(syntax);
       if (tracker !== null && !spec.TRACKERS.includes(tracker)) {
         const A = spec.msg(spec.projectLang(projectDir)).args;
         die(A.invalid(A.item("--tracker", A.oneOf(spec.TRACKERS.join(", ")), JSON.stringify(String(flags.tracker)))));
       }
-      const format = tracker || (on("md") ? "md" : on("csv") ? "csv" : on("gherkin") ? "gherkin" : "html");
+      const format = tracker || (on("md") ? "md" : on("csv") ? "csv" : on("gherkin") ? "gherkin" : on("adr") ? "adr" : "html");
       const r = spec.exportSpecs(projectDir, { name: pos[0], format, write: on("write") });
       if (!r.ok) return fail(r);
       const M = spec.msg(r.lang);
+      const relOut = (f) => path.relative(projectDir, f).split(path.sep).join("/");
       return out(r, (r) => {
+        if (r.format === "adr") { // 1.25: one MADR file per decision + the indexes — written (and the stale ones removed), or each printed under its path
+          const A = M.adr;
+          if (r.written) { // --write
+            r.written.forEach((f) => console.log(M.stakeholderExport.wrote(f)));
+            r.removed.forEach((f) => console.log(A.removed(f)));
+            if (r.note) console.log(r.note);
+            return console.log(A.summary(r.adrs, r.written.length, r.unchanged.length, r.removed.length));
+          }
+          if (r.note) console.error(r.note); // stdout stays the documents alone
+          r.stale.forEach((f) => console.error(A.stale(relOut(f))));
+          return r.documents.forEach((d, i) => process.stdout.write((i ? "\n" : "") + "<!-- ── " + relOut(d.file) + " ── -->\n" + d.content));
+        }
         if (r.format === "gherkin" && r.scope === "project") { // one .feature per feature: written, or each printed under its path
           if (r.wrote) { r.files.forEach((f) => console.log(M.stakeholderExport.wrote(f))); return console.log(M.gherkin.wroteMany(r.files.length, r.scenarios)); }
           if (!r.documents.length) return console.log(M.gherkin.noFeatures);
@@ -2229,6 +2244,10 @@ function helpText() {
                                   --tracker jira|linear: a CSV for the tracker's own importer (nothing is sent) — the feature as the
                                   parent, its stories, its tasks under their [USn] story; labels = slug, tracks, AC IDs
                                   → --write: .specs/exports/<feature|project>.<tracker>.csv
+                                  --adr: the decision log as Architecture Decision Records — one MADR file per decision (ADR
+                                  number = its D-n; discoveries left out; superseded ones linked both ways) + an index; no
+                                  feature = every feature's (archived too) + adr/index.md → --write: .specs/exports/adr/
+                                  <feature>/NNNN-<title>.md — unchanged files kept, the generated ones no decision backs removed
   changelog [--since d] [--write] Release notes from the specs: Added (shipped features + their ACs) · Changed (superseded ACs,
                                   change requests) · Fixed (bugfixes + root cause); --since <ISO date|last|all> (default: since the
                                   last written notes); --write → .specs/RELEASE-NOTES.md and stamps meta.changelogAt
@@ -2310,7 +2329,7 @@ function helpText() {
          --revoke / --reason "…" / --expires YYYY-MM-DD|Nd (approve)  --reason "…" (undone)
          --brownfield / --flow design-first (create)  --flow (feature flow)  --name (import)  --tracks tdd,saas (import/create/init/add-track, beside positional tracks)
          --apply (upgrade)  --args "…" (prompts)  --check name="cmd" (init)  --run / --shell (done, finish)  --max N (next, log)
-         --md / --write (export)  --since <ISO date|last|all> / --write (changelog)
+         --md / --csv / --gherkin / --adr / --write (export)  --since <ISO date|last|all> / --write (changelog)
          --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)  --install / --uninstall / --check (merge-state)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.

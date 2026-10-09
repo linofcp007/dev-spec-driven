@@ -155,6 +155,19 @@ function removeSpecFile(file) {
     throw e;
   }
 }
+// 1.25 — a folder under .specs/ removed when it is EMPTY (the ADR export's emptied feature folders): through the gate (never a
+// link on the way, never the folder itself a link — rmdir would drop a Windows junction); one still holding anything stays. →
+// true when removed, false otherwise (absent, not empty, refused).
+function removeEmptySpecDir(dir) {
+  try { specsWriteGate(dir, { dir: true }); } catch { return false; }
+  forgetCached(dir, { dir: true });
+  try {
+    fs.rmdirSync(dir);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Synchronous sleep (the engine is synchronous end to end): blocks this thread only, no busy loop.
 const SLEEP_CELL = new Int32Array(new SharedArrayBuffer(4));
@@ -1004,7 +1017,7 @@ function isNetworkPath(p) {
 }
 
 module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
-  writeFileAtomic, specWrite, removeSpecFile, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
+  writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
   specsWriteGate, gateRefusal, featureLangSafe, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,
   LOCK_RECLAIM_STALE_MS, LOCK_NOTELESS_STALE_MS, LOCK_NESTED_MIN_MS, HELD_LOCKS, lockSnapshot, sameLockSnapshot,
   staleLock, reclaimStaleLock, releaseLock, lockWaitMs, withFeatureLock, withLockFile, acquireLockFile, featureLocked,

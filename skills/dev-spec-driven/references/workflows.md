@@ -81,8 +81,8 @@ MCP prompts. Full table: `references/tooling-reference.md`.
 - **Metrics & retro (`/spec-metrics`).** Lead times, rework, forced approvals, change requests, evidence pass rate,
   velocity; `--write` drafts `retro.md` after finish — its steering/constitution amendments are proposals, never applied.
 - **Stakeholders.** `/spec-export` — an offline, printable HTML/md document (`--gherkin`: `.feature` files, steps = the
-  EARS clauses; `--tracker jira|linear`: an import CSV); `/spec-changelog` — release notes (Added · Changed · Fixed),
-  `--milestone`.
+  EARS clauses; `--tracker jira|linear`: an import CSV; `--adr`: the decision log as MADR files, ADR number = D-n);
+  `/spec-changelog` — release notes (Added · Changed · Fixed), `--milestone`.
 - **Archive, don't delete.** `/feature archive` is reversible (`restore` puts the roadmap deps back).
 
 Depth: `references/change-management.md`.
