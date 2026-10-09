@@ -16,7 +16,8 @@ let specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks
   isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap, realPathLoose,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
   traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps;
-function __link(E) { ({ specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
+let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
+function __link(E) { ({ dayOf, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
@@ -1287,7 +1288,7 @@ function expectFailRefusal(n, ev, ticked, lng) {
 function expectFailResult(res, xf, n, lng) {
   res.expected = "fail"; // stable: the task carries _Expect: fail_
   if (xf.red) res.redRecorded = true; // this call recorded the red run
-  if (xf.passAfterRed) res.note = [res.note, i18n.msg(lng).redGreen.passAfterRed(n, String(xf.passAfterRed.at || "?").slice(0, 10))].filter(Boolean).join(" ");
+  if (xf.passAfterRed) res.note = [res.note, i18n.msg(lng).redGreen.passAfterRed(n, dayOf(xf.passAfterRed.at) || "?")].filter(Boolean).join(" ");
 }
 // red-green (doctor, +tdd): the T-IDs DONE tasks make green (_Makes green:_) against those an _Expect: fail_ task citing
 // them (anywhere in its own text / markers) has a red run recorded for (its own record: same _Verify:_, not stale).

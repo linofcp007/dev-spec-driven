@@ -14,7 +14,7 @@ const i18n = require("../i18n.js");
 const { B, E } = require("./trace.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR, buildTraceMatrix, catalogData,
-  changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, day, designSections, detectPhase,
+  changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, dayOf, today, designSections, detectPhase,
   detectTracks, dirKey, existingFeature, extractAcIds, extractSection, fcDay, fcIso, featureDirs, featureLang,
   featurePercent, fenceStep, flatText, flowOfState, forecastData, headingIndex, headRest, htmlEsc, indentOf,
   isApprovalRecord, isGeneratedOrAbsent, isObj, isRecord, listFeatures, markerTracks, matrixCsv, maybeRefreshRoadmap,
@@ -26,7 +26,7 @@ let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM
   trackLabel, trackMarker, verificationStatus, withoutTaskMarkers, withRoadmapLock, writeFileAtomic, writeRoadmap,
   wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR,
-  buildTraceMatrix, catalogData, changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, day,
+  buildTraceMatrix, catalogData, changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, dayOf, today,
   designSections, detectPhase, detectTracks, dirKey, existingFeature, extractAcIds, extractSection, fcDay, fcIso,
   featureDirs, featureLang, featurePercent, fenceStep, flatText, flowOfState, forecastData, headingIndex, headRest,
   htmlEsc, indentOf, isApprovalRecord, isGeneratedOrAbsent, isObj, isRecord, listFeatures, markerTracks, matrixCsv,
@@ -391,7 +391,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
   const marks = new Map((catF ? catF.acs : []).map((a) => [a.id, a]));
   const meta = [[X.meta.id, "`" + slug + "`"], [X.meta.kind, X.kind[kind] || SP.kind], [X.meta.tracks, trackLabel(tracks)], [X.meta.phase, P[phase] || phase],
     [X.meta.progress, X.progress(done, tasks.length, featurePercent(phase, done, tasks.length, flowOfState(st)))]]; // + the flow (C3); a spike's kind label (C2)
-  if (catF) meta.push([X.meta.status, M.catalog.status[catF.status] + (catF.finishedAt ? " · " + day(catF.finishedAt) : "")]);
+  if (catF) meta.push([X.meta.status, M.catalog.status[catF.status] + (catF.finishedAt ? " · " + dayOf(catF.finishedAt) : "")]);
   meta.push([X.meta.lang, lang]);
 
   const blocks = [];
@@ -463,7 +463,7 @@ function exportFeatureDoc(projectDir, f, lang, cat) {
     for (const q of clarificationMarkers(file === "design.md" ? activeDesign(t, tracks) : t)) clar.push(`- \`${file}\` — ${q || "[NEEDS CLARIFICATION]"}`);
   }
   blocks.push({ id: "clarifications", h: X.sections.clarifications, md: clar.length ? clar.join("\n") : italic(X.noClarifications) });
-  return { lang, scope: "feature", feature: slug, title: specTitle(reqRaw || spikeText || "", slug), kicker: X.kicker[kind] || SP.kicker, lead: X.generated(day(new Date().toISOString())), autogen: X.autogen, meta, blocks };
+  return { lang, scope: "feature", feature: slug, title: specTitle(reqRaw || spikeText || "", slug), kicker: X.kicker[kind] || SP.kicker, lead: X.generated(today()), autogen: X.autogen, meta, blocks };
 }
 
 function exportProjectDoc(projectDir, lang, cat) {
@@ -511,7 +511,7 @@ function exportProjectDoc(projectDir, lang, cat) {
   if (fs.existsSync(path.join(root, "SPECS.md"))) blocks.push({ id: "catalog", cls: "feature", h: X.sections.catalog, md: artifactBody(cat.markdown) });
   const meta = [[X.meta.overall, X.overall(rmv.overallPercent, rmv.complete, rmv.total, done, total)], [X.meta.lang, lang]];
   return { lang, scope: "project", features: rmv.features.map((f) => f.name), title: X.projectTitle(path.basename(path.resolve(projectDir))), kicker: X.kicker.project,
-    lead: X.generated(day(new Date().toISOString())), autogen: X.autogen, meta, blocks };
+    lead: X.generated(today()), autogen: X.autogen, meta, blocks };
 }
 
 function exportMd(doc) {
@@ -1248,7 +1248,7 @@ function renderReleaseNotes(d, lang, proj, scope, now, ms) {
   const name = (e) => (slugify(e.title) === e.feature ? e.title : `${e.title} (${code(e.feature)})`);
   const title = ms ? M.milestone.notesTitle(N.title(proj), ms.name) : N.title(proj); // 1.16 E3: a milestone's notes
   const scopeLine = ms ? M.milestone.notesScope(ms.name, ms.date, ms.features.concat(ms.archived || []).join(", ")) + " · " + scope : scope;
-  let md = `# ${title}\n\n<!-- ${ms ? M.milestone.notesAutogen : N.autogen} -->\n\n_${scopeLine} · ${N.generated(day(now))}_\n\n## ${N.added}\n\n`;
+  let md = `# ${title}\n\n<!-- ${ms ? M.milestone.notesAutogen : N.autogen} -->\n\n_${scopeLine} · ${N.generated(dayOf(now))}_\n\n## ${N.added}\n\n`;
   if (!d.added.length) md += italic(N.none) + "\n\n";
   for (const a of d.added) {
     md += `### ${name(a)}\n\n` + (a.summary ? a.summary + "\n\n" : "");
@@ -1263,7 +1263,7 @@ function renderReleaseNotes(d, lang, proj, scope, now, ms) {
   for (const c of d.changed.changeRequests) {
     const parts = ["added", "modified", "removed"].filter((k) => c[k].length).map((k) => N.crParts[k](c[k].join(", ")));
     if (c.reopened.length) parts.push(N.crParts.reopened(c.reopened.map((n) => "#" + n).join(", ")));
-    lines.push(`- **${c.feature}** — ${N.changeRequest(c.n, M.stakeholderExport.phases[c.phase] || c.phase, day(c.at))}${parts.length ? ": " + parts.join("; ") : ""}`);
+    lines.push(`- **${c.feature}** — ${N.changeRequest(c.n, M.stakeholderExport.phases[c.phase] || c.phase, dayOf(c.at))}${parts.length ? ": " + parts.join("; ") : ""}`);
     for (const x of c.acs || []) lines.push(`  - **${x.id}** — ${x.text}`);
   }
   md += `## ${N.changed}\n\n` + (lines.length ? lines.join("\n") : italic(N.none)) + "\n\n## " + N.fixed + "\n\n";
@@ -1350,7 +1350,7 @@ function changelog(projectDir, opts = {}) {
 // A feature's lifecycle follows (pruneRoadmapRefsLocked, like dependsOn): rename → the new slug; remove → dropped; archive →
 // moved to the milestone's `archived` list (restore moves it back) — the milestone's release notes still cover it, its
 // status no longer counts it.
-// Status (stable codes; milestoneStatuses — over roadmap()'s features and their forecasts, "today" = opts.now's UTC day):
+// Status (stable codes; milestoneStatuses — over roadmap()'s features and their forecasts, "today" = opts.now's local calendar day):
 //   done      every active feature at 100% (or only archived ones left)
 //   late      the date has passed (today > date) and a feature is not done
 //   at-risk   reason eta-after-date — the latest ETA of its open features is after the date; eta-unknown — an open

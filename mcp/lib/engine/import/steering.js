@@ -15,7 +15,8 @@ const i18n = require("../../i18n.js");
 let artifactState, customSteeringError, existsRaw, flatText, frontMatterScalar, frontMatterValues, headRest, IMPORT_MAX_BYTES,
   IMPORT_TOOLS, importSourceAt, isSteeringStub, linkedSpecsFolder, parseTracks, readIfExists, slugify, specsRoot, steeringFrontMatter,
   stripHtmlComments, toPosix, writeIfAbsent;
-function __link(E) { ({ artifactState, customSteeringError, existsRaw, flatText, frontMatterScalar, frontMatterValues, headRest,
+let today; // core.js — 1.25.1: the local calendar date (today / dayOf)
+function __link(E) { ({ today, artifactState, customSteeringError, existsRaw, flatText, frontMatterScalar, frontMatterValues, headRest,
   IMPORT_MAX_BYTES, IMPORT_TOOLS, importSourceAt, isSteeringStub, linkedSpecsFolder, parseTracks, readIfExists, slugify, specsRoot,
   steeringFrontMatter, stripHtmlComments, toPosix, writeIfAbsent } = E); }
 
@@ -131,7 +132,7 @@ function importSteering(projectDir, t, source, opts, lang0) {
   const imported = [];
   const skipped = [];
   const taken = new Set(); // the names this import gave a file
-  const date = new Date().toISOString().slice(0, 10);
+  const date = today();
   let total = 0;
   const skip = (c, file, reason, detail, template) => {
     skipped.push({ file, from: c.from, reason, ...(template ? { template: true } : {}) });

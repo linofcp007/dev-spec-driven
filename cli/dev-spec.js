@@ -997,7 +997,7 @@ async function main() {
           const D = spec.msg(spec.featureLang(projectDir, r.feature)).drift;
           console.log(D.baselineRecorded(r.baseline.files, r.baseline.missing));
           const rp = r.baseline.replaced; // a re-finish over a drifted baseline: the drift it accepted
-          if (rp) { const list = [...rp.changed, ...rp.missing, ...rp.nowPresent]; console.log("  " + D.baselineReplaced(list.length, String(rp.at || "?").slice(0, 10), list.join(", "))); }
+          if (rp) { const list = [...rp.changed, ...rp.missing, ...rp.nowPresent]; console.log("  " + D.baselineReplaced(list.length, spec.dayOf(rp.at) || "?", list.join(", "))); }
         } else if (r.baseline && r.baseline.error) console.error("dev-spec: " + r.baseline.error); // a broken .state.json is never rewritten
         if (r.mergeSummary != null) console.log("\n# " + r.mergeTitle + "\n\n" + r.mergeSummary);
       });
@@ -1553,7 +1553,7 @@ async function main() {
       if (!r.ok) return fail(r);
       if (r.drifted.length || r.stale.length || (r.errors && r.errors.length)) process.exitCode = 1;
       const D = spec.msg(r.lang).drift;
-      const day = (iso) => String(iso || "").slice(0, 10);
+      const day = spec.dayOf; // 1.25.1: the local calendar date
       return out(r, (r) => {
         if (r.note) console.log(r.note);
         for (const f of r.features) {

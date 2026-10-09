@@ -1234,7 +1234,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
     const spDir = path.join(d6, ".specs", "cache-spike");
     const spMd = fs.readFileSync(path.join(spDir, "spike.md"), "utf8");
     const spSt = JSON.parse(fs.readFileSync(path.join(spDir, ".state.json"), "utf8"));
-    const in3 = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
+    const in3 = S.today(Date.now() + 3 * 864e5); // the local calendar date (1.25.1)
     ok(sp1.ok && sp1.kind === "spike" && sp1.label === "core" && JSON.stringify(sp1.created) === '["spike.md","tasks.md"]' && sp1.timebox === in3 &&
       /A spike is core-only — tracks ignored \(\+saas\)/.test(sp1.note) && spSt.kind === "spike" && JSON.stringify(spSt.tracks) === '["core"]' &&
       !fs.existsSync(path.join(spDir, "requirements.md")) && !fs.existsSync(path.join(spDir, "design.md")) &&

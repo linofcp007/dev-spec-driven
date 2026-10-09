@@ -25,7 +25,8 @@ let activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDeci
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
   decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame;
-function __link(E) { ({ activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
+let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
+function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, artifactMatches, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
   errs, evidenceRule, existingFeature, expectFailRefusal, expectFailResult, expectFailRun, expectsFail, extractAcIds,
   extractSection, extractTestIds, featureLang, fenceStep, forgetCached, ghostMarkers, headingEntries, idKey, implementsKey,
@@ -795,7 +796,7 @@ function untickTask(projectDir, name, number, opts = {}) {
   // re-tick's passing run is the fix going green — the note must not ask for a red run that can no longer happen. redKept: stable.
   const red = staled && expectsFail(task) ? redProof(rec, taskMarkers(task).verify, rec, projectDir) : null; // (rec's own pass: review 2's grandfathering)
   const notes = [U.unticked(n, f.slug, runnable, staled && !red)];
-  if (red) notes.push(U.redKept(n, f.slug, String(red.at || "?").slice(0, 10)));
+  if (red) notes.push(U.redKept(n, f.slug, dayOf(red.at) || "?"));
   if (isObj(state.finished) || (isRecord(state.approvals) && isRecord(state.approvals.execution))) notes.push(U.reopened(f.slug));
   const res = { ok: true, feature: f.slug, number: n, unticked: true, evidenceStale: staled, ...progress(updated), note: notes.join(" ") };
   if (red) res.redKept = true;

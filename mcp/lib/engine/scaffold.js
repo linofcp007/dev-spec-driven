@@ -13,7 +13,7 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState, checksInput,
-  checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs, evidenceMode,
+  checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, errs, evidenceMode,
   evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText, guardInput,
   guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord, isSpikeDir,
   learnSignalOverrides, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
@@ -32,7 +32,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
-  checksInput, checksPlanError, classify, createFlow, day, detectTracks, ensureDir, ensureLockIgnore, errs,
+  checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
   guardInput, guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord,
   isSpikeDir, learnSignalOverrides, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
@@ -1087,7 +1087,7 @@ function steeringChanges(root, approvals, dir, tracks) {
 // "requirements (approved 2026-09-01): constitution.md (changed); design (…): …" — doctor's and the CLI's wording.
 function steeringChangeText(changes, lng) {
   const Q = i18n.msg(lng).quality;
-  return changes.map((c) => Q.steeringItem(c.phase, day(c.approvedAt) || "?", c.files.map((x) => `${x.file} (${Q.steeringChange[x.change] || x.change})`).join(", "))).join("; ");
+  return changes.map((c) => Q.steeringItem(c.phase, dayOf(c.approvedAt) || "?", c.files.map((x) => `${x.file} (${Q.steeringChange[x.change] || x.change})`).join(", "))).join("; ");
 }
 // spec_impact {phase: "steering", name?} / `dev-spec impact [feature] --phase steering`: the active features (or the one named)
 // whose requirements / design approval was made under an older version of a steering file that changed since. Read-only:

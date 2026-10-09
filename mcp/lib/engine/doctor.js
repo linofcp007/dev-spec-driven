@@ -37,7 +37,8 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView; // 1.25 (create --branch)
-function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
+let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
+function __link(E) { ({ dayOf, acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designApprovedBeforeWeigh, designWeighChecks, detectPhase,
@@ -486,7 +487,7 @@ function nextAction(projectDir, name, opts = {}) {
         finishedDrift = { finishedAt: typeof fin.at === "string" ? fin.at : null, files: Object.keys(fin.files).length, changed: dr.changed, missing: dr.missing, nowPresent: dr.nowPresent, drifted: dr.drifted };
       }
       if (stale) staleBaseline = stale;
-      const day = fin && typeof fin.at === "string" ? fin.at.slice(0, 10) : "?";
+      const day = (fin && dayOf(fin.at)) || "?";
       // Every task ticked, but not every tick verified: spec_finish and the execution sign-off refuse on exactly these
       // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
       // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
@@ -519,7 +520,7 @@ function nextAction(projectDir, name, opts = {}) {
         // Finished once, then changed (a change request, a re-approval, a new implementing file) and done again: finish it
         // AGAIN — a fresh readiness report, merge summary and baseline — then the execution sign-off again. step stays
         // "finish"; staleBaseline says why.
-        recommendation = nx.refinish(slug, stale.finishedAt ? stale.finishedAt.slice(0, 10) : "?", staleFinishText(stale, lng));
+        recommendation = nx.refinish(slug, dayOf(stale.finishedAt) || "?", staleFinishText(stale, lng));
       } else if (fin && suiteGap.length) {
         // Finished, but a project check (meta.checks) has no passing run since the last task activity (a task re-run after
         // the finish, a check whose command changed…): spec_finish refuses on it, doctor warns, the stop gate sends a "done"
@@ -534,7 +535,7 @@ function nextAction(projectDir, name, opts = {}) {
         // No execution approval → sign it off; one that predates a later change (an upgraded feature's new tests sign-off,
         // a change request) → re-confirm it, naming what came after — never "missing" when it exists.
         const exAt = isRecord(approvals.execution) && typeof approvals.execution.at === "string" ? approvals.execution.at : null;
-        const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: exAt ? exAt.slice(0, 10) : "?", why: signOffWhyText(st, lng) } : null;
+        const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: dayOf(exAt) || "?", why: signOffWhyText(st, lng) } : null;
         // With roadmap.json meta.approvalRoles.execution the sign-off is per role (a role-less /approve is refused): name
         // the roles still missing and the one to sign as. A stale sign-off is renewed by every role signing again (r5 review: a role's
         // sign-off older than the change no longer counts — roleSignOffs): the role named is the first one still missing.

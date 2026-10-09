@@ -269,6 +269,16 @@ and U+FEFF gotchas are in CLAUDE.md.
   gets a ⚠ line (`earsWarnings`), never "EARS clean" — the PostToolUse hook's rule.
 - **Dates/timestamps**: fine to use `new Date()` in the MCP server and scripts (normal Node
   process). Do NOT assume that in any Workflow-script context.
+  **Calendar dates (1.25.1, review 7): `today(now?, utc?)` and `dayOf(instant)` (engine/core.js; the facade's `today` /
+  `dayOf`) are the ONE rule — the LOCAL calendar date, YYYY-MM-DD.** `new Date().toISOString().slice(0, 10)` (eleven places and
+  two helpers, `todayIso` / finish.js `day`) gave the UTC date: written between 00:00 and 01:00 in Lisbon summer time it was
+  the day before (a decision, a spike's timebox, an import note, a template's `{{date}}`, the retro, the release notes, the
+  forecasts' "today" — roadmap-md.js `fcDay()` is the local day now, as that date's UTC-midnight stamp so the working-day
+  arithmetic is unchanged). Stored timestamps stay ISO instants (UTC); a stored instant SHOWN as a date goes through `dayOf`
+  ("" for none). The one UTC date left is on purpose: a waiver's `expires` (`today(undefined, true)` — spec_approve's schema and
+  `waiver.badExpires` promise "today or later in UTC"). `validIsoDay` (a YYYY-MM-DD round trip) is a format check, not a date.
+  mcp/tests/16-conventions-review7-core.js guards it (no `toISOString().slice(0, 10)` in the engine) and runs a child in Tokyo
+  with a frozen clock (`TZ` set through the child's env — a Git Bash `TZ=… node` prefix does not reach Node on Windows).
 - **CLI `--lang` is the MCP enum**: `main()` refuses anything outside the MCP `lang` enum (case-folded) with the
   localized `args.invalid` message before dispatch — the engine's `normalizeLang()` would turn `fr` into `en` and save it.
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),

@@ -22,7 +22,7 @@ let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, ar
   RE_LIST_ITEM, RE_TODO_SENTINEL, readIfExists, readJson, readRoadmap, readState, reasonInput, REPRO_SYN,
   ROOT_CAUSE_SYN, SAMPLE_GOLDEN, sectionState, specChangedSince, spikePhase, statePath, STEERING_GOVERNED,
   steeringFingerprints, steeringImpact, steeringImpactLines, stripFencedCode, stripHtmlComments, taskBlocks,
-  taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf, todayIso, traceCheck, traceGapLines,
+  taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf, today, dayOf, traceCheck, traceGapLines,
   uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
@@ -37,7 +37,7 @@ function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks,
   readState, reasonInput, REPRO_SYN, ROOT_CAUSE_SYN, SAMPLE_GOLDEN, sectionState, specChangedSince, spikePhase,
   statePath, STEERING_GOVERNED, steeringFingerprints, steeringImpact, steeringImpactLines, stripFencedCode,
   stripHtmlComments, taskBlocks, taskDepsCheck, taskMarkers, taskVerification, testIndex, textFingerprint, timeOf,
-  todayIso, traceCheck, traceGapLines, uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic,
+  today, dayOf, traceCheck, traceGapLines, uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic,
   writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
@@ -121,7 +121,7 @@ function approvalsInForce(dir, tracks, approvals) {
 // "The Phase 4 sign-off of 2026-10-01 no longer covers the plan (planned since: T-08)…" — localized, or null when in force.
 function testsStaleText(dir, tracks, approvals, lng) {
   const s = testsSignOffStale(dir, tracks, approvals);
-  return s ? i18n.msg(lng).gates.testsStale(s.at ? s.at.slice(0, 10) : "?", s.missing.join(", "), s.plans.join(", ")) : null;
+  return s ? i18n.msg(lng).gates.testsStale(dayOf(s.at) || "?", s.missing.join(", "), s.plans.join(", ")) : null;
 }
 
 function detectPhase(dir, tracks) {
@@ -369,8 +369,9 @@ function waiverInput(opts, lng) {
     const bad = { error: W.badExpires(JSON.stringify(opts.expires), WAIVER_MAX_DAYS) };
     if (typeof opts.expires !== "string") return bad;
     const v = opts.expires.trim();
-    const t0 = Date.parse(todayIso() + "T00:00:00Z");
-    const day = (k) => new Date(t0 + k * 864e5).toISOString().slice(0, 10);
+    // (UTC on purpose — 1.25.1 kept it: spec_approve's schema and waiver.badExpires say "today or later in UTC")
+    const t0 = Date.parse(today(undefined, true) + "T00:00:00Z");
+    const day = (k) => today(t0 + k * 864e5, true);
     const m = v.match(/^(\d{1,4})\s*d$/i);
     if (m) {
       const k = parseInt(m[1], 10);
@@ -389,7 +390,7 @@ function waiverView(w) {
   const reason = typeof w.reason === "string" && w.reason.trim() ? w.reason.trim() : null;
   const expires = typeof w.expires === "string" && /^\d{4}-\d{2}-\d{2}$/.test(w.expires) ? w.expires : null;
   if (!reason && !expires) return null;
-  return { reason, expires, expired: !!expires && expires < todayIso() };
+  return { reason, expires, expired: !!expires && expires < today(undefined, true) };
 }
 // The forced approvals of the ACTIVE phases, in PHASES order → [{phase, failing: [ids], waiver: {reason, expires, expired} | null}]
 // — doctor's waiver-expired, the roadmap's forced line, spec_finish's merge summary / `waivers` / expired warning.
@@ -1399,7 +1400,7 @@ function impactLines(r) {
     return out;
   }
   const snaps = [r.snapshot, r.designMd && r.designMd.snapshot].filter(Boolean).join(", "); // a bugfix: bug.md + design.md
-  const out = [I.head(r.feature, r.phase, String(r.approvedAt || "").slice(0, 10), snaps)];
+  const out = [I.head(r.feature, r.phase, dayOf(r.approvedAt), snaps)];
   const label = (x) => (x.id || x.section || (x.number != null ? "#" + x.number : ""));
   // The criterion text without its own leading "**US-1.AC-2** —" (the label already names it) — or a test row's "T-01 |".
   const body = (x) => String(x.after != null ? x.after : x.text != null ? x.text : "")

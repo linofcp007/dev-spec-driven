@@ -200,7 +200,8 @@ restore, spec_upgrade, decisions and spikes, forecasts, the generated roadmap fi
 - **Ticks:** `spec_complete_task` records `.state.json → ticks[n]` = ISO, written BEFORE the tick (`recordTick`; a
   non-object `ticks` is left alone). A task ticked before 1.14 falls back to its first passing evidence run, else the
   record's time (`taskCompletedAt`); a box ticked by hand has no time and is not counted.
-- **Velocity** = points per WORKING day (Mon–Fri, UTC days) over the last `FORECAST_WINDOW_DAYS` = 28 calendar days,
+- **Velocity** = points per WORKING day (Mon–Fri, local calendar days — 1.25.1: they were UTC days, conventions.md → Calendar
+  dates) over the last `FORECAST_WINDOW_DAYS` = 28 calendar days,
   counted from the day of the window's first completion through today — project-wide, and per feature once it has
   `FORECAST_MIN_TASKS` = 3 completions of its own in the window. **The project rate counts the ARCHIVED features' completions
   too (1.24 r6 G3, `archivedCompletions()`):** their ticks happened — archiving a feature shipped this week wiped the velocity

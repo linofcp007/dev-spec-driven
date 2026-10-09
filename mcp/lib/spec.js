@@ -88,7 +88,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   supersedesWarnings, taskBlocks, taskBrief, taskCommits, taskDependsSpec, taskMarkers, taskSchedule, taskSize,
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
-  changeViews, closestName, decodeText, featureBranch, IMPORT_TOOLS,
+  changeViews, closestName, today, dayOf, decodeText, featureBranch, IMPORT_TOOLS,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
@@ -101,6 +101,8 @@ module.exports = {
   PHASES,
   resolveProjectDir, // --project / projectDir > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest dev-spec project at or above cwd > cwd
   unexpandedVar, // 1.23 review: a value holding a variable left unexpanded ("${…}", a leading $NAME, %NAME%) — never a folder name
+  today, // 1.25.1: the local calendar date (YYYY-MM-DD) of now / of a given moment (engine/core.js)
+  dayOf, // 1.25.1: a stored instant's local calendar date, "" when there is none
   closestName, // 1.24 r6: the did-you-mean — the candidate nearest a mistyped word (optimal-string-alignment distance), else null
   specsRoot,
   slugify,
