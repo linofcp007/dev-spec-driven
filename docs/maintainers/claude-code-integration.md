@@ -315,7 +315,13 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   state may be next_action's `drift` (mcp/test.js "1.16 C review (parity)" checks 27 states). A network path (`isNetworkPath`,
   the engine's — server.js uses it too) is skipped before any fs call (a UNC cwd hung it for minutes). `dev-spec statusline` renders
   BEFORE any flag check (a status line must never print an error): exit 0 always, stdin capped, silent outside a project,
-  cut to `$COLUMNS`, `--json`; `--print-config` prints the `statusLine` entry with this clone's absolute path (a note when
+  cut to `$COLUMNS`, `--json`. **Without the engine outside a project (1.25.1, review 7):** Claude Code runs it after every
+  message in every folder once it is installed user-wide, and it loaded the whole engine first (136–220 ms a render): the CLI now
+  loads the facade on first use (a proxy over `require`), and the render walks the candidates with `statusProbe()` (cli/completion.js
+  — statusLineProject's null rule, Node core only: `isDevSpecDir` at or above each candidate, ≤ 40 levels, the same skips) before
+  it; no project → the empty line at about Node's startup (~65 ms against ~140 ms measured on Windows). A project found → the
+  engine decides as before (the worktree mapping only ever starts from a folder the walk finds). cli/tests/11-claude-code.js checks
+  the two agree and that no mcp/lib module loads. `--print-config` prints the `statusLine` entry with this clone's absolute path (a note when
   it is a versioned plugin-cache copy). A plugin cannot ship a status line (plugin `settings` honour only `agent` /
   `subagentStatusLine`), hence the opt-in `/spec-statusline`.
 - **User defaults** — the environment variables `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT`

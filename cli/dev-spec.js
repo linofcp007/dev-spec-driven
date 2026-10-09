@@ -148,7 +148,12 @@ const path = require("path");
 // answered BEFORE the engine loads — cli/completion.js reads .specs/ itself — since it runs on every Tab (≈ node's own startup).
 if (process.argv[2] === "__complete") return require(path.join(__dirname, "completion.js")).complete(process.argv.slice(3));
 const { spawn, spawnSync } = require("child_process");
-const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+// 1.25.1 (review 7): the engine (~36 modules — ~80 ms of a ~140 ms run) loads on its first use, never at the top: the status line
+// outside a dev-spec project (Claude Code runs it after every message, in every folder, once it is installed user-wide) and the
+// bare help print without it. `spec.x` reads through this proxy; the first read loads the facade.
+let SPEC = null;
+const loadSpec = () => SPEC || (SPEC = require(path.join(__dirname, "..", "mcp", "lib", "spec.js")));
+const spec = new Proxy({}, { get: (_, k) => loadSpec()[k], has: (_, k) => k in loadSpec() });
 const COMPLETION = require(path.join(__dirname, "completion.js")); // 1.25: `completion <shell>` (and the hidden __complete, above)
 
 const SERVER = path.resolve(__dirname, "..", "mcp", "server.js");
@@ -191,8 +196,8 @@ function readStdin(cb) {
   const chunks = [];
   if (process.stdin.isTTY) console.error("dev-spec: " + projectText().stdinHint);
   process.stdin.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c), "utf8")));
-  process.stdin.on("end", () => { try { cb(spec.decodeText(Buffer.concat(chunks))); } catch (e) { die(e.message); } });
-  process.stdin.on("error", (e) => die(e.message));
+  process.stdin.on("end", () => { try { cb(spec.decodeText(Buffer.concat(chunks))); } catch (e) { die(e.message, { code: e.code ? String(e.code) : "exception" }); } });
+  process.stdin.on("error", (e) => die(e.message, { code: e.code ? String(e.code) : "stdin" }));
 }
 
 VALUE_FLAGS.add("tracks"); // --tracks tdd,saas = the MCP `tracks` argument (import, create/bugfix, init, add-track)
@@ -238,6 +243,7 @@ let cmdIdx = -1; // where the command word stands in ARGV0
 const flagCount = Object.create(null);
 const countFlag = (k) => { if (VALUE_FLAGS.has(k)) flagCount[k] = (flagCount[k] || 0) + 1; };
 let versionAsked = false; // 1.24 r6 B-I1: --version / -V
+let unknownShort = null; // 1.25.1: the first single-dash option given (-j) — refused in main (refuseUnknownFlags)
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   // `--` ends the options (POSIX): every later token is positional (`create -- --odd-name`) — it used to become flags[""].
@@ -259,6 +265,9 @@ for (let i = 0; i < argv.length; i++) {
     else { flags[a.slice(2)] = argv[++i]; countFlag(a.slice(2)); if (a === "--branch") branchSpaced = true; }
   }
   else if (a.startsWith("--")) flags[a.slice(2)] = true;
+  // 1.25.1 (review 7): a single-dash option (-j, -x…) is no positional — `status -j` looked for a feature "j". Refused like an unknown
+  // --flag (refuseUnknownFlags); -h / -V are handled above, a lone "-" (stdin) and "-1" (a number, refused by its command) stay words.
+  else if (/^-[A-Za-z]/.test(a)) { if (unknownShort === null) unknownShort = a; }
   else { if (!pos.length) cmdIdx = i; pos.push(a); }
 }
 if (versionAsked && pos[0] !== "help") pos.splice(0, pos.length, "version"); // the words of another command are not run (its flags: printVersion ignores them)
@@ -269,14 +278,21 @@ if (process.platform === "win32" && typeof flags.project === "string") flags.pro
 // 1.25.1 (review 7): a leading ~ is the home folder — Windows PowerShell 5.1 passes `~` to node as typed (`--project ~/zz` made a
 // folder named "~" in the working folder). The engine's expandHome, mirrored without the engine in cli/completion.js.
 if (typeof flags.project === "string") flags.project = COMPLETION.expandHome(flags.project.trim());
+// 1.25.1 (review 7) — the two runs that never load the engine up front (main() takes them first): the status line's render
+// (statusLineRender — it loads the engine only once a dev-spec project is found) and the bare help (`dev-spec`, `--help` / `-h`
+// alone, `help` alone: helpText() is plain text). Anything else on the line (a flag, an argument) takes the usual path.
+const STATUSLINE_RENDER = cmd === "statusline" && !("print-config" in flags) && !("help" in flags);
+const BARE_HELP = !versionAsked && unknownShort === null && missingValue === null &&
+  ((cmd === undefined && Object.keys(flags).every((k) => k === "help" && flags.help === true)) || (cmd === "help" && !pos.length && !Object.keys(flags).length));
+const LIGHT = STATUSLINE_RENDER || BARE_HELP;
 // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working folder with a dev-spec .specs/
 // > the working folder — the same resolution as the MCP server (spec.resolveProjectDir). --project is checked in main().
-const projectDir = spec.resolveProjectDir(flags.project);
+const projectDir = LIGHT ? null : spec.resolveProjectDir(flags.project);
 // 1.24 r6 B1 — WHICH input chose it, read with resolveProjectDir's own precedence (a value that is empty or holds an unexpanded
 // variable falls through): "flag" (--project) · "SPEC_PROJECT_DIR" · "CLAUDE_PROJECT_DIR" · "nearest" (a folder above the working
 // one with a dev-spec .specs/) · "cwd" (the working folder). checkProject() checks a named one; `version` reports it.
 const usableDir = (v) => v != null && String(v).trim() !== "" && !spec.unexpandedVar(v);
-const PROJECT_SOURCE = typeof flags.project === "string" && usableDir(flags.project) ? "flag"
+const PROJECT_SOURCE = LIGHT ? null : typeof flags.project === "string" && usableDir(flags.project) ? "flag"
   : usableDir(process.env.SPEC_PROJECT_DIR) ? "SPEC_PROJECT_DIR"
   : usableDir(process.env.CLAUDE_PROJECT_DIR) ? "CLAUDE_PROJECT_DIR"
   : path.resolve(process.cwd()) === projectDir ? "cwd" : "nearest";
@@ -291,8 +307,9 @@ const argPath = (p) => path.resolve(projectNamed ? projectDir : process.cwd(), S
 // an error (normalizeBoolFlags, in main). They are read with on(), never by truthiness — the string "false" is truthy,
 // so `done --run=false` ran the _Verify:_ commands and `add-track --remove=false` removed the track (MCP `false` is false).
 // ONE list, spec.CLI_SWITCHES (the approval hook parses `dev-spec approve …` with it): add a new switch THERE. It holds
-// --matrix / --csv (1.14 F5: trace <f> --matrix | --csv · export [f] --csv) and --help.
-const BOOL_FLAGS = [...spec.CLI_SWITCHES];
+// --matrix / --csv (1.14 F5: trace <f> --matrix | --csv · export [f] --csv) and --help. A function (1.25.1): read on use — the
+// engine's list (an unknown flag, a switch given a value), never at load.
+const BOOL_FLAGS = () => [...spec.CLI_SWITCHES];
 const on = (k) => flags[k] === true;
 // A switch passed through to an engine option whose default depends on others (finish's includeBody, brief's includeBrief:
 // true when not writing): absent → undefined (the engine's default), else the explicit boolean — `--include-body=false`
@@ -307,8 +324,19 @@ const boolFlag = (k) => (typeof flags[k] === "boolean" ? flags[k] : undefined);
 // A KNOWN flag the command doesn't read is refused too (checkCommandArgs: COMMAND_OPTIONS), and so is an extra argument.
 function refuseUnknownFlags() {
   if (cmd === "evals") return;
-  const known = [...VALUE_FLAGS, ...BOOL_FLAGS];
-  const bad = Object.keys(flags).find((k) => !known.includes(k));
+  // VALUE_FLAGS, --help and --json are known without the engine's switch list (the bare help, version and completion never load it)
+  const keys = Object.keys(flags).filter((k) => !VALUE_FLAGS.has(k) && k !== "help" && k !== "json");
+  if (unknownShort === null && !keys.length) return;
+  const known = [...VALUE_FLAGS, ...BOOL_FLAGS()];
+  // 1.25.1 (review 7): a single-dash option — its did-you-mean: the long form of the same word (-json → --json), else the one flag
+  // the letters start (-j → --json)
+  if (unknownShort !== null) {
+    const w = unknownShort.slice(1).toLowerCase();
+    const starts = known.filter((k) => k.startsWith(w));
+    const near = known.includes(w) ? w : starts.length === 1 ? starts[0] : null;
+    die(projectText().unknownFlag(unknownShort, near ? "--" + near : null), unknownArg(unknownShort, near ? "--" + near : null));
+  }
+  const bad = keys.find((k) => !known.includes(k));
   if (bad === undefined) return;
   // Optimal-string-alignment distance (a transposition — --rnu — costs 1), as the track did-you-mean.
   const dist = (a, b) => {
@@ -326,7 +354,7 @@ function refuseUnknownFlags() {
     const n = dist(k, c);
     if (n <= Math.max(1, Math.floor(c.length / 3)) && (!best || n < best.n)) best = { c, n };
   }
-  die(projectText().unknownFlag("--" + bad, best ? "--" + best.c : null));
+  die(projectText().unknownFlag("--" + bad, best ? "--" + best.c : null), unknownArg("--" + bad, best ? "--" + best.c : null));
 }
 // 1.24 r6 B5 — a single-value flag given twice is a usage error, never last-wins (--role, --by, --cmd, --summary, --through,
 // --phase, --project, --lang… dropped the first value). REPEATABLE_FLAGS are the ones a command reads every occurrence of: depend
@@ -340,12 +368,13 @@ function refuseRepeatedFlags() {
   if (k === undefined) return;
   if (cmd === "append-tasks" && ["task", "verify", "story", "heading", "size"].includes(k)) {
     const AT = spec.msg(pos[0] != null ? spec.featureLang(projectDir, pos[0]) : spec.projectLang(projectDir)).appendTasks;
-    die(k === "task" ? AT.oneTaskPerCall : AT.oneValue(k));
+    die(k === "task" ? AT.oneTaskPerCall : AT.oneValue(k), invalidArg("--" + k));
   }
-  die(projectText().flagTwice("--" + k));
+  die(projectText().flagTwice("--" + k), invalidArg("--" + k));
 }
 function normalizeBoolFlags() {
-  for (const k of BOOL_FLAGS) {
+  if (!Object.keys(flags).some((k) => typeof flags[k] === "string" && !VALUE_FLAGS.has(k))) return; // no switch given a value: nothing to read
+  for (const k of BOOL_FLAGS()) {
     if (typeof flags[k] !== "string") continue;
     if (cmd === "evals" && k === "dry-run") continue; // 1.25: import's switch has the name of run-evals.js's own flag — evals hands it over unread
     const v = flags[k].trim().toLowerCase();
@@ -353,7 +382,7 @@ function normalizeBoolFlags() {
     else if (["false", "0", "no", "off"].includes(v)) flags[k] = false;
     else {
       const A = spec.msg(spec.projectLang(projectDir)).args;
-      die(A.invalid(A.item("--" + k, A.type.boolean, JSON.stringify(flags[k]))));
+      die(A.invalid(A.item("--" + k, A.type.boolean, JSON.stringify(flags[k]))), invalidArg("--" + k));
     }
   }
 }
@@ -366,11 +395,14 @@ function intFlag(k, max) {
   if (/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1 && (max === undefined || Number(v) <= max)) return Number(v);
   const A = spec.msg(spec.projectLang(projectDir)).args;
   const most = max === undefined ? "" : projectText().atMost(max);
-  return die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1) + most, JSON.stringify(String(flags[k])))));
+  return die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1) + most, JSON.stringify(String(flags[k])))), invalidArg("--" + k));
 }
 // 1.24 r6 B6 — done --run / finish --run --timeout <seconds>: at most Node's timer limit (2^31 - 1 ms) — a larger value became a
 // TimeoutOverflowWarning and a timer of 1 ms: the run was refused as "did not finish within --timeout 9999999 s".
 const TIMEOUT_MAX_S = Math.floor(2147483647 / 1000);
+// 1.25.1 (review 7): next --max — spec_next_task's schema maximum (8): --max 50 exited 0 and the engine clamped it to 8 silently,
+// where MCP refuses max: 9.
+const NEXT_MAX = 8;
 const timeoutFlag = () => intFlag("timeout", TIMEOUT_MAX_S);
 // `dev-spec evals` (1.23 review P1): the words of the command line but the command, read with run-evals.js's own rules — its
 // value flags (--project, --model, --prompt, --max-items) take the next word unless it is a flag; the first plain word is the
@@ -398,7 +430,7 @@ function evalsArgs() {
 function runOnlyFlags() {
   if (on("run")) return;
   const k = ["shell", "timeout"].find((n) => flags[n] !== undefined);
-  if (k) die(projectText().needsRun("--" + k));
+  if (k) die(projectText().needsRun("--" + k), invalidArg("--" + k));
 }
 // done --run with several _Verify:_ commands, all passing (1.23 review): the record keeps one summary per command — "$ <command>"
 // and its summary, each re-summarized shorter when together they'd pass the record's 2,000 characters (normalizeEvidence cuts
@@ -425,17 +457,55 @@ function out(obj, human) {
 }
 // --json asked for (before normalizeBoolFlags has run too: a usage error found first still answers in JSON).
 const jsonWanted = () => flags.json === true || (typeof flags.json === "string" && /^(?:true|1|yes|on)$/i.test(flags.json.trim()));
-// A CLI usage / argument error: the message on stderr, exit 1 — and (1.23 review) with --json also {ok: false, error[, code]} as the
+// A CLI usage / argument error: the message on stderr, exit 1 — and (1.23 review) with --json also {ok: false, error, code, …} as the
 // one JSON document on stdout, as a refusal prints (fail), so a script reads one shape. `text: true` (the --json-on-a-text-command
 // error) keeps stdout empty. Written synchronously: process.exit() follows.
+// 1.25.1 (review 7): every such error carries a stable `code` — MCP's where MCP has the same error (unknown-argument {unknown},
+// missing-arguments {missing}, invalid-arguments {invalid}, project-missing, project-not-dir), else the CLI's own (usage,
+// unknown-command, project-empty, project-unexpanded, project-is-specs…); `list --project C:/nope --json` answered {ok, error} alone.
+// opts: { text, code (default "usage"), …fields the document carries (unknown, missing, invalid) }.
 function die(msg, opts) {
+  const { text, code, ...extra } = opts || {};
   console.error("dev-spec: " + msg);
-  if (jsonWanted() && !(opts && opts.text)) {
-    const doc = JSON.stringify({ ok: false, error: String(msg), ...(opts && opts.code ? { code: opts.code } : {}) }, null, 2) + "\n";
+  if (jsonWanted() && !text) {
+    const doc = jsonSafe(JSON.stringify({ ok: false, error: String(msg), code: code || "usage", ...extra }, null, 2)) + "\n";
     try { fs.writeSync(1, doc); } catch { /* stdout gone */ }
   }
   process.exit(1);
 }
+// 1.25.1 (review 7) — terminal-safe output, ONE choke point (installOutputGuard, main's first step). The human output prints spec
+// text (task text, a _Verify:_ command, its run's output, names…) as it is written: an ESC / OSC sequence or a lone carriage
+// return in a cloned tasks.md could make `done --run` show `$ npm test` while it ran something else, retitle the terminal or hide
+// lines. Everything the CLI writes to stdout / stderr goes through stream.write: the human text loses every C0 control but tab and
+// line feed (a CR only before a LF — CRLF lines, RFC 4180 CSV), DEL and every C1 control (U+0080–U+009F); JSON keeps its value —
+// JSON.stringify escapes C0 itself, and a raw DEL / C1 (legal inside a JSON string) is written as its \u escape. Built from char
+// codes (never a raw control character in the source).
+const cc = (n) => String.fromCharCode(n);
+const RE_TERM_CONTROL = new RegExp("\r(?!\n)|[" + cc(0) + "-" + cc(8) + cc(11) + cc(12) + cc(14) + "-" + cc(31) + cc(0x7f) + "-" + cc(0x9f) + "]", "g");
+const RE_JSON_RAW_CONTROL = new RegExp("[" + cc(0x7f) + "-" + cc(0x9f) + "]", "g");
+const terminalSafe = (s) => String(s).replace(RE_TERM_CONTROL, "");
+const jsonSafe = (s) => String(s).replace(RE_JSON_RAW_CONTROL, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+let outputGuarded = false;
+function installOutputGuard() {
+  if (outputGuarded) return;
+  outputGuarded = true;
+  // stdout under --json carries the JSON document (human lines go to stderr then: `say`); stderr is always human text.
+  for (const [stream, json] of [[process.stdout, jsonWanted], [process.stderr, () => false]]) {
+    const write = stream.write.bind(stream);
+    stream.write = (chunk, ...rest) => {
+      if (typeof chunk === "string") chunk = json() ? jsonSafe(chunk) : terminalSafe(chunk);
+      else if (Buffer.isBuffer(chunk)) { // only a buffer that is whole UTF-8 text (a cut multibyte character is passed on as it is)
+        const s = chunk.toString("utf8");
+        const t = json() ? jsonSafe(s) : terminalSafe(s);
+        if (t !== s && Buffer.from(s, "utf8").equals(chunk)) chunk = Buffer.from(t, "utf8");
+      }
+      return write(chunk, ...rest);
+    };
+  }
+}
+// The argument-error shapes (MCP's): an unknown option / word, an option given a bad value, a value missing.
+const unknownArg = (argument, didYouMean) => ({ code: "unknown-argument", unknown: [didYouMean ? { argument, didYouMean } : { argument }] });
+const invalidArg = (...names) => ({ code: "invalid-arguments", invalid: names });
 // An engine refusal ({ok: false, error, …}). With --json the WHOLE result is the one JSON document on stdout — what the
 // MCP tool returns, `recorded` / `neverApproved` / `gated`… included — and the exit code is 1; a script never has to
 // parse localized stderr. Otherwise the error goes to stderr (+ an optional hint line), exit 1. Callers `return fail(r)`.
@@ -564,8 +634,8 @@ function checkCommandArgs() {
   if (!own) return; // an unknown command (its own error), evals (run-evals.js), help
   const T = projectText();
   const bad = Object.keys(flags).find((k) => !GLOBAL_OPTIONS.includes(k) && !own.options.includes(k));
-  if (bad !== undefined) die(T.flagNotFor("--" + bad, cmd, own.options.map((f) => "--" + f).join(", ")));
-  if (own.max !== undefined && pos.length > own.max) die(T.extraArgs(cmd, pos.slice(own.max).join(" ")));
+  if (bad !== undefined) die(T.flagNotFor("--" + bad, cmd, own.options.map((f) => "--" + f).join(", ")), unknownArg("--" + bad));
+  if (own.max !== undefined && pos.length > own.max) die(T.extraArgs(cmd, pos.slice(own.max).join(" ")), { code: "unknown-argument", unknown: pos.slice(own.max).map((w) => ({ argument: String(w) })) });
 }
 // 1.23 review (L14) — --project names an existing FOLDER: an empty value, a variable left unexpanded (`$HOME/x`, `%DIR%`, `${…}`)
 // or a file is refused, and so is a folder that doesn't exist — except for init, which creates it (`create x --project <typo>`
@@ -580,8 +650,8 @@ function checkProject() {
   let v, src;
   if ("project" in flags) {
     v = typeof flags.project === "string" ? flags.project.trim() : "";
-    if (!v) die(T.projectEmpty);
-    if (spec.unexpandedVar(v)) die(T.projectUnexpanded(v));
+    if (!v) die(T.projectEmpty, { code: "project-empty" });
+    if (spec.unexpandedVar(v)) die(T.projectUnexpanded(v), { code: "project-unexpanded" });
     src = "--project";
   } else if (PROJECT_SOURCE === "SPEC_PROJECT_DIR" || PROJECT_SOURCE === "CLAUDE_PROJECT_DIR") {
     v = String(process.env[PROJECT_SOURCE]).trim();
@@ -591,11 +661,11 @@ function checkProject() {
   const flag = src === "--project";
   let st = null;
   try { st = fs.statSync(abs); } catch { st = null; }
-  if (st && !st.isDirectory()) die(flag ? T.projectNotDir(abs) : T.projectEnvNotDir(src, abs));
-  if (!st && cmd !== "init") die(flag ? T.projectMissing(abs) : T.projectEnvMissing(src, abs));
+  if (st && !st.isDirectory()) die(flag ? T.projectNotDir(abs) : T.projectEnvNotDir(src, abs), { code: "project-not-dir" });
+  if (!st && cmd !== "init") die(flag ? T.projectMissing(abs) : T.projectEnvMissing(src, abs), { code: "project-missing" });
   const base = path.basename(abs);
   const specsName = process.platform === "win32" || process.platform === "darwin" ? /^\.specs$/i.test(base) : base === ".specs";
-  if (st && specsName && spec.isDevSpecDir(path.dirname(abs))) die(T.projectIsSpecs(flag ? "--project " + abs : src + "=" + abs, path.dirname(abs)));
+  if (st && specsName && spec.isDevSpecDir(path.dirname(abs))) die(T.projectIsSpecs(flag ? "--project " + abs : src + "=" + abs, path.dirname(abs)), { code: "project-is-specs" });
 }
 
 // ---- mcp-config snippets ---------------------------------------------------
@@ -603,7 +673,7 @@ function mcpConfig(client) {
   const blocks = mcpConfigBlocks();
   if (client && client !== "all") {
     // Own keys only: 'constructor' / 'toString' are not clients.
-    if (!Object.prototype.hasOwnProperty.call(blocks, client)) die(projectText().unknownClient(client, Object.keys(blocks).join(", ") + ", all"));
+    if (!Object.prototype.hasOwnProperty.call(blocks, client)) die(projectText().unknownClient(client, Object.keys(blocks).join(", ") + ", all"), invalidArg("client"));
     return blocks[client];
   }
   return Object.values(blocks).join("\n\n");
@@ -636,7 +706,7 @@ const RULE_FILES = {
 };
 
 // ---- dispatch --------------------------------------------------------------
-const CLI_LANGS = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
+const CLI_LANGS = () => spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR) — read on use (1.25.1: the engine loads lazily)
 // The commands whose output is text only — no structured result — so --json is refused there (main; the help too).
 const TEXT_ONLY_COMMANDS = new Set(["rules", "mcp-config", "evals", "completion"]);
 
@@ -664,7 +734,9 @@ function statusLineRender() {
       const given = typeof flags.project === "string" ? [flags.project] : [];
       const cands = payload ? given.concat([ws.current_dir, payload.cwd, ws.project_dir])
         : given.concat([process.env.SPEC_PROJECT_DIR, process.env.CLAUDE_PROJECT_DIR, process.cwd()]);
-      const pdir = spec.statusLineProject(cands);
+      // 1.25.1 (review 7): the engine-free walk first (cli/completion.js statusProbe, statusLineProject's null rule) — outside a
+      // dev-spec project the line is empty without loading the engine (136–220 ms per render in any folder, user-wide)
+      const pdir = COMPLETION.statusProbe(cands) ? spec.statusLineProject(cands) : null;
       const cols = parseInt(process.env.COLUMNS, 10);
       if (pdir) r = spec.statusLine(pdir, { columns: Number.isSafeInteger(cols) && cols > 0 ? cols : undefined });
     } catch {
@@ -701,23 +773,24 @@ function statusLineConfig() {
 // async (1.23 review M13): done --run / finish --run wait for their commands with a timer of their own (b5Exec) — a timeout kills
 // the whole process tree, never only the shell.
 async function main() {
+  installOutputGuard(); // 1.25.1 (review 7): no control character of the spec text reaches the terminal
   // 1.16 C1: the status line's render path runs before any flag / usage check — it must print its line or nothing, exit 0.
-  if (cmd === "statusline" && !("print-config" in flags) && !("help" in flags)) return statusLineRender();
+  if (STATUSLINE_RENDER) return statusLineRender();
   process.stdout.on("error", stdoutError); // 1.24 r6 B2: a reader that closed early ends the output quietly
   refuseUnknownFlags(); // `--rnu` is an error (did you mean --run?), never a silent switch
   // 1.21 review A3: `merge-state --check` is a switch there — `--check` is init's VALUE flag (init --check name="cmd"), so it can't
   // join spec.CLI_SWITCHES (normalizeBoolFlags would refuse `init --check test="npm test"`, and the approval hook's lexer would read
   // init's value as the next word): a bare `--check` after merge-state reads as on.
   if (cmd === "merge-state" && missingValue === "check") { missingValue = null; flags.check = true; }
-  if (missingValue) die(projectText().missingValue(missingValue));
+  if (missingValue) die(projectText().missingValue(missingValue), { code: "missing-arguments", missing: ["--" + missingValue] });
   refuseRepeatedFlags(); // 1.24 r6 B5: `--role tech --role product` is an error, never last-wins
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any
   // command runs — the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
   if (flags.lang !== undefined) {
     const l = spec.canonicalLang(String(flags.lang)); // PT → pt · pt-br / pt_BR / ptbr → pt-BR · pt-PT → pt (the MCP enum folds the same)
-    if (!l || !CLI_LANGS.includes(l)) {
+    if (!l || !CLI_LANGS().includes(l)) {
       const A = spec.msg(spec.projectLang(projectDir)).args;
-      die(A.invalid(A.item("--lang", A.oneOf(CLI_LANGS.join(", ")), JSON.stringify(String(flags.lang)))));
+      die(A.invalid(A.item("--lang", A.oneOf(CLI_LANGS().join(", ")), JSON.stringify(String(flags.lang)))), invalidArg("--lang"));
     }
     flags.lang = l;
   }
@@ -789,7 +862,7 @@ async function main() {
         if (["on", "true", "yes", "1"].includes(g)) guard = true;
         else if (["off", "false", "no", "0"].includes(g)) guard = false;
         else if (g === "scope") guard = "scope"; // 1.14 C1 — the scope guard
-        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).guardMode.badValue(flags.guard));
+        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).guardMode.badValue(flags.guard), invalidArg("--guard"));
       }
       // 1.14 C1: --stop-check on|off = spec_init {stopCheck: true|false}; absent leaves the evidence gate as it is.
       let stopCheck;
@@ -797,27 +870,27 @@ async function main() {
         const v = String(flags["stop-check"]).trim().toLowerCase();
         if (["on", "true", "yes", "1"].includes(v)) stopCheck = true;
         else if (["off", "false", "no", "0"].includes(v)) stopCheck = false;
-        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).stopGate.badValue(flags["stop-check"]));
+        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).stopGate.badValue(flags["stop-check"]), invalidArg("--stop-check"));
       }
       const checks = b5ChecksFlag(); // B5: --check name="cmd" (repeatable; name= removes) = spec_init {checks}
       // 1.14 F2: --approval-guard off|ask|deny = spec_init {approvalGuard}; absent leaves the human approval guard as it is.
       let approvalGuard;
       if (flags["approval-guard"] !== undefined) {
         approvalGuard = String(flags["approval-guard"]).trim().toLowerCase();
-        if (!spec.APPROVAL_GUARD_LEVELS.includes(approvalGuard)) die(spec.msg(flags.lang || spec.projectLang(projectDir)).approvalGuard.badValue(flags["approval-guard"]));
+        if (!spec.APPROVAL_GUARD_LEVELS.includes(approvalGuard)) die(spec.msg(flags.lang || spec.projectLang(projectDir)).approvalGuard.badValue(flags["approval-guard"]), invalidArg("--approval-guard"));
       }
       // 1.14 F1: --evidence reported|observed = spec_init {evidence} (roadmap.json meta.evidence); absent leaves it as it is.
       let evidenceMode;
       if (flags.evidence !== undefined) {
         const v = String(flags.evidence).trim().toLowerCase();
         if (v === "reported" || v === "observed") evidenceMode = v;
-        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).observed.badValue(flags.evidence));
+        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).observed.badValue(flags.evidence), invalidArg("--evidence"));
       }
       // --roles requirements=product,design=tech+security | none = spec_init {approvalRoles} (1.14 B3); absent leaves them as they are.
       let approvalRoles;
       if (flags.roles !== undefined) {
         approvalRoles = spec.parseApprovalRolesText(flags.roles, flags.lang || spec.projectLang(projectDir));
-        if (approvalRoles.error) die(approvalRoles.error);
+        if (approvalRoles.error) die(approvalRoles.error, invalidArg("--roles"));
       }
       const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks, approvalRoles, stopCheck, approvalGuard, evidence: evidenceMode });
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
@@ -952,7 +1025,7 @@ async function main() {
 
     case "next": {
       if (!pos[0]) usage("dev-spec next <feature> [--batch] [--max N] [--waves]");
-      const r = spec.nextTask(projectDir, pos[0], { batch: on("batch"), max: intFlag("max"), waves: on("waves") }); // = spec_next_task {batch, max, waves}
+      const r = spec.nextTask(projectDir, pos[0], { batch: on("batch"), max: intFlag("max", NEXT_MAX), waves: on("waves") }); // = spec_next_task {batch, max, waves}
       if (!r.ok) return fail(r);
       const T = featureText(r.feature);
       const D = spec.msg(spec.featureLang(projectDir, r.feature)).taskDeps; // 1.14 F3
@@ -1023,7 +1096,7 @@ async function main() {
       // the NEXT task, where spec_task_brief {number: ""} is refused by its schema). No number at all: the next task.
       if (pos[1] != null && !/^\s*\d+\s*$/.test(String(pos[1]))) {
         const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
-        return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))) });
+        return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))), code: "invalid-arguments", invalid: ["number"] });
       }
       const r = spec.taskBrief(projectDir, pos[0], pos[1], { write: on("write"), includeBrief: boolFlag("include-brief") }); // = spec_task_brief {includeBrief}
       if (!r.ok) return fail(r);
@@ -1048,12 +1121,12 @@ async function main() {
       // engine refuses it for undone / brief (1.22 review: `-1` read "must be an integer"). --json prints the refusal on stdout.
       if (!/^\s*\d+\s*$/.test(String(pos[1])) || !(Number(pos[1]) >= 0)) {
         const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
-        return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))) });
+        return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))), code: "invalid-arguments", invalid: ["number"] });
       }
       // 1.23 review: --shell / --timeout need --run, and --run (a run made here) excludes --evidence / --exit / --cmd (a run made
       // elsewhere) — each was ignored silently.
       runOnlyFlags();
-      if (on("run") && (flags.evidence !== undefined || flags.exit !== undefined || flags.cmd !== undefined)) die(projectText().runOrEvidence);
+      if (on("run") && (flags.evidence !== undefined || flags.exit !== undefined || flags.cmd !== undefined)) die(projectText().runOrEvidence, invalidArg("--run"));
       const say = flags.json ? console.error : console.log; // --json keeps stdout one JSON document
       let evidence;
       let hint = null;
@@ -1068,6 +1141,10 @@ async function main() {
         const cmds = b.verify.filter((c) => !/^\[.*\]$/.test(c.trim()));
         if (!cmds.length) return fail({ ok: false, error: D.noRunnable(b.task.number) });
         const M = spec.msg(spec.featureLang(projectDir, pos[0]));
+        // 1.25.1 (review 7): a _Verify:_ holding a control character (an ESC / OSC sequence, a lone CR…) shows a terminal another
+        // command than the one that runs — refused before anything runs (doctor fails verify-control).
+        const ctl = cmds.find((c) => spec.commandHasControl(c));
+        if (ctl !== undefined) return fail({ ok: false, code: "control-chars", error: M.verifyControl.run(b.task.number, spec.controlVisible(ctl)) });
         // Default: the platform shell (cmd.exe on Windows). --shell / DEV_SPEC_SHELL pick another (e.g. bash — Git Bash on
         // Windows, never WSL's launcher unless named by its path: b5Shell). A shell that can't be found is refused before anything runs.
         const sh = b5Shell();
@@ -1207,7 +1284,7 @@ async function main() {
       const action = a0 || "list";
       // add <name> [note words…] reads every word; rm|remove <name> and list read no more (1.23 review: extra words were ignored)
       const most = action === "list" ? 1 : action === "rm" || action === "remove" ? 2 : Infinity;
-      if (pos.length > most) die(projectText().extraArgs("backlog " + action, pos.slice(most).join(" ")));
+      if (pos.length > most) die(projectText().extraArgs("backlog " + action, pos.slice(most).join(" ")), unknownArg(String(pos[most])));
       const r = spec.backlog(projectDir, action, pos[1], action === "add" ? pos.slice(2).join(" ") : undefined);
       if (!r.ok) return fail(r); // e.g. rm of a name that isn't in the backlog
       const T = projectText();
@@ -1371,8 +1448,8 @@ async function main() {
       // flow (or --flow, never both) — and --flow only on flow: a word past them (or --flow elsewhere) was ignored silently.
       const act = String(pos[0]).trim().toLowerCase();
       const most = { remove: 2, archive: 2, restore: 2, rename: 3, flow: flags.flow !== undefined ? 2 : 3 }[act];
-      if (most !== undefined && pos.length > most) die(projectText().extraArgs("feature " + act, pos.slice(most).join(" ")));
-      if (most !== undefined && act !== "flow" && flags.flow !== undefined) die(projectText().flagNotFor("--flow", "feature " + act, act === "remove" ? "--yes" : ""));
+      if (most !== undefined && pos.length > most) die(projectText().extraArgs("feature " + act, pos.slice(most).join(" ")), unknownArg(String(pos[most])));
+      if (most !== undefined && act !== "flow" && flags.flow !== undefined) die(projectText().flagNotFor("--flow", "feature " + act, act === "remove" ? "--yes" : ""), unknownArg("--flow"));
       const T = featureText(pos[1]); // resolved BEFORE the folder moves or disappears
       const r = spec.manageFeature(projectDir, pos[0], pos[1], pos[2], { confirm: on("yes"), flow: flags.flow });
       if (!r.ok && r.needsConfirm) {
@@ -1412,7 +1489,7 @@ async function main() {
       if (!pos[0]) usage("dev-spec rules <" + Object.keys(RULE_FILES).join("|") + ">");
       const tool = String(pos[0]).toLowerCase();
       // Own keys only: `constructor`/`__proto__` would pass a plain lookup and crash path.join.
-      if (!Object.prototype.hasOwnProperty.call(RULE_FILES, tool)) die(projectText().unknownRules(pos[0], Object.keys(RULE_FILES).join(", ")));
+      if (!Object.prototype.hasOwnProperty.call(RULE_FILES, tool)) die(projectText().unknownRules(pos[0], Object.keys(RULE_FILES).join(", ")), invalidArg("tool"));
       const ROOT = path.resolve(__dirname, "..").replace(/\\/g, "/"); // forward slashes: valid in markdown and on Windows
       const raw = fs.readFileSync(path.join(__dirname, "..", RULE_FILES[tool]), "utf8");
       // One pass (so skills/…/references/x.md is never rewritten twice). `../../AGENTS.md` (the Cursor link)
@@ -1632,7 +1709,7 @@ async function main() {
       if (pos.length > 1 || [on("md"), on("html"), on("csv"), on("gherkin"), on("adr"), tracker !== null].filter(Boolean).length > 1) usage(syntax);
       if (tracker !== null && !spec.TRACKERS.includes(tracker)) {
         const A = spec.msg(spec.projectLang(projectDir)).args;
-        die(A.invalid(A.item("--tracker", A.oneOf(spec.TRACKERS.join(", ")), JSON.stringify(String(flags.tracker)))));
+        die(A.invalid(A.item("--tracker", A.oneOf(spec.TRACKERS.join(", ")), JSON.stringify(String(flags.tracker)))), invalidArg("--tracker"));
       }
       const format = tracker || (on("md") ? "md" : on("csv") ? "csv" : on("gherkin") ? "gherkin" : on("adr") ? "adr" : "html");
       const r = spec.exportSpecs(projectDir, { name: pos[0], format, write: on("write") });
@@ -1733,7 +1810,7 @@ async function main() {
       const checks = Object.create(null);
       for (const v of vals) {
         const eq = typeof v === "string" ? v.indexOf("=") : -1;
-        if (eq <= 0) die(spec.msg(flags.lang || spec.projectLang(projectDir)).projectChecks.badArg(String(v)));
+        if (eq <= 0) die(spec.msg(flags.lang || spec.projectLang(projectDir)).projectChecks.badArg(String(v)), invalidArg("--check"));
         checks[v.slice(0, eq).trim()] = v.slice(eq + 1);
       }
       return checks;
@@ -1744,7 +1821,9 @@ async function main() {
       const fx = spec.existingFeature(projectDir, feature);
       if (!fx.ok) return fx;
       const M = spec.msg(spec.featureLang(projectDir, fx.slug));
-      const { checks } = spec.projectChecks(projectDir);
+      const { checks, unsafe } = spec.projectChecks(projectDir);
+      // 1.25.1 (review 7): a stored check holding a control character — nothing runs while one is there (spec_init refuses one)
+      if (unsafe && unsafe.length) return { ok: false, code: "control-chars", error: M.verifyControl.checks(unsafe.join(", ")) };
       if (!checks.length) return { ok: false, error: M.projectChecks.noneToRun };
       const sh = b5Shell();
       if (sh.error) return { ok: false, couldNotRun: sh.error, error: sh.error === "wsl-exe" ? M.runGate.wslExe(sh.path) : M.runGate.noGitBash };
@@ -2001,10 +2080,10 @@ async function main() {
           const fd = fs.openSync(target, "r");
           try { const buf = Buffer.alloc(512); head = buf.subarray(0, fs.readSync(fd, buf, 0, 512, 0)).toString("utf8"); } finally { fs.closeSync(fd); }
         } catch { head = ""; } // a folder, an unreadable file: not a bundle
-        if (!/^"use strict";\r?\n\/\/ GENERATED by scripts\/build\.js --bundle\b/.test(head)) die(T.bundleNotOurs(target));
+        if (!/^"use strict";\r?\n\/\/ GENERATED by scripts\/build\.js --bundle\b/.test(head)) die(T.bundleNotOurs(target), { code: "bundle-not-ours" });
       }
       let r;
-      try { r = B.writeBundle(target); } catch (e) { return die(e.message); }
+      try { r = B.writeBundle(target); } catch (e) { return die(e.message, { code: e.code ? String(e.code) : "exception" }); }
       return out({ ok: true, ...r, env: outFile ? { DEV_SPEC_BUNDLE: "1", DEV_SPEC_BUNDLE_PATH: r.file } : { DEV_SPEC_BUNDLE: "1" } },
         () => console.log(T.bundleWrote(r.file, r.modules, Math.round(r.bytes / 1024)) + "\n" + T.bundleUse(outFile ? r.file : null)));
     }
@@ -2020,13 +2099,13 @@ async function main() {
       const sh = COMPLETION.shellName(pos[0]);
       if (!sh) {
         const A = spec.msg(spec.projectLang(projectDir)).args;
-        die(A.invalid(A.item("<shell>", A.oneOf(COMPLETION.SHELLS.join(", ")), JSON.stringify(String(pos[0])))));
+        die(A.invalid(A.item("<shell>", A.oneOf(COMPLETION.SHELLS.join(", ")), JSON.stringify(String(pos[0])))), invalidArg("shell"));
       }
       return process.stdout.write(COMPLETION.script(sh, completionModel()));
     }
 
     default:
-      die(projectText().unknownCommand(cmd));
+      die(projectText().unknownCommand(cmd), { code: "unknown-command" });
   }
 }
 
@@ -2109,7 +2188,7 @@ function mergeStateRun(baseF, oursF, theirsF, rel) {
   const M = spec.msg(spec.projectLang(projectDir)).mergeState;
   const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return null; } };
   const oursText = read(oursF), theirsText = read(theirsF);
-  if (oursText == null || theirsText == null) die(M.unreadable(oursText == null ? oursF : theirsF));
+  if (oursText == null || theirsText == null) die(M.unreadable(oursText == null ? oursF : theirsF), { code: "unreadable" });
   const r = spec.mergeStateText(read(baseF) || "", oursText, theirsText, { path: rel, kind: flags.kind });
   if (r.kind === "generated") {
     // Both sides dev-spec's own output: ours stays (the next dev-spec write regenerates it from the merged state). A hand-written
@@ -2234,7 +2313,7 @@ function branchFlag() {
   if (/^(?:true|yes|on)$/i.test(s)) return true;
   if (/^(?:false|no|off)$/i.test(s)) return false;
   // `create x --branch tdd`: the word after --branch is read as its value — a track word there was meant as a track
-  if (branchSpaced && s) { const pt = spec.parseTracks(s); if (pt.given && !pt.unknown.length) die(spec.msg(flags.lang || spec.projectLang(projectDir)).branch.cliTrackWord(s)); }
+  if (branchSpaced && s) { const pt = spec.parseTracks(s); if (pt.given && !pt.unknown.length) die(spec.msg(flags.lang || spec.projectLang(projectDir)).branch.cliTrackWord(s), invalidArg("--branch")); }
   return s;
 }
 // What git says in the project folder → undefined (git can't run here: the engine reads the repository's files instead, and

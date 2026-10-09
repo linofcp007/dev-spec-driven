@@ -73,7 +73,9 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   extended section may be absent at size s or answered `n/a — <reason of 4+ words>`, a section another active track covers counts) ·
   `change-scope` (a change: 1–3 criteria, 1–3 tasks, core only) · `traceability` (every gap kind with its IDs; the kinds a later phase's still-template file would cause
   are deferred as a warn; a warn too for modal criteria with no ID beside US-n.AC-m ones — `untracedCriteria`) · `task-deps` (only when some task declares `_Depends:_`: a value that is no task number, a
-  number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · bugfix `root-cause` ·
+  number no active task carries, a self-dependency, a cycle — the tasks approval refuses on it) · `verify-control` (1.25.1: a
+  `_Verify:_` or a stored project check holding a control character — an escape sequence, a lone carriage return — named with
+  it escaped: a terminal would show another command than the one that runs; `done --run` / `finish --run` run nothing) · bugfix `root-cause` ·
   spike `spike` (spike.md missing) / `question` / `decision` · `merge-conflicts` (a `mergeConflicts` list the git merge driver left in the feature's
   `.state.json` or in `roadmap.json` — pick each value, delete the list) · `state` (the feature's `.state.json` is not
   valid JSON or has the wrong shape — next_action's one step is to repair it, spec_finish blocks on it) · `roadmap`

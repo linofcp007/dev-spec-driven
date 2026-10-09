@@ -12,7 +12,7 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let expandHome, acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks, approvalRolesOf,
+let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks, approvalRolesOf,
   approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled, chainPlaceholders,
   changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN, crossAcDoctorDetail,
   crossFeatureAcs, decisionDoctorChecks, designApprovedBeforeWeigh, designWeighChecks, detectPhase, detectTracks,
@@ -37,7 +37,7 @@ let expandHome, acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView; // 1.25 (create --branch)
-function __link(E) { ({ expandHome, acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
+function __link(E) { ({ expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
   crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designApprovedBeforeWeigh, designWeighChecks, detectPhase,
@@ -874,6 +874,16 @@ function specDoctor(projectDir, name, opts = {}) {
   const pipeTasks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
     .map((b) => ({ number: b.number, cmds: verifyPipes(b) })).filter((p) => p.cmds.length);
   if (pipeTasks.length) add("verify-pipes", "warn", fm.verifyPipe.doctor(pipeTasks.map((p) => "#" + p.number + " " + p.cmds.map((c) => "`" + c + "`").join(", ")).join("; ")));
+  // 1.25.1 (review 7) — a _Verify:_ (or a stored project check) holding a control character (an ESC / OSC sequence, a lone CR…): a
+  // terminal shows another command than the one that runs — a cloned tasks.md could print `$ npm test` while done --run ran something
+  // else. done --run / finish --run refuse it; a FAIL here, the command named with its control characters escaped. Active tasks only.
+  const ctlTasks = taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || "")
+    .map((b) => ({ number: b.number, cmds: verifyControls(b) })).filter((p) => p.cmds.length);
+  const ctlChecks = projectChecks(projectDir).unsafe || [];
+  if (ctlTasks.length || ctlChecks.length) {
+    add("verify-control", "fail", fm.verifyControl.doctor(ctlTasks.map((p) => "#" + p.number + " " + p.cmds.map((c) => "`" + controlVisible(c) + "`").join(", "))
+      .concat(ctlChecks.map((n) => "meta.checks." + n)).join("; ")));
+  }
   // 1.14 full review Pa1 — marker-shaped text that yields no marker (`**Verify:** npm test`, `Verify: npm test`): the tools
   // read nothing there — no check runs, no file is traced. Active tasks only; a warn.
   const oddMarkers = malformedMarkers(taskBlocks(activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", tracks) || ""));

@@ -2606,6 +2606,13 @@ const msg = {
       doctor: (list) => `a _Verify:_ command pipes into another one — a failing check can exit 0 (a pipeline reports its LAST command's code): ${list}. Drop the pipe or use \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Task ${n}: the recorded command pipes into another one (\`${cmd}\`) — its exit 0 is the LAST command's, so this pass may hide a failing check. Drop the pipe (or use \`set -o pipefail\` under bash) and re-run.`,
     },
+    // 1.25.1 (review 7): a _Verify:_ / project check command holding a control character (shown with \u escapes) — doctor fails
+    // verify-control; done --run / finish --run run nothing
+    verifyControl: {
+      doctor: (list) => `a command holds a control character (an escape sequence, a carriage return…) — a terminal shows another command than the one that runs: ${list}. Retype it as plain text; done --run / finish --run refuse it.`,
+      run: (n, cmd) => `Task ${n}: its _Verify:_ command holds a control character (${cmd}) — a terminal would show another command than the one that runs. Nothing ran: retype it as plain text in tasks.md.`,
+      checks: (list) => `Project check ${list}: its command holds a control character — a terminal would show another command than the one that runs. Nothing ran: set it again (${DEV_SPEC} init --check name="cmd").`,
+    },
 
     // Project templates (.specs/templates/) — spec_templates / `dev-spec templates`, and the {{summary}} slot of a scaffold.
     templates: {

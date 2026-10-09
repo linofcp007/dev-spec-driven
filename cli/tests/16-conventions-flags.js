@@ -406,4 +406,42 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
       "1.25.1 r7: --project ~/zz / --project=~\\zz / SPEC_PROJECT_DIR=~/zz are the home folder's zz (init, create, list) — no '~' folder in the working folder; a missing one names the expanded path (got " +
       JSON.stringify([init.code, init.out.slice(0, 120), create.code, list.code, fs.readdirSync(cwd), missing]) + ")");
   }
+
+  // 1.25.1 r7 (7, 8, 10): next --max is bounded like spec_next_task's schema (≤ 8: --max 50 exited 0, clamped silently); every --json
+  // usage error carries a stable code — MCP's where MCP has it; a single-dash option (-j) is refused like an unknown --flag
+  // (`status -j` looked for a feature "j"), a lone "-" still reads stdin.
+  {
+    const p = path.join(tmp, "r7-cli-codes");
+    run(["init", "--project", p]);
+    run(["create", "Alpha", "core", "--project", p]);
+    const j = (args) => { const r = cliIn([...args, "--json"], { SPEC_PROJECT_DIR: p }); return { code: r.code, doc: jsonOf(r.stdout), out: r.out }; };
+    const max50 = j(["next", "alpha", "--batch", "--max", "50"]), max8 = j(["next", "alpha", "--batch", "--max", "8"]);
+    const cases = {
+      missing: j(["list", "--project", path.join(tmp, "r7-nope")]),
+      notDir: j(["list", "--project", path.join(p, ".specs", "roadmap.json")]),
+      unknownFlag: j(["status", "alpha", "--rnu"]),
+      notFor: j(["status", "alpha", "--write"]),
+      extra: j(["status", "alpha", "beta"]),
+      badBool: j(["next", "alpha", "--batch=maybe"]),
+      noValue: j(["status", "alpha", "--lang"]),
+      badLang: j(["status", "alpha", "--lang", "fr"]),
+      usage: j(["doctor"]),
+      unknownCmd: j(["frobnicate"]),
+      short: j(["status", "alpha", "-j"]),
+      notFound: j(["status", "nope"]),
+    };
+    const want = { missing: "project-missing", notDir: "project-not-dir", unknownFlag: "unknown-argument", notFor: "unknown-argument", extra: "unknown-argument",
+      badBool: "invalid-arguments", noValue: "missing-arguments", badLang: "invalid-arguments", usage: "usage", unknownCmd: "unknown-command", short: "unknown-argument",
+      notFound: "feature-not-found" };
+    const wrong = Object.entries(want).filter(([k, c]) => !(cases[k].code === 1 && cases[k].doc && cases[k].doc.ok === false && cases[k].doc.code === c)).map(([k]) => [k, cases[k].doc]);
+    const shortHuman = cliIn(["status", "-j"], { SPEC_PROJECT_DIR: p });
+    const stdinDash = spawnSync(process.execPath, [CLI, "ears", "-", "--project", p], { encoding: "utf8", input: "- **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL open a session\n" });
+    ok(max50.code === 1 && max50.doc && max50.doc.code === "invalid-arguments" && /--max/.test(max50.doc.error) && /at most 8/.test(max50.doc.error) && max8.code === 0 &&
+      !wrong.length && JSON.stringify(cases.unknownFlag.doc.unknown) === '[{"argument":"--rnu","didYouMean":"--run"}]' &&
+      JSON.stringify(cases.short.doc.unknown) === '[{"argument":"-j","didYouMean":"--json"}]' && JSON.stringify(cases.noValue.doc.missing) === '["--lang"]' &&
+      JSON.stringify(cases.badBool.doc.invalid) === '["--batch"]' && JSON.stringify(cases.extra.doc.unknown) === '[{"argument":"beta"}]' &&
+      shortHuman.code === 1 && /unknown option -j/.test(shortHuman.out) && !/Feature 'j' not found/.test(shortHuman.out) && stdinDash.status === 0 && /EARS: 1 criteria/.test(stdinDash.stdout),
+      "1.25.1 r7: next --max 9+ is refused (≤ 8, as spec_next_task); --json usage errors carry a stable code (project-missing, project-not-dir, unknown-argument {unknown}, missing-arguments {missing}, invalid-arguments {invalid}, usage, unknown-command, feature-not-found); -j is an unknown option (did you mean --json?), a lone - is still stdin (got " +
+      JSON.stringify([max50.code, max50.doc, max8.code, wrong, cases.short.doc, shortHuman.out.slice(0, 120)]).slice(0, 900) + ")");
+  }
 };

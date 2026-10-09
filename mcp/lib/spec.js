@@ -89,7 +89,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   taskWaves, TEMPLATE_ARTIFACTS, templateBracketKeys, templateKey, templates, templateSets, traceCheck, traceGapLines,
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
   changeViews, closestName, decodeText, featureBranch, IMPORT_TOOLS,
-  userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, windowsShellFailure, withFeatureLock, withinRoot,
+  userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, commandHasControl, controlVisible, windowsShellFailure, withFeatureLock, withinRoot,
   withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
 
 module.exports = {
@@ -260,6 +260,8 @@ module.exports = {
   signalConcept: (tr, kw) => (Object.prototype.hasOwnProperty.call(SIGNAL_CONCEPTS, tr) ? SIGNAL_CONCEPTS[tr].get(kw) || null : null), // 1.17 D review
 
   verifyPipeMasked, // a _Verify:_ command that pipes into another one (its exit code is the LAST command's) — `done --run`'s hint
+  commandHasControl, // 1.25.1 (review 7): a command holding a control character (ESC, a lone CR…) — done --run / finish --run refuse it
+  controlVisible, // …and that command with its control characters as escapes, for the message
 
   templates, // spec_templates / `dev-spec templates [list|init|check]` — the project's own scaffolds in .specs/templates/
   templateKey, // "requirements.md" / "steering/tech" → the template key, or null (the allowlist)

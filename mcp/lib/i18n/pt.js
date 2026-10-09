@@ -2443,6 +2443,11 @@ const msg = {
       doctor: (list) => `um comando _Verify:_ encaminha a saída para outro (pipe) — uma verificação que falha pode sair com 0 (um pipeline reporta o código do ÚLTIMO comando): ${list}. Tira o pipe ou usa \`set -o pipefail\` (bash).`,
       completeNote: (n, cmd) => `Tarefa ${n}: o comando registado encaminha a saída para outro (\`${cmd}\`) — o seu exit 0 é o do ÚLTIMO comando, por isso esta passagem pode esconder uma verificação que falha. Tira o pipe (ou usa \`set -o pipefail\` em bash) e corre-o de novo.`,
     },
+    verifyControl: {
+      doctor: (list) => `um comando tem um carácter de controlo (uma sequência de escape, um retorno de carro…) — um terminal mostra um comando diferente do que é executado: ${list}. Reescreve-o como texto simples; o done --run / finish --run recusam-no.`,
+      run: (n, cmd) => `Tarefa ${n}: o seu comando _Verify:_ tem um carácter de controlo (${cmd}) — um terminal mostraria um comando diferente do que é executado. Nada foi executado: reescreve-o como texto simples no tasks.md.`,
+      checks: (list) => `Verificação do projeto ${list}: o seu comando tem um carácter de controlo — um terminal mostraria um comando diferente do que é executado. Nada foi executado: define-a de novo (${DEV_SPEC} init --check nome="cmd").`,
+    },
 
     templates: {
       noSummary: "[a definir]",

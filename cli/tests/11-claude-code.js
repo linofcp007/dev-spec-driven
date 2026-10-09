@@ -172,5 +172,45 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
   ok(both.code === 1 && /Pass either `path` or `text`, not both/.test(both.err) && !/Unknown track/i.test(both.err + both.out) && bothJ.code === 1 && bothJo && bothJo.ok === false &&
     /not both/.test(bothJo.error) && !fs.existsSync(path.join(pt9, ".specs", "dark-mode")),
     "1.16 C review 9: import plan <path> --text is refused as spec_import {path, text} is (path or text, not both) — nothing imported (got " + js([both.code, both.err.slice(0, 80), bothJo]) + ")");
+
+  // 1.25.1 (review 7): the status line outside a dev-spec project (and the bare help) never load the engine — Claude Code runs the
+  // status line after every message in every folder once it is installed user-wide, and each render loaded ~36 modules first
+  // (136–220 ms). cli/completion.js statusProbe (statusLineProject's null rule, without the engine) decides first; it agrees with the
+  // engine on every layout; a found project still renders its line. Timed against `node -e 0` and `version` (which loads the engine).
+  {
+    const C = require(path.join(__dirname, "completion.js"));
+    const pr = path.join(tmp, "r7-sl-proj");
+    S16.initProject(pr, ["core"], "en");
+    S16.createFeature(pr, "Login", ["core"], "", undefined, "en");
+    fs.mkdirSync(path.join(pr, "src", "deep"), { recursive: true });
+    const hand = path.join(tmp, "r7-sl-hand");
+    fs.mkdirSync(path.join(hand, ".specs"), { recursive: true }); // a hand-made empty .specs/: no dev-spec project for the status line
+    const layouts = [[none], [pr], [path.join(pr, "src", "deep")], [none, pr], ["", none], ["${CLAUDE_PROJECT_DIR}", pr], ["//fileserver/share/p"], [hand], [path.join(hand, ".specs")], [null, 7, none]];
+    const disagree = layouts.filter((c) => C.statusProbe(c) !== (S16.statusLineProject(c) !== null));
+    const pre = path.join(tmp, "r7-sl-preload.js");
+    fs.writeFileSync(pre, "process.on('exit', () => { const sep = String.fromCharCode(92); const m = Object.keys(require.cache).filter((f) => f.split(sep).join('/').includes('/mcp/lib/')); process.stderr.write('LOADED ' + m.length); });");
+    const envNo = { ...process.env };
+    for (const k of ["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "COLUMNS"]) delete envNo[k];
+    const loaded = (args, input, cwd) => spawnSync(process.execPath, ["-r", pre, CLI, ...args], { encoding: "utf8", input: input || "", cwd: cwd || none, env: envNo });
+    const slNone = loaded(["statusline"], js({ cwd: none, workspace: { current_dir: none } }));
+    const slProj = loaded(["statusline"], js({ cwd: pr }));
+    const help = loaded(["help"]), dashHelp = loaded(["--help"]);
+    const time = (args, input) => { const t0 = process.hrtime.bigint(); spawnSync(process.execPath, args, { input: input || "", cwd: none, env: envNo }); return Number(process.hrtime.bigint() - t0) / 1e6; };
+    const med = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
+    const measure = () => {
+      const n0 = [], sl = [], ver = [];
+      for (let i = 0; i < 5; i++) { n0.push(time(["-e", "0"])); sl.push(time([CLI, "statusline"], js({ cwd: none }))); ver.push(time([CLI, "version"])); }
+      return [med(n0), med(sl), med(ver)];
+    };
+    let [n, s, v] = measure();
+    if (!(s < v && s <= Math.max(250, 2.5 * n))) [n, s, v] = measure(); // timing-only miss: measure once more (testing.md)
+    ok(!disagree.length && slNone.status === 0 && slNone.stdout === "" && /LOADED 0$/.test(slNone.stderr) &&
+      slProj.status === 0 && /login/.test(slProj.stdout) && !/LOADED 0$/.test(slProj.stderr) &&
+      help.status === 0 && /universal spec-driven CLI/.test(help.stdout) && /LOADED 0$/.test(help.stderr) && /LOADED 0$/.test(dashHelp.stderr) &&
+      s < v && s <= Math.max(250, 2.5 * n),
+      "1.25.1 r7: statusline outside a dev-spec project prints nothing without loading any mcp/lib module (statusProbe agrees with statusLineProject on " + layouts.length +
+      " layouts), a project still gets its line; the bare help loads none either; statusline (no project) " + Math.round(s) + " ms vs node -e 0 " + Math.round(n) + " ms and `version` (the engine) " + Math.round(v) +
+      " ms (got " + js([disagree, slNone.status, slNone.stderr.slice(-40), slProj.stdout.slice(0, 80), slProj.stderr.slice(-20), help.stderr.slice(-20), dashHelp.stderr.slice(-20)]) + ")");
+  }
   try { fs.rmSync(none, { recursive: true, force: true }); } catch { /* best-effort */ }
 };

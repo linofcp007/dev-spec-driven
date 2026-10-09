@@ -81,6 +81,24 @@ function resolveProject(arg, env) {
   const cwd = path.resolve(process.cwd());
   return nearestProject(cwd) || cwd;
 }
+// doctor.js statusLineProject's null rule (1.25.1, review 7) — the status line's pre-check, before the engine loads: is there a
+// folder holding a dev-spec .specs/ at or above one of the candidates (STATUS_MAX_UP levels; an empty / non-string / whole-${VAR} /
+// over-long / network candidate skipped)? false → the engine would answer null (an empty line): nothing to load. true → the engine
+// decides (it also maps a worktree to its checkout, which only ever starts from a folder this walk finds).
+const STATUS_MAX_UP = 40;
+function statusProbe(candidates) {
+  for (const c of Array.isArray(candidates) ? candidates : []) {
+    if (typeof c !== "string" || !c.trim() || /^\$\{[^}]*\}$/.test(c.trim()) || c.length > 4096 || isNetworkPath(c)) continue;
+    let dir = path.resolve(expandHome(c.trim()));
+    for (let i = 0; i < STATUS_MAX_UP; i++) {
+      if (isDevSpecDir(dir)) return true;
+      const up = path.dirname(dir);
+      if (up === dir) break;
+      dir = up;
+    }
+  }
+  return false;
+}
 
 // state.js: slugify, RE_WIN_RESERVED-free (a listing shows what is there), RESERVED_SLUGS / reservedSlug, isFeatureFolder.
 const RESERVED_SLUGS = new Set(["steering", "exports", "templates", "tracks"]);
@@ -224,4 +242,4 @@ function script(shell, model) {
   return body.replace(/@@([A-Z_]+)@@/g, (m, k) => (Object.prototype.hasOwnProperty.call(fill, k) ? fill[k] : m));
 }
 
-module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, featureNames, archivedNames };
+module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, statusProbe, featureNames, archivedNames };
