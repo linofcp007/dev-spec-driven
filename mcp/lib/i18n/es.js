@@ -1454,7 +1454,8 @@ const msg = {
       evidenceMoved: (list, slug) => `ejecuciones registradas bajo un número de tarea pertenecen a una tarea que ahora tiene otro número (renumerada): ${list} — la evidencia se guarda por número, así que ninguna de las dos tareas lee esa ejecución; registra la ejecución de la tarea movida: ${DEV_SPEC} done ${slug} <n> --run`,
     },
     observed: {
-      on: "Modo de evidencia OBSERVADO — una tarea cuyo _Verify:_ tiene un comando solo queda verificada con una ejecución correcta que el harness vio (en Claude Code, el hook de observación del plugin guarda cada ejecución Bash de un comando _Verify:_ o de una verificación del proyecto) o que dev-spec done --run / finish --run hizo; la ejecución de una verificación del proyecto también (roadmap.json meta.evidence). Un cliente solo MCP no tiene ese hook: sus ejecuciones se registran con " + DEV_SPEC + " done <función> <n> --run.",
+      on: "Modo de evidencia OBSERVADO — una tarea cuyo _Verify:_ tiene un comando solo queda verificada con una ejecución correcta que el harness vio (en Claude Code, el hook de observación del plugin guarda cada ejecución Bash de un comando _Verify:_ o de una verificación del proyecto) o que dev-spec done --run / finish --run hizo; la ejecución de una verificación del proyecto también (roadmap.json meta.evidence). Un cliente solo MCP no tiene ese hook: sus ejecuciones se registran con " + DEV_SPEC + " done <función> <n> --run. Solo con la herramienta PowerShell (Windows sin Git Bash), una ejecución queda registrada únicamente cuando Claude Code da su código de salida — las demás se registran también con --run.",
+      unguarded: "La evidencia observada solo es tan fuerte como la guardia de aprobaciones, y está desactivada (meta.approvalGuard): un agente que añada una línea a un .execution/observed.jsonl falsifica una ejecución observada. Actívala — " + DEV_SPEC + " init --approval-guard ask (o deny) — para que escribir ese registro se pregunte o se rechace.",
       off: "Modo de evidencia REPORTADO — las ejecuciones que un agente reporta verifican tal como se dan (roadmap.json meta.evidence); cada registro sigue diciendo si el harness la observó.",
       badValue: (v) => `--evidence admite reported u observed (recibido '${v}').`,
       badInput: (v) => `evidence debe ser "reported" u "observed" (recibido '${v}').`,
@@ -2155,6 +2156,10 @@ const msg = {
         if (a.kind === "remove") return `borrar definitivamente la función '${f}' (su carpeta en .specs/, sus aprobaciones y su historial)`;
         if (a.kind === "unreadable") {
           if (a.why === "partial") return "ejecutar una llamada de herramienta que la guardia de aprobaciones solo recibió en parte (la entrada llegó cortada) y que menciona dev-spec o .specs/";
+          if (a.why === "fed") return "darle a una shell un script que la guardia de aprobaciones no puede ver (llegado por una tubería desde un archivo o un programa, o una sustitución de procesos) en un comando que menciona dev-spec o .specs/";
+          if (a.why === "specs-arg") return "ejecutar un programa que la guardia de aprobaciones no conoce sobre .specs/, su roadmap.json o un .state.json (puede cambiarlos)";
+          if (a.why === "error") return "ejecutar una llamada de herramienta que la guardia de aprobaciones no pudo comprobar (falló) con la guardia de aprobaciones activa";
+          if (a.why === "project") return "actuar sobre una carpeta de proyecto (projectDir) que la guardia de aprobaciones no puede leer";
           return a.why === "too-long" ? `ejecutar un comando de shell demasiado largo para que la guardia de aprobaciones lo lea (${a.length} caracteres) que menciona dev-spec o .specs/`
             : "ejecutar un comando de shell que menciona la CLI de dev-spec con una palabra de aprobación en una forma que la guardia de aprobaciones no puede leer (un lanzador desconocido, un glob, una variable o una cadena concatenada)";
         }
@@ -2174,6 +2179,9 @@ const msg = {
           }
           if (a.setting === "check") return a.to == null ? `eliminar la verificación del proyecto '${a.name}' (meta.checks)` : `cambiar el comando de la verificación del proyecto '${a.name}' (meta.checks)`;
           if (a.setting === "roadmap") return "cambiar .specs/roadmap.json desde la shell — escribirlo, moverlo o borrarlo (ahí están la guardia de aprobaciones y los gates del proyecto)";
+          if (a.setting === "specs") return a.source === "edit" ? "mover o borrar .specs/ o una carpeta dentro de ella con una herramienta de archivos (ahí están el roadmap.json y los .state.json de las funciones)"
+            : "cambiar .specs/ desde la shell — escribir, mover o borrar mediante un glob, una variable o una carpeta entera que puede alcanzar el roadmap.json o el .state.json de una función";
+          if (a.setting === "link") return "crear un enlace a .specs/ o a un archivo dentro (enlace simbólico, junction o enlace duro) — lo que se escriba a través de él llega al roadmap.json y a los .state.json sin ser visto";
           return `bajar la guardia de aprobaciones de ${a.from} a ${a.to}`;
         }
         if (a.revoke) return `revocar la aprobación de la fase ${a.phase || "?"} de '${f}'` + (a.role ? ` como ${a.role}` : "") + (a.by ? ` en nombre de '${a.by}'` : "");

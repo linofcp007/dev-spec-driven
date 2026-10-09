@@ -905,6 +905,7 @@ async function main() {
         if (checks) console.log("  " + spec.msg(r.lang).projectChecks.initLine(Object.entries(r.checks || {}).map(([k, v]) => k + " → " + v).join(" · ") || "—"));
         if (r.rolesNote) console.log("  " + r.rolesNote);
         if (r.approvalGuardNote) console.log("  " + r.approvalGuardNote);
+        if (r.observedWarning) console.log("  " + r.observedWarning); // 1.25.1 (review 7): observed evidence without the approval guard
       });
     }
 

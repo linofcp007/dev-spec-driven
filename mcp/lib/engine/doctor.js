@@ -36,7 +36,7 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
-  branchView; // 1.25 (create --branch)
+  branchView, evidenceMode, approvalGuardLevel; // branchView: 1.25 (create --branch); the last two: 1.25.1 (review 7 — observed-unguarded)
 let dayOf; // core.js — 1.25.1: the local calendar date (today / dayOf)
 function __link(E) { ({ dayOf, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
@@ -62,7 +62,7 @@ function __link(E) { ({ dayOf, expandHome, projectChecks, verifyControls, contro
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
-  branchView } = E); }
+  branchView, evidenceMode, approvalGuardLevel } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -634,6 +634,9 @@ function specDoctor(projectDir, name, opts = {}) {
   // unknown (read as none, they failed open): approve / revoke / spec_finish refuse on it, so doctor FAILS naming it
   const rmc = roadmapGovernanceCheck(projectDir, lng);
   if (rmc) add(rmc.id, rmc.status, rmc.detail);
+  // 1.25.1 (review 7): observed evidence (meta.evidence) is only as strong as the approval guard — with it off, one line appended to
+  // an .execution/observed.jsonl forges an observed run: a warn naming the fix
+  if (evidenceMode(projectDir) === "observed" && approvalGuardLevel(projectDir) === "off") add("observed-unguarded", "warn", fm.observed.unguarded);
 
   // Steering
   const steeringDir = path.join(root, "steering");

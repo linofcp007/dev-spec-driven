@@ -692,6 +692,13 @@ next (its `_Depends:_` all done), and the brief carries `dependsOn` [{number, st
   feature that has one — 1.14 F3 —, else the first open task) or `/spec-converge`. Text reads only; `guard: true` is unchanged.
 
 ## Harness-observed evidence (1.14 F1)
+- **Only as strong as the approval guard (1.25.1, review 7, finding 10).** The log is a file the agent can write: with
+  `meta.approvalGuard` off (the default), one line appended to `.specs/<f>/.execution/observed.jsonl` forges a verified, observed run
+  (the approval guard asks / refuses that write — claude-code-integration.md → Human approval guard). So `initProject` returns
+  `observedWarning` (`observed.unguarded`, localized; the CLI's `init` prints it) whenever the result's `evidence` is `observed` and
+  `approvalGuard` is `off` — on every init call, not only the one that set it — and `specDoctor` warns `observed-unguarded` (a project
+  setting, read per feature). `observed.on` also says that with the PowerShell tool alone (Windows without Git Bash) a run is logged
+  only when Claude Code reports its exit code (the hook's strict mode, below) — the others need `done --run`.
 - **The log.** `hooks/observe-hook.js` (hooks.json **PostToolUse** and **PostToolUseFailure**, matcher `^(Bash|PowerShell)$` —
   a PowerShell run only with an EXPLICIT exit code, its response shape being undocumented; never the Monitor tool, which the
   approval guard reads since 1.23: it streams a background command's lines and reports no finished run with its exit code) logs a run of a task's runnable `_Verify:_` command (or of

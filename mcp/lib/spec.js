@@ -71,7 +71,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   earsSteps, earsValidate, engineVersion, etaText, evidenceMode, existingFeature, expectsFail, EXPORT_FORMATS,
   exportSpecs, extractSection, featureFlow, featureLang, featureLocked, featureOverlaps, featurePercent,
   featurePlaceholders, finishFeature, FLOWS, forecastData, gateRefusal, globalConstraints, globFiles, glossaryEntries, guardCheck,
-  guardEnabled, guardLevel, sessionProject, sessionPath, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
+  guardEnabled, guardLevel, sessionProject, sessionPath, shellWriteTargets, impactLines, impactReport, implementsTargets, importSpec, initProject, integrationPlanMd,
   isDevSpecDir, isFeatureFolder, isNetworkPath, isPlaceholderTask, isTemplatePlaceholder, isTestFile, isWslLauncher, listFeatures,
   manageFeature, markdownToHtml, markRoadmapStale, matrixCsv, maybeRefreshCatalog, mdPlainText, refreshStaleRoadmap, ROADMAP_STALE_FILE, roadmapStale, staleGeneratedText, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY,
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, milestone,
@@ -250,6 +250,7 @@ module.exports = {
   guardCheck,
   sessionProject, // 1.23 review 5: the project a hook reads — the nearest dev-spec .specs/ above its cwd, a worktree mapped to the session's checkout
   sessionPath, // …and a payload path spelled under that project (a file in the worktree's copy)
+  shellWriteTargets, // 1.25.1 (review 7): the files a Bash / PowerShell command writes, removes or copies into — the edit guard on the shell
   designSaveCheck, // the PostToolUse design.md save check
   globFiles, // the files an _Implements:_ glob matches in the project (trace_check / drift baseline)
   withFeatureLock, // the cross-process feature lock the mutators hold (tests drive it with a short waitMs)
