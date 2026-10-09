@@ -3,6 +3,89 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.25.1] — 2026-10-09
+
+The seventh review: eight read-only reviewers (security, MCP/CLI, hooks, two engine passes, prose, i18n/docs, architecture),
+then six fix branches — 75 findings, each with a regression test. **Requires Claude Code 2.1.139+** (hooks run in exec form).
+
+### Security
+- **The approval guard reads what a shell is fed.** At `approvalGuard: ask / deny`, text piped into a shell
+  (`echo "… approve …" | bash`, `bash <(…)`, `source <(…)`, `xargs … sh -c`, `iex`, PowerShell `@('approve',…)`) is read as
+  that shell's script — a visible approval is denied, an invisible one (`curl … | sh`) asks. A subcommand that could expand to
+  an approval (`{approve,}`, `appro?e`) asks.
+- **Writes and removals under `.specs/` with globbed or indirect targets are a guard-down** (`.specs/roadmap.jso[n]`,
+  `$D/roadmap.json`, `find … -delete`, `git clean`, `rm -rf .specs/*`, `rsync`, `tar -C`, `unzip -d`, `robocopy`, `sed -i`,
+  `awk -i inplace`, PowerShell pipelines into `Remove-Item` / `Set-Content`, `[IO.File]::WriteAllText`…); an unknown program
+  run on `.specs/`, `roadmap.json` or a `.state.json` asks; a `.specs/` holding features but no `roadmap.json` fails closed.
+- **Links into `.specs/`** (`ln -s`, `mklink`, `New-Item -ItemType Junction|SymbolicLink`, `subst`) are a guard-down, and
+  Write / Edit resolve the target folder's real path.
+- **Another MCP server's file tools** (`mcp__*__write_file`, `edit_block`, `move_file`…) go through the approval guard when
+  they name `.specs/`.
+- **One `projectDir` parser** for the hook and the server: a `file://` URI no longer slips past the hook at `ask`; a leading
+  `~` is the home folder on every surface (it created a folder named `~`).
+- **The approval hook fails closed**: an engine error on a guarded project answers `ask` (it exited 0 — allow).
+- **`spec_import` reads only the project's documents**: never a hidden folder (except `.kiro/`, `.cursor/`, `.fluidplan/`,
+  `.agent/`, `.claude/plans/`), never a non-document, never another folder's files over MCP unless it is a dev-spec project
+  (it returned any file on disk in its `preview`).
+- **Misspelt nested MCP arguments are refused** at any depth with a did-you-mean (`tasks[0].verfy` wrote a task with no
+  `_Verify:_` that then ticked as verified); nested `required` and `minItems` are enforced.
+- **Terminal control characters** from spec text are stripped from the CLI's human output; `done --run` / `finish --run`
+  refuse a command holding them, and doctor fails `verify-control` (a cloned tasks.md could show `$ npm test` while running
+  something else).
+- **Observed evidence warns when unguarded**: `init` and doctor (`observed-unguarded`) say observed mode is only as strong as
+  the approval guard.
+- `merge-state --install / --uninstall` never write through a linked `.gitattributes`; the eval harness's baseline goes through
+  the `.specs/` write gate.
+- **An honest threat model**: INSTALL, README, `/spec-guard` and the references now say the guards stop accidents and casual
+  workarounds, not a determined agent with a shell, and list what still gets through.
+
+### Fixed
+- **Guard mode sees shell writes** (`sed -i`, `cat > src/a.ts`, `Set-Content`…) and a monorepo's nested `.specs/`.
+- **A whitespace-only edit** of approved tasks no longer makes the guard, the traceability matrix, the tests sign-off or the
+  rework count disagree with `next_action` (one `approvedContentSame` test for all of them).
+- Tasks a track adds never reuse a removed task's number (and inherit its evidence or tick).
+- An `_Expect: fail_` task whose re-run crashes is unverified; a dangling `npm test &&` proves nothing.
+- The implementer's stop gate reads exit codes per run — a failing `_Verify:_` run next to a passing lint no longer passes.
+- Mistyped task lines (`- [ ] 2 B`, `[~]`, a quoted task) are reported as unread instead of swallowed into the task above;
+  setext phase headings are read; a bugfix's fix is gated before the root cause wherever it sits.
+- `writeFileAtomic` fsyncs before the rename and never falls back to a truncating in-place write.
+- **Calendar dates are the local date** (they were UTC: a write between 00:00 and 01:00 in Lisbon was dated the day before).
+- A lock being released on Windows ("delete pending") is waited for, never refused as a link.
+- **Readers**: an inactive track's marker hides a heading only when it leads it, and trace names what it hides
+  (`inactiveAcs`); `[]` / `[...]` in a real criterion are no placeholder; pipe-less test-plan tables, a Test ID column that is
+  not the first and `### T-01` entries are read; EARS reads setext headings; CR-only files read as lines; an annotated
+  `_Implements:_` path is the path; spec-kit FRs no scenario covers are named; importers read setext headings; a pack's `\|`
+  stays in its cell.
+- **Classifier**: AI products (ChatGPT, Ollama, LangChain, Hugging Face, Bedrock, pgvector, Stable Diffusion…), training and
+  prediction give +ai; everyday words no longer switch tracks on ("claude monet", "the mistral wind", "photo credits",
+  "therapy session", "a cron expression helper"); "no more X" is a replacement, "without X … incomplete" keeps the track; a
+  small change (a clearer error message, a changed default) is sized `xs` (`small-change`).
+- [AI] Fallback & Degradation is no longer satisfied by an unrelated "Fallbacks" heading.
+- **Scan**: Spring Boot entry points only in `.java` / `.kt`, test files are never entry points, "node" not "node ()".
+- **Stop gate**: a claim must be about the work — "I verified that the bug is in the parser", "Done. I updated the README",
+  "Concluí que…", "Listo, aquí tienes…" no longer cost an extra turn; "Work complete — ready to merge" is now caught.
+- **MCP**: a late `roots/list` answer is used; `destructiveHint` is true on the 11 tools that remove or overwrite; every
+  feature-resolver refusal carries a stable `code` (`feature-not-found`…); `spec_log` reads the range the CLI reads.
+- **CLI**: `--json` usage errors carry stable codes; an unknown `-x` is refused; `next --max` is capped at 8 like MCP.
+- **The status line** command printed by `--print-config` follows the newest installed plugin version (it broke on update).
+- **pt-BR**: every track tag, European residue ("ligação", enclisis, "porque" asking why) and "começa por"; PT writes
+  `{{variables}}`; ES says "fichero" for a file.
+
+### Performance
+- **Hooks run in exec form** (`"command": "node", "args": [...]`): no shell per spawn — 65 ms instead of 114 ms (Git Bash)
+  or 441 ms (Windows PowerShell). **Requires Claude Code 2.1.139+.**
+- The observe hook runs in the background (`async`); SessionStart and the status line probe for a dev-spec project before
+  the engine loads (157 → 61 ms, 140 → 61 ms in a repo without one); the observe pre-filter skips placeholder `_Verify:_`.
+- The traceability matrix builds its indexes once (2,800 stories: 5.5 s → 0.47 s).
+
+### Docs
+- The maintainer notes cite live identifiers (a test checks every backticked name), list all nine section tables, and drop
+  `readline`; model-facing prose names `spec_approve` for approvals (`/approve` is the user's), `/grill` is self-contained,
+  version archaeology is gone from SKILL.md and the commands.
+
+### Tests
+- `node mcp/test.js` 2132 assertions (was 2052), `node cli/test-cli.js` 610 (was 599).
+
 ## [1.25.0] — 2026-10-09
 
 Five ideas from the sixth review's product pass: a git branch per feature (as spec-kit's `/specify` does), the decision
