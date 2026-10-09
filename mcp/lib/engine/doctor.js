@@ -1499,4 +1499,4 @@ function planBridge(projectDir, payload) {
 
 module.exports = { designSaveCheck, userDefaults, newProjectLang, userDefaultsApplied, seedProjectLang, listFeatures,
   statusFeature, nextAction, specDoctor, isDevSpecDir, statusLineProject, statusLine, planBridge,
-  approvalChecks, CHECK_PHASE, DOCTOR_CHECKS, __link }; // 1.27: the check registry (DOCTOR_CHECKS: read by mcp/tests/17-docs-review6.js)
+  approvalChecks, CHECK_PHASE, DOCTOR_CHECKS, GATES, __link }; // 1.27: the check registry (DOCTOR_CHECKS, GATES: read by mcp/tests/06-gates-registry.js and 17-docs-review6.js)
