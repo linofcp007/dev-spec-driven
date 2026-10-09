@@ -238,6 +238,19 @@ independent tasks. Protocol: `skills/dev-spec-driven/references/subagent-executi
 - **`/spec-metrics`** (`spec_metrics`) — lead time per phase, rework, forced approvals, change requests
   and evidence pass rate, per feature or for the project; `write` creates a pre-filled `retro.md`.
 
+### New in 1.25
+
+- **A branch per feature** — `dev-spec create "Login" --branch` scaffolds the spec, records where it started and switches
+  you onto `feature/login` (spec-kit's habit; over MCP the agent runs the returned `git switch -c`). next-action reminds you
+  to switch back, finish says "merge it into its base, or keep it", and `log` counts only the feature's commits.
+- **ADRs from the decision log** — `/spec-export <feature> --adr` turns `decisions.md` into MADR files
+  (`.specs/exports/adr/checkout/0003-use-stripe.md`), numbered by the decision's D-number so they never reshuffle; re-run it
+  any time.
+- **Bring your Kiro steering and Cursor rules** — `import kiro-steering` / `import cursor-rules` make them scoped steering
+  the task briefs follow; `--dry-run` shows what any import would write, and writes nothing.
+- **Tab completion** — `dev-spec completion powershell` (or bash, zsh, fish): commands, flags, phases, tracks and your
+  feature names, even from a plugin install with no `dev-spec` on PATH.
+
 ### New in 1.24
 
 - **A sixth full review, fixed** — 75 findings across the server, the CLI, the hooks, the evidence, the gates, the
@@ -766,6 +779,19 @@ skill `subagent-driven-development` do [obra/superpowers](https://github.com/obr
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabalho, aprovações forçadas, pedidos de
   alteração e taxa de sucesso da evidência, por funcionalidade ou para o projeto; `write` cria um `retro.md`
   pré-preenchido.
+
+### Novidades da 1.25
+
+- **Um branch por funcionalidade** — `dev-spec create "Login" --branch` cria a spec, regista de onde partiu e muda para
+  `feature/login` (o hábito do spec-kit; por MCP o agente corre o `git switch -c` devolvido). O next-action lembra de
+  voltar a ele, o finish diz "faz merge na base ou mantém-no" e o `log` conta só os commits da funcionalidade.
+- **ADRs a partir do registo de decisões** — `/spec-export <feature> --adr` transforma o `decisions.md` em ficheiros MADR
+  (`.specs/exports/adr/checkout/0003-usar-stripe.md`), numerados pelo número D da decisão, para nunca se baralharem; pode
+  correr-se outra vez sempre que se quiser.
+- **Traz o steering do Kiro e as regras do Cursor** — `import kiro-steering` / `import cursor-rules` tornam-nos steering
+  com âmbito, que os briefs das tarefas seguem; `--dry-run` mostra o que qualquer importação escreveria, sem escrever nada.
+- **Completação com Tab** — `dev-spec completion powershell` (ou bash, zsh, fish): comandos, flags, fases, tracks e os
+  nomes das funcionalidades, mesmo numa instalação por plugin sem `dev-spec` no PATH.
 
 ### Novidades da 1.24
 
@@ -1323,6 +1349,20 @@ así que compensa en funciones con ~6+ tareas independientes. Protocolo:
 - **`/spec-metrics`** (`spec_metrics`) — lead time por fase, retrabajo, aprobaciones forzadas, solicitudes de
   cambio y tasa de éxito de la evidencia, por función o para el proyecto; `write` crea un `retro.md`
   prerrellenado.
+
+### Novedades de la 1.25
+
+- **Una rama por función** — `dev-spec create "Login" --branch` crea la spec, registra de dónde partió y te cambia a
+  `feature/login` (la costumbre de spec-kit; por MCP el agente ejecuta el `git switch -c` devuelto). next-action te recuerda
+  volver a ella, finish dice "fusiónala en su base o consérvala" y `log` cuenta solo los commits de la función.
+- **ADRs a partir del registro de decisiones** — `/spec-export <feature> --adr` convierte `decisions.md` en archivos MADR
+  (`.specs/exports/adr/checkout/0003-usar-stripe.md`), numerados por el número D de la decisión para que nunca se
+  reordenen; se puede volver a ejecutar cuando se quiera.
+- **Trae el steering de Kiro y las reglas de Cursor** — `import kiro-steering` / `import cursor-rules` los convierten en
+  steering con ámbito que siguen los briefs de las tareas; `--dry-run` muestra lo que escribiría cualquier importación, sin
+  escribir nada.
+- **Autocompletado con Tab** — `dev-spec completion powershell` (o bash, zsh, fish): comandos, flags, fases, tracks y los
+  nombres de tus funciones, incluso en una instalación por plugin sin `dev-spec` en el PATH.
 
 ### Novedades de la 1.24
 

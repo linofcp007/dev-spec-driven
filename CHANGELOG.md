@@ -3,6 +3,63 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.25.0] — 2026-10-09
+
+Five ideas from the sixth review's product pass: a git branch per feature (as spec-kit's `/specify` does), the decision
+log as Architecture Decision Records, Kiro steering and Cursor rules brought along, a dry run for every import, and shell
+completion for the CLI.
+
+### Added
+- **A git branch per feature** — `spec_create {branch}` / `dev-spec create|bugfix|spike --branch [<name>]` starts a
+  feature on its own branch (`feature/<slug>`, `fix/<slug>`, `spike/<slug>`, or a name you give, validated before anything
+  is written) and records it in `.state.json` with the branch and commit it started from. The CLI runs `git switch -c`;
+  over MCP the tool returns `branch.command` for the agent to run — the engine never runs git (it reads `.git` as files).
+  An existing branch of that name is never adopted or switched to; the CLI exits 1 when the feature doesn't end up on its
+  branch (outside a repository, the name taken, git failing) — the feature is created all the same. `spec_status` and
+  `spec_next_action` name the branch (next_action says to switch first when HEAD is elsewhere), `spec_finish` names it and
+  its base in the merge summary and in the two local options, and `dev-spec log` reads only the commits since the feature's
+  start (`<base>..HEAD`). The git merge driver keeps the earlier record.
+- **The decision log as ADRs** — `spec_export {format: "adr"}` / `dev-spec export [feature] --adr [--write]` turns
+  `decisions.md` into MADR files, one per decision: `.specs/exports/adr/<feature>/NNNN-<title>.md` plus an `index.md`. The
+  ADR number is the decision's D-number, so numbers never reshuffle; superseded and superseding ADRs link to each other;
+  discoveries are left out; headings follow the feature's language (EN / PT / pt-BR / ES). The project export covers every
+  feature, archived ones included, plus `adr/index.md`. Re-running writes only what changed and removes the generated ADR
+  files no decision backs any more; a hand-written file is never touched (one at a path the export writes refuses it all).
+- **Kiro steering and Cursor rules** — `spec_import {tool: "kiro-steering" | "cursor-rules"}` / `dev-spec import
+  kiro-steering|cursor-rules [path]` turn `.kiro/steering/*.md`, `.cursor/rules/*.mdc` and the legacy `.cursorrules` into
+  `.specs/steering/` files with their inclusion mode: Kiro's front matter is kept (none → always); Cursor's
+  `alwaysApply` → `inclusion: always`, `globs` → `fileMatch` + `fileMatchPattern` (a folder-less glob such as `*.ts`
+  matches at any depth, as in Cursor), neither → `manual`. Task briefs follow them. An existing steering file is never overwritten: it is skipped with
+  a reason — and when it is still `spec_init`'s untouched stub (Kiro's product / tech / structure), the message says to
+  delete it and import again.
+- **A dry run for every import** — `spec_import {dryRun: true}` / `dev-spec import … --dry-run` runs the whole import and
+  writes nothing (no file, folder, lock or roadmap refresh), returning the real answer — the feature, its tracks, the
+  warnings, every refusal a real import makes — plus a bounded preview of each file it would write. Every import result
+  now carries `counts` (stories, criteria, tasks, decisions).
+- **Shell completion** — `dev-spec completion <powershell|bash|zsh|fish>` prints a completion script built from the CLI's
+  own tables: commands and aliases, each command's flags, the values known for a flag or argument (languages, tracks,
+  phases, flows, sizes, import formats…) and the project's feature names — read from `.specs/` on Tab by a hidden lister
+  that never loads the engine (about Node's startup time). Windows PowerShell 5.1 and 7, bash, zsh and fish. Without a
+  `dev-spec` on PATH the script defines one, and after a plugin update it follows the newest installed version. Install
+  lines: `dev-spec completion --help` and INSTALL.md.
+
+### Fixed
+- The 1.23 worktree guard test reused session `"s"`, so 1.24's once-a-session forced-approval note made it fail on every
+  run after the first on a machine (a test defect, not the product's).
+
+### Docs
+- The tooling reference, the commands (`/spec-export`, `/spec-decide`, `/spec-import`, `/createSpec`, `/spec`,
+  `/spec-finish`), SKILL.md, AGENTS.md, INSTALL.md (Shell completion), INTEGRATIONS.md and the maintainer notes cover each
+  feature; extending.md says how to add a dry-runnable operation, a completion table entry and a string-or-switch tool
+  argument. tools/list grew by ~660 characters to 75,936 — under its 76,000 budget, with little room left.
+
+### Tests
+- `node mcp/test.js` 2052 assertions (was 2018), `node cli/test-cli.js` 599 (was 573): each feature through the MCP tool and
+  the CLI command — branch names and git in a real temp repository, ADR numbering, supersession, languages and stale-file
+  removal, every steering mapping and skip reason, dry runs that leave the project byte-identical and match the real import
+  file by file, and a completion script for each shell that names every command and flag (driven in Git Bash and Windows
+  PowerShell 5.1; zsh and fish where installed).
+
 ## [1.24.0] — 2026-10-09
 
 A sixth full review — nine areas (the MCP server, the CLI, the Claude Code hooks, tasks and evidence, gates and state,
