@@ -331,7 +331,7 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   only), and an older Claude Code validating option fields strictly could refuse the whole plugin. Claude Code's
   settings.json `env` block reaches the hooks, stdio MCP servers and the Bash tool alike (code.claude.com/docs/en/env-vars).
 - **MCP** — every tool carries `annotations` from server.js `TOOL_ANNOTATIONS` (`READ_ONLY` for the 14 tools no argument
-  makes write; `destructiveHint` only on `spec_feature`; `idempotentHint` per tool; `openWorldHint: false` everywhere —
+  makes write; `destructiveHint` on the 11 tools one of whose arguments removes or overwrites a record — 1.25.1 review 7: `spec_feature` remove, `spec_export` adr, `spec_approve` revoke, `spec_complete_task` undo, `spec_impact` reopen, `spec_backlog` / `spec_milestone` rm, `spec_depend` replace / clear, `spec_add_track` remove, `spec_init` (a removed check, cleared roles, an overwritten setting), `spec_tracks` signals set / forget; `idempotentHint` per tool; `openWorldHint: false` everywhere —
   the protocol's defaults are the opposite, so all are explicit); mcp/test.js requires one entry per tool and snapshots
   `.specs/` around every read-only one. `completion/complete` (prompts-resources.js `complete()`): feature slugs for a
   prompt argument that names a feature, the `specs://` template variables `slug` / `artifact` / `file` (≤ 100 values,

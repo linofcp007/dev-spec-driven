@@ -449,23 +449,27 @@ const TOOLS = [
 // enforces its own rules whatever a client makes of them. readOnlyHint: true only when NO argument can make the tool write
 // (spec_roadmap / spec_catalog / spec_export / spec_changelog / spec_metrics / spec_task_brief write with `write: true`,
 // spec_impact with `reopen`, spec_upgrade with `apply`, spec_templates / spec_tracks with `init` — so they are not read-only;
-// a read-only tool never touches .specs/ — mcp/test.js snapshots the tree around each). destructiveHint: only spec_feature
-// (`remove` deletes a feature folder) — every other writer only adds or updates what it owns (1.25: spec_export {format:
-// "adr"} also removes the ADR files it generated that no decision backs any more — never a hand-written one). idempotentHint: a second
-// identical call changes nothing more (a tick, an approval, an appended task or decision, finish's evidence each add a record:
-// false). openWorldHint: false everywhere — local files only, no network, no command, no git.
+// a read-only tool never touches .specs/ — mcp/test.js snapshots the tree around each). destructiveHint (MCP: false = "only
+// additive updates"): every tool one of whose arguments removes or overwrites a record the user made (1.25.1, review 7 — only
+// spec_feature carried it): spec_feature (remove deletes a feature folder), spec_export (adr: removes the generated ADR files no
+// decision backs), spec_approve (revoke), spec_complete_task (undo), spec_impact (reopen unticks), spec_backlog / spec_milestone
+// (rm), spec_depend (dependsOn replaces the list, [] clears it), spec_add_track (remove), spec_init (an empty check command removes
+// it, approvalRoles {} clears them, a setting is overwritten) and spec_tracks (signals set overwrites / forget removes an override).
+// The rest only add records or regenerate their own derived files (ROADMAP.*, SPECS.md, a brief, a merge summary). idempotentHint:
+// a second identical call changes nothing more (a tick, an approval, an appended task or decision, finish's evidence each add a
+// record: false). openWorldHint: false everywhere — local files only, no network, no command, no git.
 const READ_ONLY = Object.freeze({ readOnlyHint: true, openWorldHint: false });
 const writes = (idempotent, destructive) => Object.freeze({ readOnlyHint: false, destructiveHint: !!destructive, idempotentHint: idempotent, openWorldHint: false });
 const TOOL_ANNOTATIONS = {
-  spec_init: writes(true), spec_classify: READ_ONLY, spec_create: writes(true), spec_list: READ_ONLY, spec_status: READ_ONLY,
-  spec_next_task: READ_ONLY, spec_task_brief: writes(true), spec_finish: writes(false), spec_complete_task: writes(false),
-  ears_validate: READ_ONLY, trace_check: READ_ONLY, spec_doctor: READ_ONLY, spec_approve: writes(false), steering_scaffold: writes(true),
-  spec_roadmap: writes(true), spec_backlog: writes(true), spec_depend: writes(true), spec_scan: READ_ONLY, spec_coverage: READ_ONLY,
-  spec_clarify: READ_ONLY, spec_next_action: READ_ONLY, spec_add_track: writes(true), spec_feature: writes(true, true),
-  spec_import: writes(true), spec_append_tasks: writes(false), spec_impact: writes(true), spec_metrics: writes(true),
-  spec_catalog: writes(true), spec_drift: READ_ONLY, spec_upgrade: writes(true), spec_templates: writes(true), spec_tracks: writes(true),
-  spec_export: writes(true), spec_changelog: writes(true), spec_decide: writes(false),
-  spec_stop_check: READ_ONLY, spec_log: READ_ONLY, spec_milestone: writes(true),
+  spec_init: writes(true, true), spec_classify: READ_ONLY, spec_create: writes(true), spec_list: READ_ONLY, spec_status: READ_ONLY,
+  spec_next_task: READ_ONLY, spec_task_brief: writes(true), spec_finish: writes(false), spec_complete_task: writes(false, true),
+  ears_validate: READ_ONLY, trace_check: READ_ONLY, spec_doctor: READ_ONLY, spec_approve: writes(false, true), steering_scaffold: writes(true),
+  spec_roadmap: writes(true), spec_backlog: writes(true, true), spec_depend: writes(true, true), spec_scan: READ_ONLY, spec_coverage: READ_ONLY,
+  spec_clarify: READ_ONLY, spec_next_action: READ_ONLY, spec_add_track: writes(true, true), spec_feature: writes(true, true),
+  spec_import: writes(true), spec_append_tasks: writes(false), spec_impact: writes(true, true), spec_metrics: writes(true),
+  spec_catalog: writes(true), spec_drift: READ_ONLY, spec_upgrade: writes(true), spec_templates: writes(true), spec_tracks: writes(true, true),
+  spec_export: writes(true, true), spec_changelog: writes(true), spec_decide: writes(false),
+  spec_stop_check: READ_ONLY, spec_log: READ_ONLY, spec_milestone: writes(true, true),
 };
 // A tool missing from the table gets the protocol's own defaults spelled out (may write, may destroy, not idempotent) — the
 // test fails on it anyway.

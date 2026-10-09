@@ -239,12 +239,14 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     const roTools = tl.filter((t) => t.annotations && t.annotations.readOnlyHint === true).map((t) => t.name).sort();
     ok(tl.every((t) => t.annotations && t.annotations.openWorldHint === false && typeof t.annotations.readOnlyHint === "boolean" &&
       (t.annotations.readOnlyHint || (typeof t.annotations.destructiveHint === "boolean" && typeof t.annotations.idempotentHint === "boolean"))) &&
-      tl.filter((t) => t.annotations.destructiveHint === true).map((t) => t.name).join() === "spec_feature" &&
+      // 1.25.1 (review 7): destructiveHint on every tool one of whose arguments removes or overwrites a record (it was spec_feature alone)
+      tl.filter((t) => t.annotations.destructiveHint === true).map((t) => t.name).sort().join() === ["spec_feature", "spec_export", "spec_approve", "spec_complete_task",
+        "spec_impact", "spec_backlog", "spec_milestone", "spec_depend", "spec_add_track", "spec_init", "spec_tracks"].sort().join() &&
       roTools.join() === ["ears_validate", "spec_classify", "spec_clarify", "spec_coverage", "spec_doctor", "spec_drift", "spec_list", "spec_next_action", "spec_next_task",
         "spec_scan", "spec_status", "trace_check", "spec_stop_check", "spec_log"].sort().join() &&
       ["spec_complete_task", "spec_approve", "spec_append_tasks", "spec_decide", "spec_finish"].every((n) => tl.find((t) => t.name === n).annotations.idempotentHint === false) &&
       ["spec_roadmap", "spec_catalog", "spec_export", "spec_upgrade", "spec_init"].every((n) => tl.find((t) => t.name === n).annotations.idempotentHint === true),
-      "1.16 C3: every tool carries annotations — openWorldHint false everywhere, readOnlyHint only for the 14 tools no argument makes write, destructiveHint only on spec_feature, idempotentHint per tool (got " +
+      "1.16 C3: every tool carries annotations — openWorldHint false everywhere, readOnlyHint only for the 14 tools no argument makes write, destructiveHint on the 11 whose arguments remove or overwrite (1.25.1 r7 — it was spec_feature alone), idempotentHint per tool (got " +
       JSON.stringify(tl.filter((t) => !t.annotations || t.annotations.destructiveHint === true).map((t) => t.name).concat(roTools)) + ")");
     const roBefore = cSnap(path.join(sl, ".specs"));
     const roCalls = [];

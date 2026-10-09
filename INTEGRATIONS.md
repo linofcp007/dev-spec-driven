@@ -90,7 +90,7 @@ See [INSTALL.md](./INSTALL.md) for the persistent marketplace install, your defa
 
 The MCP server also answers `completion/complete` (feature slugs for the prompts' feature argument, and the `{slug}` /
 `{artifact}` / `{file}` variables of the `specs://` templates) and marks every tool with MCP `annotations`
-(`readOnlyHint` for the pure reads, `destructiveHint` only on `spec_feature`, `openWorldHint: false` everywhere) — any MCP
+(`readOnlyHint` for the pure reads, `destructiveHint` on every tool that can remove or overwrite a record — `spec_feature` remove, `spec_approve` revoke, `spec_complete_task` undo…, `openWorldHint: false` everywhere) — any MCP
 client can use both.
 
 **Alongside superpowers.** If the superpowers plugin is installed too, its planning / TDD / debugging / execution /
