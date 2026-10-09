@@ -24,11 +24,13 @@ Call the `spec_next_action` MCP tool (CLI `dev-spec next-action <feature>`, alia
      classification;
    - **fix** — what that phase's approve gate would refuse (`refusedGate` lists its failing check ids);
    - **approve** — its gate passes. On Phase 4 (`tests`): write the failing tests / eval harness with `/writeTests`,
-     then `/approve <feature> tests` — on a feature already executing or complete, e.g. an upgraded 1.12 one, it is
+     then, on the user's yes, `spec_approve` the `tests` phase — on a feature already executing or complete it is
      worded as a sign-off for the tests that exist (T-IDs in test names, the eval baseline recorded); on a bugfix the
      `design` approval signs off `bug.md`. With approvals by role, a phase still waiting for a role names it
      ("missing role: security") and the `--role` to sign as. When every planning artifact up to `tasks` is filled and
-     passes its gate, the recommendation offers `/spec-ff` — approve them in one go, only after the user said so.
+     passes its gate, the recommendation offers `/spec-ff` — approve them in one go (`spec_approve {through: "tasks"}`),
+     only after the user said so. `/approve` and `/spec-ff` are the user's own commands: you record an approval with
+     `spec_approve`, never before their explicit yes.
    The next phase starts only after that approval — the design is never asked for before the requirements are
    approved (on a **design-first** feature the order is classification → design → requirements → …, and the result
    carries `flow: "design-first"`), and `spec_approve` refuses a phase while an earlier one is unapproved (`phase-order`);

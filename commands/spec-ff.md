@@ -8,7 +8,7 @@ Use the **dev-spec-driven** skill approval gate, fast-forward mode.
 
 Args: $ARGUMENTS
 
-**Size xs / s (1.21) — the default way to approve the plan:** `spec_next_action` names this call from the start (its
+**Size xs / s — the default way to approve the plan:** `spec_next_action` names this call from the start (its
 `fastForward`): fill the whole plan, then approve it once — a change (size xs) has a single planning approval, `tasks`
 (its `change.md`); size s approves requirements → design (→ test-plan / eval-plan) in order — with +tdd / +ai the call ends
 there — at the last plan before `tests`: `/spec-ff <feature> test-plan` with +tdd alone, `eval-plan` whenever +ai

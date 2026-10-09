@@ -302,7 +302,8 @@ exports.run = async ({
     // D1: red-green counts only _Makes green:_ IDs — a bugfix's guard test T-02 shows up only on a pre-1.14 bugfix
     // (its task 4 still lists it); the docs said it "is expected here" / "is named there too" on every bugfix.
     const d1Docs = [dRead("commands", "spec-doctor.md"), dRef("verification.md"), dRef("test-patterns.md")].map(dWs);
-    ok(d1Docs.every((t) => !/T-02 is expected here|is named there too/.test(t) && /before 1\.14/.test(t) && /remove (?:T-02|it) from (?:that|there|task 4)/.test(t)),
+    // (1.25.1 review: the command says "an older bugfix scaffold" — a model instruction states the behaviour, not the release)
+    ok(d1Docs.every((t) => !/T-02 is expected here|is named there too/.test(t) && /before 1\.14|an older bugfix scaffold/.test(t) && /remove (?:T-02|it) from (?:that|there|task 4)/.test(t)),
       "full review D1: spec-doctor / verification / test-patterns — T-02 in red-green only on a pre-1.14 bugfix; the fix is removing it from task 4's _Makes green:_");
     // D2: the canonical _Expect: fail_ example keeps _Makes green:_ off the red task (the fix task makes it green).
     const d2Ex = ((dRef("verification.md").split("## Red → green")[1] || "").match(/```markdown\n([\s\S]*?)\n```/) || [])[1] || "";

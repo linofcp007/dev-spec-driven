@@ -136,7 +136,7 @@ change: ONE `change.md` (summary, 1–3 EARS criteria, approach, 1–3 tasks wit
 the plan (`spec_approve {through: "tasks"}`) and execution; a track or a fourth task means size s. **s** — one story, no
 classification.md, each track's core-tier sections (an extended one may stay out, or answer `n/a — <reason>`); fill the
 whole plan, approve it in one call (+tdd / +ai: up to Phase 4). **m / l** — the full chain, duplicate track sections merged. A bugfix (any size) has
-no reproduce / root-cause tasks (their gates remain). No size = the pre-1.21 scaffold. Every size keeps EARS, trace,
+no reproduce / root-cause tasks (their gates remain). No size = the full chain, nothing merged or trimmed. Every size keeps EARS, trace,
 evidence, the iron law and the finish gate. `references/workflows.md`.
 
 ### Brownfield — adopt SDD in an EXISTING codebase
@@ -258,8 +258,8 @@ N red, 0 green, 0 erroring. Put the T-ID in each test's name (`test("T-01 …")`
 baseline and commit it (`references/track-checklists.md`).
 
 **The gate is tracked:** with a test or eval plan, phase `tests` is pending — `/next-action` asks for it before the
-tasks approval and never recommends implementing until the user signs it off (`/approve <feature> tests`, which checks
-`tests-in-code` / `eval-sets`). The engine can't see the tests run: present the red/green counts first. A bugfix has no
+tasks approval and never recommends implementing until the user signs it off (recorded with `spec_approve`, phase
+`tests`, which checks `tests-in-code` / `eval-sets`). The engine can't see the tests run: present the red/green counts first. A bugfix has no
 Phase 4 gate — its failing regression test is one of its tasks.
 
 ## Phase 5: Tasks (`/createTask`)
@@ -341,12 +341,12 @@ Before advancing a phase, run `/spec-doctor` (`spec_doctor`): one `readyToAdvanc
 traceability, steering, the design, every active track's mandatory sections (filled with your own text — not the `TODO`
 sentinel or the template's guidance), evidence, edits since approval and the approval gates; check ids:
 `references/tooling-reference.md`; `--deep` adds the `dev-spec-driven:spec-critic` agent's semantic review. When the
-user signs off — an explicit yes for that phase — record it with `/approve <feature> <phase>`. **The approval is a
-gate:** its checks run first and a failure refuses it; `--force` records a *forced* approval only when the user
+user signs off — an explicit yes for that phase — record it with `spec_approve {name, phase}` (`/approve` and `/spec-ff`
+are the user's own commands: they may type them; you can't run them). **The approval is a
+gate:** its checks run first and a failure refuses it; `force: true` records a *forced* approval only when the user
 explicitly accepts the failures (it stays visible). Phases are approved in order (`phase-order` — an earlier phase edited
-since its approval is re-reviewed and re-approved first); `/spec-ff`
-(`spec_approve {through: "tasks"}`) approves several filled ones, each through its own gate, only after the user said
-go. Team roles and waivers: `references/change-management.md`. When the approval guard asks the user or refuses your
+since its approval is re-reviewed and re-approved first); `spec_approve {through: "tasks"}` (`/spec-ff`) approves
+several filled ones, each through its own gate, only after the user said go. Team roles and waivers: `references/change-management.md`. When the approval guard asks the user or refuses your
 approval, give the user the command it names and wait — never retry it another way. **The `execution` sign-off:** a
 green run is evidence, not the sign-off — show the run and the merge summary, then ask for an explicit yes before
 `spec_approve {phase: "execution"}`.

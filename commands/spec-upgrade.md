@@ -10,7 +10,7 @@ Args: $ARGUMENTS
 **When.** The plugin was just updated — Claude Code: `/plugin marketplace update` then restart the session; a
 clone: `git pull` — and the project already has a `.specs/` from an older version (the session-start hook says
 `⬆ .specs/ was created with an older dev-spec …`). Older specs keep working, but nothing reviewed them against the
-new rules, and approvals made before 1.13 have no history baseline (`spec_impact` then answers `fingerprint-only`).
+new rules, and the oldest approvals have no history baseline (`spec_impact` then answers `fingerprint-only`).
 If the plugin itself isn't updated yet, say how (above) and stop.
 
 **Steps**

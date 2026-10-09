@@ -28,7 +28,8 @@ Use it when implementation drifted from the plan, after a review found follow-up
    (`_Expect: fail_` — a red task whose proof is a FAILING run), `size` (XS|S|M|L|XL → `_Size:_`, for the roadmap ETA)
    and `depends` (task numbers → `_Depends:_` — an active task or one of this call, never itself, no cycle);
    CLI `--makes-green T-01,T-02 --expect-fail --size M --depends 3,5`.
-5. The result carries `needsReapproval`: run `trace_check`, then re-approve the **tasks** phase (`/approve`).
+5. The result carries `needsReapproval`: run `trace_check`, then — on the user's yes — re-approve the **tasks** phase
+   with `spec_approve` (`/approve` is the user's own command).
 6. Execute the new tasks as usual (`/executeTask`), with evidence for each.
 
 Never append tasks the user hasn't approved. Respond in the user's language (EN/PT/ES).

@@ -41,8 +41,8 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   note on a runnable `_Verify:_`, failed run, stale evidence, duplicate number, unexpected pass on an
   `_Expect: fail_` task, a run of another command than its `_Verify:_` — `command-mismatch` —, a run the harness never
   saw under `meta.evidence: "observed"`), `red-green` (+tdd: T-IDs made green with no recorded red run — a test that never failed
-  proves nothing; only `_Makes green:_` IDs count, so a bugfix's guard test T-02 appears here only on a bugfix
-  scaffolded before 1.14, whose task 4 still lists it — remove T-02 from that `_Makes green:_`), `suite-evidence`
+  proves nothing; only `_Makes green:_` IDs count, so a bugfix's guard test T-02 appears here only on an older
+  bugfix scaffold whose task 4 still lists it — remove T-02 from that `_Makes green:_`), `suite-evidence`
   (project checks without a passing run since the last task activity, or run before the implementing files changed —
   `/spec-finish` blocks on it), `verify-pipes` (a `_Verify:_` that pipes: its exit code is the last command's),
   `malformed-markers` (text on a task line shaped like a marker that yields none — `**Verify:** npm test`, a bare
@@ -63,8 +63,8 @@ result clearly: each check (pass/warn/fail), the recorded phase approvals, and t
   AC: merge or reword them, or declare `_Supersedes: <feature>/US-n.AC-m_` on the newer one; template criteria and
   declared replacements never count), `steering-changed-since-approval` (a steering file that governed the requirements /
   design approval — constitution, the tracks' files, `always` / matching `fileMatch` ones — changed or was removed since:
-  re-review — `/spec-impact` with phase `steering` lists every feature concerned — then re-approve; approvals made before
-  1.16 are never flagged), `glossary` (words `.specs/steering/glossary.md` says to avoid, used in `requirements.md` /
+  re-review — `/spec-impact` with phase `steering` lists every feature concerned — then re-approve; older approvals that recorded
+  no steering are never flagged), `glossary` (words `.specs/steering/glossary.md` says to avoid, used in `requirements.md` /
   `design.md` — with the count; `/clarify` asks about each; no glossary → no check),
   `design-tradeoffs` / `design-risks` / `design-reuse` (design.md has no Alternatives & Trade-offs with ≥ 2 options per
   key decision, no Risks, or no Reuse & Integration — never a fail), `waiver-expired` (a forced approval whose waiver's

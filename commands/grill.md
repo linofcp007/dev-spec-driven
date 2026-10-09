@@ -11,9 +11,18 @@ Feature: $ARGUMENTS
 
 Steps:
 
-1. Load the **dev-grill** skill and run it in **plan/design** mode with output contract = **spec**.
-   Seed it with this feature's `requirements.md` (and `classification.md` if present). If `dev-grill`
-   isn't installed, run the same interrogation loop inline using its method.
+1. **Seed** — read this feature's `requirements.md` (and `classification.md` if present). No feature yet? Scaffold it
+   first (`spec_create`, Phase 1 — `/createSpec`), then grill. **The method** (it needs no other skill):
+   - **One question at a time** — ask it, wait for the answer, then ask the next. Never a list of questions.
+   - **Recommend an answer** with every question — your best guess and why, from the spec, the steering and the code —
+     so the user confirms or corrects it instead of starting from a blank.
+   - **Walk the decision tree** — start with the unknowns that would change the most (scope, the main business rule,
+     the failure that hurts most); each answer opens or closes branches: follow an open branch to its end before
+     moving on, and keep a short running list of what is settled.
+   - **Don't ask what the material already answers** — when the requirements, the steering or the code settle a
+     question, state the answer and move on.
+   - **Stop** when every branch is settled, or the user parks it on purpose — a parked one is a
+     `[NEEDS CLARIFICATION]` in requirements.md, never a guess.
 2. Grill the significant decision-branches: business-rule branches, validation → failure paths,
    in/out of scope, the language-agnostic input/output contract, edge cases. ONE question at a time.
 3. **Constraints round** — before closing, grill the constraints a design must honour (still one question at a
@@ -46,11 +55,14 @@ Steps:
    on its own when the spec names queues, events, concurrency or transactions and neither the requirements nor the
    design state a consistency model, a delivery guarantee or idempotency — an answer folded into the requirements
    clears it.)
-4. When you reach shared understanding, take the engine's EARS-ready statements ("WHEN … THE SYSTEM
-   SHALL …", "IF … THEN …") and fold them into `requirements.md` for this feature — as new acceptance
-   criteria and as filled-in edge-case / out-of-scope / non-functional sections. Keep the spec
-   language-agnostic (no framework or language names) so it can drive any implementation.
-5. Run `spec_clarify` (and `ears_validate` if available) to confirm the folded requirements pass the
-   gate, then hand off to `/design` or `/createSpec`.
+4. When you reach shared understanding, write each settled answer as an EARS statement ("WHEN … THE SYSTEM
+   SHALL …", "IF … THEN THE SYSTEM SHALL …") and fold them into `requirements.md` for this feature — as new
+   acceptance criteria (each with the next free `US-n.AC-m` ID; never renumber the existing ones) and as filled-in
+   edge-case / out-of-scope / non-functional sections. Keep the spec language-agnostic (no framework or language
+   names) so it can drive any implementation. Requirements already approved? The edit is a change request:
+   `/spec-impact` first.
+5. Run `spec_clarify` and `ears_validate` to confirm the folded requirements pass, show the user what changed,
+   then finish Phase 1 as usual: `spec_doctor`, and on the user's explicit yes record the requirements approval with
+   `spec_approve` (`/approve` is the user's own command). Then hand off to `/design` (Phase 2).
 
 Respond in the user's language (EN/PT/ES). Do not switch the spec's language.
