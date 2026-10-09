@@ -1259,7 +1259,7 @@ const RE_DIST_DELIVERY = /idempot|duplicat|duplica|dedup|exactly[ -]once|at[ -]l
 const RE_DIST_FAILURE = /unavailable|is down|goes down|went down|unreachable|timeout|timed out|times out|indispon[íi]ve|n[ãa]o est[áa] dispon[íi]vel|fora do ar|(?:est[áa]|estiver|fica|ficar) em baixo|inacess[íi]vel|no est[áa] disponible|est[áa] ca[íi]d[oa]|se cae|inalcanzable|tempo limite|tiempo de espera|partition|parti[çc][ãa]o|partici[óo]n/i;
 function clarify(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const dir = f.dir;
   // 1.21 verify V6 — clarify asks what THIS kind / size's doctor asks, never more: a change (one change.md) is read as its
   // criteria view (changeViews — the task blocks out; lines still point into change.md) and asked only about its own sections,

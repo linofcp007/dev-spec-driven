@@ -68,7 +68,7 @@ function __link(E) { ({ expandHome, acDuplicates, activeDesign, activeSectionTra
 // replaces the design) and template placeholders — as structured fields plus a short localized `text`.
 function designSaveCheck(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const design = readIfExists(path.join(f.dir, "design.md"));
   const lng = featureLang(projectDir, f.slug);
   const fm = i18n.msg(lng);
@@ -212,7 +212,7 @@ function listFeatures(projectDir) {
 
 function statusFeature(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const tracks = detectTracks(dir);
   const artifacts = fs
@@ -296,7 +296,7 @@ function statusFeature(projectDir, name) {
 // opts.doctor: this feature's specDoctor() result, already computed in the same call (spec_upgrade) — never run twice.
 function nextAction(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   if (isSpikeDir(f.dir)) return withBranchStep(projectDir, f.slug, readState(projectDir, f.slug), spikeNextAction(projectDir, f, opts)); // 1.14 C2 (+ 1.25 its branch)
   const { slug, dir } = f;
   const tracks = detectTracks(dir);
@@ -614,7 +614,7 @@ function withBranchStep(projectDir, slug, st, res) {
 // already warn / fail (1.16 Q review).
 function specDoctor(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   if (isSpikeDir(f.dir)) return spikeDoctor(projectDir, f); // 1.14 C2
   const { slug, dir, root } = f;
   const tracks = detectTracks(dir);

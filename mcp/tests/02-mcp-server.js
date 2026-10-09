@@ -1334,6 +1334,18 @@ exports.run = async ({
         js([pendingId, waited, before.specsDir, after.specsDir, asked]) + ")");
     }
 
+    { // 1.25.1 (review 7): the feature resolver's refusals carry a stable code on every tool (feature-not-found was {ok: false, error} alone)
+      const p = path.join(tmp, "proj-r7-codes");
+      S.initProject(p, ["core"], "en");
+      const res = [];
+      for (const [tool, args] of [["spec_status", { name: "nope" }], ["spec_doctor", { name: "nope" }], ["spec_complete_task", { name: "nope", number: 1 }],
+        ["spec_approve", { name: "nope", phase: "requirements" }], ["spec_task_brief", { name: "nope" }], ["spec_drift", { name: "nope" }], ["spec_log", { name: "nope", gitLog: "" }],
+        ["spec_feature", { action: "archive", name: "nope" }], ["spec_status", { name: "..." }], ["spec_status", { name: "steering" }]]) res.push([tool, bodyOf(await call(tool, Object.assign({ projectDir: p }, args)))]);
+      const codes = res.map(([t, r]) => t + ":" + r.code);
+      ok(res.slice(0, 8).every(([, r]) => r.ok === false && r.code === "feature-not-found") && res[8][1].code === "feature-name-invalid" && res[9][1].code === "feature-name-reserved",
+        "1.25.1 r7: a feature the resolver doesn't find answers code feature-not-found on every tool (an unusable name feature-name-invalid, a reserved one feature-name-reserved) — the CLI's --json prints the same result (got " + js(codes) + ")");
+    }
+
     { // 1.25.1 (review 7): the initialize instructions name spec_next_action (clients without the skill) and claim only what holds
       const ins = (await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })).result.instructions;
       ok(/spec_next_action \{name\}/.test(ins) && /where am I \/ what now/.test(ins) && !/All file ops are local to the project's \.specs\/ directory/.test(ins) &&

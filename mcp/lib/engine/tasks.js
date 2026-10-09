@@ -54,7 +54,7 @@ function taskDescription(text) {
 
 function nextTask(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const raw = readIfExists(path.join(f.dir, "tasks.md"));
   if (raw == null) return { ok: false, error: errs(projectDir, f.slug).tasksMissing(f.slug) };
   const tracks = detectTracks(f.dir);
@@ -528,7 +528,7 @@ function checkboxBytes(file, text, boxes, ch) {
 function completeTask(projectDir, name, number, evidence, opts = {}) {
   if (opts && opts.undo === true) return untickTask(projectDir, name, number, { reason: opts.reason, evidence }); // 1.16 U1
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   // 1.16 U1: a reason explains an undo — a tick records evidence instead (refused, never silently dropped).
   if (opts && opts.reason != null) return { ok: false, error: i18n.msg(featureLang(projectDir, f.slug)).undo.reasonNeedsUndo };
   const file = path.join(f.dir, "tasks.md");
@@ -729,7 +729,7 @@ function reasonInput(v, lng) {
 }
 function untickTask(projectDir, name, number, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const lng = featureLang(projectDir, f.slug);
   const U = i18n.msg(lng).undo;
   const E = errs(projectDir, f.slug);
@@ -1549,7 +1549,7 @@ const BRIEF_DESIGN_BUDGET = 4000; // chars of design text carried into a brief (
 
 function taskBrief(projectDir, name, number, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir, root } = f;
   const tasksText = readIfExists(path.join(dir, "tasks.md"));
   const E = errs(projectDir, slug);
@@ -1901,7 +1901,7 @@ function newTaskSpec(t, i, A, D) {
 // track's section. All-or-nothing: an invalid task or an unknown AC writes nothing.
 function appendTasks(projectDir, name, tasks, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const M = i18n.msg(lng);

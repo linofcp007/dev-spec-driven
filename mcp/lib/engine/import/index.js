@@ -424,7 +424,7 @@ function importRun(projectDir, tool, source, opts) {
     name = fb;
   }
   const f = resolveFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   if (fs.existsSync(f.dir)) return { ok: false, error: W.exists(f.slug) };
   const pt = parseTracks(opts.tracks);
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(lang0, pt.unknown) };

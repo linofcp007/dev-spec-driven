@@ -1619,7 +1619,7 @@ function stopActivity(state) {
 const SPEC_EDIT_LOCK_WAIT_MS = 2000;
 function recordSpecEdit(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   return withFeatureLock(f.dir, () => {
     const state = readState(projectDir, f.slug);
     if (state.invalid) return { ok: false, error: state.invalid }; // never "repaired"

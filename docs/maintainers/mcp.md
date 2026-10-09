@@ -152,7 +152,9 @@ as the "where am I / what now?" call for clients without the skill.
 true`: `unknown-argument` (+ `unknown` [{argument, didYouMean?}]) · `missing-arguments` (+ `missing` [names]) ·
 `invalid-arguments` (+ `invalid` — the paths, e.g. `["number", "evidence.exitCode"]`; arguments that aren't an object:
 `["arguments"]`) · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` · `project-no-specs` (1.25.1, spec_import). Callers branch
-on the code (English, stable); the message is in the project language — the default project's for a projectDir refusal.
+on the code (English, stable); the message is in the project language — the default project's for a projectDir refusal. The feature resolver's refusals (1.25.1, review 7 — `resolveFeature` / `existingFeature`, state.js) carry their code too, on
+every tool and the CLI's `--json`: `feature-not-found` · `feature-name-invalid` (no usable slug) · `feature-name-reserved` (they were
+`{ok: false, error}` alone); an operation that hands such a refusal back keeps the code (`{ok: false, error: f.error, code: f.code}`).
 Messages are localized in the project language (`msg(lang).args`). The engine
 still validates what schemas can't express (track names, AC IDs, paths). String enums the engine case-folds
 (`phase`, `lang`, `kind`, `action`) are trimmed + lowercased first (`foldEnumArgs`) — the CLI passes `Design` / `PT`

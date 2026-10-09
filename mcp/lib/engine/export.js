@@ -648,7 +648,7 @@ function exportSpecs(projectDir, opts = {}) {
   const tracker = TRACKERS.includes(fmt); // 1.16 E2 — one CSV for the tool's importer
   if (opts.name != null && String(opts.name).trim() !== "") {
     const f = existingFeature(projectDir, opts.name);
-    if (!f.ok) return { ok: false, error: f.error };
+    if (!f.ok) return { ok: false, error: f.error, code: f.code };
     const fl = featureLang(projectDir, f.slug);
     doc = fmt === "csv" ? { lang: fl, scope: "feature", feature: f.slug, content: matrixCsv([buildTraceMatrix(projectDir, f)], fl, { document: true }) }
       : tracker ? { lang: fl, scope: "feature", feature: f.slug, records: trackerRecords(projectDir, f, fl) }
@@ -698,7 +698,7 @@ function exportGherkin(projectDir, opts, pl) {
   let res;
   if (opts.name != null && String(opts.name).trim() !== "") {
     const f = existingFeature(projectDir, opts.name);
-    if (!f.ok) return { ok: false, error: f.error };
+    if (!f.ok) return { ok: false, error: f.error, code: f.code };
     const d = one(f);
     if (d.error) return { ok: false, error: d.error, spike: true, feature: f.slug };
     docs = [d];

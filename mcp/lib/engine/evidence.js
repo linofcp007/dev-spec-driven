@@ -1821,7 +1821,7 @@ function suiteCodeStamp(projectDir, dir) {
 // run went on read as tested (a code stamp of the edited files; a later `at`).
 function runStartStamp(projectDir, name) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   return { ok: true, at: new Date().toISOString(), code: suiteCodeStamp(projectDir, f.dir) };
 }
 // A runStart the CLI hands back → { at, code } — at: an ISO time not in the future (5 min of skew tolerated), else null (the
@@ -1926,7 +1926,7 @@ function parseGitLog(text) {
 // log was read with (a full window means older commits were not read: an order that can't be known is `outside-window`).
 function taskCommits(projectDir, name, logText, opts = {}) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const tasksText = readIfExists(path.join(dir, "tasks.md"));
   if (tasksText == null) return { ok: false, error: errs(projectDir, slug).tasksMissing(slug) };

@@ -80,12 +80,12 @@ function resolveFeature(projectDir, name) {
   const root = specsRoot(projectDir);
   const slug = slugify(name);
   const E = () => errs(projectDir); // only on a refusal: the project language costs a roadmap.json read
-  if (!slug) return { ok: false, slug, root, error: E().noUsableName(name == null ? "" : name) };
-  if (reservedSlug(slug, root)) return { ok: false, slug, root, error: E().reserved(slug) };
+  if (!slug) return { ok: false, slug, root, code: "feature-name-invalid", error: E().noUsableName(name == null ? "" : name) };
+  if (reservedSlug(slug, root)) return { ok: false, slug, root, code: "feature-name-reserved", error: E().reserved(slug) };
   // Windows device names: refuse new ones, but an existing folder of that name (created on another OS)
   // must stay reachable so it can be renamed away. Check the real listing — on Windows existsSync("con")
   // can report the device.
-  if (RE_WIN_RESERVED.test(slug) && !safeReaddir(root).includes(slug)) return { ok: false, slug, root, error: E().reservedWin(slug) };
+  if (RE_WIN_RESERVED.test(slug) && !safeReaddir(root).includes(slug)) return { ok: false, slug, root, code: "feature-name-reserved", error: E().reservedWin(slug) };
   const dir = path.join(root, slug);
   if (!existsCached(dir)) {
     const legacy = legacySlugify(name);
@@ -103,7 +103,7 @@ function existingFeature(projectDir, name) {
     // for an archived feature used to end right here): name the archive and the restore.
     const E = errs(projectDir);
     const arch = locateFeatures(projectDir, name).find((x) => x.archived);
-    return { ...f, ok: false, error: E.notFound(f.slug, f.root) + (arch ? " " + E.archivedHint(arch.slug) : "") };
+    return { ...f, ok: false, code: "feature-not-found", error: E.notFound(f.slug, f.root) + (arch ? " " + E.archivedHint(arch.slug) : "") };
   }
   return f;
 }
@@ -448,7 +448,7 @@ function orderInput(v) {
 function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   edits = edits || {};
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const slug = f.slug;
   const bad = roadmapError(projectDir);
   if (bad) return { ok: false, error: bad };

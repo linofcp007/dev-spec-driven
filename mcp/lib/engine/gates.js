@@ -154,7 +154,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (opts.revoke === true) return revokeApproval(projectDir, name, phase, by, opts); // 1.16 U2: spec_approve {revoke} / approve --revoke
   if (opts.through != null) return approveThrough(projectDir, name, phase, by, opts); // 1.14 B3: the fast-forward (spec_approve {through})
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   if (phase == null || String(phase).trim() === "") return { ok: false, error: i18n.msg(featureLang(projectDir, f.slug)).governance.phaseRequired };
   const p = String(phase || "").toLowerCase().trim();
   if (!PHASES.includes(p)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(phase, PHASES.join(", ")) };
@@ -428,7 +428,7 @@ function legacySeeds(approvals, hist) {
 // sign-off → error (notApproved); `execution` included (its sign-off is asked for again). force / expires / through are refused.
 function revokeApproval(projectDir, name, phase, by, opts) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const lng = featureLang(projectDir, f.slug);
   const R = i18n.msg(lng).revoke;
   if (opts.through != null) return { ok: false, error: R.noThrough };
@@ -885,7 +885,7 @@ function approveStepExtras(projectDir, slug, dir, st, tracks, kind, pending, doc
 // `force` still only when the user asked: it forces each gate, like approve --force. Called by approvePhase, under its lock.
 function approveThrough(projectDir, name, phase, by, opts) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const lng = featureLang(projectDir, f.slug);
   const E = i18n.msg(lng).governance;
   const G = i18n.msg(lng).gates;
@@ -1132,7 +1132,7 @@ function impactReport(projectDir, name, opts = {}) {
   if (ph0 === "steering") return steeringImpact(projectDir, name, opts);
   if (name == null || String(name).trim() === "") return { ok: false, error: i18n.msg(projectLang(projectDir)).quality.impactNeedsName([...IMPACT_PHASES, "steering"].join(", ")) };
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const { slug, dir } = f;
   const lng = featureLang(projectDir, slug);
   const I = i18n.msg(lng).impact;
@@ -1494,7 +1494,7 @@ function flowOrderText(dir, tracks, flow) {
 // previous, changed, order, pendingGates, note }
 function setFeatureFlow(projectDir, name, flow) {
   const f = existingFeature(projectDir, name);
-  if (!f.ok) return { ok: false, error: f.error };
+  if (!f.ok) return { ok: false, error: f.error, code: f.code };
   const lng = featureLang(projectDir, f.slug);
   const F = i18n.msg(lng).flow;
   const pf = parseFlow(flow, lng);
