@@ -29,7 +29,9 @@ and U+FEFF gotchas are in CLAUDE.md.
   append: `{append: true}` opens with O_APPEND | O_CREAT | O_NOFOLLOW where the platform has it, the target lstat'ed first) — and
   `withLockFile` checks its lock's path the same way BEFORE the lock exists. No other mcp/lib source writes with a raw fs call
   (mcp/tests/16-conventions.js guards it: writeFileSync / appendFileSync / renameSync / mkdirSync / copyFileSync / cpSync /
-  symlinkSync / linkSync / writeSync / an openSync with a write flag — files.js alone is allowed). The gate finds the `.specs`
+  symlinkSync / linkSync / writeSync / an openSync with a write flag — files.js alone is allowed; 1.25.1, review 7: mcp/evals/ too —
+  the eval harness writes evals/baseline.json through `spec.writeSpecFile`, the facade's gated atomic write, where its raw
+  fs.writeFileSync followed a link under .specs/). The gate finds the `.specs`
   folder a path lies in (`specsRootOf`: the nearest ancestor of that name — a path outside every .specs/ is not gated; the
   engine writes nothing there) and refuses (`specsWriteBlock`, lstat of each part below .specs/ + one realpath of the deepest
   that exists): **a link on the way** — a folder between .specs/ and the target (a feature folder, `.execution/`, `.history/`,

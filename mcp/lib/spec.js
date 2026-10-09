@@ -90,7 +90,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   traceGaps, traceMatrix, traceWarningLines, TRACK_MARKER, TRACK_SECTIONS, TRACKERS, trackLabel, trackPacks, FEATURE_SIZES, TRACK_OVERLAPS, TRACK_TASK_OVERLAPS,
   changeViews, closestName, decodeText, featureBranch, IMPORT_TOOLS,
   userDefaults, VALID_TRACKS, verificationStatus, verifyPipeMasked, commandHasControl, controlVisible, windowsShellFailure, withFeatureLock, withinRoot,
-  withReadCache, writeRoadmapHtml, writeRoadmapMd } = engine;
+  withReadCache, writeFileAtomic, writeRoadmapHtml, writeRoadmapMd } = engine;
 
 module.exports = {
   CLI_SWITCHES, // the CLI's boolean switches — ONE list (cli/dev-spec.js BOOL_FLAGS, the approval hook's lexer)
@@ -190,6 +190,9 @@ module.exports = {
   removeTrack: featureLocked(removeTrack),
 
   existingFeature, // the eval harness resolves its feature like every other operation
+  // 1.25.1 (review 7): the write gate for a .specs/ file a script outside the engine owns — the eval harness's evals/baseline.json
+  // (it wrote with a raw fs.writeFileSync, through any link under .specs/). → { ok: true, file } | the gate's refusal (the wrapper below).
+  writeSpecFile: (file, text) => { writeFileAtomic(file, text); return { ok: true, file }; },
 
   traceGaps,
   traceGapLines,
