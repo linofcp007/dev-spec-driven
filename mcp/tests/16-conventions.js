@@ -671,7 +671,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
   // (a) Every name an engine module links (its bare `let` list) is used in its own code — the list, __link and module.exports
   // aside: a name linked and never used is a dead link. (b) Every name an engine module exports is used OUTSIDE it: linked or
   // required at load time by another engine module, read by the facade (spec.js), a surface (mcp/server.js, prompts-resources.js,
-  // mcp/evals/, the CLI, the hooks, scripts/) or a test (its code, or a string it runs — a child's script). A name only its own
+  // operations.js — 1.27: the engine calls both surfaces make —, mcp/evals/, the CLI, the hooks, scripts/) or a test (its code, or a
+  // string it runs — a child's script). A name only its own
   // module reads is no export: drop it from module.exports (E, the merged namespace, holds only what crosses a module boundary).
   // EXPORT_ALLOW keeps one with no outside use — each with its reason. (c) The facade: each key is read by a surface or a test,
   // and each name it takes from the engine is used in it.
@@ -765,7 +766,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       for (const r of m.loadTime) for (const x of r.names) required.add(r.to + "|" + x);
     }
     const listDir = (d, keep = () => true) => fs.readdirSync(d).filter((x) => x.endsWith(".js") && keep(x)).map((x) => path.join(d, x));
-    const consumers = [path.join(__dirname, "server.js"), path.join(__dirname, "lib", "prompts-resources.js"), path.join(__dirname, "test.js"),
+    const consumers = [path.join(__dirname, "server.js"), path.join(__dirname, "lib", "prompts-resources.js"), path.join(__dirname, "lib", "operations.js"), path.join(__dirname, "test.js"),
       ...listDir(path.join(__dirname, "evals")), ...listDir(path.join(__dirname, "tests")), ...listDir(path.join(root, "cli")),
       ...listDir(path.join(root, "cli", "tests")), ...listDir(path.join(root, "hooks")), ...listDir(path.join(root, "scripts"))];
     const outside = new Set();

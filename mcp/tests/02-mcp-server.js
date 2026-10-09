@@ -1143,17 +1143,20 @@ exports.run = async ({
         !nul.result.isError && /^Argumento desconhecido para spec_x: a \(será b\?\)/.test(ptMsg) && /^Argumentos desconocidos para spec_x: a, z/.test(esMsg),
         "1.24 r6 A1: a top-level argument the tool's inputSchema doesn't list is refused (code unknown-argument, `unknown` [{argument, didYouMean}], localized) and nothing runs — spec_approve {revoked} no longer re-approves changed content, spec_task_brief {task: 3} no longer briefs the next task (got " +
         js([rvB, tb.code, typo.unknown, extra.unknown, before === after]) + ")");
-      // Every argument a tool's handler reads is in its inputSchema — one it doesn't list would now be refused, never read.
+      // Every argument a tool's handler reads is in its inputSchema — one it doesn't list would now be refused, never read. 1.27: the
+      // handler is the tool's operation (mcp/lib/operations.js — each option's `mcp` argument); runTool itself reads only projectDir.
       const src = fs.readFileSync(SERVER, "utf8");
-      const parts = src.slice(src.indexOf("function runTool("), src.indexOf("// --- JSON-RPC / MCP plumbing")).split(/case "([a-z_]+)":/);
+      const OPS = require("./lib/operations.js");
       const unlisted = [];
-      for (let i = 1; i < parts.length; i += 2) {
-        const tool = list.result.tools.find((t) => t.name === parts[i]);
+      for (const op of OPS.OPERATIONS) {
+        const tool = list.result.tools.find((t) => t.name === op.tool);
         const props = tool ? tool.inputSchema.properties : {};
-        for (const m of parts[i + 1].matchAll(/\bargs\.([A-Za-z_]+)/g)) if (!Object.prototype.hasOwnProperty.call(props, m[1])) unlisted.push(parts[i] + "." + m[1]);
+        for (const a of Object.values(op.args)) if (a.mcp !== undefined && !Object.prototype.hasOwnProperty.call(props, a.mcp)) unlisted.push(op.id + "." + a.mcp);
       }
-      ok((parts.length - 1) / 2 === list.result.tools.length && !unlisted.length,
-        "1.24 r6 A1: every argument runTool reads is in its tool's inputSchema (" + (parts.length - 1) / 2 + " tools; got " + js(unlisted) + ")");
+      const runToolReads = [...src.slice(src.indexOf("function runTool("), src.indexOf("// --- JSON-RPC / MCP plumbing")).matchAll(/\bargs\.([A-Za-z_]+)/g)].map((m) => m[1]).filter((k) => k !== "projectDir");
+      const withOp = list.result.tools.filter((t) => OPS.toolOperations(t.name).length).length;
+      ok(withOp === list.result.tools.length && !unlisted.length && !runToolReads.length,
+        "1.24 r6 A1: every argument a tool's operation reads is in its tool's inputSchema (" + withOp + " tools; got " + js([unlisted, runToolReads]) + ")");
     }
 
     { // 1.24 r6 A-I2: every argument error carries a stable code (+ the arguments it names) — the message stays localized

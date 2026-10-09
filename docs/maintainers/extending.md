@@ -15,18 +15,26 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   Every file it writes goes through the write gate — `writeFileAtomic` / `writeIfAbsent` / `ensureDir` / `specWrite` (append),
   never a raw `fs.writeFileSync` / `appendFileSync` / `renameSync` / `mkdirSync` outside engine/files.js (a source guard
   fails it — conventions.md → The write gate).
-- New MCP tool → the operation above, a TOOLS entry + dispatch case in
+- An operation a surface exposes (1.27) → ONE entry of `OPERATIONS` in `mcp/lib/operations.js`: `id`, its `tool` (+ `mode` /
+  `when` when the tool runs several), `cli` (the commands that run it), `engine` (the facade function), `args` (each engine option
+  → its MCP argument, its CLI flag or positional, how it is read: `type`, `join`, `cmd`, `parsed`…), `internal` (options a surface
+  sets itself), `cliOnly`, and `call(S, dir, o)` — THE engine call, written once (mcp.md → The operations). The server and the CLI
+  read nothing else: no dispatch case, no hand-kept flag → option list. A positional engine signature with holes gets an
+  options-object form (`createFeature(dir, {name, …})`, `completeTask(dir, {name, number, …})` — the positional one stays).
+- New MCP tool → the operation above, a TOOLS entry in
   `mcp/server.js` (its `inputSchema` IS the validation — declare types, enums, required keys, and EVERY argument the
-  dispatch reads: one the schema doesn't list is refused, `unknown-argument` — mcp.md → Argument validation), the CLI
+  operation reads: one the schema doesn't list is refused, `unknown-argument` — mcp.md → Argument validation; runTool runs the
+  tool's operation, no case of its own), the CLI
   subcommand, a test in the file of its area in `mcp/tests/` and `cli/tests/` (testing.md → The suites; bump the exact
   tool count — the handshake's, `mcp/tests/harness.js`), the README tool tables (EN/PT/ES —
   `mcp/test.js` builds the expected set from the live `tools/list`: a missing or phantom row in any language fails
   the suite) of README.md, README.pt.md and README.es.md, a `TOOL_ANNOTATIONS` entry in `mcp/server.js` (1.16 — mcp/test.js requires one per tool and snapshots `.specs/`
   around every read-only one), the tool count every doc states (below), and (usually) a thin command in `commands/`.
 - Folding a tool into another or renaming one (1.26) → keep the old name working: a `LEGACY_TOOLS` entry in `mcp/server.js`
-  (its OLD inputSchema — old callers keep their refusals — and `args`, the translation to the new tool), never a `runTool` case;
-  arguments that belong to one mode of the new tool → its `ARG_MODES` entry (refused elsewhere: `inapplicable-arguments`); the
-  alias = new-tool assertion in `mcp/tests/02-mcp-server-tools.js`; every doc that names the old tool (mcp.md → Folded tools).
+  (its OLD inputSchema — old callers keep their refusals — and `args`, the translation to the new tool) and its name in the
+  `legacy` of the operation the call lands on; each mode of the new tool → an operation with its `mode` — its arguments are the
+  mode's (`ARG_MODES` is derived from them: refused elsewhere, `inapplicable-arguments`); the alias = new-tool assertion in
+  `mcp/tests/02-mcp-server-tools.js`; every doc that names the old tool (mcp.md → Folded tools).
   A description stays within the budget (mcp.md → The description budget: `TOOLS_LIST_CAP`).
 - New command → first ask whether it is a subcommand of an existing one (1.26 folded 55 commands into 22 — the table below;
   every command file costs the user's `/` menu and, if model-invocable, the shared listing budget). If it is one: a
@@ -73,12 +81,17 @@ What a new operation, tool, command, track, artifact, importer, CLI flag, hook o
   spaces, then the description from column 35 — byte for byte what `help` prints) and `run(c)`, the handler (synchronous; a promise
   only where it waits — never an `async` function). Nothing else to touch: the flag checks, `help` / `help <command>`, the
   completion scripts and `checkCommandArgs()` read the table (conventions.md → The CLI is one table and one call;
-  cli/tests/16-conventions-cli-modules.js checks the entry). The engine call it makes is the MCP tool's, with the same defaults.
+  cli/tests/16-conventions-cli-modules.js checks the entry). A command that wraps an engine operation runs it with
+  `c.call(id, given)` — the operation lists the command in its `cli`, its flags and words are read by the table, `given` holds only
+  what the handler parses in its own syntax (`parsed`) or sets itself (`internal`); it never calls the facade function itself
+  (cli/tests/02-surfaces-parity.js). The engine call is then the MCP tool's, with the same defaults.
 - New CLI switch (a flag that takes no value) → `CLI_SWITCHES` in `mcp/lib/engine/guards.js`, exported as
   `spec.CLI_SWITCHES` (the CLI's `BOOL_FLAGS` and the approval hook's lexer both read it); a new value flag → `VALUE_FLAG_SPECS`
   in cli/commands.js (with its completion `values` where the set is known — a list the facade has is named by its `@source`
   (`completionModel()`), never copied —, `repeatable: true` when a command reads EVERY occurrence with `c.every()` — 1.24 r6 B5:
-  any other one given twice is a usage error). Either one → the `options` of every command entry that reads it.
+  any other one given twice is a usage error). Either one → the `options` of every command entry that reads it, and — when it
+  fills an engine option — that option's `cli` in the operations table (a switch `type: "switch"` / `"bool"`, a repeatable one
+  `"list"`).
 - A tool argument that is a string OR a true/false switch (1.25 `spec_create {branch}`) → `type: "string"` (never a list-valued
   type — mcp.md → Argument validation) + its key in server.js `BOOL_STRING_ARGS`, the engine reading `"true"` / `"false"`; a CLI
   value flag whose value is optional → `optional: true` in `VALUE_FLAG_SPECS` (as `--branch`: a bare one is `true`), never

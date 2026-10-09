@@ -138,7 +138,7 @@ const RULE_FILES = {
 
 // `list` and a bare `status`: one line per feature, in the project language.
 function main2list(c) {
-  const r = spec.listFeatures(c.projectDir);
+  const r = c.call("list");
   const T = c.projectText();
   c.out(r, (r) => {
     if (!r.exists || !r.features.length) return c.log(T.noFeatures(r.specsDir));
@@ -473,23 +473,15 @@ function evalsArgs(c) {
 
 // create / bugfix (each its own entry: options, help) — one handler.
 function createCommand(c) {
-  const { flags, pos, projectDir, on, out, fail, usage, log } = c;
+  const { pos, out, fail, usage, log } = c;
   // 1.24 r6 B9: each its own usage (`bugfix` without a name printed create's)
   if (!pos[0]) usage(c.cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--branch [<name>]] [--lang en|pt|pt-BR|es]'
     : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
-  const name = pos[0];
-  const tr = c.withTracksFlag(pos.slice(1));
-  const tracks = tr.length ? tr : undefined; // none → engine: keep existing / classify new
   const branch = branchFlag(c); // 1.25: --branch [<name>] — what git says is read BEFORE the engine records anything
   const git = branch ? branchGitFacts(c) : undefined;
-  // the engine classifies a new feature in its language (the explicit --lang, else the project's) — same as spec_create
-  const r = spec.createFeature(projectDir, name, tracks, flags.summary, undefined, flags.lang, c.cmd === "bugfix" ? "bugfix" : flags.kind,
-    { brownfield: on("brownfield"), flow: flags.flow, question: flags.question, timebox: flags.timebox, // = spec_create {brownfield, flow, question, timebox,
-      reproduction: flags.reproduction, rootCause: flags["root-cause"], condition: flags.condition, behaviour: flags.behaviour, // the bugfix prefill (1.21 F3)
-      cli: true, // 1.21 review A8: a refusal names the flag (--root-cause), not the MCP key (rootCause)
-      includeBody: c.boolFlag("include-body") === true, // … includeBody} — the bodies are in the --json result
-      size: flags.size, // 1.21 F5: --size xs|s|m|l (= spec_create {size}; xs = a change: one change.md)
-      branch, git }); // 1.25: = spec_create {branch}; git: what git said here (the engine reads no git process — MCP: the repository's files)
+  // The operation's flags and words as mcp/lib/operations.js maps them; cli: a refusal names the flag (--root-cause), not the MCP key
+  // (1.21 review A8); git: what git said here (the engine reads no git process — MCP: the repository's files)
+  const r = c.call("create", { branch, git, cli: true });
   if (!r.ok) return fail(r);
   const switched = branch ? branchSwitch(c, r, git) : null; // runs `git switch -c <name>` — the engine never does
   return out(r, (r) => {
@@ -510,9 +502,9 @@ const COMMANDS = [
                                   --explain: every keyword match (table tier → final tier, cue / override, negation) + the
                                   project's signal overrides`,
     run(c) {
-      const { flags, pos, projectDir, on, out, usage, log } = c;
+      const { pos, out, usage, log } = c;
       if (!pos[0]) usage('dev-spec classify "<description>" [--name "<feature name>"] [--lang en|pt|pt-BR|es] [--explain]');
-      const r = spec.classify(pos.join(" "), { name: flags.name, lang: flags.lang, projectDir, explain: on("explain") }); // same args as spec_classify
+      const r = c.call("classify");
       return out(r, (r) => {
         const T = c.cliText(r.lang); // the language the reasoning was written in
         const C = spec.msg(r.lang).classify;
@@ -549,8 +541,7 @@ const COMMANDS = [
                                   --approval-guard off|ask|deny: the human approval guard — an agent's approve (MCP or this CLI through
                                   its shell tool), feature remove --yes or lowering this guard asks you (ask) or is refused (deny)`,
     run(c) {
-      const { flags, pos, projectDir, out, fail, die, log } = c;
-      const tr = c.withTracksFlag(pos);
+      const { flags, projectDir, out, fail, die, log } = c;
       // --guard on|off|scope = spec_init {guard: true|false|"scope"}; absent leaves the guard as it is.
       let guard;
       if (flags.guard !== undefined) {
@@ -588,7 +579,7 @@ const COMMANDS = [
         approvalRoles = spec.parseApprovalRolesText(flags.roles, flags.lang || spec.projectLang(projectDir));
         if (approvalRoles.error) die(approvalRoles.error, c.invalidArg("--roles"));
       }
-      const r = spec.initProject(projectDir, tr.length ? tr : ["core"], flags.lang, { guard, checks, approvalRoles, stopCheck, approvalGuard, evidence: evidenceMode });
+      const r = c.call("init", { guard, checks, approvalRoles, stopCheck, approvalGuard, evidence: evidenceMode }); // no tracks: core
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         log(c.cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || c.cliText(r.lang).nothingNew, r.skipped.join(", ")));
@@ -613,7 +604,7 @@ const COMMANDS = [
       // matter (inclusion: always|fileMatch|manual) for any other safe name (same as steering_scaffold)
       const { flags, pos, projectDir, out, fail, usage, log } = c;
       if (!pos[0]) usage("dev-spec steering <constitution.md|product.md|tech.md|…|<custom-name>.md> [--lang en|pt|pt-BR|es]");
-      const r = spec.scaffoldSteeringFile(projectDir, pos[0], flags.lang);
+      const r = c.call("steering");
       if (!r.ok) return fail(r);
       const T = c.cliText(flags.lang || spec.projectLang(projectDir)); // the language the file was written in
       return out(r, (r) => log(r.created ? T.steeringCreated(r.file) : T.steeringExists(r.file)));
@@ -628,10 +619,10 @@ const COMMANDS = [
                                   edit; check validates them (exit 1 on an error)`,
     run(c) {
       // dev-spec templates [list|init|check] [artifact] [--lang en|pt|pt-BR|es] — the project's own scaffolds in .specs/templates/
-      // (= spec_templates {action, artifact, lang}). check exits 1 when a template has an error (scriptable, like doctor).
-      const { flags, pos, projectDir, out, fail, usage, log } = c;
+      // (spec_templates). check exits 1 when a template has an error (scriptable, like doctor).
+      const { pos, out, fail, usage, log } = c;
       if (pos.length > 2) usage("dev-spec templates [list|init|check] [artifact] [--lang en|pt|pt-BR|es]");
-      const r = spec.templates(projectDir, pos[0], { artifact: pos[1], lang: flags.lang });
+      const r = c.call("templates");
       if (!r.ok) return fail(r);
       if (r.action === "check" && r.errors) c.exitCode = 1;
       return out(r, (r) => spec.templatesLines(r).forEach((l) => log(l))); // 1.26: rendered from the result (it carries no lines)
@@ -646,10 +637,10 @@ const COMMANDS = [
                                   one; check validates them (exit 1 on an error)`,
     run(c) {
       // dev-spec tracks [list|init <name>|check] [name] [--lang en|pt|pt-BR|es] — the project's track packs in .specs/tracks/
-      // (= spec_tracks {action, name, lang}). check exits 1 when a pack has an error (scriptable, like templates check).
-      const { flags, pos, projectDir, out, fail, usage, log } = c;
+      // (spec_tracks). check exits 1 when a pack has an error (scriptable, like templates check).
+      const { pos, out, fail, usage, log } = c;
       if (pos.length > 2) usage("dev-spec tracks [list|init <name>|check] [name] [--lang en|pt|pt-BR|es]");
-      const r = spec.trackPacks(projectDir, pos[0], { name: pos[1], lang: flags.lang });
+      const r = c.call("tracks");
       if (!r.ok) return fail(r);
       if (r.action === "check" && r.errors) c.exitCode = 1;
       return out(r, (r) => r.lines.forEach((l) => log(l)));
@@ -665,12 +656,12 @@ const COMMANDS = [
                                   hand (applies at once), forget one (= spec_tracks {action: "signals"})`,
     run(c) {
       // dev-spec signals [list | set <track> <word> off|weak|strong | forget <track> <word>] [--lang] — the project's classifier
-      // signal overrides in .specs/classifier.json (= spec_tracks {action: "signals", op, track, word, effect}); exit 1 on a refusal.
-      const { flags, pos, projectDir, out, fail, usage, log } = c;
+      // signal overrides in .specs/classifier.json (spec_tracks {action: "signals"}); exit 1 on a refusal.
+      const { pos, out, fail, usage, log } = c;
       const syntax = "dev-spec signals [list | set <track> <word> off|weak|strong | forget <track> <word>] [--lang en|pt|pt-BR|es]";
       const op = pos[0] == null ? "list" : String(pos[0]).trim().toLowerCase();
       if ((op === "list" && pos.length > 1) || (op === "set" && pos.length !== 4) || (op === "forget" && pos.length !== 3)) usage(syntax);
-      const r = spec.trackPacks(projectDir, "signals", { op, track: pos[1], word: pos[2], effect: pos[3], lang: flags.lang });
+      const r = c.call("signals", { op });
       if (!r.ok) return fail(r);
       return out(r, (r) => r.lines.forEach((l) => log(l)));
     },
@@ -709,13 +700,12 @@ const COMMANDS = [
                                   requirements/design gates (= create --kind spike; prototype code stays outside .specs/)`,
     run(c) {
       // dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d|2w|8h] [--summary …] [--lang] — the spike shortcut
-      // (= spec_create {name, kind: "spike", question, timebox}; `create "<name>" --kind spike` is the same call).
-      const { flags, pos, projectDir, on, out, fail, usage, log } = c;
+      // (spec_create {kind: "spike"} — the operation's `cmd`; `create "<name>" --kind spike` is the same call).
+      const { pos, out, fail, usage, log } = c;
       if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
-      const tr = c.withTracksFlag(pos.slice(1));
       const branch = branchFlag(c); // 1.25: --branch [<name>] (spike/<slug> by default), as create
       const git = branch ? branchGitFacts(c) : undefined;
-      const r = spec.createFeature(projectDir, pos[0], tr.length ? tr : undefined, flags.summary, undefined, flags.lang, "spike", { question: flags.question, timebox: flags.timebox, flow: flags.flow, brownfield: on("brownfield"), cli: true, branch, git }); // = create --kind spike (a flow gets its note; cli: a refusal names the flag)
+      const r = c.call("create", { branch, git, cli: true }); // a flow gets its note; cli: a refusal names the flag
       if (!r.ok) return fail(r);
       const switched = branch ? branchSwitch(c, r, git) : null;
       return out(r, (r) => {
@@ -742,11 +732,9 @@ const COMMANDS = [
       // [--supersedes D-1] [--discovery] — append one entry to decisions.md (= spec_decide; unknown _Affects:_ → exit 1, nothing written).
       const { flags, pos, projectDir, on, out, fail, usage, log } = c;
       if (!pos[0] || pos.length > 1) usage('dev-spec decide <feature> --title "…" --decision "…" [--context "…"] [--consequences "…"] [--affects US-1.AC-2,T-03] [--supersedes D-1] [--discovery | --kind decision|discovery] (--affects / --supersedes repeatable)');
-      // A repeated --affects / --supersedes adds to the list (the shared parser kept only the last one); --kind decision|discovery
-      // is the MCP `kind` (the engine validates it), --discovery its shorthand.
-      const list = (name) => { const v = c.every(name); return v.length ? v : undefined; };
-      const r = spec.decide(projectDir, pos[0], { title: flags.title, decision: flags.decision, context: flags.context, consequences: flags.consequences,
-        affects: list("affects"), supersedes: list("supersedes"), kind: on("discovery") ? "discovery" : flags.kind });
+      // A repeated --affects / --supersedes adds to the list (every occurrence — the shared parser kept only the last one); --kind
+      // decision|discovery is the MCP `kind` (the engine validates it), --discovery its shorthand.
+      const r = c.call("decide", { kind: on("discovery") ? "discovery" : flags.kind });
       if (!r.ok) return fail(r);
       const D = spec.msg(spec.featureLang(projectDir, r.feature)).decisions;
       return out(r, (r) => {
@@ -770,7 +758,7 @@ const COMMANDS = [
     run(c) {
       const { pos, projectDir, out, fail, log } = c;
       if (!pos[0]) return main2list(c);
-      const r = spec.statusFeature(projectDir, pos[0]);
+      const r = c.call("status");
       if (!r.ok) return fail(r);
       const T = c.featureText(r.feature);
       return out(r, (r) => {
@@ -798,9 +786,9 @@ const COMMANDS = [
     args: ["@feature"],
     help: `  doctor <feature>                Health-check → ready to advance? (exit 1 on FAIL; trace/ears likewise on gaps/errors)`,
     run(c) {
-      const { pos, projectDir, out, fail, usage, log } = c;
+      const { pos, out, fail, usage, log } = c;
       if (!pos[0]) usage("dev-spec doctor <feature>");
-      const r = spec.specDoctor(projectDir, pos[0]);
+      const r = c.call("doctor");
       if (!r.ok) return fail(r);
       if (r.verdict === "fail") c.exitCode = 1; // scriptable: blocking checks → non-zero
       const T = c.featureText(r.feature);
@@ -822,8 +810,7 @@ const COMMANDS = [
     run(c) {
       const { flags, pos, projectDir, on, out, fail, usage, log, write } = c;
       if (!pos[0]) usage("dev-spec trace <feature> [--code] [--matrix] [--csv]");
-      const matrix = on("matrix") || on("csv"); // 1.14 F5: --csv prints the matrix as CSV
-      const r = spec.traceCheck(projectDir, pos[0], { code: on("code"), matrix }); // = trace_check {code, matrix}
+      const r = c.call("trace"); // 1.14 F5: --csv prints the matrix as CSV (the operation's matrix is on with it)
       if (!r.ok) return fail(r);
       if (r.verdict !== "pass") c.exitCode = 1; // scriptable: gaps → non-zero (warnings never change it)
       const lang = spec.featureLang(projectDir, r.feature);
@@ -852,9 +839,9 @@ const COMMANDS = [
     args: ["@feature"],
     help: `  clarify <feature>               Surface ambiguities/gaps in requirements before design`,
     run(c) {
-      const { pos, projectDir, out, fail, usage, log } = c;
+      const { pos, out, fail, usage, log } = c;
       if (!pos[0]) usage("dev-spec clarify <feature>");
-      const r = spec.clarify(projectDir, pos[0]);
+      const r = c.call("clarify");
       if (!r.ok) return fail(r);
       const T = c.featureText(r.feature);
       return out(r, (r) => {
@@ -871,10 +858,12 @@ const COMMANDS = [
     help: `  ears <feature|file.md>          Lint EARS (SHALL/DEVE/DEBE, IDs, vague words);
        ears --text "…" | ears -   … or raw text / stdin (same as ears_validate {text})`,
     run(c) {
-      // dev-spec ears <feature|file.md> | --text "<criteria>" | -   (raw text / stdin = ears_validate {text})
+      // dev-spec ears <feature|file.md> | --text "<criteria>" | -   (raw text / stdin = ears_validate {text}: the operation ears-text, in
+      // --lang or the project's language; a feature: the operation ears)
       const { flags, pos, projectDir, out, fail, usage, log } = c;
       if (flags.text == null && !pos[0]) usage('dev-spec ears <feature|path-to.md> | --text "<criteria>" | - (stdin)');
-      const textLang = flags.lang || spec.projectLang(projectDir);
+      const textLang = flags.lang || spec.projectLang(projectDir); // the human output's language
+      const lint = (text) => c.call("ears-text", { text });
       const report = (r, T) => {
         if (!r.ok) return fail(r);
         if (r.verdict === "fail") c.exitCode = 1; // scriptable: EARS errors → non-zero
@@ -883,18 +872,18 @@ const COMMANDS = [
           r.issues.forEach((i) => log("  L" + i.line + " [" + T.word(i.severity) + "] " + i.msg)); // `severity` stays English in --json
         });
       };
-      if (typeof flags.text === "string") return report(spec.earsValidate(flags.text, textLang), c.cliText(textLang));
-      if (pos[0] === "-") return c.readStdin((txt) => report(spec.earsValidate(txt, textLang), c.cliText(textLang)));
+      if (typeof flags.text === "string") return report(lint(flags.text), c.cliText(textLang));
+      if (pos[0] === "-") return c.readStdin((txt) => report(lint(txt), c.cliText(textLang)));
       // A file path is read from the project when it was named (--project / the env), else from the working folder (argPath, L12).
       const file = c.argPath(pos[0]);
       const isFile = fs.existsSync(file) && fs.statSync(file).isFile();
-      if (isFile) return report(spec.earsValidate(spec.decodeText(fs.readFileSync(file)), textLang), c.cliText(textLang)); // UTF-16 too
+      if (isFile) return report(lint(spec.decodeText(fs.readFileSync(file))), c.cliText(textLang)); // UTF-16 too
       // 1.24 r6 B9: a word that reads as a PATH (a separator, or a .md / .markdown / .txt name) and is no file — nor a feature of that
       // name — is "no such file", never "Feature 'missing-md' not found" (its slug).
       if ((/[\\/]/.test(String(pos[0])) || /\.(?:md|markdown|txt)$/i.test(String(pos[0]))) && !spec.existingFeature(projectDir, pos[0]).ok) {
         return fail({ ok: false, error: c.projectText().earsNoFile(file) });
       }
-      return report(spec.earsFeature(projectDir, pos[0]), c.featureText(pos[0]));
+      return report(c.call("ears"), c.featureText(pos[0]));
     },
   },
   {
@@ -906,9 +895,9 @@ const COMMANDS = [
                                   --waves: the execution waves of every open task (dependencies done or in earlier waves, no shared
                                   _Implements:_ file), + dependency cycles and blocked tasks`,
     run(c) {
-      const { pos, projectDir, on, out, fail, usage, log } = c;
+      const { pos, projectDir, out, fail, usage, log } = c;
       if (!pos[0]) usage("dev-spec next <feature> [--batch] [--max N] [--waves]");
-      const r = spec.nextTask(projectDir, pos[0], { batch: on("batch"), max: c.intFlag("max"), waves: on("waves") }); // = spec_next_task {batch, max, waves}
+      const r = c.call("next");
       if (!r.ok) return fail(r);
       const T = c.featureText(r.feature);
       const D = spec.msg(spec.featureLang(projectDir, r.feature)).taskDeps; // 1.14 F3
@@ -935,9 +924,9 @@ const COMMANDS = [
     args: ["@feature"],
     help: `  next-action <feature>           "You are here → do this next" (+ what changed since approval); alias: na`,
     run(c) {
-      const { pos, projectDir, out, fail, usage, log } = c;
+      const { pos, out, fail, usage, log } = c;
       if (!pos[0]) usage("dev-spec next-action <feature>");
-      const r = spec.nextAction(projectDir, pos[0]);
+      const r = c.call("next-action");
       if (!r.ok) return fail(r);
       const T = c.featureText(r.feature);
       return out(r, (r) => {
@@ -955,7 +944,7 @@ const COMMANDS = [
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)`,
     run(c) {
       // dev-spec brief <feature> [n] [--write]  — self-contained brief for one task (default: next open)
-      const { pos, projectDir, on, out, fail, usage, log, err } = c;
+      const { pos, projectDir, out, fail, usage, log, err } = c;
       if (!pos[0]) usage("dev-spec brief <feature> [task-number] [--write]");
       // A task number GIVEN is an integer ≥ 0, as done checks it (1.23 review L11: an empty word briefed — and with --write wrote —
       // the NEXT task, where spec_task_brief {number: ""} is refused by its schema). No number at all: the next task.
@@ -963,7 +952,7 @@ const COMMANDS = [
         const A = spec.msg(spec.featureLang(projectDir, pos[0])).args;
         return fail({ ok: false, error: A.invalid(A.item("number", A.type.integer + " " + A.atLeast(0), JSON.stringify(String(pos[1])))), code: "invalid-arguments", invalid: ["number"] });
       }
-      const r = spec.taskBrief(projectDir, pos[0], pos[1], { write: on("write"), includeBrief: c.boolFlag("include-brief") }); // = spec_task_brief {includeBrief}
+      const r = c.call("brief");
       if (!r.ok) return fail(r);
       const T = c.cliText(r.lang);
       return out(r, (r) => {
@@ -1011,7 +1000,8 @@ const COMMANDS = [
       // The tick, once the evidence is known (after --run's commands, or at once).
       const tick = () => {
         // 1.14 F1: a run --run made is observed by the CLI itself (observed: "cli"); a reported one is looked up in the harness's log.
-        const r = spec.completeTask(projectDir, pos[0], pos[1], evidence, { ...(on("run") ? { ranBy: "cli", startedAt: runStartedAt, ranVerify } : {}), ...(flags.reason !== undefined ? { reason: flags.reason } : {}) }); // --reason: only undone takes it (refused here, as MCP)
+        // --reason: only undone takes it (the engine refuses it here, as over MCP)
+        const r = c.call("complete", { evidence, ...(on("run") ? { ranBy: "cli", startedAt: runStartedAt, ranVerify } : {}) });
         if (!r.ok) return fail(r, hint); // --json: {ok:false, recorded:true, …} on stdout, as spec_complete_task returns it
         return out(r, (r) => {
           // "(verified)" only when something was run or attested — nothingToVerify is verified with nothing checked
@@ -1124,7 +1114,7 @@ const COMMANDS = [
       // {undo, evidence} — they were silently ignored (the user believed a run had been recorded). Nothing runs, nothing changes.
       // (1.23 review: --shell / --timeout — how --run would run — too, never ignored)
       if (flags.evidence != null || flags.exit != null || flags.cmd != null || on("run") || flags.shell !== undefined || flags.timeout !== undefined) return fail({ ok: false, error: M.undo.noEvidence });
-      const r = spec.completeTask(projectDir, pos[0], pos[1], undefined, { undo: true, reason: flags.reason });
+      const r = c.call("complete"); // undo: the command's (the operation's `cmd`)
       if (!r.ok) return fail(r);
       return out(r, (r) => {
         log((r.unticked ? M.undo.cliDone : M.undo.cliAlready)(r.number, r.done, r.total) + (r.next ? M.taskDone.next(r.next.number, r.next.text) : ""));
@@ -1143,13 +1133,13 @@ const COMMANDS = [
                                   set, finish needs a passing run of each since the last task activity`,
     run(c) { // synchronous but for --run's checks
       // dev-spec finish <feature> [--write] [--include-body] — readiness report + merge summary from the spec chain (no PRs)
-      const { flags, pos, projectDir, on, out, fail, usage, log, err } = c;
+      const { pos, projectDir, on, out, fail, usage, log, err } = c;
       if (!pos[0]) usage("dev-spec finish <feature> [--write] [--include-body] [--run [--shell bash|pwsh|<path>] [--timeout <s>]]");
       // B5: --run executes the project checks (roadmap.json meta.checks) — only on this explicit flag — and records every run
       // (= spec_finish {evidence}); without meta.checks it is an error, nothing runs.
       c.runOnlyFlags(); // --shell / --timeout without --run: a usage error (1.23 review — they were ignored)
       const report = (evidence, runStart) => {
-        const r = spec.finishFeature(projectDir, pos[0], { write: on("write"), includeBody: c.boolFlag("include-body"), evidence, ...(on("run") ? { ranBy: "cli", runStart } : {}) }); // = spec_finish {includeBody, evidence}; ranBy: the runs are observed by the CLI itself (1.14 F1)
+        const r = c.call("finish", { evidence, ...(on("run") ? { ranBy: "cli", runStart } : {}) }); // ranBy: the runs are observed by the CLI itself (1.14 F1)
         if (!r.ok) return fail(r);
         if (!r.readyToFinish) c.exitCode = 1; // scriptable: blockers → non-zero
         const T = c.featureText(r.feature);
@@ -1207,7 +1197,7 @@ const COMMANDS = [
       if (typeof flags.size === "string") task.size = flags.size;
       const deps = c.every("depends"); // 1.14 F3: = the MCP task field depends (repeatable, "3,5" / "#3" split by the engine)
       if (deps.length) task.depends = deps;
-      const r = spec.appendTasks(projectDir, pos[0], [task], { heading: typeof flags.heading === "string" ? flags.heading : undefined });
+      const r = c.call("append-tasks", { tasks: [task] });
       if (!r.ok) return fail(r);
       return out(r, (r) => {
         log(T.appended(r.heading, r.headingCreated, r.file));
@@ -1229,14 +1219,11 @@ const COMMANDS = [
   approve <feature> --through <phase>  Fast-forward (/approve --through): approve every active phase up to <phase>, in order, each through its
                                   own gate — stops at the first refused gate (exit 1) or a phase still waiting for another role`,
     run(c) {
-      // --through <phase> = the fast-forward (spec_approve {through}); --role <role> = the sign-off's role (spec_approve {role}).
-      const { flags, pos, projectDir, on, out, fail, usage, log } = c;
-      const through = typeof flags.through === "string" ? flags.through : undefined;
-      if (!pos[0] || (!pos[1] && through === undefined)) usage("dev-spec approve <feature> <phase> [--force [--reason \"…\"] [--expires YYYY-MM-DD|Nd]] [--by NAME] [--role ROLE] | dev-spec approve <feature> <phase> --revoke [--reason \"…\"] | dev-spec approve <feature> --through <phase>");
-      // Default approver: the engine's (same as MCP). --force = spec_approve {force: true}; a refusal exits 1 listing the failing checks.
-      const r = spec.approvePhase(projectDir, pos[0], pos[1], typeof flags.by === "string" ? flags.by : undefined,
-        { force: on("force"), role: typeof flags.role === "string" ? flags.role : undefined, ...(through !== undefined ? { through } : {}),
-          reason: flags.reason, expires: flags.expires, revoke: on("revoke") }); // 1.16 U2 / U3 (= spec_approve {revoke, reason, expires})
+      // --through <phase>: the fast-forward; --role <role>: the sign-off's role; --revoke / --reason / --expires (1.16 U2 / U3).
+      const { flags, pos, projectDir, out, fail, usage, log } = c;
+      if (!pos[0] || (!pos[1] && typeof flags.through !== "string")) usage("dev-spec approve <feature> <phase> [--force [--reason \"…\"] [--expires YYYY-MM-DD|Nd]] [--by NAME] [--role ROLE] | dev-spec approve <feature> <phase> --revoke [--reason \"…\"] | dev-spec approve <feature> --through <phase>");
+      // Default approver: the engine's. A refusal exits 1 listing the failing checks.
+      const r = c.call("approve");
       if (!r.ok) return fail(r); // a fast-forward stopped at a refused gate: its error names what was approved before it
       const GV = spec.msg(spec.featureLang(projectDir, r.feature)).governance;
       return out(r, (r) => {
@@ -1267,10 +1254,10 @@ const COMMANDS = [
     run(c) {
       // dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] — the same engine call as spec_impact;
       // 1.16 Q1: `impact [feature] --phase steering` — the features approved under steering that changed since (no feature = all)
-      const { flags, pos, projectDir, on, out, fail, usage, log } = c;
+      const { flags, pos, out, fail, usage, log } = c;
       const steeringPhase = String(flags.phase == null ? "" : flags.phase).trim().toLowerCase() === "steering";
       if (!pos[0] && !steeringPhase) usage("dev-spec impact <feature> [--phase requirements|design|test-plan|eval-plan|tasks] [--reopen] · dev-spec impact [feature] --phase steering");
-      const r = spec.impactReport(projectDir, pos[0], { phase: flags.phase, reopen: on("reopen") });
+      const r = c.call("impact");
       if (!r.ok) return fail(r);
       return out(r, (r) => spec.impactLines(r).forEach((l) => log(l)));
     },
@@ -1283,8 +1270,8 @@ const COMMANDS = [
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)`,
     run(c) {
       // dev-spec metrics [feature] [--write] — one feature (+ retro.md with --write) or the whole project; = spec_metrics
-      const { pos, projectDir, on, out, fail, log } = c;
-      const r = spec.metrics(projectDir, pos[0], { write: on("write") });
+      const { out, fail, log } = c;
+      const r = c.call("metrics");
       if (!r.ok) return fail(r);
       return out(r, (r) => spec.metricsLines(r).forEach((l) => log(l)));
     },
@@ -1297,11 +1284,11 @@ const COMMANDS = [
                                   --remove turns a track off (non-destructive: files kept, listed as inactive);
                                   a project track pack (dev-spec tracks) is named the same way`,
     run(c) {
-      const { pos, projectDir, on, out, fail, usage, log } = c;
+      const { pos, out, fail, usage, log } = c;
       const tr = c.withTracksFlag(pos.slice(1));
       if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy|dist|api|ui|obs|data>... (or a track pack's name — dev-spec tracks) [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
-      const r = spec.addTrack(projectDir, pos[0], tr, { remove: on("remove") });
+      const r = c.call("add-track");
       if (!r.ok) return fail(r);
       return out(r, (r) => {
         log(c.featureText(r.feature).trackNow(r.feature, r.tracks));
@@ -1331,7 +1318,7 @@ const COMMANDS = [
       if (most !== undefined && pos.length > most) die(c.projectText().extraArgs("feature " + act, pos.slice(most).join(" ")), c.unknownArg(String(pos[most])));
       if (most !== undefined && act !== "flow" && flags.flow !== undefined) die(c.projectText().flagNotFor("--flow", "feature " + act, act === "remove" ? "--yes" : ""), c.unknownArg("--flow"));
       const T = c.featureText(pos[1]); // resolved BEFORE the folder moves or disappears
-      const r = spec.manageFeature(projectDir, pos[0], pos[1], pos[2], { confirm: on("yes"), flow: flags.flow });
+      const r = c.call("feature");
       if (!r.ok && r.needsConfirm) {
         // Without --yes: show what would be deleted, delete nothing, exit 1.
         c.exitCode = 1;
@@ -1372,8 +1359,8 @@ const COMMANDS = [
       // dev-spec catalog [--write] [--include-body] — the living .specs/SPECS.md (= spec_export {format: "catalog", write, includeBody}).
       // Without --write the markdown is printed (--json: with --include-body); a hand-written SPECS.md (no AUTO-GENERATED marker) is
       // never overwritten → exit 1.
-      const { flags, projectDir, on, out, log, err, write } = c;
-      const r = spec.catalog(projectDir, { write: on("write"), includeBody: c.bodyWanted() });
+      const { flags, out, log, err, write } = c;
+      const r = c.call("catalog", { includeBody: c.bodyWanted() });
       if (r.ok === false) c.exitCode = 1;
       if (!flags.json && r.error) err("dev-spec: " + r.error);
       const C = spec.msg(r.lang).catalog;
@@ -1417,7 +1404,7 @@ const COMMANDS = [
         die(A.invalid(A.item("--tracker", A.oneOf(spec.TRACKERS.join(", ")), JSON.stringify(String(flags.tracker)))), c.invalidArg("--tracker"));
       }
       const format = tracker || (on("md") ? "md" : on("csv") ? "csv" : on("gherkin") ? "gherkin" : on("adr") ? "adr" : "html");
-      const r = spec.exportSpecs(projectDir, { name: pos[0], format, write: on("write"), includeBody: c.bodyWanted() }); // --json: the preview unless --include-body
+      const r = c.call("export", { format, includeBody: c.bodyWanted() }); // --json: the preview unless --include-body
       if (!r.ok) return fail(r);
       const M = spec.msg(r.lang);
       const relOut = (f) => path.relative(projectDir, f).split(path.sep).join("/");
@@ -1456,9 +1443,9 @@ const COMMANDS = [
       // dev-spec changelog [--since <ISO date|last|all>] [--write] — release notes from the specs (= spec_export {format: "changelog"}):
       // the markdown on stdout (a note on stderr; --json: with --include-body), or --write → .specs/RELEASE-NOTES.md + meta.changelogAt
       // (exit 1 on a refusal).
-      const { flags, pos, projectDir, on, out, fail, usage, log, err, write } = c;
+      const { pos, out, fail, usage, log, err, write } = c;
       if (pos.length) usage("dev-spec changelog [--since <ISO date|last|all>] [--milestone <name>] [--write] [--include-body]");
-      const r = spec.changelog(projectDir, { since: flags.since, write: on("write"), milestone: flags.milestone, includeBody: c.bodyWanted() });
+      const r = c.call("changelog", { includeBody: c.bodyWanted() });
       if (!r.ok) return fail(r);
       const N = spec.msg(r.lang).releaseNotes;
       return out(r, (r) => {
@@ -1481,11 +1468,11 @@ const COMMANDS = [
     run(c) {
       // dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list] (= spec_roadmap_edit {kind: "milestone", action, name, date, features}):
       // a name with spaces is quoted; the features may also be comma-separated. The action is case-folded, like the MCP enum.
-      const { pos, projectDir, out, fail, usage, log } = c;
+      const { pos, out, fail, usage, log } = c;
       const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase() || "list";
       const syntax = "dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]";
       if ((a0 === "list" && pos.length > 1) || ((a0 === "rm" || a0 === "remove") && pos.length !== 2)) usage(syntax);
-      const r = spec.milestone(projectDir, a0, a0 === "add" ? { name: pos[1], date: pos[2], features: pos.slice(3) } : { name: pos[1] });
+      const r = c.call("milestone", { action: a0 }); // add: <name> <date> <features…>
       if (!r.ok) return fail(r);
       return out(r, (r) => r.lines.forEach((l) => log(l)));
     },
@@ -1499,8 +1486,8 @@ const COMMANDS = [
       // dev-spec drift [feature] — implementing files changed / missing / now present since spec_finish recorded the baseline
       // (= spec_drift {name}); exit 1 when any finished feature drifted, a baseline is stale (the feature changed since its finish:
       // finish it again) or a state file couldn't be read (a check that didn't run is not "clean" — scriptable, like trace).
-      const { pos, projectDir, out, fail, log, err } = c;
-      const r = spec.drift(projectDir, pos[0]);
+      const { out, fail, log, err } = c;
+      const r = c.call("drift");
       if (!r.ok) return fail(r);
       if (r.drifted.length || r.stale.length || (r.errors && r.errors.length)) c.exitCode = 1;
       const D = spec.msg(r.lang).drift;
@@ -1534,9 +1521,9 @@ const COMMANDS = [
       // = the Stop / SubagentStop hook's decision (spec.stopCheck): the closing message from --message "<text>", the words after the
       // command, or stdin (--message - / a lone -); --agent <subagent type> (a spec-implementer is checked on its report, a
       // spec-simplifier on its simplification report). Exit 1 when the turn would be sent back (scriptable, like doctor); --json prints the result.
-      const { flags, pos, projectDir, usage, log } = c;
+      const { flags, pos, usage, log } = c;
       const runCheck = (message) => {
-        const r = spec.stopCheck(projectDir, { message, agent: typeof flags.agent === "string" ? flags.agent : "" });
+        const r = c.call("stop-check", { message });
         if (flags.json) log(JSON.stringify(r, null, 2));
         else if (r.block) log(r.reason);
         else {
@@ -1569,12 +1556,12 @@ const COMMANDS = [
       const fx = spec.existingFeature(projectDir, pos[0]);
       if (!fx.ok) return fail(fx);
       const max = c.intFlag("max") || 1000;
-      const report = (text, opts) => {
-        const r = spec.taskCommits(projectDir, pos[0], text, opts);
+      const report = (text, own) => {
+        const r = c.call("log", { gitLog: text, ...own });
         if (!r.ok) return fail(r);
         return out(r, (r) => r.lines.forEach((l) => log(l)));
       };
-      if (pos[1] === "-") return c.readStdin((text) => report(text, { max: c.intFlag("max") })); // --max: the window the piped log was read with (= spec_log {max})
+      if (pos[1] === "-") return c.readStdin((text) => report(text, {})); // --max: the window the piped log was read with (= spec_log {max})
       const logArgs = ["-c", "core.quotePath=false", "-c", "log.showSignature=false", "log", "--no-color", "--no-decorate", "--no-abbrev-commit",
         "--pretty=medium", "--date=iso-strict", "--name-only", "--relative", "--max-count=" + max];
       // 1.25: a feature started on its own branch (create --branch) recorded the commit it started from — the log is read from there
@@ -1631,8 +1618,8 @@ const COMMANDS = [
       // dev-spec upgrade [--apply] — after a plugin update (= spec_upgrade {apply}): the audit of every active feature against the
       // current rules (read-only), or --apply: the safe migrations + .specs/UPGRADE.md. A report exits 0; an error (no .specs/, a
       // broken roadmap.json, a feature that couldn't be migrated) exits 1.
-      const { projectDir, on, out, fail, log } = c;
-      const r = spec.specUpgrade(projectDir, { apply: on("apply") });
+      const { out, fail, log } = c;
+      const r = c.call("upgrade");
       if (!r.ok) return fail(r);
       if (r.migrations && r.migrations.errors.length) c.exitCode = 1;
       return out(r, (r) => spec.upgradeLines(r).forEach((l) => log(l))); // 1.26: rendered from the result (it carries no lines)
@@ -1644,8 +1631,8 @@ const COMMANDS = [
     help: `  roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles, ETA per feature (velocity from ticked tasks, _Size: XS|S|M|L|XL_), cross-feature file overlaps. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|pt-BR|es`,
     run(c) {
       // Same engine call as spec_roadmap: a failed write (e.g. a hand-written ROADMAP.md) is an error → exit 1.
-      const { flags, projectDir, on, out, log, err } = c;
-      const r = spec.roadmapReport(projectDir, { write: on("write") || on("md"), html: on("html"), lang: flags.lang });
+      const { flags, projectDir, out, log, err } = c;
+      const r = c.call("roadmap"); // --md: --write
       if (r.ok === false) c.exitCode = 1;
       const T = c.cliText(flags.lang || spec.projectLang(projectDir));
       if (!flags.json) {
@@ -1673,7 +1660,7 @@ const COMMANDS = [
     help: `  depend <feature> [deps...]      Show / set dependencies: deps replace the list; --add x,y · --rm x · --clear · --order N
                                   (every dep must be an existing feature; cycles are rejected)`,
     run(c) {
-      const { flags, pos, projectDir, on, out, fail, usage, log } = c;
+      const { pos, on, out, fail, usage, log } = c;
       const syntax = "dev-spec depend <feature> [dep1 dep2 ...] [--add x[,y]] [--rm x[,y]] [--order N] [--clear]";
       // 1.24 r6 B4: deps (they REPLACE the list) and --clear (it empties it) contradict each other — the deps won silently
       if (!pos[0] || (on("clear") && pos.length > 1)) usage(syntax);
@@ -1684,7 +1671,7 @@ const COMMANDS = [
       // Same semantics as the MCP tool: positional deps REPLACE the list, --clear empties it, --add/--rm edit it; with nothing at all
       // it only shows the current deps (a bare `depend <f>` used to clear them).
       const deps = pos.slice(1).length ? pos.slice(1) : on("clear") ? [] : undefined;
-      const r = spec.setDependency(projectDir, pos[0], deps, flags.order, { add: adds.length ? adds.join(",") : undefined, remove: rms.length ? rms.join(",") : undefined });
+      const r = c.call("depend", { dependsOn: deps }); // --add / --rm: every occurrence, as one comma list
       if (!r.ok) return fail(r);
       return out(r, (r) => log(c.projectText().dependsOn(r.feature, r.dependsOn.join(", "), r.order, r.unknownDeps.join(", ")))); // project language, like the engine's depend messages
     },
@@ -1695,14 +1682,14 @@ const COMMANDS = [
     args: ["@backlog-action"],
     help: `  backlog [add|rm|remove <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)`,
     run(c) {
-      const { pos, projectDir, out, fail, die, log } = c;
+      const { pos, out, fail, die, log } = c;
       const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase(); // case-folded, like the engine and the MCP enum
       // No action lists; an unknown one (delete, ad…) is an error from the engine, as over MCP — it used to just list.
       const action = a0 || "list";
       // add <name> [note words…] reads every word; rm|remove <name> and list read no more (1.23 review: extra words were ignored)
       const most = action === "list" ? 1 : action === "rm" || action === "remove" ? 2 : Infinity;
       if (pos.length > most) die(c.projectText().extraArgs("backlog " + action, pos.slice(most).join(" ")), c.unknownArg(String(pos[most])));
-      const r = spec.backlog(projectDir, action, pos[1], action === "add" ? pos.slice(2).join(" ") : undefined);
+      const r = c.call("backlog", { action }); // add: the words after the name are its note
       if (!r.ok) return fail(r); // e.g. rm of a name that isn't in the backlog
       const T = c.projectText();
       return out(r, (r) => {
@@ -1725,9 +1712,8 @@ const COMMANDS = [
       // 1.23 review (L12): <path> is read from the project when it was named (--project / the env), else from the working folder
       // (argPath) — it was always the working folder; and the report is in the PROJECT's language (a subfolder has no .specs/).
       const { pos, projectDir, out, fail, log } = c;
-      const root = pos[0] ? c.argPath(pos[0]) : projectDir;
       const lang = spec.projectLang(projectDir);
-      const r = spec.scanCodebase(root, { cap: c.intFlag("cap"), lang });
+      const r = c.call("scan", { path: pos[0] ? c.argPath(pos[0]) : undefined }); // no path: the project
       if (!r.ok) return fail(r); // a path that is no folder (1.22 review): exit 1, never an empty codebase
       const T = c.cliText(lang); // same language as the engine's note
       const B = spec.msg(lang).brownfield;
@@ -1755,7 +1741,7 @@ const COMMANDS = [
     help: `  coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder`,
     run(c) {
       const { projectDir, out, fail, log } = c;
-      const r = spec.coverage(projectDir);
+      const r = c.call("coverage");
       if (!r.ok) return fail(r);
       const T = c.projectText();
       const B = spec.msg(spec.projectLang(projectDir)).brownfield;
@@ -1787,8 +1773,8 @@ const COMMANDS = [
   import … --dry-run              Write nothing — no file, folder, lock or roadmap refresh: what the import would do (the files with
                                   their size, counts, mapping, warnings; --json adds each file's content, bounded)`,
     run(c) {
-      // dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …] — the same engine
-      // call as spec_import: <path> resolves against the project root and must stay inside it.
+      // dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name n] [--lang] [--tracks …] — <path> resolves
+      // against the project root and must stay inside it.
       // 1.16 C4: `import plan|execplan|fluidplan -` reads the document's markdown from stdin, `--text "<markdown>"` takes it inline
       // (= spec_import {tool, text} — a plan kept outside the project, e.g. Claude Code's ~/.claude/plans).
       // 1.25: `import kiro-steering|cursor-rules [<path>]` (= spec_import {tool}: another tool's steering → .specs/steering/; no path →
@@ -1808,8 +1794,7 @@ const COMMANDS = [
       const source = (p) => (p == null || c.projectNamed || path.resolve(c.cwd) === projectDir ? p
         : path.relative(projectDir, c.argPath(p)).split(path.sep).join("/") || ".");
       const doImport = (text) => {
-        const r = spec.importSpec(projectDir, pos[0], text != null && !pathWithText ? undefined : source(pos[1]), { name: flags.name, lang: flags.lang,
-          tracks: c.withTracksFlag(pos.slice(hasText && !pathWithText ? 1 : 2)), text, dryRun: flags["dry-run"] === true });
+        const r = c.call("import", { path: text != null && !pathWithText ? undefined : source(pos[1]), text, tracks: c.withTracksFlag(pos.slice(hasText && !pathWithText ? 1 : 2)) });
         if (!r.ok) return fail(r);
         return out(r, (r) => {
           const B = spec.msg(r.lang).importSpec;

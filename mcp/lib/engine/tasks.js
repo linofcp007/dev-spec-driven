@@ -531,7 +531,10 @@ function checkboxBytes(file, text, boxes, ch) {
 // opts.ranBy "cli" (1.14 F1): the CLI's `done --run` ran the command itself — the record's observed stamp is "cli". The MCP
 // server never passes it (and normalizeEvidence keeps no caller-given `observed`): a reported run is looked up in the
 // harness's log (observedRun).
+// The options form (1.27): completeTask(projectDir, { name, number, evidence, …opts }) — what both surfaces call
+// (mcp/lib/operations.js: an undo has no evidence hole); the positional form stays the same call.
 function completeTask(projectDir, name, number, evidence, opts = {}) {
+  if (isObj(name)) ({ name, number, evidence, ...opts } = name);
   if (opts && opts.undo === true) return untickTask(projectDir, name, number, { reason: opts.reason, evidence }); // 1.16 U1
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };

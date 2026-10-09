@@ -538,7 +538,7 @@ function featureLocked(fn, when) {
   const run = function (projectDir, name) {
     const args = arguments;
     if (when && !when(args)) return fn.apply(this, args);
-    const f = existingFeature(projectDir, name);
+    const f = existingFeature(projectDir, isObj(name) ? name.name : name); // the options form (1.27): (projectDir, { name, … })
     if (!f.ok) return fn.apply(this, args);
     return withFeatureLock(f.dir, () => fn.apply(this, args), { onBusy: (b) => featureBusyResult(projectDir, f.slug, null, b),
       onRefused: (e) => gateRefusal(e, featureLangSafe(projectDir, f.slug)) }); // a linked feature folder: refused up front (1.24 r6)

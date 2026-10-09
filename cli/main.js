@@ -112,6 +112,33 @@ function guarded(chunk, json) {
 // console.log's text for what the CLI prints (strings, numbers, a missing note): the arguments joined by a space.
 const line = (args) => args.map((a) => (typeof a === "string" ? a : String(a))).join(" ") + "\n";
 
+// ---- the operations (1.27) ---------------------------------------------------------------------------------------------------
+// The table both surfaces read (mcp/lib/operations.js) — loaded on the first c.call: the status line and the bare help never need it.
+let OPERATIONS_MODULE = null;
+const operations = () => OPERATIONS_MODULE || (OPERATIONS_MODULE = require(path.join(__dirname, "..", "mcp", "lib", "operations.js")));
+// One argument of an operation as this command line gives it: the value its command implies (bugfix → kind "bugfix"); its word — or,
+// with `rest`, the words from there on plus its flag's value (`create x tdd --tracks saas`); a switch any of its flags turns on; every
+// occurrence of a list flag; an integer checked (c.intFlag: ≥ 1, at most the command's bound); `join` makes the words one string. A
+// `parsed` one is the handler's own (its syntax: init --guard on|off|scope, done --run's evidence…) — never read raw here.
+function cliArg(c, command, a) {
+  if (a.cmd && Object.prototype.hasOwnProperty.call(a.cmd, command)) return a.cmd[command];
+  if (a.parsed) return undefined;
+  const names = [].concat(a.cli === undefined ? [] : a.cli).map((f) => f.slice(2));
+  if (a.type === "switch") return names.some((k) => c.on(k));
+  if (a.type === "bool") return c.boolFlag(names[0]);
+  if (a.type === "int") return c.intFlag(names[0]);
+  let v;
+  if (a.pos !== undefined && a.rest) {
+    v = c.pos.slice(a.pos).concat(names.filter((k) => typeof c.flags[k] === "string" && c.flags[k].trim()).map((k) => c.flags[k]));
+    if (!v.length) v = undefined;
+  } else if (a.pos !== undefined) v = c.pos[a.pos];
+  else if (a.type === "list") {
+    v = names.flatMap((k) => c.every(k));
+    if (!v.length) v = undefined;
+  } else v = names.length ? c.flags[names[0]] : undefined;
+  return a.join !== undefined && Array.isArray(v) ? v.join(a.join) : v;
+}
+
 // ---- the call's context ----------------------------------------------------------------------------------------------------
 // Everything a handler reads: the parsed command line, the project, the output helpers — one per call, never shared.
 function createContext(argv, io) {
@@ -252,6 +279,17 @@ function createContext(argv, io) {
   // --tracks takes ONE token: every command that takes tracks merges the flag with its positional tracks (parseTracks splits
   // "tdd,saas") — none may drop it silently.
   c.withTracksFlag = (list) => (typeof flags.tracks === "string" && flags.tracks.trim() ? list.concat([flags.tracks]) : list);
+
+  // ---- the operations (1.27, mcp/lib/operations.js): c.call(id, given) makes the engine call MCP makes for the same tool — each option
+  // read from this command line as the table maps it (cliArg), `given` the handler's own (a value it parses in its own syntax, an option
+  // only the CLI sets). A command runs only an operation that lists it (anything else is a programming error, thrown).
+  c.call = (id, given) => {
+    const OPS = operations();
+    const op = OPS.byId(id);
+    const command = c.entry ? c.entry.name : cmd;
+    if (!op.cli.includes(command)) throw new Error("dev-spec: the command '" + command + "' does not run the operation '" + id + "'");
+    return OPS.run(op, spec, c.projectDir, "cli", (a) => cliArg(c, command, a), given);
+  };
 
   // ---- stdin. Read as BYTES and decoded as a file is (spec.decodeText: a UTF-16 BOM decides, else UTF-8) — 1.23 review: a UTF-16
   // document (what Windows PowerShell 5.1's `>` writes) piped into `ears -` read as "0 criteria, pass". From a stream asynchronously
