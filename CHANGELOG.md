@@ -3,6 +3,65 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.26.0] — 2026-10-09
+
+The context diet. The seventh review measured what the plugin costs a session before it does any work: 15 of its commands
+had lost their description in the user's own skill listing (the listing's budget is 1% of the context window, shared by
+every installed plugin), `/spec <idea>` read ~24,000 tokens before writing a line, and tools/list was ~19,000 tokens. Every
+rule stays; what the model loads shrinks. **Commands were renamed** — see "Upgrading" below.
+
+### Changed
+- **55 slash commands → 22**, and only `/spec` and `/spec-bugfix` are model-invocable — every other one is the user's to type
+  (`disable-model-invocation`), so its description costs nothing in the listing: **5,718 → 776 characters** model-visible
+  (with the skill's description). Command files 185 KB → 50 KB: each says what it routes to, the one tool call and the rules
+  that matter; the catalogues live in the tool results and the references. Read-only commands pre-allow their read-only
+  tools (`allowed-tools`). `/spec-tour` proposes size `xs` (one `change.md`, one plan approval) and passes the size it confirms.
+- **The MCP surface: 38 tools / 75,909 characters → 32 / 43,316** (30 / 41,392 in the Claude Code plugin, where the hooks do
+  `spec_stop_check`'s and `spec_log`'s job — they stay callable). `spec_list` → `spec_status` without a name;
+  `spec_backlog` / `spec_depend` / `spec_milestone` → **`spec_roadmap_edit {kind}`**; `spec_catalog` / `spec_changelog` →
+  `spec_export {format: "catalog" | "changelog"}`; `spec_coverage` → `spec_scan {coverage: true}`. **The old names still
+  work** (hidden aliases, validated against their old schema). Descriptions keep the rules (evidence before claims, approvals
+  are the user's) and drop the catalogues.
+- **Lean replies**: `spec_export` without `write` returns `{bytes, preview, hint}` (pass `includeBody: true` for the
+  document — a template-only feature's reply 25k → 3k characters); catalog / changelog carry their markdown only with
+  `includeBody`; `spec_upgrade` and `spec_templates` carry no `lines` (the CLI renders its human output from the structure).
+  The CLI's `--json` stays equal to the MCP result, so `export` / `catalog` / `changelog` take `--include-body` for the
+  document.
+- **SKILL.md 31.6 → 14.7 KB** (mode first, one table of phases, each rule once — the per-phase detail moved to
+  `references/phase-guide.md`); its description 1,011 → 553 characters (intents, not trigger lists); the classification
+  matrix 63.5 → 14.7 KB (the classifier's internals moved to the maintainer notes). Starting `/spec <idea>`: ~24,000 →
+  ~6,000–8,000 tokens.
+- **Agents**: a new **`spec-verifier`** (the reviewer's per-finding verify mode, now its own 3 KB agent); descriptions 2,586
+  → 1,162 characters; `spec-critic` inherits the session's model.
+- **AGENTS.md 36.4 → 13.4 KB** (Codex reads 32 KiB across all its AGENTS.md files); the Cursor and Windsurf rules are
+  agent-requested instead of always on.
+- **README**: English, 306 lines, quick start first (a size-xs change end to end in 5 minutes); `README.pt.md` and
+  `README.es.md` in their own files; INSTALL.md 412 → 255 lines with a troubleshooting section. Release history lives here.
+
+### Upgrading from 1.25 or earlier
+- `/spec` absorbs `/next-action`, `/classify`, `/createSpec`, `/design`, `/testPlan`, `/evalPlan`, `/writeTests`,
+  `/createTask` (`/spec [feature] [phase]`) · `/clarify [--grill]` absorbs `/grill` · `/approve --through` absorbs `/spec-ff`
+  · `/executeTask commit` absorbs `/spec-commit` · `/roadmap depend | backlog | milestone` absorbs `/depend`, `/backlog`,
+  `/spec-milestone` · `/spec-review branch | converge | simplify | feedback | prompt` absorbs `/prReview`, `/spec-converge`,
+  `/spec-simplify`, `/spec-review-feedback`, `/promptReview` · `/spec-change impact | decide | track` absorbs `/spec-impact`,
+  `/spec-decide`, `/add-track` · `/spec-report catalog | drift | metrics | changelog | export` · `/spec-adopt scan | reverse |
+  coverage | import` · `/spec-setup init | guard | statusline | superpowers | templates | tracks` · `/eval run | baseline |
+  migrate` absorbs `/migrateModel`. Unchanged: `/spec-bugfix`, `/ds`, `/dss`, `/dsx`, `/spec-doctor`, `/spec-status`,
+  `/spec-finish`, `/spec-spike`, `/feature`, `/spec-upgrade`, `/spec-tour`.
+- Update the installed plugin: `/plugin marketplace update dev-spec-driven-marketplace`.
+
+### Tests and build (maintainers)
+- **Hermetic test chains**: every chain runs in a fresh temp folder without the shell's steering variables
+  (`SPEC_PROJECT_DIR`, `CLAUDE_PROJECT_DIR`, `DEV_SPEC_*`) — a `.specs/` or an exported variable in the maintainer's shell
+  no longer changes results (it failed 125 + 205 assertions before).
+- **`all()` / `eq()`**: a failing assertion names the condition that failed; 201 large conjunctions converted.
+- Timing-bound checks measure once more on a miss; a hung chain is killed by a watchdog; a failed spawn under memory pressure
+  is retried.
+- The generated corpus and stop-claim filter carry no version stamp — a release no longer rewrites them; `npm run check`.
+
+### Tests
+- `node mcp/test.js` 2146 assertions (was 2132), `node cli/test-cli.js` 615 (was 610).
+
 ## [1.25.1] — 2026-10-09
 
 The seventh review: eight read-only reviewers (security, MCP/CLI, hooks, two engine passes, prose, i18n/docs, architecture),
