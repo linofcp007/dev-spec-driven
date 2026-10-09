@@ -3,7 +3,8 @@
 /**
  * dev-spec-driven i18n — English (en) — the canonical reference: PT and ES mirror its structure (same sections, IDs, markers and slots).
  *
- * Every table's en block: the artifact builders (BUILD), the steering stubs, the evals README, the tool messages (MSG
+ * Every table's en block: the layouts' text (`text` — mcp/lib/i18n.js LAYOUTS render it), the artifact builders it writes
+ * whole (BUILD), the steering stubs, the evals README, the tool messages (MSG
  * with its quality / designWeigh groups) and the task-brief labels. mcp/lib/i18n.js assembles the tables and is what the
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
@@ -13,9 +14,9 @@ let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
 
 // ===========================================================================
-// The artifact layouts' text (mcp/lib/i18n.js LAYOUTS renders it — the same structure in every language): what each
-// scaffold section SAYS, never which sections come, in what order or under which track / size. A value with a slot inside a
-// sentence is a function of it. pt-BR derives from the rendered pt scaffolds (toPtBr over each builder's whole output).
+// The layouts' text — mcp/lib/i18n.js LAYOUTS (and approvalAction) render it, the same structure in every language: what
+// each scaffold section SAYS, never which sections come, in what order or under which track / size. A value with a slot inside
+// a sentence is a function of it. pt-BR derives from the rendered pt output (toPtBr over each builder's whole text).
 // ===========================================================================
 const text = {
   // trackDesignBlock — each built-in track's design sections, in order: [heading, guidance]. The layout writes "## <marker>
@@ -620,7 +621,8 @@ Tracks: ${label}. Tick before calling the feature done.`,
 };
 
 // ===========================================================================
-// Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
+// The artifact builders this language writes whole — one template each, nothing to share (every other one renders the
+// `text` block above through mcp/lib/i18n.js LAYOUTS). EN is the canonical reference; since 1.13 its templates are
 // internally consistent (every template AC planned and tasked) — the gates would otherwise flag the scaffold.
 // ===========================================================================
 const build = {

@@ -9,6 +9,8 @@
  * blocks live in mcp/lib/i18n/<lang>.js (en · pt · es), the shared helpers in i18n/common.js and the pt-BR derivation in
  * i18n/pt-br.js; the tables are assembled here, and this file is what the engine and the tests require.
  * The engine (mcp/lib/spec.js over mcp/lib/engine/) keeps the logic; it calls the builders here with a resolved `lang`.
+ * The STRUCTURE every language's scaffolds share is written once here (LAYOUTS, approvalAction, renderBrief, renderRetro):
+ * a language's file holds what they say (its `text` block), never which sections come or under which condition.
  *
  * Language model: a project picks ONE language (persisted in `.specs/roadmap.json` meta.lang —
  * the single source of truth), inherited by every new feature and overridable per feature
@@ -45,7 +47,8 @@ function localeFileLoaded(rel) {
   for (const fn of LOCALE_LISTENERS) { try { fn(rel); } catch { /* the listener's own trouble */ } }
 }
 
-// Artifact builders, one set per language (i18n/<lang>.js `build`).
+// Artifact builders, one set per language: i18n/<lang>.js `build` (its single-template builders) plus LAYOUTS bound to its
+// `text` block (loadLocale).
 const BUILD = {};
 // Steering stubs, one set per language. Filenames stay constant; content localized.
 const STEERING = {};
