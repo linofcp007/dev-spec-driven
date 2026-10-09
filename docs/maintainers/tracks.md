@@ -823,10 +823,20 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   listed endings only — `encript`, `cifr`, `criptograf`: never "cifra"; the self-match sweep probes them by infinitive),
   and `-based/-powered/…` adjectives (`AI-powered`), while rejecting `-<letter>` compounds
   (`claude-plugin`) and dotted/slashed identifiers. `-<digit>` stays legal (`gpt-4`). **A glued version (review 5, L29):** a
-  built-in one-word keyword of 2–5 letters (an acronym: oauth, gpt, tls, llm, saml) or a `VERSIONED_NAMES` product (claude, gemini,
-  mistral) takes `VERSION_TAIL` — digits, dot-digits, one letter — before its inflection: "OAuth2", "GPT4", "GPT4o", "TLS1.3",
+  built-in one-word keyword of 2–5 letters (an acronym: oauth, gpt, tls, llm, saml) or a `VERSIONED_NAMES` product (Claude, Gemini,
+  Mistral) takes `VERSION_TAIL` — digits, dot-digits, one letter — before its inflection: "OAuth2", "GPT4", "GPT4o", "TLS1.3",
   "Claude3", "Gemini1.5" were no signal at all; a longer word never does ("Billing10x"), nor a track pack's keyword. When you add a
-  keyword, add it to the self-match sweep's expectations if it needs a new suffix class.
+  keyword, add it to the self-match sweep's expectations if it needs a new suffix class. **1.25.1 — everyday words:** a product
+  name that is an everyday word in lower case is written CAPITALISED in the table (matched case-sensitively — Claude, Gemini,
+  Mistral, Copilot, RAG, Cohere, Stable Diffusion, Pinecone; `VERSIONED_NAMES` holds the table's spelling), its capitalised
+  everyday senses are ai cues (Claude Monet, a Gemini zodiac page, the Mistral wind, a Copilot for pilots), and SIGNALS.tdd / saas
+  have cues for credits (photo / film / course), "in charge of", a battery charge, a therapy / training session, a cron EXPRESSION
+  helper; 'tool use' is weak. `-compatible` joined `ADJ_SUFFIX` ("the OpenAI-compatible endpoint"). Training / predicting with a
+  model are gap keywords ("train … model", "model … trained", "predict … churn"; PT / ES through the VERB_STEMS trein- / entren-).
+  **Measured:** the differential (b7978f8 vs the fix) over 16,013 string literals of the test files, evals and the review's
+  phrasings: 67 decisions changed, each one a phrasing the fix targets (or a test message naming one of its words); a 14-frame
+  sweep of every keyword of both tables (30,674 texts): 345 changed — +ai off only for the lower-case claude / gemini / mistral /
+  copilot / rag / tool use, +ai on only for the new keywords.
 - **Negation never vetoes a track**, it annotates it. "the system shall not hallucinate" negates
   `hallucinat` on a feature that is unmistakably `+ai`. So when a track is on *and* has negated
   keywords, `classify` emits a conflict note ("+ai is ON although 'llm' appeared negated") for the
@@ -846,6 +856,10 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   a denying predicate over "without X" ("Reject requests without a valid token", "Users without MFA must not…") —
   `nominalFollowRequires()` / `negativePredicate()`; widening `SUBJECT_VERBS`, `PLACE_PREPS` or `RE_DENY_VERB` turns tracks
   ON in every frame that uses them — measure it (the review-6 harness: 29 frames × every built-in keyword, old / new apart).
+  **1.25.1:** "no more X" / "no más X" (`NO_MORE`) is a replacement, never an exclusion ("No more manual invoices: generate them
+  automatically"; "no more than 3" a limit), and an INSUFFICIENCY predicate over "without X" keeps the track (`insufficientAfter()`:
+  a copula — ≤ 2 adverbs between — then incomplete / useless / broken / unusable / not usable…, `INSUFF_COPULA` / `INSUFF_ADJ`, EN /
+  PT / ES, within 10 words of the item's clause): "Without an LLM summary the ticket view is incomplete".
 - **Project signal overrides are the team's, never the engine's defaults.** A tuning that holds for everyone goes into
   `SIGNALS` (tracks.js); `.specs/classifier.json` is one project's learned or hand-set layer — never read it without a
   projectDir, never write it outside `writeSignalRecords()` (the roadmap lock, the never-rewrite-a-broken-file rule).

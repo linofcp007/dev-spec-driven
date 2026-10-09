@@ -394,9 +394,12 @@ iron law, phase order, the finish / execution gate, every track criterion scaffo
 - **Input.** `spec_create {size: xs | s | m | l}` / `create --size` (`sizeInput()`, state.js — case-folded; the MCP enum; a
   new feature only: an existing one keeps its size, `sizes.sizeKept` note). Stored as `.state.json → size` only when given
   (a plain value — the merge driver needs no rule); `featureSize(dir)` reads it (null for any other value). `res.size` on a
-  sized create. `spec_classify` suggests one — `suggestedSize`, `sizeReason` (stable: trivial-change · several-tracks ·
-  public-api · cross-system · single-unit · default — `suggestSize()`, classify.js: a deterministic EN / PT / ES reading of
-  the request, never the track count alone; the localized `sizeNote`, never in `notes`); nothing applies it by itself.
+  sized create. `spec_classify` suggests one — `suggestedSize`, `sizeReason` (stable: trivial-change · small-change (1.25.1) ·
+  several-tracks · public-api · cross-system · single-unit · default — `suggestSize()`, classify.js: a deterministic EN / PT / ES
+  reading of the request, never the track count alone; the localized `sizeNote`, never in `notes`); nothing applies it by itself.
+  `small-change` (xs, no marker track — `SIZE_SMALL`): one small behaviour change — a clearer / friendlier error message, a default /
+  timeout / limit changed, one empty / missing input handled ("Return a clearer error message when the orders route gets an empty
+  customer id" was m / default).
 - **xs = the change kind** (`kind: "change"`; size xs on a plain feature IS a change; kind change with s / m / l, a spike
   with any size, a change with an optional track → refused before any write — `sizes.changeSize` / `spikeNoSize` /
   `changeTracks`). ONE file, `change.md` (`i18n.change` — summary · 1–3 EARS criteria · approach · 1–3 tasks with

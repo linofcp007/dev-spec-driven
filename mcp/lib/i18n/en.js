@@ -1211,6 +1211,7 @@ const msg = {
       // spec_classify's size suggestion (a reason code → the sentence)
       suggest: {
         "trivial-change": "Suggested size xs — a trivial change (a typo, a copy or config tweak, a one-line fix): a change, one change.md, two approvals.",
+        "small-change": "Suggested size xs — one small behaviour change (a clearer error message, a default or a limit, one empty or missing input handled): a change, one change.md with 1–3 criteria and tasks, two approvals.",
         "single-unit": "Suggested size s — one unit of work (one endpoint, screen, button, field…) with at most one track that has design sections: one story, the core-tier track sections, the plan approved in one call.",
         "several-tracks": "Suggested size l — three or more tracks with design sections: the full chain.",
         "public-api": "Suggested size l — a public API (outside consumers, a contract to keep): the full chain.",

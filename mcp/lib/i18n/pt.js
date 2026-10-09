@@ -1182,6 +1182,7 @@ const msg = {
       coveredComment: (label) => `Esta secção também responde a ${label} — os dois tracks estão ativos, por isso uma secção chega (uma secção ${label} própria também conta).`,
       suggest: {
         "trivial-change": "Tamanho sugerido xs — uma alteração trivial (uma gralha, um texto ou uma configuração, uma correção de uma linha): uma alteração, um change.md, duas aprovações.",
+        "small-change": "Tamanho sugerido xs — uma pequena alteração de comportamento (uma mensagem de erro mais clara, um valor por omissão ou um limite, uma entrada vazia ou em falta tratada): uma alteração, um change.md com 1–3 critérios e tarefas, duas aprovações.",
         "single-unit": "Tamanho sugerido s — uma unidade de trabalho (um endpoint, ecrã, botão, campo…) com no máximo um track com secções de design: uma história, as secções core dos tracks, o plano aprovado numa só chamada.",
         "several-tracks": "Tamanho sugerido l — três ou mais tracks com secções de design: a cadeia completa.",
         "public-api": "Tamanho sugerido l — uma API pública (consumidores externos, um contrato a manter): a cadeia completa.",

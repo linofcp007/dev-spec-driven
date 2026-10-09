@@ -738,6 +738,29 @@ function negativePredicate(text, start, end) {
   }
   return false;
 }
+// (c, 1.25.1) an INSUFFICIENCY predicate over "without X" — X is needed: "Without an LLM summary the ticket view is incomplete", "Sem
+// um resumo por LLM a vista fica incompleta", "Sin un resumen con LLM la vista queda incompleta", "… is useless / would be broken / is
+// not usable". A copula (≤ 2 adverbs between) then an insufficiency adjective, within INSUFF_WINDOW words of the item's clause.
+const INSUFF_COPULA = new Set(["is", "are", "was", "were", "be", "becomes", "become", "stays", "stay", "remains", "remain", "feels", "feel", "looks",
+  "look", "seems", "seem", "gets", "get", "é", "são", "fica", "ficam", "ficaria", "está", "estão", "será", "serão", "seria", "torna-se", "es", "son",
+  "queda", "quedan", "quedaría", "están", "serán", "sería", "resulta", "resultan"]);
+const INSUFF_ADJ = new Set(["incomplete", "useless", "broken", "unusable", "pointless", "worthless", "insufficient", "inadequate", "meaningless",
+  "impractical", "unreadable", "half-baked", "crippled", "incompleto", "incompleta", "incompletos", "incompletas", "inútil", "inúteis", "inutilizável",
+  "inutilizáveis", "insuficiente", "insuficientes", "inservible", "inservibles", "inútiles"]);
+const INSUFF_NOT = new Set(["usable", "useful", "enough", "complete", "sufficient", "viable", "possible"]);
+const INSUFF_WINDOW = 10;
+const NO_MORE = new Set(["more", "más", "mas", "mais"]); // (negationOf, 1.25.1) "no more X" — a replacement, never an exclusion
+function insufficientAfter(text, end) {
+  const after = cueWords(cueAfter(text, end, CUE_BOUNDARY)).slice(0, INSUFF_WINDOW + 3).map((x) => x.toLowerCase());
+  for (let p = 1; p < after.length && p <= INSUFF_WINDOW + 2; p++) {
+    const x = after[p];
+    if (WITHOUT_WORDS.has(x)) return false; // (another "without": nothing of this item's)
+    const adj = INSUFF_ADJ.has(x) || (INSUFF_NOT.has(x) && after[p - 1] === "not");
+    if (!adj) continue;
+    for (let q = p - 1; q >= Math.max(0, p - 3); q--) if (INSUFF_COPULA.has(after[q])) return true;
+  }
+  return false;
+}
 // (a) the finite verbs after a negated subject: auxiliaries and modals (their next verb decides), and the verbs a datum's or a tenant's
 // requirement is written with ("leaks", "reaches", "ends up", "leaves", "can access"…)
 const SUBJECT_AUX = new Set(["is", "are", "was", "were", "will", "would", "may", "might", "can", "could", "must", "should", "shall", "has", "have",
@@ -1014,11 +1037,15 @@ function negationOf(text, start, end, lang, cased) {
   for (let i = words.length - 1, n = 0; i >= 0 && n <= GOVERN_MAX; i--, n++) if (isNegatorWord(words[i], pt)) { j = i; break; }
   if (j < 0) return null;
   const w = words[j];
+  // (1.25.1) "no more X" / "no más X" is a REPLACEMENT — the request does X differently ("No more manual invoices: generate them
+  // automatically"), "no more than N" a limit — never an exclusion of X
+  if ((w === "no" || w === "não" || w === "nao") && NO_MORE.has(words[j + 1])) return null;
   if (LIST_NEG.has(w)) return words.slice(j + 1).every(passWord) && !negationBlocked(text, words, j, end, pt) ? { word: w, conj: true } : null;
   if (w === "no" && j + 1 < words.length && NEG_FILLER.has(words[j + 1]) && !NEG_FILLER_EN.has(words[j + 1])) return null;
   if (negationBlocked(text, words, j, end, pt)) return null;
   // (1.24 r6 F5 (c)) a negative predicate over "without X" — "Reject requests without a valid access token", "Users without MFA must not…"
-  if (WITHOUT_WORDS.has(w) && negativePredicate(text, start, end)) return null;
+  // … or (1.25.1) an insufficiency predicate — "Without an LLM summary the ticket view is incomplete": X is needed
+  if (WITHOUT_WORDS.has(w) && (negativePredicate(text, start, end) || insufficientAfter(text, end))) return null;
   const contrast = j === 0 && (seg.afterComma || (w === "not" && seg.sentenceStart));
   const k = negationKind(words, j, words.length, lang, { contrast, protectedHead: (loose) => protectedHead(text, start, end, loose) });
   if (k !== "exclude") return null;
@@ -1148,6 +1175,11 @@ const VERB_STEMS = new Map([
   ["public", "(?:ar|a|as|am|an|amos|ando|ado|ada|ados|adas|ou|aram|ó|aron|ará|arão|arán)"],
   // enviar (PT / ES — 1.17 D review): only inside "envi … mensagem" / "envi … mensaje" ("environment" has no listed ending)
   ["envi", "(?:ar|a|as|am|an|amos|ando|ado|ada|ados|adas|ou|aram|ó|aron|ará|arão|arán)"],
+  // treinar / retreinar (PT), entrenar / reentrenar (ES) — 1.25.1: only inside "trein … modelo" / "entren … modelo" (+ai)
+  ["trein", "(?:ar|a|as|am|amos|ando|ado|ada|ados|adas|ou|aram|e|em|ará|arão)"],
+  ["retrein", "(?:ar|a|as|am|amos|ando|ado|ada|ados|adas|ou|aram|e|em|ará|arão)"],
+  ["entren", "(?:ar|a|as|an|amos|ando|ado|ada|ados|adas|ó|aron|e|en|ará|arán)"],
+  ["reentren", "(?:ar|a|as|an|amos|ando|ado|ada|ados|adas|ó|aron|e|en|ará|arán)"],
 ]);
 // Irregular inflections (1.17 D): a keyword whose forms the suffix rules can't produce — retry → retries / retried. The key is
 // the keyword (its name in notes); the value its literal prefix and the alternation of endings. One concept, one signal:
@@ -1179,8 +1211,9 @@ const ACRONYM_INFLECTION = "s?";
 // turning it into an identifier ('claude-plugin'). C4: compliance / certification / grade compounds too — "GDPR-compliant",
 // "HIPAA-compliant", "PCI-compliance", "SOC2-certified", "enterprise-grade" name the keyword's concept ('-compliant' used to
 // be a rejected '-<letter>' compound: "A GDPR-compliant signup form" classified as core only). Not '-aware': "session-aware
-// routing" (sticky sessions) would read as an auth session.
-const ADJ_SUFFIX = "(?:-(?:based|powered|driven|generated|assisted|enabled|native|ready|first|compliant|compliance|certified|grade))?";
+// routing" (sticky sessions) would read as an auth session. 1.25.1: '-compatible' — "the OpenAI-compatible endpoint", "an
+// S3-compatible store" name the keyword's interface (it was no signal at all).
+const ADJ_SUFFIX = "(?:-(?:based|powered|driven|generated|assisted|enabled|native|ready|first|compliant|compliance|certified|grade|compatible))?";
 
 const KW_RE = new Map();
 // PT/ES plurals the English inflections can't produce: migração→migrações, sessão→sessões,
@@ -1251,7 +1284,7 @@ function keywordPattern(kw, plain) {
 // refuses a digit; "gpt-4" / "OAuth 2.0" always matched). Unambiguous (digits, then dot-digits, then one letter): linear. Never a
 // track pack's.
 const RE_VERSIONED_KW = /^[a-z]{2,5}$/i;
-const VERSIONED_NAMES = new Set(["claude", "gemini", "mistral"]);
+const VERSIONED_NAMES = new Set(["Claude", "Gemini", "Mistral"]); // (1.25.1: case-sensitive keywords — the table's spelling)
 const VERSION_TAIL = "(?:\\d+(?:\\.\\d+)*[a-z]?)?";
 
 // A keyword's ALL-CAPS acronyms when it mixes them with lower-case words and nothing else ("relatório de BI" → ["BI"], "CDC pipeline" →
@@ -1547,7 +1580,7 @@ function classify(description, opts = {}) {
 
 // 1.21 F5 — the size spec_classify suggests (spec_create {size}): a deterministic reading of the request — never the track count
 // alone (the 1.20 friction audit: the classifier under-calls tracks). → { size, reason } — reason (stable): trivial-change ·
-// several-tracks · public-api · cross-system · single-unit · default. The human confirms or overrides it in Phase 0; nothing
+// small-change (1.25.1) · several-tracks · public-api · cross-system · single-unit · default. The human confirms or overrides it in Phase 0; nothing
 // applies a size by itself (spec_create without one keeps the 1.20 scaffold).
 const B_ = "(?<![\\p{L}\\p{N}])", _B = "(?![\\p{L}\\p{N}])";
 const SIZE_TRIVIAL = new RegExp(B_ + "(?:typos?|misspell(?:ing|ed|ings)?|spelling (?:mistake|error)s?|wording|copy (?:change|tweak|edit|fix)|" +
@@ -1557,6 +1590,22 @@ const SIZE_TRIVIAL = new RegExp(B_ + "(?:typos?|misspell(?:ing|ed|ings)?|spellin
   "renomear (?:o |a )?(?:rótulo|botão|campo|ficheiro|arquivo)|(?:numa|uma|em uma) (?:só )?linha|link (?:partido|quebrado)|atualizar (?:a )?versão|" +
   "erratas?|errores? (?:tipográfico|ortográfico|de escritura)s?|faltas? de ortografía|(?:corregir|cambiar|actualizar) (?:el |la )?(?:texto|etiqueta|color|redacción)|" +
   "renombrar (?:el |la )?(?:etiqueta|botón|campo|archivo)|(?:en )?una (?:sola )?línea|enlace roto|actualizar (?:la )?versión)" + _B, "u");
+// 1.25.1 — one SMALL behaviour change (reason small-change, xs): a clearer / friendlier error message, a default / timeout / limit
+// changed, one empty / missing input handled — "Return a clearer error message when the orders route gets an empty customer id" was m.
+// Bounded (≤ 40 characters between the verb and the empty word): linear.
+const SIZE_SMALL = new RegExp(B_ + "(?:(?:clearer|better|friendlier|nicer|proper|meaningful|more (?:helpful|descriptive|specific|useful|informative|actionable|explicit)) " +
+  "(?:error|validation|warning) (?:messages?|texts?)|(?:improve|clarify|reword|rephrase|change|update|fix|adjust|tweak) (?:the |an? |its |our )?(?:error|validation|warning) (?:messages?|texts?)|" +
+  "(?:change|raise|lower|increase|decrease|reduce|bump|adjust) (?:the )?(?:default (?:value|limit|timeout|page size|sort order)|timeout|time-out|page size|retry count|" +
+  "max(?:imum)? (?:length|size|retries)|upload limit|size limit|character limit)|" +
+  "(?:handle|reject|refuse|validate|guard against|check for) (?:an? |the )?(?:[\\p{L}-]+ ){0,3}?(?:empty|blank|null|missing|negative)|" +
+  "mensage(?:m|ns) de erro (?:mais )?(?:clara|claras|útil|úteis|explícita|explícitas|amigável|amigáveis|melhor|melhores|descritiva|descritivas)|" +
+  "(?:melhorar|clarificar|esclarecer|reformular|alterar|mudar|corrigir|atualizar) (?:a |as )?mensage(?:m|ns) de erro|" +
+  "(?:aumentar|diminuir|baixar|reduzir|alterar|mudar|ajustar) (?:o |a )?(?:valor (?:por omissão|padrão|predefinido)|timeout|tempo limite|limite de (?:upload|tamanho|caracteres))|" +
+  "(?:rejeitar|recusar|validar|tratar) (?:um |uma |o |a )?(?:[\\p{L}-]+ ){0,4}?(?:vazio|vazia|vazios|vazias|em branco|nulo|nula)|" +
+  "mensajes? de error (?:más )?(?:claros?|útiles?|explícitos?|amigables?|mejores?|descriptivos?)|" +
+  "(?:mejorar|aclarar|reformular|cambiar|corregir|actualizar) (?:el |los )?mensajes? de error|" +
+  "(?:aumentar|reducir|bajar|cambiar|ajustar) (?:el |la )?(?:valor (?:por defecto|predeterminado)|timeout|tiempo de espera|límite de (?:subida|tamaño|caracteres))|" +
+  "(?:rechazar|validar|manejar|tratar) (?:un |una |el |la )?(?:[\\p{L}-]+ ){0,4}?(?:vacío|vacía|vacíos|vacías|en blanco|nulo|nula))" + _B, "u");
 const SIZE_UNIT = new RegExp(B_ + "(?:a|an|one|single|um|uma|un|una|1)\\s+(?:[\\p{L}\\p{N}/-]+\\s+){0,3}?(?:endpoints?|button|screen|page|field|column|form|filter|" +
   "report|export|checkbox|toggle|tab|dialog|modal|query|job|script|command|setting|link|email|notification|route|widget|" +
   "botão|ecrã|tela|página|campo|coluna|formulário|filtro|relatório|exportação|botón|pantalla|columna|formulario|informe|exportación|ruta)" + _B, "u");
@@ -1565,6 +1614,7 @@ const SIZE_PUBLIC = new RegExp(B_ + "(?:public|pública|publica|público|publico
 function suggestSize(text, tracks) {
   const markers = tracks.filter((t) => t !== "core" && t !== "tdd");
   if (!markers.length && SIZE_TRIVIAL.test(text)) return { size: "xs", reason: "trivial-change" };
+  if (!markers.length && SIZE_SMALL.test(text)) return { size: "xs", reason: "small-change" };
   if (markers.length >= 3) return { size: "l", reason: "several-tracks" };
   if (markers.includes("api") && SIZE_PUBLIC.test(text)) return { size: "l", reason: "public-api" };
   if ((markers.includes("dist") && markers.length >= 2) || SIZE_CROSS.test(text)) return { size: "l", reason: "cross-system" };

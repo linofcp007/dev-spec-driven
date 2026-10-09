@@ -552,6 +552,28 @@ const SIGNALS = {
       "permissão", "permiso", "fuso horário", "fuso horario", "zona horaria",
       "concorrência", "concurrencia", "agendamento",
     ],
+    // CUES (1.25.1) — the everyday senses of three money / auth words: a photo's / a film's / a course's credits, who is "in charge of"
+    // something and a battery's charge, a therapy / training / jam session — no signal at all ("Add photo credits under each gallery
+    // image", "Show who is in charge of each project", "Add a notes field to each therapy session"; a credit card, a late-payment charge
+    // and a login session keep theirs)
+    cues: [
+      { kind: "near", on: ["credit"], then: "none",
+        before: { words: ["photos?", "images?", "pictures?", "films?", "movies?", "videos?", "songs?", "music", "authors?", "artists?", "contributors?",
+          "end", "opening", "closing", "course", "academic", "ects", "college", "university", "school"], chars: 16, edge: "letter" },
+        after: { words: ["rolls?", "lines?", "screens?", "sequences?", "hours?", ["(?:the|each|every|a|an|our|their)", ["photographers?", "authors?",
+          "artists?", "creators?", "contributors?", "illustrators?", "sources?"]], "photographers?", "authors?", "artists?", "creators?"], chars: 28, plural: true } },
+      { kind: "near", on: ["charge"], then: "none",
+        before: { words: ["in", "battery", "batteries", "phone", "full", "static", "electric", "electrical", "ev", "device", "partial", "fast"], chars: 14, edge: "letter" },
+        after: { words: ["levels?", "cycles?", "indicators?", "percentage", "states?", "status", "stations?", "ports?", "cables?", "points?", "time",
+          ["(?:the|a|your|my|their|its)", ["batter(?:y|ies)", "phones?", "devices?", "cars?", "laptops?", "vehicles?"]], "batter(?:y|ies)"], chars: 24, plural: true } },
+      { kind: "near", on: ["session", "sessão", "sessao", "sesión", "sesion"], then: "none",
+        before: { words: ["therapy", "training", "jam", "photo", "coaching", "counseling", "counselling", "yoga", "practice", "study", "brainstorming",
+          "planning", "recording", "tasting", "workout", "gym", "tutoring", "mentoring", "rehearsal", "breakout", "poster", "q&a", "ama",
+          "parliamentary", "court", "plenary", "group", "massage", "physio", "physiotherapy"], chars: 16, edge: "letter" },
+        after: { words: [["de", ["terapia", "treino", "treinos", "fotos", "fotografia", "ioga", "yoga", "estudo", "coaching", "formação", "mentoria",
+          "música", "gravação", "fisioterapia", "massagem", "entrenamiento", "estudio", "formación", "mentoría", "grabación", "masaje", "ensaio", "ensayo"]]],
+        chars: 24, plural: true } },
+    ],
   },
   saas: {
     strong: [
@@ -595,14 +617,37 @@ const SIGNALS = {
           "property managers?", "property management", "evictions?", "rendas?", "senhori[oa]s?", "arrendamentos?", "arrendatári[oa]s?", "aluguel",
           "aluguer", "aluguéis", "alugueis", "imóve(?:l|is)", "apartamentos?", "condomínios?", "fiador(?:es)?", "despejos?", "alquiler(?:es)?",
           "caser[oa]s?", "arrendador(?:es)?", "pisos?", "inmuebles?", "fianzas?", "desahucios?"] },
+      // (1.25.1) a cron EXPRESSION helper — a parser, a validator, a builder, a describer — is a text utility, not a scheduled job ("Add
+      // a cron expression helper", "Validate the cron syntax in the form"); "Run the purge as a cron job" keeps its signal
+      { kind: "all", on: ["cron"], then: "none", rules: [
+        { kind: "near", after: { words: ["expressions?", "syntax", "strings?", "patterns?", "format"], chars: 16 } },
+        { kind: "sentence", edge: "letter", phrases: ["helpers?", "parsers?", "pars(?:e|es|ed|ing)", "validators?", "validat(?:e|es|ed|ing|ion)",
+          "builders?", "editors?", "formatters?", "generators?", "explainers?", "pickers?", "inputs?", "fields?", "widgets?", "humaniz(?:e|es|ed|er|ing)",
+          "human-readable", "describ(?:e|es|ed|er|ing)", "previews?", "librar(?:y|ies)", "utilit(?:y|ies)", "linters?"] },
+      ] },
     ],
   },
   ai: {
     strong: [
-      "llm", "gpt", "claude", "openai", "anthropic", "gemini", "mistral", "chatbot",
-      "copilot", "rag", "fine-tune", "finetune", "fine tune", "hallucinat",
+      // 1.25.1: the product names that are everyday words in lower case are matched case-sensitively — "Claude" / "Gemini" / "Mistral" /
+      // "Copilot" / "RAG" (a claude monet print, a gemini zodiac page, the mistral wind, a copilot's seat, a rag rug are no AI; the
+      // capitalised everyday senses are ai cues); 'tool use' is weak (a workshop's tool use log)
+      "llm", "gpt", "Claude", "openai", "anthropic", "Gemini", "Mistral", "chatbot",
+      "Copilot", "RAG", "fine-tune", "finetune", "fine tune", "hallucinat",
       "prompt injection", "ai feature", "ai product", "semantic search", "embedding",
-      "embeddings", "tool use", "function calling", "reranker", "guardrail", "multimodal",
+      "embeddings", "function calling", "reranker", "guardrail", "multimodal",
+      // 1.25.1 — recall: the well-known AI products, frameworks and vector stores ("Add a ChatGPT plugin", "Run Ollama locally", "Index docs
+      // with LlamaIndex", "Store vectors in pgvector"); "Cohere" / "Stable Diffusion" / "Pinecone" are everyday words in lower case
+      "chatgpt", "ollama", "Cohere", "Stable Diffusion", "dall-e", "dall·e", "midjourney", "llamaindex", "langchain", "langgraph",
+      "hugging face", "huggingface", "amazon bedrock", "aws bedrock", "pgvector", "qdrant", "weaviate", "milvus", "faiss", "chromadb", "Pinecone",
+      "vector store", "vector index",
+      // … and training or predicting with a model: "Train a classifier to tag tickets", "Retrain the model nightly", "Predict churn for each
+      // customer" (a gap keyword: ≤ 3 words between, never across a sentence)
+      "train … model", "train … classifier", "model … trained", "retrain … model", "retrain … classifier", "predict … churn", "churn prediction",
+      "predictive model", "prediction model",
+      // PT / ES (trein- / entren-: VERB_STEMS — treinar, treina, treinado…; entrenar, entrena, entrenado…)
+      "trein … modelo", "trein … classificador", "modelo … treinado", "retrein … modelo", "prever … churn", "previsão de churn", "modelo preditivo",
+      "entren … modelo", "entren … clasificador", "modelo … entrenado", "reentren … modelo", "predecir … churn", "predicción de churn", "modelo predictivo",
       "vlm", "vector search", "vector database", "image generation", "text generation",
       "language model", "artificial intelligence",
       // review 5: a trained model is an AI feature too (evals, drift) — "Detect fraud with a machine learning model"
@@ -644,6 +689,8 @@ const SIGNALS = {
       "prompt", "agent", "model", "generation", "summariz", "completion", "inference",
       "tokens", "token cost", "assistant", "temperature", "context window", "retrieval",
       "moderation", "few-shot", "sampling", "ai", "generative",
+      // 1.25.1: an LLM's tool use (strong until 1.25 — "The tool use log for the workshop machines"), a classifier, a prediction
+      "tool use", "classifier", "predict", "rerank", "classificador", "clasificador",
       // 1.24 r6 F-I5: a transcription may be done by people ("transcribe the interview notes") — an anchor
       "transcription", "transcribe", "transcribing",
       // PT/ES
@@ -663,6 +710,23 @@ const SIGNALS = {
         phrases: ["information architecture", "navigation", "sitemaps?", "site maps?", "taxonom(?:y|ies)", "card sorting", "wayfinding"] },
       { kind: "sentence", on: ["AI"], then: "none", edge: "letter",
         phrases: ["adobe illustrator", "illustrator", "action items?", "vector files?", "eps", "svg"] },
+      // (1.25.1) the capitalised everyday senses of the product names: the painter / composer Claude, the Gemini star sign, the Mistral
+      // wind, an aircraft's Copilot — and a workshop's "tool use", an e-mail / reset / API "token" (no LLM token)
+      { kind: "near", on: ["Claude"], then: "none",
+        after: { words: ["monet", "debussy", "shannon", "lorrain", "van damme", "rains", "lévi-strauss", "levi-strauss", "chabrol", "lelouch"], chars: 16 } },
+      { kind: "sentence", on: ["Gemini"], then: "none", edge: "letter",
+        phrases: ["zodiac", "horoscopes?", "astrolog(?:y|ical|ers?)", "star signs?", "birth charts?", "constellations?", "signo", "signos", "zodíaco", "horóscopos?"] },
+      { kind: "sentence", on: ["Mistral"], then: "none", edge: "letter",
+        phrases: ["winds?", "weather", "forecasts?", "gusts?", "provence", "sailing", "sailors?", "vento", "viento"] },
+      { kind: "sentence", on: ["Copilot"], then: "none", edge: "letter",
+        phrases: ["pilots?", "aviation", "cockpits?", "flights?", "airlines?", "aircraft", "planes?", "rally", "co-driver"] },
+      { kind: "sentence", on: ["tool use"], then: "none", edge: "letter",
+        phrases: ["workshops?", "machines?", "machinery", "power tools?", "hand tools?", "tool sheds?", "tool cribs?", "equipment", "garage",
+          "construction", "site safety", "wrench(?:es)?", "drills?", "saws?"] },
+      { kind: "near", on: ["tokens"], then: "none",
+        before: { words: ["e-?mail", "reset", "verification", "access", "refresh", "auth", "api", "csrf", "magic(?:-link)?", "invite", "invitation",
+          "session", "bearer", "jwt", "oauth", "one-time", "confirmation", "security", "login", "password", "device", "push", "unsubscribe",
+          "payment", "card", "game", "loyalty", "bus", "transit", "arcade"], chars: 16, edge: "letter" } },
     ],
   },
   // +sec (1.14). Auth words stay WEAK here (they are +tdd's strong signals): an auth feature is only "possibly"
