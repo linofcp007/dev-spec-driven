@@ -130,8 +130,10 @@ exports.run = async ({ ok, S, root, tmp, list }) => {
   }
 
   { // 1.24 r6 H12: tooling-reference.md's spec_doctor list names every check id the engine emits (track-pack-missing, spike were not)
+    // (1.27: a feature's doctor checks are the check registry's — DOCTOR_CHECKS, every id an entry with a doctor verdict emits)
     const eng = (f) => rd("mcp", "lib", "engine", f);
-    const ids = new Set([...[...eng("doctor.js").matchAll(/\badd\("([a-z][a-z-]*)"/g)].map((m) => m[1]),
+    const registry = require(path.join(root, "mcp", "lib", "engine", "index.js")).DOCTOR_CHECKS;
+    const ids = new Set([...registry.filter((e) => e.run).flatMap((e) => e.emits || [e.id]),
       ...[...eng("decisions.js").matchAll(/\badd\("([a-z][a-z-]*)", (?:"(?:fail|warn|pass)"|[a-z])/g)].map((m) => m[1]),
       ...fs.readdirSync(path.join(root, "mcp", "lib", "engine")).filter((f) => f.endsWith(".js")).flatMap((f) => [...eng(f).matchAll(/\bid: "([a-z][a-z-]*)", status/g)].map((m) => m[1]))]);
     const sec = (rd("skills", "dev-spec-driven", "references", "tooling-reference.md").split("### `spec_doctor` checks (stable ids)")[1] || "").split("\n## ")[0];
