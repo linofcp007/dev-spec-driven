@@ -752,7 +752,8 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   too, so deleting the Offline section passed doctor). `sectionOverlaps(table)` lists such pairs; every built-in table keeps none
   (04-tracks-packs-lang asserts it — a new built-in section must too).
   Fragments: `packListItems()` (top-level item = at most one space before the bullet; lines
-  indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`);
+  indented ≥ 2 are its continuation), `packTableRows()` (six cells, header + separator skipped; else `fragment-row`; a `\|` is a
+  pipe inside a cell — 1.25.1, `tableCells`' rule: "encode \| decode" split the row into seven cells and refused the pack);
   `{{acN}}` / `{{tN}}` beyond what the pack scaffolds in that language context → `fragment-ref` (its args name the context
   and the file the count comes from — F4 review R10). Warnings only:
   unknown keys / files / variables, an empty fragment (the default is used), a steering name a built-in track also uses.

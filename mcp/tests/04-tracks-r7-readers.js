@@ -2,7 +2,8 @@
 // Tracks — 1.25.1 readers review: the classifier's AI product names, its everyday-word cues, "no more X" / "without X … is incomplete", the small-change size.
 // (04-tracks.js and 04-tracks-builtin.js hold the area's earlier tests; this file the fixes of the 1.25.1 readers review.)
 
-exports.run = async ({ ok, S }) => {
+exports.run = async ({ ok, S, require }) => {
+  const E = require("./lib/engine/index.js"); // engine internals (the pack fragment reader) — read through mcp/test.js's require
   const js = JSON.stringify;
   const on = (t, tr, lang) => S.classify(t, lang ? { lang } : {}).tracks.includes(tr);
   const poss = (t, tr) => (S.classify(t, {}).possible || []).some((p) => p.track === tr);
@@ -68,5 +69,15 @@ exports.run = async ({ ok, S }) => {
       /^Tamanho sugerido xs/.test(got[3][2]) && /^Tamaño sugerido xs/.test(got[4][2]),
       "1.25.1 (17): a clearer error message, a limit raised, one empty input rejected → xs (small-change, a localized note — EN / PT / ES); a typo, a button, a feature, three tracks keep xs / s / m / l (got " +
       js(got.map((g) => g.slice(0, 2))) + ")");
+  }
+
+  { // 1.25.1 (16): a track pack's test-plan fragment — a "\|" is a pipe inside a cell, never a seventh column
+    const bs = String.fromCharCode(92);
+    const t = "| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n" +
+      "| T-00 | unit | example | encode " + bs + "| decode round-trip | {{ac1}} | `tests/unit/codec.test.js` |\n| T-00 | unit | property | x | {{ac2}} | `tests/unit/x.test.js` |\n";
+    const r = E.packTableRows(t);
+    ok(r.bad.length === 0 && r.rows.length === 2 && r.rows[0].cells.length === 6 && r.rows[0].cells[3] === "encode " + bs + "| decode round-trip" &&
+      E.packTableRows("| T-00 | a | b |\n").bad.length === 1,
+      "1.25.1 (16): packTableRows honours GFM's escaped pipe — 'encode \\| decode' stays one Description cell (the row was refused as fragment-row); a row of the wrong width is still bad (got " + js(r) + ")");
   }
 };
