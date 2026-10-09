@@ -211,8 +211,11 @@ that is mostly embedded markdown, create's bodies, barely changes). Every client
   1.24 r6 A2: `spec.unexpandedVar`, any `${` / a leading `$NAME` / `%NAME%`, no longer a whole `${VAR}` only) gets it as
   `projectDir`, a RELATIVE projectDir resolves from it (1.24 r6 A2 — Argument validation → projectDir), and resources / prompts /
   completions / argument messages read it (`defaultProjectDir()`). No usable root, an
-  error or no answer within `ROOTS_TIMEOUT_MS` (5 s) → `null`, the old default (cwd), not asked again until
-  `notifications/roots/list_changed`. The engine's `resolveProjectDir` is untouched — the server passes the root as projectDir.
+  error or no answer within `ROOTS_TIMEOUT_MS` (5 s; `DEV_SPEC_ROOTS_TIMEOUT_MS`, ≤ 60 s) → `null`, the old default (cwd), not
+  asked again until `notifications/roots/list_changed` — but (1.25.1, review 7) a timeout no longer cancels the request: an answer
+  that comes later still sets `rootsDir` (`clientRequest`'s `late` handler; it was dropped, and the cwd stayed the default for the
+  session), unless another ask started since (`rootsGen` — initialize, list_changed). The engine's `resolveProjectDir` is
+  untouched — the server passes the root as projectDir.
 - **The feature-lock wait (1.24 r6 A6).** The engine is synchronous: a call waiting for a feature lock another LIVE process holds
   (a CLI `done`, another editor's server — conventions.md → the locks) froze the WHOLE server — pings, every other tool, a
   pending approval's reply — for `DEV_SPEC_LOCK_WAIT_MS` (10 s by default). At start the server sets that variable to
