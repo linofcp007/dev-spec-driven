@@ -19,22 +19,24 @@ a bundled **local, zero-dependency MCP server**. Hard constraints set by the own
 - Specs always live in `.specs/` (no alternate directory detection).
 
 ## Topic map
-Read the file BEFORE you change its area (a section name another note cites — "see Gates" — is listed here too):
+Read the file BEFORE you change its area (a section name another note cites — "see Gates" — is listed here too). Each
+file states the CURRENT rules first; its `## History` at the end keeps how they came to be — grep a release or a finding id there:
 - **`docs/maintainers/architecture.md`** — before adding or splitting an engine module, changing what a surface requires,
-  the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) · The module rule
-  (1.18) · The build (1.20) · Config paths.
+  the build (the committed corpus, the on-demand bundle), or touching the MCP / rule-file configs: Layout (the full tree) ·
+  The module rule · The build · Config paths.
 - **`docs/maintainers/tracks.md`** — before changing the classifier, a built-in track (+tdd … +dist, +api, +ui, +obs, +data) or
-  track packs: The track model · Project-defined tracks (1.15) · Classifier gotchas · The classifier's signal rules, track
-  by track.
+  track packs: The track model · Project-defined tracks · Classifier gotchas · The classifier's signal rules, track by track.
 - **`docs/maintainers/languages.md`** — before adding or rewording ANY user-facing string, a translated heading or a
   language: Languages (EN / PT-PT / PT-BR / ES) · Localization gotchas.
 - **`docs/maintainers/mcp.md`** — before changing a tool's schema or description, a capability (prompts, resources,
-  completions), argument validation, the stdio framing or the elicitation path: MCP tools · Capabilities · Human approvals over
-  MCP elicitation (1.21) · Argument validation · Protocol (server-initiated requests).
+  completions), argument validation, the operations table, the stdio framing or the elicitation path: MCP tools (The
+  operations · Folded tools · Hidden aliases · The description budget) · Capabilities · Human approvals over MCP elicitation ·
+  Argument validation · Protocol (server-initiated requests).
 - **`docs/maintainers/gates-and-approvals.md`** — before changing an approval gate, next_action's steps, placeholders,
   spec_impact / the approval history, roles, undo / revoke / waivers, flows, the bugfix kind or feature sizes / the change
-  kind / the track sections' filled rule: Gates (1.13) · Approval fingerprints and pending gates · Change history · Team
-  governance · Undo, revoke, waivers, MCP-only gates · Flows · Right-sized rigor (1.21 F5) · Bugfix and finish.
+  kind / the track sections' filled rule: Gates (the check registry) · Approval fingerprints and pending gates · Change
+  history · Team governance · Undo, revoke, waivers, MCP-only gates · Approvals the user confirmed over MCP, and the dry run ·
+  Flows · Right-sized rigor · Bugfix and finish.
 - **`docs/maintainers/tasks-and-evidence.md`** — before changing tasks.md parsing, the task brief, `_Verify:_` / evidence /
   `done --run`, `_Depends:_`, the stop gate, the scope guard or observed evidence: Subagent-driven execution · Evidence ·
   Task dependencies and execution waves · Tasks: ONE scanner · End-of-turn evidence gate and scope guard ·
@@ -52,12 +54,13 @@ Read the file BEFORE you change its area (a section name another note cites — 
   design's trade-offs / risks / reuse checks, the constraint nudge or the brief's Reuse section: Spec quality · Design
   trade-offs and risks · Reuse & Integration and clean code.
 - **`docs/maintainers/claude-code-integration.md`** — before changing a hook, a command name, guard mode, the approval
-  guard, the status line, user defaults or the plan-mode bridge: Hooks and commands · Guard mode · Human approval guard ·
-  Claude Code integration (1.16 C).
+  guard, the status line, user defaults, the dev-spec project probe or the plan-mode bridge: Hooks and commands · Guard
+  mode · Human approval guard · Claude Code integration.
 - **`docs/maintainers/conventions.md`** — before touching feature folders, `.state.json` / roadmap.json writes (or adding a key
-  to them — the merge driver must know it), any write under .specs/ (the write gate, the 1.25 dry-run sink), the locks, process I/O or CLI flags / exit codes:
-  Conventions & gotchas (resolver, the write gate, JSON state, merging the spec state — git's merge driver, 1.21 —, locks,
-  rename, stdout, the CLI).
+  to them — the merge driver must know it), any write under .specs/ (the write gate, the dry-run sink), the locks, process
+  I/O or the CLI's table, flags and exit codes: Conventions & gotchas — Feature folders · The project folder · The write
+  gate · The dry-run sink · JSON state · Merging the spec state · The locks · Flush stdout before exiting · Calendar dates ·
+  The CLI is one table and one call · CLI boolean switches · Shell completion.
 - **`docs/maintainers/testing.md`** — before adding a test (which file of `mcp/tests/` / `cli/tests/`), writing one that
   runs a command or depends on the file system, or running a part of a suite or the Linux / plugin-eval suites: The
   suites (files, runner, `--only`) · Tests (continued) — Docker, plugin evals, Windows AND Linux, the eval harness.
