@@ -2081,7 +2081,7 @@ function approvalGuardDecision(payload, level, opts = {}) {
   // (a script fed to a shell out of sight, an unknown program run on .specs/ files, the hook's own failure — the same)
   const decision = actions.every((a) => a.kind === "unreadable" && APPROVAL_ASK_WHYS.includes(a.why)) ? "ask" : lvl;
   const res = { decision, why: "approval", level: lvl, tool, actions, force, command, summary: text,
-    reason: decision === "deny" ? (plain ? A.denyMcp(text, command) : A.deny(text, command)) : A.ask(text, force) };
+    reason: decision === "deny" ? (plain ? A.denyMcp(text, command) : A.deny(text, command)) : A.ask(text, force, lvl) };
   if (decision === "deny") res.userNote = A.denyUser(text, command);
   return res;
 }

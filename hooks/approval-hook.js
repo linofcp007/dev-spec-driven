@@ -166,7 +166,7 @@ function failClosed(meta) {
   try {
     const i18n = require(path.join(__dirname, "..", "mcp", "lib", "i18n.js"));
     const A = i18n.msg(i18n.normalizeLang(meta && typeof meta.lang === "string" ? meta.lang : "en")).approvalGuard;
-    reason = A.ask(A.action({ kind: "unreadable", why: "error" }), false);
+    reason = A.ask(A.action({ kind: "unreadable", why: "error" }), false, meta && meta.approvalGuard); // at deny it says so (it asks, never refuses)
   } catch {
     reason = undefined;
   }

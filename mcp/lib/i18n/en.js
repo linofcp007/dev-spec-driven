@@ -2047,8 +2047,11 @@ const msg = {
       },
       off: "Approval guard OFF — an agent's approval calls are not gated (roadmap.json meta.approvalGuard).",
       badValue: (v) => `--approval-guard takes off, ask or deny (got '${v}').`,
-      ask: (list, force) => `dev-spec approval guard: the agent wants to ${list}.` + (force ? " ⚠ FORCE: the phase's checks are bypassed — a failing gate would be recorded as approved anyway." : "") +
-        " Approvals are yours — allow this only if you approve it yourself. (meta.approvalGuard: ask — " + DEV_SPEC + " init --approval-guard deny refuses agent approvals outright.)",
+      // level "deny": a form the guard can't read is asked about, never refused outright (it may be no approval at all)
+      ask: (list, force, level) => `dev-spec approval guard: the agent wants to ${list}.` + (force ? " ⚠ FORCE: the phase's checks are bypassed — a failing gate would be recorded as approved anyway." : "") +
+        " Approvals are yours — allow this only if you approve it yourself." + (level === "deny"
+          ? " (meta.approvalGuard: deny — the guard can't read this command, so it asks you instead of refusing it.)"
+          : " (meta.approvalGuard: ask — " + DEV_SPEC + " init --approval-guard deny refuses agent approvals outright.)"),
       // command: the line the human runs, or null (a change with no dev-spec command — a shell write of roadmap.json)
       deny: (list, command) => `dev-spec approval guard: refused — approvals are the human's, and an agent may not ${list}. ` +
         (command ? `Stop and ask the user to run it themselves, in their own terminal or in Claude Code with the ! prefix (it runs as the user, not as your tool call): ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +

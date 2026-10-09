@@ -285,4 +285,16 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
       "1.25.1 r7 F10: evidence observed with the approval guard off — init reports observedWarning (EN / PT), the doctor warns observed-unguarded, the observed note names the PowerShell-only limit; with approvalGuard ask neither (got " +
       js([r1.observedWarning, r2.observedWarning, chk(d1), chk(d2), pt.observedWarning && pt.observedWarning.slice(0, 60)]) + ")");
   }
+
+  { // 1.27: an unreadable approval form at deny is ASKED about — its prompt names the deny level and never tells the user to set
+    // deny (it read "meta.approvalGuard: ask — … init --approval-guard deny refuses …" in a project already at deny)
+    const cmd = "node '" + C + "' {approve,} login-flow classification --force";
+    const at = (level, lang) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: cmd }, cwd: tmp }, level,
+      { meta: { approvalGuard: level }, lang });
+    const deny = ["en", "pt", "pt-BR", "es"].map((l) => at("deny", l)), ask = at("ask", "en");
+    ok(deny.every((r) => r.decision === "ask" && /meta\.approvalGuard: deny — /.test(r.reason) && !/--approval-guard deny/.test(r.reason)) &&
+      ask.decision === "ask" && /meta\.approvalGuard: ask — .*--approval-guard deny refuses/.test(ask.reason),
+      "an unreadable approval form at deny asks with a reason naming deny (EN / PT / pt-BR / ES), never 'set deny'; at ask the hint to raise it stays (got " +
+      js(deny.map((r) => [r.decision, String(r.reason).slice(-110)])) + ")");
+  }
 };

@@ -38,6 +38,12 @@ two suites.
   answers (checked on 3,023 messages) — the engine's scan 122 → 49 ms, a fenced one 145 → 19 ms.
 - **The CLI suite runs ~3× faster**: 1,723 of its 1,970 CLI calls run in-process.
 
+### Fixed
+- At `approvalGuard: deny`, the prompt for a command the guard can't read (`{approve,}`, a glob, a fed script) said
+  "meta.approvalGuard: ask — … init --approval-guard deny refuses agent approvals outright" in a project already at deny; it
+  now names deny and says the guard asks because it can't read the command (EN / PT / ES; the hook's fail-closed prompt too).
+  Found by the release's end-to-end run in Claude Code.
+
 ### Docs and tests (maintainers)
 - The maintainer notes state the current rules first (~51% of the words) and keep each rule's history in a `## History`
   section at the end; the layout lists the 1.27 modules. ~2,430 release / review tags left the code comments.
@@ -45,7 +51,7 @@ two suites.
 - Two date checks compared the local calendar date with UTC and failed between the two midnights — fixed.
 
 ### Tests
-- `node mcp/test.js` 2169 assertions (was 2146), `node cli/test-cli.js` 630 (was 615).
+- `node mcp/test.js` 2170 assertions (was 2146), `node cli/test-cli.js` 630 (was 615).
 
 ## [1.26.0] — 2026-10-09
 

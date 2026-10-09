@@ -1951,8 +1951,10 @@ const msg = {
       },
       off: "Guardia de aprobaciones DESACTIVADA — las aprobaciones que pide un agente no se controlan (roadmap.json meta.approvalGuard).",
       badValue: (v) => `--approval-guard admite off, ask o deny (recibido '${v}').`,
-      ask: (list, force) => `dev-spec approval guard: el agente quiere ${list}.` + (force ? " ⚠ FORCE: se saltan las comprobaciones de la fase — un gate que falla quedaría registrado como aprobado igualmente." : "") +
-        " Las aprobaciones te corresponden — permítelo solo si lo apruebas tú. (meta.approvalGuard: ask — " + DEV_SPEC + " init --approval-guard deny rechaza sin más las aprobaciones de los agentes.)",
+      ask: (list, force, level) => `dev-spec approval guard: el agente quiere ${list}.` + (force ? " ⚠ FORCE: se saltan las comprobaciones de la fase — un gate que falla quedaría registrado como aprobado igualmente." : "") +
+        " Las aprobaciones te corresponden — permítelo solo si lo apruebas tú." + (level === "deny"
+          ? " (meta.approvalGuard: deny — el guardia no puede leer este comando, así que te pregunta en lugar de rechazarlo.)"
+          : " (meta.approvalGuard: ask — " + DEV_SPEC + " init --approval-guard deny rechaza sin más las aprobaciones de los agentes.)"),
       deny: (list, command) => `dev-spec approval guard: rechazado — las aprobaciones son de la persona, y un agente no puede ${list}. ` +
         (command ? `Detente y pide al usuario que lo ejecute él mismo, en su propio terminal o en Claude Code con el prefijo ! (se ejecuta como el usuario, no como tu llamada de herramienta): ${command}` : "Detente y pide al usuario que haga él mismo ese cambio, en su propio editor o terminal") +
         " — y espéralo. No lo reintentes por otra vía (la herramienta MCP, la CLI, un script o una edición de los ficheros de .specs/). (meta.approvalGuard: deny.)",
