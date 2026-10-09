@@ -341,11 +341,12 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     const hpj = hp.map(jsonOut);
     const ctx = (j) => (j && j.hookSpecificOutput && j.hookSpecificOutput.hookEventName === "PostToolUse" ? j.hookSpecificOutput.additionalContext : "");
     const hooksCfg16 = JSON.parse(cRead(path.join(root, "hooks", "hooks.json"))).hooks;
-    const planCfg = (hooksCfg16.PostToolUse || []).find((e) => e.hooks.some((h) => /plan-hook\.js/.test(h.command))) || {};
+    // (1.25.1: exec form — `node` + the script as its one argument)
+    const planCfg = (hooksCfg16.PostToolUse || []).find((e) => e.hooks.some((h) => /plan-hook\.js/.test((h.args || []).join(" ")))) || {};
     ok(hp.every((h) => h.status === 0) && /\/spec-import — spec_import \{tool: "plan", text: <the approved plan's markdown>\}/.test(ctx(hpj[0])) && Object.keys(hpj[0]).join() === "hookSpecificOutput" &&
       /spec_import \{tool: "plan", path: "docs\/plan\.md"\}/.test(ctx(hpj[1])) && /o utilizador aprovou este plano/.test(ctx(hpj[2])) &&
       hp.slice(3, 7).every((h) => h.stdout === "") && /spec_import/.test(ctx(hpj[7])) &&
-      planCfg.matcher === "ExitPlanMode" && planCfg.hooks[0].command === 'node "${CLAUDE_PLUGIN_ROOT}/hooks/plan-hook.js"' && planCfg.hooks[0].timeout === 10 &&
+      planCfg.matcher === "ExitPlanMode" && planCfg.hooks[0].command === "node" && JSON.stringify(planCfg.hooks[0].args) === JSON.stringify(["${CLAUDE_PLUGIN_ROOT}/hooks/plan-hook.js"]) && planCfg.hooks[0].timeout === 10 &&
       !cRead(path.join(root, "hooks", "plan-hook.js")).includes(String.fromCharCode(0xfeff)),
       "1.16 C4: hooks/plan-hook.js (PostToolUse, matcher ExitPlanMode, timeout 10) adds one line of context in a dev-spec project — the plan's text, or its path when the file is inside the project, in the project language — and is silent (exit 0) elsewhere, on a malformed payload, another tool or event (got " +
       JSON.stringify(hp.map((h) => [h.status, h.stdout.slice(0, 50)])) + ")");

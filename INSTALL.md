@@ -2,7 +2,8 @@
 
 This is a Claude Code **plugin** with a bundled **local MCP server**. It needs **Node.js** on your
 PATH (the MCP server is plain Node — no `npm install`, no dependencies). Check with `node --version`
-(v18+; tested on v24).
+(v18+; tested on v24). Its hooks need **Claude Code 2.1.139 or later** (`claude --version`): they run in exec form — `node`
+started directly with the hook's script, no shell per call — which older versions don't read (their hooks would not run).
 
 There is **no GitHub Actions and no cloud component** — nothing to configure remotely, nothing that
 costs money per run.
@@ -180,7 +181,9 @@ NOT also reference it, or Claude Code reports `Duplicate hooks file detected`): 
 traceability, saving a `design.md` checks the active tracks' mandatory sections, and session start
 prints feature status plus one line per finished feature whose files drifted since `/spec-finish` (one line while
 `.specs/` comes from an older dev-spec — see *Updating* — and one when two features' open tasks plan the same files). To
-turn them off, disable the plugin (or empty `hooks/hooks.json`).
+turn them off, disable the plugin (or empty `hooks/hooks.json`). Each hook is `node` started directly with its script (exec
+form, Claude Code 2.1.139+): on Windows a shell-form hook went through Git Bash (+~40 ms a call) or, without Git Bash,
+PowerShell (+~300 ms a call), and a Write / Edit runs three hooks.
 
 **Evidence gate at the end of a turn (on by default).** A Stop hook (`hooks/stop-hook.js`, also on SubagentStop for the
 `spec-implementer` and `spec-simplifier` agents, checked on their reports) sends Claude back to work — once — when its closing message says a task or feature is done or
