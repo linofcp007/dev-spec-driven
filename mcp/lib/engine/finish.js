@@ -348,12 +348,14 @@ function featureMetrics(projectDir, slug, dir) {
   // approximate, like a seeded legacy record (the phase may have been approved earlier).
   // r5 review: an approval of the SAME content as the phase's previous approval (fingerprint + designFingerprint — a role re-signing,
   // a fast-forward re-run, a revoke then re-approve) changed nothing: no rework. A phase without a fingerprint (tests) counts as before.
-  const first = {}, count = {}, lastContent = {};
+  // 1.25.1 (review 7): "the same content" is sameApprovedContent's — a re-approval after a whitespace-only edit (an editor's
+  // trailing-whitespace trim: the same wsFingerprint, 1.24 review 6) is no rework either.
+  const first = {}, count = {}, lastRec = {};
   for (const h of history || []) {
     const t = timeOf(h.at);
-    const content = typeof h.fingerprint === "string" && h.fingerprint ? h.fingerprint + "|" + (h.designFingerprint || "") : null;
-    if (content == null || lastContent[h.phase] !== content) count[h.phase] = (count[h.phase] || 0) + 1;
-    if (content != null) lastContent[h.phase] = content;
+    const fingerprinted = typeof h.fingerprint === "string" && !!h.fingerprint;
+    if (!fingerprinted || !sameApprovedContent(h, lastRec[h.phase])) count[h.phase] = (count[h.phase] || 0) + 1;
+    if (fingerprinted) lastRec[h.phase] = h;
     if (t != null && (first[h.phase] == null || t < first[h.phase].t)) first[h.phase] = { t, approximate: h.legacy === true };
   }
   for (const [ph, a] of Object.entries(approvals)) {

@@ -21,7 +21,8 @@ let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput
   statePath, suiteLabel, suiteStatus, taskBlocks, taskMarkers, taskSchedule, toPosix, userDefaults,
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
   decodeText, isNetworkPath, runProvesVerify, withinRoot;
-function __link(E) { ({ activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
+let approvedContentSame; // gates.js (1.25.1: the guard's stale tasks approval is the shared changed-since-approval test)
+function __link(E) { ({ approvedContentSame, activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, fingerprintMatches, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
@@ -53,7 +54,9 @@ function guardEnabled(projectDir) {
 //   ask:   otherwise, with a localized `reason` (project language).
 // An approval covers only the tasks.md it signed off: when it carries a fingerprint and tasks.md no longer matches
 // it (tasks appended or edited after approval — ticking boxes is not an edit), the feature is `stale`, not covering:
-// "an approved spec that changed is not approved". An approval without a fingerprint (older state) still counts.
+// "an approved spec that changed is not approved". An approval without a fingerprint (older state) still counts. "Changed" is
+// next_action's and finish's own test (approvedContentSame, gates.js — 1.25.1): trailing whitespace, final blank lines or a
+// "\r\r\n" file normalized to LF are no edit.
 // meta.guard "scope" (1.14 C1): once tasks are approved, a code file must also be in the plan — scopeGuardDecision.
 function guardCheck(projectDir, filePath, cwd) {
   const pdir = path.resolve(projectDir);
@@ -97,7 +100,7 @@ function guardCheck(projectDir, filePath, cwd) {
     texts.set(name, tasksText);
     const ap = approvals.tasks || null;
     if (!ap) pending.push(name);
-    else if (isObj(ap) && typeof ap.fingerprint === "string" && ap.fingerprint && !fingerprintMatches(tasksText, "tasks", ap.fingerprint)) stale.push(name);
+    else if (isObj(ap) && typeof ap.fingerprint === "string" && ap.fingerprint && !approvedContentSame(dir, "tasks", ap, tasksText)) stale.push(name);
     else if (isObj(ap) && ap.forced) forced.push(name);
     else covering.push(name);
   }

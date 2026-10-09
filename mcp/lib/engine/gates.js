@@ -26,7 +26,7 @@ let acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, ar
   uncheckTasks, untickedSince, useTemplateScopeOf, validIsoDay, writeFileAtomic, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
-  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError;
+  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError, sameApprovedContent;
 function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks, artifactMatches, artifactReport,
   artifactState, bugPlaceholders, clarificationMarkers, criterionBlocks, designSections, detectTracks,
   duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, errs, evidenceRule, existingFeature, existsCached, extractSection,
@@ -41,7 +41,7 @@ function __link(E) { ({ acIndex, activeDesign, activeSectionTracks, activeTasks,
   writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   CHANGE_FILE, requirementAcIds, changeViews, isChangeDir, tKey,
-  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError } = E); }
+  checkboxBytes, changesSince, wsText, wsFingerprint, roadmapError, sameApprovedContent } = E); }
 
 // Phases that only exist for a track: an inactive track's artifact (kept on disk after add_track --remove)
 // is not a gate, not a phase and not a "changed since approval".
@@ -93,8 +93,21 @@ function testsSignOffStale(dir, tracks, approvals) {
   const had = new Set((Array.isArray(stamp.tests) ? stamp.tests : []).filter((x) => typeof x === "string" && /^T-\d+$/i.test(x)).map(key));
   const missing = plannedTestIds(dir, tracks).filter((id) => !had.has(key(id)));
   const rec = isObj(stamp.plans) ? stamp.plans : {};
-  const plans = TESTS_PLANS.filter((ph) => phaseActive(ph, tracks) && (own(rec, ph) && typeof rec[ph] === "string" ? rec[ph] : null) !== planApprovalFp(a, ph));
+  const plans = TESTS_PLANS.filter((ph) => phaseActive(ph, tracks) && !planStampHolds(dir, a, ph, own(rec, ph) && typeof rec[ph] === "string" ? rec[ph] : null));
   return missing.length || plans.length ? { at: typeof a.tests.at === "string" ? a.tests.at : null, missing, plans } : null;
+}
+// The plan approval a `tests` sign-off stamped (`stamped`: its fingerprint then, or null — none) still in force: the same fingerprint,
+// or (1.25.1, review 7) a re-approval of the same content but whitespace — the history record that carried the stamped fingerprint
+// and the approval now are sameApprovedContent (their wsFingerprint, 1.24 review 6). Re-approving test-plan.md after an editor's
+// trailing-whitespace trim made the Phase 4 sign-off stale while changedSinceApproval called the plan unchanged. The history is read
+// only when the fingerprints differ.
+function planStampHolds(dir, approvals, ph, stamped) {
+  const now = planApprovalFp(approvals, ph);
+  if (stamped === now) return true;
+  if (!stamped || !now) return false;
+  const st = readJson(statePath(dir)).data;
+  const hist = isObj(st) && Array.isArray(st.approvalHistory) ? st.approvalHistory : [];
+  return hist.some((h) => isApprovalRecord(h) && h.phase === ph && h.fingerprint === stamped && sameApprovedContent(approvals[ph], h));
 }
 // The approvals that count for the gate walk: `approvals` without a stale `tests` approval (testsSignOffStale). The same
 // object when nothing is stale.
@@ -1189,7 +1202,7 @@ function impactReport(projectDir, name, opts = {}) {
     curDesign = readIfExists(path.join(dir, PHASE_FILE.design));
     designBase = designBaseline(dir, snap, appr);
     if (curDesign != null || designBase && designBase.rel) {
-      const designChanged = curDesign != null && !fingerprintMatches(curDesign, phase, appr.designFingerprint) &&
+      const designChanged = curDesign != null && !approvedContentSame(dir, phase, appr, curDesign, true) &&
         !(designBase && designBase.rel && wsText(designBase.text, phase) === wsText(curDesign, phase)); // r5 review: whitespace only
       const designMd = { file: PHASE_FILE.design, baseline: !designBase ? "fingerprint-only" : designBase.rel ? "snapshot" : "absent", changed: designChanged };
       if (designBase && designBase.rel) designMd.snapshot = designBase.rel;
@@ -1628,8 +1641,8 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
       // (`designFingerprint`) — a design.md created since (a track added) is a change too. A deleted bug.md is one as well
       // (1.22 review); a deleted design.md is not (it only ever held a track's sections — spec_impact's rule).
       const bug = path.join(dir, a.file), design = path.join(dir, file);
-      if (!fs.existsSync(bug) || (!artifactMatches(bug, ph, a.fingerprint) && !wsSame(bug, ph, a.wsFingerprint) && !wsOnlyEdit(dir, ph, a.file, a, "snapshot"))) out.push(a.file);
-      if (fs.existsSync(design) && !artifactMatches(design, ph, a.designFingerprint) && !wsSame(design, ph, a.designWsFingerprint) && !wsOnlyEdit(dir, ph, file, a, "designSnapshot")) out.push(file);
+      if (!fs.existsSync(bug) || !approvedContentSame(dir, ph, a, readIfExists(bug))) out.push(a.file);
+      if (fs.existsSync(design) && !approvedContentSame(dir, ph, a, readIfExists(design), true)) out.push(file);
       continue;
     }
     const rel = kind === "change" ? phaseFile(ph, kind) : file; // 1.21 F5: a change's plan approval signed off change.md
@@ -1641,7 +1654,7 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
     if (!fs.existsSync(abs)) { if (!(kind === "bugfix" && rel === PHASE_FILE.design)) out.push(rel); continue; }
     if (a.fingerprint) {
       // r5 review: whitespace only — by the approval's wsFingerprint (1.24 review 6, E-I5), else its .history snapshot
-      if (!artifactMatches(abs, ph, a.fingerprint) && !wsSame(abs, ph, a.wsFingerprint) && !wsOnlyEdit(dir, ph, rel, a, "snapshot")) out.push(rel);
+      if (!approvedContentSame(dir, ph, a, readIfExists(abs))) out.push(rel);
     } else if (a.at && ph !== "tasks") {
       try { if (fs.statSync(abs).mtime.getTime() > new Date(a.at).getTime()) { out.push(rel); byDate.push(rel); } } catch { /* ignore */ }
     }
@@ -1655,18 +1668,31 @@ function changedSinceApproval(dir, approvals, tracks, kind, opts = {}) {
 // (`which`: snapshot | designSnapshot — the history record of that approval, the same `at`) when that snapshot still holds the
 // approved content (fingerprintMatches): equal once each line's trailing whitespace and the final blank lines are dropped (wsText).
 // No snapshot (an approval before 1.13, a .history not committed) → false: the fingerprint alone decides, as before.
-// 1.24 review 6 (E-I5): an approval recorded since carries its whitespace-insensitive fingerprint — wsSame() decides without a snapshot.
-const wsSame = (abs, phase, stored) => typeof stored === "string" && !!stored && wsFingerprint(readIfExists(abs), phase) === stored;
-function wsOnlyEdit(dir, phase, file, appr, which) {
-  if (!isRecord(appr) || typeof appr.at !== "string") return false;
+// 1.24 review 6 (E-I5): an approval recorded since carries its whitespace-insensitive fingerprint — it decides without a snapshot.
+// cur: the artifact's text now (null: gone or unreadable).
+function wsOnlyEdit(dir, phase, cur, appr, which) {
+  if (cur == null || !isRecord(appr) || typeof appr.at !== "string") return false;
   const st = readJson(statePath(dir)).data;
   const hist = isObj(st) && Array.isArray(st.approvalHistory) ? st.approvalHistory : [];
   const rec = hist.filter((h) => isApprovalRecord(h) && h.phase === phase && h.at === appr.at && typeof h[which] === "string").pop();
   if (!rec) return false;
   const snap = historyText(dir, rec[which]);
   if (snap == null || !fingerprintMatches(snap, phase, which === "snapshot" ? appr.fingerprint : appr.designFingerprint)) return false;
-  const cur = readIfExists(path.join(dir, file));
-  return cur != null && wsText(cur, phase) === wsText(snap, phase);
+  return wsText(cur, phase) === wsText(snap, phase);
+}
+// 1.25.1 (review 7) — THE "changed since its approval" test of one artifact, every reader's: is `raw` (its text now; null = gone or
+// unreadable) still the content the approval record `appr` signed off? Its fingerprint (fingerprintMatches — a tick, CRLF / "\r\r\n",
+// a BOM are no change), else the whitespace-insensitive fingerprint it recorded (wsFingerprint, 1.24 review 6), else its own .history
+// snapshot equal but for whitespace (wsOnlyEdit, r5 review). design: a bugfix design approval's design.md (designFingerprint /
+// designWsFingerprint / designSnapshot). changedSinceApproval (next_action, finish, doctor, the roadmap), the edit guard's stale tasks
+// approval (guardCheck), the traceability matrix's fingerprint-only baseline, spec_impact's design.md and spec_append_tasks'
+// needsReapproval read it: the guard alone compared the fingerprint, so trailing spaces in tasks.md (or a "\r\r\n" file normalized
+// to LF) made it ask "re-approve the tasks" while next_action and finish called them unchanged.
+function approvedContentSame(dir, phase, appr, raw, design) {
+  if (raw == null || !isRecord(appr)) return false;
+  const fp = design ? appr.designFingerprint : appr.fingerprint, ws = design ? appr.designWsFingerprint : appr.wsFingerprint;
+  return fingerprintMatches(raw, phase, fp) || (typeof ws === "string" && !!ws && wsFingerprint(raw, phase) === ws) ||
+    wsOnlyEdit(dir, phase, raw, appr, design ? "designSnapshot" : "snapshot");
 }
 
 // Success criteria / priorities count once they are REAL: the template's "Priorities: **P1** = …" legend, its
@@ -1897,6 +1923,6 @@ module.exports = { phaseActive, testsGateDue, stateApprovals, TESTS_PLANS, plann
   sectionEntries, taskEntries, plannedTestEntries, activeTaskBlocks, impactReport, impactLines, gateWalk, gateArtifacts,
   pendingGateList, FLOWS, DESIGN_FIRST_PHASES, flowOfState, featureFlow, phaseOrder, flowIndex, flowPhaseIndex,
   checkPhaseIndex, positionPhase, parseFlow, flowOrderText, setFeatureFlow, setFeatureFlowLocked, createFlow,
-  storeCreateFlow, CHECK_PHASE, CHANGE_MAX_ACS, CHANGE_MAX_TASKS, changeScope, PHASE_INDEX, chainArtifacts, changedSinceApproval, realLines, hasSuccessCriteria,
+  storeCreateFlow, CHECK_PHASE, CHANGE_MAX_ACS, CHANGE_MAX_TASKS, changeScope, PHASE_INDEX, chainArtifacts, changedSinceApproval, approvedContentSame, realLines, hasSuccessCriteria,
   hasPriority, acDuplicates, sectionFilled, bugSectionFilled, CONSTITUTION_SYN, approvalChecks, RE_CONSTITUTION_CHECK,
   RE_SUCCESS_CRITERIA, RE_INDEPENDENT_TEST, RE_OUT_OF_SCOPE, RE_NFR, RE_EDGE_CASES, RE_TESTABILITY, __link };

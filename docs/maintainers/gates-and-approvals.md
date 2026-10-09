@@ -152,6 +152,15 @@ flows, the bugfix kind.
   sign-off has no snapshot: an editor's trailing-whitespace trim after product signed made tech's sign-off "not complete"
   (product's read stale — r5's rule held for single approvals only). Records from before 1.24 have none: the fingerprint and
   the snapshot fallback decide, as before. (A field of the approval / sign-off records — the merge driver's rules carry it.)
+  **1.25.1 (review 7) — ONE test for every reader:** `approvedContentSame(dir, phase, appr, raw, design?)` (gates.js) is "is this
+  text still the content that approval record signed off" — the fingerprint, else the recorded wsFingerprint, else the own-snapshot
+  `wsOnlyEdit` — and every reader of a change since approval asks it: `changedSinceApproval`, the edit guard's stale tasks approval
+  (`guardCheck` compared the fingerprint alone: trailing spaces in tasks.md, or a "\r\r\n" file normalized to LF, made it ask
+  "re-approve" while next_action and finish said unchanged), the traceability matrix's approval baseline (its snapshot path compares
+  `wsText`, its fingerprint-only path asks the predicate) and spec_impact's design.md. Two RECORDS are compared by
+  `sameApprovedContent` (finish.js): the Phase 4 stamp (`planStampHolds` — a test plan re-approved after a whitespace-only edit
+  keeps the `tests` sign-off in force: the history record of the stamped fingerprint and the approval now share a wsFingerprint)
+  and the metrics' rework count (such a re-approval is no rework). Never compare an approval's fingerprint by hand.
 - **A deleted approved artifact is a change since its approval** (1.22 review — `changedSinceApproval()` skipped a missing
   file, so deleting an approved test-plan.md and its T-IDs read as "nothing changed" and the Phase 4 gate vanished; the
   tasks were approvable at once). It is listed like an edit (doctor's changed-since-approval, finish's blocker, the roadmap,

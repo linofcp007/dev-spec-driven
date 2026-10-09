@@ -22,7 +22,7 @@ let acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, c
   SAMPLE_ADVERSARIAL, SAMPLE_GOLDEN, SCAN_READ_BYTES, specsRoot, stateFromFile, statePath, stripEnd, stripEnds,
   criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers, taskMarkerValues, taskProse,
   tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds, trackLabel, trackMarker, unitIn,
-  useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir;
+  useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews, isChangeDir, approvedContentSame, wsText;
 function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atxHeading, BOM_CHAR, cleanTaskText,
   codeBlockLines, commentLines, decisionLog, DECISIONS_FILE, decisionsTrace, designSections, detectTracks, dirKey,
   duplicateTaskNumbers, evidenceRule, existingFeature, featureDirs, featureLang, fingerprintMatches, FOLD_CASE,
@@ -34,7 +34,7 @@ function __link(E) { ({ acOneLine, activeDesign, activeTasks, artifactState, atx
   statePath, stripEnd, stripEnds, criterionLabel, notASlug, featureRefTest, stripForeignAcRefs, stripStart, stripSupersedes, supersedesMarkers, supersedesTrace, tableCells, taskBlocks, taskMarkers,
   taskMarkerValues, taskProse, tasksProseText, taskVerification, textFingerprint, timeOf, toPosix, trackAcIds,
   trackLabel, trackMarker, unitIn, useTemplateScopeOf, utcStamp, walkProject, withinRoot, criteriaText, tasksIdText, changeViews,
-  isChangeDir } = E); }
+  isChangeDir, approvedContentSame, wsText } = E); }
 
 // ---------------------------------------------------------------------------
 // EARS linting
@@ -1401,10 +1401,11 @@ function buildTraceMatrix(projectDir, f, opts = {}) {
       const before = requirementIndex(snapReq);
       // (a change: the views' blank lines stand for task lines — a task added or moved is no change of the criteria)
       const cmp = (t) => (change ? t.split("\n").filter((l) => l.trim()).join("\n") : t);
-      Object.assign(approval, { baseline: "snapshot", snapshot: snap.rel, changed: textFingerprint(cmp(reqRaw), "requirements") !== textFingerprint(cmp(snapReq), "requirements") });
+      // (1.25.1, review 7: whitespace only is no change — spec_impact's and changedSinceApproval's rule, wsText)
+      Object.assign(approval, { baseline: "snapshot", snapshot: snap.rel, changed: wsText(cmp(reqRaw), "requirements") !== wsText(cmp(snapReq), "requirements") });
       rowChanged = (row) => { const o = before.get(row.id); return !o || normWs(o.text) !== normWs(row.raw); };
     } else if (appr.fingerprint) {
-      const changed = !fingerprintMatches(change ? fullReq : reqRaw, apPhase, appr.fingerprint);
+      const changed = !approvedContentSame(dir, apPhase, appr, change ? fullReq : reqRaw); // the shared test (gates.js — 1.25.1)
       Object.assign(approval, { baseline: "fingerprint-only", changed });
       rowChanged = () => (changed ? null : false); // THAT the file changed, not which criterion
     } else Object.assign(approval, { baseline: "none", changed: null });

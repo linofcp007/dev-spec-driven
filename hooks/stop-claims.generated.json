@@ -8,7 +8,7 @@
   "mcp/lib/i18n/es.js": 365672,
   "mcp/lib/i18n/pt-br.js": 48280,
   "mcp/lib/i18n/pt.js": 364170,
-  "mcp/lib/engine/guards.js": 139495
+  "mcp/lib/engine/guards.js": 139819
  },
  "word": {
   "pre": "(?<![\\p{L}\\p{N}_])(?:",
