@@ -1,11 +1,11 @@
 "use strict";
-// CLI ↔ MCP parity — every trace gap listed, confirmations, rules, help, localized output.
+// CLI ↔ MCP parity — every trace gap listed, confirmations, rules, help, localized output; the 1.27 operations table, the command side.
 
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
+exports.run = ({ ok, all, run, runIn, tmp, CLI, require, __dirname }) => {
 // 1.13 WP4: CLI ↔ MCP parity, every trace gap listed, confirmations, rules, help, localized output.
 const S4 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const w4 = path.join(tmp, "wp4-proj");
@@ -179,4 +179,64 @@ ok(flagsRead.length >= 15 && flagsRead.every((x) => doc4.includes(x)) && ["--by"
   "the command table's help lists every flag the CLI reads (missing: " + flagsRead.filter((x) => !doc4.includes(x)).join(",") + ")");
 ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(x)).every((x) => help4.includes(x)) && /--md/.test(help4) && /alias: na/.test(help4),
   "help mentions every flag it owns plus the --md and na aliases");
+
+// 1.27: the operations table (mcp/lib/operations.js), the command side — every command that wraps an engine operation runs it
+// through c.call (its flags and words read by the table), every flag of such a command is one of its operations' arguments (or one
+// the table names CLI-only), each argument's flags are its commands' and of the kind it reads, and no handler calls an operation's
+// facade function itself. The tool side and the --json = MCP comparison: mcp/tests/02-mcp-server-tools.js.
+{
+  const OPS = require(path.join(__dirname, "..", "mcp", "lib", "operations.js"));
+  const T = require(path.join(path.dirname(CLI), "commands.js"));
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  // the commands that run no engine operation — each for its reason (no MCP tool does what it does)
+  const NOT_OPERATIONS = { "merge-state": "git's merge driver", statusline: "Claude Code's status line", evals: "the eval harness (run-evals.js)",
+    "mcp-config": "an MCP client's config block", rules: "another tool's rule file", prompts: "MCP prompts/get (a prompt, not a tool)",
+    bundle: "the one-file engine build", version: "the CLI's version", completion: "a shell's completion script", help: "the help" };
+  const src = fs.readFileSync(path.join(path.dirname(CLI), "commands.js"), "utf8");
+  const bad = [];
+  const byCommand = new Map();
+  for (const op of OPS.OPERATIONS) for (const cmd of op.cli) (byCommand.get(cmd) || byCommand.set(cmd, []).get(cmd)).push(op);
+  for (const [cmd] of byCommand) if (!T.commandFor(cmd) || T.commandFor(cmd).name !== cmd) bad.push(cmd + ": no such command (by its name)");
+  for (const e of T.COMMANDS) {
+    const ops = byCommand.get(e.name) || [];
+    if (!ops.length !== own(NOT_OPERATIONS, e.name)) bad.push(e.name + (ops.length ? ": runs an operation, yet listed as none" : ": runs no operation and is not listed as a non-operation"));
+    const mapped = new Set(ops.flatMap((op) => Object.values(op.args).flatMap((a) => [].concat(a.cli === undefined ? [] : a.cli)).concat(op.cliOnly || [])).map((f) => f.slice(2)));
+    for (const o of ops.length ? e.options || [] : []) if (!mapped.has(o)) bad.push(e.name + " --" + o + ": no argument of " + ops.map((op) => op.id).join(" / "));
+  }
+  for (const op of OPS.OPERATIONS) {
+    if (!src.includes("c.call(\"" + op.id + "\"")) bad.push(op.id + ": no handler runs it (c.call)");
+    for (const [k, a] of Object.entries(op.args)) {
+      for (const f of [].concat(a.cli === undefined ? [] : a.cli)) {
+        const n = f.slice(2);
+        if (!op.cli.some((cmd) => (T.commandFor(cmd).options || []).includes(n))) bad.push(op.id + "." + k + ": " + f + " is no option of " + op.cli.join(" / "));
+        if (!doc4.includes(f)) bad.push(op.id + "." + k + ": " + f + " is not in the help");
+        if (a.parsed) continue; // the handler reads it in its own syntax
+        const sw = S4.CLI_SWITCHES.has(n);
+        if ((a.type === "switch" || a.type === "bool") !== sw) bad.push(op.id + "." + k + ": " + f + (sw ? " is a switch, read as a value" : " is a value flag, read as a switch"));
+        if ((a.type === "list") !== T.REPEATABLE_FLAGS.has(n)) bad.push(op.id + "." + k + ": " + f + (a.type === "list" ? " is not repeatable" : " is repeatable, read once"));
+      }
+      for (const cmd of Object.keys(a.cmd || {})) if (!op.cli.includes(cmd)) bad.push(op.id + "." + k + ": implied by " + cmd + ", no command of it");
+    }
+  }
+  // no handler makes an operation's engine call itself — done --run's brief aside (the _Verify:_ commands of the task it is about to tick)
+  const direct = [...new Set(OPS.OPERATIONS.map((op) => op.engine))].flatMap((fn) => [...src.matchAll(new RegExp("\\bspec\\." + fn + "\\(", "g"))].map(() => fn));
+  // c.call runs only an operation that lists the command, with only the options the operation declares (a handler patched for the call)
+  const doctorEntry = T.commandFor("doctor");
+  const saved = doctorEntry.run;
+  let wrongOp, wrongOpt;
+  try {
+    doctorEntry.run = (c) => c.call("drift");
+    wrongOp = runIn(["doctor", "gaps", "--project", w4]);
+    doctorEntry.run = (c) => c.call("doctor", { bogus: true });
+    wrongOpt = runIn(["doctor", "gaps", "--project", w4]);
+  } finally { doctorEntry.run = saved; }
+  all("1.27 operations (CLI): every command runs an operation through c.call or is a known non-operation; each flag of an operation's command is one of its arguments (or CLI-only); each argument's flags are its commands', in the help, of the kind it reads; no handler calls an operation's engine function itself (got " +
+    JSON.stringify({ bad, direct, wrongOp, wrongOpt }) + ")", {
+    commands: () => T.COMMANDS.length - Object.keys(NOT_OPERATIONS).length === byCommand.size,
+    noBad: () => !bad.length,
+    onlyDonesBrief: () => JSON.stringify(direct) === JSON.stringify(["taskBrief"]),
+    wrongOperation: () => wrongOp.code === 1 && /the command 'doctor' does not run the operation 'drift'/.test(wrongOp.out),
+    undeclaredOption: () => wrongOpt.code === 1 && /operation 'doctor' has no option 'bogus' for the cli/.test(wrongOpt.out),
+  });
+}
 };
