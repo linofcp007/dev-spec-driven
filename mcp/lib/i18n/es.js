@@ -8,9 +8,9 @@
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
 const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded } = require("./common.js"); // load time
-// The assembled tables — call-time use only; mcp/lib/i18n.js links them once every language has loaded.
-let BUILD, MSG;
-function __link(T) { ({ BUILD, MSG } = T); }
+// The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
+let BUILD, MSG, renderRetro;
+function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
 
 // ===========================================================================
 // Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
@@ -2030,7 +2030,8 @@ const msg = {
         followUps: "## Seguimiento",
         followUpsNote: "<!-- Candidatos al backlog — añade los que aceptes con spec_backlog (dev-spec backlog add \"<nombre>\" \"<nota>\"). -->",
       },
-      retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.es.metrics.retroText, MSG.es.metrics.phase, m, fmt),
+      // retro.md: the one layout (i18n.js renderRetro, linked) with this language's retroText and phase names
+      retro: (m, fmt) => renderRetro(MSG.es.metrics.retroText, MSG.es.metrics.phase, m, fmt),
     },
 
     deepTrace: {

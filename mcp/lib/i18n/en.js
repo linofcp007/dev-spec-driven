@@ -8,9 +8,9 @@
  * engine requires. Blocks keep the indentation they had inside i18n.js's tables.
  */
 const { DEV_SPEC, MARKER_TRACK_ORDER, greenLine, signalTracks, templateTestRows, templateTests, coreSuperseded } = require("./common.js"); // load time
-// The assembled tables — call-time use only; mcp/lib/i18n.js links them once every language has loaded.
-let BUILD, MSG;
-function __link(T) { ({ BUILD, MSG } = T); }
+// The assembled tables and the shared retro.md layout (renderRetro) — call-time use only; mcp/lib/i18n.js links them when it loads this file.
+let BUILD, MSG, renderRetro;
+function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
 
 // ===========================================================================
 // Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
@@ -2136,33 +2136,8 @@ const msg = {
         followUps: "## Follow-ups",
         followUpsNote: "<!-- Candidate backlog items — add the ones you accept with spec_backlog (dev-spec backlog add \"<name>\" \"<note>\"). -->",
       },
-      // The ONE retro layout; each language passes its own retroText (lazy MSG reference — MSG is complete at call time).
-      buildRetro: (T, P, m, fmt) => {
-        const lt = m.leadTime || {};
-        const rows = [[T.created, m.createdAt ? m.createdAt.slice(0, 10) + (m.createdAtApproximate ? ` (${T.approximate})` : "") : T.unknown]];
-        for (const ph of ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "complete", "finished"]) {
-          if (lt[ph]) rows.push([T.lead(P[ph] || ph), fmt.dur(lt[ph].hours) + (lt[ph].approximate ? ` (${T.approximate})` : "")]);
-        }
-        const by = m.reworkByPhase ? Object.entries(m.reworkByPhase).map(([ph, n]) => `${P[ph] || ph} ${n}`).join(", ") : "";
-        const reworkValue = m.rework == null ? null : m.rework + (by ? ` (${by})` : "");
-        rows.push([T.rework, reworkValue == null ? T.reworkUnknown
-          : m.reworkLowerBound && Array.isArray(m.legacyPhases) ? T.reworkPartial(reworkValue, m.legacyPhases.map((ph) => P[ph] || ph).join(", ")) : reworkValue]);
-        rows.push([T.forced, String(m.forcedApprovals)]);
-        rows.push([T.changes, `${m.changeRequests} (${T.reopened(m.reopenedTasks)})`]);
-        rows.push([T.passRate, m.evidence && m.evidence.runs ? T.runs(m.evidence.passRate, m.evidence.passing, m.evidence.runs) : T.noRuns]);
-        rows.push([T.tasks, T.tasksValue(m.tasks.done, m.tasks.total)]);
-        rows.push([T.clar, String(m.openClarifications)]);
-        const sig = [];
-        if (m.reworkByPhase) for (const [ph, n] of Object.entries(m.reworkByPhase)) sig.push(T.sigRework(P[ph] || ph, n + 1));
-        if (m.forcedApprovals) sig.push(T.sigForced(m.forcedApprovals));
-        if (m.reopenedTasks) sig.push(T.sigReopened(m.reopenedTasks));
-        if (m.evidence && m.evidence.runs && m.evidence.passRate < 100) sig.push(T.sigPass(m.evidence.passRate));
-        if (m.openClarifications) sig.push(T.sigClar(m.openClarifications));
-        return [T.title(m.feature), "", T.intro(fmt.today), "", T.metrics, "", T.header, "|---|---|", ...rows.map(([k, v]) => `| ${k} | ${v} |`), "",
-          T.well, "", "- ", "", T.hurt, "", ...(sig.length ? [T.signals(sig.join("; "))] : []), "- ", "", T.amend, "", T.amendNote, "- ", "",
-          T.followUps, "", T.followUpsNote, "- ", ""].join("\n");
-      },
-      retro: (m, fmt) => MSG.en.metrics.buildRetro(MSG.en.metrics.retroText, MSG.en.metrics.phase, m, fmt),
+      // retro.md: the one layout (i18n.js renderRetro, linked) with this language's retroText and phase names
+      retro: (m, fmt) => renderRetro(MSG.en.metrics.retroText, MSG.en.metrics.phase, m, fmt),
     },
 
     // Deep traceability (trace_check warnings, doctor secondary-trace / tests-in-code, finish, hook). Never blocking.

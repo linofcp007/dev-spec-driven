@@ -193,6 +193,23 @@ exports.run = async ({ ok, rpc, payload, S, tmp, list, require }) => {
     const esFile = esTexts.map((t) => t.replace(/columna Fichero \(o Archivo, en un plan más antiguo\)/g, "")).filter((t) => /(?<![\p{L}])[Aa]rchivos?(?![\p{L}])/u.test(t));
     ok(esTexts.length > 1000 && !esFile.length && /registros de archivado/.test(I.msg("es").restore.renamedRecords("x")) && /\| Fichero \|/.test(I.testPlan("n", "es", ["core", "tdd"])),
       "1.25.1 review: ES says 'fichero' for a file in every message and scaffold (the archive keeps archivo / archivado) (" + esTexts.length + " strings; " + esFile.slice(0, 2).map((t) => t.slice(0, 80)).join(" · ") + ")");
+    // 1.25.1 review — PT / ES retro.md rendered through MSG.en.metrics.buildRetro: a Portuguese or Spanish process loaded the
+    // English locale file to write it. The layout is i18n.js's renderRetro now; a fresh process renders all three without en.js.
+    {
+      const { spawnSync } = require("child_process");
+      const probe = spawnSync(process.execPath, ["-e", [
+        "const I = require(" + JSON.stringify(require.resolve("./lib/i18n.js")) + ");",
+        "const m = { feature: 'x', leadTime: { design: { hours: 3 } }, reworkByPhase: { design: 1 }, rework: 1, evidence: { runs: 2, passing: 1, passRate: 50 }, tasks: { done: 1, total: 2 }, openClarifications: 1, forcedApprovals: 0, changeRequests: 1, reopenedTasks: 1 };",
+        "const out = ['pt', 'es', 'pt-BR'].map((l) => I.msg(l).metrics.retro(m, { dur: (h) => h + 'h', today: '2026-01-01' }));",
+        "const en = Object.keys(require.cache).some((k) => /[\\\\/]i18n[\\\\/]en\\.js$/.test(k));",
+        "process.stdout.write(JSON.stringify({ en, heads: out.map((t) => t.split('\\n')[0]), design: out.map((t) => t.includes(' | 3h |') && t.includes('<!-- ')) }));",
+      ].join("\n")], { encoding: "utf8", timeout: 60000 });
+      let got = null;
+      try { got = JSON.parse(probe.stdout); } catch { got = { stdout: probe.stdout, stderr: String(probe.stderr).slice(0, 300) }; }
+      ok(got && got.en === false && JSON.stringify(got.heads) === JSON.stringify(["# Retrospetiva: x", "# Retrospectiva: x", "# Retrospectiva: x"]) &&
+        got.design.every(Boolean) && typeof I.renderRetro === "function" && !("buildRetro" in I.msg("en").metrics),
+        "1.25.1 review: a PT / ES / pt-BR retro.md renders through i18n.js's renderRetro without loading the English locale file (got " + JSON.stringify(got) + ")");
+    }
     const enVars = varText("en");
     ok(enVars.join(" ").includes("{{variables}}") && ["pt", "es", "pt-BR"].every((l) => JSON.stringify(varText(l)) === JSON.stringify(enVars)),
       "1.25.1 review: {{template variables}} are English-stable — every builder and steering stub names the same ones in PT / ES / pt-BR as in EN (got pt " + JSON.stringify(varsOf(I.promptStub("n", "pt"))) + ")");
