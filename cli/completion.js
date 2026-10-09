@@ -63,6 +63,12 @@ function nearestProject(start) {
   }
   return null;
 }
+// files.js expandHome (1.25.1): a leading ~ (alone, ~/ or ~ and a backslash) is the home folder — the CLI expands --project with it.
+const RE_HOME_PREFIX = /^~(?=$|[\\/])/;
+function expandHome(p) {
+  const s = String(p == null ? "" : p);
+  return RE_HOME_PREFIX.test(s) ? path.join(require("os").homedir(), s.slice(1)) : s;
+}
 // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one with a dev-spec .specs/ >
 // the working folder (an empty value or one holding an unexpanded variable falls through) — the CLI's resolution.
 function resolveProject(arg, env) {
@@ -71,7 +77,7 @@ function resolveProject(arg, env) {
   // Windows: `--project "C:\dir\"` reaches node as `C:\dir"` — the CLI drops the trailing quote (1.23 review L14)
   const flag = typeof arg === "string" && process.platform === "win32" ? arg.replace(/"+$/, "") : arg;
   const dir = usable(flag) || usable(e.SPEC_PROJECT_DIR) || usable(e.CLAUDE_PROJECT_DIR);
-  if (dir) return path.resolve(dir);
+  if (dir) return path.resolve(expandHome(dir));
   const cwd = path.resolve(process.cwd());
   return nearestProject(cwd) || cwd;
 }
@@ -218,4 +224,4 @@ function script(shell, model) {
   return body.replace(/@@([A-Z_]+)@@/g, (m, k) => (Object.prototype.hasOwnProperty.call(fill, k) ? fill[k] : m));
 }
 
-module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, featureNames, archivedNames };
+module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, featureNames, archivedNames };

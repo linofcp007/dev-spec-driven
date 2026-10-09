@@ -32,10 +32,18 @@ function __link(E) { ({ errs, existingFeature, featureLang, isDevSpecDir, projec
 const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
 const PROJECT_MAX_UP = 64; // folders walked up from the working folder (a few stats each, never a walk down)
 function unexpandedVar(v) { return RE_UNEXPANDED_VAR.test(String(v == null ? "" : v).trim()); }
+// 1.25.1 (review 7): a leading ~ (alone, ~/ or ~ and a backslash) is the home folder — PowerShell 5.1 hands a native command its ~ as
+// typed, and an MCP client's argument or JSON config is never expanded: --project ~/zz / projectDir "~/zz" made a folder literally
+// named "~" in the working folder. ~user stays as written (no user database lookup). cli/completion.js mirrors it.
+const RE_HOME_PREFIX = /^~(?=$|[\\/])/;
+function expandHome(p) {
+  const s = String(p == null ? "" : p);
+  return RE_HOME_PREFIX.test(s) ? path.join(require("os").homedir(), s.slice(1)) : s;
+}
 function resolveProjectDir(arg) {
   const usable = (v) => (v != null && String(v).trim() && !unexpandedVar(v) ? String(v).trim() : null);
   const dir = usable(arg) || usable(process.env.SPEC_PROJECT_DIR) || usable(process.env.CLAUDE_PROJECT_DIR);
-  if (dir) return path.resolve(dir);
+  if (dir) return path.resolve(expandHome(dir));
   const cwd = path.resolve(process.cwd());
   return nearestProject(cwd) || cwd;
 }
@@ -1113,7 +1121,7 @@ function isNetworkPath(p) {
   return host !== "wsl$" && host !== "wsl.localhost";
 }
 
-module.exports = { resolveProjectDir, unexpandedVar, nearestProject, specsRoot, ensureDir, withDryRun, isDryRun, dryRunRefused, dryWrites, dryPut,
+module.exports = { resolveProjectDir, unexpandedVar, expandHome, nearestProject, specsRoot, ensureDir, withDryRun, isDryRun, dryRunRefused, dryWrites, dryPut,
   dryEntry, dryListing, readDirDisk, mkdirp, writeIfAbsent, RENAME_RETRY_MS, RENAME_RETRY_CODES,
   writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, GATE_CODES, specsRootOf, realSpecsRoot, specsWriteBlock, gateRel, gateMessage, specsGateError,
   specsWriteGate, gateRefusal, featureLangSafe, SLEEP_CELL, sleepSync, LOCK_FILE, LOCK_WAIT_MS, LOCK_STALE_MS, LOCK_MAX_HOLD_MS, LOCK_RECLAIM_SUFFIX,

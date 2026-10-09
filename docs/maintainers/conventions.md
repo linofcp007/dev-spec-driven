@@ -75,7 +75,10 @@ and U+FEFF gotchas are in CLAUDE.md.
   levels; 1.23 review: run from a subfolder, `create` / `backlog add` started a SECOND, nested .specs/ there) > the working
   folder. A value holding a variable left unexpanded — any `${`, a leading `$NAME`, a `%NAME%` (`unexpandedVar()`) — is
   unusable and falls through (1.23 review: `SPEC_PROJECT_DIR="${CLAUDE_PROJECT_DIR}/"`, `$CLAUDE_PROJECT_DIR` or
-  `%CLAUDE_PROJECT_DIR%` created that literal folder; only a whole `${VAR}` was caught). A separate project INSIDE another one
+  `%CLAUDE_PROJECT_DIR%` created that literal folder; only a whole `${VAR}` was caught). A leading `~` (alone, `~/`, `~\`) is the
+  home folder (1.25.1, review 7 — `expandHome()`, files.js; the CLI's `--project` / the env through its mirror in cli/completion.js,
+  the server's projectDir, the status line's candidates): Windows PowerShell 5.1 hands node `~` as typed and an MCP argument or a
+  JSON config is never expanded — `~/zz` made a folder named `~` in the working folder (`~user` stays as written). A separate project INSIDE another one
   needs `--project .` (or its own `.specs/` first — an empty one is enough). The CLI validates `--project` itself (below), the
   MCP server a tool's `projectDir` by the same rule (1.24 r6 — an existing folder, only spec_init creates one: mcp.md → Argument
   validation); a

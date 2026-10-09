@@ -957,7 +957,7 @@ function parseProjectDir(v) {
     if (host && host[1] && host[1].toLowerCase() !== "localhost") return { code: "project-network", message: (A) => A.network(s) };
     p = fileUriToPath(s);
     if (!p) return { code: "project-uri", message: (A) => A.projectUri(s) };
-  }
+  } else p = spec.expandHome(p); // 1.25.1 (review 7): "~/zz" is the home folder's zz — it made a folder named "~" in the cwd
   if (isNetworkPath(p)) return { code: "project-network", message: (A) => A.network(s) };
   return { dir: path.resolve(rootsDir || process.cwd(), p) };
 }

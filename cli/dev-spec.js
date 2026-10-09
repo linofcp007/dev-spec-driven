@@ -266,6 +266,9 @@ const cmd = pos.shift();
 // 1.23 review (L14): Windows' `--project "C:\dir\"` reaches the CLI as `C:\dir"` (the backslash escapes the closing quote) — a
 // double quote is never part of a Windows path, so a trailing one is dropped.
 if (process.platform === "win32" && typeof flags.project === "string") flags.project = flags.project.replace(/"+$/, "");
+// 1.25.1 (review 7): a leading ~ is the home folder — Windows PowerShell 5.1 passes `~` to node as typed (`--project ~/zz` made a
+// folder named "~" in the working folder). The engine's expandHome, mirrored without the engine in cli/completion.js.
+if (typeof flags.project === "string") flags.project = COMPLETION.expandHome(flags.project.trim());
 // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working folder with a dev-spec .specs/
 // > the working folder — the same resolution as the MCP server (spec.resolveProjectDir). --project is checked in main().
 const projectDir = spec.resolveProjectDir(flags.project);
@@ -584,7 +587,7 @@ function checkProject() {
     v = String(process.env[PROJECT_SOURCE]).trim();
     src = PROJECT_SOURCE;
   } else return;
-  const abs = path.resolve(v);
+  const abs = path.resolve(COMPLETION.expandHome(v)); // 1.25.1: SPEC_PROJECT_DIR=~/x too (a JSON config never expands it)
   const flag = src === "--project";
   let st = null;
   try { st = fs.statSync(abs); } catch { st = null; }

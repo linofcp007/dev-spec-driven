@@ -380,4 +380,30 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
       "1.24 r6 B9: bugfix's own usage; ears <missing file> says no such file (--json ok false; a feature name still works); create --question / --timebox name the flag and the spike command; a change's create note gives the CLI approve line on the CLI (spec_approve over MCP) (got " +
       JSON.stringify([bug.out.trim().slice(0, 80), ears.map((r) => r.out.trim().slice(0, 80)), q.out.trim().slice(0, 140), tb.out.trim().slice(0, 80), ch.out.slice(0, 400)]) + ")");
   }
+
+  // 1.25.1 (review 7) — the CLI's own options. A process with its own env and cwd: { out, stdout, code }.
+  const cliIn = (args, env, cwd) => {
+    const e = { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "", ...(env || {}) };
+    const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: e, cwd: cwd || tmp });
+    return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
+  };
+  const jsonOf = (s) => { try { return JSON.parse(s); } catch { return null; } };
+
+  // 1.25.1 r7 (3): --project ~/zz (and SPEC_PROJECT_DIR=~/zz) is the home folder's zz — Windows PowerShell 5.1 passes ~ as typed: it
+  // made a folder literally named "~" in the working folder.
+  {
+    const home = path.join(tmp, "r7-tilde-home"), cwd = path.join(tmp, "r7-tilde-cwd");
+    for (const d of [home, cwd]) fs.mkdirSync(d, { recursive: true });
+    const env = { HOME: home, USERPROFILE: home };
+    const init = cliIn(["init", "--project", "~/zz"], env, cwd);
+    const create = cliIn(["create", "Alpha", "core", "--project=~" + path.sep + "zz"], env, cwd);
+    const list = cliIn(["list", "--json"], { ...env, SPEC_PROJECT_DIR: "~/zz" }, cwd);
+    const missing = jsonOf(cliIn(["list", "--json", "--project", "~/nope"], env, cwd).stdout);
+    const C = require(path.join(__dirname, "completion.js"));
+    ok(init.code === 0 && fs.existsSync(path.join(home, "zz", ".specs", "steering")) && create.code === 0 && fs.existsSync(path.join(home, "zz", ".specs", "alpha")) &&
+      list.code === 0 && /"alpha"/.test(list.out) && fs.readdirSync(cwd).length === 0 && missing && missing.ok === false && missing.error.includes(path.join(home, "nope")) &&
+      C.expandHome("~user") === "~user",
+      "1.25.1 r7: --project ~/zz / --project=~\\zz / SPEC_PROJECT_DIR=~/zz are the home folder's zz (init, create, list) — no '~' folder in the working folder; a missing one names the expanded path (got " +
+      JSON.stringify([init.code, init.out.slice(0, 120), create.code, list.code, fs.readdirSync(cwd), missing]) + ")");
+  }
 };

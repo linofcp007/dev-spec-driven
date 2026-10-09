@@ -1293,6 +1293,24 @@ exports.run = async ({
         tasksBefore.split("\n").filter((l) => /^- \[ \] \d+\./.test(l)).length + 1, "1.25.1 r7: of those calls only the valid append wrote a task");
     }
 
+    { // 1.25.1 (review 7): a projectDir starting with ~ is the home folder (a JSON argument is never expanded; PowerShell 5.1 passes ~
+      // as typed) — "~/zz" made a folder literally named "~" in the server's cwd; the engine's resolveProjectDir expands it too (env)
+      const home = path.join(tmp, "proj-r7-home-tilde"), cwd = path.join(tmp, "proj-r7-tilde-cwd");
+      for (const d of [home, cwd]) fs.mkdirSync(d, { recursive: true });
+      const s = srv({ SPEC_PROJECT_DIR: null, CLAUDE_PROJECT_DIR: null, HOME: home, USERPROFILE: home }, cwd);
+      await s.init();
+      const made = await s.call("spec_init", { tracks: ["core"], projectDir: "~/zz" });
+      const back = await s.call("spec_create", { name: "alpha", tracks: ["core"], projectDir: "~" + path.sep + "zz" });
+      const listed = await s.call("spec_list", { projectDir: "~/zz" });
+      await s.stop();
+      const E = require("./lib/engine/index.js");
+      ok(made.ok !== false && same(made.specsDir, path.join(home, "zz", ".specs")) && back.ok && listed.features && listed.features.length === 1 &&
+        fs.readdirSync(cwd).length === 0 && E.expandHome("~user/x") === "~user/x" && E.expandHome("a/~") === "a/~" &&
+        same(E.expandHome("~"), require("os").homedir()),
+        "1.25.1 r7: projectDir ~/zz and ~\\zz name the home folder's zz (spec_init created it there, create / list found it) — nothing named '~' in the server's cwd; ~user and a later ~ stay as written (got " +
+        js([made.specsDir, back.ok, listed.features && listed.features.length, fs.readdirSync(cwd)]) + ")");
+    }
+
     { // 1.25.1 (review 7): the initialize instructions name spec_next_action (clients without the skill) and claim only what holds
       const ins = (await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })).result.instructions;
       ok(/spec_next_action \{name\}/.test(ins) && /where am I \/ what now/.test(ins) && !/All file ops are local to the project's \.specs\/ directory/.test(ins) &&
