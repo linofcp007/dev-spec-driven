@@ -60,7 +60,7 @@ first; how they came to be — the releases and review findings — is in Histor
 - **The CLI** (cli/commands.js): `branchGitFacts`, the engine, then `branchSwitch` runs `branch.args` through cli/git.js `gitRun`
   (+ `switched` / `created` / `current` / `error`), only onto a branch it creates or the feature's own. **Exit 1 whenever the
   feature does not end up on its branch** (no repository, the name taken, no git, `git switch` refused); the feature and the
-  record stay, so a re-run retries. `--branch` takes an OPTIONAL value (conventions.md → CLI); a track word as its spaced value
+  record stay, so a re-run retries. `--branch` takes an OPTIONAL value (conventions.md → CLI arguments); a track word as its spaced value
   (`create x --branch tdd`) is refused as ambiguous.
 - **The readers:** `spec_status` / `spec_next_action` / `spec_finish` carry `branch` (`branchView()`: + `current`, `exists`).
   next_action appends `branch.notOn` while HEAD is elsewhere and the phase is open — the step never changes. finish adds
