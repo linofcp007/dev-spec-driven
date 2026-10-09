@@ -13,6 +13,297 @@ let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
 
 // ===========================================================================
+// The artifact layouts' text (mcp/lib/i18n.js LAYOUTS renders it — the same structure in every language): what each
+// scaffold section SAYS, never which sections come, in what order or under which track / size. A value with a slot inside a
+// sentence is a function of it. pt-BR derives from the rendered pt scaffolds (toPtBr over each builder's whole output).
+// ===========================================================================
+const text = {
+  // trackDesignBlock — each built-in track's design sections, in order: [heading, guidance]. The layout writes "## <marker>
+  // <heading>" (the track's [SaaS] / [AI] … marker), this TODO line and the guidance; +tdd's Testability Notes take neither.
+  designTodo: "> **TODO** — replace with real values (remove this line when done).",
+  designBlocks: {
+    tdd: [
+      ["Testability Notes", `- **Seams:** [where test doubles inject]
+- **Determinism:** [clocks, randomness, IDs abstracted how]
+- **Side effects to isolate:** [network, fs, time, external services]
+- **Test data strategy:** [factories, fixtures, seeds]`],
+    ],
+    saas: [
+      ["Performance Budget", "- P50/P95/P99 latency targets · max DB query time · max memory/request · throughput target."],
+      ["Scale Design", "- Concurrent users (launch/6mo/2yr) · data growth · hot paths · caching (TTL+invalidation) · queue strategy · indexes · sharding."],
+      ["Multi-tenancy Model", "- Isolation (pooled/siloed/bridged) · how tenant_id is enforced · noisy-neighbor limits · export/delete (GDPR)."],
+      ["Observability", "- Metrics (name each) · structured logs (events+fields) · traces (spans) · alerts (metric→threshold→who) · dashboard panels."],
+      ["Cost Envelope", "- $/1000 users/month (compute/storage/network/3p) · cost-critical paths · cost metric + alert threshold."],
+    ],
+    ai: [
+      ["1. Model Strategy", "Primary / fallback model · features used · context-window usage · why not another model."],
+      ["2. Prompt Architecture", "System prompt · user template (variables) · few-shot source · versioning (prompts/vN.md, not inline)."],
+      ["3. Token Economics", "Typical in/out tokens · cost/call · cost/user action · cost/1000 users/month · regression threshold."],
+      ["4. Latency Budget", "Time to first token · total response time · end-to-end user-perceived latency."],
+      ["5. Eval Strategy", "Golden set · adversarial set · regression set · grading method · ship threshold · eval frequency."],
+      ["6. Safety & Abuse", "Injection defense · content moderation · jailbreak resistance · PII handling · rate limiting."],
+      ["7. Fallback & Degradation", "Provider outage · rate-limit hit · garbage output detection · cost circuit breaker."],
+      ["8. Observability for AI", "Per-call logging (prompt version, model, tokens, cost, latency, ids) · metrics · sampled prompts · traces · alerts."],
+      ["9. Model Lifecycle", "Pinned IDs · deprecation awareness · eval-gated migration plan · pin policy."],
+      ["10. Multi-modality (if applicable)", "Input types · size/count limits · token counting per type · validation pipeline."],
+    ],
+    sec: [
+      ["Threat Model", "- Assets · actors · trust boundaries · entry points · STRIDE per component / boundary (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) → mitigation · residual risk."],
+      ["Security Requirements", "- Target OWASP ASVS level (L1 / L2 / L3) and why · the ASVS controls and OWASP Top 10 risks in scope → how the design meets each."],
+      ["Authentication & Authorization", "- Who may do what (role / permission matrix) · authentication (session, token, MFA) · object-level checks, deny by default · session lifetime and revocation."],
+      ["Secrets & Key Management", "- Secrets the feature needs · where they live (a secret store — never code, logs or tickets) · rotation · encryption at rest / in transit and who owns the keys."],
+      ["Security Testing", "- SAST · dependency and secret scanning · DAST when exposed · one abuse-case test per material threat — all runnable locally before the merge."],
+    ],
+    privacy: [
+      ["Personal Data Inventory", "- Each personal data field · category (special categories — Art. 9 — flagged) · source · where it is stored · who can read it."],
+      ["Lawful Basis & Purpose", "- Purpose per processing activity · its lawful basis (Art. 6: consent, contract, legal obligation, vital interests, public task, legitimate interests) · how consent is recorded and withdrawn."],
+      ["Retention & Deletion", "- Retention period per data category and why · the deletion / anonymization job · backups and logs · legal holds."],
+      ["Data Subject Rights", "- Access · rectification · erasure · restriction · portability · objection — how each request is verified, served and answered within one month."],
+      ["Processors & International Transfers", "- Processors / sub-processors and their Art. 28 contracts · where the data is stored and processed · transfers outside the EEA and their safeguard (adequacy decision, standard contractual clauses)."],
+      ["DPIA (when required — Art. 35)", "- Required? (high risk: large-scale special categories, systematic monitoring, profiling with legal effects…) · if yes: risks → measures → residual risk; if not: why not."],
+    ],
+    dist: [
+      ["Consistency Model", "- What must be atomic (one transaction) · is ACID required, at which isolation level and why · where consistency is strong and where eventual · the staleness the business accepts · read-your-writes needs."],
+      ["Cross-system Writes", "- Every write that touches more than one system (DB + broker, DB + cache, DB + external API) → its mitigation: transactional outbox (+ relay / CDC), inbox, saga with compensations — or the risk explicitly accepted, and by whom."],
+      ["Delivery & Idempotency", "- Delivery guarantee (at-least-once) · idempotency keys or natural idempotency · deduplication (inbox table, unique constraint) · retry policy (exponential backoff + jitter, max attempts, what is never retried) · DLQ / poison messages · ordering needs."],
+      ["Concurrency", "- Race conditions on each shared record · optimistic (version column) or pessimistic (SELECT … FOR UPDATE) locking · unique constraints · isolation anomalies ruled out (lost update, write skew) · lock timeouts and deadlocks."],
+      ["Failure Modes", "- Partial failures and timeouts per dependency · what happens when each dependency is down (degrade, queue, fail fast) · network partitions: the CAP / PACELC trade-off chosen · recovery and reconciliation (replay, compensation, a reconciliation job)."],
+    ],
+    api: [
+      ["API Contract", "- Style (REST / GraphQL / gRPC) · resources and operations (method + path, or query / mutation / RPC) · request and response schemas · where the contract file lives (OpenAPI document, .proto files, GraphQL schema) — written first, reviewed before the handlers · auth scopes per operation."],
+      ["Versioning & Compatibility", "- Versioning strategy (URL / header / date) · what is a breaking change here (a removed or renamed field, a new required input, a changed type or status code, tighter validation) · additive-only changes within a version · deprecation: the Deprecation / Sunset headers, the notice period, how clients are told."],
+      ["Error Model", "- Error format: application/problem+json (RFC 9457 — type, title, status, detail, instance) · the stable error codes clients may branch on · validation errors per field · the status codes each operation returns · no stack trace or internal detail in a response."],
+      ["Pagination, Idempotency & Concurrency", "- Pagination: an opaque cursor with a stable order and a maximum page size (or offset, and why) · Idempotency-Key on non-idempotent creates (its scope, how long a key is kept, a reused key with another body → 422) · ETag / If-Match on updates (412 on a stale version) · long-running operations (202 + a status resource)."],
+      ["Rate Limits & Quotas", "- Limits per client / key / tenant and their windows · 429 with Retry-After and the RateLimit headers · quotas and how a client reads what it has left · what is exempt."],
+    ],
+    ui: [
+      ["Design System Usage", "- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours."],
+      ["UI States", "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept)."],
+      ["Accessibility", "- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass)."],
+      ["Responsiveness & i18n", "- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue."],
+      ["UI Performance Budget", "- Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users)."],
+    ],
+    obs: [
+      ["SLIs & SLOs", "- The user journeys that matter → their SLIs (availability, latency, correctness) · the SLO of each over a window (e.g. 99.5 % of valid requests under 800 ms, 28 days) · the error budget and what happens when it is spent · burn-rate alerts (fast and slow)."],
+      ["Telemetry", "- Metrics (RED per endpoint / USE per resource, one business counter; bounded label cardinality) · structured logs with a correlation / trace ID — no personal data · traces with the context propagated across calls and queues (OpenTelemetry) · the metrics each task emits."],
+      ["Alerting & Runbooks", "- Each alert: the symptom (an SLO burn, not a cause), threshold, severity and who is paged · every page links a runbook (triage, mitigate, verify) · what is a ticket, not a page · dashboards per journey."],
+      ["Rollout & Rollback", "- Feature flags (who owns each, when it is removed) · the canary / progressive rollout steps and the metrics that gate each step · rollback criteria (e.g. an error rate above the baseline) and how long a rollback takes · migrations that can be rolled back (expand / contract)."],
+      ["Health & Capacity", "- Liveness vs readiness checks (what each verifies — never a dependency in liveness) · the capacity signals (saturation, queue depth, pool usage) and their thresholds · the expected load and where the first bottleneck is."],
+    ],
+    data: [
+      ["Data Contracts & Schema Evolution", "- Each dataset produced or consumed: its producer, its consumers and the contract's owner · the schema (columns, types, nullability, keys, units) and where it lives (a schema file, a dbt model's YAML, a registry) · the compatibility rule (additive changes only; a removed or renamed column → a new version with a deprecation window) · how a breaking change is caught before it ships."],
+      ["Data Quality", "- The checks per dataset: not-null keys, uniqueness, accepted values and ranges, referential integrity, row-count and volume anomalies, freshness · where each runs (at ingestion, after each transformation, before publishing) · what a failure does (quarantine the rows, stop the load, alert the owner) — no bad row reaches a consumer silently."],
+      ["Pipeline Idempotency & Backfills", "- The unit of work (a partition: a day, an hour, a batch ID) and how a re-run replaces it (overwrite the partition or MERGE on a key — never a blind append) · late-arriving data: the lookback window and how late rows are merged · the backfill procedure (range, parallelism, cost, a dry run, who approves it) · large volumes: references/distributed-data-patterns.md."],
+      ["Lineage & Ownership", "- Sources → transformations → consumers (a lineage diagram or the dbt DAG) · the owner of each dataset and who is told when it breaks · the freshness SLA consumers rely on · the history each table keeps (slowly changing dimensions: type 1 overwrites, type 2 keeps versions)."],
+      ["Retention & Cost", "- Retention per dataset and storage tier (the raw zone vs the curated one; hot / warm / cold) — personal data follows references/privacy-track.md · partitioning and clustering so a query scans only what it needs · the expected storage and query cost per month and the alert when it drifts."],
+    ],
+  },
+  // trackTasks — each built-in track's template tasks (none for +tdd — it only adds markers): the story heading and each task's
+  // text, in the order of the layout's TRACK_TASK_PLAN (the criteria each task implements and makes green, its fixed markers).
+  trackTasks: {
+    saas: {
+      heading: "Story US-1 — Observability & Scale",
+      tasks: [
+        "Emit metrics, add dashboard, configure alerts",
+        "Load test — verify performance budget from design.md (hot path only)",
+        "Enforce tenant isolation — every query scoped by tenant_id",
+      ],
+    },
+    ai: {
+      heading: "Story US-1 — AI",
+      tasks: ["Prompt v1 + eval harness wiring (separate task per prompt change)", "Cost monitoring — emit cost metric + alert"],
+    },
+    sec: {
+      heading: "Story US-1 — Security",
+      tasks: [
+        "Threat model the feature (STRIDE per trust boundary); record each mitigation in design.md",
+        "Enforce authentication and object-level authorization on every endpoint (deny by default)",
+        "Keep secrets out of code, responses and logs — secret store + log redaction",
+        "Security testing — SAST, dependency audit and the abuse-case tests, runnable locally",
+      ],
+    },
+    privacy: {
+      heading: "Story US-1 — Privacy",
+      tasks: [
+        "Personal data inventory + lawful basis per purpose in design.md; update the privacy notice",
+        "Data subject requests — access/export and erasure end to end, across every store and processor",
+        "Retention — scheduled deletion/anonymization of records past their retention period",
+      ],
+    },
+    dist: {
+      heading: "Story US-1 — Data Consistency",
+      tasks: [
+        "Transactional outbox — write the outbox row in the same transaction as the state change; a relay (polling or CDC) publishes it and marks it sent",
+        "Idempotent consumer — an inbox / processed-message table keyed by the message ID, written in the same transaction as the effect",
+        "Concurrency control — a version column (optimistic locking) or a unique constraint; a conflict is an error, never a silent overwrite",
+        "Resilience — timeouts, retries with exponential backoff + jitter (never a non-idempotent call without a key), a DLQ, the degraded path when a dependency is down",
+        "Failure-injection tests — crash between the commit and the publish, duplicate delivery, concurrent updates, a dependency down — runnable locally",
+      ],
+    },
+    api: {
+      heading: "Story US-1 — API Contract",
+      tasks: [
+        "Contract first — the OpenAPI document / .proto files / GraphQL schema in the repo, reviewed before the handlers (the file is this task's Implements marker)",
+        "Error model — every error an application/problem+json body with a stable code; a validation error names each field",
+        "Idempotency and concurrency — an Idempotency-Key on creates (the stored response replayed), ETag / If-Match on updates (412 on a stale version)",
+        "Compatibility gate — a breaking-change diff of the contract against the published version, runnable locally; anything removed is deprecated with a Sunset date",
+        "Contract tests — the implementation checked against the contract (every documented status code, schema and header), runnable locally",
+      ],
+    },
+    ui: {
+      heading: "Story US-1 — User Interface",
+      tasks: [
+        "Build the view from design-system components and tokens — a new component only through the system (documented, reviewed)",
+        "UI states — loading, empty, error with Retry, partial, offline, permission denied, success — per the state matrix in design.md",
+        "Forms and keyboard — values kept on an error, errors in text with a summary, a logical focus order, a visible focus",
+        "Accessibility checks — an automated check (axe or equivalent) runnable locally + a manual keyboard and screen-reader pass (findings in the report)",
+        "Responsiveness, i18n and the performance budget — the breakpoints, text expansion, RTL, locale formats; LCP / INP / CLS within budget",
+      ],
+    },
+    obs: {
+      heading: "Story US-1 — Operability",
+      tasks: [
+        "SLIs, SLOs and burn-rate alerts — defined in code / config next to the service, each alert linked to its runbook",
+        "Telemetry — the metrics, structured logs with the correlation ID (no personal data) and trace spans the design names",
+        "Rollout — a feature flag and a canary / progressive rollout gated on the SLO metrics; automatic rollback on the criteria in design.md",
+        "Health checks — liveness and readiness endpoints (a dependency down → not ready, still live); capacity signals with thresholds",
+        "Operability tests — fault injection (a dependency down, a slow dependency), an alert firing in a staged failure, a rollback drill — runnable locally or in staging",
+      ],
+    },
+    data: {
+      heading: "Story US-1 — Data Pipeline",
+      tasks: [
+        "Data contract first — each dataset's schema (columns, types, nullability, keys), owner and compatibility rule in the repo, reviewed before the transformations",
+        "Data-quality checks — not-null, unique, accepted ranges, row counts and freshness at ingestion and before publishing; a failing row quarantined with its rule, never loaded",
+        "Idempotent loads — each run replaces its partition (overwrite or MERGE on a key, never a blind append); late-arriving rows merged within the lookback window",
+        "Backfill — the procedure for a date range (parallelism, cost, a dry run), rehearsed on one partition and compared with a single run",
+        "Lineage, ownership and retention — sources → transformations → consumers documented, an owner per dataset, the retention and partitioning from design.md applied",
+      ],
+    },
+  },
+  // requirements — the title, the Summary, then the user stories (size S: the one story) up to the core criteria; the active
+  // tracks' criteria (each under "#### <marker> <trackAcsHeading>", numbered and given its TEMPLATE_ACS ID by the layout); the rest.
+  requirements: {
+    title: (name) => `# Feature: ${name}`,
+    summary: "## Summary",
+    summarySlot: "[1-2 sentences: what this does and why it matters]",
+    stories: `## User Stories (prioritized — each independently testable)
+
+Priorities: **P1** = critical, a viable MVP on its own · **P2** = secondary · **P3** = enhancement.
+Each story must deliver standalone value if shipped alone.
+
+### US-1 (P1 — MVP): [Story Title]
+**As a** [role], **I want** [capability], **so that** [benefit].
+**Why P1:** [why this is the minimum viable slice]
+**Independent Test:** Can be fully tested by [specific action] and delivers [specific value], without the other stories.
+
+#### Acceptance Criteria (EARS)
+1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
+2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
+3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
+4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]`,
+    end: `### US-2 (P2): [Story Title]
+**As a** [role], **I want** [capability], **so that** [benefit].
+**Independent Test:** [how to test this alone]
+
+#### Acceptance Criteria (EARS)
+1. **US-2.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
+
+## Success Criteria (measurable, technology-agnostic)
+Outcomes the feature must achieve — business/UX, not implementation. Quantify each.
+- **SC-001** — [e.g., 90% of users complete [task] in under [N] seconds]
+- **SC-002** — [e.g., error rate on [flow] stays below [N]%]
+
+## Edge Cases & Error Handling
+- **EC-1** — [Scenario]: [Expected behavior]
+
+## Non-Functional Requirements
+- **NFR-1** — [measurable performance / security / accessibility constraint]
+
+## Out of Scope
+- [What this feature does NOT include]
+
+## Assumptions
+- [Anything assumed true that, if wrong, changes the spec]
+
+<!-- EARS: every AC contains SHALL/DEVE/DEBE and is testable; avoid vague terms; keep stable AC IDs.
+     Mark any ambiguity inline with a bracketed marker like  [NEEDS CLARIFICATION: which provider?] .
+     The design phase is gated — it cannot start while any such marker remains unresolved. -->
+`,
+    storyS: `## User Story
+
+### US-1 (P1 — MVP): [Story Title]
+**As a** [role], **I want** [capability], **so that** [benefit].
+**Independent Test:** Can be fully tested by [specific action] and delivers [specific value].
+
+#### Acceptance Criteria (EARS)
+1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
+2. **US-1.AC-2** — IF [error condition] THEN THE SYSTEM SHALL [recovery]`,
+    endS: `## Success Criteria (measurable, technology-agnostic)
+- **SC-001** — [e.g., 90% of users complete [task] in under [N] seconds]
+
+## Out of Scope
+- [What this feature does NOT include]
+
+<!-- Size S: one story. Every AC contains SHALL and is testable; keep stable AC IDs. Mark any ambiguity inline with a
+     bracketed marker like  [NEEDS CLARIFICATION: which provider?] . A second story, edge cases or NFRs mean size m. -->
+`,
+    trackAcsHeading: "Acceptance Criteria (EARS)",
+    trackAcs: {
+      saas: [
+        "WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT return any record whose tenant_id != A.",
+        "THE SYSTEM SHALL respond within [N]ms at P95.",
+      ],
+      ai: [
+        "THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.",
+        "IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.",
+        "THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size.",
+      ],
+      sec: [
+        "IF an unauthenticated request reaches a protected endpoint, THEN THE SYSTEM SHALL reject it with 401 and return no protected data.",
+        "IF an authenticated user requests a resource they are not authorized to access, THEN THE SYSTEM SHALL deny it with 403 and record a security audit event.",
+        "THE SYSTEM SHALL NOT include secrets, credentials, session tokens or stack traces in any response or log entry.",
+      ],
+      privacy: [
+        "WHEN a data subject requests a copy of their personal data, THE SYSTEM SHALL export it in a structured, machine-readable format within one month.",
+        "WHEN a data subject's erasure request is accepted, THE SYSTEM SHALL delete or irreversibly anonymize their personal data in every store within one month.",
+        "WHEN a record's retention period ends, THE SYSTEM SHALL delete or anonymize it.",
+      ],
+      dist: [
+        "IF publishing [the event] fails after the database transaction commits, THEN THE SYSTEM SHALL still deliver it later, at least once, without losing it (transactional outbox).",
+        "WHEN the same message is delivered more than once, THE SYSTEM SHALL apply its effect exactly once (idempotent consumer).",
+        "WHEN two requests update the same [entity] concurrently, THE SYSTEM SHALL NOT lose either update (optimistic locking or a unique constraint).",
+        "IF [the dependency] is unavailable, THEN THE SYSTEM SHALL [degrade / retry with exponential backoff and jitter] and SHALL NOT block [the critical path].",
+      ],
+      api: [
+        "IF a request omits [a required field] or sends it malformed, THEN THE SYSTEM SHALL respond 400 with an application/problem+json body that names the field and carries a stable error code.",
+        "WHEN a client repeats [a create request] with the same Idempotency-Key and body, THE SYSTEM SHALL return the first response without applying the effect again.",
+        "IF an update carries an If-Match ETag that no longer matches the resource, THEN THE SYSTEM SHALL respond 412 and leave the resource unchanged.",
+        "IF a change to the contract would break an existing client, THEN THE SYSTEM SHALL ship it only in a new [API version] and keep the current version working until its announced Sunset date.",
+      ],
+      ui: [
+        "WHEN a user operates [the view] with the keyboard alone, THE SYSTEM SHALL make every action reachable and operable in a logical focus order, with a visible focus indicator.",
+        "IF a submitted form has invalid fields, THEN THE SYSTEM SHALL keep every value the user entered, identify each error in text next to its field and move focus to an error summary.",
+        "WHILE [the list] has no items, THE SYSTEM SHALL show an empty state that explains why and offers the next action.",
+        "IF loading [the data] fails, THEN THE SYSTEM SHALL show an error message with a Retry action and keep the content already shown.",
+      ],
+      obs: [
+        "THE SYSTEM SHALL emit [the request metric] with its latency, outcome and a correlation ID for every [request], and log each error with that correlation ID and no personal data.",
+        "WHEN the error-budget burn rate of [the SLO] exceeds [14.4]× over [one hour], THE SYSTEM SHALL page the on-call engineer with a link to the runbook.",
+        "IF the canary's error rate exceeds [the baseline] by [N] percentage points, THEN THE SYSTEM SHALL stop the rollout and roll back to the previous version automatically.",
+        "WHILE [a dependency] is unavailable, THE SYSTEM SHALL report itself not ready (readiness check) while staying live, and recover without a restart once it is back.",
+      ],
+      data: [
+        "WHEN a batch contains a row that violates [a data-quality rule], THE SYSTEM SHALL quarantine that row with the rule it failed and SHALL NOT load it into [the target table].",
+        "IF the job is re-run for a partition that was already loaded, THEN THE SYSTEM SHALL produce the same result as a single run, with no duplicate and no missing rows (an idempotent re-run and backfill).",
+        "IF the newest data in [the table] is older than [its freshness SLA], THEN THE SYSTEM SHALL alert [the owner] and mark the table stale for its consumers.",
+        "WHEN the schema of [the source] changes, THE SYSTEM SHALL accept an additive, backward-compatible change and SHALL reject a breaking change (a removed or renamed column, a narrowed type) before any row reaches [the consumers].",
+      ],
+    },
+  },
+};
+
+// ===========================================================================
 // Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
 // internally consistent (every template AC planned and tasked) — the gates would otherwise flag the scaffold.
 // ===========================================================================
@@ -44,362 +335,6 @@ ${a.tracks.includes("saas") ? "\n## Hot Path?\n[Yes/No — if yes, load-test.md 
 
 ${a.summary ? "## Summary\n" + a.summary + "\n" : ""}`
       );
-    },
-
-    requirements(a) {
-      // Track criteria sit under [SaaS]/[AI] headings: inactive (not a gate, not a placeholder) once the track is off.
-      const saasAc = a.tracks.includes("saas")
-        ? "\n\n#### [SaaS] Acceptance Criteria (EARS)\n5. **US-1.AC-5** — WHEN a user from tenant A requests data, THE SYSTEM SHALL NOT return any record whose tenant_id != A.\n6. **US-1.AC-6** — THE SYSTEM SHALL respond within [N]ms at P95."
-        : "";
-      const aiAc = a.tracks.includes("ai")
-        ? "\n\n#### [AI] Acceptance Criteria (EARS)\n7. **US-1.AC-7** — THE SYSTEM SHALL produce outputs rated 'good or excellent' on at least [85]% of the golden eval set.\n8. **US-1.AC-8** — IF the input contains a prompt-injection attempt, THEN THE SYSTEM SHALL ignore the injected instruction and complete the original task.\n9. **US-1.AC-9** — THE SYSTEM SHALL cost at most $[0.03] per user request at P95 size."
-        : "";
-      const secAc = a.tracks.includes("sec")
-        ? "\n\n#### [SEC] Acceptance Criteria (EARS)\n10. **US-1.AC-10** — IF an unauthenticated request reaches a protected endpoint, THEN THE SYSTEM SHALL reject it with 401 and return no protected data.\n11. **US-1.AC-11** — IF an authenticated user requests a resource they are not authorized to access, THEN THE SYSTEM SHALL deny it with 403 and record a security audit event.\n12. **US-1.AC-12** — THE SYSTEM SHALL NOT include secrets, credentials, session tokens or stack traces in any response or log entry."
-        : "";
-      const privacyAc = a.tracks.includes("privacy")
-        ? "\n\n#### [PRIVACY] Acceptance Criteria (EARS)\n13. **US-1.AC-13** — WHEN a data subject requests a copy of their personal data, THE SYSTEM SHALL export it in a structured, machine-readable format within one month.\n14. **US-1.AC-14** — WHEN a data subject's erasure request is accepted, THE SYSTEM SHALL delete or irreversibly anonymize their personal data in every store within one month.\n15. **US-1.AC-15** — WHEN a record's retention period ends, THE SYSTEM SHALL delete or anonymize it."
-        : "";
-      const distAc = a.tracks.includes("dist")
-        ? "\n\n#### [DIST] Acceptance Criteria (EARS)\n16. **US-1.AC-16** — IF publishing [the event] fails after the database transaction commits, THEN THE SYSTEM SHALL still deliver it later, at least once, without losing it (transactional outbox).\n17. **US-1.AC-17** — WHEN the same message is delivered more than once, THE SYSTEM SHALL apply its effect exactly once (idempotent consumer).\n18. **US-1.AC-18** — WHEN two requests update the same [entity] concurrently, THE SYSTEM SHALL NOT lose either update (optimistic locking or a unique constraint).\n19. **US-1.AC-19** — IF [the dependency] is unavailable, THEN THE SYSTEM SHALL [degrade / retry with exponential backoff and jitter] and SHALL NOT block [the critical path]."
-        : "";
-      const apiAc = a.tracks.includes("api")
-        ? "\n\n#### [API] Acceptance Criteria (EARS)\n20. **US-1.AC-20** — IF a request omits [a required field] or sends it malformed, THEN THE SYSTEM SHALL respond 400 with an application/problem+json body that names the field and carries a stable error code.\n21. **US-1.AC-21** — WHEN a client repeats [a create request] with the same Idempotency-Key and body, THE SYSTEM SHALL return the first response without applying the effect again.\n22. **US-1.AC-22** — IF an update carries an If-Match ETag that no longer matches the resource, THEN THE SYSTEM SHALL respond 412 and leave the resource unchanged.\n23. **US-1.AC-23** — IF a change to the contract would break an existing client, THEN THE SYSTEM SHALL ship it only in a new [API version] and keep the current version working until its announced Sunset date."
-        : "";
-      const uiAc = a.tracks.includes("ui")
-        ? "\n\n#### [UI] Acceptance Criteria (EARS)\n24. **US-1.AC-24** — WHEN a user operates [the view] with the keyboard alone, THE SYSTEM SHALL make every action reachable and operable in a logical focus order, with a visible focus indicator.\n25. **US-1.AC-25** — IF a submitted form has invalid fields, THEN THE SYSTEM SHALL keep every value the user entered, identify each error in text next to its field and move focus to an error summary.\n26. **US-1.AC-26** — WHILE [the list] has no items, THE SYSTEM SHALL show an empty state that explains why and offers the next action.\n27. **US-1.AC-27** — IF loading [the data] fails, THEN THE SYSTEM SHALL show an error message with a Retry action and keep the content already shown."
-        : "";
-      const obsAc = a.tracks.includes("obs")
-        ? "\n\n#### [OBS] Acceptance Criteria (EARS)\n28. **US-1.AC-28** — THE SYSTEM SHALL emit [the request metric] with its latency, outcome and a correlation ID for every [request], and log each error with that correlation ID and no personal data.\n29. **US-1.AC-29** — WHEN the error-budget burn rate of [the SLO] exceeds [14.4]× over [one hour], THE SYSTEM SHALL page the on-call engineer with a link to the runbook.\n30. **US-1.AC-30** — IF the canary's error rate exceeds [the baseline] by [N] percentage points, THEN THE SYSTEM SHALL stop the rollout and roll back to the previous version automatically.\n31. **US-1.AC-31** — WHILE [a dependency] is unavailable, THE SYSTEM SHALL report itself not ready (readiness check) while staying live, and recover without a restart once it is back."
-        : "";
-      const dataAc = a.tracks.includes("data") // +data (1.21 F4)
-        ? "\n\n#### [DATA] Acceptance Criteria (EARS)\n32. **US-1.AC-32** — WHEN a batch contains a row that violates [a data-quality rule], THE SYSTEM SHALL quarantine that row with the rule it failed and SHALL NOT load it into [the target table].\n33. **US-1.AC-33** — IF the job is re-run for a partition that was already loaded, THEN THE SYSTEM SHALL produce the same result as a single run, with no duplicate and no missing rows (an idempotent re-run and backfill).\n34. **US-1.AC-34** — IF the newest data in [the table] is older than [its freshness SLA], THEN THE SYSTEM SHALL alert [the owner] and mark the table stale for its consumers.\n35. **US-1.AC-35** — WHEN the schema of [the source] changes, THE SYSTEM SHALL accept an additive, backward-compatible change and SHALL reject a breaking change (a removed or renamed column, a narrowed type) before any row reaches [the consumers]."
-        : "";
-      // 1.21 F5 — size S: one story, two core criteria (WHEN · IF…THEN), every track criterion kept; no US-2, edge-case, NFR or
-      // assumptions block (the IF…THEN criterion is the error path). M / L / no size: the full template below.
-      if (a.size === "s") {
-        return (
-`# Feature: ${a.name}
-
-## Summary
-${a.summary || "[1-2 sentences: what this does and why it matters]"}
-
-## User Story
-
-### US-1 (P1 — MVP): [Story Title]
-**As a** [role], **I want** [capability], **so that** [benefit].
-**Independent Test:** Can be fully tested by [specific action] and delivers [specific value].
-
-#### Acceptance Criteria (EARS)
-1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
-2. **US-1.AC-2** — IF [error condition] THEN THE SYSTEM SHALL [recovery]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}${dataAc}
-
-## Success Criteria (measurable, technology-agnostic)
-- **SC-001** — [e.g., 90% of users complete [task] in under [N] seconds]
-
-## Out of Scope
-- [What this feature does NOT include]
-
-<!-- Size S: one story. Every AC contains SHALL and is testable; keep stable AC IDs. Mark any ambiguity inline with a
-     bracketed marker like  [NEEDS CLARIFICATION: which provider?] . A second story, edge cases or NFRs mean size m. -->
-`
-        );
-      }
-      return (
-`# Feature: ${a.name}
-
-## Summary
-${a.summary || "[1-2 sentences: what this does and why it matters]"}
-
-## User Stories (prioritized — each independently testable)
-
-Priorities: **P1** = critical, a viable MVP on its own · **P2** = secondary · **P3** = enhancement.
-Each story must deliver standalone value if shipped alone.
-
-### US-1 (P1 — MVP): [Story Title]
-**As a** [role], **I want** [capability], **so that** [benefit].
-**Why P1:** [why this is the minimum viable slice]
-**Independent Test:** Can be fully tested by [specific action] and delivers [specific value], without the other stories.
-
-#### Acceptance Criteria (EARS)
-1. **US-1.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
-2. **US-1.AC-2** — WHILE [state], WHEN [trigger] THE SYSTEM SHALL [behavior]
-3. **US-1.AC-3** — IF [error condition] THEN THE SYSTEM SHALL [recovery]
-4. **US-1.AC-4** — [ubiquitous] THE SYSTEM SHALL [always-true property]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}${dataAc}
-
-### US-2 (P2): [Story Title]
-**As a** [role], **I want** [capability], **so that** [benefit].
-**Independent Test:** [how to test this alone]
-
-#### Acceptance Criteria (EARS)
-1. **US-2.AC-1** — WHEN [trigger] THE SYSTEM SHALL [behavior]
-
-## Success Criteria (measurable, technology-agnostic)
-Outcomes the feature must achieve — business/UX, not implementation. Quantify each.
-- **SC-001** — [e.g., 90% of users complete [task] in under [N] seconds]
-- **SC-002** — [e.g., error rate on [flow] stays below [N]%]
-
-## Edge Cases & Error Handling
-- **EC-1** — [Scenario]: [Expected behavior]
-
-## Non-Functional Requirements
-- **NFR-1** — [measurable performance / security / accessibility constraint]
-
-## Out of Scope
-- [What this feature does NOT include]
-
-## Assumptions
-- [Anything assumed true that, if wrong, changes the spec]
-
-<!-- EARS: every AC contains SHALL/DEVE/DEBE and is testable; avoid vague terms; keep stable AC IDs.
-     Mark any ambiguity inline with a bracketed marker like  [NEEDS CLARIFICATION: which provider?] .
-     The design phase is gated — it cannot start while any such marker remains unresolved. -->
-`
-      );
-    },
-
-    trackDesignBlock(track) {
-      if (track === "tdd") {
-        return `
-## Testability Notes
-- **Seams:** [where test doubles inject]
-- **Determinism:** [clocks, randomness, IDs abstracted how]
-- **Side effects to isolate:** [network, fs, time, external services]
-- **Test data strategy:** [factories, fixtures, seeds]
-`;
-      }
-      if (track === "saas") {
-        return `
-## [SaaS] Performance Budget
-> **TODO** — replace with real values (remove this line when done).
-- P50/P95/P99 latency targets · max DB query time · max memory/request · throughput target.
-
-## [SaaS] Scale Design
-> **TODO** — replace with real values (remove this line when done).
-- Concurrent users (launch/6mo/2yr) · data growth · hot paths · caching (TTL+invalidation) · queue strategy · indexes · sharding.
-
-## [SaaS] Multi-tenancy Model
-> **TODO** — replace with real values (remove this line when done).
-- Isolation (pooled/siloed/bridged) · how tenant_id is enforced · noisy-neighbor limits · export/delete (GDPR).
-
-## [SaaS] Observability
-> **TODO** — replace with real values (remove this line when done).
-- Metrics (name each) · structured logs (events+fields) · traces (spans) · alerts (metric→threshold→who) · dashboard panels.
-
-## [SaaS] Cost Envelope
-> **TODO** — replace with real values (remove this line when done).
-- $/1000 users/month (compute/storage/network/3p) · cost-critical paths · cost metric + alert threshold.
-`;
-      }
-      if (track === "ai") {
-        return `
-## [AI] 1. Model Strategy
-> **TODO** — replace with real values (remove this line when done).
-Primary / fallback model · features used · context-window usage · why not another model.
-
-## [AI] 2. Prompt Architecture
-> **TODO** — replace with real values (remove this line when done).
-System prompt · user template (variables) · few-shot source · versioning (prompts/vN.md, not inline).
-
-## [AI] 3. Token Economics
-> **TODO** — replace with real values (remove this line when done).
-Typical in/out tokens · cost/call · cost/user action · cost/1000 users/month · regression threshold.
-
-## [AI] 4. Latency Budget
-> **TODO** — replace with real values (remove this line when done).
-Time to first token · total response time · end-to-end user-perceived latency.
-
-## [AI] 5. Eval Strategy
-> **TODO** — replace with real values (remove this line when done).
-Golden set · adversarial set · regression set · grading method · ship threshold · eval frequency.
-
-## [AI] 6. Safety & Abuse
-> **TODO** — replace with real values (remove this line when done).
-Injection defense · content moderation · jailbreak resistance · PII handling · rate limiting.
-
-## [AI] 7. Fallback & Degradation
-> **TODO** — replace with real values (remove this line when done).
-Provider outage · rate-limit hit · garbage output detection · cost circuit breaker.
-
-## [AI] 8. Observability for AI
-> **TODO** — replace with real values (remove this line when done).
-Per-call logging (prompt version, model, tokens, cost, latency, ids) · metrics · sampled prompts · traces · alerts.
-
-## [AI] 9. Model Lifecycle
-> **TODO** — replace with real values (remove this line when done).
-Pinned IDs · deprecation awareness · eval-gated migration plan · pin policy.
-
-## [AI] 10. Multi-modality (if applicable)
-> **TODO** — replace with real values (remove this line when done).
-Input types · size/count limits · token counting per type · validation pipeline.
-`;
-      }
-      if (track === "sec") {
-        return `
-## [SEC] Threat Model
-> **TODO** — replace with real values (remove this line when done).
-- Assets · actors · trust boundaries · entry points · STRIDE per component / boundary (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) → mitigation · residual risk.
-
-## [SEC] Security Requirements
-> **TODO** — replace with real values (remove this line when done).
-- Target OWASP ASVS level (L1 / L2 / L3) and why · the ASVS controls and OWASP Top 10 risks in scope → how the design meets each.
-
-## [SEC] Authentication & Authorization
-> **TODO** — replace with real values (remove this line when done).
-- Who may do what (role / permission matrix) · authentication (session, token, MFA) · object-level checks, deny by default · session lifetime and revocation.
-
-## [SEC] Secrets & Key Management
-> **TODO** — replace with real values (remove this line when done).
-- Secrets the feature needs · where they live (a secret store — never code, logs or tickets) · rotation · encryption at rest / in transit and who owns the keys.
-
-## [SEC] Security Testing
-> **TODO** — replace with real values (remove this line when done).
-- SAST · dependency and secret scanning · DAST when exposed · one abuse-case test per material threat — all runnable locally before the merge.
-`;
-      }
-      if (track === "privacy") {
-        return `
-## [PRIVACY] Personal Data Inventory
-> **TODO** — replace with real values (remove this line when done).
-- Each personal data field · category (special categories — Art. 9 — flagged) · source · where it is stored · who can read it.
-
-## [PRIVACY] Lawful Basis & Purpose
-> **TODO** — replace with real values (remove this line when done).
-- Purpose per processing activity · its lawful basis (Art. 6: consent, contract, legal obligation, vital interests, public task, legitimate interests) · how consent is recorded and withdrawn.
-
-## [PRIVACY] Retention & Deletion
-> **TODO** — replace with real values (remove this line when done).
-- Retention period per data category and why · the deletion / anonymization job · backups and logs · legal holds.
-
-## [PRIVACY] Data Subject Rights
-> **TODO** — replace with real values (remove this line when done).
-- Access · rectification · erasure · restriction · portability · objection — how each request is verified, served and answered within one month.
-
-## [PRIVACY] Processors & International Transfers
-> **TODO** — replace with real values (remove this line when done).
-- Processors / sub-processors and their Art. 28 contracts · where the data is stored and processed · transfers outside the EEA and their safeguard (adequacy decision, standard contractual clauses).
-
-## [PRIVACY] DPIA (when required — Art. 35)
-> **TODO** — replace with real values (remove this line when done).
-- Required? (high risk: large-scale special categories, systematic monitoring, profiling with legal effects…) · if yes: risks → measures → residual risk; if not: why not.
-`;
-      }
-      if (track === "dist") {
-        return `
-## [DIST] Consistency Model
-> **TODO** — replace with real values (remove this line when done).
-- What must be atomic (one transaction) · is ACID required, at which isolation level and why · where consistency is strong and where eventual · the staleness the business accepts · read-your-writes needs.
-
-## [DIST] Cross-system Writes
-> **TODO** — replace with real values (remove this line when done).
-- Every write that touches more than one system (DB + broker, DB + cache, DB + external API) → its mitigation: transactional outbox (+ relay / CDC), inbox, saga with compensations — or the risk explicitly accepted, and by whom.
-
-## [DIST] Delivery & Idempotency
-> **TODO** — replace with real values (remove this line when done).
-- Delivery guarantee (at-least-once) · idempotency keys or natural idempotency · deduplication (inbox table, unique constraint) · retry policy (exponential backoff + jitter, max attempts, what is never retried) · DLQ / poison messages · ordering needs.
-
-## [DIST] Concurrency
-> **TODO** — replace with real values (remove this line when done).
-- Race conditions on each shared record · optimistic (version column) or pessimistic (SELECT … FOR UPDATE) locking · unique constraints · isolation anomalies ruled out (lost update, write skew) · lock timeouts and deadlocks.
-
-## [DIST] Failure Modes
-> **TODO** — replace with real values (remove this line when done).
-- Partial failures and timeouts per dependency · what happens when each dependency is down (degrade, queue, fail fast) · network partitions: the CAP / PACELC trade-off chosen · recovery and reconciliation (replay, compensation, a reconciliation job).
-`;
-      }
-      if (track === "api") {
-        return `
-## [API] API Contract
-> **TODO** — replace with real values (remove this line when done).
-- Style (REST / GraphQL / gRPC) · resources and operations (method + path, or query / mutation / RPC) · request and response schemas · where the contract file lives (OpenAPI document, .proto files, GraphQL schema) — written first, reviewed before the handlers · auth scopes per operation.
-
-## [API] Versioning & Compatibility
-> **TODO** — replace with real values (remove this line when done).
-- Versioning strategy (URL / header / date) · what is a breaking change here (a removed or renamed field, a new required input, a changed type or status code, tighter validation) · additive-only changes within a version · deprecation: the Deprecation / Sunset headers, the notice period, how clients are told.
-
-## [API] Error Model
-> **TODO** — replace with real values (remove this line when done).
-- Error format: application/problem+json (RFC 9457 — type, title, status, detail, instance) · the stable error codes clients may branch on · validation errors per field · the status codes each operation returns · no stack trace or internal detail in a response.
-
-## [API] Pagination, Idempotency & Concurrency
-> **TODO** — replace with real values (remove this line when done).
-- Pagination: an opaque cursor with a stable order and a maximum page size (or offset, and why) · Idempotency-Key on non-idempotent creates (its scope, how long a key is kept, a reused key with another body → 422) · ETag / If-Match on updates (412 on a stale version) · long-running operations (202 + a status resource).
-
-## [API] Rate Limits & Quotas
-> **TODO** — replace with real values (remove this line when done).
-- Limits per client / key / tenant and their windows · 429 with Retry-After and the RateLimit headers · quotas and how a client reads what it has left · what is exempt.
-`;
-      }
-      if (track === "ui") {
-        return `
-## [UI] Design System Usage
-> **TODO** — replace with real values (remove this line when done).
-- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours.
-
-## [UI] UI States
-> **TODO** — replace with real values (remove this line when done).
-- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).
-
-## [UI] Accessibility
-> **TODO** — replace with real values (remove this line when done).
-- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass).
-
-## [UI] Responsiveness & i18n
-> **TODO** — replace with real values (remove this line when done).
-- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue.
-
-## [UI] UI Performance Budget
-> **TODO** — replace with real values (remove this line when done).
-- Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users).
-`;
-      }
-      if (track === "obs") {
-        return `
-## [OBS] SLIs & SLOs
-> **TODO** — replace with real values (remove this line when done).
-- The user journeys that matter → their SLIs (availability, latency, correctness) · the SLO of each over a window (e.g. 99.5 % of valid requests under 800 ms, 28 days) · the error budget and what happens when it is spent · burn-rate alerts (fast and slow).
-
-## [OBS] Telemetry
-> **TODO** — replace with real values (remove this line when done).
-- Metrics (RED per endpoint / USE per resource, one business counter; bounded label cardinality) · structured logs with a correlation / trace ID — no personal data · traces with the context propagated across calls and queues (OpenTelemetry) · the metrics each task emits.
-
-## [OBS] Alerting & Runbooks
-> **TODO** — replace with real values (remove this line when done).
-- Each alert: the symptom (an SLO burn, not a cause), threshold, severity and who is paged · every page links a runbook (triage, mitigate, verify) · what is a ticket, not a page · dashboards per journey.
-
-## [OBS] Rollout & Rollback
-> **TODO** — replace with real values (remove this line when done).
-- Feature flags (who owns each, when it is removed) · the canary / progressive rollout steps and the metrics that gate each step · rollback criteria (e.g. an error rate above the baseline) and how long a rollback takes · migrations that can be rolled back (expand / contract).
-
-## [OBS] Health & Capacity
-> **TODO** — replace with real values (remove this line when done).
-- Liveness vs readiness checks (what each verifies — never a dependency in liveness) · the capacity signals (saturation, queue depth, pool usage) and their thresholds · the expected load and where the first bottleneck is.
-`;
-      }
-      if (track === "data") {
-        return `
-## [DATA] Data Contracts & Schema Evolution
-> **TODO** — replace with real values (remove this line when done).
-- Each dataset produced or consumed: its producer, its consumers and the contract's owner · the schema (columns, types, nullability, keys, units) and where it lives (a schema file, a dbt model's YAML, a registry) · the compatibility rule (additive changes only; a removed or renamed column → a new version with a deprecation window) · how a breaking change is caught before it ships.
-
-## [DATA] Data Quality
-> **TODO** — replace with real values (remove this line when done).
-- The checks per dataset: not-null keys, uniqueness, accepted values and ranges, referential integrity, row-count and volume anomalies, freshness · where each runs (at ingestion, after each transformation, before publishing) · what a failure does (quarantine the rows, stop the load, alert the owner) — no bad row reaches a consumer silently.
-
-## [DATA] Pipeline Idempotency & Backfills
-> **TODO** — replace with real values (remove this line when done).
-- The unit of work (a partition: a day, an hour, a batch ID) and how a re-run replaces it (overwrite the partition or MERGE on a key — never a blind append) · late-arriving data: the lookback window and how late rows are merged · the backfill procedure (range, parallelism, cost, a dry run, who approves it) · large volumes: references/distributed-data-patterns.md.
-
-## [DATA] Lineage & Ownership
-> **TODO** — replace with real values (remove this line when done).
-- Sources → transformations → consumers (a lineage diagram or the dbt DAG) · the owner of each dataset and who is told when it breaks · the freshness SLA consumers rely on · the history each table keeps (slowly changing dimensions: type 1 overwrites, type 2 keeps versions).
-
-## [DATA] Retention & Cost
-> **TODO** — replace with real values (remove this line when done).
-- Retention per dataset and storage tier (the raw zone vs the curated one; hot / warm / cold) — personal data follows references/privacy-track.md · partitioning and clustering so a query scans only what it needs · the expected storage and query cost per month and the alert when it drifts.
-`;
-      }
-      return "";
     },
 
     design(a) {
@@ -635,136 +570,6 @@ ${body}`
 
 ${phases}`
       );
-    },
-
-    // A track's template task block (none for +tdd — it only adds markers). Shared by tasks() and
-    // spec_add_track, so a feature escalated later gets the very same tasks. a = { track, start, green? } — green
-    // (templateTests) only on a greenfield +tdd scaffold, whose test plan holds those T-IDs.
-    trackTasks(a) {
-      let n = a.start - 1;
-      const id = () => ++n;
-      if (a.track === "saas") {
-        return `
-## Story US-1 — Observability & Scale
-- [ ] ${id()}. [US1] Emit metrics, add dashboard, configure alerts
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Load test — verify performance budget from design.md (hot path only)
-  - _Requirements: US-1.AC-6_${greenLine(a.green, "US-1.AC-6")}
-- [ ] ${id()}. [US1] Enforce tenant isolation — every query scoped by tenant_id
-  - _Requirements: US-1.AC-5_${greenLine(a.green, "US-1.AC-5")}
-`;
-      }
-      if (a.track === "ai") {
-        return `
-## Story US-1 — AI
-- [ ] ${id()}. [US1] Prompt v1 + eval harness wiring (separate task per prompt change)
-  - _Requirements: US-1.AC-7, US-1.AC-8_
-  - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
-- [ ] ${id()}. [US1] Cost monitoring — emit cost metric + alert
-  - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
-`;
-      }
-      if (a.track === "sec") {
-        return `
-## Story US-1 — Security
-- [ ] ${id()}. [US1] Threat model the feature (STRIDE per trust boundary); record each mitigation in design.md
-  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
-- [ ] ${id()}. [US1] Enforce authentication and object-level authorization on every endpoint (deny by default)
-  - _Requirements: US-1.AC-10, US-1.AC-11_${greenLine(a.green, "US-1.AC-10", "US-1.AC-11")}
-- [ ] ${id()}. [US1] Keep secrets out of code, responses and logs — secret store + log redaction
-  - _Requirements: US-1.AC-12_${greenLine(a.green, "US-1.AC-12")}
-- [ ] ${id()}. [US1] Security testing — SAST, dependency audit and the abuse-case tests, runnable locally
-  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
-`;
-      }
-      if (a.track === "privacy") {
-        return `
-## Story US-1 — Privacy
-- [ ] ${id()}. [US1] Personal data inventory + lawful basis per purpose in design.md; update the privacy notice
-  - _Requirements: US-1.AC-13, US-1.AC-14, US-1.AC-15_
-- [ ] ${id()}. [US1] Data subject requests — access/export and erasure end to end, across every store and processor
-  - _Requirements: US-1.AC-13, US-1.AC-14_${greenLine(a.green, "US-1.AC-13", "US-1.AC-14")}
-- [ ] ${id()}. [US1] Retention — scheduled deletion/anonymization of records past their retention period
-  - _Requirements: US-1.AC-15_${greenLine(a.green, "US-1.AC-15")}
-`;
-      }
-      if (a.track === "dist") {
-        return `
-## Story US-1 — Data Consistency
-- [ ] ${id()}. [US1] Transactional outbox — write the outbox row in the same transaction as the state change; a relay (polling or CDC) publishes it and marks it sent
-  - _Requirements: US-1.AC-16_${greenLine(a.green, "US-1.AC-16")}
-- [ ] ${id()}. [US1] Idempotent consumer — an inbox / processed-message table keyed by the message ID, written in the same transaction as the effect
-  - _Requirements: US-1.AC-17_${greenLine(a.green, "US-1.AC-17")}
-- [ ] ${id()}. [US1] Concurrency control — a version column (optimistic locking) or a unique constraint; a conflict is an error, never a silent overwrite
-  - _Requirements: US-1.AC-18_${greenLine(a.green, "US-1.AC-18")}
-- [ ] ${id()}. [US1] Resilience — timeouts, retries with exponential backoff + jitter (never a non-idempotent call without a key), a DLQ, the degraded path when a dependency is down
-  - _Requirements: US-1.AC-19_${greenLine(a.green, "US-1.AC-19")}
-- [ ] ${id()}. [US1] Failure-injection tests — crash between the commit and the publish, duplicate delivery, concurrent updates, a dependency down — runnable locally
-  - _Requirements: US-1.AC-16, US-1.AC-17, US-1.AC-18, US-1.AC-19_
-`;
-      }
-      if (a.track === "api") {
-        return `
-## Story US-1 — API Contract
-- [ ] ${id()}. [US1] Contract first — the OpenAPI document / .proto files / GraphQL schema in the repo, reviewed before the handlers (the file is this task's Implements marker)
-  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
-- [ ] ${id()}. [US1] Error model — every error an application/problem+json body with a stable code; a validation error names each field
-  - _Requirements: US-1.AC-20_${greenLine(a.green, "US-1.AC-20")}
-- [ ] ${id()}. [US1] Idempotency and concurrency — an Idempotency-Key on creates (the stored response replayed), ETag / If-Match on updates (412 on a stale version)
-  - _Requirements: US-1.AC-21, US-1.AC-22_${greenLine(a.green, "US-1.AC-21", "US-1.AC-22")}
-- [ ] ${id()}. [US1] Compatibility gate — a breaking-change diff of the contract against the published version, runnable locally; anything removed is deprecated with a Sunset date
-  - _Requirements: US-1.AC-23_${greenLine(a.green, "US-1.AC-23")}
-- [ ] ${id()}. [US1] Contract tests — the implementation checked against the contract (every documented status code, schema and header), runnable locally
-  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
-`;
-      }
-      if (a.track === "ui") {
-        return `
-## Story US-1 — User Interface
-- [ ] ${id()}. [US1] Build the view from design-system components and tokens — a new component only through the system (documented, reviewed)
-  - _Requirements: US-1.AC-24, US-1.AC-25, US-1.AC-26, US-1.AC-27_
-- [ ] ${id()}. [US1] UI states — loading, empty, error with Retry, partial, offline, permission denied, success — per the state matrix in design.md
-  - _Requirements: US-1.AC-26, US-1.AC-27_${greenLine(a.green, "US-1.AC-26", "US-1.AC-27")}
-- [ ] ${id()}. [US1] Forms and keyboard — values kept on an error, errors in text with a summary, a logical focus order, a visible focus
-  - _Requirements: US-1.AC-24, US-1.AC-25_${greenLine(a.green, "US-1.AC-24", "US-1.AC-25")}
-- [ ] ${id()}. [US1] Accessibility checks — an automated check (axe or equivalent) runnable locally + a manual keyboard and screen-reader pass (findings in the report)
-  - _Requirements: US-1.AC-24, US-1.AC-25_
-- [ ] ${id()}. [US1] Responsiveness, i18n and the performance budget — the breakpoints, text expansion, RTL, locale formats; LCP / INP / CLS within budget
-  - _Requirements: US-1.AC-24, US-1.AC-26, US-1.AC-27_
-`;
-      }
-      if (a.track === "obs") {
-        return `
-## Story US-1 — Operability
-- [ ] ${id()}. [US1] SLIs, SLOs and burn-rate alerts — defined in code / config next to the service, each alert linked to its runbook
-  - _Requirements: US-1.AC-29_${greenLine(a.green, "US-1.AC-29")}
-- [ ] ${id()}. [US1] Telemetry — the metrics, structured logs with the correlation ID (no personal data) and trace spans the design names
-  - _Requirements: US-1.AC-28_${greenLine(a.green, "US-1.AC-28")}
-  - _Emits metrics: requests_total, request_duration_seconds, errors_total_
-- [ ] ${id()}. [US1] Rollout — a feature flag and a canary / progressive rollout gated on the SLO metrics; automatic rollback on the criteria in design.md
-  - _Requirements: US-1.AC-30_${greenLine(a.green, "US-1.AC-30")}
-- [ ] ${id()}. [US1] Health checks — liveness and readiness endpoints (a dependency down → not ready, still live); capacity signals with thresholds
-  - _Requirements: US-1.AC-31_${greenLine(a.green, "US-1.AC-31")}
-- [ ] ${id()}. [US1] Operability tests — fault injection (a dependency down, a slow dependency), an alert firing in a staged failure, a rollback drill — runnable locally or in staging
-  - _Requirements: US-1.AC-28, US-1.AC-29, US-1.AC-30, US-1.AC-31_
-`;
-      }
-      if (a.track === "data") {
-        return `
-## Story US-1 — Data Pipeline
-- [ ] ${id()}. [US1] Data contract first — each dataset's schema (columns, types, nullability, keys), owner and compatibility rule in the repo, reviewed before the transformations
-  - _Requirements: US-1.AC-35_${greenLine(a.green, "US-1.AC-35")}
-- [ ] ${id()}. [US1] Data-quality checks — not-null, unique, accepted ranges, row counts and freshness at ingestion and before publishing; a failing row quarantined with its rule, never loaded
-  - _Requirements: US-1.AC-32, US-1.AC-34_${greenLine(a.green, "US-1.AC-32", "US-1.AC-34")}
-- [ ] ${id()}. [US1] Idempotent loads — each run replaces its partition (overwrite or MERGE on a key, never a blind append); late-arriving rows merged within the lookback window
-  - _Requirements: US-1.AC-33_${greenLine(a.green, "US-1.AC-33")}
-- [ ] ${id()}. [US1] Backfill — the procedure for a date range (parallelism, cost, a dry run), rehearsed on one partition and compared with a single run
-  - _Requirements: US-1.AC-33_
-- [ ] ${id()}. [US1] Lineage, ownership and retention — sources → transformations → consumers documented, an owner per dataset, the retention and partitioning from design.md applied
-  - _Requirements: US-1.AC-32, US-1.AC-33, US-1.AC-34, US-1.AC-35_
-`;
-      }
-      return "";
     },
 
     bugReport(a) {
@@ -3716,4 +3521,4 @@ const brief = {
     alreadyDone: (n) => `Task ${n} is already marked done.`,
   };
 
-module.exports = { build, steering, evalsReadme, msg, quality, designWeigh, brief, __link };
+module.exports = { text, build, steering, evalsReadme, msg, quality, designWeigh, brief, __link };

@@ -29,7 +29,8 @@
  * DATA_SECTIONS) and RE_* matchers in the engine.
  */
 
-const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli, FEATURE_SIZES } = require("./i18n/common.js");
+const { BASE_LANGS, LANGS, normalizeLang, canonicalLang, baseLang, templateTests, DEV_SPEC, DEV_SPEC_SCRIPT, cliPrefix, portableCli, FEATURE_SIZES,
+  TEMPLATE_ACS, MARKER_TRACK_ORDER, MARKER_TAG, greenLine } = require("./i18n/common.js");
 // The pt-BR derivation (i18n/pt-br.js) loads on its first use — a table's "pt-BR" entry, toPtBr, derivePtBr: a process
 // that never meets pt-BR (most hooks) doesn't load it.
 let PTBR = null;
@@ -69,6 +70,8 @@ const TABLES = [[BUILD, "build"], [STEERING, "steering"], [EVALS_README, "evalsR
 function loadLocale(l) {
   const blocks = require(LOCALE_FILES[l]);
   for (const [t, key] of TABLES) Object.defineProperty(t, l, { value: blocks[key], enumerable: true, configurable: true, writable: true });
+  // The artifact layouts, bound to this language's text: BUILD[l] holds them beside the builders the language writes whole.
+  for (const name of Object.keys(LAYOUTS)) BUILD[l][name] = (...args) => LAYOUTS[name](blocks.text, ...args);
   // The [SEC] / [PRIVACY] section display names live with their track's messages; every caller reads sectionNames.
   Object.assign(MSG[l].sectionNames, MSG[l].secPrivacy.sectionNames); // pt-BR derives from pt's merged table
   MSG[l].quality = QUALITY_MSG[l];
@@ -226,6 +229,66 @@ function renderRetro(T, P, m, fmt) {
     T.well, "", "- ", "", T.hurt, "", ...(sig.length ? [T.signals(sig.join("; "))] : []), "- ", "", T.amend, "", T.amendNote, "- ", "",
     T.followUps, "", T.followUpsNote, "- ", ""].join("\n");
 }
+
+// ===========================================================================
+// Artifact layouts (1.27) — the STRUCTURE every language's scaffolds share: which sections, in which order, under which
+// track or size; the IDs, markers, numbering and fixed annotation lines. A language's file holds only what they SAY: its
+// `text` block (strings — a function where a value sits inside a sentence). loadLocale binds each layout to a language's
+// text as BUILD[lang].<name>, beside the builders a language still writes whole (one template each, no structure to share);
+// pt-BR derives from pt's bound builders like from any other (toPtBr over each whole output). A structural change is made
+// here, once — the three language files no longer change together for it.
+// ===========================================================================
+const own = (o, k) => (o && typeof k === "string" && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined);
+// Each built-in track's template tasks (+tdd has none — it only adds markers), in order: the criteria each one implements
+// (US-1.AC-<n>, its _Requirements:_), whether a +tdd scaffold's tests make them green (_Makes green:_ — only on a greenfield
+// scaffold, whose test plan holds those T-IDs) and a fixed annotation before / after that line. The text of each task:
+// text.trackTasks[track].tasks, in this order.
+const TRACK_TASK_PLAN = {
+  saas: [{ ac: [6] }, { ac: [6], green: true }, { ac: [5], green: true }],
+  ai: [{ ac: [7, 8], before: "_Affects evals: golden, adversarial, regression_", green: true }, { ac: [9], green: true }],
+  sec: [{ ac: [10, 11, 12] }, { ac: [10, 11], green: true }, { ac: [12], green: true }, { ac: [10, 11, 12] }],
+  privacy: [{ ac: [13, 14, 15] }, { ac: [13, 14], green: true }, { ac: [15], green: true }],
+  dist: [{ ac: [16], green: true }, { ac: [17], green: true }, { ac: [18], green: true }, { ac: [19], green: true }, { ac: [16, 17, 18, 19] }],
+  api: [{ ac: [20, 21, 22, 23] }, { ac: [20], green: true }, { ac: [21, 22], green: true }, { ac: [23], green: true }, { ac: [20, 21, 22, 23] }],
+  ui: [{ ac: [24, 25, 26, 27] }, { ac: [26, 27], green: true }, { ac: [24, 25], green: true }, { ac: [24, 25] }, { ac: [24, 26, 27] }],
+  obs: [{ ac: [29], green: true }, { ac: [28], green: true, after: "_Emits metrics: requests_total, request_duration_seconds, errors_total_" },
+    { ac: [30], green: true }, { ac: [31], green: true }, { ac: [28, 29, 30, 31] }],
+  data: [{ ac: [35], green: true }, { ac: [32, 34], green: true }, { ac: [33], green: true }, { ac: [33] }, { ac: [32, 33, 34, 35] }],
+};
+const LAYOUTS = {
+  // requirements.md: the title and Summary, the user stories up to the core criteria (size S: one story, two criteria), then
+  // each active track's criteria under its marker's heading — inactive (not a gate, not a placeholder) once the track is off;
+  // they keep their TEMPLATE_ACS numbers at every size (US-1.AC-5…) — then the rest.
+  requirements(T, a) {
+    const R = T.requirements, s = a.size === "s";
+    const trackAcs = MARKER_TRACK_ORDER.filter((t) => a.tracks.includes(t)).map((t) => `\n\n#### ${MARKER_TAG[t]} ${R.trackAcsHeading}\n` +
+      TEMPLATE_ACS[t].map((id, i) => `${id.slice(id.lastIndexOf("-") + 1)}. **${id}** — ${R.trackAcs[t][i]}`).join("\n")).join("");
+    return `${R.title(a.name)}\n\n${R.summary}\n${a.summary || R.summarySlot}\n\n${s ? R.storyS : R.stories}${trackAcs}\n\n${s ? R.endS : R.end}`;
+  },
+
+  // One track's design sections (design() appends the active tracks'; spec_add_track writes one into an existing design.md):
+  // "## <marker> <heading>", the TODO line, the guidance. +tdd's Testability Notes: no marker, no TODO (notes, never a gate).
+  // Any other name (core, a track pack — packs.js renders those): "".
+  trackDesignBlock(T, track) {
+    const secs = own(T.designBlocks, track);
+    if (!secs) return "";
+    const tdd = track === "tdd";
+    return "\n" + secs.map(([heading, guidance]) => `## ${tdd ? "" : MARKER_TAG[track] + " "}${heading}\n${tdd ? "" : T.designTodo + "\n"}${guidance}\n`).join("\n");
+  },
+
+  // A track's template task block (TRACK_TASK_PLAN). Shared by tasks() and spec_add_track, so a feature escalated later gets
+  // the very same tasks. a = { track, start, green? } — green (templateTests) only on a greenfield +tdd scaffold.
+  trackTasks(T, a) {
+    const plan = own(TRACK_TASK_PLAN, a.track), text = own(T.trackTasks, a.track);
+    if (!plan || !text) return "";
+    let n = a.start - 1;
+    return `\n## ${text.heading}\n` + plan.map((t, i) => {
+      const ids = t.ac.map((x) => "US-1.AC-" + x);
+      return `- [ ] ${++n}. [US1] ${text.tasks[i]}\n  - _Requirements: ${ids.join(", ")}_` + (t.before ? "\n  - " + t.before : "") +
+        (t.green ? greenLine(a.green, ...ids) : "") + (t.after ? "\n  - " + t.after : "") + "\n";
+    }).join("");
+  },
+};
 
 // pt-BR (1.14 D1) — every table's pt-BR twin, derived lazily from pt (i18n/pt-br.js, loaded by the first read of one).
 const defineDerivedLocale = (table, raw, patch) => Object.defineProperty(table, "pt-BR", { enumerable: true, configurable: true,

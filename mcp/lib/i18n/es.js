@@ -13,6 +13,300 @@ let BUILD, MSG, renderRetro;
 function __link(T) { ({ BUILD, MSG, renderRetro } = T); }
 
 // ===========================================================================
+// The artifact layouts' text (mcp/lib/i18n.js LAYOUTS renders it — the same structure in every language): what each
+// scaffold section SAYS, never which sections come, in what order or under which track / size. A value with a slot inside a
+// sentence is a function of it. pt-BR derives from the rendered pt scaffolds (toPtBr over each builder's whole output).
+// ===========================================================================
+const text = {
+  // trackDesignBlock — each built-in track's design sections, in order: [heading, guidance]. The layout writes "## <marker>
+  // <heading>" (the track's [SaaS] / [AI] … marker), this TODO line and the guidance; +tdd's Testability Notes take neither.
+  designTodo: "> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).",
+  designBlocks: {
+    tdd: [
+      ["Notas de Testabilidad", `- **Costuras (seams):** [dónde inyectar test doubles]
+- **Determinismo:** [relojes, aleatoriedad, IDs abstraídos cómo]
+- **Efectos secundarios a aislar:** [red, fs, tiempo, servicios externos]
+- **Estrategia de datos de prueba:** [factories, fixtures, seeds]`],
+    ],
+    saas: [
+      ["Presupuesto de Rendimiento", "- Objetivos de latencia P50/P95/P99 · tiempo máx. de query · memoria máx./solicitud · objetivo de throughput."],
+      ["Diseño de Escala", "- Usuarios concurrentes (lanzamiento/6m/2a) · crecimiento de datos · rutas críticas · caching (TTL+invalidación) · estrategia de colas · índices · sharding."],
+      ["Modelo Multiinquilino", "- Aislamiento (pooled/siloed/bridged) · cómo se impone el tenant_id · límites noisy-neighbor · exportar/eliminar (GDPR)."],
+      ["Observabilidad", "- Métricas (nombrar cada una) · logs estructurados (eventos+campos) · traces (spans) · alertas (métrica→umbral→quién) · paneles de dashboard."],
+      ["Presupuesto de Coste", "- $/1000 usuarios/mes (cómputo/almacenamiento/red/3p) · rutas críticas de coste · métrica de coste + umbral de alerta."],
+    ],
+    ai: [
+      ["1. Estrategia de Modelo", "Modelo primario / fallback · funcionalidades usadas · uso de la ventana de contexto · por qué no otro modelo."],
+      ["2. Arquitectura de Prompt", "System prompt · plantilla de usuario (variables) · fuente de few-shot · versionado (prompts/vN.md, no inline)."],
+      ["3. Economía de Tokens", "Tokens típicos in/out · coste/llamada · coste/acción de usuario · coste/1000 usuarios/mes · umbral de regresión."],
+      ["4. Presupuesto de Latencia", "Tiempo hasta el primer token · tiempo total de respuesta · latencia percibida por el usuario end-to-end."],
+      ["5. Estrategia de Evaluación", "Conjunto golden · conjunto adversarial · conjunto de regresión · método de calificación · umbral para lanzar · frecuencia de evaluación."],
+      ["6. Seguridad y Abuso", "Defensa contra inyección · moderación de contenido · resistencia a jailbreak · manejo de PII · limitación de tasa."],
+      ["7. Fallback y Degradación", "Caída del proveedor · límite de tasa alcanzado · detección de output basura · circuit breaker de coste."],
+      ["8. Observabilidad de IA", "Logging por llamada (versión del prompt, modelo, tokens, coste, latencia, ids) · métricas · prompts muestreados · traces · alertas."],
+      ["9. Ciclo de Vida del Modelo", "IDs fijados · conciencia de descontinuación · plan de migración con gate de evaluación · política de fijación."],
+      ["10. Multimodalidad (si aplica)", "Tipos de entrada · límites de tamaño/cantidad · conteo de tokens por tipo · pipeline de validación."],
+    ],
+    sec: [
+      ["Modelo de Amenazas", "- Activos · actores · fronteras de confianza · puntos de entrada · STRIDE por componente / frontera (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) → mitigación · riesgo residual."],
+      ["Requisitos de Seguridad", "- Nivel OWASP ASVS objetivo (L1 / L2 / L3) y por qué · los controles ASVS y los riesgos del OWASP Top 10 en alcance → cómo los cumple el diseño."],
+      ["Autenticación y Autorización", "- Quién puede hacer qué (matriz de roles / permisos) · autenticación (sesión, token, MFA) · comprobación a nivel de objeto, denegar por defecto · duración y revocación de la sesión."],
+      ["Gestión de Secretos y Claves", "- Secretos que necesita la función · dónde viven (un almacén de secretos — nunca en el código, los logs ni los tickets) · rotación · cifrado en reposo / en tránsito y quién custodia las claves."],
+      ["Pruebas de Seguridad", "- SAST · análisis de dependencias y de secretos · DAST si está expuesto · una prueba de caso de abuso por amenaza relevante — todo ejecutable en local antes del merge."],
+    ],
+    privacy: [
+      ["Inventario de Datos Personales", "- Cada campo de datos personales · categoría (categorías especiales — art. 9 — señaladas) · origen · dónde se almacena · quién puede leerlo."],
+      ["Base Jurídica y Finalidad", "- Finalidad por actividad de tratamiento · su base jurídica (art. 6: consentimiento, contrato, obligación legal, intereses vitales, interés público, interés legítimo) · cómo se registra y se retira el consentimiento."],
+      ["Conservación y Supresión", "- Plazo de conservación por categoría de datos y por qué · el proceso de supresión / anonimización · copias de seguridad y logs · bloqueos por obligación legal."],
+      ["Derechos de los Interesados", "- Acceso · rectificación · supresión · limitación · portabilidad · oposición — cómo se verifica, atiende y responde cada solicitud en el plazo de un mes."],
+      ["Encargados del Tratamiento y Transferencias Internacionales", "- Encargados / subencargados y sus contratos (art. 28) · dónde se almacenan y tratan los datos · transferencias fuera del EEE y su garantía (decisión de adecuación, cláusulas contractuales tipo)."],
+      ["EIPD (cuando sea obligatoria — art. 35)", "- ¿Es obligatoria? (alto riesgo: categorías especiales a gran escala, observación sistemática, elaboración de perfiles con efectos jurídicos…) · si lo es: riesgos → medidas → riesgo residual; si no: por qué no."],
+    ],
+    dist: [
+      ["Modelo de Consistencia", "- Qué debe ser atómico (una transacción) · si se requiere ACID, con qué nivel de aislamiento y por qué · dónde la consistencia es fuerte y dónde eventual · el retraso que el negocio acepta · necesidades de leer las propias escrituras."],
+      ["Escrituras entre Sistemas", "- Cada escritura que toca más de un sistema (BD + broker, BD + caché, BD + API externa) → su mitigación: outbox transaccional (+ relay / CDC), inbox, saga con compensaciones — o el riesgo aceptado explícitamente, y por quién."],
+      ["Entrega e Idempotencia", "- Garantía de entrega (al menos una vez) · claves de idempotencia o idempotencia natural · deduplicación (tabla inbox, restricción de unicidad) · política de reintentos (retroceso exponencial + jitter, máximo de intentos, lo que nunca se reintenta) · DLQ / mensajes envenenados · necesidades de orden."],
+      ["Concurrencia", "- Condiciones de carrera en cada registro compartido · bloqueo optimista (columna de versión) o pesimista (SELECT … FOR UPDATE) · restricciones de unicidad · anomalías de aislamiento descartadas (actualización perdida, write skew) · tiempos de espera de bloqueo y deadlocks."],
+      ["Modos de Fallo", "- Fallos parciales y tiempos de espera por dependencia · qué ocurre cuando cada dependencia está caída (degradar, encolar, fallar rápido) · particiones de red: el compromiso CAP / PACELC elegido · recuperación y reconciliación (reprocesamiento, compensación, un proceso de reconciliación)."],
+    ],
+    api: [
+      ["Contrato de la API", "- Estilo (REST / GraphQL / gRPC) · recursos y operaciones (método + ruta, o query / mutation / RPC) · esquemas de petición y de respuesta · dónde está el fichero del contrato (documento OpenAPI, ficheros .proto, esquema GraphQL) — escrito primero, revisado antes de los handlers · scopes de autorización por operación."],
+      ["Versionado y Compatibilidad", "- Estrategia de versionado (URL / cabecera / fecha) · qué es aquí un cambio incompatible (un campo eliminado o renombrado, un nuevo dato obligatorio, un tipo o código de estado cambiado, una validación más estricta) · solo cambios aditivos dentro de una versión · obsolescencia: las cabeceras Deprecation / Sunset, el plazo de aviso, cómo se avisa a los clientes."],
+      ["Modelo de Errores", "- Formato de los errores: application/problem+json (RFC 9457 — type, title, status, detail, instance) · los códigos de error estables en los que los clientes pueden basarse · errores de validación por campo · los códigos de estado que devuelve cada operación · ningún stack trace ni detalle interno en una respuesta."],
+      ["Paginación, Idempotencia y Concurrencia", "- Paginación: un cursor opaco con orden estable y un tamaño máximo de página (u offset, y por qué) · Idempotency-Key en las creaciones no idempotentes (su ámbito, cuánto tiempo se guarda una clave, una clave reutilizada con otro cuerpo → 422) · ETag / If-Match en las actualizaciones (412 en una versión obsoleta) · operaciones largas (202 + un recurso de estado)."],
+      ["Límites de Tasa y Cuotas", "- Límites por cliente / clave / inquilino y sus ventanas · 429 con Retry-After y las cabeceras RateLimit · cuotas y cómo un cliente sabe cuánto le queda · qué queda exento."],
+    ],
+    ui: [
+      ["Uso del Design System", "- Los componentes del design system usados y los tokens (color, espaciado, tipografía) · cada componente nuevo: por qué no sirven los existentes y cómo entra en el sistema (documentado, revisado, en la biblioteca de componentes) · ningún estilo suelto ni color fijo en el código."],
+      ["Estados de la Interfaz", "- Por vista, una matriz de estados: cargando · vacío · error (con Reintentar) · parcial · sin conexión · sin permiso · éxito — qué ve y qué puede hacer el usuario en cada uno; validación de formularios (en el campo + un resumen, los valores conservados)."],
+      ["Accesibilidad", "- WCAG 2.2 AA: operable con el teclado y orden de foco visible · nombre / etiqueta en cada control · contraste (4,5:1 en el texto, 3:1 en la interfaz) · tamaño de los objetivos (24×24 px) · movimiento reducido · errores identificados en texto · cómo se prueba (una comprobación automática + una pasada manual con teclado y lector de pantalla)."],
+      ["Diseño Adaptable e i18n", "- Breakpoints y cómo se adapta el layout · expansión del texto (+30–40 %) · layouts de derecha a izquierda · formatos del locale (fechas, números, moneda) · todas las cadenas en el catálogo de traducciones."],
+      ["Presupuesto de Rendimiento de la Interfaz", "- Core Web Vitals en el percentil 75: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 · el presupuesto de JS / imágenes de esta vista · cómo se mide (laboratorio + usuarios reales)."],
+    ],
+    obs: [
+      ["SLIs y SLOs", "- Los recorridos de usuario que importan → sus SLIs (disponibilidad, latencia, corrección) · el SLO de cada uno en una ventana (p. ej., 99,5 % de las peticiones válidas por debajo de 800 ms, 28 días) · el presupuesto de errores y qué pasa cuando se agota · alertas por tasa de consumo (rápida y lenta)."],
+      ["Telemetría", "- Métricas (RED por endpoint / USE por recurso, un contador de negocio; cardinalidad de labels acotada) · logs estructurados con un ID de correlación / traza — sin datos personales · trazas con el contexto propagado entre llamadas y colas (OpenTelemetry) · las métricas que emite cada tarea."],
+      ["Alertas y Runbooks", "- Cada alerta: el síntoma (un consumo del SLO, no una causa), el umbral, la severidad y a quién se avisa · cada aviso enlaza un runbook (triaje, mitigación, verificación) · qué es un ticket y no un aviso · dashboards por recorrido."],
+      ["Despliegue y Reversión", "- Feature flags (quién es dueño de cada una, cuándo se retira) · los pasos del canario / despliegue progresivo y las métricas que deciden cada paso · criterios de reversión (p. ej., tasa de error por encima de la referencia) y cuánto tarda una reversión · migraciones reversibles (expand / contract)."],
+      ["Salud y Capacidad", "- Comprobaciones de vida frente a disponibilidad (qué verifica cada una — nunca una dependencia en la de vida) · las señales de capacidad (saturación, profundidad de colas, uso de pools) y sus umbrales · la carga esperada y dónde está el primer cuello de botella."],
+    ],
+    data: [
+      ["Contratos de Datos y Evolución del Esquema", "- Cada conjunto de datos producido o consumido: su productor, sus consumidores y el responsable del contrato · el esquema (columnas, tipos, nulabilidad, claves, unidades) y dónde vive (un fichero de esquema, el YAML de un modelo dbt, un registro de esquemas) · la regla de compatibilidad (solo cambios aditivos; una columna eliminada o renombrada → una versión nueva con un periodo de retirada) · cómo se detiene un cambio incompatible antes de publicarlo."],
+      ["Calidad de los Datos", "- Las comprobaciones por conjunto de datos: claves no nulas, unicidad, valores y rangos aceptados, integridad referencial, anomalías de recuento de filas y de volumen, frescura · dónde se ejecuta cada una (en la ingesta, tras cada transformación, antes de publicar) · qué hace un fallo (poner las filas en cuarentena, detener la carga, avisar al responsable) — ninguna fila errónea llega a un consumidor en silencio."],
+      ["Idempotencia del Pipeline y Backfills", "- La unidad de trabajo (una partición: un día, una hora, un ID de lote) y cómo la sustituye una reejecución (sobrescribir la partición o MERGE sobre una clave — nunca un append a ciegas) · datos que llegan tarde: la ventana de lookback y cómo se integran las filas tardías · el procedimiento de backfill (rango, paralelismo, coste, una ejecución de prueba, quién lo aprueba) · grandes volúmenes: references/distributed-data-patterns.md."],
+      ["Linaje y Responsables", "- Orígenes → transformaciones → consumidores (un diagrama de linaje o el DAG de dbt) · el responsable de cada conjunto de datos y a quién se avisa cuando falla · el SLA de frescura del que dependen los consumidores · el historial que guarda cada tabla (dimensiones lentamente cambiantes: el tipo 1 sobrescribe, el tipo 2 guarda versiones)."],
+      ["Retención y Coste", "- La retención por conjunto de datos y por nivel de almacenamiento (la zona bruta frente a la curada; caliente / templado / frío) — los datos personales siguen references/privacy-track.md · particionado y clustering para que una consulta lea solo lo que necesita · el coste esperado de almacenamiento y de consultas al mes y la alerta cuando se desvía."],
+    ],
+  },
+  // trackTasks — each built-in track's template tasks (none for +tdd — it only adds markers): the story heading and each task's
+  // text, in the order of the layout's TRACK_TASK_PLAN (the criteria each task implements and makes green, its fixed markers).
+  trackTasks: {
+    saas: {
+      heading: "Historia US-1 — Observabilidad y Escala",
+      tasks: [
+        "Emitir métricas, añadir dashboard, configurar alertas",
+        "Prueba de carga — verificar el presupuesto de rendimiento del design.md (solo ruta crítica)",
+        "Imponer el aislamiento de inquilino — toda query filtrada por tenant_id",
+      ],
+    },
+    ai: {
+      heading: "Historia US-1 — IA",
+      tasks: [
+        "Prompt v1 + conexión al harness de evaluación (tarea separada por cambio de prompt)",
+        "Monitorización de coste — emitir métrica de coste + alerta",
+      ],
+    },
+    sec: {
+      heading: "Historia US-1 — Seguridad",
+      tasks: [
+        "Modelar las amenazas de la función (STRIDE por frontera de confianza); registrar cada mitigación en el design.md",
+        "Imponer autenticación y autorización a nivel de objeto en todos los endpoints (denegar por defecto)",
+        "Mantener los secretos fuera del código, las respuestas y los logs — almacén de secretos + ocultación en los logs",
+        "Pruebas de seguridad — SAST, auditoría de dependencias y las pruebas de casos de abuso, ejecutables en local",
+      ],
+    },
+    privacy: {
+      heading: "Historia US-1 — Privacidad",
+      tasks: [
+        "Inventario de datos personales + base jurídica por finalidad en el design.md; actualizar la política de privacidad",
+        "Solicitudes de los interesados — acceso/exportación y supresión de extremo a extremo, en todos los almacenes y encargados",
+        "Conservación — supresión/anonimización programada de los registros con el plazo de conservación vencido",
+      ],
+    },
+    dist: {
+      heading: "Historia US-1 — Consistencia de Datos",
+      tasks: [
+        "Outbox transaccional — escribir la fila del outbox en la misma transacción que el cambio de estado; un relay (polling o CDC) la publica y la marca como enviada",
+        "Consumidor idempotente — una tabla inbox / de mensajes procesados con la clave en el ID del mensaje, escrita en la misma transacción que el efecto",
+        "Control de concurrencia — una columna de versión (bloqueo optimista) o una restricción de unicidad; un conflicto es un error, nunca una sobrescritura silenciosa",
+        "Resiliencia — tiempos de espera, reintentos con retroceso exponencial + jitter (nunca una llamada no idempotente sin clave), una DLQ, la ruta degradada cuando una dependencia está caída",
+        "Pruebas de inyección de fallos — caída entre el commit y la publicación, entrega duplicada, actualizaciones concurrentes, una dependencia caída — ejecutables localmente",
+      ],
+    },
+    api: {
+      heading: "Historia US-1 — Contrato de la API",
+      tasks: [
+        "Contrato primero — el documento OpenAPI / los ficheros .proto / el esquema GraphQL en el repositorio, revisado antes de los handlers (el fichero es el marcador Implements de esta tarea)",
+        "Modelo de errores — cada error un cuerpo application/problem+json con un código estable; un error de validación nombra cada campo",
+        "Idempotencia y concurrencia — una Idempotency-Key en las creaciones (se devuelve de nuevo la respuesta guardada), ETag / If-Match en las actualizaciones (412 en una versión obsoleta)",
+        "Barrera de compatibilidad — una comparación del contrato con la versión publicada que detecta cambios incompatibles, ejecutable en local; lo que se elimine queda obsoleto con una fecha de Sunset",
+        "Pruebas de contrato — la implementación verificada contra el contrato (cada código de estado, esquema y cabecera documentado), ejecutables en local",
+      ],
+    },
+    ui: {
+      heading: "Historia US-1 — Interfaz de Usuario",
+      tasks: [
+        "Construir la vista con componentes y tokens del design system — un componente nuevo solo a través del sistema (documentado, revisado)",
+        "Estados de la interfaz — cargando, vacío, error con Reintentar, parcial, sin conexión, sin permiso, éxito — según la matriz de estados de design.md",
+        "Formularios y teclado — valores conservados en un error, errores en texto con un resumen, orden de foco lógico, foco visible",
+        "Comprobaciones de accesibilidad — una comprobación automática (axe o equivalente) ejecutable en local + una pasada manual con teclado y lector de pantalla (los hallazgos en el informe)",
+        "Diseño adaptable, i18n y el presupuesto de rendimiento — los breakpoints, la expansión del texto, RTL, los formatos del locale; LCP / INP / CLS dentro del presupuesto",
+      ],
+    },
+    obs: {
+      heading: "Historia US-1 — Operabilidad",
+      tasks: [
+        "SLIs, SLOs y alertas por tasa de consumo — definidos en código / configuración junto al servicio, cada alerta enlazada a su runbook",
+        "Telemetría — las métricas, los logs estructurados con el ID de correlación (sin datos personales) y los spans de traza que indica el diseño",
+        "Despliegue — una feature flag y un canario / despliegue progresivo decidido por las métricas del SLO; reversión automática según los criterios de design.md",
+        "Comprobaciones de salud — endpoints de vida y de disponibilidad (una dependencia caída → no listo, sigue vivo); señales de capacidad con umbrales",
+        "Pruebas de operabilidad — inyección de fallos (una dependencia caída, una dependencia lenta), una alerta que salta en un fallo escenificado, un simulacro de reversión — ejecutables en local o en staging",
+      ],
+    },
+    data: {
+      heading: "Historia US-1 — Pipeline de Datos",
+      tasks: [
+        "Contrato de datos primero — el esquema de cada conjunto de datos (columnas, tipos, nulabilidad, claves), el responsable y la regla de compatibilidad en el repositorio, revisados antes de las transformaciones",
+        "Comprobaciones de calidad de datos — no nulos, únicos, rangos aceptados, recuentos de filas y frescura en la ingesta y antes de publicar; una fila que falla queda en cuarentena con su regla, nunca se carga",
+        "Cargas idempotentes — cada ejecución sustituye su partición (sobrescribir o MERGE sobre una clave, nunca un append a ciegas); filas tardías integradas dentro de la ventana de lookback",
+        "Backfill — el procedimiento para un rango de fechas (paralelismo, coste, una ejecución de prueba), ensayado en una partición y comparado con una sola ejecución",
+        "Linaje, responsables y retención — orígenes → transformaciones → consumidores documentados, un responsable por conjunto de datos, la retención y el particionado de design.md aplicados",
+      ],
+    },
+  },
+  // requirements — the title, the Summary, then the user stories (size S: the one story) up to the core criteria; the active
+  // tracks' criteria (each under "#### <marker> <trackAcsHeading>", numbered and given its TEMPLATE_ACS ID by the layout); the rest.
+  requirements: {
+    title: (name) => `# Función: ${name}`,
+    summary: "## Resumen",
+    summarySlot: "[1-2 frases: qué hace y por qué importa]",
+    stories: `## Historias de Usuario (priorizadas — cada una testeable de forma independiente)
+
+Prioridades: **P1** = crítica, un MVP viable por sí solo · **P2** = secundaria · **P3** = mejora.
+Cada historia debe entregar valor autónomo si se lanza sola.
+
+### US-1 (P1 — MVP): [Título de la Historia]
+**Como** [rol], **quiero** [capacidad], **para que** [beneficio].
+**Por qué P1:** [por qué es la porción mínima viable]
+**Prueba Independiente:** Puede testearse por completo mediante [acción específica] y entrega [valor específico], sin las demás historias.
+
+#### Criterios de Aceptación (EARS)
+1. **US-1.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
+2. **US-1.AC-2** — MIENTRAS [estado], CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
+3. **US-1.AC-3** — SI [condición de error] ENTONCES EL SISTEMA DEBE [recuperación]
+4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]`,
+    end: `### US-2 (P2): [Título de la Historia]
+**Como** [rol], **quiero** [capacidad], **para que** [beneficio].
+**Prueba Independiente:** [cómo testear esta sola]
+
+#### Criterios de Aceptación (EARS)
+1. **US-2.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
+
+## Criterios de Éxito (medibles, agnósticos a la tecnología)
+Resultados que la función debe lograr — negocio/UX, no implementación. Cuantifica cada uno.
+- **SC-001** — [p.ej., 90% de los usuarios completan [tarea] en menos de [N] segundos]
+- **SC-002** — [p.ej., la tasa de error en [flujo] se mantiene por debajo de [N]%]
+
+## Casos Límite y Manejo de Errores
+- **EC-1** — [Escenario]: [Comportamiento esperado]
+
+## Requisitos No Funcionales
+- **NFR-1** — [restricción medible de rendimiento / seguridad / accesibilidad]
+
+## Fuera de Alcance
+- [Lo que esta función NO incluye]
+
+## Supuestos
+- [Algo asumido como verdadero que, si es falso, cambia la spec]
+
+<!-- EARS: cada AC contiene SHALL/DEVE/DEBE y es testeable; evita términos vagos; mantén IDs de AC estables.
+     Marca cualquier ambigüedad inline con un marcador entre corchetes como  [NEEDS CLARIFICATION: ¿qué proveedor?] .
+     La fase de diseño está bloqueada — no puede empezar mientras quede un marcador de esos sin resolver. -->
+`,
+    storyS: `## Historia de Usuario
+
+### US-1 (P1 — MVP): [Título de la Historia]
+**Como** [rol], **quiero** [capacidad], **para que** [beneficio].
+**Prueba Independiente:** Puede testearse por completo mediante [acción específica] y entrega [valor específico].
+
+#### Criterios de Aceptación (EARS)
+1. **US-1.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
+2. **US-1.AC-2** — SI [condición de error] ENTONCES EL SISTEMA DEBE [recuperación]`,
+    endS: `## Criterios de Éxito (medibles, agnósticos a la tecnología)
+- **SC-001** — [p.ej., 90% de los usuarios completan [tarea] en menos de [N] segundos]
+
+## Fuera de Alcance
+- [Lo que esta función NO incluye]
+
+<!-- Tamaño S: una historia. Cada AC contiene DEBE y es testeable; mantén IDs de AC estables. Marca cualquier ambigüedad
+     inline con un marcador como  [NEEDS CLARIFICATION: ¿qué proveedor?] . Una segunda historia, casos límite o NFR = tamaño m. -->
+`,
+    trackAcsHeading: "Criterios de Aceptación (EARS)",
+    trackAcs: {
+      saas: [
+        "CUANDO un usuario del inquilino A solicita datos, EL SISTEMA NO DEBE devolver ningún registro cuyo tenant_id != A.",
+        "EL SISTEMA DEBE responder en [N]ms en P95.",
+      ],
+      ai: [
+        "EL SISTEMA DEBE producir salidas calificadas como 'buenas o excelentes' en al menos [85]% del conjunto de evaluación golden.",
+        "SI la entrada contiene un intento de inyección de prompt, ENTONCES EL SISTEMA DEBE ignorar la instrucción inyectada y completar la tarea original.",
+        "EL SISTEMA DEBE costar como máximo $[0.03] por solicitud de usuario en tamaño P95.",
+      ],
+      sec: [
+        "SI una solicitud no autenticada llega a un endpoint protegido, ENTONCES EL SISTEMA DEBE rechazarla con 401 y no devolver datos protegidos.",
+        "SI un usuario autenticado solicita un recurso al que no tiene autorización de acceso, ENTONCES EL SISTEMA DEBE denegarlo con 403 y registrar un evento de auditoría de seguridad.",
+        "EL SISTEMA NO DEBE incluir secretos, credenciales, tokens de sesión ni stack traces en ninguna respuesta ni entrada de log.",
+      ],
+      privacy: [
+        "CUANDO un interesado solicita una copia de sus datos personales, EL SISTEMA DEBE exportarlos en un formato estructurado y de lectura mecánica en el plazo de un mes.",
+        "CUANDO se acepta la solicitud de supresión de un interesado, EL SISTEMA DEBE eliminar o anonimizar de forma irreversible sus datos personales en todos los almacenes en el plazo de un mes.",
+        "CUANDO vence el plazo de conservación de un registro, EL SISTEMA DEBE eliminarlo o anonimizarlo.",
+      ],
+      dist: [
+        "SI la publicación [del evento] falla después del commit de la transacción en la base de datos, ENTONCES EL SISTEMA DEBE entregarlo más tarde, al menos una vez, sin perderlo (outbox transaccional).",
+        "CUANDO el mismo mensaje se entregue más de una vez, EL SISTEMA DEBE aplicar su efecto exactamente una vez (consumidor idempotente).",
+        "CUANDO dos solicitudes actualicen la misma [entidad] de forma concurrente, EL SISTEMA NO DEBE perder ninguna de las actualizaciones (bloqueo optimista o una restricción de unicidad).",
+        "SI [la dependencia] no está disponible, ENTONCES EL SISTEMA DEBE [degradarse / reintentar con retroceso exponencial y jitter] y NO DEBE bloquear [la ruta crítica].",
+      ],
+      api: [
+        "SI una petición omite [un campo obligatorio] o lo envía mal formado, ENTONCES EL SISTEMA DEBE responder 400 con un cuerpo application/problem+json que nombra el campo y lleva un código de error estable.",
+        "CUANDO un cliente repite [una petición de creación] con la misma Idempotency-Key y el mismo cuerpo, EL SISTEMA DEBE devolver la primera respuesta sin aplicar el efecto otra vez.",
+        "SI una actualización trae un ETag If-Match que ya no coincide con el recurso, ENTONCES EL SISTEMA DEBE responder 412 y dejar el recurso sin cambios.",
+        "SI un cambio en el contrato pudiera romper un cliente existente, ENTONCES EL SISTEMA DEBE publicarlo solo en una nueva [versión de la API] y mantener la versión actual en funcionamiento hasta su fecha de Sunset anunciada.",
+      ],
+      ui: [
+        "CUANDO un usuario maneja [la vista] solo con el teclado, EL SISTEMA DEBE hacer cada acción alcanzable y operable en un orden de foco lógico, con un indicador de foco visible.",
+        "SI un formulario enviado tiene campos no válidos, ENTONCES EL SISTEMA DEBE conservar todos los valores introducidos, identificar cada error en texto junto a su campo y mover el foco a un resumen de errores.",
+        "MIENTRAS [la lista] no tenga elementos, EL SISTEMA DEBE mostrar un estado vacío que explica por qué y ofrece la siguiente acción.",
+        "SI la carga [de los datos] falla, ENTONCES EL SISTEMA DEBE mostrar un mensaje de error con una acción Reintentar y conservar el contenido ya mostrado.",
+      ],
+      obs: [
+        "EL SISTEMA DEBE emitir [la métrica de la petición] con la latencia, el resultado y un ID de correlación para cada [petición], y registrar cada error con ese ID de correlación y sin datos personales.",
+        "CUANDO la tasa de consumo del presupuesto de errores [del SLO] supere [14,4]× durante [una hora], EL SISTEMA DEBE avisar a la persona de guardia (on-call) con un enlace al runbook.",
+        "SI la tasa de error del canario supera [la referencia] en [N] puntos porcentuales, ENTONCES EL SISTEMA DEBE detener el despliegue y revertir automáticamente a la versión anterior.",
+        "MIENTRAS [una dependencia] no esté disponible, EL SISTEMA DEBE indicar que no está listo (comprobación de disponibilidad) sin dejar de estar vivo, y recuperarse sin reinicio cuando vuelva.",
+      ],
+      data: [
+        "CUANDO un lote contenga una fila que incumpla [una regla de calidad de datos], EL SISTEMA DEBE poner esa fila en cuarentena con la regla que incumplió y NO DEBE cargarla en [la tabla de destino].",
+        "SI el job se vuelve a ejecutar para una partición ya cargada, ENTONCES EL SISTEMA DEBE producir el mismo resultado que una sola ejecución, sin filas duplicadas ni ausentes (una reejecución y un backfill idempotentes).",
+        "SI los datos más recientes de [la tabla] son más antiguos que [su SLA de frescura], ENTONCES EL SISTEMA DEBE avisar a [la persona responsable] y marcar la tabla como desactualizada para sus consumidores.",
+        "CUANDO cambie el esquema de [el origen], EL SISTEMA DEBE aceptar un cambio aditivo y retrocompatible y DEBE rechazar un cambio incompatible (una columna eliminada o renombrada, un tipo más restringido) antes de que ninguna fila llegue a [los consumidores].",
+      ],
+    },
+  },
+};
+
+// ===========================================================================
 // Artifact builders, one set per language. EN is the canonical reference; since 1.13 its templates are
 // internally consistent (every template AC planned and tasked) — the gates would otherwise flag the scaffold.
 // ===========================================================================
@@ -44,360 +338,6 @@ ${a.tracks.includes("saas") ? "\n## ¿Ruta Crítica?\n[Sí/No — si sí, load-t
 
 ${a.summary ? "## Resumen\n" + a.summary + "\n" : ""}`
       );
-    },
-
-    requirements(a) {
-      const saasAc = a.tracks.includes("saas")
-        ? "\n\n#### [SaaS] Criterios de Aceptación (EARS)\n5. **US-1.AC-5** — CUANDO un usuario del inquilino A solicita datos, EL SISTEMA NO DEBE devolver ningún registro cuyo tenant_id != A.\n6. **US-1.AC-6** — EL SISTEMA DEBE responder en [N]ms en P95."
-        : "";
-      const aiAc = a.tracks.includes("ai")
-        ? "\n\n#### [AI] Criterios de Aceptación (EARS)\n7. **US-1.AC-7** — EL SISTEMA DEBE producir salidas calificadas como 'buenas o excelentes' en al menos [85]% del conjunto de evaluación golden.\n8. **US-1.AC-8** — SI la entrada contiene un intento de inyección de prompt, ENTONCES EL SISTEMA DEBE ignorar la instrucción inyectada y completar la tarea original.\n9. **US-1.AC-9** — EL SISTEMA DEBE costar como máximo $[0.03] por solicitud de usuario en tamaño P95."
-        : "";
-      const secAc = a.tracks.includes("sec")
-        ? "\n\n#### [SEC] Criterios de Aceptación (EARS)\n10. **US-1.AC-10** — SI una solicitud no autenticada llega a un endpoint protegido, ENTONCES EL SISTEMA DEBE rechazarla con 401 y no devolver datos protegidos.\n11. **US-1.AC-11** — SI un usuario autenticado solicita un recurso al que no tiene autorización de acceso, ENTONCES EL SISTEMA DEBE denegarlo con 403 y registrar un evento de auditoría de seguridad.\n12. **US-1.AC-12** — EL SISTEMA NO DEBE incluir secretos, credenciales, tokens de sesión ni stack traces en ninguna respuesta ni entrada de log."
-        : "";
-      const privacyAc = a.tracks.includes("privacy")
-        ? "\n\n#### [PRIVACY] Criterios de Aceptación (EARS)\n13. **US-1.AC-13** — CUANDO un interesado solicita una copia de sus datos personales, EL SISTEMA DEBE exportarlos en un formato estructurado y de lectura mecánica en el plazo de un mes.\n14. **US-1.AC-14** — CUANDO se acepta la solicitud de supresión de un interesado, EL SISTEMA DEBE eliminar o anonimizar de forma irreversible sus datos personales en todos los almacenes en el plazo de un mes.\n15. **US-1.AC-15** — CUANDO vence el plazo de conservación de un registro, EL SISTEMA DEBE eliminarlo o anonimizarlo."
-        : "";
-      const distAc = a.tracks.includes("dist")
-        ? "\n\n#### [DIST] Criterios de Aceptación (EARS)\n16. **US-1.AC-16** — SI la publicación [del evento] falla después del commit de la transacción en la base de datos, ENTONCES EL SISTEMA DEBE entregarlo más tarde, al menos una vez, sin perderlo (outbox transaccional).\n17. **US-1.AC-17** — CUANDO el mismo mensaje se entregue más de una vez, EL SISTEMA DEBE aplicar su efecto exactamente una vez (consumidor idempotente).\n18. **US-1.AC-18** — CUANDO dos solicitudes actualicen la misma [entidad] de forma concurrente, EL SISTEMA NO DEBE perder ninguna de las actualizaciones (bloqueo optimista o una restricción de unicidad).\n19. **US-1.AC-19** — SI [la dependencia] no está disponible, ENTONCES EL SISTEMA DEBE [degradarse / reintentar con retroceso exponencial y jitter] y NO DEBE bloquear [la ruta crítica]."
-        : "";
-      const apiAc = a.tracks.includes("api")
-        ? "\n\n#### [API] Criterios de Aceptación (EARS)\n20. **US-1.AC-20** — SI una petición omite [un campo obligatorio] o lo envía mal formado, ENTONCES EL SISTEMA DEBE responder 400 con un cuerpo application/problem+json que nombra el campo y lleva un código de error estable.\n21. **US-1.AC-21** — CUANDO un cliente repite [una petición de creación] con la misma Idempotency-Key y el mismo cuerpo, EL SISTEMA DEBE devolver la primera respuesta sin aplicar el efecto otra vez.\n22. **US-1.AC-22** — SI una actualización trae un ETag If-Match que ya no coincide con el recurso, ENTONCES EL SISTEMA DEBE responder 412 y dejar el recurso sin cambios.\n23. **US-1.AC-23** — SI un cambio en el contrato pudiera romper un cliente existente, ENTONCES EL SISTEMA DEBE publicarlo solo en una nueva [versión de la API] y mantener la versión actual en funcionamiento hasta su fecha de Sunset anunciada."
-        : "";
-      const uiAc = a.tracks.includes("ui")
-        ? "\n\n#### [UI] Criterios de Aceptación (EARS)\n24. **US-1.AC-24** — CUANDO un usuario maneja [la vista] solo con el teclado, EL SISTEMA DEBE hacer cada acción alcanzable y operable en un orden de foco lógico, con un indicador de foco visible.\n25. **US-1.AC-25** — SI un formulario enviado tiene campos no válidos, ENTONCES EL SISTEMA DEBE conservar todos los valores introducidos, identificar cada error en texto junto a su campo y mover el foco a un resumen de errores.\n26. **US-1.AC-26** — MIENTRAS [la lista] no tenga elementos, EL SISTEMA DEBE mostrar un estado vacío que explica por qué y ofrece la siguiente acción.\n27. **US-1.AC-27** — SI la carga [de los datos] falla, ENTONCES EL SISTEMA DEBE mostrar un mensaje de error con una acción Reintentar y conservar el contenido ya mostrado."
-        : "";
-      const obsAc = a.tracks.includes("obs")
-        ? "\n\n#### [OBS] Criterios de Aceptación (EARS)\n28. **US-1.AC-28** — EL SISTEMA DEBE emitir [la métrica de la petición] con la latencia, el resultado y un ID de correlación para cada [petición], y registrar cada error con ese ID de correlación y sin datos personales.\n29. **US-1.AC-29** — CUANDO la tasa de consumo del presupuesto de errores [del SLO] supere [14,4]× durante [una hora], EL SISTEMA DEBE avisar a la persona de guardia (on-call) con un enlace al runbook.\n30. **US-1.AC-30** — SI la tasa de error del canario supera [la referencia] en [N] puntos porcentuales, ENTONCES EL SISTEMA DEBE detener el despliegue y revertir automáticamente a la versión anterior.\n31. **US-1.AC-31** — MIENTRAS [una dependencia] no esté disponible, EL SISTEMA DEBE indicar que no está listo (comprobación de disponibilidad) sin dejar de estar vivo, y recuperarse sin reinicio cuando vuelva."
-        : "";
-      const dataAc = a.tracks.includes("data") // +data (1.21 F4)
-        ? "\n\n#### [DATA] Criterios de Aceptación (EARS)\n32. **US-1.AC-32** — CUANDO un lote contenga una fila que incumpla [una regla de calidad de datos], EL SISTEMA DEBE poner esa fila en cuarentena con la regla que incumplió y NO DEBE cargarla en [la tabla de destino].\n33. **US-1.AC-33** — SI el job se vuelve a ejecutar para una partición ya cargada, ENTONCES EL SISTEMA DEBE producir el mismo resultado que una sola ejecución, sin filas duplicadas ni ausentes (una reejecución y un backfill idempotentes).\n34. **US-1.AC-34** — SI los datos más recientes de [la tabla] son más antiguos que [su SLA de frescura], ENTONCES EL SISTEMA DEBE avisar a [la persona responsable] y marcar la tabla como desactualizada para sus consumidores.\n35. **US-1.AC-35** — CUANDO cambie el esquema de [el origen], EL SISTEMA DEBE aceptar un cambio aditivo y retrocompatible y DEBE rechazar un cambio incompatible (una columna eliminada o renombrada, un tipo más restringido) antes de que ninguna fila llegue a [los consumidores]."
-        : "";
-      // 1.21 F5 — tamaño S (el EN es la referencia): una historia, dos criterios core (CUANDO · SI…ENTONCES), todos los de los tracks.
-      if (a.size === "s") {
-        return (
-`# Función: ${a.name}
-
-## Resumen
-${a.summary || "[1-2 frases: qué hace y por qué importa]"}
-
-## Historia de Usuario
-
-### US-1 (P1 — MVP): [Título de la Historia]
-**Como** [rol], **quiero** [capacidad], **para que** [beneficio].
-**Prueba Independiente:** Puede testearse por completo mediante [acción específica] y entrega [valor específico].
-
-#### Criterios de Aceptación (EARS)
-1. **US-1.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
-2. **US-1.AC-2** — SI [condición de error] ENTONCES EL SISTEMA DEBE [recuperación]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}${dataAc}
-
-## Criterios de Éxito (medibles, agnósticos a la tecnología)
-- **SC-001** — [p.ej., 90% de los usuarios completan [tarea] en menos de [N] segundos]
-
-## Fuera de Alcance
-- [Lo que esta función NO incluye]
-
-<!-- Tamaño S: una historia. Cada AC contiene DEBE y es testeable; mantén IDs de AC estables. Marca cualquier ambigüedad
-     inline con un marcador como  [NEEDS CLARIFICATION: ¿qué proveedor?] . Una segunda historia, casos límite o NFR = tamaño m. -->
-`
-        );
-      }
-      return (
-`# Función: ${a.name}
-
-## Resumen
-${a.summary || "[1-2 frases: qué hace y por qué importa]"}
-
-## Historias de Usuario (priorizadas — cada una testeable de forma independiente)
-
-Prioridades: **P1** = crítica, un MVP viable por sí solo · **P2** = secundaria · **P3** = mejora.
-Cada historia debe entregar valor autónomo si se lanza sola.
-
-### US-1 (P1 — MVP): [Título de la Historia]
-**Como** [rol], **quiero** [capacidad], **para que** [beneficio].
-**Por qué P1:** [por qué es la porción mínima viable]
-**Prueba Independiente:** Puede testearse por completo mediante [acción específica] y entrega [valor específico], sin las demás historias.
-
-#### Criterios de Aceptación (EARS)
-1. **US-1.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
-2. **US-1.AC-2** — MIENTRAS [estado], CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
-3. **US-1.AC-3** — SI [condición de error] ENTONCES EL SISTEMA DEBE [recuperación]
-4. **US-1.AC-4** — [ubicuo] EL SISTEMA DEBE [propiedad siempre verdadera]${saasAc}${aiAc}${secAc}${privacyAc}${distAc}${apiAc}${uiAc}${obsAc}${dataAc}
-
-### US-2 (P2): [Título de la Historia]
-**Como** [rol], **quiero** [capacidad], **para que** [beneficio].
-**Prueba Independiente:** [cómo testear esta sola]
-
-#### Criterios de Aceptación (EARS)
-1. **US-2.AC-1** — CUANDO [disparador] EL SISTEMA DEBE [comportamiento]
-
-## Criterios de Éxito (medibles, agnósticos a la tecnología)
-Resultados que la función debe lograr — negocio/UX, no implementación. Cuantifica cada uno.
-- **SC-001** — [p.ej., 90% de los usuarios completan [tarea] en menos de [N] segundos]
-- **SC-002** — [p.ej., la tasa de error en [flujo] se mantiene por debajo de [N]%]
-
-## Casos Límite y Manejo de Errores
-- **EC-1** — [Escenario]: [Comportamiento esperado]
-
-## Requisitos No Funcionales
-- **NFR-1** — [restricción medible de rendimiento / seguridad / accesibilidad]
-
-## Fuera de Alcance
-- [Lo que esta función NO incluye]
-
-## Supuestos
-- [Algo asumido como verdadero que, si es falso, cambia la spec]
-
-<!-- EARS: cada AC contiene SHALL/DEVE/DEBE y es testeable; evita términos vagos; mantén IDs de AC estables.
-     Marca cualquier ambigüedad inline con un marcador entre corchetes como  [NEEDS CLARIFICATION: ¿qué proveedor?] .
-     La fase de diseño está bloqueada — no puede empezar mientras quede un marcador de esos sin resolver. -->
-`
-      );
-    },
-
-    trackDesignBlock(track) {
-      if (track === "tdd") {
-        return `
-## Notas de Testabilidad
-- **Costuras (seams):** [dónde inyectar test doubles]
-- **Determinismo:** [relojes, aleatoriedad, IDs abstraídos cómo]
-- **Efectos secundarios a aislar:** [red, fs, tiempo, servicios externos]
-- **Estrategia de datos de prueba:** [factories, fixtures, seeds]
-`;
-      }
-      if (track === "saas") {
-        return `
-## [SaaS] Presupuesto de Rendimiento
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Objetivos de latencia P50/P95/P99 · tiempo máx. de query · memoria máx./solicitud · objetivo de throughput.
-
-## [SaaS] Diseño de Escala
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Usuarios concurrentes (lanzamiento/6m/2a) · crecimiento de datos · rutas críticas · caching (TTL+invalidación) · estrategia de colas · índices · sharding.
-
-## [SaaS] Modelo Multiinquilino
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Aislamiento (pooled/siloed/bridged) · cómo se impone el tenant_id · límites noisy-neighbor · exportar/eliminar (GDPR).
-
-## [SaaS] Observabilidad
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Métricas (nombrar cada una) · logs estructurados (eventos+campos) · traces (spans) · alertas (métrica→umbral→quién) · paneles de dashboard.
-
-## [SaaS] Presupuesto de Coste
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- $/1000 usuarios/mes (cómputo/almacenamiento/red/3p) · rutas críticas de coste · métrica de coste + umbral de alerta.
-`;
-      }
-      if (track === "ai") {
-        return `
-## [AI] 1. Estrategia de Modelo
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-Modelo primario / fallback · funcionalidades usadas · uso de la ventana de contexto · por qué no otro modelo.
-
-## [AI] 2. Arquitectura de Prompt
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-System prompt · plantilla de usuario (variables) · fuente de few-shot · versionado (prompts/vN.md, no inline).
-
-## [AI] 3. Economía de Tokens
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-Tokens típicos in/out · coste/llamada · coste/acción de usuario · coste/1000 usuarios/mes · umbral de regresión.
-
-## [AI] 4. Presupuesto de Latencia
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-Tiempo hasta el primer token · tiempo total de respuesta · latencia percibida por el usuario end-to-end.
-
-## [AI] 5. Estrategia de Evaluación
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-Conjunto golden · conjunto adversarial · conjunto de regresión · método de calificación · umbral para lanzar · frecuencia de evaluación.
-
-## [AI] 6. Seguridad y Abuso
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-Defensa contra inyección · moderación de contenido · resistencia a jailbreak · manejo de PII · limitación de tasa.
-
-## [AI] 7. Fallback y Degradación
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-Caída del proveedor · límite de tasa alcanzado · detección de output basura · circuit breaker de coste.
-
-## [AI] 8. Observabilidad de IA
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-Logging por llamada (versión del prompt, modelo, tokens, coste, latencia, ids) · métricas · prompts muestreados · traces · alertas.
-
-## [AI] 9. Ciclo de Vida del Modelo
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-IDs fijados · conciencia de descontinuación · plan de migración con gate de evaluación · política de fijación.
-
-## [AI] 10. Multimodalidad (si aplica)
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-Tipos de entrada · límites de tamaño/cantidad · conteo de tokens por tipo · pipeline de validación.
-`;
-      }
-      if (track === "sec") {
-        return `
-## [SEC] Modelo de Amenazas
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Activos · actores · fronteras de confianza · puntos de entrada · STRIDE por componente / frontera (Spoofing, Tampering, Repudiation, Information disclosure, Denial of service, Elevation of privilege) → mitigación · riesgo residual.
-
-## [SEC] Requisitos de Seguridad
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Nivel OWASP ASVS objetivo (L1 / L2 / L3) y por qué · los controles ASVS y los riesgos del OWASP Top 10 en alcance → cómo los cumple el diseño.
-
-## [SEC] Autenticación y Autorización
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Quién puede hacer qué (matriz de roles / permisos) · autenticación (sesión, token, MFA) · comprobación a nivel de objeto, denegar por defecto · duración y revocación de la sesión.
-
-## [SEC] Gestión de Secretos y Claves
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Secretos que necesita la función · dónde viven (un almacén de secretos — nunca en el código, los logs ni los tickets) · rotación · cifrado en reposo / en tránsito y quién custodia las claves.
-
-## [SEC] Pruebas de Seguridad
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- SAST · análisis de dependencias y de secretos · DAST si está expuesto · una prueba de caso de abuso por amenaza relevante — todo ejecutable en local antes del merge.
-`;
-      }
-      if (track === "privacy") {
-        return `
-## [PRIVACY] Inventario de Datos Personales
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Cada campo de datos personales · categoría (categorías especiales — art. 9 — señaladas) · origen · dónde se almacena · quién puede leerlo.
-
-## [PRIVACY] Base Jurídica y Finalidad
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Finalidad por actividad de tratamiento · su base jurídica (art. 6: consentimiento, contrato, obligación legal, intereses vitales, interés público, interés legítimo) · cómo se registra y se retira el consentimiento.
-
-## [PRIVACY] Conservación y Supresión
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Plazo de conservación por categoría de datos y por qué · el proceso de supresión / anonimización · copias de seguridad y logs · bloqueos por obligación legal.
-
-## [PRIVACY] Derechos de los Interesados
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Acceso · rectificación · supresión · limitación · portabilidad · oposición — cómo se verifica, atiende y responde cada solicitud en el plazo de un mes.
-
-## [PRIVACY] Encargados del Tratamiento y Transferencias Internacionales
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Encargados / subencargados y sus contratos (art. 28) · dónde se almacenan y tratan los datos · transferencias fuera del EEE y su garantía (decisión de adecuación, cláusulas contractuales tipo).
-
-## [PRIVACY] EIPD (cuando sea obligatoria — art. 35)
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- ¿Es obligatoria? (alto riesgo: categorías especiales a gran escala, observación sistemática, elaboración de perfiles con efectos jurídicos…) · si lo es: riesgos → medidas → riesgo residual; si no: por qué no.
-`;
-      }
-      if (track === "dist") {
-        return `
-## [DIST] Modelo de Consistencia
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Qué debe ser atómico (una transacción) · si se requiere ACID, con qué nivel de aislamiento y por qué · dónde la consistencia es fuerte y dónde eventual · el retraso que el negocio acepta · necesidades de leer las propias escrituras.
-
-## [DIST] Escrituras entre Sistemas
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Cada escritura que toca más de un sistema (BD + broker, BD + caché, BD + API externa) → su mitigación: outbox transaccional (+ relay / CDC), inbox, saga con compensaciones — o el riesgo aceptado explícitamente, y por quién.
-
-## [DIST] Entrega e Idempotencia
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Garantía de entrega (al menos una vez) · claves de idempotencia o idempotencia natural · deduplicación (tabla inbox, restricción de unicidad) · política de reintentos (retroceso exponencial + jitter, máximo de intentos, lo que nunca se reintenta) · DLQ / mensajes envenenados · necesidades de orden.
-
-## [DIST] Concurrencia
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Condiciones de carrera en cada registro compartido · bloqueo optimista (columna de versión) o pesimista (SELECT … FOR UPDATE) · restricciones de unicidad · anomalías de aislamiento descartadas (actualización perdida, write skew) · tiempos de espera de bloqueo y deadlocks.
-
-## [DIST] Modos de Fallo
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Fallos parciales y tiempos de espera por dependencia · qué ocurre cuando cada dependencia está caída (degradar, encolar, fallar rápido) · particiones de red: el compromiso CAP / PACELC elegido · recuperación y reconciliación (reprocesamiento, compensación, un proceso de reconciliación).
-`;
-      }
-      if (track === "api") {
-        return `
-## [API] Contrato de la API
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Estilo (REST / GraphQL / gRPC) · recursos y operaciones (método + ruta, o query / mutation / RPC) · esquemas de petición y de respuesta · dónde está el fichero del contrato (documento OpenAPI, ficheros .proto, esquema GraphQL) — escrito primero, revisado antes de los handlers · scopes de autorización por operación.
-
-## [API] Versionado y Compatibilidad
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Estrategia de versionado (URL / cabecera / fecha) · qué es aquí un cambio incompatible (un campo eliminado o renombrado, un nuevo dato obligatorio, un tipo o código de estado cambiado, una validación más estricta) · solo cambios aditivos dentro de una versión · obsolescencia: las cabeceras Deprecation / Sunset, el plazo de aviso, cómo se avisa a los clientes.
-
-## [API] Modelo de Errores
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Formato de los errores: application/problem+json (RFC 9457 — type, title, status, detail, instance) · los códigos de error estables en los que los clientes pueden basarse · errores de validación por campo · los códigos de estado que devuelve cada operación · ningún stack trace ni detalle interno en una respuesta.
-
-## [API] Paginación, Idempotencia y Concurrencia
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Paginación: un cursor opaco con orden estable y un tamaño máximo de página (u offset, y por qué) · Idempotency-Key en las creaciones no idempotentes (su ámbito, cuánto tiempo se guarda una clave, una clave reutilizada con otro cuerpo → 422) · ETag / If-Match en las actualizaciones (412 en una versión obsoleta) · operaciones largas (202 + un recurso de estado).
-
-## [API] Límites de Tasa y Cuotas
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Límites por cliente / clave / inquilino y sus ventanas · 429 con Retry-After y las cabeceras RateLimit · cuotas y cómo un cliente sabe cuánto le queda · qué queda exento.
-`;
-      }
-      if (track === "ui") {
-        return `
-## [UI] Uso del Design System
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Los componentes del design system usados y los tokens (color, espaciado, tipografía) · cada componente nuevo: por qué no sirven los existentes y cómo entra en el sistema (documentado, revisado, en la biblioteca de componentes) · ningún estilo suelto ni color fijo en el código.
-
-## [UI] Estados de la Interfaz
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Por vista, una matriz de estados: cargando · vacío · error (con Reintentar) · parcial · sin conexión · sin permiso · éxito — qué ve y qué puede hacer el usuario en cada uno; validación de formularios (en el campo + un resumen, los valores conservados).
-
-## [UI] Accesibilidad
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- WCAG 2.2 AA: operable con el teclado y orden de foco visible · nombre / etiqueta en cada control · contraste (4,5:1 en el texto, 3:1 en la interfaz) · tamaño de los objetivos (24×24 px) · movimiento reducido · errores identificados en texto · cómo se prueba (una comprobación automática + una pasada manual con teclado y lector de pantalla).
-
-## [UI] Diseño Adaptable e i18n
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Breakpoints y cómo se adapta el layout · expansión del texto (+30–40 %) · layouts de derecha a izquierda · formatos del locale (fechas, números, moneda) · todas las cadenas en el catálogo de traducciones.
-
-## [UI] Presupuesto de Rendimiento de la Interfaz
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Core Web Vitals en el percentil 75: LCP ≤ 2,5 s, INP ≤ 200 ms, CLS ≤ 0,1 · el presupuesto de JS / imágenes de esta vista · cómo se mide (laboratorio + usuarios reales).
-`;
-      }
-      if (track === "obs") {
-        return `
-## [OBS] SLIs y SLOs
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Los recorridos de usuario que importan → sus SLIs (disponibilidad, latencia, corrección) · el SLO de cada uno en una ventana (p. ej., 99,5 % de las peticiones válidas por debajo de 800 ms, 28 días) · el presupuesto de errores y qué pasa cuando se agota · alertas por tasa de consumo (rápida y lenta).
-
-## [OBS] Telemetría
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Métricas (RED por endpoint / USE por recurso, un contador de negocio; cardinalidad de labels acotada) · logs estructurados con un ID de correlación / traza — sin datos personales · trazas con el contexto propagado entre llamadas y colas (OpenTelemetry) · las métricas que emite cada tarea.
-
-## [OBS] Alertas y Runbooks
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Cada alerta: el síntoma (un consumo del SLO, no una causa), el umbral, la severidad y a quién se avisa · cada aviso enlaza un runbook (triaje, mitigación, verificación) · qué es un ticket y no un aviso · dashboards por recorrido.
-
-## [OBS] Despliegue y Reversión
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Feature flags (quién es dueño de cada una, cuándo se retira) · los pasos del canario / despliegue progresivo y las métricas que deciden cada paso · criterios de reversión (p. ej., tasa de error por encima de la referencia) y cuánto tarda una reversión · migraciones reversibles (expand / contract).
-
-## [OBS] Salud y Capacidad
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Comprobaciones de vida frente a disponibilidad (qué verifica cada una — nunca una dependencia en la de vida) · las señales de capacidad (saturación, profundidad de colas, uso de pools) y sus umbrales · la carga esperada y dónde está el primer cuello de botella.
-`;
-      }
-      if (track === "data") {
-        return `
-## [DATA] Contratos de Datos y Evolución del Esquema
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Cada conjunto de datos producido o consumido: su productor, sus consumidores y el responsable del contrato · el esquema (columnas, tipos, nulabilidad, claves, unidades) y dónde vive (un fichero de esquema, el YAML de un modelo dbt, un registro de esquemas) · la regla de compatibilidad (solo cambios aditivos; una columna eliminada o renombrada → una versión nueva con un periodo de retirada) · cómo se detiene un cambio incompatible antes de publicarlo.
-
-## [DATA] Calidad de los Datos
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Las comprobaciones por conjunto de datos: claves no nulas, unicidad, valores y rangos aceptados, integridad referencial, anomalías de recuento de filas y de volumen, frescura · dónde se ejecuta cada una (en la ingesta, tras cada transformación, antes de publicar) · qué hace un fallo (poner las filas en cuarentena, detener la carga, avisar al responsable) — ninguna fila errónea llega a un consumidor en silencio.
-
-## [DATA] Idempotencia del Pipeline y Backfills
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- La unidad de trabajo (una partición: un día, una hora, un ID de lote) y cómo la sustituye una reejecución (sobrescribir la partición o MERGE sobre una clave — nunca un append a ciegas) · datos que llegan tarde: la ventana de lookback y cómo se integran las filas tardías · el procedimiento de backfill (rango, paralelismo, coste, una ejecución de prueba, quién lo aprueba) · grandes volúmenes: references/distributed-data-patterns.md.
-
-## [DATA] Linaje y Responsables
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- Orígenes → transformaciones → consumidores (un diagrama de linaje o el DAG de dbt) · el responsable de cada conjunto de datos y a quién se avisa cuando falla · el SLA de frescura del que dependen los consumidores · el historial que guarda cada tabla (dimensiones lentamente cambiantes: el tipo 1 sobrescribe, el tipo 2 guarda versiones).
-
-## [DATA] Retención y Coste
-> **TODO** — reemplazar con valores reales (eliminar esta línea cuando esté hecho).
-- La retención por conjunto de datos y por nivel de almacenamiento (la zona bruta frente a la curada; caliente / templado / frío) — los datos personales siguen references/privacy-track.md · particionado y clustering para que una consulta lea solo lo que necesita · el coste esperado de almacenamiento y de consultas al mes y la alerta cuando se desvía.
-`;
-      }
-      return "";
     },
 
     design(a) {
@@ -628,133 +568,6 @@ ${body}`
 
 ${phases}`
       );
-    },
-
-    trackTasks(a) {
-      let n = a.start - 1;
-      const id = () => ++n;
-      if (a.track === "saas") {
-        return `
-## Historia US-1 — Observabilidad y Escala
-- [ ] ${id()}. [US1] Emitir métricas, añadir dashboard, configurar alertas
-  - _Requirements: US-1.AC-6_
-- [ ] ${id()}. [US1] Prueba de carga — verificar el presupuesto de rendimiento del design.md (solo ruta crítica)
-  - _Requirements: US-1.AC-6_${greenLine(a.green, "US-1.AC-6")}
-- [ ] ${id()}. [US1] Imponer el aislamiento de inquilino — toda query filtrada por tenant_id
-  - _Requirements: US-1.AC-5_${greenLine(a.green, "US-1.AC-5")}
-`;
-      }
-      if (a.track === "ai") {
-        return `
-## Historia US-1 — IA
-- [ ] ${id()}. [US1] Prompt v1 + conexión al harness de evaluación (tarea separada por cambio de prompt)
-  - _Requirements: US-1.AC-7, US-1.AC-8_
-  - _Affects evals: golden, adversarial, regression_${greenLine(a.green, "US-1.AC-7", "US-1.AC-8")}
-- [ ] ${id()}. [US1] Monitorización de coste — emitir métrica de coste + alerta
-  - _Requirements: US-1.AC-9_${greenLine(a.green, "US-1.AC-9")}
-`;
-      }
-      if (a.track === "sec") {
-        return `
-## Historia US-1 — Seguridad
-- [ ] ${id()}. [US1] Modelar las amenazas de la función (STRIDE por frontera de confianza); registrar cada mitigación en el design.md
-  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
-- [ ] ${id()}. [US1] Imponer autenticación y autorización a nivel de objeto en todos los endpoints (denegar por defecto)
-  - _Requirements: US-1.AC-10, US-1.AC-11_${greenLine(a.green, "US-1.AC-10", "US-1.AC-11")}
-- [ ] ${id()}. [US1] Mantener los secretos fuera del código, las respuestas y los logs — almacén de secretos + ocultación en los logs
-  - _Requirements: US-1.AC-12_${greenLine(a.green, "US-1.AC-12")}
-- [ ] ${id()}. [US1] Pruebas de seguridad — SAST, auditoría de dependencias y las pruebas de casos de abuso, ejecutables en local
-  - _Requirements: US-1.AC-10, US-1.AC-11, US-1.AC-12_
-`;
-      }
-      if (a.track === "privacy") {
-        return `
-## Historia US-1 — Privacidad
-- [ ] ${id()}. [US1] Inventario de datos personales + base jurídica por finalidad en el design.md; actualizar la política de privacidad
-  - _Requirements: US-1.AC-13, US-1.AC-14, US-1.AC-15_
-- [ ] ${id()}. [US1] Solicitudes de los interesados — acceso/exportación y supresión de extremo a extremo, en todos los almacenes y encargados
-  - _Requirements: US-1.AC-13, US-1.AC-14_${greenLine(a.green, "US-1.AC-13", "US-1.AC-14")}
-- [ ] ${id()}. [US1] Conservación — supresión/anonimización programada de los registros con el plazo de conservación vencido
-  - _Requirements: US-1.AC-15_${greenLine(a.green, "US-1.AC-15")}
-`;
-      }
-      if (a.track === "dist") {
-        return `
-## Historia US-1 — Consistencia de Datos
-- [ ] ${id()}. [US1] Outbox transaccional — escribir la fila del outbox en la misma transacción que el cambio de estado; un relay (polling o CDC) la publica y la marca como enviada
-  - _Requirements: US-1.AC-16_${greenLine(a.green, "US-1.AC-16")}
-- [ ] ${id()}. [US1] Consumidor idempotente — una tabla inbox / de mensajes procesados con la clave en el ID del mensaje, escrita en la misma transacción que el efecto
-  - _Requirements: US-1.AC-17_${greenLine(a.green, "US-1.AC-17")}
-- [ ] ${id()}. [US1] Control de concurrencia — una columna de versión (bloqueo optimista) o una restricción de unicidad; un conflicto es un error, nunca una sobrescritura silenciosa
-  - _Requirements: US-1.AC-18_${greenLine(a.green, "US-1.AC-18")}
-- [ ] ${id()}. [US1] Resiliencia — tiempos de espera, reintentos con retroceso exponencial + jitter (nunca una llamada no idempotente sin clave), una DLQ, la ruta degradada cuando una dependencia está caída
-  - _Requirements: US-1.AC-19_${greenLine(a.green, "US-1.AC-19")}
-- [ ] ${id()}. [US1] Pruebas de inyección de fallos — caída entre el commit y la publicación, entrega duplicada, actualizaciones concurrentes, una dependencia caída — ejecutables localmente
-  - _Requirements: US-1.AC-16, US-1.AC-17, US-1.AC-18, US-1.AC-19_
-`;
-      }
-      if (a.track === "api") {
-        return `
-## Historia US-1 — Contrato de la API
-- [ ] ${id()}. [US1] Contrato primero — el documento OpenAPI / los ficheros .proto / el esquema GraphQL en el repositorio, revisado antes de los handlers (el fichero es el marcador Implements de esta tarea)
-  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
-- [ ] ${id()}. [US1] Modelo de errores — cada error un cuerpo application/problem+json con un código estable; un error de validación nombra cada campo
-  - _Requirements: US-1.AC-20_${greenLine(a.green, "US-1.AC-20")}
-- [ ] ${id()}. [US1] Idempotencia y concurrencia — una Idempotency-Key en las creaciones (se devuelve de nuevo la respuesta guardada), ETag / If-Match en las actualizaciones (412 en una versión obsoleta)
-  - _Requirements: US-1.AC-21, US-1.AC-22_${greenLine(a.green, "US-1.AC-21", "US-1.AC-22")}
-- [ ] ${id()}. [US1] Barrera de compatibilidad — una comparación del contrato con la versión publicada que detecta cambios incompatibles, ejecutable en local; lo que se elimine queda obsoleto con una fecha de Sunset
-  - _Requirements: US-1.AC-23_${greenLine(a.green, "US-1.AC-23")}
-- [ ] ${id()}. [US1] Pruebas de contrato — la implementación verificada contra el contrato (cada código de estado, esquema y cabecera documentado), ejecutables en local
-  - _Requirements: US-1.AC-20, US-1.AC-21, US-1.AC-22, US-1.AC-23_
-`;
-      }
-      if (a.track === "ui") {
-        return `
-## Historia US-1 — Interfaz de Usuario
-- [ ] ${id()}. [US1] Construir la vista con componentes y tokens del design system — un componente nuevo solo a través del sistema (documentado, revisado)
-  - _Requirements: US-1.AC-24, US-1.AC-25, US-1.AC-26, US-1.AC-27_
-- [ ] ${id()}. [US1] Estados de la interfaz — cargando, vacío, error con Reintentar, parcial, sin conexión, sin permiso, éxito — según la matriz de estados de design.md
-  - _Requirements: US-1.AC-26, US-1.AC-27_${greenLine(a.green, "US-1.AC-26", "US-1.AC-27")}
-- [ ] ${id()}. [US1] Formularios y teclado — valores conservados en un error, errores en texto con un resumen, orden de foco lógico, foco visible
-  - _Requirements: US-1.AC-24, US-1.AC-25_${greenLine(a.green, "US-1.AC-24", "US-1.AC-25")}
-- [ ] ${id()}. [US1] Comprobaciones de accesibilidad — una comprobación automática (axe o equivalente) ejecutable en local + una pasada manual con teclado y lector de pantalla (los hallazgos en el informe)
-  - _Requirements: US-1.AC-24, US-1.AC-25_
-- [ ] ${id()}. [US1] Diseño adaptable, i18n y el presupuesto de rendimiento — los breakpoints, la expansión del texto, RTL, los formatos del locale; LCP / INP / CLS dentro del presupuesto
-  - _Requirements: US-1.AC-24, US-1.AC-26, US-1.AC-27_
-`;
-      }
-      if (a.track === "obs") {
-        return `
-## Historia US-1 — Operabilidad
-- [ ] ${id()}. [US1] SLIs, SLOs y alertas por tasa de consumo — definidos en código / configuración junto al servicio, cada alerta enlazada a su runbook
-  - _Requirements: US-1.AC-29_${greenLine(a.green, "US-1.AC-29")}
-- [ ] ${id()}. [US1] Telemetría — las métricas, los logs estructurados con el ID de correlación (sin datos personales) y los spans de traza que indica el diseño
-  - _Requirements: US-1.AC-28_${greenLine(a.green, "US-1.AC-28")}
-  - _Emits metrics: requests_total, request_duration_seconds, errors_total_
-- [ ] ${id()}. [US1] Despliegue — una feature flag y un canario / despliegue progresivo decidido por las métricas del SLO; reversión automática según los criterios de design.md
-  - _Requirements: US-1.AC-30_${greenLine(a.green, "US-1.AC-30")}
-- [ ] ${id()}. [US1] Comprobaciones de salud — endpoints de vida y de disponibilidad (una dependencia caída → no listo, sigue vivo); señales de capacidad con umbrales
-  - _Requirements: US-1.AC-31_${greenLine(a.green, "US-1.AC-31")}
-- [ ] ${id()}. [US1] Pruebas de operabilidad — inyección de fallos (una dependencia caída, una dependencia lenta), una alerta que salta en un fallo escenificado, un simulacro de reversión — ejecutables en local o en staging
-  - _Requirements: US-1.AC-28, US-1.AC-29, US-1.AC-30, US-1.AC-31_
-`;
-      }
-      if (a.track === "data") {
-        return `
-## Historia US-1 — Pipeline de Datos
-- [ ] ${id()}. [US1] Contrato de datos primero — el esquema de cada conjunto de datos (columnas, tipos, nulabilidad, claves), el responsable y la regla de compatibilidad en el repositorio, revisados antes de las transformaciones
-  - _Requirements: US-1.AC-35_${greenLine(a.green, "US-1.AC-35")}
-- [ ] ${id()}. [US1] Comprobaciones de calidad de datos — no nulos, únicos, rangos aceptados, recuentos de filas y frescura en la ingesta y antes de publicar; una fila que falla queda en cuarentena con su regla, nunca se carga
-  - _Requirements: US-1.AC-32, US-1.AC-34_${greenLine(a.green, "US-1.AC-32", "US-1.AC-34")}
-- [ ] ${id()}. [US1] Cargas idempotentes — cada ejecución sustituye su partición (sobrescribir o MERGE sobre una clave, nunca un append a ciegas); filas tardías integradas dentro de la ventana de lookback
-  - _Requirements: US-1.AC-33_${greenLine(a.green, "US-1.AC-33")}
-- [ ] ${id()}. [US1] Backfill — el procedimiento para un rango de fechas (paralelismo, coste, una ejecución de prueba), ensayado en una partición y comparado con una sola ejecución
-  - _Requirements: US-1.AC-33_
-- [ ] ${id()}. [US1] Linaje, responsables y retención — orígenes → transformaciones → consumidores documentados, un responsable por conjunto de datos, la retención y el particionado de design.md aplicados
-  - _Requirements: US-1.AC-32, US-1.AC-33, US-1.AC-34, US-1.AC-35_
-`;
-      }
-      return "";
     },
 
     bugReport(a) {
@@ -3497,4 +3310,4 @@ const brief = {
     alreadyDone: (n) => `La tarea ${n} ya está marcada como hecha.`,
   };
 
-module.exports = { build, steering, evalsReadme, msg, quality, designWeigh, brief, __link };
+module.exports = { text, build, steering, evalsReadme, msg, quality, designWeigh, brief, __link };
