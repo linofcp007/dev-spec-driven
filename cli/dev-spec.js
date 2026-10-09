@@ -117,6 +117,8 @@
  *                                      an existing file that is no previous bundle is replaced only with --force
  *   version (or --version / -V)        The version, this CLI's path, Node, the engine (modules or bundle — why a bundle was
  *                                      skipped), the project, which input chose it, its language (--json too)
+ *   completion <powershell|bash|zsh|fish>  The shell's completion script (commands, flags, values, feature names) — built from
+ *                                      COMMAND_OPTIONS / COMMAND_ARGS / FLAG_VALUES; it calls the hidden `__complete` on Tab
  *
  * Flags: --json (raw JSON output) · --project <dir> (an existing folder; only init creates one) · --lang en|pt|pt-BR|es
  *        The project: --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one with a
@@ -133,13 +135,17 @@
  *        prompts: --args "…" (the command's arguments, = prompts/get {arguments: {args}})
  *        import: --text "<markdown>" (a plan / ExecPlan's text, = spec_import {text}) · statusline: --print-config
  *        Switches: --x or --x=true|false (1/0, yes/no, on/off). --json prints a refusal's {ok:false,…} result on stdout (exit 1).
- *        help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
+ *        help, rules, mcp-config, evals and completion print text only: --json there is a usage error (exit 1).
  */
 
 const fs = require("fs");
 const path = require("path");
+// 1.25 — `dev-spec __complete features|archived [--project <dir>]`: the completion scripts' hidden call on Tab (feature names),
+// answered BEFORE the engine loads — cli/completion.js reads .specs/ itself — since it runs on every Tab (≈ node's own startup).
+if (process.argv[2] === "__complete") return require(path.join(__dirname, "completion.js")).complete(process.argv.slice(3));
 const { spawn, spawnSync } = require("child_process");
 const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
+const COMPLETION = require(path.join(__dirname, "completion.js")); // 1.25: `completion <shell>` (and the hidden __complete, above)
 
 const SERVER = path.resolve(__dirname, "..", "mcp", "server.js");
 const EVALS = path.resolve(__dirname, "..", "mcp", "evals", "run-evals.js");
@@ -503,7 +509,40 @@ const COMMAND_OPTIONS = {
   bundle: { options: ["out", "force"] }, // --force: overwrite an --out that is no previous bundle (1.24 r6 B8)
   statusline: { options: ["print-config"], max: 0 },
   version: { options: [], max: 0 }, // 1.24 r6 B-I1 (--version / -V anywhere skip this check: they print the version, nothing else)
+  completion: { options: [], max: 1 }, // 1.25: completion <powershell|bash|zsh|fish>
 };
+// 1.25 — shell completion (`completion <shell>`, cli/completion.js): what a command's positional arguments are, for its script.
+// Per position (the first word after the command first): words to offer, or a source — @feature / @archived (the project's
+// feature names, read on Tab), @command, @file, @dir, or a value list completionModel() names (@track, @phase…); null offers
+// nothing there, a trailing "..." repeats the last one. "<cmd> <word>" holds the positions after a first word that picks them
+// (feature restore → archived names). A command without an entry still completes its name and its COMMAND_OPTIONS flags; an
+// alias (HELP_ALIASES) reads its command's entries.
+const COMMAND_ARGS = {
+  signals: ["list set forget"], "signals set": [null, "@track", null, "off weak strong"], "signals forget": [null, "@track"],
+  init: ["@track..."], templates: ["list init check", "@template"], tracks: ["list init check"],
+  create: [null, "@track..."], bugfix: [null, "@track..."], spike: [null, "@track..."],
+  status: ["@feature"], doctor: ["@feature"], trace: ["@feature"], clarify: ["@feature"], ears: ["@feature @file"], next: ["@feature"],
+  "next-action": ["@feature"], brief: ["@feature"], done: ["@feature"], undone: ["@feature"], finish: ["@feature"], decide: ["@feature"],
+  "append-tasks": ["@feature"], impact: ["@feature"], metrics: ["@feature"], drift: ["@feature"], export: ["@feature"], log: ["@feature", "-"],
+  evals: ["@feature"], approve: ["@feature", "@phase"], "add-track": ["@feature", "@optional-track..."], depend: ["@feature", "@feature..."],
+  feature: ["remove archive rename restore flow"], "feature remove": [null, "@feature"], "feature archive": [null, "@feature"],
+  "feature rename": [null, "@feature"], "feature restore": [null, "@archived"], "feature flow": [null, "@feature", "@flow"],
+  backlog: ["@backlog-action"], milestone: ["@milestone-action"], "milestone add": [null, null, null, "@feature..."],
+  import: ["@import-tool", "@file"], scan: ["@dir"], rules: ["@rules-tool"], "mcp-config": ["@mcp-client"], prompts: ["@prompt"],
+  "merge-state": ["@file..."], help: ["@command"], completion: ["@shell"],
+};
+// The values of a value flag where the set is known — "<flag>" for every command that takes it, "<command> --<flag>" where commands
+// differ (init --evidence is a mode, done --evidence a summary). The same specs as COMMAND_ARGS.
+const FLAG_VALUES = {
+  lang: "@lang", tracks: "@track", flow: "@flow", tracker: "@tracker", "approval-guard": "@approval-guard", guard: "on off scope",
+  "stop-check": "on off", through: "@through", phase: "requirements design test-plan eval-plan tasks steering", since: "last all",
+  shell: "bash pwsh powershell cmd", project: "@dir", out: "@file",
+  "init --evidence": "reported observed", "create --kind": "feature bugfix spike change", "create --size": "@size", "bugfix --size": "@size",
+  "append-tasks --size": "@task-size", "append-tasks --story": "shared", "decide --kind": "decision discovery",
+  "merge-state --kind": "state roadmap generated", "depend --add": "@feature", "depend --rm": "@feature", "evals --prompt": "@file",
+};
+// `evals` forwards its flags to mcp/evals/run-evals.js: its switches (BOOL_FLAGS there) for the completion script.
+const EVALS_SWITCHES = ["dry-run", "set-baseline", "require-live"];
 function checkCommandArgs() {
   const own = Object.prototype.hasOwnProperty.call(COMMAND_OPTIONS, cmd) ? COMMAND_OPTIONS[cmd] : null;
   if (!own) return; // an unknown command (its own error), evals (run-evals.js), help
@@ -545,6 +584,16 @@ function checkProject() {
 
 // ---- mcp-config snippets ---------------------------------------------------
 function mcpConfig(client) {
+  const blocks = mcpConfigBlocks();
+  if (client && client !== "all") {
+    // Own keys only: 'constructor' / 'toString' are not clients.
+    if (!Object.prototype.hasOwnProperty.call(blocks, client)) die(projectText().unknownClient(client, Object.keys(blocks).join(", ") + ", all"));
+    return blocks[client];
+  }
+  return Object.values(blocks).join("\n\n");
+}
+// One config block per client (their names are the completion script's mcp-config values too).
+function mcpConfigBlocks() {
   // Forward slashes: valid in JSON without escaping and accepted by Node on Windows.
   const S = SERVER.replace(/\\/g, "/");
   const ROOT = path.resolve(__dirname, "..").replace(/\\/g, "/");
@@ -559,18 +608,21 @@ function mcpConfig(client) {
     codex: "OpenAI Codex CLI — ~/.codex/config.toml:\n[mcp_servers.spec-driven]\ncommand = \"node\"\nargs = [" + JSON.stringify(S) + "]", // basic string: safe for paths with ' (forward slashes need no escaping)
     generic: "Generic stdio MCP client:\n  command: node\n  args: [\"" + S + "\"]",
   };
-  if (client && client !== "all") {
-    // Own keys only: 'constructor' / 'toString' are not clients.
-    if (!Object.prototype.hasOwnProperty.call(blocks, client)) die(projectText().unknownClient(client, Object.keys(blocks).join(", ") + ", all"));
-    return blocks[client];
-  }
-  return Object.values(blocks).join("\n\n");
+  return blocks;
 }
+// `rules <tool>`: the rule file each tool reads, in this clone (printed with its paths made absolute).
+const RULE_FILES = {
+  cursor: ".cursor/rules/dev-spec-driven.mdc",
+  windsurf: ".windsurf/rules/dev-spec-driven.md",
+  copilot: ".github/copilot-instructions.md",
+  gemini: "GEMINI.md",
+  agents: "AGENTS.md",
+};
 
 // ---- dispatch --------------------------------------------------------------
 const CLI_LANGS = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
 // The commands whose output is text only — no structured result — so --json is refused there (main; the help too).
-const TEXT_ONLY_COMMANDS = new Set(["rules", "mcp-config", "evals"]);
+const TEXT_ONLY_COMMANDS = new Set(["rules", "mcp-config", "evals", "completion"]);
 
 // ---- statusline (1.16 C1) ----------------------------------------------------
 // Claude Code runs the settings.json "statusLine" command after every assistant message (debounced, cancelled when a newer
@@ -665,7 +717,9 @@ async function main() {
   // `version` command reports the project it resolves — never refuses it (a missing one reads exists: false).
   if (versionAsked && cmd === "version") return printVersion();
   if (!helpOnly) {
-    if (cmd !== "version") checkProject(); // 1.23 review L14: an existing folder (init alone may create it) — 1.24 r6 B1: the environment too
+    // 1.23 review L14: an existing folder (init alone may create it) — 1.24 r6 B1: the environment too. `version` reports the project
+    // and `completion` reads none (it runs from a shell profile, wherever that starts): neither refuses it.
+    if (cmd !== "version" && cmd !== "completion") checkProject();
     checkCommandArgs(); // 1.23 review: the command's own options, at most its own arguments
   }
   switch (cmd) {
@@ -1329,14 +1383,7 @@ async function main() {
 
     case "rules": {
       // dev-spec rules <cursor|windsurf|copilot|gemini|agents> — a per-tool rule file from THIS clone, with its
-      // relative paths made absolute so it works pasted into any project (like mcp-config, never committed).
-      const RULE_FILES = {
-        cursor: ".cursor/rules/dev-spec-driven.mdc",
-        windsurf: ".windsurf/rules/dev-spec-driven.md",
-        copilot: ".github/copilot-instructions.md",
-        gemini: "GEMINI.md",
-        agents: "AGENTS.md",
-      };
+      // relative paths made absolute so it works pasted into any project (like mcp-config, never committed). RULE_FILES: above.
       if (!pos[0]) usage("dev-spec rules <" + Object.keys(RULE_FILES).join("|") + ">");
       const tool = String(pos[0]).toLowerCase();
       // Own keys only: `constructor`/`__proto__` would pass a plain lookup and crash path.join.
@@ -1902,6 +1949,19 @@ async function main() {
     case "statusline": // --print-config (the render path runs before the flag checks, in main)
       return on("print-config") ? statusLineConfig() : statusLineRender();
 
+    case "completion": {
+      // 1.25 — dev-spec completion <powershell|bash|zsh|fish>: the shell's completion script on stdout, nothing else (it is saved
+      // to a file or evaluated as it is) — built from this CLI's own tables (completionModel). How to install it: completion --help.
+      const syntax = "dev-spec completion <" + COMPLETION.SHELLS.join("|") + ">";
+      if (pos[0] == null || !String(pos[0]).trim()) usage(syntax);
+      const sh = COMPLETION.shellName(pos[0]);
+      if (!sh) {
+        const A = spec.msg(spec.projectLang(projectDir)).args;
+        die(A.invalid(A.item("<shell>", A.oneOf(COMPLETION.SHELLS.join(", ")), JSON.stringify(String(pos[0])))));
+      }
+      return process.stdout.write(COMPLETION.script(sh, completionModel()));
+    }
+
     default:
       die(projectText().unknownCommand(cmd));
   }
@@ -1934,6 +1994,38 @@ function printVersion() {
     console.log(V.project(r.project.dir, V.src[r.project.source] || r.project.source));
     console.log(!r.project.exists ? V.state.missing : r.project.devSpec ? V.state.devSpec(r.project.lang) : V.state.noSpecs(r.project.lang));
   });
+}
+
+// 1.25 — what `completion <shell>` fills its script with (cli/completion.js): every command (COMMAND_OPTIONS, + help and evals) and
+// its flags (+ --json --project --help), the flags that take a value, COMMAND_ARGS and FLAG_VALUES (an alias reads its command's),
+// and the value lists their @sources name — from the facade where it has them, so a new command, flag or value completes with
+// nothing else to touch. `cli`: this CLI, which the script runs for feature names (and as `dev-spec` without one on PATH).
+function completionModel() {
+  const cli = path.resolve(__filename).replace(/\\/g, "/");
+  const globalFlags = GLOBAL_OPTIONS.map((f) => "--" + f);
+  const commands = [...new Set([...Object.keys(COMMAND_OPTIONS), "evals", "help"])].sort();
+  const flags = {};
+  for (const c of commands) {
+    const own = c === "evals" ? [...EVALS_SWITCHES, ...[...EVALS_VALUE_FLAGS].filter((f) => f !== "project")] : c === "help" ? [] : COMMAND_OPTIONS[c].options;
+    flags[c] = [...new Set([...own, ...GLOBAL_OPTIONS])].map((f) => "--" + f);
+  }
+  const args = { ...COMMAND_ARGS };
+  for (const [alias, target] of Object.entries(HELP_ALIASES)) {
+    for (const k of Object.keys(COMMAND_ARGS)) if (k === target || k.startsWith(target + " ")) args[alias + k.slice(target.length)] = COMMAND_ARGS[k];
+  }
+  const values = {};
+  for (const [k, v] of Object.entries(FLAG_VALUES)) values[k.includes(" ") ? k : "--" + k] = v;
+  let prompts = [];
+  try { prompts = fs.readdirSync(path.join(__dirname, "..", "commands")).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)).sort(); } catch { prompts = []; }
+  const sources = {
+    lang: spec.LANGS, track: spec.VALID_TRACKS, "optional-track": spec.OPTIONAL_TRACKS, phase: spec.PHASES,
+    through: spec.PHASES.filter((p) => p !== "execution"), flow: spec.FLOWS, size: spec.FEATURE_SIZES, "task-size": Object.keys(spec.SIZE_POINTS),
+    tracker: spec.TRACKERS, "approval-guard": spec.APPROVAL_GUARD_LEVELS, "import-tool": spec.IMPORT_TOOLS, template: Object.keys(spec.TEMPLATE_ARTIFACTS),
+    "backlog-action": spec.BACKLOG_ACTIONS, "milestone-action": spec.MILESTONE_ACTIONS, "mcp-client": [...Object.keys(mcpConfigBlocks()), "all"],
+    "rules-tool": Object.keys(RULE_FILES), prompt: prompts, shell: COMPLETION.SHELLS,
+  };
+  return { version: spec.engineVersion(), cli, gone: projectText().completionGone(cli), commands, rootFlags: [...globalFlags, "--version"], globalFlags,
+    valueFlags: [...new Set([...VALUE_FLAGS, ...EVALS_VALUE_FLAGS])].map((f) => "--" + f), flags, args, values, sources };
 }
 
 // `list` and a bare `status`: one line per feature, in the project language.
@@ -2118,6 +2210,7 @@ function helpFor(c) {
   return lines.join("\n");
 }
 function helpText() {
+  const CLI_PATH = path.resolve(__filename).replace(/\\/g, "/"); // completion's install lines name this CLI
   return `dev-spec — universal spec-driven CLI (local, zero-dependency)
 
   classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data), multilingual
@@ -2290,6 +2383,18 @@ function helpText() {
   version                         The version, this CLI's path, Node, the engine it runs on (its modules, or the bundle — and why a
                                   requested bundle was skipped), the project, which input chose it and its language; also
                                   --version / -V anywhere (prints it, runs nothing)
+  completion <powershell|bash|zsh|fish>   Print the shell's completion script on stdout: the commands, their flags, the values
+                                  they take (--lang, --flow, --size, phases, tracks…) and the project's feature names (read from
+                                  .specs/ on Tab, without loading the engine). Save it once, then load it from the shell's profile:
+                                    PowerShell 5.1 / 7: node "${CLI_PATH}" completion powershell > "$HOME\\dev-spec-completion.ps1"
+                                      then add this line to $PROFILE:  . "$HOME\\dev-spec-completion.ps1"
+                                    bash: node "${CLI_PATH}" completion bash > ~/.dev-spec-completion.bash
+                                      then add to ~/.bashrc:  . ~/.dev-spec-completion.bash
+                                    zsh:  … completion zsh > ~/.dev-spec-completion.zsh — in ~/.zshrc, after compinit:  . ~/.dev-spec-completion.zsh
+                                    fish: … completion fish > ~/.config/fish/conf.d/dev-spec.fish
+                                  Without a dev-spec on PATH the script also defines dev-spec (this CLI); from a plugin's versioned
+                                  folder it follows an update to the newest installed version — save it again then to complete the
+                                  new version's commands and flags
 
   The project: --project <dir> (an existing folder — only init creates one) > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest
   folder at or above the working one that holds a dev-spec .specs/ > the working folder. A variable that chose it is checked like
@@ -2317,7 +2422,7 @@ function helpText() {
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1 — a usage error
          or an unexpected failure too ({"ok": false, "error": …[, "code": …]}).
-         help, rules, mcp-config and evals print text only: --json there is a usage error (exit 1).
+         help, rules, mcp-config, evals and completion print text only: --json there is a usage error (exit 1).
          --shell / --timeout go with --run (done, finish); --run and --evidence / --exit / --cmd exclude each other (done);
          --timeout (at most 2147483 s) stops the command's whole process tree; a run ends when its command exits — a
          background process it started (a server) holds nothing up beyond a 2 s drain.

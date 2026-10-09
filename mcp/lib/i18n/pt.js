@@ -1706,6 +1706,7 @@ const msg = {
       flagTwice: (flag) => `${flag} foi indicada mais de uma vez — esta opção só aceita um valor: indica-a uma vez.`,
       atMost: (n) => `, no máximo ${n}`,
       runHeldOpen: (code) => `⚠ o comando terminou (${code}), mas um processo que ele lançou em segundo plano manteve a saída aberta — a execução ficou registada nesse fim; o que esse processo imprimir depois não está na evidência.`,
+      completionGone: (cli) => `${cli} já não existe e não foi encontrada uma cópia mais recente do plugin — guarda de novo o script de completação a partir da CLI atual (o completion --help dela explica como), ou retira-o do perfil da tua shell.`,
     },
 
     gates: {
