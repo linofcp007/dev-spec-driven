@@ -16,7 +16,9 @@ reports the current `guard` state. With no argument, read
 to look (it scaffolds any missing core steering file).
 
 **What it does (Claude Code only).** The plugin's PreToolUse hook runs before Write / Edit /
-NotebookEdit. While the guard is on, an edit to a **code file outside `.specs/`** gets a permission prompt
+NotebookEdit and before a Bash / PowerShell / Monitor command that writes files (`sed -i`, a redirect, `tee`, `cp`,
+`Set-Content`… — each file it writes is checked; reads, test runs, builds and git never prompt). In a monorepo the
+nearest `.specs/` above the edited file counts too. While the guard is on, an edit to a **code file outside `.specs/`** gets a permission prompt
 ("ask") with a localized reason **unless some feature has an approved tasks phase and open tasks** — then it
 is silent. It is silent too for a **test file** while some feature has an approved test plan and is not
 finished (Phase 4 writes the failing tests before the tasks can be approved), and for any code edit while an **active
@@ -38,6 +40,8 @@ it) also asks — the reason names the likely task to add it to (one planning a 
 open task) or points to `/spec-converge` (`spec_append_tasks`). Test files are not asked (tests are planned by T-ID
 in test-plan.md), nor is a code edit while an active spike exists (its prototype has no `_Implements:_` to plan it in). Adding the file to a task changes tasks.md, so re-approve the tasks phase afterwards.
 
-Explain it to the user in those terms: it is a reminder to plan before coding, not a lock. Other hosts (Cursor,
+Explain it to the user in those terms: it is a reminder to plan before coding, not a lock — it stops accidents and
+casual workarounds, not a determined agent with a shell (an inline script, a script file it wrote, a path held in a
+variable set by an earlier command are not read). Other hosts (Cursor,
 Windsurf, Copilot, Gemini) have no PreToolUse hook — there the rule lives in the workflow text only.
 Respond in the user's language (EN/PT/ES).

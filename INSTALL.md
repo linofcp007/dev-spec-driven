@@ -195,7 +195,9 @@ Other tools don't run the hook; `dev-spec stop-check --message "<text>"` gives t
 
 **Guard mode (opt-in, off by default).** A PreToolUse hook (`hooks/guard-hook.js`) that, once you turn
 it on for a project, asks for confirmation before Claude writes or edits a code file outside `.specs/`
-while no feature has approved, unfinished tasks. It stays silent when the guard is off and never blocks
+while no feature has approved, unfinished tasks — through Write / Edit and (1.25.1) a Bash / PowerShell command that
+writes one (`sed -i`, a redirect, `tee`, `cp`, `Set-Content`…; reads, test runs, builds and git don't prompt). In a
+monorepo the nearest `.specs/` above the edited file counts too. It stays silent when the guard is off and never blocks
 on its own errors:
 
 ```powershell
@@ -215,20 +217,34 @@ harness saw (or that `dev-spec done --run` made):
 node "$plugin\cli\dev-spec.js" init --evidence observed   # or spec_init {evidence: "observed"}; --evidence reported to go back
 ```
 
+Observed evidence is only as strong as the approval guard below: with it off, an agent appending one line to
+`.execution/observed.jsonl` forges an observed run (`init` and `dev-spec doctor` — `observed-unguarded` — say so). Turn
+the approval guard on with it. With the PowerShell tool alone (Windows without Git Bash) a run is logged only when Claude
+Code reports its exit code — record the others with `dev-spec done <feature> <n> --run`.
+
 **Human approval guard (opt-in, off by default).** A PreToolUse hook (`hooks/approval-hook.js`) that makes approvals a
-human act: when Claude calls `spec_approve` (even with force), runs `dev-spec approve` / `feature remove --yes`, or tries
-to lower the guard, you are asked (`ask`) or the call is refused (`deny` — you approve yourself, in your terminal or with
-Claude Code's `!` prefix):
+human act: when Claude calls `spec_approve` (even with force), runs `dev-spec approve` / `feature remove --yes`, tries
+to lower the guard, or writes the spec state itself (`.specs/roadmap.json`, a feature's `.state.json`, the observed log —
+through Write / Edit, another MCP server's file tools, or a shell command: a redirect, a writer, a glob, a link to
+`.specs/`), you are asked (`ask`) or the call is refused (`deny` — you approve yourself, in your terminal or with Claude
+Code's `!` prefix):
 
 ```powershell
 node "$plugin\cli\dev-spec.js" init --approval-guard deny   # or ask; off to disable (only you can lower it)
 ```
 
-`ask` relies on Claude Code's permission prompt, which auto mode still shows and only bypass-permissions mode may skip;
-`deny` holds in every mode.
-Both are guardrails, not a sandbox. In other MCP clients the MCP server enforces the same setting itself: a client that
-supports MCP elicitation shows you the question (Approve + an optional note) and only your explicit approve records it; a
-client without it runs `ask` as before and refuses `deny` with the command to run yourself.
+`ask` relies on Claude Code's permission prompt, which auto mode still shows and only bypass-permissions mode may skip.
+`deny` is refused in auto mode too — but a session in bypass-permissions mode, or with hooks disabled, runs no hook at all.
+
+**What the guards are — and aren't.** They stop accidents and casual workarounds, not a determined agent with a shell.
+They read each command as text (nothing is run or evaluated) and ask whenever a command names dev-spec or `.specs/` in a
+form they can't follow. Known limits: an inline script or a script file the agent wrote (`node -e`, `python -c`,
+`./x.sh`), a variable, alias or function defined in an earlier command, encoded or downloaded text fed to a shell
+(`… | base64 -d | bash`), a copy of the CLI under another name, git forms whose files can't be known from the command
+(`git apply`, `git stash pop`, `git reset --hard`, a branch switch), an archive extracted into the project root, and a
+link to `.specs/` made by one of those routes. In other MCP clients the MCP server enforces the same setting itself: a
+client that supports MCP elicitation shows you the question (Approve + an optional note) and only your explicit approve
+records it; a client without it runs `ask` as before and refuses `deny` with the command to run yourself.
 
 **Teams: a merge driver for the spec state (opt-in, once per clone).** Two branches that both approve phases, tick tasks or
 record evidence change the same `.specs/<feature>/.state.json` and `.specs/roadmap.json` — a plain git merge conflicts on

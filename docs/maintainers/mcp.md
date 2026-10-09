@@ -130,7 +130,9 @@ server's cwd) → the client's root when roots gave the default project, else le
 `\\.\UNC\…` and other device paths — refused before ANY fs call, argument errors included, so a tool call can't make
 the server open an SMB connection to a host it names or hang on an unreachable one; `\\?\C:\…` and WSL's `\\wsl$` /
 `\\wsl.localhost` are local), or a `file://` URI naming a host, is refused; a local `file://` URI (what roots/list hands a
-client) is its path (`fileUriToPath`); a RELATIVE path resolves from the client's root when roots chose the default (it went to
+client) is its path (`fileUriToPath`) — 1.25.1 (review 7): both read by hooks/hook-utils.js (`HOOK_UTILS.parseProjectDir` /
+`fileUriToPath`, zero-dependency), the very parser the approval hook reads the projectDir with (it read a `file://` URI as a relative
+folder and let an approval of that project through); server.js keeps the codes' localized messages; a RELATIVE path resolves from the client's root when roots chose the default (it went to
 the server's cwd — `.` from Claude Desktop scaffolded the app folder), else from the server's working folder. The folder must
 EXIST, as the CLI's `--project` (1.23 review L14): a missing one is refused (`project-missing`) — only `spec_init` creates one —
 and so is a file (`project-not-dir`): `spec_create` into a mistyped path built the whole tree there, `spec_list` on a file
