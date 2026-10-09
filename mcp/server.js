@@ -656,8 +656,10 @@ const serverRequests = new Map();
 let serverRequestSeq = 0;
 // → { rid, promise, cancel(reason) }. The promise resolves to the client's response, { timeout: true } (no answer within
 // timeoutMs) or { cancelled: true } (cancel(): the request that needed it was cancelled); the last two tell the client
-// (notifications/cancelled for our request id), so it can close the question.
-function clientRequest(method, params, timeoutMs) {
+// (notifications/cancelled for our request id), so it can close the question. `late` (1.25.1, review 7 — roots/list): a timeout
+// settles the promise but cancels nothing — the request stays open and an answer that comes later goes to late(response) (a
+// client slower than the timeout used to leave the default project on the server's cwd for the whole session).
+function clientRequest(method, params, timeoutMs, late) {
   const rid = "dev-spec-" + ++serverRequestSeq;
   let settle;
   const promise = new Promise((resolve) => { settle = resolve; });
@@ -670,7 +672,12 @@ function clientRequest(method, params, timeoutMs) {
     return true;
   };
   serverRequests.set(rid, (msg) => done(msg));
-  timer = setTimeout(() => done({ timeout: true }, "timeout"), timeoutMs);
+  const onTimeout = () => {
+    if (typeof late !== "function") return done({ timeout: true }, "timeout");
+    serverRequests.set(rid, (msg) => { serverRequests.delete(rid); late(msg); }); // still listening, nothing cancelled
+    settle({ timeout: true });
+  };
+  timer = setTimeout(onTimeout, timeoutMs);
   process.stdout.write(frame({ jsonrpc: "2.0", id: rid, method, params })); // never into a batch reply: the client must see it now
   return { rid, promise, cancel: (reason) => done({ cancelled: true }, reason || "cancelled") };
 }
@@ -1094,13 +1101,19 @@ function toolFailure(e, args) {
 // `roots` is asked once (roots/list, on the first request that needs the project) and its first local file:// root becomes the
 // default: tools/call without a projectDir gets it as one, and resources / prompts / completions read it. A network root
 // (file://host/…), one with '..', or no usable root → the old default (cwd). notifications/roots/list_changed asks again.
-const ROOTS_TIMEOUT_MS = 5000;
+// 1.25.1 (review 7): no answer within ROOTS_TIMEOUT_MS → the cwd for now, but the question stays open: an answer that comes later
+// still sets the root (it was dropped, and the cwd stayed the default for the session). DEV_SPEC_ROOTS_TIMEOUT_MS (≥ 1, ≤ 60 000).
+const ROOTS_TIMEOUT_MS = (() => {
+  const n = Number(String(process.env.DEV_SPEC_ROOTS_TIMEOUT_MS || "").trim());
+  return Number.isSafeInteger(n) && n >= 1 ? Math.min(n, 60000) : 5000;
+})();
 // An env value that names a folder (an unexpanded `${VAR}`, `$VAR` or `%VAR%` — a client that didn't expand it — names none).
 const envDirSet = (v) => { const s = v == null ? "" : String(v).trim(); return !!s && !spec.unexpandedVar(s); };
 const ENV_PROJECT = envDirSet(process.env.SPEC_PROJECT_DIR) || envDirSet(process.env.CLAUDE_PROJECT_DIR);
 let clientRoots = false; // initialize: the client declared capabilities.roots
 let rootsDir; // undefined: not asked yet · null: no usable root · the folder
 let rootsWait = null; // the roots/list in flight
+let rootsGen = 0; // which ask an answer belongs to (initialize / list_changed start another: an older late answer is ignored)
 // A local file:// URI → its absolute path, else null (a host other than localhost, '..', a control character; on Windows a
 // drive path only — file:///C:/x, file:///c%3A/x).
 function fileUriToPath(uri) {
@@ -1128,8 +1141,14 @@ function firstFileRoot(res) {
 function rootsPending() {
   if (!clientRoots || ENV_PROJECT || rootsDir !== undefined) return null;
   if (!rootsWait) {
-    const q = clientRequest("roots/list", {}, ROOTS_TIMEOUT_MS);
-    rootsWait = q.promise.then((res) => { rootsDir = firstFileRoot(res); rootsWait = null; });
+    const gen = ++rootsGen;
+    // A late answer (after the timeout) sets the root then — unless another ask started since, or a root was set meanwhile.
+    const q = clientRequest("roots/list", {}, ROOTS_TIMEOUT_MS, (res) => { if (gen === rootsGen && rootsDir === null) rootsDir = firstFileRoot(res); });
+    const w = q.promise.then((res) => {
+      if (rootsWait === w) rootsWait = null;
+      if (gen === rootsGen) rootsDir = res.timeout ? null : firstFileRoot(res);
+    });
+    rootsWait = w;
   }
   return rootsWait;
 }
@@ -1247,6 +1266,8 @@ function handle(msg) {
         clientElicits = TYPE_CHECK.object(el) && (!Object.keys(el).length || TYPE_CHECK.object(el.form));
         clientRoots = TYPE_CHECK.object(caps.roots); // 1.23: the default project from roots/list (rootsPending)
         rootsDir = undefined;
+        rootsGen++; // 1.25.1: an answer to an earlier session's roots/list no longer applies
+        rootsWait = null;
         return result(id, {
           protocolVersion: proto,
           serverInfo: SERVER_INFO,

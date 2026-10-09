@@ -1107,7 +1107,7 @@ exports.run = async ({
       });
       const callP = async (name, args) => bodyOf(await req("tools/call", { name, arguments: args }));
       const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
-      return { req, call: callP, asked, stop, init: (caps) => req("initialize", { protocolVersion: "2025-06-18", capabilities: caps || {} }) };
+      return { req, call: callP, asked, stop, write, init: (caps) => req("initialize", { protocolVersion: "2025-06-18", capabilities: caps || {} }) };
     };
 
     { // 1.24 r6 A1: an unknown / misspelt top-level argument is refused before anything runs — code unknown-argument, a did-you-mean
@@ -1309,6 +1309,29 @@ exports.run = async ({
         same(E.expandHome("~"), require("os").homedir()),
         "1.25.1 r7: projectDir ~/zz and ~\\zz name the home folder's zz (spec_init created it there, create / list found it) — nothing named '~' in the server's cwd; ~user and a later ~ stay as written (got " +
         js([made.specsDir, back.ok, listed.features && listed.features.length, fs.readdirSync(cwd)]) + ")");
+    }
+
+    { // 1.25.1 (review 7): a roots/list answer that comes after the timeout still sets the default project (it was dropped: the cwd
+      // stayed the default for the whole session); the timed-out request is not cancelled, and the client is asked once
+      const rootDir = path.join(tmp, "proj-r7-late-root"), cwd = path.join(tmp, "proj-r7-late-cwd");
+      S.initProject(rootDir, ["core"], "en");
+      S.createFeature(rootDir, "from-late-root", ["core"]);
+      fs.mkdirSync(cwd, { recursive: true });
+      let pendingId = null;
+      const s = srv({ SPEC_PROJECT_DIR: null, CLAUDE_PROJECT_DIR: null, DEV_SPEC_ROOTS_TIMEOUT_MS: "300" }, cwd, (m) => { if (m.method === "roots/list") pendingId = m.id; return null; });
+      await s.init({ roots: { listChanged: true } });
+      const t0 = Date.now();
+      const before = await s.call("spec_list", {}); // waits the 300 ms, then the cwd
+      const waited = Date.now() - t0;
+      s.write({ jsonrpc: "2.0", id: pendingId, result: { roots: [{ uri: fileUri(rootDir) }] } }); // the late answer
+      await new Promise((r) => setTimeout(r, 150));
+      const after = await s.call("spec_list", {});
+      const asked = s.asked.length; // server→client requests seen (a notifications/cancelled has no id: not counted)
+      await s.stop();
+      ok(pendingId !== null && waited >= 250 && same(before.specsDir, path.join(cwd, ".specs")) && same(after.specsDir, path.join(rootDir, ".specs")) &&
+        after.features.length === 1 && asked === 1,
+        "1.25.1 r7: a roots/list answer after DEV_SPEC_ROOTS_TIMEOUT_MS still sets the default project — the calls before it used the cwd, the ones after it the root; one roots/list asked (got " +
+        js([pendingId, waited, before.specsDir, after.specsDir, asked]) + ")");
     }
 
     { // 1.25.1 (review 7): the initialize instructions name spec_next_action (clients without the skill) and claim only what holds
