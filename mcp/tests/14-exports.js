@@ -897,7 +897,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
     const d2 = S.decide(p, "checkout", { title: "PSP rate limit", decision: "The PSP allows 10 requests a second.", kind: "discovery" });
     const d3 = S.decide(p, "checkout", { title: "Use Stripe", decision: "Stripe handles the charge.", consequences: "Migrate the saved cards.", supersedes: "D-1",
       affects: "Decisions, reuse & risks" });
-    const day1 = (d1.at || "").slice(0, 10), day3 = (d3.at || "").slice(0, 10);
+    const day1 = S.dayOf(d1.at), day3 = S.dayOf(d3.at); // the LOCAL calendar date the ADR prints (never the UTC one)
     const r = S.exportSpecs(p, { name: "checkout", format: "adr" });
     const doc = (name) => ((r.documents || []).find((d) => path.basename(d.file) === name) || {}).content || "";
     const adrDir = path.join(p, ".specs", "exports", "adr", "checkout");
