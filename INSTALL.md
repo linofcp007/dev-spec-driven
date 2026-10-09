@@ -269,7 +269,8 @@ node "$plugin\cli\dev-spec.js" statusline --print-config   # prints the "statusL
 
 Put that entry in `~/.claude/settings.json` (every project) or a project's `.claude/settings.local.json` (the path is this
 machine's — keep it out of a committed `.claude/settings.json`). A plugin installed from a git marketplace lives in a
-versioned cache folder: run `/spec-statusline` again after an update. It reads `.specs/` (at Phase 4 also the few test files
+versioned cache folder: there the printed command finds the newest installed version at each run, so it survives plugin
+updates (1.25.1). It reads `.specs/` (at Phase 4 also the few test files
 the test plan names — never a repo walk, never a network folder), names the same next step as `/next-action` (it doesn't
 check drift, so a finished feature reads "finished", not "clean"), exits 0 always and costs no tokens.
 

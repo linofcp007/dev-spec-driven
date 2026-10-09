@@ -212,5 +212,34 @@ exports.run = ({ ok, run, tmp, CLI, require, __dirname }) => {
       " layouts), a project still gets its line; the bare help loads none either; statusline (no project) " + Math.round(s) + " ms vs node -e 0 " + Math.round(n) + " ms and `version` (the engine) " + Math.round(v) +
       " ms (got " + js([disagree, slNone.status, slNone.stderr.slice(-40), slProj.stdout.slice(0, 80), slProj.stderr.slice(-20), help.stderr.slice(-20), dashHelp.stderr.slice(-20)]) + ")");
   }
+
+  // 1.25.1 (review 7): in a plugin's versioned cache folder the status line command printed `node "<…/<version>/cli/dev-spec.js>"
+  // statusline` — gone at the first plugin update. It now finds the newest installed version at each run (the completion scripts'
+  // rule): run through the platform's shell (cmd.exe / sh) and bash where there is one, against a fake cache whose old version is gone.
+  {
+    const C = require(path.join(__dirname, "completion.js"));
+    const base = path.join(tmp, "r7-cache", "plugins", "cache", "mkt", "dev-spec-driven");
+    for (const v of ["1.2.0", "1.9.0", "1.10.0", "notes"]) {
+      const d = path.join(base, v, "cli");
+      fs.mkdirSync(d, { recursive: true });
+      if (v !== "notes") fs.writeFileSync(path.join(d, "dev-spec.js"), `process.stdout.write("v${v} " + process.argv.slice(2).join(" ") + " " + require("path").basename(__filename));\n`);
+    }
+    const cli19 = path.join(base, "1.9.0", "cli", "dev-spec.js");
+    const r = C.statuslineCommand(cli19);
+    fs.rmSync(path.join(base, "1.9.0"), { recursive: true, force: true }); // the version the command was printed from is removed
+    const viaShell = spawnSync(r.command, { shell: true, encoding: "utf8", input: "{}", timeout: 30000 });
+    const bashOk = spawnSync("bash", ["-c", "exit 0"], { encoding: "utf8" }).status === 0;
+    const viaBash = bashOk ? spawnSync("bash", ["-c", r.command], { encoding: "utf8", input: "{}", timeout: 30000 }) : null;
+    const plain = C.statuslineCommand(path.join(tmp, "a clone", "cli", "dev-spec.js"));
+    const odd = C.statuslineCommand(path.join(tmp, "we$ird", "dev-spec-driven", "1.0.0", "cli", "dev-spec.js"));
+    const L = C.STATUSLINE_LAUNCHER;
+    ok(r.follows === true && !/["$`%!\\]/.test(L) && viaShell.status === 0 && viaShell.stdout === "v1.10.0 statusline dev-spec.js" &&
+      (!viaBash || (viaBash.status === 0 && viaBash.stdout === "v1.10.0 statusline dev-spec.js")) &&
+      plain.follows === false && /^node ".*a clone\/cli\/dev-spec\.js" statusline$/.test(plain.command) && odd.follows === false &&
+      ["en", "pt", "es"].every((l) => /spec-statusline/.test(S16.msg(l).claudeCode.statusLine.config.cacheFollows)),
+      "1.25.1 r7: statusline --print-config in a versioned plugin folder prints a command that runs the NEWEST installed version (1.10.0 over 1.2.0, numeric parts) even after the printed one is removed — the platform shell" +
+      (viaBash ? " and bash" : " (bash: skipped)") + " alike; a clone (or a path holding $ % ! \" `) keeps the plain command (got " +
+      js([r.follows, viaShell.status, viaShell.stdout, viaShell.stderr.slice(0, 200), viaBash && viaBash.stdout, plain.command]) + ")");
+  }
   try { fs.rmSync(none, { recursive: true, force: true }); } catch { /* best-effort */ }
 };

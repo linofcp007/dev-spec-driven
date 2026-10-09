@@ -100,6 +100,24 @@ function statusProbe(candidates) {
   return false;
 }
 
+// 1.25.1 (review 7) — the status line command `statusline --print-config` prints (and /spec-statusline writes into settings.json).
+// In a plugin's versioned folder (…/dev-spec-driven/<version>/cli/dev-spec.js) the plain `node "<that path>" statusline` broke at the
+// first plugin update (Claude Code removes the old folder 14 days later): the command finds the newest installed <version> holding
+// cli/dev-spec.js at each run — the completion scripts' rule (numeric parts, a missing part 0) — in a node one-liner that holds no
+// shell syntax but its two double-quoted arguments (no ", $, `, %, !, backslash): cmd.exe, PowerShell, sh and bash pass it alike.
+// It sets argv[1] to the CLI it found and requires it (dev-spec.js reads argv.slice(2): `statusline`). A plugin folder whose path
+// holds one of those characters, or any other CLI (a clone), gets the plain command.
+const STATUSLINE_LAUNCHER = "const f=require('fs'),p=require('path'),b=process.argv[1],k=(s)=>s.split('.').map((x)=>parseInt(x,10)||0)," +
+  "c=(x,y)=>{const a=k(x),d=k(y);for(let i=0;i<Math.max(a.length,d.length);i++){const e=(a[i]||0)-(d[i]||0);if(e)return e}return 0};" +
+  "let v=[];try{v=f.readdirSync(b).filter((d)=>f.existsSync(p.join(b,d,'cli','dev-spec.js'))).sort(c)}catch(e){}" +
+  "if(v.length){process.argv[1]=p.join(b,v[v.length-1],'cli','dev-spec.js');require(process.argv[1])}";
+function statuslineCommand(cli) {
+  const p = String(cli).split(path.sep).join("/").replace(/\\/g, "/");
+  const m = /^(.*\/dev-spec-driven)\/[^/]+\/cli\/dev-spec\.js$/.exec(p);
+  if (!m || /["$`%!\\]/.test(m[1])) return { command: `node "${p}" statusline`, follows: false };
+  return { command: `node -e "${STATUSLINE_LAUNCHER}" "${m[1]}" statusline`, follows: true };
+}
+
 // state.js: slugify, RE_WIN_RESERVED-free (a listing shows what is there), RESERVED_SLUGS / reservedSlug, isFeatureFolder.
 const RESERVED_SLUGS = new Set(["steering", "exports", "templates", "tracks"]);
 function slugify(name) {
@@ -242,4 +260,4 @@ function script(shell, model) {
   return body.replace(/@@([A-Z_]+)@@/g, (m, k) => (Object.prototype.hasOwnProperty.call(fill, k) ? fill[k] : m));
 }
 
-module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, statusProbe, featureNames, archivedNames };
+module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, statusProbe, STATUSLINE_LAUNCHER, statuslineCommand, featureNames, archivedNames };

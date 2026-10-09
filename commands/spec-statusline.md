@@ -25,13 +25,13 @@ it always exits 0, never writes anything and runs locally (no tokens).
    entry before writing anything.
 3. Write only after the user says yes. Change only the `statusLine` key and keep every other setting as it is. If a
    `statusLine` is already there, show it and ask before replacing it (a custom script can also call ours and print both).
-4. `--remove`: delete the `statusLine` key only when its command is this one (`dev-spec.js" statusline`); otherwise say
-   what is there and leave it.
+4. `--remove`: delete the `statusLine` key only when its command is this one (it ends in `statusline` and names `dev-spec.js`
+   or the `dev-spec-driven` plugin folder); otherwise say what is there and leave it.
 5. Tell the user: it appears after the next assistant message (Claude Code runs it after each one); it needs the folder's
    workspace trust, like hooks; test it with
    `echo '{"cwd": "<project>"}' | node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" statusline`. A plugin installed from a git
-   marketplace lives in a versioned cache folder (`…/plugins/cache/…/<version>/`): after a plugin update, run
-   `/spec-statusline` again (Claude Code removes the old version 14 days after an update). A clone added as a local
-   marketplace (or `--plugin-dir`) loads in place and keeps its path.
+   marketplace lives in a versioned cache folder (`…/plugins/cache/…/<version>/`): the printed command then finds the newest
+   installed version at each run, so it keeps working after a plugin update (no need to run `/spec-statusline` again). A clone
+   added as a local marketplace (or `--plugin-dir`) loads in place and keeps its path.
 
 Respond in the user's language (EN/PT/ES).

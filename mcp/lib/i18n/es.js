@@ -2360,6 +2360,7 @@ const msg = {
           head: "Status line — añade esto a ~/.claude/settings.json (todos los proyectos) o al .claude/settings.local.json de un proyecto (solo en esta máquina — la ruta es de esta máquina, así que nunca en el .claude/settings.json versionado):",
           after: "Muestra una línea — la función más activa, sus tareas, las tareas sin verificar y el siguiente paso — y nada fuera de un proyecto dev-spec.",
           cacheNote: "Esta ruta es una copia con versión en la caché de plugins de Claude Code (…/plugins/cache/…): tras actualizar el plugin, vuelve a ejecutar /spec-statusline — la copia antigua se borra 14 días después de una actualización.",
+          cacheFollows: "Este CLI es una copia con versión en la caché de plugins de Claude Code (…/plugins/cache/…): el comando busca la versión instalada más reciente del plugin en cada ejecución, así que sigue funcionando tras una actualización — no hace falta volver a ejecutar /spec-statusline.",
           tryIt: (cmd) => `Pruébalo: echo '{"cwd": "<tu proyecto>"}' | ${cmd}`,
         },
       },

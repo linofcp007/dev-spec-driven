@@ -321,8 +321,11 @@ before exiting (never `process.exit()` right after a write), a feature's folder 
   — statusLineProject's null rule, Node core only: `isDevSpecDir` at or above each candidate, ≤ 40 levels, the same skips) before
   it; no project → the empty line at about Node's startup (~65 ms against ~140 ms measured on Windows). A project found → the
   engine decides as before (the worktree mapping only ever starts from a folder the walk finds). cli/tests/11-claude-code.js checks
-  the two agree and that no mcp/lib module loads. `--print-config` prints the `statusLine` entry with this clone's absolute path (a note when
-  it is a versioned plugin-cache copy). A plugin cannot ship a status line (plugin `settings` honour only `agent` /
+  the two agree and that no mcp/lib module loads. `--print-config` prints the `statusLine` entry with this clone's absolute path;
+  in a plugin's versioned cache folder (1.25.1, review 7 — the plain path broke at the first plugin update) a command that finds the
+  newest installed `<version>` holding cli/dev-spec.js at each run (cli/completion.js `statuslineCommand`: the completion scripts'
+  rule in a `node -e` one-liner with no shell syntax — no double quote, dollar, backtick, percent, ! or backslash — so cmd.exe, PowerShell, sh and bash pass it alike;
+  a path holding one of those keeps the plain command and its re-run note, `cacheNote`; else `cacheFollows`). A plugin cannot ship a status line (plugin `settings` honour only `agent` /
   `subagentStatusLine`), hence the opt-in `/spec-statusline`.
 - **User defaults** — the environment variables `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT`
   (`userOptionRaw()` → `userDefaults()`), FALLBACKS only: project meta always wins; empty, invalid or unexpanded (`${X}`)

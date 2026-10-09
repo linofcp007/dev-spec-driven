@@ -757,16 +757,19 @@ function statusLineRender() {
   setTimeout(render, 1500).unref(); // a caller that never closes stdin still gets its line
 }
 // `statusline --print-config`: the settings.json snippet with THIS clone's absolute path (never committed — like mcp-config).
+// 1.25.1 (review 7): in a plugin's versioned folder the command finds the newest installed version at each run (cli/completion.js
+// statuslineCommand — the completion scripts' rule): the plain path broke at the first plugin update.
 function statusLineConfig() {
   const cli = path.resolve(__filename).replace(/\\/g, "/");
-  const command = `node "${cli}" statusline`;
+  const { command, follows } = COMPLETION.statuslineCommand(cli);
   const cfg = { statusLine: { type: "command", command } };
   if (flags.json) return console.log(JSON.stringify(cfg, null, 2));
   const C = spec.msg(spec.projectLang(projectDir)).claudeCode.statusLine.config;
   console.log(C.head);
   console.log(JSON.stringify(cfg, null, 2));
   console.log(C.after);
-  if (/\/plugins\/cache\//i.test(cli)) console.log(C.cacheNote);
+  if (follows) console.log(C.cacheFollows);
+  else if (/\/plugins\/cache\//i.test(cli)) console.log(C.cacheNote);
   console.log(C.tryIt(command));
 }
 
