@@ -184,7 +184,8 @@ Decide the mode, then the track set. This is fast (5–10 min) and saves days of
    persists the track set, size and language in `.state.json` (change tracks later with `spec_add_track` — `remove: true`
    drops one). **m / l** (or no size): it seeds `classification.md` — record the fields
    from step 3 there and record the gate with `spec_approve`. **s / xs:** no `classification.md`, no classification
-   gate — record them in the Summary of `requirements.md` (s) or `change.md` (xs).
+   gate — record them in the Summary of `requirements.md` (s) or `change.md` (xs). The user wants the feature on its own
+   git branch? Add `branch: "true"` (or a name) and run the `branch.command` the result returns (`git switch -c …`).
 
 Worked examples: `references/classification-examples-saas.md`, `references/classification-examples-ai.md`.
 

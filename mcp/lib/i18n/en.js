@@ -3398,6 +3398,27 @@ _Outcome: [go | no-go | pivot]_
       nextNote: (order) => `(design-first flow: ${order})`,
       laterPhase: (detail) => `requirements.md is a later phase (design-first) — ${detail}`,
     },
+    // 1.25 — a feature's own git branch (spec_create {branch} / create --branch). Branch names, commands and git's own words stay as given.
+    branch: {
+      invalid: (name) => `'${name}' is not a branch name dev-spec can hand to git: letters, digits, '.', '_', '+', '-' and '/' only (no space, quote or shell character), no '..' or '//', no part starting with '.' or ending with '.lock', not starting with '-' or '/', not ending with '/' or '.', not HEAD — at most 200 characters.`,
+      empty: "branch: give a name, or true for the default (feature/<slug> · fix/<slug> for a bugfix · spike/<slug> for a spike).",
+      noGit: (name) => `No git repository here — no branch was recorded (${name} would have been the feature's branch; the feature was created).`,
+      exists: (name) => `A git branch named ${name} already exists — not recorded, and never switched to (it may hold other work): name another one (branch: "<name>" · --branch <name>), or leave the option out.`,
+      kept: (name, asked) => `The feature's branch stays ${name}, recorded when it started (${asked} was not recorded).`,
+      run: (command) => `The feature's own branch: run ${command} to start on it (this server never runs git).`,
+      notOn: (name, current, command) => `This feature's branch is ${name} and you are on ${current} — ${command} first.`,
+      summary: (name, base, short) => `Branch: \`${name}\`${base ? ` — from \`${base}\`` : ""}${short ? ` at ${short}` : ""}`,
+      finishLine: (name, base) => (base ? `Branch ${name} (from ${base}): 1. merge it into ${base} locally — git switch ${base}, then git merge ${name} · 2. keep the branch.`
+        : `Branch ${name}: 1. merge it locally into the branch it started from · 2. keep the branch.`),
+      statusLine: (name, base, short, current) => `  branch: ${name}${base ? ` (from ${base}${short ? ` at ${short}` : ""})` : short ? ` (from ${short})` : ""}${current ? (current === name ? " — you are on it" : ` — you are on ${current}`) : ""}`,
+      logSince: (base, short) => `  read since the feature started: ${base ? base + " at " : ""}${short} (git log ${short}..HEAD)`,
+      cliCreated: (name, base, short) => `  Branch ${name} created${base ? ` from ${base}` : ""}${short ? ` (${short})` : ""} — you are on it now.`,
+      cliSwitched: (name) => `  Now on the feature's branch ${name}.`,
+      cliOn: (name) => `  On the feature's branch ${name}.`,
+      cliGitMissing: (command) => `  ▲ git could not run here — the branch is recorded but was not created: ${command}`,
+      cliFailed: (command, why) => `  ▲ ${command} failed${why ? `: ${why}` : ""} — the branch is recorded; run the command once that is fixed.`,
+      cliTrackWord: (word) => `--branch ${word}: '${word}' is a track — put the tracks before --branch (create "<name>" ${word} --branch), or write --branch=${word} for a branch of that name.`,
+    },
     // spec_import plan · execplan · bmad (1.14 C3). Headings in the feature's language; IDs and markers stay English-stable.
     importPlans: {
       plansDir: "Claude Code plan mode keeps plans under plansDirectory (default ~/.claude/plans — outside the project): copy the plan into the project first, or set plansDirectory to a folder inside it.",

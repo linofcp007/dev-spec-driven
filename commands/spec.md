@@ -16,7 +16,8 @@ chain — `references/workflows.md` → Sizes). Use the `spec_classify` MCP tool
 approval: `spec_init {tracks, lang}` if steering is missing, then `spec_create {name, tracks, lang}`
 once, with `size` (it seeds the artifacts the size needs and persists the tracks, size + language in `.state.json`; add `brownfield: true`
 when the feature lands in existing code → `integration-plan.md`, `flow: "design-first"` when the architecture is the
-input). The spec or plan already exists in Kiro, spec-kit, OpenSpec, Claude Code / Cursor plan mode, a Codex ExecPlan
+input, `branch: "true"` when the user wants it on its own git branch — `feature/<slug>`, recorded with its base: run the
+`branch.command` it returns; the CLI's `create … --branch` runs it). The spec or plan already exists in Kiro, spec-kit, OpenSpec, Claude Code / Cursor plan mode, a Codex ExecPlan
 or BMAD? Use `/spec-import` instead of re-typing it. If the user clearly wants Vibe mode, skip the artifacts and just
 build it. If a `.specs/<feature>/` already exists, run `spec_next_action` first and resume from the step it names
 instead of starting over. First time with the plugin? Offer `/spec-tour`. Respond in the user's language (EN/PT/ES).

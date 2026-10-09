@@ -39,8 +39,9 @@ Read the file BEFORE you change its area (a section name another note cites — 
   Task dependencies and execution waves · Tasks: ONE scanner · End-of-turn evidence gate and scope guard ·
   Harness-observed evidence.
 - **`docs/maintainers/lifecycle.md`** — before changing the catalog, `_Supersedes:_`, finish baselines / drift, archive /
-  restore, spec_upgrade, decisions, spikes, forecasts / overlaps or the generated roadmap files: Catalog, drift, restore ·
-  Upgrade · Decisions and spikes · Forecasts and cross-feature overlap · Roadmap files and dependencies.
+  restore, a feature's git branch (`create --branch`), spec_upgrade, decisions, spikes, forecasts / overlaps or the generated
+  roadmap files: Catalog, drift, restore · A feature's own git branch · Upgrade · Decisions and spikes · Forecasts and
+  cross-feature overlap · Roadmap files and dependencies.
 - **`docs/maintainers/templates-imports-exports.md`** — before changing project templates, steering front matter, an
   importer or an export format: Project templates · Scoped steering · Import sources · Stakeholder export and release
   notes · Exports and planning.

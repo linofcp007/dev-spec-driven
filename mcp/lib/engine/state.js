@@ -1021,6 +1021,19 @@ function mergeRunRecord(b, o, t, p, ctx) {
   }
   return rec;
 }
+// `branch` (1.25 — create --branch): recorded once, when the feature started on its own git branch. Two records (each side recorded
+// one) → the EARLIER — its `at`: where the feature started first, as createdAt (a record without a time reads as the later one); the
+// same time → the same name is one record (ours' fields over theirs'), two names a conflict (ours kept).
+function mergeBranchRecord(b, o, t, p, ctx) {
+  if (!isObj(o) || !isObj(t)) return mergeEither(ctx, p, b, o, t);
+  const when = (x) => { const v = mergeTime(x.at); return v === -Infinity ? Infinity : v; };
+  const to = when(o), tt = when(t);
+  if (to !== tt) return tt < to ? t : o;
+  if (o.name !== t.name) return mergeConflict(ctx, p, b, o, t);
+  const m = copyOwn(t);
+  for (const k of Object.keys(o)) setOwn(m, k, o[k]);
+  return m;
+}
 // `finished` (the drift baseline): the later one; firstAt = the earliest finish either side recorded.
 function mergeFinished(b, o, t, p, ctx) {
   if (!isObj(o) || !isObj(t)) return mergeEither(ctx, p, b, o, t);
@@ -1129,6 +1142,7 @@ function mergeFeatureState(b, o, t, ctx) {
     changes: mergeHistoryBy(CHANGE_ID), unticks: mergeHistoryBy(UNTICK_ID), [MERGE_CONFLICTS_KEY]: mergeHistoryBy(mergeCanon),
     evidence: mergeMapWith(mergeRunRecord), finishChecks: mergeMapWith(mergeRunRecord), ticks: mergeMapWith(mergeLaterTime),
     finished: mergeFinished, tracks: mergeSet, createdAt: mergeEarlierTime, lastTickAt: mergeLaterTime, lastEditAt: mergeLaterTime, // lastEditAt: 1.22 review (the spec-hook's stamp)
+    branch: mergeBranchRecord, // 1.25 (create --branch)
   };
   const out = mergeObject(b, o, t, [], ctx, (k) => (own(FIELDS, k) ? FIELDS[k] : null));
   // lastApprovedPhase follows the merged approvals, never its own 3-way (ours unchanged + theirs revoked would drop it while a
@@ -1505,6 +1519,107 @@ function mergeDriverStatus(projectDir, opts = {}) {
   return res;
 }
 
+// ---------------------------------------------------------------------------
+// 1.25 — a feature's own git branch (spec_create {branch} / `create --branch [<name>]`). `.state.json → branch` = { name, base,
+// commit, at }: the branch the feature started on, the branch HEAD named when it was recorded (null: a detached HEAD) and HEAD's
+// commit then (null: a repository without a commit yet). The engine never runs git: the repository is READ as files — HEAD, the
+// loose refs, packed-refs — as repoGitConfigText reads its config; the CLI hands what git itself says (createFeature's opts.git) and
+// runs `git switch -c` after the record is written.
+// ---------------------------------------------------------------------------
+const BRANCH_PREFIX = { feature: "feature", change: "feature", bugfix: "fix", spike: "spike" }; // the default name: <prefix>/<slug>
+const BRANCH_NAME_MAX = 200;
+// A name handed to git AND to a shell unquoted (`git switch -c <name>` reads the same in sh, PowerShell and cmd.exe): letters,
+// digits, '.', '_', '+', '-', '/' — then git's own rules for a branch (git check-ref-format --branch): no '..' or '//', no part
+// starting with '.' or ending with '.lock', no leading '-' or '/', no trailing '/' or '.', not HEAD. → true when usable.
+const RE_BRANCH_CHARS = /^[\p{L}\p{N}._+\/-]+$/u;
+function branchNameOk(name) {
+  if (typeof name !== "string" || !name || name.length > BRANCH_NAME_MAX || !RE_BRANCH_CHARS.test(name)) return false;
+  if (name === "HEAD" || /^[-/]|[/.]$|\.\.|\/\//.test(name)) return false;
+  return name.split("/").every((p) => p && !p.startsWith(".") && !/\.lock$/i.test(p));
+}
+const defaultBranchName = (kind, slug) => (own(BRANCH_PREFIX, kind) ? BRANCH_PREFIX[kind] : "feature") + "/" + slug;
+const RE_GIT_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+// The repository a project folder lies in (fs only): the nearest `.git` up from it — a folder, or a worktree's / submodule's `.git`
+// FILE (`gitdir: <path>`, relative to its folder) — and its common dir (`<gitdir>/commondir`: a linked worktree's branches live
+// there, its HEAD in its own gitdir). → { gitDir, commonDir } | null
+function gitDirsOf(projectDir) {
+  let dir = path.resolve(String(projectDir || "."));
+  for (let k = 0; k < 64; k++) {
+    const dotGit = path.join(dir, ".git");
+    let st = null;
+    try { st = fs.statSync(dotGit); } catch { st = null; }
+    if (st) {
+      let gitDir = dotGit;
+      if (st.isFile()) {
+        let m = null;
+        try { m = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(fs.readFileSync(dotGit, "utf8").slice(0, 4096)); } catch { m = null; }
+        if (!m) return null;
+        gitDir = path.resolve(dir, m[1]);
+      }
+      let commonDir = gitDir;
+      try { commonDir = path.resolve(gitDir, fs.readFileSync(path.join(gitDir, "commondir"), "utf8").trim()); } catch { commonDir = gitDir; }
+      return { gitDir, commonDir };
+    }
+    const up = path.dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  return null;
+}
+// refs/heads/<name>'s commit as the files hold it: the loose ref, else its packed-refs line → the sha | null (none, or unreadable).
+function gitHeadsSha(commonDir, name) {
+  const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return null; } };
+  const loose = read(path.join(commonDir, "refs", "heads", ...name.split("/")));
+  if (loose != null) return RE_GIT_SHA.test(loose.trim()) ? loose.trim() : null;
+  const want = " refs/heads/" + name;
+  for (const l of (read(path.join(commonDir, "packed-refs")) || "").split(/\r?\n/)) {
+    if (l.endsWith(want) && RE_GIT_SHA.test(l.slice(0, l.length - want.length))) return l.slice(0, l.length - want.length);
+  }
+  return null;
+}
+// What the repository's FILES say (never git): null — no repository found — | { repo: true, base, commit, current, exists(name) }.
+// base / current: the branch HEAD names (null: a detached HEAD, or one these files can't tell — a reftable repository's HEAD reads
+// "refs/heads/.invalid"); commit: HEAD's (null: no commit yet, or unreadable); exists(name): refs/heads/<name> is there (null: can't
+// tell — reftable, or a name git would refuse).
+function gitRepoFacts(projectDir) {
+  const g = gitDirsOf(projectDir);
+  if (!g) return null;
+  let head;
+  try { head = fs.readFileSync(path.join(g.gitDir, "HEAD"), "utf8").trim(); } catch { return null; }
+  const reftable = isDirSafe(path.join(g.commonDir, "reftable"));
+  const m = /^ref:[ \t]*refs\/heads\/(.+)$/.exec(head);
+  const base = m && !reftable && m[1] !== ".invalid" ? m[1] : null;
+  const commit = RE_GIT_SHA.test(head) ? head : base && branchNameOk(base) ? gitHeadsSha(g.commonDir, base) : null;
+  const exists = (name) => {
+    if (reftable || !branchNameOk(name)) return null;
+    try { if (fs.statSync(path.join(g.commonDir, "refs", "heads", ...name.split("/"))).isFile()) return true; } catch { /* not a loose ref */ }
+    return gitHeadsSha(g.commonDir, name) != null;
+  };
+  return { repo: true, base, commit, current: base, exists };
+}
+// .state.json → branch, sanitized: { name, base, commit, at } | null (absent, or not a usable record — a hand edit).
+function featureBranchRecord(state) {
+  const b = isObj(state) ? state.branch : undefined;
+  if (!isObj(b) || !branchNameOk(b.name)) return null;
+  return { name: b.name, base: typeof b.base === "string" && b.base.trim() ? b.base : null,
+    commit: typeof b.commit === "string" && RE_GIT_SHA.test(b.commit) ? b.commit : null, at: typeof b.at === "string" ? b.at : null };
+}
+// The record as status / next_action / finish show it, plus where the repository stands NOW (its files): current — the branch HEAD
+// names (null: none or unknown) — and exists (false: the branch is not there — never created, or deleted since; null: can't tell).
+// facts: what gitRepoFacts() said, when the caller has it. → null when the feature has no branch.
+function branchView(projectDir, state, facts) {
+  const rec = featureBranchRecord(state);
+  if (!rec) return null;
+  const f = facts !== undefined ? facts : gitRepoFacts(projectDir);
+  const repo = !!(f && f.repo);
+  return { ...rec, current: repo ? f.current || null : null, exists: repo && typeof f.exists === "function" ? f.exists(rec.name) : null };
+}
+// A feature's branch by its name (the CLI's `log` reads the base commit from it) → branchView() | null.
+function featureBranch(projectDir, name) {
+  const f = existingFeature(projectDir, name);
+  return f.ok ? branchView(projectDir, readState(projectDir, f.slug)) : null;
+}
+
 module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
   RESERVED_SLUGS, reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState,
   stateFromFile, PHASE_FILE, artifactFingerprint, textFingerprint, fingerprintText, wsText, wsFingerprint, sha1Hex, fingerprintMatches,
@@ -1518,4 +1633,6 @@ module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugi
   MERGE_DRIVER, MERGE_KINDS, MERGE_ATTRIBUTE_PATHS, MERGE_ATTRIBUTE_LINES, MERGE_CONFLICTS_KEY, mergeStateJson, mergeStateText,
   mergeKindOfPath, mergeAttributes, mergeConflictsCheck,
   // 1.21 review A3 — the installed driver still this clone's? (merge-state --check, the SessionStart hook)
-  MERGE_DRIVER_KEY, gitConfigGet, mergeDriverScript, repoGitConfigText, mergeDriverStatus, __link };
+  MERGE_DRIVER_KEY, gitConfigGet, mergeDriverScript, repoGitConfigText, mergeDriverStatus,
+  // 1.25 — a feature's own git branch (create --branch): its name, the repository read as files, the record
+  BRANCH_PREFIX, BRANCH_NAME_MAX, branchNameOk, defaultBranchName, gitDirsOf, gitRepoFacts, featureBranchRecord, branchView, featureBranch, __link };

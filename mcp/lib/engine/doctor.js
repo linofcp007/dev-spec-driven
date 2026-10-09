@@ -35,7 +35,8 @@ let acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, a
   waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers;
+  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
+  branchView; // 1.25 (create --branch)
 function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeTasks, AI_SECTIONS, approvalChecks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
@@ -59,7 +60,8 @@ function __link(E) { ({ acDuplicates, activeDesign, activeSectionTracks, activeT
   verifyPipes, waiverExpiredCheck, withinRoot, withRoadmapLock, writeRoadmap,
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
-  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers } = E); }
+  suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
+  branchView } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -260,11 +262,14 @@ function statusFeature(projectDir, name) {
   }
   const missingPacks = missingPackTracks(dir);
 
-  const kind = readState(projectDir, slug).kind || "feature";
+  const st = readState(projectDir, slug);
+  const kind = st.kind || "feature";
+  const branch = branchView(projectDir, st); // 1.25: the feature's own git branch (create --branch) — and where HEAD is now
   return {
     ok: true,
     feature: slug,
     kind, // feature | bugfix | spike (1.14 — the same field spec_list rows carry)
+    ...(branch ? { branch } : {}), // { name, base, commit, at, current, exists } — only for a feature started on its own branch
     flow: featureFlow(dir, kind), // requirements-first | design-first (C3; a bugfix / spike is always requirements-first)
     tracks: trackLabel(tracks),
     phase: detectPhase(dir, tracks),
@@ -292,7 +297,7 @@ function statusFeature(projectDir, name) {
 function nextAction(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error };
-  if (isSpikeDir(f.dir)) return spikeNextAction(projectDir, f, opts); // 1.14 C2
+  if (isSpikeDir(f.dir)) return withBranchStep(projectDir, f.slug, readState(projectDir, f.slug), spikeNextAction(projectDir, f, opts)); // 1.14 C2 (+ 1.25 its branch)
   const { slug, dir } = f;
   const tracks = detectTracks(dir);
   const phase = detectPhase(dir, tracks);
@@ -584,6 +589,18 @@ function nextAction(projectDir, name, opts = {}) {
   if (flow === "design-first") { // C3: stable `flow`; the order is named while the design / requirements gates are the open ones
     res.flow = flow;
     if (["fill", "fix", "approve"].includes(step) && (pending === "design" || pending === "requirements")) res.recommendation += " " + fm.flow.nextNote(flowOrderText(dir, tracks, flow));
+  }
+  return withBranchStep(projectDir, slug, st, res);
+}
+// 1.25 — next_action names the feature's own git branch (create --branch): `branch` {name, base, commit, at, current, exists}, and —
+// while there is work left (the phase isn't complete) and HEAD is on ANOTHER branch — the switch first, appended to the step's
+// recommendation (`git switch <name>`; `-c` when the branch is not there yet). The step itself is unchanged. → res
+function withBranchStep(projectDir, slug, st, res) {
+  const bv = res && res.ok !== false ? branchView(projectDir, st) : null;
+  if (!bv) return res;
+  res.branch = bv;
+  if (bv.current && bv.current !== bv.name && res.phase !== "complete" && typeof res.recommendation === "string") {
+    res.recommendation += " " + i18n.msg(featureLang(projectDir, slug)).branch.notOn(bv.name, bv.current, "git switch " + (bv.exists === false ? "-c " : "") + bv.name);
   }
   return res;
 }

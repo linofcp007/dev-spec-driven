@@ -147,7 +147,10 @@ straight to the engine and the 1.12 MCP accepted them; `spec_import`'s `tool` st
 (`EXACT_ENUMS`). The engine and the CLI fold `backlog`'s action too (`ADD` adds on every surface).
 A schema `type` is always ONE string, never a list (`["string", "boolean"]` — not every MCP client handles list-valued
 types): `spec_init`'s `guard` is a plain string enum `on | off | scope`, and `foldEnumArgs` turns a boolean into
-`"on"` / `"off"` for any string enum holding both (the pre-1.14 `guard: true` keeps working).
+`"on"` / `"off"` for any string enum holding both (the pre-1.14 `guard: true` keeps working). A free string that also reads
+`'true'` / `'false'` (1.25 — `spec_create {branch}`: `'true'` = the default branch name, else the name) is listed in
+`BOOL_STRING_ARGS`: a boolean given for it becomes its word (`"true"` / `"false"`) before validation, and the engine reads the
+words (any case) — `branch: true` works, the schema stays `type: "string"`.
 A tool that THROWS (a file system error — `.specs` being a file) answers the JSON every other refusal is
 (1.23 — it was the bare text `ERROR: <message>`): `toolFailure()` → `{ok: false, error: args.toolFailed(<message>), code: <the
 error's code, e.g. ENOTDIR>}` with `isError: true`, in the project's language.

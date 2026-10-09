@@ -60,7 +60,7 @@ dev-spec init [--evidence reported|observed] [--approval-guard off|ask|deny]   #
 dev-spec steering <file> [--lang]              # one steering file from its template (constitution.md, tech.md, …) or a custom scoped one (api-rules.md)
 dev-spec templates [list|init|check] [artifact] [--lang]   # the team's own scaffolds in .specs/templates/ (replace the built-in ones)
 dev-spec tracks [list|init <name>|check] [name] [--lang]   # the team's own tracks: packs in .specs/tracks/<name>/ (marker tracks like +sec)
-dev-spec create "<name>" [tracks...] [--size xs|s|m|l] [--lang] [--summary "…"] [--brownfield] [--flow design-first]  # scaffold the feature (no tracks → auto-classify; --size: xs = one change.md, s = no classification.md; --brownfield → integration-plan.md)
+dev-spec create "<name>" [tracks...] [--size xs|s|m|l] [--lang] [--summary "…"] [--brownfield] [--flow design-first] [--branch [<name>]]  # scaffold the feature (no tracks → auto-classify; --size: xs = one change.md, s = no classification.md; --brownfield → integration-plan.md; --branch → its own git branch: feature/<slug>, recorded and switched to — bugfix / spike too)
 dev-spec bugfix "<name>" [--summary "…"]       # bugfix flow: reproduce → root cause → regression test → fix
 dev-spec spike "<name>" [--question "…"] [--timebox 3d]   # a timeboxed investigation that ends in a decision (go / no-go / pivot)
 dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name "<feature>"] [--tracks …]   # another tool's spec, a plan, an ExecPlan, BMAD docs or a fluidplan plan → a NEW feature (IDs remapped)

@@ -11,7 +11,9 @@ Read the steering files first. Ask clarifying questions — don't guess. If the 
 yet (Phase 0 approved), run `spec_create {name, tracks, lang}` once (or write by hand): the track set and the
 language are persisted in `.specs/<feature>/.state.json`, and a fresh feature starts at phase `requirements`. In an
 existing codebase pass `brownfield: true` (CLI `--brownfield`) to also scaffold `integration-plan.md`
-(integration points · required modifications · sequencing · risks · affected files). Then fill
+(integration points · required modifications · sequencing · risks · affected files). On its own git branch: `branch:
+"true"` or a name (CLI `--branch [<name>]`, which also switches to it) — then run the `branch.command` the result returns
+(`git switch -c feature/<slug>`); a branch of that name that already exists is never recorded nor switched to. Then fill
 `requirements.md` in EARS syntax with stable AC IDs (US-1.AC-1 …), prioritized stories (P1 = MVP),
 success criteria `SC-001…`, and edge cases / NFRs with their own IDs (`EC-1`, `NFR-1`).
 Add the track-specific ACs the feature's classification calls for (tenant isolation / rate limits
