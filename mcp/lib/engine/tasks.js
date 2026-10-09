@@ -1042,11 +1042,14 @@ function scanTaskBlocks(tasksText, ownLines) {
   const blocks = [];
   let phase = null;
   let cur = null;
+  let curInd = 0; // the current task line's indentation (columns): a checkbox item at it or less is a sibling, not its body
   let open = []; // tasks of the current section still waiting for their checkpoint
   let prevBlank = false;
   let owner = null; // the task a fenced block belongs to (null = a free-standing block)
   const hold = (i) => { if (ownLines) ownLines[i] = true; };
-  scanTaskLines(tasksText).forEach((ln, i) => {
+  const scan = scanTaskLines(tasksText);
+  const heads = taskHeadings(tasksText, scan);
+  scan.forEach((ln, i) => {
     const line = ln.vis;
     if (ln.code) {
       // Fenced code is never a task, heading or checkpoint. Right under a task it stays in its body (the brief shows
@@ -1059,7 +1062,8 @@ function scanTaskBlocks(tasksText, ownLines) {
       return;
     }
     owner = null;
-    const h = atxHeading(line); // /^#{1,6}\s+(.*?)\s*$/
+    const h = heads.get(i); // taskHeadings: ATX at the margin, or setext
+    if (h && h.underlineOf != null) { prevBlank = false; return; } // a setext heading's underline: part of its heading
     if (h) {
       phase = h.text;
       cur = null;
@@ -1089,7 +1093,13 @@ function scanTaskBlocks(tasksText, ownLines) {
       };
       blocks.push(cur);
       open.push(cur);
+      curInd = indentCols(line);
       hold(i);
+    } else if (cur && RE_LIST_BOX_LINE.test(line) && indentCols(line) <= curInd) {
+      // 1.25.1 (review 7): a checkbox item at the task's own indentation (or less, or quoted) is a SIBLING, never its body — a
+      // mistyped task right under it (`- [ ] 2 B`, `- [ ] 2) B`, `- [~] 2. B`) became task 1's body text, markers included, and
+      // vanished from every tool; now it is no task's and doctor's unread-tasks names it. A deeper one is a sub-step (the body's).
+      cur = null;
     } else if (cur && line.trim() && (/^\s/.test(line) || !prevBlank)) {
       cur.body.push(line.trim()); // indented sub-line, or a lazy continuation right under the task
       hold(i);
@@ -1101,10 +1111,31 @@ function scanTaskBlocks(tasksText, ownLines) {
   return blocks;
 }
 
+// The phase headings the task scanner reads → Map(line index → { level, text } | { underlineOf: the heading's line }): an ATX heading
+// at the margin (`## Phase 1`, as ever) and — 1.25.1 (review 7) — a SETEXT one ("Phase A" underlined by "===" / "---", its text at
+// the margin) as the ONE heading reader takes it (headingEntries: never in a comment or a fence). The scanner read ATX only while
+// activeTasks / the section readers read setext too: every task's phase was null (taskSchedule served a later section's task
+// first) and spec_append_tasks never found a setext phase. Its underline line is part of the heading (never a task's body).
+// scan: scanTaskLines(tasksText) (a line it reads as code is no heading).
+const RE_SETEXT_UNDERLINE_LINE = /^ {0,3}(?:={3,}|-{3,})[ \t]*\r?$/m;
+function taskHeadings(tasksText, scan) {
+  const out = new Map();
+  scan.forEach((s, i) => { const m = !s.code && atxHeading(s.vis); if (m) out.set(i, { level: m.level, text: m.text }); }); // /^(#{1,6})\s+(.*?)\s*$/
+  if (!RE_SETEXT_UNDERLINE_LINE.test(String(tasksText || ""))) return out; // no underline anywhere: no setext heading
+  for (const h of headingEntries(String(tasksText || "").split("\n"))) {
+    if (h.atx || h.indent !== 0 || out.has(h.i) || !scan[h.i] || scan[h.i].code || scan[h.i].task || !scan[h.i + 1] || scan[h.i + 1].code) continue;
+    out.set(h.i, { level: h.level, text: h.text });
+    out.set(h.i + 1, { underlineOf: h.i });
+  }
+  return out;
+}
+
 // 1.22 review — checkbox list lines the ONE scanner does not read as tasks: an ordered-list checkbox (`1. [ ] text`), an
 // unnumbered one outside every task block (`- [ ] text`) — never ticked, briefed or verified (a sub-step checkbox in a task's
 // body is that task's). Comments and fenced code hold none. → [{ line (1-based), text }] — doctor's unread-tasks warn.
-const RE_LIST_BOX_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s*\[[ xX]\]/;
+// 1.25.1 (review 7): any one-character box (`- [~] 2.`, `- [-] 2.`, `- [/] 2.` — a task-list app's states) and a quoted one
+// (`> - [ ] 1.`) are named too — they were skipped silently; a letter or digit in the brackets (`- [a](…)`) is no box.
+const RE_LIST_BOX_LINE = /^\s*(?:>\s*)*(?:[-*+]|\d{1,9}[.)])\s*\[(?:[ xX]|[^\]\p{L}\p{N}\s])\]/u;
 function unreadTaskLines(tasksText) {
   const src = String(tasksText || "");
   const held = new Array(src.split("\n").length).fill(false);
@@ -1895,6 +1926,15 @@ function newTaskSpec(t, i, A, D) {
 }
 
 // spec_append_tasks {name, tasks: [{text, requirements?, implements?, verify?, makesGreen?, expectFail?, size?, depends?, story?, parallel?}], heading?}.
+// The number a NEW task takes — spec_append_tasks and a track's template tasks (spec_add_track, a track pack's block) alike: after
+// every number in use, tasks.md's and any evidence record or tick time a removed task left behind in the state (`state`: .state.json's
+// data; none for a fresh scaffold). A new task must never inherit an old run — ticked by hand it read verified on the removed task's
+// evidence — nor an old completion time the forecasts would count (1.25.1, review 7: the track blocks numbered after tasks.md alone).
+function nextTaskNumber(tasksText, state) {
+  const used = (o) => Object.keys(isRecord(o) ? o : {}).filter((k) => /^\d{1,15}$/.test(k)).map(Number);
+  const st = isRecord(state) ? state : {};
+  return Math.max(0, ...taskBlocks(tasksText || "").map((b) => b.number), ...used(st.evidence), ...used(st.ticks)) + 1;
+}
 // Tasks are numbered after every number in use and appended under a phase heading: an existing heading with that
 // text (at the end of its phase, before its closing checkpoint) or a new one (default: the localized
 // "Phase: Convergence", with a closing **Checkpoint:**) placed after the last ACTIVE line — never inside a removed
@@ -1979,19 +2019,21 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
   const lines = raw.split("\n").map((l) => l.replace(/\r$/, ""));
   const scan = scanTaskLines(raw);
   const off = inactiveTaskLines(lines, tracks);
-  const heads = [];
-  scan.forEach((s, i) => { const m = !s.code && atxHeading(s.vis); if (m) heads.push({ i, level: m.level, text: m.text }); }); // /^(#{1,6})\s+(.*?)\s*$/
+  // the scanner's own phase headings (taskHeadings — ATX, and setext since 1.25.1); body: the first line after the heading (a setext
+  // heading's underline is part of it — new tasks never land between its text and its underline)
+  const headMap = taskHeadings(raw, scan);
+  const heads = [...headMap].filter(([, h]) => h.underlineOf == null)
+    .map(([i, h]) => ({ i, level: h.level, text: h.text, body: headMap.has(i + 1) && headMap.get(i + 1).underlineOf === i ? i + 2 : i + 1 }))
+    .sort((a, b) => a.i - b.i);
   const lastContent = (from, to, skip) => { for (let i = to - 1; i >= from; i--) if (lines[i].trim() && !(skip && skip.has(i))) return i; return -1; };
 
   const matches = heads.filter((h) => h.level >= 2 && normTaskHeading(h.text) === norm); // never the H1 title
   const target = matches.filter((h) => !off.has(h.i)).pop(); // the latest round, when the heading repeats
   if (!target && matches.length) return { ok: false, error: A.inactiveHeading(matches[0].text, "+" + off.get(matches[0].i)) };
 
-  // Numbered after every number in use — tasks.md's, and any evidence record or tick time a removed task left behind (a
-  // new task must never inherit an old run, nor an old completion time the forecasts would count).
+  // Numbered after every number in use (nextTaskNumber: tasks.md's, and any evidence record or tick time a removed task left behind).
   const before = taskBlocks(raw);
-  const usedKeys = (o) => Object.keys(isRecord(o) ? o : {}).filter((k) => /^\d+$/.test(k)).map(Number);
-  let n = Math.max(0, ...before.map((b) => b.number), ...usedKeys(state.evidence), ...usedKeys(state.ticks));
+  let n = nextTaskNumber(raw, state) - 1;
   const numbered = items.map((t) => ({ ...t, number: ++n }));
   // 1.14 F3: every `depends` names an ACTIVE task or a task of this call (by the number it gets here), never the task itself.
   const withDeps = numbered.some((t) => t.depends.length);
@@ -2018,7 +2060,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
     const next = heads.find((h) => h.i > target.i);
     const end = next ? next.i : lines.length;
     let lastTask = target.i;
-    for (let i = target.i + 1; i < end; i++) if (!scan[i].code && scan[i].task) lastTask = i;
+    for (let i = target.body; i < end; i++) if (!scan[i].code && scan[i].task) lastTask = i;
     let closing = -1;
     for (let i = lastTask + 1; i < end && closing === -1; i++) if (!scan[i].code && RE_CHECKPOINT.test(scan[i].vis)) closing = i;
     if (closing !== -1) {
@@ -2028,7 +2070,7 @@ function appendTasks(projectDir, name, tasks, opts = {}) {
       // line stay after the new tasks. (A comment line without its "<!--", or one that starts inside an open comment
       // — "<!-- a" … "<!-- b -->" — is the tail of a multi-line one: the tasks go after it, never inside it.)
       closing = end;
-      while (closing > target.i + 1) {
+      while (closing > target.body) {
         const i = closing - 1;
         const s = lines[i].trim();
         const trailer = !s || (!scan[i].code && (RE_THEMATIC_BREAK.test(scan[i].vis) || (!scan[i].vis.trim() && !scan[i].inComment && s.startsWith("<!--"))));
@@ -2118,7 +2160,7 @@ module.exports = { parseTasks, taskDescription, nextTask, parallelBatch, RE_DEP_
   taskDepsWaitList, taskDepsIssues, taskDepsCheck, RE_ROOT_CAUSE_TASK, bugfixGate, rootCauseTaskIndex, blockPosition,
   taskSections, taskNumber, tasksBytes, textEncoding, encodeText, tasksRewrite, checkboxBytes, completeTask, UNDO_REASON_MAX, reasonInput, untickTask, RE_TASK_LINE_HEAD, taskLine, dropTrailingCr, RE_CHECKPOINT,
   COMMENT_MASK, RE_TASK_FENCE_OPEN, RE_PARA_BREAK, scanTaskLines, fenceLine, indentOf, hasOutsideCode, backtickRuns,
-  TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, BLOCK_PEERS, SCAN_STAMPS, taskPeerStamps, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
+  nextTaskNumber, TASK_BLOCKS_MEMO, TASK_BLOCKS_MEMO_MAX, BLOCK_PEERS, SCAN_STAMPS, taskPeerStamps, taskBlocks, scanTaskBlocks, RE_LIST_BOX_LINE, unreadTaskLines, unreadTasksDetail, resolveTask, duplicateTaskNumbers, taskProse,
   RE_RED_PHASE_TASK, redPhaseTask, redPhaseHint, tasksProseText, changeViews, criteriaText, tasksIdText, TASK_MARKER_LABELS, RE_TASK_MARKER_OPEN,
   MARKER_CLOSE_PUNCT, MARKER_SPANS_MEMO, MARKER_SPANS_MEMO_MAX, MARKER_MEMO_LINE_MAX, NO_MARKER_SPANS, taskMarkerSpans, scanMarkerSpans,
   taskMarkerValues, withoutTaskMarkers, WHOLE_VALUE_MARKERS, TASK_MARKERS_MEMO, TASK_MARKERS_MEMO_MAX, taskMarkers, scanTaskMarkers,

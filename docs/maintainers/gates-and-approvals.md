@@ -245,7 +245,8 @@ flows, the bugfix kind.
 - **`spec_metrics`** derives everything from `.state.json`, `.history/` and the artifacts (`createdAt` is
   stored by createFeature; older features get an approximate one). `write` creates `retro.md` (writeIfAbsent).
 - **`spec_append_tasks`** (converge) appends only: numbers after every number in use (tasks.md + leftover
-  evidence records and tick times — a new task never inherits a removed one's run or completion time), all-or-nothing validation (phantom AC IDs, non-relative paths, bad story, multi-line markers,
+  evidence records and tick times — a new task never inherits a removed one's run or completion time; `nextTaskNumber()`,
+  tasks.js, which a track's template tasks read too since 1.25.1 — tracks.md), all-or-nothing validation (phantom AC IDs, non-relative paths, bad story, multi-line markers,
   inactive-track / Global Constraints headings), a read-back check that existing tasks didn't change, and
   CRLF / BOM / missing final newline preserved. An approved task list → `needsReapproval`. Per task, besides `requirements`
   / `implements` / `verify` / `story` / `parallel`: `makesGreen` (T-IDs — `T-1`, `t-01`, `T01` accepted —, each planned in

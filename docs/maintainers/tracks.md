@@ -756,7 +756,9 @@ human. The track set drives which artifacts/sections/loops apply. See `reference
   guidance — `packSubstBasic()` fills its `{{title}}` / `{{marker}}` / `{{name}}` / `{{slug}}`; `trackDesignBlock(tr, lang,
   vars)`), `packRequirementsBlock` (`#### [MARKER] <title> — Acceptance Criteria (EARS)`, numbered after the highest
   US-1 AC of the text it joins; `insertPackRequirements()` puts it before the first REAL `#`/`##`/`###` heading after the
-  last US-1 criterion — `commentLines()`: never one inside an HTML comment or fence, F4 review R3 — else at the end), `packTaskBlock` (`## Story US-1 — [MARKER] <title>`, numbered after the last task;
+  last US-1 criterion — `commentLines()`: never one inside an HTML comment or fence, F4 review R3 — else at the end), `packTaskBlock` (`## Story US-1 — [MARKER] <title>`, numbered after the last task — 1.25.1: from `spec_add_track`, after every
+  number in use, the state's leftover evidence / tick numbers too, `nextTaskNumber()` as `spec_append_tasks` and the built-in
+  tracks' `trackTaskBlock` (a removed task's run was inherited by the track's first new task);
   `_Requirements:_` added when a task has none — the pack's AC IDs per `trackAcIds`, else the track's `acPlaceholder`;
   the DEFAULT task also gets `_Makes green:_` from `packPlanRows()`; a fragment line whose `{{tN}}` / `{{tests}}` names no
   planned test is dropped), `packTestRowsBlock` (`## [MARKER] <Traceability Matrix>` + the built-in header, T-IDs after

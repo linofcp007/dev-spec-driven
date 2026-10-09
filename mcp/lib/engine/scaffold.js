@@ -17,7 +17,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText, guardInput,
   guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord, isSpikeDir,
   learnSignalOverrides, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
-  optionalTracks, own, packDesignBlock, packMarkersFor, packOf, packTaskBlock, parseTasks, parseTracks,
+  optionalTracks, own, packDesignBlock, packMarkersFor, packOf, packTaskBlock, parseTasks, parseTracks, nextTaskNumber,
   placeholderReport, projectChecks, projectLang, quotedValue, RE_ACTIVE_TRACKS, RE_TESTABILITY, RE_WIN_RESERVED,
   readIfExists, readJson, readRoadmap, readState, requirementAcIds, resolveFeature, roadmapError, rolesSummary,
   safeReaddir, safeSpecText, scaffoldText, scanTaskLines, seedProjectLang, setApprovalGuard, setApprovalRoles,
@@ -36,7 +36,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
   guardInput, guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord,
   isSpikeDir, learnSignalOverrides, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
-  optionalTracks, own, packDesignBlock, packMarkersFor, packOf, packTaskBlock, parseTasks, parseTracks,
+  optionalTracks, own, packDesignBlock, packMarkersFor, packOf, packTaskBlock, parseTasks, parseTracks, nextTaskNumber,
   placeholderReport, projectChecks, projectLang, quotedValue, RE_ACTIVE_TRACKS, RE_TESTABILITY, RE_WIN_RESERVED,
   readIfExists, readJson, readRoadmap, readState, requirementAcIds, resolveFeature, roadmapError, rolesSummary,
   safeReaddir, safeSpecText, scaffoldText, scanTaskLines, seedProjectLang, setApprovalGuard, setApprovalRoles,
@@ -1229,7 +1229,9 @@ function applyTracks(projectDir, f, name, trs, lng) {
     const tasksPath = path.join(dir, "tasks.md");
     const tasksText = readIfExists(tasksPath);
     if (tasksText != null) {
-      const block = sizeTasksText(trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng, undefined, readIfExists(path.join(dir, "test-plan.md")), { name, slug }), after, size);
+      // numbered after the state's leftover evidence / tick numbers too (nextTaskNumber — 1.25.1: a removed task's run was inherited)
+      const block = sizeTasksText(trackTaskBlock(tr, tasksText, readIfExists(path.join(dir, "requirements.md")), lng, undefined, readIfExists(path.join(dir, "test-plan.md")), { name, slug },
+        nextTaskNumber(tasksText, state)), after, size);
       // atomic (never a torn tasks.md for a concurrent reader), after a code block left open at its end is closed (1.23 review 5)
       if (block && appendSpecFile(projectDir, tasksPath, tasksText, block, { trim: true })) note(T.addedTasks);
     }
@@ -1295,13 +1297,14 @@ function scaffoldTestPlan(dir, name, lng, tracks, size) {
 // load-test tasks "covered" it and trace_check passed with a real criterion no task implements. A phantom ID (one the
 // feature doesn't define) would read as a typo in trace_check.
 // idMap: template ID → the feature's ID for that criterion (a project template's renumbered track block — trackIdMap).
-function trackTaskBlock(tr, tasksText, reqText, lng, idMap, planText, vars) {
-  if (isPackTrack(tr)) return packTaskBlock(packOf(tr), tasksText || "", reqText, planText, lng, vars); // a track pack's own block (1.15)
+// start: the first task's number (spec_add_track: nextTaskNumber over tasks.md AND the state); default: after tasks.md's last task.
+function trackTaskBlock(tr, tasksText, reqText, lng, idMap, planText, vars, start) {
+  if (isPackTrack(tr)) return packTaskBlock(packOf(tr), tasksText || "", reqText, planText, lng, vars, start); // a track pack's own block (1.15)
   const T = i18n.msg(lng).tracks;
   if (!T.taskBlock(tr, 1) || trackTaskHeading(tr, tasksText)) return null;
-  const start = Math.max(0, ...parseTasks(tasksText).map((t) => t.number)) + 1;
+  const first = Number.isSafeInteger(start) && start > 0 ? start : nextTaskNumber(tasksText);
   const known = trackAcIds(reqText || "", tr);
-  return T.taskBlock(tr, start).replace(/_Requirements:\s*([^_\n]+)_/g, (m, ids) => {
+  return T.taskBlock(tr, first).replace(/_Requirements:\s*([^_\n]+)_/g, (m, ids) => {
     const keep = ids.split(/[,;]/).map((s) => s.trim()).map((id) => (idMap && own(idMap, id) ? idMap[id] : id)).filter((id) => known.has(id));
     return "_Requirements: " + (keep.length ? keep.join(", ") : T.acPlaceholder(tr)) + "_";
   });
