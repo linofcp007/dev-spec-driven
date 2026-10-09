@@ -40,14 +40,14 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeadin
   withRoadmapLock, writeFileAtomic, writeRoadmap, wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr, catalog } = E); }
 
 // ---------------------------------------------------------------------------
-// 1.14 B2 — stakeholder export (spec_export) · release notes from the specs (spec_changelog)
+// 1.14 B2 — stakeholder export (spec_export) · release notes from the specs (spec_export {format: "changelog"})
 // ---------------------------------------------------------------------------
 
 // .specs/exports/ holds spec_export's documents: a reserved name (RESERVED_SLUGS), never a feature folder.
 const EXPORT_DIR = "exports";
 // csv (1.14 F5): the requirements traceability matrix; 1.16 E1 gherkin, E2 jira / linear; 1.25 adr: the decision log as MADR files
 // (decisions.js — exportAdr); 1.26 catalog (SPECS.md — catalog(), finish.js) and changelog (the release notes — changelog() below):
-// the two documents spec_catalog / spec_changelog returned before spec_export took them as formats.
+// the two documents spec_export {format: "catalog"} / spec_export {format: "changelog"} returned before spec_export took them as formats.
 const EXPORT_FORMATS = ["html", "md", "csv", "gherkin", "jira", "linear", "adr", "catalog", "changelog"];
 // 1.26: html / md without write and without includeBody — a markdown preview of the document, not the document (an 18.5k-character
 // HTML for a template-only feature landed in the agent's context on every call): its first EXPORT_PREVIEW_CHARS characters.
@@ -1155,7 +1155,7 @@ function trackerCsv(records, tracker, lang) {
   return out;
 }
 
-// --- release notes (spec_changelog) ---
+// --- release notes (spec_export {format: "changelog"}) ---
 
 // An ISO date (YYYY-MM-DD = that day, 00:00 UTC) or timestamp → ms, or null. A day that doesn't exist (2026-02-30) is
 // refused, never rolled over into the next month as Date.parse would.
@@ -1290,7 +1290,7 @@ function renderReleaseNotes(d, lang, proj, scope, now, ms) {
   md += d.fixed.length ? d.fixed.map((x) => `- **${name(x)}**${x.summary ? " — " + x.summary : ""} — ${x.rootCause ? N.rootCause(x.rootCause) : italic(N.noRootCause)}`).join("\n") + "\n" : italic(N.none) + "\n";
   return md;
 }
-// spec_changelog {since?, write?} / `dev-spec changelog [--since <ISO date|last|all>] [--write]`: release notes from the spec
+// spec_export {format: "changelog", since?, write?} / `dev-spec changelog [--since <ISO date|last|all>] [--write]`: release notes from the spec
 // data, in the project language. since: an ISO date / timestamp, 'last' (the default: roadmap.json meta.changelogAt, stamped by
 // the last written notes — everything while unset) or 'all'. write: .specs/RELEASE-NOTES.md (AUTO-GENERATED, never over a
 // hand-written one) + meta.changelogAt, both under the roadmap lock; with nothing to report nothing is written or stamped.
@@ -1358,7 +1358,7 @@ function changelog(projectDir, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// 1.16 E3 — milestones: spec_milestone {action: add | rm | list} · `dev-spec milestone [add <name> <YYYY-MM-DD> <features…> |
+// 1.16 E3 — milestones: spec_roadmap_edit {kind: "milestone", action: add | rm | list} · `dev-spec milestone [add <name> <YYYY-MM-DD> <features…> |
 // rm <name> | list]`, stored in roadmap.json → meta.milestones [{name, date, features, archived?}] (under the roadmap lock).
 // A name: letters (any script, with their marks), digits, spaces and . _ : # ( ) + - (≤ 60 characters, starting with a
 // letter or a digit), unique by its identity (milestoneKey — Unicode kept: "Sprint α" ≠ "Sprint β"); its release notes'
@@ -1378,7 +1378,7 @@ function changelog(projectDir, opts = {}) {
 //   on-track  every open feature has an ETA on or before the date
 // ROADMAP.md / .html show a Milestones table when any exists, and "Needs attention" lists the at-risk / late ones.
 // ---------------------------------------------------------------------------
-const MILESTONE_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_milestone enum (server.js reads it from here)
+const MILESTONE_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_roadmap_edit {kind: "milestone"} enum (server.js reads it from here)
 const MILESTONE_STATUSES = ["on-track", "at-risk", "late", "done"];
 const MILESTONE_MAX = 50;
 const MILESTONE_FEATURES_MAX = 200;
@@ -1505,7 +1505,7 @@ function milestonesNow(projectDir, opts = {}) {
   for (const f of rmv.features) f.forecast = fc.byFeature[f.name];
   return { today: fcIso(fcDay(now)), milestones: milestoneStatuses(projectDir, rmv.features, now) };
 }
-// spec_milestone {action?, name?, date?, features?} (opts.now: "today", tests).
+// spec_roadmap_edit {kind: "milestone", action?, name?, date?, features?} (opts.now: "today", tests).
 function milestone(projectDir, action, opts = {}) {
   const lang = projectLang(projectDir);
   const MS = i18n.msg(lang).milestone;
@@ -1553,7 +1553,7 @@ function milestone(projectDir, action, opts = {}) {
     const date = opts.date == null ? "" : String(opts.date).trim();
     if (!RE_ISO_DAY.test(date) || isoTime(date) == null) return { ok: false, error: MS.badDate(date) };
     // A list's items are names (a feature called "User Login" is one) split on commas only; a single string — the engine's
-    // shorthand — on whitespace and commas too, as spec_depend reads it (1.16 E review m2).
+    // shorthand — on whitespace and commas too, as spec_roadmap_edit {kind: "depend"} reads it (1.16 E review m2).
     const asked = (opts.features == null ? [] : Array.isArray(opts.features) ? opts.features.flatMap((x) => String(x == null ? "" : x).split(",")) : String(opts.features).split(/[\s,]+/))
       .map((x) => x.trim()).filter(Boolean);
     if (!asked.length) return { ok: false, error: MS.noFeatures };

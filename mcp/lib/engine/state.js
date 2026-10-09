@@ -469,7 +469,7 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   const replaced = dependsOn === undefined || dependsOn === null ? null : resolveDeps(dependsOn);
   const added = resolveDeps(edits.add);
   if (unknownNames.length) return { ok: false, error: D.unknown(unknownNames.join(", ")) };
-  // order: a SAFE integer, as spec_depend's schema ({type: "integer"} — no bound) — the CLI passes the raw word, and
+  // order: a SAFE integer, as spec_roadmap_edit {kind: "depend"}'s schema ({type: "integer"} — no bound) — the CLI passes the raw word, and
   // `--order 99999999999999999999` matched the digits and was stored as 1e20 (1.22 review). Refused with the MCP
   // validator's own message (args), so both surfaces refuse the same values alike.
   const orderNum = order == null ? null : orderInput(order);
@@ -607,11 +607,11 @@ function removeBacklogUnlocked(projectDir, nm) {
   return { ok: true, backlog: rm.backlog };
 }
 
-const BACKLOG_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_backlog enum (server.js reads it from here)
+const BACKLOG_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_roadmap_edit {kind: "backlog"} enum (server.js reads it from here)
 function backlog(projectDir, action, name, note) {
   const a = String(action == null ? "" : action).trim().toLowerCase(); // 'ADD' is add on every surface (the MCP enum folds it too)
   if (a === "add") return addBacklog(projectDir, name, note);
-  // "remove" is an alias of "rm" on EVERY surface (the spec_backlog enum lists it too) — it used to be a CLI-only alias,
+  // "remove" is an alias of "rm" on EVERY surface (the spec_roadmap_edit {kind: "backlog"} enum lists it too) — it used to be a CLI-only alias,
   // then refused everywhere while the docs still named it.
   if (a === "rm" || a === "remove") return removeBacklog(projectDir, name);
   // Absent/"list" lists; anything else is an error (the MCP enum refuses it) — `backlog delete X` used to just list.

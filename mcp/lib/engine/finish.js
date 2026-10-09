@@ -1447,7 +1447,7 @@ function recordFinishBaseline(projectDir, slug, dir, tasksText, globCap) {
   for (const rel of files) map[rel] = fileHash(path.resolve(root, rel));
   const at = new Date().toISOString();
   // firstAt: when the feature was FIRST finished — a re-finish (a stale baseline, a change request) keeps it, so the release
-  // notes never list a feature that already shipped as new again (spec_changelog's shipped-before test).
+  // notes never list a feature that already shipped as new again (spec_export {format: "changelog"}'s shipped-before test).
   const prevFin = isObj(st.finished) ? st.finished : null;
   const firstAt = prevFin && typeof prevFin.firstAt === "string" ? prevFin.firstAt : prevFin && typeof prevFin.at === "string" ? prevFin.at : null;
   st.finished = firstAt ? { at, firstAt, files: map } : { at, files: map };

@@ -1325,7 +1325,7 @@ function shippedSupersedeKeys(projectDir, dir, state, reqRaw, cache) {
   if (text == null || textFingerprint(text, "requirements") === textFingerprint(reqRaw || "", "requirements")) return null;
   return new Set(resolveSupersedes(projectDir, dir, supersedesMarkers(text), cache).valid.map((v) => dirKey(v.dir) + "\n" + v.ac));
 }
-// A feature that SHIPPED — a finish recorded, or its execution signed off (spec_changelog's rule). Only a shipped feature's
+// A feature that SHIPPED — a finish recorded, or its execution signed off (spec_export {format: "changelog"}'s rule). Only a shipped feature's
 // _Supersedes:_ retires the older criterion in the catalog, the export and the matrix (1.15): a draft's declaration is
 // "to be superseded" — the catalog says what the system does today.
 function featureShipped(st) {

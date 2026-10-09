@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * dev-spec-driven engine — spec_doctor, spec_next_action, spec_list / spec_status and the status line.
+ * dev-spec-driven engine — spec_doctor, spec_next_action, spec_status (one feature, or every one) and the status line.
  * The one health check that decides "ready to advance?", "you are here → do this next", the design.md save check;
  * introspection, the Claude Code status line (`dev-spec statusline`), the plan-mode bridge (hooks/plan-hook.js) and the
  * user's DEV_SPEC_* defaults.
@@ -269,7 +269,7 @@ function statusFeature(projectDir, name) {
   return {
     ok: true,
     feature: slug,
-    kind, // feature | bugfix | spike (1.14 — the same field spec_list rows carry)
+    kind, // feature | bugfix | spike (1.14 — the same field spec_status rows carry)
     ...(branch ? { branch } : {}), // { name, base, commit, at, current, exists } — only for a feature started on its own branch
     flow: featureFlow(dir, kind), // requirements-first | design-first (C3; a bugfix / spike is always requirements-first)
     tracks: trackLabel(tracks),

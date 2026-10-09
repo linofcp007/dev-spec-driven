@@ -981,15 +981,15 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, shipFeature, list, requir
 
     const chk = (f) => S.specDoctor(opB4, f).checks.find((c) => c.id === "cross-feature-overlap");
     const dBill = chk("billing"), dRef = chk("refunds"), dSearch = chk("search");
-    ok(dBill && dBill.status === "warn" && /payouts \(src\/billing\/invoice\.js\); refunds \(src\/util\/money\.js\)/.test(dBill.detail) && /spec_depend/.test(dBill.detail) && /_Supersedes:/.test(dBill.detail) &&
+    ok(dBill && dBill.status === "warn" && /payouts \(src\/billing\/invoice\.js\); refunds \(src\/util\/money\.js\)/.test(dBill.detail) && /spec_roadmap_edit {kind: "depend", name: "billing"/.test(dBill.detail) && /_Supersedes:/.test(dBill.detail) &&
       dRef && dRef.status === "warn" && /billing \(src\/util\/money\.js\)/.test(dRef.detail) &&
       dSearch && /finished feature recorded in its drift baseline — legacy \(docs\/search\/intro\.md\)/.test(dSearch.detail) && /_Supersedes: <feature>\/US-n\.AC-m_/.test(dSearch.detail) &&
       !chk("legacy") && !chk("notes"),
-      "spec_doctor: a warn 'cross-feature-overlap' on both features of an active pair and on the active side of a finished pair (suggesting spec_depend / _Supersedes:_); none on the finished feature nor on a disjoint one (got " + JSON.stringify([dBill, dSearch]) + ")");
+      "spec_doctor: a warn 'cross-feature-overlap' on both features of an active pair and on the active side of a finished pair (suggesting spec_roadmap_edit {kind: depend} / _Supersedes:_); none on the finished feature nor on a disjoint one (got " + JSON.stringify([dBill, dSearch]) + ")");
 
     const omdB4 = S.renderRoadmapMd(opB4, "en");
     const attB4 = omdB4.split("## ⚠")[1] || "";
-    ok(/- \*\*billing\*\* — plans the same files as payouts: src\/billing\/invoice\.js — order them \(spec_depend\) or declare _Supersedes:_/.test(attB4) &&
+    ok(/- \*\*billing\*\* — plans the same files as payouts: src\/billing\/invoice\.js — order them \(spec_roadmap_edit {kind: "depend"}\) or declare _Supersedes:_/.test(attB4) &&
       /- \*\*billing\*\* — plans the same files as refunds: src\/util\/money\.js/.test(attB4) &&
       /- \*\*search\*\* — plans files in legacy's finish baseline: docs\/search\/intro\.md — declare _Supersedes: legacy\/US-n\.AC-m_/.test(attB4) &&
       !/\*\*(refunds|payouts|notes|legacy)\*\* — plans/.test(attB4) && /planeia os mesmos ficheiros que payouts/.test(S.renderRoadmapMd(opB4, "pt")),

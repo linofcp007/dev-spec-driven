@@ -148,7 +148,7 @@ module.exports = {
   setDependency,
   roadmap,
   backlog,
-  BACKLOG_ACTIONS, // the spec_backlog `action` enum (rm and its alias remove)
+  BACKLOG_ACTIONS, // the spec_roadmap_edit {kind: "backlog"} `action` enum (rm and its alias remove)
   renderRoadmapMd,
   writeRoadmapMd,
   renderRoadmapHtml,
@@ -227,7 +227,7 @@ module.exports = {
   scanTestCode, // the bounded walk over test files that trace_check {code: true} reads
   withinRoot, // "inside the project root?" that also holds at a drive root (C:\)
 
-  catalog, // spec_catalog / `dev-spec catalog` (.specs/SPECS.md)
+  catalog, // spec_export {format: "catalog"} / `dev-spec catalog` (.specs/SPECS.md)
   maybeRefreshCatalog,
   // 1.24 r6 I-I1 — the save hook's deferred ROADMAP.* / SPECS.md refresh (a stamp in .specs/.execution/, refreshed once a turn)
   ROADMAP_STALE_FILE, // "roadmap-stale" — the stamp's name in .specs/.execution/ (the Stop hook and the pre-commit check stat it raw)
@@ -278,7 +278,7 @@ module.exports = {
   PACK_LIMITS, // 1.15 — a track pack's bounds (sizes, counts)
 
   exportSpecs, // spec_export / `dev-spec export` — the stakeholder document (.specs/exports/, offline HTML or markdown)
-  changelog, // spec_changelog / `dev-spec changelog` — release notes from the specs (.specs/RELEASE-NOTES.md + meta.changelogAt)
+  changelog, // spec_export {format: "changelog"} / `dev-spec changelog` — release notes from the specs (.specs/RELEASE-NOTES.md + meta.changelogAt)
   markdownToHtml, // the export's zero-dep markdown renderer (every text escaped; links http(s)/mailto only; no images)
   traceMatrix, // 1.14 F5 — the requirements traceability matrix of a feature (trace_check {matrix} / `dev-spec trace --matrix`)
   matrixCsv, // traceMatrix results → RFC 4180 CSV (`trace --csv`; opts.document: + BOM and the AUTO-GENERATED record — spec_export csv)
@@ -288,8 +288,8 @@ module.exports = {
   mdPlainText, // 1.17 verification N3 — markdown inline text → the plain text a reader sees (escapes / entities, outside code spans)
   EXPORT_FORMATS: Object.freeze(EXPORT_FORMATS.slice()), // the spec_export `format` enum (server.js reads it from here)
   TRACKERS: Object.freeze(TRACKERS.slice()), // 1.16 E2 — the tracker CSV formats (export --tracker)
-  milestone, // 1.16 E3 — spec_milestone / `dev-spec milestone [add|rm|list]` (roadmap.json meta.milestones)
-  MILESTONE_ACTIONS, // the spec_milestone `action` enum (rm and its alias remove)
+  milestone, // 1.16 E3 — spec_roadmap_edit {kind: "milestone"} / `dev-spec milestone [add|rm|list]` (roadmap.json meta.milestones)
+  MILESTONE_ACTIONS, // the spec_roadmap_edit {kind: "milestone"} `action` enum (rm and its alias remove)
   MILESTONE_STATUSES: Object.freeze(MILESTONE_STATUSES.slice()), // on-track · at-risk · late · done
   milestoneLine, // one milestone (with its status) as a localized line — CLI
 

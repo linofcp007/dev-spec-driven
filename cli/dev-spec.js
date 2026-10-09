@@ -218,9 +218,9 @@ VALUE_FLAGS.add("guard"); // init --guard on|off|scope (= spec_init {guard: true
 VALUE_FLAGS.add("check"); // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
 VALUE_FLAGS.add("approval-guard"); // 1.14 F2: init --approval-guard off|ask|deny (= spec_init {approvalGuard})
 ["roles", "role", "through"].forEach((k) => VALUE_FLAGS.add(k)); // init --roles …, approve --role <role> / --through <phase> (= spec_init {approvalRoles}, spec_approve {role, through})
-VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_changelog {since})
+VALUE_FLAGS.add("since"); // changelog --since <ISO date|last|all> (= spec_export {format: "changelog", since})
 VALUE_FLAGS.add("tracker"); // 1.16 E2: export [f] --tracker jira|linear (= spec_export {format: "jira" | "linear"})
-VALUE_FLAGS.add("milestone"); // 1.16 E3: changelog --milestone <name> (= spec_changelog {milestone})
+VALUE_FLAGS.add("milestone"); // 1.16 E3: changelog --milestone <name> (= spec_export {format: "changelog", milestone})
 VALUE_FLAGS.add("flow"); // create --flow design-first · feature flow <name> --flow <flow> (= spec_create / spec_feature {flow}) — C3
 // 1.14 C2: spike / create --kind spike --question … --timebox … · decide <f> --title … --decision … [--context …] [--consequences …] [--affects …] [--supersedes …]
 ["question", "timebox", "title", "decision", "context", "consequences", "affects", "supersedes"].forEach((k) => VALUE_FLAGS.add(k));
@@ -1307,7 +1307,7 @@ async function main() {
 
     case "milestone":
     case "milestones": {
-      // dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list] (= spec_milestone {action, name, date, features}):
+      // dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list] (= spec_roadmap_edit {kind: "milestone", action, name, date, features}):
       // a name with spaces is quoted; the features may also be comma-separated. The action is case-folded, like the MCP enum.
       const a0 = String(pos[0] == null ? "" : pos[0]).trim().toLowerCase() || "list";
       const syntax = "dev-spec milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]";

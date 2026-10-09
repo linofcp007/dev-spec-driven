@@ -2,7 +2,7 @@
 
 /**
  * dev-spec-driven engine — brownfield scan and coverage.
- * The heuristic, bounded, read-only codebase scan (routes, env, migrations, entrypoints) and spec_coverage.
+ * The heuristic, bounded, read-only codebase scan (routes, env, migrations, entrypoints) and spec_scan {coverage: true}.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -20,7 +20,7 @@ function __link(E) { ({ FOLD_CASE, implementsPath, implementsRefs, implementsTar
 // ---------------------------------------------------------------------------
 
 const SCAN_IGNORE = new Set([".git", ".specs", ".kiro", "_archive", "node_modules", "dist", "build", ".next", "out", "coverage", "vendor", "target", ".venv", "venv", "__pycache__", ".idea", ".vscode", ".cursor", ".windsurf", ".gemini", ".github"]);
-// ONE notion of code (1.21.1): source files in a broad list of languages. The brownfield scan's inventory, spec_coverage's
+// ONE notion of code (1.21.1): source files in a broad list of languages. The brownfield scan's inventory, spec_scan {coverage: true}'s
 // denominators, the test-code scan (trace --code, the Phase 4 tests gate, doctor's tests-in-code, finish) and guard mode
 // all read it. Until 1.21.1 the scan, coverage and the test scan knew only JS/TS, Python, Go, Rust, Java, Ruby, PHP, C#,
 // Kotlin, Swift, C/C++ and Vue/Svelte — a PowerShell, shell, Lua, R, Erlang… project scanned empty, had 0 code files and a

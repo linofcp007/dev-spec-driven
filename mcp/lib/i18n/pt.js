@@ -2055,7 +2055,7 @@ const msg = {
         amend: "## Alterações propostas ao steering ou à constituição",
         amendNote: "<!-- Para aprovação humana — nunca aplicadas automaticamente. Indica o ficheiro (.specs/steering/constitution.md, tech.md, …), a alteração exata e o porquê. -->",
         followUps: "## Seguimento",
-        followUpsNote: "<!-- Candidatos ao backlog — acrescenta os que aceitares com spec_backlog (dev-spec backlog add \"<nome>\" \"<nota>\"). -->",
+        followUpsNote: "<!-- Candidatos ao backlog — acrescenta os que aceitares com spec_roadmap_edit {kind: \"backlog\"} (dev-spec backlog add \"<nome>\" \"<nota>\"). -->",
       },
       // retro.md: the one layout (i18n.js renderRetro, linked) with this language's retroText and phase names
       retro: (m, fmt) => renderRetro(MSG.pt.metrics.retroText, MSG.pt.metrics.phase, m, fmt),
@@ -2084,7 +2084,7 @@ const msg = {
 
     catalog: {
       title: (proj) => `Catálogo de specs — ${proj}`,
-      autogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_catalog {write: true} (dev-spec catalog --write).",
+      autogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_export {format: \"catalog\", write: true} (dev-spec catalog --write).",
       intro: "O que o sistema faz hoje: todos os critérios de aceitação, agrupados por feature. Um critério substituído por uma feature posterior já entregue (_Supersedes:_) aparece riscado e indica o critério que o substitui; um que uma feature ainda em curso prevê substituir aparece com \"substituição prevista\" e continua em vigor.",
       totals: (f, acs, current, sup, pending) => `**${f} feature(s) · ${acs} critérios de aceitação — ${current} em vigor${pending ? ` (${pending} com substituição prevista)` : ""}, ${sup} substituído(s)**`,
       status: { active: "em curso", complete: "completa", finished: "fechada", archived: "arquivada" },
@@ -2107,7 +2107,7 @@ const msg = {
       notArchived: (slug) => `Não há nada arquivado como '${slug}' (.specs/_archive/${slug}/ não existe).`,
       activeExists: (slug) => `'${slug}' já é uma feature ativa — renomeia-a primeiro (${DEV_SPEC} feature rename ${slug} "<novo nome>") e depois restaura a arquivada.`,
       done: (slug) => `'${slug}' restaurada de .specs/_archive/ ✓`,
-      noRecord: "Foi arquivada antes de o arquivo registar a sua entrada no roadmap — volta a declarar as dependências com spec_depend, se as tinha.",
+      noRecord: "Foi arquivada antes de o arquivo registar a sua entrada no roadmap — volta a declarar as dependências com spec_roadmap_edit {kind: \"depend\"}, se as tinha.",
       skipDependsOn: (d, reason) => `a sua dependência '${d}' (${reason})`,
       skipDependent: (k, reason) => `'${k}', que dependia dela (${reason})`,
       skipRecord: (field, reason) => `o campo ${field} do registo de arquivo (${reason})`,
@@ -2115,7 +2115,7 @@ const msg = {
       reason: { gone: "já não existe", archived: "também arquivada — restaurá-la repõe a ligação", cycle: "fecharia um ciclo de dependências", invalid: "formato inesperado — deixado de fora" },
       renamedRecords: (list) => `registos de arquivo atualizados para o nome novo (o restore repõe as suas dependências): ${list}`,
       prunedDependents: (list) => `as dependências das features que dependiam dela saíram do roadmap: ${list} (registado — o restore repõe-nas)`,
-      prunedIncomplete: (slug, pct, list) => `'${slug}' não estava completa (${pct}%), mas ${list} dependia(m) dela: o roadmap deixa de a(s) mostrar bloqueada(s) por ela — restaura-a, ou volta a declarar a dependência com spec_depend, se ainda precisa(m) desse trabalho`,
+      prunedIncomplete: (slug, pct, list) => `'${slug}' não estava completa (${pct}%), mas ${list} dependia(m) dela: o roadmap deixa de a(s) mostrar bloqueada(s) por ela — restaura-a, ou volta a declarar a dependência com spec_roadmap_edit {kind: "depend"}, se ainda precisa(m) desse trabalho`,
     },
     drift: {
       none: "Nenhuma feature fechada tem ainda uma baseline de drift — spec_finish {write: true} (" + DEV_SPEC + " finish <feature> --write) regista uma quando a feature está pronta para fechar.",
@@ -2752,7 +2752,7 @@ const msg = {
     },
     releaseNotes: {
       title: (proj) => `Notas de versão — ${proj}`,
-      autogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_changelog {write: true} (dev-spec changelog --write).",
+      autogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_export {format: \"changelog\", write: true} (dev-spec changelog --write).",
       sinceDate: (d) => `Alterações desde ${d}`,
       sinceLast: (d) => `Alterações desde as últimas notas de versão (${d})`,
       all: "Todas as alterações registadas nas specs",
@@ -2815,7 +2815,7 @@ const msg = {
       archivedLabel: "arquivadas",
       line: (name, date, done, total, eta, status, feats, archived) => `${name} — ${date} · ${done}/${total} feature(s) feitas · ETA ${eta || "—"} · ${status} · ${feats || "—"}${archived ? ` (arquivadas: ${archived})` : ""}`,
       head: (n, today) => `${n} marco(s) — hoje ${today}:`,
-      none: "Ainda sem marcos — adiciona um: " + DEV_SPEC + " milestone add <nome> <AAAA-MM-DD> <features…> (spec_milestone {action: \"add\", name, date, features}).",
+      none: "Ainda sem marcos — adiciona um: " + DEV_SPEC + " milestone add <nome> <AAAA-MM-DD> <features…> (spec_roadmap_edit {kind: \"milestone\", action: \"add\", name, date, features}).",
       added: (name, date, list) => `Marco '${name}' adicionado — ${date}: ${list}`,
       updated: (name, date, list) => `Marco '${name}' atualizado — ${date}: ${list}`,
       removed: (name) => `Marco '${name}' removido.`,
@@ -2838,7 +2838,7 @@ const msg = {
       badStored: (rel) => `${rel} → meta.milestones não é uma lista de {name, date, features} como o milestone add os escreve (um nome válido, um dia AAAA-MM-DD real, uma entrada por nome) — corrige-o à mão; recuso alterá-lo.`,
       notesTitle: (title, name) => `${title} — ${name}`,
       notesScope: (name, date, list) => `Marco ${name} (${date}): ${list}`,
-      notesAutogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_changelog {milestone, write: true} (dev-spec changelog --milestone <nome> --write).",
+      notesAutogen: "AUTO-GERADO por dev-spec — não editar à mão. Para regenerar: spec_export {format: \"changelog\", milestone, write: true} (dev-spec changelog --milestone <nome> --write).",
       nothingToWrite: (file) => `Nada a reportar para este marco — ${file} não foi escrito.`,
     },
 
@@ -2940,10 +2940,10 @@ const msg = {
         : `  velocidade: nenhuma tarefa concluída nos últimos ${v.windowDays} dias`),
       etaNote: (pct) => `Previsão = pontos por fazer ÷ velocidade, em dias úteis (±${pct}%) · \`_Size: XS|S|M|L|XL_\` numa tarefa = 1/2/3/5/8 pontos; uma tarefa sem tamanho conta como a mediana da sua feature (senão M) · uma feature à espera de uma dependência começa depois da previsão dessa.`,
       overlap: {
-        attentionActive: (other, files) => `planeia os mesmos ficheiros que ${other}: ${files} — ordena-as (spec_depend) ou declara _Supersedes:_ se uma substitui o comportamento da outra`,
+        attentionActive: (other, files) => `planeia os mesmos ficheiros que ${other}: ${files} — ordena-as (spec_roadmap_edit {kind: "depend"}) ou declara _Supersedes:_ se uma substitui o comportamento da outra`,
         attentionFinished: (other, files) => `planeia ficheiros da baseline de fecho de ${other}: ${files} — declara _Supersedes: ${other}/US-n.AC-m_ onde substitui esse comportamento, ou o spec_drift assinala ${other} depois do merge`,
-        doctorActive: (list, slug) => `há tarefas por fazer que planeiam os mesmos ficheiros que outra feature ativa — ${list}: ambas mexem neles no merge e uma deriva sem aviso. Ordena as duas (spec_depend {name: "${slug}", add: ["<outra>"]} · ${DEV_SPEC} depend ${slug} <outra>) ou, onde uma substitui o comportamento da outra, declara _Supersedes: <outra>/US-n.AC-m_`,
-        doctorFinished: (list, slug) => `há tarefas por fazer que planeiam ficheiros que uma feature fechada registou na sua baseline de drift — ${list}: depois do merge, o spec_drift assinala-a. Declara _Supersedes: <feature>/US-n.AC-m_ nos critérios de ${slug} que substituem o comportamento dela, faz ${slug} depender dela onde assenta nela (spec_depend {name: "${slug}", add: ["<feature>"]} · ${DEV_SPEC} depend ${slug} --add <feature>), ou volta a fechá-la depois do merge (spec_finish)`,
+        doctorActive: (list, slug) => `há tarefas por fazer que planeiam os mesmos ficheiros que outra feature ativa — ${list}: ambas mexem neles no merge e uma deriva sem aviso. Ordena as duas (spec_roadmap_edit {kind: "depend", name: "${slug}", add: ["<outra>"]} · ${DEV_SPEC} depend ${slug} <outra>) ou, onde uma substitui o comportamento da outra, declara _Supersedes: <outra>/US-n.AC-m_`,
+        doctorFinished: (list, slug) => `há tarefas por fazer que planeiam ficheiros que uma feature fechada registou na sua baseline de drift — ${list}: depois do merge, o spec_drift assinala-a. Declara _Supersedes: <feature>/US-n.AC-m_ nos critérios de ${slug} que substituem o comportamento dela, faz ${slug} depender dela onde assenta nela (spec_roadmap_edit {kind: "depend", name: "${slug}", add: ["<feature>"]} · ${DEV_SPEC} depend ${slug} --add <feature>), ou volta a fechá-la depois do merge (spec_finish)`,
         hookLine: (n, list) => `⚠ ${n} sobreposição(ões) de ficheiros entre features: ${list} — corre /spec-doctor nelas (ordena-as com /depend, ou declara _Supersedes:_)`,
         cliHead: (n) => `⚠ ${n} sobreposição(ões) de ficheiros entre features:`,
         cliActive: (a, b, files) => `  ${a} ↔ ${b}: ${files}`,
