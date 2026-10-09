@@ -11,12 +11,12 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
+let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
   extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest, isBacktickUnit,
   isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap, realPathLoose,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
   traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps;
-function __link(E) { ({ specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
+function __link(E) { ({ featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, forgetCached, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
@@ -1951,6 +1951,19 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   const tracks = detectTracks(dir);
   const blocks = taskBlocks(activeTasks(tasksText, tracks) || "");
   const commits = parseGitLog(logText);
+  // 1.25.1 (review 7): a feature started on its own branch (create --branch) recorded the commit it started from, and the CLI reads
+  // `git log <commit>..HEAD` — a log handed in (spec_log {gitLog}, `log <f> -`) is read the same way: cut at that commit when it holds
+  // it (it and every commit after it in the newest-first list are older work), and labelled `since` either way (spec_log's description
+  // names the range). opts.since: what the CLI read — {base, commit} the range, null the whole log on purpose (git no longer knows it).
+  let since = isObj(opts.since) && typeof opts.since.commit === "string" && opts.since.commit ? { base: typeof opts.since.base === "string" ? opts.since.base : null, commit: opts.since.commit } : null;
+  if (opts.since === undefined) {
+    const rec = featureBranchRecord(readState(projectDir, slug));
+    if (rec && rec.commit) {
+      since = { base: rec.base, commit: rec.commit };
+      const at = commits.findIndex((c) => c.hash.length >= 7 && (rec.commit.startsWith(c.hash) || c.hash.startsWith(rec.commit)));
+      if (at !== -1) commits.splice(at);
+    }
+  }
   const truncated = commits.length >= GITLOG_MAX_COMMITS || (Number.isInteger(opts.max) && commits.length >= opts.max); // the parser's cap is a window too
   const wordRe = (s) => new RegExp("(?<![\\p{L}\\p{N}_-])" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}_-])", "iu");
   const self = wordRe(slug);
@@ -2003,8 +2016,7 @@ function taskCommits(projectDir, name, logText, opts = {}) {
   }
   const cut = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
   const lines = [G.head(slug, commits.length, citing, truncated)];
-  // 1.25: opts.since {base, commit} — the CLI read the log from the feature's start (`git log <commit>..HEAD`: its branch record)
-  const since = isObj(opts.since) && typeof opts.since.commit === "string" && opts.since.commit ? { base: typeof opts.since.base === "string" ? opts.since.base : null, commit: opts.since.commit } : null;
+  // 1.25: since {base, commit} — the log read from the feature's start (`git log <commit>..HEAD`: its branch record), above
   if (since) lines.push(i18n.msg(lng).branch.logSince(since.base, since.commit.slice(0, 7)));
   for (const t of info) {
     const list = t.commits.slice(0, 5).map((c) => G.commitRef(commits[c.idx].short, cut(commits[c.idx].subject, 60), c.via.join(", ")));

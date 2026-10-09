@@ -1778,7 +1778,7 @@ async function main() {
       const ranged = text != null;
       if (!ranged) text = b5Git(logArgs);
       if (text == null) return fail({ ok: false, error: spec.msg(spec.featureLang(projectDir, fx.slug)).gitLog.noGit });
-      return report(text, { max, ...(ranged ? { since } : {}) });
+      return report(text, { max, since: ranged ? since : null }); // null: the whole log on purpose — the engine applies no range of its own
     }
     // Helpers of done --run / finish --run / init --check / log (function declarations: hoisted across this switch block).
     // `git` is only ever read here: rev-parse, status, log — local, no network, no lock (GIT_OPTIONAL_LOCKS=0).

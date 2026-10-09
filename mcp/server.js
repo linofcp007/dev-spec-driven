@@ -430,12 +430,12 @@ const TOOLS = [
   {
     name: "spec_log",
     description:
-      "Git-linked evidence for clients without a shell tool for dev-spec: per ACTIVE task of a feature, the commits whose message cites it, plus (+tdd) a red-first check — the same result as `dev-spec log <feature> --json`. THIS SERVER NEVER RUNS GIT (or any command): pass `gitLog`, the text of `git log --name-only --relative` that you or the user ran in the project (an empty gitLog — a repository without commits — is valid: 0 commits). A message cites task N when it names the feature (its slug) and \"task #N\" / \"#N\" (PT tarefa, ES tarea), or one of the task's T-IDs / AC IDs. Red-first: a task with _Makes green: T-xx_ committed before any commit touching a test file that names T-xx warns `impl-first`. Returns {commits, truncated, citing, tasks, redFirst, warnings, lines}; `max` = the --max-count the log was read with (a log that long is a full window).",
+      "Git-linked evidence: per ACTIVE task of a feature, the commits whose message cites it, plus (+tdd) a red-first check — the result of `dev-spec log <feature> --json`. THIS SERVER NEVER RUNS GIT: pass `gitLog`, the output of `git log --name-only --relative` run in the project — for a feature on its own branch (spec_status `branch`) `git log <branch.commit>..HEAD --name-only --relative`, as the CLI reads it (a fuller log is cut at that commit); an empty gitLog (no commits) is valid. A message cites task N when it names the feature (its slug) and \"task #N\" / \"#N\" (PT tarefa, ES tarea), or one of the task's T-IDs / AC IDs. Red-first: a task with _Makes green: T-xx_ committed before any commit touching a test file that names T-xx warns `impl-first`. Returns {commits, truncated, citing, tasks, redFirst, warnings, lines}; `max` = the --max-count the log was read with (a log that long is a full window).",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Feature name/slug." },
-        gitLog: { type: "string", description: "The output of `git log --name-only --relative` (e.g. with --max-count=1000), run in the project — never run by this server." },
+        gitLog: { type: "string", description: "That output (e.g. --max-count=1000) — never run by this server." },
         max: { type: "integer", minimum: 1, description: "Optional: the --max-count the log was read with (a log that long is a full window)." },
         projectDir: PROJECT_DIR,
       },
