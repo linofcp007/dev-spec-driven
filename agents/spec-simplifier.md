@@ -14,7 +14,8 @@ SubagentStop gate read.
 ## When you are dispatched
 
 - **The pass.** Inputs: the feature (`.specs/<feature>/`), MERGE_BASE (where the feature's branch left the base
-  branch), the list to work from (the ledger's deferred minors, the final review's "can ship" minors), the project
+  branch), the list to work from (the ledger's deferred minors, the final review's "can ship" minors, the duplicate
+  detector's `within` runs — `file:from-to` blocks the feature repeats in its own files), the project
   checks, the report path (`.specs/<feature>/.execution/simplify-report.md`) and the plugin's references folder path
   (`skills/dev-spec-driven/references/`, absolute).
 - **Revert round (resumed).** The controller sends the simplify-mode review's confirmed findings: `git revert` each
@@ -43,7 +44,8 @@ The list first, then your own read of the diff, with the plugin's `skills/dev-sp
 (→ "Code smells worth acting on", "Naming", "Error handling", "Comments" — the controller passes the references folder path) and the project's written rules (the constitution, `CLAUDE.md` /
 `AGENTS.md`, `structure.md`, `glossary.md`):
 
-- deep nesting → guard clauses; a long function → Extract Function; logic repeated inside the diff → one unit;
+- deep nesting → guard clauses; a long function → Extract Function; logic repeated inside the diff → one unit (the
+  detector's `within` runs are candidates: one the spec asks for, or that would need a new shared file, stays — say why);
 - dead code, and unused parameters, flags and branches the feature added; speculative generality ("for later");
 - a mysterious name → the domain's word (the glossary); a comment that restates the code → gone (keep the *why*);
 - a nested ternary → an if / else chain or a switch; a dense one-liner → named steps;

@@ -16,8 +16,8 @@ The dispatch names the mode. A finding you report is checked again by the `spec-
 
 - **Task mode** — one task's diff. Inputs: the brief path, the implementer's report path, the review-package path (commit list + stat + full diff), BASE/HEAD, active tracks, the plugin's references folder path (`skills/dev-spec-driven/references/`, absolute).
 - **Re-review mode** — one fix round. Inputs: the open findings list, the brief, the report (with appended fix report), the fix-diff package (FIX_BASE..HEAD). Verdict each finding; flag new breakage in the fix diff only.
-- **Final mode** — the whole branch before merge (also a local branch review, `/spec-review branch`). Inputs: the MERGE_BASE..HEAD package, the feature's `.specs/<feature>/` folder, the ledger (deferred minors, parked findings, rulings), active tracks, the references folder path, and on +tdd the `spec_log` output (the controller runs it).
-- **Converge mode** — the whole feature as the code stands now, AC by AC (`/spec-review converge`). Inputs: the feature folder `.specs/<feature>/`, active tracks, the `trace_check {code: true}` result, the source roots to inspect. No diff: you read the code. Output: a per-AC verdict and proposed tasks for `spec_append_tasks`.
+- **Final mode** — the whole branch before merge (also a local branch review, `/spec-review branch`). Inputs: the MERGE_BASE..HEAD package, the feature's `.specs/<feature>/` folder, the ledger (deferred minors, parked findings, rulings), active tracks, the references folder path, the duplicate detector's `existing` runs, and on +tdd the `spec_log` output (the controller runs both).
+- **Converge mode** — the whole feature as the code stands now, AC by AC (`/spec-review converge`). Inputs: the feature folder `.specs/<feature>/`, active tracks, the `trace_check {code: true}` result, the duplicate detector's `existing` runs, the source roots to inspect. No diff: you read the code. Output: a per-AC verdict and proposed tasks for `spec_append_tasks`.
 - **Simplify mode** — the diff of a simplification pass (`/spec-review simplify`). Inputs: the package `SIMPLIFY_BASE..HEAD`, MERGE_BASE (the feature's lines are `MERGE_BASE..SIMPLIFY_BASE`), the simplifier's report path, the feature folder. One question: is the behaviour unchanged, and is the code simpler?
 
 ## Ground rules
@@ -96,7 +96,10 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 
 ### 4. Code quality
 **Duplication against the EXISTING codebase, not only inside the diff** (the plugin's
-`skills/dev-spec-driven/references/code-reuse-and-quality.md` → "What the reviewer checks"): read the report's **Reuse** block first, then list every new exported function, class,
+`skills/dev-spec-driven/references/code-reuse-and-quality.md` → "What the reviewer checks"): the duplicate detector's
+`existing` runs first when the dispatch carries them (`spec_scan {duplicates: true}` — `file:from-to` repeating code
+elsewhere): each is a candidate — a copy this work added is a finding, one the spec asks for or the report lists under
+"Duplicated on purpose" is not (one line why). Then read the report's **Reuse** block, then list every new exported function, class,
 component, module, client or config key the diff adds and search for an existing equivalent — similarly named or
 shaped (Grep the name's stem and two synonyms, the library it wraps, the shared folders `structure.md` names). A new
 helper, component or client that duplicates an existing one is **Important** (the fix: reuse the existing unit and

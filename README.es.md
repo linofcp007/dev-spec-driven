@@ -198,7 +198,7 @@ cliente MCP — llaman al mismo motor:
 | `spec_roadmap` | Progreso, dependencias, ETAs a partir de la velocidad de las tareas marcadas, hitos, funciones que se solapan; `write` → `.specs/ROADMAP.md` (+ `html`) |
 | `spec_roadmap_edit` | `kind`: `depend` (detecta ciclos) · `backlog` (planificadas, aún sin spec) · `milestone` (una fecha objetivo para un conjunto de funciones) |
 | `spec_export` | `format`: html / md para stakeholders, csv (matriz de trazabilidad), gherkin, jira / linear, adr, `catalog` (`.specs/SPECS.md`), `changelog` (notas de versión) |
-| `spec_scan` | Inventario brownfield — stack, rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones; `coverage: true` — la parte del código que nombran las specs |
+| `spec_scan` | Inventario brownfield — stack, rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones; `coverage: true` — la parte del código que nombran las specs; `duplicates: true` — el código que una función repite (`existing` / `within`) |
 | `spec_upgrade` | Después de actualizar el plugin: audita `.specs/` frente a las reglas actuales; `apply` aplica las migraciones seguras (nunca edita una spec) |
 | `spec_templates` | Las plantillas propias del equipo en `.specs/templates/`: list · init · check |
 | `spec_tracks` | Los tracks propios del equipo, packs en `.specs/tracks/<nombre>/`: list · init · check |
@@ -220,7 +220,7 @@ ejecutable, `node "<plugin>/cli/dev-spec.js" …`; el autocompletado para PowerS
 planificar  classify · signals · init · steering · templates · tracks · create · bugfix · spike · import · clarify · ears
 progreso    list · status · next-action · next · brief · done · undone · append-tasks · approve · impact · decide · add-track · feature
 comprobar   doctor · trace · finish · drift · stop-check · log · evals · upgrade
-informes    roadmap · depend · backlog · milestone · catalog · export · changelog · metrics · scan · coverage
+informes    roadmap · depend · backlog · milestone · catalog · export · changelog · metrics · scan · dupes · coverage
 configurar  mcp-config · rules · prompts · statusline · merge-state · completion · bundle · version
 ```
 
@@ -300,7 +300,7 @@ dev-spec-driven/                      ← raíz del plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 herramientas + prompts + recursos, sin dependencias)
 │   ├── servers.json                  ← registro MCP del plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← la fachada del motor (el único objeto que cargan el servidor, la CLI y los hooks)
-│   ├── lib/engine/                   ← el motor: 22 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
+│   ├── lib/engine/                   ← el motor: 23 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← contenido localizado (en · pt · es) + la derivación pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (uno por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (tu clave de API; --dry-run sin conexión)

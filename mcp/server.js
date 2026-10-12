@@ -132,7 +132,7 @@ const TOOLS = [
   {
     name: "spec_task_brief",
     description:
-      "A self-contained brief for ONE task (default: the next one, as spec_next_task picks it) so a fresh implementer can execute it without the whole spec: the task, the full text of the ACs it cites, its test-plan rows, its _Verify:_ command (the evidence its report must carry), _Expect: fail_, dependencies, global constraints, the design sections, decisions, steering and glossary that apply, a Reuse section (search before you write), the project checks and the definition of done. A bugfix task after the root-cause task is `gated` until bug.md's Root Cause is filled. `write: true` writes .specs/<feature>/.execution/task-<N>-brief.md (+ ledger.md) and returns the paths — the basis of subagent-driven execution.",
+      "A self-contained brief for ONE task (default: the next one, as spec_next_task picks it) so a fresh implementer can execute it without the whole spec: the task, the full text of the ACs it cites, its test-plan rows, its _Verify:_ command (the evidence its report must carry), _Expect: fail_, dependencies, global constraints, the design sections, decisions, steering and glossary that apply, a Reuse section (search before you write), the project checks and the definition of done. A bugfix task after the root-cause task is `gated` until bug.md's Root Cause is filled. `write: true` writes .specs/<feature>/.execution/task-<N>-brief.md (+ ledger.md) and returns the paths.",
     inputSchema: {
       type: "object",
       properties: {
@@ -169,7 +169,7 @@ const TOOLS = [
   },
   {
     name: "spec_doctor",
-    description: "One health check that decides whether a feature can advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. It fails on what blocks the next approval — missing artifacts, EARS problems, open clarifications, duplicate ACs, template placeholders in the current phase, the active tracks' mandatory design sections (<track>-sections), traceability gaps, task dependencies — and warns on the rest (unverified tasks, edits since an approval, steering changes, cross-feature overlaps…). Also returns the phase, approvals, pending and forced gates, and what the next approval would refuse (`nextGate`).",
+    description: "One health check that decides whether a feature can advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. It fails on what blocks the next approval — missing artifacts, EARS problems, open clarifications, duplicate ACs, template placeholders in the current phase, the active tracks' mandatory design sections (<track>-sections), a size m / l design's Reuse & Integration, traceability gaps, task dependencies — and warns on the rest (unverified tasks, edits since an approval, steering changes, cross-feature overlaps…). Also returns the phase, approvals, pending and forced gates, and what the next approval would refuse (`nextGate`).",
     inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
@@ -210,8 +210,19 @@ const TOOLS = [
   },
   {
     name: "spec_scan",
-    description: "Brownfield, read-only, bounded, no model. Default: inventory an EXISTING codebase — files by extension, top-level modules, stack and web frameworks, HTTP routes (method, path, file:line), test frameworks and files, entrypoints, the environment variable NAMES the code reads (never values; .env is never read) and migration / schema files — to infer the steering and reverse-engineer specs. `coverage: true` instead measures how much code the specs cover: the share of code files any feature's _Implements:_ names (active or archived), per top-level folder, the uncovered folders and the _Implements:_ entries naming nothing on disk.",
-    inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR, cap: { type: "integer", minimum: 1, description: "The inventory's max code / manifest files (default 5000)." }, coverage: { type: "boolean", description: "Measure the specs' coverage of the code instead." } } },
+    description: "Brownfield, read-only, bounded, no model. Default: inventory an EXISTING codebase — files by extension, top-level modules, stack and web frameworks, HTTP routes (method, path, file:line), test frameworks and files, entrypoints, the environment variable NAMES the code reads (never values; .env is never read) and migration / schema files — to infer the steering and reverse-engineer specs. `coverage: true`: the share of code files any feature's _Implements:_ names, per top-level folder, and the entries naming nothing on disk. `duplicates: true`: repeated code — a feature's (`name`) _Implements:_ code repeating code elsewhere (`existing`: reuse it) or inside it (`within`), else the project's top duplicates; candidates to verify, never verdicts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectDir: PROJECT_DIR,
+        cap: { type: "integer", minimum: 1, description: "The inventory's max code / manifest files (default 5000)." },
+        coverage: { type: "boolean", description: "Measure the specs' coverage of the code instead." },
+        duplicates: { type: "boolean", description: "Find repeated code instead." },
+        name: { type: "string", description: "duplicates: the feature to check." },
+        minLines: { type: "integer", minimum: 4, maximum: 100, description: "duplicates: code lines per match (default 6)." },
+        tests: { type: "boolean", description: "duplicates: include test files." },
+      },
+    },
   },
   {
     name: "spec_clarify",
@@ -326,13 +337,13 @@ const TOOLS = [
   {
     name: "spec_upgrade",
     description:
-      "After a plugin update: audit .specs/ against this engine's rules (read-only by default) — per active feature its status, doctor fails / warnings, pending gates, edits since approval, unverified tasks, drift, the next step and a review recommendation (critic · converge · none), plus `plan` (what apply would change). `apply: true` — only after the user agrees — runs the safe migrations (saves inferred tracks, seeds the approval history, completes .specs/.gitignore, stamps meta.specVersion, writes .specs/UPGRADE.md); it never edits an artifact, approves, ticks or deletes.",
+      "After a plugin update: audit .specs/ against this engine's rules (read-only by default) — per active feature: status, doctor, pending gates, edits since approval, unverified tasks, drift, the next step, a review (critic · converge · none), plus `plan` (what apply would change). `apply: true` — only after the user agrees — runs the safe migrations (saves inferred tracks, seeds the approval history, completes .specs/.gitignore, stamps meta.specVersion, writes .specs/UPGRADE.md); it never edits an artifact, approves, ticks or deletes.",
     inputSchema: { type: "object", properties: { apply: { type: "boolean", description: "Run the safe migrations (default: the read-only audit)." }, projectDir: PROJECT_DIR } },
   },
   {
     name: "spec_templates",
     description:
-      "Project templates in .specs/templates/: `<artifact>.md` replaces the built-in template for new features (`<lang>/<artifact>.md` (en | pt | pt-BR | es) wins for that language), `steering/<file>.md` a steering stub; {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}} are substituted and the active tracks' sections still appended. `action`: list (default — built-in vs project per artifact) · init (copy the built-in templates for editing, never overwriting) · check (validate them: {file, line, code, severity, message} + a verdict).",
+      "Project templates in .specs/templates/: `<artifact>.md` replaces the built-in template for new features (`<lang>/<artifact>.md` (en | pt | pt-BR | es) wins for that language), `steering/<file>.md` a steering stub; {{name}} {{slug}} {{summary}} {{tracks}} {{lang}} {{date}} are substituted and the active tracks' sections still appended. `action`: list (default — built-in vs project per artifact) · init (copy the built-in templates for editing, never overwriting) · check (validate them, with a verdict).",
     inputSchema: {
       type: "object",
       properties: {
@@ -364,7 +375,7 @@ const TOOLS = [
   {
     name: "spec_export",
     description:
-      "Documents generated from the specs. `format`: html (default) / md — ONE self-contained, offline, printable stakeholder document: a feature (`name`, in its language) or the whole project · csv — the requirements traceability matrix · gherkin — a .feature per feature (the EARS clauses as steps, never invented) · jira / linear — a tracker import CSV (nothing is sent) · adr — decisions.md as MADR files · catalog — the living catalog: every feature and AC with its status, superseded criteria named (.specs/SPECS.md) · changelog — release notes from the specs: Added / Changed / Fixed since `since`, or of one `milestone` (.specs/RELEASE-NOTES.md). `write: true` writes the file (AUTO-GENERATED; a hand-written one is never overwritten) and returns its path. Without write: html / md return a markdown `preview`, catalog / changelog their structure — `includeBody: true` adds the whole document.",
+      "Documents generated from the specs. `format`: html (default) / md — ONE self-contained, offline stakeholder document: a feature (`name`, in its language) or the whole project · csv — the requirements traceability matrix · gherkin — a .feature per feature (the EARS clauses as steps, never invented) · jira / linear — a tracker import CSV (nothing is sent) · adr — decisions.md as MADR files · catalog — the living catalog: every feature and AC with its status, superseded criteria named (.specs/SPECS.md) · changelog — release notes from the specs: Added / Changed / Fixed since `since`, or of one `milestone` (.specs/RELEASE-NOTES.md). `write: true` writes the file (AUTO-GENERATED; a hand-written one is never overwritten) and returns its path. Without write: html / md return a markdown `preview`, catalog / changelog their structure — `includeBody: true` adds the whole document.",
     inputSchema: {
       type: "object",
       properties: {
@@ -381,7 +392,7 @@ const TOOLS = [
   {
     name: "spec_decide",
     description:
-      "Decision log: append ONE entry to .specs/<feature>/decisions.md — `## D-<n> — <title>` with _Kind:_ decision | discovery, _Date:_, _Affects:_, _Supersedes:_ and Context / Decision / Consequences. Append-only: an entry is never renumbered or rewritten. `affects` must name what exists (an AC / T / EC / NFR / SC ID, or a design section) and `supersedes` earlier entries — else nothing is written (`unknownAffects`).",
+      "Decision log: append ONE entry to .specs/<feature>/decisions.md — `## D-<n> — <title>` (a decision or a discovery) with Context / Decision / Consequences. Append-only: an entry is never renumbered or rewritten. `affects` must name what exists (an AC / T / EC / NFR / SC ID, or a design section) and `supersedes` earlier entries — else nothing is written (`unknownAffects`).",
     inputSchema: {
       type: "object",
       properties: {
@@ -494,27 +505,32 @@ function translateLegacy(legacy, args) {
 
 // --- Arguments by mode ----------------------------------------------------------------------------------------------
 // A tool that took over others takes some arguments in one of its modes only — `kind` (spec_roadmap_edit), `format` (spec_export),
-// `coverage` (spec_scan). An argument the call's mode doesn't take is refused before anything runs (code inapplicable-arguments,
-// `inapplicable` [names] — before 1.26 it was another tool's argument, an unknown one), and a mode's `required` ones are missing
-// arguments. The mode key itself and projectDir go everywhere. fallback: the mode when the key is not given. Derived from the
-// operations table (mcp/lib/operations.js) — a mode's arguments are its operation's — { tool: { key, fallback?, modes: {value:
-// [arguments]}, required?: {value: [arguments]} } }.
+// `coverage` and `duplicates` (spec_scan). An argument the call's mode doesn't take is refused before anything runs (code
+// inapplicable-arguments, `inapplicable` [names] — before 1.26 it was another tool's argument, an unknown one), and a mode's
+// `required` ones are missing arguments. The mode key itself and projectDir go everywhere. fallback: the mode when the key is not
+// given. Derived from the operations table (mcp/lib/operations.js) — a mode's arguments are its operation's — { tool: { key,
+// fallback?, modes: {value: [arguments]}, required?: {value: [arguments]}, alt?: {key: {modes, required?}} } } (alt: a second key's).
 const ARG_MODES = OPS.argModes();
 // The call's mode → { key, value, takes, required } (takes: the arguments it accepts), or null (a tool without modes, or a value the
-// enum check refuses).
+// enum check refuses). A second key (`alt` — spec_scan {duplicates: true}) given one of its values picks its mode first.
 function argMode(toolName, args) {
   const m = hasOwn(ARG_MODES, toolName) ? ARG_MODES[toolName] : null;
   if (!m) return null;
-  const value = args[m.key] == null ? m.fallback : args[m.key];
-  const key = String(value);
-  if (!hasOwn(m.modes, key)) return null;
-  return { key: m.key, value, takes: m.modes[key], required: (m.required && hasOwn(m.required, key) && m.required[key]) || [] };
+  const pick = (k, value, am) => {
+    const key = String(value);
+    return hasOwn(am.modes, key) ? { key: k, value, takes: am.modes[key], required: (am.required && hasOwn(am.required, key) && am.required[key]) || [] } : null;
+  };
+  for (const [k, am] of Object.entries(m.alt || {})) if (args[k] != null && hasOwn(am.modes, String(args[k]))) return pick(k, args[k], am);
+  return pick(m.key, args[m.key] == null ? m.fallback : args[m.key], m);
 }
-// The arguments given that the call's mode doesn't take → { names, mode, allowed } | null.
+// The arguments given that the call's mode doesn't take → { names, mode, allowed } | null. Another mode key given a value that
+// picks no mode of its own (spec_scan's coverage: false beside duplicates: true, or duplicates: false) is no other mode's argument.
 function inapplicableArgs(toolName, args) {
   const mode = argMode(toolName, args);
   if (!mode) return null;
-  const names = Object.keys(args).filter((k) => args[k] != null && k !== mode.key && k !== "projectDir" && !mode.takes.includes(k));
+  const m = ARG_MODES[toolName];
+  const idle = (k) => (k === m.key ? String(args[k]) === String(m.fallback) : !!m.alt && hasOwn(m.alt, k) && !hasOwn(m.alt[k].modes, String(args[k])));
+  const names = Object.keys(args).filter((k) => args[k] != null && k !== mode.key && k !== "projectDir" && !mode.takes.includes(k) && !idle(k));
   return names.length ? { names, mode: mode.key + ": " + JSON.stringify(mode.value), allowed: mode.takes.join(", ") } : null;
 }
 // Claude Code plugin mode (SPEC_MCP_APPROVAL_HOOK=on — mcp/servers.json): the plugin's own hooks do what these two are for (the

@@ -973,6 +973,9 @@ const msg = {
       prFix: "## Corrección",
       noEvidence: "sin evidencia registrada",
       changedByDate: (list, slug) => `juzgado solo por la fecha del fichero (aprobado antes de las huellas de contenido — un clon o una copia restablece las fechas, así que puede no ser una edición): ${list} — revísalo y vuelve a aprobar para seguirlo por contenido (/approve ${slug} <fase>)`,
+      // 1.28: el detector de código duplicado — un aviso, nunca un bloqueo
+      duplicates: (n, top, within, slug) => `el código de la función repite código existente en ${n} lugar(es) — ${top}${n > 3 ? "; …" : ""}: reutilizar o extender el código existente, o explicar en el informe por qué una copia es deliberada${within ? `; ${within} repetición(es) más dentro de los ficheros de la propia función` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicatesWithin: (n, slug) => `${n} bloque(s) del código de la función repite(n) otro lugar de sus propios ficheros — candidato(s) para la pasada de simplificación (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       untrackedApproval: (list, slug) => `aprobado antes del registro de cambios — no se registró nada del fichero aprobado, así que una edición no puede detectarse: ${list} — vuelve a aprobar para empezar a seguirlo (/approve ${slug} design)`,
     },
     // rigor a medida (el EN es la referencia): tamaños (spec_create {size}), el cambio (tamaño xs, un change.md).
@@ -1464,6 +1467,16 @@ const msg = {
       scanEndpoints: (n, files) => `  endpoints: ${n} ruta(s) en ${files} fichero(s)`,
       coverage: (pct, d, t) => `Cobertura de specs: ${pct}%  (${d}/${t} ficheros de código nombrados en _Implements:_)`,
       undocumented: (list) => `  carpetas sin cobertura: ${list}`,
+      // dupes (1.28): el informe de código duplicado — spec_scan {duplicates: true}
+      dupesHead: (f, existing, within, n, files, lines) => `Duplicados — ${f}: ${existing} lugar(es) repiten código existente · ${within} repetido(s) dentro de la función  (ventanas de ${n} líneas de código; ${files} ficheros, ${lines} líneas de código leídas)`,
+      dupesHeadProject: (total, n, files, lines) => `Duplicados — el proyecto: ${total} bloque(s) repetido(s)  (ventanas de ${n} líneas de código; ${files} ficheros, ${lines} líneas de código leídas)`,
+      dupesNoCode: "  aún no existe ningún fichero de código nombrado por los _Implements:_ de sus tareas — nada que comparar",
+      dupesNone: "  no hay código repetido",
+      dupesExisting: (at, n, also) => `  ⚠ ${at} (${n} líneas) repite ${also} — reutiliza o extiende el código existente`,
+      dupesWithin: (at, n, also) => `  · ${at} (${n} líneas) también en ${also}`,
+      dupesAlsoMore: (n) => `+${n}`,
+      dupesMore: (n) => `  … y ${n} más (se listan los más largos)`,
+      dupesTruncated: (n) => `  (solo se leyeron los primeros ${n} ficheros de código — el límite: una repetición más allá no se ve)`,
       clarify: (f, tracks, verdict, n) => `Aclarar: ${f}  [${tracks}]  → ${verdict} (${n} pregunta(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Función: ${f}  [${tracks}]  fase: ${phase}  veredicto=${verdict}  gates aprobados: ${gatesOk}`,
       changed: (list) => `  ⚠ modificado desde la última aprobación: ${list}`,
@@ -2059,6 +2072,8 @@ const msg = {
         packReserved: (list, slug, since) => `Cambia el nombre de su(s) track pack(s) anterior(es) a la ${since || "1.17"} — ${list}: el nombre está reservado ahora, así que el track está inactivo (detalles: ${DEV_SPEC} doctor ${slug}, comprobación track-pack-missing)`,
         packMarkerReserved: (list, slug, since, tracks) => `Cambia el marcador de su(s) track pack(s) anterior(es) a la ${since || "1.19"} — ${list}: el marcador es ahora el de un track de serie, así que el pack está inactivo; o usa el track de serie: ${DEV_SPEC} add-track ${slug} ${tracks} (detalles: ${DEV_SPEC} doctor ${slug}, comprobación track-pack-missing)`,
         bareAcIds: (list, slug, file = "requirements.md") => `Renumera los criterios que ${file} identifica con IDs sueltos (${list}) como US-<historia>.AC-<n> — y sus referencias ${file === "change.md" ? "en los _Requirements:_ de sus tareas (también en change.md)" : "en tasks.md y test-plan.md"} — y vuelve a aprobar: desde la 1.22 un AC-n suelto no es un ID que trace_check lea, así que doctor (ears, traceability) falla y la aprobación se rechaza (detalles: ${DEV_SPEC} doctor ${slug})`,
+        // un diseño de tamaño m / l aprobado antes de la 1.28 sin su Reutilización e Integración — exigida ahora en el gate del diseño
+        designReuse: (slug) => `Escribir la sección Reutilización e Integración del diseño (el código existente que reutiliza o extiende y lo que es nuevo — Tipo · Qué · Dónde · Por qué) y luego volver a aprobar el diseño (/approve ${slug} design): desde la 1.28 la aprobación de un diseño de tamaño m / l la exige; la aprobación actual se mantiene hasta entonces (el doctor avisa design-reuse)`,
         critic: (files) => `Revísala con el agente spec-critic (solo lectura), fase a fase: ${files || "—"}`,
         converge: (files) => "Ejecuta la pasada de convergencia del spec-reviewer (las tareas hechas frente a sus ACs)" + (files ? `, después el agente spec-critic sobre ${files}` : ""),
         none: "No necesita revisión de la spec — todas las tareas están hechas",
@@ -3177,6 +3192,9 @@ const designWeigh = {
       integration: (n) => `cubierta por integration-plan.md → Puntos de Integración${n ? ` (${n} elemento(s))` : ""}`,
     },
     legacyApproval: (d, v = "1.17") => `diseño aprobado antes de la ${v} — solo se exige a partir de su próxima aprobación (${d})`,
+    // 1.28: la Reutilización e Integración de un diseño de tamaño m / l es una comprobación de la aprobación
+    reuseGate: (d, size) => `${d} — un diseño de tamaño ${size} la necesita antes de su aprobación`,
+    reuseGateLegacy: (d, size) => `${d} — aprobado antes de la 1.28: un diseño de tamaño ${size} la necesita en su próxima aprobación`,
     clarifyConsistency: (words) => `La spec menciona ${words}, pero ni los requisitos ni el diseño dicen nada de consistencia ni de idempotencia (la respuesta va en Alternativas y Compensaciones / Riesgos del diseño, o en un requisito): ¿qué debe tener éxito o fallar a la vez (atomicidad, nivel de aislamiento), quién más escribe los mismos datos a la vez, consistencia fuerte o eventual (qué desfase es aceptable), y cuál es la garantía de entrega y la idempotencia de todo lo asíncrono?`,
   };
 

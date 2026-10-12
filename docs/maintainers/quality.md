@@ -1,8 +1,8 @@
-# Spec quality — steering amendments, cross-feature criteria, glossary, design weighing, reuse
+# Spec quality — steering amendments, cross-feature criteria, glossary, design weighing, reuse, duplicates
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 The spec-quality checks, the design's trade-offs / risks / reuse sections and their doctor warnings, the constraint nudge,
-the TDD micro-cycle. The rules come first; how they came to be — the releases and review findings — is in History at the end.
+the TDD micro-cycle, the duplicate-code detector. The rules come first; how they came to be — the releases and review findings — is in History at the end.
 
 ## Spec quality
 - **Steering amendments** — a requirements / design approval (`STEERING_GOVERNED`) and its history record carry `steering`
@@ -78,10 +78,19 @@ the TDD micro-cycle. The rules come first; how they came to be — the releases 
 - **The section** — the core design builder scaffolds `## Reuse & Integration` between Architecture and Alternatives &
   Trade-offs: a Kind · What · Where (path) · Why table (Reuse / Extend / New) + a `**Module boundaries:**` line — slots,
   refused on `placeholders` until written. Guide: `references/code-reuse-and-quality.md`.
-- **Doctor `design-reuse`** — the third `DESIGN_WEIGH` entry, the trade-offs pattern exactly (WARN only, `REUSE_SYN`, min 0:
+- **Doctor `design-reuse`** — the third `DESIGN_WEIGH` entry, the trade-offs pattern exactly (a WARN, `REUSE_SYN`, min 0:
   "greenfield: nothing to reuse" counts; `designSaveCheck`'s `reuse`, `templates check`'s `reuse-missing`). The heading must
   NAME the section — never a bare "Integration" or "Existing" (`weighTextMatches`). **Brownfield:** a missing or empty section
   passes as `integration` when `integration-plan.md` → Integration Points is filled (`designReuseFallback`).
+- **A gate at size m / l (1.28)** — `designReuseGated(kind, size)`: a plain feature of size m or l (never a bugfix, spike,
+  change, size s / xs or an unsized feature — those keep the warning). There `designWeighChecks(…, {gate: size})` FAILS
+  design-reuse where it would warn (`designWeigh.reuseGate`), and the design gate refuses it: `GATES.design` runs
+  `design-weigh:reuse` (the entry's `gate.reuse` probe — the approval being made, never legacy). Forceable like every gate
+  (`force` + the user's consent; a forced approval keeps failing in doctor). The m / l builder scaffolds the section
+  (`reuseSized`: one example row), so a filled design passes. **The `reuseGate` stamp** (`DESIGN_WEIGH_STAMPS`, gates.js on
+  every design approval and its record): a design approved without it — before 1.28 — keeps the warning, its detail naming the
+  rule (`designWeigh.reuseGateLegacy`), never a fail; spec_upgrade lists such a feature whose section is missing / unfilled
+  (attention `design-reuse`, `designReuseDue`, `upgrade.item.designReuse` — lifecycle.md → Upgrade); nothing is edited.
 - **The stamp scheme** — `approvePhase` stamps a design approval (and its history record) `weigh: true` and `reuse: true`;
   each DESIGN_WEIGH entry names the stamp it needs. A check whose stamp the approval lacks is legacy: a pass whose detail says
   so (`designWeigh.legacyApproval`, the release from `DESIGN_WEIGH_STAMPS` — "approved before 1.19"), since a finished feature
@@ -107,11 +116,50 @@ the TDD micro-cycle. The rules come first; how they came to be — the releases 
   nothing written. One name per refactor candidate.
 - **Prose** — spec-implementer: "Search before you write" (Before-you-begin step 3: reuse → extend → create, the rule of
   three) + a hard rule + the report's `### Reuse` block; spec-reviewer: duplication against the EXISTING codebase is Important;
-  the controller files refactor candidates in the backlog. No engine gate reads the Reuse block. Extending a unit OUTSIDE the
+  the controller files refactor candidates in the backlog. No engine gate reads the Reuse block. The review flow runs the
+  duplicate detector first (below). Extending a unit OUTSIDE the
   task's `_Implements:_` files is never a silent edit (NEEDS_CONTEXT → a converge task or the controller's go-ahead, or create
   locally and say so) — the scope guard would stop a subagent mid-task; the brief's `reuseRule` says it.
 - **Steering** — the `structure.md` stub has Module Boundaries and Shared Code slots, the constitution stub the example
   principle "Search before you write: extend an existing module before adding a new one" — EN / PT / ES.
+
+## Duplicate-code detector (1.28)
+The mechanical half of reuse — the prose asks the implementer to search, this finds what a feature repeats. engine/dupes.js.
+- **The matcher** — `duplicateRuns(files, {minLines, feature, code})` over texts already read (`[{file, text}]` — the plugin's
+  duplication guard, mcp/tests/16-conventions-duplication.js, runs it over its own sources: testing.md). `code: true` gives each
+  run its normalized lines (what an allow-list reads); `scanned.duplicated` counts the code lines in a repeated window, both
+  sides (the guard's share at window 6). Per line (`codeLines()`): comments stripped by family (`STYLES` / `STYLE_OF_EXT`: C-like `//` +
+  `/* */` with backtick strings, `#` (the shells' only at a word's start), `--` for SQL / Lua / Haskell, `<!-- -->` in markup,
+  `;` `%` `'` `!` and a batch file's REM); strings kept and never read as a comment (a one-line string ends at its quote or the
+  line's end; a backtick or `"""` string spans lines); one pass that jumps from one trigger character to the next (`st.trig`).
+  Whitespace collapses; a BOM and CRLF are encoding; punctuation-only, block-closer and import / include / use lines are
+  dropped. Each distinct line gets an id (interned) and a count: a window holding a line seen once is never hashed. Windows of
+  `minLines` (default 6, 4–100) holding ≥ minLines × 12 characters are hashed (two 32-bit mixes → one 53-bit number; a match is
+  then checked id by id); ≤ 32 occurrences kept per window. With a feature, its windows are hashed first and the rest only
+  looked up.
+- **Runs** — matched windows grouped by diagonal (file a, file b, offset); windows no more than a window apart merge (every
+  line between lies in a matched window); each side's places merged per file where they overlap or touch. `existing` = a
+  feature place repeating code outside the feature's files; `within` = inside them (or anywhere, without a feature) — listed
+  ONCE, longest first, a place already listed beside another skipped (`once()`). Sorted: existing first, then the longest, then
+  file (code-unit order, never `localeCompare`) and line. `lines` counts code lines; from / to are the file's own lines.
+- **The report** — `duplicationReport(projectDir, {name, minLines, tests, cap})`: the scan's corpus (`walkProject` +
+  `gitignoreRules`, `isCodeFile`, no fixture, test files only with `tests: true`), `DUP_FILE_CAP` 5,000 files (`truncated`); a
+  file past `DUP_MAX_BYTES` (512 KB — `skipped.large`) or generated / minified (`RE_GENERATED_NAME`, a `@generated` / DO NOT
+  EDIT / Code generated / generated by comment in its first 5 lines, 400+ characters a line — `skipped.generated`) is never
+  read; one open + fstat + read per file into a reused buffer (`decodeText`). With a name: the feature's code = the code files
+  its tasks' `_Implements:_` name (every task; `implementsTargets` — globs, folders), a plain path past the cap still read
+  (`featureFileOnDisk`, never through a link out); no file of its own → nothing read (`featureFiles: 0`). The top `DUP_TOP`
+  (20) + `counts` / `total`; `also` ≤ 5 + `alsoMore`. Timing: this repo ~0.2–0.3 s (75 files); a synthetic 5,000-file project
+  (730k code lines) ~1.5–2.5 s warm, ~4–5 s cold.
+- **Surfaces** — `spec_scan {duplicates: true, name?, minLines?, tests?}` (a mode on spec_scan's SECOND key — mcp.md →
+  Arguments by mode) = `dev-spec dupes [feature] [--min-lines N] [--tests]` (one operation, `dupes`; the human report:
+  `cliOutput.dupes*`). **spec_finish** runs it for the feature (never on the execution gate's `gateOnly` path): a warning,
+  never a blocker — `finish.duplicates` (how many places, the top 3 as `file:from-to ↔ file:from-to`, the `within` count, the
+  calls that list them all) or `finish.duplicatesWithin` (the count alone); the result's `duplicates` {existing, within, top}
+  only when there is one. **The review flow** (commands/spec-review.md branch · converge · simplify, /executeTask
+  --subagents' final review, the reviewer, the simplifier, code-reuse-and-quality.md, subagent-execution.md): the `existing`
+  runs are the reviewer's candidate findings, the `within` runs the simplifier's — each verified (spec-verifier) like any
+  finding; a repeat the spec asks for or one under "Duplicated on purpose" is none.
 
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
@@ -174,3 +222,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   permission prompt); the PT / ES "integration with the existing system" headings name the Reuse section, as EN's did.
 - **1.19 T review 6** — a task emitting metrics on an +obs feature reached no `[OBS]` section: `_Emits metrics:_` pulls its
   `[OBS] Telemetry` section too.
+- **1.28** — at size m / l the Reuse & Integration became an approval check of the design (`designReuseGated`, the
+  `reuseGate` stamp): reuse was enforced by prose alone — a warning a design could ship with. Designs approved before keep the
+  warning; spec_upgrade names them.
+
+### Duplicate-code detector
+- **1.28** — introduced: engine/dupes.js, spec_scan {duplicates}, `dev-spec dupes`, spec_finish's warning, the review flow's
+  candidates (from a prototype: windows of 6–8 normalized lines, ≥ 12 characters a line). On this repo's own mcp/lib it reported
+  5 repeated blocks at minLines 8 — after 1.27.1's cleanup, 2: the link lists the duplication guard allows. The guard (1.27.1,
+  16-conventions-duplication.js) runs this detector since 1.28 — one detector (testing.md); `code` and `scanned.duplicated`
+  serve it.

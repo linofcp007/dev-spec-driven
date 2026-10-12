@@ -8,8 +8,10 @@
  *   id          its name — what a CLI handler runs (c.call("create", …))
  *   tool        the MCP tool that runs it; for a tool that runs several, which one:
  *     mode      { key, values, fallback } — a folded tool's mode (spec_roadmap_edit {kind}, spec_export {format}, spec_scan
- *               {coverage}): the call's args[key] (or the fallback when it leaves the key out) picks the entry. The server's
- *               ARG_MODES — the arguments each mode takes — is DERIVED from these entries (argModes())
+ *               {coverage}): the call's args[key] (or the fallback when it leaves the key out) picks the entry. A tool may have a
+ *               second key (spec_scan {duplicates: true}, 1.28): an entry of a key other than the PRIMARY one (the fallback
+ *               entry's, else the first entry's) runs when the call gives that key one of its values; the primary picks
+ *               otherwise. The server's ARG_MODES — the arguments each mode takes — is DERIVED from these entries (argModes())
  *     when(a)   …or a test of the call's arguments (spec_status: a name or none; ears_validate: a feature or a text; spec_tracks:
  *               action signals); the tool's entry without one runs otherwise
  *   legacy      the hidden aliases (server.js LEGACY_TOOLS) whose calls land here
@@ -207,6 +209,12 @@ const OPERATIONS = [
     call: (S, dir) => S.coverage(dir),
   },
   {
+    // 1.28: the code a feature repeats (name) — or the project's top duplicates; a mode of its own key (spec_scan {duplicates: true})
+    id: "dupes", tool: "spec_scan", mode: { key: "duplicates", values: [true] }, cli: ["dupes"], engine: "duplicationReport",
+    args: { name: NAME, minLines: { mcp: "minLines", cli: "--min-lines", type: "int" }, tests: SWITCH("tests", "--tests") },
+    call: (S, dir, o) => S.duplicationReport(dir, { name: o.name, minLines: o.minLines, tests: o.tests }),
+  },
+  {
     id: "clarify", tool: "spec_clarify", cli: ["clarify"], engine: "clarify",
     args: { name: NAME },
     call: (S, dir, o) => S.clarify(dir, o.name),
@@ -349,9 +357,11 @@ function byId(id) {
 }
 // The operations a tool runs, in the table's order.
 const toolOperations = (tool) => OPERATIONS.filter((op) => op.tool === tool);
-// The value of a moded tool's key in a call: the given one, else the fallback (the entry that declares one).
+// A moded tool's primary key: its fallback entry's, else its first entry's.
+const primaryKey = (ops) => (ops.find((op) => hasOwn(op.mode, "fallback")) || ops[0]).mode.key;
+// The value of a moded tool's primary key in a call: the given one, else the fallback (the entry that declares one).
 function modeValue(ops, args) {
-  const key = ops[0].mode.key;
+  const key = primaryKey(ops);
   const fb = ops.find((op) => hasOwn(op.mode, "fallback"));
   return args[key] == null ? (fb ? fb.mode.fallback : undefined) : args[key];
 }
@@ -361,28 +371,38 @@ function forTool(tool, args) {
   if (ops.length <= 1) return ops[0] || null;
   const a = args || {};
   if (ops[0].mode) {
+    const key = primaryKey(ops);
+    // a second key given one of its values picks its entry (spec_scan {duplicates: true})
+    const alt = ops.find((op) => op.mode.key !== key && a[op.mode.key] != null && op.mode.values.map(String).includes(String(a[op.mode.key])));
+    if (alt) return alt;
     const v = String(modeValue(ops, a));
-    return ops.find((op) => op.mode.values.map(String).includes(v)) || ops.find((op) => hasOwn(op.mode, "fallback")) || null;
+    return ops.find((op) => op.mode.key === key && op.mode.values.map(String).includes(v)) || ops.find((op) => hasOwn(op.mode, "fallback")) || null;
   }
   return ops.find((op) => op.when && op.when(a)) || ops.find((op) => !op.when) || null;
 }
 // The server's ARG_MODES, derived: for each tool whose operations are picked by a mode — { key, fallback, modes: {value: [the
-// MCP arguments it takes, the mode key and projectDir aside]}, required?: {value: [the ones it requires]} }.
+// MCP arguments it takes, the mode key and projectDir aside]}, required?: {value: [the ones it requires]}, alt?: {key: {modes,
+// required?}} } — alt: a second key's modes (1.28 spec_scan {duplicates}), in the same shape.
 function argModes() {
   const out = {};
   for (const tool of new Set(OPERATIONS.filter((op) => op.mode).map((op) => op.tool))) {
     const ops = toolOperations(tool);
     const fb = ops.find((op) => hasOwn(op.mode, "fallback"));
-    const modes = {}, required = {};
+    const key = primaryKey(ops);
+    const byKey = {};
     for (const op of ops) {
+      const k = op.mode.key;
+      const m = byKey[k] || (byKey[k] = { modes: {}, required: {} });
       for (const v of op.mode.values) {
-        const takes = Object.values(op.args).filter((a) => a.mcp !== undefined && a.mcp !== op.mode.key && (!a.modes || a.modes.includes(v)));
-        modes[String(v)] = takes.map((a) => a.mcp);
+        const takes = Object.values(op.args).filter((a) => a.mcp !== undefined && a.mcp !== k && (!a.modes || a.modes.includes(v)));
+        m.modes[String(v)] = takes.map((a) => a.mcp);
         const req = takes.filter((a) => a.required).map((a) => a.mcp);
-        if (req.length) required[String(v)] = req;
+        if (req.length) m.required[String(v)] = req;
       }
     }
-    out[tool] = { key: ops[0].mode.key, ...(fb ? { fallback: fb.mode.fallback } : {}), modes, ...(Object.keys(required).length ? { required } : {}) };
+    const shape = (m) => ({ modes: m.modes, ...(Object.keys(m.required).length ? { required: m.required } : {}) });
+    const alt = Object.keys(byKey).filter((k) => k !== key);
+    out[tool] = { key, ...(fb ? { fallback: fb.mode.fallback } : {}), ...shape(byKey[key]), ...(alt.length ? { alt: Object.fromEntries(alt.map((k) => [k, shape(byKey[k])])) } : {}) };
   }
   return out;
 }

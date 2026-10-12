@@ -69,6 +69,9 @@ how they came to be — the releases and review findings — is in History at th
   cli/tests/16-conventions-cli-modules.js checks the entry). A command wrapping an operation runs `c.call(id, given)`, `given`
   holding only what the handler parses (`parsed`) or sets (`internal`) — never the facade function directly
   (cli/tests/02-surfaces-parity.js), so the engine call is the MCP tool's, with the same defaults.
+- **A mode on a second key of a tool** (1.28 `spec_scan {duplicates}`) → its operation's `mode: {key, values}` with the new
+  key; `argModes()` derives `alt`, `forTool()` / the server's `argMode()` try it first; its arguments in the tool's schema
+  (mcp.md → Arguments by mode).
 - **New CLI switch** (no value) → `CLI_SWITCHES` in `mcp/lib/engine/guards.js` (the CLI and the approval hook's lexer read
   it); a new **value flag** → `VALUE_FLAG_SPECS` in cli/commands.js (completion `values` by `@source` where the facade has
   the list, never copied; `repeatable: true` when a command reads EVERY occurrence — any other given twice is a usage error).
@@ -121,6 +124,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   constants the 1.20 cue rules had replaced, so `mcp/tests/17-docs-identifiers.js` checks every backticked identifier of the notes.
 - **1.26** — tools folded into others behind hidden aliases (`LEGACY_TOOLS`, the modes); the 55 slash commands folded into 22
   (the table below); the corpus stopped carrying the version, so a version bump alone no longer needs a rebuild.
+- **1.28** — a tool's mode on a second key (`alt`); an integer flag's `bounds` as a `[least, most]` pair (the schema's
+  minimum: `dupes --min-lines` 4–100).
 - **1.27** — one operations table (`OPERATIONS`, mcp/lib/operations.js) both surfaces run through and one CLI command table
   (`COMMANDS`, cli/commands.js) replace the server's dispatch cases and the CLI's hand-kept flag → option lists; createFeature /
   completeTask take an options object; one check registry (`DOCTOR_CHECKS`, `GATES`) for doctor and the approval gates; the

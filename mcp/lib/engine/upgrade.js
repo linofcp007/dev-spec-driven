@@ -10,14 +10,14 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, detectTracks, ensureLockIgnore, errs, existsCached,
+let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, designReuseGated, detectTracks, ensureLockIgnore, errs, existsCached, featureSize,
   featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir, isGeneratedOrAbsent, isObj,
   isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES, maybeRefreshRoadmap, missingPackTracks,
   nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile, positionPhase, projectLang, readIfExists,
   readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError, savedTracks, scanTestCode, shortIdList, specDoctor, specsRoot,
   staleFinish, stateFromFile, statePath, timeOf, trackLabel, unverifiedLabel, verificationStatus, withFeatureLock,
   withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot;
-function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, detectTracks, ensureLockIgnore,
+function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir,
   isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,
   maybeRefreshRoadmap, missingPackTracks, nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile,
@@ -239,6 +239,11 @@ function upgradeFeature(projectDir, s, ctx) {
   // renumber them US-<story>.AC-<n>, their references too, then re-approve. Never edited here: the audit names them.
   const bareAcIds = criteriaBareIds(criteriaText(s.dir) || "", s.dir);
   if (bareAcIds.length) attention.push("bare-ac-ids");
+  // 1.28: a size m / l design approved before its Reuse & Integration became an approval check, the section missing or unfilled
+  // (doctor warns design-reuse) — named, never fixed here: write the section, then re-approve the design. The approval stands.
+  const designReuseDue = warns.some((c) => c.id === "design-reuse") && designReuseGated(kind, featureSize(s.dir)) && isRecord(approvals.design) &&
+    approvals.design.reuseGate !== true;
+  if (designReuseDue) attention.push("design-reuse");
   // the design weigh warns (design-tradeoffs / design-risks) are listed, never an upgrade to-do on their own.
   if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id))) attention.push("warnings");
   const res = {
@@ -249,7 +254,7 @@ function upgradeFeature(projectDir, s, ctx) {
     history: { present: plan.present, seed: plan.seed.map((x) => x.phase), skip: plan.skip },
     unverified: vs.unverifiedDetail.map((d) => Object.assign({ number: d.number, reason: d.reason }, d.specChanged ? { specChanged: true } : {}, d.unticked ? { unticked: true } : {})),
     next: { step: na.step, recommendation: na.recommendation },
-    review, reviewArtifacts, drift, reservedPacks, reservedMarkers, bareAcIds, criteriaFile: isChangeDir(s.dir) ? CHANGE_FILE : "requirements.md",
+    review, reviewArtifacts, drift, reservedPacks, reservedMarkers, bareAcIds, criteriaFile: isChangeDir(s.dir) ? CHANGE_FILE : "requirements.md", designReuseDue,
     group: fails.length ? "blocked" : attention.length ? "attention" : "ok", attention,
   };
   if (na.impact) res.impact = na.impact.phases; // the spec_impact phases to diff before re-approving
@@ -357,6 +362,7 @@ function upgradeItems(f, lang) {
       f.reservedMarkers.map((x) => packReservedSince(x.track)).sort().pop(), [...new Set(f.reservedMarkers.map((x) => x.track))].join(" ")));
   }
   if (f.bareAcIds && f.bareAcIds.length) act(I.bareAcIds(shortIdList(f.bareAcIds), f.name, f.criteriaFile)); // 1.22 review 2
+  if (f.designReuseDue) act(I.designReuse(f.name)); // 1.28
   if (f.review === "critic") act(I.critic(f.reviewArtifacts.join(", ")));
   else if (f.review === "converge") act(I.converge(f.reviewArtifacts.join(", ")));
   else out.push({ check: false, text: I.none });

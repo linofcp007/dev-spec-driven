@@ -251,7 +251,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
       JSON.stringify(tl.filter((t) => !t.annotations || t.annotations.destructiveHint === true).map((t) => t.name).concat(roTools)) + ")");
     const roBefore = cSnap(path.join(sl, ".specs"));
     const roCalls = [];
-    const roArgs = { name: "billing", description: "billing invoices", code: true, matrix: true, message: "All done.", gitLog: "commit 0123456789abcdef0123456789abcdef01234567", projectDir: sl };
+    // (1.28: spec_scan takes `name` in its duplicates mode — the duplicate detector, read-only too)
+    const roArgs = { name: "billing", description: "billing invoices", code: true, matrix: true, duplicates: true, message: "All done.", gitLog: "commit 0123456789abcdef0123456789abcdef01234567", projectDir: sl };
     for (const n of roTools) {
       // each tool gets the arguments its schema lists (1.24 r6 A1: another one is refused — unknown-argument)
       const props = tl.find((t) => t.name === n).inputSchema.properties || {};
