@@ -162,9 +162,9 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(2170 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(2171 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 630 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 631 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its
 AREA: `mcp/tests/NN-<area>.js` / `cli/tests/NN-<area>-<topic>.js` (NN is the area, the same in both; `--list` says what
 each holds; `--only <file|area|NN>` runs a part, plus the files it needs — testing.md → The suites). Keep
@@ -172,7 +172,8 @@ it dependency-free. `node mcp/evals/run-evals.js <feature> --dry-run` validates 
 Exact counts that change when a package adds a command, tool or template (22 command files, the tools/list length, the
 template keys, the resource list) are asserted in place — update them in the same change. The source guards (no literal
 U+FEFF, no `child_process`, no backslash-stripped regex literal, the roadmap's printed labels, no raw fs write outside
-engine/files.js — the write gate, conventions.md) read every `mcp/lib` source
+engine/files.js — the write gate, conventions.md; no block of 8+ code lines repeated across the sources —
+16-conventions-duplication.js, with a reasoned allowlist) read every `mcp/lib` source
 — the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone; never a built bundle
 (its registry comes from scripts/build.js, which they read). Both suites run on the modules (the harnesses drop
 `DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp. Every chain is hermetic (1.26): a fresh empty temp folder as its
