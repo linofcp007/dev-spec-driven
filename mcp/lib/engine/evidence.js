@@ -15,13 +15,13 @@ let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, c
   extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest, isBacktickUnit,
   isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, readIfExists, readRoadmap, realPathLoose,
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
-  traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps;
+  traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps, gitDirsOf;
 let dayOf; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ dayOf, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
-  taskProse, timeOf, tKey, toPosix, traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps } = E); }
+  taskProse, timeOf, tKey, toPosix, traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps, gitDirsOf } = E); }
 
 // Verification evidence (verification-before-completion): a task that declares _Verify: <command>_ is only
 // trustworthy when its result was recorded. Evidence lives in .state.json → evidence[<task number>].
@@ -1539,28 +1539,10 @@ function runRootStamp(command, projectDir, slug) {
   return worktree() || pdir;
 }
 // The repository's common git dir for a folder (fs only): the nearest `.git` up from it — a folder, or a worktree's `.git` FILE
-// (`gitdir: <path>`) whose `commondir` names the main one (as state.js's repoGitConfigText reads it) → a path, or null.
+// (`gitdir: <path>`) whose `commondir` names the main one (state.js gitDirsOf) → a path, or null.
 function gitCommonDir(dir) {
-  let d = path.resolve(dir);
-  for (let k = 0; k < 64; k++) {
-    const dotGit = path.join(d, ".git");
-    let st = null;
-    try { st = fs.statSync(dotGit); } catch { st = null; }
-    if (st) {
-      let gitDir = dotGit;
-      if (st.isFile()) {
-        let m = null;
-        try { m = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(fs.readFileSync(dotGit, "utf8").slice(0, 4096)); } catch { m = null; }
-        if (!m) return null;
-        gitDir = path.resolve(d, m[1]);
-      }
-      try { return path.resolve(gitDir, fs.readFileSync(path.join(gitDir, "commondir"), "utf8").trim()); } catch { return path.resolve(gitDir); }
-    }
-    const up = path.dirname(d);
-    if (up === d) break;
-    d = up;
-  }
-  return null;
+  const g = gitDirsOf(dir);
+  return g ? g.commonDir : null;
 }
 // The nearest folder at or above dir that holds a .specs/ folder (≤ 12 levels; a network path is never stat'ed) — or null.
 function specsProjectOf(dir) {

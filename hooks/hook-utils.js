@@ -1,15 +1,17 @@
 "use strict";
 
 /**
- * dev-spec-driven — what the approval hook (and the guard hook's per-session note) share BEFORE the engine loads (zero-dependency:
- * Node core and mcp/lib/probe.js only; it never requires the engine, so a hook's cheap pre-check stays cheap). Not a hook itself:
- * hooks/hooks.json runs the hook scripts, which require this file — and mcp/server.js, for the projectDir parser it shares
- * with the approval hook. Is a folder a dev-spec project, where is it, a file as the engine reads it (UTF-8 or UTF-16)
- * and a network path: mcp/lib/probe.js (ONE rule for the hooks, the status line and the engine), re-exported here
- * under the names this file always had (readJson = probe.readJsonFile).
+ * dev-spec-driven — what the hooks share BEFORE the engine loads (zero-dependency: Node core and mcp/lib/probe.js only; it never
+ * requires the engine, so a hook's cheap pre-check stays cheap). Not a hook itself: hooks/hooks.json runs the hook scripts, which
+ * require this file — and mcp/server.js, for the projectDir parser it shares with the approval hook. Is a folder a dev-spec
+ * project, where is it, a file as the engine reads it (UTF-8 or UTF-16), a network path and a Write / Edit target as the file
+ * system reads it: mcp/lib/probe.js (ONE rule for the hooks, the status line and the engine), re-exported here under the names
+ * this file always had (readJson = probe.readJsonFile) — loaded on first use: the runner alone needs none of it.
  *
- *   - editTargets — a Write / Edit target as the file system reads it, the engine's approvalEditTargets (its real path
- *     on every platform — a folder linked to .specs/).
+ *   - runHook / finish / payloadOf / eventOf — every hook's process: the payload read from stdin and parsed, main run once, the
+ *     safety net, the one flushed exit.
+ *   - probe() — mcp/lib/probe.js, required on first use (each hook's pre-filter runs before it).
+ *   - editTargets / fsTargetPath — the probe's (the engine's approvalEditTargets / guardTargetPath ARE them).
  *   - parseProjectDir / fileUriToPath / unexpandedVar — ONE reading of an MCP tool's projectDir (a path or a local file:// URI), the
  *     approval hook's and the MCP server's.
  *   - approvalProjects — the projects an approval-shaped tool call may act on, for the approval hook's raw level read.
@@ -19,13 +21,62 @@
  * mcp/tests/10-guards-guard-downs.js checks the readings agree with the engine's.
  */
 
-const fs = require("fs");
 const os = require("os");
 const path = require("path");
-// The project probe: the rule, the walks, the readers, isNetwork — Node core only, like this file.
-const P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js"));
-const { utf16OrUtf8, textOf, jsonOf, readText, isUtf16, isNetwork, usable, expandHome, nearestSpecs, RE_UNEXPANDED_VAR, unexpandedVar } = P;
-const readJson = P.readJsonFile;
+
+// ---- the hooks' runner ------------------------------------------------------------------------------------------------------
+// ONE process shape for every hook (each still decides in its own main, before anything heavier loads). finish(obj?) is the hook's
+// one exit: at most one JSON object on stdout, the process exiting only once it is flushed (Windows and Linux pipes truncate
+// otherwise — conventions.md → Flush stdout before exiting); a second call is a no-op. runHook(main, opts) reads the payload from
+// stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes) and runs main(raw, timedOut) ONCE — at stdin's end, or
+// from the safety net (SAFETY_NET_MS, 2 s: a stdin that never ends; timedOut true — the approval hook asks on a partial payload
+// naming dev-spec). It never crashes: an exception in main, or a stdin error, is a silent exit 0 — never a block (past its
+// pre-check the approval hook catches its own and asks). A terminal stdin runs main("{}"). opts.maxInput: past that many
+// characters the rest is drained unread and main gets "" (the observe and plan hooks ignore an oversized payload).
+const SAFETY_NET_MS = 2000;
+let finished = false;
+function finish(obj) {
+  if (finished) return;
+  finished = true;
+  if (!obj) process.exit(0);
+  process.stdout.write(JSON.stringify(obj), () => process.exit(0));
+}
+function runHook(main, opts = {}) {
+  const max = opts.maxInput > 0 ? opts.maxInput : Infinity;
+  let ran = false, input = "", tooBig = false;
+  const run = (raw, timedOut) => {
+    if (ran) return; // stdin's end and the safety net must not both run it
+    ran = true;
+    try { main(raw, timedOut); } catch { finish(); }
+  };
+  if (process.stdin.isTTY) return run("{}", false);
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (c) => {
+    if (tooBig) return;
+    input += c;
+    if (input.length > max) { tooBig = true; input = ""; }
+  });
+  process.stdin.on("end", () => run(input, false));
+  process.stdin.on("error", () => finish());
+  setTimeout(() => run(input, true), SAFETY_NET_MS).unref(); // the safety net
+}
+// The payload main reads: its raw text → the object it holds, or null (not JSON, or JSON that is no object — an array, a string…);
+// an empty text is {}. eventOf: its event name (hook_event_name, or the camelCase hookEventName), else "".
+function payloadOf(raw) {
+  let p;
+  try { p = JSON.parse(raw || "{}"); } catch { return null; }
+  return p && typeof p === "object" && !Array.isArray(p) ? p : null;
+}
+const eventOf = (p) => p.hook_event_name || p.hookEventName || "";
+
+// The project probe: the rule, the walks, the readers, isNetwork, a target path — Node core only, like this file. Required on first
+// use (a hook's runner and pre-filter need none of it).
+let PROBE = null;
+const probe = () => PROBE || (PROBE = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
+const isNetwork = (p) => probe().isNetwork(p);
+const usable = (v) => probe().usable(v);
+const expandHome = (p) => probe().expandHome(p);
+const unexpandedVar = (v) => probe().unexpandedVar(v);
 
 // The share a network path lies on (`\\host\share`, lower case, `\\?\UNC\` read as `\\`), or null.
 function shareOf(p) {
@@ -35,39 +86,6 @@ function shareOf(p) {
   return m ? ("\\\\" + m[1] + "\\" + m[2]).toLowerCase() : null;
 }
 
-// The engine's guardTargetPath (engine/guards.js), on win32 only: Git Bash's `/c/…` is `C:/…`, and an NTFS
-// stream suffix on the last segment is dropped (`a.json::$DATA` IS a.json).
-function fsTargetPath(p, win = process.platform === "win32") {
-  let s = String(p);
-  if (!win) return s;
-  const m = /^\/([A-Za-z])(?=\/|$)/.exec(s);
-  if (m) s = m[1].toUpperCase() + ":" + (s.slice(2) || "/");
-  const cut = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\")) + 1;
-  const from = cut === 0 && /^[A-Za-z]:/.test(s) ? 2 : 0;
-  const i = s.indexOf(":", cut + from);
-  return i > cut ? s.slice(0, i) : s;
-}
-// A Write / Edit target (absolute, or relative to cwd) → the paths the file system reads it as: [resolved] — `./`, `..` and a stream
-// suffix taken out — plus its real path (the file's, else its folder's + the name): an 8.3 short name (`ROADMA~1.JSO`) and
-// a folder linked to .specs/ or to a feature folder (`ln -s .specs sx` → `sx/roadmap.json`). A network path is never resolved
-// on the disk. The engine's approvalEditTargets. (The approval hook calls it only for a path naming .specs, a short name or one of the
-// guarded file names — RE_EDIT_MAYBE.)
-function editTargets(fp, cwd, win = process.platform === "win32") {
-  const s = fsTargetPath(String(fp).trim(), win);
-  if (isNetwork(s)) return [s];
-  const c = usable(cwd);
-  if (c && isNetwork(c) && !path.isAbsolute(s) && !/^[A-Za-z]:/.test(s)) return [c.replace(/[\\/]+$/, "") + "/" + s]; // under a network cwd: text only
-  const base = c && !isNetwork(c) ? path.resolve(fsTargetPath(c, win)) : process.cwd();
-  let abs;
-  try { abs = path.resolve(base, s); } catch { return [s]; }
-  const out = [abs];
-  let real = null;
-  try { real = fs.realpathSync.native(abs); } catch {
-    try { real = path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs)); } catch { real = null; }
-  }
-  if (real && real !== abs) out.push(real);
-  return out;
-}
 // ONE reading of an MCP tool's projectDir, shared by the approval hook and mcp/server.js (it accepted a
 // local file:// URI the hook read as a relative folder: spec_approve {projectDir: "file:///…/projA", force: true} went through at ask).
 // The engine's unexpanded-variable rule is the probe's (files.js unexpandedVar — mcp/tests/10-guards-shell-writes.js checks they agree):
@@ -121,6 +139,7 @@ const RE_PROJECT_FLAG = /--project(?:=|\s+)(?:"([^"]*)"|'([^']*)'|([^\s;&|)]+))/
 // The session's folders (the payload cwd — walked up like the CLI —, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the
 // user's: read even on a network share. A network path the AGENT names is refused unless it lies on a share the session is on.
 function approvalProjects(opts = {}) {
+  const P = probe();
   const env = opts.env || {};
   const cwd = usable(opts.cwd);
   const anchors = [env.CLAUDE_PROJECT_DIR, env.SPEC_PROJECT_DIR].map(usable).filter(Boolean);
@@ -216,5 +235,10 @@ function claimMatch(message, f, scan) {
   return new RegExp(sc.source(f.word.pre + "(?:" + f.claims.join(")|(?:") + ")" + f.word.post), String(f.word.flags).replace("g", "")).test(sc.text);
 }
 
-module.exports = { utf16OrUtf8, textOf, jsonOf, readText, readJson, isUtf16, isNetwork, shareOf, fsTargetPath, editTargets, nearestSpecs, approvalProjects, sessionFlagFile,
-  claimProse, claimScan, claimMatch, RE_UNEXPANDED_VAR, unexpandedVar, RE_DOTDOT, fileUriToPath, parseProjectDir };
+module.exports = { runHook, finish, payloadOf, eventOf, probe, isNetwork, shareOf, approvalProjects, sessionFlagFile, claimProse, claimScan, claimMatch, unexpandedVar,
+  RE_DOTDOT, fileUriToPath, parseProjectDir };
+// the probe's names, read through on first use — readJson is its readJsonFile
+for (const [name, key] of [["utf16OrUtf8"], ["textOf"], ["jsonOf"], ["readText"], ["readJson", "readJsonFile"], ["isUtf16"], ["fsTargetPath"],
+  ["editTargets"], ["nearestSpecs"], ["RE_UNEXPANDED_VAR"]]) {
+  Object.defineProperty(module.exports, name, { enumerable: true, get: () => probe()[key || name] });
+}

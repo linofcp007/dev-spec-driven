@@ -74,7 +74,8 @@ hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|Notebook
 hooks/*-hook.js                guard (opt-in guard mode) · approval (opt-in human approval guard) · observe (logs _Verify:_ /
                                check runs, prints nothing) · spec (save checks + SessionStart lines) · stop (stale roadmap
                                refresh, then the evidence gate) · plan (the plan-mode bridge)
-hooks/hook-utils.js            what the hooks share before the engine loads (probe.js re-exported, the claim pre-filter…)
+hooks/hook-utils.js            what the hooks share before the engine loads (the runner — runHook / finish —, probe.js
+                               re-exported on first use, the claim pre-filter…)
 hooks/precommit-check.js       optional git pre-commit validator (a stale ROADMAP.* / SPECS.md refreshed and re-staged)
 hooks/stop-claims.generated.json GENERATED (npm run build, committed): the stop gate's claim patterns, the Stop hook's pre-filter
 AGENTS.md · GEMINI.md · .cursor/ .windsurf/ .github/copilot-instructions.md   rule files for other tools · INTEGRATIONS.md
@@ -115,7 +116,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   "1.27 module boundaries" — (a) every linked name is used, (b) every export is used outside its module, (c) every facade key
   is read by a surface or a test and every engine name the facade takes is used.
 - **Beside the engine:** a zero-dependency module a process needs WITHOUT the engine (~100 ms to load) lives in `mcp/lib/`
-  and requires only Node core — `probe.js` (hook / status-line pre-checks; files.js and doctor.js require it too),
+  and requires only Node core — `probe.js` (hook / status-line pre-checks; files.js, doctor.js and guards.js require it too),
   `latin1-scan.js` (the claim scan; guards.js loads it on first use), `operations.js` (requires nothing: the surfaces hand it
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.

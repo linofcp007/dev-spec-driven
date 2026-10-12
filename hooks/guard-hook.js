@@ -28,6 +28,10 @@
 
 const fs = require("fs");
 const path = require("path");
+// The hooks' runner (stdin, the safety net, the one flushed exit) and the project probe (mcp/lib/probe.js — the one dev-spec project
+// rule, the session's candidate projects, a JSON file read as the engine reads it: UTF-8 or UTF-16 with a BOM), required on first use
+// — past the pre-filter: a call that edits nothing loads nothing more.
+const { runHook, finish, payloadOf, eventOf, probe, sessionFlagFile } = require("./hook-utils.js");
 
 // the shell tools — the engine reads which files a command writes (spec.shellWriteTargets). Before it loads, a
 // command must hold an output redirection or the name of a program that writes, removes, moves, copies or extracts files (the
@@ -43,21 +47,6 @@ const RE_SHELL_WRITE = new RegExp("[>]|(?:^|[^\\w.-])(?:tee|sed|perl|ruby|g?awk|
 // A shell command's path-like words (holding a / or \) — the nearest dev-spec .specs/ above each is a candidate project (a monorepo's
 // package).
 const RE_PATH_WORD = /(?:^|[\s'"=<>|;&(])[^\s'"<>|;&()]*[\\/][^\s'"<>|;&()]*/g;
-
-// The project probe (mcp/lib/probe.js — the one dev-spec project rule, the session's candidate projects, a JSON file read as the engine
-// reads it: UTF-8 or UTF-16 with a BOM). Required only past the pre-filter: a call that edits nothing loads nothing.
-let P = null;
-const probe = () => P || (P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
-
-let done = false;
-let ran = false;
-// At most one JSON object, and exit only after it is flushed (Windows pipes truncate otherwise).
-function finish(obj) {
-  if (done) return;
-  done = true;
-  if (!obj) process.exit(0);
-  process.stdout.write(JSON.stringify(obj), () => process.exit(0));
-}
 
 // The user's default (the environment variable DEV_SPEC_GUARD_DEFAULT, e.g. from Claude Code's settings.json `env`):
 // on / scope turns the guard on for a project whose roadmap.json leaves meta.guard unset. The engine (spec.guardLevel) reads
@@ -95,16 +84,9 @@ function guardOn(dir) {
 }
 
 function main(raw) {
-  if (ran) return; // stdin 'end' and the safety-net timer must not both run it
-  ran = true;
-  let payload;
-  try {
-    payload = JSON.parse(raw || "{}");
-  } catch {
-    return finish();
-  }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
-  const event = payload.hook_event_name || payload.hookEventName || "";
+  const payload = payloadOf(raw);
+  if (!payload) return finish();
+  const event = eventOf(payload);
   if (event && event !== "PreToolUse") return finish();
   const ti = payload.tool_input || payload.toolInput || {};
   const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";
@@ -154,7 +136,7 @@ function main(raw) {
   if (r.note) {
     const sid = typeof payload.session_id === "string" && payload.session_id.trim() ? payload.session_id : null;
     if (sid) {
-      const flag = require("./hook-utils.js").sessionFlagFile("forced-note", sid);
+      const flag = sessionFlagFile("forced-note", sid);
       let seen = null;
       try { seen = fs.readFileSync(flag, "utf8"); } catch { seen = null; }
       if (seen === r.note) return finish();
@@ -165,23 +147,5 @@ function main(raw) {
   return finish();
 }
 
-// Never crash, whatever the payload: any unexpected error is a silent no-op (never a block).
-function safeMain(raw) {
-  try {
-    main(raw);
-  } catch {
-    finish();
-  }
-}
-
-// Read the hook payload from stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes).
-let input = "";
-if (process.stdin.isTTY) {
-  safeMain("{}");
-} else {
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (c) => (input += c));
-  process.stdin.on("end", () => safeMain(input));
-  process.stdin.on("error", () => finish());
-  setTimeout(() => safeMain(input), 2000).unref(); // safety net
-}
+// The payload from stdin, main run once; any unexpected error is a silent no-op (never a block).
+runHook(main);

@@ -38,8 +38,8 @@ const BUNDLE_PATH = path.join(LIB, "spec.bundle.js"); // the default place — .
 const STOP_CLAIMS_PATH = path.join(ROOT, "hooks", "stop-claims.generated.json"); // committed (a clone without hooks/: none)
 
 // The bundled modules of an mcp/lib folder: every .js file of engine/ (folders included) and i18n/, the i18n.js facade and the
-// zero-dependency helpers the engine requires (ENGINE_HELPERS: doctor.js and files.js load probe.js, guards.js latin1-scan.js on
-// first use) — mcp/lib-relative, "/"-separated, sorted. Not spec.js (the facade chooses between the modules and a bundle),
+// zero-dependency helpers the engine requires (ENGINE_HELPERS: doctor.js, files.js and guards.js load probe.js, guards.js
+// latin1-scan.js on first use) — mcp/lib-relative, "/"-separated, sorted. Not spec.js (the facade chooses between the modules and a bundle),
 // prompts-resources.js (not the engine: it requires spec.js) nor operations.js (the surfaces' table: no engine module requires it).
 const ENGINE_HELPERS = ["latin1-scan.js", "probe.js"];
 function bundledFiles(lib = LIB) {

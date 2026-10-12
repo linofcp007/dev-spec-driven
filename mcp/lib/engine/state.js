@@ -32,6 +32,17 @@ function featureLang(projectDir, name) {
   const st = readState(projectDir, name); // readState is hoisted below
   return normalizeLang(st.lang || projectLang(projectDir));
 }
+// A tool's `lang` option (spec_templates, spec_tracks and its signals action): a language of LANGS, canonical (pt-BR / pt_br / PTBR
+// → pt-BR — its folder is .specs/templates/pt-BR/) → { lang, lng }: lang the language asked for (null when absent or blank), lng the
+// one to answer in (lang, else the project's); a value naming no language → { error }, in the project's language.
+function langOption(projectDir, value) {
+  const pl = projectLang(projectDir);
+  if (value == null || !String(value).trim()) return { lang: null, lng: pl };
+  const lang = i18n.canonicalLang(String(value));
+  if (lang) return { lang, lng: lang };
+  const A = i18n.msg(pl).args;
+  return { error: A.invalid(A.item("lang", A.oneOf(i18n.LANGS.join(", ")), JSON.stringify(String(value)))) };
+}
 // Localized engine errors: the feature's language when there is one, else the project's.
 function errs(projectDir, slug) {
   return i18n.msg(slug ? featureLang(projectDir, slug) : projectLang(projectDir)).err;
@@ -1452,32 +1463,14 @@ function mergeDriverScript(command) {
   const at = words.indexOf("merge-state");
   return at > 0 && words[at - 1] ? words[at - 1] : null;
 }
-// The repository's git config TEXT for the project folder (fs only): the nearest `.git` up from it — a folder, or a worktree's /
-// submodule's `.git` FILE (`gitdir: <path>`, relative to the file's folder); a linked worktree's settings live in the common dir
-// (`<gitdir>/commondir`), plus its own config.worktree (read after, so its values win). → { text, dir } | null
+// The repository's git config TEXT for the project folder (fs only): the repository gitDirsOf finds (the nearest `.git` up from it);
+// a linked worktree's settings live in the common dir, plus its own config.worktree (read after, so its values win).
+// → { text, dir } | null
 function repoGitConfigText(projectDir) {
-  let dir = path.resolve(String(projectDir || "."));
-  for (let k = 0; k < 64; k++) {
-    const dotGit = path.join(dir, ".git");
-    let st = null;
-    try { st = fs.statSync(dotGit); } catch { st = null; }
-    if (st) {
-      let gitDir = dotGit;
-      if (st.isFile()) {
-        const m = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(fs.readFileSync(dotGit, "utf8"));
-        if (!m) return null;
-        gitDir = path.resolve(dir, m[1]);
-      }
-      let common = gitDir;
-      try { common = path.resolve(gitDir, fs.readFileSync(path.join(gitDir, "commondir"), "utf8").trim()); } catch { common = gitDir; }
-      const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
-      return { text: read(path.join(common, "config")) + "\n" + (common !== gitDir ? read(path.join(gitDir, "config.worktree")) : ""), dir: gitDir };
-    }
-    const up = path.dirname(dir);
-    if (up === dir) break;
-    dir = up;
-  }
-  return null;
+  const g = gitDirsOf(projectDir);
+  if (!g) return null;
+  const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
+  return { text: read(path.join(g.commonDir, "config")) + "\n" + (g.commonDir !== g.gitDir ? read(path.join(g.gitDir, "config.worktree")) : ""), dir: g.gitDir };
 }
 // The project's merge driver, checked (read only). opts.driver: the configured command when the caller read it (`git config --get`:
 // a string, or null when none is set); absent → read from the repository's config text. opts.cli: this clone's cli/dev-spec.js
@@ -1536,7 +1529,8 @@ const defaultBranchName = (kind, slug) => (own(BRANCH_PREFIX, kind) ? BRANCH_PRE
 const RE_GIT_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 // The repository a project folder lies in (fs only): the nearest `.git` up from it — a folder, or a worktree's / submodule's `.git`
 // FILE (`gitdir: <path>`, relative to its folder) — and its common dir (`<gitdir>/commondir`: a linked worktree's branches live
-// there, its HEAD in its own gitdir). → { gitDir, commonDir } | null
+// there, its HEAD in its own gitdir). → { gitDir, commonDir } | null. The one walk to a repository: repoGitConfigText, gitRepoFacts
+// and evidence.js gitCommonDir read it.
 function gitDirsOf(projectDir) {
   let dir = path.resolve(String(projectDir || "."));
   for (let k = 0; k < 64; k++) {
@@ -1615,7 +1609,7 @@ function featureBranch(projectDir, name) {
   return f.ok ? branchView(projectDir, readState(projectDir, f.slug)) : null;
 }
 
-module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
+module.exports = { normalizeLang, projectLang, featureLang, langOption, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
   reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState, stateFromFile, PHASE_FILE,
   textFingerprint, wsText, wsFingerprint, sha1Hex, fingerprintMatches, BOM_CHAR, uncheckTasks, phaseFile, FEATURE_SIZES,
   sizeInput, featureSize, isChangeDir, PHASE_PERCENT, featurePercent, roadmapPath, loadRoadmap, readRoadmap, roadmapError,
@@ -1627,4 +1621,4 @@ module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugi
   // the installed driver still this clone's? (merge-state --check, the SessionStart hook)
   MERGE_DRIVER_KEY, gitConfigGet, mergeDriverScript, mergeDriverStatus,
   // a feature's own git branch (create --branch): its name, the repository read as files, the record
-  branchNameOk, defaultBranchName, gitRepoFacts, featureBranchRecord, branchView, featureBranch, __link };
+  branchNameOk, defaultBranchName, gitDirsOf, gitRepoFacts, featureBranchRecord, branchView, featureBranch, __link };
