@@ -8,7 +8,8 @@
  * system reads it: mcp/lib/probe.js (ONE rule for the hooks, the status line and the engine), re-exported here under the names
  * this file always had (readJson = probe.readJsonFile) — loaded on first use: the runner alone needs none of it.
  *
- *   - runHook / finish — every hook's process: the payload read from stdin, main run once, the safety net, the one flushed exit.
+ *   - runHook / finish / payloadOf / eventOf — every hook's process: the payload read from stdin and parsed, main run once, the
+ *     safety net, the one flushed exit.
  *   - probe() — mcp/lib/probe.js, required on first use (each hook's pre-filter runs before it).
  *   - editTargets / fsTargetPath — the probe's (the engine's approvalEditTargets / guardTargetPath ARE them).
  *   - parseProjectDir / fileUriToPath / unexpandedVar — ONE reading of an MCP tool's projectDir (a path or a local file:// URI), the
@@ -59,6 +60,14 @@ function runHook(main, opts = {}) {
   process.stdin.on("error", () => finish());
   setTimeout(() => run(input, true), SAFETY_NET_MS).unref(); // the safety net
 }
+// The payload main reads: its raw text → the object it holds, or null (not JSON, or JSON that is no object — an array, a string…);
+// an empty text is {}. eventOf: its event name (hook_event_name, or the camelCase hookEventName), else "".
+function payloadOf(raw) {
+  let p;
+  try { p = JSON.parse(raw || "{}"); } catch { return null; }
+  return p && typeof p === "object" && !Array.isArray(p) ? p : null;
+}
+const eventOf = (p) => p.hook_event_name || p.hookEventName || "";
 
 // The project probe: the rule, the walks, the readers, isNetwork, a target path — Node core only, like this file. Required on first
 // use (a hook's runner and pre-filter need none of it).
@@ -226,7 +235,7 @@ function claimMatch(message, f, scan) {
   return new RegExp(sc.source(f.word.pre + "(?:" + f.claims.join(")|(?:") + ")" + f.word.post), String(f.word.flags).replace("g", "")).test(sc.text);
 }
 
-module.exports = { runHook, finish, probe, isNetwork, shareOf, approvalProjects, sessionFlagFile, claimProse, claimScan, claimMatch, unexpandedVar,
+module.exports = { runHook, finish, payloadOf, eventOf, probe, isNetwork, shareOf, approvalProjects, sessionFlagFile, claimProse, claimScan, claimMatch, unexpandedVar,
   RE_DOTDOT, fileUriToPath, parseProjectDir };
 // the probe's names, read through on first use — readJson is its readJsonFile
 for (const [name, key] of [["utf16OrUtf8"], ["textOf"], ["jsonOf"], ["readText"], ["readJson", "readJsonFile"], ["isUtf16"], ["fsTargetPath"],

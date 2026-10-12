@@ -34,7 +34,7 @@ const path = require("path");
 // (mcp/lib/probe.js: the one dev-spec project rule, the session's candidate projects, a file read as the engine reads it — UTF-8, or
 // UTF-16 with a BOM, Windows PowerShell 5.1's Out-File), required once the call is a completed Bash / PowerShell run: every other tool
 // call exits before it loads.
-const { runHook, finish, probe } = require("./hook-utils.js");
+const { runHook, finish, payloadOf, probe } = require("./hook-utils.js");
 
 const MAX_INPUT = 4 * 1024 * 1024; // a larger payload is ignored (Claude Code truncates Bash output long before this)
 const MAX_COMMAND = 4000; // no _Verify:_ / project-check command is longer (the engine's OBSERVED_MAX_COMMAND, engine/evidence.js)
@@ -156,13 +156,8 @@ function readTasksText(file) {
 
 function main(raw) {
   if (!raw) return finish(); // an oversized payload (past MAX_INPUT) arrives as ""
-  let payload;
-  try {
-    payload = JSON.parse(raw);
-  } catch {
-    return finish();
-  }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
+  const payload = payloadOf(raw);
+  if (!payload) return finish();
   // The Bash tool, and on Windows the PowerShell tool (strict: its exit code must be explicit).
   if (payload.tool_name !== "Bash" && payload.tool_name !== "PowerShell") return finish();
   const strict = payload.tool_name === "PowerShell";

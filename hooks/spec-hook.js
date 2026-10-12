@@ -24,7 +24,7 @@
 const fs = require("fs");
 const path = require("path");
 // The hooks' runner (stdin, the safety net, the one flushed exit) and the project probe getter (hooks/hook-utils.js).
-const { runHook, finish, probe } = require("./hook-utils.js");
+const { runHook, finish, payloadOf, eventOf, probe } = require("./hook-utils.js");
 
 // The engine is loaded LAZILY: this hook runs on every Write / Edit in EVERY project, and loading the engine cost
 // ~100 ms before the `/.specs/` path check could send an unrelated edit away (197 vs 71 ms median per edit). loadSpec() runs
@@ -78,14 +78,9 @@ function sessionMayBeDevSpec(payload) {
 }
 
 function main(raw) {
-  let payload = {};
-  try {
-    payload = JSON.parse(raw || "{}");
-  } catch {
-    process.exit(0);
-  }
-  if (!payload || typeof payload !== "object") process.exit(0);
-  const event = payload.hook_event_name || payload.hookEventName || "";
+  const payload = payloadOf(raw);
+  if (!payload) return finish();
+  const event = eventOf(payload);
   // The cheap pre-check, before the engine loads: only SessionStart and a PostToolUse on a `.specs/` file (not its scratch
   // `.execution/` folder, not a folder being removed) go on.
   if (event === "PostToolUse") {

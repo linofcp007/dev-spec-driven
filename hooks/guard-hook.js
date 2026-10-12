@@ -31,7 +31,7 @@ const path = require("path");
 // The hooks' runner (stdin, the safety net, the one flushed exit) and the project probe (mcp/lib/probe.js — the one dev-spec project
 // rule, the session's candidate projects, a JSON file read as the engine reads it: UTF-8 or UTF-16 with a BOM), required on first use
 // — past the pre-filter: a call that edits nothing loads nothing more.
-const { runHook, finish, probe, sessionFlagFile } = require("./hook-utils.js");
+const { runHook, finish, payloadOf, eventOf, probe, sessionFlagFile } = require("./hook-utils.js");
 
 // the shell tools — the engine reads which files a command writes (spec.shellWriteTargets). Before it loads, a
 // command must hold an output redirection or the name of a program that writes, removes, moves, copies or extracts files (the
@@ -84,14 +84,9 @@ function guardOn(dir) {
 }
 
 function main(raw) {
-  let payload;
-  try {
-    payload = JSON.parse(raw || "{}");
-  } catch {
-    return finish();
-  }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
-  const event = payload.hook_event_name || payload.hookEventName || "";
+  const payload = payloadOf(raw);
+  if (!payload) return finish();
+  const event = eventOf(payload);
   if (event && event !== "PreToolUse") return finish();
   const ti = payload.tool_input || payload.toolInput || {};
   const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";

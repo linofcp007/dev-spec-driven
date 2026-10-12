@@ -33,7 +33,7 @@ const path = require("path");
 // (mcp/lib/probe.js: the one dev-spec project rule, the session's candidate projects, a JSON file read as the engine reads it — UTF-8,
 // or UTF-16 with a BOM), required once the event is a Stop / SubagentStop.
 const HU = require("./hook-utils.js");
-const { runHook, finish, probe } = HU;
+const { runHook, finish, payloadOf, eventOf, probe } = HU;
 
 const TRANSCRIPT_TAIL = 512 * 1024; // bytes read from the end of a transcript when the payload carries no last message
 
@@ -171,14 +171,9 @@ function lastAssistantText(file) {
 }
 
 function main(raw) {
-  let payload;
-  try {
-    payload = JSON.parse(raw || "{}");
-  } catch {
-    return finish();
-  }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
-  const event = payload.hook_event_name || payload.hookEventName || "";
+  const payload = payloadOf(raw);
+  if (!payload) return finish();
+  const event = eventOf(payload);
   if (event !== "Stop" && event !== "SubagentStop") return finish();
 
   // The raw pre-check: the projects this stop may be about (probe.sessionProjects — the nearest dev-spec .specs/ at or above the

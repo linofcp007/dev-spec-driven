@@ -21,19 +21,14 @@ const path = require("path");
 // them, the engine's network-path rule), required once the tool is ExitPlanMode. A network path (UNC `\\host\share`,
 // `//host/share`, `\\?\UNC\…`, other device paths) is never stat'ed here: it would open an SMB connection and block this hook until
 // an unreachable host times out (`\\?\C:\…` and WSL's `\\wsl$\…` are local).
-const { runHook, finish, probe } = require("./hook-utils.js");
+const { runHook, finish, payloadOf, eventOf, probe } = require("./hook-utils.js");
 
 const PAYLOAD_MAX = 4 * 1024 * 1024; // characters of the hook payload read (an approved plan rides in it); a longer one is ignored
 
 function main(raw) {
-  let payload;
-  try {
-    payload = JSON.parse(raw || "{}");
-  } catch {
-    return finish();
-  }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
-  const event = payload.hook_event_name || payload.hookEventName || "";
+  const payload = payloadOf(raw);
+  if (!payload) return finish();
+  const event = eventOf(payload);
   if (event && event !== "PostToolUse") return finish();
   if ((payload.tool_name || payload.toolName) !== "ExitPlanMode") return finish();
 
