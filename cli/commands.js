@@ -79,6 +79,7 @@ const VALUE_FLAG_SPECS = [
   ["guard", { values: "on off scope" }], // init --guard on|off|scope (= spec_init {guard: true|false|"scope"})
   ["stop-check", { values: "on off" }], ["message"], ["agent"], // init --stop-check on|off · stop-check --message "…" --agent <type>
   ["check", { repeatable: true }], // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
+  ["guardian", { values: "on off", optional: true }], // init --guardian [on|off] — a bare --guardian is on (= spec_init {guardian: true|false})
   ["approval-guard", { values: "@approval-guard" }], // init --approval-guard off|ask|deny (= spec_init {approvalGuard})
   ["roles"], ["role"], ["through", { values: "@through" }], // init --roles …, approve --role <role> / --through <phase>
   ["since", { values: "last all" }], // changelog --since <ISO date|last|all>
@@ -533,7 +534,7 @@ const COMMANDS = [
   },
   {
     name: "init",
-    options: ["lang", "tracks", "guard", "stop-check", "check", "approval-guard", "evidence", "roles"],
+    options: ["lang", "tracks", "guard", "stop-check", "check", "guardian", "approval-guard", "evidence", "roles"],
     args: ["@track..."],
     values: { evidence: "reported observed" },
     help: `  init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|pt-BR|es → project default)
@@ -545,6 +546,8 @@ const COMMANDS = [
                                   Claude Code) or that done --run / finish --run made
                                   --check name="cmd" (repeatable; name= removes one): the project's check commands (roadmap.json
                                   meta.checks, e.g. --check test="npm test" --check lint="npm run lint") — in every brief's definition of done
+                                  --guardian [on|off]: dev-guardian's gate as the check 'guardian' (node .specs/guardian.cjs scan … — the
+                                  newest installed dev-guardian); finish --run runs it (minutes; needs its scanners). off removes it
                                   --roles requirements=product,design=tech+security: approvals by role (a listed phase is approved once
                                   every role signed its current content); --roles none clears them
                                   --approval-guard off|ask|deny: the human approval guard — an agent's approve (MCP or this CLI through
@@ -569,6 +572,14 @@ const COMMANDS = [
         else die(spec.msg(flags.lang || spec.projectLang(projectDir)).stopGate.badValue(flags["stop-check"]), c.invalidArg("--stop-check"));
       }
       const checks = checksFlag(c); // --check name="cmd" (repeatable; name= removes) = spec_init {checks}
+      // --guardian [on|off] = spec_init {guardian: true|false} (a bare --guardian is on); absent leaves the check as it is.
+      let guardian;
+      if (flags.guardian !== undefined) {
+        const v = flags.guardian === true ? "on" : String(flags.guardian).trim().toLowerCase();
+        if (["on", "true", "yes", "1"].includes(v)) guardian = true;
+        else if (["off", "false", "no", "0"].includes(v)) guardian = false;
+        else die(spec.msg(flags.lang || spec.projectLang(projectDir)).guardian.badValue(flags.guardian), c.invalidArg("--guardian"));
+      }
       // --approval-guard off|ask|deny = spec_init {approvalGuard}; absent leaves the human approval guard as it is.
       let approvalGuard;
       if (flags["approval-guard"] !== undefined) {
@@ -588,7 +599,7 @@ const COMMANDS = [
         approvalRoles = spec.parseApprovalRolesText(flags.roles, flags.lang || spec.projectLang(projectDir));
         if (approvalRoles.error) die(approvalRoles.error, c.invalidArg("--roles"));
       }
-      const r = c.call("init", { guard, checks, approvalRoles, stopCheck, approvalGuard, evidence: evidenceMode }); // no tracks: core
+      const r = c.call("init", { guard, checks, approvalRoles, stopCheck, approvalGuard, evidence: evidenceMode, guardian }); // no tracks: core
       if (r.ok === false) return fail(r); // e.g. an unknown track (did-you-mean) or an unreadable roadmap.json
       return out(r, (r) => {
         log(c.cliText(r.lang).created(r.specsDir, r.lang, r.created.join(", ") || c.cliText(r.lang).nothingNew, r.skipped.join(", ")));
@@ -599,6 +610,8 @@ const COMMANDS = [
         if (r.rolesNote) log("  " + r.rolesNote);
         if (r.approvalGuardNote) log("  " + r.approvalGuardNote);
         if (r.observedWarning) log("  " + r.observedWarning); // observed evidence without the approval guard
+        if (r.guardianNote) log("  " + r.guardianNote); // 1.29: --guardian on / off
+        if (r.guardianOffer) log("  " + r.guardianOffer); // dev-guardian installed (or .guardian/) and no check runs it: offered, never set
       });
     },
   },
@@ -1763,6 +1776,7 @@ const COMMANDS = [
         }
         if (r.total > r.duplicates.length) log(T.dupesMore(r.total - r.duplicates.length));
         if (r.truncated) log(T.dupesTruncated(r.scanned.files));
+        if (r.budget) log((r.budget.over ? "  ⚠ " : "  ") + r.budget.note); // 1.29: dev-guardian's duplication budget (.guardian/budgets.yml)
       });
     },
   },

@@ -31,6 +31,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
+let guardianChecks, guardianOffer, isGuardianCheck, setGuardianLauncher; // evidence.js — 1.29 (init --guardian)
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -49,7 +50,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
-  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts } = E); }
+  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianOffer, isGuardianCheck, setGuardianLauncher } = E); }
 
 // the first of `files` a write would reach through a link (a .specs/<feature>/ or .specs/steering/ that is a
 // symbolic link / junction, or resolves outside the real .specs/ — specsWriteContained) → that folder as `.specs/<rel>/`, else
@@ -113,7 +114,9 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const evMode = opts.evidence == null ? undefined : evidenceModeInput(opts.evidence);
   if (opts.evidence != null && !evMode) return { ok: false, error: i18n.msg(normalizeLang(lang || projectLang(projectDir))).observed.badInput(String(opts.evidence)) };
   // meta.checks (named project commands) — {name: command} adds/replaces, "" removes; validated before any write.
-  const nc = checksInput(opts.checks, lang || projectLang(projectDir));
+  // 1.29 guardian: true / false adds / removes the check `guardian` (dev-guardian's gate) on top of them — the same rules.
+  const setsGuardian = opts.guardian === true || opts.guardian === false;
+  const nc = checksInput(guardianChecks(opts.checks, opts.guardian), lang || projectLang(projectDir));
   if (nc && nc.error) return { ok: false, error: nc.error };
   // approvals by role (roadmap.json meta.approvalRoles): validated before anything is written; {} clears them.
   const setsRoles = opts.approvalRoles !== undefined && opts.approvalRoles !== null;
@@ -139,6 +142,8 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   }
   ensureDir(steering);
   ensureLockIgnore(root); // .specs/.gitignore: the lock files are never committable
+  // the check's launcher, .specs/guardian.cjs — written (or removed) once meta.checks says so
+  if (setsGuardian) setGuardianLauncher(projectDir, opts.guardian);
   // meta.specVersion: a brand-new project is at this engine's version, so it never gets the upgrade notice. A project that
   // already has features is never stamped here — spec_upgrade {apply: true} does it, after its audit.
   if (fresh) { try { stampSpecVersion(projectDir); } catch { /* best-effort */ } }
@@ -166,6 +171,8 @@ function initProject(projectDir, tracks, lang, opts = {}) {
     approvalGuard: approvalGuardLevel(projectDir), // the CURRENT human approval guard ("off" | "ask" | "deny")
     evidence: evidenceMode(projectDir), // the CURRENT evidence mode ("reported" | "observed"), whether or not this call changed it
   };
+  // 1.29: does a project check run dev-guardian's gate now — whether or not this call changed it
+  res.guardian = Object.entries(res.checks).some(([name, command]) => isGuardianCheck(name, command));
   if (Object.keys(templates).length) res.templates = templates;
   // which of the reported values come from the user's DEV_SPEC_* defaults (the project sets none of them itself).
   const fromUser = userDefaultsApplied(projectDir, { lang: userLang });
@@ -181,6 +188,10 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const current = approvalRolesOf(projectDir);
   if (setsRoles || Object.keys(current).length) res.approvalRoles = current;
   if (setsRoles) res.rolesNote = Object.keys(current).length ? i18n.msg(lng).governance.rolesSet(rolesSummary(current)) : i18n.msg(lng).governance.rolesCleared;
+  // dev-guardian's gate: what this call set (guardianNote), else offered — never enabled — when dev-guardian is installed or the
+  // project holds .guardian/ (its scan takes minutes and needs its scanners: the user decides)
+  if (setsGuardian) res.guardianNote = res.guardian ? i18n.msg(lng).guardian.on(res.checks.guardian) : i18n.msg(lng).guardian.off;
+  else { const offer = guardianOffer(projectDir, lng); if (offer) res.guardianOffer = offer; }
   return res;
 }
 

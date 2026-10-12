@@ -415,4 +415,37 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
       "1.27 operations: the CLI's --json is the MCP result — " + (steps.length - 1) + " calls on twin projects (create / bugfix / spike, approve / revoke, done / undone, status, roadmap and its edits, export / catalog / changelog, scan / coverage… — every operation), project folder and ISO times aside; the two refusals (an approval whose gate fails, an impact never approved) alike (got " +
       js({ bad, unseen, refused }) + ")");
   }
+
+  // 1.29 — the CONTRACT with dev-guardian: its skills and commands (≥ 3.2.0) call these dev-spec names — /guardian-improve hands
+  // its seeds to the backlog and a feature, its prose names the gate /spec-finish runs. Each tool stays LISTED in tools/list (never
+  // only a hidden alias) with the arguments dev-guardian passes, each command file exists, and spec_init {guardian: true} sets the
+  // check named `guardian`. dev-guardian keeps the MIRROR of this test: renaming any of these breaks it — change both together.
+  {
+    const DEV_GUARDIAN_CALLS = {
+      tools: { spec_roadmap_edit: { kind: "backlog", action: "add" }, spec_create: { name: null }, spec_init: { guardian: "boolean" } },
+      commands: { "spec.md": null, "clarify.md": "--grill", "spec-finish.md": null },
+      check: "guardian",
+    };
+    const listed = new Map(list.result.tools.map((t) => [t.name, t]));
+    const toolBad = Object.entries(DEV_GUARDIAN_CALLS.tools).filter(([name, args]) => {
+      const t = listed.get(name);
+      if (!t || removed.includes(name)) return true;
+      const props = t.inputSchema.properties || {};
+      return Object.entries(args).some(([k, v]) => !props[k] || (v === "boolean" ? props[k].type !== "boolean" : v != null && !(props[k].enum || []).includes(v)));
+    });
+    const cmdBad = Object.entries(DEV_GUARDIAN_CALLS.commands).filter(([file, needs]) => {
+      const f = path.join(root, "commands", file);
+      return !fs.existsSync(f) || (needs && !fs.readFileSync(f, "utf8").includes(needs));
+    });
+    const dg = path.join(tmp, "dg-contract");
+    const init = await call("spec_init", { projectDir: dg, guardian: true });
+    const backlog = await call("spec_roadmap_edit", { projectDir: dg, kind: "backlog", action: "add", name: "Split the checkout module", note: "duplication 6.1% → ≤ 5%" });
+    all("1.29 contract with dev-guardian: spec_roadmap_edit {kind: backlog, action: add}, spec_create and spec_init {guardian: true} are LISTED (no hidden alias) with those arguments and work; /spec, /clarify --grill and /spec-finish exist; the check is named `guardian` — dev-guardian keeps the mirror test: change both together (got " +
+      js({ toolBad, cmdBad, checks: init.p.checks, backlog: backlog.p.ok }) + ")", {
+      tools: toolBad.length === 0,
+      commands: cmdBad.length === 0,
+      check: !init.isError && typeof init.p.checks[DEV_GUARDIAN_CALLS.check] === "string" && init.p.guardian === true,
+      backlog: !backlog.isError && backlog.p.ok !== false,
+    });
+  }
 };

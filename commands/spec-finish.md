@@ -15,6 +15,10 @@ this, not after.
    record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}`, or
    `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" finish <feature> --run` (`--run` given: run that). No shell? Ask the user to
    run them and paste the output — never record a run nobody made, never send a subagent to look for a shell.
+   With the project check `guardian` set (`init --guardian`), this runs **dev-guardian's gate** (its scan takes minutes):
+   over MCP run its command yourself and add its JSON stdout as `report`. A new finding at or above the threshold blocks —
+   fix it, or the user accepts it in dev-guardian (`dev-guardian baseline update`, a suppression); an incomplete scan
+   blocks until the missing scanner runs. Never force the finish, or drop the check, without the user.
 3. Show the merge title and summary (`.specs/<feature>/.execution/merge-summary.md`), then ask the user **explicitly**
    whether they sign off the `execution` phase, and call `spec_approve {name, phase: "execution"}` only on their yes.
    **A green run is evidence, not the sign-off:** after the run, show it and ask. A ready written finish also records

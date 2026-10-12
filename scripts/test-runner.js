@@ -66,8 +66,10 @@ function sweepStaleTmp(prefix) {
 // the shells to test) and the terminal width (COLUMNS) — are dropped, and its working folder is a fresh, empty temp folder. A test
 // that starts the CLI, a hook or the server without naming a project finds none — never the maintainer's dogfood .specs/ at the
 // repo root (git-ignored, meta.lang pt: tests that passed in a worktree failed after the merge), nor a DEV_SPEC_DEFAULT_LANG or a
-// SPEC_PROJECT_DIR exported in the shell. A test that wants one of them sets it for the process it starts.
-const RE_HOST_ENV = /^(?:SPEC_PROJECT_DIR|SPEC_MCP_\w*|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_\w*|DEV_SPEC_(?!TEST_)\w*|COLUMNS)$/i;
+// SPEC_PROJECT_DIR exported in the shell. A test that wants one of them sets it for the process it starts. 1.29: nor the
+// maintainer's installed plugins — DEV_GUARDIAN_CLI is dropped and CLAUDE_CONFIG_DIR names an absent folder of the chain's own
+// (isolate()): no dev-guardian plugin cache is found (init / spec_upgrade offer its gate on a machine that has one).
+const RE_HOST_ENV = /^(?:SPEC_PROJECT_DIR|SPEC_MCP_\w*|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_\w*|CLAUDE_CONFIG_DIR|DEV_GUARDIAN_CLI|DEV_SPEC_(?!TEST_)\w*|COLUMNS)$/i;
 const hostEnvKey = (k) => RE_HOST_ENV.test(k);
 // env without the host's steering variables (a new object; `env` untouched).
 function hermeticEnv(env) {
@@ -87,10 +89,12 @@ const samePath = (a, b) => {
 function isolate(prefix) {
   for (const k of Object.keys(process.env)) if (hostEnvKey(k)) delete process.env[k];
   const given = process.env[CWD_ENV];
-  if (given && samePath(given, process.cwd())) return process.cwd();
+  // Claude Code's config folder (its plugin cache): one that does not exist, inside the chain's own folder
+  if (given && samePath(given, process.cwd())) { process.env.CLAUDE_CONFIG_DIR = path.join(process.cwd(), "no-claude-config"); return process.cwd(); }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix || "dev-spec-test-"));
   process.chdir(dir);
   process.env[CWD_ENV] = dir;
+  process.env.CLAUDE_CONFIG_DIR = path.join(dir, "no-claude-config");
   process.on("exit", () => { try { process.chdir(os.tmpdir()); } catch {} rmTmpDir(dir); }); // a folder can't go while it is the cwd
   return dir;
 }

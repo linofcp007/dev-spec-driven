@@ -8,7 +8,7 @@
  *
  *   execCommand(command, sh, opts)   → Promise<{ status, signal, error, heldOpen, stdout, stderr }> — the run itself
  *   runVerdict(run, sh, why, timeoutS) → { code, output, summary, cantRun, crashed? } — what the run proves
- *   runCommand(command, sh, M, opts) → Promise<the verdict + heldOpen> — both, as done --run / finish --run use them
+ *   runCommand(command, sh, M, opts) → Promise<the verdict + heldOpen, stdout, stderr> — both, as done --run / finish --run use them
  *   runChecks(feature, deps)         → Promise<{ ok, evidence } | a refusal> — finish --run's loop over meta.checks
  *   runSummaries(parts)              → the evidence summary of several passing commands
  *   shellName(sh)                    → the shell a run uses, as a message names it
@@ -145,11 +145,14 @@ function runVerdict(run, sh, why, timeoutS) {
 }
 
 // ONE command, run and judged → the verdict + heldOpen (a background process still held the output pipes when the
-// run settled at the command's exit). M: the feature language's messages. opts: execCommand's.
+// run settled at the command's exit) + its stdout and stderr apart (finish --run: dev-guardian's JSON report is its stdout).
+// M: the feature language's messages. opts: execCommand's.
 async function runCommand(command, sh, M, opts) {
   const run = await execCommand(command, sh, opts);
   const r = runVerdict(run, sh, M.runGate.why, (opts || {}).timeoutS);
   r.heldOpen = !!run.heldOpen;
+  r.stdout = run.stdout || "";
+  r.stderr = run.stderr || "";
   return r;
 }
 
@@ -168,7 +171,9 @@ function runSummaries(parts) {
 
 // finish --run: every project check (meta.checks), in order, from the project root — the same shell rules as done --run (--shell /
 // DEV_SPEC_SHELL, POSIX syntax refused under cmd.exe, a pwsh script under a POSIX shell, the pipe hint). Every run is recorded, a
-// failure too; a check that could not run refuses the whole run (all-or-nothing, like spec_finish {evidence}).
+// failure too; a check that could not run refuses the whole run (all-or-nothing, like spec_finish {evidence}). dev-guardian's gate
+// (spec.isGuardianCheck) prints its verdict instead of the output's last lines, and its evidence carries the JSON report (stdout)
+// as `report` and stderr's last lines as the summary — what an agent reports over MCP.
 // deps: projectDir · resolveShell() (the CLI's: --shell / DEV_SPEC_SHELL, --timeout checked first) · say(line) (stdout, or stderr
 // under --json) · warn(line) (stderr) · gitState() · execOpts() (runCommand's opts — read once the shell is resolved).
 async function runChecks(feature, deps) {
@@ -197,16 +202,20 @@ async function runChecks(feature, deps) {
   const exec = deps.execOpts();
   const evidence = [];
   let cmdFailed = false;
+  const lang = spec.featureLang(projectDir, fx.slug);
   for (const c of checks) {
     deps.say("$ " + c.command + "   (" + c.name + ")");
     const x = await runCommand(c.command, sh, M, exec);
-    if (x.summary) deps.say(x.summary.replace(/^/gm, "  "));
+    const guardian = spec.isGuardianCheck(c.name, c.command);
+    const summary = guardian ? spec.summarizeRunOutput(x.stderr) : x.summary;
+    if (guardian && !x.cantRun) spec.guardianLines(spec.guardianRecord(projectDir, fx.dir, c.command, x.code, x.stdout, x.stderr), lang).forEach((l) => deps.say("  " + l));
+    else if (x.summary) deps.say(x.summary.replace(/^/gm, "  "));
     if (x.heldOpen && !x.cantRun) deps.say("  " + M.cliOutput.runHeldOpen(x.code)); // settled at its exit
     // a check that could not run is refused and NOTHING is recorded (all-or-nothing, like
     // spec_finish {evidence}) — it used to be recorded as a failed run (exit 1).
     if (x.cantRun) return { ok: false, couldNotRun: x.cantRun.code, check: c.name, error: M.runGate.checkRefused(c.name, c.command, x.cantRun.why) };
     if (x.code !== 0 && sh.cmd && spec.windowsShellFailure(x.output, x.code)) cmdFailed = true;
-    evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary: x.summary, ...git });
+    evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary, ...(guardian ? { report: x.stdout } : {}), ...git });
   }
   if (cmdFailed) deps.warn(M.taskDone.shellHint);
   return { ok: true, evidence };

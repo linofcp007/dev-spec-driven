@@ -92,6 +92,10 @@ first; how they came to be — the releases and review findings — is in Histor
 - **A size m / l design approved before 1.28** (no `reuseGate` stamp) whose Reuse & Integration is missing or unfilled
   (doctor's `design-reuse` warns): `designReuseDue`, attention `design-reuse`, `upgrade.item.designReuse` — write the section,
   then re-approve the design. The approval stands; nothing is migrated (quality.md → Reuse & Integration).
+- **dev-guardian's gate offered (1.29)** — a project-level attention item, not a feature's: `guardianOffer` (the result) when
+  dev-guardian is installed or the project has `.guardian/` and no check runs its gate — `upgradeLines()` prints it under the
+  summary (`▲`), UPGRADE.md as a `- [ ]` line. Never set by `apply` (the user runs `init --guardian`); finish then runs it like
+  any project check, its verdict read from its exit code and JSON report (tasks-and-evidence.md → Project checks).
 - **The migrations** (`apply: true`) never edit an artifact, approve, tick, untick or delete. Per feature, under its lock,
   `upgradePlan()` → `applyUpgradePlan()` writes `.state.json` once: `tracks` when absent (a malformed list left alone);
   approvals missing from `approvalHistory` as `legacy` records (`legacyRecord()`, as `approvePhase` seeds); for a snapshot-less
@@ -240,6 +244,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.28** — the m / l Reuse & Integration gate: a design approved before it is listed (`designReuseDue`, attention
   `design-reuse`), never failed or migrated. **1.22 review 3** — a change has no tasks.md / test-plan.md:
   the item names its tasks' `_Requirements:_` in change.md.
+- **1.29** — the dev-guardian offer (`guardianOffer`): the audit's first project-level item.
 
 ### Decisions and spikes
 - **1.14** — `decisions.md`, `spec_decide` and the spike kind.
