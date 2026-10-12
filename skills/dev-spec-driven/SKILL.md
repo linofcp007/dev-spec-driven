@@ -2,11 +2,12 @@
 name: dev-spec-driven
 description: >
   Spec-driven development with approval gates: EARS requirements, a design and traceable tasks before
-  code, then execution that ticks a task only on evidence. Use when the user wants to plan or spec a
-  non-trivial feature before coding, fix a reported bug properly (root cause and a failing regression
-  test first), adopt specs in an existing codebase, manage a feature roadmap, or update the specs after a
-  dev-spec-driven update. Works in English, Portuguese and Spanish. Not for trivial edits,
-  requirements.txt, or code that merely calls eval() or an LLM.
+  code, then execution that ticks a task only on evidence. Use when the user wants to plan a non-trivial
+  feature before coding, fix a reported bug properly (root cause, then a red regression test), close a
+  finished feature (its checks, dev-guardian's gate included, then a local merge), adopt specs in an
+  existing codebase, manage a roadmap, or update the specs after a dev-spec-driven update. Works in
+  English, Portuguese and Spanish. Not for trivial edits, requirements.txt, or code that merely calls
+  eval() or an LLM.
 ---
 
 # Dev Spec-Driven

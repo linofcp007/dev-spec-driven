@@ -65,10 +65,13 @@ exports.run = async ({
   const docsDesc = ((docsSkill.match(/^description: >\r?\n([\s\S]*?)\r?\n---/m) || [])[1] || "").split(/\r?\n/).map((l) => l.trim()).join(" ").trim();
   // 1.26: the description is intent-based — what the user wants (plan before coding, fix a bug properly, adopt specs, a
   // roadmap, update the specs after a plugin update) — and SAYS it works in Portuguese and Spanish instead of listing their
-  // trigger phrases (280 of its 1,011 characters); ≤ ~600 characters, the near-miss exclusions kept.
+  // trigger phrases (280 of its 1,011 characters); ≤ ~600 characters, the near-miss exclusions kept. 1.29.1: it names closing a
+  // finished feature too ("fecha a feature" reached spec_finish through the tools, the skill only sometimes) — its checks,
+  // dev-guardian's gate included, then a local merge (evals/trigger-finish-pt / -es).
   ok(docsDesc.length > 200 && docsDesc.length <= 620 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /eval\(\) or an LLM/.test(docsDesc) &&
     /Works in English, Portuguese and Spanish/.test(docsDesc) && !/antes de|especificar|corrige|arregla|atualizar|actualizar/.test(docsDesc) &&
     /before coding/.test(docsDesc) && /fix a reported bug/.test(docsDesc) && /existing codebase/.test(docsDesc) && /roadmap/.test(docsDesc) &&
+    /close a finished feature/.test(docsDesc) && /dev-guardian's gate/.test(docsDesc) && /local merge/.test(docsDesc) &&
     /update the specs/.test(docsDesc) && /after a dev-spec-driven update/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
     `SKILL.md description is intent-based, says it works in EN / PT / ES (no literal PT / ES trigger list), scoped ("Not for …") and ≤ 620 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
   const docsLoops = (docsSkill.split("## Phase 6")[1] || "").split("Track-gated")[0];

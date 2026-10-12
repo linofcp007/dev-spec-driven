@@ -3,8 +3,8 @@
 Behaviour tests for the plugin itself, run with Claude Code's `claude plugin eval` — the "test the
 skill under pressure" idea from obra/superpowers' *writing-skills*. Two suites share this folder:
 
-- **Triggering** (tags `triggering` / `negative`): the workflow **triggers** on planning, bug-fix and upgrade
-  requests in English, Portuguese and Spanish, and **stays silent** on an unrelated question and on near-misses
+- **Triggering** (tags `triggering` / `negative`): the workflow **triggers** on planning, bug-fix, upgrade and
+  close-the-feature requests in English, Portuguese and Spanish, and **stays silent** on an unrelated question and on near-misses
   that only share a keyword (`requirements.txt`, `eval()`, one LLM call) or ask for a trivial fix (a typo in a label).
 - **Behavioural** (tag `behavior`): once it fires, the agent **respects the workflow** — it plans before coding,
   takes the bugfix flow, records evidence instead of a bare tick, integrates locally, reports a refused gate
@@ -20,6 +20,7 @@ These are not the `+ai` feature evals of a user's project (those live in `mcp/ev
 | `trigger-spec-en` / `-pt` / `-es` | a `dev-spec-driven:*` skill or command (the skill, `/spec` or `/spec-bugfix` — the only model-invocable commands) fires on "spec this before coding" |
 | `trigger-bugfix-en` | it fires on a defect report asking for a proper fix |
 | `trigger-upgrade-pt` | it fires on "I updated the plugin — update this project's specs and review what isn't implemented" (PT) |
+| `trigger-finish-pt` / `-es` | it fires on "the feature is done and verified — close it" (PT / ES; 1.29.1 — closing a feature runs `spec_finish` and the project's checks, dev-guardian's gate included) |
 | `no-trigger-unrelated` | nothing from the plugin fires on a general-knowledge question |
 | `no-trigger-requirements-txt` / `-eval-call` / `-llm-call` / `-trivial-fix` | near-misses (tag `near-miss`): pinning a package in `requirements.txt`, replacing an `eval()` call, adding one LLM API call, fixing a typo in a button label ("fix" alone is no bug report) — trivial edits the description excludes |
 
@@ -55,7 +56,7 @@ MCP tool a grader names exists — fix a fixture there, not after a paid run.
 
 | Tag | Cases |
 |---|---|
-| `triggering` | the five cases that must fire the workflow |
+| `triggering` | the seven cases that must fire the workflow |
 | `negative` · `near-miss` | the cases that must stay silent (`near-miss`: only the four near-misses) |
 | `behavior` | the seven behavioural cases (need `--scaffold` and the real MCP server — below) |
 | `evidence` · `bugfix` · `gates` · `finish` · `upgrade` | one workflow rule: `evidence` = the two evidence cases, `bugfix` = the bugfix trigger + behaviour cases, `upgrade` = the upgrade trigger + behaviour cases |
@@ -133,6 +134,9 @@ Reference runs (default model, `-j 3`):
   `dev-spec` on PATH (1.21 prints `node "<clone>/cli/dev-spec.js" …`), a bugfix agent reading back and rewriting all
   four scaffolds (1.21: `spec_create {kind: "bugfix"}` takes `reproduction`, `rootCause`, `condition`, `behaviour` and
   `includeBody`) and 4 of 14 shell-less runs sending a subagent to find a shell (1.21: ask the user for the run).
+- **1.29.1, 2026-10-12** (CLI 2.1.292, Windows): triggering + negative **12/12 at 1.0** (36 runs, $3.64) — the new
+  `trigger-finish-pt` / `-es` ("the feature is done and verified — close it") fire 3/3 each with the description naming
+  closing a feature; every near-miss stays silent.
 - behavioural, 2026-09-26, CLI 2.1.282, Windows (no shell granted), 2 runs per case: **6/7 cases at 1.0, $3.30**
   for the 14 runs (about $0.12–0.54 per run; the bugfix case is the dearest). Per case, with the earlier smoke run
   (1 run each, $1.63) where it tells something:
