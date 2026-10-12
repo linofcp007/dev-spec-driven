@@ -84,6 +84,8 @@ you the `dev-spec done <feature> 1 --run` line to run yourself.
 **5. Finish.** `/spec-finish` checks the whole chain (open or unverified tasks, edits since an approval, placeholders),
 asks for a fresh run of your full suite, drafts the merge summary from the spec and asks for your sign-off. Then you
 choose: merge locally or keep the branch. Nothing is pushed without you.
+With **dev-guardian** installed, `dev-spec init --guardian` makes its security gate a project check: `/spec-finish` runs it,
+and a new high finding blocks until it is fixed or you accept it in dev-guardian (`dev-guardian baseline update`).
 
 Lost at any point? `/spec <feature>` resumes at the one next step. Prefer a guided version on your own repo?
 `/dev-spec-driven:spec-tour` takes one tiny real change through every gate, explaining each as it happens.

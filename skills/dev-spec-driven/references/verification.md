@@ -243,6 +243,32 @@ Task runs prove tasks; a feature is done when the **whole project's checks** pas
 
 Without `meta.checks` nothing changes: `/spec-finish` lists "run the full suite" among the fresh checks to confirm.
 
+### dev-guardian's gate — the check `guardian`
+
+With the sibling plugin **dev-guardian** installed, `spec_init {guardian: true}` (CLI `dev-spec init --guardian`; `off` /
+`false` removes it) adds the project check `guardian` = `node .specs/guardian.cjs scan --project . --fail-on high --format json`.
+`.specs/guardian.cjs` (written beside it, committed) runs the newest installed dev-guardian at each run — `DEV_GUARDIAN_CLI`
+(the path of its `cli/dev-guardian.mjs`) first, else Claude Code's plugin cache — so the check survives updates of both
+plugins. `init` and `spec_upgrade` only **offer** it when dev-guardian is installed or the project has `.guardian/`: the scan
+takes minutes and needs its scanners (Semgrep, Gitleaks, Trivy…), so it is the user's choice.
+
+- **It is a project check like any other** — `finish --run` runs it, `spec_finish {evidence}` records it — read by its exit
+  code: **0** pass · **1** new findings at or above `--fail-on` (against `.guardian/baseline.json`) · **2** an incomplete scan
+  (an expected scanner did not run) · **3** a usage or configuration error (also: no dev-guardian found). The verdict
+  (`suiteChecks[].guardian` — `verdict`: pass · blocked · incomplete · config · not-found · no-launcher · exit) names the
+  top findings, **the feature's own `_Implements:_` files first**.
+- **Over MCP** run the command yourself from the project root and report it with its JSON stdout:
+  `spec_finish {name, evidence: [{name: "guardian", command, exitCode, summary: <stderr's last lines>, report: <stdout>}]}`.
+  Without `report` the exit code alone decides.
+- **A blocking finding is fixed** — or, only when the user accepts it, recorded in dev-guardian (`dev-guardian baseline
+  update`, or a suppression) and the check run again. An incomplete scan stays a failed check until the missing scanner
+  runs (dev-guardian's `/guardian-init`; offline, `--local-only` in the check's command keeps Semgrep to local rules).
+  Never force the finish, nor remove the check, without the user — the approval guard treats removing it as a guard-down.
+- **Duplication budget:** when `.guardian/budgets.yml` sets `quality.duplication_pct`, `dev-spec dupes` (no feature) /
+  `spec_scan {duplicates: true}` shows the project's duplicated share beside it (`budget`), and finish's duplicate warning
+  says when the project is over it. dev-spec counts windows of code lines, dev-guardian measures with jscpd — close, not
+  identical.
+
 ## Evidence the harness observed (Claude Code)
 
 A reported run is what the agent SAYS it ran. In Claude Code the plugin's `hooks/observe-hook.js` (PostToolUse and
