@@ -25,7 +25,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   mcp/tests/01-core.js keeps one), or a feature folder (no `.` prefix) with a `.state.json` or a `classification.md` — the
   cheapest check first (no `.specs/`: one stat). **The walks:** `nearestDevSpec(start, {maxUp})` (≤ `SESSION_MAX_UP` = 40),
   `nearestSpecs` (any `.specs/`), `nearestProject` (the CLI's resolver: the folder itself with any `.specs/`, else the nearest
-  dev-spec one above, ≤ `PROJECT_MAX_UP` = 64); a network path is never walked (`isNetwork` = files.js `isNetworkPath`). **The
+  dev-spec one above, ≤ `PROJECT_MAX_UP` = 64); a network path is never walked (`isNetwork` — files.js `isNetworkPath`,
+  `unexpandedVar` and `expandHome` ARE the probe's functions, as guards.js `guardTargetPath` / `approvalEditTargets` are its
+  `fsTargetPath` / `editTargets`: one implementation each). **The
   session:** `sessionProjects({cwd, anchors})` — the nearest
   dev-spec project at or above the payload cwd, then each anchor (`sessionAnchors()`: CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) that
   is one: every hook's raw pre-check (`[]` exactly when `spec.sessionProject` finds nothing). mcp/tests/10-guards-probe.js checks
@@ -68,10 +70,22 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   near → the first dev-spec anchor. → `{project, root, worktree}`; `sessionPath(s, p, cwd)` spells a payload path under
   `project`. The hooks run `probe.sessionProjects` first (mcp/tests/10-guards-guard-downs.js), then ask the engine; the spec hook
   stamps a worktree's tasks.md save in the mapped project, SessionStart reports it, `statusLineProject()` maps the same way.
-- **What the hooks share before the engine loads — `hooks/hook-utils.js`** (not a hook; Node core and probe.js only): the
-  probe's readers (`readJson`, `textOf` …: a UTF-16 BOM decides, else UTF-8 — files.js `decodeText`; Windows PowerShell 5.1
-  writes UTF-16, and a UTF-8-only reader sees the guards "off"; the server's `approvalMeta` decodes the same way),
-  `editTargets` / `approvalProjects` (Human approval guard), `sessionFlagFile` (`dev-spec-<kind>-<sha1(session_id)>.flag` in the
+- **Every hook runs on ONE runner — hook-utils.js `runHook(main, {maxInput})` and `finish(obj?)`.** It reads the payload from
+  stdin asynchronously (never `fs.readFileSync(0)`), runs `main(raw, timedOut)` once — at stdin's end or from the 2 s safety net
+  (`SAFETY_NET_MS`; `timedOut` true: the approval hook's `partial` path) —, turns an exception or a stdin error into a silent exit
+  0 (past its pre-check the approval hook catches its own and asks), feeds a terminal stdin `"{}"` and, past `maxInput` characters
+  (the observe and plan hooks, 4 MB), drains the rest and hands `main` `""`. `finish` prints at most one JSON object and exits in
+  the write's callback (conventions.md → Flush stdout before exiting); the spec hook's `emit()` and the observe hook (which prints
+  nothing) go through it. `payloadOf(raw)` is the payload object or null (not JSON, or no object: the hook exits), `eventOf(p)`
+  its event name — the approval hook alone parses its own (a partial payload asks). A hook keeps only its decision: its
+  pre-filter still runs first in its `main`, and hook-utils.js loads nothing heavier when required — the probe comes through
+  `probe()` on first use (requiring hook-utils.js: ~0.7 ms over an empty module; every fast path within the run-to-run spread of
+  1.27.0's — 1.27.1 History).
+- **What the hooks share before the engine loads — `hooks/hook-utils.js`** (not a hook; Node core and probe.js only, the
+  probe loaded on first use): the runner above, `probe()`, the probe's readers (`readJson`, `textOf` …: a UTF-16 BOM decides,
+  else UTF-8 — files.js `decodeText`; Windows PowerShell 5.1 writes UTF-16, and a UTF-8-only reader sees the guards "off"; the
+  server's `approvalMeta` decodes the same way), the probe's `editTargets` / `fsTargetPath`, `approvalProjects` (Human approval
+  guard), `sessionFlagFile` (`dev-spec-<kind>-<sha1(session_id)>.flag` in the
   OS temp folder), `claimProse` / `claimScan` / `claimMatch` (the Stop hook's pre-filter) and `parseProjectDir(v, base)` /
   `fileUriToPath` / `unexpandedVar` — ONE reading of an MCP tool's projectDir (`{none}` · `{dir}` · `{code: project-dotdot |
   project-network | project-uri}`), which **mcp/server.js** requires too (`HOOK_UTILS`). mcp/tests/10-guards-guard-downs.js and
@@ -157,7 +171,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (relative: from `CLAUDE_PROJECT_DIR`, `SPEC_PROJECT_DIR` and the cwd, each a candidate); a `file://` URI that is no local path
   asks at least (`opts.projectUnreadable`, why `project`); `..` and network values still go to `approvalProjects` (the server
   refuses them).
-- **The edited path as the file system reads it** (`approvalEditTargets` = hook-utils `editTargets`): resolved against the
+- **The edited path as the file system reads it** (`approvalEditTargets` = the probe's `editTargets`, which hook-utils
+  re-exports for the hook): resolved against the
   payload cwd (`.` / `..` folded), `guardTargetPath()` on win32, and its real path on every platform (the file's, else its
   parent's + the name; never a network path's) — an 8.3 name (`ROADMA~1.JSO`), a folder linked to `.specs/` (`sx/roadmap.json`).
   Either reading counts. A trailing dot / space needs no rule (Node's file calls keep it: another file).
@@ -367,6 +382,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   with an emoji 339 → 277 (an ASCII claim 245 → 249); a triggered message without a claim, with an em dash, 84 → 74; no trigger
   word 51 → 50. The CLI left cli/dev-spec.js (now a 44-line entry point) for cli/main.js, cli/commands.js, cli/run.js and
   cli/git.js.
+- **1.27.1 — one runner** — the six hooks each carried their own stdin reader, once-guards, safety net, `finish()`, payload parse
+  and catch (13 % of the hooks' code lines were duplicated, 0 after): hook-utils.js `runHook` / `finish` / `payloadOf` / `eventOf`
+  / `probe()`; hook-utils.js loads the probe on first use. Measured (Windows, Node 26, a loaded machine; 31 rounds of fresh
+  processes, 1.27.0 and 1.27.1 copied side by side, their order alternating): every fast path's median within ±5 ms of 1.27.0's
+  (a p25–p75 spread of 20–50 ms; time in the process 35–55 ms either way, `node -e 0` 30), the engine paths too (SessionStart
+  in a project 230 → 208 ms, a Stop claim 287 → 247, ExitPlanMode 174 → 165 — noise, not a gain); requiring hook-utils.js
+  costs ~0.7 ms over an empty module. The engine's `isNetworkPath`, `unexpandedVar`, `expandHome`, `guardTargetPath` and `approvalEditTargets` became
+  the probe's functions (they had been copies).
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.
