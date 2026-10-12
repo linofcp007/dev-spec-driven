@@ -973,6 +973,9 @@ const msg = {
       prFix: "## Corrección",
       noEvidence: "sin evidencia registrada",
       changedByDate: (list, slug) => `juzgado solo por la fecha del fichero (aprobado antes de las huellas de contenido — un clon o una copia restablece las fechas, así que puede no ser una edición): ${list} — revísalo y vuelve a aprobar para seguirlo por contenido (/approve ${slug} <fase>)`,
+      // 1.28: el detector de código duplicado — un aviso, nunca un bloqueo
+      duplicates: (n, top, within, slug) => `el código de la función repite código existente en ${n} lugar(es) — ${top}${n > 3 ? "; …" : ""}: reutilizar o extender el código existente, o explicar en el informe por qué una copia es deliberada${within ? `; ${within} repetición(es) más dentro de los ficheros de la propia función` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicatesWithin: (n, slug) => `${n} bloque(s) del código de la función repite(n) otro lugar de sus propios ficheros — candidato(s) para la pasada de simplificación (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       untrackedApproval: (list, slug) => `aprobado antes del registro de cambios — no se registró nada del fichero aprobado, así que una edición no puede detectarse: ${list} — vuelve a aprobar para empezar a seguirlo (/approve ${slug} design)`,
     },
     // rigor a medida (el EN es la referencia): tamaños (spec_create {size}), el cambio (tamaño xs, un change.md).
@@ -1464,6 +1467,16 @@ const msg = {
       scanEndpoints: (n, files) => `  endpoints: ${n} ruta(s) en ${files} fichero(s)`,
       coverage: (pct, d, t) => `Cobertura de specs: ${pct}%  (${d}/${t} ficheros de código nombrados en _Implements:_)`,
       undocumented: (list) => `  carpetas sin cobertura: ${list}`,
+      // dupes (1.28): el informe de código duplicado — spec_scan {duplicates: true}
+      dupesHead: (f, existing, within, n, files, lines) => `Duplicados — ${f}: ${existing} lugar(es) repiten código existente · ${within} repetido(s) dentro de la función  (ventanas de ${n} líneas de código; ${files} ficheros, ${lines} líneas de código leídas)`,
+      dupesHeadProject: (total, n, files, lines) => `Duplicados — el proyecto: ${total} bloque(s) repetido(s)  (ventanas de ${n} líneas de código; ${files} ficheros, ${lines} líneas de código leídas)`,
+      dupesNoCode: "  aún no existe ningún fichero de código nombrado por los _Implements:_ de sus tareas — nada que comparar",
+      dupesNone: "  no hay código repetido",
+      dupesExisting: (at, n, also) => `  ⚠ ${at} (${n} líneas) repite ${also} — reutiliza o extiende el código existente`,
+      dupesWithin: (at, n, also) => `  · ${at} (${n} líneas) también en ${also}`,
+      dupesAlsoMore: (n) => `+${n}`,
+      dupesMore: (n) => `  … y ${n} más (se listan los más largos)`,
+      dupesTruncated: (n) => `  (solo se leyeron los primeros ${n} ficheros de código — el límite: una repetición más allá no se ve)`,
       clarify: (f, tracks, verdict, n) => `Aclarar: ${f}  [${tracks}]  → ${verdict} (${n} pregunta(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Función: ${f}  [${tracks}]  fase: ${phase}  veredicto=${verdict}  gates aprobados: ${gatesOk}`,
       changed: (list) => `  ⚠ modificado desde la última aprobación: ${list}`,

@@ -336,6 +336,7 @@ CLI_SWITCHES.add("install").add("uninstall"); // merge-state --install / --unins
 CLI_SWITCHES.add("explain"); // classify "<text>" --explain (= spec_classify {explain: true})
 CLI_SWITCHES.add("adr"); // export [f] --adr (= spec_export {format: "adr"})
 CLI_SWITCHES.add("dry-run"); // import … --dry-run (= spec_import {dryRun: true} — nothing written, the same result + a preview)
+CLI_SWITCHES.add("tests"); // dupes [feature] --tests (= spec_scan {duplicates: true, tests: true} — test files too)
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
