@@ -57,7 +57,7 @@ const TOOLS = [
   {
     name: "spec_init",
     description:
-      "Initialize .specs/ and the steering files of the tracks the project uses (core always; each track adds its own). Idempotent — never overwrites a file. `lang` writes the steering in that language and becomes the project default. Optional project settings, each unchanged when omitted and always reported back: `guard`, `stopCheck`, `approvalGuard`, `checks`, `evidence`, `approvalRoles`. Lowering a protection (guard, approvalGuard, roles) is the user's decision — never do it without their consent.",
+      "Initialize .specs/ and the steering files of the tracks the project uses (core always; each track adds its own). Idempotent — never overwrites a file. `lang` writes the steering in that language and becomes the project default. Optional project settings, each unchanged when omitted and always reported back: `guard`, `stopCheck`, `approvalGuard`, `checks`, `guardian`, `evidence`, `approvalRoles`. Lowering a protection (guard, approvalGuard, roles, a check) is the user's decision — never without their consent.",
     inputSchema: {
       type: "object",
       properties: {
@@ -68,6 +68,7 @@ const TOOLS = [
         stopCheck: { type: "boolean", description: "The end-of-turn evidence gate (on by default)." },
         approvalGuard: { type: "string", enum: [...spec.APPROVAL_GUARD_LEVELS], description: "ask = an agent's approval asks the user first; deny = only the human approves; off (default)." },
         checks: { type: "object", additionalProperties: { type: "string" }, description: "Project check commands {name: command}, e.g. {\"test\": \"npm test\"} — spec_finish needs a passing run of each; an empty command removes one." },
+        guardian: { type: "boolean", description: "true: dev-guardian's gate as check `guardian` (a scan of minutes — only when the user asks); false removes it." },
         approvalRoles: { type: "object", description: "{<phase>: [<role>, …]}: every role signs the phase off; {} clears them." },
         projectDir: PROJECT_DIR_INIT,
       },
@@ -149,7 +150,7 @@ const TOOLS = [
     name: "spec_finish",
     description:
       "Close a feature: a readiness report plus a merge title + summary generated from the spec chain. `readyToFinish` only without `blockers` (doctor fails, edits since an approval, placeholders, open or unverified tasks, a project check without a passing recorded run since the last task activity, phases awaiting approval); `warnings` never block. `evidence` [{name, command, exitCode, summary}] records the project checks' runs YOU made (meta.checks names; the server never runs them) before readiness is computed. `write: true` writes .specs/<feature>/.execution/merge-summary.md and, when ready, records the drift baseline. Integration is LOCAL — the human merges or keeps the branch; it never merges, pushes or approves by itself. A green run is EVIDENCE, not the sign-off: ask the user for an explicit yes on the `execution` phase before calling spec_approve.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary file (+ the drift baseline when ready)." }, includeBody: { type: "boolean", description: "Include the merge summary (default: true unless writing)." }, evidence: { type: "array", description: "The project checks' runs you made (needs meta.checks; all-or-nothing).", items: { type: "object", properties: { name: { type: "string", description: "A meta.checks name." }, command: { type: "string" }, exitCode: { type: "integer" }, summary: { type: "string", description: "e.g. '212 passing'." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional: uncommitted changes outside .specs/." } }, required: ["name", "command", "exitCode"] } }, projectDir: PROJECT_DIR }, required: ["name"] },
+    inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary file (+ the drift baseline when ready)." }, includeBody: { type: "boolean", description: "Include the merge summary (default: true unless writing)." }, evidence: { type: "array", description: "The project checks' runs you made (needs meta.checks; all-or-nothing).", items: { type: "object", properties: { name: { type: "string", description: "A meta.checks name." }, command: { type: "string" }, exitCode: { type: "integer" }, summary: { type: "string", description: "e.g. '212 passing'." }, report: { type: "string", description: "The guardian check: its JSON stdout." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional: uncommitted changes outside .specs/." } }, required: ["name", "command", "exitCode"] } }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
     name: "spec_complete_task",
@@ -189,7 +190,7 @@ const TOOLS = [
   },
   {
     name: "spec_roadmap_edit",
-    description: "Edit the roadmap (.specs/roadmap.json); `kind` says what. 'backlog' — planned features without a spec folder yet: `action` add (`name` + an optional one-line `note`; an existing name gets the note appended) · rm · list (default). 'depend' — a feature's dependencies and order: `name` (required) with `dependsOn` (REPLACES the list; [] clears it) or `add` / `remove`, and `order`; `name` alone shows them. Every dependency must be an existing feature; a cycle is refused. 'milestone' — a target date for a set of features: `action` add (`name`, `date` YYYY-MM-DD, `features`; an existing name is updated) · rm · list (default), each with its status against the forecasts (done · late · at-risk · on-track). An argument of another kind is refused (inapplicable-arguments).",
+    description: "Edit the roadmap (.specs/roadmap.json); `kind` says what. 'backlog' — planned features without a spec folder yet: `action` add (`name` + an optional one-line `note`; an existing name gets the note appended) · rm · list (default). 'depend' — a feature's dependencies and order: `name` (required) with `dependsOn` (REPLACES the list) or `add` / `remove`, and `order`; `name` alone shows them. Every dependency must be an existing feature; a cycle is refused. 'milestone' — a target date for a set of features: `action` add (`name`, `date` YYYY-MM-DD, `features`; an existing name is updated) · rm · list (default), each with its status against the forecasts. An argument of another kind is refused (inapplicable-arguments).",
     inputSchema: {
       type: "object",
       properties: {
@@ -210,7 +211,7 @@ const TOOLS = [
   },
   {
     name: "spec_scan",
-    description: "Brownfield, read-only, bounded, no model. Default: inventory an EXISTING codebase — files by extension, top-level modules, stack and web frameworks, HTTP routes (method, path, file:line), test frameworks and files, entrypoints, the environment variable NAMES the code reads (never values; .env is never read) and migration / schema files — to infer the steering and reverse-engineer specs. `coverage: true`: the share of code files any feature's _Implements:_ names, per top-level folder, and the entries naming nothing on disk. `duplicates: true`: repeated code — a feature's (`name`) _Implements:_ code repeating code elsewhere (`existing`: reuse it) or inside it (`within`), else the project's top duplicates; candidates to verify, never verdicts.",
+    description: "Brownfield, read-only, bounded, no model. Default: inventory an EXISTING codebase — files, modules, stack and frameworks, HTTP routes (method, path, file:line), tests, entrypoints, the env variable NAMES it reads (never values; .env is never read), migrations — to infer the steering and reverse-engineer specs. `coverage: true`: the share of code files any feature's _Implements:_ names, per top-level folder, and the entries naming nothing on disk. `duplicates: true`: repeated code — a feature's (`name`) _Implements:_ code repeating code elsewhere (`existing`: reuse it) or inside it (`within`), else the project's top duplicates; candidates to verify, never verdicts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -250,7 +251,7 @@ const TOOLS = [
   {
     name: "spec_import",
     description:
-      "Import a spec written for another tool as a NEW feature (the source is only read): `tool` kiro · spec-kit · openspec · plan (a Markdown plan — Claude Code plan mode, Cursor) · execplan (Codex) · bmad · fluidplan; or steering: kiro-steering / cursor-rules (→ .specs/steering/, existing names skipped). Scenarios become EARS criteria (else [NEEDS CLARIFICATION]), IDs are remapped to US-n.AC-m (`mapping`), tasks keep their ticks and markers. `path`: a file or folder inside the project; `text` (plan / execplan / fluidplan): the document itself — e.g. a plan kept outside the project. `dryRun: true` writes nothing and returns a `preview`.",
+      "Import a spec written for another tool as a NEW feature (the source is only read): `tool` kiro · spec-kit · openspec · plan (a Markdown plan — Claude Code plan mode, Cursor) · execplan (Codex) · bmad · fluidplan; or steering: kiro-steering / cursor-rules (→ .specs/steering/, existing names skipped). Scenarios become EARS criteria (else [NEEDS CLARIFICATION]), IDs are remapped to US-n.AC-m (`mapping`), tasks keep their ticks and markers. `path`: a file or folder inside the project; `text` (plan / execplan / fluidplan): the document itself. `dryRun: true` writes nothing and returns a `preview`.",
     inputSchema: {
       type: "object",
       properties: {
@@ -357,7 +358,7 @@ const TOOLS = [
   {
     name: "spec_tracks",
     description:
-      "Project-defined tracks (track packs in .specs/tracks/<name>/ — data only, nothing runs): a team's own rigor (+a11y, +mobile…) beside the built-in tracks. A valid pack works as a marker track everywhere; a bad one is reported and ignored whole (format: references/project-tracks.md). `action`: list (default) · init (scaffold an example pack `name`) · check (validate) · signals (the classifier's learned overrides in .specs/classifier.json — `op` list · set {track, word, effect} · forget).",
+      "Project-defined tracks (track packs in .specs/tracks/<name>/ — data only, nothing runs): a team's own rigor (+a11y, +mobile…) beside the built-in tracks. A valid pack works as a marker track everywhere; a bad one is reported and ignored whole. `action`: list (default) · init (scaffold an example pack `name`) · check (validate) · signals (the classifier's learned overrides in .specs/classifier.json — `op` list · set {track, word, effect} · forget).",
     inputSchema: {
       type: "object",
       properties: {
@@ -375,7 +376,7 @@ const TOOLS = [
   {
     name: "spec_export",
     description:
-      "Documents generated from the specs. `format`: html (default) / md — ONE self-contained, offline stakeholder document: a feature (`name`, in its language) or the whole project · csv — the requirements traceability matrix · gherkin — a .feature per feature (the EARS clauses as steps, never invented) · jira / linear — a tracker import CSV (nothing is sent) · adr — decisions.md as MADR files · catalog — the living catalog: every feature and AC with its status, superseded criteria named (.specs/SPECS.md) · changelog — release notes from the specs: Added / Changed / Fixed since `since`, or of one `milestone` (.specs/RELEASE-NOTES.md). `write: true` writes the file (AUTO-GENERATED; a hand-written one is never overwritten) and returns its path. Without write: html / md return a markdown `preview`, catalog / changelog their structure — `includeBody: true` adds the whole document.",
+      "Documents generated from the specs. `format`: html (default) / md — ONE self-contained, offline stakeholder document: a feature (`name`, in its language) or the whole project · csv — the requirements traceability matrix · gherkin — a .feature per feature (the EARS clauses as steps, never invented) · jira / linear — a tracker import CSV (nothing is sent) · adr — decisions.md as MADR files · catalog — every feature and AC with its status (.specs/SPECS.md) · changelog — release notes from the specs: Added / Changed / Fixed since `since`, or of one `milestone` (.specs/RELEASE-NOTES.md). `write: true` writes the file (AUTO-GENERATED; a hand-written one is never overwritten) and returns its path. Without write: html / md return a markdown `preview`, catalog / changelog their structure — `includeBody: true` adds the whole document.",
     inputSchema: {
       type: "object",
       properties: {

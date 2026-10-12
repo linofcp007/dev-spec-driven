@@ -2903,6 +2903,31 @@ const msg = {
       dodExpect: "The _Verify:_ run must FAIL (non-zero exit) for the right reason — put the command, its exit code and the failure in the report; it is recorded as the task's red run.",
       naVerify: (n, slug) => `Task ${n} is marked _Expect: fail_: its proof is a run that FAILS (its test red before the fix) — a passing run doesn't count. Record the red run (${DEV_SPEC} done ${slug} ${n} --run while the test fails — before the fix, or with the fix stashed), or drop _Expect: fail_ if the task is no red test.`,
     },
+    // 1.29: dev-guardian's gate as the project check 'guardian' (init --guardian; finish --run reads its exit code and JSON report)
+    // and its duplication budget (.guardian/budgets.yml quality.duplication_pct) beside the duplicate detector's measure
+    guardian: {
+      offer: (installed, project) => `${installed && project ? "dev-guardian is installed and this project has .guardian/" : installed ? "dev-guardian is installed" : "This project has .guardian/ (dev-guardian)"}: ${DEV_SPEC} init --guardian (spec_init {guardian: true}) adds its gate as the project check 'guardian' — /spec-finish (finish --run) then runs dev-guardian's scan, which takes minutes and needs its scanners (Semgrep, Gitleaks, Trivy…).`,
+      on: (cmd) => `dev-guardian's gate is the project check 'guardian' (${cmd} — .specs/guardian.cjs runs the newest installed dev-guardian): finish --run runs it, and a new finding at or above high blocks the finish until it is fixed or the user accepts it in dev-guardian (dev-guardian baseline update, or a suppression).`,
+      off: "The project check 'guardian' is off (meta.checks.guardian and .specs/guardian.cjs removed).",
+      badValue: (v) => `--guardian expects on or off (got '${v}') — a bare --guardian is on`,
+      pass: (failOn, n) => `dev-guardian: pass — no new finding at or above ${failOn}` + (n ? ` (${n} new below it)` : ""),
+      blocked: (n, failOn, own) => (n == null ? `dev-guardian: the gate failed — a new finding at or above ${failOn} (its JSON report could not be read)`
+        : `dev-guardian: ${n} new finding(s) at or above ${failOn}` + (own ? `, ${own} in this feature's files` : "")),
+      incomplete: (gaps) => `dev-guardian could not run every scanner (incomplete scan${gaps ? ": " + gaps : ""})`,
+      config: (m) => `dev-guardian could not run — a configuration or usage error${m ? ": " + m : ""}`,
+      notFound: "dev-guardian was not found — install the dev-guardian plugin, or set DEV_GUARDIAN_CLI to the path of its cli/dev-guardian.mjs",
+      noLauncher: `the check's launcher .specs/guardian.cjs is missing — ${DEV_SPEC} init --guardian writes it again`,
+      exited: (code) => `dev-guardian exited ${code == null ? "?" : code}`,
+      finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [this feature]" : ""),
+      blocker: (name, text) => `the project check '${name}' failed — ${text}.`,
+      more: (n) => `+${n} more`,
+      fixHint: (slug) => `Fix the finding(s) — or, only when the user accepts one, record that in dev-guardian (dev-guardian baseline update, or a suppression) — then run the check again: ${DEV_SPEC} finish ${slug} --run. Never force the finish without the user.`,
+      incompleteHint: "Install the missing scanner (dev-guardian's /guardian-init), or — offline, when Semgrep could not fetch its rules — add --local-only to the check's command; the check stays failed until it passes or the user changes it.",
+      configHint: (slug) => `Fix that, then run the check again: ${DEV_SPEC} finish ${slug} --run.`,
+      mcpRun: (name, cmd) => `The '${name}' check runs dev-guardian's scan (minutes): over MCP run \`${cmd}\` yourself from the project root and report it with spec_finish {evidence: [{name: "${name}", command, exitCode, summary: its stderr's last lines, report: its JSON stdout}]}.`,
+      budget: (pct, limit, over, n) => `Duplicated code: ${pct}% of the code lines read — dev-guardian's budget (.guardian/budgets.yml quality.duplication_pct) is ${limit}%: ${over ? "OVER the budget" : "within it"}. (dev-spec counts windows of ${n} code lines; dev-guardian measures with jscpd — close, not identical.)`,
+      finishBudget: (pct, limit) => `; the project as a whole is over dev-guardian's duplication budget — ${pct}% of its code lines repeat (budget ${limit}%, .guardian/budgets.yml; dev-spec's measure, close to jscpd's but not identical)`,
+    },
     projectChecks: {
       badInput: 'checks must be an object of name → command (e.g. {"test": "npm test"}); an empty command removes that check.',
       badName: (k) => `invalid check name '${k}' — letters, digits and . _ : - (up to 40 characters, starting with a letter or a digit).`,

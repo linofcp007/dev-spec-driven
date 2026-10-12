@@ -17,13 +17,14 @@ let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, cr
   readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError, savedTracks, scanTestCode, shortIdList, specDoctor, specsRoot,
   staleFinish, stateFromFile, statePath, timeOf, trackLabel, unverifiedLabel, verificationStatus, withFeatureLock,
   withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot;
+let guardianOffer; // evidence.js — 1.29: dev-guardian's gate offered (never set) when it is installed or the project has .guardian/
 function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir,
   isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,
   maybeRefreshRoadmap, missingPackTracks, nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile,
   positionPhase, projectLang, readIfExists, readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError,
   savedTracks, scanTestCode, shortIdList, specDoctor, specsRoot, staleFinish, stateFromFile, statePath, timeOf, trackLabel,
-  unverifiedLabel, verificationStatus, withFeatureLock, withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot } = E); }
+  unverifiedLabel, verificationStatus, withFeatureLock, withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot, guardianOffer } = E); }
 
 // ---------------------------------------------------------------------------
 // Upgrade — after the plugin is updated. roadmap.json meta.specVersion records the dev-spec version that last
@@ -326,6 +327,10 @@ function specUpgrade(projectDir, opts = {}) {
   const res = { ok: true, lang, from: ver.from, to: ver.to, needsUpgrade: ver.behind || plan.changes, newer: ver.newer,
     features, summary: { ok: count("ok"), attention: count("attention"), blocked: count("blocked") }, archived: dirs.length - active.length, migrations };
   if (!apply) res.plan = plan;
+  // a project-level attention item: dev-guardian is installed (or the project has .guardian/) and no project check runs its gate —
+  // offered, never set (its scan takes minutes and needs its scanners)
+  const offer = guardianOffer(projectDir, lang);
+  if (offer) res.guardianOffer = offer;
   if (apply) {
     const file = path.join(root, "UPGRADE.md");
     if (!migrations.changed) migrations.report = { file, written: false };
@@ -405,6 +410,7 @@ function upgradeLines(r, lang = r.lang) {
   const out = [U.head(r.from, r.to, mode)];
   if (r.newer) out.push(U.newer(r.from, r.to));
   out.push(r.features.length ? U.summary(r.features.length, r.summary.blocked, r.summary.attention, r.summary.ok, r.archived) : U.noFeatures);
+  if (r.guardianOffer) out.push("  ▲ " + r.guardianOffer); // 1.29: the project's own attention item
   for (const g of ["blocked", "attention", "ok"]) {
     const list = r.features.filter((f) => f.group === g);
     if (!list.length) continue;
@@ -439,6 +445,7 @@ function renderUpgradeMd(r, lang, proj) {
   const P = i18n.msg(lang).phaseNames || {};
   let md = `# ${M.title(proj)}\n\n<!-- ${M.autogen} -->\n\n> ${M.intro(r.from, r.to)}\n\n`;
   md += `**${r.features.length ? U.summary(r.features.length, r.summary.blocked, r.summary.attention, r.summary.ok, r.archived) : U.noFeatures}**\n`;
+  if (r.guardianOffer) md += `\n- [ ] ${r.guardianOffer}\n`; // 1.29: the project's own attention item
   const mig = upgradeMigrationLines(r, lang);
   if (mig.length) md += `\n## ${M.migrations}\n\n` + mig.map((l) => `- ${l}`).join("\n") + "\n";
   for (const g of ["blocked", "attention", "ok"]) {

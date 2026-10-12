@@ -77,7 +77,7 @@ const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalG
   MERGE_DRIVER, MERGE_DRIVER_KEY, mergeAttributes, mergeDriverScript, mergeDriverStatus, gitConfigGet, mergeKindOfPath, mergeStateJson, mergeStateText, metrics, metricsLines, templatesLines, upgradeLines, milestone,
   MILESTONE_ACTIONS, networkPathInside, nextAction, nextTask, normalizeLang,
   normalizeTracks, OBSERVED_MAX_BYTES, observedRun, observeRun, OPTIONAL_TRACKS, parseApprovalRolesText, runProvesVerify, stripCdPrefix,
-  recordSpecEdit, runStartStamp,
+  recordSpecEdit, runStartStamp, isGuardianCheck, guardianRecord, guardianLines,
   parseGitLog, parseTasks, parseTracks, PHASES, placeholderReport, planBridge, planPaths,
   posixPwshScript, posixShellSyntax, projectChecks, projectLang, pwshParseFailure, runsPwsh, readRoadmap, readState, removeFeature, removeTrack, renameFeature,
   renderRoadmapHtml, renderRoadmapMd, resolveFeature, resolveProjectDir, unexpandedVar, expandHome, resolveRunShell, resolveTask, restoreFeature,
@@ -165,6 +165,9 @@ module.exports = {
   resolveTask,
   verificationStatus,
   summarizeRunOutput,
+  isGuardianCheck, // 1.29: does a project check run dev-guardian's gate (the check `guardian`, a `dev-guardian … scan`)? — finish --run
+  guardianRecord, // its run → the verdict finish records (its exit code + JSON report; the feature's own findings first)
+  guardianLines, // that verdict → the localized lines finish --run prints
   posixShellSyntax, // `done --run` on Windows: POSIX-only syntax cmd.exe would misread (refused unless --shell)
   windowsShellFailure, // `done --run` on Windows: did cmd.exe itself fail (unknown command / its syntax error)? — the --shell hint
   resolveRunShell, // `done --run` / `finish --run` — the shell (a bare bash → Git Bash on Windows; WSL's launcher refused)
