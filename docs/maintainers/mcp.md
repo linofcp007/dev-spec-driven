@@ -229,6 +229,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.28** — `spec_scan {duplicates: true, name?, minLines?, tests?}`, the 41st operation (`dupes`), a mode on a second key
   (`alt`) — ~490 characters of tools/list (+ spec_doctor naming the m / l Reuse gate), ~200 of them paid back by trimming
   other descriptions (43,272 → 43,611).
+- **1.29** — `spec_init {guardian}` and spec_finish's evidence `report` (dev-guardian's gate, ~260 characters) paid back in full
+  by trimming spec_scan's, spec_import's, spec_tracks', spec_roadmap_edit's and spec_export's descriptions: still 43,611.
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.

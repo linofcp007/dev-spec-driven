@@ -300,6 +300,25 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (cli/completion.js `statuslineCommand`: no quote, dollar, backtick, percent, ! or backslash, so every shell passes it; else the
   plain command and `cacheNote`). A plugin can't ship a status line (plugin `settings` honour only `agent` /
   `subagentStatusLine`), hence the opt-in `/spec-setup statusline`.
+- **The dev-guardian launcher (1.29)** — the other newest-installed-version lookup, for the project check `guardian`
+  (tasks-and-evidence.md → Project checks). The sibling plugin lives in the same versioned cache
+  (`plugins/cache/<marketplace>/dev-guardian/<version>/cli/dev-guardian.mjs`), so its path can't be baked into a check either.
+  A `node -e` one-liner like the status line's did NOT fit: with DEV_GUARDIAN_CLI, CLAUDE_CONFIG_DIR, every marketplace, the
+  numeric order and a clear exit 3 it was ~730 characters against meta.checks' 500. So the check is `node .specs/guardian.cjs
+  scan --project . --fail-on high --format json` and `.specs/guardian.cjs` is a small generated script (evidence.js
+  `GUARDIAN_LAUNCHER`, committed with the project: a teammate's clone runs the same check): `DEV_GUARDIAN_CLI` (a file) first,
+  else the newest `<version>` by numeric parts (a missing part 0, a version folder without the CLI skipped) under
+  `CLAUDE_CONFIG_DIR` — else `~/.claude` (Claude Code's own rule: one config folder, never both) — `/plugins/cache/*/dev-guardian/`;
+  it sets `argv[1]` to that CLI (dev-guardian runs `main()` only when argv[1] is itself — realpaths compared) and imports it by
+  its file URL (`import("node:url")`: `require("url")` would be a Node core module CLAUDE.md doesn't list), so dev-guardian's
+  own exit code is the run's. Nothing found, a DEV_GUARDIAN_CLI naming no file, a CLI that doesn't load → `exitCode = 3`
+  (never `process.exit`: a message to a pipe would be cut) and a "dev-guardian not found: …" / "could not be loaded" line.
+  `nosemgrep` comments on its three `path.join` lines: dev-guardian's own Semgrep flagged them (medium) in every project.
+  Source rules: no backslash in it, Node core only. `guardianCli()` mirrors the rule for the engine's offer (folder listings,
+  outside the project — the one engine read of the user's config folder); mcp/tests/09-evidence-guardian.js runs both on a
+  fake plugin cache. The command runs under cmd.exe, bash, PowerShell 5.1 and pwsh alike (cli/tests/09-evidence-guardian.js).
+  **Hermetic tests:** the runner drops `DEV_GUARDIAN_CLI` and points `CLAUDE_CONFIG_DIR` at an absent folder of the chain's own
+  (testing.md), or init would offer the gate on a maintainer's machine with dev-guardian installed.
 - **User defaults** — `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT` (`userOptionRaw()` →
   `userDefaults()`), FALLBACKS only: project meta wins; empty, invalid or unexpanded changes nothing. `newProjectLang()` only for
   a brand-new project (no meta.lang, no feature, active or archived), seeded by `seedProjectLang()` under the roadmap lock;
@@ -460,3 +479,5 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — `statusProbe()` is the probe's rule, not a copy of `isDevSpecDir`; the plan hook walks up through
   `probe.sessionProjects` (it looked at the cwd itself only). The render moved with the CLI split: cli/commands.js
   `statusLineRender`, run first by cli/main.js.
+- **1.29** — the dev-guardian launcher, `.specs/guardian.cjs`: a generated script rather than the status line's `node -e`
+  one-liner, which did not fit a project check's 500 characters.
