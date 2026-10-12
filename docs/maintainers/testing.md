@@ -63,7 +63,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   empty temp folder as its working folder (`<os tmpdir>/<spec-test-|cli-test->XXXXXX`, removed once it closed) and an
   environment without the variables that steer the plugin — `SPEC_PROJECT_DIR`, `CLAUDE_PROJECT_DIR`, `SPEC_MCP_*`,
   `CLAUDE_PLUGIN_*`, `COLUMNS` and every `DEV_SPEC_*` but the suites' own `DEV_SPEC_TEST_*` (`DEV_SPEC_TEST_CHAIN`,
-  `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`) — scripts/test-runner.js `isolate()` / `hermeticEnv()`. The
+  `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`) — scripts/test-runner.js `isolate()` / `hermeticEnv()`; 1.29:
+  nor the maintainer's installed plugins — `DEV_GUARDIAN_CLI` is dropped and `CLAUDE_CONFIG_DIR` names an absent folder inside
+  the chain's own (`no-claude-config`), so no dev-guardian plugin cache is seen (init / spec_upgrade would offer its gate on one
+  machine and not on another; a test that wants one builds a fake cache and passes it). The
   child runs `isolate()` again before it loads a file, and both harnesses first thing (a no-op in the folder the runner gave
   it), so a chain started by hand (`DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js`) is isolated too. Why: the main checkout
   keeps a git-ignored dogfood `.specs/` (meta.lang pt) at the repo root, and a test that started the CLI or a hook without
@@ -197,3 +200,5 @@ How the rules above came to be — grep a release here.
 - **1.28** — the guard runs the engine's detector (`S.duplicateRuns`) instead of its own scanner: one detector. Its reading
   of a template literal dropped the PT / ES design sample's allowance — the old scanner read the sample's `// …` line (it differs
   per language) as a comment, the detector as the string it is — so the stale allowance went; 56 of 40,697 code lines (0.1 %).
+- **1.29** — hermetic chains also leave out the maintainer's installed plugins (`DEV_GUARDIAN_CLI` dropped, `CLAUDE_CONFIG_DIR` an
+  absent folder of the chain's own): with dev-guardian installed, every `init` in the suites would have printed its offer.

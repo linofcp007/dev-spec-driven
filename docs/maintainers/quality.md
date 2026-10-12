@@ -160,6 +160,16 @@ The mechanical half of reuse — the prose asks the implementer to search, this 
   --subagents' final review, the reviewer, the simplifier, code-reuse-and-quality.md, subagent-execution.md): the `existing`
   runs are the reviewer's candidate findings, the `within` runs the simplifier's — each verified (spec-verifier) like any
   finding; a repeat the spec asks for or one under "Duplicated on purpose" is none.
+- **dev-guardian's duplication budget (1.29)** — `duplicationBudget(root)` reads ONE key of `.guardian/budgets.yml`:
+  `quality.duplication_pct` (jscpd's duplicated-lines %, project-wide — dev-guardian's quality_check holds the project to it;
+  the file's only other keys are `quality.complexity` and `perf.*`). Zero-dependency and minimal: a top-level `quality:` block
+  (an indented `duplication_pct: <number>`) or a flow mapping on its line, comments dropped; a plain file inside the project
+  (lstat, realpath), ≤ 64 KB. Another section's key, a non-number, broken YAML, no file → none. The project report (no `name`)
+  then carries `budget` {file, key, limit, measured — `scanned.duplicated / scanned.lines`, %, one decimal —, over, note
+  (`guardian.budget`, the project language: the measures are close, not identical — windows of N code lines vs jscpd)}; the
+  CLI prints the note (`⚠` when over). spec_finish asks the feature report for `budget: true`: a second, project-wide match
+  over the files already read, only when the budget is set; its duplicate warning appends `guardian.finishBudget` only when
+  the project is over it (never a warning of its own, never a blocker).
 
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
@@ -232,3 +242,6 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   5 repeated blocks at minLines 8 — after 1.27.1's cleanup, 2: the link lists the duplication guard allows. The guard (1.27.1,
   16-conventions-duplication.js) runs this detector since 1.28 — one detector (testing.md); `code` and `scanned.duplicated`
   serve it.
+- **1.29** — dev-guardian's duplication budget beside the project report (`budget`) and in finish's warning when over; the
+  reader takes only `quality.duplication_pct` (dev-guardian has no file / function size or coverage budget —
+  references/improvement-specs.md said it had, and cited a `.guardian/perf-budget.yml` that never existed).

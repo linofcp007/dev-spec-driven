@@ -88,6 +88,9 @@ ejecutarla, te pide la salida — o te da la línea
 **5. Cierra.** `/spec-finish` comprueba toda la cadena (tareas abiertas o sin verificar, ediciones después de una
 aprobación, placeholders), pide una ejecución nueva de tu suite completa, redacta el resumen del merge a partir de la spec
 y pide tu aprobación final. Después eliges: hacer el merge en local o mantener la rama. No se envía nada sin ti.
+Con **dev-guardian** instalado, `dev-spec init --guardian` convierte su gate de seguridad en una verificación del proyecto:
+`/spec-finish` lo ejecuta, y un finding nuevo de gravedad high bloquea hasta que se corrija o lo aceptes en dev-guardian
+(`dev-guardian baseline update`).
 
 ¿Te has perdido? `/spec <feature>` retoma en el único paso siguiente. ¿Prefieres una versión guiada en tu repositorio?
 `/dev-spec-driven:spec-tour` lleva un cambio pequeño y real por todos los gates y explica cada uno a medida que ocurre.

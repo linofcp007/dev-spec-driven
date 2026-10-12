@@ -174,7 +174,9 @@ summary and ask for an explicit yes. Roles, waivers, revoking: `references/chang
 
 ## Finish and after
 
-`spec_finish` lists the blockers, the checks to run fresh and a merge summary (`write`: the drift baseline). After the
+`spec_finish` lists the blockers, the checks to run fresh and a merge summary (`write`: the drift baseline). With the
+project check `guardian` (`spec_init {guardian: true}`, only on the user's request) it runs dev-guardian's gate: a blocking
+finding is fixed or the user accepts it in dev-guardian — never forced (`references/verification.md`). After the
 `execution` sign-off the user picks **merge into the base branch locally** or **keep the branch** — no pull requests,
 no CI; never merge or push on your own (pushing the merged base is a step they approve too). An approved artifact
 edited later: `spec_impact` lists what each change reaches; with the user's OK, `reopen: true` unticks the affected

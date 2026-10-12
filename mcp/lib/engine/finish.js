@@ -26,14 +26,15 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   projectLang, pruneBacklog, RE_DEFINES_AC, RE_TODO_SENTINEL, readContained, readIfExists, readRoadmap, readState,
   recordFinishChecks, renderCrossAcsMd, resolveFeature, roadmapBusyResult, roadmapError, roleLabel, ROOT_CAUSE_SYN,
   safeReaddir, scanTestCode, setFeatureFlowLocked, shippedSupersedeKeys, slugify, specDoctor, specsRoot, spikeFinish,
-  spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus, suiteSummaryLines,
+  spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteStatus, suiteSummaryLines,
   taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines, trackLabel,
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
+let suiteBlocker; // evidence.js — 1.29: the suite blocker (with dev-guardian's gate: its verdict and what to do)
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ duplicationReport, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+function __link(E) { ({ duplicationReport, suiteBlocker, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
@@ -45,7 +46,7 @@ function __link(E) { ({ duplicationReport, today, dayOf, acIndex, activeDesign, 
   planIdText, projectLang, pruneBacklog, RE_DEFINES_AC, RE_TODO_SENTINEL, readContained, readIfExists, readRoadmap,
   readState, recordFinishChecks, renderCrossAcsMd, resolveFeature, roadmapBusyResult, roadmapError, roleLabel,
   ROOT_CAUSE_SYN, safeReaddir, scanTestCode, setFeatureFlowLocked, shippedSupersedeKeys, slugify, specDoctor, specsRoot,
-  spikeFinish, spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteLabel, suiteStatus,
+  spikeFinish, spikeInfo, stateFromFile, statePath, stripEnds, stripHtmlComments, suiteStatus,
   suiteSummaryLines, taskBlocks, taskMarkers, testIndex, toPosix, TRACE_SECONDARY_KINDS, traceCheck, traceWarningLines,
   trackLabel, unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject,
   withMoveLock, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
@@ -219,20 +220,24 @@ function finishFeature(projectDir, name, opts = {}) {
   if (vs.unverified.length) block("verification", F.unverified(unverifiedLabel(vs, lng)));
   // meta.checks set → every check needs a passing run since the feature's last task activity (suiteStatus).
   const suite = suiteStatus(projectDir, state, dir);
-  if (suite.missing.length) block("suite-evidence", i18n.msg(lng).projectChecks.blocker(suiteLabel(suite.missing, lng), slug));
+  // (+ dev-guardian's gate: how to clear a failed one, or how to run and report it over MCP — 1.29)
+  if (suite.missing.length) block("suite-evidence", suiteBlocker(suite.missing, slug, lng));
   if (suite.invalid.length) warnings.push(i18n.msg(lng).projectChecks.invalidStored(suite.invalid.join(", ")));
   if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);
   // 1.28: the feature's code repeats code the project already has (the duplicate-code detector, its _Implements:_ files against the
   // rest) — a warning, never a blocker: how many places, the top 3 (`file:from-to ↔ file:from-to`) and the call listing them all;
-  // the repeats inside the feature's own files only as a count.
-  const dup = duplicationReport(projectDir, { name: slug });
+  // the repeats inside the feature's own files only as a count. 1.29: with dev-guardian's duplication budget set
+  // (.guardian/budgets.yml quality.duplication_pct — budget: true measures the whole project too), the warning says when the project
+  // is over it.
+  const dup = duplicationReport(projectDir, { name: slug, budget: true });
   let duplicates = null;
   if (dup.ok && dup.total) {
     const top = dup.duplicates.filter((d) => d.kind === "existing").slice(0, 3);
     const pair = (d) => `${d.file}:${d.from}-${d.to} ↔ ${d.also[0].file}:${d.also[0].from}-${d.also[0].to}`;
-    warnings.push(dup.counts.existing ? F.duplicates(dup.counts.existing, top.map(pair).join("; "), dup.counts.within, slug) : F.duplicatesWithin(dup.counts.within, slug));
+    const over = dup.budget && dup.budget.over ? i18n.msg(lng).guardian.finishBudget(dup.budget.measured, dup.budget.limit) : "";
+    warnings.push((dup.counts.existing ? F.duplicates(dup.counts.existing, top.map(pair).join("; "), dup.counts.within, slug) : F.duplicatesWithin(dup.counts.within, slug)) + over);
     duplicates = { existing: dup.counts.existing, within: dup.counts.within, top };
   }
 
@@ -316,7 +321,6 @@ function finishFeature(projectDir, name, opts = {}) {
   if (baseline) res.baseline = baseline;
   if (branch) res.branch = branch; // {name, base, commit, at, current, exists} — option 1 merges `name` into `base` locally
   if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
-  if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats} — spec_scan {duplicates: true} lists all
   if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats} — spec_scan {duplicates: true} lists all
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // the runs this call recorded

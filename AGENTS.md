@@ -105,6 +105,8 @@ At each phase boundary run `dev-spec doctor <feature>` and advance only on `read
   with a localized reason. Reason codes, shells, PowerShell: `skills/dev-spec-driven/references/verification.md`.
 - **`finish` blocks** on doctor failures, an artifact changed since approval, placeholders, open or unverified tasks,
   pending approvals and project checks (`init --check`) without a passing run on the current code (`finish --run`).
+  With dev-guardian installed, `init --guardian` (only on the user's request) makes its gate the check `guardian`: a
+  blocking finding is fixed, or the user accepts it in dev-guardian — never force the finish without the user.
   A bugfix's fix can't complete before `bug.md` → Root Cause is written.
 
 ## When the spec changes

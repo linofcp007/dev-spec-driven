@@ -106,6 +106,12 @@ then verifies a task only with such a run, or one `dev-spec done --run` made. It
 with that off, an agent appending one line to the log forges a run (`init` and doctor's `observed-unguarded` say so).
 A run Claude Code logged no exit code for (the PowerShell tool alone): record it with `dev-spec done <feature> <n> --run`.
 
+**dev-guardian's gate (opt-in).** With the dev-guardian plugin installed, `node "$plugin\cli\dev-spec.js" init --guardian`
+(`spec_init {guardian: true}`; `--guardian off` removes it) adds the project check `guardian`, which `/spec-finish` runs:
+`.specs/guardian.cjs` finds the newest installed dev-guardian at each run (`DEV_GUARDIAN_CLI` overrides it), so updating
+either plugin never breaks it. Its scan takes minutes and needs dev-guardian's scanners; a new high finding blocks until it
+is fixed or you accept it in dev-guardian (`dev-guardian baseline update`, a suppression). `init` offers it, never sets it.
+
 **Human approval guard (opt-in, off by default).** A PreToolUse hook (`hooks/approval-hook.js`) that makes approvals a
 human act: when Claude calls `spec_approve` (even with force), runs `dev-spec approve` / `feature remove --yes`, tries
 to lower the guard, or writes the spec state itself (`.specs/roadmap.json`, a feature's `.state.json`, the observed log —

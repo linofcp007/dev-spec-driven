@@ -387,14 +387,50 @@ function featureFileOnDisk(root, realRoot, ref, want) {
   return rel;
 }
 
+// dev-guardian's duplication budget (1.29): .guardian/budgets.yml → quality.duplication_pct — jscpd's duplicated-lines percentage,
+// project-wide, which dev-guardian's quality_check holds the project to. A close measure, not the same one: this detector counts
+// windows of code lines (comments, blank, brace-only and import lines aside). A minimal reader of that one key (zero dependencies:
+// no YAML parser) — a top-level `quality:` block, or a flow mapping on its line, holding `duplication_pct: <number>`; the file is read
+// only when it is a plain file inside the project, ≤ 64 KB. → the limit (a finite number ≥ 0) | null (absent, unreadable, garbage)
+const BUDGETS_FILE = ".guardian/budgets.yml";
+const RE_DUP_KEY = /^["']?duplication_pct["']?\s*:\s*["']?(\d+(?:\.\d+)?)["']?$/;
+function duplicationBudget(root) {
+  const file = path.join(root, ".guardian", "budgets.yml");
+  let text;
+  try {
+    const st = fs.lstatSync(file);
+    if (!st.isFile() || st.size > 65536 || !withinRoot(realRootOf(root), fs.realpathSync.native(file))) return null;
+    text = decodeText(fs.readFileSync(file));
+  } catch { return null; }
+  let quality = false; // inside the top-level quality: block
+  for (const raw of text.split("\n")) {
+    const line = raw.replace(/(?:^|\s)#.*$/, "").trimEnd(); // a comment: a # at the start or after a space
+    if (!line.trim()) continue;
+    const top = /^([^\s#][^:]*):(?:\s+(.*))?$/.exec(line); // a key at the margin
+    if (top) {
+      quality = top[1].trim().replace(/^["']|["']$/g, "") === "quality";
+      const flow = quality && top[2] ? /^\{(.*)\}$/.exec(top[2].trim()) : null; // quality: { duplication_pct: 5, complexity: 15 }
+      if (flow) for (const part of flow[1].split(",")) { const m = RE_DUP_KEY.exec(part.trim()); if (m) return budgetValue(m[1]); }
+      continue;
+    }
+    const m = quality && /^\s/.test(line) ? RE_DUP_KEY.exec(line.trim()) : null;
+    if (m) return budgetValue(m[1]);
+  }
+  return null;
+}
+const budgetValue = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n >= 0 ? n : null; };
+
 // spec_scan {duplicates: true} / `dev-spec dupes [feature]`. opts.name: a feature — its code is the existing source files its
 // tasks' _Implements:_ name (every task; a folder or a glob names the code files under it), reported against the rest of the
 // project; without it the whole project's top duplicates. opts.minLines (default 6); opts.tests: test files too (left out by
-// default); opts.cap: the files read (engine-internal). The corpus is the scan's: source files by extension, no node_modules /
+// default); opts.cap: the files read (engine-internal); opts.budget (spec_finish's warning): with a feature, measure the whole
+// project too for dev-guardian's duplication budget. The corpus is the scan's: source files by extension, no node_modules /
 // .git / .specs / dist / build / vendor / coverage / hidden folders nor a folder the root .gitignore names, no test fixture,
 // generated or minified file, none larger than DUP_MAX_BYTES (skipped {large, generated}).
 // → { ok, feature?, minLines, featureFiles?, scanned: {files, lines, duplicated}, skipped: {large, generated}, truncated, duplicates (the top
-//    DUP_TOP), counts: {existing, within}, total } — stable keys, English; the CLI renders it (cliText).
+//    DUP_TOP), counts: {existing, within}, total, budget? } — stable keys, English; the CLI renders it (cliText). budget (1.29, when
+//    .guardian/budgets.yml sets quality.duplication_pct; without a feature, or with opts.budget): { file, key, limit, measured (the
+//    project's duplicated share of its code lines, %, one decimal), over, note (the localized line) }.
 function duplicationReport(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
   const lang = projectLang(projectDir);
@@ -432,9 +468,18 @@ function duplicationReport(projectDir, opts = {}) {
     }
   }
   const r = mine && !mine.size ? { scanned: { files: 0, lines: 0, duplicated: 0 }, duplicates: [], counts: { existing: 0, within: 0 } } : duplicateRuns(files, { minLines: m, feature: mine });
+  // dev-guardian's budget beside the project's share: the project report's own count; a feature's (finish) a second, project-wide
+  // match over the files already read — only when the budget is set
+  const limit = duplicationBudget(root);
+  const whole = limit == null ? null : !mine ? r.scanned : opts.budget === true && files.length ? duplicateRuns(files, { minLines: m }).scanned : null;
+  let budget = null;
+  if (whole && whole.lines) {
+    const measured = Math.round((1000 * whole.duplicated) / whole.lines) / 10;
+    budget = { file: BUDGETS_FILE, key: "quality.duplication_pct", limit, measured, over: measured > limit, note: i18n.msg(lang).guardian.budget(measured, limit, measured > limit, m) };
+  }
   return Object.assign({ ok: true }, f ? { feature: f.slug } : {}, { minLines: m }, mine ? { featureFiles: mine.size } : {}, {
     scanned: r.scanned, skipped, truncated: walk.truncated, duplicates: r.duplicates.slice(0, DUP_TOP), counts: r.counts, total: r.duplicates.length,
-  });
+  }, budget ? { budget } : {});
 }
 
 module.exports = { duplicateRuns, duplicationReport, __link };

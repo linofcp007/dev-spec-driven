@@ -148,7 +148,7 @@ exports.run = () => new Promise(() => { setInterval(() => {}, 1000); });
     fs.rmSync(own, { recursive: true, force: true });
     fs.mkdirSync(own, { recursive: true });
     const KEYS = ["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT", "DEV_SPEC_DEFAULT_LANG", "DEV_SPEC_BUNDLE", "SPEC_MCP_PROMPTS", "COLUMNS",
-      "DEV_SPEC_TEST_BASH", "FAKE_KEEP"];
+      "DEV_GUARDIAN_CLI", "DEV_SPEC_TEST_BASH", "FAKE_KEEP", "CLAUDE_CONFIG_DIR"];
     const envFile = `// what a chain sees: its working folder, what it holds, the host's variables
 exports.run = async ({ ok }) => {
   const fs = require("fs");
@@ -162,16 +162,18 @@ exports.run = async ({ ok }) => {
     w(".specs/roadmap.json", js({ features: {}, meta: { lang: "pt" } }));
     w(".specs/decoy/requirements.md", "# Requisitos\n");
     const host = { ...env, SPEC_PROJECT_DIR: root, CLAUDE_PROJECT_DIR: root, CLAUDE_PLUGIN_ROOT: root, DEV_SPEC_DEFAULT_LANG: "es", DEV_SPEC_BUNDLE: "1",
-      SPEC_MCP_PROMPTS: "off", COLUMNS: "20", DEV_SPEC_TEST_BASH: "keep-me", FAKE_KEEP: "kept" };
+      SPEC_MCP_PROMPTS: "off", COLUMNS: "20", DEV_SPEC_TEST_BASH: "keep-me", FAKE_KEEP: "kept", DEV_GUARDIAN_CLI: root, CLAUDE_CONFIG_DIR: root };
     const seen = (out) => out.split(/\r?\n/).filter((l) => l.startsWith("ENV ")).map((l) => { try { return JSON.parse(l.slice(4)); } catch { return null; } });
     const fold = (p) => (process.platform === "win32" ? path.resolve(p).toLowerCase() : path.resolve(p));
     const shape = (s) => !!s && /^fake-runner-[A-Za-z0-9]{6}$/.test(path.basename(s.cwd)) && fold(path.dirname(s.cwd)) === fold(own) &&
       s.files.length === 0 && !fs.existsSync(s.cwd);
-    const clean = (s) => !!s && KEYS.slice(0, 7).every((k) => s.env[k] === null) && s.env.DEV_SPEC_TEST_BASH === "keep-me" && s.env.FAKE_KEEP === "kept";
+    // 1.29: no DEV_GUARDIAN_CLI, and Claude Code's config folder an absent one in the chain's own folder (no installed plugin is seen)
+    const clean = (s) => !!s && KEYS.slice(0, 8).every((k) => s.env[k] === null) && s.env.DEV_SPEC_TEST_BASH === "keep-me" && s.env.FAKE_KEEP === "kept" &&
+      typeof s.env.CLAUDE_CONFIG_DIR === "string" && fold(path.dirname(s.env.CLAUDE_CONFIG_DIR)) === fold(s.cwd);
     const r = spawnSync(process.execPath, [path.join(root, "suite.js"), "--only", "06,07"], { cwd: root, encoding: "utf8", env: host, timeout: 60000 });
     const two = seen(r.stdout || "");
     ok(r.status === 0 && lastLine(r.stdout || "") === "2 passed, 0 failed" && two.length === 2 && two.every(shape) && two.every(clean) && two[0].cwd !== two[1].cwd,
-      "1.26: every chain runs hermetic — a fresh, empty temp folder of its own as its working folder (never the folder the suite was started from, with its .specs/; removed afterwards) and none of SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, CLAUDE_PLUGIN_*, SPEC_MCP_*, DEV_SPEC_* (but DEV_SPEC_TEST_*), COLUMNS (got " +
+      "1.26: every chain runs hermetic — a fresh, empty temp folder of its own as its working folder (never the folder the suite was started from, with its .specs/; removed afterwards) and none of SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR, CLAUDE_PLUGIN_*, SPEC_MCP_*, DEV_SPEC_* (but DEV_SPEC_TEST_*), COLUMNS, DEV_GUARDIAN_CLI — CLAUDE_CONFIG_DIR an absent folder of its own (1.29) (got " +
       js([r.status, lastLine(r.stdout || ""), two]) + ")");
     const byHand = spawnSync(process.execPath, [path.join(root, "suite.js")], { cwd: root, encoding: "utf8", env: { ...host, DEV_SPEC_TEST_CHAIN: "06-env" }, timeout: 60000 });
     const one = seen(byHand.stdout || "");

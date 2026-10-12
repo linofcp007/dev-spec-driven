@@ -28,7 +28,7 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
   safeReaddir, SAMPLE_GOLDEN, SCAN_IGNORE, SCAN_READ_BYTES, secondaryDefinitions, sectionFilled,
   signOffWhyText, snapshotPhases, specsRoot, SPIKE_FILE, spikeDoctor, spikeInfo, spikeNextAction, staleFinish,
   staleFinishText, stateEvidence, statePath, steeringChanges, steeringChangeText, steeringPlaceholders, stopActivity,
-  suiteLabel, suiteStatus, supersedesWarnings, taskBlocks, taskDepsBlockedNote, taskDepsCheck, taskMarkers,
+  suiteGuardianHint, suiteLabel, suiteStatus, supersedesWarnings, taskBlocks, taskDepsBlockedNote, taskDepsCheck, taskMarkers,
   taskSchedule, taskVerification, tKey, toPosix, TRACE_PLAN_KINDS, TRACE_SECONDARY_KINDS, TRACE_TASK_KINDS,
   TRACE_VERDICT_KINDS, traceCheck, traceGapLines, traceGaps, traceWarningLines,
   trackLabel, trackMarker, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus, verifyPipes,
@@ -56,7 +56,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   ROOT_CAUSE_SYN, safeReaddir, SAMPLE_GOLDEN, SCAN_IGNORE, SCAN_READ_BYTES, secondaryDefinitions,
   sectionFilled, signOffWhyText, snapshotPhases, specsRoot, SPIKE_FILE, spikeDoctor, spikeInfo,
   spikeNextAction, staleFinish, staleFinishText, stateEvidence, statePath, steeringChanges, steeringChangeText,
-  steeringPlaceholders, stopActivity, suiteLabel, suiteStatus, supersedesWarnings, taskBlocks, taskDepsBlockedNote,
+  steeringPlaceholders, stopActivity, suiteGuardianHint, suiteLabel, suiteStatus, supersedesWarnings, taskBlocks, taskDepsBlockedNote,
   taskDepsCheck, taskMarkers, taskSchedule, taskVerification, tKey, toPosix, TRACE_PLAN_KINDS, TRACE_SECONDARY_KINDS,
   TRACE_TASK_KINDS, TRACE_VERDICT_KINDS, traceCheck, traceGapLines, traceGaps, traceWarningLines,
   trackLabel, trackMarker, unreadTasksDetail, unverifiedLabel, VALID_TRACKS, verificationStatus,
@@ -528,7 +528,7 @@ function nextAction(projectDir, name, opts = {}) {
         // back — never "finished — nothing left to do". Any status but pass counts (suiteStatus().missing).
         step = "verify";
         suiteMissing = suiteGap.map((i) => ({ name: i.name, status: i.status }));
-        recommendation = nx.verifySuite(slug, suiteLabel(suiteGap, lng));
+        recommendation = nx.verifySuite(slug, suiteLabel(suiteGap, lng)) + suiteGuardianHint(suiteGap, slug, lng); // + dev-guardian's gate (1.29)
       } else if (fin) {
         // Already finished (spec_finish {write} recorded the baseline): not "close the feature" again. The sign-off, if
         // the execution phase isn't approved yet (or its approval predates a change), or nothing left to do.
@@ -558,7 +558,7 @@ function nextAction(projectDir, name, opts = {}) {
       // (dev-spec finish <f> --run / spec_finish {evidence}); also on `drift`, whose "harmless → re-finish" needs that run.
       if ((step === "finish" || step === "drift") && !st.invalid) {
         const suite = ctx.suite;
-        if (suite.missing.length) recommendation += " " + i18n.msg(lng).projectChecks.naFinish(slug, suiteLabel(suite.missing, lng));
+        if (suite.missing.length) recommendation += " " + i18n.msg(lng).projectChecks.naFinish(slug, suiteLabel(suite.missing, lng)) + suiteGuardianHint(suite.missing, slug, lng);
       }
     }
   }

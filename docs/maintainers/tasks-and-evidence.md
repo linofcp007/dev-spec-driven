@@ -227,6 +227,39 @@ Engine: the `B5` block of `engine/evidence.js`.
   `dev-spec finish <f> --run` / `spec_finish {evidence}` while one is missing (`projectChecks.naFinish`). No meta.checks, no change.
 - **`finish <f> --run`** (`runChecks`): `done --run`'s shell rules and refusals and the pipe hint; a check that could not run records
   nothing.
+- **dev-guardian's gate — the check `guardian` (1.29; evidence.js's guardian block).** `spec_init {guardian: true}` / `init
+  --guardian [on|off]` (an optional-value CLI flag, bare = on) folds `{guardian: GUARDIAN_COMMAND | ""}` into the checks input
+  (`guardianChecks()`) — the meta.checks rules unchanged (merged, validated, ≤ 20, the control-character refusal) — and, once
+  written, `setGuardianLauncher()` writes `.specs/guardian.cjs` (`GUARDIAN_LAUNCHER`; rewritten when it differs, a CRLF copy
+  equal) or removes it (only the generated one: `GUARDIAN_MARK`). `GUARDIAN_COMMAND` = `node .specs/guardian.cjs scan --project
+  . --fail-on high --format json`: no versioned path, no shell syntax (claude-code-integration.md → The dev-guardian launcher).
+  `init`'s result always carries `guardian` (does a check run the gate), `guardianNote` when it changed it. The approval guard
+  reads the same map (`initGuardDowns`): removing the check, or replacing another command named `guardian`, is a guard-down
+  whose command is `init --guardian off|on`; `--guardian` is in `RE_APPROVAL_VERB` / the hook's `RE_VERB`.
+  - *Which check is it:* `isGuardianCheck(name, command)` — the name `guardian`, or a command naming `dev-guardian[.mjs]` /
+    `guardian.cjs` followed by `scan`.
+  - *Its run:* `recordFinishChecks` takes the evidence item's optional `report` (the JSON stdout; MCP schema `report: string`;
+    never stored) and stores `finishChecks[name].guardian` = `guardianRecord(projectDir, dir, command, exitCode, report,
+    summary)`: `{verdict, exit, failOn (the command's --fail-on, else high), parsed, newFindings?, blocking?, own?, top? (≤ 5:
+    {severity, rule, file, line, own} — the feature's `_Implements:_` files (`baselineFiles`) first, then severity, then the
+    report's order), gaps? (≤ 3), message?}`. Verdicts (stable): `pass` (0) · `blocked` (1) · `incomplete` (2) · `config` (3,
+    dev-guardian's own "error: …" / "dev-guardian: …" lines from the summary) · `not-found` (3 + the launcher's "dev-guardian
+    not found") · `no-launcher` (1 + node's "Cannot find module … guardian.cjs") · `exit` (any other). `guardianJson()` reads the
+    report tolerantly (a BOM, lines around it, ≤ 16 MB, the gate's shape) — unreadable: the exit code alone (`parsed: false`).
+    `suiteStatus` items carry `guardian`, `recordedChecks[]` its `verdict`; the status rule is unchanged (a non-zero exit is
+    `failed`).
+  - *What surfaces say:* `suiteLabel` gives a failed guardian item its verdict (`guardianText`: the head + 3 findings); the
+    merge summary's check line too. `suiteBlocker()` (finish's `suite-evidence`) lists the other missing checks as before and
+    a failed gate apart — `guardian.blocker` + how to clear it (`fixHint`: fix, or the user accepts it in dev-guardian, never
+    forced · `incompleteHint` · `configHint`); a guardian check still needing a run adds `guardian.mcpRun` (run the command
+    yourself, report it with `report`). next_action's `finish` / `verify` steps append the same (`suiteGuardianHint`).
+  - *finish --run* (cli/run.js): for a guardian check it prints `guardianLines()` instead of the output's last lines and
+    passes `report: stdout`, `summary: summarizeRunOutput(stderr)` — what an agent reports over MCP (`runCommand` returns
+    stdout / stderr apart).
+  - *The offer:* `guardianOffer(projectDir, lng)` — dev-guardian installed (`guardianCli()`: the launcher's rule, folder
+    listings only) or `<project>/.guardian/` a folder, and no check runs the gate → `guardian.offer`; `initProject`
+    (`guardianOffer`, when `guardian` wasn't given) and `specUpgrade` (`guardianOffer`, a project line in `upgradeLines` /
+    UPGRADE.md) — never SessionStart, never set.
 - **Git-linked evidence** (CLI only, read-only — `gitRun` / `gitState`): a `--run` records `{commit, dirty}` (`dirty` ignores
   `.specs/`; skipped without git; a malformed value dropped, never an error — `gitEvidence()`), tagged `@sha` / `@sha-dirty` in the
   merge summary. `parseGitLog()` + `taskCommits()` read git log TEXT (the MCP server stays exec-free); `dev-spec log <feature> [--max
@@ -544,6 +577,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — the runs moved out of cli/dev-spec.js (its b5Exec / b5Verdict / b5RunChecks) into cli/run.js (`execCommand`,
   `runVerdict`, `runChecks`), every git call into cli/git.js (`gitRun`); the done / finish `--run` handlers became the CLI's only
   asynchronous handlers next to the stdin readers.
+- **1.29** — dev-guardian's gate as the check `guardian`: a project check whose exit code and JSON report finish reads (the
+  sibling plugin's 0 / 1 / 2 / 3), offered by init / upgrade when dev-guardian is installed, never set on its own (its scan takes
+  minutes and needs scanners). Measured on dev-guardian 3.1.0's real scan of a fresh project: exit 0, coverage full, stderr
+  empty — and three medium Semgrep findings (`path-join-resolve-traversal`) in the launcher itself, now `nosemgrep`-annotated.
 
 ### Task dependencies and execution waves
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks

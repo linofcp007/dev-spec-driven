@@ -56,10 +56,11 @@ const OPERATIONS = [
       stopCheck: { mcp: "stopCheck", cli: "--stop-check", parsed: true }, // on|off → boolean
       approvalGuard: { mcp: "approvalGuard", cli: "--approval-guard", parsed: true }, // off|ask|deny, checked
       evidence: { mcp: "evidence", cli: "--evidence", parsed: true }, // reported|observed, checked
+      guardian: { mcp: "guardian", cli: "--guardian", parsed: true }, // 1.29: a bare --guardian / on → true, off → false (dev-guardian's gate)
     },
     // undefined leaves each meta value as it is
     call: (S, dir, o) => S.initProject(dir, o.tracks, o.lang, { guard: o.guard, checks: o.checks, approvalRoles: o.approvalRoles,
-      stopCheck: o.stopCheck, approvalGuard: o.approvalGuard, evidence: o.evidence }),
+      stopCheck: o.stopCheck, approvalGuard: o.approvalGuard, evidence: o.evidence, guardian: o.guardian }),
   },
   {
     id: "classify", tool: "spec_classify", cli: ["classify"], engine: "classify",

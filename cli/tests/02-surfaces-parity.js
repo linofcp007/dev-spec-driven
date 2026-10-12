@@ -239,4 +239,20 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
     undeclaredOption: () => wrongOpt.code === 1 && /operation 'doctor' has no option 'bogus' for the cli/.test(wrongOpt.out),
   });
 }
+
+// 1.29 — the CONTRACT with dev-guardian, the CLI side: its prose (≥ 3.2.0) runs `dev-spec backlog add "<title>" "<note>"` and
+// `dev-spec init --guardian` and names the project check `guardian`. dev-guardian keeps the mirror test (mcp/tests/02-mcp-server-tools.js
+// holds the tools and commands): renaming any of these breaks it — change both together.
+{
+  const dg = path.join(tmp, "dg-contract-cli");
+  const init = runIn(["init", "--guardian", "--project", dg]);
+  const rm = JSON.parse(fs.readFileSync(path.join(dg, ".specs", "roadmap.json"), "utf8"));
+  const added = runIn(["backlog", "add", "Split the checkout module", "duplication 6.1% → ≤ 5%", "--project", dg]);
+  const listed = runIn(["backlog", "--json", "--project", dg]);
+  all("1.29 contract with dev-guardian (CLI): `init --guardian` sets the project check named `guardian`, `backlog add <title> <note>` adds a backlog item — the commands its prose runs (dev-guardian keeps the mirror test — change both together) (got " +
+    JSON.stringify([init.code, rm.meta && rm.meta.checks, added.code, listed.out.slice(0, 200)]) + ")", {
+    init: init.code === 0 && typeof (rm.meta.checks || {}).guardian === "string",
+    backlog: added.code === 0 && /Split the checkout module/.test(listed.out),
+  });
+}
 };
