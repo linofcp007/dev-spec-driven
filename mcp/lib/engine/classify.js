@@ -14,11 +14,11 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { SIGNALS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS, projectLang,
+let allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS, langOption,
   RE_PACK_KEYWORD, readIfExists, readRoadmap, roadmapBusyResult, specsRoot, trackLabel, trackSignalTable, withRoadmapLock,
   writeFileAtomic;
 function __link(E) { ({ allTracks, forgetCached, isObj, newProjectLang, normalizeLang, OPTIONAL_TRACKS, optionalTracks, PACK_LIMITS,
-  projectLang, RE_PACK_KEYWORD, readIfExists, readRoadmap, roadmapBusyResult, specsRoot, trackLabel, trackSignalTable,
+  langOption, RE_PACK_KEYWORD, readIfExists, readRoadmap, roadmapBusyResult, specsRoot, trackLabel, trackSignalTable,
   withRoadmapLock, writeFileAtomic } = E); }
 
 // ---------------------------------------------------------------------------
@@ -1822,13 +1822,9 @@ function signalLearnNote(L, lang) {
 // <track> <word>]` — the project's overrides: list them (active / pending, the file's problems), set one by hand (applies at once),
 // forget one.
 function signalOverrides(projectDir, op, opts = {}) {
-  const pl = projectLang(projectDir);
-  let lang = null;
-  if (opts.lang != null && String(opts.lang).trim()) {
-    lang = i18n.canonicalLang(String(opts.lang));
-    if (!lang) { const A = i18n.msg(pl).args; return { ok: false, error: A.invalid(A.item("lang", A.oneOf(i18n.LANGS.join(", ")), JSON.stringify(String(opts.lang)))) }; }
-  }
-  const lng = lang || pl;
+  const L = langOption(projectDir, opts.lang);
+  if (L.error) return { ok: false, error: L.error };
+  const { lng } = L;
   const G = i18n.msg(lng).signals;
   const act = op == null || !String(op).trim() ? "list" : String(op).trim().toLowerCase();
   if (!SIGNAL_OPS.includes(act)) return { ok: false, error: G.badOp(String(op)) };

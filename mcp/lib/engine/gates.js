@@ -1238,6 +1238,17 @@ function impactReport(projectDir, name, opts = {}) {
 
   const digests = {}; // change key → digest of its new content ("removed") — what a reopen records, to stay idempotent
   const reach = new Map(); // change key (modified/removed ID, changed section) → the IDs whose citing tasks it affects
+  // a diff keyed by stable ID (criteria, a change's criteria, planned tests) → res.added / modified / removed, each change's digest and
+  // reach (its own ID's citing tasks); → the changed IDs as [id, "modified" | "removed"] — the caller builds res.impacted from them
+  const idChanges = (d) => {
+    res.added = d.added.map((a) => ({ id: a.id, text: a.text, tasks: citing([a.id]).map((b) => b.number) }));
+    res.modified = d.modified.map((m) => ({ id: m.key, before: m.before.text, after: m.after.text }));
+    res.removed = d.removed.map((r) => ({ id: r.id, text: r.text }));
+    for (const a of res.added) digests[a.id] = shortDigest(a.text);
+    for (const m of res.modified) { digests[m.id] = shortDigest(m.after); reach.set(m.id, [m.id]); }
+    for (const r of res.removed) { digests[r.id] = "removed"; reach.set(r.id, [r.id]); }
+    return [...res.modified.map((m) => [m.id, "modified"]), ...res.removed.map((r) => [r.id, "removed"])];
+  };
   if (phase === "requirements") {
     const d = diffEntries(requirementIndex(snap.text), requirementIndex(cur));
     const plan = [...testIndex(tracks.includes("tdd") ? readIfExists(path.join(dir, "test-plan.md")) || "" : "").values()];
@@ -1248,30 +1259,18 @@ function impactReport(projectDir, name, opts = {}) {
       const byFile = (name) => (s) => ({ ...s, title: `${name}: ${s.title}` });
       sections = designSections(readIfExists(path.join(dir, "bug.md")) || "").map(byFile("bug.md")).concat(sections.map(byFile(PHASE_FILE.design)));
     }
-    res.added = d.added.map((a) => ({ id: a.id, text: a.text, tasks: citing([a.id]).map((b) => b.number) }));
-    res.modified = d.modified.map((m) => ({ id: m.key, before: m.before.text, after: m.after.text }));
-    res.removed = d.removed.map((r) => ({ id: r.id, text: r.text }));
-    res.impacted = [...res.modified.map((m) => [m.id, "modified"]), ...res.removed.map((r) => [r.id, "removed"])].map(([id, change]) => ({
+    res.impacted = idChanges(d).map(([id, change]) => ({
       id, change,
       tasks: citing([id]).map(taskView),
       tests: plan.filter((t) => mentions(t.row, id)).map((t) => ({ id: t.id, row: t.row })),
       designSections: sections.filter((s) => mentions(s.title + "\n" + s.body, id)).map((s) => s.title),
     }));
-    for (const a of res.added) digests[a.id] = shortDigest(a.text);
-    for (const m of res.modified) { digests[m.id] = shortDigest(m.after); reach.set(m.id, [m.id]); }
-    for (const r of res.removed) { digests[r.id] = "removed"; reach.set(r.id, [r.id]); }
   } else if (isChange) {
     // a change: the criteria (change.md WITHOUT its task blocks — changeViews) by stable ID, as requirements —
     // a modified / removed criterion reaches the tasks citing it —, and the tasks (by number, checkboxes normalized) in `tasks`.
     const crit = (t) => changeViews(t).criteria;
     const d = diffEntries(requirementIndex(crit(snap.text)), requirementIndex(crit(cur)));
-    res.added = d.added.map((a) => ({ id: a.id, text: a.text, tasks: citing([a.id]).map((b) => b.number) }));
-    res.modified = d.modified.map((m) => ({ id: m.key, before: m.before.text, after: m.after.text }));
-    res.removed = d.removed.map((r) => ({ id: r.id, text: r.text }));
-    res.impacted = [...res.modified.map((m) => [m.id, "modified"]), ...res.removed.map((r) => [r.id, "removed"])].map(([id, change]) => ({ id, change, tasks: citing([id]).map(taskView) }));
-    for (const a of res.added) digests[a.id] = shortDigest(a.text);
-    for (const m of res.modified) { digests[m.id] = shortDigest(m.after); reach.set(m.id, [m.id]); }
-    for (const r of res.removed) { digests[r.id] = "removed"; reach.set(r.id, [r.id]); }
+    res.impacted = idChanges(d).map(([id, change]) => ({ id, change, tasks: citing([id]).map(taskView) }));
     const t = diffEntries(taskEntries(uncheckTasks(snap.text)), taskEntries(uncheckTasks(cur)));
     res.tasks = { added: t.added.map((e) => ({ number: e.number, text: e.title })), modified: t.modified.map((m) => ({ number: m.key, before: m.before.title, after: m.after.title })),
       removed: t.removed.map((e) => ({ number: e.number, text: e.title })) };
@@ -1280,13 +1279,7 @@ function impactReport(projectDir, name, opts = {}) {
     // green (_Makes green:_). Reopen semantics are the requirements': a modified test's done tasks are unticked (their
     // evidence proved the old test), a removed one's are listed in `retire` (drop or repoint the T-ID), never redone.
     const d = diffEntries(plannedTestEntries(snap.text), plannedTestEntries(cur));
-    res.added = d.added.map((a) => ({ id: a.id, text: a.text, tasks: citing([a.id]).map((b) => b.number) }));
-    res.modified = d.modified.map((m) => ({ id: m.key, before: m.before.text, after: m.after.text }));
-    res.removed = d.removed.map((r) => ({ id: r.id, text: r.text }));
-    res.impacted = [...res.modified.map((m) => [m.id, "modified"]), ...res.removed.map((r) => [r.id, "removed"])].map(([id, change]) => ({ id, change, tasks: citing([id]).map(taskView) }));
-    for (const a of res.added) digests[a.id] = shortDigest(a.text);
-    for (const m of res.modified) { digests[m.id] = shortDigest(m.after); reach.set(m.id, [m.id]); }
-    for (const r of res.removed) { digests[r.id] = "removed"; reach.set(r.id, [r.id]); }
+    res.impacted = idChanges(d).map(([id, change]) => ({ id, change, tasks: citing([id]).map(taskView) }));
   } else if (phase === "design" || phase === "eval-plan") {
     // eval-plan.md is diffed like the design: by `##` section, reaching the tasks that cite an ID a changed section names.
     let before = sectionEntries(snap.text), after = sectionEntries(cur);

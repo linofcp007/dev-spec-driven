@@ -161,7 +161,8 @@ History at the end.
   edit can lose that line.
 
 ### Flush stdout before exiting — on Windows AND Linux pipes
-- **Hooks** read stdin asynchronously (never `fs.readFileSync(0)`) and exit in the write callback; **the test harnesses** exit
+- **Hooks** read stdin asynchronously (never `fs.readFileSync(0)`) and exit in the write callback — all of it ONE runner,
+  hooks/hook-utils.js `runHook` / `finish` (claude-code-integration.md → Hooks and commands); **the test harnesses** exit
   once stdout has flushed (a Linux pipe writes async past 64 KB); **the MCP server** flushes its replies on stdin close, exits 0
   quietly on a closed stdout (EPIPE / EOF / ERR_STREAM_DESTROYED), else one stderr line and 1.
 - **The CLI:** only its entry point exits, once stdout and stderr have flushed — never `process.exit()` after a write.
@@ -244,7 +245,8 @@ History at the end.
 - **`--x=false` is the string "false".** `normalizeBoolFlags()` turns `true|false|1|0|yes|no|on|off` into booleans for every
   name in `BOOL_FLAGS` and refuses other values. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]` — ONE list, which the approval hook's
   lexer (`cliApprovalAction()`) reads too: a new switch goes there (in a CLI-only list the hook would read the next word as its
-  value), a new value flag into `VALUE_FLAG_SPECS`. `refuseUnknownFlags()` refuses any other `--flag` (a did-you-mean); `evals`
+  value), a new value flag into `VALUE_FLAG_SPECS`. `refuseUnknownFlags()` refuses any other `--flag` (a did-you-mean:
+  `spec.closestName`, the engine's one, which the eval harness and the track / argument refusals read too); `evals`
   is exempt (run-evals.js refuses its own, `dry-run` included); `--` ends the options. An explicit `--include-body=false`
   reaches the engine as false (`boolFlag()`), as on MCP.
 - **Help:** `--help` anywhere runs nothing. `<command> --help`, `-h` (a switch) and `help <command>` print `helpFor()` — the
@@ -383,6 +385,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   changelog, rules, trace --csv, prompts) raised an unhandled `'error'` — a stack trace and exit 1.
 - **1.24 r6 B-I9** — `cliOutput.stdinHint`: stdin from a terminal looked hung.
 - **1.27** — nothing in the CLI exits but its entry point (it called `process.exit()` in many places).
+- **1.27.1** — the six hooks' own stdin readers, safety nets and `finish()` copies became hook-utils.js `runHook` / `finish`.
 
 ### Calendar dates and timestamps
 - **1.25.1 review 7** — `today()` / `dayOf()`: `toISOString().slice(0, 10)` (eleven places and two helpers, `todayIso` /

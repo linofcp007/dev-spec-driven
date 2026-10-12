@@ -14,13 +14,13 @@ const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds, headingIndex,
-  isInsideDir, isObj, MARKER_TRACKS, normalizeLang, planIdText, projectLang, PROTO_KEYS, RE_CUSTOM_STEERING,
+  isInsideDir, writeInsideProject, isObj, MARKER_TRACKS, normalizeLang, planIdText, langOption, PROTO_KEYS, RE_CUSTOM_STEERING,
   RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, readJson,
   requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription, templateBracketKeys,
   templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING, trackAcIds, trackMarker,
   trackTaskHeading, VALID_TRACKS, writeIfAbsent, nextTaskNumber;
 function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds,
-  headingIndex, isInsideDir, isObj, MARKER_TRACKS, normalizeLang, planIdText, projectLang, PROTO_KEYS,
+  headingIndex, isInsideDir, writeInsideProject, isObj, MARKER_TRACKS, normalizeLang, planIdText, langOption, PROTO_KEYS,
   RE_CUSTOM_STEERING, RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists,
   readJson, requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription,
   templateBracketKeys, templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING,
@@ -861,16 +861,9 @@ function localizePackProblem(p, K) {
 function trackPacks(projectDir, action, opts = {}) {
   // the project's classifier signal overrides (.specs/classifier.json): an action of this tool, not a tool of its own
   if (action != null && String(action).trim().toLowerCase() === "signals") return signalOverrides(projectDir, opts.op, opts);
-  const pl = projectLang(projectDir);
-  let lang = null;
-  if (opts.lang != null && String(opts.lang).trim()) {
-    lang = i18n.canonicalLang(String(opts.lang));
-    if (!lang) {
-      const A = i18n.msg(pl).args;
-      return { ok: false, error: A.invalid(A.item("lang", A.oneOf(i18n.LANGS.join(", ")), JSON.stringify(String(opts.lang)))) };
-    }
-  }
-  const lng = lang || pl;
+  const L = langOption(projectDir, opts.lang);
+  if (L.error) return { ok: false, error: L.error };
+  const { lang, lng } = L;
   const K = i18n.msg(lng).trackPacks;
   const act = action == null || !String(action).trim() ? "list" : String(action).trim().toLowerCase();
   if (!["list", "init", "check"].includes(act)) return { ok: false, error: K.badAction(String(action)) };
@@ -954,19 +947,12 @@ function initTrackPack(projectDir, name, lang, lng) {
   const a = { name: n, token, title, lang: lng };
   const files = { "track.json": K.initJson(a), "requirements.md": K.initRequirements(a), "tasks.md": K.initTasks(a), "test-plan.md": K.initTestPlan(a),
     "checklist.md": K.initChecklist(a), "steering.md": K.initSteering(a) };
-  // Writes stay inside the project: a .specs/ or tracks/ folder that is a link to a folder elsewhere is refused.
-  const inside = (abs) => {
-    let real;
-    try { real = fs.realpathSync.native(projectDir); } catch { return true; }
-    let d = path.dirname(abs);
-    while (!fs.existsSync(d) && path.dirname(d) !== d) d = path.dirname(d);
-    try { return isInsideDir(real, fs.realpathSync.native(d)); } catch { return false; }
-  };
+  // Writes stay inside the project: a .specs/ or tracks/ folder that is a link to a folder elsewhere is refused (writeInsideProject).
   const created = [], kept = [];
   for (const [file, text] of Object.entries(files)) {
     const rel = ".specs/" + TRACK_PACKS_DIR + "/" + n + "/" + file;
     const abs = path.join(dir, file);
-    if (!inside(abs)) return { ok: false, error: K.writeOutside(rel), created, kept };
+    if (!writeInsideProject(projectDir, abs)) return { ok: false, error: K.writeOutside(rel), created, kept };
     try {
       if (writeIfAbsent(abs, text)) created.push(rel);
       else kept.push(rel);

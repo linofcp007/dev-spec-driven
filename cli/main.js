@@ -357,23 +357,10 @@ function refuseUnknownFlags(c) {
   }
   const bad = keys.find((k) => !known.includes(k));
   if (bad === undefined) return;
-  // Optimal-string-alignment distance (a transposition — --rnu — costs 1), as the track did-you-mean.
-  const dist = (a, b) => {
-    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-    for (let j = 1; j <= b.length; j++) d[0][j] = j;
-    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-    }
-    return d[a.length][b.length];
-  };
-  const k = bad.toLowerCase();
-  let best = null;
-  for (const cand of known) {
-    const n = dist(k, cand);
-    if (n <= Math.max(1, Math.floor(cand.length / 3)) && (!best || n < best.n)) best = { c: cand, n };
-  }
-  c.die(c.projectText().unknownFlag("--" + bad, best ? "--" + best.c : null), c.unknownArg("--" + bad, best ? "--" + best.c : null));
+  // the engine's did-you-mean (core.js closestName — optimal-string-alignment distance: a transposition, --rnu, costs 1; within
+  // max(1, ⌊length / 3⌋) edits), as the track's and the MCP server's
+  const near = spec.closestName(bad, known);
+  c.die(c.projectText().unknownFlag("--" + bad, near ? "--" + near : null), c.unknownArg("--" + bad, near ? "--" + near : null));
 }
 // a single-value flag given twice is a usage error, never last-wins (--role, --by, --cmd, --summary, --through, --phase,
 // --project, --lang… dropped the first value). REPEATABLE_FLAGS are the ones a command reads every occurrence of. append-tasks keeps

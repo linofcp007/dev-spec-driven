@@ -30,26 +30,16 @@
 
 const fs = require("fs");
 const path = require("path");
+// The hooks' runner (stdin, the safety net, the exit — nothing is ever printed: finish() exits at once) and the project probe
+// (mcp/lib/probe.js: the one dev-spec project rule, the session's candidate projects, a file read as the engine reads it — UTF-8, or
+// UTF-16 with a BOM, Windows PowerShell 5.1's Out-File), required once the call is a completed Bash / PowerShell run: every other tool
+// call exits before it loads.
+const { runHook, finish, payloadOf, probe } = require("./hook-utils.js");
 
 const MAX_INPUT = 4 * 1024 * 1024; // a larger payload is ignored (Claude Code truncates Bash output long before this)
 const MAX_COMMAND = 4000; // no _Verify:_ / project-check command is longer (the engine's OBSERVED_MAX_COMMAND, engine/evidence.js)
 const MAX_FEATURES = 200; // feature folders pre-filtered, at most
 const MAX_TASKS_BYTES = 2 * 1024 * 1024; // a tasks.md past this is skipped
-
-// The project probe (mcp/lib/probe.js): the one dev-spec project rule, the session's candidate projects, a file read as the engine
-// reads it (UTF-8, or UTF-16 with a BOM — Windows PowerShell 5.1's Out-File). Required once the call is a completed
-// Bash / PowerShell run: every other tool call exits before it loads.
-let P = null;
-const probe = () => P || (P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
-
-let done = false;
-let ran = false;
-// Nothing is ever printed: exit as soon as the work is done (there is no stdout to flush).
-function finish() {
-  if (done) return;
-  done = true;
-  process.exit(0);
-}
 
 // The pre-filter's reading — a copy of the engine's observedNorm / observedBodies (engine/evidence.js; mcp/tests/09-evidence.js
 // checks the two agree): the run's command bodies — split at ` && ` and `;`, a `cd` / `set … pipefail` part dropped, leading
@@ -165,16 +155,9 @@ function readTasksText(file) {
 }
 
 function main(raw) {
-  if (ran) return; // stdin 'end' and the safety-net timer must not both run it
-  ran = true;
-  if (!raw || raw.length > MAX_INPUT) return finish();
-  let payload;
-  try {
-    payload = JSON.parse(raw);
-  } catch {
-    return finish();
-  }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
+  if (!raw) return finish(); // an oversized payload (past MAX_INPUT) arrives as ""
+  const payload = payloadOf(raw);
+  if (!payload) return finish();
   // The Bash tool, and on Windows the PowerShell tool (strict: its exit code must be explicit).
   if (payload.tool_name !== "Bash" && payload.tool_name !== "PowerShell") return finish();
   const strict = payload.tool_name === "PowerShell";
@@ -216,29 +199,6 @@ function main(raw) {
   return finish();
 }
 
-// Never crash, whatever the payload: any unexpected error is a silent no-op.
-function safeMain(raw) {
-  try {
-    main(raw);
-  } catch {
-    finish();
-  }
-}
-
-// Read the hook payload from stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes). Past MAX_INPUT the
-// rest is drained unread and the payload ignored.
-let input = "";
-let tooBig = false;
-if (process.stdin.isTTY) {
-  safeMain("");
-} else {
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (c) => {
-    if (tooBig) return;
-    input += c;
-    if (input.length > MAX_INPUT) { tooBig = true; input = ""; }
-  });
-  process.stdin.on("end", () => safeMain(input));
-  process.stdin.on("error", () => finish());
-  setTimeout(() => safeMain(tooBig ? "" : input), 2000).unref(); // safety net
-}
+// The payload from stdin (past MAX_INPUT the rest is drained unread and the payload ignored), main run once; any unexpected error is a
+// silent no-op.
+runHook(main, { maxInput: MAX_INPUT });

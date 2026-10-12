@@ -29,23 +29,13 @@
 
 const fs = require("fs");
 const path = require("path");
+// The hooks' runner (stdin, the safety net, the one flushed exit), the claim pre-filter's scan and the project probe
+// (mcp/lib/probe.js: the one dev-spec project rule, the session's candidate projects, a JSON file read as the engine reads it — UTF-8,
+// or UTF-16 with a BOM), required once the event is a Stop / SubagentStop.
+const HU = require("./hook-utils.js");
+const { runHook, finish, payloadOf, eventOf, probe } = HU;
 
-// The project probe (mcp/lib/probe.js): the one dev-spec project rule, the session's candidate projects, a JSON file read as the engine
-// reads it (UTF-8, or UTF-16 with a BOM). Required once the event is a Stop / SubagentStop.
-let P = null;
-const probe = () => P || (P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
-
-let done = false;
-let ran = false;
 const TRANSCRIPT_TAIL = 512 * 1024; // bytes read from the end of a transcript when the payload carries no last message
-
-// At most one JSON object, and exit only after it is flushed (Windows and Linux pipes truncate otherwise).
-function finish(obj) {
-  if (done) return;
-  done = true;
-  if (!obj) process.exit(0);
-  process.stdout.write(JSON.stringify(obj), () => process.exit(0));
-}
 
 // The user's default (the environment variable DEV_SPEC_STOP_CHECK, e.g. from Claude Code's settings.json `env`) set to
 // off. The engine (spec.stopCheckEnabled) reads the same.
@@ -128,13 +118,12 @@ function mayClaim(message) {
     const f = JSON.parse(fs.readFileSync(path.join(__dirname, "stop-claims.generated.json"), "utf8"));
     if (!f || !f.sources || typeof f.sources !== "object" || !Object.keys(f.sources).length || !Array.isArray(f.claims)) return true;
     for (const [rel, size] of Object.entries(f.sources)) if (fs.statSync(path.join(__dirname, "..", ...rel.split("/"))).size !== size) return true;
-    const hu = require("./hook-utils.js");
     // only the claim patterns of the languages whose trigger words the prose holds (f.triggers — as stopClaims runs them):
     // none → no claim, with nothing but the small trigger regexes compiled (every pattern of every language cost ~35 ms).
     // the claim patterns scan a one-byte text (hook-utils claimScan — a wide character made them ~30 ms slower to compile). The
     // few trigger regexes read the prose as it is (a one-byte copy when it holds nothing past U+00FF): on a wide one they cost less
     // than the projection's table, and most messages trigger nothing.
-    const prose = hu.claimProse(message, f.prose);
+    const prose = HU.claimProse(message, f.prose);
     const wide = /[^\x00-\xff]/.test(prose);
     const text = wide ? prose : Buffer.from(prose, "latin1").toString("latin1");
     if (Array.isArray(f.triggers) && f.triggers.length) {
@@ -142,9 +131,9 @@ function mayClaim(message) {
       const idx = new Set();
       for (const t of f.triggers) if (new RegExp(f.word.pre + t.source + f.word.post, flags).test(text)) for (const i of t.claims) idx.add(i);
       if (!idx.size) return false;
-      return hu.claimMatch(message, { ...f, claims: [...idx].sort((a, b) => a - b).map((i) => f.claims[i]) }, hu.claimScan(text, f));
+      return HU.claimMatch(message, { ...f, claims: [...idx].sort((a, b) => a - b).map((i) => f.claims[i]) }, HU.claimScan(text, f));
     }
-    return hu.claimMatch(message, f, hu.claimScan(text, f));
+    return HU.claimMatch(message, f, HU.claimScan(text, f));
   } catch {
     return true;
   }
@@ -182,16 +171,9 @@ function lastAssistantText(file) {
 }
 
 function main(raw) {
-  if (ran) return; // stdin 'end' and the safety-net timer must not both run it
-  ran = true;
-  let payload;
-  try {
-    payload = JSON.parse(raw || "{}");
-  } catch {
-    return finish();
-  }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return finish();
-  const event = payload.hook_event_name || payload.hookEventName || "";
+  const payload = payloadOf(raw);
+  if (!payload) return finish();
+  const event = eventOf(payload);
   if (event !== "Stop" && event !== "SubagentStop") return finish();
 
   // The raw pre-check: the projects this stop may be about (probe.sessionProjects — the nearest dev-spec .specs/ at or above the
@@ -226,23 +208,5 @@ function main(raw) {
   return finish();
 }
 
-// Never crash, whatever the payload: any unexpected error is a silent no-op (never a block).
-function safeMain(raw) {
-  try {
-    main(raw);
-  } catch {
-    finish();
-  }
-}
-
-// Read the hook payload from stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes).
-let input = "";
-if (process.stdin.isTTY) {
-  safeMain("{}");
-} else {
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (c) => (input += c));
-  process.stdin.on("end", () => safeMain(input));
-  process.stdin.on("error", () => finish());
-  setTimeout(() => safeMain(input), 2000).unref(); // safety net
-}
+// The payload from stdin, main run once; any unexpected error is a silent no-op (never a block).
+runHook(main);

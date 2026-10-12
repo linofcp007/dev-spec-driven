@@ -13,6 +13,13 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const i18n = require("../i18n.js");
+// guardTargetPath(p, win?): a Write / Edit target as the Windows file system reads it — an NTFS stream suffix on the last segment
+// dropped (`a.ts::$DATA` IS a.ts), Git Bash's `/c/…` read as `C:/…` (both were read as no code / outside the project and allowed with
+// the guard on). approvalEditTargets(fp, cwd, win?): the paths the file system reads a target as — resolved (`./`, `..`, a stream
+// suffix taken out) plus its real path on every platform (an 8.3 short name, a folder linked to .specs/); never a disk call on a
+// network path. ONE reading, the project probe's (mcp/lib/probe.js fsTargetPath / editTargets — the cases there): the approval hook's
+// pre-check reads the same functions before the engine loads.
+const { fsTargetPath: guardTargetPath, editTargets: approvalEditTargets } = require("../probe.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, approvalRolesFrom, checksInput, detectTracks, evidenceModeInput, evidenceRecords, existingFeature,
   expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher, guessLang,
@@ -116,45 +123,6 @@ function guardCheck(projectDir, filePath, cwd) {
   if (testing.length && isTestFile(rel)) return allow("tests-phase", { covering: testing });
   const list = (xs) => xs.slice(0, 3).join(", ") + (xs.length > 3 ? ", …" : "");
   return { guard: true, decision: "ask", why: "no-approved-tasks", pending, stale, reason: G.ask(list(pending), list(stale)) };
-}
-
-// a Write / Edit target as the Windows file system reads it (win: process.platform === "win32" by default;
-// elsewhere ':' is a file name character and /c/ a folder): an NTFS stream suffix on the last segment is dropped — `a.ts::$DATA`
-// IS a.ts, `a.ts:x` / `a.ts:x:$DATA` a stream of it (an edit of it all the same) — and Git Bash's `/c/…` is `C:/…` (`//host`
-// untouched). Both were read as no code / outside the project and allowed with the guard on.
-function guardTargetPath(p, win = process.platform === "win32") {
-  let s = String(p);
-  if (!win) return s;
-  const m = /^\/([A-Za-z])(?=\/|$)/.exec(s);
-  if (m) s = m[1].toUpperCase() + ":" + (s.slice(2) || "/");
-  const cut = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\")) + 1; // the last segment
-  const from = cut === 0 && /^[A-Za-z]:/.test(s) ? 2 : 0; // a drive-relative "C:a.ts" keeps its drive
-  const i = s.indexOf(":", cut + from);
-  return i > cut ? s.slice(0, i) : s;
-}
-// a Write / Edit target (absolute, or relative to the payload's cwd) → the paths the file system reads it as:
-// [resolved] (`./`, `..` and a stream suffix taken out — `.specs/./roadmap.json`, `.specs/alpha/../roadmap.json`,
-// `roadmap.json::$DATA` were matched as text and allowed) plus, on Windows, when a segment looks like an 8.3 short name
-// (`ROADMA~1.JSO`, `STATE~1.JSO`), its real path (the file's, else its parent's + the name). Never a disk call on a network path;
-// a relative path under a network cwd is read as text. hooks/hook-utils.js editTargets is the same reading (the hook's pre-check,
-// before the engine loads — mcp/tests/10-guards-guard-downs.js checks they agree).
-function approvalEditTargets(fp, cwd, win = process.platform === "win32") {
-  const s = guardTargetPath(String(fp).trim(), win);
-  if (isNetworkPath(s)) return [s];
-  const c = sessionUsable(cwd) ? cwd.trim() : null;
-  if (c && isNetworkPath(c) && !path.isAbsolute(s) && !/^[A-Za-z]:/.test(s)) return [c.replace(/[\\/]+$/, "") + "/" + s];
-  const base = c && !isNetworkPath(c) ? path.resolve(guardTargetPath(c, win)) : process.cwd();
-  let abs;
-  try { abs = path.resolve(base, s); } catch { return [s]; }
-  const out = [abs];
-  // on every platform, the real path — a folder linked to .specs/ (`ln -s .specs sx`, a junction) or to a feature
-  // folder: `sx/roadmap.json` IS .specs/roadmap.json — as well as an 8.3 short name (the file's, else its folder's + the name)
-  let real = null;
-  try { real = fs.realpathSync.native(abs); } catch {
-    try { real = path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs)); } catch { real = null; }
-  }
-  if (real && real !== abs) out.push(real);
-  return out;
 }
 
 // ---------------------------------------------------------------------------

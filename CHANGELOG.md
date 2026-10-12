@@ -3,6 +3,29 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.27.1] — 2026-10-12
+
+The plugin's own repeated code, gone. Measured as lines inside a window of 6 normalized code lines that appears twice:
+0.9% of the sources at 1.27.0 → 0.2% (the hooks 13.2% → 0%); what is left is deliberate (the module rule's link lists, the
+code examples inside the PT / ES templates, two parsers' section loop).
+
+### Changed (maintainers — behaviour unchanged)
+- **One hook runner**: the six hooks share `hook-utils.js` `runHook(main)` / `finish()` (stdin, the 2 s safety net, a
+  partial payload, flush-then-exit) instead of six copies; every pre-filter still runs before anything heavier loads.
+- **One copy each**: the network-path test, `~` / `${VAR}` reading and the edit-target readers live in `mcp/lib/probe.js`
+  (the engine and the hooks read them there); one merge-summary writer; one reading of a tool's `lang` option (it had three
+  copies); one walk to a git repository; one impact diff; one create runner for `create` / `bugfix` / `spike`; one
+  did-you-mean; one starter-write containment check.
+- **A duplication guard**: `mcp/tests/16-conventions-duplication.js` fails when a block of 8 or more code lines appears
+  twice across `mcp/lib`, the server, the CLI, the hooks and the scripts, naming both places; its allowlist states a reason
+  per entry and fails when an entry no longer matches.
+
+### Fixed
+- The merge driver's check of a `.git` file it can't read now reads it as "no repository" instead of throwing.
+
+### Tests
+- `node mcp/test.js` 2171 assertions (was 2170), `node cli/test-cli.js` 631 (was 630).
+
 ## [1.27.0] — 2026-10-10
 
 Structure, no new features. The seventh review's architecture pass found a split monolith: one 2,000-name global namespace,

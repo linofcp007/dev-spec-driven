@@ -111,6 +111,20 @@ const COMMIT_TITLE_MAX = 72;
 function commitTitle(prefix, text) {
   return prefix + shortTitle(text, Math.max(24, COMMIT_TITLE_MAX - prefix.length));
 }
+// The merge summary of a finish (a feature's, a spike's — decisions.js spikeFinish): its body lines → { mergeSummary, summaryPath }.
+// write: the derived file .execution/merge-summary.md (`# <mergeTitle>` + the body) is regenerated on every call, through the write
+// gate, beside the folder's `*` .gitignore.
+function mergeSummaryOf(dir, mergeTitle, body, write) {
+  const mergeSummary = body.join("\n") + "\n";
+  const exDir = path.join(dir, ".execution");
+  const summaryPath = path.join(exDir, "merge-summary.md");
+  if (write) {
+    ensureDir(exDir);
+    writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
+    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary);
+  }
+  return { mergeSummary, summaryPath };
+}
 
 // a ready feature started on its own branch: the two local options named with it (" Branch x (from main): 1. merge it into
 // main locally — git switch main, then git merge x · 2. keep the branch."); a base no shell could take unquoted is not put in a
@@ -274,16 +288,9 @@ function finishFeature(projectDir, name, opts = {}) {
   const specFiles = ["requirements.md", "change.md", "bug.md", "design.md", "test-plan.md", "eval-plan.md", "load-test.md", "tasks.md", DECISIONS_FILE] // a change's one file
     .filter((x) => fs.existsSync(path.join(dir, x)));
   body.push(F.prSpec, ...specFiles.map((x) => "- `.specs/" + slug + "/" + x + "`"));
-  const mergeSummary = body.join("\n") + "\n";
 
-  const exDir = path.join(dir, ".execution");
-  const summaryPath = path.join(exDir, "merge-summary.md");
   const write = !!opts.write;
-  if (write) {
-    ensureDir(exDir);
-    writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (through the write gate)
-  }
+  const { mergeSummary, summaryPath } = mergeSummaryOf(dir, mergeTitle, body, write);
   const ready = blockers.length === 0;
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null;
@@ -1691,7 +1698,7 @@ function baselineDrift(root, rootReal, fin) {
   return { unchanged, changed, missing, nowPresent, ignored, drifted: changed.length + missing.length + nowPresent.length > 0 };
 }
 
-module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, commitTitle, finishFeature, timeOf, round1, round2,
+module.exports = { sectionFirstParagraph, oneLine, codeSpan, shortTitle, commitTitle, mergeSummaryOf, finishFeature, timeOf, round1, round2,
   stats, metrics, metricsLines, removeFeature, archiveFeature, renameFeature, manageFeature, stripSupersedes, blockLines,
   lineMap, supersedesMarkers, dirKey, resolveSupersedes, supersedesTrace, supersedesWarnings, acOneLine, catalogData,
   catalog, maybeRefreshCatalog, restoreFeature, fileHash, realRootOf, baselineFiles, recordFinishBaseline, staleFinish,
