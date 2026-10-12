@@ -169,7 +169,7 @@ const TOOLS = [
   },
   {
     name: "spec_doctor",
-    description: "One health check that decides whether a feature can advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. It fails on what blocks the next approval — missing artifacts, EARS problems, open clarifications, duplicate ACs, template placeholders in the current phase, the active tracks' mandatory design sections (<track>-sections), traceability gaps, task dependencies — and warns on the rest (unverified tasks, edits since an approval, steering changes, cross-feature overlaps…). Also returns the phase, approvals, pending and forced gates, and what the next approval would refuse (`nextGate`).",
+    description: "One health check that decides whether a feature can advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. It fails on what blocks the next approval — missing artifacts, EARS problems, open clarifications, duplicate ACs, template placeholders in the current phase, the active tracks' mandatory design sections (<track>-sections), a size m / l design's Reuse & Integration, traceability gaps, task dependencies — and warns on the rest (unverified tasks, edits since an approval, steering changes, cross-feature overlaps…). Also returns the phase, approvals, pending and forced gates, and what the next approval would refuse (`nextGate`).",
     inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {

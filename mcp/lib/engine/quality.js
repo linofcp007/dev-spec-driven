@@ -777,7 +777,12 @@ const REUSE_SYN = ["reuse", "code reuse", "reuse of existing code", "reused comp
 const DESIGN_WEIGH = [["design-tradeoffs", TRADEOFFS_SYN, 2, "weigh"], ["design-risks", RISKS_SYN, 0, "weigh"], ["design-reuse", REUSE_SYN, 0, "reuse"]];
 const DESIGN_WEIGH_IDS = new Set(DESIGN_WEIGH.map(([id]) => id));
 // The release each stamp arrived with (the "approved before X" note) — approvePhase stamps every key here on a design approval.
-const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19" };
+// `reuseGate` (1.28): the Reuse & Integration section is an APPROVAL check of a size m / l design (designReuseGated) — doctor fails
+// it there, the design gate refuses it; a design approved before (no stamp) keeps the warning, never failed retroactively.
+const DESIGN_WEIGH_STAMPS = { weigh: "1.17", reuse: "1.19", reuseGate: "1.28" };
+// Is the Reuse & Integration section a gate for this feature? A plain feature of size m / l (the full chain) — never a bugfix, a
+// spike, a change, an unsized feature or size s / xs (a warning there, as before).
+const designReuseGated = (kind, size) => (kind || "feature") === "feature" && (size === "m" || size === "l");
 // A weigh heading NAMES its section (A review 6): after the heading lead (numbering, an emoji, a marker) the synonym is the whole
 // heading, or it is followed by a separator ( : , ; ( [ / & + | — – . or a spaced hyphen) or a connector word (and / or / vs / for /
 // of … e / ou / de … y / o / en …) — never a modifier: "## Risk-based rate limiting", "## Options parser", "## Riskiest
@@ -875,7 +880,9 @@ function designReuseFallback(integrationPlan) {
 // (a finished feature following the advice would re-open its re-review, changed-since-approval, stale finish and execution
 // sign-off). opts.approval = the design approval record (approvals.design) — each check reads its own stamp (`weigh` / `reuse`);
 // opts.legacy = true (the 1.17 form) treats every check as approved before it. opts.integrationPlan = integration-plan.md's text
-// (designReuseFallback — state "integration").
+// (designReuseFallback — state "integration"). opts.gate = the feature's size when its Reuse & Integration is an approval check
+// (designReuseGated — m / l): design-reuse then FAILS where it would warn — unless the approval predates the rule (no `reuseGate`
+// stamp): a warn naming the rule, asked from its next approval on (1.28).
 // a SIZE S design merges the three into ONE section, "Decisions, reuse & risks" (the sized builders write it): a
 // design with none of the three sections of its own and that merged one has each check read it — one entry or a line of prose
 // answers each (min 0: "nothing to reuse", "no alternative worth weighing", "no material risk" are answers).
@@ -896,6 +903,11 @@ function designWeighChecks(design, lang, opts = {}) {
     if (st.status === "integration") return { id, status: "pass", detail, state: st.status, entries: st.entries };
     const legacy = opts.legacy === true || (approval != null && approval[stamp] !== true);
     if (st.status !== "filled" && legacy) return { id, status: "pass", detail: W.legacyApproval(detail, DESIGN_WEIGH_STAMPS[stamp]), state: st.status, entries: st.entries, legacy: true };
+    if (st.status !== "filled" && id === "design-reuse" && opts.gate) {
+      // approved before the rule: the warning it had, saying what its next approval asks
+      if (approval != null && approval.reuseGate !== true) return { id, status: "warn", detail: W.reuseGateLegacy(detail, opts.gate), state: st.status, entries: st.entries, gateLegacy: true };
+      return { id, status: "fail", detail: W.reuseGate(detail, opts.gate), state: st.status, entries: st.entries };
+    }
     return { id, status: st.status === "filled" ? "pass" : "warn", detail, state: st.status, entries: st.entries };
   });
 }
@@ -1372,5 +1384,5 @@ function clarifyChange(projectDir, f, c) {
 }
 
 module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
-  TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, REUSE_SYN, reuseQuotedSection, briefReuse,
+  TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, __link };

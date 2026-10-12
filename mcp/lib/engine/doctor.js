@@ -15,7 +15,7 @@ const i18n = require("../i18n.js");
 let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks, approvalRolesOf,
   approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled, chainPlaceholders,
   changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN, crossAcDoctorDetail,
-  crossFeatureAcs, decisionDoctorChecks, designWeighChecks, detectPhase, detectTracks,
+  crossFeatureAcs, decisionDoctorChecks, designReuseGated, designWeighChecks, detectPhase, detectTracks,
   duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, evidenceRule, executionSignOffStale, existingFeature, expectsFail,
   extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText, flowPhaseIndex,
   FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority, hasSuccessCriteria,
@@ -43,7 +43,7 @@ let PROBE_IO; // files.js — the engine's view of the disk for the project prob
 function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
   approvalRolesOf, approveStepExtras, artifactReport, artifactState, b5DoctorChecks, baselineDrift, bugSectionFilled,
   chainPlaceholders, changedSinceApproval, checkPhaseIndex, clarificationMarkers, cleanTaskText, CONSTITUTION_SYN,
-  crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designWeighChecks, detectPhase,
+  crossAcDoctorDetail, crossFeatureAcs, decisionDoctorChecks, designReuseGated, designWeighChecks, detectPhase,
   detectTracks, duplicateTaskNumbers, earsUnlinted, earsUnidentified, shortIdList, earsValidate, evidenceRule, executionSignOffStale, existingFeature,
   expectsFail, extractSection, extractTestIds, featureDirs, featureFlow, featureLang, featureOverlaps, flowOrderText,
   flowPhaseIndex, FOLD_CASE, gateArtifacts, gateWalk, glossaryEntries, glossaryHits, guardInput, hasPriority,
@@ -932,13 +932,20 @@ const DOCTOR_CHECKS = [
     const s = constitutionState(c.designActive);
     return s === "filled" ? { status: "pass", detail: c.m.constitutionOk } : { status: "warn", detail: s === "missing" ? c.m.constitutionMissing : c.G.constitutionUnfilled };
   }, gate: { design: (c) => [[constitutionState(c.designActive) === "filled", c.G.constitutionUnfilled]] } },
-  // design-tradeoffs / design-risks, design-reuse: warns only (never a fail, never an approval check). Not while
-  // design.md is still a LATER phase's template (nothing is being designed yet — the placeholders check already says so). A design
-  // approved before a check existed (its approval lacks that check's stamp — `weigh` 1.17, `reuse` 1.19) is never flagged by it: a pass
-  // with a note (A review 3). A brownfield feature's filled integration-plan.md → Integration Points answers a missing / empty Reuse &
-  // Integration section.
+  // design-tradeoffs / design-risks, design-reuse: warns. Not while design.md is still a LATER phase's template (nothing is being
+  // designed yet — the placeholders check already says so). A design approved before a check existed (its approval lacks that check's
+  // stamp — `weigh` 1.17, `reuse` 1.19) is never flagged by it: a pass with a note (A review 3). A brownfield feature's filled
+  // integration-plan.md → Integration Points answers a missing / empty Reuse & Integration section. 1.28: for a plain feature of size
+  // m / l (designReuseGated) the Reuse & Integration section is an approval check of the design — design-reuse FAILS there (the gate
+  // refuses it: `design-weigh:reuse`), unless the design was approved before the rule (no `reuseGate` stamp: the warning it had).
   { id: "design-weigh", emits: ["design-tradeoffs", "design-risks", "design-reuse"], phase: 2, applies: (c) => designed(c) && !c.laterFiles.includes("design.md"),
-    run: (c) => designWeighChecks(c.designActive, c.lang, { approval: c.approvals && c.approvals.design, integrationPlan: c.read("integration-plan.md") }) },
+    run: (c) => designWeighChecks(c.designActive, c.lang, { approval: c.approvals && c.approvals.design, integrationPlan: c.read("integration-plan.md"),
+      gate: designReuseGated(c.kind, c.size) ? c.size : null }),
+    gate: { reuse: (c) => {
+      if (!designReuseGated(c.kind, c.size)) return [];
+      const r = designWeighChecks(c.designActive, c.lang, { integrationPlan: c.read("integration-plan.md"), gate: c.size })[2]; // the approval being made: never legacy
+      return [[r.status === "pass", r.detail, "design-reuse"]];
+    } } },
   // Mandatory sections — `<track>-sections` per active marker track (a track pack's too). The size's rules (tiers,
   // overlaps) and the stricter filled rule: a section holding nothing but the template's guidance lines fails — a WARN on a design
   // approved already (never a phase failed retroactively; its next approval asks — the approval holds every NEW one to it).
@@ -1168,7 +1175,7 @@ const GATES = {
   // there too: its Reproduction and its placeholders (bugPlaceholders: the report's own slots, `> **TODO**`; quoted
   // evidence such as [object Object] stays content). design.md, while it holds active track sections, keeps its sections' rule.
   design: { artifact: (c) => (c.kind === "bugfix" ? { file: "bug.md", missing: !c.exists("bug.md") } : { file: "design.md", missing: c.read("design.md") == null }),
-    probes: (c) => (c.kind === "bugfix" ? ["root-cause", "reproduction", "placeholders"] : ["placeholders", "constitution-check"]).concat("<track>-sections", "clarifications") },
+    probes: (c) => (c.kind === "bugfix" ? ["root-cause", "reproduction", "placeholders"] : ["placeholders", "constitution-check", "design-weigh:reuse"]).concat("<track>-sections", "clarifications") },
   "test-plan": { artifact: (c) => ({ file: "test-plan.md", missing: !phaseActive("test-plan", c.tracks) || !c.exists("test-plan.md") }), probes: () => ["placeholders", "traceability"] },
   "eval-plan": { artifact: (c) => ({ file: "eval-plan.md", missing: !phaseActive("eval-plan", c.tracks) || !c.exists("eval-plan.md") }), probes: () => ["placeholders"] },
   // the plan of a change: ONE file holds its criteria and its tasks, one gate checks both

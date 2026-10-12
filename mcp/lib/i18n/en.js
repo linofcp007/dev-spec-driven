@@ -2189,6 +2189,8 @@ const msg = {
         packMarkerReserved: (list, slug, since, tracks) => `Change the marker of its track pack(s) from before ${since || "1.19"} — ${list}: the marker is a built-in track's now, so the pack is inactive; or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${tracks} (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
         // criteria numbered with bare AC-n IDs (approved before 1.22) — renumber, then re-approve
         bareAcIds: (list, slug, file = "requirements.md") => `Renumber the criteria ${file} numbers with bare IDs (${list}) as US-<story>.AC-<n> — and their references in ${file === "change.md" ? "its tasks' _Requirements:_ (in change.md too)" : "tasks.md and test-plan.md"} — then re-approve: since 1.22 a bare AC-n is no ID trace_check reads, so doctor (ears, traceability) fails and the approval is refused (details: ${DEV_SPEC} doctor ${slug})`,
+        // a size m / l design approved before 1.28 without its Reuse & Integration — required at the design gate now
+        designReuse: (slug) => `Write its design's Reuse & Integration section (the existing code it reuses or extends and what is new — Kind · What · Where · Why), then re-approve the design (/approve ${slug} design): since 1.28 a size m / l design's approval requires it; the current approval stands until then (doctor warns design-reuse)`,
         critic: (files) => `Review it with the spec-critic agent (read-only), phase by phase: ${files || "—"}`,
         converge: (files) => "Run the spec-reviewer converge pass (the done tasks against their ACs)" + (files ? `, then the spec-critic agent on ${files}` : ""),
         none: "No spec review needed — every task is done",
@@ -3379,6 +3381,9 @@ const designWeigh = {
       integration: (n) => `covered by integration-plan.md → Integration Points${n ? ` (${n} item(s))` : ""}`,
     },
     legacyApproval: (d, v = "1.17") => `design approved before ${v} — asked only from its next approval (${d})`,
+    // 1.28: a size m / l design's Reuse & Integration is an approval check (doctor fails it; one approved before the rule warns)
+    reuseGate: (d, size) => `${d} — a size ${size} design needs it before its approval`,
+    reuseGateLegacy: (d, size) => `${d} — approved before 1.28: a size ${size} design needs it at its next approval`,
     clarifyConsistency: (words) => `The spec mentions ${words}, but neither the requirements nor the design say anything about consistency or idempotency (the answer goes in the design's Alternatives & Trade-offs / Risks, or in a requirement): what must succeed or fail together (atomicity, isolation level), who else writes the same data concurrently, strong or eventual consistency (how stale is acceptable), and the delivery guarantee and idempotency of anything asynchronous?`,
   };
 

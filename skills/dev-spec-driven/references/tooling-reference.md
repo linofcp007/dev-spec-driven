@@ -94,9 +94,10 @@ Each check is pass / warn / fail; `readyToAdvance` means no fail.
   comment or a "TBD" is none) · `design-tradeoffs` (the design's Alternatives & Trade-offs missing,
   empty, still the template, or fewer than 2 options) · `design-risks` (its Risks section missing, empty or still the
   template) · `design-reuse` (its Reuse & Integration section missing, empty or still the template — a brownfield
-  feature's filled `integration-plan.md` → Integration Points counts; the three never block an approval, a bugfix and a
-  spike are exempt, and a design approved before the check existed — 1.17 for the first two, 1.19 for reuse — is never
-  flagged) · `test-plan` / `eval-plan` · `secondary-trace` (EC / NFR / SC) ·
+  feature's filled `integration-plan.md` → Integration Points counts; the three warn, a bugfix and a spike are exempt, and
+  a design approved before the check existed — 1.17 for the first two, 1.19 for reuse — is never flagged; 1.28: for a
+  plain feature of size **m / l** `design-reuse` FAILS and the design approval refuses it — forceable with the user's
+  consent; a design approved before 1.28 keeps the warning and `spec_upgrade` lists it, attention `design-reuse`) · `test-plan` / `eval-plan` · `secondary-trace` (EC / NFR / SC) ·
   `supersedes` (`_Supersedes:_` references that resolve to nothing) · `tests-in-code` (+tdd: T-IDs made green by done
   tasks that no test file names) · `verification` (ticked tasks without passing evidence, with the reason — `unobserved`
   too under `meta.evidence: "observed"`) ·

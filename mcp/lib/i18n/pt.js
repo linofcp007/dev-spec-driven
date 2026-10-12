@@ -2073,6 +2073,8 @@ const msg = {
         packReserved: (list, slug, since) => `Muda o nome do(s) seu(s) track pack(s) anterior(es) à ${since || "1.17"} — ${list}: o nome é agora reservado, por isso o track está inativo (detalhes: ${DEV_SPEC} doctor ${slug}, verificação track-pack-missing)`,
         packMarkerReserved: (list, slug, since, tracks) => `Muda o marcador do(s) seu(s) track pack(s) anterior(es) à ${since || "1.19"} — ${list}: o marcador é agora o de um track incluído, por isso o pack está inativo; ou usa o track incluído: ${DEV_SPEC} add-track ${slug} ${tracks} (detalhes: ${DEV_SPEC} doctor ${slug}, verificação track-pack-missing)`,
         bareAcIds: (list, slug, file = "requirements.md") => `Renumera os critérios que o ${file} identifica com IDs soltos (${list}) como US-<história>.AC-<n> — e as referências a eles ${file === "change.md" ? "nos _Requirements:_ das suas tarefas (também no change.md)" : "no tasks.md e no test-plan.md"} — e volta a aprovar: desde a 1.22 um AC-n sozinho não é um ID que o trace_check leia, por isso o doctor (ears, traceability) falha e a aprovação é recusada (detalhes: ${DEV_SPEC} doctor ${slug})`,
+        // um design de tamanho m / l aprovado antes da 1.28 sem a Reutilização e Integração — exigida agora no gate do design
+        designReuse: (slug) => `Escrever a secção Reutilização e Integração do design (o código existente que reutiliza ou estende e o que é novo — Tipo · O quê · Onde · Porquê) e depois voltar a aprovar o design (/approve ${slug} design): desde a 1.28 a aprovação de um design de tamanho m / l exige-a; a aprovação atual mantém-se até lá (o doctor avisa design-reuse)`,
         critic: (files) => `Revê-a com o agente spec-critic (só leitura), fase a fase: ${files || "—"}`,
         converge: (files) => "Corre a passagem de convergência do spec-reviewer (as tarefas feitas face aos seus ACs)" + (files ? `, depois o agente spec-critic sobre ${files}` : ""),
         none: "Não precisa de revisão da spec — todas as tarefas estão feitas",
@@ -3191,6 +3193,9 @@ const designWeigh = {
       integration: (n) => `coberta pelo integration-plan.md → Pontos de Integração${n ? ` (${n} item(ns))` : ""}`,
     },
     legacyApproval: (d, v = "1.17") => `design aprovado antes da ${v} — só é exigido a partir da próxima aprovação (${d})`,
+    // 1.28: a Reutilização e Integração de um design de tamanho m / l é uma verificação da aprovação
+    reuseGate: (d, size) => `${d} — um design de tamanho ${size} precisa dela antes da aprovação`,
+    reuseGateLegacy: (d, size) => `${d} — aprovado antes da 1.28: um design de tamanho ${size} precisa dela na próxima aprovação`,
     clarifyConsistency: (words) => `A spec menciona ${words}, mas nem os requisitos nem o design dizem nada sobre consistência ou idempotência (a resposta vai para as secções Alternativas e Compromissos / Riscos do design, ou para um requisito): o que tem de ter sucesso ou falhar em conjunto (atomicidade, nível de isolamento), quem mais escreve os mesmos dados ao mesmo tempo, consistência forte ou eventual (que desatualização é aceitável), e a garantia de entrega e a idempotência de tudo o que for assíncrono?`,
   };
 

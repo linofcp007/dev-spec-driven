@@ -2072,6 +2072,8 @@ const msg = {
         packReserved: (list, slug, since) => `Cambia el nombre de su(s) track pack(s) anterior(es) a la ${since || "1.17"} — ${list}: el nombre está reservado ahora, así que el track está inactivo (detalles: ${DEV_SPEC} doctor ${slug}, comprobación track-pack-missing)`,
         packMarkerReserved: (list, slug, since, tracks) => `Cambia el marcador de su(s) track pack(s) anterior(es) a la ${since || "1.19"} — ${list}: el marcador es ahora el de un track de serie, así que el pack está inactivo; o usa el track de serie: ${DEV_SPEC} add-track ${slug} ${tracks} (detalles: ${DEV_SPEC} doctor ${slug}, comprobación track-pack-missing)`,
         bareAcIds: (list, slug, file = "requirements.md") => `Renumera los criterios que ${file} identifica con IDs sueltos (${list}) como US-<historia>.AC-<n> — y sus referencias ${file === "change.md" ? "en los _Requirements:_ de sus tareas (también en change.md)" : "en tasks.md y test-plan.md"} — y vuelve a aprobar: desde la 1.22 un AC-n suelto no es un ID que trace_check lea, así que doctor (ears, traceability) falla y la aprobación se rechaza (detalles: ${DEV_SPEC} doctor ${slug})`,
+        // un diseño de tamaño m / l aprobado antes de la 1.28 sin su Reutilización e Integración — exigida ahora en el gate del diseño
+        designReuse: (slug) => `Escribir la sección Reutilización e Integración del diseño (el código existente que reutiliza o extiende y lo que es nuevo — Tipo · Qué · Dónde · Por qué) y luego volver a aprobar el diseño (/approve ${slug} design): desde la 1.28 la aprobación de un diseño de tamaño m / l la exige; la aprobación actual se mantiene hasta entonces (el doctor avisa design-reuse)`,
         critic: (files) => `Revísala con el agente spec-critic (solo lectura), fase a fase: ${files || "—"}`,
         converge: (files) => "Ejecuta la pasada de convergencia del spec-reviewer (las tareas hechas frente a sus ACs)" + (files ? `, después el agente spec-critic sobre ${files}` : ""),
         none: "No necesita revisión de la spec — todas las tareas están hechas",
@@ -3190,6 +3192,9 @@ const designWeigh = {
       integration: (n) => `cubierta por integration-plan.md → Puntos de Integración${n ? ` (${n} elemento(s))` : ""}`,
     },
     legacyApproval: (d, v = "1.17") => `diseño aprobado antes de la ${v} — solo se exige a partir de su próxima aprobación (${d})`,
+    // 1.28: la Reutilización e Integración de un diseño de tamaño m / l es una comprobación de la aprobación
+    reuseGate: (d, size) => `${d} — un diseño de tamaño ${size} la necesita antes de su aprobación`,
+    reuseGateLegacy: (d, size) => `${d} — aprobado antes de la 1.28: un diseño de tamaño ${size} la necesita en su próxima aprobación`,
     clarifyConsistency: (words) => `La spec menciona ${words}, pero ni los requisitos ni el diseño dicen nada de consistencia ni de idempotencia (la respuesta va en Alternativas y Compensaciones / Riesgos del diseño, o en un requisito): ¿qué debe tener éxito o fallar a la vez (atomicidad, nivel de aislamiento), quién más escribe los mismos datos a la vez, consistencia fuerte o eventual (qué desfase es aceptable), y cuál es la garantía de entrega y la idempotencia de todo lo asíncrono?`,
   };
 
