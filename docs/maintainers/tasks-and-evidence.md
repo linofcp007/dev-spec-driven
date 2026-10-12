@@ -27,7 +27,10 @@ Phase 6, opt-in.
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
   ONE finding fresh (80+ opens a fix round, 50–79 is ledgered as unconfirmed, below 50 refuted); its **simplify** mode reviews
   `/spec-review simplify`'s diff; it checks the §5 written rules (constitution, CLAUDE.md / AGENTS.md, code comments) and the
-  rewritten lines' history. The engine's part: the SubagentStop gates (End-of-turn evidence gate).
+  rewritten lines' history. The engine's part: the SubagentStop gates (End-of-turn evidence gate). **1.28:** the final review,
+  `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
+  true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
+  runs the simplifier's, each verified before it costs a fix.
 
 ## Evidence
 
@@ -462,6 +465,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   The engine's only part was the simplifier's SubagentStop gate.
 - **1.23 review 5** — design sections matched by WHOLE IDs: a substring test took US-1.AC-1 for US-1.AC-10 and T-1 for T-10; the
   sections naming the task's own IDs now fill the budget first.
+- **1.28** — the review flow runs the duplicate detector first; until then duplication was found only by the reviewer's own
+  searches (prose).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

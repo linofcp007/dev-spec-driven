@@ -32,7 +32,7 @@ review findings — is in History at the end.
   |---|---|
   | classification | placeholders |
   | requirements | ears, placeholders, clarifications, success-criteria, priorities, ac-uniqueness (+ reproduction: a bugfix) |
-  | design | placeholders, constitution-check (a bugfix signs off bug.md: root-cause, reproduction, placeholders), then `<track>-sections`, clarifications |
+  | design | placeholders, constitution-check, `design-weigh:reuse` (design-reuse — a size m / l plain feature's Reuse & Integration, 1.28; a bugfix signs off bug.md: root-cause, reproduction, placeholders), then `<track>-sections`, clarifications |
   | test-plan · eval-plan | placeholders, traceability · placeholders |
   | tests | `tests-in-code` (+tdd with test-plan.md: every planned T-ID named by a test file), `eval-sets` (+ai with eval-plan.md: evals/golden.json the feature's own, neither empty nor the sample) |
   | tasks | placeholders, `placeholders:realTasks` (a real task beyond the scaffold's), traceability, task-deps; a change's plan (change.md): ears, placeholders, clarifications, ac-uniqueness, realTasks, change-scope, traceability, task-deps |
@@ -320,7 +320,9 @@ finish / execution gate, every track criterion scaffolded.
   into **Decisions, reuse & risks** (`WEIGH_MERGED_SYN`), each track's **core-tier** sections only (`sizeDesignText()`,
   `TRACK_SECTIONS` `tier`), per track only the template tasks that implement a criterion (`sizeTasksText()`). An XS bugfix:
   the plan in one call, the common short-form tasks.md.
-- **m / l**: the full chain. At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
+- **m / l**: the full chain — and the design's **Reuse & Integration is an approval check** (1.28, `designReuseGated`):
+  doctor fails `design-reuse` and the design gate refuses it until the section names what is reused, extended or new; a
+  design approved before 1.28 (no `reuseGate` stamp) keeps the warning (quality.md → Reuse & Integration). At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
   Considerations under +sec, Testing Strategy under +tdd) drops the core section, Complexity Tracking has no example row,
   Reuse & Integration one, Error Handling points at the IF…THEN criteria, and `TRACK_OVERLAPS` / `TRACK_TASK_OVERLAPS`
   (tracks.js) write a section / task two tracks ask for once (with +obs the +saas telemetry line goes); **+api / +dist
@@ -504,6 +506,8 @@ here. "r5 review" is 1.23's fifth review.
   name change.md.
 - **1.25.1** — `small-change` joined `sizeReason`: "Return a clearer error message when the orders route gets an empty
   customer id" was m / default.
+- **1.28** — a size m / l design's Reuse & Integration became a design-gate check (`design-weigh:reuse`; doctor fails it
+  there), so doctor's verdict and the gate agree; s / xs / unsized / bugfix / spike / change keep the warning.
 
 ### Bugfix and finish
 - **v1.12** — the bugfix kind.

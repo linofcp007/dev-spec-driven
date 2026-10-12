@@ -28,7 +28,7 @@ names share `TRACK_ITEM`.
 
 ### The operations
 `OPERATIONS` (`mcp/lib/operations.js` — Node core only, requiring nothing: each surface hands it the facade) is ONE table
-both surfaces run through, so a tool and its CLI command are the SAME call: one entry per engine operation (40, asserted by
+both surfaces run through, so a tool and its CLI command are the SAME call: one entry per engine operation (41, asserted by
 `mcp/tests/02-mcp-server-tools.js`). The file's header documents the fields — `id`, `tool` (several operations of one tool
 told apart by a `mode` or a `when(args)` test), `legacy`, `cli`, `engine`, `args` (`mcp`, `cli` / `pos`, `type`, `join`,
 `cmd`, `parsed`, `modes`, `required`), `internal`, `cliOnly`, `call(S, dir, o)`: THE engine call, written once.
@@ -48,7 +48,8 @@ told apart by a `mode` or a `when(args)` test), `legacy`, `cli`, `engine`, `args
 `spec_roadmap_edit {kind}` (destructive: rm, dependsOn replaces; `spec_roadmap` stays the reader + ROADMAP.md writer);
 `spec_catalog` / `spec_changelog` → `spec_export {format}`, running `catalog()` / `changelog()` — the very calls of `dev-spec
 catalog` / `changelog --json`; `spec_coverage` → `spec_scan {coverage: true}`. The CLI keeps its commands (list, backlog,
-depend, milestone, catalog, changelog, coverage); each mode is an operation.
+depend, milestone, catalog, changelog, coverage); each mode is an operation. `spec_scan {duplicates: true}` (1.28) is a mode
+of its own — the duplicate detector, `dev-spec dupes` — never a tool of its own (quality.md → Duplicate-code detector).
 
 ### Hidden aliases
 `LEGACY_TOOLS` (server.js) keeps the seven old names callable: a call's arguments are checked against the OLD schema
@@ -61,6 +62,11 @@ listed, never completed, no operation of their own — each is in the `legacy` o
 (default false) — takes its operation's MCP arguments (export's `includeBody`: html / md only). Another mode's argument is
 refused before anything runs: `inapplicable-arguments` (`inapplicable` [names]; `args.inapplicable` names what the mode
 takes). A mode's `required` (depend → `name`) are `missing-arguments`; the mode key and `projectDir` go everywhere.
+- **A second key (1.28).** A tool's operations may be picked by more than one key: the PRIMARY one (the fallback entry's, else
+  the first's) and others — `spec_scan {duplicates: true}` beside `coverage`. `forTool()` / `argMode()` try the other keys
+  first: given one of its values, its mode runs (`ARG_MODES[tool].alt` {key: {modes, required?}}, the primary's shape). A mode
+  key given a value that picks no mode of its own (`coverage: false` beside `duplicates: true`, `duplicates: false`) is no
+  other mode's argument; `coverage: true` beside `duplicates: true` is (`inapplicable` [coverage]).
 
 ### Plugin mode's list
 With `SPEC_MCP_APPROVAL_HOOK=on` (mcp/servers.json — the Claude Code plugin) `tools/list` omits `PLUGIN_UNLISTED`:
@@ -220,6 +226,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   dispatch, the CLI's handlers call `c.call(id, given)`, `ARG_MODES` is derived from it (`argModes()`); `createFeature` /
   `completeTask` take an options object; the structural parity tests (`mcp/tests/02-mcp-server-tools.js`,
   `cli/tests/02-surfaces-parity.js`).
+- **1.28** — `spec_scan {duplicates: true, name?, minLines?, tests?}`, the 41st operation (`dupes`), a mode on a second key
+  (`alt`) — ~490 characters of tools/list (+ spec_doctor naming the m / l Reuse gate), ~200 of them paid back by trimming
+  other descriptions (43,272 → 43,611).
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.
