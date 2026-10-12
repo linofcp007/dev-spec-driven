@@ -13,7 +13,7 @@ const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, existsCached, extractAcIds,
-  extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements, isInsideDir, isObj,
+  extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements, isInsideDir, writeInsideProject, isObj,
   isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock, packCorpusSets, packOf,
   packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText, langOption, PROTO_KEYS,
   RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY, RE_TODO_SENTINEL, RE_WIN_RESERVED,
@@ -24,7 +24,7 @@ let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValid
 let today; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, existsCached,
   extractAcIds, extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements,
-  isInsideDir, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
+  isInsideDir, writeInsideProject, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
   langOption, PROTO_KEYS, RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY,
   RE_TODO_SENTINEL, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN,
@@ -471,21 +471,14 @@ function initTemplates(projectDir, key, lang, lng) {
   const sub = lang ? [lang] : [];
   const created = [], kept = [];
   // Writes stay inside the project: a .specs/ or templates/ folder (or a <lang>/ / steering/ one) that is a link to a folder
-  // elsewhere is refused — the nearest existing folder above each target must really be inside the project.
-  const inside = (abs) => {
-    let real;
-    try { real = fs.realpathSync.native(projectDir); } catch { return true; } // no project folder yet: nothing in it is a link
-    let d = path.dirname(abs);
-    while (!fs.existsSync(d) && path.dirname(d) !== d) d = path.dirname(d);
-    try { return isInsideDir(real, fs.realpathSync.native(d)); } catch { return false; }
-  };
+  // elsewhere is refused — the nearest existing folder above each target must really be inside the project (writeInsideProject).
   for (const k of key ? [key] : allTemplateKeys()) {
     const text = builtInTemplate(k, lng);
     if (text == null) continue;
     const parts = [...sub, ...templateRel(k).split("/")];
     const rel = ".specs/" + TEMPLATES_DIR + "/" + parts.join("/");
     const abs = path.join(tdir, ...parts);
-    if (!inside(abs)) return { ok: false, error: T.writeOutside(rel), created, kept };
+    if (!writeInsideProject(projectDir, abs)) return { ok: false, error: T.writeOutside(rel), created, kept };
     try {
       if (writeIfAbsent(abs, text)) created.push(rel);
       else kept.push(rel);
