@@ -26,11 +26,11 @@ and the review), [red-flags.md](red-flags.md) ("while I'm here I'll also refacto
 | Phase | What to do |
 |---|---|
 | Steering | `structure.md` says where shared code lives and the dependency rules; the constitution states the principle ("search before adding a helper; shared code lives in `src/lib/`") |
-| Design | the **Reuse & Integration** section every plain feature's `design.md` is scaffolded with: the existing modules, components and helpers this feature uses or extends (with their paths), what is new and why nothing existing fits, and where the new code lives — `spec_doctor` warns `design-reuse` while it is missing, empty or still the template (a brownfield feature's filled `integration-plan.md` → Integration Points counts; a design approved before 1.19 is never flagged) |
+| Design | the **Reuse & Integration** section every plain feature's `design.md` is scaffolded with: the existing modules, components and helpers this feature uses or extends (with their paths), what is new and why nothing existing fits, and where the new code lives — `spec_doctor` warns `design-reuse` while it is missing, empty or still the template, and for a size **m / l** feature it FAILS and the design approval refuses it (1.28 — `force` only with the user's consent; a design approved before keeps the warning). A brownfield feature's filled `integration-plan.md` → Integration Points counts; a design approved before 1.19 is never flagged |
 | Tasks | `_Implements:_` names the existing files a task extends, not only the new ones — the task brief's **Reuse** section quotes the design's entries for those files (or the task's criteria) and lists the existing source files next to them |
 | Implementation | search first; reuse or extend; report what was reused, extended or created, and why (below) |
-| Review | new code compared with the **existing codebase**: a new helper that duplicates one is a finding (below) |
-| Before finishing | the optional **simplification pass** (`/spec-review simplify`) cleans up the smells the reviews deferred, in the feature's own lines only, proven by its tests (below) |
+| Review | new code compared with the **existing codebase**: a new helper that duplicates one is a finding (below); the duplicate detector (`spec_scan {duplicates: true, name}` · `dev-spec dupes <feature>`) runs first and hands the reviewer its `existing` runs as candidates |
+| Before finishing | the optional **simplification pass** (`/spec-review simplify`) cleans up the smells the reviews deferred — and the detector's `within` runs — in the feature's own lines only, proven by its tests (below); `spec_finish` warns (never blocks) when the feature's code repeats existing code |
 | Afterwards | smells outside the task go to the refactor-candidate backlog, never into the task |
 
 ---
@@ -160,8 +160,13 @@ user for permission — a subagent that hits the prompt mid-task stalls the loop
 
 ## Duplication — which kind, and when it's fine
 
-- **Verbatim duplication** (the same lines twice) is found by copy-paste detectors — jscpd, PMD's CPD — run
-  locally over the changed files.
+- **Verbatim duplication** (the same lines twice) is found by a copy-paste detector. The plugin has one —
+  `spec_scan {duplicates: true, name: "<feature>"}` / `dev-spec dupes <feature> [--min-lines N] [--tests]`: windows of
+  N code lines (default 8; comments, blank, brace-only and import lines left out, string contents kept) of the
+  feature's `_Implements:_` files that repeat code elsewhere in the project (`existing` — reuse or extend it) or inside
+  the feature (`within` — the simplifier's); without a feature, the project's top duplicates. Its runs are
+  **candidates**, never verdicts: a repeat the spec asks for, generated-looking code or a copy the report names under
+  "Duplicated on purpose" is no finding. jscpd or PMD's CPD go further (token-level, renamed identifiers).
 - **Semantic duplication** (the same knowledge, written differently: two email validators, two ways to compute a
   tax) is found only by searching for the concept. DRY, as *The Pragmatic Programmer* defines it, is about
   **knowledge** — "every piece of knowledge must have a single, unambiguous, authoritative representation" — not
@@ -335,6 +340,9 @@ below) and ledgers it; the implementer never does the refactor in the task.
 
 The reviewer compares new code with the **codebase**, not only with the rest of the diff:
 
+0. **Start from the detector's `existing` runs** when the dispatch carries them (the final review, `/spec-review
+   branch` / `converge` run it first): each is a candidate — confirm it is a copy this branch added, not one the spec
+   asks for or the report lists under "Duplicated on purpose"; a confirmed one goes through the verifier like any finding.
 1. **List what the diff adds** — every new exported function, class, component, module, client or config key.
 2. **Search for an existing equivalent of each** (the same searches as above, by concept and synonym), and read the
    report's Reuse block.

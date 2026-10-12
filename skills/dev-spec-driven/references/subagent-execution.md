@@ -319,9 +319,12 @@ a conflict between two tasks' file plans — you decide, and ledger the ruling.
 
 ## Final review
 
-After the last task: package `MERGE_BASE..HEAD` (`git merge-base <default-branch> HEAD`) and dispatch
+After the last task: run the duplicate detector — `spec_scan {duplicates: true, name}` (or `dev-spec dupes <feature>
+--json`) — then package `MERGE_BASE..HEAD` (`git merge-base <default-branch> HEAD`) and dispatch
 `dev-spec-driven:spec-reviewer` in **final** mode on the most capable model, with the package path, the feature folder,
-the ledger, the active tracks, the references folder path and, on +tdd, the `spec_log {name, gitLog}` output (you run
+the detector's `existing` runs as **candidate findings** (each `file:from-to` and the places it repeats — a duplicate the
+spec asks for, or one a report lists under "Duplicated on purpose", is no finding), the ledger, the active tracks, the
+references folder path and, on +tdd, the `spec_log {name, gitLog}` output (you run
 `git log --name-only --relative` and pass its text — the server never runs git; the reviewer can't call MCP tools) — it
 runs the branch-review checklist
 (track-aware: spec compliance, red-first evidence, tenant isolation, eval deltas, security, the project's written rules
@@ -339,8 +342,9 @@ commit each, a review of the pass):
 
 1. Record `SIMPLIFY_BASE = git rev-parse HEAD` and `MERGE_BASE` (as for the final review). No `.execution/` yet (the
    feature ran inline)? Create it with a `.gitignore` holding `*` — the folder ignores itself. Dispatch
-   **`dev-spec-driven:spec-simplifier`** with the feature, MERGE_BASE, the list — the ledger's deferred minors and the
-   final review's "can ship" minors —, the project checks, the report path
+   **`dev-spec-driven:spec-simplifier`** with the feature, MERGE_BASE, the list — the ledger's deferred minors, the
+   final review's "can ship" minors and the detector's `within` runs (`spec_scan {duplicates: true, name}`: the feature
+   repeating its own code) —, the project checks, the report path
    (`.specs/<feature>/.execution/simplify-report.md`) and the references folder path. It touches only lines `MERGE_BASE..HEAD` added or changed —
    never a test, a contract, a dependency or code the feature didn't write — runs the covering tests after each change,
    commits each one alone, and ends its report with a `## Final runs` section: the project checks (or the full suite)
@@ -386,8 +390,9 @@ this diff right?" but "does the code, as it stands, deliver every AC?". Use it w
 work, or before finishing when every task is ticked but you doubt the feature is complete. It works on any
 feature, inline-executed or not.
 
-1. **Gather.** `spec_status` and `trace_check {name, code: true}` (T-IDs and AC IDs named in the test files,
-   planned tests missing from the code).
+1. **Gather.** `spec_status`, `trace_check {name, code: true}` (T-IDs and AC IDs named in the test files,
+   planned tests missing from the code) and `spec_scan {duplicates: true, name}` (its `existing` runs go to the
+   reviewer as candidate findings, verified before they cost a task).
 2. **Dispatch `dev-spec-driven:spec-reviewer` in converge mode** (standard tier; most capable for a large or
    security-sensitive feature) with: the feature folder `.specs/<feature>/`, the active tracks, the
    `trace_check` result (its gaps and `code` block, pasted) and the source roots to inspect. The reviewer is

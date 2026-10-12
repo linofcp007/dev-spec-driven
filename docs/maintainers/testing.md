@@ -117,14 +117,16 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   would only report every finding twice).
 - **The duplication guard (1.27.1)** — mcp/tests/16-conventions-duplication.js reads every source the plugin runs: each `.js`
   under mcp/lib (never a `*.generated.*` file or a built bundle), mcp/server.js, cli/*.js (not its tests), hooks/*.js and
-  scripts/*.js. Each becomes its CODE lines (comments, blank lines and lines of closing brackets alone dropped, whitespace folded,
-  string literals KEPT — two builders that differ in their strings are no duplicate), and a window of **8** consecutive code
-  lines found twice (another file, or a place of the same file that doesn't overlap; a window of lines under 12 characters on
-  average is noise) FAILS, one line per run with each place (`12 lines · a.js:40  b.js:310 · <its first line>`). The label
-  reports the duplicated share at a window of 6 (0.2 % at 1.27.1). Two duplications are allowed, each by its pattern and reason
-  in `ALLOW` — the module rule's link lists (a window of identifier-list lines: a `let` list and its `__link` twin) and the code
-  example inside the PT / ES design templates (an i18n window holding an escaped code fence); an allowance that matches nothing
-  any more fails too (drop it). A duplicate it finds is a helper to extract — into the module that owns the concept, linked
+  scripts/*.js — and runs the ENGINE'S duplicate-code detector over them (1.28: `S.duplicateRuns(files, {minLines: 8, code:
+  true})`, quality.md → Duplicate-code detector — the one spec_scan {duplicates} runs; no scanner of its own). Each source
+  becomes its CODE lines (comments, blank lines, lines of brackets / punctuation alone and import lines dropped, whitespace
+  folded, string literals KEPT — two builders that differ in their strings are no duplicate), and a run of **8** consecutive
+  code lines found twice (another file, or a place of the same file that doesn't overlap; a window of lines under 12 characters
+  on average is noise) FAILS, one line per run with each place (`12 lines · a.js:40-55  b.js:310-327 · <its first line>`). The
+  label reports the duplicated share at a window of 6 (the detector's `scanned.duplicated`: 0.2 % at 1.27.1 with its own
+  scanner, 0.1 % on the detector). One duplication is allowed, by its pattern and reason in `ALLOW`, read over a run's `code` —
+  the module rule's link lists (identifier-list lines: a `let` list and its `__link` twin); an allowance that matches nothing any
+  more fails too (drop it). A planted copy of state.js lines must be found. A duplicate it finds is a helper to extract — into the module that owns the concept, linked
   where the other copy was (hooks: hooks/hook-utils.js; engine-free readings both the hooks and the engine need:
   mcp/lib/probe.js) — never a reason to widen `ALLOW`. Self-contained, zero dependencies, ~0.3 s.
 - **The corpus and the bundle (1.20).** Run `npm run build` after changing a file of `CORPUS_SOURCES` (`mcp/lib/i18n.js`,
@@ -192,3 +194,6 @@ How the rules above came to be — grep a release here.
 - **1.27.1** — the duplication guard (16-conventions-duplication.js): the cleanup took the plugin's duplicated code lines (window
   of 6, mcp/evals and mcp/test.js counted too) from 364 of 39,680 (0.9 %; the hooks 13.2 %) to 72 of 39,435 (0.2 %; the hooks
   0) — 60 of them the two allowed duplications — and the guard keeps new copies out.
+- **1.28** — the guard runs the engine's detector (`S.duplicateRuns`) instead of its own scanner: one detector. Its reading
+  of a template literal dropped the PT / ES design sample's allowance — the old scanner read the sample's `// …` line (it differs
+  per language) as a comment, the detector as the string it is — so the stale allowance went; 56 of 40,697 code lines (0.1 %).

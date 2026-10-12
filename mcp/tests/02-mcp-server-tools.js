@@ -250,10 +250,11 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
       const ops = OPS.toolOperations(t.name);
       const read = new Set(ops.flatMap((op) => Object.values(op.args).map((a) => a.mcp)).concat(ops.filter((op) => op.mode).map((op) => op.mode.key)));
       for (const k of Object.keys(props(t.name))) if (k !== "projectDir" && !read.has(k)) bad.push(t.name + "." + k + ": no operation reads it");
-      // a tool of several operations picks one: by a mode (each value once) or by its arguments (one default)
+      // a tool of several operations picks one: by a mode (each key's value once — 1.28: a second key, spec_scan {duplicates}) or by
+      // its arguments (one default)
       if (ops.length > 1) {
-        const values = ops.filter((op) => op.mode).flatMap((op) => op.mode.values.map(String));
-        if (ops.some((op) => op.mode) ? !ops.every((op) => op.mode && op.mode.key === ops[0].mode.key) || new Set(values).size !== values.length
+        const values = ops.filter((op) => op.mode).flatMap((op) => op.mode.values.map((v) => op.mode.key + "=" + String(v)));
+        if (ops.some((op) => op.mode) ? !ops.every((op) => op.mode) || new Set(values).size !== values.length
           : ops.filter((op) => !op.when).length !== 1) bad.push(t.name + ": its operations are not told apart");
       }
     }
@@ -262,7 +263,7 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
     const direct = [...new Set(OPS.OPERATIONS.map((op) => op.engine))].filter((fn) => new RegExp("\\bspec\\." + fn + "\\(").test(src));
     all("1.27 operations: every tool runs an operation (" + OPS.OPERATIONS.length + " operations, " + tools.length + " tools) whose call is its facade function's; each operation argument is its tool's, of the type its kind reads; every tool argument is read; server.js calls no operation's engine function itself (got " +
       js({ bad, direct }) + ")", {
-      operations: () => OPS.OPERATIONS.length === 40, noBad: () => !bad.length, noDirectCall: () => !direct.length,
+      operations: () => OPS.OPERATIONS.length === 41, noBad: () => !bad.length, noDirectCall: () => !direct.length,
     });
   }
 
@@ -270,15 +271,16 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
     const DOC = ["name", "write", "includeBody"], FILE = ["name", "write"];
     eq(OPS.argModes(), {
       spec_roadmap_edit: { key: "kind", modes: { backlog: ["action", "name", "note"], depend: ["name", "dependsOn", "add", "remove", "order"], milestone: ["action", "name", "date", "features"] }, required: { depend: ["name"] } },
-      spec_scan: { key: "coverage", fallback: false, modes: { false: ["cap"], true: [] } },
+      spec_scan: { key: "coverage", fallback: false, modes: { false: ["cap"], true: [] }, alt: { duplicates: { modes: { true: ["name", "minLines", "tests"] } } } },
       spec_export: { key: "format", fallback: "html", modes: { html: DOC, md: DOC, csv: FILE, gherkin: FILE, jira: FILE, linear: FILE, adr: FILE, catalog: ["write", "includeBody"], changelog: ["since", "milestone", "write", "includeBody"] } },
-    }, "1.27 operations: ARG_MODES derives from the table — the 1.26 modes, each with its operation's arguments (export's includeBody in html / md only), depend's name required");
+    }, "1.27 operations: ARG_MODES derives from the table — the 1.26 modes, each with its operation's arguments (export's includeBody in html / md only), depend's name required; 1.28: spec_scan's second key (duplicates) as `alt`");
     const pick = (tool, a) => (OPS.forTool(tool, a) || {}).id;
     eq([pick("spec_status", {}), pick("spec_status", { name: " " }), pick("spec_status", { name: "x" }), pick("ears_validate", { name: "x" }), pick("ears_validate", { name: "x", text: "t" }),
       pick("spec_tracks", {}), pick("spec_tracks", { action: "signals" }), pick("spec_scan", {}), pick("spec_scan", { coverage: true }), pick("spec_export", {}),
-      pick("spec_export", { format: "csv" }), pick("spec_export", { format: "changelog" }), pick("spec_roadmap_edit", { kind: "depend" }), pick("spec_nope", {})],
-    ["list", "list", "status", "ears", "ears-text", "tracks", "signals", "scan", "coverage", "export", "export", "changelog", "depend", undefined],
-    "1.27 operations: a tool's call picks its operation — spec_status by a name, ears_validate by a feature without text, spec_tracks by action signals, the folded tools by their mode (the fallback when it is left out)");
+      pick("spec_export", { format: "csv" }), pick("spec_export", { format: "changelog" }), pick("spec_roadmap_edit", { kind: "depend" }), pick("spec_nope", {}),
+      pick("spec_scan", { duplicates: true }), pick("spec_scan", { duplicates: false }), pick("spec_scan", { coverage: false, duplicates: true })],
+    ["list", "list", "status", "ears", "ears-text", "tracks", "signals", "scan", "coverage", "export", "export", "changelog", "depend", undefined, "dupes", "scan", "dupes"],
+    "1.27 operations: a tool's call picks its operation — spec_status by a name, ears_validate by a feature without text, spec_tracks by action signals, the folded tools by their mode (the fallback when it is left out); 1.28: spec_scan {duplicates: true} by its second key, which picks nothing given false");
   }
 
   { // the hidden aliases (1.26) land on the operation that names them: the alias's answer is that operation's call
@@ -382,6 +384,8 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
       ["scan", "spec_scan", {}, ["scan"]],
       ["scan", "spec_scan", { cap: 1 }, ["scan", "--cap", "1"]],
       ["coverage", "spec_scan", { coverage: true }, ["coverage"]],
+      ["dupes", "spec_scan", { duplicates: true }, ["dupes"]],
+      ["dupes", "spec_scan", { duplicates: true, name: "login", minLines: 4, tests: true }, ["dupes", "login", "--min-lines", "4", "--tests"]],
       ["import", "spec_import", { tool: "plan", text: PLAN, dryRun: true }, ["import", "plan", "--text", PLAN, "--dry-run"]],
       ["templates", "spec_templates", {}, ["templates"]],
       ["tracks", "spec_tracks", {}, ["tracks"]],

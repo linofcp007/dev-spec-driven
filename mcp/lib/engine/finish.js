@@ -31,8 +31,9 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   unverifiedLabel, velocityOf, verificationStatus, waiverResult, waiverSummaryLines, walkProject, withMoveLock,
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
+let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+function __link(E) { ({ duplicationReport, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
@@ -223,6 +224,17 @@ function finishFeature(projectDir, name, opts = {}) {
   if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);
+  // 1.28: the feature's code repeats code the project already has (the duplicate-code detector, its _Implements:_ files against the
+  // rest) — a warning, never a blocker: how many places, the top 3 (`file:from-to ↔ file:from-to`) and the call listing them all;
+  // the repeats inside the feature's own files only as a count.
+  const dup = duplicationReport(projectDir, { name: slug });
+  let duplicates = null;
+  if (dup.ok && dup.total) {
+    const top = dup.duplicates.filter((d) => d.kind === "existing").slice(0, 3);
+    const pair = (d) => `${d.file}:${d.from}-${d.to} ↔ ${d.also[0].file}:${d.also[0].from}-${d.also[0].to}`;
+    warnings.push(dup.counts.existing ? F.duplicates(dup.counts.existing, top.map(pair).join("; "), dup.counts.within, slug) : F.duplicatesWithin(dup.counts.within, slug));
+    duplicates = { existing: dup.counts.existing, within: dup.counts.within, top };
+  }
 
   // What only a human (or a fresh run) can confirm — the track-gated "done" checks.
   const checks = [F.checkSuite];
@@ -304,6 +316,8 @@ function finishFeature(projectDir, name, opts = {}) {
   if (baseline) res.baseline = baseline;
   if (branch) res.branch = branch; // {name, base, commit, at, current, exists} — option 1 merges `name` into `base` locally
   if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
+  if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats} — spec_scan {duplicates: true} lists all
+  if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats} — spec_scan {duplicates: true} lists all
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // the runs this call recorded
   if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // the roles each pending phase waits for

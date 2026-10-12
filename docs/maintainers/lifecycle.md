@@ -89,6 +89,9 @@ first; how they came to be — the releases and review findings — is in Histor
 - **Bare AC-n IDs** (`AC-1`) fail doctor's `ears` / `traceability`; the audit lists them (`bareAcIds` via `criteriaBareIds()`, a
   change's change.md too; `criteriaFile`; attention `bare-ac-ids`) with `upgrade.item.bareAcIds`: renumber to
   US-<story>.AC-<n> with their references, then re-approve. The audit edits no spec.
+- **A size m / l design approved before 1.28** (no `reuseGate` stamp) whose Reuse & Integration is missing or unfilled
+  (doctor's `design-reuse` warns): `designReuseDue`, attention `design-reuse`, `upgrade.item.designReuse` — write the section,
+  then re-approve the design. The approval stands; nothing is migrated (quality.md → Reuse & Integration).
 - **The migrations** (`apply: true`) never edit an artifact, approve, tick, untick or delete. Per feature, under its lock,
   `upgradePlan()` → `applyUpgradePlan()` writes `.state.json` once: `tracks` when absent (a malformed list left alone);
   approvals missing from `approvalHistory` as `legacy` records (`legacyRecord()`, as `approvePhase` seeds); for a snapshot-less
@@ -233,7 +236,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.13** — `meta.specVersion`, the SessionStart notice and `spec_upgrade` (the read-only audit, the safe migrations,
   UPGRADE.md).
 - **1.22 review 2** — doctor's `ears` / `traceability` started failing a feature approved before 1.22 with bare `AC-1`, `AC-2`
-  criteria; the audit lists them (`bareAcIds`) with the renumber item. **1.22 review 3** — a change has no tasks.md / test-plan.md:
+  criteria; the audit lists them (`bareAcIds`) with the renumber item.
+- **1.28** — the m / l Reuse & Integration gate: a design approved before it is listed (`designReuseDue`, attention
+  `design-reuse`), never failed or migrated. **1.22 review 3** — a change has no tasks.md / test-plan.md:
   the item names its tasks' `_Requirements:_` in change.md.
 
 ### Decisions and spikes

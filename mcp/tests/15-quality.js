@@ -1041,4 +1041,23 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       "1.19 verify 5: backlog add of a NEW name with a 2,500-character note is refused (localized — EN / PT / pt-BR; the CLI exits 1), nothing written; 2,000 characters pass; a multi-line note is stored on one line (got " +
       js([v5Long, v5Max.ok, v5Lines.ok, v5List, v5Cli.status, (v5Cli.stdout + v5Cli.stderr).slice(0, 200), v5Pt.error]) + ")");
   }
+
+  // 1.28 — the review flow names the duplicate detector and the verifier
+  {
+    const rd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n");
+    const ws = (t) => t.replace(/\s+/g, " ");
+    const review = ws(rd("commands", "spec-review.md")), exec = ws(rd("commands", "executeTask.md")), rev = ws(rd("agents", "spec-reviewer.md"));
+    const simp = ws(rd("agents", "spec-simplifier.md")), guide = ws(rd("skills", "dev-spec-driven", "references", "code-reuse-and-quality.md"));
+    const sub = ws(rd("skills", "dev-spec-driven", "references", "subagent-execution.md"));
+    const cut = (t, a, b) => t.slice(t.indexOf(a), t.indexOf(b, t.indexOf(a) + 1));
+    all("1.28 review flow: /spec-review (branch · converge · simplify), /executeTask --subagents' final review, the reviewer, the simplifier, code-reuse-and-quality.md and subagent-execution.md run the duplicate detector first — its `existing` runs are the reviewer's candidate findings, its `within` runs the simplifier's, each verified (spec-verifier) — a repeat the spec asks for or one listed under \"Duplicated on purpose\" is none", {
+      review: () => /\*\*Duplicates first\*\* \(branch · converge · simplify\): `spec_scan \{duplicates: true, name\}`/.test(review) && /`existing` runs go to the reviewer as candidate findings, its `within` runs to the simplifier; each is verified/.test(review) && /"Duplicated on purpose"/.test(review),
+      exec: () => /The final review starts from `spec_scan \{duplicates: true, name\}`: its `existing` runs are the reviewer's candidate findings, verified/.test(exec),
+      reviewer: () => /the duplicate detector's `existing` runs first when the dispatch carries them/.test(rev) && /"Duplicated on purpose" is not/.test(rev),
+      simplifier: () => /the duplicate detector's `within` runs/.test(simp),
+      guide: () => /`spec_scan \{duplicates: true, name: "<feature>"\}` \/ `dev-spec dupes <feature>/.test(guide) && /\*\*Start from the detector's `existing` runs\*\*/.test(guide) && /goes through the verifier/.test(guide),
+      final: () => /run the duplicate detector — `spec_scan \{duplicates: true, name\}`/.test(cut(sub, "## Final review", "## The simplification pass")) && /\*\*candidate findings\*\*/.test(sub),
+      simplifyPass: () => /the detector's `within` runs/.test(cut(sub, "## The simplification pass", "## Closing")),
+    });
+  }
 };

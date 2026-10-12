@@ -243,17 +243,19 @@ function createContext(argv, io) {
   // a document the human output prints (export html / md, catalog's and changelog's markdown) — always there for the human
   // output; with --json only on --include-body, as spec_export {includeBody} (the MCP default leaves it out: --json = the MCP result).
   c.bodyWanted = () => (flags.json ? c.boolFlag("include-body") === true : true);
-  // --cap / --max / --timeout: an integer ≥ 1, like the MCP schema ({type: integer, minimum: 1}) — and at most the command's bound
-  // (its entry's `bounds`: next --max ≤ 8, --timeout ≤ TIMEOUT_MAX_S). parseInt read "1.5" as 1, "-3" as -3 (a scan of zero files,
-  // "truncated") and "abc" as the default. Absent → undefined (the engine's default).
+  // --cap / --max / --timeout / --min-lines: an integer ≥ 1, like the MCP schema ({type: integer, minimum: 1}) — and at most the
+  // command's bound (its entry's `bounds`: next --max ≤ 8, --timeout ≤ TIMEOUT_MAX_S; a [least, most] pair — dupes --min-lines 4–100,
+  // the schema's minimum and maximum). parseInt read "1.5" as 1, "-3" as -3 (a scan of zero files, "truncated") and "abc" as the
+  // default. Absent → undefined (the engine's default).
   c.intFlag = (k) => {
     if (flags[k] === undefined) return undefined;
-    const max = c.entry && c.entry.bounds ? c.entry.bounds[k] : undefined;
+    const b = c.entry && c.entry.bounds ? c.entry.bounds[k] : undefined;
+    const [min, max] = Array.isArray(b) ? b : [1, b];
     const v = String(flags[k]).trim();
-    if (/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= 1 && (max === undefined || Number(v) <= max)) return Number(v);
+    if (/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= min && (max === undefined || Number(v) <= max)) return Number(v);
     const A = spec.msg(spec.projectLang(c.projectDir)).args;
     const most = max === undefined ? "" : c.projectText().atMost(max);
-    return c.die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(1) + most, JSON.stringify(String(flags[k])))), c.invalidArg("--" + k));
+    return c.die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(min) + most, JSON.stringify(String(flags[k])))), c.invalidArg("--" + k));
   };
   c.timeoutFlag = () => c.intFlag("timeout");
   // done / finish: --shell and --timeout say how --run runs the commands — without --run they are a usage error (ignored).

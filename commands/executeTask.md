@@ -33,7 +33,8 @@ reason}`.
 `spec_task_brief {write: true}` → `dev-spec-driven:spec-implementer` → `dev-spec-driven:spec-reviewer` (each Critical /
 Important finding and each ❌ checked first by one `dev-spec-driven:spec-verifier` per finding — 80 or more opens a fix round;
 a new unit that is a duplicate in the existing codebase is Important) → `spec_complete_task` after a clean review. Stop at every `**Checkpoint:**`;
-`inlineOnly` tasks run inline; `spec_next_task {waves: true}` plans parallel waves.
+`inlineOnly` tasks run inline; `spec_next_task {waves: true}` plans parallel waves. The final review starts from
+`spec_scan {duplicates: true, name}`: its `existing` runs are the reviewer's candidate findings, verified like any other.
 
 **`commit [note]`** — draft a conventional commit (`type(scope): summary`) whose body cites the chain: `Part of
 .specs/<feature>/ task #N.`, `Makes T-xx green` (+tdd), the eval delta (+ai); Phase 4 tests and a red regression test in

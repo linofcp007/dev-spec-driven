@@ -117,7 +117,8 @@ ambiguity `[NEEDS CLARIFICATION: …]` (the design can't start while one remains
 
 **Phase 2.** Base sections: Overview · Architecture · **Reuse & Integration** · **Alternatives & Trade-offs** · Data
 Models · API Contracts · Security · Error Handling · Testing Strategy · **Risks** · **Constitution Check** · Complexity
-Tracking, plus each track's sections (doctor warns `design-tradeoffs` / `design-risks` / `design-reuse`). For the
+Tracking, plus each track's sections (doctor warns `design-tradeoffs` / `design-risks` / `design-reuse` — at size m / l
+the Reuse & Integration is a gate: name what is reused, extended or new). For the
 Constitution Check `spec_doctor` only checks that the section is there; the human judges it.
 `spec_create` always scaffolds `quickstart.md` and `checklist.md` — fill both.
 
@@ -152,8 +153,10 @@ evidence: run the check or say what is unverified.
 **Subagents (opt-in, ~6+ independent tasks, 2–3× the tokens):** per task `spec_task_brief {name, number, write: true}`,
 dispatch **`dev-spec-driven:spec-implementer`** with its path, send the diff to **`dev-spec-driven:spec-reviewer`**,
 verify each ❌ / Critical / Important finding (a `dev-spec-driven:spec-verifier` per finding; only 80+ opens a fix
-round), at most 5 rounds, then `spec_complete_task`. You never write feature code; stop at every `**Checkpoint:**`; a
-finding that changes an AC, the design or a planned test goes back to that phase; +ai prompt tasks stay inline.
+round), at most 5 rounds, then `spec_complete_task`. The final review starts from the duplicate detector
+(`spec_scan {duplicates: true, name}` — candidates, verified like any finding). You never write feature code; stop at
+every `**Checkpoint:**`; a finding that changes an AC, the design or a planned test goes back to that phase; +ai prompt
+tasks stay inline.
 `references/subagent-execution.md` — also the converge pass and the optional simplification pass.
 
 ## Gates and approvals

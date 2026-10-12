@@ -9,7 +9,8 @@
  *                      engine's spec.CLI_SWITCHES (the approval hook's lexer reads that list — a new switch goes THERE).
  *                      Absent: the command checks nothing itself (evals hands every flag to run-evals.js; help).
  *   max                the most positional arguments it takes (absent: any number, or its handler checks them)
- *   bounds             the largest value of an integer flag (next --max ≤ 8, --timeout ≤ TIMEOUT_MAX_S) — read by c.intFlag()
+ *   bounds             the largest value of an integer flag (next --max ≤ 8, --timeout ≤ TIMEOUT_MAX_S), or its [least, most] (dupes
+ *                      --min-lines 4–100) — read by c.intFlag()
  *   args, sub          shell completion (cli/completion.js): what each positional is, per position — words, or a source:
  *                      @feature / @archived (the project's feature names, read on Tab), @command, @file, @dir, or a value list
  *                      completionModel() names (@track, @phase…); null offers nothing there, a trailing "..." repeats the last.
@@ -62,7 +63,7 @@ const NEXT_MAX = 8;
 // occurrence (any other given twice is a usage error); `optional` — its value may be left out (1.25 create / bugfix /
 // spike --branch [<name>]: a bare --branch, the last word or a flag after it, is true — the default name).
 const VALUE_FLAG_SPECS = [
-  ["project", { values: "@dir" }], ["lang", { values: "@lang" }], ["order"], ["cap"], ["by"], ["summary"], ["kind"], ["max"], ["evidence"], ["exit"], ["cmd"],
+  ["project", { values: "@dir" }], ["lang", { values: "@lang" }], ["order"], ["cap"], ["min-lines"], ["by"], ["summary"], ["kind"], ["max"], ["evidence"], ["exit"], ["cmd"],
   ["shell", { values: "bash pwsh powershell cmd" }], // done --run --shell bash|pwsh|<path>
   ["add", { repeatable: true }], ["rm", { repeatable: true }], // depend <f> --add x[,y] --rm x[,y]
   ["name"], // classify --name <feature name> (evidence for the classifier, like spec_classify {name}); import --name
@@ -1733,6 +1734,35 @@ const COMMANDS = [
         log(B.env(r.envVars.slice(0, 20).join(", ") || B.none, Math.max(0, r.envVarsTotal - 20)));
         log(B.migrations(r.migrationsTotal, r.migrationDirs.join(", ")));
         if (r.readNote) log("  " + r.readNote);
+      });
+    },
+  },
+  {
+    name: "dupes",
+    options: ["min-lines", "tests"], max: 1,
+    bounds: { "min-lines": [4, 100] },
+    args: ["@feature"],
+    help: `  dupes [feature] [--min-lines N] [--tests]   Repeated code: a feature's _Implements:_ code that repeats code elsewhere in
+                                  the project (existing — reuse it) or inside the feature (within); no feature: the project's top
+                                  duplicates. Windows of N code lines (default 8, 4–100); --tests: test files too`,
+    run(c) {
+      // dev-spec dupes [feature] [--min-lines N] [--tests] (= spec_scan {duplicates: true, name, minLines, tests}) — read-only, exit 0
+      const { out, fail, log } = c;
+      const r = c.call("dupes");
+      if (!r.ok) return fail(r);
+      const T = r.feature ? c.featureText(r.feature) : c.projectText();
+      const at = (x) => x.file + ":" + x.from + "-" + x.to;
+      return out(r, (r) => {
+        if (r.feature) log(T.dupesHead(r.feature, r.counts.existing, r.counts.within, r.minLines, r.scanned.files, r.scanned.lines));
+        else log(T.dupesHeadProject(r.total, r.minLines, r.scanned.files, r.scanned.lines));
+        if (r.feature && !r.featureFiles) log(T.dupesNoCode);
+        else if (!r.total) log(T.dupesNone);
+        for (const d of r.duplicates) {
+          const also = d.also.map(at).join(", ") + (d.alsoMore ? " " + T.dupesAlsoMore(d.alsoMore) : "");
+          log((d.kind === "existing" ? T.dupesExisting : T.dupesWithin)(at(d), d.lines, also));
+        }
+        if (r.total > r.duplicates.length) log(T.dupesMore(r.total - r.duplicates.length));
+        if (r.truncated) log(T.dupesTruncated(r.scanned.files));
       });
     },
   },

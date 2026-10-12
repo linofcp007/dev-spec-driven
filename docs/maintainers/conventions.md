@@ -252,8 +252,9 @@ History at the end.
 - **Help:** `--help` anywhere runs nothing. `<command> --help`, `-h` (a switch) and `help <command>` print `helpFor()` — the
   entry's `help` lines and its `COMMAND_OPTIONS`; otherwise `helpText()`, every entry's lines in table order. A new entry's
   `help` starts `  <name> ` at two spaces (a test checks it).
-- **Numbers:** `--cap`, `--max`, `--timeout` go through `intFlag()` (an integer ≥ 1, ≤ the entry's `bounds` — `--timeout` ≤
-  2147483, Node's timer limit; next `--max` ≤ 8). Where the CLI passes raw strings the engine refuses what the MCP schema
+- **Numbers:** `--cap`, `--max`, `--timeout`, `--min-lines` go through `intFlag()` (an integer ≥ 1, ≤ the entry's `bounds` —
+  `--timeout` ≤ 2147483, Node's timer limit; next `--max` ≤ 8; a `[least, most]` pair for dupes `--min-lines`, 4–100 — the MCP
+  schema's `minimum` / `maximum`). Where the CLI passes raw strings the engine refuses what the MCP schema
   refuses, in the validator's words (`msg(lang).args`): `taskNumber()` takes digits only (`"1.9"` is not task 1); a task number
   asked for (`askedTaskNumber()`) is an integer ≥ 0, not ≥ 1 — the scanner serves a hand-written "0." task, so refusing 0 would
   loop next → complete; a roadmap `order` is a SAFE integer (`orderInput()`).
@@ -433,6 +434,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.25** — `dry-run` became a CLI switch (`import --dry-run`), skipped under `evals`.
 - **1.27** — `helpText()` derived from the table: exactly the lines the pre-1.27 rule cut out of the whole help (a test checks
   it).
+- **1.28** — `tests` became a CLI switch (`dupes --tests`); `bounds` takes a `[least, most]` pair (`dupes --min-lines` 4–100,
+  the schema's minimum — `--min-lines 3` passed the old ≥ 1 rule where MCP refuses `minLines: 3`).
 
 ### Shell completion
 - **1.25** — `completion <shell>` and the hidden `__complete`; `IMPORT_TOOLS` among the value lists. `__complete` measured ~80
