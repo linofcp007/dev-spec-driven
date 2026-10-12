@@ -30,7 +30,10 @@
  *                                    nearestProject): start itself with any .specs/, else the nearest dev-spec one above it
  *                                    (≤ PROJECT_MAX_UP levels)
  *   sessionAnchors(env) · sessionProjects({cwd, anchors})   the session resolution the hooks share before the engine loads
- *   usable · unexpandedVar · expandHome · isNetwork          reading a folder value as the engine does
+ *   usable · unexpandedVar · expandHome · isNetwork          reading a folder value as the engine does (isNetwork IS files.js
+ *                                    isNetworkPath)
+ *   fsTargetPath · editTargets       a Write / Edit target as the file system reads it (guards.js guardTargetPath /
+ *                                    approvalEditTargets ARE them; hooks/hook-utils.js re-exports them)
  *   utf16OrUtf8 · textOf · jsonOf · readText · readJsonFile · isUtf16   a file as the engine reads it (files.js decodeText)
  * A network or device path (\\host\share, //host/share, \\?\UNC\…) is never walked up: no stat climbs a share, and none is made on a
  * path only the agent named (the callers pass the session's own folders). mcp/tests/10-guards-probe.js checks every caller agrees.
@@ -56,20 +59,63 @@ function expandHome(p) {
   const s = String(p == null ? "" : p);
   return RE_HOME_PREFIX.test(s) ? path.join(require("os").homedir(), s.slice(1)) : s;
 }
-// A network or device path (files.js isNetworkPath): \\host\share, //host/share, \\?\UNC\…, \\.\pipe\…; \\?\C:\… is a local drive,
-// WSL's \\wsl$\ and \\wsl.localhost\ name no network host.
+// A network or device path — the ONE test (files.js isNetworkPath is this function): UNC `\\host\share`, `//host/share`,
+// `\\?\UNC\host\share`, `\\.\UNC\…` open an SMB/WebDAV connection to whatever host they name (on Windows the redirector sends the
+// user's NTLM credentials) and, a hook or the engine being synchronous, block until an unreachable host times out (a status line
+// hung 7 minutes on a payload cwd `\\192.0.2.1\share`). Local: the extended/device forms of a drive path (`\\?\C:\…`, `\\.\C:\…`)
+// and WSL's own hosts (`\\wsl$\…`, `\\wsl.localhost\…`). Other device paths (`\\.\pipe\…`, `\\?\Volume{…}\…`) are no project
+// folder either. (A drive letter mapped to a share can't be told apart without I/O.)
 function isNetwork(p) {
   const s = String(p).trim();
   if (!/^[\\/]{2}/.test(s)) return false;
   let rest = s.slice(2);
   if (/^[?.][\\/]/.test(rest)) {
     rest = rest.slice(2);
-    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false;
-    if (!/^UNC[\\/]/i.test(rest)) return true;
+    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false; // \\?\C:\… — a local drive
+    if (!/^UNC[\\/]/i.test(rest)) return true; // \\.\pipe\…, \\?\Volume{…}, \\?\GLOBALROOT\… — not a project folder
     rest = rest.slice(4);
   }
   const host = rest.split(/[\\/]/)[0].toLowerCase();
   return host !== "wsl$" && host !== "wsl.localhost";
+}
+
+// ---- a Write / Edit target as the file system reads it ----------------------------------------------------------------------
+// The edit guard's and the approval guard's reading (engine/guards.js guardTargetPath / approvalEditTargets ARE these; the approval
+// hook's pre-check reads them through hooks/hook-utils.js before the engine loads).
+// A target as the Windows file system reads it (win: process.platform === "win32" by default; elsewhere ':' is a file name
+// character and /c/ a folder): an NTFS stream suffix on the last segment is dropped — `a.ts::$DATA` IS a.ts, `a.ts:x` /
+// `a.ts:x:$DATA` a stream of it (an edit of it all the same) — and Git Bash's `/c/…` is `C:/…` (`//host` untouched). Both were read
+// as no code / outside the project and allowed with the guard on.
+function fsTargetPath(p, win = process.platform === "win32") {
+  let s = String(p);
+  if (!win) return s;
+  const m = /^\/([A-Za-z])(?=\/|$)/.exec(s);
+  if (m) s = m[1].toUpperCase() + ":" + (s.slice(2) || "/");
+  const cut = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\")) + 1; // the last segment
+  const from = cut === 0 && /^[A-Za-z]:/.test(s) ? 2 : 0; // a drive-relative "C:a.ts" keeps its drive
+  const i = s.indexOf(":", cut + from);
+  return i > cut ? s.slice(0, i) : s;
+}
+// A Write / Edit target (absolute, or relative to the payload's cwd) → the paths the file system reads it as: [resolved] (`./`, `..`
+// and a stream suffix taken out — `.specs/./roadmap.json`, `.specs/alpha/../roadmap.json`, `roadmap.json::$DATA` were matched as text
+// and allowed) plus, on every platform, its real path (the file's, else its folder's + the name): an 8.3 short name (`ROADMA~1.JSO`,
+// `STATE~1.JSO`) and a folder linked to .specs/ or to a feature folder (`ln -s .specs sx` → `sx/roadmap.json` IS
+// .specs/roadmap.json). Never a disk call on a network path; a relative path under a network cwd is read as text.
+function editTargets(fp, cwd, win = process.platform === "win32") {
+  const s = fsTargetPath(String(fp).trim(), win);
+  if (isNetwork(s)) return [s];
+  const c = usable(cwd);
+  if (c && isNetwork(c) && !path.isAbsolute(s) && !/^[A-Za-z]:/.test(s)) return [c.replace(/[\\/]+$/, "") + "/" + s]; // under a network cwd: text only
+  const base = c && !isNetwork(c) ? path.resolve(fsTargetPath(c, win)) : process.cwd();
+  let abs;
+  try { abs = path.resolve(base, s); } catch { return [s]; }
+  const out = [abs];
+  let real = null;
+  try { real = fs.realpathSync.native(abs); } catch {
+    try { real = path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs)); } catch { real = null; }
+  }
+  if (real && real !== abs) out.push(real);
+  return out;
 }
 
 // ---- a file as the engine reads it -----------------------------------------------------------------------------------------
@@ -196,6 +242,6 @@ function sessionProjects(opts = {}) {
 
 module.exports = {
   SESSION_MAX_UP, PROJECT_MAX_UP, RE_AUTOGEN, RE_UNEXPANDED_VAR, unexpandedVar, usable, RE_HOME_PREFIX, expandHome, isNetwork,
-  utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16,
+  fsTargetPath, editTargets, utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16,
   isDevSpecProject, nearestDevSpec, nearestSpecs, nearestProject, sessionAnchors, sessionProjects,
 };
