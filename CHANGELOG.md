@@ -3,6 +3,43 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.29.0] — 2026-10-12
+
+dev-guardian at the finish line. With dev-guardian (3.2.0+) installed, closing a feature can run its security and quality
+gate as recorded evidence — not as an instruction the model may skip.
+
+### Added
+- **The `guardian` project check** — `dev-spec init --guardian` (`spec_init {guardian: true}`; `--guardian off` removes it)
+  stores `node .specs/guardian.cjs scan --project . --fail-on high --format json` in `meta.checks`. `.specs/guardian.cjs` is a
+  small generated launcher that runs the **newest installed dev-guardian** (`DEV_GUARDIAN_CLI` first, then the plugin
+  cache's newest version), so the check survives updates of both plugins; it runs the same under bash, cmd.exe, Windows
+  PowerShell and pwsh. Removing or replacing the check is a guard-down for the approval guard.
+- **`/spec-finish` runs it** (`finish --run`): dev-guardian gates against `.guardian/baseline.json`, so only a **new**
+  finding at or above high blocks the finish — historical debt never does. The blocker lists the findings with the
+  **feature's own files first**, marked `[this feature]` (`src/checkout.js:4 github-pat (high) [this feature]`), and says
+  how to proceed: fix it, or — only when you accept one — record that in dev-guardian (`dev-guardian baseline update`, or a
+  suppression), never by forcing the finish. An incomplete scan (a scanner missing) and a configuration error are named as
+  such and keep the check failed. Over MCP the agent runs the command and reports it with `spec_finish {evidence}` (its JSON
+  report included); the verdict is the same on both surfaces.
+- **The offer**: `init` and `spec_upgrade` notice dev-guardian (installed, or a `.guardian/` in the project) and offer
+  `init --guardian` — never turned on by themselves (the scan takes minutes and needs its scanners).
+- **dev-guardian's duplication budget**: with `quality.duplication_pct` in `.guardian/budgets.yml`, `dev-spec dupes` /
+  `spec_scan {duplicates: true}` shows the project's duplicated-code share beside it (and says the two measures are close,
+  not identical); `/spec-finish`'s duplicate warning mentions it when the project is over.
+- **A cross-plugin contract**: a test holds the dev-spec names dev-guardian calls (`spec_roadmap_edit`, `spec_create`,
+  `spec_init {guardian}`, `/spec`, `/clarify --grill`, `/spec-finish`, `init --guardian`, `backlog add`) to the LISTED
+  surface; dev-guardian 3.2.0 keeps the mirror test. (dev-guardian ≤ 3.1 handed improvement seeds to `spec_backlog`, a
+  hidden alias since 1.26 that Claude Code can't call — fixed on its side in 3.2.0.)
+
+### Fixed
+- `references/improvement-specs.md` named a `.guardian/perf-budget.yml` that doesn't exist and budget keys dev-guardian
+  doesn't have; it now names the real `budgets.yml` keys and where size / coverage thresholds come from instead.
+
+### Tests
+- Test chains also drop `DEV_GUARDIAN_CLI` and point `CLAUDE_CONFIG_DIR` at an empty folder, so a maintainer's installed
+  plugins never change results.
+- `node mcp/test.js` 2191 assertions (was 2182), `node cli/test-cli.js` 639 (was 633).
+
 ## [1.28.0] — 2026-10-12
 
 Reuse, checked by the engine. Until now "don't repeat existing code" was prose only — the implementer searches before it
