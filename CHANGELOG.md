@@ -3,6 +3,21 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.29.1] — 2026-10-12
+
+### Changed
+- **"Close the feature" reaches the skill.** The skill's description now names closing a finished feature — its checks,
+  dev-guardian's gate included, then a local merge. Tested in a real Claude Code session with plain Portuguese ("A feature
+  checkout está pronta. Fecha-a."): the agent reached `spec_finish`, ran dev-guardian's gate itself, recorded the failed
+  run and refused to close on a SQL injection in the feature's file — but loaded the skill in only one of two runs (the
+  other went straight to the tools). New triggering evals `trigger-finish-pt` / `-es`; the triggering + negative suite
+  with `claude plugin eval` (CLI 2.1.292, Windows): **12/12 cases at 1.0** (36 runs, $3.64) — the two new cases fire 3/3,
+  every near-miss (a trivial fix, `requirements.txt`, `eval()`, one LLM call, an unrelated question) stays silent.
+
+### Tests
+- `node mcp/test.js` 2191 assertions, `node cli/test-cli.js` 639 (unchanged — one assertion now also requires the
+  description to name closing a feature).
+
 ## [1.29.0] — 2026-10-12
 
 dev-guardian at the finish line. With dev-guardian (3.2.1+) installed, closing a feature can run its security and quality
