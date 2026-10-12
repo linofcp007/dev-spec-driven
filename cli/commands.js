@@ -471,24 +471,32 @@ function evalsArgs(c) {
   return { feature, help, rest };
 }
 
-// create / bugfix (each its own entry: options, help) — one handler.
-function createCommand(c) {
-  const { pos, out, fail, usage, log } = c;
-  // each its own usage (`bugfix` without a name printed create's)
-  if (!pos[0]) usage(c.cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--branch [<name>]] [--lang en|pt|pt-BR|es]'
-    : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
-  const branch = branchFlag(c); // --branch [<name>] — what git says is read BEFORE the engine records anything
+// create / bugfix / spike: the create operation with --branch [<name>] — what git says is read BEFORE the engine records anything,
+// `git switch -c <name>` runs after (the engine never does) —, then the feature line, more(r)'s lines (the spike's question and
+// timebox) and the branch line.
+function createRun(c, more) {
+  const { out, fail, log } = c;
+  const branch = branchFlag(c);
   const git = branch ? branchGitFacts(c) : undefined;
   // The operation's flags and words as mcp/lib/operations.js maps them; cli: a refusal names the flag (--root-cause), not the MCP key
   // git: what git said here (the engine reads no git process — MCP: the repository's files)
   const r = c.call("create", { branch, git, cli: true });
   if (!r.ok) return fail(r);
-  const switched = branch ? branchSwitch(c, r, git) : null; // runs `git switch -c <name>` — the engine never does
+  const switched = branch ? branchSwitch(c, r, git) : null;
   return out(r, (r) => {
     const T = c.cliText(r.lang);
     log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : ""));
+    if (more) more(r);
     if (switched) log(switched);
   });
+}
+// create / bugfix (each its own entry: options, help) — one handler.
+function createCommand(c) {
+  const { pos, usage } = c;
+  // each its own usage (`bugfix` without a name printed create's)
+  if (!pos[0]) usage(c.cmd === "bugfix" ? 'dev-spec bugfix "<name>" [tracks...] [--summary "…"] [--reproduction "…"] [--root-cause "…"] [--condition "…"] [--behaviour "…"] [--branch [<name>]] [--lang en|pt|pt-BR|es]'
+    : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
+  return createRun(c);
 }
 const CREATE_OPTIONS = ["tracks", "summary", "lang", "brownfield", "flow", "question", "timebox", "reproduction", "root-cause", "condition", "behaviour", "include-body", "size", "branch"];
 
@@ -700,22 +708,15 @@ const COMMANDS = [
                                   requirements/design gates (= create --kind spike; prototype code stays outside .specs/)`,
     run(c) {
       // dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d|2w|8h] [--summary …] [--lang] — the spike shortcut
-      // (spec_create {kind: "spike"} — the operation's `cmd`; `create "<name>" --kind spike` is the same call).
-      const { pos, out, fail, usage, log } = c;
+      // (spec_create {kind: "spike"} — the operation's `cmd`; `create "<name>" --kind spike` is the same call: --branch [<name>] —
+      // spike/<slug> by default — and a flow's note as create's).
+      const { pos, usage, log } = c;
       if (!pos[0]) usage('dev-spec spike "<name>" [--question "…"] [--timebox YYYY-MM-DD|3d] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
-      const branch = branchFlag(c); // --branch [<name>] (spike/<slug> by default), as create
-      const git = branch ? branchGitFacts(c) : undefined;
-      const r = c.call("create", { branch, git, cli: true }); // a flow gets its note; cli: a refusal names the flag
-      if (!r.ok) return fail(r);
-      const switched = branch ? branchSwitch(c, r, git) : null;
-      return out(r, (r) => {
-        const T = c.cliText(r.lang);
+      return createRun(c, (r) => {
         const SP = spec.msg(r.lang).spike;
-        log(T.feature(r.slug, r.label, r.lang) + "\n  " + (r.created.join(", ") || T.nothingNew) + (r.note ? "\n  " + r.note : ""));
         const si = spec.spikeInfo(r.dir);
         if (si.question) log(SP.cliQuestion(si.question));
         if (si.timebox.state === "date") log(SP.cliUntil(si.timebox.date));
-        if (switched) log(switched);
       });
     },
   },
