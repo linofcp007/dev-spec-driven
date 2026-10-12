@@ -162,7 +162,7 @@ user for permission — a subagent that hits the prompt mid-task stalls the loop
 
 - **Verbatim duplication** (the same lines twice) is found by a copy-paste detector. The plugin has one —
   `spec_scan {duplicates: true, name: "<feature>"}` / `dev-spec dupes <feature> [--min-lines N] [--tests]`: windows of
-  N code lines (default 8; comments, blank, brace-only and import lines left out, string contents kept) of the
+  N code lines (default 6; comments, blank, brace-only and import lines left out, string contents kept) of the
   feature's `_Implements:_` files that repeat code elsewhere in the project (`existing` — reuse or extend it) or inside
   the feature (`within` — the simplifier's); without a feature, the project's top duplicates. Its runs are
   **candidates**, never verdicts: a repeat the spec asks for, generated-looking code or a copy the report names under

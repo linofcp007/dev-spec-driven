@@ -38,7 +38,7 @@ exports.run = ({ ok, all, runIn, tmp, require, __dirname }) => {
   const withTests = jsonOf(runIn(["dupes", "checkout", "--tests", "--min-lines", "4", "--project", p, "--json"]));
   all("1.28 dupes (CLI): the feature's report — its head, each run as file:from-to with the places it repeats (⚠ existing, reuse or extend it), exit 0; --json IS spec_scan {duplicates: true, name}'s result; no feature: the project's repeated blocks; --tests / --min-lines reach the engine (got " +
     js([human.code, human.out, whole.out.split("\n")[0], withTests.minLines, withTests.counts]) + ")", {
-    head: () => human.code === 0 && /^Duplicates — checkout: 1 place\(s\) repeat existing code · 0 repeated within the feature  \(windows of 8 code lines; 2 files, \d+ code lines read\)$/m.test(human.out),
+    head: () => human.code === 0 && /^Duplicates — checkout: 1 place\(s\) repeat existing code · 0 repeated within the feature  \(windows of 6 code lines; 2 files, \d+ code lines read\)$/m.test(human.out),
     line: () => human.out.includes("  ⚠ src/checkout/total.js:4-14 (10 lines) repeats src/lib/money.js:4-15 — reuse or extend the existing code"),
     json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.duplicationReport(p, { name: "checkout" })),
     project: () => whole.code === 0 && /^Duplicates — the project: 1 repeated block\(s\)/.test(whole.out) && /  · src\/checkout\/total\.js:4-14 \(10 lines\) also at src\/lib\/money\.js:4-15/.test(whole.out),

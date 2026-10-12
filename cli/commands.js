@@ -1744,7 +1744,7 @@ const COMMANDS = [
     args: ["@feature"],
     help: `  dupes [feature] [--min-lines N] [--tests]   Repeated code: a feature's _Implements:_ code that repeats code elsewhere in
                                   the project (existing — reuse it) or inside the feature (within); no feature: the project's top
-                                  duplicates. Windows of N code lines (default 8, 4–100); --tests: test files too`,
+                                  duplicates. Windows of N code lines (default 6, 4–100); --tests: test files too`,
     run(c) {
       // dev-spec dupes [feature] [--min-lines N] [--tests] (= spec_scan {duplicates: true, name, minLines, tests}) — read-only, exit 0
       const { out, fail, log } = c;

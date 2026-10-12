@@ -3,6 +3,39 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.28.0] — 2026-10-12
+
+Reuse, checked by the engine. Until now "don't repeat existing code" was prose only — the implementer searches before it
+writes, the reviewer calls a duplicate Important, the design's Reuse & Integration was a warning. 1.28 measures it.
+
+### Added
+- **The duplicate-code detector** — `spec_scan {duplicates: true, name?, minLines?, tests?}` · `dev-spec dupes [feature]
+  [--min-lines N] [--tests] [--json]`. With a feature: the code its tasks' `_Implements:_` name, compared with the rest of
+  the project — each place that repeats **existing** code (`file:from-to ↔ file:from-to`), and repeats **within** the
+  feature's own files. Without one: the project's top repeated blocks. Language-agnostic: windows of `minLines` code lines
+  (default 6, 4–100) with comments (C-like, `#`, `--`, markup, Lisp, …), blank, brace-only and import lines left out and
+  string contents kept — a copy with renamed identifiers on its first line, other comments and another indentation is
+  found; two blocks that differ only in their strings are not. Test files are left out unless `tests: true`; generated,
+  minified and very large files are skipped; at most 5,000 files (`truncated`). This repository: ~0.1 s; a 5,000-file
+  project: ~2 s.
+- **`/spec-finish` warns** (never blocks) when the feature's code repeats existing code: how many places, the first three,
+  and the call that lists them all; repeats inside the feature are counted and pointed at the simplification pass.
+- **The review flow starts from it**: `/spec-review` (branch, converge, simplify) and `/executeTask --subagents`' final
+  review run the detector first — its `existing` runs go to the reviewer as candidate findings, its `within` runs to the
+  simplifier; each is still verified by `spec-verifier` before it costs a fix round, and a copy the spec asks for or the
+  report lists under "Duplicated on purpose" is not a finding.
+
+### Changed
+- **Reuse & Integration is a gate for sizes m / l**: the design approval of an m / l feature is refused while its Reuse &
+  Integration section is unfilled, and doctor's `design-reuse` fails there (forceable like every gate, with your consent).
+  It stays a warning for xs / s, unsized features, bugfixes, spikes and changes. Approvals made before 1.28 are never failed
+  retroactively; `spec_upgrade` lists the m / l features whose next design approval will need the section.
+- The plugin's own duplication guard (1.27.1) now runs the engine's detector — one implementation; what it reports on the
+  plugin's sources is only the two allowlisted link lists.
+
+### Tests
+- `node mcp/test.js` 2182 assertions (was 2171), `node cli/test-cli.js` 633 (was 631).
+
 ## [1.27.1] — 2026-10-12
 
 The plugin's own repeated code, gone. Measured as lines inside a window of 6 normalized code lines that appears twice:

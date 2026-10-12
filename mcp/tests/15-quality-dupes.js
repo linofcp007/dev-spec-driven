@@ -63,7 +63,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources }) => {
   const named = (r) => r.duplicates.flatMap((d) => [d.file, ...d.also.map((a) => a.file)]);
   all("1.28 dupes: a feature's copy of an existing helper (other comments, indentation, a block comment and blank lines inside) is ONE `existing` run — its file:lines and the helper's; the block its two files share is `within`, listed once; a block differing only in its strings is no duplicate; a test, a .min.js and a 'Code generated … DO NOT EDIT' copy are never read (tests: true adds the test file); stable keys (got " +
     js({ ex, wi, counts: fr.counts, skipped: fr.skipped, scanned: fr.scanned, project: all1.duplicates.map((d) => d.kind + " " + at(d)) }) + ")", {
-    ok: () => fr.ok === true && fr.feature === "checkout" && fr.minLines === 8 && fr.featureFiles === 2 && fr.truncated === false,
+    ok: () => fr.ok === true && fr.feature === "checkout" && fr.minLines === 6 && fr.featureFiles === 2 && fr.truncated === false,
     keys: () => js(Object.keys(fr)) === js(["ok", "feature", "minLines", "featureFiles", "scanned", "skipped", "truncated", "duplicates", "counts", "total"]),
     existing: () => ex.length === 1 && ex[0].file === "src/checkout/total.js" && ex[0].from === 6 && ex[0].to === 17 && ex[0].lines === 9 &&
       js(ex[0].also) === js([{ file: "src/lib/money.js", from: 4, to: 12 }]),
@@ -79,7 +79,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources }) => {
     deterministic: () => js(S.duplicationReport(dp, { name: "checkout" })) === js(fr) && js(S.duplicationReport(dp, {})) === js(all1),
   });
 
-  // minLines: a five-line repeat is found with minLines 4 (4–100), never with the default 8; the cap → truncated, a feature's own files
+  // minLines: a five-line repeat is found with minLines 4 (4–100), never with the default 6; the cap → truncated, a feature's own files
   // read all the same; a feature naming no file of its own reads nothing; an unknown feature is refused
   {
     const FIVE = ["const width = Number(options.width || 80);", "const height = Number(options.height || 24);", "const area = width * height * options.scale;",
@@ -92,9 +92,9 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources }) => {
     const none = S.createFeature(dp, "Empty", ["core"], "x");
     const nr = S.duplicationReport(dp, { name: "empty" });
     const unknown = S.duplicationReport(dp, { name: "nope" });
-    all("1.28 dupes: minLines 4 finds a five-line repeat the default 8 doesn't (an out-of-range value is the default); past the file cap `truncated`, the feature's own files still read; a feature whose _Implements:_ name no file reads nothing (featureFiles 0); an unknown feature is feature-not-found (got " +
+    all("1.28 dupes: minLines 4 finds a five-line repeat the default 6 doesn't (an out-of-range value is the default); past the file cap `truncated`, the feature's own files still read; a feature whose _Implements:_ name no file reads nothing (featureFiles 0); an unknown feature is feature-not-found (got " +
       js({ r4: r4.counts, r8: r8.counts, capped: [capped.truncated, capped.featureFiles, capped.counts], nr, unknown: unknown.code }) + ")", {
-      four: () => r4.minLines === 4 && five(r4) && !five(r8) && S.duplicationReport(dp, { minLines: 3 }).minLines === 8,
+      four: () => r4.minLines === 4 && five(r4) && !five(r8) && S.duplicationReport(dp, { minLines: 3 }).minLines === 6,
       cap: () => capped.truncated === true && capped.featureFiles === 2 && capped.counts.within === 1,
       empty: () => none.ok !== false && nr.ok === true && nr.featureFiles === 0 && nr.scanned.files === 0 && nr.total === 0,
       unknown: () => unknown.ok === false && unknown.code === "feature-not-found",

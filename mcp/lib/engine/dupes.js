@@ -20,7 +20,7 @@ function __link(E) { ({ decodeText, existingFeature, FOLD_CASE, gitignoreRules, 
   isCodeFile, isDirSafe, isImplementsGlob, isTestFile, isTestFixture, projectLang, readIfExists, realRootOf, toPosix, walkProject,
   withinRoot } = E); }
 
-const DUP_MIN_LINES = 8; // the window: this many consecutive code lines (the tool's minLines, 4–100)
+const DUP_MIN_LINES = 6; // the window: this many consecutive code lines (the tool's minLines, 4–100)
 const DUP_MIN_LINES_RANGE = [4, 100];
 const DUP_FILE_CAP = 5000; // source files read (`truncated` past it) — a feature's own files are read whatever the cap
 const DUP_MAX_BYTES = 512 * 1024; // a larger file is data or a bundle, never read (skipped.large)
@@ -201,7 +201,7 @@ function mergeIntervals(list) {
 }
 
 // The matcher over files already read — the detector's core, for any caller that has the texts (duplicationReport reads the
-// project; a test hands it the plugin's own sources). files: [{ file (a forward-slash path), text }]. opts.minLines (default 8,
+// project; a test hands it the plugin's own sources). files: [{ file (a forward-slash path), text }]. opts.minLines (default 6,
 // 4–100); opts.feature: the paths of the feature's files (a Set or an array) — then the runs of the feature's lines that repeat
 // code OUTSIDE them (`existing`) or another place INSIDE them (`within`); without it every run repeated anywhere among the files
 // (`within`), each reported once (the longest first — a place already listed beside another is not listed again). opts.code: each
@@ -389,7 +389,7 @@ function featureFileOnDisk(root, realRoot, ref, want) {
 
 // spec_scan {duplicates: true} / `dev-spec dupes [feature]`. opts.name: a feature — its code is the existing source files its
 // tasks' _Implements:_ name (every task; a folder or a glob names the code files under it), reported against the rest of the
-// project; without it the whole project's top duplicates. opts.minLines (default 8); opts.tests: test files too (left out by
+// project; without it the whole project's top duplicates. opts.minLines (default 6); opts.tests: test files too (left out by
 // default); opts.cap: the files read (engine-internal). The corpus is the scan's: source files by extension, no node_modules /
 // .git / .specs / dist / build / vendor / coverage / hidden folders nor a folder the root .gitignore names, no test fixture,
 // generated or minified file, none larger than DUP_MAX_BYTES (skipped {large, generated}).

@@ -134,7 +134,7 @@ The mechanical half of reuse — the prose asks the implementer to search, this 
   line's end; a backtick or `"""` string spans lines); one pass that jumps from one trigger character to the next (`st.trig`).
   Whitespace collapses; a BOM and CRLF are encoding; punctuation-only, block-closer and import / include / use lines are
   dropped. Each distinct line gets an id (interned) and a count: a window holding a line seen once is never hashed. Windows of
-  `minLines` (default 8, 4–100) holding ≥ minLines × 12 characters are hashed (two 32-bit mixes → one 53-bit number; a match is
+  `minLines` (default 6, 4–100) holding ≥ minLines × 12 characters are hashed (two 32-bit mixes → one 53-bit number; a match is
   then checked id by id); ≤ 32 occurrences kept per window. With a feature, its windows are hashed first and the rest only
   looked up.
 - **Runs** — matched windows grouped by diagonal (file a, file b, offset); windows no more than a window apart merge (every

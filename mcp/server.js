@@ -219,7 +219,7 @@ const TOOLS = [
         coverage: { type: "boolean", description: "Measure the specs' coverage of the code instead." },
         duplicates: { type: "boolean", description: "Find repeated code instead." },
         name: { type: "string", description: "duplicates: the feature to check." },
-        minLines: { type: "integer", minimum: 4, maximum: 100, description: "duplicates: code lines per match (default 8)." },
+        minLines: { type: "integer", minimum: 4, maximum: 100, description: "duplicates: code lines per match (default 6)." },
         tests: { type: "boolean", description: "duplicates: include test files." },
       },
     },
