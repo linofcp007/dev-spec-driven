@@ -32,6 +32,17 @@ function featureLang(projectDir, name) {
   const st = readState(projectDir, name); // readState is hoisted below
   return normalizeLang(st.lang || projectLang(projectDir));
 }
+// A tool's `lang` option (spec_templates, spec_tracks and its signals action): a language of LANGS, canonical (pt-BR / pt_br / PTBR
+// → pt-BR — its folder is .specs/templates/pt-BR/) → { lang, lng }: lang the language asked for (null when absent or blank), lng the
+// one to answer in (lang, else the project's); a value naming no language → { error }, in the project's language.
+function langOption(projectDir, value) {
+  const pl = projectLang(projectDir);
+  if (value == null || !String(value).trim()) return { lang: null, lng: pl };
+  const lang = i18n.canonicalLang(String(value));
+  if (lang) return { lang, lng: lang };
+  const A = i18n.msg(pl).args;
+  return { error: A.invalid(A.item("lang", A.oneOf(i18n.LANGS.join(", ")), JSON.stringify(String(value)))) };
+}
 // Localized engine errors: the feature's language when there is one, else the project's.
 function errs(projectDir, slug) {
   return i18n.msg(slug ? featureLang(projectDir, slug) : projectLang(projectDir)).err;
@@ -1627,4 +1638,4 @@ module.exports = { normalizeLang, projectLang, featureLang, errs, slugify, slugi
   // the installed driver still this clone's? (merge-state --check, the SessionStart hook)
   MERGE_DRIVER_KEY, gitConfigGet, mergeDriverScript, mergeDriverStatus,
   // a feature's own git branch (create --branch): its name, the repository read as files, the record
-  branchNameOk, defaultBranchName, gitRepoFacts, featureBranchRecord, branchView, featureBranch, __link };
+  branchNameOk, defaultBranchName, gitDirsOf, gitRepoFacts, featureBranchRecord, branchView, featureBranch, __link };

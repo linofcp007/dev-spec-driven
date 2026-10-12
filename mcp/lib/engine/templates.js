@@ -15,7 +15,7 @@ const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in pl
 let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, existsCached, extractAcIds,
   extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements, isInsideDir, isObj,
   isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock, packCorpusSets, packOf,
-  packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText, projectLang, PROTO_KEYS,
+  packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText, langOption, PROTO_KEYS,
   RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY, RE_TODO_SENTINEL, RE_WIN_RESERVED,
   readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN, ROOT_CAUSE_SYN, slugify,
   specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription, taskMarkerValues,
@@ -26,7 +26,7 @@ function __link(E) { ({ today, acDuplicates, artifactState, bugSectionFilled, cu
   extractAcIds, extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements,
   isInsideDir, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
-  projectLang, PROTO_KEYS, RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY,
+  langOption, PROTO_KEYS, RE_ACTIVE_TRACKS, RE_CONSTITUTION_CHECK, RE_CUSTOM_STEERING, RE_TESTABILITY,
   RE_TODO_SENTINEL, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, REPRO_SYN, requirementAcIds, REUSE_SYN, RISKS_SYN,
   ROOT_CAUSE_SYN, slugify, specsDirOf, specsRoot, statePath, steeringFrontMatter, stripHtmlComments, taskDescription,
   taskMarkerValues, tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel,
@@ -433,16 +433,9 @@ function builtInTemplate(key, lang, tracks) {
 const allTemplateKeys = () => [...Object.keys(TEMPLATE_ARTIFACTS), ...i18n.steeringKnownFiles().map((f) => "steering/" + f)];
 
 function templates(projectDir, action, opts = {}) {
-  const pl = projectLang(projectDir);
-  let lang = null;
-  if (opts.lang != null && String(opts.lang).trim()) {
-    lang = i18n.canonicalLang(String(opts.lang)); // pt-BR / pt_br / PTBR → pt-BR (its folder is .specs/templates/pt-BR/)
-    if (!lang) {
-      const A = i18n.msg(pl).args;
-      return { ok: false, error: A.invalid(A.item("lang", A.oneOf(i18n.LANGS.join(", ")), JSON.stringify(String(opts.lang)))) };
-    }
-  }
-  const lng = lang || pl;
+  const L = langOption(projectDir, opts.lang); // pt-BR / pt_br / PTBR → pt-BR (its folder is .specs/templates/pt-BR/)
+  if (L.error) return { ok: false, error: L.error };
+  const { lang, lng } = L;
   const T = i18n.msg(lng).templates;
   const act = action == null || !String(action).trim() ? "list" : String(action).trim().toLowerCase();
   if (!["list", "init", "check"].includes(act)) return { ok: false, error: T.badAction(String(action)) };
