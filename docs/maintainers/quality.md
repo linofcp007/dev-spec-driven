@@ -125,8 +125,10 @@ the TDD micro-cycle, the duplicate-code detector. The rules come first; how they
 
 ## Duplicate-code detector (1.28)
 The mechanical half of reuse — the prose asks the implementer to search, this finds what a feature repeats. engine/dupes.js.
-- **The matcher** — `duplicateRuns(files, {minLines, feature})` over texts already read (`[{file, text}]` — the plugin's own
-  sources in mcp/tests too). Per line (`codeLines()`): comments stripped by family (`STYLES` / `STYLE_OF_EXT`: C-like `//` +
+- **The matcher** — `duplicateRuns(files, {minLines, feature, code})` over texts already read (`[{file, text}]` — the plugin's
+  duplication guard, mcp/tests/16-conventions-duplication.js, runs it over its own sources: testing.md). `code: true` gives each
+  run its normalized lines (what an allow-list reads); `scanned.duplicated` counts the code lines in a repeated window, both
+  sides (the guard's share at window 6). Per line (`codeLines()`): comments stripped by family (`STYLES` / `STYLE_OF_EXT`: C-like `//` +
   `/* */` with backtick strings, `#` (the shells' only at a word's start), `--` for SQL / Lua / Haskell, `<!-- -->` in markup,
   `;` `%` `'` `!` and a batch file's REM); strings kept and never read as a comment (a one-line string ends at its quote or the
   line's end; a backtick or `"""` string spans lines); one pass that jumps from one trigger character to the next (`st.trig`).
@@ -226,5 +228,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 
 ### Duplicate-code detector
 - **1.28** — introduced: engine/dupes.js, spec_scan {duplicates}, `dev-spec dupes`, spec_finish's warning, the review flow's
-  candidates (from a prototype: windows of 6–8 normalized lines, ≥ 12 characters a line). On this repo's own mcp/lib it reports
-  5 repeated blocks at minLines 8.
+  candidates (from a prototype: windows of 6–8 normalized lines, ≥ 12 characters a line). On this repo's own mcp/lib it reported
+  5 repeated blocks at minLines 8 — after 1.27.1's cleanup, 2: the link lists the duplication guard allows. The guard (1.27.1,
+  16-conventions-duplication.js) runs this detector since 1.28 — one detector (testing.md); `code` and `scanned.duplicated`
+  serve it.

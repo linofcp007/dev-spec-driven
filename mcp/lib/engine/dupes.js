@@ -204,23 +204,25 @@ function mergeIntervals(list) {
 // project; a test hands it the plugin's own sources). files: [{ file (a forward-slash path), text }]. opts.minLines (default 8,
 // 4–100); opts.feature: the paths of the feature's files (a Set or an array) — then the runs of the feature's lines that repeat
 // code OUTSIDE them (`existing`) or another place INSIDE them (`within`); without it every run repeated anywhere among the files
-// (`within`), each reported once (the longest first — a place already listed beside another is not listed again).
-// → { minLines, scanned: {files, lines}, duplicates: [{kind, file, from, to, lines, also: [{file, from, to}], alsoMore?}],
-//    counts: {existing, within} } — every duplicate, existing first, then the longest, then by file and line. `lines` counts
-//    code lines (blank, comment, brace-only and import lines aside); from / to are the file's own line numbers.
+// (`within`), each reported once (the longest first — a place already listed beside another is not listed again). opts.code: each
+// duplicate also carries `code`, its normalized lines (what an allow-list reads — the plugin's duplication guard).
+// → { minLines, scanned: {files, lines, duplicated}, duplicates: [{kind, file, from, to, lines, also: [{file, from, to}], alsoMore?,
+//    code?}], counts: {existing, within} } — every duplicate, existing first, then the longest, then by file and line. `lines` counts
+//    code lines (blank, comment, brace-only and import lines aside); from / to are the file's own line numbers; `duplicated`: the
+//    code lines that lie in a repeated window, on either side (with a feature: of the runs reported).
 function duplicateRuns(files, opts = {}) {
   const m = minLinesOf(opts.minLines);
   const featureSet = opts.feature ? new Set(opts.feature) : null;
   // every distinct code line gets an id; lens / seen: its length and how often it occurs (a window holding a line that occurs
-  // once can repeat nowhere — never hashed)
-  const idOf = new Map(), lens = [], seen = [];
+  // once can repeat nowhere — never hashed); texts: the line itself (opts.code only)
+  const idOf = new Map(), lens = [], seen = [], texts = opts.code ? [] : null;
   let lines = 0;
   const F = files.map((x) => {
     const cl = codeLines(x.text, x.file);
     const ids = new Int32Array(cl.keys.length);
     for (let i = 0; i < cl.keys.length; i++) {
       let id = idOf.get(cl.keys[i]);
-      if (id === undefined) { id = lens.length; idOf.set(cl.keys[i], id); lens.push(cl.keys[i].length); seen.push(0); }
+      if (id === undefined) { id = lens.length; idOf.set(cl.keys[i], id); lens.push(cl.keys[i].length); seen.push(0); if (texts) texts.push(cl.keys[i]); }
       seen[id]++;
       ids[i] = id;
     }
@@ -275,6 +277,7 @@ function duplicateRuns(files, opts = {}) {
   }
   // runs: windows on one diagonal no more than a window apart cover every line between them (each line lies in a matched window)
   const sides = { existing: [], within: [] };
+  const marks = F.map((f) => new Uint8Array(f.ids.length)); // the lines in a repeated window, either side (scanned.duplicated)
   for (const [key, list] of diag) {
     const [fa, fb, d] = key.split(":").map(Number);
     list.sort((p, q) => p - q);
@@ -282,12 +285,15 @@ function duplicateRuns(files, opts = {}) {
     for (let t = 1; t <= list.length; t++) {
       if (t < list.length && list[t] <= e + m) { e = list[t]; continue; }
       const a = [fa, s, e + m - 1], b = [fb, s - d, e + m - 1 - d];
+      marks[fa].fill(1, a[1], a[2] + 1);
+      marks[fb].fill(1, b[1], b[2] + 1);
       if (!featureSet) sides.within.push([a, b], [b, a]);
       else if (F[fa].feature && F[fb].feature) sides.within.push([a, b], [b, a]);
       else if (F[fa].feature) sides.existing.push([a, b]);
       if (t < list.length) s = e = list[t];
     }
   }
+  const duplicated = marks.reduce((n, mk) => n + mk.reduce((x, v) => x + v, 0), 0);
   // per kind: each file's places merged (where they overlap or touch), with the places they repeat
   const places = (list) => {
     list.sort((p, q) => p[0][0] - q[0][0] || p[0][1] - q[0][1] || p[0][2] - q[0][2]);
@@ -318,11 +324,12 @@ function duplicateRuns(files, opts = {}) {
   const entry = (kind) => (p) => {
     const also = p.also.slice().sort((x, y) => byName(F[x[0]].file, F[y[0]].file) || x[1] - y[1]);
     return Object.assign({ kind, ...at(p.fi, p.lo, p.hi), lines: p.hi - p.lo + 1, also: also.slice(0, DUP_ALSO_MAX).map(([f, lo, hi]) => at(f, lo, hi)) },
-      also.length > DUP_ALSO_MAX ? { alsoMore: also.length - DUP_ALSO_MAX } : {});
+      also.length > DUP_ALSO_MAX ? { alsoMore: also.length - DUP_ALSO_MAX } : {},
+      texts ? { code: Array.from(F[p.fi].ids.subarray(p.lo, p.hi + 1), (id) => texts[id]) } : {});
   };
   const existing = places(sides.existing).sort(longest).map(entry("existing"));
   const within = once(places(sides.within)).map(entry("within"));
-  return { minLines: m, scanned: { files: F.length, lines }, duplicates: existing.concat(within), counts: { existing: existing.length, within: within.length } };
+  return { minLines: m, scanned: { files: F.length, lines, duplicated }, duplicates: existing.concat(within), counts: { existing: existing.length, within: within.length } };
 }
 
 // --- the project's files -----------------------------------------------------------------------------------------------------
@@ -386,7 +393,7 @@ function featureFileOnDisk(root, realRoot, ref, want) {
 // default); opts.cap: the files read (engine-internal). The corpus is the scan's: source files by extension, no node_modules /
 // .git / .specs / dist / build / vendor / coverage / hidden folders nor a folder the root .gitignore names, no test fixture,
 // generated or minified file, none larger than DUP_MAX_BYTES (skipped {large, generated}).
-// → { ok, feature?, minLines, featureFiles?, scanned: {files, lines}, skipped: {large, generated}, truncated, duplicates (the top
+// → { ok, feature?, minLines, featureFiles?, scanned: {files, lines, duplicated}, skipped: {large, generated}, truncated, duplicates (the top
 //    DUP_TOP), counts: {existing, within}, total } — stable keys, English; the CLI renders it (cliText).
 function duplicationReport(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
@@ -424,7 +431,7 @@ function duplicationReport(projectDir, opts = {}) {
       if (r === "large" || r === "generated") { skipped[r]++; if (mine) mine.delete(x.rel); } else if (r) files.push({ file: x.rel, text: r.text });
     }
   }
-  const r = mine && !mine.size ? { scanned: { files: 0, lines: 0 }, duplicates: [], counts: { existing: 0, within: 0 } } : duplicateRuns(files, { minLines: m, feature: mine });
+  const r = mine && !mine.size ? { scanned: { files: 0, lines: 0, duplicated: 0 }, duplicates: [], counts: { existing: 0, within: 0 } } : duplicateRuns(files, { minLines: m, feature: mine });
   return Object.assign({ ok: true }, f ? { feature: f.slug } : {}, { minLines: m }, mine ? { featureFiles: mine.size } : {}, {
     scanned: r.scanned, skipped, truncated: walk.truncated, duplicates: r.duplicates.slice(0, DUP_TOP), counts: r.counts, total: r.duplicates.length,
   });

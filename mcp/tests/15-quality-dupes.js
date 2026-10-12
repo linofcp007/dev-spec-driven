@@ -195,15 +195,27 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources }) => {
       "1.28 spec_finish: repeats inside the feature only → one warning with the count (the simplification pass's); none → no warning and no `duplicates` key (got " + js([wWarn, w1.duplicates, w0.duplicates]) + ")");
   }
 
-  // --- dogfood: the detector over the plugin's own engine sources (mcp/lib) — the top runs, printed; the threshold is another test's ---
+  // --- duplicateRuns over texts: `code` (the run's normalized lines — what an allow-list reads) and scanned.duplicated (the lines in a
+  // repeated window, both sides) ---
+  {
+    const r = S.duplicateRuns([{ file: "a.js", text: "// a\n" + HELPER.join("\n") + "\n" }, { file: "b.js", text: HELPER.map((l) => "    " + l + "  /* b */").join("\n") + "\n" }], { code: true });
+    const plain = S.duplicateRuns([{ file: "a.js", text: HELPER.join("\n") }, { file: "b.js", text: HELPER.join("\n") }]);
+    ok(r.duplicates.length === 1 && js(r.duplicates[0].code) === js(HELPER.slice(0, 9).map((l) => l.trim())) && r.scanned.duplicated === 18 && r.scanned.lines === 18 &&
+      plain.duplicates[0].code === undefined && plain.scanned.duplicated === 18,
+      "1.28 duplicateRuns: {code: true} gives each run its normalized lines (comments out, whitespace folded); scanned.duplicated counts the code lines in a repeated window on both sides (got " +
+      js([r.duplicates, r.scanned, plain.scanned]) + ")");
+  }
+
+  // --- the two entry points agree: duplicationReport walking a folder (mcp/lib) = duplicateRuns over the same files read by hand
+  // (libSources()) — the call 16-conventions-duplication.js, the plugin's own duplication guard, makes over all its sources ---
   {
     const lib = path.join(root, "mcp", "lib");
     const rep = S.duplicationReport(lib, { minLines: 8 });
     const files = libSources().map((f) => ({ file: path.relative(lib, f).split(path.sep).join("/"), text: fs.readFileSync(f, "utf8") }));
     const runs = S.duplicateRuns(files, { minLines: 8 });
-    ok(rep.ok === true && rep.scanned.files >= 40 && rep.truncated === false && runs.scanned.files === files.length && runs.counts.within === rep.counts.within &&
-      js(runs.duplicates.slice(0, 20)) === js(rep.duplicates) && rep.counts.existing === 0,
-      "1.28 dogfood: duplicationReport on this repo's mcp/lib (minLines 8) = duplicateRuns over libSources() — " + rep.scanned.files + " files, " + rep.scanned.lines +
-      " code lines, " + rep.total + " repeated block(s); top: " + rep.duplicates.slice(0, 8).map((d) => d.lines + " " + at(d) + " ↔ " + d.also.map(at).join(", ")).join(" · "));
+    ok(rep.ok === true && rep.scanned.files >= 40 && rep.truncated === false && js(runs.scanned) === js(rep.scanned) && js(runs.counts) === js(rep.counts) &&
+      js(runs.duplicates.slice(0, 20)) === js(rep.duplicates) && rep.counts.existing === 0 && rep.scanned.duplicated <= rep.scanned.lines,
+      "1.28: duplicationReport over a folder (this repo's mcp/lib, minLines 8) = duplicateRuns over the same files read by hand — " + rep.scanned.files + " files, " +
+      rep.scanned.lines + " code lines, " + rep.total + " repeated block(s) (got " + js([rep.scanned, rep.counts, runs.scanned, runs.counts]) + ")");
   }
 };
