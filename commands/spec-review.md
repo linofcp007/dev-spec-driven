@@ -7,6 +7,10 @@ argument-hint: "[feature] [branch | converge | simplify [--subagents] | feedback
 Use the **dev-spec-driven** skill, review loops. Args: $ARGUMENTS (default mode: `branch`). The protocols:
 `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md` (converge, verify, the simplification pass).
 
+**Duplicates first** (branch · converge · simplify): `spec_scan {duplicates: true, name}` — its `existing` runs go to the
+reviewer as candidate findings, its `within` runs to the simplifier; each is verified like any finding (a repeat the spec
+asks for, or one a report lists under "Duplicated on purpose", is none).
+
 **branch** — a local pre-merge review of `git diff <merge-base>..HEAD` (`git merge-base <base-branch> HEAD`) against the
 whole chain: spec compliance (the design, every AC); the **Constitution** — `.specs/steering/constitution.md`, a break
 justified in the design's Complexity Tracking or sent back; each active track's checks (`track-checklists.md` beside the
@@ -40,10 +44,10 @@ task's `_Verify:_` (`node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature>
 each under its `meta.checks` name (`… finish <feature> --run`) — never add checks just to record a run.
 Never "behaviour unchanged" without the runs.
 
-**feedback `<comments>`** — read them all first; verify each against the code and the spec, then: an AC violation → fix it,
-cite the AC · a spec change → don't implement, take it to its phase · out of scope / YAGNI → push back citing the spec ·
-quality within scope → fix with a test · a nit → if cheap · unclear → ask. One at a time, the covering tests after each,
-fresh evidence (`spec_complete_task`). Reply with the change or the evidence, never performative agreement.
+**feedback `<comments>`** — read them all, verify each against the code and the spec: an AC violation → fix it, cite the
+AC · a spec change → take it to its phase · out of scope / YAGNI → push back citing the spec · quality → fix with a test ·
+a nit → if cheap · unclear → ask. One at a time, the covering tests after each, fresh evidence (`spec_complete_task`).
+Reply with the change or the evidence, never performative agreement.
 
 **prompt** (+ai) — a prompt change lands only with its eval delta (golden up, adversarial held, regression intact), its
 cost delta and a bumped `prompts/vN.md`; without eval results it waits for the harness (`/eval`).
