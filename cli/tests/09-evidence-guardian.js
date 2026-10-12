@@ -94,8 +94,9 @@ exports.run = ({ ok, all, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
       pt: /\n {2}dev-guardian: 2 finding\(s\) novo\(s\) de gravidade high ou superior, 1 nos ficheiros desta feature\n {4}src\/login\.js:12 js\.sqli \(high\) \[esta feature\]/.test(p1.out) && /✗ a verificação do projeto 'guardian' falhou/.test(p1.out),
       es: /\n {2}dev-guardian no pudo ejecutar todos los escáneres \(escaneo incompleto: trivy: not installed\)\n/.test(e2.out) && /✗ la verificación del proyecto 'guardian' falló/.test(e2.out),
     });
-    // the stored command is shell-neutral: the same verdict under every shell finish --run can use here
-    const shells = (process.platform === "win32" ? ["cmd", "bash", "powershell", "pwsh"] : ["bash"]).filter((sh) => spawnSync(sh === "cmd" ? "cmd.exe" : sh, sh === "cmd" ? ["/c", "exit 0"] : sh === "bash" ? ["-c", "exit 0"] : ["-NoProfile", "-Command", "exit 0"], { timeout: 20000 }).status === 0);
+    // the stored command is shell-neutral: the same verdict under every shell finish --run can use here (POSIX: sh always —
+    // an Alpine image has no bash —, and bash where it exists)
+    const shells = (process.platform === "win32" ? ["cmd", "bash", "powershell", "pwsh"] : ["sh", "bash"]).filter((sh) => spawnSync(sh === "cmd" ? "cmd.exe" : sh, sh === "cmd" ? ["/c", "exit 0"] : sh === "bash" || sh === "sh" ? ["-c", "exit 0"] : ["-NoProfile", "-Command", "exit 0"], { timeout: 20000 }).status === 0);
     const bySh = shells.map((sh) => [sh, finishRun(en.p, en.slug, env(1), ["--shell", sh])]);
     const badSh = bySh.filter(([, r]) => !/\n {2}dev-guardian: 2 new finding\(s\) at or above high, 1 in this feature's files\n/.test(r.out)).map(([sh, r]) => sh + ": " + r.out.slice(0, 200));
     ok(shells.length >= 1 && !badSh.length, "1.29 the guardian check's command runs alike under " + shells.join(", ") + " (no shell syntax but its arguments) (bad: " + js(badSh) + ")");
