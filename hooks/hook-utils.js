@@ -6,8 +6,10 @@
  * require this file — and mcp/server.js, for the projectDir parser it shares with the approval hook. Is a folder a dev-spec
  * project, where is it, a file as the engine reads it (UTF-8 or UTF-16), a network path and a Write / Edit target as the file
  * system reads it: mcp/lib/probe.js (ONE rule for the hooks, the status line and the engine), re-exported here under the names
- * this file always had (readJson = probe.readJsonFile) — loaded on first use.
+ * this file always had (readJson = probe.readJsonFile) — loaded on first use: the runner alone needs none of it.
  *
+ *   - runHook / finish — every hook's process: the payload read from stdin, main run once, the safety net, the one flushed exit.
+ *   - probe() — mcp/lib/probe.js, required on first use (each hook's pre-filter runs before it).
  *   - editTargets / fsTargetPath — the probe's (the engine's approvalEditTargets / guardTargetPath ARE them).
  *   - parseProjectDir / fileUriToPath / unexpandedVar — ONE reading of an MCP tool's projectDir (a path or a local file:// URI), the
  *     approval hook's and the MCP server's.
@@ -21,8 +23,45 @@
 const os = require("os");
 const path = require("path");
 
+// ---- the hooks' runner ------------------------------------------------------------------------------------------------------
+// ONE process shape for every hook (each still decides in its own main, before anything heavier loads). finish(obj?) is the hook's
+// one exit: at most one JSON object on stdout, the process exiting only once it is flushed (Windows and Linux pipes truncate
+// otherwise — conventions.md → Flush stdout before exiting); a second call is a no-op. runHook(main, opts) reads the payload from
+// stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes) and runs main(raw, timedOut) ONCE — at stdin's end, or
+// from the safety net (SAFETY_NET_MS, 2 s: a stdin that never ends; timedOut true — the approval hook asks on a partial payload
+// naming dev-spec). It never crashes: an exception in main, or a stdin error, is a silent exit 0 — never a block (past its
+// pre-check the approval hook catches its own and asks). A terminal stdin runs main("{}"). opts.maxInput: past that many
+// characters the rest is drained unread and main gets "" (the observe and plan hooks ignore an oversized payload).
+const SAFETY_NET_MS = 2000;
+let finished = false;
+function finish(obj) {
+  if (finished) return;
+  finished = true;
+  if (!obj) process.exit(0);
+  process.stdout.write(JSON.stringify(obj), () => process.exit(0));
+}
+function runHook(main, opts = {}) {
+  const max = opts.maxInput > 0 ? opts.maxInput : Infinity;
+  let ran = false, input = "", tooBig = false;
+  const run = (raw, timedOut) => {
+    if (ran) return; // stdin's end and the safety net must not both run it
+    ran = true;
+    try { main(raw, timedOut); } catch { finish(); }
+  };
+  if (process.stdin.isTTY) return run("{}", false);
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (c) => {
+    if (tooBig) return;
+    input += c;
+    if (input.length > max) { tooBig = true; input = ""; }
+  });
+  process.stdin.on("end", () => run(input, false));
+  process.stdin.on("error", () => finish());
+  setTimeout(() => run(input, true), SAFETY_NET_MS).unref(); // the safety net
+}
+
 // The project probe: the rule, the walks, the readers, isNetwork, a target path — Node core only, like this file. Required on first
-// use (a hook's pre-filter needs none of it).
+// use (a hook's runner and pre-filter need none of it).
 let PROBE = null;
 const probe = () => PROBE || (PROBE = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
 const isNetwork = (p) => probe().isNetwork(p);
@@ -187,7 +226,7 @@ function claimMatch(message, f, scan) {
   return new RegExp(sc.source(f.word.pre + "(?:" + f.claims.join(")|(?:") + ")" + f.word.post), String(f.word.flags).replace("g", "")).test(sc.text);
 }
 
-module.exports = { isNetwork, shareOf, approvalProjects, sessionFlagFile, claimProse, claimScan, claimMatch, unexpandedVar,
+module.exports = { runHook, finish, probe, isNetwork, shareOf, approvalProjects, sessionFlagFile, claimProse, claimScan, claimMatch, unexpandedVar,
   RE_DOTDOT, fileUriToPath, parseProjectDir };
 // the probe's names, read through on first use — readJson is its readJsonFile
 for (const [name, key] of [["utf16OrUtf8"], ["textOf"], ["jsonOf"], ["readText"], ["readJson", "readJsonFile"], ["isUtf16"], ["fsTargetPath"],

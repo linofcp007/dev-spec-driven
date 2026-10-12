@@ -16,29 +16,16 @@
  */
 
 const path = require("path");
+// The hooks' runner (stdin, the safety net, the one flushed exit) and the project probe. The hooks run in EVERY project: only a
+// .specs/ that dev-spec owns is looked at — the probe (mcp/lib/probe.js: the one rule, the session's projects as every hook reads
+// them, the engine's network-path rule), required once the tool is ExitPlanMode. A network path (UNC `\\host\share`,
+// `//host/share`, `\\?\UNC\…`, other device paths) is never stat'ed here: it would open an SMB connection and block this hook until
+// an unreachable host times out (`\\?\C:\…` and WSL's `\\wsl$\…` are local).
+const { runHook, finish, probe } = require("./hook-utils.js");
 
-const PAYLOAD_MAX = 4 * 1024 * 1024; // characters of the hook payload read (an approved plan rides in it)
-let done = false;
-let ran = false;
-
-// At most one JSON object, and exit only after it is flushed (Windows and Linux pipes truncate otherwise).
-function finish(obj) {
-  if (done) return;
-  done = true;
-  if (!obj) process.exit(0);
-  process.stdout.write(JSON.stringify(obj), () => process.exit(0));
-}
-
-// The hooks run in EVERY project: only a .specs/ that dev-spec owns is looked at — the project probe (mcp/lib/probe.js: the one
-// rule, the session's projects as every hook reads them, the engine's network-path rule), required once the tool is ExitPlanMode.
-// A network path (UNC `\\host\share`, `//host/share`, `\\?\UNC\…`, other device paths) is never stat'ed here: it would open an SMB
-// connection and block this hook until an unreachable host times out (`\\?\C:\…` and WSL's `\\wsl$\…` are local).
-const probe = () => require(path.join(__dirname, "..", "mcp", "lib", "probe.js"));
+const PAYLOAD_MAX = 4 * 1024 * 1024; // characters of the hook payload read (an approved plan rides in it); a longer one is ignored
 
 function main(raw) {
-  if (ran) return; // stdin 'end' and the safety-net timer must not both run it
-  ran = true;
-  if (raw.length > PAYLOAD_MAX) return finish();
   let payload;
   try {
     payload = JSON.parse(raw || "{}");
@@ -63,23 +50,5 @@ function main(raw) {
   return finish();
 }
 
-// Never crash, whatever the payload: any unexpected error is a silent no-op (never a block).
-function safeMain(raw) {
-  try {
-    main(raw);
-  } catch {
-    finish();
-  }
-}
-
-// Read the hook payload from stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes).
-let input = "";
-if (process.stdin.isTTY) {
-  safeMain("{}");
-} else {
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (c) => { if (input.length <= PAYLOAD_MAX) input += c; });
-  process.stdin.on("end", () => safeMain(input));
-  process.stdin.on("error", () => finish());
-  setTimeout(() => safeMain(input), 2000).unref(); // safety net
-}
+// The payload from stdin (past PAYLOAD_MAX: "" — silent), main run once; any unexpected error is a silent no-op (never a block).
+runHook(main, { maxInput: PAYLOAD_MAX });

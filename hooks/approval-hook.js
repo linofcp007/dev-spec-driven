@@ -41,6 +41,10 @@
  */
 
 const path = require("path");
+// The hooks' runner (stdin, the safety net, the one flushed exit) and what the hooks share before the engine loads (hooks/hook-utils.js:
+// the probe's readers, editTargets, approvalProjects, parseProjectDir — each loading the probe on first use, past the cheap pre-check).
+const HU = require("./hook-utils.js");
+const { runHook, finish } = HU;
 
 const LEVELS = ["off", "ask", "deny"];
 const RE_MCP = /^(?:mcp__.+__)?(?:spec_approve|spec_feature|spec_init|spec_add_track)$/;
@@ -79,19 +83,7 @@ const RE_RAW_GUARD = /"approvalGuard"\s*:\s*"\s*(ask|deny)\s*"/gi;
 // a payload cut short — what it may be about (dev-spec, .specs/, an approval-shaped MCP tool).
 const RE_PARTIAL = /dev-?spec|\.specs|spec_(?:approve|feature|init|add_track)/i;
 
-let done = false;
-let ran = false;
-// At most one JSON object, and exit only after it is flushed (Windows pipes truncate otherwise).
-function finish(obj) {
-  if (done) return;
-  done = true;
-  if (!obj) process.exit(0);
-  process.stdout.write(JSON.stringify(obj), () => process.exit(0));
-}
-
 const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
-let HU = null; // hooks/hook-utils.js — required only past the cheap pre-check
-const hu = () => HU || (HU = require(path.join(__dirname, "hook-utils.js")));
 
 // meta.approvalGuard, read raw (the engine is loaded only for a guarded project) → { level: 0 off · 1 ask · 2 deny, meta }.
 // meta = the parsed roadmap.json meta (what a spec_init / `init` change is compared with), undefined when the file is broken.
@@ -99,7 +91,7 @@ const hu = () => HU || (HU = require(path.join(__dirname, "hook-utils.js")));
 function rawLevel(dir) {
   let text;
   try {
-    text = hu().readText(path.join(dir, ".specs", "roadmap.json"));
+    text = HU.readText(path.join(dir, ".specs", "roadmap.json"));
   } catch (e) {
     // missing while the .specs/ holds features (a feature folder's .state.json) — deleted: fail closed at ask, as
     // the engine's approvalGuardLevel (meta unknown). Missing in a .specs/ without features, or unreadable: out of the way.
@@ -136,7 +128,7 @@ function partial(raw) {
   let cwd = null;
   const m = /"cwd"\s*:\s*"((?:[^"\\]|\\.){1,4096})"/.exec(text);
   if (m) try { cwd = JSON.parse('"' + m[1] + '"'); } catch { cwd = null; }
-  const dirs = hu().approvalProjects({ cwd: cwd || process.cwd(), env: sessionEnv() });
+  const dirs = HU.approvalProjects({ cwd: cwd || process.cwd(), env: sessionEnv() });
   const s = strictest(dirs);
   if (!s.level) return finish();
   try {
@@ -183,7 +175,7 @@ function mcpPathArgs(ti) {
     if (typeof v === "string") {
       if (!keyed || !v.trim() || v.length > 4096 || /[\r\n]/.test(v)) return;
       const t = v.trim();
-      out.push(/^file:\/\//i.test(t) ? hu().fileUriToPath(t) || t : t);
+      out.push(/^file:\/\//i.test(t) ? HU.fileUriToPath(t) || t : t);
     } else if (Array.isArray(v)) v.forEach((x) => walk(x, keyed, depth + 1));
     else if (isObj(v)) for (const [k, x] of Object.entries(v)) walk(x, keyed || /path|file|source|src|dest|target|from|^to$|dir|folder|name|uri|location/i.test(k), depth + 1);
   };
@@ -192,8 +184,6 @@ function mcpPathArgs(ti) {
 }
 
 function main(raw, timedOut) {
-  if (ran) return; // stdin 'end' and the safety-net timer must not both run it
-  ran = true;
   let payload;
   try {
     payload = JSON.parse(raw || "{}");
@@ -215,7 +205,7 @@ function main(raw, timedOut) {
   // the edited path as the file system reads it — `./`, `..`, an NTFS stream, an 8.3 short name and a folder linked
   // to .specs/ (hook-utils editTargets, the engine's approvalEditTargets).
   const paths = fp ? [fp] : mcpFile ? mcpPathArgs(ti) : [];
-  const touched = paths.flatMap((p) => hu().editTargets(p, cwd)).filter((t) => /(?:^|[\\/])\.specs(?:[\\/]|$)/i.test(t));
+  const touched = paths.flatMap((p) => HU.editTargets(p, cwd)).filter((t) => /(?:^|[\\/])\.specs(?:[\\/]|$)/i.test(t));
   const edited = touched.find((t) => RE_GUARDED_FILE.test(t)) || null;
   if (fp && !edited) return finish();
   if (mcpFile && !touched.length) return finish();
@@ -230,15 +220,15 @@ function main(raw, timedOut) {
   let unreadableProject = false;
   if (touched.length) named = [...new Set(touched.map((t) => t.replace(/[\\/]*\.specs(?:[\\/][\s\S]*)?$/i, "") || "."))];
   else if (!command) {
-    const bases = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR, cwd].filter((b) => typeof b === "string" && b.trim() && !hu().unexpandedVar(b));
+    const bases = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR, cwd].filter((b) => typeof b === "string" && b.trim() && !HU.unexpandedVar(b));
     for (const b of bases.length ? bases : [process.cwd()]) {
-      const pd = hu().parseProjectDir(ti.projectDir, b);
+      const pd = HU.parseProjectDir(ti.projectDir, b);
       if (pd.code === "project-uri") unreadableProject = true;
       else if (pd.code) named.push(ti.projectDir);
       else if (pd.dir) named.push(pd.dir);
     }
   }
-  const s = strictest(hu().approvalProjects({ cwd, env: sessionEnv(), named, command: command || "" }));
+  const s = strictest(HU.approvalProjects({ cwd, env: sessionEnv(), named, command: command || "" }));
   if (unreadableProject && s.level < 1) s.level = 1;
   if (!s.level) return finish();
 
@@ -250,7 +240,7 @@ function main(raw, timedOut) {
     // in that project — its slug — never the raw argument (slugify drops text in other scripts, which must not reach the prompt).
     const resolveFeature = (n) => { const f = spec.existingFeature(dir, n); return f.ok ? f.slug : null; };
     const r = spec.approvalGuardDecision(payload, LEVELS[s.level], { lang: spec.projectLang(dir), meta: s.meta, resolveFeature,
-      uriPath: hu().fileUriToPath, projectUnreadable: unreadableProject });
+      uriPath: HU.fileUriToPath, projectUnreadable: unreadableProject });
     if (r.decision !== "ask" && r.decision !== "deny") return finish();
     const out = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: r.decision, permissionDecisionReason: r.reason } };
     if (r.userNote) out.systemMessage = r.userNote; // deny: the reason goes to the agent — the user sees the command to run
@@ -260,23 +250,6 @@ function main(raw, timedOut) {
   }
 }
 
-// Never crash, whatever the payload: any unexpected error is a silent no-op (never a block).
-function safeMain(raw, timedOut) {
-  try {
-    main(raw, timedOut);
-  } catch {
-    finish();
-  }
-}
-
-// Read the hook payload from stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes).
-let input = "";
-if (process.stdin.isTTY) {
-  safeMain("{}");
-} else {
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (c) => (input += c));
-  process.stdin.on("end", () => safeMain(input));
-  process.stdin.on("error", () => finish());
-  setTimeout(() => safeMain(input, true), 2000).unref(); // safety net (a partial payload naming dev-spec: ask)
-}
+// The payload from stdin, main run once — from the 2 s safety net with timedOut (a partial payload naming dev-spec: ask); any
+// unexpected error before the pre-check passes is a silent no-op (never a block).
+runHook(main);
