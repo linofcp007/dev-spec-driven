@@ -5,7 +5,7 @@ this project versions the plugin as a whole.
 
 ## [1.29.0] — 2026-10-12
 
-dev-guardian at the finish line. With dev-guardian (3.2.0+) installed, closing a feature can run its security and quality
+dev-guardian at the finish line. With dev-guardian (3.2.1+) installed, closing a feature can run its security and quality
 gate as recorded evidence — not as an instruction the model may skip.
 
 ### Added
@@ -28,7 +28,8 @@ gate as recorded evidence — not as an instruction the model may skip.
   not identical); `/spec-finish`'s duplicate warning mentions it when the project is over.
 - **A cross-plugin contract**: a test holds the dev-spec names dev-guardian calls (`spec_roadmap_edit`, `spec_create`,
   `spec_init {guardian}`, `/spec`, `/clarify --grill`, `/spec-finish`, `init --guardian`, `backlog add`) to the LISTED
-  surface; dev-guardian 3.2.0 keeps the mirror test. (dev-guardian ≤ 3.1 handed improvement seeds to `spec_backlog`, a
+  surface; dev-guardian 3.2.0+ keeps the mirror test (3.2.1+ for the gate: 3.2.0's CLI could not run its scan from a
+  plugin install). (dev-guardian ≤ 3.1 handed improvement seeds to `spec_backlog`, a
   hidden alias since 1.26 that Claude Code can't call — fixed on its side in 3.2.0.)
 
 ### Fixed
