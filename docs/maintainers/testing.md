@@ -115,6 +115,18 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   mcp/tests/. The engine guards (U+FEFF, backslash-stripped regex literals) also read scripts/build.js — a bundle's
   registry comes from it — and `libSources()` leaves a user-built `mcp/lib/spec.bundle.js` out (the sources verbatim: it
   would only report every finding twice).
+- **The duplication guard (1.27.1)** — mcp/tests/16-conventions-duplication.js reads every source the plugin runs: each `.js`
+  under mcp/lib (never a `*.generated.*` file or a built bundle), mcp/server.js, cli/*.js (not its tests), hooks/*.js and
+  scripts/*.js. Each becomes its CODE lines (comments, blank lines and lines of closing brackets alone dropped, whitespace folded,
+  string literals KEPT — two builders that differ in their strings are no duplicate), and a window of **8** consecutive code
+  lines found twice (another file, or a place of the same file that doesn't overlap; a window of lines under 12 characters on
+  average is noise) FAILS, one line per run with each place (`12 lines · a.js:40  b.js:310 · <its first line>`). The label
+  reports the duplicated share at a window of 6 (0.2 % at 1.27.1). Two duplications are allowed, each by its pattern and reason
+  in `ALLOW` — the module rule's link lists (a window of identifier-list lines: a `let` list and its `__link` twin) and the code
+  example inside the PT / ES design templates (an i18n window holding an escaped code fence); an allowance that matches nothing
+  any more fails too (drop it). A duplicate it finds is a helper to extract — into the module that owns the concept, linked
+  where the other copy was (hooks: hooks/hook-utils.js; engine-free readings both the hooks and the engine need:
+  mcp/lib/probe.js) — never a reason to widen `ALLOW`. Self-contained, zero dependencies, ~0.3 s.
 - **The corpus and the bundle (1.20).** Run `npm run build` after changing a file of `CORPUS_SOURCES` (`mcp/lib/i18n.js`,
   `mcp/lib/i18n/*.js`, `engine/core.js` / `markdown.js` / `packs.js` / `tasks.js` / `tracks.js`) — never for a version bump
   alone (1.26: the generated files carry no version; `npm run check` says whether they are current) — and BEFORE the suites: mcp/tests/16-conventions-build.js ("1.20 build") fails while the committed `corpus.generated.json` differs from a
@@ -173,3 +185,10 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   EVERY item (`itemProblems()`: object, `id`, `input`, a grader in contains|equals|regex|refuse|judge, a value / a regex
   that compiles with gradeItem's flags / a rubric) and `thresholds.json` (a number in [0, 1] per set) before anything
   runs: a dry run exits 1 naming each bad item, a live run calls no model while any set is invalid.
+
+## History
+How the rules above came to be — grep a release here.
+
+- **1.27.1** — the duplication guard (16-conventions-duplication.js): the cleanup took the plugin's duplicated code lines (window
+  of 6, mcp/evals and mcp/test.js counted too) from 364 of 39,680 (0.9 %; the hooks 13.2 %) to 72 of 39,435 (0.2 %; the hooks
+  0) — 60 of them the two allowed duplications — and the guard keeps new copies out.

@@ -23,6 +23,8 @@
 
 const fs = require("fs");
 const path = require("path");
+// The hooks' runner (stdin, the safety net, the one flushed exit) and the project probe getter (hooks/hook-utils.js).
+const { runHook, finish, payloadOf, eventOf, probe } = require("./hook-utils.js");
 
 // The engine is loaded LAZILY: this hook runs on every Write / Edit in EVERY project, and loading the engine cost
 // ~100 ms before the `/.specs/` path check could send an unrelated edit away (197 vs 71 ms median per edit). loadSpec() runs
@@ -38,27 +40,15 @@ function loadSpec() {
   return spec;
 }
 
-let emitted = false;
-let ran = false;
 const DRIFT_MAX_FILES = 200; // SessionStart hashes at most this many recorded _Implements:_ files, else skips the drift check
 const SESSION_MAX_FEATURES = 20; // SessionStart lists at most this many features (the most relevant), then "+N more — /spec-status"
-// Emits exactly one JSON object and exits only after the write is flushed (Windows pipes truncate
-// otherwise). Callers `return emit(...)` — nothing may call process.exit() after it.
-function emit(eventName, text) {
-  if (emitted) return;
-  emitted = true;
-  if (!text) process.exit(0);
-  process.stdout.write(
-    JSON.stringify({ hookSpecificOutput: { hookEventName: eventName, additionalContext: text } }),
-    () => process.exit(0)
-  );
-}
+// Emits exactly one JSON object — the context line(s) — and exits only after the write is flushed (hook-utils finish: Windows pipes
+// truncate otherwise); no text → a silent exit. Callers `return emit(...)` — nothing may call process.exit() after it.
+const emit = (eventName, text) => finish(text ? { hookSpecificOutput: { hookEventName: eventName, additionalContext: text } } : null);
 
 // The hooks run in EVERY project. Only touch a .specs/ that dev-spec owns (another tool may use the name) — the project probe's one
 // rule (mcp/lib/probe.js isDevSpecProject: roadmap.json, steering/, a ROADMAP.md dev-spec generated — a v1.8-era project —, or a
 // feature folder with its .state.json / classification.md), required lazily: an edit outside .specs/ loads nothing.
-let P = null;
-const probe = () => P || (P = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
 const isDevSpecProject = (pdir) => probe().isDevSpecProject(pdir);
 
 function findProjectDir(filePath) {
@@ -88,16 +78,9 @@ function sessionMayBeDevSpec(payload) {
 }
 
 function main(raw) {
-  if (ran) return; // stdin 'end' and the safety-net timer must not both run the hook
-  ran = true;
-  let payload = {};
-  try {
-    payload = JSON.parse(raw || "{}");
-  } catch {
-    process.exit(0);
-  }
-  if (!payload || typeof payload !== "object") process.exit(0);
-  const event = payload.hook_event_name || payload.hookEventName || "";
+  const payload = payloadOf(raw);
+  if (!payload) return finish();
+  const event = eventOf(payload);
   // The cheap pre-check, before the engine loads: only SessionStart and a PostToolUse on a `.specs/` file (not its scratch
   // `.execution/` folder, not a folder being removed) go on.
   if (event === "PostToolUse") {
@@ -306,26 +289,9 @@ function handle(payload, event) {
     // Any other spec file (classification.md, a test plan, steering…): nothing to say — its roadmap refresh waits for the Stop hook.
   }
 
-  if (!emitted) process.exit(0);
+  finish(); // nothing emitted: a silent exit
 }
 
-// Never crash, whatever the payload: any unexpected error is a silent no-op.
-function safeMain(raw) {
-  try {
-    main(raw);
-  } catch {
-    if (!emitted) process.exit(0);
-  }
-}
-
-// Read the hook payload from stdin (cross-platform). Guard against no-stdin hangs.
-let input = "";
-if (process.stdin.isTTY) {
-  safeMain("{}");
-} else {
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (c) => (input += c));
-  process.stdin.on("end", () => safeMain(input));
-  process.stdin.on("error", () => process.exit(0));
-  setTimeout(() => safeMain(input), 2000).unref(); // safety net
-}
+// The payload from stdin (the safety net guards against a stdin that never ends), main run once; any unexpected error is a silent
+// no-op.
+runHook(main);

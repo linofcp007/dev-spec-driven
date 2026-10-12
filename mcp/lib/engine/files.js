@@ -26,19 +26,19 @@ function __link(E) { ({ errs, existingFeature, featureLang, projectLang, roadmap
 // argument (CLI --project, a tool's projectDir) > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the
 // working folder that holds a dev-spec .specs/ (nearestProject — run from a subfolder, a command used to start a SECOND,
 // nested .specs/ there) > the working folder itself (a project not set up yet: init creates it there).
-// a value holding a variable left unexpanded — any "${", a leading $NAME, a %NAME% — is unusable and falls
+// The project probe (mcp/lib/probe.js — the one dev-spec project rule every surface reads, and its readings of a folder value).
+const PROBE = require("../probe.js");
+// unexpandedVar: a value holding a variable left unexpanded — any "${", a leading $NAME, a %NAME% — is unusable and falls
 // through (a SPEC_PROJECT_DIR of "${CLAUDE_PROJECT_DIR}/", "$CLAUDE_PROJECT_DIR" or "%CLAUDE_PROJECT_DIR%" created that
-// literal folder; only a whole "${VAR}" was caught).
-const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
-function unexpandedVar(v) { return RE_UNEXPANDED_VAR.test(String(v == null ? "" : v).trim()); }
-// a leading ~ (alone, ~/ or ~ and a backslash) is the home folder — PowerShell 5.1 hands a native command its ~ as
-// typed, and an MCP client's argument or JSON config is never expanded: --project ~/zz / projectDir "~/zz" made a folder literally
-// named "~" in the working folder. ~user stays as written (no user database lookup). cli/completion.js mirrors it.
-const RE_HOME_PREFIX = /^~(?=$|[\\/])/;
-function expandHome(p) {
-  const s = String(p == null ? "" : p);
-  return RE_HOME_PREFIX.test(s) ? path.join(require("os").homedir(), s.slice(1)) : s;
-}
+// literal folder; only a whole "${VAR}" was caught). expandHome: a leading ~ (alone, ~/ or ~ and a backslash) is the home folder —
+// PowerShell 5.1 hands a native command its ~ as typed, and an MCP client's argument or JSON config is never expanded: --project
+// ~/zz / projectDir "~/zz" made a folder literally named "~" in the working folder. ~user stays as written (no user database
+// lookup). isNetworkPath: a network path — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — opens an SMB /
+// WebDAV connection to whatever host it names and blocks the engine until an unreachable host times out; a device path
+// (`\\.\pipe\…`) is no project folder either, `\\?\C:\…` and WSL's hosts are local (the cases and why: probe.js isNetwork). The MCP
+// server refuses such a projectDir before any fs call; the status line and the hooks skip such a candidate folder. All three are
+// the probe's — cli/completion.js and the hooks read the same functions.
+const { unexpandedVar, expandHome, isNetwork: isNetworkPath } = PROBE;
 function resolveProjectDir(arg) {
   const usable = (v) => (v != null && String(v).trim() && !unexpandedVar(v) ? String(v).trim() : null);
   const dir = usable(arg) || usable(process.env.SPEC_PROJECT_DIR) || usable(process.env.CLAUDE_PROJECT_DIR);
@@ -46,9 +46,8 @@ function resolveProjectDir(arg) {
   const cwd = path.resolve(process.cwd());
   return nearestProject(cwd) || cwd;
 }
-// The project probe (mcp/lib/probe.js — the one dev-spec project rule every surface reads) through the engine's view of the disk: a
-// dry run's folders and files seen as made (isDirSafe, readFileHead, safeReaddir). doctor.js isDevSpecDir reads the rule with it.
-const PROBE = require("../probe.js");
+// The probe's rule through the engine's view of the disk: a dry run's folders and files seen as made (isDirSafe, readFileHead,
+// safeReaddir). doctor.js isDevSpecDir reads the rule with it.
 const PROBE_IO = { isDir: (p) => isDirSafe(p), exists: (p) => fs.existsSync(p), head: (p) => readFileHead(p, 4000) || "", folders: (p) => safeReaddir(p) };
 // The nearest folder at or above `start` that holds a dev-spec .specs/ (the probe's rule: roadmap.json, steering/, a generated
 // ROADMAP.md or a feature folder with its .state.json or classification.md) — `start` itself also with any .specs/ folder (one made
@@ -1088,6 +1087,16 @@ function isInsideDir(root, p) {
   const r = f(root.endsWith(path.sep) ? root : root + path.sep);
   return f(p) === f(root) || f(p).startsWith(r);
 }
+// A starter file's write stays inside the project (spec_templates init, spec_tracks init): the nearest existing folder above `abs`
+// really lies in projectDir — a .specs/, templates/ or tracks/ folder (or one below) that is a link to a folder elsewhere is not.
+// No project folder yet: nothing in it is a link (true).
+function writeInsideProject(projectDir, abs) {
+  let real;
+  try { real = fs.realpathSync.native(projectDir); } catch { return true; }
+  let d = path.dirname(abs);
+  while (!fs.existsSync(d) && path.dirname(d) !== d) d = path.dirname(d);
+  try { return isInsideDir(real, fs.realpathSync.native(d)); } catch { return false; }
+}
 
 // The real path of p even when it doesn't exist yet: the real path (fs.realpathSync.native — 8.3 short names, junctions
 // and symlinks resolved) of its nearest EXISTING ancestor, plus the segments below it. null when nothing resolves.
@@ -1143,31 +1152,10 @@ function insideDirAlias(root, p) {
   } catch { /* the text answer stands */ }
   return null;
 }
-// A network path — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — opens an SMB/WebDAV connection to
-// whatever host it names (on Windows the redirector sends the user's NTLM credentials) and, the engine being synchronous, blocks
-// until an unreachable host times out (a status line hung 7 minutes on a payload cwd `\\192.0.2.1\share`). The MCP server
-// refuses such a projectDir before any fs call; the status line and hooks/plan-hook.js skip such a candidate folder. Local:
-// the extended/device forms of a drive path (`\\?\C:\…`, `\\.\C:\…`) and WSL's own hosts (`\\wsl$\…`, `\\wsl.localhost\…`).
-// Other device paths (`\\.\pipe\…`, `\\?\Volume{…}\…`) are no project folder either. (A drive letter mapped to a share can't be
-// told apart without I/O.)
-function isNetworkPath(p) {
-  const s = String(p).trim();
-  if (!/^[\\/]{2}/.test(s)) return false;
-  let rest = s.slice(2);
-  if (/^[?.][\\/]/.test(rest)) {
-    rest = rest.slice(2);
-    if (/^[A-Za-z]:(?:[\\/]|$)/.test(rest)) return false; // \\?\C:\… — a local drive
-    if (!/^UNC[\\/]/i.test(rest)) return true; // \\.\pipe\…, \\?\Volume{…}, \\?\GLOBALROOT\… — not a project folder
-    rest = rest.slice(4);
-  }
-  const host = rest.split(/[\\/]/)[0].toLowerCase();
-  return host !== "wsl$" && host !== "wsl.localhost";
-}
-
 module.exports = { resolveProjectDir, unexpandedVar, expandHome, specsRoot, ensureDir, withDryRun, isDryRun, writeIfAbsent,
   writeFileAtomic, specWrite, removeSpecFile, removeEmptySpecDir, specsWriteBlock, gateRefusal, LOCK_FILE, withFeatureLock,
   featureLocked, featureBusyResult, withMoveLock, renameDirSync, removeLinkEntry, moveDirOrBusy, LOCK_IGNORE_LINES,
   ensureLockIgnore, specsDirOf, roadmapBusyResult, withRoadmapLock, readJson, isObj, jsonRel, shapeError, withReadCache,
   readCacheKey, specsFileContained, specsWriteContained, readContained, readIfExists, readFileHead, decodeText, existsCached,
   existsRaw, CHANGE_FILE, changeAlias, readDirCached, forgetCached, invalidateReadCache, safeReaddir, withinRoot, isDirSafe,
-  FOLD_CASE, toPosix, isInsideDir, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO, __link };
+  FOLD_CASE, toPosix, isInsideDir, writeInsideProject, realPathLoose, networkPathInside, insideDirAlias, isNetworkPath, PROBE_IO, __link };

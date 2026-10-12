@@ -13,7 +13,7 @@ const i18n = require("../i18n.js");
 const { BOM_CHAR } = require("./state.js"); // load time
 const { TRACE_INFO_FIELDS } = require("./trace.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
+let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers,
   existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
@@ -21,18 +21,18 @@ let activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTra
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck,
+  waiverSummaryLines, writeFileAtomic, mergeSummaryOf, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck,
   backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
   removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot;
 function __link(E) { ({ activeTasks, atxHeading, cleanTaskText, dayOf, today, detectPhase, detectTracks, duplicateTaskNumbers,
-  ensureDir, existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList,
+  existingFeature, extractSection, extractTestIds, featureLang, fenceStep, forcedApprovalList,
   hasProseOutsideBrackets, headingIndex, headingLeadRe, idKey, isBacktickUnit, isObj, isRecord, isWsUnit,
   maybeRefreshRoadmap, mergeConflictsCheck, oneLiner, phaseFile, planIdText, RE_LINE_TERMINATOR, RE_TODO_SENTINEL,
   readIfExists, readJson,
   readState, recordFinishBaseline, replaceHtmlCommentSpans, requirementAcIds, secondaryDefinitions, secondaryIds,
   commitTitle, specsFileContained, specTitle, statePath, stripEnd, stripEnds, stripHtmlComments, taskBlocks,
   taskDepsBlockedNote, taskDepsCheck, taskSchedule, timeOf, tKey, trackLabel, unitIn, waiverExpiredCheck, waiverResult,
-  waiverSummaryLines, writeFileAtomic, writeIfAbsent, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck,
+  waiverSummaryLines, writeFileAtomic, mergeSummaryOf, wsOrUnitIn, criteriaText, CHANGE_FILE, unreadTasksDetail, roadmapGovernanceCheck,
   backtickRuns, EXPORT_DIR, featureDirs, isGeneratedOrAbsent, mdCell, mdPlainText, normalizeLang, projectLang, readContained, readDirCached,
   removeEmptySpecDir, removeSpecFile, shiftHeadings, slugify, specsRoot, specsWriteContained, squeezeBlankLines, stateFromFile, withinRoot } = E); }
 
@@ -1000,15 +1000,8 @@ function spikeFinish(projectDir, f, opts, recordedChecks) {
   if (forcedList.length) body.push(...waiverSummaryLines(forcedList, lng), "");
   body.push(F.prChecks, ...SP.finish.checks.map((c) => "- [ ] " + c), "");
   body.push(F.prSpec, ...[SPIKE_FILE, DECISIONS_FILE, "tasks.md"].filter((x) => fs.existsSync(path.join(dir, x))).map((x) => "- `.specs/" + slug + "/" + x + "`"));
-  const mergeSummary = body.join("\n") + "\n";
-  const exDir = path.join(dir, ".execution");
-  const summaryPath = path.join(exDir, "merge-summary.md");
   const write = !!opts.write;
-  if (write) {
-    ensureDir(exDir);
-    writeIfAbsent(path.join(exDir, ".gitignore"), "*\n");
-    writeFileAtomic(summaryPath, "# " + mergeTitle + "\n\n" + mergeSummary); // derived: regenerated on every call (through the write gate)
-  }
+  const { mergeSummary, summaryPath } = mergeSummaryOf(dir, mergeTitle, body, write); // finish.js: .execution/merge-summary.md
   const ready = blockers.length === 0;
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null; // "finished" (catalog, next_action)
   const res = { ok: true, feature: slug, kind: "spike", tracks: trackLabel(tracks), readyToFinish: ready, message: ready ? SP.finish.ready(slug) : SP.finish.notReady(slug),
