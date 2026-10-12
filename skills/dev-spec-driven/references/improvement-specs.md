@@ -10,15 +10,20 @@ defines how to spec them so the loop closes with proof.
 **An improvement spec's success criterion is a re-measurable metric delta — nothing vaguer.**
 
 "Clean up the checkout module" is not a spec; it can't be verified. "No function over 60 lines in
-`checkout`, and branch coverage ≥ 45%" is — the same quality gate that found the problem re-measures
-it at the end. If the gate can't verify "done", it isn't an improvement spec; it's a wish.
+`checkout`, and branch coverage ≥ 45%" is — the same measurement that found the problem re-measures
+it at the end. If nothing can verify "done", it isn't an improvement spec; it's a wish.
 
 **The target numbers are per project, not universal.** Don't hardcode 60 / 45 from this doc — those
-are illustrations. Pull the real thresholds from the project's `.guardian/budgets.yml` (max file/
-function lines, max complexity, coverage floor), which `dev-guardian` sets per detected stack. When
-no absolute budget exists, make the target relative to the baseline ("improve by X%", "no worse than
-today"). A Rust crate, a React app and a billing service will each have different sane numbers — the
-budget file is where that per-project tuning lives.
+are illustrations. Where `dev-guardian` measures the metric, the threshold lives in the project's
+`.guardian/budgets.yml` — and only these keys exist there: `quality.duplication_pct` (jscpd's
+duplicated-lines %, project-wide), `quality.complexity` (the highest per-function cyclomatic
+complexity — radon, Python only), and `perf.lcp_ms` · `perf.inp_ms` · `perf.cls` · `perf.tbt_ms` ·
+`perf.bundle_size_kb` (Lighthouse, through `perf_check`). dev-guardian has **no** budget for file or
+function size, nor for test coverage: take those thresholds from the project's own lint config (e.g.
+ESLint `max-lines` / `max-lines-per-function`) and its test runner's coverage threshold, re-measure with
+those tools, and never say dev-guardian's gate checks them. When no absolute threshold exists, make
+the target relative to the baseline ("improve by X%", "no worse than today"). A Rust crate, a React
+app and a billing service will each have different sane numbers.
 
 ## Writing the requirements
 
@@ -46,7 +51,8 @@ and the requirements approval fail (`unidentifiedCriteria`). Keep the baseline/t
    (Baseline: 24%. Target: ≥ 45%.)
 4. **US-1.AC-4** — _(when the improvement is speed)_ WHEN load-tested at the expected rate, THE SYSTEM
    SHALL keep the p95 latency of `/api/checkout` ≤ 400ms and the JS bundle ≤ 250KB.
-   (Baseline: p95 820ms, bundle 310KB. Targets from `.guardian/perf-budget.yml`.)
+   (Baseline: p95 820ms, bundle 310KB. The bundle target from `.guardian/budgets.yml` → `perf.bundle_size_kb`
+   when set — Lighthouse's page weight; the p95 from the project's load test, e.g. k6 — no budgets.yml key holds it.)
 5. **US-1.AC-5** — _(when the improvement is systemic security)_ WHEN any query in `orders` is built,
    THE SYSTEM SHALL use parameterized statements (0 raw-string SQL), with 0 injection findings from
    `scan_sast` in the module.
@@ -74,8 +80,10 @@ Pick only the criteria that fit the improvement (US-1.AC-1 and US-1.AC-7 always)
 - **Grill first:** before touching the code, grill the requirements (`spec_clarify`, the user's
   `/clarify --grill` — or `/guardian-grill` on the current module) so you understand the branches you're about to
   move. Fold that Shared Understanding into the requirements — it's free RFC.
-- **Exit = re-measure:** the feature is done when `dev-guardian`'s gate re-runs and shows the target
-  deltas met. Record the before/after in the spec's completion note so the improvement is auditable.
+- **Exit = re-measure:** the feature is done when the measurement re-runs and shows the target deltas
+  met — `dev-guardian`'s gate, `quality_check` and `perf_check` for what they measure (with the project
+  check `guardian` set, `/spec-finish` runs the gate itself), the project's own lint / coverage tools for
+  the rest. Record the before/after in the spec's completion note so the improvement is auditable.
 
 ## The loop this belongs to
 
