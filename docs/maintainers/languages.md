@@ -104,6 +104,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — the shared layouts: `LAYOUTS` and `approvalAction` in `i18n.js` take the structure out of the three language files,
   which keep only their `text` — a structural change was made three times before. `mcp/tests/03-languages.js` gains the
   one-key-tree parity check.
+- **1.30 review 8** — the 1.28 / 1.29 guardian and duplicate messages came out half European in pt-BR ("Corrija … registra isso …
+  Nunca forces", "por MCP, roda você", "o finish --run roda-a", "lugar(s)", "porque é que"). Generic rules instead of one override
+  per sentence: a tu order after "só quando / só se …," (`RE_PTBR_INTRO`) or with "tu" after it, a "." that ends a chain only
+  before a blank (".gitattributes"), `forces` in `PTBR_YOU_SUBJ`, the 3rd person's pronoun before it ("corre-a" → "a executa",
+  `PTBR_WORDS`), "sítio(s)" and "porque é que" in `PTBR_PHRASES`; the lint's `EU_ONLY` checks each.
 
 ### Localization gotchas
 - **1.19** — the eval run showed agents relaying `dev-spec done <f> <n> --run` to users who had no `dev-spec` on PATH (only

@@ -5,14 +5,16 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, remeasure, rpc, payload, S, tmp, list, require }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require }) => {
 
   // --- 1.14 D1: Brazilian Portuguese (pt-BR) — a fourth locale, DERIVED from European pt (i18n.js toPtBr) ---
   {
     const I = require("./lib/i18n.js");
     // European-only vocabulary a pt-BR string must never hold (the transform's job) — whole words, case-insensitive.
     // (1.24 r6 H-I5: + revisto / revista(s) / revistos — Brazil says revisado)
-    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|revist[oa]s?|contigo|tens|podes|queres)(?![\p{L}])|(?<![\p{L}])(?:a correr|à espera)(?![\p{L}])|por defeito|por omissão/iu;
+    // (1.30 review 8: + the European residue the guardian / dupes messages showed — "porque é que", a tu order mid-sentence
+    // ("nunca forces", "corre tu" → "roda você"), a 3rd person with its pronoun after it ("roda-a", "registra-as"), "lugar(s)")
+    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|revist[oa]s?|contigo|tens|podes|queres|forces|porque é que|roda você|(?:roda|registra)-(?:o|a|os|as))(?![\p{L}])|(?<![\p{L}])(?:a correr|à espera)(?![\p{L}])|por defeito|por omissão|lugar\(s\)/iu;
     // 1. language codes: aliases fold to pt-BR; pt / pt-PT stay European; the strict reader refuses the unknown
     ok(["pt-BR", "pt_BR", "pt-br", "ptbr", "PT-BR", " pt_br "].every((l) => S.normalizeLang(l) === "pt-BR" && S.canonicalLang(l) === "pt-BR") &&
       ["pt", "pt-PT", "pt_pt", "PT"].every((l) => S.normalizeLang(l) === "pt" && S.canonicalLang(l) === "pt") &&
@@ -156,6 +158,26 @@ exports.run = async ({ ok, remeasure, rpc, payload, S, tmp, list, require }) => 
     ok([...Object.values(S.TRACK_MARKER), "[KAFKA]"].every((m) => tagged(m) === "- [ ] 3. " + m + " Escreva os testes e execute-os") &&
       I.toPtBr("- [ ] 4. [US1][P] [DATA] Corre a migração") === "- [ ] 4. [US1][P] [DATA] Execute a migração",
       "1.25.1 review: pt-BR turns the imperative after every track tag — [SaaS] … [DATA] (the engine's TRACK_MARKER) and a pack's [KAFKA] (got " + JSON.stringify(tagged("[API]")) + ")");
+    // 1.30 review 8 (ds-prose 6): the guardian / dupes messages came out half European in pt-BR — "Corrija … registra isso … Nunca
+    // forces", "por MCP, roda você", "o finish --run roda-a", "4 lugar(s)", "porque é que". Generic rules, not one override per
+    // sentence: a tu order after "só quando …," / with "tu" after it / after a ".gitattributes" dot, the negative tu order, a
+    // 3rd person's pronoun before it, the plural and the interrogative.
+    const br8 = {
+      fix: I.toPtBr("Corrige o finding — ou, só quando o utilizador aceitar um, regista isso no dev-guardian. Nunca forces o finish sem o utilizador."),
+      mcp: I.toPtBr("A verificação corre o scan (minutos): por MCP, corre tu `npm test` a partir da raiz e regista a execução com spec_finish."),
+      run: I.toPtBr("o finish --run corre-a, e o spec_decide regista-a no log; o controlador regista-os com o spec_complete_task"),
+      dot: I.toPtBr("substitui-o por um .gitattributes normal e corre-o de novo."),
+      dup: I.toPtBr("o código repete código existente em 4 sítio(s): explicar no relatório porque é que uma cópia é deliberada"),
+    };
+    all("1.30 review 8: pt-BR derives the guardian / dupes messages without European residue", {
+      fix: () => br8.fix === "Corrija o finding — ou, só quando o usuário aceitar um, registre isso no dev-guardian. Nunca force o finish sem o usuário.",
+      mcp: () => br8.mcp === "A verificação roda o scan (minutos): por MCP, execute você `npm test` a partir da raiz e registre a execução com spec_finish.",
+      run: () => br8.run === "o finish --run a executa, e o spec_decide a registra no log; o controlador os registra com o spec_complete_task",
+      dot: () => br8.dot === "substitua-o por um .gitattributes normal e execute-o de novo.",
+      dup: () => br8.dup === "o código repete código existente em 4 lugar(es): explicar no relatório por que uma cópia é deliberada",
+      lint: () => !Object.values(br8).some((t) => EU_ONLY.test(t)),
+      idempotent: () => Object.values(br8).every((t) => I.toPtBr(t) === t),
+    });
     // … a 3rd-person description at a clause start stays one ("— começa por _ ou *": the command starts with); European residue
     // (a link is no "ligação", enclisis after a subject, the interrogative "porque") goes through the derivation's tables
     const brM = I.msg("pt-BR"), sv = brM.markerSyntax.suspiciousVerify("x");

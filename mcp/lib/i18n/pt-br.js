@@ -172,6 +172,8 @@ const PTBR_PHRASES = {
   "off desliga-o": "off o desliga", // "<cli> init --guard off turns it off"
   // the interrogative "why" is two words in Brazil
   "<porque não se aplica>": "<por que não se aplica>", "porque foi abandonado": "por que foi abandonado",
+  "porque é que": "por que", // the European interrogative "why is it that" ("explicar porque é que uma cópia é deliberada")
+  "sítio(s)": "lugar(es)", // the word rule alone wrote "lugar(s)"
 };
 // "põe X a verde" (make X pass) → "faz X passar"; "postos a verde" → "deixados verdes"; a leftover "a verde" → "verde(s)".
 const PTBR_GREEN_VERB = { põe: ["faz", "passar"], põem: ["fazem", "passar"], pôr: ["fazer", "passar"], pondo: ["fazendo", "passar"],
@@ -196,7 +198,7 @@ const PTBR_YOU_SUBJ = {
   confies: "confie", adiciones: "adicione", aproves: "aprove", removas: "remova", voltes: "volte", precises: "precise",
   tenhas: "tenha", possas: "possa", queiras: "queira", sejas: "seja", estejas: "esteja", vás: "vá", ignores: "ignore",
   mexas: "mexa", toques: "toque", reescrevas: "reescreva", apresentes: "apresente", declares: "declare", afirmes: "afirme",
-  tires: "tire",
+  tires: "tire", forces: "force", // "Nunca forces o finish" → "Nunca force o finish"
 };
 const PTBR_POSSESSIVE = { teu: "seu", tua: "sua", teus: "seus", tuas: "suas" };
 
@@ -232,7 +234,7 @@ const PTBR_IMPERATIVES = {
 // After these at a clause start, the next word starts the clause too ("depois corre", "(ou usa …)").
 const RE_PTBR_LEADIN = /^(?:(?:e|ou|mas|depois|primeiro|então|agora|senão|finalmente|antes|em seguida|a seguir|por fim|por favor|no fim|no final|por isso|assim|de novo)(?![\p{L}\p{N}_])[ \t]*,?|(?:se não|caso contrário)[ \t]*,)[ \t]+/iu;
 // A subordinate intro: the main clause (often an imperative) starts after its comma ("Se o teste falhar, corrige-o").
-const RE_PTBR_INTRO = /^(?:se|quando|para|antes de|depois de|enquanto|caso|assim que|logo que|sem|até|após|ao|uma vez que|sempre que)(?![\p{L}\p{N}_])/iu;
+const RE_PTBR_INTRO = /^(?:se|quando|só se|só quando|para|antes de|depois de|enquanto|caso|assim que|logo que|sem|até|após|ao|uma vez que|sempre que)(?![\p{L}\p{N}_])/iu;
 // Where the chain of coordinated imperatives stops: a relative / subordinate word ("corre X, que verifica …").
 const PTBR_CHAIN_STOP = new Set(["que", "onde", "quando", "porque", "pois", "como", "enquanto", "cujo", "cuja", "cujos", "cujas", "se", "quem"]);
 // A clause-start verb read as the 3rd person after all (a description, not an instruction): never an imperative here.
@@ -295,6 +297,10 @@ const PTBR_WORDS = {
   correr: "executar", corre: "roda", correm: "rodam", correu: "rodou", correram: "rodaram", corrido: "executado", corrida: "executada",
   corridos: "executados", corridas: "executadas", correria: "executaria", correriam: "executariam", "corrê-lo": "executá-lo",
   "corrê-la": "executá-la", "corrê-los": "executá-los", "corrê-las": "executá-las", pára: "para", sítio: "lugar", aceites: "aceitos",
+  // a 3rd person with its pronoun after it ("o finish --run corre-a e regista-a") takes it before in Brazil — the clause-start
+  // imperative ("Corre-a") is stage 4's, read first
+  "corre-o": "o executa", "corre-a": "a executa", "corre-os": "os executa", "corre-as": "as executa",
+  "regista-o": "o registra", "regista-a": "a registra", "regista-os": "os registra", "regista-as": "as registra",
   demasiado: "demais", "semi-autónomo": "semiautônomo", autónomo: "autônomo", autónoma: "autônoma", autónomos: "autônomos",
   autónomas: "autônomas", anónimo: "anônimo", anónima: "anônima", anónimos: "anônimos", anónimas: "anônimas", económico: "econômico",
   económica: "econômica", económicos: "econômicos", económicas: "econômicas", fenómeno: "fenômeno", fenómenos: "fenômenos",
@@ -437,8 +443,9 @@ function ptbrImperatives(s) {
   // The coordinated imperatives of one sentence: after "," / "e" / "ou" (/ "e depois"), up to the sentence's end (. ! ? ; :
   // a line, a top-level dash). A parenthesis is skipped whole; a relative / subordinate word ("que", "onde", "se"…) holds
   // the chain until the next comma — "o que" ("what") and "aquilo que" never do ("vê o que mudou e volta a aprovar").
+  // A sentence's "." is followed by a blank or the end: the dot of ".gitattributes" or "e.g" ends nothing.
   const chain = (from) => {
-    const re = /[\p{L}]+(?:-(?:o|a|os|as|no|na|nos|nas|lhe|lhes|me))?|[()]|[.!?;:\n]|[—–→]|,/gu;
+    const re = /[\p{L}]+(?:-(?:o|a|os|as|no|na|nos|nas|lhe|lhes|me))?|[()]|[.!?](?=\s|$)|[;:\n]|[—–→]|,/gu;
     re.lastIndex = from;
     let m, depth = 0, held = false, joined = false, prev = "";
     while ((m = re.exec(s))) {
@@ -479,6 +486,14 @@ function ptbrImperatives(s) {
   while ((m = RE_PTBR_CLAUSE.exec(s))) {
     visit(m.index + m[0].length, 0);
     if (m[0].length === 0) RE_PTBR_CLAUSE.lastIndex++;
+  }
+  // A verb with "tu" after it is an order wherever it stands ("por MCP, corre tu o comando", "corre-as tu"): the you form
+  // ("execute você"; the word rule makes "tu" "você").
+  const RE_TU_AFTER = /(?<![\p{L}\p{N}_-])[\p{L}]+(?:-(?:o|a|os|as|no|na|nos|nas|lhe|lhes|me))?(?=[ \t]+tu(?![\p{L}\p{N}_]))/gu;
+  while ((m = RE_TU_AFTER.exec(s))) {
+    if (hits.has(m.index)) continue;
+    const after = take(m.index);
+    if (after != null) chain(after); // "corre tu X e regista a execução": the order goes on
   }
   if (!hits.size) return s;
   let out = "", last = 0;
