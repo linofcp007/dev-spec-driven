@@ -6,12 +6,17 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 // 1.14 full review (Ga) — evidence, project checks, CLI runs.
-exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, all, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
   const Sga = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const jsonGa = (s) => { try { return JSON.parse(s); } catch { return null; } };
   const rga = (proj, args, env) => { // in-process (1.27), but a --run — it waits for its commands: spawned
     const a = [...args, "--project", proj], o = { encoding: "utf8", env: { ...process.env, ...(env || {}) } };
     const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...a], o) : spawnIn(a, o);
+    return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
+  };
+  // …and a --run, which waits for its commands: in-process and awaited (1.30 — spawnAsync: the CLI's own start saved)
+  const rgaRun = async (proj, args, env) => {
+    const r = await spawnAsync([...args, "--project", proj], { env: { ...process.env, ...(env || {}) } });
     return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
   };
   const stGa = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
@@ -30,7 +35,7 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
     Sga.initProject(gps, ["core"], "en", { checks: { unit: "$failed = 0; Write-Output \"failed: $failed\"; exit $failed", lint: "exit 4" } });
     const fps = Sga.createFeature(gps, "Pwsh checks", ["core"], "", undefined, "en");
     wGa(fps.dir, "tasks.md", "- [x] 1. [US1] Done\n");
-    const fin = jsonGa(rga(gps, ["finish", fps.slug, "--run", "--shell", "pwsh", "--json"]).stdout);
+    const fin = jsonGa((await rgaRun(gps, ["finish", fps.slug, "--run", "--shell", "pwsh", "--json"])).stdout);
     const fc = stGa(fps).finishChecks || {};
     ok(fin && fc.unit && fc.unit.exitCode === 0 && /failed: 0/.test(fc.unit.summary || "") && fc.unit.observed === "cli" && fc.lint && fc.lint.exitCode === 4,
       "1.21.1 languages: finish --run --shell pwsh runs each project check under PowerShell 7 and records it — `$failed = 0; … exit $failed` → exit 0, `exit 4` → exit 4 (got " +
@@ -46,19 +51,19 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
     const f11 = Sga.createFeature(p11, "Stamps", ["core"], "", undefined, "en");
     wGa(p11, "src/a.js", "module.exports = 1;\n");
     wGa(f11.dir, "tasks.md", "- [x] 1. [US1] A\n  - _Implements: src/a.js_\n");
-    const fin = jsonGa(rga(p11, ["finish", f11.slug, "--run", "--json"]).stdout);
+    const fin = jsonGa((await rgaRun(p11, ["finish", f11.slug, "--run", "--json"])).stdout);
     const chk = fin && (fin.suiteChecks || []).find((c) => c.name === "test");
     // done --run: the run's `at` is when it STARTED (a 1.5 s run)
     wGa(f11.dir, "tasks.md", "- [x] 1. [US1] A\n  - _Implements: src/a.js_\n- [ ] 2. [US1] Slow\n  - _Verify: node -e \"setTimeout(() => {}, 1500)\"_\n" +
       "- [ ] 3. [US1] Edits its own _Verify:_\n  - _Verify: node edit.js_\n");
     const t0 = Date.now();
-    const d2 = rga(p11, ["done", f11.slug, "2", "--run"]);
+    const d2 = (await rgaRun(p11, ["done", f11.slug, "2", "--run"]));
     const t1 = Date.now();
     const ev2 = (stGa(f11).evidence || {})["2"];
     const at2 = Date.parse(ev2 ? ev2.at : "");
     // done --run: a _Verify:_ edited while it ran → the record is for the command that ran (stale-evidence), never verified
     wGa(p11, "edit.js", "const fs = require('fs'); const p = '.specs/" + f11.slug + "/tasks.md'; fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace('node edit.js', 'node edit2.js'));\n");
-    const d3 = jsonGa(rga(p11, ["done", f11.slug, "3", "--run", "--json"]).stdout);
+    const d3 = jsonGa((await rgaRun(p11, ["done", f11.slug, "3", "--run", "--json"])).stdout);
     ok(chk && chk.status === "code-changed" && d2.code === 0 && Number.isFinite(at2) && at2 - t0 < (t1 - t0) - 1000 &&
       d3 && d3.ok && d3.verified === false && d3.unverifiedReason === "stale-evidence",
       "1.22 review: finish --run stamps the code BEFORE the checks run (a check editing an implementing file reads code-changed); done --run's run `at` is its start and its verify stamp the _Verify:_ it ran (edited meanwhile → stale-evidence) (got " +
@@ -78,10 +83,10 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
     const fb3 = Sga.createFeature(pb, "Serve", ["core"], "", undefined, "en");
     wGa(fb3.dir, "tasks.md", "- [ ] 1. [US1] Starts the server\n  - _Verify: node spawner-r6.js done_\n");
     const t0 = Date.now();
-    const d = rga(pb, ["done", fb3.slug, "1", "--run", "--timeout", "15"]);
+    const d = (await rgaRun(pb, ["done", fb3.slug, "1", "--run", "--timeout", "15"]));
     const tookDone = Date.now() - t0;
     const t1 = Date.now();
-    const f = rga(pb, ["finish", fb3.slug, "--run", "--json"]);
+    const f = (await rgaRun(pb, ["finish", fb3.slug, "--run", "--json"]));
     const tookFin = Date.now() - t1;
     const fj = jsonGa(f.stdout);
     const ev = (stGa(fb3).evidence || {})["1"];

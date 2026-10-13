@@ -6,12 +6,17 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 // 1.14 full review (Ga) — evidence, project checks, CLI runs.
-exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, all, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
   const Sga = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const jsonGa = (s) => { try { return JSON.parse(s); } catch { return null; } };
   const rga = (proj, args, env) => { // in-process (1.27), but a --run — it waits for its commands: spawned
     const a = [...args, "--project", proj], o = { encoding: "utf8", env: { ...process.env, ...(env || {}) } };
     const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...a], o) : spawnIn(a, o);
+    return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
+  };
+  // …and a --run, which waits for its commands: in-process and awaited (1.30 — spawnAsync: the CLI's own start saved)
+  const rgaRun = async (proj, args, env) => {
+    const r = await spawnAsync([...args, "--project", proj], { env: { ...process.env, ...(env || {}) } });
     return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
   };
   const stGa = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
@@ -25,14 +30,14 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
   // _Expect: fail_ task was ticked on a "red run" that never happened); finish --run records no check run.
   const f1 = Sga.createFeature(gp, "Shellless", ["core"], "", undefined, "en");
   wGa(f1.dir, "tasks.md", "- [ ] 1. [US1] Write T-01 red\n  - _Verify: " + PASS + "_\n  - _Expect: fail_\n");
-  const g1 = rga(gp, ["done", f1.slug, "1", "--run", "--shell", "no-such-shell-dsd", "--json"]);
+  const g1 = (await rgaRun(gp, ["done", f1.slug, "1", "--run", "--shell", "no-such-shell-dsd", "--json"]));
   const g1j = jsonGa(g1.stdout);
-  const g1env = rga(gp, ["done", f1.slug, "1", "--run"], { DEV_SPEC_SHELL: "no-such-shell-dsd" });
+  const g1env = (await rgaRun(gp, ["done", f1.slug, "1", "--run"], { DEV_SPEC_SHELL: "no-such-shell-dsd" }));
   const gpc = path.join(tmp, "frga-checks");
   Sga.initProject(gpc, ["core"], "en", { checks: { test: PASS } });
   const fc = Sga.createFeature(gpc, "Fin", ["core"], "", undefined, "en");
   wGa(fc.dir, "tasks.md", "- [x] 1. [US1] Done\n");
-  const g1f = rga(gpc, ["finish", fc.slug, "--run", "--shell", "no-such-shell-dsd", "--json"]);
+  const g1f = (await rgaRun(gpc, ["finish", fc.slug, "--run", "--shell", "no-such-shell-dsd", "--json"]));
   const g1fj = jsonGa(g1f.stdout);
   ok(g1.code === 1 && g1j && g1j.couldNotRun === "shell-not-started" && /could not run \(the shell 'no-such-shell-dsd' could not be started: ENOENT\) — nothing was recorded; the task stays open/.test(g1j.error) &&
     g1env.code === 1 && /nothing was recorded; the task stays open/.test(g1env.out) && !(stGa(f1).evidence || {})["1"] && /- \[ \] 1\./.test(tasksGa(f1)) &&
@@ -45,11 +50,11 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
   const f2 = Sga.createFeature(gp, "Missing test", ["core"], "", undefined, "en");
   wGa(f2.dir, "tasks.md", "- [ ] 1. [US1] Write T-01 and watch it fail\n  - _Verify: node t/red.js_\n  - _Expect: fail_\n");
   wGa(gp, "t/red.js", "console.error(\"Could not find 't/uppercase.test.js'\");\nprocess.exit(1);\n");
-  const g2 = rga(gp, ["done", f2.slug, "1", "--run", "--json"]);
+  const g2 = (await rgaRun(gp, ["done", f2.slug, "1", "--run", "--json"]));
   const g2j = jsonGa(g2.stdout);
   const g2rec = (stGa(f2).evidence || {})["1"];
   wGa(gp, "t/red.js", "require(\"assert\").strictEqual(\"a\".toUpperCase(), \"B\");\n");
-  const g2b = rga(gp, ["done", f2.slug, "1", "--run"]);
+  const g2b = (await rgaRun(gp, ["done", f2.slug, "1", "--run"]));
   ok(g2.code === 1 && g2j && g2j.couldNotRun === "output" && g2j.expected === "fail" && /its output shows the test never ran \(Could not find 't\/uppercase\.test\.js'\) — that is no red test/.test(g2j.error) &&
     !g2rec && g2b.code === 0 && /✓ red run recorded for task 1 \(exit 1\)/.test(g2b.out) && /- \[x\] 1\./.test(tasksGa(f2)),
     "full review Ga2: done --run on an _Expect: fail_ task whose test never ran (missing test file) is refused, nothing recorded; an assertion failure is then the red proof (got " +
@@ -73,15 +78,15 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
     "- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + PASS + "_\n**Checkpoint:** US-1 works.\n");
   wGa(g3p, "src/limiter.js", "module.exports = 1;\n");
   Sga.approvePhase(g3p, f3.slug, null, "u", { through: "tasks" });
-  rga(g3p, ["done", f3.slug, "1", "--run"]);
-  rga(g3p, ["done", f3.slug, "2", "--run"]);
-  const g3a = rga(g3p, ["finish", f3.slug, "--run", "--write"]);
+  (await rgaRun(g3p, ["done", f3.slug, "1", "--run"]));
+  (await rgaRun(g3p, ["done", f3.slug, "2", "--run"]));
+  const g3a = (await rgaRun(g3p, ["finish", f3.slug, "--run", "--write"]));
   const fin3At = (stGa(f3).finished || {}).at;
   wGa(g3p, "src/limiter.js", "module.exports = 2; // changed after the checks ran\n");
   const g3b = rga(g3p, ["finish", f3.slug, "--write"]);
   const fin3Same = (stGa(f3).finished || {}).at === fin3At;
   const na3 = jsonGa(rga(g3p, ["next-action", f3.slug, "--json"]).stdout); // drift → "harmless → re-finish" names the check run it needs
-  const g3c = rga(g3p, ["finish", f3.slug, "--run", "--write"]);
+  const g3c = (await rgaRun(g3p, ["finish", f3.slug, "--run", "--write"]));
   ok(g3a.code === 0 && /is ready to finish/.test(g3a.out) && !!fin3At && g3b.code === 1 && /test \(the implementing files changed since the run\)/.test(g3b.out) && !/Replaced the baseline/.test(g3b.out) && fin3Same &&
     na3 && na3.step === "drift" && /node "[^"]*dev-spec\.js" finish limiter --run runs and records them/.test(na3.recommendation) &&
     g3c.code === 0 && /Replaced the baseline/.test(g3c.out),
@@ -116,15 +121,15 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
     const f9 = Sga.createFeature(gp, "Wsl", ["core"], "", undefined, "en");
     wGa(f9.dir, "tasks.md", "- [ ] 1. [US1] Must pass\n  - _Verify: exit 0_\n"); // a builtin: no node needed inside a WSL distribution
     const sysBash = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "bash.exe");
-    const g9 = rga(gp, ["done", f9.slug, "1", "--run", "--shell", sysBash, "--json"]);
+    const g9 = (await rgaRun(gp, ["done", f9.slug, "1", "--run", "--shell", sysBash, "--json"]));
     const g9j = jsonGa(g9.stdout);
-    const g9x = jsonGa(rga(gp, ["done", f9.slug, "1", "--run", "--shell", path.join(path.dirname(sysBash), "wsl.exe"), "--json"]).stdout);
+    const g9x = jsonGa((await rgaRun(gp, ["done", f9.slug, "1", "--run", "--shell", path.join(path.dirname(sysBash), "wsl.exe"), "--json"])).stdout);
     const g9none = !(stGa(f9).evidence || {})["1"] || !!(g9j && g9j.ok); // before the Git Bash run below records its pass
     ok(g9x && g9x.ok === false && g9x.couldNotRun === "wsl-exe" && /wsl\.exe/.test(g9x.error),
       "full review Ga9 (Windows): --shell <System32 wsl.exe> is no shell (it rejects -c) — refused before anything runs, nothing recorded (got " + JSON.stringify(g9x) + ")");
     const gitExec = spawnSync("git", ["--exec-path"], { encoding: "utf8" });
     const gitBash = Sga.resolveRunShell("bash", { gitExecPath: gitExec.status === 0 ? gitExec.stdout : null });
-    const g9b = gitBash.shell ? rga(gp, ["done", f9.slug, "1", "--run", "--shell", "bash", "--json"]) : null;
+    const g9b = gitBash.shell ? (await rgaRun(gp, ["done", f9.slug, "1", "--run", "--shell", "bash", "--json"])) : null;
     const g9bj = g9b && jsonGa(g9b.stdout);
     // Either WSL ran it (a working distribution: a real pass is recorded) or its relay failed (could-not-run `wsl` / the shell
     // didn't start: nothing recorded) — never a bogus failed run or red proof.
