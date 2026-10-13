@@ -97,6 +97,9 @@ function neutralTmpBase() {
 }
 // A chain's environment for its temp folder: TMP / TEMP / TMPDIR (Windows reads TEMP then TMP; POSIX TMPDIR) all name it.
 const tmpEnv = (dir) => ({ TMP: dir, TEMP: dir, TMPDIR: dir });
+// env with tmpEnv(dir) in place of the shell's own — whatever case its names are in (Windows' are case-blind: a `Temp` left beside
+// `TEMP` would give the child two values for one name)
+const withTmpEnv = (env, dir) => ({ ...Object.fromEntries(Object.entries(env).filter(([k]) => !/^(?:TMP|TEMP|TMPDIR)$/i.test(k))), ...tmpEnv(dir) });
 
 // Hermetic chains. A chain never sees the shell the suite was started from: the variables that steer the plugin — the
 // project (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR), the MCP server's switches (SPEC_MCP_*), Claude Code's plugin variables
@@ -371,7 +374,7 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
       let kid;
       try {
         cwd = cwd || fs.mkdtempSync(path.join(base.dir, opts.tmpPrefix || "test-chain-"));
-        const env = { ...hermeticEnv(process.env), ...tmpEnv(base.dir), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
+        const env = { ...withTmpEnv(hermeticEnv(process.env), base.dir), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
         kid = spawn(process.execPath, [opts.entry], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
       } catch (e) {
         if (attempt === 0) return void setTimeout(() => start(1), 1000);

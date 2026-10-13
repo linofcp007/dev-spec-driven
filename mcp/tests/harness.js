@@ -127,7 +127,6 @@ function hookIn(file, o = {}) {
   return { status: 0, signal: null, stdout: out ? JSON.stringify(out) : "", stderr: "" };
 }
 
-
 let pass = 0,
   fail = 0;
 let muted = true; // the handshake runs muted unless this chain counts it (setup)
@@ -149,7 +148,6 @@ function shipFeature(dir, slug, at) {
   st.approvals = { ...(st.approvals || {}), execution: { at: at || "2026-09-01T00:00:00.000Z", by: "test" } };
   fs.writeFileSync(sp, JSON.stringify(st, null, 2));
 }
-
 
 const pending = new Map();
 let buf = "";
