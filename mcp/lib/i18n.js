@@ -434,6 +434,11 @@ function approvalAction(X, a) {
     if (a.setting === "roadmap") return X.roadmapShell;
     if (a.setting === "specs") return a.source === "edit" ? X.specsEdit : X.specsShell;
     if (a.setting === "link") return X.link;
+    // dev-guardian's gate (1.30): its launcher, its baseline, an agent-run `baseline update`, a DEV_GUARDIAN_CLI of the command's own
+    if (a.setting === "guardian-launcher") return X.guardianLauncher;
+    if (a.setting === "guardian-baseline") return X.guardianBaseline;
+    if (a.setting === "guardian-baseline-update") return X.guardianBaselineUpdate;
+    if (a.setting === "guardian-cli") return X.guardianCli;
     return X.lower(a.from, a.to);
   }
   const who = (a.role ? X.asRole(a.role) : "") + (a.by ? X.onBehalf(a.by) : "");

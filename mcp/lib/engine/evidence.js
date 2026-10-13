@@ -17,8 +17,8 @@ let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, c
   readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers, taskProse, timeOf, tKey, toPosix,
   traceTestCode, withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, taskPeerStamps, gitDirsOf;
 let dayOf; // core.js — the local calendar date (today / dayOf)
-let isGuardianCheck, guardianRecord, guardianText; // guardian.js — dev-guardian's gate (1.29): which check runs it, its run read, its verdict
-function __link(E) { ({ dayOf, isGuardianCheck, guardianRecord, guardianText, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
+let isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact; // guardian.js — dev-guardian's gate: which check runs it, its run read, its verdict, what is refused / stored, --compact
+function __link(E) { ({ dayOf, isGuardianCheck, guardianRecord, guardianText, guardianRefusal, guardianStored, guardianCompact, featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs,
   existingFeature, extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest,
   isBacktickUnit, isDirSafe, isNetworkPath, isObj, loadRoadmap, normalizeLang, oneLine, planIdText, projectLang, PROTO_KEYS, realPathLoose,
   readIfExists, readRoadmap, readState, roadmapPath, specsRoot, statePath, stripEnds, taskBlocks, taskMarkers,
@@ -1744,6 +1744,13 @@ function writeChecks(projectDir, nc) {
   });
 }
 
+const GUARDIAN_STDERR_MAX = 64 * 1024; // the raw stderr finish --run hands a guardian check's reading (its last characters)
+// The command a check's run must prove: its meta.checks command — for dev-guardian's gate, or that command with --compact
+// (guardianCompact: the short report an agent can pass over MCP) when that is what ran.
+function checkProof(name, command, run, projectDir) {
+  const compact = guardianCompact(name, command);
+  return compact && runProvesVerify(run, [compact], projectDir) ? compact : command;
+}
 // spec_finish {evidence: [{name, command, exitCode, summary}]} — the project checks' runs as the agent (or `finish --run`)
 // ran them, validated all-or-nothing, then recorded in .state.json → finishChecks[name]: the latest run {command, exitCode,
 // summary, at, commit?, dirty?} stamped `check` (the meta.checks command it ran for — an edited command makes it `changed`)
@@ -1773,12 +1780,19 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
     const run = { command: it.command.trim().slice(0, OBSERVED_MAX_COMMAND), exitCode: parseInt(code, 10), ...gitEvidence(it) }; // (never cut before it is compared)
     const root = runRootStamp(run.command, projectDir, slug); // the folder its absolute cds are read against
     if (root) run.root = root;
-    run.observed = observedStamp(projectDir, null, run, ranBy, [byName.get(it.name)]); // an observed run of THIS check's command
+    // an observed run of THIS check's command (a guardian check's: or its --compact twin, when that is what ran — guardianCompact)
+    run.observed = observedStamp(projectDir, null, run, ranBy, [checkProof(it.name, byName.get(it.name), run, projectDir)]);
     if (typeof it.summary === "string" && it.summary.trim()) run.summary = it.summary.slice(0, 2000);
     // 1.29: dev-guardian's gate — its exit code and JSON report (`report`, its stdout; never stored) read into a summary; its own
-    // message read from the summary (stderr's last lines)
+    // message read from the output: finish --run's raw stderr (`stderr`, CLI only, never stored — the summary's last lines lost
+    // node's "Cannot find module" and dev-guardian's "error: …"), else the summary (stderr's last lines, over MCP).
+    // 1.30: a run it must not vouch for is refused, all-or-nothing (guardianRefusal: launcher-changed · no-launcher ·
+    // report-mismatch · report-missing) — nothing is recorded.
+    const output = ranBy === "cli" && typeof it.stderr === "string" ? it.stderr.slice(-GUARDIAN_STDERR_MAX) : typeof it.summary === "string" ? it.summary : "";
     const guardian = isGuardianCheck(it.name, byName.get(it.name))
-      ? guardianRecord(projectDir, dir, byName.get(it.name), run.exitCode, typeof it.report === "string" ? it.report : null, typeof it.summary === "string" ? it.summary : "") : null;
+      ? guardianRecord(projectDir, dir, byName.get(it.name), run.exitCode, typeof it.report === "string" ? it.report : null, output) : null;
+    const refused = guardian ? guardianRefusal(guardian, lng) : null;
+    if (refused) return { error: P.evidenceItem(i, refused.why), code: refused.code };
     // (a CLI run's `check` is the command it ran — meta.checks when it started; edited meanwhile, the run reads `changed`)
     runs.push({ name: it.name, check: start ? run.command : byName.get(it.name), run, guardian });
   }
@@ -1794,7 +1808,7 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
     const prev = Object.prototype.hasOwnProperty.call(fc, r.name) && isRecord(fc[r.name]) ? fc[r.name] : null;
     const run = runOf({ ...r.run, at, cmdRule: CMD_RULE }); // recorded under the command rule (suiteStatus judges it by it)
     const hist = prev && prev.check === r.check && Array.isArray(prev.history) ? prev.history.filter(isRecord) : [];
-    fc[r.name] = { ...run, check: r.check, ...(code ? { code } : {}), ...(r.guardian ? { guardian: r.guardian } : {}), history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
+    fc[r.name] = { ...run, check: r.check, ...(code ? { code } : {}), ...(r.guardian ? { guardian: guardianStored(r.guardian) } : {}), history: hist.concat([run]).slice(-EVIDENCE_HISTORY) };
   }
   state.finishChecks = fc;
   writeFileAtomic(statePath(dir), JSON.stringify(state, null, 2));
@@ -1829,7 +1843,7 @@ function suiteStatus(projectDir, state, dir) {
     // changed: meta.checks' command changed since the run — or the run was of ANOTHER command (runProvesVerify:
     // `{name: "test", command: "echo ok"}` made check test pass); a run recorded before that rule (no cmdRule stamp —
     // preRuleRun) keeps the pre-1.22 reading (its `check` stamp alone), as a task's run does
-    it.status = r.check !== command || (!preRuleRun(r) && !runProvesVerify(r, [command], projectDir)) ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick"
+    it.status = r.check !== command || (!preRuleRun(r) && !runProvesVerify(r, [checkProof(name, command, r, projectDir)], projectDir)) ? "changed" : r.exitCode !== 0 ? "failed" : last != null && !(Number.isFinite(t) && t >= last) ? "before-last-tick"
       : codeChanged(r) ? "code-changed" : observedOnly && r.observed !== true && r.observed !== "cli" ? "unobserved" : "pass";
     return it;
   });

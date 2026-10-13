@@ -17,14 +17,14 @@ let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, cr
   readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError, savedTracks, scanTestCode, shortIdList, specDoctor, specsRoot,
   staleFinish, stateFromFile, statePath, timeOf, trackLabel, unverifiedLabel, verificationStatus, withFeatureLock,
   withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot;
-let guardianOffer; // guardian.js — 1.29: dev-guardian's gate offered (never set) when it is installed or the project has .guardian/
+let guardianOffer, guardianLauncherAudit; // guardian.js — 1.29 (1.30: the launcher's audit / rewrite): dev-guardian's gate offered (never set) when it is installed or the project has .guardian/
 function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir,
   isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,
   maybeRefreshRoadmap, missingPackTracks, nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile,
   positionPhase, projectLang, readIfExists, readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError,
   savedTracks, scanTestCode, shortIdList, specDoctor, specsRoot, staleFinish, stateFromFile, statePath, timeOf, trackLabel,
-  unverifiedLabel, verificationStatus, withFeatureLock, withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot, guardianOffer } = E); }
+  unverifiedLabel, verificationStatus, withFeatureLock, withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot, guardianOffer, guardianLauncherAudit } = E); }
 
 // ---------------------------------------------------------------------------
 // Upgrade — after the plugin is updated. roadmap.json meta.specVersion records the dev-spec version that last
@@ -288,7 +288,10 @@ function specUpgrade(projectDir, opts = {}) {
     p.seed.forEach((x) => plan.history.seed.push({ feature: s.slug, phase: x.phase }));
     p.skip.forEach((x) => plan.history.skip.push({ feature: s.slug, ...x }));
   }
-  plan.changes = plan.specVersion.stamp || plan.tracks.length > 0 || plan.history.records > 0 || plan.history.seed.length > 0 || plan.gitignore.length > 0;
+  // 1.30: a guardian check runs .specs/guardian.cjs and it is not this version's launcher (an earlier version's, edited, missing)
+  if (guardianLauncherAudit(projectDir, lang, false)) plan.guardianLauncher = true;
+  plan.changes = plan.specVersion.stamp || plan.tracks.length > 0 || plan.history.records > 0 || plan.history.seed.length > 0 || plan.gitignore.length > 0 ||
+    !!plan.guardianLauncher;
   let migrations = null;
   if (apply) {
     migrations = { changed: false, specVersion: { from: ver.from, to: ver.to, stamped: false }, tracks: [], history: { seeded: [], skipped: [], records: 0 },
@@ -309,6 +312,7 @@ function specUpgrade(projectDir, opts = {}) {
     ensureLockIgnore(root); // (every lock above ensured it too)
     const still = new Set(missingIgnoreLines(root));
     migrations.gitignore = plan.gitignore.filter((l) => !still.has(l));
+    if (plan.guardianLauncher) { const w = guardianLauncherAudit(projectDir, lang, true); if (w) migrations.guardianLauncher = w; } // "written"
     // The stamp last, and only once every feature migrated: a busy or broken one keeps the notice until the upgrade is re-run.
     if (!migrations.errors.length && ver.behind) {
       const sv = stampSpecVersion(projectDir);
@@ -316,7 +320,7 @@ function specUpgrade(projectDir, opts = {}) {
       else migrations.specVersion.stamped = sv.stamped;
     }
     migrations.changed = migrations.specVersion.stamped || migrations.tracks.length > 0 || migrations.history.records > 0 ||
-      migrations.history.seeded.length > 0 || migrations.gitignore.length > 0;
+      migrations.history.seeded.length > 0 || migrations.gitignore.length > 0 || !!migrations.guardianLauncher;
     if (migrations.changed) maybeRefreshRoadmap(projectDir);
   }
   // The audit — after the migrations when applying (fresh reads: the locks dropped the read cache).
@@ -331,6 +335,9 @@ function specUpgrade(projectDir, opts = {}) {
   // offered, never set (its scan takes minutes and needs its scanners)
   const offer = guardianOffer(projectDir, lang);
   if (offer) res.guardianOffer = offer;
+  // …and one when the gate's launcher is not this version's (after apply: none — it was written)
+  const launcher = guardianLauncherAudit(projectDir, lang, false);
+  if (launcher) res.guardianLauncher = launcher;
   if (apply) {
     const file = path.join(root, "UPGRADE.md");
     if (!migrations.changed) migrations.report = { file, written: false };
@@ -389,6 +396,7 @@ function upgradeMigrationLines(r, lang) {
     if (m.history.records) out.push(U.migRecords(m.history.records));
     if (m.history.skipped.length) out.push(U.migSkipped(m.history.skipped.map(reason).join(", ")));
     if (m.gitignore.length) out.push(U.migGitignore(m.gitignore.length));
+    if (m.guardianLauncher) out.push(i18n.msg(lang).guardian.migLauncher);
     if (m.errors.length) out.push(U.migErrors(m.errors.map((e) => (e.feature ? e.feature + ": " : "") + e.error).join(" | ")));
   } else if (p) {
     if (p.specVersion.stamp && p.specVersion.to) out.push(U.migStamp(p.specVersion.from, p.specVersion.to));
@@ -397,6 +405,7 @@ function upgradeMigrationLines(r, lang) {
     if (p.history.records) out.push(U.migRecords(p.history.records));
     if (p.history.skip.length) out.push(U.migSkipped(p.history.skip.map(reason).join(", ")));
     if (p.gitignore.length) out.push(U.migGitignore(p.gitignore.length));
+    if (p.guardianLauncher) out.push(i18n.msg(lang).guardian.migLauncher);
     if (p.errors.length) out.push(U.migErrors(p.errors.map((e) => e.feature + ": " + e.error).join(" | ")));
   }
   return out;
@@ -411,6 +420,7 @@ function upgradeLines(r, lang = r.lang) {
   if (r.newer) out.push(U.newer(r.from, r.to));
   out.push(r.features.length ? U.summary(r.features.length, r.summary.blocked, r.summary.attention, r.summary.ok, r.archived) : U.noFeatures);
   if (r.guardianOffer) out.push("  ▲ " + r.guardianOffer); // 1.29: the project's own attention item
+  if (r.guardianLauncher) out.push("  ▲ " + r.guardianLauncher); // 1.30: the gate's launcher
   for (const g of ["blocked", "attention", "ok"]) {
     const list = r.features.filter((f) => f.group === g);
     if (!list.length) continue;
@@ -446,6 +456,7 @@ function renderUpgradeMd(r, lang, proj) {
   let md = `# ${M.title(proj)}\n\n<!-- ${M.autogen} -->\n\n> ${M.intro(r.from, r.to)}\n\n`;
   md += `**${r.features.length ? U.summary(r.features.length, r.summary.blocked, r.summary.attention, r.summary.ok, r.archived) : U.noFeatures}**\n`;
   if (r.guardianOffer) md += `\n- [ ] ${r.guardianOffer}\n`; // 1.29: the project's own attention item
+  if (r.guardianLauncher) md += `\n- [ ] ${r.guardianLauncher}\n`; // 1.30: the gate's launcher
   const mig = upgradeMigrationLines(r, lang);
   if (mig.length) md += `\n## ${M.migrations}\n\n` + mig.map((l) => `- ${l}`).join("\n") + "\n";
   for (const g of ["blocked", "attention", "ok"]) {

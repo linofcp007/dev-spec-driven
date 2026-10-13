@@ -30,7 +30,8 @@ let activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAN
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
   decodeText, isNetworkPath, runProvesVerify, withinRoot;
 let approvedContentSame, proofIncomplete; // gates.js (the guard's stale tasks approval) · evidence.js (an incomplete command runs nothing)
-function __link(E) { ({ approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
+let guardianGuardedFile, guardianShellActions, guardianGuardFilter; // guardian.js — dev-guardian's gate: its guarded files, commands, scope (1.30)
+function __link(E) { ({ guardianGuardedFile, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
@@ -391,7 +392,7 @@ const RE_COMSPEC_WORD = /^(?:\$env:comspec|\$\{env:comspec\}|%comspec%)$/i;
 // or the files the guard stands on by name (`find . -name roadmap.json -delete`), or a glob / brace expansion that
 // may name .specs (`.s*/road*.json`, `.spec?/…`) or stand beside a writer / remover (PowerShell's `Remove-Item * -Recurse` reaches
 // .specs/). The hook's pre-check (approval-hook.js candidate) is the same test — mcp/tests/10-guards-shell-writes.js checks they agree.
-const RE_APPROVAL_CANDIDATE = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
+const RE_APPROVAL_CANDIDATE = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl|guardian/i; // guardian: dev-guardian's gate (1.30)
 const RE_APPROVAL_DOT_GLOB = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*[*?[{]/;
 const RE_APPROVAL_WRITE_WORD = /(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|remove-item|ri|mv|move|move-item|mi|cp|copy|copy-item|cpi|set-content|sc|add-content|ac|clear-content|clc|out-file|new-item|ni|tee|robocopy|xcopy|rsync)(?=[\s;&|)]|$)/i;
 // The words that make a CLI call an approval or a guard-down (approve, feature remove, init's guard-down flags).
@@ -880,7 +881,7 @@ function approvalGuardedFile(p) {
     return { setting: "observed", feature: f && f.toLowerCase() !== ".specs" ? f : null };
   }
   if (RE_STATE_FILE.test(t)) { const segs = t.split("/"); return { setting: "state", feature: segs[segs.length - 2] || null }; }
-  return null;
+  return guardianGuardedFile(t); // 1.30: dev-guardian's gate — .specs/guardian.cjs, .guardian/baseline.json (only with its check set)
 }
 // A folder a whole-folder writer (git checkout / restore -- <dir>) rewrites: .specs/ itself (roadmap.json with it) or a feature's
 // folder (its .state.json) → { setting, feature? } | null. Files (an extension: ROADMAP.md, roadmap.json) and dot folders aren't one.
@@ -1626,6 +1627,7 @@ function shellApprovalActions(command, level, depth, mode, meta, ctx) {
     const raw = words.raw || words;
     shellTrack(words, raw, mode, c);
     const at = devSpecWordAt(words, raw);
+    out.push(...guardianShellActions(words, programAt(words, raw), at, c)); // dev-guardian's gate (1.30): baseline update, DEV_GUARDIAN_CLI=
     if (at >= 0) {
       let args = words.slice(at + 1);
       if (mode === "ps" && args.length && args[args.length - 1] === "@" && segs[si + 1]) {
@@ -1947,7 +1949,8 @@ function approvalCommand(a, cli) {
   else if (a.kind === "guard-down") {
     // a write / edit of the file itself (or of the harness-observed log — evidence is recorded by the harness, never by hand):
     // the user makes it
-    if (a.setting === "roadmap" || a.setting === "state" || a.setting === "observed" || a.setting === "specs" || a.setting === "link") return null;
+    if (a.setting === "roadmap" || a.setting === "state" || a.setting === "observed" || a.setting === "specs" || a.setting === "link" ||
+      String(a.setting).startsWith("guardian-")) return null; // (dev-guardian's launcher, baseline, baseline update — 1.30)
     if (a.setting === "track") words.push("add-track", name(a.feature), ...(Array.isArray(a.tracks) ? a.tracks : []).map((t) => word(t, "<track>")), "--remove");
     else if (a.setting === "evidence") words.push("init", "--evidence", "reported");
     else if (a.setting === "stopCheck") words.push("init", "--stop-check", "off");
@@ -2027,6 +2030,7 @@ function approvalGuardDecision(payload, level, opts = {}) {
     // .specs/ itself, of a folder or a glob under it, too
     actions = approvalEditActions(approvalPathArgs(ti, opts.uriPath), payload.cwd, /(?:move|rename|delete|remove|unlink)/i.test(tool.replace(/^mcp__.+__/, "")));
   }
+  actions = guardianGuardFilter(actions, meta); // dev-guardian's rules guard nothing without its check (1.30)
   if (opts.projectUnreadable === true && actions.length) actions.push({ kind: "unreadable", why: "project", source: "mcp" });
   if (!actions.length) return allow("not-an-approval", { tool });
   if (typeof opts.resolveFeature === "function") {

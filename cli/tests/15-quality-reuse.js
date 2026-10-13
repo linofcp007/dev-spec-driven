@@ -80,7 +80,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const b3 = jsonOf(runIn(["backlog", "add", "refactor-pricing", "refactor: rounding copied in cart.ts", "--json", "--project", rp]));
   const bP = (runIn(["backlog", "add", "refactor-precos", "refactor: a", "--project", pp]), runIn(["backlog", "add", "refactor-precos", "refactor: b", "--project", pp]));
   ok(b1.code === 0 && /✓ 'refactor-pricing' added to the backlog/.test(b1.out) && b2.code === 0 && !/added to the backlog/.test(b2.out) &&
-    /'refactor-pricing' is already in the backlog — the new note was appended to its note\./.test(b2.out) &&
+    /'refactor-pricing' is already in the backlog — the new note was appended to its note \(to replace the note instead: remove the item, then add it again\)\./.test(b2.out) &&
     /  - refactor-pricing — refactor: Repeated Switches in pricing\.ts · refactor: rounding copied in cart\.ts\n/.test(b2.out) &&
     b3.exists === true && b3.appended === false && /nothing changed/.test(b3.note || "") && bP.code === 0 && /já está no backlog — a nova nota foi acrescentada/.test(bP.out),
     "1.19 R review 5 (CLI): backlog add of an existing name prints the engine's note (appended / nothing changed) instead of '✓ added', the entry keeps both notes; --json has exists / appended; PT line (got " +
