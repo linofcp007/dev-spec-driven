@@ -279,11 +279,11 @@ function globDpMatch(g, p) {
 }
 
 // _Implements:_ references of one tasks.md — the same reading as trace_check (HTML comments and fenced code out, the
-// task-marker reader taskMarkerSpans, comma/semicolon lists, backticks dropped).
+// task-marker reader taskMarkerSpans, comma/semicolon lists, backticks dropped; the template's [bracketed] slot is no file).
 function implementsRefs(tasksText) {
   const out = [];
   for (const v of taskMarkerValues(tasksProseText(tasksText || ""), "implements")) {
-    v.split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });
+    v.split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter((p) => p && !/^\[[^\]]*\]$/.test(p)).forEach((p) => { if (!out.includes(p)) out.push(p); });
   }
   return out;
 }

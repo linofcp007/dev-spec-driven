@@ -1223,4 +1223,42 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
         js([b.map((x) => x.phase), next && next.number, ap.ok, ap.error, ap.headingCreated, ab.map((x) => [x.number, x.phase]), ap2.ok, ap2.error, after2]) + ")");
     }
   }
+
+  { // 1.30 review 8 (ds-prose 1): the 1.28 duplicate check, the drift baseline, the scope guard and dev-guardian's "[this feature]"
+    // read a task's _Implements:_ — a filled xs change.md finished "ready" with 0 implementing files, all silent. Every tasks
+    // template carries the slot on its code task (tasks.md no size / s, change.md, the bugfix's fix — EN / PT / ES / pt-BR); a
+    // [bracketed] slot names no file (no phantom plan, no cross-feature overlap between two fresh features), the placeholder
+    // gate refuses it left in, and a real path — `app/[id]/page.tsx` too — is read.
+    const I = require("./lib/i18n.js");
+    const slot = /^ {2}- _Implements: \[[^\]\n]+\]_$/m;
+    const tpl = ["en", "pt", "es", "pt-BR"].flatMap((l) => [
+      ["tasks/" + l, I.tasks({ name: "x", tracks: ["core"], label: "core", slug: "x", summary: "" }, l)],
+      ["tasks-s/" + l, I.tasks({ name: "x", tracks: ["core", "tdd"], label: "core +tdd", slug: "x", summary: "", size: "s" }, l)],
+      ["change/" + l, I.change({ name: "x" }, l)], ["bugTasks/" + l, I.bugTasks("x", l)]]);
+    const p8 = path.join(tmp, "proj-impl-slot");
+    S.initProject(p8, ["core"], "en");
+    const fa = S.createFeature(p8, { name: "Coupon", size: "xs", lang: "en" }), fb = S.createFeature(p8, { name: "Invoices", size: "s", lang: "en" });
+    const ch = path.join(fa.dir, "change.md");
+    const fresh = [S.traceCheck(p8, fa.slug), S.traceCheck(p8, fb.slug)];
+    const filledButSlot = fs.readFileSync(ch, "utf8").replace("[one line: what changes and why]", "A coupon applies once per customer.")
+      .replace("[trigger]", "a customer applies a used coupon").replace("[behavior]", "reject it with the message \"coupon already used\"")
+      .replace("[the change in one or two lines — what it touches and why that is all of it]", "One check in the coupon service.")
+      .replace("[the change]", "Reject a reused coupon").replace("[command that proves it, e.g. npm test -- path/to/file.test.js]", "npm test");
+    fs.writeFileSync(ch, filledButSlot);
+    const ph = (S.specDoctor(p8, fa.slug).checks.find((c) => c.id === "placeholders") || {}).detail || "";
+    fs.mkdirSync(path.join(p8, "src", "coupons"), { recursive: true });
+    fs.mkdirSync(path.join(p8, "app", "[id]"), { recursive: true });
+    fs.writeFileSync(path.join(p8, "src", "coupons", "apply.js"), "module.exports = 1;\n");
+    fs.writeFileSync(path.join(p8, "app", "[id]", "page.tsx"), "export default 1;\n");
+    fs.writeFileSync(ch, filledButSlot.replace("[path of the code it creates or changes]", "src/coupons/apply.js, app/[id]/page.tsx"));
+    const filled = S.traceCheck(p8, fa.slug);
+    all("1.30 review 8: every tasks template carries an _Implements:_ slot on its code task; a [bracketed] slot names no file, the placeholder gate refuses it left in, a real path (app/[id]/page.tsx too) is read", {
+      slots: () => tpl.every(([, t]) => slot.test(t)),
+      noFile: () => fresh.every((t) => t.implementsFiles.length === 0 && t.plannedImplFiles.length === 0 && t.missingImplFiles.length === 0),
+      noOverlap: () => S.featureOverlaps(p8).pairs.length === 0,
+      gated: () => /change\.md[^;]*\[path of the code it creates or changes\]/.test(ph),
+      read: () => JSON.stringify(filled.implementsFiles) === JSON.stringify(["src/coupons/apply.js", "app/[id]/page.tsx"]) && filled.missingImplFiles.length === 0,
+      refs: () => JSON.stringify(S.taskMarkers(S.taskBlocks("- [ ] 1. a\n  - _Implements: [path of the code it creates or changes]_\n  - _Implements: [slug].tsx_\n")[0]).implements) === JSON.stringify(["[slug].tsx"]),
+    });
+  }
 };

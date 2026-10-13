@@ -413,14 +413,15 @@ Justify anything that violates a constitution principle or adds non-obvious comp
     title: (name) => `# Tasks: ${name}`,
     intro: (label) => `<!-- Tracks: ${label}. Organized by user story so each is independently shippable
      (P1 first). Each task is tagged with its story: [US1]/[US2] or [shared] for cross-cutting work.
-     [P] = parallelizable (different files, no deps). Every task carries _Requirements:_; TDD tasks
-     carry _Makes green:_. Use _Implements: path_ to tie a task to a real source file. A **Checkpoint**
-     marks where a story is independently testable.
+     [P] = parallelizable (different files, no deps). Every task carries _Requirements:_ and, when it
+     writes code, _Implements: <path>_ — the files it creates or changes (the scope guard, drift, the
+     duplicate check and finish read them); TDD tasks carry _Makes green:_. A **Checkpoint** marks where
+     a story is independently testable.
      If the stories are NOT independently shippable, they were mis-sliced — re-slice them, or fall
      back to a technical-layer layout (Foundation→Logic→API→…) keeping the [US1] tags. -->`,
-    introS: (label) => `<!-- Tracks: ${label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_) and a
-     _Verify: <command>_ — spec_complete_task records its result as the task's evidence. Use _Implements: path_ to tie a
-     task to a real source file. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_), a
+     _Verify: <command>_ — spec_complete_task records its result as the task's evidence — and, when it writes code,
+     _Implements: <path>_: the files it creates or changes. -->`,
     constraints: `## Global Constraints
 <!-- Exact values every task must respect, copied verbatim from the spec/steering (version floors,
      naming rules, limits, formats) — spec_task_brief inlines this section into every task brief.
@@ -437,6 +438,7 @@ Justify anything that violates a constitution principle or adds non-obvious comp
     story1: "## Story US-1 (P1 — MVP)",
     coreTask: "[Core behavior for US-1]",
     verify: "[command that proves it, e.g. npm test -- path/to/file.test.js]",
+    implements: "[path of the code it creates or changes]",
     parallelTask: "[parallelizable task — different file, no deps]",
     checkpoint1: "US-1 is fully functional and independently testable/shippable.",
     story2: "## Story US-2 (P2)",
@@ -721,6 +723,7 @@ ${a.summary || "[one line: the bug being fixed]"}
 - [ ] 2. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
+  - _Implements: [path of the code the fix changes]_
   - _Verify: [full test suite command]_
 **Checkpoint:** the bug no longer reproduces and the full suite is green.
 `;
@@ -792,6 +795,7 @@ ${a.summary || "[one line: what changes and why]"}
 ## Tasks
 - [ ] 1. [US1] [the change]
   - _Requirements: US-1.AC-1_
+  - _Implements: [path of the code it creates or changes]_
   - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
 
 <!-- A change (size xs): 1–3 acceptance criteria and 1–3 tasks, core only — no classification, design, quickstart or

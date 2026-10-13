@@ -419,13 +419,14 @@ Justifica tudo o que viole um princípio da constituição ou acrescente complex
     intro: (label) => `<!-- Tracks: ${label}. Organizado por história de utilizador para cada uma ser lançável de forma
      independente (P1 primeiro). Cada tarefa é marcada com a sua história: [US1]/[US2] ou [shared] para
      trabalho transversal. [P] = paralelizável (ficheiros diferentes, sem deps). Cada tarefa leva
-     _Requirements:_; tarefas TDD levam _Makes green:_. Usa _Implements: caminho_ para ligar uma tarefa
-     a um ficheiro de código real. Um **Checkpoint** marca onde uma história é testável de forma independente.
+     _Requirements:_ e, quando escreve código, _Implements: <caminho>_ — os ficheiros que cria ou altera (o
+     guarda de âmbito, a deriva, a deteção de duplicados e o finish leem-nos); tarefas TDD levam _Makes green:_.
+     Um **Checkpoint** marca onde uma história é testável de forma independente.
      Se as histórias NÃO forem lançáveis de forma independente, foram mal fatiadas — volta a fatiá-las, ou
      recorre a um layout por camada técnica (Fundação→Lógica→API→…) mantendo as tags [US1]. -->`,
-    introS: (label) => `<!-- Tracks: ${label} · tamanho s. Uma história; cada tarefa leva _Requirements:_ (as TDD _Makes green:_) e um
-     _Verify: <comando>_ — o spec_complete_task regista o resultado como evidência da tarefa. Usa _Implements: caminho_
-     para ligar uma tarefa a um ficheiro de código real. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · tamanho s. Uma história; cada tarefa leva _Requirements:_ (as TDD _Makes green:_), um
+     _Verify: <comando>_ — o spec_complete_task regista o resultado como evidência da tarefa — e, quando escreve código,
+     _Implements: <caminho>_: os ficheiros que cria ou altera. -->`,
     constraints: `## Restrições Globais
 <!-- Valores exatos que todas as tarefas têm de respeitar, copiados tal e qual da spec/steering (versões
      mínimas, regras de nomes, limites, formatos) — o spec_task_brief copia esta secção para cada brief.
@@ -442,6 +443,7 @@ Justifica tudo o que viole um princípio da constituição ou acrescente complex
     story1: "## História US-1 (P1 — MVP)",
     coreTask: "[Comportamento central para US-1]",
     verify: "[comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]",
+    implements: "[caminho do código que cria ou altera]",
     parallelTask: "[tarefa paralelizável — ficheiro diferente, sem deps]",
     checkpoint1: "US-1 está totalmente funcional e testável/lançável de forma independente.",
     story2: "## História US-2 (P2)",
@@ -726,6 +728,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 - [ ] 2. [US1] Corrigir a causa raiz — uma alteração, não um pacote; o teste de proteção T-02 continua verde
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
+  - _Implements: [caminho do código que a correção altera]_
   - _Verify: [comando da suite de testes completa]_
 **Checkpoint:** o bug deixa de se reproduzir e a suite completa está verde.
 `;
@@ -796,6 +799,7 @@ ${a.summary || "[uma linha: o que muda e porquê]"}
 ## Tarefas
 - [ ] 1. [US1] [a alteração]
   - _Requirements: US-1.AC-1_
+  - _Implements: [caminho do código que cria ou altera]_
   - _Verify: [comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]_
 
 <!-- Uma alteração (tamanho xs): 1–3 critérios de aceitação e 1–3 tarefas, só core — sem classificação, design, quickstart

@@ -418,13 +418,14 @@ Justifica todo lo que viole un principio de la constitución o añada complejida
     intro: (label) => `<!-- Tracks: ${label}. Organizado por historia de usuario para que cada una sea lanzable de forma
      independiente (P1 primero). Cada tarea se marca con su historia: [US1]/[US2] o [shared] para
      trabajo transversal. [P] = paralelizable (ficheros distintos, sin deps). Cada tarea lleva
-     _Requirements:_; las tareas TDD llevan _Makes green:_. Usa _Implements: ruta_ para vincular una tarea
-     a un fichero de código real. Un **Checkpoint** marca dónde una historia es testeable de forma independiente.
+     _Requirements:_ y, cuando escribe código, _Implements: <ruta>_ — los ficheros que crea o cambia (la guardia
+     de alcance, la deriva, la detección de duplicados y el finish los leen); las tareas TDD llevan _Makes green:_.
+     Un **Checkpoint** marca dónde una historia es testeable de forma independiente.
      Si las historias NO son lanzables de forma independiente, se trocearon mal — vuelve a trocearlas, o
      recurre a un layout por capa técnica (Fundación→Lógica→API→…) manteniendo las tags [US1]. -->`,
-    introS: (label) => `<!-- Tracks: ${label} · tamaño s. Una historia; cada tarea lleva _Requirements:_ (las TDD _Makes green:_) y un
-     _Verify: <comando>_ — spec_complete_task registra el resultado como evidencia de la tarea. Usa _Implements: ruta_
-     para vincular una tarea a un fichero de código real. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · tamaño s. Una historia; cada tarea lleva _Requirements:_ (las TDD _Makes green:_), un
+     _Verify: <comando>_ — spec_complete_task registra el resultado como evidencia de la tarea — y, cuando escribe código,
+     _Implements: <ruta>_: los ficheros que crea o cambia. -->`,
     constraints: `## Restricciones Globales
 <!-- Valores exactos que toda tarea debe respetar, copiados tal cual de la spec/steering (versiones
      mínimas, reglas de nombres, límites, formatos) — spec_task_brief copia esta sección en cada brief.
@@ -441,6 +442,7 @@ Justifica todo lo que viole un principio de la constitución o añada complejida
     story1: "## Historia US-1 (P1 — MVP)",
     coreTask: "[Comportamiento central para US-1]",
     verify: "[comando que lo demuestra, p. ej.: npm test -- ruta/fichero.test.js]",
+    implements: "[ruta del código que crea o cambia]",
     parallelTask: "[tarea paralelizable — fichero distinto, sin deps]",
     checkpoint1: "US-1 está totalmente funcional y es testeable/lanzable de forma independiente.",
     story2: "## Historia US-2 (P2)",
@@ -725,6 +727,7 @@ ${a.summary || "[una línea: el bug a corregir]"}
 - [ ] 2. [US1] Corregir la causa raíz — un cambio, no un paquete; la prueba de protección T-02 sigue en verde
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
+  - _Implements: [ruta del código que cambia la corrección]_
   - _Verify: [comando de la suite de pruebas completa]_
 **Checkpoint:** el bug deja de reproducirse y la suite completa está en verde.
 `;
@@ -795,6 +798,7 @@ ${a.summary || "[una línea: qué cambia y por qué]"}
 ## Tareas
 - [ ] 1. [US1] [el cambio]
   - _Requirements: US-1.AC-1_
+  - _Implements: [ruta del código que crea o cambia]_
   - _Verify: [comando que lo demuestra, p. ej.: npm test -- ruta/fichero.test.js]_
 
 <!-- Un cambio (tamaño xs): 1–3 criterios de aceptación y 1–3 tareas, solo core — sin clasificación, diseño, quickstart ni
