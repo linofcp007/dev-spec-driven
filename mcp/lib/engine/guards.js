@@ -2007,6 +2007,8 @@ function approvalCommand(a, cli) {
 // opts.meta: the project's roadmap.json meta (what a spec_init / `init` change is compared with — absent: unknown, fail closed).
 // opts.resolveFeature (the MCP server): name → the slug the engine resolves it to, or null; a resolved action shows (and
 // its command names) that slug, never the raw argument — slugify drops text in other scripts, which must not reach the question.
+// The other readers of a call's guard-downs, in order (none yet): a module that owns one returns it from here, linked.
+const approvalExtraReaders = () => [];
 function approvalGuardDecision(payload, level, opts = {}) {
   const lvl = approvalGuardInput(level) || "off";
   const allow = (why, extra) => Object.assign({ decision: "allow", why, level: lvl }, extra);
@@ -2047,6 +2049,9 @@ function approvalGuardDecision(payload, level, opts = {}) {
     // .specs/ itself, of a folder or a glob under it, too
     actions = approvalEditActions(approvalPathArgs(ti, opts.uriPath), payload.cwd, /(?:move|rename|delete|remove|unlink)/i.test(tool.replace(/^mcp__.+__/, "")));
   }
+  // the guard-downs another concern reads in the same call (each reader: {tool, ti, payload, meta, level} → actions) — the hook
+  // point for one a module owns (dev-guardian's, engine/guardian.js); its pre-filter test joins probe.js APPROVAL_CANDIDATE_TESTS
+  if (opts.partial !== true) for (const read of approvalExtraReaders()) actions.push(...read({ tool, ti, payload, meta, level: lvl }));
   if (opts.projectUnreadable === true && actions.length) actions.push({ kind: "unreadable", why: "project", source: "mcp" });
   if (!actions.length) return allow("not-an-approval", { tool });
   if (typeof opts.resolveFeature === "function") {
