@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
@@ -148,7 +149,7 @@ ok(lgIn.code === 0 && /^Commits: redcli — 2 commit\(s\) read, 1 cite its tasks
   "dev-spec log <feature> - reads a log from stdin (no git needed): 'task #N' with the feature name cites task N; PT / ES output; an unknown feature exits 1 (got " + JSON.stringify(lgIn.out.slice(0, 200)) + ")");
 const noRepoB5 = !hasGitB5 || gitB5(pb, "rev-parse", "--git-dir").status !== 0;
 const lgNo = rb5(["log", "redcli", "--project", pb]);
-ok(!noRepoB5 || (lgNo.code === 1 && /git is not available here, or this is not a git repository with commits/.test(lgNo.out)),
+ok(!noRepoB5 || (lgNo.code === 1 && String(lgNo.out).includes(MSG("en").gitLog.noGit)),
   "dev-spec log outside a git repository (or without git) exits 1 with a localized hint to pipe a log in");
 if (hasGitB5) {
   const pl = path.join(tmp, "b5-log");

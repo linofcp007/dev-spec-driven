@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, all, runIn, tmp, require, __dirname }) => {
   const SR = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -58,7 +59,7 @@ exports.run = ({ ok, all, runIn, tmp, require, __dirname }) => {
     low: () => low.code === 1 && /"code": "invalid-arguments"/.test(low.out) && /--min-lines must be an integer ≥ 4, at most 100/.test(low.out),
     high: () => high.code === 1,
     nope: () => nope.code === 1,
-    empty: () => empty.code === 0 && /no source file its tasks' _Implements:_ name exists yet — nothing to compare/.test(empty.out),
+    empty: () => empty.code === 0 && String(empty.out).includes(MSG("en").cliOutput.dupesNoCode),
     pt: () => /^Duplicados — checkout: 1 sítio repete código existente/m.test(pt.out) && /repete src\/lib\/money\.js:4-15 — reutilizar ou estender o código existente/.test(pt.out),
     help: () => /dupes \[feature\] \[--min-lines N\] \[--tests\]/.test(help.out),
   });

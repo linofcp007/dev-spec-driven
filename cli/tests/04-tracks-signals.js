@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, all, run, runIn, tmp, require, __dirname }) => {
   const js = (v) => JSON.stringify(v);
@@ -17,7 +18,7 @@ exports.run = ({ ok, all, run, runIn, tmp, require, __dirname }) => {
   const exJson = JSON.parse(runIn(["classify", "We will not add feature flags or canary releases; show a modal instead", "--explain", "--json", "--project", pd]).out);
   ok(en.code === 0 && /^Tracks: core\b(?! \+obs)/.test(en.out) && /\+obs: off — 'feature flag', 'canary release' appeared negated\./.test(en.out) &&
     /\+obs: inativo — 'feature flag', 'lançamento canário' apareceu negado\./.test(pt.out) &&
-    /Matched keywords \(track · keyword · table tier → final tier\):/.test(ex.out) && /\+obs 'canary release' \("canary releases"\) · strong → strong · negated \(a negated list\)/.test(ex.out) &&
+    String(ex.out).includes(MSG("en").classify.explainHead) && /\+obs 'canary release' \("canary releases"\) · strong → strong · negated \(a negated list\)/.test(ex.out) &&
     /\+ui 'modal' · weak → strong \(a cue\)/.test(ex.out) && /Project signal overrides: none/.test(ex.out) &&
     js(exJson) === js(S.classify("We will not add feature flags or canary releases; show a modal instead", { projectDir: pd, explain: true })),
     "1.21 F2 (CLI): classify negates every item of a coordinated list (EN / PT); --explain prints each match (table tier → final tier, a cue, the negation) and the project's overrides; --json = the engine's result (got " +

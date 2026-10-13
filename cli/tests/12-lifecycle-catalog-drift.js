@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
 // 1.13 WP10: catalog (SPECS.md), _Supersedes:_ warnings in trace, feature restore, drift since finish — CLI = MCP.
@@ -73,7 +74,7 @@ ok(ren10c.code === 0 && /Renamed 'billing' → 'payments' ✓\n {2}archive recor
 
 // drift: no baseline yet → a note, exit 0; a baseline + an edited implementing file → exit 1 with the file named.
 const dr10 = r10(["drift"]);
-ok(dr10.code === 0 && /No finished feature has a drift baseline yet/.test(dr10.out) && /no finish baseline yet: accounts, billing, billing-v2/.test(dr10.out), "drift without any baseline: a note + the unbaselined features, exit 0");
+ok(dr10.code === 0 && String(dr10.out).includes(MSG("en").drift.none) && /no finish baseline yet: accounts, billing, billing-v2/.test(dr10.out), "drift without any baseline: a note + the unbaselined features, exit 0");
 // A baseline on a feature whose tasks aren't all done (reworked after finish) is `reopened`: listed, never hashed, exit 0.
 fs.mkdirSync(path.join(w10, "src"), { recursive: true });
 fs.writeFileSync(path.join(w10, "src", "a.js"), "two\n");
@@ -82,14 +83,14 @@ const bStKeep = fs.readFileSync(bSt, "utf8");
 fs.writeFileSync(bSt, JSON.stringify({ ...JSON.parse(bStKeep), finished: { at: "2026-01-02T03:04:05.000Z", files: { "src/a.js": "0".repeat(40) } } }, null, 2));
 const drRe10 = r10(["drift", "billing"]);
 ok(drRe10.code === 0 && /reopened since finish \(tasks open again — checked once finished again\): billing/.test(drRe10.out) && !/⚠/.test(drRe10.out) &&
-  !/No finished feature has a drift baseline yet/.test(drRe10.out) && r10(["drift", "nope"]).code === 1,
+  !String(drRe10.out).includes(MSG("en").drift.none) && r10(["drift", "nope"]).code === 1,
   "drift <feature> on a baselined feature whose tasks are open again: listed as reopened, not drift (exit 0); an unknown feature exits 1");
 // An unreadable .state.json is not "clean": named → error, project-wide → the error printed, exit 1.
 fs.writeFileSync(bSt, "{ broken");
 const drBad10 = r10(["drift", "billing"]);
 const drBadAll10 = r10(["drift"]);
 fs.writeFileSync(bSt, bStKeep);
-ok(drBad10.code === 1 && /not valid JSON/.test(drBad10.out) && !/No finished feature has a drift baseline yet/.test(drBad10.out) &&
+ok(drBad10.code === 1 && /not valid JSON/.test(drBad10.out) && !String(drBad10.out).includes(MSG("en").drift.none) &&
   drBadAll10.code === 1 && /billing\/\.state\.json is not valid JSON/.test(drBadAll10.out),
   "drift with an unreadable .state.json exits 1 (named or project-wide) and never claims 'no baseline yet'");
 
@@ -193,7 +194,7 @@ runIn(["create", "Pagamentos", "core", "--project", w10pt]);
 const catPt10 = runIn(["catalog", "--project", w10pt]).out;
 ok(/# Catálogo de specs — wp10-pt/.test(catPt10) && /AUTO-GERADO por dev-spec/.test(catPt10) && /pagamentos — em curso/.test(catPt10) &&
   /Não há nada arquivado como 'x'/.test(runIn(["feature", "restore", "x", "--project", w10pt]).out) &&
-  /Nenhuma feature fechada tem ainda uma baseline de drift/.test(runIn(["drift", "--project", w10pt]).out), "PT: catalog chrome, restore error and drift note are localized");
+  String(runIn(["drift", "--project", w10pt]).out).includes(MSG("pt").drift.none), "PT: catalog chrome, restore error and drift note are localized");
 
 // A _Supersedes:_ list hard-wrapped onto the next line: trace passes with no "never closed" warning, doctor's
 // traceability passes, the catalog strikes every target through.

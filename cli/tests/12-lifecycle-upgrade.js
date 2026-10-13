@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, all, run, runIn, tmp, CLI, require, __dirname }) => {
   const S17 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -53,7 +54,7 @@ exports.run = ({ ok, all, run, runIn, tmp, CLI, require, __dirname }) => {
     () => fs.existsSync(path.join(u17, ".specs", "UPGRADE.md")),
     () => fs.existsSync(path.join(u17, ".specs", "half", ".history", "requirements@1.md")), () => Array.isArray(st17.tracks),
     () => S17.readRoadmap(u17).meta.specVersion === S17.engineVersion(), () => ap17b.code === 0,
-    () => /Nothing to migrate — \.specs\/ is already up to date; nothing was changed\./.test(ap17b.out), () => ap17j, () => ap17j.ok === true,
+    () => String(ap17b.out).includes(MSG("en").upgrade.nothing), () => ap17j, () => ap17j.ok === true,
     () => ap17j.migrations.changed === false, () => ap17j.from === S17.engineVersion(),
   ]);
 

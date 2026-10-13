@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
@@ -76,7 +77,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const doc = require(path.join(path.dirname(CLI), "commands.js")).helpText();
   const help = runIn(["help"]).out;
   ok(/^Matriz de rastreabilidade — pagamento \(core\): 1 requisito\(s\) · 0 verificado\(s\) · 0 implementado\(s\) · 1 planeado\(s\) · 0 sem rastreio\n {2}requisitos ainda não aprovados\n/.test(ptm.out) &&
-    /\n {2}ID +Estado +Tasks +Testes +Decisões +Requisito\n {2}US-1\.AC-1 +planeado +#1○ /.test(ptm.out) && /tasks: ✓ verificada · ▲ feita, não verificada · ○ por fazer/.test(ptm.out) &&
+    /\n {2}ID +Estado +Tasks +Testes +Decisões +Requisito\n {2}US-1\.AC-1 +planeado +#1○ /.test(ptm.out) && String(ptm.out).includes(MSG("pt").rtm.cli.legend) &&
     /^Feature,ID,Tipo,Requisito,Estado,Lacunas,/.test(ptc.stdout) && ptc.stdout.includes("\r\npagamento,US-1.AC-1,AC,QUANDO o cliente paga O SISTEMA DEVE cobrar o total,planeado,,,,#1 por fazer,") &&
     /trace <feature> \[--code\]/.test(doc) && /--matrix: \+ the requirements traceability matrix/.test(help) &&
     /--csv: the matrix as RFC 4180 CSV on stdout/.test(help) && /\.rtm\.csv/.test(help),

@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const Sb3 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -32,7 +33,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const badJ = jsonB3(runIn(["init", "--roles", "design=tech lead!", "--json", "--project", pr]));
   ok(init.code === 0 && /Approval roles: requirements=product · design=tech\+security — /.test(init.out) &&
     JSON.stringify(metaB3(pr).approvalRoles) === '{"requirements":["product"],"design":["tech","security"]}' &&
-    bad.code === 1 && /approvalRoles must map phases to role lists/.test(bad.out) && badPhase.code === 1 && /unknown phase 'plan'/.test(badPhase.out) &&
+    bad.code === 1 && String(bad.out).includes(MSG("en").governance.rolesShape) && badPhase.code === 1 && /unknown phase 'plan'/.test(badPhase.out) &&
     badJ && badJ.ok === false && /invalid role name/.test(badJ.error) && JSON.stringify(metaB3(pr).approvalRoles) === '{"requirements":["product"],"design":["tech","security"]}',
     "init --roles stores roadmap.json meta.approvalRoles and prints the roles; a role before any phase, an unknown phase or a bad role name exits 1 and changes nothing");
 
@@ -98,7 +99,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const bothB3 = runIn(["approve", "quick-spec", "design", "--through", "tasks", "--project", pf2]);
   const execB3 = runIn(["approve", "quick-spec", "--through", "execution", "--project", pf2]);
   ok(cliJ && JSON.stringify([cliJ.ok, cliJ.complete, cliJ.approved, cliJ.steps, cliJ.message]) === JSON.stringify([eng.ok, eng.complete, eng.approved, eng.steps, eng.message]) &&
-    usageB3.code === 1 && /Name the phase to approve — or through: <phase> \(CLI: --through <phase>\)/.test(usageB3.out) && bothB3.code === 1 && /either a phase or through/.test(bothB3.out) &&
+    usageB3.code === 1 && String(usageB3.out).includes(MSG("en").governance.phaseRequired) && bothB3.code === 1 && /either a phase or through/.test(bothB3.out) &&
     execB3.code === 1 && /covers the planning phases only/.test(execB3.out),
     "approve --through --json = spec_approve {through} (same approved / steps / message); approve without a phase or --through is refused as spec_approve refuses it (1.30: missing-arguments [phase], naming --through); a phase plus --through and --through execution are refused");
 
@@ -114,7 +115,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const ptClear = runIn(["init", "--roles", "none", "--project", pp]);
   ok(/^'design' de exportar-faturas validada como tech ✓\n {2}⚠ 'design' continua pendente até todos os papéis validarem o seu conteúdo atual — falta o papel: security\./.test(ptSign.out) &&
     /^Avanço rápido de 'exportar-faturas': design, tasks aprovadas, por ordem/.test(ptFf.out) &&
-    /Papéis de aprovação removidos — cada fase volta a precisar de uma única aprovação\./.test(ptClear.out) && metaB3(pp).approvalRoles === undefined,
+    String(ptClear.out).includes(MSG("pt").governance.rolesCleared) && metaB3(pp).approvalRoles === undefined,
     "PT: the role sign-off, the fast-forward summary and --roles none (cleared) print in European Portuguese");
 
   const helpB3 = runIn(["help"]).out;

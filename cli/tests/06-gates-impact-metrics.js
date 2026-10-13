@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const S8 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -39,7 +40,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const bad8 = [["impact", "drafts", "--phase", "design"], ["impact", "drafts", "--phase", "plan"], ["impact", "drafts", "--phase"], ["impact", "drafts", "--phase", "tasks", "--reopen"], ["impact"]]
     .map((a) => runIn(a.concat(["--project", w8])));
   ok(bad8.every((r) => r.code === 1) && /'design' was never approved for 'drafts'/.test(bad8[0].out) && /phase must be one of: requirements, design, test-plan, eval-plan, tasks, steering \(got "plan"\)/.test(bad8[1].out) && /missing value for --phase/.test(bad8[2].out) &&
-    /reopen applies to requirements, design, test-plan and eval-plan/.test(bad8[3].out) && /usage: dev-spec impact/.test(bad8[4].out), "impact: never approved / unknown phase / missing --phase value / reopen on tasks / no feature → exit 1 with a clear message");
+    String(bad8[3].out).includes(MSG("en").impact.reopenTasks) && /usage: dev-spec impact/.test(bad8[4].out), "impact: never approved / unknown phase / missing --phase value / reopen on tasks / no feature → exit 1 with a clear message");
   // --phase test-plan: the T-ID row diff, and next-action names that phase for a changed test-plan.md (the earlier gates —
   // requirements re-approved after the change, design — are approved, so the test plan is what can be re-approved now).
   runIn(["approve", "drafts", "requirements", "--force", "--project", w8]);

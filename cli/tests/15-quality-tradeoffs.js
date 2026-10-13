@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const SA = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -60,7 +61,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const pTpl = runIn(["templates", "check", "--project", pp]);
   ok(/▲ design-tradeoffs — Alternativas e Compromissos lista 1 opção\(ões\) — o mínimo são 2 por decisão-chave/.test(pDoc.out) && /▲ design-risks — sem secção Riscos/.test(pDoc.out) &&
     /A spec menciona 'fila de mensagens', mas nem os requisitos nem o design dizem nada sobre consistência ou idempotência/.test(pCl.out) &&
-    pTpl.code === 0 && /sem secção Alternativas e Compromissos — o doctor avisa \(design-tradeoffs\)/.test(pTpl.out) && /sem secção Riscos — o doctor avisa \(design-risks\)/.test(pTpl.out),
+    pTpl.code === 0 && String(pTpl.out).includes(MSG("pt").templates.problems["tradeoffs-missing"]) && String(pTpl.out).includes(MSG("pt").templates.problems["risks-missing"]),
     "1.17 A1 / A2 (CLI, PT): doctor's design-tradeoffs ('lista 1 opção') / design-risks details and the clarify question are Portuguese; templates check warns (exit 0) on a design template without the sections (got " +
     js([pDoc.out.split("\n").filter((l) => /design-/.test(l)), pCl.out.slice(0, 160), pTpl.code, pTpl.out.slice(0, 300)]) + ")");
 

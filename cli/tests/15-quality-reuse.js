@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const SR = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -69,7 +70,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   fs.writeFileSync(path.join(pp, ".specs", "templates", "design.md"), "# Design: {{name}}\n\n## Visão Geral\n[Como funciona]\n\n## Alternativas e Compromissos\n- [opção A]\n- [opção B]\n\n## Riscos\n- [o que pode falhar]\n\n## Verificação da Constituição\n- [ ] [Princípio 1] — cumpre\n");
   const pTpl = runIn(["templates", "check", "--project", pp]);
   ok(/  ▲ design-reuse — sem secção Reutilização e Integração — indica os módulos/.test(pDoc.out) &&
-    pTpl.code === 0 && /sem secção Reutilização e Integração — o doctor avisa \(design-reuse\)/.test(pTpl.out),
+    pTpl.code === 0 && String(pTpl.out).includes(MSG("pt").templates.problems["reuse-missing"]),
     "1.19 R1 (CLI, PT): doctor's design-reuse detail is Portuguese; templates check warns (exit 0) on a design template without Reutilização e Integração (got " +
     js([pDoc.out.split("\n").filter((l) => /design-reuse/.test(l)), pTpl.code, pTpl.out.slice(0, 400)]) + ")");
 
