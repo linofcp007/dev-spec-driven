@@ -558,6 +558,39 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
     });
   }
 
+  // 1.30.1: a GLOB onto dev-guardian's launcher — `cp evil .specs/guard*.cjs`, `echo x > .specs/*.cjs`, `cp evil .s*/guardian.cjs` (Bash
+  // expands it to .specs/guardian.cjs when the file exists) — was allowed at deny with the check (a known limit: "a glob write onto either
+  // file"; the baseline's glob was caught since review 9 — guardianHit). With the check each decides as its exact twin; without, as the
+  // same call without its dev-guardian part (allowed).
+  {
+    const p = path.join(tmp, "g-r14-glob");
+    const on = { checks: { guardian: CMD } }, off = { checks: { test: "npm test" } };
+    const d = (tool, input, m, lvl) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: input, cwd: p }, lvl, { meta: m, lang: "en", win: false });
+    const settings = (r) => [...new Set((r.actions || []).map((a) => a.setting))].sort().join(",");
+    // [tool, the glob, its exact twin]
+    const pairs = [
+      ["Bash", { command: "cp evil .specs/guard*.cjs" }, { command: "cp evil .specs/guardian.cjs" }],
+      ["Bash", { command: "echo x > .specs/*.cjs" }, { command: "echo x > .specs/guardian.cjs" }],
+      ["Bash", { command: "cp evil .s*/guardian.cjs" }, { command: "cp evil .specs/guardian.cjs" }],
+      ["Bash", { command: "cp evil .specs/guardian.c?s" }, { command: "cp evil .specs/guardian.cjs" }],
+      ["PowerShell", { command: "Set-Content .specs/guard*.cjs x" }, { command: "Set-Content .specs/guardian.cjs x" }],
+      ["Bash", { command: "cp evil .guardian/base*.json" }, { command: "cp evil .guardian/baseline.json" }],
+    ];
+    const wrong = [];
+    for (const [tool, input, twin] of pairs) {
+      for (const lvl of ["ask", "deny"]) {
+        const a = d(tool, input, on, lvl), b = d(tool, twin, on, lvl), x = d(tool, input, off, lvl);
+        if (a.decision !== b.decision || settings(a) !== settings(b)) wrong.push("on/" + lvl + ": " + tool + " " + js(input) + " → " + a.decision + " " + settings(a) + ", its twin " + b.decision + " " + settings(b));
+        if (x.decision !== "allow") wrong.push("off/" + lvl + ": " + tool + " " + js(input) + " → " + x.decision + " " + settings(x));
+      }
+    }
+    const reads = ["cat .specs/*.cjs", "ls .specs/guard*", "node .specs/guard*.cjs scan --project ."].filter((c) => d("Bash", { command: c }, on, "deny").decision !== "allow");
+    all("1.30.1: a glob onto dev-guardian's launcher (guard*.cjs, *.cjs, .s*/guardian.cjs, guardian.c?s, PowerShell's too) decides as the launcher itself with the check (deny / ask), allowed without it; reads stay allowed (got " + js({ wrong, reads }) + ")", {
+      pairs: () => !wrong.length,
+      reads: () => !reads.length,
+    });
+  }
+
   // review 9 (3a / 3c): a nested project's guarded files, named from the folder above it — `cp evil.cjs sub/.specs/guardian.cjs`,
   // `echo x > sub/.guardian/baseline.json` — were judged by the outer project's level and meta alone (sub/ was never a candidate):
   // allowed, or only asked. Every folder holding a .specs/ / .guardian/ a command names is a candidate now, and each candidate with the

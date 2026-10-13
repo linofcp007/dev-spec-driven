@@ -195,7 +195,8 @@ function approvalProjects(opts = {}) {
     const parents = new Set();
     for (const m of command.matchAll(RE_PATH_WORD)) {
       const w = (m[1] || m[2] || m[3] || "").replace(/^-[^=\\/]*=/, "");
-      if (!RE_GUARDED_SEG.test(w)) continue;
+      // (or, on win32, an 8.3 alias of one: `cp evil sub/SPECS~1/guardian.cjs` acts on sub/ — specsParentOf reads it too)
+      if (!RE_GUARDED_SEG.test(w) && !(process.platform === "win32" && P.shortDirAt(w) >= 0)) continue;
       const parent = P.specsParentOf(w);
       if (parent === "." || parents.has(parent)) continue;
       if (parents.size >= 16) break;

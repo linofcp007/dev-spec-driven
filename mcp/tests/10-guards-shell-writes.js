@@ -319,6 +319,150 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
       js([r1.observedWarning, r2.observedWarning, chk(d1), chk(d2), pt.observedWarning && pt.observedWarning.slice(0, 60)]) + ")");
   }
 
+  // 1.30.1 — Windows' own readings of a path (review 9 3b, a known limit until then). An 8.3 short name — `SPECS~1`, `GUARDI~1`,
+  // `BASELI~1.JSO`, `ROADMA~1.JSO`, `STATE~1.JSO`, dev-guardian's `DEV-GU~1.MJS` — names the file its long name does, and Win32 (cmd.exe,
+  // PowerShell, a native program) drops a trailing dot / space: `Set-Content .specs\roadmap.json.` writes roadmap.json. On win32 every such
+  // call decides as its long-name twin — at ask and deny, with dev-guardian's check and without (the pair style of 09-evidence-guardian.js);
+  // on Linux / macOS (win: false) those are other names: the shell spellings stay allowed, as before. Where the path exists the file
+  // system answers (an alias the volume made); else the 8.3 rule (fail closed).
+  {
+    const GCMD = "node .specs/guardian.cjs scan --project . --fail-on high --format json";
+    const p = project("r14-short", {}, ["Alpha"]);
+    fs.mkdirSync(path.join(p, ".guardian"), { recursive: true });
+    fs.writeFileSync(path.join(p, ".guardian", "baseline.json"), "{}");
+    fs.writeFileSync(path.join(p, ".specs", "guardian.cjs"), "x");
+    fs.mkdirSync(path.join(p, ".specs", "alpha", ".execution"), { recursive: true });
+    fs.writeFileSync(path.join(p, ".specs", "alpha", ".execution", "observed.jsonl"), "");
+    const on = { checks: { guardian: GCMD } }, off = { checks: { test: "npm test" } };
+    const d = (tool, input, m, lvl, win) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: input, cwd: p }, lvl,
+      { meta: m, lang: "en", win });
+    const settings = (r) => [...new Set((r.actions || []).map((a) => a.setting || a.why))].sort().join(",");
+    const DG = "C:/Users/u/.claude/plugins/cache/dev-guardian/dev-guardian/3.3.0/cli/";
+    // [tool, the Windows spelling, its long-name twin] — the shell ones first (read as text: the win: false check runs on them)
+    const shell = [
+      ["Bash", { command: "cp evil SPECS~1/guardian.cjs" }, { command: "cp evil .specs/guardian.cjs" }],
+      ["Bash", { command: "cp x SPECS~1/roadmap.json" }, { command: "cp x .specs/roadmap.json" }],
+      ["Bash", { command: "echo x > GUARDI~1/BASELI~1.JSO" }, { command: "echo x > .guardian/baseline.json" }],
+      ["Bash", { command: "echo '{}' > spec~2/roadma~1.jso" }, { command: "echo '{}' > .specs/roadmap.json" }], // ~2, lower case: the rule
+      ["Bash", { command: "echo x > SPECS~1/alpha/STATE~1.JSO" }, { command: "echo x > .specs/alpha/.state.json" }],
+      ["Bash", { command: "echo x >> SPECS~1/alpha/EXECUT~1/OBSERV~1.JSO" }, { command: "echo x >> .specs/alpha/.execution/observed.jsonl" }],
+      ["Bash", { command: "rm -rf SPECS~1" }, { command: "rm -rf .specs" }],
+      ["Bash", { command: "cp /tmp/evil/baseline.json GUARDI~1/" }, { command: "cp /tmp/evil/baseline.json .guardian/" }],
+      ["Bash", { command: "cp /tmp/evil/ROADMA~1.JSO .specs/" }, { command: "cp /tmp/evil/roadmap.json .specs/" }], // the name landing there
+      ["Bash", { command: "cd SPECS~1 && echo x > roadmap.json" }, { command: "cd .specs && echo x > roadmap.json" }],
+      ["Bash", { command: "git checkout HEAD~1 -- SPECS~1/roadmap.json" }, { command: "git checkout HEAD~1 -- .specs/roadmap.json" }],
+      ["Bash", { command: "rm SP1A2B~1/roadmap.json" }, { command: "rm .specs/roadmap.json" }], // past four collisions: 2 letters + 4 hex
+      ["Bash", { command: "node " + DG + "DEV-GU~1.MJS baseline update" }, { command: "node " + DG + "dev-guardian.mjs baseline update" }],
+      ["PowerShell", { command: "Set-Content -Path .specs" + BS + "roadmap.json. -Value x" }, { command: "Set-Content -Path .specs" + BS + "roadmap.json -Value x" }],
+      ["PowerShell", { command: "Set-Content -Path .specs." + BS + "guardian.cjs -Value x" }, { command: "Set-Content -Path .specs" + BS + "guardian.cjs -Value x" }],
+      ["PowerShell", { command: "Copy-Item evil.json GUARDI~1" + BS + "BASELI~1.JSO" }, { command: "Copy-Item evil.json .guardian" + BS + "baseline.json" }],
+      ["Bash", { command: "cmd /c \"echo x> .specs" + BS + "roadmap.json.\"" }, { command: "cmd /c \"echo x> .specs" + BS + "roadmap.json\"" }],
+    ];
+    // NTFS reads a folder's stream designation as the folder: `.specs::$INDEX_ALLOCATION/roadmap.json` IS .specs/roadmap.json (cmd.exe, .NET
+    // — checked on Windows 11). (Its `$INDEX_ALLOCATION` reads as an unknown variable in any shell — a guarded name under it fails closed
+    // on every platform: not in the win: false check.)
+    const streams = [
+      ["Bash", { command: "cmd /c 'echo x> .specs::$INDEX_ALLOCATION" + BS + "roadmap.json'" }, { command: "cmd /c 'echo x> .specs" + BS + "roadmap.json'" }],
+      ["PowerShell", { command: "[IO.File]::WriteAllText('.specs:$I30:$INDEX_ALLOCATION" + BS + "guardian.cjs', 'x')" }, { command: "[IO.File]::WriteAllText('.specs" + BS + "guardian.cjs', 'x')" }],
+    ];
+    // the edit tools and another server's file tools (their paths go through the file system on every platform: win32 only here)
+    const edits = [
+      ["Write", { file_path: "SPECS~1/alpha/STATE~1.JSO", content: "{}" }, { file_path: ".specs/alpha/.state.json", content: "{}" }],
+      ["Write", { file_path: "SPECS~1/beta/.state.json", content: "{}" }, { file_path: ".specs/beta/.state.json", content: "{}" }], // a folder Write makes
+      ["Edit", { file_path: "GUARDI~1/BASELI~1.JSO", old_string: "a", new_string: "b" }, { file_path: ".guardian/baseline.json", old_string: "a", new_string: "b" }],
+      ["mcp__fs__write_file", { path: "SPECS~1/GUARDIAN.CJS", content: "x" }, { path: ".specs/guardian.cjs", content: "x" }],
+      ["mcp__fs__write_file", { path: ".specs/roadmap.json. ", content: "{}" }, { path: ".specs/roadmap.json", content: "{}" }], // a Python / .NET server
+      ["mcp__fs__write_file", { path: ".specs::$INDEX_ALLOCATION/zz/.state.json", content: "{}" }, { path: ".specs/zz/.state.json", content: "{}" }],
+    ];
+    const label = (t, i) => t + " " + js(i);
+    const wrong = [];
+    for (const [tool, input, twin] of shell.concat(streams, edits)) {
+      for (const lvl of ["ask", "deny"]) {
+        for (const [mk, m] of [["on", on], ["off", off]]) {
+          const a = d(tool, input, m, lvl, true), b = d(tool, twin, m, lvl, true);
+          if (a.decision !== b.decision || !settings(b).split(",").every((x) => settings(a).split(",").includes(x))) wrong.push("win/" + mk + "/" + lvl + ": " + label(tool, input) + " → " + a.decision + " " + settings(a) + ", its twin " + b.decision + " " + settings(b));
+        }
+      }
+    }
+    const linux = shell.filter(([tool, input]) => ["ask", "deny"].some((lvl) => d(tool, input, on, lvl, false).decision !== "allow")).map(([t, i]) => label(t, i));
+    // what stays allowed on win32: another name that only looks like a guarded one, git's HEAD~1, a read
+    const allowed = [["Bash", { command: "cp x SPECSX~1/roadmap.json" }], ["Bash", { command: "git checkout HEAD~1 -- src/a.ts" }], ["Bash", { command: "cp SPECS~1/roadmap.json /tmp/backup.json" }],
+      ["Bash", { command: "echo x > PROGRA~1/notes.md" }], ["PowerShell", { command: "Set-Content -Path docs" + BS + "a.md. -Value x" }], ["Bash", { command: "cat GUARDI~1/BASELI~1.JSO" }]]
+      .filter(([tool, input]) => d(tool, input, on, "deny", true).decision !== "allow").map(([t, i]) => label(t, i));
+    // the probe's readings, platform by platform (the rule; the trim; a path nothing on disk answers)
+    const P = require("./lib/probe.js");
+    const names = ["SPECS~1", "spec~12", "SP1A2B~1", "GUARDI~1", "GUARDI~1.CJS", "BASELI~1.JSO", "STATE~1.JSO", "ROADMA~1.JSO", "OBSERV~1.JSO", "EXECUT~1", "DEV-GU~1.MJS",
+      "ROADMA~1", "SPECS~1.JSO", "SPECSX~1", "HEAD~1", "PROGRA~1", "~1", "SPECS~"].map((x) => x + "=" + P.shortNameOf(x)).join(" ");
+    const trims = [".specs" + BS + "roadmap.json.", ".specs." + BS + "x", "a.." + BS + "x", "x. . .", ".." + BS + "x.", "./a.", "a./", ".specs::$INDEX_ALLOCATION" + BS + "roadmap.json", "C:" + BS + "a:$I30:$INDEX_ALLOCATION/b", "notes.txt:s"].map((x) => P.winPathTrim(x)).join(" | ");
+    const gone = path.join(tmp, "r14-gone");
+    const linuxTargets = P.editTargets("SPECS~1/beta/.state.json. ", gone, false);
+    all("1.30.1: on win32 an 8.3 short name (SPECS~1, GUARDI~1/BASELI~1.JSO, ROADMA~1.JSO, STATE~1.JSO, OBSERV~1.JSO, SP1A2B~1, DEV-GU~1.MJS) and Win32's trailing dot / space (.specs\\roadmap.json., .specs.\\guardian.cjs) decide as the long name — shell, edit and MCP file tools, at ask and deny, with dev-guardian's check and without; on Linux / macOS the shell spellings stay allowed; lookalikes, HEAD~1 and reads stay allowed (got " +
+      js({ wrong, linux, allowed, names, trims, linuxTargets }) + ")", {
+      pairs: () => !wrong.length,
+      linux: () => !linux.length,
+      allowed: () => !allowed.length,
+      rule: () => names === "SPECS~1=.specs spec~12=.specs SP1A2B~1=.specs GUARDI~1=.guardian GUARDI~1.CJS=guardian.cjs BASELI~1.JSO=baseline.json STATE~1.JSO=.state.json ROADMA~1.JSO=roadmap.json OBSERV~1.JSO=observed.jsonl EXECUT~1=.execution DEV-GU~1.MJS=dev-guardian.mjs ROADMA~1=null SPECS~1.JSO=null SPECSX~1=null HEAD~1=null PROGRA~1=null ~1=null SPECS~=null",
+      trim: () => trims === [".specs" + BS + "roadmap.json", ".specs" + BS + "x", "a.." + BS + "x", "x", ".." + BS + "x", "./a", "a/", ".specs" + BS + "roadmap.json", "C:" + BS + "a/b", "notes.txt:s"].join(" | "),
+      linuxEdit: () => !linuxTargets.some((t) => /[\\/]\.specs[\\/]|\.state\.json$/.test(t)), // no alias, no trim, nothing on disk
+      winEdit: () => P.editTargets("SPECS~1/beta/.state.json. ", gone, true).some((t) => /[\\/]\.specs[\\/]beta[\\/]\.state\.json$/.test(t)),
+    });
+
+    // the hook itself (its pre-filter, the nested project a short name names, a payload cut short) — the process's own platform
+    const outer = project("r14-short-outer", { approvalGuard: "ask" });
+    S.initProject(path.join(outer, "sub"), [], "en", { guardian: true, approvalGuard: "deny" });
+    const hp = project("r14-short-hook", { guardian: true, approvalGuard: "deny" });
+    const hook = (cwd, tool, input, timedOut) => {
+      const raw = js({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input });
+      return decisionOf(hookResult(hookIn(path.join(HOOKS, "approval-hook.js"), { input: timedOut ? raw.slice(0, -8) : raw, env: hookEnv(), cwd, timedOut })));
+    };
+    const got = {
+      launcher: hook(hp, "Bash", { command: "cp evil SPECS~1/guardian.cjs" }),
+      baseline: hook(hp, "Bash", { command: "echo x > GUARDI~1/BASELI~1.JSO" }),
+      roadmap: hook(hp, "PowerShell", { command: "Set-Content -Path .specs" + BS + "roadmap.json. -Value '{}'" }),
+      cliAlias: hook(hp, "Bash", { command: "node " + DG + "DEV-GU~1.MJS baseline update" }),
+      nested: hook(outer, "Bash", { command: "cp evil sub/SPECS~1/guardian.cjs" }),
+      partial: hook(hp, "Bash", { command: "cp evil SPECS~1/x --verbose" }, true), // (the cut takes the payload's last 8 characters)
+      head: hook(hp, "Bash", { command: "git log HEAD~1 --oneline" }),
+      write: hook(hp, "Write", { file_path: path.join(hp, ".specs", "roadmap.json."), content: "{}" }),
+    };
+    const W = WIN ? "deny" : "silent";
+    all("1.30.1: the approval hook lets the Windows spellings through to the engine — deny at deny on win32 (the launcher, the baseline, roadmap.json., dev-guardian's CLI by its 8.3 name, a nested project's SPECS~1 judged by ITS level and check, a payload cut short naming SPECS~1 asks); silent on Linux / macOS; `git log HEAD~1` stays silent (got " + js(got) + ")", {
+      win: () => got.launcher === W && got.baseline === W && got.roadmap === W && got.cliAlias === W && got.nested === W && got.write === W,
+      partial: () => got.partial === (WIN ? "ask" : "silent"),
+      head: () => got.head === "silent",
+    });
+
+    // where the path exists the FILE SYSTEM answers (an 8.3-enabled NTFS volume): a folder that merely looks like .specs' alias — `spe cs`,
+    // made first, holds SPECS~1 — is itself, .specs is SPECS~2; the edit guard reads `src/MAIN~1.JAV` as src/Main.java (code: it asks)
+    const r = path.join(tmp, "r14-real");
+    fs.mkdirSync(path.join(r, "spe cs"), { recursive: true });
+    S.initProject(r, ["core"], "en", { guard: true, approvalGuard: "deny" });
+    fs.mkdirSync(path.join(r, "src"), { recursive: true });
+    fs.writeFileSync(path.join(r, "src", "Main.java"), "class Main {}");
+    let shortNames = false;
+    try { shortNames = WIN && /[\\/]\.specs$/.test(fs.realpathSync.native(path.join(r, "SPECS~2"))) && /spe cs$/.test(fs.realpathSync.native(path.join(r, "SPECS~1"))); } catch { shortNames = false; }
+    if (!shortNames) ok(true, "1.30.1: the file system's own 8.3 names — skipped: " + (WIN ? "this volume makes no 8.3 names" : "not win32"));
+    else {
+      const rd = (command) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, cwd: r }, "deny", { meta: {}, lang: "en" }).decision;
+      const gh = (tool, ti) => decisionOf(hookOut(path.join(HOOKS, "guard-hook.js"), pre(r, tool, ti), { CLAUDE_PROJECT_DIR: r }));
+      const g = { lookalike: rd("cp x SPECS~1/roadmap.json"), specs: rd("cp x SPECS~2/roadmap.json"), java: S.guardCheck(r, path.join(r, "src", "MAIN~1.JAV")).decision,
+        javaShell: gh("Bash", { command: "echo x > src/MAIN~1.JAV" }), javaWrite: gh("Write", { file_path: path.join(r, "src", "MAIN~1.JAV"), content: "x" }),
+        specsShort: S.guardCheck(r, path.join(r, "SPECS~2", "notes.ts")).decision };
+      all("1.30.1: on an 8.3-enabled volume the file system answers first — `spe cs` (SPECS~1) is not .specs (allowed), SPECS~2 is (deny); the edit guard reads src/MAIN~1.JAV as src/Main.java (asks — Write and shell) and SPECS~2/notes.ts as .specs/ (allowed) (got " + js(g) + ")", {
+        lookalike: () => g.lookalike === "allow", specs: () => g.specs === "deny", java: () => g.java === "ask" && g.javaShell === "ask" && g.javaWrite === "ask",
+        specsShort: () => g.specsShort === "allow",
+      });
+    }
+    // Win32's trailing dot in a shell write is a code edit (PowerShell's `Set-Content src\a.ts. x` writes src\a.ts) — the edit guard on win32
+    const t2 = S.shellWriteTargets("Set-Content -Path src" + BS + "a.ts. -Value x", "ps", true), t3 = S.shellWriteTargets("Set-Content -Path src" + BS + "a.ts. -Value x", "ps", false);
+    const eg = project("r14-trim-guard", { guard: true }, ["billing"]);
+    const egh = decisionOf(hookOut(path.join(HOOKS, "guard-hook.js"), pre(eg, "PowerShell", { command: "Set-Content -Path src" + BS + "a.ts. -Value x" }), { CLAUDE_PROJECT_DIR: eg }));
+    all("1.30.1: the edit guard reads a shell target as Win32 does on win32 — `Set-Content src\\a.ts.` writes src\\a.ts (code: asks); on Linux / macOS `a.ts.` is another name (got " + js([t2, t3, egh]) + ")", {
+      targets: () => t2.includes("src" + BS + "a.ts") && !t3.includes("src" + BS + "a.ts"),
+      hook: () => egh === (WIN ? "ask" : "silent"),
+    });
+  }
+
   { // 1.27: an unreadable approval form at deny is ASKED about — its prompt names the deny level and never tells the user to set
     // deny (it read "meta.approvalGuard: ask — … init --approval-guard deny refuses …" in a project already at deny)
     const cmd = "node '" + C + "' {approve,} login-flow classification --force";

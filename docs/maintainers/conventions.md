@@ -32,7 +32,8 @@ History at the end.
   `fs.existsSync` does NOT — name the file through `phaseFile("tasks", "change")`; never create a tasks.md there (it would win).
 
 ### The project folder: `resolveProjectDir()` — the resolver
-- **Every surface's default** (files.js): the explicit argument (`--project`, a tool's `projectDir`) > `SPEC_PROJECT_DIR` >
+- **Every surface's default** (mcp/lib/probe.js `resolveProjectDir` — files.js's IS it through the engine's reads, the CLI's context
+  and completion read it without the engine, 1.30.1): the explicit argument (`--project`, a tool's `projectDir`) > `SPEC_PROJECT_DIR` >
   `CLAUDE_PROJECT_DIR` > the nearest folder at or above the working one holding a dev-spec .specs/ (`nearestProject()` —
   `probe.nearestProject` over the engine's reads, the walk the CLI's completion makes too: the working folder itself with ANY
   `.specs/`; ≤ 64 levels; never up a network path — without the walk a subfolder run would
@@ -219,8 +220,12 @@ History at the end.
   is the engine's `projectLang` once `engineLoaded()`, else `lightProjectLang()` — the CLI's resolver walk (cli/completion.js
   `resolveProject`) and roadmap.json's `meta.lang` read raw; cli/tests/16-conventions-cli-modules.js checks both print the same.
   cli/run.js and cli/git.js load on first use too. Nor does an unknown `--flag` or a switch given a non-boolean (1.30): the switch
-  list (`CLI_SWITCHES`) and the did-you-mean (`closestName`) are mcp/lib/probe.js's — one copy, the engine's are them. A handler's
-  own usage error still loads it where the handler reads `projectDir` (its destructure) before its usage check.
+  list (`CLI_SWITCHES`) and the did-you-mean (`closestName`) are mcp/lib/probe.js's — one copy, the engine's are them. Nor does a
+  handler's own usage error (1.30.1): `c.projectDir` is THE resolver's — mcp/lib/probe.js `resolveProjectDir`, which files.js
+  `resolveProjectDir` and the completion read too — never the engine, so a handler may read it (its destructure) before its usage
+  check; `--lang` and an integer flag are refused from the i18n tables (`LANGS`, `canonicalLang`, `msg` — the facade's ARE them). The
+  engine still loads for `import <tool>` without a path (its tool list), a repeated `append-tasks --task` and `done … --timeout`
+  without `--run` (the feature's language, read first). A new handler keeps `spec.*` after its usage check.
 
 ### CLI exit codes and `--json`
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
@@ -292,9 +297,9 @@ History at the end.
   names are case-blind (never `$T` beside `$t`) and its script is ASCII (5.1 decodes native output with the OEM code page).
 - **Feature names** are the one call on Tab: `dev-spec __complete features|archived [--project <dir>]`, handled on the CLI's
   first lines (cli/completion.js `complete()`) with Node core and mcp/lib/probe.js only — the project rule and the resolver
-  walk — plus a small mirror of `resolveProjectDir`'s precedence and `listFeatures`' folder rule (`isFeatureFolder`); never an
-  error, exit 0, about Node's startup. cli/tests/16-conventions-completion.js compares it with the engine on 8 layouts and
-  checks no mcp/lib module but probe.js loads — **change the precedence or the listing rule and the mirror follows**.
+  walk and (1.30.1) the resolver itself, `resolveProjectDir` — plus a small mirror of `listFeatures`' folder rule (`isFeatureFolder`);
+  never an error, exit 0, about Node's startup. cli/tests/16-conventions-completion.js compares it with the engine on 8 layouts and
+  checks no mcp/lib module but probe.js loads — **change the listing rule and the mirror follows**.
 - **The CLI the script runs** is resolved on Tab: in a plugin's versioned folder the newest installed `<version>`, else this
   CLI's path, else a `dev-spec` on PATH. The tables are the generating version's: save the script again after an update.
 
@@ -429,6 +434,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   engine to print text (+170–185 ms over `node -e 0`), and every call required cli/run.js and cli/git.js. Measured (Windows, Node 26,
   median of 21 interleaved fresh processes, `node -e 0` 51 ms): `help approve` 164 → 82 ms, `approve --help` 163 → 86, an unknown
   command 167 → 79 (`version`, which loads the engine, 166 → 164).
+- **1.30.1** — a command's own usage error still loaded the engine: ~25 handlers read `projectDir` (the engine's resolver) before
+  their usage check. THE resolver moved to mcp/lib/probe.js (files.js's and the completion's mirror read it: one copy of the
+  precedence) and the CLI reads it without the engine; `--lang` / an integer flag are refused from the i18n tables, `prompts` and
+  `import` check their usage first. 256 usage-error calls (every command's, text and `--json`, in a PT project and outside one)
+  compared with 1.30.0's: byte-identical stdout, stderr and exit codes; the engine loaded in 12 instead of 122. Measured (Windows,
+  Node 26, median of 21 interleaved fresh processes, `node -e 0` 64 ms): `done` alone 228 → 108 ms, `approve` 215 → 116, `trace`
+  229 → 108.
 
 ### CLI exit codes and `--json`
 - **1.12** — the scriptable exit codes. **1.13** — `--json` prints refusals (`fail(r)`).

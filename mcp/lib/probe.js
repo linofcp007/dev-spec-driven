@@ -29,11 +29,16 @@
  *   nearestProject(start, {io})      the CLI's resolver walk (the engine's resolveProjectDir, through its own reads — files.js
  *                                    nearestProject): start itself with any .specs/, else the nearest dev-spec one above it
  *                                    (≤ PROJECT_MAX_UP levels)
+ *   resolveProjectDir(arg, {env, io})   THE resolver: --project / projectDir > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > nearestProject >
+ *                                    the working folder (files.js resolveProjectDir, the CLI's context and completion read it)
  *   sessionAnchors(env) · sessionProjects({cwd, anchors})   the session resolution the hooks share before the engine loads
  *   usable · unexpandedVar · expandHome · isNetwork          reading a folder value as the engine does (isNetwork IS files.js
  *                                    isNetworkPath)
  *   fsTargetPath · editTargets       a Write / Edit target as the file system reads it (guards.js guardTargetPath /
  *                                    approvalEditTargets ARE them; hooks/hook-utils.js re-exports them)
+ *   shortNameOf · mayShortName · shortNamesRead · shortDirAt · winPathTrim · realPrefix · realPathLoose · longPath   Windows' own
+ *                                    readings of a path (1.30.1): an 8.3 alias of a guarded name, Win32's trailing dots and spaces, the
+ *                                    real path of the deepest existing folder (files.js realPathLoose IS this one)
  *   utf16OrUtf8 · textOf · jsonOf · readText · readJsonFile · isUtf16   a file as the engine reads it (files.js decodeText)
  *   the guards' shared readings (one copy for the hooks, before the engine loads, and the engine):
  *     trimSlashEnd · approvalPlain · approvalMayBe (APPROVAL_CANDIDATE_TESTS) · RE_APPROVAL_VERB   the approval guard's pre-filter
@@ -51,7 +56,8 @@ const path = require("path");
 
 const SESSION_MAX_UP = 40; // folders a hook or the status line walks up (the engine's SESSION_MAX_UP and STATUS_MAX_UP)
 const PROJECT_MAX_UP = 64; // folders the CLI's resolver walks up (nearestProject — the engine's resolveProjectDir too)
-const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
+const WIN = process.platform === "win32";
+const FOLD_CASE = WIN || process.platform === "darwin";
 
 // A variable left unexpanded — any "${", a leading $NAME, a %NAME% (files.js unexpandedVar): such a value names no folder.
 const RE_UNEXPANDED_VAR = /\$\{|^\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%/;
@@ -105,24 +111,151 @@ function fsTargetPath(p, win = process.platform === "win32") {
 }
 // A Write / Edit target (absolute, or relative to the payload's cwd) → the paths the file system reads it as: [resolved] (`./`, `..`
 // and a stream suffix taken out — `.specs/./roadmap.json`, `.specs/alpha/../roadmap.json`, `roadmap.json::$DATA` were matched as text
-// and allowed) plus, on every platform, its real path (the file's, else its folder's + the name): an 8.3 short name (`ROADMA~1.JSO`,
-// `STATE~1.JSO`) and a folder linked to .specs/ or to a feature folder (`ln -s .specs sx` → `sx/roadmap.json` IS
-// .specs/roadmap.json). Never a disk call on a network path; a relative path under a network cwd is read as text.
+// and allowed) plus, on every platform, its real path (longPath — the deepest existing folder's, ≤ EDIT_MAX_UP levels up, + the rest): an
+// 8.3 short name (`ROADMA~1.JSO`, `STATE~1.JSO`, `SPECS~1/newfeat/.state.json` — a folder Write makes) and a folder linked to .specs/ or
+// to a feature folder (`ln -s .specs sx` → `sx/roadmap.json` IS .specs/roadmap.json); on win32 also Win32's reading of a trailing dot /
+// space (winPathTrim — Node keeps `roadmap.json.`, another MCP server's file tool in Python or .NET writes roadmap.json: fail closed).
+// Never a disk call on a network path: a relative path under a network cwd, and a network path, are read as text (the 8.3 rule).
+const EDIT_MAX_UP = 16;
 function editTargets(fp, cwd, win = process.platform === "win32") {
   const s = fsTargetPath(String(fp).trim(), win);
-  if (isNetwork(s)) return [s];
   const c = usable(cwd);
-  if (c && isNetwork(c) && !path.isAbsolute(s) && !/^[A-Za-z]:/.test(s)) return [trimSlashEnd(c) + "/" + s]; // under a network cwd: text only
+  const text = isNetwork(s) ? s : c && isNetwork(c) && !path.isAbsolute(s) && !/^[A-Za-z]:/.test(s) ? trimSlashEnd(c) + "/" + s : null;
+  const out = [];
+  const add = (t) => { if (t && !out.includes(t)) out.push(t); };
+  if (text !== null) { // a network path, or relative to a network cwd: text only
+    add(text);
+    if (win) { const t = winPathTrim(text); add(t); add(shortNamesRead(t)); }
+    return out;
+  }
   const base = c && !isNetwork(c) ? path.resolve(fsTargetPath(c, win)) : process.cwd();
   let abs;
   try { abs = path.resolve(base, s); } catch { return [s]; }
-  const out = [abs];
-  let real = null;
-  try { real = fs.realpathSync.native(abs); } catch {
-    try { real = path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs)); } catch { real = null; }
-  }
-  if (real && real !== abs) out.push(real);
+  add(abs);
+  for (const t of win ? [abs, winPathTrim(abs)] : [abs]) { add(t); add(longPath(t, win, EDIT_MAX_UP)); }
   return out;
+}
+
+// ---- Windows' own readings of a path: 8.3 short names, trailing dots and spaces (1.30.1) ----------------------------------------
+// NTFS gives every name that is not 8.3 already a short alias — `.specs` SPECS~1, `roadmap.json` ROADMA~1.JSO, `.guardian` GUARDI~1,
+// `baseline.json` BASELI~1.JSO — and every program opens a file by either name (cmd.exe, PowerShell, Git Bash, Node's own calls). The
+// guards read a shell command's paths as TEXT, so `cp evil SPECS~1/guardian.cjs`, `echo x > GUARDI~1/BASELI~1.JSO` wrote what they stand
+// on unseen (review 9 3b, a known limit until 1.30.1). And Win32 — cmd.exe, PowerShell, any native program, not Node or Git Bash — drops
+// a segment's trailing dot and the last segment's trailing dots and spaces: `Set-Content .specs\roadmap.json. x` writes roadmap.json.
+// Linux and macOS have neither: `SPECS~1` and `roadmap.json.` are other names there (every caller passes `win`).
+// The names the guards stand on — a guarded file, a folder holding them, dev-guardian's CLI — each with its 8.3 parts: the name
+// without its leading dots and inner dots, upper case, and the extension's first 3 characters.
+const SHORT_NAME_LONGS = [".specs", ".guardian", ".execution", "roadmap.json", ".state.json", "observed.jsonl", "guardian.cjs", "baseline.json",
+  "dev-guardian.mjs"];
+const SHORT_PARTS = SHORT_NAME_LONGS.map((long) => {
+  const s = long.replace(/^\.+/, "").toUpperCase();
+  const dot = s.lastIndexOf(".");
+  return { long, base: (dot < 0 ? s : s.slice(0, dot)).replace(/\./g, ""), ext: dot < 0 ? "" : s.slice(dot + 1, dot + 4) };
+});
+// One path segment → the guarded name it may be the 8.3 alias of, else null. The rule, fail closed (an alias of a missing file may be
+// made for it): `<base>~<N>[.<ext>]` with base 1–6 characters that start the long name's (`SPECS~1`, `GUARDI~2`, `SPEC~10`) — or, past
+// four collisions, its first two and 4 hex digits (`SP1A2B~1`) — and ext the long name's first 3 (none for none), case-blind.
+const RE_SHORT_SEG = /^([^~.\\/]{1,6})~(\d{1,6})(?:\.([^.~\\/]{1,3}))?$/;
+function shortNameOf(seg) {
+  const m = RE_SHORT_SEG.exec(String(seg));
+  if (!m) return null;
+  const b = m[1].toUpperCase(), ext = (m[3] || "").toUpperCase();
+  for (const L of SHORT_PARTS) {
+    if (L.ext !== ext) continue;
+    if (L.base.startsWith(b) || (b.length === 6 && b.slice(0, 2) === L.base.slice(0, 2) && /^[0-9A-F]{4}$/.test(b.slice(2)))) return L.long;
+  }
+  return null;
+}
+// May a text hold such an alias — a word starting with a short base (or the hash form) and `~<digit>`? The pre-filters' test (a superset
+// of shortNameOf on each segment: the extension is not read), one pass: each alternative is a few fixed characters.
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+const RE_SHORT_MAYBE = new RegExp("(?<![A-Za-z0-9])(?:" + [...new Set(SHORT_PARTS.flatMap((L) => {
+  const b = L.base.slice(0, 6);
+  let chain = "";
+  for (let i = b.length - 1; i >= 1; i--) chain = "(?:" + escapeRe(b[i]) + chain + ")?";
+  return [escapeRe(b[0]) + chain, escapeRe(L.base.slice(0, 2)) + "[0-9A-Fa-f]{4}"];
+}))].join("|") + ")~\\d", "i");
+const mayShortName = (text) => RE_SHORT_MAYBE.test(String(text));
+// A path with each segment that is such an alias read as its long name (text only — the 8.3 rule), separators kept.
+function shortNamesRead(p) {
+  const s = String(p);
+  if (!mayShortName(s)) return s;
+  let out = "", start = 0;
+  for (let i = 0; i <= s.length; i++) {
+    if (i < s.length && !isSlashCode(s.charCodeAt(i))) continue;
+    const seg = s.slice(start, i);
+    out += (shortNameOf(seg) || seg) + (i < s.length ? s[i] : "");
+    start = i + 1;
+  }
+  return out;
+}
+// A path as Win32 reads it (Microsoft's path normalization — cmd.exe, PowerShell, a native program; Node's file calls go around it
+// through `\\?\`): a segment ending in ONE period loses it (`.specs.\x` IS .specs\x; `a..` stays), the last segment loses its trailing
+// periods and spaces (`roadmap.json. .` IS roadmap.json); `.` / `..` stay. And NTFS reads a folder segment's stream designation as the
+// folder itself — `.specs::$INDEX_ALLOCATION\roadmap.json` IS .specs\roadmap.json (cmd.exe, .NET, Node alike; checked on Windows 11):
+// a segment's `:<stream>` suffix is dropped (a drive's `C:` stays; the last segment's is fsTargetPath's). One pass (each segment's tail
+// walked once from its end).
+function winPathTrim(p) {
+  const s = String(p);
+  let out = "", start = 0;
+  for (let i = 0; i <= s.length; i++) {
+    if (i < s.length && !isSlashCode(s.charCodeAt(i))) continue;
+    let seg = s.slice(start, i);
+    const colon = i < s.length && !/^[A-Za-z]:$/.test(seg) ? seg.indexOf(":", start === 0 && /^[A-Za-z]:/.test(seg) ? 2 : 0) : -1;
+    if (colon > 0) seg = seg.slice(0, colon);
+    if (seg !== "." && seg !== "..") {
+      if (i === s.length) {
+        let e = seg.length;
+        while (e > 0 && (seg.charCodeAt(e - 1) === 46 || seg.charCodeAt(e - 1) === 32)) e--;
+        if (e > 0) seg = seg.slice(0, e);
+      } else if (seg.length > 1 && seg.charCodeAt(seg.length - 1) === 46 && seg.charCodeAt(seg.length - 2) !== 46) seg = seg.slice(0, -1);
+    }
+    out += seg + (i < s.length ? s[i] : "");
+    start = i + 1;
+  }
+  return out;
+}
+// The real path of an absolute local path even when it doesn't exist (yet): fs.realpathSync.native — 8.3 short names, junctions and
+// symlinks resolved — of its deepest existing ancestor, at most maxUp levels up (default 256), → { real, rest: [the segments below it] },
+// or null (nothing resolved within maxUp; an answer other than "not there" — EACCES, ELOOP: no answer). files.js realPathLoose IS
+// realPathLoose here.
+function realPrefix(p, maxUp = 256) {
+  let cur = path.resolve(p);
+  const rest = [];
+  for (let i = 0; i <= maxUp; i++) {
+    try {
+      return { real: fs.realpathSync.native(cur), rest };
+    } catch (e) {
+      if (!e || (e.code !== "ENOENT" && e.code !== "ENOTDIR")) return null;
+    }
+    const up = path.dirname(cur);
+    if (up === cur) return null;
+    rest.unshift(path.basename(cur));
+    cur = up;
+  }
+  return null;
+}
+const realPathLoose = (p, maxUp) => { const r = realPrefix(p, maxUp); return r ? path.join(r.real, ...r.rest) : null; };
+// An absolute path as the file system reads it, beyond its text: the real path of its deepest existing ancestor (realPrefix, ≤ maxUp
+// levels) and the segments below it — on win32 each 8.3 alias among them read by the rule (shortNameOf: a missing SPECS~1 may be made for
+// .specs — fail closed); nothing resolved: the text by that rule (win32), else null. Never a disk call on a network path.
+function longPath(abs, win = process.platform === "win32", maxUp) {
+  const r = isNetwork(abs) ? null : realPrefix(abs, maxUp);
+  if (!r) return win ? shortNamesRead(abs) : null;
+  return r.rest.length ? path.join(r.real, ...r.rest.map((x) => (win && shortNameOf(x)) || x)) : r.real;
+}
+// The first segment of a path that is an 8.3 alias of .specs or .guardian → its index in the text, else -1 (specsParentOf, the approval
+// hook's candidate projects).
+function shortDirAt(p) {
+  const s = String(p);
+  if (!mayShortName(s)) return -1;
+  for (let i = 0, start = 0; i <= s.length; i++) {
+    if (i < s.length && !isSlashCode(s.charCodeAt(i))) continue;
+    const long = shortNameOf(s.slice(start, i));
+    if (long === ".specs" || long === ".guardian") return start;
+    start = i + 1;
+  }
+  return -1;
 }
 
 // ---- a file as the engine reads it -----------------------------------------------------------------------------------------
@@ -228,6 +361,19 @@ function nearestProject(start, opts = {}) {
   if (!s || isNetwork(s)) return null;
   return nearestSpecs(s, { maxUp: 1, io: opts.io }) || nearestDevSpec(s, { maxUp: PROJECT_MAX_UP, io: opts.io });
 }
+// The project folder every surface works in — THE resolver (files.js resolveProjectDir is it through the engine's reads; the CLI's
+// context and its completion read it without the engine, 1.30.1): the explicit argument (--project, a tool's projectDir) >
+// SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one holding a dev-spec .specs/ (nearestProject) >
+// the working folder. A value that is empty or holds an unexpanded variable falls through; a leading ~ is the home folder.
+// opts: { env (default process.env), io (nearestProject's) }.
+function resolveProjectDir(arg, opts = {}) {
+  const env = opts.env || process.env;
+  const use = (v) => (v != null && String(v).trim() && !unexpandedVar(v) ? String(v).trim() : null);
+  const dir = use(arg) || use(env.SPEC_PROJECT_DIR) || use(env.CLAUDE_PROJECT_DIR);
+  if (dir) return path.resolve(expandHome(dir));
+  const cwd = path.resolve(process.cwd());
+  return nearestProject(cwd, { io: opts.io }) || cwd;
+}
 
 // ---- the session -------------------------------------------------------------------------------------------------------------
 // The session's anchors, each usable one in this order: CLAUDE_PROJECT_DIR (where Claude Code started — the plugin's MCP server works
@@ -292,6 +438,8 @@ const APPROVAL_CANDIDATE_TESTS = [
   (t) => RE_GLOB_CHAR.test(t) && (RE_APPROVAL_VERB.test(t) || dotGlob(t) || RE_APPROVAL_WRITE_WORD.test(t)),
   // dev-guardian's gate (1.30, engine/guardian.js): its launcher (.specs/guardian.cjs), its baseline, dev-guardian's `baseline update`
   (t) => /guardian/i.test(t),
+  // (1.30.1, win32) an 8.3 alias of a guarded name — SPECS~1, GUARDI~1, BASELI~1.JSO, DEV-GU~1.MJS (mayShortName)
+  (t) => WIN && mayShortName(t),
 ];
 // plain: approvalPlain(command) → may it be an approval / a guard-down?
 const approvalMayBe = (plain) => APPROVAL_CANDIDATE_TESTS.some((test) => test(plain));
@@ -322,11 +470,13 @@ function guardedFileOf(p) {
   return null;
 }
 // The folder holding a path's .specs/ (or dev-guardian's .guardian/) — the text before the first `.specs` / `.guardian` followed by a
-// separator or the end, its separators taken off ("" → "."): the project an edit of a guarded file acts on.
-function specsParentOf(p) {
+// separator or the end, its separators taken off ("" → "."): the project an edit of a guarded file acts on. With none, on win32, the
+// first segment that is an 8.3 alias of one (`sub/SPECS~1/guardian.cjs` acts on sub/ — shortDirAt).
+function specsParentOf(p, win = process.platform === "win32") {
   const t = String(p);
   const m = /\.(?:specs|guardian)(?=[\\/]|$)/i.exec(t);
-  return m ? trimSlashEnd(t.slice(0, m.index)) || "." : t;
+  const at = m ? m.index : win ? shortDirAt(t) : -1;
+  return at >= 0 ? trimSlashEnd(t.slice(0, at)) || "." : t;
 }
 
 // Another MCP server's file tools — filesystem's write_file / edit_file / move_file, Desktop Commander's write_file / edit_block, … —
@@ -444,7 +594,8 @@ function closestName(word, candidates, limit) {
 module.exports = {
   SESSION_MAX_UP, PROJECT_MAX_UP, RE_AUTOGEN, RE_UNEXPANDED_VAR, unexpandedVar, usable, RE_HOME_PREFIX, expandHome, isNetwork,
   fsTargetPath, editTargets, utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16,
-  isDevSpecProject, nearestDevSpec, nearestSpecs, nearestProject, sessionAnchors, sessionProjects,
+  SHORT_NAME_LONGS, shortNameOf, mayShortName, shortNamesRead, shortDirAt, winPathTrim, realPrefix, realPathLoose, longPath,
+  isDevSpecProject, nearestDevSpec, nearestSpecs, nearestProject, resolveProjectDir, sessionAnchors, sessionProjects,
   trimSlashEnd, approvalPlain, approvalMayBe, APPROVAL_CANDIDATE_TESTS, RE_APPROVAL_VERB, dotGlob, guardedFileOf, specsParentOf,
   MCP_FILE_VERBS, isMcpFileTool, APPROVAL_TOOLS, RE_APPROVAL_MCP, approvalHookMatcher, mcpPathArgs, observedNorm, observedBodies,
   CLI_SWITCHES, closestName,
