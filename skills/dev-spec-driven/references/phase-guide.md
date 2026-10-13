@@ -18,6 +18,32 @@ steps and what to present. What each active track adds: `references/track-checkl
   `/spec-doctor --deep`) and, on the code, by the branch review (`/spec-review branch`).
 - New to the plugin? Offer the user `/spec-tour`: one tiny real change on their repo through every gate in ~10 minutes.
 
+## Sizes — right-sized rigor
+
+Read it in Phase 0, with `spec_classify`'s `suggestedSize`.
+
+A feature's size decides how much scaffold and how many approvals it costs; the gates that keep a spec honest — EARS on
+every criterion, trace, the evidence gate, the bugfix iron law, phase order, the finish and execution gates — hold at
+every size. `spec_classify` suggests one (`suggestedSize` + a stable `sizeReason`: trivial-change · small-change · single-unit ·
+several-tracks · public-api · cross-system · default); the human confirms it in Phase 0 and `spec_create {size}` (CLI
+`--size`) records it in `.state.json`. No size = the full scaffold and rules, nothing merged or trimmed; `spec_upgrade` never assigns one.
+
+| Size | When | What it scaffolds | Approvals |
+|---|---|---|---|
+| **xs** — a change | one small behaviour change — a clearer error message, a default or a limit, one missing input handled — or a trivial edit the user asked to spec (`/spec`; a typo alone is Vibe mode) | ONE `change.md`: summary · 1–3 EARS criteria · approach · 1–3 tasks with `_Implements:_` and `_Verify:_`; core only — no classification, design, quickstart or checklist | the plan (`spec_approve {through: "tasks"}`), then execution |
+| **s** | one endpoint / screen / button, at most one track with design sections | one story (AC-1 WHEN · AC-2 IF…THEN + every track criterion), no `classification.md`; the design's weigh sections merged into **Decisions, reuse & risks**; each track's **core-tier** sections (the extended ones optional); a track task per criterion | fill the whole plan, then `spec_approve {through: "tasks"}` in one call (`next_action` says so from the start); with +tdd / +ai the call ends at the last plan before `tests` (`through: "test-plan"` with +tdd alone, `through: "eval-plan"` whenever +ai is on — the phase `next_action`'s `fastForward.through` names) — Phase 4's gate needs the failing tests / eval sets written first (Phase 4), then approve `tests`, then `tasks` |
+| **m** / **l** | a feature with tracks · several tracks, a public API, cross-system | the full chain; the duplicate sections of two active tracks merged (`[SaaS] Observability` / `Performance Budget` → `[OBS]`); the core API Contracts / Error Handling under +api, Security Considerations under +sec, Testing Strategy under +tdd left out | phase by phase (`spec_approve {through}` once they are all filled and the user said go) |
+
+- **A change stays XS.** A track, or more than 3 criteria / tasks, is refused (`change-scope`) — create it as a feature of
+  size s instead, never silently. `spec_add_track` refuses a change.
+- **A bugfix, any size** (`spec_create {kind: "bugfix"}`, `size: "xs"` for the one-call plan approval) has two tasks — 1
+  the red regression test, 2 the fix — and no reproduce / root-cause tasks: the requirements gate already needs bug.md →
+  Reproduction and the design gate its Root Cause; only task 1 can be ticked while Root Cause is empty.
+- **Size s — the extended sections.** Absent is fine; present, it must be filled, or answered by ONE line `n/a — <why it
+  does not apply>` (EN / PT / ES; a reason of at least 4 words).
+- **Every size — a filled section is your own text.** The `> **TODO**` line deleted with the template's guidance bullet
+  left alone is not an answer: a new approval refuses it; a design approved before 1.21 only warns.
+
 ## Phase 0 — Classification
 
 `spec_classify` returns the suggested tracks, the keyword signals behind each, notes ("possible +sec", a negated
@@ -61,8 +87,9 @@ and:
 - Each active track's mandatory sections (+tdd Testability Notes, +ai 10, the others 5 or 6) — what goes in each:
   `references/track-checklists.md`.
 
-Doctor warns `design-tradeoffs` / `design-risks` / `design-reuse` (never blocks). Fill `quickstart.md` (a manual
-acceptance scenario) and `checklist.md`. Simplicity over cleverness, consistency with the codebase; present for approval.
+Doctor warns `design-tradeoffs` / `design-risks` / `design-reuse`; at size m / l `design-reuse` FAILS and the design
+approval refuses an empty Reuse & Integration (size s and no size: a warning). Fill `quickstart.md` (a manual acceptance
+scenario) and `checklist.md`. Simplicity over cleverness, consistency with the codebase; present for approval.
 
 ## Phase 3 — Test plan and eval plan (track-conditional)
 
@@ -99,10 +126,13 @@ testable, then `Polish`. Tag each task with its story (`[US1]`, or `[shared]`) a
 (different files, no dependency) — `[US1][P]`. Numbers ARE the order; stories that aren't independent were mis-sliced.
 
 Markers: always `_Requirements: US-1.AC-1, US-1.AC-2_` and `_Verify: <command that proves it>_` (no pipe: a pipeline
-reports its LAST command's exit code) · `_Expect: fail_` on a task that writes a test before its code (its failing run
-is the proof; a pass is refused, `unexpected-pass`) · optional `_Size: XS|S|M|L|XL_` (1/2/3/5/8 points — the roadmap's
-velocity and ETA) · optional `_Depends: 3, 5_` (tasks that must be done first; doctor fails `task-deps` on an unknown
-number or a cycle; without it tasks.md order is the order) · per track: `references/track-checklists.md`.
+reports its LAST command's exit code) · `_Implements: src/a.js, src/b/_` on every task that writes code — the files it
+creates or changes (a folder or a glob too): the scope guard, the drift baseline, finish's duplicate check,
+cross-feature overlaps and dev-guardian's attribution read it; the template's `[bracketed]` slot left in is refused, a
+task that writes no code deletes the line · `_Expect: fail_` on a task that writes a test before its code (its failing
+run is the proof; a pass is refused, `unexpected-pass`) · optional `_Size: XS|S|M|L|XL_` (1/2/3/5/8 points — the
+roadmap's velocity and ETA) · optional `_Depends: 3, 5_` (tasks that must be done first; doctor fails `task-deps` on an
+unknown number or a cycle; without it tasks.md order is the order) · per track: `references/track-checklists.md`.
 
 Run `trace_check`: every AC maps to ≥ 1 task (on +tdd also to the test plan; every planned T-ID should map to a task).
 Keep task numbers unique and replace every scaffold placeholder task (the tasks gate refuses them). Present for review.
@@ -116,6 +146,9 @@ Keep task numbers unique and replace every scaffold placeholder task (the tasks 
   injection, contract tests, accessibility, a staged alert…): `references/track-checklists.md`; `spec_finish` lists them.
 - Before finishing, optionally a simplification pass: behaviour-preserving cleanups proven by the tests
   (`references/code-reuse-and-quality.md`).
+- Finish warns when the feature's code (its `_Implements:_` files) repeats code the project already has — reuse it or say
+  why the copy is deliberate (`spec_scan {duplicates: true, name}` lists them); with the project check `guardian` on
+  (opt-in), finish also runs dev-guardian's gate (`references/verification.md`).
 - A +tdd task's evidence: its target tests' command and exit code, "T-xx green" and the suite tally; the full suite
   leaves the targets green, the earlier green still green and the later tasks' tests still red.
 - A +ai prompt task: announce the baseline first; the evidence is the harness command, its exit code and the scores

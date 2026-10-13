@@ -10,7 +10,8 @@ this, not after.
 1. `spec_finish {name, write: true}` (CLI `dev-spec finish <feature> --write`). Not `readyToFinish` → show the
    **blockers** and stop: failing doctor checks, open or unverified tasks, project checks without a passing run on the
    current code (`suite-evidence`), pending approvals, an artifact changed since its approval, placeholders, a bugfix's
-   root cause. Show the warnings too — each one deserves a decision.
+   root cause. Show the warnings too — each one deserves a decision (code the feature repeats from elsewhere: reuse it, or
+   say why the copy is deliberate).
 2. **Verify fresh, now** — the full suite and every check the report lists for the active tracks. With project checks set,
    record them: `spec_finish {name, evidence: [{name, command, exitCode, summary}]}`, or
    `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" finish <feature> --run` (`--run` given: run that). No shell? Ask the user to

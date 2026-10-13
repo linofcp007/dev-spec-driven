@@ -12,8 +12,10 @@ The plugin not updated yet? Say how (Claude Code: `/plugin marketplace update`, 
 
 1. **Audit (read-only)** — `spec_upgrade {}`. Show the summary, then the features grouped **blocked**, **needs attention**,
    **ok** — each with its status, what the current rules flag (failing checks, pending gates, artifacts changed since
-   approval, approvals without history, unverified tasks, drift, bare `AC-n` IDs to renumber), its next step and its
-   review — then `plan`: what apply would change.
+   approval, approvals without history, unverified tasks, drift, bare `AC-n` IDs to renumber, an m / l design approved
+   without its Reuse & Integration — `design-reuse`: write it, then re-approve the design), its next step and its review —
+   then `plan`: what apply would change. A `guardianOffer` (dev-guardian installed, its gate off): mention it once; only the
+   user turns it on.
 2. **Apply — only after the user says yes** (`--apply` given, or they agree): `spec_upgrade {apply: true}`. It never edits
    an artifact, approves, ticks or deletes: it saves inferred tracks, records history baselines, completes
    `.specs/.gitignore`, stamps `meta.specVersion` and writes `.specs/UPGRADE.md`. Report `migrations`, `skipped` and

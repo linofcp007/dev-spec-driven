@@ -4,7 +4,7 @@ Read on demand — never preload everything. `SKILL.md` names the file a phase n
 the whole library.
 
 **Workflow and tooling**
-- `references/phase-guide.md` — the detail behind SKILL.md's pipeline: `.specs/` and steering, what each phase's artifact
+- `references/phase-guide.md` — the detail behind SKILL.md's pipeline: the sizes, `.specs/` and steering, what each phase's artifact
   holds, the steps, the Phase 4 gate, the task markers, what to present at a gate, `spec_next_action`'s order
 - `references/tool-catalog.md` — which MCP tool when (start · gates · execute · change · project), the runnable CLI line
 - `references/tooling-reference.md` — the MCP tools, prompts + resources, the CLI, the hooks, doctor checks, command
