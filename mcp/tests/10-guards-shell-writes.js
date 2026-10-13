@@ -119,7 +119,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
       .concat(asks.filter(([t, c]) => dec(t, c).decision !== "ask" || !kinds(dec(t, c)).includes("unreadable/specs-arg")).map(([t, c]) => "ask? " + c))
       .concat(fp.filter(([t, c]) => dec(t, c).decision !== "allow").map(([t, c]) => "allow? " + c + " " + js(kinds(dec(t, c)))));
     const glob = dec("Bash", "cp t.json .specs/roadmap.jso[n]");
-    ok(!wrong.length && glob.actions[0].setting === "specs" && glob.command === null && /change \.specs\/ from the shell — write, move or delete through a glob/.test(glob.reason),
+    ok(!wrong.length && glob.actions[0].setting === "specs" && glob.command === null && glob.reason.includes(require("./lib/i18n/en.js").text.approvalActions.specsShell),
       "1.25.1 r7 F3: a shell write or removal through a glob, a brace expansion, a variable (assigned in the command or not), a relative path after `cd .specs`, a folder or a glob under .specs/ (rm, find -delete / -exec rm, git clean, xargs rm, Remove-Item, a pipe from Get-ChildItem), an extractor or copier into it (rsync, tar -C, unzip -d, 7z -o, robocopy, xcopy, cp -r, mv, Expand-Archive), an editor or downloader (ed, ex, vim -c, awk -i inplace, curl -o, wget -O / -P, sponge), [IO.File]:: and Copy-Item -Destination (Join-Path …) is a guard-down (setting specs when no exact file — no command, localized); an unknown program on .specs/ files asks; the review's 33 legitimate commands and other ordinary work stay allowed (wrong: " +
       js(wrong) + ")");
   }

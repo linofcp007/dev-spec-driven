@@ -67,7 +67,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const hUp = hookRun(pr, "Bash", "node " + q + " init --check lint=eslint --evidence observed --stop-check on");
   const userLine = ((hEv.note.match(/: (! node .*)$/) || [])[1] || "");
   const humanEv = spawnSync(userLine.replace(/^! node /, JSON.stringify(process.execPath) + " "), { shell: true, encoding: "utf8", cwd: pr, env: { ...process.env, SPEC_PROJECT_DIR: pr, CLAUDE_PROJECT_DIR: "" } });
-  ok(r0.code === 0 && hEv.decision === "deny" && /switch the evidence mode \(meta\.evidence\) back to reported/.test(hEv.note) && hChk.decision === "deny" &&
+  ok(r0.code === 0 && hEv.decision === "deny" && hEv.note.includes(require(path.join(__dirname, "..", "mcp", "lib", "i18n", "en.js")).text.approvalActions.evidence) && hChk.decision === "deny" &&
     hRoles.decision === "deny" && hStop.decision === "deny" && hUp.decision === "silent" &&
     /init --evidence reported$/.test(userLine) && humanEv.status === 0 && SF.evidenceMode(pr) === "reported",
     "feature F2 review R10: in a deny project the hook refuses an agent's init --evidence reported / --check test= / --roles none / --stop-check off (raising or adding passes); the line it gives the user runs as is and lowers meta.evidence (got " +
