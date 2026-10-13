@@ -156,7 +156,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const liveState = path.join(w10Specs, "accounts", ".state.json");
     fs.writeFileSync(liveState, "[]");
     const badArch = S.manageFeature(w10, "archive", "accounts");
-    ok(bad10.ok === false && /not valid JSON/.test(bad10.error) && old10.ok && /archived before archive recorded its roadmap entry/.test(old10.note) &&
+    ok(bad10.ok === false && /not valid JSON/.test(bad10.error) && old10.ok && String(old10.note).includes(S.msg("en").restore.noRecord) &&
       badArch.ok === false && /unexpected shape/.test(badArch.error) && fs.existsSync(path.join(w10Specs, "accounts")) && fs.readFileSync(liveState, "utf8") === "[]",
       "a broken archived .state.json refuses restore; a pre-1.13 archive restores with a note; archive refuses a broken .state.json (never rewritten, nothing moved)");
     fs.writeFileSync(liveState, JSON.stringify({ lang: "en", tracks: ["core"], approvals: {} }));
@@ -366,7 +366,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
       S.drift(w10d, null, { maxFiles: 2 }).skipped === true && S.drift(w10d, null, { maxBytes: 1 }).skipped === true && S.drift(w10d, null, { maxFiles: 2 }).features.length === 0,
       "SessionStart: one localized drift line per drifted finished feature; over the file/byte budget the check is skipped (nothing hashed)");
     ok(S.drift(w10d, "nope").ok === false && S.drift(w10d, "draft").features.length === 0 && S.drift(w10d, "draft").unbaselined.join() === "draft" &&
-      /No finished feature has a drift baseline yet/.test(S.drift(w10d, "draft").note), "drift: an unknown feature is an error; an unfinished one is listed as unbaselined, not an error");
+      String(S.drift(w10d, "draft").note).includes(S.msg("en").drift.none), "drift: an unknown feature is an error; an unfinished one is listed as unbaselined, not an error");
     S.manageFeature(w10d, "archive", "login-loop");
     const drArch = S.drift(w10d);
     const hookArch = hook10(w10d); // "draft" is still active, so the hook runs
@@ -567,7 +567,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const mdPt = fs.readFileSync(path.join(w10pt, ".specs", "SPECS.md"), "utf8");
     ok(catPt.ok && catPt.lang === "pt" && /^# Catálogo de specs — proj-wp10-pt$/m.test(mdPt) && /<!-- AUTO-GERADO por dev-spec/.test(mdPt) && /## 🟡 pagamentos — em curso \(/.test(mdPt) &&
       /1 feature\(s\) · 1 critérios de aceitação — 1 em vigor, 0 substituído\(s\)/.test(mdPt) && /Não há nada arquivado como 'x'/.test(S.manageFeature(w10pt, "restore", "x").error) &&
-      /Nenhuma feature fechada tem ainda uma baseline de drift/.test(S.drift(w10pt).note), "PT project: SPECS.md chrome (title, AUTO-GERADO marker, status, totals), restore and drift messages in Portuguese");
+      String(S.drift(w10pt).note).includes(S.msg("pt").drift.none), "PT project: SPECS.md chrome (title, AUTO-GERADO marker, status, totals), restore and drift messages in Portuguese");
     const w10es = path.join(tmp, "proj-wp10-es");
     S.initProject(w10es, ["core"], "es");
     S.createFeature(w10es, "Pagos", ["core"]);

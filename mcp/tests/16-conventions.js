@@ -325,7 +325,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       !fs.existsSync(path.join(m14, ".specs", "beta")) && fs.existsSync(path.join(m14, ".specs", "_archive", "parked")) && (S.readRoadmap(m14).backlog || []).length === 0 &&
       S.projectLang(m14) === "en";
     const featBusy14 = (r, slug, rel) => r && r.ok === false && r.busy === true && (r.error || "").includes(`Another dev-spec process is updating '${slug}' right now (${rel})`);
-    const rmBusy14 = (r) => r && r.ok === false && r.busy === true && /updating \.specs\/roadmap\.json right now \(\.specs\/\.roadmap\.lock\)/.test(r.error || "");
+    const rmBusy14 = (r) => r && r.ok === false && r.busy === true && String(r.error || "").includes(S.msg("en").err.roadmapBusy);
     ok(mv14.length === 8 && mv14.slice(0, 4).every((r) => featBusy14(r, "alpha", ".specs/alpha/.lock")) && featBusy14(mv14[4], "parked", ".specs/_archive/parked/.lock") &&
       mv14.slice(5).every(rmBusy14) && mUntouched14,
       "a held feature lock makes create (existing feature) / rename / archive / remove wait, then answer busy; restore waits on its archived folder's lock; backlog / depend / init --lang wait on .specs/.roadmap.lock — nothing changed (got " +

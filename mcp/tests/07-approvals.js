@@ -49,7 +49,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirnam
     const pC = b3("roles-clear");
     S.initProject(pC, ["core"], "en", { approvalRoles: { design: ["tech"] } });
     const iClear = S.initProject(pC, ["core"], undefined, { approvalRoles: {} });
-    ok(iClear.rolesNote === "Approval roles cleared — every phase takes a single approval again." && meta3(pC).approvalRoles === undefined && JSON.stringify(iClear.approvalRoles) === "{}" &&
+    ok(iClear.rolesNote === S.msg("en").governance.rolesCleared && meta3(pC).approvalRoles === undefined && JSON.stringify(iClear.approvalRoles) === "{}" &&
       S.parseApprovalRolesText("requirements=product,design=tech+security").design.join() === "tech,security" &&
       S.parseApprovalRolesText("design=tech,security;tasks=tech").design.join() === "tech,security" && JSON.stringify(S.parseApprovalRolesText("none")) === "{}" &&
       !!S.parseApprovalRolesText("tech").error && JSON.stringify(S.approvalRolesOf(pC)) === "{}",
@@ -277,7 +277,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirnam
       () => eBoth.ok === false, () => /either a phase or through/.test(eBoth.error), () => eExec.ok === false,
       () => /covers the planning phases only/.test(eExec.error), () => eInact.ok === false, () => eInact.notActive,
       () => /'test-plan' is not an approvable phase of 'errors-ff'/.test(eInact.error), () => eNone.ok === false,
-      () => /Name the phase to approve — or through: <phase>/.test(eNone.error), () => JSON.stringify(eEnum).includes("execution"),
+      () => String(eNone.error).includes(S.msg("en").governance.phaseRequired), () => JSON.stringify(eEnum).includes("execution"),
       () => !(payload(eEnum) || {}).approved, () => apTool3.inputSchema.required.join() === "name",
       () => apTool3.inputSchema.properties.through.enum.join() === "classification,requirements,design,test-plan,eval-plan,tests,tasks",
       () => apTool3.inputSchema.properties.role.type === "string", () => /APPROVALS BY ROLE/.test(apTool3.description),
@@ -734,7 +734,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirnam
     let sc1j = null;
     try { sc1j = JSON.parse(sc1cli.out); } catch { /* stays null */ }
     ok(sc1.ok && sc1.block === true && sc1.why === "unverified" && sc1.features[0].feature === "login" && sc1.features[0].unverified[0].number === 1 &&
-      /tasks are ticked without verification evidence/.test(sc1.reason) && sc1cli.code === 1 && js(sc1) === js(sc1j) &&
+      String(sc1.reason).includes(S.msg("en").stopGate.head) && sc1cli.code === 1 && js(sc1) === js(sc1j) &&
       sc2.block === false && sc2.why === "admitted" && sc3.block === false && sc3.why === "no-claim" && sc4.result.isError === true && /Missing required argument\(s\): message/.test(sc4.result.content[0].text),
       "1.16 U4: spec_stop_check sends a 'done' claim back while a recent tick is unverified (block, why unverified — the same JSON as `dev-spec stop-check --json`, exit 1); an honest admission and a message without a claim pass; message is required (got " +
       js([sc1.why, sc2.why, sc3.why]) + ")");

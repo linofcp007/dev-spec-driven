@@ -483,7 +483,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require }
     ok(revBr.join(" | ") === "modelo de ameaças revisado. | documentado, revisado, na biblioteca | os contratos revisados | a lista revisada | as regras revisadas" &&
       I.msg("pt").gates.more(3) === "+3 mais" && I.msg("pt-BR").gates.more(3) === "+3 mais" &&
       ecra === "O erro aparece na tela, em uma tela e na sua tela; a tela de login, uma tela de ajuda, as telas da sua tela e o leitor de tela." &&
-      tr(ecra) === ecra && ptA === "Escreve a Abordagem no change.md: o que a alteração toca e porque é só isso." &&
+      tr(ecra) === ecra && ptA === S.msg("pt").clarify.changeApproach &&
       brA === "Escreva a Abordagem no change.md: o que a alteração toca e por que é só isso.",
       "1.24 r6 H8 + H9: pt-BR — revisto/revista(s) → revisado(s)/revisada(s); '+N mais'; ecrã → tela with its article (no/num/o/um/os/do seu/teu → na/em uma/a/uma/as/da sua); PT changeApproach asks why that is all of it (got " +
       JSON.stringify({ revBr, more: I.msg("pt").gates.more(3), ecra, ptA, brA }) + ")");

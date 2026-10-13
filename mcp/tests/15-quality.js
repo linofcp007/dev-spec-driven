@@ -73,7 +73,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       () => js(imB.features[0].approvals[0].files) === js([{ file: "constitution.md", change: "modified" }]),
       () => /^Steering — beta: approved under an older version of steering/.test(S.impactLines(imB)[0]), () => imNo.isError,
       () => /name required — only phase 'steering' works project-wide/.test(imNo.p.error), () => imRe.ok === false,
-      () => /reopen doesn't apply to phase 'steering'/.test(imRe.error),
+      () => String(imRe.error).includes(S.msg("en").quality.impactNoReopen),
     ]);
     approveAll(q1, "alpha", ["requirements", "design"]);
     const imAfter = S.impactReport(q1, undefined, { phase: "steering" });

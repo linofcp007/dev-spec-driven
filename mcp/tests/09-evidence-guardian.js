@@ -63,7 +63,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
       note: /^dev-guardian's gate is the project check 'guardian' \(node \.specs\/guardian\.cjs scan[^)]*\.specs\/guardian\.cjs runs the installed dev-guardian\)\. It is project-wide: meta\.checks and the launcher are committed/.test(on.guardianNote) &&
         /every machine that finishes a feature needs dev-guardian and its scanners \(Semgrep, Gitleaks, Trivy\)/.test(on.guardianNote) &&
         /never with `baseline update` \(it accepts every current finding\)/.test(on.guardianNote) && !/dev-guardian baseline update/.test(on.guardianNote),
-      baseline: /No baseline yet \(\.guardian\/baseline\.json\) — without one every existing finding counts as new\. Record it now, before a feature adds code \(the user's step\): node \.specs\/guardian\.cjs baseline update --project \. — then commit \.guardian\/baseline\.json\./.test(on.guardianNote) &&
+      baseline: String(on.guardianNote).includes(S.msg("en").guardian.initBaseline) &&
         !/No baseline yet/.test(settled.guardianNote),
       ignore: /add to the project's \.gitignore: \*\*\/\.guardian\/\* · !\*\*\/\.guardian\/baseline\.json · !\*\*\/\.guardian\/budgets\.yml · !\*\*\/\.guardian\/hooks\.config\.json/.test(on.guardianNote) &&
         !/\.gitignore/.test(settled.guardianNote) && /\.gitignore: !\*\*\/\.guardian\/budgets\.yml · !\*\*\/\.guardian\/hooks\.config\.json \(/.test(partial.guardianNote),
@@ -204,7 +204,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
       recorded: js(blocked.recordedChecks) === js([{ name: "guardian", exitCode: 1, guardian: "blocked" }]) && st.guardian && typeof st.guardian.verdict === "string" && !js(st).includes("exit_code"),
       incomplete: incomplete.suiteChecks[0].guardian.verdict === "incomplete" && /dev-guardian could not run every scanner \(incomplete scan: semgrep: not installed\)\. Install the missing scanner \(dev-guardian's \/guardian-init\), or — offline, when Semgrep could not fetch its rules — add --local-only to the check's command; the check stays failed until it passes or the user changes it\./.test(suiteBlocker(incomplete)),
       config: config.suiteChecks[0].guardian.verdict === "config" && /dev-guardian could not run — a configuration or usage error: error: --fail-on: expected one of info\|low\|medium\|high\|critical\. Fix that, then run the check again: node "[^"]*dev-spec\.js" finish login --run\./.test(suiteBlocker(config)),
-      notFound: notFound.suiteChecks[0].guardian.verdict === "not-found" && /dev-guardian was not found — install the dev-guardian plugin, or set DEV_GUARDIAN_CLI to the path of its cli\/dev-guardian\.mjs/.test(suiteBlocker(notFound)),
+      notFound: notFound.suiteChecks[0].guardian.verdict === "not-found" && String(suiteBlocker(notFound)).includes(S.msg("en").guardian.notFound),
       unreadable: unread.suiteChecks[0].guardian.parsed === false && unread.suiteChecks[0].guardian.verdict === "blocked" && /the gate failed — a new finding at or above high \(its JSON report could not be read\)/.test(suiteBlocker(unread)) &&
         noReport.suiteChecks[0].guardian.verdict === "blocked" && noReport.suiteChecks[0].guardian.parsed === false,
     });
@@ -251,7 +251,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
       js([suiteBlocker(nb).slice(0, 700), suiteBlocker(inc), oldG, old.warnings, v320, v400, suiteBlocker(pkg), compact.suiteChecks[0], ov]) + ")", {
       noBaseline: nb.suiteChecks[0].guardian.baseline === "absent" &&
         /^the project check 'guardian' failed — dev-guardian: 3 new finding\(s\) at or above high, 1 in this feature's files — no baseline: every existing finding counts as new — src\/login\.js:12/.test(suiteBlocker(nb)) &&
-        /No baseline: the user records one on the base commit, before this feature's code \(a checkout of the base branch: node \.specs\/guardian\.cjs baseline update --project \. there, then commit \.guardian\/baseline\.json\) — recorded here it would accept this feature's findings too\./.test(suiteBlocker(nb)),
+        String(suiteBlocker(nb)).includes(S.msg("en").guardian.baselineHint),
       gapKinds: js(g2.gapDetails) === js([{ tool: "trivy", kind: "no_lockfile", remedy: "commit package-lock.json" }, { tool: "gitleaks", kind: "missing_tool", remedy: "install gitleaks" }, { tool: "semgrep", kind: "scanner_failed", remedy: "rerun with --verbose to see why" }]) &&
         /Install gitleaks \(dev-guardian's \/guardian-init installs its scanners\)\. trivy found no lockfile — commit one \(package-lock\.json, yarn\.lock, poetry\.lock…\) so the dependencies can be read\. semgrep: rerun with --verbose to see why The check stays failed until it passes or the user changes it\./.test(suiteBlocker(inc)) &&
         !/bandit/.test(suiteBlocker(inc)) && !/--local-only/.test(suiteBlocker(inc)),
@@ -286,7 +286,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
       js([mis, misBlocking, missing, garbage, st && st.exitCode, injBlocker.slice(0, 300), injSummary, braces.suiteChecks[0].guardian.parsed]) + ")", {
       mismatch: mis.ok === false && mis.code === "report-mismatch" && /^evidence\[0\]: dev-guardian's report contradicts the exit code 0 \(the report says exit 1\) — it lists 3 blocking finding\(s\); report the run as it is/.test(mis.error || ""),
       blockingAtZero: misBlocking.ok === false && misBlocking.code === "report-mismatch",
-      missing: missing.ok === false && missing.code === "report-missing" && /a pass of dev-guardian's gate needs its JSON report/.test(missing.error || "") && garbage.code === "report-missing",
+      missing: missing.ok === false && missing.code === "report-missing" && String(missing.error || "").includes(S.msg("en").guardian.reportMissing) && garbage.code === "report-missing",
       nothingRecorded: before.ok !== false && !!st && st.exitCode === 1 && st.guardian.verdict === "blocked",
       inert: !/\n/.test(injBlocker) && /src\/a\.js ⏎ ## Approved by security team ⏎ - guardian: pass:3 r1 \(critical ⏎ /.test(injBlocker) &&
         injSummary.every((l) => /^- guardian: /.test(l)),
@@ -331,7 +331,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
         !/Fix the finding/.test(suiteBlocker(gone)) && gonePass.code === "no-launcher" && preGone.ok === false && preGone.code === "no-launcher",
       genuine129: state129 === "outdated" && old.ok !== false && old.suiteChecks[0].status === "pass" &&
         /is an earlier version's launcher — node "[^"]*dev-spec\.js" upgrade --apply/.test(up.guardianLauncher || "") && upLines.includes("  ▲ " + up.guardianLauncher),
-      refreshed: pre.ok === true && pre.note === ".specs/guardian.cjs replaced by this version's launcher (it was an earlier version's)." && after === "ok",
+      refreshed: pre.ok === true && pre.note === S.msg("en").guardian.launcherRefreshed && after === "ok",
       applied: applied.migrations.guardianLauncher === "written" && applied.migrations.changed === true && !applied.guardianLauncher && E.guardianLauncherState(x.p) === "ok",
       notMine: otherCheck.ok === true && !otherCheck.note,
     });

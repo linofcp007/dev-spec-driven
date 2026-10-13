@@ -197,7 +197,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
       fin4.blockers.some((b) => /template placeholders left in the spec chain: design\.md/.test(b)) && fin4.placeholders.includes("tasks.md") && fin4.readyToFinish === false,
       "spec_finish: an artifact changed after its approval (the same list next_action shows) and placeholders anywhere in the chain are blockers");
     const fin4b = S.finishFeature(w5, f2b.slug);
-    ok(fin4b.blockers.some((b) => b === "bug.md → Root Cause is not filled — no fix before the root cause is known") && !fin4b.blockers.some((b) => /blocking checks: [^\n]*root-cause/.test(b)),
+    ok(fin4b.blockers.some((b) => b === S.msg("en").gates.finishRootCause) && !fin4b.blockers.some((b) => /blocking checks: [^\n]*root-cause/.test(b)),
       "spec_finish on a bugfix: an unfilled Root Cause is its own blocker");
 
     // (5) bugfix execution gate + brief context — on a tasks.md that has a root-cause task: the four-task form every bugfix
@@ -839,7 +839,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const rt8 = S.impactReport(w8, "drafts", { phase: "tasks", reopen: true });
     const bad8m = await call8("spec_impact", { name: "drafts", phase: "plan", projectDir: w8 });
     const bad8e = S.impactReport(w8, "drafts", { phase: "plan" });
-    ok(rt8.ok === false && /reopen applies to requirements, design, test-plan and eval-plan/.test(rt8.error) && bad8m.isError && /phase must be one of: requirements, design, test-plan, eval-plan, tasks/.test(bad8m.p.error) &&
+    ok(rt8.ok === false && String(rt8.error).includes(S.msg("en").impact.reopenTasks) && bad8m.isError && /phase must be one of: requirements, design, test-plan, eval-plan, tasks/.test(bad8m.p.error) &&
       // 1.30 review 8: the engine refuses it as the MCP schema does — the same words and code (the CLI's --phase reaches the engine)
       bad8e.ok === false && bad8e.error === bad8m.p.error && bad8e.code === "invalid-arguments" && JSON.stringify(bad8e.invalid) === '["phase"]',
       "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine — the same message and code)");
@@ -1154,7 +1154,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const fpR = S.impactReport(w8, "slow-list", { phase: "design", reopen: true });
     const fpDc = S.specDoctor(w8, "slow-list").checks.find((c) => c.id === "changed-since-approval");
     ok(fpI.changed === true && fpI.designMd.baseline === "fingerprint-only" && /design\.md changed since the approval too, but this approval kept no snapshot of it/.test(fpI.designHint) &&
-      !S.impactLines(fpI).join("\n").includes("no changes since the approval") && fpR.recorded === false && /design\.md changed, but without a snapshot of it/.test(fpR.note) &&
+      !S.impactLines(fpI).join("\n").includes("no changes since the approval") && fpR.recorded === false && String(fpR.note).includes(S.msg("en").impact.reopenDesignUnknown) &&
       /^changed after their approval: design\.md — re-review/.test(fpDc.detail),
       "a bugfix approval with only design.md's fingerprint: impact and reopen say design.md changed but can't be diffed; doctor doesn't send to spec_impact");
 

@@ -206,7 +206,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     ok(br1.expect === "fail" && /## Verification \(_Verify:_\)\n- `node tests\/t01\.test\.js`\n\n\*\*Expected result: FAIL\*\* \(_Expect: fail_\) — the run must exit non-zero/.test(br1.brief) &&
       /\n\d+\. The _Verify:_ run must FAIL \(non-zero exit\) for the right reason/.test(br1.brief) && !br2.expect && !/Expected result: FAIL/.test(br2.brief) &&
       brW.expect === "fail" && brW.brief === undefined && /## Verification \(_Verify:_\)\n\n\*\*Expected result: FAIL\*\*/.test(br4.brief) &&
-      /\*\*Resultado esperado: FALHA\*\* \(_Expect: fail_\)/.test(brPt.brief) && /A execução do _Verify:_ tem de FALHAR/.test(brPt.brief),
+      String(brPt.brief).includes(S.msg("pt").redGreen.briefExpect) && /A execução do _Verify:_ tem de FALHAR/.test(brPt.brief),
       "B5 brief: an _Expect: fail_ task's Verification section and definition of done say the run must FAIL (expect: 'fail', kept with write:true; the heading appears without a _Verify:_; PT)");
 
     // --- B5.1 next_action's verify step: an _Expect: fail_ task whose run passed is told its proof is a FAILING run (never "a
@@ -308,7 +308,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     const plain1 = S.finishFeature(d1, f1.slug);
     ok(badEv7.ok === false && /evidence\[1\]: 'e2e' is not a project check — one of: test, lint/.test(badEv7.error) && b5State(f7).finishChecks.lint.exitCode === 1 &&
       noExit7.ok === false && /evidence\[0\]: its exit code/.test(noExit7.error) && noCmd7.ok === false && /the command that ran is required/.test(noCmd7.error) &&
-      notList7.ok === false && /evidence must be a list/.test(notList7.error) && noChecks7.ok === false && /no project checks configured \(roadmap\.json meta\.checks\)/.test(noChecks7.error) &&
+      notList7.ok === false && /evidence must be a list/.test(notList7.error) && noChecks7.ok === false && String(noChecks7.error).includes(S.msg("en").projectChecks.noChecks) &&
       !plain1.suiteChecks && !plain1.blockers.some((b) => /project checks/.test(b)),
       "B5 spec_finish {evidence} is all-or-nothing (an unknown check name, a missing exit code or command: nothing recorded); needs meta.checks; without meta.checks nothing changes");
     const fix7 = await b5Call("spec_finish", { projectDir: d7, name: "suite", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0, summary: "clean" }] });
@@ -836,7 +836,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     naFill("tasks.md", /- \[ \] 2\./, "- [x] 2.");
     const naObs = S.nextAction(pNa, bNa.slug);
     ok(red1.ok && red1.unverifiedReason === "unobserved" && naObs.step === "verify" && /#1 \(run not observed by the harness\)/.test(naObs.recommendation) &&
-      /only runs the harness saw \(roadmap\.json meta\.evidence: observed\)/.test(naObs.recommendation),
+      String(naObs.recommendation).includes(S.msg("en").observed.naHint),
       "feature F1: next_action's verify step lists the unobserved task and says how to get an observed run (got " + JSON.stringify([red1.unverifiedReason, naObs.step, naObs.recommendation]).slice(0, 400) + ")");
 
     // A new report of task 2: unobserved (reason + note; nothing ever observed in a project → the MCP-only line); after the hook saw it → verified.
@@ -853,7 +853,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
       JSON.stringify([c2b.p.unverifiedReason, cN.p.unverifiedReason, c2c.p.verified, cCli.observed]) + ")", [
       () => c2b.p.ok, () => c2b.p.verified === false, () => c2b.p.unverifiedReason === "unobserved", () => c2b.p.observed === false,
       () => /node "[^"]*dev-spec\.js" done auth 2 --run/.test(c2b.p.note), () => !/No run was ever observed/.test(c2b.p.note),
-      () => cN.p.unverifiedReason === "unobserved", () => /No run was ever observed in this project/.test(cN.p.note),
+      () => cN.p.unverifiedReason === "unobserved", () => String(cN.p.note).includes(S.msg("en").observed.neverObserved),
       () => /MCP-only client has no hook/.test(cN.p.note), () => c2c.p.verified === true, () => c2c.p.observed === true,
       () => !c2c.p.unverifiedReason, () => cCli.verified === true, () => cCli.observed === "cli", () => obsState(fN).evidence["1"].observed === "cli",
     ]);

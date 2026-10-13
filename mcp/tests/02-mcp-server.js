@@ -286,7 +286,7 @@ exports.run = async ({
     ok(evBadDry.status === 1 && itemLines(evBadDry.stdout) === ["regression.json — item r1: tipo de avaliador desconhecido 'contain' (usa contains | equals | regex | refuse | judge)",
       "regression.json — item r2: a regex não compila: Invalid regular expression: /(pago/i: Unterminated group", "regression.json — item #3: sem 'id' (texto não vazio); sem objeto 'expect'",
       "regression.json — item r4: sem 'input' (texto não vazio)", "regression.json — item #5: não é um objeto", "regression.json — item r6: 'judge' precisa de uma 'rubric'",
-      "regression.json — item r7: 'contains' precisa de um 'value'"].join("\n") && /golden: 1 item/.test(evBadDry.stdout) && /O dry run encontrou conjunto\(s\) de evals inválido\(s\)/.test(evBadDry.stdout) &&
+      "regression.json — item r7: 'contains' precisa de um 'value'"].join("\n") && /golden: 1 item/.test(evBadDry.stdout) && String(evBadDry.stdout).includes(S.msg("pt").evals.dryInvalid) &&
       evBadLive.status === 1 && itemLines(evBadLive.stdout) === itemLines(evBadDry.stdout) && /nenhum modelo foi chamado/.test(evBadLive.stdout) && !fs.existsSync(markEv),
       "run-evals validates every item (object, id, input, a known grader, value / a compiling regex / rubric) — dry run exit 1 with one line per bad item; a live run refuses before any model call (localized, PT) (got " + JSON.stringify(itemLines(evBadDry.stdout)) + ")");
     fs.rmSync(path.join(evDir, "regression.json"));
@@ -617,7 +617,7 @@ exports.run = async ({
     ]);
     ok(gBad.every((r) => r.error && r.error.code === -32602 && !r.result) && /^Unknown prompt 'nope' — one of: .*spec-change/.test(gBad[0].error.message) &&
       /Unknown prompt '\.\.\/README'/.test(gBad[1].error.message) && /needs the prompt `name`/.test(gBad[3].error.message) &&
-      [4, 5, 6].every((i) => /`arguments` must be an object of strings/.test(gBad[i].error.message)),
+      [4, 5, 6].every((i) => String(gBad[i].error.message).includes(S.msg("en").promptsResources.err.badPromptArgs)),
       "prompts/get: an unknown prompt (also '../README', 'spec-change.md', 'constructor'), no name or non-string arguments → JSON-RPC -32602 with a clear message");
 
     // resources/list — ROADMAP.md, SPECS.md, steering, each active feature's allowlisted artifacts; nothing else.

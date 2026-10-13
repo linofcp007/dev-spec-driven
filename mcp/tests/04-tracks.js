@@ -284,12 +284,12 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
   // localized removal / create-on-existing messages (PT, ES)
   const ptRel = S.createFeature(ptW2, "Relatórios", ["saas"]);
   const ptRelRm = S.addTrack(ptW2, ptRel.slug, "saas", { remove: true });
-  ok(/^Tracks desativados: \+saas\. Nenhum ficheiro foi apagado/.test(ptRelRm.note) && S.addTrack(ptW2, ptRel.slug, "core", { remove: true }).error === "O 'core' está sempre ativo — não pode ser removido." &&
+  ok(/^Tracks desativados: \+saas\. Nenhum ficheiro foi apagado/.test(ptRelRm.note) && S.addTrack(ptW2, ptRel.slug, "core", { remove: true }).error === S.msg("pt").tracks.cannotRemoveCore &&
     /^Não ativo: \+ai/.test(S.addTrack(ptW2, ptRel.slug, "ai", { remove: true }).note), "removal messages follow the feature language (PT: removed, core, not active)");
   S.createFeature(esW2, "Exportar", ["core"]);
   const esAgain = S.createFeature(esW2, "Exportar", ["saas"]);
   ok(/^'exportar' ya existía — tracks añadidos: \+saas/.test(esAgain.note) && esAgain.addedTracks.join() === "saas" &&
-    S.removeTrack(esW2, "error-de-pago", "tdd").error === "Un bugfix es siempre test-first — no se puede quitar +tdd.",
+    S.removeTrack(esW2, "error-de-pago", "tdd").error === S.msg("es").tracks.bugfixNeedsTdd,
     "create-on-existing note and the bugfix +tdd refusal are localized (ES)");
 
   // roadmap: planned-but-not-started (tasks-ready, 0 done) is its own state — never ⬜ next to 30%

@@ -724,7 +724,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
       phGate12.refused && phGate12.failing.includes("traceability") && /US-1\.AC-6/.test(phGate12.error) &&
       gDoc12.phase === "test-plan" && gTr12.status === "fail" && /the test plan covers unknown ACs \(typos\?\): US-1\.AC-2, US-1\.AC-3, US-1\.AC-4, US-2\.AC-1/.test(gTr12.detail) &&
       !/ACs with no task|tasks reference/.test(gTr12.detail) &&
-      /o plano de testes cobre ACs desconhecidos/.test(S.traceGapLines(ph12, "pt").join()) && /el plan de pruebas cubre ACs desconocidos/.test(S.traceGapLines(ph12, "es").join()),
+      String(S.traceGapLines(ph12, "pt").join()).includes(S.msg("pt").traceGapText.kinds.phantomAcsInTests) && String(S.traceGapLines(ph12, "es").join()).includes(S.msg("es").traceGapText.kinds.phantomAcsInTests),
       "trace_check: a test-plan row covering an AC requirements.md doesn't define is a phantom (phantomAcsInTests — a gap: the test-plan approval is refused, doctor fails once the test plan is the current phase and defers it while it is a later template; a fenced example is none; EN/PT/ES) (got " + phDoc12.detail + " | " + gTr12.status + ": " + gTr12.detail + ")");
 
     // A fenced example row in test-plan.md is no planned test either way: it neither covers its AC (a false traceability
@@ -1106,7 +1106,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
       () => rec("US-1.AC-1")[col("Decisions")] === "D-1 Stripe, as the PSP", () => rec("SC-001")[col("Test files")] === "T-03: run outside test code",
       () => rec("US-1.AC-2")[col("Test files")] === "T-02: in no test file",
       () => rec("US-1.AC-3")[col("Gaps")] === "no task cites it; no test-plan row covers it",
-      () => rec("SC-002")[col("Gaps")] === "no test-plan row or quickstart line covers it",
+      () => rec("SC-002")[col("Gaps")] === S.msg("en").rtm.gap["no-coverage-sc"],
       () => rec("US-1.AC-2")[col("Superseded by")] === "sso/US-1.AC-1", () => rec("NFR-2")[col("Changed since approval")] === "yes",
       () => rec("US-1.AC-1")[col("Changed since approval")] === "no", () => rec("US-1.AC-1")[col("Approved by")] === "alice (forced)",
       () => rec("US-1.AC-3")[col("Template")] === "yes", () => rec("EC-1")[col("Kind")] === "EC",

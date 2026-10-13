@@ -190,7 +190,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
       "task brief steering: defaults without front matter = always, tech.md with 'manual' drops out, fileMatch included only when an _Implements:_ path matches, always included, manual listed; no-front-matter extras stay out (got " + inc(br1) + ")");
     const brText = br1.brief.split("## Global constraints")[1] || "";
     ok(/Read before coding: .*`\.specs\/steering\/api-rules\.md`.*`\.specs\/steering\/security\.md`/.test(brText) &&
-      /Scoped steering \(fileMatch — matches this task's files\):/.test(brText) && /> - Every handler validates its input with zod\./.test(brText) &&
+      String(brText).includes(S.msg("en").scopedSteering.scoped) && /> - Every handler validates its input with zod\./.test(brText) &&
       !/inclusion:|fileMatchPattern:/.test(br1.brief) && !/A rule every file matching/.test(br1.brief) && /Available on request \(manual steering\): `\.specs\/steering\/tech\.md`, `\.specs\/steering\/release\.md`/.test(brText),
       "the brief quotes the matching fileMatch file with its front matter stripped (a placeholder-only stub is listed, never quoted) and lists manual files as available on request");
     const br2 = S.taskBrief(b11, "api", 2);
@@ -280,7 +280,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     S.scaffoldSteeringFile(d11, "api-rules.md");
     fs.unlinkSync(path.join(dSt, "tech.md"));
     const ds3 = docSt(d11, "dash");
-    ok(ds2.status === "pass" && ds2.detail === "core steering present (incl. constitution)" && ds3.status === "warn" && ds3.detail === "missing: tech.md; still template placeholders: api-rules.md (2)",
+    ok(ds2.status === "pass" && ds2.detail === S.msg("en").doctor.steeringOk && ds3.status === "warn" && ds3.detail === "missing: tech.md; still template placeholders: api-rules.md (2)",
       "filled steering → pass; a custom stub still holding placeholders (front matter set aside) and a missing core file are both reported");
     const d11pt = path.join(tmp, "proj-wp11-doctor-pt");
     S.initProject(d11pt, ["core"], "pt");
@@ -319,7 +319,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     const ptF = S.createFeature(e11, "Faturação", ["saas"], undefined, undefined, "pt");
     const dzPt = runPost(path.join(ptF.dir, "design.md"));
     ok(/^Verificação do design em design\.md \(faturacao \[core \+saas\]\):/.test(dzPt) && /secções \[SaaS\]: Orçamento de Desempenho:por preencher/.test(dzPt) &&
-      /Verificação da Constituição: por preencher/.test(dzPt) && /placeholder\(s\) do template por substituir/.test(dzPt) && /Preenche-os antes de aprovar o design/.test(dzPt),
+      String(dzPt).includes(S.msg("pt").designSaveCheck.constitution.unfilled) && /placeholder\(s\) do template por substituir/.test(dzPt) && /Preenche-os antes de aprovar o design/.test(dzPt),
       "hook on design.md is localized in the feature's language (PT)");
     const bugF = S.createFeature(e11, "Crash On Save", ["tdd"], undefined, undefined, undefined, "bugfix");
     fs.writeFileSync(path.join(bugF.dir, "design.md"), "# Design: Crash On Save\n\n## Notes\nThe fix stays inside the save handler.\n");
@@ -840,7 +840,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     const st4b = S.stopCheck(p4b, { message: "Finished — the feature is complete." });
     ok(fin4.readyToFinish && st4.block === false && !st4.features.length && st4b.block === true && st4b.features[0].suite.length === 1 &&
       /^dev-spec evidence gate: your last message says the work is done or verified, but the project checks have no passing run since the last task activity:\n {2}- export: /.test(st4b.reason) &&
-      !/tasks are ticked without verification evidence/.test(st4b.reason) && ["en", "pt", "es", "pt-BR"].every((l) => typeof S.msg(l).stopGate.headSuite === "string" && S.msg(l).stopGate.headSuite !== S.msg(l).stopGate.head),
+      !String(st4b.reason).includes(S.msg("en").stopGate.head) && ["en", "pt", "es", "pt-BR"].every((l) => typeof S.msg(l).stopGate.headSuite === "string" && S.msg(l).stopGate.headSuite !== S.msg(l).stopGate.head),
       "full review Gb4: a decided spike with every task ticked is never sent back over project checks (it has none); a checks-only reason heads with the checks, not 'tasks are ticked without verification evidence' (got " +
       JSON.stringify([st4.block, st4.why, st4.features, st4b.reason.split("\n")[0]]) + ")");
 
