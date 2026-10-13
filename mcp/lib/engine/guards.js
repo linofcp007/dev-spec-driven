@@ -1103,7 +1103,9 @@ function shellWinReading(x, ctx) {
   if (base !== null && !/^[\u0001\u0002*?[]/.test(t) && !isNetworkPath(t) && ctx.disk && ctx.disk.left > 0) {
     ctx.disk.left--;
     let long = null;
-    try { long = longPath(abs ? path.resolve(guardTargetPath(t)) : path.resolve(base, guardTargetPath(t)), true, SHORT_DISK_UP); } catch { long = null; }
+    // (Windows' separators either way — the same reading wherever it runs: on win32 `/` and `\` are one, elsewhere only `/` would split)
+    const wt = guardTargetPath(t).replace(/\\/g, "/");
+    try { long = longPath(abs ? path.resolve(wt) : path.resolve(base, wt), true, SHORT_DISK_UP); } catch { long = null; }
     if (long) return long;
   }
   const s = shortNamesRead(t);
