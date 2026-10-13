@@ -1223,4 +1223,88 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
         js([b.map((x) => x.phase), next && next.number, ap.ok, ap.error, ap.headingCreated, ab.map((x) => [x.number, x.phase]), ap2.ok, ap2.error, after2]) + ")");
     }
   }
+
+  { // 1.30 review 8 (ds-prose 1): the 1.28 duplicate check, the drift baseline, the scope guard and dev-guardian's "[this feature]"
+    // read a task's _Implements:_ — a filled xs change.md finished "ready" with 0 implementing files, all silent. Every tasks
+    // template carries the slot on its code task (tasks.md no size / s, change.md, the bugfix's fix — EN / PT / ES / pt-BR); a
+    // [bracketed] slot names no file (no phantom plan, no cross-feature overlap between two fresh features), the placeholder
+    // gate refuses it left in, and a real path — `app/[id]/page.tsx` too — is read.
+    const I = require("./lib/i18n.js");
+    const slot = /^ {2}- _Implements: \[[^\]\n]+\]_$/m;
+    const tpl = ["en", "pt", "es", "pt-BR"].flatMap((l) => [
+      ["tasks/" + l, I.tasks({ name: "x", tracks: ["core"], label: "core", slug: "x", summary: "" }, l)],
+      ["tasks-s/" + l, I.tasks({ name: "x", tracks: ["core", "tdd"], label: "core +tdd", slug: "x", summary: "", size: "s" }, l)],
+      ["change/" + l, I.change({ name: "x" }, l)], ["bugTasks/" + l, I.bugTasks("x", l)]]);
+    const p8 = path.join(tmp, "proj-impl-slot");
+    S.initProject(p8, ["core"], "en");
+    const fa = S.createFeature(p8, { name: "Coupon", size: "xs", lang: "en" }), fb = S.createFeature(p8, { name: "Invoices", size: "s", lang: "en" });
+    const ch = path.join(fa.dir, "change.md");
+    const fresh = [S.traceCheck(p8, fa.slug), S.traceCheck(p8, fb.slug)];
+    const filledButSlot = fs.readFileSync(ch, "utf8").replace("[one line: what changes and why]", "A coupon applies once per customer.")
+      .replace("[trigger]", "a customer applies a used coupon").replace("[behavior]", "reject it with the message \"coupon already used\"")
+      .replace("[the change in one or two lines — what it touches and why that is all of it]", "One check in the coupon service.")
+      .replace("[the change]", "Reject a reused coupon").replace("[command that proves it, e.g. npm test -- path/to/file.test.js]", "npm test");
+    fs.writeFileSync(ch, filledButSlot);
+    const ph = (S.specDoctor(p8, fa.slug).checks.find((c) => c.id === "placeholders") || {}).detail || "";
+    fs.mkdirSync(path.join(p8, "src", "coupons"), { recursive: true });
+    fs.mkdirSync(path.join(p8, "app", "[id]"), { recursive: true });
+    fs.writeFileSync(path.join(p8, "src", "coupons", "apply.js"), "module.exports = 1;\n");
+    fs.writeFileSync(path.join(p8, "app", "[id]", "page.tsx"), "export default 1;\n");
+    fs.writeFileSync(ch, filledButSlot.replace("[path of the code it creates or changes]", "src/coupons/apply.js, app/[id]/page.tsx"));
+    const filled = S.traceCheck(p8, fa.slug);
+    all("1.30 review 8: every tasks template carries an _Implements:_ slot on its code task; a [bracketed] slot names no file, the placeholder gate refuses it left in, a real path (app/[id]/page.tsx too) is read", {
+      slots: () => tpl.every(([, t]) => slot.test(t)),
+      noFile: () => fresh.every((t) => t.implementsFiles.length === 0 && t.plannedImplFiles.length === 0 && t.missingImplFiles.length === 0),
+      noOverlap: () => S.featureOverlaps(p8).pairs.length === 0,
+      gated: () => /change\.md[^;]*\[path of the code it creates or changes\]/.test(ph),
+      read: () => JSON.stringify(filled.implementsFiles) === JSON.stringify(["src/coupons/apply.js", "app/[id]/page.tsx"]) && filled.missingImplFiles.length === 0,
+      refs: () => JSON.stringify(S.taskMarkers(S.taskBlocks("- [ ] 1. a\n  - _Implements: [path of the code it creates or changes]_\n  - _Implements: [slug].tsx_\n")[0]).implements) === JSON.stringify(["[slug].tsx"]),
+    });
+    // … and a feature whose tasks name no _Implements:_ file at all (the slot deleted) finishes with a warning that says what
+    // then sees nothing — never a blocker (a feature may write no code); one that names its files gets none. EN / PT / ES.
+    const fc = S.createFeature(p8, { name: "Copy only", size: "xs", lang: "pt" });
+    const chc = path.join(fc.dir, "change.md");
+    fs.writeFileSync(chc, fs.readFileSync(chc, "utf8").replace(/\n {2}- _Implements: \[[^\]\n]+\]_/, ""));
+    const noImpl = (slug, lang, file = "change.md") => (S.finishFeature(p8, slug).warnings || []).some((w) => w === I.msg(lang).finish.noImplements(file));
+    all("1.30 review 8: finish warns (never blocks) when no task names a file in _Implements:_ — a feature that names its files gets no such warning", {
+      warned: () => noImpl(fc.slug, "pt") && /_Implements:_ — a baseline de deriva/.test(I.msg("pt").finish.noImplements("change.md")),
+      quiet: () => !noImpl(fa.slug, "en"),
+      strings: () => ["en", "pt", "es", "pt-BR"].every((l) => /_Implements: <[^>]+>_/.test(I.msg(l).finish.noImplements("tasks.md"))) && /dev-guardian/.test(I.msg("es").finish.noImplements("tasks.md")),
+    });
+    // review 9: the warning names the file the tasks are in — an xs change's change.md (it said "an edited tasks.md is re-approved"
+    // for every feature), a feature's tasks.md
+    const tfb = path.join(fb.dir, "tasks.md");
+    fs.writeFileSync(tfb, fs.readFileSync(tfb, "utf8").replace(/\n {2}- _Implements: \[[^\]\n]+\]_/g, ""));
+    const fcWarn = (S.finishFeature(p8, fc.slug).warnings || []).join("\n"), fbWarn = (S.finishFeature(p8, fb.slug).warnings || []).join("\n");
+    all("1.30 review 9: finish's no-_Implements:_ warning names the file the tasks are in — change.md for an xs change, tasks.md else (EN / PT / ES)", {
+      change: () => fcWarn.includes(I.msg("pt").finish.noImplements("change.md")) && /um change\.md editado/.test(fcWarn) && !/tasks\.md/.test(fcWarn),
+      tasks: () => fbWarn.includes(I.msg("en").finish.noImplements("tasks.md")) && /an edited tasks\.md is re-approved/.test(fbWarn),
+      es: () => /un change\.md editado/.test(I.msg("es").finish.noImplements("change.md")),
+    });
+    // review 9: a backticked slot — `` _Implements: `[path of the code it creates or changes]`_ `` — was a path to scanTaskMarkers
+    // (its bracket test ran before the backticks came off) while implementsRefs dropped it, and its code span hid it from the
+    // placeholder gate: the tasks gate passed with the slot left in. Now it is no file anywhere and the gate names it; a backticked
+    // real path (`app/[id]/page.tsx`, `[slug].tsx`) is still read and passes; a template slot in a code span elsewhere stays code.
+    const fd = S.createFeature(p8, { name: "Backticked slot", size: "xs", lang: "en" });
+    const chd = path.join(fd.dir, "change.md");
+    const filledD = fs.readFileSync(chd, "utf8").replace("[one line: what changes and why]", "A coupon applies once per customer.")
+      .replace("[trigger]", "a customer applies a used coupon").replace("[behavior]", "reject it with the message \"coupon already used\"")
+      .replace("[the change in one or two lines — what it touches and why that is all of it]", "One check in the coupon service.")
+      .replace("[the change]", "Reject a reused coupon").replace("[command that proves it, e.g. npm test -- path/to/file.test.js]", "npm test");
+    fs.writeFileSync(chd, filledD.replace("_Implements: [path of the code it creates or changes]_", "_Implements: `[path of the code it creates or changes]`_"));
+    const phD = (S.specDoctor(p8, fd.slug).checks.find((c) => c.id === "placeholders") || {});
+    const gateD = S.approvePhase(p8, fd.slug, "tasks", "t");
+    fs.writeFileSync(chd, filledD.replace("_Implements: [path of the code it creates or changes]_", "_Implements: `src/coupons/apply.js`, `app/[id]/page.tsx`_"));
+    const phReal = (S.specDoctor(p8, fd.slug).checks.find((c) => c.id === "placeholders") || {}).status;
+    const mkOf = (t) => S.taskMarkers(S.taskBlocks("- [ ] 1. a\n  - _Implements: " + t + "_\n")[0]).implements;
+    all("1.30 review 9: a backticked _Implements:_ slot is no file (scanTaskMarkers reads as implementsRefs) and the placeholder gate refuses it; a backticked real path is read", {
+      noFile: () => mkOf("`[path of the code it creates or changes]`").length === 0 && mkOf("``[path of the code it creates or changes]``").length === 0,
+      paths: () => JSON.stringify(mkOf("`app/[id]/page.tsx`, `[slug].tsx`")) === JSON.stringify(["`app/[id]/page.tsx`", "`[slug].tsx`"]),
+      gated: () => phD.status === "fail" && /change\.md[^;]*\[path of the code it creates or changes\]/.test(phD.detail || ""),
+      refused: () => gateD.ok === false && JSON.stringify(gateD.failing) === JSON.stringify(["placeholders"]),
+      realPasses: () => phReal !== "fail",
+      opaque: () => S.placeholderReport("The slot `[path of the code it creates or changes]` names the file.").length === 0,
+      ptSlot: () => S.placeholderReport("  - _Implements: `" + I.change({ name: "x" }, "pt").match(/_Implements: (\[[^\]\n]+\])_/)[1] + "`_").length === 1,
+    });
+  }
 };

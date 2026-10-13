@@ -457,6 +457,29 @@ function isCodeFile(rel) {
   const ext = extOf(rel);
   return CODE_EXT.has(ext) || (TEST_EXTRA_EXT.has(ext) && isTestFile(rel));
 }
+// Do these folders hold code (isCodeFile, read on each file's path from projectDir)? Guard mode asks it of a folder a command removes or
+// moves as a whole (`rm -rf src`, `Remove-Item -Recurse src`, `find src -delete`, `mv src old` — review 8 C14: they passed while
+// `sed -i src/util.js` asked). A bounded walk, breadth first: links are never followed, the scan's ignored folders (SCAN_IGNORE —
+// node_modules, dist, build, .git, .specs…) never entered, and a folder SCAN_IGNORE names is no code itself (`rm -rf node_modules` is
+// no code edit). → true at the first code file, and past FOLDER_CODE_ENTRIES entries (fail closed: it may hold some); false otherwise.
+const FOLDER_CODE_ENTRIES = 2000;
+const scanIgnored = (name) => SCAN_IGNORE.has(FOLD_CASE ? name.toLowerCase() : name);
+function folderHoldsCode(projectDir, dirs) {
+  const queue = dirs.filter((d) => !scanIgnored(path.basename(d)));
+  let seen = 0;
+  for (let q = 0; q < queue.length; q++) {
+    let entries;
+    try { entries = fs.readdirSync(queue[q], { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      if (++seen > FOLDER_CODE_ENTRIES) return true;
+      if (e.isSymbolicLink()) continue;
+      const p = path.join(queue[q], e.name);
+      if (e.isDirectory()) { if (!scanIgnored(e.name)) queue.push(p); }
+      else if (e.isFile() && isCodeFile(path.relative(projectDir, p).split(path.sep).join("/"))) return true;
+    }
+  }
+  return false;
+}
 
 // --- routes (method + path + file:line), one matcher set per framework family --------------------------------
 const JS_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".mts", ".cts"]);
@@ -1207,5 +1230,5 @@ function coverage(projectDir, opts = {}) {
 
 module.exports = { SCAN_IGNORE, CODE_EXT, TEST_EXTRA_EXT, GUARD_CODE_EXT, SCAN_TEXT_EXT, SCAN_READ_BYTES, COVERAGE_CAP,
   WALK_STOP, walkProject, gitignoreNegationTokens, gitignoreNegationReincludes, gitignoreDirPatterns, gitignoreRules,
-  GITIGNORE_NESTED_MAX, isTestFile, testNamed, isTestFixture, isCodeFile, NESTED_MANIFEST_CAP, MANIFEST_FIXTURE_DIRS,
+  GITIGNORE_NESTED_MAX, isTestFile, testNamed, isTestFixture, isCodeFile, folderHoldsCode, NESTED_MANIFEST_CAP, MANIFEST_FIXTURE_DIRS,
   scanCodebase, coverage, __link };

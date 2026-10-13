@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname, require }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -101,7 +101,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     all("B5 spec_complete_task on an _Expect: fail_ task: a passing run is refused and recorded (unexpectedPass), then a FAILING run is the proof — ticked, verified, redRecorded, stored with expected: 'fail' (got " +
       JSON.stringify([pass0.error, red1]).slice(0, 300) + ")", [
       () => pass0.ok === false, () => pass0.recorded === true, () => pass0.unexpectedPass === true, () => pass0.expected === "fail",
-      () => /the test doesn't fail yet, so it tests nothing/.test(pass0.error), () => st0.exitCode === 0, () => st0.expected === "fail",
+      () => String(pass0.error).includes(S.msg("en").redGreen.passRefused(1)), () => st0.exitCode === 0, () => st0.expected === "fail",
       () => red1.ok === true, () => red1.completed === 1, () => red1.verified === true, () => red1.redRecorded === true,
       () => red1.expected === "fail", () => !red1.unverifiedReason, () => st1.exitCode === 1, () => st1.expected === "fail",
       () => st1.history.length === 2, () => /- \[x\] 1\./.test(b5Read(f1, "tasks.md")),
@@ -137,7 +137,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
       () => cant.ok === false, () => cant.recorded, () => !cant.unexpectedPass,
       () => /exit 127 means the command itself could not run/.test(cant.error), () => /Not marking it done/.test(cant.error), () => note2.ok,
       () => note2.verified === false, () => note2.unverifiedReason === "manual-note-on-runnable-verify", () => tick3.ok === false,
-      () => tick3.unexpectedPass, () => /is ticked, but it expects its test to FAIL/.test(tick3.error),
+      () => tick3.unexpectedPass, () => String(tick3.error).includes(S.msg("en").redGreen.passTicked(3)),
       () => vs2.unverifiedDetail.some((x) => x.number === 3 && x.reason === "unexpected-pass"),
       () => /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(docV2.detail), () => none4.ok, () => none4.verified,
       () => none4.nothingToVerify, () => none4.expected === "fail",
@@ -206,7 +206,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     ok(br1.expect === "fail" && /## Verification \(_Verify:_\)\n- `node tests\/t01\.test\.js`\n\n\*\*Expected result: FAIL\*\* \(_Expect: fail_\) — the run must exit non-zero/.test(br1.brief) &&
       /\n\d+\. The _Verify:_ run must FAIL \(non-zero exit\) for the right reason/.test(br1.brief) && !br2.expect && !/Expected result: FAIL/.test(br2.brief) &&
       brW.expect === "fail" && brW.brief === undefined && /## Verification \(_Verify:_\)\n\n\*\*Expected result: FAIL\*\*/.test(br4.brief) &&
-      /\*\*Resultado esperado: FALHA\*\* \(_Expect: fail_\)/.test(brPt.brief) && /A execução do _Verify:_ tem de FALHAR/.test(brPt.brief),
+      String(brPt.brief).includes(S.msg("pt").redGreen.briefExpect) && /A execução do _Verify:_ tem de FALHAR/.test(brPt.brief),
       "B5 brief: an _Expect: fail_ task's Verification section and definition of done say the run must FAIL (expect: 'fail', kept with write:true; the heading appears without a _Verify:_; PT)");
 
     // --- B5.1 next_action's verify step: an _Expect: fail_ task whose run passed is told its proof is a FAILING run (never "a
@@ -220,6 +220,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
       const fillAll = (rel, re, by) => { const p = path.join(b.dir, rel); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(re, by)); };
       fillAll("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
       fillAll("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+      fillAll("tasks.md", /\n  - _Implements: \[[^\]\n]*\]_/g, ""); // 1.30: the fix's _Implements:_ slot — no code file here
       fillAll("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
       ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph));
       const pass1 = S.completeTask(d, b.slug, 1, { command: "node tests/t01.test.js", exitCode: 0 });
@@ -307,7 +308,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     const plain1 = S.finishFeature(d1, f1.slug);
     ok(badEv7.ok === false && /evidence\[1\]: 'e2e' is not a project check — one of: test, lint/.test(badEv7.error) && b5State(f7).finishChecks.lint.exitCode === 1 &&
       noExit7.ok === false && /evidence\[0\]: its exit code/.test(noExit7.error) && noCmd7.ok === false && /the command that ran is required/.test(noCmd7.error) &&
-      notList7.ok === false && /evidence must be a list/.test(notList7.error) && noChecks7.ok === false && /no project checks configured \(roadmap\.json meta\.checks\)/.test(noChecks7.error) &&
+      notList7.ok === false && /evidence must be a list/.test(notList7.error) && noChecks7.ok === false && String(noChecks7.error).includes(S.msg("en").projectChecks.noChecks) &&
       !plain1.suiteChecks && !plain1.blockers.some((b) => /project checks/.test(b)),
       "B5 spec_finish {evidence} is all-or-nothing (an unknown check name, a missing exit code or command: nothing recorded); needs meta.checks; without meta.checks nothing changes");
     const fix7 = await b5Call("spec_finish", { projectDir: d7, name: "suite", evidence: [{ name: "lint", command: "npm run lint", exitCode: 0, summary: "clean" }] });
@@ -678,7 +679,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
     const obsCall = async (tool, args) => { const r = await rpc("tools/call", { name: tool, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
     // The runner may itself run inside Claude Code: the hook gets the project it is told about, nothing else.
-    const obsHook = (pdir, input) => spawnSync(process.execPath, [obsJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+    // the hook in this process (harness hookIn, review 8); obsHookSpawn: a real one, for the stdin bound (an oversized payload)
+    const obsHookSpawn = (pdir, input) => spawnSync(process.execPath, [obsJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: pdir, SPEC_PROJECT_DIR: "" } });
+    const obsHook = (pdir, input) => hookIn(obsJs, { input: typeof input === "string" ? input : JSON.stringify(input),
       env: { ...process.env, CLAUDE_PROJECT_DIR: pdir, SPEC_PROJECT_DIR: "" } });
     const bash = (cwd, command, extra) => ({ session_id: "s-obs", transcript_path: path.join(cwd, "t.jsonl"), cwd, permission_mode: "default", hook_event_name: "PostToolUse",
       tool_name: "Bash", tool_input: { command, description: "Run it", timeout: 120000, run_in_background: false }, tool_use_id: "toolu_01", ...extra });
@@ -740,8 +744,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     // Malformed / empty / huge stdin: exit 0, silent, nothing written. A .specs/ that is not dev-spec's: nothing written.
     const n0 = logOf(fO.dir).length;
     const bad = ["", "not json", "null", "[]", "42", JSON.stringify({ tool_name: "Bash" }), JSON.stringify({ tool_name: "Bash", tool_input: { command: 42 } }),
-      JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0 } })).slice(0, 60), "x".repeat(5 * 1024 * 1024)].map((s) => obsHook(pO, s));
-    const huge = obsHook(pO, JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0, stdout: "y".repeat(5 * 1024 * 1024) } })));
+      JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0 } })).slice(0, 60), "x".repeat(5 * 1024 * 1024)].map((s) => obsHookSpawn(pO, s));
+    const huge = obsHookSpawn(pO, JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0, stdout: "y".repeat(5 * 1024 * 1024) } })));
     const other = path.join(tmp, "ffobs-other");
     fs.mkdirSync(path.join(other, ".specs", "notes"), { recursive: true });
     fs.writeFileSync(path.join(other, ".specs", "notes", "tasks.md"), "- [ ] 1. x\n  - _Verify: node t1.js_\n");
@@ -825,13 +829,14 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     naFill("bug.md", /\[[^\]\n]+\]/g, "the dashboard opens");
     naFill("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
     naFill("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+    naFill("tasks.md", /\n  - _Implements: \[[^\]\n]*\]_/g, ""); // 1.30: the fix's _Implements:_ slot — no code file here
     naFill("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
     ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(pNa, bNa.slug, ph));
     const red1 = S.completeTask(pNa, bNa.slug, 1, { command: "node tests/t01.test.js", exitCode: 1, summary: "not ok 1 - T-01" }); // the red task (_Expect: fail_)
     naFill("tasks.md", /- \[ \] 2\./, "- [x] 2.");
     const naObs = S.nextAction(pNa, bNa.slug);
     ok(red1.ok && red1.unverifiedReason === "unobserved" && naObs.step === "verify" && /#1 \(run not observed by the harness\)/.test(naObs.recommendation) &&
-      /only runs the harness saw \(roadmap\.json meta\.evidence: observed\)/.test(naObs.recommendation),
+      String(naObs.recommendation).includes(S.msg("en").observed.naHint),
       "feature F1: next_action's verify step lists the unobserved task and says how to get an observed run (got " + JSON.stringify([red1.unverifiedReason, naObs.step, naObs.recommendation]).slice(0, 400) + ")");
 
     // A new report of task 2: unobserved (reason + note; nothing ever observed in a project → the MCP-only line); after the hook saw it → verified.
@@ -848,7 +853,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
       JSON.stringify([c2b.p.unverifiedReason, cN.p.unverifiedReason, c2c.p.verified, cCli.observed]) + ")", [
       () => c2b.p.ok, () => c2b.p.verified === false, () => c2b.p.unverifiedReason === "unobserved", () => c2b.p.observed === false,
       () => /node "[^"]*dev-spec\.js" done auth 2 --run/.test(c2b.p.note), () => !/No run was ever observed/.test(c2b.p.note),
-      () => cN.p.unverifiedReason === "unobserved", () => /No run was ever observed in this project/.test(cN.p.note),
+      () => cN.p.unverifiedReason === "unobserved", () => String(cN.p.note).includes(S.msg("en").observed.neverObserved),
       () => /MCP-only client has no hook/.test(cN.p.note), () => c2c.p.verified === true, () => c2c.p.observed === true,
       () => !c2c.p.unverifiedReason, () => cCli.verified === true, () => cCli.observed === "cli", () => obsState(fN).evidence["1"].observed === "cli",
     ]);
@@ -907,7 +912,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
   // 1.14 feature review (F1 / F3 / F5) — one regression per finding of the independent review of the merged features.
   {
     const hookJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
-    const runHook = (projectEnv, input) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify(input), encoding: "utf8",
+    const runHook = (projectEnv, input) => hookIn(hookJs, { input: JSON.stringify(input),
       env: { ...process.env, CLAUDE_PROJECT_DIR: projectEnv, SPEC_PROJECT_DIR: "" } });
     const post = (cwd, tool, command, resp, event) => ({ session_id: "s-rv", cwd, hook_event_name: event || "PostToolUse", tool_name: tool,
       tool_input: { command }, tool_response: resp });
@@ -1785,7 +1790,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
       "- [ ] 2. [US1] b\n  - _Verify: npm run build_\n  - _Verify: npm test_\n- [ ] 3. [US1] c\n  - _Verify: npm run typecheck_\n  - _Verify: npm run format_\n" +
       "- [ ] 4. [US1] d\n  - _Verify: npm run lint_\n- [ ] 5. [US1] e\n  - _Verify: cd packages/web && npm test_\n- [ ] 6. [US1] f\n  - _Verify: npm run e2e_\n");
     S.initProject(p3, ["core"], "en", { evidence: "observed" });
-    const hook = (command, code) => spawnSync(process.execPath, [obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
+    const hook = (command, code) => hookIn(obsJs, { env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
       input: js({ session_id: "s", cwd: p3, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: code } }) });
     for (const [c, x] of [["node --test tests" + BS + "x.test.js", 0], ["npm test && npm run build", 0], ["npm run typecheck", 0], ["npm run format", 0], ["CI=1 npm run lint", 0],
       ["cd ./packages/web && npm test", 0], ["cd ../elsewhere && npm run e2e", 0], ["CI=1 npm run e2e", 1]]) hook(c, x);
@@ -1803,19 +1808,21 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
       !logged.includes("cd ../elsewhere && npm run e2e") && logged.includes("node --test tests" + BS + "x.test.js") && js(projLog) === js(["CI=1 npm run lint"]),
       "1.22 review 3 (3): under meta.evidence observed, runs in the forms the matcher accepts are logged and found — `node --test tests\\x.test.js`, `npm test && npm run build` (reversed), two separate Bash runs reported joined, `CI=1 npm run lint` (task and project check), `cd ./packages/web && npm test`; a run in another folder is logged nowhere and the harness's failed run stays failed (got " +
       js([[c1, c2, c3, c4, c4b, c5, c6].map(pick), logged, projLog]) + ")");
-    // the hook's pre-filter is the engine's: the same functions, and a superset of the matcher on the probe commands
+    // the hook's pre-filter is the engine's: the same functions (review 8, ds-maint finding 4: ONE copy, mcp/lib/probe.js — it was a
+    // renamed copy the source guard couldn't see), and a superset of the matcher on the probe commands
     const E3 = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const PR3 = require(path.join(__dirname, "lib", "probe.js"));
     const hookSrc = fs.readFileSync(obsJs, "utf8"), engSrc = fs.readFileSync(path.join(__dirname, "lib", "engine", "evidence.js"), "utf8");
-    const grab = (src, from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a); return a < 0 || b < 0 ? null : src.slice(a, b); };
-    const hookFns = (grab(hookSrc, "const norm = ", "\n}\n") || "").replace(/\bnorm\b/g, "observedNorm").replace(/\bRE_ENV\b/g, "RE_OBSERVED_ENV").replace(/\bbodies\b/g, "observedBodies");
-    const engFns = grab(engSrc, "const observedNorm = ", "\n}\n") || "";
-    const strip = (s) => s.replace(/\s+/g, " ").trim();
     const probes = [["node --test tests" + BS + "x.test.js", "node --test tests/x.test.js"], ['X="a b" npm test', "npm test"], ["CI=1 npm run lint 2>&1", "npm run lint"],
       ["cd /x && set -o pipefail; npm test | tee log", "set -o pipefail; npm test | tee log"], ["`npm test`", "npm test"], ['node --test "tests/x.test.js"', "node --test tests/x.test.js"],
       ["npm test && npm run build", "npm run build"]];
     const notSuperset = probes.filter(([run, v]) => { const t = E3.observedNorm(v + " " + "npm test"); return !E3.observedBodies(run).every((b) => t.includes(b)); });
-    ok(hookFns && strip(hookFns) === strip(engFns) && !notSuperset.length,
-      "1.22 review 3 (3): hooks/observe-hook.js's pre-filter (norm / RE_ENV / bodies) is the engine's observedNorm / RE_OBSERVED_ENV / observedBodies, and reads every probe run as mentioned by its _Verify:_ (got " + js([!!hookFns, strip(hookFns) === strip(engFns), notSuperset]) + ")");
+    all("1.22 review 3 (3) / review 8: hooks/observe-hook.js's pre-filter is the engine's observedNorm / observedBodies — the probe's one copy, none in the hook or evidence.js — and reads every probe run as mentioned by its _Verify:_", {
+      oneCopy: () => E3.observedNorm === PR3.observedNorm && E3.observedBodies === PR3.observedBodies,
+      hookReadsProbe: () => /probe\(\)\.observedBodies\(/.test(hookSrc) && /probe\(\)\.observedNorm\(/.test(hookSrc) && !/const norm = |function bodies\(|RE_ENV =/.test(hookSrc),
+      engineNoCopy: () => !/const observedNorm = |function observedBodies\(|RE_OBSERVED_ENV =/.test(engSrc),
+      superset: () => !notSuperset.length,
+    });
   }
 
   // 1.22 review (finding 6) — ONE `cd <root> &&` stripping (spec.stripCdPrefix) for the observe hook's log and the reported run's
@@ -1833,7 +1840,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     const pMain = path.join(tmp, "proj-122-cd-main"), pWt = path.join(tmp, "proj-122-cd-wt", "wt");
     const fMain = mk(pMain), fWt = mk(pWt);
     const logOf = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
-    const hook = (cwd, command, envDir) => spawnSync(process.execPath, [obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: envDir, SPEC_PROJECT_DIR: "" },
+    const hook = (cwd, command, envDir) => hookIn(obsJs, { env: { ...process.env, CLAUDE_PROJECT_DIR: envDir, SPEC_PROJECT_DIR: "" },
       input: JSON.stringify({ session_id: "s", cwd, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: 0 } }) });
     const h1 = hook(pWt, "cd " + pWt + " && node t1.js", pMain);
     const h2 = hook(pMain, "cd " + path.join(tmp, "elsewhere") + " && node t1.js", pMain);

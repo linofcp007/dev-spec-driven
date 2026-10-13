@@ -225,13 +225,47 @@ exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) 
     const refused = spawnIn(["done", "login", "2", "--run", "--project", p]);
     let threw = null;
     try { spawnIn(["done", "login", "1", "--run", "--project", p]); } catch (e) { threw = e.message; }
-    await new Promise((r) => setTimeout(r, 1500));
+    await MAIN.whenIdle(); // 1.30: the next in-process call would wait for it anyway (calls run one at a time)
     all("1.27 main: a synchronous command is done when main returns (io.done called), done --run settles through its promise (exit 0, the run's output, task 1 verified), stdin as a string is read at once; spawnIn answers a refusal made before any run and refuses a call that waits (got " +
       js([sync.syncCode, later.syncCode, laterCode, later.out.join(""), piped.syncCode, piped.out.join(""), refused.status, threw]) + ")", {
       sync: sync.syncCode === 0 && /login/.test(sync.out.join("")), async: later.syncCode === undefined && laterCode === 0 && /\$ node -e/.test(later.out.join("")) && /42/.test(later.out.join("")),
       ticked: /- \[x\] 1\./.test(fs.readFileSync(path.join(p, ".specs", "login", "tasks.md"), "utf8")),
       piped: piped.syncCode === 0 && /1 criteria, 1 with modal, verdict=pass/.test(piped.out.join("")),
       refusedSync: refused.status === 1 && /_Verify/.test(refused.stderr), waits: typeof threw === "string" && /waits/.test(threw),
+    });
+  }
+
+  // 1.30 review 8 (ds-engine 11): in-process calls never share a context — a call started while another waits (here a stdin stream)
+  // waits for it, so neither runs in the other's environment or working folder; A ending first left A's env and cwd behind (B
+  // restored what it saw at its start: A's)
+  {
+    const { PassThrough } = require("stream");
+    const p = path.join(tmp, "main-mod-overlap");
+    runIn(["init", "--project", p]);
+    const dA = path.join(tmp, "main-mod-overlap-a"), dB = path.join(tmp, "main-mod-overlap-b");
+    fs.mkdirSync(dA, { recursive: true });
+    fs.mkdirSync(dB, { recursive: true });
+    const envNow = () => js(Object.entries(process.env).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
+    const envBefore = envNow(), cwdBefore = process.cwd();
+    const sink = (to) => ({ write: (s) => { to.push(String(s)); return true; } });
+    const TEXT = "- **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL open a session\n";
+    const order = [], outA = [], outB = [];
+    const sA = new PassThrough(), sB = new PassThrough();
+    const pA = MAIN.main(["ears", "-", "--project", p], { stdout: sink(outA), stderr: sink([]), stdin: sA, env: { ...process.env, MAIN_OVERLAP: "A" }, cwd: dA, done: () => order.push("A") });
+    const pB = MAIN.main(["ears", "-", "--project", p], { stdout: sink(outB), stderr: sink([]), stdin: sB, env: { ...process.env, MAIN_OVERLAP: "B" }, cwd: dB, done: () => order.push("B") });
+    const whileWaiting = [process.env.MAIN_OVERLAP, process.cwd() === path.resolve(dA)]; // B queued: A's context only
+    sA.end(TEXT); // A ends first, then B
+    const codeA = await pA;
+    sB.end(TEXT);
+    const codes = [codeA, await pB];
+    await MAIN.whenIdle();
+    all("1.30 review 8: overlapping in-process calls run one at a time — B, started while A waits on stdin, waits for A (A's context alone meanwhile), both end with their output; A ending first, process.env and the working folder are left as they were (got " +
+      js([whileWaiting, order, codes, outA.join(""), outB.join(""), process.env.MAIN_OVERLAP, process.cwd() === cwdBefore]) + ")", {
+      queued: () => whileWaiting[0] === "A" && whileWaiting[1] === true,
+      order: () => js(order) === js(["A", "B"]) && js(codes) === js([0, 0]),
+      outputs: () => /verdict=pass/.test(outA.join("")) && /verdict=pass/.test(outB.join("")),
+      envRestored: () => !("MAIN_OVERLAP" in process.env) && envNow() === envBefore,
+      cwdRestored: () => process.cwd() === cwdBefore,
     });
   }
 
@@ -245,5 +279,51 @@ exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) 
       ["done", "pagamentos", "--json", "--project", p], ["doctor", "pagamentos", "--project", p], ["next", "pagamentos", "--max", "50", "--project", p], ["mcp-config", "cursor"]];
     const diff = cases.map((a) => [a, run(a), runIn(a)]).filter(([, x, y]) => x.out !== y.out || x.code !== y.code).map(([a, x, y]) => [a.join(" "), x.code, y.code, x.out.slice(0, 120), y.out.slice(0, 120)]);
     ok(!diff.length, "1.27 runIn = run: " + cases.length + " calls (help, a command's help, list, a PT status, a --json refusal and usage error, doctor's exit 1, a bound, mcp-config) give the same out and code in-process and spawned (diff: " + js(diff) + ")");
+  }
+
+  // Review 8 (ds-maint finding 13): `help <command>`, `<command> --help` and an unknown command loaded the whole engine (+170–185 ms)
+  // to print text — and cli/run.js / cli/git.js were required on every call, the status line's included. They load only the probe and
+  // the i18n tables now; the project's language they print in (PT here, from roadmap.json — found from a subfolder, or through
+  // SPEC_PROJECT_DIR) is the engine's projectLang: the same output as a call with the engine loaded (in-process here).
+  {
+    const pt = path.join(tmp, "r8-light-pt");
+    S.initProject(pt, ["core"], "pt");
+    fs.mkdirSync(path.join(pt, "src", "deep"), { recursive: true });
+    const pre = path.join(tmp, "r8-light-preload.js");
+    fs.writeFileSync(pre, "process.on('exit', () => { const sep = String.fromCharCode(92); const m = Object.keys(require.cache).map((f) => f.split(sep).join('/')).filter((f) => /[/]mcp[/]lib[/](?:spec[.]js|engine[/])|[/]cli[/](?:run|git)[.]js$/.test(f)); process.stderr.write('HEAVY ' + m.length); });");
+    const env = { ...process.env };
+    for (const k of ["SPEC_PROJECT_DIR", "CLAUDE_PROJECT_DIR"]) delete env[k];
+    const light = (args, o = {}) => spawnSync(process.execPath, ["-r", pre, CLI, ...args], { encoding: "utf8", cwd: o.cwd || pt, env: { ...env, ...(o.env || {}) } });
+    const calls = [[["help", "approve"]], [["approve", "--help"]], [["status", "-h"]], [["frobnicate"]], [["help", "approve"], { cwd: path.join(pt, "src", "deep") }],
+      [["approve", "--help"], { cwd: tmp, env: { SPEC_PROJECT_DIR: pt } }]];
+    const got = calls.map(([a, o]) => light(a, o));
+    void T.spec.LANGS; // the engine loaded in this process: c.projectText reads the engine's projectLang
+    const engineOut = calls.map(([a, o]) => runIn(a, { cwd: (o && o.cwd) || pt, env: { SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "", ...((o && o.env) || {}) } }));
+    all("review 8 (ds-maint 13): a command's help and an unknown command load neither the engine nor cli/run.js / cli/git.js, print in the project's language (PT — found from a subfolder, through SPEC_PROJECT_DIR) and as a call with the engine loaded does (got " +
+      js(got.map((r) => [r.status, r.stderr.slice(-8), (r.stdout + r.stderr).trim().split("\n").pop().slice(0, 70)])) + ")", {
+      noEngine: () => got.every((r) => /HEAVY 0$/.test(r.stderr)),
+      portuguese: () => [0, 1, 2, 4, 5].every((i) => /Todos os comandos e os detalhes/.test(got[i].stdout)) && /comando desconhecido 'frobnicate'/.test(got[3].stderr),
+      codes: () => got.map((r) => r.status).join() === "0,0,0,1,0,0",
+      sameAsEngine: () => T.engineLoaded() && got.every((r, i) => r.stdout + r.stderr.replace(/HEAVY \d+$/, "") === engineOut[i].out),
+    });
+
+    // 1.30 (ds-maint 13, the rest): a mistyped --flag (or -j) and a switch given a word that is no boolean loaded the engine too — the
+    // switch list (CLI_SWITCHES) lived in engine/guards.js, the did-you-mean in engine/core.js. Both are mcp/lib/probe.js's now, ONE
+    // copy: the engine's facade and the approval guard's lexer read the same Set, the engine's closestName IS the probe's.
+    const P = require(path.join(path.dirname(CLI), "..", "mcp", "lib", "probe.js"));
+    const flagCalls = [["status", "--rnu"], ["approve", "x", "y", "--rmove"], ["status", "-j"], ["status", "--json=maybe"]];
+    const fGot = flagCalls.map((a) => light(a));
+    const fEngine = flagCalls.map((a) => runIn(a, { cwd: pt, env: { SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } }));
+    const guardsSrc = fs.readFileSync(path.join(path.dirname(CLI), "..", "mcp", "lib", "engine", "guards.js"), "utf8");
+    const coreSrc = fs.readFileSync(path.join(path.dirname(CLI), "..", "mcp", "lib", "engine", "core.js"), "utf8");
+    all("1.30 (ds-maint 13): an unknown --flag / -x and a switch given a non-boolean are refused without the engine — the switches and the did-you-mean are the probe's, one copy (the facade's CLI_SWITCHES and closestName ARE them); the same text and code as with the engine loaded, in the project's language (got " +
+      js(fGot.map((r) => [r.status, r.stderr.slice(-8), r.stderr.split("\n")[0].slice(0, 90)])) + ")", {
+      noEngine: () => fGot.every((r) => /HEAVY 0$/.test(r.stderr) && r.status === 1),
+      suggestions: () => /--rnu[\s\S]*--run/.test(fGot[0].stderr) && /--rmove[\s\S]*--remove/.test(fGot[1].stderr) && /-j[\s\S]*--json/.test(fGot[2].stderr) && /--json/.test(fGot[3].stderr),
+      sameAsEngine: () => fGot.every((r, i) => r.stdout + r.stderr.replace(/HEAVY \d+$/, "") === fEngine[i].out),
+      oneCopy: () => S.CLI_SWITCHES === P.CLI_SWITCHES && /const \{ closestName \} = require\("\.\.\/probe\.js"\)/.test(coreSrc) && !/function (?:osaDistance|closestName)\b/.test(coreSrc) &&
+        !/new Set\(\["json", "run"/.test(guardsSrc) && /CLI_SWITCHES \} = require\("\.\.\/probe\.js"\)/.test(guardsSrc),
+      boolFlags: () => js(T.BOOL_FLAGS()) === js([...P.CLI_SWITCHES]),
+    });
   }
 };

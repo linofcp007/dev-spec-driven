@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, hookIn }) => {
 
   { // 1.14 B1 — project templates (.specs/templates/): scaffolds, variables, track blocks, the placeholder corpus, spec_templates
     const b1Root = path.join(tmp, "b1-templates");
@@ -230,7 +230,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname }) => {
       "/etc/passwd", "C:\\x\\requirements.md", "templates/requirements.md", "Requirements.md/.."];
     const badRes = bad.map((a) => S.templates(pt0, "init", { artifact: a }));
     ok(badRes.every((r) => !r.ok && /^Unknown template '/.test(r.error)) && !fs.existsSync(path.join(pt0, ".specs")) && !fs.existsSync(path.join(b1Root, "evil")) &&
-      !S.templates(pt0, "delete").ok && /Unknown templates action 'delete'/.test(S.templates(pt0, "delete").error) && !S.templates(pt0, "list", { lang: "fr" }).ok &&
+      !S.templates(pt0, "delete").ok && /action must be one of: list, init, check \(got "delete"\)/.test(S.templates(pt0, "delete").error) && S.templates(pt0, "delete").code === "invalid-arguments" && !S.templates(pt0, "list", { lang: "fr" }).ok &&
       S.templateKey("steering/api-rules") === "steering/api-rules.md" && S.templateKey("steering\\tech.md") === "steering/tech.md" && S.templateKey(" Bug-Tasks.md ") === "bug-tasks",
       "B1: spec_templates refuses any template name outside the allowlist (traversal, absolute paths, device / prototype names, nested steering) and an unknown action / lang — nothing is written");
     const outDir = b1("outside-tpl");
@@ -280,7 +280,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname }) => {
       !mcpTrav.ok && /Unknown template/.test(mcpTrav.error) && list.result.tools.some((t) => t.name === "spec_templates" && !/\n/.test(t.description)),
       "B1: spec_templates (MCP) returns what the engine returns (list / check, a case-folded action), refuses an unknown action by its enum and a traversal by the allowlist");
     S.createFeature(pk, "pt", ["core"], "", undefined, "en");
-    const hkTpl = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], {
+    const hkTpl = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), {
       input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: tw(pk, "pt/design.md", "# D\n") } }), encoding: "utf8" });
     ok(hkTpl.status === 0 && hkTpl.stdout.trim() === "", "B1: the PostToolUse hook stays silent for .specs/templates/ files (pt/design.md is not feature 'pt''s design)");
   }

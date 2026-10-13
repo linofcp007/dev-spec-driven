@@ -4,11 +4,12 @@
 
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 // Runs after 01-core, in the same process: it reads ctx.vDir — the v1.12 project whose login-loop feature 01-core took to its finish (the prose guard reads its merge summary).
 exports.deps = ["01-core"];
 exports.run = async ({
-  ok, S, root, tmp, libSources, maintainerNotes, approveBefore, init, list, require, __dirname, vDir,
+  ok, all, S, root, tmp, libSources, maintainerNotes, approveBefore, init, list, require, __dirname, vDir,
 }) => {
 
   { // --- 1.13 batch 6: the docs' worked examples pass the engine's own gates; no stale test counts ---
@@ -48,13 +49,51 @@ exports.run = async ({
     const docText = (f) => fs.readFileSync(path.join(root, f), "utf8");
     const RE_COUNT15 = /\b\d{2,} (?:passed|passing|assertions|asserções|aserciones)\b|badge\/tests-\d/i;
     const stale15 = ["README.md", "INSTALL.md", "llms-install.md", "CONTRIBUTING.md"].filter((f) => RE_COUNT15.test(docText(f)));
-    const claude15 = docText("CLAUDE.md");
-    const log15 = docText("CHANGELOG.md").split(/\n## \[/)[1] || "";
-    const counts15 = [(claude15.match(/\((\d+) assertions, incl\./) || [])[1], (claude15.match(/`node cli\/test-cli\.js` adds (\d+)/) || [])[1],
-      (log15.match(/`node mcp\/test\.js` (\d+) assertions/) || [])[1], (log15.match(/`node cli\/test-cli\.js` (\d+)/) || [])[1]];
-    ok(stale15.length === 0 && counts15.every(Boolean) && counts15[0] === counts15[2] && counts15[1] === counts15[3],
+    // 1.30 (review 8, ds-maint 7): the sentences are read by scripts/release-counts.js's own patterns (npm run release:counts writes
+    // them from a RUN's totals — the release step; this only holds the two records to each other between releases).
+    const RC = require(path.join(root, "scripts", "release-counts.js"));
+    const counts15 = RC.readCounts(root).map((c) => c.value); // CLAUDE.md mcp, cli · CHANGELOG mcp, cli
+    // Under release:counts' own run the two records are about to be rewritten from it: only their presence is held then.
+    const releasing15 = process.env.DEV_SPEC_TEST_RELEASE_COUNTS === "1";
+    ok(stale15.length === 0 && counts15.every((n) => n !== null) && (releasing15 || (counts15[0] === counts15[2] && counts15[1] === counts15[3])),
       "README / INSTALL / llms-install / CONTRIBUTING hard-code no test count; CLAUDE.md and the current CHANGELOG entry state the same mcp / cli totals (stale: " +
       stale15.join(", ") + "; CLAUDE.md " + counts15.slice(0, 2).join("/") + " vs CHANGELOG " + counts15.slice(2).join("/") + ")");
+
+    // …and scripts/release-counts.js on a copy: it writes a run's totals into both records (the CHANGELOG's CURRENT entry only — an
+    // older one keeps its own), --check exits 1 on a difference and writes nothing, a suite with a failure records nothing, an entry
+    // without its tests line gets the line to paste (with the previous entry's totals as "was"). Its suites here are fakes printing a total.
+    const rcRoot = path.join(tmp, "release-counts");
+    const rcW = (rel, text) => { const p = path.join(rcRoot, ...rel.split("/")); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, text); };
+    const rcClaude = "## Tests\n`node mcp/test.js` drives it\n(100 assertions, incl. a PT scaffold);\n`node cli/test-cli.js` adds 20 for the CLI.\n";
+    const rcLog = (cur) => "# Changelog\n\n## [2.0.0] — 2026-10-13\n\n### Tests\n" + cur + "\n\n## [1.9.0] — 2026-10-01\n\n### Tests\n- `node mcp/test.js` 100 assertions, `node cli/test-cli.js` 20.\n";
+    const fakeSuite = (line) => `"use strict";\nprocess.stdout.write(${JSON.stringify("# a fake suite\n\n" + line + "\n")});\nprocess.exitCode = /, 0 failed$/.test(${JSON.stringify(line)}) ? 0 : 1;\n`;
+    rcW("CLAUDE.md", rcClaude);
+    rcW("CHANGELOG.md", rcLog("- `node mcp/test.js` 100 assertions, `node cli/test-cli.js` 20."));
+    rcW("mcp/test.js", fakeSuite("130 passed, 0 failed"));
+    rcW("cli/test-cli.js", fakeSuite("25 passed, 0 failed"));
+    const rcScript = path.join(root, "scripts", "release-counts.js");
+    const rc = (...a) => { const r = spawnSync(process.execPath, [rcScript, "--root", rcRoot, ...a], { encoding: "utf8" }); return { code: r.status, out: (r.stdout || "") + (r.stderr || "") }; };
+    const rcRead = (f) => fs.readFileSync(path.join(rcRoot, f), "utf8");
+    const checked = rc("--check");
+    const unchanged = rcRead("CLAUDE.md") === rcClaude;
+    const wrote = rc();
+    const after = RC.readCounts(rcRoot).map((c) => c.value);
+    const claudeAfter = rcRead("CLAUDE.md");
+    const olderKept = /## \[1\.9\.0\][\s\S]*`node mcp\/test\.js` 100 assertions, `node cli\/test-cli\.js` 20\./.test(rcRead("CHANGELOG.md"));
+    const again = rc("--check");
+    rcW("cli/test-cli.js", fakeSuite("24 passed, 1 failed"));
+    const red = rc();
+    rcW("CHANGELOG.md", rcLog("- (the tests line is still to write)"));
+    const noLine = rc("--mcp", "140", "--cli", "25");
+    all("1.30 review 8 (ds-maint 7): npm run release:counts writes the totals a RUN of both suites printed into CLAUDE.md and the current CHANGELOG entry — --check writes nothing and exits 1 on a difference, a failed suite records nothing, a missing tests line is given to paste (got " +
+      JSON.stringify({ checked, wrote, after, again, red, noLine }) + ")", {
+      checkDiffers: () => checked.code === 1 && /differs: CLAUDE\.md \(mcp\) 100 → 130/.test(checked.out) && unchanged,
+      writes: () => wrote.code === 0 && JSON.stringify(after) === JSON.stringify([130, 25, 130, 25]) && olderKept && /^\(130 assertions, incl\. a PT scaffold\);$/m.test(claudeAfter),
+      thenAgrees: () => again.code === 0 && /state the run's totals: mcp 130, cli 25/.test(again.out),
+      failedSuite: () => red.code === 1 && /24 passed, 1 failed — the suites must pass/.test(red.out) && RC.readCounts(rcRoot)[1].value === 25,
+      pasteLine: () => noLine.code === 1 && noLine.out.includes("- `node mcp/test.js` 140 assertions (was 100), `node cli/test-cli.js` 25 (was 20)."),
+      npmScript: () => require(path.join(root, "package.json")).scripts["release:counts"] === "node scripts/release-counts.js",
+    });
   }
 
   // Prose regressions: the skill must describe the engine honestly (loops tick with evidence, examples
@@ -67,13 +106,17 @@ exports.run = async ({
   // roadmap, update the specs after a plugin update) — and SAYS it works in Portuguese and Spanish instead of listing their
   // trigger phrases (280 of its 1,011 characters); ≤ ~600 characters, the near-miss exclusions kept. 1.29.1: it names closing a
   // finished feature too ("fecha a feature" reached spec_finish through the tools, the skill only sometimes) — its checks,
-  // dev-guardian's gate included, then a local merge (evals/trigger-finish-pt / -es).
-  ok(docsDesc.length > 200 && docsDesc.length <= 620 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /eval\(\) or an LLM/.test(docsDesc) &&
+  // dev-guardian's gate included, then a local merge (evals/trigger-finish-pt / -es). 1.30 review 8: resuming a feature (where it
+  // stands, what's left, the next task — Phase 6, where the evidence rules apply most), changing its approved spec and a spike
+  // never reached the skill — the cap goes 620 → 660 (the model-visible listing stays ≤ 1,500: 10-guards-guard-downs.js) and
+  // evals/trigger-resume-en, -execute-es, -change-pt, -roadmap-en, -adopt-es, -spike-pt check each intent.
+  ok(docsDesc.length > 200 && docsDesc.length <= 660 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /eval\(\) or an LLM/.test(docsDesc) &&
     /Works in English, Portuguese and Spanish/.test(docsDesc) && !/antes de|especificar|corrige|arregla|atualizar|actualizar/.test(docsDesc) &&
     /before coding/.test(docsDesc) && /fix a reported bug/.test(docsDesc) && /existing codebase/.test(docsDesc) && /roadmap/.test(docsDesc) &&
+    /resume one \(where it stands, what's left, the next task\)/.test(docsDesc) && /change its approved spec/.test(docsDesc) && /run a spike/.test(docsDesc) &&
     /close a finished feature/.test(docsDesc) && /dev-guardian's gate/.test(docsDesc) && /local merge/.test(docsDesc) &&
     /update the specs/.test(docsDesc) && /after a dev-spec-driven update/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
-    `SKILL.md description is intent-based, says it works in EN / PT / ES (no literal PT / ES trigger list), scoped ("Not for …") and ≤ 620 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
+    `SKILL.md description is intent-based, says it works in EN / PT / ES (no literal PT / ES trigger list), scoped ("Not for …"), names resume / change / spike, ≤ 660 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
   const docsLoops = (docsSkill.split("## Phase 6")[1] || "").split("Track-gated")[0];
   ok(["**core task", "**+tdd task", "**+ai generation/prompt task"].every((k) => /spec_complete_task \{evidence\}/.test(((docsLoops.split(k)[1] || "").split("\n- **")[0]))),
     "every Phase 6 execution loop (core, +tdd, +ai) ends in spec_complete_task {evidence}");

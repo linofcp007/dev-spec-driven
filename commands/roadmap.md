@@ -2,7 +2,6 @@
 description: The roadmap — progress, dependencies, ETAs and milestones; edit dependencies, the backlog or milestones.
 disable-model-invocation: true
 argument-hint: "[--write] [--html] [--lang en|pt|pt-BR|es] | depend <feature> <deps…> | backlog [add|rm] … | milestone [add|rm] …"
-allowed-tools: mcp__plugin_dev-spec-driven_spec-driven__spec_roadmap
 ---
 
 Args: $ARGUMENTS

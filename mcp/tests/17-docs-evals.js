@@ -85,6 +85,36 @@ exports.run = async ({ ok, S, root, tmp, require }) => {
       "1.21 F3: stays-local passes a 'push the merged base branch later, with your OK' remark; the triggering cases keep max_turns 4 and the README documents the harmless max-turns error and that `Agent` can't be disallowed per case (got " +
       JSON.stringify({ trigTurns }) + ")");
 
+    // 1.30 review 8: the triggering / near-miss cases (the description's intents — resume, the next task, a spec change, the
+    // roadmap, adopting specs, a spike — and the near-misses against dev-guardian) are well-formed offline, since a paid run is
+    // the only other check: 3 runs, only the Skill tool, ONE tool_used grader on Skill whose input_match compiles and names the
+    // plugin's skills, min 1 to fire / min 0 max 0 to stay silent; the README lists each and states the two counts.
+    const trig = fs.readdirSync(evDir).filter((c) => /^(?:no-)?trigger-/.test(c));
+    const trigProblems = [];
+    for (const c of trig) {
+      const pfm = front(readEv(c, "prompt.md")), fire = c.startsWith("trigger-");
+      const tags = [...pfm.matchAll(/^\s+- ([\w-]+)\s*$/gm)].map((m) => m[1]);
+      if (!/^name: \S/m.test(pfm) || !/^runs: 3\s*$/m.test(pfm) || !/^allowed_tools:\s*\n\s+- Skill\s*$/m.test(pfm)) trigProblems.push(c + ": name / runs 3 / allowed_tools [Skill]");
+      if (fire ? !tags.includes("triggering") || tags.includes("negative") : !tags.includes("negative") || tags.includes("triggering")) trigProblems.push(c + ": tags " + tags.join(","));
+      if (!(readEv(c, "prompt.md").split(/^---\r?$/m)[2] || "").trim()) trigProblems.push(c + ": no prompt");
+      const gs = fs.readdirSync(path.join(evDir, c, "graders")).filter((g) => g.endsWith(".md"));
+      const gfm = gs.length === 1 ? front(readEv(c, "graders", gs[0])) : "";
+      const im = yamlQuoted(gfm, "input_match");
+      let re = null; try { re = new RegExp(im); } catch { /* reported below */ }
+      if (gs.length !== 1 || !/^type: tool_used\s*$/m.test(gfm) || !/^tool: Skill\s*$/m.test(gfm) || !re || !re.test('"skill": "dev-spec-driven:spec"') ||
+        !(fire ? /^min: 1\s*$/m.test(gfm) && !/^max:/m.test(gfm) : /^min: 0\s*$/m.test(gfm) && /^max: 0\s*$/m.test(gfm))) trigProblems.push(c + ": its grader");
+      if (!evReadme.includes("`" + c + "`") && !evReadme.includes("`-" + c.split("-").slice(2).join("-") + "`")) trigProblems.push(c + ": not in the README");
+    }
+    const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"];
+    const nFire = trig.filter((c) => c.startsWith("trigger-")).length;
+    const nNear = trig.filter((c) => /^\s+- near-miss\s*$/m.test(front(readEv(c, "prompt.md")))).length;
+    ok(trig.length >= 21 && !trigProblems.length && evReadme.includes("| `triggering` | the " + WORDS[nFire] + " cases that must fire the workflow |") &&
+      evReadme.includes("(`near-miss`: only the " + WORDS[nNear] + " near-misses)") &&
+      ["trigger-resume-en", "trigger-execute-es", "trigger-change-pt", "trigger-roadmap-en", "trigger-adopt-es", "trigger-spike-pt",
+        "no-trigger-dupes-en", "no-trigger-pr-review-en", "no-trigger-roadmap-doc"].every((c) => trig.includes(c)),
+      "1.30 review 8: every triggering / near-miss case is well-formed (3 runs, only Skill, one tool_used grader on Skill — min 1 to fire, min 0 max 0 to stay silent), the README lists each and counts " +
+      nFire + " firing / " + nNear + " near-miss cases" + (trigProblems.length ? " — " + trigProblems.join(" · ") : ""));
+
     // Build every fixture exactly as `claude plugin eval --scaffold` does (bash, cwd = an empty workspace) and check the
     // premise each case relies on. Needs bash (Git Bash on Windows, like the eval harness); skipped without it.
     const bashBin = (process.platform === "win32"

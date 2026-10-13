@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const SR = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -69,7 +70,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   fs.writeFileSync(path.join(pp, ".specs", "templates", "design.md"), "# Design: {{name}}\n\n## Visão Geral\n[Como funciona]\n\n## Alternativas e Compromissos\n- [opção A]\n- [opção B]\n\n## Riscos\n- [o que pode falhar]\n\n## Verificação da Constituição\n- [ ] [Princípio 1] — cumpre\n");
   const pTpl = runIn(["templates", "check", "--project", pp]);
   ok(/  ▲ design-reuse — sem secção Reutilização e Integração — indica os módulos/.test(pDoc.out) &&
-    pTpl.code === 0 && /sem secção Reutilização e Integração — o doctor avisa \(design-reuse\)/.test(pTpl.out),
+    pTpl.code === 0 && String(pTpl.out).includes(MSG("pt").templates.problems["reuse-missing"]),
     "1.19 R1 (CLI, PT): doctor's design-reuse detail is Portuguese; templates check warns (exit 0) on a design template without Reutilização e Integração (got " +
     js([pDoc.out.split("\n").filter((l) => /design-reuse/.test(l)), pTpl.code, pTpl.out.slice(0, 400)]) + ")");
 
@@ -80,7 +81,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const b3 = jsonOf(runIn(["backlog", "add", "refactor-pricing", "refactor: rounding copied in cart.ts", "--json", "--project", rp]));
   const bP = (runIn(["backlog", "add", "refactor-precos", "refactor: a", "--project", pp]), runIn(["backlog", "add", "refactor-precos", "refactor: b", "--project", pp]));
   ok(b1.code === 0 && /✓ 'refactor-pricing' added to the backlog/.test(b1.out) && b2.code === 0 && !/added to the backlog/.test(b2.out) &&
-    /'refactor-pricing' is already in the backlog — the new note was appended to its note\./.test(b2.out) &&
+    /'refactor-pricing' is already in the backlog — the new note was appended to its note \(to replace the note instead: remove the item, then add it again\)\./.test(b2.out) &&
     /  - refactor-pricing — refactor: Repeated Switches in pricing\.ts · refactor: rounding copied in cart\.ts\n/.test(b2.out) &&
     b3.exists === true && b3.appended === false && /nothing changed/.test(b3.note || "") && bP.code === 0 && /já está no backlog — a nova nota foi acrescentada/.test(bP.out),
     "1.19 R review 5 (CLI): backlog add of an existing name prints the engine's note (appended / nothing changed) instead of '✓ added', the entry keeps both notes; --json has exists / appended; PT line (got " +

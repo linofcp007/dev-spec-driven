@@ -156,16 +156,16 @@ skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) +
 evals/                         plugin evals for `claude plugin eval` (maintainer-side, local only)
 mcp/test.js · cli/test-cli.js  the suites' entry points — their files: mcp/tests/ · cli/tests/ (NN-<area>…, + harness.js)
 scripts/                       build.js (npm run build: the corpus; --bundle) · test-runner.js (both suites' runner: --only,
-                               --list) · test-docker.js (both in Linux containers)
+                               --list) · test-docker.js (both in Linux containers) · release-counts.js (the totals, from a run)
 docs/maintainers/              these notes by topic — NOT loaded automatically; the topic map above says when to read each
 AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions.md   rule files for other tools
 ```
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(2191 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(2227 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 639 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 650 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its
 AREA: `mcp/tests/NN-<area>.js` / `cli/tests/NN-<area>-<topic>.js` (NN is the area, the same in both; `--list` says what
 each holds; `--only <file|area|NN>` runs a part, plus the files it needs — testing.md → The suites). Keep
@@ -177,7 +177,7 @@ engine/files.js — the write gate, conventions.md; no block of 8+ code lines re
 16-conventions-duplication.js, with a reasoned allowlist) read every `mcp/lib` source
 — the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone; never a built bundle
 (its registry comes from scripts/build.js, which they read). Both suites run on the modules (the harnesses drop
-`DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp. Every chain is hermetic (1.26): a fresh empty temp folder as its
-cwd, none of the shell's `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `DEV_SPEC_*` (but `DEV_SPEC_TEST_*`) — a test sets what it
+`DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp. Every chain is hermetic (1.26): a fresh empty temp folder (on a neutral temp base, 1.30) as its
+cwd, none of the shell's `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `DEV_SPEC_*` (but `DEV_SPEC_TEST_*`) / `NODE_OPTIONS`… — a test sets what it
 needs for the process it starts, and never reads a path from `process.cwd()` (testing.md → Hermetic chains).
 Linux containers (`npm run test:docker`), plugin evals and the cross-platform test rules: docs/maintainers/testing.md.

@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
+exports.run = async ({ ok, all, S, tmp, rpc, payload, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the lexer) — read through mcp/test.js's require
   let HU; // what the hooks share before the engine loads (hooks/hook-utils.js — no engine)
   try { HU = require("../hooks/hook-utils.js"); } catch { HU = { approvalProjects: () => [], editTargets: () => [], sessionFlagFile: () => path.join(os.tmpdir(), "none") }; }
@@ -15,9 +15,10 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
   const BS = String.fromCharCode(92);
   const WIN = process.platform === "win32";
   const hookEnv = (env) => ({ ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) });
+  // the hook's decision in this process (harness hookIn — review 8: its spawns were most of this file's time); the process
+  // boundary — stdin's safety net, the preloaded probe — keeps real processes below
   const hookOut = (name, pl, env) => {
-    const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", name + ".js")], { input: typeof pl === "string" ? pl : js(pl),
-      encoding: "utf8", env: hookEnv(env), cwd: tmp, timeout: 20000 });
+    const r = hookIn(path.join(__dirname, "..", "hooks", name + ".js"), { input: typeof pl === "string" ? pl : js(pl), env: hookEnv(env), cwd: tmp });
     let j = null;
     try { j = r.stdout ? JSON.parse(r.stdout) : null; } catch { j = { unparsed: r.stdout }; }
     return { status: r.status, json: j, stdout: r.stdout, stderr: r.stderr };
@@ -270,7 +271,8 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
       kid.stdin.write(text); // never ended: the safety net fires
     });
     const head = "{\"session_id\":\"s\",\"cwd\":" + js(p) + ",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"";
-    const [cut, plain, off] = await Promise.all([partial(head + "node cli/dev-spec.js approve alpha tas", p), partial(head + "npm run build && npm te", p),
+    // (the plain payload's cwd field names a neutral folder: the temp folder's own path may say "dev-spec" — 1.30)
+    const [cut, plain, off] = await Promise.all([partial(head + "node cli/dev-spec.js approve alpha tas", p), partial(head.replace(js(p), js("/work/app")) + "npm run build && npm te", p),
       partial(head.replace(js(p), js(pOff)) + "node cli/dev-spec.js approve alpha tas", pOff)]);
     const d = (j) => (j && j.hookSpecificOutput ? j.hookSpecificOutput.permissionDecision : j ? "?" : "silent");
     ok(d(cut) === "ask" && /only in part/.test(cut.hookSpecificOutput.permissionDecisionReason) && d(plain) === "silent" && d(off) === "silent",
@@ -319,6 +321,26 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
       "1.24 r6 C-I1 + 1.26: only /spec and /spec-bugfix are model-invocable — every other command carries disable-model-invocation: true; the model-visible listing (their descriptions + the skill's) is " +
       visible + " ≤ 1,500 chars; every description is one short English line (≤ 125 chars, no PT / ES tail, " + total + " chars in all); the MCP prompts list every command (got " +
       js([marked.length, human.length, long, tails]) + ")");
+  }
+
+  // 1.30 review 8 (ds-prose 16): a command's `allowed-tools` grants its tools for the invoking turn without asking — only a tool
+  // that can't write (readOnlyHint true in tools/list) may be there. /roadmap granted spec_roadmap (write: ROADMAP.md / .html)
+  // and /spec-report spec_metrics (write: retro.md). The server's own name is the plugin's (mcp__plugin_<plugin>_<server>__).
+  {
+    const PR = require("./lib/prompts-resources.js");
+    const dir = path.join(__dirname, "..", "commands");
+    const tools = (await rpc("tools/list", {})).result.tools;
+    const readOnly = new Set(tools.filter((t) => t.annotations && t.annotations.readOnlyHint === true).map((t) => t.name));
+    const pluginName = JSON.parse(fs.readFileSync(path.join(__dirname, "..", ".claude-plugin", "plugin.json"), "utf8")).name;
+    const serverName = Object.keys(JSON.parse(fs.readFileSync(path.join(__dirname, "servers.json"), "utf8")).mcpServers)[0];
+    const prefix = `mcp__plugin_${pluginName}_${serverName}__`;
+    const granted = fs.readdirSync(dir).filter((f) => f.endsWith(".md")).flatMap((f) => {
+      const at = PR.parseFrontMatter(fs.readFileSync(path.join(dir, f), "utf8")).data["allowed-tools"] || "";
+      return at.split(",").map((t) => t.trim()).filter(Boolean).map((t) => [f, t]);
+    });
+    const bad = granted.filter(([, t]) => !t.startsWith(prefix) || !readOnly.has(t.slice(prefix.length)));
+    ok(granted.length >= 4 && !bad.length && !granted.some(([f]) => f === "roadmap.md") && readOnly.has("spec_drift") && !readOnly.has("spec_metrics"),
+      "1.30 review 8: every command's allowed-tools pre-approves only read-only tools of this plugin's server (" + granted.length + " grants; bad: " + js(bad) + ")");
   }
 
   // C-I9 — the aliases hand over to the full command (its file, resolved by Claude Code and by the MCP prompt alike) instead of a lossy summary.

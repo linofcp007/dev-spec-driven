@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
+exports.run = async ({ ok, run, runIn, tmp, require, __dirname, runAsync }) => {
   const Sc4 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   // C4.1 — /spec-tour is served as a prompt like every command.
   const tourC4 = runIn(["prompts", "spec-tour", "--args", "a length check on the signup name"]);
@@ -36,7 +36,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   fs.writeFileSync(path.join(fPp.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Masked, mentions pipefail\n  - _Verify: node -e \"process.exit(0)\" | node -e \"process.exit(0)\" # pipefail later_\n" +
     "- [ ] 2. [US1] Wrapped\n  - _Verify: bash -c \"npm test | tee test.log\"_\n- [ ] 3. [US1] Real pipefail\n  - _Verify: set -o pipefail; npm test | tee test.log_\n");
   const docPp = runIn(["doctor", fPp.slug, "--project", pc4]);
-  const donePp = run(["done", fPp.slug, "1", "--run", "--project", pc4]);
+  const donePp = (await runAsync(["done", fPp.slug, "1", "--run", "--project", pc4]));
   const vpLine = (docPp.out.match(/.*verify-pipes.*/) || [""])[0];
   ok(docPv.code === 1 && /privacy-sections.*Processors & International Transfers:missing/.test(docPv.out) &&
     /#1 .*#2 `bash -c "npm test \| tee test\.log"`/.test(vpLine) && !/#3 /.test(vpLine) &&

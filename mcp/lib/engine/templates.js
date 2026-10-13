@@ -12,7 +12,7 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, existsCached, extractAcIds,
+let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, enumArg, existsCached, extractAcIds,
   extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements, isInsideDir, writeInsideProject, isObj,
   isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock, packCorpusSets, packOf,
   packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText, langOption, PROTO_KEYS,
@@ -22,7 +22,7 @@ let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValid
   tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel, trackMarker,
   trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection, writeIfAbsent;
 let today; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, existsCached,
+function __link(E) { ({ today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, enumArg, existsCached,
   extractAcIds, extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements,
   isInsideDir, writeInsideProject, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
@@ -437,8 +437,9 @@ function templates(projectDir, action, opts = {}) {
   if (L.error) return { ok: false, error: L.error };
   const { lang, lng } = L;
   const T = i18n.msg(lng).templates;
-  const act = action == null || !String(action).trim() ? "list" : String(action).trim().toLowerCase();
-  if (!["list", "init", "check"].includes(act)) return { ok: false, error: T.badAction(String(action)) };
+  const asked = enumArg("action", ["list", "init", "check"], action, lng); // the MCP enum's refusal, in its words
+  if (asked.error) return asked;
+  const act = asked.value || "list";
   let key = null;
   if (opts.artifact != null && String(opts.artifact).trim()) {
     key = templateKey(String(opts.artifact));

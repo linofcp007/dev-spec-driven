@@ -70,17 +70,31 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   near → the first dev-spec anchor. → `{project, root, worktree}`; `sessionPath(s, p, cwd)` spells a payload path under
   `project`. The hooks run `probe.sessionProjects` first (mcp/tests/10-guards-guard-downs.js), then ask the engine; the spec hook
   stamps a worktree's tasks.md save in the mapped project, SessionStart reports it, `statusLineProject()` maps the same way.
-- **Every hook runs on ONE runner — hook-utils.js `runHook(main, {maxInput})` and `finish(obj?)`.** It reads the payload from
-  stdin asynchronously (never `fs.readFileSync(0)`), runs `main(raw, timedOut)` once — at stdin's end or from the 2 s safety net
-  (`SAFETY_NET_MS`; `timedOut` true: the approval hook's `partial` path) —, turns an exception or a stdin error into a silent exit
-  0 (past its pre-check the approval hook catches its own and asks), feeds a terminal stdin `"{}"` and, past `maxInput` characters
-  (the observe and plan hooks, 4 MB), drains the rest and hands `main` `""`. `finish` prints at most one JSON object and exits in
-  the write's callback (conventions.md → Flush stdout before exiting); the spec hook's `emit()` and the observe hook (which prints
-  nothing) go through it. `payloadOf(raw)` is the payload object or null (not JSON, or no object: the hook exits), `eventOf(p)`
-  its event name — the approval hook alone parses its own (a partial payload asks). A hook keeps only its decision: its
-  pre-filter still runs first in its `main`, and hook-utils.js loads nothing heavier when required — the probe comes through
-  `probe()` on first use (requiring hook-utils.js: ~0.7 ms over an empty module; every fast path within the run-to-run spread of
-  1.27.0's — 1.27.1 History).
+- **A hook IS its decision — `decide(raw, opts)`, exported.** Each hooks/*-hook.js exports `decide(raw, {timedOut})` → the ONE
+  object its process prints (a permission decision, additionalContext, a block) or null (silent); it never writes stdout or exits,
+  and reads the process's environment and working folder as the engine does. The file runs as a hook only as the main module
+  (`if (require.main === module) runHook(decide, …)`), so a test calls it in-process — mcp/tests/harness.js `hookIn(file, {input,
+  env, cwd, timedOut})`, spawnSync's shape, the environment and folder applied for the call and restored like cli/main.js `main`
+  (testing.md → The harnesses). Exports beside `decide`: a hook's pre-filter where a test checks it (the approval hook's
+  `candidate`, the edit guard's `mayWrite` / `pathWords`, the Stop hook's `mayClaim`).
+- **Every hook runs on ONE runner — hook-utils.js `runHook(decide, {maxInput})` and `finish(obj?)`.** It reads the payload from
+  stdin asynchronously (never `fs.readFileSync(0)`), runs `decide(raw, {timedOut})` once — at stdin's end or from the 2 s safety net
+  (`SAFETY_NET_MS`; `timedOut` true: the approval hook's `partial` path) — and finishes with its answer; it turns an exception or a
+  stdin error into a silent exit 0 (past its pre-check the approval hook catches its own and asks), feeds a terminal stdin `"{}"`
+  and, past `maxInput` characters (the observe and plan hooks, 4 MB), drains the rest and hands `decide` `""`. `finish` prints at
+  most one JSON object and exits in the write's callback (conventions.md → Flush stdout before exiting). `payloadOf(raw)` is the
+  payload object or null (not JSON, or no object: the hook exits), `eventOf(p)` its event name — the approval hook alone parses its
+  own (a partial payload asks). A hook keeps only its decision: its pre-filter still runs first in its `decide`, and hook-utils.js
+  loads nothing heavier when required — the probe comes through `probe()` on first use (requiring hook-utils.js: ~0.7 ms over an
+  empty module; every fast path within the run-to-run spread of 1.27.0's — 1.27.1 History).
+- **Every scan a hook runs on payload text is LINEAR.** A PreToolUse hook that runs past its timeout doesn't block the call
+  (code.claude.com/docs/en/hooks), so a super-linear pattern is a way past the guard: no run class that holds its own start
+  delimiter (`(?:^|[=,(])\.[^\s/]*[*?]` rescans `=.=.…` from every start — 120 K characters took the approval hook 16.7 s), no
+  `[\\/]+$`-style tail, no nested quantifier over a path's segments — read the delimiter-free runs once (probe.js `dotGlob`, the
+  edit guard's `pathWords`), split first (`mayWrite`'s `find … -delete`), walk segments or the text by hand (`guardedFileOf`,
+  `trimSlashEnd`). mcp/tests/10-guards-hooks-cost.js times each reader by SHAPE (16 K vs 64 K characters of a hostile input: ≤ 8×)
+  and the report's 120 K payload through the hook process. The engine's lexer and readers past the pre-filter read ≤
+  `APPROVAL_COMMAND_MAX` (64 K) and stay linear (review 8 swept them: ~0.1–0.2 s at the cap).
 - **What the hooks share before the engine loads — `hooks/hook-utils.js`** (not a hook; Node core and probe.js only, the
   probe loaded on first use): the runner above, `probe()`, the probe's readers (`readJson`, `textOf` …: a UTF-16 BOM decides,
   else UTF-8 — files.js `decodeText`; Windows PowerShell 5.1 writes UTF-16, and a UTF-8-only reader sees the guards "off"; the
@@ -88,8 +102,17 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   guard), `sessionFlagFile` (`dev-spec-<kind>-<sha1(session_id)>.flag` in the
   OS temp folder), `claimProse` / `claimScan` / `claimMatch` (the Stop hook's pre-filter) and `parseProjectDir(v, base)` /
   `fileUriToPath` / `unexpandedVar` — ONE reading of an MCP tool's projectDir (`{none}` · `{dir}` · `{code: project-dotdot |
-  project-network | project-uri}`), which **mcp/server.js** requires too (`HOOK_UTILS`). mcp/tests/10-guards-guard-downs.js and
-  10-guards-shell-writes.js check they agree with the engine's.
+  project-network | project-uri}`), which **mcp/server.js** requires too (`HOOK_UTILS`, its `RE_DOTDOT` included). mcp/tests/
+  10-guards-guard-downs.js and 10-guards-shell-writes.js check they agree with the engine's.
+- **What the hooks and the engine both read — mcp/lib/probe.js, ONE copy** (never a renamed copy in a hook: the 8-line duplication
+  guard can't see one — review 8): the approval pre-filter (`approvalPlain`, `approvalMayBe` over `APPROVAL_CANDIDATE_TESTS`,
+  `RE_APPROVAL_VERB` — the engine's `approvalCandidate` adds a PowerShell `-EncodedCommand`'s decoded script, the hook passes any
+  encoded-looking call on), the guarded files by path (`guardedFileOf`, `specsParentOf`), dev-spec's approval-shaped tools
+  (`RE_APPROVAL_MCP`) and other servers' file tools (`MCP_FILE_VERBS` → `isMcpFileTool`, `approvalHookMatcher()` — hooks.json's
+  matcher, each verb spelled case-blind — and `mcpPathArgs`), and the observe pre-filter (`observedNorm` / `observedBodies`). guards.js
+  and evidence.js require them at load, the hooks through `probe()`. A guard-down another module reads in a command it names
+  (dev-guardian's, engine/guardian.js) adds its test to `APPROVAL_CANDIDATE_TESTS` and its file to `guardedFileOf`: the hook's pre-filter
+  and the engine's stay one.
 - **Commands never reuse a Claude Code built-in name** (`/init`, `/status`, `/doctor`, `/commit`, `/review`): one that could
   collide takes the `spec-` prefix (`/spec-setup`, `/spec-status`, `/spec-doctor`, `/spec-review`).
 - **22 commands, 2 of them model-invocable.** Model-invocable skill and command descriptions share ONE budget across all
@@ -107,8 +130,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   bare `references/…`). Only `/spec`, `/spec-bugfix`, `/executeTask`, `/spec-review` and `/spec-tour` say "use the
   dev-spec-driven skill"; the self-contained ones don't pull SKILL.md in.
 - **`allowed-tools` on the read-only commands** — `/spec-status` and `/dss` (`spec_status`, `spec_next_action`),
-  `/spec-doctor`, `/roadmap` (it writes only the generated ROADMAP files) and `/spec-report` (`spec_drift`, `spec_metrics`) grant
-  their tools for the invoking turn by plugin name (`mcp__plugin_dev-spec-driven_spec-driven__<tool>`, comma-separated). `claude
+  `/spec-doctor` and `/spec-report` (`spec_drift`) grant their tools for the invoking turn by plugin name
+  (`mcp__plugin_dev-spec-driven_spec-driven__<tool>`, comma-separated). Only a tool no argument makes write (`readOnlyHint`
+  true): `/roadmap`'s `spec_roadmap` and `/spec-report`'s `spec_metrics` write with `write` and ask like any writer
+  (mcp/tests/10-guards-guard-downs.js reads every command's list against tools/list). `claude
   plugin validate` (2.1.292) doesn't parse a command's front matter: it checks none of this.
 - **The aliases follow the full command.** `/ds`, `/dss`, `/dsx` read and follow
   `${CLAUDE_PLUGIN_ROOT}/commands/<spec | spec-status | executeTask>.md` with their arguments (Claude Code substitutes the
@@ -121,12 +146,22 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   a MultiEdit payload is read too) is silent unless the guard is on (off costs one raw JSON read); `guardCheck()` reads
   roadmap.json + each feature's `.state.json` / tasks.md, never a repo walk. Its own errors never block: a malformed payload, a
   broken roadmap.json, any exception → exit 0.
-- **Shell writes are edits.** A command passes the pre-filter only with an output redirection or a writer's name
-  (`RE_SHELL_WRITE`; reads, test runs, builds and git exit there), then `spec.shellWriteTargets(command, mode)` — the approval
-  guard's reader (`shellSegOps`; git's restores and a path starting with an unknown variable left out) — sends each file through
-  `guardCheck`. **The candidate projects** add the nearest dev-spec `.specs/` above the edited file (≤ 8 path-like words of a
-  command; never a network path): at a monorepo's root, `packages/app/.specs` guards `packages/app/src/a.ts` — the engine checks
-  the session's project AND `sessionProject({cwd: dirname(file)})`, the first ask wins.
+- **Shell writes are edits.** A command passes the pre-filter only with an output redirection, a writer's name or `find` with a
+  writing action (`mayWrite`: `RE_SHELL_WRITE`, then each simple command's first `find` and its `-delete` / `-exec`… after it;
+  reads, test runs, builds and git exit there), then `spec.shellWriteTargets(command, mode)` — the approval guard's reader
+  (`shellSegOps`; git's restores and a path starting with an unknown variable left out) — sends each file through `guardCheck`.
+  **The candidate projects** add the nearest dev-spec `.specs/` above the edited file (`pathWords`: ≤ 8 path-like words of the
+  command's first 64 K; never a network path): at a monorepo's root, `packages/app/.specs` guards `packages/app/src/a.ts` — the
+  engine checks the session's project AND `sessionProject({cwd: dirname(file)})`, the first ask wins.
+- **A folder holding code is code** (`guardFolderCode`, review 8 C14 — `rm -rf src` passed while `sed -i src/util.js` asked): a
+  target that is no code file by its name but a folder (lstat, never a link) is a code edit when scan.js `folderHoldsCode` finds a
+  code file in it — breadth first, ≤ `FOLDER_CODE_ENTRIES` (2,000) entries (past them: it may — ask), links never followed, the scan's
+  ignored folders (`SCAN_IGNORE`: node_modules, dist, build, .git, .specs…) neither entered nor code themselves (`rm -rf
+  node_modules` asks nothing). A glob in the target's last segment (`rm -rf src/*`) reads the folder's entries it matches (≤
+  `GUARD_GLOB_ENTRIES`); a glob higher up is not read. So every removal / move spelling the guard reads — rm -r, rmdir /s and rd /s
+  (cmd), Remove-Item -Recurse and PowerShell's rm, find … -delete, mv / Move-Item — asks for a code folder as for a code file. A
+  network path is never read. git stays the user's — the edit guard reads no git command: `git rm -r src` asks nothing, as
+  `git rm src/a.ts` and `git checkout -- src/a.ts` don't.
 - **"Code" is `isCodeFile(rel)`** (engine/scan.js), ONE notion the guard, the brownfield scan, `spec_scan {coverage: true}` and
   the test-code scan share: `CODE_EXT` (a broad list) plus `TEST_EXTRA_EXT` (`.bats`, Perl's `.t`) on a file that IS a test
   (`isTestFile`: `t/basic.t` yes, `notes.t` no); `GUARD_CODE_EXT` = both (trace's `plannedOutsideCode`, the reuse check). The
@@ -154,19 +189,25 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `spec_init {approvalGuard}` / `init --approval-guard off|ask|deny` (else a localized CLI error; `approvalGuardInput()` →
   undefined leaves it unchanged); written under the roadmap lock, never when unchanged; the result reports `approvalGuard` (+
   `approvalGuardNote`).
-- **The hook** `hooks/approval-hook.js` (PreToolUse, anchored matcher: `Bash|PowerShell|Monitor|Write|Edit|NotebookEdit`,
-  `(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track)`, and other MCP servers' file tools by the verb in the name
-  — write, edit, move, delete… — dev-spec's own excluded by `(?!spec_|steering_scaffold|ears_validate|trace_check)`; the engine's
-  `RE_MCP_FILE_TOOL` / `RE_DEVSPEC_MCP_TOOL`, the hook's `RE_MCP_FILE`; mcp/tests/10-guards.js). Monitor runs its command in the
-  Bash tool's shell. A call that can't be an approval exits before any file read (the hook's `candidate()` mirrors the engine's
-  `approvalCandidate`, a superset: a command naming `dev-spec`, `.specs` or a guarded file; a path naming `.specs`, a `~N` short
-  name or a guarded file — `RE_EDIT_MAYBE`); else ONE raw roadmap.json read per candidate project, the STRICTEST level wins,
-  and only then the engine (`permissionDecision`, + `systemMessage` for deny). Its own trouble before that point exits 0; past
-  it, an engine failure ASKS (`failClosed`).
-- **The candidate projects** (hook-utils.js `approvalProjects`, ≤ 12) follow where the CLI acts: the folders the call names (MCP
-  `projectDir`, the edited file's project, `--project`, `SPEC_PROJECT_DIR=` / `$env:` assignments), each `cd` / `Set-Location`
-  target (chained and from cwd alone) and the payload `cwd` through `probe.nearestProject`, then the anchors — text only, a
-  superset (an extra candidate only makes the answer stricter). The session's own folders are read on a share too; a network path
+- **The hook** `hooks/approval-hook.js` (PreToolUse, anchored matcher = probe.js `approvalHookMatcher()`:
+  `Bash|PowerShell|Monitor|Write|Edit|NotebookEdit`, `(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track)`, and other
+  MCP servers' file tools by the verb in the name — `MCP_FILE_VERBS`: write, edit, move, delete…, each spelled case-blind
+  (`[Ww][Rr][Ii][Tt][Ee]` — a matcher is a regex without flags) — dev-spec's own excluded by
+  `(?!spec_|steering_scaffold|ears_validate|trace_check)`; the engine and the hook test `isMcpFileTool`; mcp/tests/10-guards.js checks
+  hooks.json holds the built matcher). Monitor runs its command in the Bash tool's shell. A call that can't be an approval exits
+  before any file read (the hook's `candidate()` is the probe's `approvalMayBe` — the engine's `approvalCandidate`, a superset: a
+  command naming `dev-spec`, `.specs` or a guarded file; a path naming `.specs`, a `~N` short name or a guarded file —
+  `RE_EDIT_MAYBE`); else ONE raw roadmap.json read per candidate project, and only then the engine — EACH candidate with the
+  guard on judges the call with its own level and meta (its checks: dev-guardian's files are guarded only where a check runs the
+  gate), the strictest level's first, the strictest ANSWER wins (`permissionDecision`, + `systemMessage` for deny). One meta for
+  every project (the strictest level's) let an outer project at deny without the check drop a nested one's dev-guardian files
+  (review 9). Its own trouble before that point exits 0; past it, an engine failure ASKS (`failClosed`).
+- **The candidate projects** (hook-utils.js `approvalProjects`, ≤ 12 the call names, then the session's own — always kept) follow
+  where the CLI acts: the folders the call names (MCP `projectDir`, the edited file's project, `--project`, `SPEC_PROJECT_DIR=` /
+  `$env:` assignments), each `cd` / `Set-Location` target (chained and from cwd alone), the folder holding each `.specs/` /
+  `.guardian/` a command's word names (quoted or bare, an `--opt=` prefix off, ≤ 16 — `cp evil sub/.specs/guardian.cjs` from the
+  folder above acts on `sub/`'s files: review 9), and the payload `cwd` through `probe.nearestProject`, then the anchors — text
+  only, a superset (an extra candidate only makes the answer stricter). The session's own folders are read on a share too; a network path
   the AGENT names only on a share the session is on; none is walked up. An MCP `projectDir` goes through `parseProjectDir`
   (relative: from `CLAUDE_PROJECT_DIR`, `SPEC_PROJECT_DIR` and the cwd, each a candidate); a `file://` URI that is no local path
   asks at least (`opts.projectUnreadable`, why `project`); `..` and network values still go to `approvalProjects` (the server
@@ -193,12 +234,40 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   · state · observed · track · specs · link): lowering the guard or weakening what it protects — evidence observed → reported,
   approval roles cleared or a required one dropped, a project check removed or changed, the stop gate off, the edit guard
   lowered, and **track removal** — `spec_add_track {remove: true}` (`RE_APPROVAL_MCP`) / `add-track … --remove` turning off +tdd
-  or +ai (`APPROVAL_GATED_TRACKS`: they carry a phase; +sec / +saas / a pack stay allowed). **The guarded files** —
-  `.specs/roadmap.json`, `.specs/**/.state.json` (`RE_STATE_FILE`), `.specs/**/.execution/observed.jsonl` (`RE_OBSERVED_FILE` —
-  a forged line would make a run "observed") — written through Write / Edit / MultiEdit / NotebookEdit (`APPROVAL_EDIT_TOOLS`), a
+  or +ai (`APPROVAL_GATED_TRACKS`: they carry a phase; +sec / +saas / a pack stay allowed). **The guarded files** (probe.js
+  `guardedFileOf`, read on the path's segments) — `.specs/roadmap.json`, `.specs/**/.state.json`, `.specs/**/.execution/observed.jsonl`
+  (a forged line would make a run "observed") — written through Write / Edit / MultiEdit / NotebookEdit (`APPROVAL_EDIT_TOOLS`), a
   shell writer or an MCP file tool: `command: null` (the user makes that change), `project` the folder above `.specs/`
   (`approvalSpecsProject()`). `dev-spec merge-state … <ours>` onto a state file is one too (git runs the driver itself, never
   through the Bash tool).
+- **dev-guardian's gate (1.30, review 8)** — its rules live in engine/guardian.js, read through the guards' hook points: guards.js
+  `approvalShellReaders()` (per simple command — `guardianShellActions`, given `programAt`) and `approvalActionFilters()`
+  (`guardianGuardFilter`); its two files are probe.js `guardedFileOf`'s (the approval hook reads them before the engine loads), its
+  pre-filter word probe.js `APPROVAL_CANDIDATE_TESTS`'. Two one-liners stay where they are: `shellOpActions`' unknown program — the
+  two files' own guard-down, never "unreadable", so nothing asks without the check — and `approvalCommand` (no command for them).
+  With a check running the gate (`guardianGuardOn(meta)`; meta unknown → yes, fail closed), these are guard-downs (`command: null`
+  — the user makes them): an agent's write of `.specs/guardian.cjs` (`guardian-launcher` — code the gate runs) or
+  `.guardian/baseline.json` (`guardian-baseline` — what it accepts as known), through every writer above (`approvalGuardedFile` →
+  `guardedFileOf`); an agent-run `baseline update` of the launcher or of dev-guardian's own CLI in program position
+  (`guardian-baseline-update` — it accepts every current finding, the feature's included); a gate run — the launcher, or
+  `dev-spec finish … --run` — under a `DEV_GUARDIAN_CLI` / `CLAUDE_CONFIG_DIR` the command sets (`guardian-cli`: a prefix
+  assignment, or one an earlier command set — `ctx.vars`). Without the check they are dropped (`guardianGuardFilter`). The
+  pre-filters let them through: `guardian` in `APPROVAL_CANDIDATE_TESTS` (the engine's and the hook's), `.guardian` and the two
+  names in the hook's `RE_EDIT_MAYBE` / `RE_MCP_MAYBE`, `.guardian/` paths in its `RE_GUARDED_DIR` and `specsParentOf`.
+  **`.guardian/` as a whole** is the baseline's guard-down too (`guardian-baseline`, review 9 — like `.specs/`'s): a folder
+  destination (`cp … .guardian/`, `cp -r evil/. .guardian/`, `rsync`, `Copy-Item`, `tar -C .guardian`), removed, moved onto,
+  replaced by git or a link (`rm -rf .guardian`, `mv evil .guardian`, `git checkout HEAD~1 -- .guardian`), an MCP move / delete of
+  it — `shellPathFacts`' `guardianSelf` / `guardianHit` (the folder itself, or an entry that may be its baseline: `.guardian/*`),
+  `approvalEditActions`' whole-folder reading; `budgets.yml`, `reports/` and reads stay allowed.
+  **A filter never stands in for a fallback** (review 9 — `dev-guardian baseline update; eval node <cli> approve …` was ALLOWED
+  without the check, 1.29.1 asked): `approvalGuardDecision` runs `approvalActionFilters()` as EACH reader returns — before the
+  shell's `approvalUnparsed` fallback, on each edit / MCP hit before it is the answer (a dropped hit lets the reading go on: the
+  next path, the whole-folder reading) — and dev-guardian's file is a fact of its own in `shellPathFacts` (`guardianFile`, never
+  `guarded`): each operation ADDS its action to the path's 1.29 reading (`git restore .specs/guardian.cjs` stays a feature
+  folder's restore). So without the check every call decides as the same call without its dev-guardian part; a new filter keeps
+  that rule (mcp/tests/09-evidence-guardian.js pairs each call with its twin). Known limits: a glob write onto either file,
+  dev-guardian's own MCP tool `set_baseline` (not in the hook's matcher: dev-guardian's side) and a variable exported out of the
+  command's sight; for the launcher, its verification before every run is the backstop.
 - **The shell lexer** (`shellCommandWords(cmd, mode)`: one linear pass, nothing evaluated, ≤ `APPROVAL_LEX_DEPTH` = 32 deep)
   reads the tool's shell — `bash` (`\x`, `$'…'`; `raw` keeps backslashes for Windows paths), `ps` (the backtick escape, `@'…'@`,
   `<# #>`), `cmd` (`^`). `{` / `}` separate only standing alone (inside a word they are brace expansion). Redirections go to
@@ -210,7 +279,7 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   skips launchers' value options (`APPROVAL_OPTION_VALUES`, `APPROVAL_POSITIONALS`), takes npm / pnpm / yarn / bun / deno only
   through a run subcommand (`APPROVAL_SUBCOMMANDS`) and `$env:ComSpec` as cmd (`RE_COMSPEC_WORD`); the CLI fed on stdin counts
   (`stdinScriptAt()`). `cliApprovalAction()` reads its words with `CLI_SWITCHES` (a non-switch `--flag` takes the next word),
-  then with every flag a switch — `spec.CLI_SWITCHES` is the ONE list of CLI boolean switches (conventions.md → CLI boolean
+  then with every flag a switch — `CLI_SWITCHES` (mcp/lib/probe.js, `spec.CLI_SWITCHES`) is the ONE list of CLI boolean switches (conventions.md → CLI boolean
   switches): a CLI-only switch would shift this reading.
 - **Nested scripts.** A word holding whitespace and `dev-spec` after an `APPROVAL_SHELLS` program is lexed in turn, ≤
   `APPROVAL_SHELL_DEPTH` = 3, reading ≤ `APPROVAL_COMMAND_MAX` (64 K) characters. Where cmd / pwsh RUNS, the words after `/c` /
@@ -240,7 +309,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `.specs/` or a guarded file is `unreadable` why `specs-arg` (`npx prettier --write .specs/roadmap.json`).
   mcp/tests/10-guards-shell-writes.js holds 33 legitimate commands that stay allowed; mcp/tests/10-guards-hooks.js checks the hook's
   `candidate()` constants match the engine's.
-- **MCP file tools** (`approvalEditActions()` / `approvalPathArgs()`): string values of path-named keys (3 levels, ≤ 32; a
+- **MCP file tools** (`approvalEditActions()` / `approvalPathArgs()` — probe.js `mcpPathArgs`, the hook's reading too): string
+  values of path-named keys (3 levels, ≤ 32; a
   `file://` URI via `fileUriToPath`) are read as an Edit's path; a move / delete tool also on `.specs/` or under it. Content keys
   are never read.
 - **Unreadable actions** (`kind: "unreadable"`, no command). `too-long` — past `APPROVAL_COMMAND_MAX`, its unread tail naming
@@ -251,8 +321,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   with an unreadable subcommand (`cliSubcommandUnread()`) beside an approval word; `--%` right after the CLI
   (`RE_PS_STOP_AFTER_CLI`); a subcommand glob / brace that may expand to a guarded one (`cliSubcommandGlob()`,
   `CLI_GUARDED_COMMANDS`: `appro?e` asks, `st?tus` doesn't). `partial`: the hook's 2 s stdin safety net fired, the payload
-  doesn't parse, and its text names dev-spec, `.specs` or an approval tool while a project the session may be in has the guard
-  on.
+  doesn't parse, and its text names dev-spec, `.specs`, dev-guardian (`guardian` — `RE_PARTIAL`, review 9) or an approval tool
+  while a project the session may be in has the guard on.
 - **ask** → `permissionDecision: "ask"`: the reason names the feature, phase(s), role, `by` and, loudly, `--force`; Claude Code
   shows it in auto mode too (only bypass-permissions skips it; dontAsk refuses it). **deny** (auto mode included): the reason
   tells the agent
@@ -273,8 +343,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   when the command names nothing of dev-spec's (`… | base64 -d | bash`), splatting the CLI's own path (`& node @a`), `git -c
   alias.x='!…'`, a copy of the CLI under another name, git forms whose files can't be known from the command (`git apply` /
   `am`, `git stash pop`, `git reset --hard`, a branch switch), an archive extracted into the project root without naming
-  `.specs/`, `patch` without a file operand, and a link to a guarded FILE (not a folder) made by one of those routes and then
-  edited through (only its folder's real path is read). Outside Claude Code the elicitation path gates spec_approve /
+  `.specs/`, `patch` without a file operand, a link to a guarded FILE (not a folder) made by one of those routes and then
+  edited through (only its folder's real path is read), and a Windows 8.3 short name in a SHELL command (`cp x SPECS~1\roadmap.json`,
+  `echo x > GUARDI~1\baseline.json` — a shell word is read as text, nothing touches the disk; the edit tools' and MCP file tools'
+  paths go through their real path, `approvalEditTargets`). Outside Claude Code the elicitation path gates spec_approve /
   spec_feature / spec_init only (not a `spec_add_track {remove}` — gates-and-approvals.md → Approvals the user confirmed over
   MCP).
 
@@ -295,7 +367,15 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   — exit 0, stdin capped, silent outside a project, cut to `$COLUMNS`, `--json`. It runs after every message in every folder, so
   cli/commands.js's `spec` is a proxy that loads the facade on first use and the render tries `statusProbe()` first
   (cli/completion.js — the probe's `nearestDevSpec`): no project → the empty line at about Node's startup
-  (cli/tests/11-claude-code.js checks the two agree and that no mcp/lib module loads). `--print-config` prints the `statusLine`
+  (cli/tests/11-claude-code.js checks the two agree and that no mcp/lib module loads). **In a project, the last render is reused**
+  (cli/completion.js `statusCacheRead` / `statusCacheWrite`, no engine): kept in the OS temp folder per key (this CLI, the
+  candidate folders resolved, `$COLUMNS`) with `specsSignature()` of the project's `.specs/` taken BEFORE it rendered — every
+  entry's path, size, mtime and ctime, ≤ `STATUS_CACHE_ENTRIES` (4,000; past it: no cache), links never entered — and served while
+  that signature holds and it is under `STATUS_CACHE_TTL_MS` (10 s) old. Any change under `.specs/` shows at the next render; what
+  the line reads OUTSIDE `.specs/` (a Phase 4 test file, a finished feature's code — finish again —, a forced approval's code checks,
+  a worktree's mapping, a nearer `.specs/` made since) within the TTL. Measured (Windows, Node 26, median of 21 interleaved fresh
+  processes, `node -e 0` 51 ms): a 5-feature project 194 → 80 ms on a hit (outside a project 72; a loaded machine, `node -e 0` 96:
+  414 → 152, outside 135). `--print-config` prints the `statusLine`
   entry — in a plugin's versioned cache folder, a `node -e` one-liner that finds the newest installed `<version>` at each run
   (cli/completion.js `statuslineCommand`: no quote, dollar, backtick, percent, ! or backslash, so every shell passes it; else the
   plain command and `cacheNote`). A plugin can't ship a status line (plugin `settings` honour only `agent` /
@@ -305,20 +385,39 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (`plugins/cache/<marketplace>/dev-guardian/<version>/cli/dev-guardian.mjs`), so its path can't be baked into a check either.
   A `node -e` one-liner like the status line's did NOT fit: with DEV_GUARDIAN_CLI, CLAUDE_CONFIG_DIR, every marketplace, the
   numeric order and a clear exit 3 it was ~730 characters against meta.checks' 500. So the check is `node .specs/guardian.cjs
-  scan --project . --fail-on high --format json` and `.specs/guardian.cjs` is a small generated script (evidence.js
-  `GUARDIAN_LAUNCHER`, committed with the project: a teammate's clone runs the same check): `DEV_GUARDIAN_CLI` (a file) first,
-  else the newest `<version>` by numeric parts (a missing part 0, a version folder without the CLI skipped) under
-  `CLAUDE_CONFIG_DIR` — else `~/.claude` (Claude Code's own rule: one config folder, never both) — `/plugins/cache/*/dev-guardian/`;
-  it sets `argv[1]` to that CLI (dev-guardian runs `main()` only when argv[1] is itself — realpaths compared) and imports it by
-  its file URL (`import("node:url")`: `require("url")` would be a Node core module CLAUDE.md doesn't list), so dev-guardian's
-  own exit code is the run's. Nothing found, a DEV_GUARDIAN_CLI naming no file, a CLI that doesn't load → `exitCode = 3`
-  (never `process.exit`: a message to a pipe would be cut) and a "dev-guardian not found: …" / "could not be loaded" line.
-  `nosemgrep` comments on its three `path.join` lines: dev-guardian's own Semgrep flagged them (medium) in every project.
-  Source rules: no backslash in it, Node core only. `guardianCli()` mirrors the rule for the engine's offer (folder listings,
-  outside the project — the one engine read of the user's config folder); mcp/tests/09-evidence-guardian.js runs both on a
-  fake plugin cache. The command runs under cmd.exe, bash, PowerShell 5.1 and pwsh alike (cli/tests/09-evidence-guardian.js).
-  **Hermetic tests:** the runner drops `DEV_GUARDIAN_CLI` and points `CLAUDE_CONFIG_DIR` at an absent folder of the chain's own
-  (testing.md), or init would offer the gate on a maintainer's machine with dev-guardian installed.
+  scan --project . --fail-on high --format json` and `.specs/guardian.cjs` is a small generated script (guardian.js
+  `GUARDIAN_LAUNCHER`, committed with the project: a teammate's clone runs the same check).
+  - *The lookup is ONE function* (1.30), `findDevGuardian(env, cwd, fs, path, os)`: the engine runs it for the offer
+    (`guardianCli(env, cwd)`) and the launcher carries its source (`Function.prototype.toString`, CRLF folded) — the two can't
+    drift. Its source rules: Node core only, handed in; no backslash, no backtick, no `${`. `DEV_GUARDIAN_CLI` first — only a
+    file whose basename is `dev-guardian.mjs` (review 8: any file was imported, the launcher was a trampoline); else Claude
+    Code's `plugins/installed_plugins.json` under `CLAUDE_CONFIG_DIR` — else `~/.claude` (Claude Code's own rule: one config
+    folder, never both): the `installPath` of a `dev-guardian@<marketplace>` entry whose `cli/dev-guardian.mjs` is a file — one
+    scoped to this project (`projectPath` = the cwd) over the user's, then the newest version. That file decides once it parses
+    (a dev-guardian it doesn't list is not installed: an update's leftover folder, a disabled copy). Without it, the newest x.y.z
+    folder (semver only — a commit-hash folder like `9f3e2a1b7c` read as 9 before) of `plugins/cache/*/dev-guardian/` holding
+    the CLI and not marked `.orphaned_at` (Claude Code marks an update's leftovers so).
+  - *What it runs:* only `scan`, `baseline` (the user's `baseline update`), `status` and help (`GUARDIAN_FORWARDED`); anything
+    else exits 3 ("not forwarded"). A `DEV_GUARDIAN_CLI` it ran is said on stderr (`dev-guardian launcher: DEV_GUARDIAN_CLI=…`)
+    and lands in the verdict (`override`) and the merge summary.
+  - *How it runs it:* it sets `argv[1]` to that CLI (dev-guardian runs `main()` only when argv[1] is itself — realpaths
+    compared) and imports it by its file URL (`import("node:url")`: `require("url")` would be a Node core module CLAUDE.md
+    doesn't list), so dev-guardian's own exit code is the run's. Nothing found, a subcommand not forwarded, a CLI that doesn't
+    load → `exitCode = 3` (never `process.exit`: a message to a pipe would be cut) and a "dev-guardian not found: …" /
+    "could not be loaded" line. `nosemgrep` comments on its `path.join` / `path.resolve` helpers: dev-guardian's own Semgrep
+    flagged them (medium) in every project.
+  - *It is verified, never trusted* (1.30, review 8 ds-security 1): the gate runs code from the project, so `guardianLauncherState()`
+    compares `.specs/guardian.cjs` (lstat: a regular file, ≤ 256 KB, read raw, CRLF folded) with `GUARDIAN_LAUNCHER` → ok ·
+    outdated (an earlier version's, byte for byte: `GUARDIAN_LAUNCHER_PAST`, sha1 — 1.29's is mcp/tests/fixtures) · missing ·
+    changed. `finish --run` checks it before running anything (`guardianPreRun`: outdated → rewritten first, with a note;
+    missing → `no-launcher`, changed → `launcher-changed`, both refused with nothing run or recorded), `recordFinishChecks`
+    refuses a reported run of a changed one (and a pass of a missing one), `spec_upgrade` flags it and `--apply` writes it;
+    `init --guardian` (no guard-down while the check is already set) writes it again. **A launcher edit is a release item:**
+    add the old text's sha1 to `GUARDIAN_LAUNCHER_PAST`, or every project's gate refuses until `init --guardian`.
+  - The command runs under cmd.exe, bash, PowerShell 5.1 and pwsh alike (cli/tests/09-evidence-guardian.js).
+    mcp/tests/09-evidence-guardian.js runs the launcher and `guardianCli` on fake caches and installed_plugins.json files.
+    **Hermetic tests:** the runner drops `DEV_GUARDIAN_CLI` and points `CLAUDE_CONFIG_DIR` at an absent folder of the chain's own
+    (testing.md), or init would offer the gate on a maintainer's machine with dev-guardian installed.
 - **User defaults** — `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT` (`userOptionRaw()` →
   `userDefaults()`), FALLBACKS only: project meta wins; empty, invalid or unexpanded changes nothing. `newProjectLang()` only for
   a brand-new project (no meta.lang, no feature, active or archived), seeded by `seedProjectLang()` under the roadmap lock;
@@ -409,6 +508,21 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   in a project 230 → 208 ms, a Stop claim 287 → 247, ExitPlanMode 174 → 165 — noise, not a gain); requiring hook-utils.js
   costs ~0.7 ms over an empty module. The engine's `isNetworkPath`, `unexpandedVar`, `expandHome`, `guardTargetPath` and `approvalEditTargets` became
   the probe's functions (they had been copies).
+- **1.30 (review 8)** — **ds-security finding 3:** the approval hook's dot-glob pre-filter (and the engine's copy of it), the edit
+  guard's path-word regex and its `find … -delete` branch, the guarded-file regexes, the hook's `.specs`-parent regex and the
+  trailing-separator trims rescanned a run from every start: `echo =.=.…` (120 K characters) ran the approval hook 16.7 s against
+  its 10 s timeout, so the guard-down behind it went through (exp4 / exp9 of the report: the regex alone 3.5 s at 64 K; the guard
+  hook 4.1 s on an 80 K command outside any project). Every scan is linear (the rule above): at 64 K the dot glob 2.8 s → under 1 ms,
+  the path words ~2 s → under 1 ms; a sweep of every regex the hooks run on payload text, and of the engine's lexer at its 64 K cap
+  (pumped with ~80 token pairs), found no other super-linear one (the lexer: ~0.1–0.2 s at the cap). **ds-maint finding 1:** every
+  hook exports `decide()`; the MCP suite's hook tests run in-process (`hookIn`), real processes kept for stdin, the safety net,
+  oversized payloads, preloads and timing. **finding 4:** renamed copies the duplication guard couldn't see — the observe hook's
+  pre-filter, the approval hook's MCP path reader, verb list, approval-tool and guarded-file regexes, server.js's `RE_DOTDOT` — are
+  probe.js's / hook-utils.js's one copy; hooks.json's verbs (`[Ww]rite`) were case-sensitive, so `mcp__x__FILE_WRITE` never reached
+  the hook: the matcher is built from `MCP_FILE_VERBS`.
+- **1.30 review 8** — `allowed-tools` pre-approved two writers (`/roadmap`'s `spec_roadmap`, `/spec-report`'s `spec_metrics`,
+  both writing with `write`) although the 1.26 rule was read-only tools only: dropped, and a test reads every command's list
+  against tools/list's `readOnlyHint`.
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.
@@ -429,6 +543,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   guarded package's `.specs/` didn't guard its files.
 - **1.27** — the edited file's candidate is the nearest DEV-SPEC `.specs/` (the probe); a network cwd is never walked up the
   share, as the engine's sessionProject (the observe hook's walk had climbed to the share root).
+- **1.30 (review 8, integration C14)** — `rm -rf src` passed both plugins' guards (dev-guardian only warned) while `sed -i
+  src/util.js` asked: a folder holding code is a code target (`guardFolderCode` / scan.js `folderHoldsCode`), for every removal and
+  move spelling the guard reads.
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer
@@ -465,6 +582,20 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   **finding 11:** the threat model, said as it is in every doc; the known limits listed.
 - **1.27** — the candidate projects' `cd` targets go through `probe.nearestProject` (the folder itself with any `.specs/`, else
   the nearest dev-spec one above, ≤ 64 levels); it took the nearest `.specs/` of any tool, ≤ 40.
+- **1.30 (review 8)** — dev-guardian's gate joined the guard: at deny, an agent overwrote `.specs/guardian.cjs` with a stub
+  printing exit 0 (recorded as the CLI's own observed pass), ran `baseline update` or wrote `.guardian/baseline.json` to clear a
+  failed gate, or pointed `DEV_GUARDIAN_CLI` at a stub — all allowed. Now guard-downs while a check runs the gate (rules in
+  guardian.js, one-line hook points in guards.js).
+- **1.30 (review 9)** — **HIGH:** a dev-guardian action switched the fail-closed fallback off: it made the action list non-empty,
+  so `approvalUnparsed()` never ran, then `guardianGuardFilter` dropped it without the check — `dev-guardian baseline update; eval
+  node <cli> approve … --force` (and the launcher's, a `DEV_GUARDIAN_CLI=` prefix, `X=approve; … $X`) went from 1.29.1's ask to
+  allow; PowerShell's `…; iex "node <cli> approve …"` and an MCP move of `.guardian/baseline.json` onto `.specs/roadmap.json` from
+  deny to allow (the first hit returned); `git restore .specs/guardian.cjs` lost its feature-folder reading. The filters run as each
+  reader returns, dev-guardian's file is `guardianFile` (added, never in place). **MEDIUM:** `.guardian/` as a folder destination
+  (`cp … .guardian/`, `rsync`, `mv evil .guardian`, `git checkout -- .guardian`, an MCP move) was unguarded with the check:
+  `guardian-baseline` now. **3a:** a nested project's files named from the folder above (`cp evil sub/.specs/guardian.cjs`) were
+  judged by the outer project alone: the folders a command's words name are candidates, each candidate judges with its own meta.
+  **3c:** `RE_PARTIAL` names `guardian`. **3b:** 8.3 short names in shell commands — a known limit (listed).
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import
@@ -481,3 +612,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `statusLineRender`, run first by cli/main.js.
 - **1.29** — the dev-guardian launcher, `.specs/guardian.cjs`: a generated script rather than the status line's `node -e`
   one-liner, which did not fit a project check's 500 characters.
+- **1.30 (review 8)** — the launcher's lookup became one function the launcher carries (`findDevGuardian`); installed_plugins.json
+  first (the cache's newest numeric folder ran an orphaned or another project's copy, and a commit-hash folder read as version 9);
+  DEV_GUARDIAN_CLI only a `dev-guardian.mjs` and only the gate's subcommands forwarded (it imported any file with any arguments:
+  `DEV_GUARDIAN_CLI=…/dev-spec.js node .specs/guardian.cjs approve … --force` recorded a forced approval at deny); the launcher
+  verified before every run and recorded run (`launcher-changed`), an earlier version's replaced (`GUARDIAN_LAUNCHER_PAST`).
+- **1.30 (review 8, ds-maint finding 5)** — the status line loaded the whole engine after every message in a project (+158 ms over
+  `node -e 0`), its most frequent engine load: the render cache (Status line above).

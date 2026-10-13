@@ -279,11 +279,11 @@ function globDpMatch(g, p) {
 }
 
 // _Implements:_ references of one tasks.md — the same reading as trace_check (HTML comments and fenced code out, the
-// task-marker reader taskMarkerSpans, comma/semicolon lists, backticks dropped).
+// task-marker reader taskMarkerSpans, comma/semicolon lists, backticks dropped; the template's [bracketed] slot is no file).
 function implementsRefs(tasksText) {
   const out = [];
   for (const v of taskMarkerValues(tasksProseText(tasksText || ""), "implements")) {
-    v.split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter(Boolean).forEach((p) => { if (!out.includes(p)) out.push(p); });
+    v.split(/[,;]/).map((s) => stripEnds(s.trim(), isBacktickUnit).trim()).filter((p) => p && !/^\[[^\]]*\]$/.test(p)).forEach((p) => { if (!out.includes(p)) out.push(p); });
   }
   return out;
 }
@@ -434,35 +434,10 @@ function blankFacts(s) {
   return { n, nnw, nlt, tws: (p) => nnw[p] === n || nlt[p] < nnw[p] };
 }
 
-// ---------------------------------------------------------------------------
-// Did-you-mean — the one edit distance behind every suggestion: a track (suggestTrack), a tool argument (the MCP
-// server's unknown-argument refusal). Words are short (names, keys), so the O(a·b) table is cheap.
-// ---------------------------------------------------------------------------
-
-// The optimal-string-alignment distance: insert, delete, substitute — and a transposition ('sasa', 'revokde') — cost 1.
-function osaDistance(a, b) {
-  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-  for (let j = 1; j <= b.length; j++) d[0][j] = j;
-  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
-    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-  }
-  return d[a.length][b.length];
-}
-// The candidate nearest to `word` — compared case-insensitively — within `limit(candidate, word)` edits (default: max(1,
-// ⌊candidate length / 3⌋), the CLI's rule for a mistyped flag; the first of equals wins), else null. A suggestion only:
-// never accepted as input.
-function closestName(word, candidates, limit) {
-  const w = String(word == null ? "" : word).toLowerCase();
-  const max = typeof limit === "function" ? limit : (c) => Math.max(1, Math.floor(c.length / 3));
-  let best = null;
-  for (const c of candidates || []) {
-    if (typeof c !== "string") continue;
-    const n = osaDistance(w, c.toLowerCase());
-    if (n <= max(c, w) && (!best || n < best.n)) best = { c, n };
-  }
-  return best ? best.c : null;
-}
+// Did-you-mean — the one edit distance behind every suggestion: a track (suggestTrack), a tool argument (the MCP server's
+// unknown-argument refusal), a CLI flag. closestName lives in mcp/lib/probe.js (1.30): the CLI refuses a mistyped --flag with
+// its suggestion before the engine loads — one copy, the engine's E.closestName is it.
+const { closestName } = require("../probe.js");
 
 // THE calendar date (YYYY-MM-DD) of a moment, as the person working reads it on a calendar: the LOCAL date.
 // `new Date().toISOString().slice(0, 10)` (eleven places, two helpers) is the UTC date — something written between 00:00 and 01:00

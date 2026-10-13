@@ -419,13 +419,14 @@ Justifica tudo o que viole um princípio da constituição ou acrescente complex
     intro: (label) => `<!-- Tracks: ${label}. Organizado por história de utilizador para cada uma ser lançável de forma
      independente (P1 primeiro). Cada tarefa é marcada com a sua história: [US1]/[US2] ou [shared] para
      trabalho transversal. [P] = paralelizável (ficheiros diferentes, sem deps). Cada tarefa leva
-     _Requirements:_; tarefas TDD levam _Makes green:_. Usa _Implements: caminho_ para ligar uma tarefa
-     a um ficheiro de código real. Um **Checkpoint** marca onde uma história é testável de forma independente.
+     _Requirements:_ e, quando escreve código, _Implements: <caminho>_ — os ficheiros que cria ou altera (o
+     guarda de âmbito, a deriva, a deteção de duplicados e o finish leem-nos); tarefas TDD levam _Makes green:_.
+     Um **Checkpoint** marca onde uma história é testável de forma independente.
      Se as histórias NÃO forem lançáveis de forma independente, foram mal fatiadas — volta a fatiá-las, ou
      recorre a um layout por camada técnica (Fundação→Lógica→API→…) mantendo as tags [US1]. -->`,
-    introS: (label) => `<!-- Tracks: ${label} · tamanho s. Uma história; cada tarefa leva _Requirements:_ (as TDD _Makes green:_) e um
-     _Verify: <comando>_ — o spec_complete_task regista o resultado como evidência da tarefa. Usa _Implements: caminho_
-     para ligar uma tarefa a um ficheiro de código real. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · tamanho s. Uma história; cada tarefa leva _Requirements:_ (as TDD _Makes green:_), um
+     _Verify: <comando>_ — o spec_complete_task regista o resultado como evidência da tarefa — e, quando escreve código,
+     _Implements: <caminho>_: os ficheiros que cria ou altera. -->`,
     constraints: `## Restrições Globais
 <!-- Valores exatos que todas as tarefas têm de respeitar, copiados tal e qual da spec/steering (versões
      mínimas, regras de nomes, limites, formatos) — o spec_task_brief copia esta secção para cada brief.
@@ -442,6 +443,7 @@ Justifica tudo o que viole um princípio da constituição ou acrescente complex
     story1: "## História US-1 (P1 — MVP)",
     coreTask: "[Comportamento central para US-1]",
     verify: "[comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]",
+    implements: "[caminho do código que cria ou altera]",
     parallelTask: "[tarefa paralelizável — ficheiro diferente, sem deps]",
     checkpoint1: "US-1 está totalmente funcional e testável/lançável de forma independente.",
     story2: "## História US-2 (P2)",
@@ -618,6 +620,10 @@ Tracks: ${label}. Marca antes de dar a feature por concluída.`,
     specsEdit: "mover ou apagar .specs/ ou uma pasta dentro dela com uma ferramenta de ficheiros (é lá que estão o roadmap.json e os .state.json das features)",
     specsShell: "alterar .specs/ a partir da shell — escrever, mover ou apagar através de um glob, de uma variável ou de uma pasta inteira que pode chegar ao roadmap.json ou ao .state.json de uma feature",
     link: "criar um link para .specs/ ou para um ficheiro lá dentro (link simbólico, junction ou hard link) — o que se escrever através dele chega ao roadmap.json e aos .state.json sem ser visto",
+    guardianLauncher: "escrever ou apagar .specs/guardian.cjs — o launcher que o gate do dev-guardian (a verificação do projeto 'guardian') corre",
+    guardianBaseline: "escrever ou apagar .guardian/baseline.json — os findings que o gate do dev-guardian aceita como conhecidos",
+    guardianBaselineUpdate: "correr o `baseline update` do dev-guardian — aceita como conhecidos todos os findings atuais, incluindo os da feature, e o gate deixa de os reportar",
+    guardianCli: "correr o gate do dev-guardian com um DEV_GUARDIAN_CLI ou CLAUDE_CONFIG_DIR próprio — responderia outro dev-guardian",
     lower: (from, to) => `baixar o guarda de aprovações de ${from} para ${to}`,
     revoke: (phase, feature) => `revogar a aprovação da fase ${phase} de '${feature}'`,
     approve: (phase, feature) => `aprovar a fase ${phase} de '${feature}'`,
@@ -726,6 +732,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 - [ ] 2. [US1] Corrigir a causa raiz — uma alteração, não um pacote; o teste de proteção T-02 continua verde
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
+  - _Implements: [caminho do código que a correção altera]_
   - _Verify: [comando da suite de testes completa]_
 **Checkpoint:** o bug deixa de se reproduzir e a suite completa está verde.
 `;
@@ -796,6 +803,7 @@ ${a.summary || "[uma linha: o que muda e porquê]"}
 ## Tarefas
 - [ ] 1. [US1] [a alteração]
   - _Requirements: US-1.AC-1_
+  - _Implements: [caminho do código que cria ou altera]_
   - _Verify: [comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]_
 
 <!-- Uma alteração (tamanho xs): 1–3 critérios de aceitação e 1–3 tarefas, só core — sem classificação, design, quickstart
@@ -975,8 +983,11 @@ const msg = {
       noEvidence: "sem evidência registada",
       changedByDate: (list, slug) => `avaliado só pela data do ficheiro (aprovado antes das impressões digitais de conteúdo — um clone ou uma cópia repõe as datas, por isso pode nem ser uma edição): ${list} — revê e volta a aprovar para o seguir pelo conteúdo (/approve ${slug} <fase>)`,
       // 1.28: o detetor de código duplicado — um aviso, nunca um bloqueio
-      duplicates: (n, top, within, slug) => `o código da feature repete código existente em ${n} sítio(s) — ${top}${n > 3 ? "; …" : ""}: reutilizar ou estender o código existente, ou explicar no relatório porque é que uma cópia é deliberada${within ? `; mais ${within} repetição(ões) dentro dos ficheiros da própria feature` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
-      duplicatesWithin: (n, slug) => `${n} bloco(s) do código da feature repete(m) outro sítio dos seus próprios ficheiros — candidato(s) para a passagem de simplificação (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicates: (n, top, within, slug) => `o código da feature repete código existente em ${n} ${n === 1 ? "sítio" : "sítios"} — ${top}${n > 3 ? "; …" : ""}: reutilizar ou estender o código existente, ou explicar no relatório porque é que uma cópia é deliberada${within ? `; mais ${within} ${within === 1 ? "repetição" : "repetições"} dentro dos ficheiros da própria feature` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicatesPartial: (unread) => `; só parte do projeto foi comparada — o limite de bytes do detetor deixou ${unread === 1 ? "1 ficheiro de código" : `${unread} ficheiros de código`} por ler`,
+      duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "bloco do código da feature repete" : "blocos do código da feature repetem"} outro sítio dos seus próprios ficheiros — ${n === 1 ? "candidato" : "candidatos"} para a passagem de simplificação (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // 1.30: nenhuma tarefa indica ficheiros em _Implements:_ — quem os lê não vê código da feature
+      noImplements: (file) => `nenhuma tarefa indica os seus ficheiros em _Implements:_ — a baseline de deriva, a deteção de duplicados e a atribuição do dev-guardian não veem código desta feature. Acrescenta _Implements: <caminho>_ a cada tarefa que escreveu código (um ${file} editado volta a ser aprovado), ou ignora isto se nenhuma o fez.`,
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
     // rigor à medida (o EN é a referência): tamanhos (spec_create {size}), a alteração (tamanho xs, um change.md).
@@ -1010,7 +1021,7 @@ const msg = {
       },
       optionalMark: "opcional neste tamanho",
       coveredMark: "coberta por outro track",
-      suggestTail: "Confirmar ou escolher outro na Fase 0 — spec_create {size: xs | s | m | l}; sem tamanho fica o scaffold anterior ao 1.21.",
+      suggestTail: "Confirmar ou escolher outro na Fase 0 — spec_create {size} (CLI: create --size xs|s|m|l); sem tamanho: o scaffold completo.",
     },
     kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
     langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,
@@ -1048,7 +1059,6 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' já existe.`,
       renameArchived: (slug) => `'${slug}' é o nome de uma feature arquivada (.specs/_archive/${slug}) — escolhe outro nome (com o mesmo nome, nenhuma das duas poderia ser arquivada nem restaurada).`,
       slugTaken: (slug, held, name) => `'${name}' chega à pasta .specs/${slug}/, que tem outra feature ('${held}') — o nome da pasta guarda só os primeiros 64 caracteres do nome. Nada foi alterado: usa um nome mais curto que difira dentro deles (para trabalhar em '${held}', usa o nome '${slug}').`,
-      badAction: "a ação tem de ser: remove | archive | rename | restore | flow",
       badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
@@ -1145,6 +1155,7 @@ const msg = {
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] por resolver — resolve antes do design`,
       clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] por resolver no change.md — resolve antes de aprovar o plano`,
       clarificationsOpenBug: (n) => `${n} [NEEDS CLARIFICATION] por resolver no bug.md — resolve-os antes de aprovar a Reprodução / Causa Raiz`,
+      clarificationsOpenDesign: (n) => `${n} [NEEDS CLARIFICATION] por resolver no design.md — resolve-os antes de aprovar o design`,
       clarificationsNone: "nenhum por resolver",
       scPresent: "presente",
       scMissing: "sem critérios de sucesso mensuráveis SC-###",
@@ -1422,7 +1433,8 @@ const msg = {
       removeChangedSincePreview: (slug) => `Nada foi apagado: .specs/${slug}/ mudou depois de o utilizador ter sido questionado sobre a remoção (outra feature renomeada para este nome, ou ficheiros editados enquanto a pergunta esperava) — a confirmação cobria a pasta que lhe foi mostrada. Pergunta-lhe de novo.`,
       backlogNotFound: (name, known) => `'${name}' não está no backlog${known ? ` (backlog: ${known})` : " (o backlog está vazio)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' já tem uma spec (.specs/${slug}/) — o backlog é para features ainda sem spec (estado: ${DEV_SPEC} status ${slug}).`,
-      backlogAppended: (name) => `'${name}' já está no backlog — a nova nota foi acrescentada à sua nota.`,
+      backlogAppended: (name) => `'${name}' já está no backlog — a nova nota foi acrescentada à sua nota (para a substituir: remove o item e volta a juntá-lo).`,
+      fromBacklog: (name, note) => `Do backlog (${name}): ${note}`,
       backlogKept: (name) => `'${name}' já está no backlog com essa nota — nada mudou.`,
       backlogNoteFull: (name, max) => `'${name}' já está no backlog e a sua nota passaria de ${max} caracteres — a nova nota não foi acrescentada: regista-a com outro nome.`,
       backlogNoteLong: (name, max) => `A nota de '${name}' passa de ${max} caracteres — nada foi acrescentado ao backlog: encurta a nota.`,
@@ -1469,8 +1481,8 @@ const msg = {
       coverage: (pct, d, t) => `Cobertura de specs: ${pct}%  (${d}/${t} ficheiros de código nomeados em _Implements:_)`,
       undocumented: (list) => `  pastas sem cobertura: ${list}`,
       // dupes (1.28): o relatório de código duplicado — spec_scan {duplicates: true}
-      dupesHead: (f, existing, within, n, files, lines) => `Duplicados — ${f}: ${existing} sítio(s) repetem código existente · ${within} repetido(s) dentro da feature  (janelas de ${n} linhas de código; ${files} ficheiros, ${lines} linhas de código lidas)`,
-      dupesHeadProject: (total, n, files, lines) => `Duplicados — o projeto: ${total} bloco(s) repetido(s)  (janelas de ${n} linhas de código; ${files} ficheiros, ${lines} linhas de código lidas)`,
+      dupesHead: (f, existing, within, n, files, lines) => `Duplicados — ${f}: ${existing} ${existing === 1 ? "sítio repete" : "sítios repetem"} código existente · ${within} ${within === 1 ? "repetido" : "repetidos"} dentro da feature  (janelas de ${n} linhas de código; ${files} ${files === 1 ? "ficheiro" : "ficheiros"}, ${lines} ${lines === 1 ? "linha de código lida" : "linhas de código lidas"})`,
+      dupesHeadProject: (total, n, files, lines) => `Duplicados — o projeto: ${total} ${total === 1 ? "bloco repetido" : "blocos repetidos"}  (janelas de ${n} linhas de código; ${files} ${files === 1 ? "ficheiro" : "ficheiros"}, ${lines} ${lines === 1 ? "linha de código lida" : "linhas de código lidas"})`,
       dupesNoCode: "  ainda não existe nenhum ficheiro de código nomeado pelos _Implements:_ das suas tarefas — nada a comparar",
       dupesNone: "  nenhum código repetido",
       dupesExisting: (at, n, also) => `  ⚠ ${at} (${n} linhas) repete ${also} — reutilizar ou estender o código existente`,
@@ -1478,6 +1490,7 @@ const msg = {
       dupesAlsoMore: (n) => `+${n}`,
       dupesMore: (n) => `  … e mais ${n} (listam-se os mais longos)`,
       dupesTruncated: (n) => `  (só os primeiros ${n} ficheiros de código foram lidos — o limite: uma repetição para lá deles não se vê)`,
+      dupesPartial: (unread, mb) => `  (atingido o limite de bytes — ${mb} MB de código: ${unread === 1 ? "mais 1 ficheiro de código ficou" : `mais ${unread} ficheiros de código ficaram`} por ler, uma repetição neles não se vê)`,
       clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  fase: ${phase}  veredicto=${verdict}  gates aprovados: ${gatesOk}`,
       changed: (list) => `  ⚠ alterado desde a última aprovação: ${list}`,
@@ -1760,7 +1773,6 @@ const msg = {
     },
 
     impact: {
-      badPhase: (p, known) => `Fase '${p}' desconhecida para spec_impact. Conhecidas: ${known}.`,
       reopenTasks: "reopen aplica-se a requirements, design, test-plan e eval-plan — uma alteração ao tasks.md revê-se e volta a aprovar-se; não reabre nada.",
       changePhase: (phase, slug) => `'${slug}' é uma alteração: os seus critérios e as suas tarefas são um só ficheiro, change.md, aprovado como o plano (fase tasks) — não há fase ${phase}. spec_impact {name: "${slug}"} (fase tasks, a predefinida) compara os dois: os critérios por ID, as tarefas por número.`,
       retireTests: {
@@ -2262,7 +2274,6 @@ const msg = {
 
     templates: {
       noSummary: "[a definir]",
-      badAction: (a) => `Ação de templates desconhecida '${a}' — uma de: list, init, check.`,
       unknownArtifact: (a, list) => `Template desconhecido '${a}' — um de: ${list}, ou steering/<ficheiro>.md.`,
       writeFailed: (rel, why) => `Não foi possível escrever ${rel} (${why}).`,
       writeOutside: (rel) => `Recusei escrever ${rel}: a pasta é uma ligação para fora do projeto.`,
@@ -2321,7 +2332,6 @@ const msg = {
       missingInvalid: (name, codes) => `+${name} (o pack é inválido: ${codes})`,
       missingReserved: (name, slug, builtIn, since) => `+${name} (um track pack anterior à ${since || "1.17"} — '${name}' é agora um nome reservado${builtIn ? `, e o track +${name} incluído NÃO se aplica a esta feature` : ""}: muda o nome de .specs/tracks/${name}/ (e do marcador, se também estiver reservado) e depois ${DEV_SPEC} add-track ${slug} <novo-nome> e ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; para usar o track incluído em vez dele: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
       missingReservedMarker: (name, marker, track, slug, since) => `+${name} (um track pack anterior à ${since || "1.19"} — o seu marcador ${marker} é agora o do track +${track} incluído, por isso o pack é ignorado e as suas secções ${marker} não contam como as do +${track}: muda o marcador em .specs/tracks/${name}/track.json e nos títulos ${marker} desta feature; para usar o track incluído em vez dele: ${DEV_SPEC} add-track ${slug} ${track} (as secções dele são acrescentadas e o pack sai desta feature); para retirar o pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
-      badAction: (a) => `Ação de tracks desconhecida '${a}' — uma de: list, init, check, signals.`,
       nameRequired: "o tracks init precisa de um nome — " + DEV_SPEC + " tracks init <nome> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `Não há track nem track pack '${n}' — os packs do projeto: ${list}.`,
       legacyFeature: ".specs/tracks/ é a pasta de uma feature criada antes de existirem track packs (tem um .state.json) — continua a ser essa feature e nunca é lida como packs. Muda-lhe o nome (" + DEV_SPEC + " feature rename tracks <novo-nome>, ou spec_feature rename) para usar track packs.",
@@ -2753,7 +2763,9 @@ const msg = {
     },
     guardian: {
       offer: (installed, project) => `${installed && project ? "O dev-guardian está instalado e este projeto tem .guardian/" : installed ? "O dev-guardian está instalado" : "Este projeto tem .guardian/ (dev-guardian)"}: ${DEV_SPEC} init --guardian (spec_init {guardian: true}) junta o gate dele como a verificação do projeto 'guardian' — o /spec-finish (finish --run) passa a correr o scan do dev-guardian, que demora minutos e precisa dos scanners dele (Semgrep, Gitleaks, Trivy…).`,
-      on: (cmd) => `O gate do dev-guardian é a verificação do projeto 'guardian' (${cmd} — o .specs/guardian.cjs corre o dev-guardian instalado mais recente): o finish --run corre-a, e um finding novo de gravidade high ou superior bloqueia o finish até ser corrigido ou o utilizador o aceitar no dev-guardian (dev-guardian baseline update, ou uma supressão).`,
+      on: (cmd) => `O gate do dev-guardian é a verificação do projeto 'guardian' (${cmd} — o .specs/guardian.cjs corre o dev-guardian instalado). Vale para o projeto todo: o meta.checks e o launcher vão no commit, por isso o finish de cada clone corre-o, e cada máquina que fecha uma feature precisa do dev-guardian e dos scanners dele (Semgrep, Gitleaks, Trivy). O finish --run corre-a; um finding novo de gravidade high ou superior bloqueia o finish até ser corrigido — para aceitar um finding revisto, o utilizador suprime-o na própria linha com um motivo, nunca com \`baseline update\` (esse aceita todos os findings atuais).`,
+      initBaseline: "Ainda não há baseline (.guardian/baseline.json) — sem ela, todos os findings que já existem contam como novos. Regista-a agora, antes de uma feature juntar código (é um passo do utilizador): node .specs/guardian.cjs baseline update --project . — e faz commit do .guardian/baseline.json.",
+      initIgnore: (lines) => `O dev-spec só escreve dentro de .specs/ — junta ao .gitignore do projeto: ${lines.join(" · ")} (os relatórios do dev-guardian ficam fora do git, a baseline e os orçamentos dentro).`,
       off: "A verificação do projeto 'guardian' está desligada (meta.checks.guardian e .specs/guardian.cjs removidos).",
       badValue: (v) => `--guardian aceita on ou off (recebido '${v}') — um --guardian sem valor é on`,
       pass: (failOn, n) => `dev-guardian: passou — nenhum finding novo de gravidade ${failOn} ou superior` + (n ? ` (${n} novo(s) abaixo disso)` : ""),
@@ -2764,13 +2776,35 @@ const msg = {
       notFound: "o dev-guardian não foi encontrado — instala o plugin dev-guardian, ou define DEV_GUARDIAN_CLI com o caminho do cli/dev-guardian.mjs dele",
       noLauncher: `falta o launcher da verificação, .specs/guardian.cjs — ${DEV_SPEC} init --guardian volta a escrevê-lo`,
       exited: (code) => `o dev-guardian terminou com exit ${code == null ? "?" : code}`,
+      noBaseline: " — sem baseline: todos os findings que já existem contam como novos",
+      override: (p) => ` (dev-guardian do DEV_GUARDIAN_CLI=${p})`,
+      update: (v) => `atualiza o dev-guardian (Claude Code: /plugin) — ${v ? "esta execução usou o " + v + ", o gate precisa do 3.2.1 ou posterior" : "esta execução não indicou versão (o 3.3.0 e posteriores indicam); o gate precisa do 3.2.1 ou posterior"}`,
+      updateHint: (slug) => `Atualiza o plugin dev-guardian (3.2.1 ou posterior — Claude Code: /plugin) e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run.`,
       finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [esta feature]" : ""),
       blocker: (name, text) => `a verificação do projeto '${name}' falhou — ${text}.`,
       more: (n) => `+${n} mais`,
-      fixHint: (slug) => `Corrige o(s) finding(s) — ou, só quando o utilizador aceitar um, regista isso no dev-guardian (dev-guardian baseline update, ou uma supressão) — e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run. Nunca forces o finish sem o utilizador.`,
+      fixHint: (slug) => `Corrige o(s) finding(s) e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run. Para aceitar UM finding revisto, o utilizador suprime-o na própria linha com um motivo (nosemgrep: <regra> -- <motivo>, # nosec) — nunca com \`baseline update\`, que aceita todos os findings atuais, incluindo os desta feature. Nunca forces o finish sem o utilizador.`,
+      baselineHint: "Sem baseline: o utilizador regista uma no commit de base, antes do código desta feature (num checkout do ramo de base: node .specs/guardian.cjs baseline update --project . aí, e depois commit do .guardian/baseline.json) — registada aqui, aceitaria também os findings desta feature.",
       incompleteHint: "Instala o scanner em falta (o /guardian-init do dev-guardian), ou — sem rede, quando o Semgrep não conseguiu obter as regras — junta --local-only ao comando da verificação; a verificação continua falhada até passar ou o utilizador a mudar.",
+      gap: {
+        missingTool: (tools) => `Instala o ${tools} (o /guardian-init do dev-guardian instala os scanners dele).`,
+        noLockfile: (tools) => `O ${tools} não encontrou nenhum lockfile — faz commit de um (package-lock.json, yarn.lock, poetry.lock…) para as dependências poderem ser lidas.`,
+        partialParse: (tools) => `O ${tools} só leu em parte alguns ficheiros — corrige-os, ou o utilizador aceita isso ficheiro a ficheiro (o --accept-partial-parse <caminho> do dev-guardian no comando da verificação).`,
+        timeout: (tools) => `O ${tools} esgotou o tempo nalguns ficheiros — volta a correr a verificação; se continuar, deixa ficheiros gerados ou de terceiros fora do scan (.guardianignore).`,
+        pathTooLong: "Há um caminho longo demais para este sistema — ativa os caminhos longos (Windows) ou encurta-o.",
+        remedy: (tool, r) => `${tool}: ${r}`,
+        other: (tool) => `O ${tool} não correu por completo — o relatório do dev-guardian diz porquê.`,
+        tail: "A verificação continua falhada até passar ou o utilizador a mudar.",
+      },
       configHint: (slug) => `Corrige isso e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run.`,
-      mcpRun: (name, cmd) => `A verificação '${name}' corre o scan do dev-guardian (minutos): por MCP, corre tu \`${cmd}\` a partir da raiz do projeto e regista a execução com spec_finish {evidence: [{name: "${name}", command, exitCode, summary: as últimas linhas do stderr, report: o JSON do stdout}]}.`,
+      mcpRun: (name, cmd, slug) => `A verificação '${name}' corre o scan do dev-guardian (minutos). No Claude Code, corre ${DEV_SPEC} finish ${slug} --run (Bash com timeout 600000, ou em segundo plano): corre a verificação e regista o relatório sozinho. Noutros clientes, corre \`${cmd}\` a partir da raiz do projeto (dev-guardian 3.3+: junta --compact para um relatório curto) e regista a execução com spec_finish {evidence: [{name: "${name}", command, exitCode, summary: as últimas linhas do stderr, report: o JSON do stdout}]} — uma execução que passa precisa do relatório.`,
+      launcherChanged: `o .specs/guardian.cjs não é o launcher que o dev-spec-driven escreve (editado, substituído ou um link), por isso o gate não o corre — ${DEV_SPEC} init --guardian volta a escrevê-lo`,
+      launcherRefreshed: "O .specs/guardian.cjs foi substituído pelo launcher desta versão (era o de uma versão anterior).",
+      notRun: (name, why) => `a verificação do projeto '${name}' não foi corrida — ${why}. Nada foi registado.`,
+      reportMismatch: (exit, reported, blocking) => `o relatório do dev-guardian contradiz o exit code ${exit}` + (reported != null ? ` (o relatório diz exit ${reported})` : "") + (blocking ? ` — lista ${blocking} finding(s) que bloqueiam` : "") + `; regista a execução tal como foi (ou deixa o finish --run registá-la) — nada foi registado`,
+      reportMissing: "uma execução do gate do dev-guardian que passa precisa do relatório JSON — `report`: o stdout da execução (dev-guardian 3.3+: junta --compact para um curto) — ou deixa o finish --run registá-la; nada foi registado",
+      upgradeLauncher: (state) => `o .specs/guardian.cjs ${state === "missing" ? "não existe" : state === "outdated" ? "é o launcher de uma versão anterior" : "não é o launcher que o dev-spec-driven escreve"} — ${DEV_SPEC} upgrade --apply (ou init --guardian) escreve o desta versão.`,
+      migLauncher: ".specs/guardian.cjs — o launcher desta versão (o gate do dev-guardian)",
       budget: (pct, limit, over, n) => `Código duplicado: ${pct}% das linhas de código lidas — o orçamento do dev-guardian (.guardian/budgets.yml quality.duplication_pct) é ${limit}%: ${over ? "ACIMA do orçamento" : "dentro dele"}. (O dev-spec conta janelas de ${n} linhas de código; o dev-guardian mede com o jscpd — próximos, não idênticos.)`,
       finishBudget: (pct, limit) => `; o projeto, no seu todo, está acima do orçamento de duplicação do dev-guardian — ${pct}% das linhas de código repetem-se (orçamento ${limit}%, .guardian/budgets.yml; a medida do dev-spec, próxima da do jscpd mas não idêntica)`,
     },

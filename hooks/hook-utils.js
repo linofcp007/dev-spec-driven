@@ -8,7 +8,7 @@
  * system reads it: mcp/lib/probe.js (ONE rule for the hooks, the status line and the engine), re-exported here under the names
  * this file always had (readJson = probe.readJsonFile) — loaded on first use: the runner alone needs none of it.
  *
- *   - runHook / finish / payloadOf / eventOf — every hook's process: the payload read from stdin and parsed, main run once, the
+ *   - runHook / finish / payloadOf / eventOf — every hook's process: the payload read from stdin and parsed, decide run once, the
  *     safety net, the one flushed exit.
  *   - probe() — mcp/lib/probe.js, required on first use (each hook's pre-filter runs before it).
  *   - editTargets / fsTargetPath — the probe's (the engine's approvalEditTargets / guardTargetPath ARE them).
@@ -25,14 +25,19 @@ const os = require("os");
 const path = require("path");
 
 // ---- the hooks' runner ------------------------------------------------------------------------------------------------------
-// ONE process shape for every hook (each still decides in its own main, before anything heavier loads). finish(obj?) is the hook's
-// one exit: at most one JSON object on stdout, the process exiting only once it is flushed (Windows and Linux pipes truncate
-// otherwise — conventions.md → Flush stdout before exiting); a second call is a no-op. runHook(main, opts) reads the payload from
-// stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes) and runs main(raw, timedOut) ONCE — at stdin's end, or
-// from the safety net (SAFETY_NET_MS, 2 s: a stdin that never ends; timedOut true — the approval hook asks on a partial payload
-// naming dev-spec). It never crashes: an exception in main, or a stdin error, is a silent exit 0 — never a block (past its
-// pre-check the approval hook catches its own and asks). A terminal stdin runs main("{}"). opts.maxInput: past that many
-// characters the rest is drained unread and main gets "" (the observe and plan hooks ignore an oversized payload).
+// ONE process shape for every hook. A hook is its decision — `decide(raw, opts)` → the ONE object it prints (a permission decision,
+// additionalContext, a block) or null — exported for in-process callers (mcp/tests/harness.js hookIn: no process start, ~100× cheaper)
+// and run here when the file is the process's main module. decide never exits and never writes stdout; it reads the process's
+// environment and working folder as the engine does, so an in-process caller applies its own for the call. Each hook's pre-filter
+// still runs first in its decide, before anything heavier loads.
+// finish(obj?) is the process's one exit: at most one JSON object on stdout, the process exiting only once it is flushed (Windows and
+// Linux pipes truncate otherwise — conventions.md → Flush stdout before exiting); a second call is a no-op. runHook(decide, opts) reads
+// the payload from stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes) and runs decide(raw, { timedOut }) ONCE —
+// at stdin's end, or from the safety net (SAFETY_NET_MS, 2 s: a stdin that never ends; timedOut true — the approval hook asks on a
+// partial payload naming dev-spec) — then finishes with its answer. It never crashes: an exception in decide, or a stdin error, is a
+// silent exit 0 — never a block (past its pre-check the approval hook catches its own and asks). A terminal stdin runs decide("{}").
+// opts.maxInput: past that many characters the rest is drained unread and decide gets "" (the observe and plan hooks ignore an
+// oversized payload).
 const SAFETY_NET_MS = 2000;
 let finished = false;
 function finish(obj) {
@@ -41,13 +46,15 @@ function finish(obj) {
   if (!obj) process.exit(0);
   process.stdout.write(JSON.stringify(obj), () => process.exit(0));
 }
-function runHook(main, opts = {}) {
+function runHook(decide, opts = {}) {
   const max = opts.maxInput > 0 ? opts.maxInput : Infinity;
   let ran = false, input = "", tooBig = false;
   const run = (raw, timedOut) => {
     if (ran) return; // stdin's end and the safety net must not both run it
     ran = true;
-    try { main(raw, timedOut); } catch { finish(); }
+    let out = null;
+    try { out = decide(raw, { timedOut }); } catch { out = null; }
+    finish(out);
   };
   if (process.stdin.isTTY) return run("{}", false);
   process.stdin.setEncoding("utf8");
@@ -60,7 +67,7 @@ function runHook(main, opts = {}) {
   process.stdin.on("error", () => finish());
   setTimeout(() => run(input, true), SAFETY_NET_MS).unref(); // the safety net
 }
-// The payload main reads: its raw text → the object it holds, or null (not JSON, or JSON that is no object — an array, a string…);
+// The payload a decide reads: its raw text → the object it holds, or null (not JSON, or JSON that is no object — an array, a string…);
 // an empty text is {}. eventOf: its event name (hook_event_name, or the camelCase hookEventName), else "".
 function payloadOf(raw) {
   let p;
@@ -130,12 +137,18 @@ function parseProjectDir(v, base) {
 const RE_CD = /(?:^|[\s;&|(){}])(?:cd|chdir|pushd|sl|set-location|push-location)(?:[ \t]+(?:\/d|-(?:literalpath|path|lp):?))?[ \t]+(?:"([^"]*)"|'([^']*)'|([^\s;&|)'"]+))/gi;
 const RE_ENV_SET = /(?:^|[\s;&|(){}])(?:\$env:)?(?:SPEC_PROJECT_DIR|CLAUDE_PROJECT_DIR)[ \t]*=[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s;&|)'"]+))/gi;
 const RE_PROJECT_FLAG = /--project(?:=|\s+)(?:"([^"]*)"|'([^']*)'|([^\s;&|)]+))/g;
+// A command's words (quoted or bare — linear: an unclosed quote fails once, at the last one) and the ones that name a .specs/ or
+// .guardian/ folder: `cp evil.cjs sub/.specs/guardian.cjs`, `echo x > sub/.guardian/baseline.json` act on sub/'s guarded files — sub/ is
+// a project the call may act on (review 9: a nested project's level and checks were never read). An `--opt=` prefix is no path.
+const RE_PATH_WORD = /"([^"]*)"|'([^']*)'|([^\s'"<>|;&()]+)/g;
+const RE_GUARDED_SEG = /(?:^|[\\/])\.(?:specs|guardian)(?:[\\/]|$)/i;
 
-// The projects an approval-shaped tool call may act on, the session's own first-class: → [folders] (≤ max, distinct), for a raw read
-// of each one's .specs/roadmap.json (the strictest level wins). opts: { cwd (the payload's), env ({CLAUDE_PROJECT_DIR,
-// SPEC_PROJECT_DIR}), named ([folders the call names: MCP projectDir, the edited file's project]), command (a shell command: its
-// --project values, SPEC_PROJECT_DIR= assignments — the folders themselves — and cd targets — where the CLI acts from each: the probe's
-// nearestProject, the CLI's own resolver walk), max }.
+// The projects an approval-shaped tool call may act on, the session's own first-class: → [folders] (distinct: ≤ max the call names,
+// then the session's), for a raw read of each one's .specs/roadmap.json (each one with the guard on judges the call — approval-hook.js).
+// opts: { cwd (the payload's), env ({CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR}), named ([folders the call names: MCP projectDir, the edited
+// file's project]), command (a shell command: its --project values, SPEC_PROJECT_DIR= assignments — the folders themselves —, cd
+// targets — where the CLI acts from each: the probe's nearestProject, the CLI's own resolver walk — and the folder holding each
+// .specs/ / .guardian/ a word names: a nested project's guarded files), max }.
 // The session's folders (the payload cwd — walked up like the CLI —, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the
 // user's: read even on a network share. A network path the AGENT names is refused unless it lies on a share the session is on.
 function approvalProjects(opts = {}) {
@@ -154,7 +167,7 @@ function approvalProjects(opts = {}) {
     if (isNetwork(h)) return shares.has(shareOf(h)) ? h : null;
     if (base && isNetwork(base)) { // relative to a network folder of the session's: on its share
       if (path.isAbsolute(h) || /^[A-Za-z]:/.test(h)) return path.resolve(h);
-      return base.replace(/[\\/]+$/, "") + "\\" + h.replace(/\//g, "\\");
+      return probe().trimSlashEnd(base) + "\\" + h.replace(/\//g, "\\");
     }
     try { return path.resolve(base || localBase || process.cwd(), h); } catch { return null; }
   };
@@ -178,12 +191,24 @@ function approvalProjects(opts = {}) {
       const next = named(t, base);
       if (next) base = next;
     }
+    // the folders holding a .specs/ / .guardian/ a word names (≤ 16), each from the session's folder and the last cd target
+    const parents = new Set();
+    for (const m of command.matchAll(RE_PATH_WORD)) {
+      const w = (m[1] || m[2] || m[3] || "").replace(/^-[^=\\/]*=/, "");
+      if (!RE_GUARDED_SEG.test(w)) continue;
+      const parent = P.specsParentOf(w);
+      if (parent === "." || parents.has(parent)) continue;
+      if (parents.size >= 16) break;
+      parents.add(parent);
+      for (const b of new Set([cwd, base])) add(named(parent, b));
+    }
   }
-  add(cwd && (P.nearestProject(cwd) || cwd));
-  for (const a of anchors) add(isNetwork(a) ? a : path.resolve(a));
+  // the session's own folders always (≤ max of the call's — a command naming many folders never pushes them out), after the call's
   const key = (d) => (process.platform === "win32" || process.platform === "darwin" ? String(d).toLowerCase() : String(d));
-  const seen = new Set();
-  return out.filter((d) => !seen.has(key(d)) && seen.add(key(d))).slice(0, opts.max || 12);
+  const distinct = (list, seen) => list.filter((d) => d && !seen.has(key(d)) && seen.add(key(d)));
+  const called = distinct(out, new Set()).slice(0, opts.max || 12);
+  const own = [cwd && (P.nearestProject(cwd) || cwd), ...anchors.map((a) => (isNetwork(a) ? a : path.resolve(a)))];
+  return called.concat(distinct(own, new Set(called.map(key))));
 }
 
 // A per-session marker file in the OS temp folder: dev-spec-<kind>-<sha1(session id), 16 hex>.flag (the session id is Claude Code's;

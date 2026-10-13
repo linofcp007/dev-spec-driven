@@ -63,7 +63,8 @@ how they came to be — the releases and review findings — is in History at th
   `trackMarker()`, `trackSectionTable()`, `trackSteeringFiles()`, `trackSignalTable()`), never the built-in constants, which
   miss the project's track packs (only the process-wide template corpus and `spec_tracks list`'s built-in lists read them).
 - **New CLI command** → ONE entry of `COMMANDS` in cli/commands.js (its header lists the fields), in the help's order: its
-  `options` (any other flag is refused), completion specs, `help` lines (byte for byte what `help` prints) and `run(c)` —
+  `options` (any other flag is refused — `TABLE` when it runs operations: their flags, in the table's order), completion specs,
+  `help` lines (byte for byte what `help` prints) and `run(c)` —
   synchronous, a promise only where it waits, never an `async` function. The flag checks, the help, the completion scripts
   and `checkCommandArgs()` read the table (conventions.md → The CLI is one table and one call;
   cli/tests/16-conventions-cli-modules.js checks the entry). A command wrapping an operation runs `c.call(id, given)`, `given`
@@ -72,11 +73,13 @@ how they came to be — the releases and review findings — is in History at th
 - **A mode on a second key of a tool** (1.28 `spec_scan {duplicates}`) → its operation's `mode: {key, values}` with the new
   key; `argModes()` derives `alt`, `forTool()` / the server's `argMode()` try it first; its arguments in the tool's schema
   (mcp.md → Arguments by mode).
-- **New CLI switch** (no value) → `CLI_SWITCHES` in `mcp/lib/engine/guards.js` (the CLI and the approval hook's lexer read
+- **New CLI switch** (no value) → `CLI_SWITCHES` in `mcp/lib/probe.js` (the CLI and the approval hook's lexer read
   it); a new **value flag** → `VALUE_FLAG_SPECS` in cli/commands.js (completion `values` by `@source` where the facade has
   the list, never copied; `repeatable: true` when a command reads EVERY occurrence — any other given twice is a usage error).
-  Either → the `options` of every command that reads it and, when it fills an engine option, that option's `cli` in the
-  operations table (a switch `type: "switch"` / `"bool"`, a repeatable one `"list"`).
+  Either → when it fills an engine option, that option's `cli` in the operations table (a switch `type: "switch"` /
+  `"bool"`, a repeatable one `"list"`), at the place the help shows it — a command with `options: TABLE` reads it from there;
+  else (a hand-kept list: init, spike, done, undone, changelog, depend, or a command that runs no operation) the `options` of
+  every command that reads it.
 - **A tool argument that is a string OR a true/false switch** (`spec_create {branch}`) → `type: "string"`, never a list-valued
   type (mcp.md → Argument validation), + its key in server.js `BOOL_STRING_ARGS`, the engine reading `"true"` / `"false"`;
   its CLI flag → `optional: true` in `VALUE_FLAG_SPECS` (a bare `--branch` is `true`), never `CLI_SWITCHES`.
@@ -98,8 +101,10 @@ how they came to be — the releases and review findings — is in History at th
   `CORPUS_SOURCES` (the V8-coverage test names it). Never commit `mcp/lib/spec.bundle.js`.
 - **Renaming or removing a code identifier** → fix the notes citing it: `mcp/tests/17-docs-identifiers.js` fails on a backticked
   name in CLAUDE.md or `docs/maintainers/*.md` that no code file holds (a name from outside the code goes into its allowlist).
-- **SKILL.md stays the source of truth for the workflow** — the rules an agent needs at decision time, ≤ 5,000 words
-  (`mcp/tests/01-core.js`; loaded whole every time the skill fires). Lookup material goes into `references/` with a one-line
+- **SKILL.md stays the source of truth for the workflow** — the rules an agent needs at decision time, ≤ 15,360 bytes
+  and ≤ 5,000 words (`mcp/tests/01-core.js`; loaded whole every time the skill fires — a new rule pays for itself). Its
+  `description` (≤ 660 characters, `mcp/tests/17-docs.js`) names the intents the skill serves; a new intent gets its triggering
+  case in `evals/` (and a near-miss where a neighbour — dev-guardian — shares the words). Lookup material goes into `references/` with a one-line
   pointer ("read X when Y"), every file listed in `references/index.md` (a test fails on an orphan). A rule agents need even
   when they skip the skill also goes into the MCP tool description that acts on it. Commands stay thin.
 
@@ -124,6 +129,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   constants the 1.20 cue rules had replaced, so `mcp/tests/17-docs-identifiers.js` checks every backticked identifier of the notes.
 - **1.26** — tools folded into others behind hidden aliases (`LEGACY_TOOLS`, the modes); the 55 slash commands folded into 22
   (the table below); the corpus stopped carrying the version, so a version bump alone no longer needs a rebuild.
+- **1.30 review 8** — SKILL.md had 85 bytes left under 15 KiB with only the word cap tested: a byte cap (≤ 15,360); the
+  description reached 618 of its 620 characters while resume, the next task, a spec change and a spike never fired the skill — the
+  cap is 660 (the model-visible listing stays ≤ 1,500) and evals/ gained six triggering cases and three near-misses.
 - **1.28** — a tool's mode on a second key (`alt`); an integer flag's `bounds` as a `[least, most]` pair (the schema's
   minimum: `dupes --min-lines` 4–100).
 - **1.27** — one operations table (`OPERATIONS`, mcp/lib/operations.js) both surfaces run through and one CLI command table

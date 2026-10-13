@@ -198,11 +198,16 @@ async function runChecks(feature, deps) {
     if (pw) return { ok: false, error: M.projectChecks.pwshInPosix(pw[0].name, pw[0].command, pw[1], shellName(sh)) };
   }
   checks.map((c) => c.command).filter(spec.verifyPipeMasked).forEach((c) => deps.say(M.verifyPipe.runHint(c)));
+  const lang = spec.featureLang(projectDir, fx.slug);
+  // dev-guardian's gate (1.30): its launcher must be the one dev-spec writes — an earlier version's is replaced first, a missing or
+  // changed one refuses the run before anything runs (nothing recorded)
+  const pre = spec.guardianPreRun(projectDir, checks, lang);
+  if (!pre.ok) return { ok: false, code: pre.code, error: pre.error };
+  if (pre.note) deps.say("  " + pre.note);
   const git = deps.gitState();
   const exec = deps.execOpts();
   const evidence = [];
   let cmdFailed = false;
-  const lang = spec.featureLang(projectDir, fx.slug);
   for (const c of checks) {
     deps.say("$ " + c.command + "   (" + c.name + ")");
     const x = await runCommand(c.command, sh, M, exec);
@@ -215,7 +220,8 @@ async function runChecks(feature, deps) {
     // spec_finish {evidence}) — it used to be recorded as a failed run (exit 1).
     if (x.cantRun) return { ok: false, couldNotRun: x.cantRun.code, check: c.name, error: M.runGate.checkRefused(c.name, c.command, x.cantRun.why) };
     if (x.code !== 0 && sh.cmd && spec.windowsShellFailure(x.output, x.code)) cmdFailed = true;
-    evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary, ...(guardian ? { report: x.stdout } : {}), ...git });
+    // a guardian check: its JSON report (stdout) and its raw stderr (its own message, node's — the summary keeps only the last lines)
+    evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary, ...(guardian ? { report: x.stdout, stderr: x.stderr } : {}), ...git });
   }
   if (cmdFailed) deps.warn(M.taskDone.shellHint);
   return { ok: true, evidence };

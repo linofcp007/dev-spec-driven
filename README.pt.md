@@ -21,8 +21,8 @@ em inglês, português (PT-PT e PT-BR) e espanhol.
 - **Claude Code 2.1.139 ou posterior** (`claude --version`) — os hooks correm em exec form (o `node` arranca
   diretamente, sem shell em cada chamada), que as versões anteriores não correm. Ou qualquer cliente MCP: Claude
   Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI, Codex CLI… ([INTEGRATIONS.md](./INTEGRATIONS.md)).
-- **Node.js ≥ 18** no PATH (`node --version`). O Node 18 já chegou ao fim de vida: recomenda-se o 20 ou posterior (as
-  suites passam no 18, no 22 e no 24).
+- **Node.js ≥ 18** no PATH (`node --version`). O Node 18 e o 20 já chegaram ao fim de vida: recomenda-se o 22 ou
+  posterior (as suites passam no 18, no 22, no 24 e no 26).
 - git — opcional: um branch por funcionalidade, o commit em que uma execução foi feita, o merge driver do estado das specs.
 
 ## Instalação
@@ -86,8 +86,9 @@ consegue correr, pede-te o output — ou dá-te a linha
 aprovação, placeholders), pede uma execução nova da tua suite completa, escreve o resumo de merge a partir da spec e pede
 a tua aprovação final. Depois escolhes: fazer o merge localmente ou manter o branch. Nada é enviado sem ti.
 Com o **dev-guardian** instalado, `dev-spec init --guardian` torna o gate de segurança dele uma verificação do projeto: o
-`/spec-finish` corre-o, e um finding novo de gravidade high bloqueia até ser corrigido ou o aceitares no dev-guardian
-(`dev-guardian baseline update`).
+`/spec-finish` corre-o, e um finding novo de gravidade high bloqueia até ser corrigido (aceitas um finding revisto com uma
+supressão na própria linha, nunca com `baseline update`). Vale para o projeto todo: cada máquina que fecha uma feature
+precisa do dev-guardian e dos scanners dele.
 
 Perdeste-te? O `/spec <feature>` retoma no único passo seguinte. Preferes uma versão guiada no teu repositório? O
 `/dev-spec-driven:spec-tour` leva uma alteração pequena e real por todos os gates e explica cada um à medida que acontece.
@@ -100,7 +101,8 @@ A Fase 0 sugere um tamanho; confirmas ou escolhes outro:
 - **s** — uma história: requisitos, design e tarefas (com +tdd / +ai até ao plano de testes / de avaliação) aprovados
   numa só chamada, só com as secções core de cada track.
 - **m / l** — a cadeia completa, cada fase aprovada: classificação → requisitos → design → plano de testes / de
-  avaliação → os testes que falham (+tdd / +ai, antes de qualquer código) → tarefas.
+  avaliação → os testes que falham (+tdd / +ai, antes de qualquer código) → tarefas. O design indica a sua **Reutilização
+  e Integração** — o que reutiliza, estende ou cria, com os caminhos —, e a aprovação recusa-a vazia.
 
 Em todos os tamanhos: EARS em cada critério, rastreabilidade, o gate de evidência (o `doctor`, o `spec_finish` e a linha
 "Precisa de atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo) e o gate de fecho. Os tracks
@@ -232,7 +234,7 @@ novos (`DEV_SPEC_DEFAULT_LANG`) ou para uma funcionalidade. As palavras-chave EA
 são os mesmos em todas. As mensagens das ferramentas e da CLI seguem a língua da funcionalidade; as descrições dos
 comandos e a ajuda da CLI estão em inglês. Este README: [English](./README.md) · [Español](./README.es.md).
 
-## Atualizar a partir da 1.25 ou anterior
+## Atualizar
 
 1. **Atualiza o plugin:** `/plugin marketplace update dev-spec-driven-marketplace` e depois reinicia o Claude Code (um
    clone: `git pull` e depois reinicia). A 1.26 precisa do Claude Code 2.1.139 ou posterior.
@@ -240,8 +242,13 @@ comandos e a ajuda da CLI estão em inglês. Este README: [English](./README.md)
    migrações seguras (`--apply`) depois do teu OK; nunca edita uma spec. Volta a configurar o que aponta para a pasta do
    plugin (o merge driver, o hook de pre-commit — [INSTALL.md](./INSTALL.md) → Your plugin folder).
 
-As tuas specs não precisam de alterações: a 1.26 mudou o nome dos comandos, não os ficheiros. Os nomes antigos deixaram
-de existir — não há atalhos para eles:
+**A partir da 1.27 ou anterior:** um design m / l passa a precisar da sua Reutilização e Integração — o `/spec-upgrade`
+lista cada feature cujo design foi aprovado sem ela (escreve a secção e volta a aprovar o design). O finish avisa quando o
+código de uma feature repete código que o projeto já tem, e cada tarefa que escreve código indica os seus ficheiros em
+`_Implements:_`. O gate do dev-guardian fica desligado até o pedires (Começar em 5 minutos → passo 5).
+
+**A partir da 1.25 ou anterior:** as tuas specs não precisam de alterações: a 1.26 mudou o nome dos comandos, não os
+ficheiros. Os nomes antigos deixaram de existir — não há atalhos para eles:
 
 | Antes da 1.26 | Agora |
 |---|---|
@@ -298,7 +305,7 @@ dev-spec-driven/                      ← raiz do plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 ferramentas + prompts + recursos, sem dependências)
 │   ├── servers.json                  ← registo MCP do plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← a fachada do motor (o único objeto que o servidor, a CLI e os hooks carregam)
-│   ├── lib/engine/                   ← o motor: 23 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
+│   ├── lib/engine/                   ← o motor: 24 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← conteúdo localizado (en · pt · es) + a derivação pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (um por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (a tua chave de API; --dry-run offline)

@@ -31,22 +31,57 @@ const path = require("path");
 // The hooks' runner (stdin, the safety net, the one flushed exit) and the project probe (mcp/lib/probe.js — the one dev-spec project
 // rule, the session's candidate projects, a JSON file read as the engine reads it: UTF-8 or UTF-16 with a BOM), required on first use
 // — past the pre-filter: a call that edits nothing loads nothing more.
-const { runHook, finish, payloadOf, eventOf, probe, sessionFlagFile } = require("./hook-utils.js");
+const { runHook, payloadOf, eventOf, probe, sessionFlagFile } = require("./hook-utils.js");
 
 // the shell tools — the engine reads which files a command writes (spec.shellWriteTargets). Before it loads, a
 // command must hold an output redirection or the name of a program that writes, removes, moves, copies or extracts files (the
 // engine's readers — mcp/tests/10-guards-shell-writes.js checks every one it reads matches) — read-only commands, test runs and git (the
 // edit guard leaves git to the user) exit here.
 const SHELLS = new Set(["Bash", "PowerShell", "Monitor"]);
+// Every scan here is linear in the command (a hook past its timeout lets the call through — probe.js, the guards' shared readings):
+// the writers by name are fixed words, and `find … -delete / -exec` is read per simple command — the first `find` of each, then its
+// action after it (the regex this replaced, find[^|;&\n]*-(?:delete|…), rescanned the rest of a command from every `find`).
 const RE_SHELL_WRITE = new RegExp("[>]|(?:^|[^\\w.-])(?:tee|sed|perl|ruby|g?awk|mawk|nawk|cp|mv|install|scp|ln|dd|rm|rmdir|unlink|shred|truncate|" +
   "r?ed|ex|vi|vim|nvim|view|sponge|curl|wget|rsync|(?:bsd)?tar|unzip|7z[ar]?|zip|patch|dos2unix|unix2dos|sort|uniq|iconv|xxd|base64|" +
-  "find[^|;&\\n]*-(?:delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)|" +
   "del|erase|rd|copy|move|ren|rename|robocopy|xcopy|mklink|junction|subst|fsutil|mount|set-content|add-content|out-file|clear-content|new-item|" +
   "remove-item|move-item|copy-item|rename-item|tee-object|export-csv|export-clixml|expand-archive|sc|ac|ni|ri|mi|cpi|rni|clc|epcsv)(?![\\w-])|" +
   "\\[(?:system\\.)?io\\.(?:file|directory)\\]::", "i");
-// A shell command's path-like words (holding a / or \) — the nearest dev-spec .specs/ above each is a candidate project (a monorepo's
-// package).
-const RE_PATH_WORD = /(?:^|[\s'"=<>|;&(])[^\s'"<>|;&()]*[\\/][^\s'"<>|;&()]*/g;
+const RE_FIND_WORD = /(?:^|[^\w.-])find/i;
+const RE_FIND_WRITE = /-(?:delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls)(?![\w-])/i;
+// May this command write a file — an output redirection, a writer named, or find with a writing action?
+function mayWrite(command) {
+  const c = String(command);
+  if (RE_SHELL_WRITE.test(c)) return true;
+  for (const seg of c.split(/[|;&\n]/)) {
+    const m = RE_FIND_WORD.exec(seg);
+    if (m && RE_FIND_WRITE.test(seg.slice(m.index + m[0].length))) return true;
+  }
+  return false;
+}
+// A shell command's path-like words (holding a / or \), at most `max`, from its first 64 K characters — the nearest dev-spec .specs/
+// above each is a candidate project (a monorepo's package). Each delimiter-free run is read once: its word is the run (a leading `=`
+// taken off) — or, right after a `)`, its part after the first `=` (`$(x)a=b/c`: b/c) — as the regex this replaced read it; the run's
+// other reading (the value of `--out=src/a.ts`, the whole run after a `)`) joins as one more candidate, at most `max` of them (an extra
+// candidate only adds a check).
+const RE_WORD_RUN = /[^\s'"<>|;&()]+/g;
+const hasSlash = (w) => /[\\/]/.test(w);
+function pathWords(command, max = 8) {
+  const words = [], extras = [];
+  const re = new RegExp(RE_WORD_RUN.source, "g");
+  const c = String(command).slice(0, 64 * 1024);
+  for (let m; words.length < max && (m = re.exec(c));) {
+    const t = m[0];
+    if (!hasSlash(t)) continue;
+    const eq = t.indexOf("=");
+    const value = eq >= 0 ? t.slice(eq).replace(/^=+/, "") : "";
+    const afterParen = m.index > 0 && c[m.index - 1] === ")";
+    const word = afterParen ? value : t.replace(/^=+/, "");
+    const other = afterParen ? t : value;
+    if (hasSlash(word)) words.push(word);
+    if (hasSlash(other) && other !== word && extras.length < max) extras.push(other);
+  }
+  return [...new Set(words.concat(extras))];
+}
 
 // The user's default (the environment variable DEV_SPEC_GUARD_DEFAULT, e.g. from Claude Code's settings.json `env`):
 // on / scope turns the guard on for a project whose roadmap.json leaves meta.guard unset. The engine (spec.guardLevel) reads
@@ -83,18 +118,19 @@ function guardOn(dir) {
   }
 }
 
-function main(raw) {
+// The hook's decision on one payload → the object it prints (ask, or the forced-approval note) or null (silent).
+function decide(raw) {
   const payload = payloadOf(raw);
-  if (!payload) return finish();
+  if (!payload) return null;
   const event = eventOf(payload);
-  if (event && event !== "PreToolUse") return finish();
+  if (event && event !== "PreToolUse") return null;
   const ti = payload.tool_input || payload.toolInput || {};
   const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";
   // a shell command — only one that may write a file (an output redirection, a writer by name) goes on
   const command = SHELLS.has(tool) && typeof ti.command === "string" ? ti.command : null;
-  if (command !== null && !RE_SHELL_WRITE.test(command)) return finish();
+  if (command !== null && !mayWrite(command)) return null;
   const target = command !== null ? null : [ti.file_path, ti.notebook_path, ti.path].find((v) => typeof v === "string" && v.trim());
-  if (!target && command === null) return finish();
+  if (!target && command === null) return null;
 
   // The raw pre-check: is the guard on in any project this edit may belong to — the session's dev-spec projects (probe.sessionProjects:
   // the nearest at or above the session's cwd — a cd'd subfolder, a worktree —, the project dir Claude Code or the user exported) and
@@ -106,9 +142,9 @@ function main(raw) {
   const anchors = PR.sessionAnchors();
   const local = (p) => typeof p === "string" && p.trim() && !PR.isNetwork(p);
   const near = (p) => { try { return local(p) ? PR.nearestDevSpec(path.dirname(path.resolve(cwd && local(cwd) ? cwd : process.cwd(), p))) : null; } catch { return null; } };
-  const words = target ? [target] : (command.match(RE_PATH_WORD) || []).slice(0, 8).map((w) => w.replace(/^[\s'"=<>|;&(]+/, ""));
+  const words = target ? [target] : pathWords(command);
   const cands = [...PR.sessionProjects({ cwd, anchors }), ...words.map(near)].filter(Boolean);
-  if (![...new Set(cands)].some(guardOn)) return finish();
+  if (![...new Set(cands)].some(guardOn)) return null;
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const targets = target ? [target] : spec.shellWriteTargets(command, tool === "PowerShell" ? "ps" : "bash");
@@ -124,7 +160,7 @@ function main(raw) {
       seen.add(s.project);
       const r = spec.guardCheck(s.project, spec.sessionPath(s, t, cwd), s.project);
       if (r.decision === "ask") {
-        return finish({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: r.reason } });
+        return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: r.reason } };
       }
       if (r.note && !note) note = r.note;
     }
@@ -139,13 +175,14 @@ function main(raw) {
       const flag = sessionFlagFile("forced-note", sid);
       let seen = null;
       try { seen = fs.readFileSync(flag, "utf8"); } catch { seen = null; }
-      if (seen === r.note) return finish();
+      if (seen === r.note) return null;
       try { fs.writeFileSync(flag, r.note); } catch { /* not writable: shown again next time */ }
     }
-    return finish({ systemMessage: r.note });
+    return { systemMessage: r.note };
   }
-  return finish();
+  return null;
 }
 
-// The payload from stdin, main run once; any unexpected error is a silent no-op (never a block).
-runHook(main);
+module.exports = { decide, mayWrite, pathWords };
+// As a process (hooks/hooks.json): the payload from stdin, decide run once; any unexpected error is a silent no-op (never a block).
+if (require.main === module) runHook(decide);

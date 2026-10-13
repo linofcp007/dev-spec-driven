@@ -5,13 +5,18 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, run, runIn, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
   const Sob = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const HOOK = path.join(__dirname, "..", "hooks", "observe-hook.js");
   const jsonOb = (s) => { try { return JSON.parse(s); } catch { return null; } };
   const rob = (proj, args) => { // in-process (1.27), but a --run — it waits for its commands: spawned
     const a = [...args, "--project", proj], opts = { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } };
     const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...a], opts) : spawnIn(a, opts);
+    return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
+  };
+  // …and a --run, which waits for its commands: in-process and awaited (1.30 — spawnAsync: the CLI's own start saved)
+  const robRun = async (proj, args) => {
+    const r = await spawnAsync([...args, "--project", proj], { env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } });
     return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
   };
   const stOb = (f) => JSON.parse(fs.readFileSync(path.join(f.dir, ".state.json"), "utf8"));
@@ -38,7 +43,7 @@ exports.run = ({ ok, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   // meta.evidence observed: done --run is observed by the CLI itself ("cli"); a reported run nobody saw ticks but stays unverified
   // (unobserved + the note); once the hook saw the command run, the same report verifies.
   rob(po, ["init", "--evidence", "observed"]);
-  const d1 = rob(po, ["done", fo.slug, "1", "--run", "--json"]);
+  const d1 = (await robRun(po, ["done", fo.slug, "1", "--run", "--json"]));
   const d1j = jsonOb(d1.stdout) || {};
   const d2 = rob(po, ["done", fo.slug, "2", "--cmd", "node two.js", "--exit", "0"]);
   const d2j = jsonOb(rob(po, ["done", fo.slug, "2", "--cmd", "node two.js", "--exit", "0", "--json"]).stdout) || {};
@@ -54,7 +59,7 @@ exports.run = ({ ok, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   // The one verdict: doctor and stop-check name the unobserved task; finish --run records its checks as observed "cli".
   const doc = rob(po, ["doctor", fo.slug]);
   const stop = rob(po, ["stop-check", "--message", "Done — all tasks are complete and verified."]);
-  const fin = rob(po, ["finish", fo.slug, "--run", "--json"]);
+  const fin = (await robRun(po, ["finish", fo.slug, "--run", "--json"]));
   const finj = jsonOb(fin.stdout) || {};
   const tst = (finj.suiteChecks || []).find((c) => c.name === "test") || {};
   ok(/#2 \(run not observed by the harness\)/.test(doc.out) && stop.code === 1 && /#2 \(run not observed by the harness\)/.test(stop.out) &&

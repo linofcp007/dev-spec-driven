@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require }) => {
+exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, hookIn, require }) => {
 
   // 1.16 package (C) — Claude Code integration: status line, user defaults (DEV_SPEC_*), annotations / completion, plan-mode bridge.
 
@@ -69,7 +69,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
       const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
       return { req, stop };
     };
-    const hook = (script, input, env) => spawnSync(process.execPath, [path.join(root, "hooks", script)],
+    // the hook in this process (harness hookIn, review 8); the network-path timings below keep real processes
+    const hook = (script, input, env) => hookIn(path.join(root, "hooks", script),
       { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8", env: childEnv(env), timeout: 30000 });
     const jsonOut = (r) => { try { return JSON.parse(r.stdout); } catch { return null; } };
     const none = fs.mkdtempSync(path.join(os.tmpdir(), "p16c-none-")); // no .specs/ at or above it
@@ -126,7 +127,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     const sl3r = S.statusLine(sl3);
     const slNone = S.statusLine(none);
     const cut = S.statusLine(sl, { columns: 24 }).line;
-    ok(sl3r.found && sl3r.feature === null && sl3r.line === "◆ dev-spec · aún no hay funciones — /spec" && slNone.found === false && slNone.line === "" &&
+    ok(sl3r.found && sl3r.feature === null && sl3r.line === S.msg("es").claudeCode.statusLine.none && slNone.found === false && slNone.line === "" &&
       S.statusLineProject([path.join(sl, "src", "deep", "er")]) === path.resolve(sl) && S.statusLineProject(["${CLAUDE_PROJECT_DIR}", 42, "", none]) === null &&
       S.statusLineProject([none, path.join(sl2, "lib")]) === path.resolve(sl2) && [...cut].length === 24 && cut.endsWith("…"),
       "1.16 C1: no feature → a hint line; no .specs/ → nothing; the project is the nearest dev-spec .specs/ at or above the folder (unexpanded / empty candidates skipped); cut to the width (got " +
@@ -347,7 +348,7 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
     const hooksCfg16 = JSON.parse(cRead(path.join(root, "hooks", "hooks.json"))).hooks;
     // (1.25.1: exec form — `node` + the script as its one argument)
     const planCfg = (hooksCfg16.PostToolUse || []).find((e) => e.hooks.some((h) => /plan-hook\.js/.test((h.args || []).join(" ")))) || {};
-    ok(hp.every((h) => h.status === 0) && /\/spec-adopt import — spec_import \{tool: "plan", text: <the approved plan's markdown>\}/.test(ctx(hpj[0])) && Object.keys(hpj[0]).join() === "hookSpecificOutput" &&
+    ok(hp.every((h) => h.status === 0) && String(ctx(hpj[0])).includes(S.msg("en").claudeCode.planBridge.byText) && Object.keys(hpj[0]).join() === "hookSpecificOutput" &&
       /spec_import \{tool: "plan", path: "docs\/plan\.md"\}/.test(ctx(hpj[1])) && /o utilizador aprovou este plano/.test(ctx(hpj[2])) &&
       hp.slice(3, 7).every((h) => h.stdout === "") && /spec_import/.test(ctx(hpj[7])) &&
       planCfg.matcher === "ExitPlanMode" && planCfg.hooks[0].command === "node" && JSON.stringify(planCfg.hooks[0].args) === JSON.stringify(["${CLAUDE_PLUGIN_ROOT}/hooks/plan-hook.js"]) && planCfg.hooks[0].timeout === 10 &&

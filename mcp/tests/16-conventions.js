@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSources, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSources, require, __dirname, hookIn }) => {
 
   { // --- 1.13 batch 4: localized roadmap phase / doctor ears detail / add-track entries, guard code types, numbers & enums refused on every surface ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -104,7 +104,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     fs.mkdirSync(path.join(specs14, "ROADMAP.md"));
     const bl14a = S.backlog(t14, "add", "Later one");
     const bl14b = payload(await call("spec_backlog", { action: "add", name: "Later two", projectDir: t14 }));
-    const post14 = (file, dir) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: file } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+    const post14 = (file, dir) => hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: file } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
     const hk14 = post14(path.join(t14f.dir, "tasks.md"), t14);
     let thrown14 = null;
     try { S.writeRoadmapMd(t14); } catch (e) { thrown14 = e; }
@@ -151,7 +151,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       fs.writeFileSync(path.join(d, "spec.md"), "# Spec\n");
       fs.writeFileSync(path.join(d, "tasks.md"), "- [x] 1. done thing\n- [ ] 2. open thing\n");
     });
-    const sess14 = (dir, source) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir, source }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+    const sess14 = (dir, source) => hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir, source }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
     const fStart14 = sess14(f14, "startup"), fCompact14 = sess14(f14, "compact");
     const fList14 = fs.readdirSync(path.join(f14, ".specs")).sort().join();
     fs.writeFileSync(path.join(f14, ".specs", "auth", "classification.md"), "# Classification\n");
@@ -325,7 +325,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       !fs.existsSync(path.join(m14, ".specs", "beta")) && fs.existsSync(path.join(m14, ".specs", "_archive", "parked")) && (S.readRoadmap(m14).backlog || []).length === 0 &&
       S.projectLang(m14) === "en";
     const featBusy14 = (r, slug, rel) => r && r.ok === false && r.busy === true && (r.error || "").includes(`Another dev-spec process is updating '${slug}' right now (${rel})`);
-    const rmBusy14 = (r) => r && r.ok === false && r.busy === true && /updating \.specs\/roadmap\.json right now \(\.specs\/\.roadmap\.lock\)/.test(r.error || "");
+    const rmBusy14 = (r) => r && r.ok === false && r.busy === true && String(r.error || "").includes(S.msg("en").err.roadmapBusy);
     ok(mv14.length === 8 && mv14.slice(0, 4).every((r) => featBusy14(r, "alpha", ".specs/alpha/.lock")) && featBusy14(mv14[4], "parked", ".specs/_archive/parked/.lock") &&
       mv14.slice(5).every(rmBusy14) && mUntouched14,
       "a held feature lock makes create (existing feature) / rename / archive / remove wait, then answer busy; restore waits on its archived folder's lock; backlog / depend / init --lang wait on .specs/.roadmap.lock — nothing changed (got " +
@@ -533,6 +533,20 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       () => /Docker is not available: the docker command was not found/.test(noDocker.stderr), () => /npm test/.test(noDocker.stderr),
       () => /"--network", "none"/.test(src), () => /:\/repo:ro/.test(src), () => !/\.github|workflow/i.test(src),
     ]);
+    // 1.30 review 8 (ds-maint 15): the matrix — the FIRST image is package.json's engines floor (kept while engines says it; raise
+    // the floor, drop its image), then the LTS lines ascending, musl (alpine) and glibc both; --jobs reaches the suites.
+    const floor = (String(require(path.join(root, "package.json")).engines.node).match(/^>=\s*(\d+)/) || [])[1];
+    const images = ((help.stdout || "").match(/replaces the defaults: ([^)\n]+)\)/) || [])[1] || "";
+    const majors = images.split(/,\s*/).map((im) => Number((im.match(/^node:(\d+)-/) || [])[1]));
+    const badJobs = spawnSync(process.execPath, [dockerJs, "--jobs", "0"], { encoding: "utf8" });
+    all("1.30 review 8 (ds-maint 15): test-docker's default images start at the engines floor (node:" + floor + "), then the LTS lines ascending, alpine and glibc both; --jobs is the suites' (got " +
+      JSON.stringify([floor, images, majors, badJobs.status]) + ")", {
+      floorFirst: () => !!floor && majors[0] === Number(floor) && new RegExp("^node:" + floor + "-").test(images),
+      ascending: () => majors.length >= 3 && majors.every((m, i) => Number.isInteger(m) && (i === 0 || m > majors[i - 1])),
+      ltsLines: () => majors.slice(1).every((m) => m % 2 === 0 && m >= 22),
+      bothLibcs: () => /-alpine\b/.test(images) && /-(?:bookworm|trixie)(?:-slim)?\b/.test(images),
+      jobs: () => badJobs.status === 2 && /--jobs needs a whole number >= 1/.test(badJobs.stderr) && /--jobs <n>/.test(help.stdout) && /\.\.\.jobs/.test(src),
+    });
   }
 
   // 1.17: no regex literal lost its backslashes (a heredoc'd edit once turned /^\s*status\s*:/i into /^s*statuss*:/i in
@@ -1054,7 +1068,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     // The SessionStart hook: ONE line while the configured script is missing (or another copy), none once it is this clone's.
     const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
     const session = () => {
-      const r = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: repo }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: repo, SPEC_PROJECT_DIR: repo } });
+      const r = hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: repo }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: repo, SPEC_PROJECT_DIR: repo } });
       try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; }
     };
     setDriver(gone);

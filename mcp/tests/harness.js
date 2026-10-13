@@ -19,6 +19,8 @@
  *   init · list              the handshake's initialize / tools/list replies (ctDesc · ntvSentence: spec_complete_task's
  *                            description and its nothingToVerify sentence)
  *   libSources() · maintainerNotes() · GATE_ORDER · approveBefore() · shipFeature()     shared helpers (below)
+ *   hookIn(file, o)          one hook run in this process (its exported decide) with spawnSync's shape — o: input, env (the whole
+ *                            environment), cwd, timedOut — instead of spawnSync(process.execPath, [file], o) (below)
  *   child · abort(reason)    the server process · fail the run now (a private server that stops answering)
  *   require · __dirname · __filename   mcp/test.js's, so the test code reads paths from mcp/ — require("./lib/i18n.js"),
  *                            path.join(__dirname, "server.js") — whichever file of mcp/tests/ it lives in
@@ -44,6 +46,15 @@ const { exitFlushed, rmTmpDir, isolate, assertHelpers } = require("../../scripts
 isolate("spec-test-");
 const MCP_DIR = path.join(__dirname, ".."); // mcp/ — where mcp/test.js lives: the tests' __dirname
 const MCP_TEST = path.join(MCP_DIR, "test.js");
+const SERVER = path.join(MCP_DIR, "server.js");
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "spec-test-"));
+// The server starts FIRST (1.30, review 8 — ds-maint 2): its own start (node + the engine, ~0.3 s) overlaps this process's engine
+// load below instead of following it — every chain paid both in a row. Its stdout reader is attached further down, in this same
+// synchronous module evaluation (no reply can arrive before it).
+const child = spawn(process.execPath, [SERVER], {
+  env: { ...process.env, SPEC_PROJECT_DIR: tmp },
+  stdio: ["pipe", "pipe", "inherit"],
+});
 const S = require("../lib/spec.js");
 const root = path.join(MCP_DIR, "..");
 // Every engine source file (1.18): the facades (mcp/lib/spec.js, i18n.js, prompts-resources.js) and their modules under
@@ -76,9 +87,45 @@ const GATE_ORDER = ["classification", "requirements", "design", "test-plan", "ev
 function approveBefore(dir, slug, phase) {
   for (const ph of S.specDoctor(dir, slug).pendingGates || []) if (GATE_ORDER.indexOf(ph) < GATE_ORDER.indexOf(phase)) S.approvePhase(dir, slug, ph, "t", { force: true });
 }
-
-const SERVER = path.join(MCP_DIR, "server.js");
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "spec-test-"));
+// One hook run IN THIS PROCESS (review 8): hookIn(file, { input, env, cwd, timedOut }) → spawnSync's { status, stdout, stderr } for
+// `node <file>` fed that stdin — the hook's exported decide(raw, {timedOut}) answer, printed as its process prints it (one JSON object,
+// or nothing), without a process start (a hook spawn costs ~60–200 ms; here the hook shares this process's engine, S). env is the WHOLE
+// environment, as spawnSync's (default: this process's), cwd the working folder (default: this process's) — both applied for the call
+// and restored, as cli/main.js main does for the CLI: the hooks and the engine read process.env / process.cwd() themselves. An
+// exception is a silent exit 0, as the runner's. Keep a real process where the test is about one: stdin and the 2 s safety net
+// (timedOut stands in for it here), the flushed exit, the exec form, an oversized payload, what a fresh process loads (a -r preload),
+// its timing.
+function enterProcessContext(env, cwd) {
+  const undo = [];
+  if (env && env !== process.env) {
+    const before = { ...process.env };
+    const apply = (to) => {
+      for (const k of Object.keys(process.env)) if (!Object.prototype.hasOwnProperty.call(to, k) || to[k] === undefined) delete process.env[k];
+      for (const [k, v] of Object.entries(to)) if (v !== undefined && process.env[k] !== String(v)) process.env[k] = String(v);
+    };
+    apply(env);
+    undo.push(() => apply(before));
+  }
+  if (cwd && path.resolve(cwd) !== process.cwd()) {
+    const before = process.cwd();
+    try { process.chdir(cwd); } catch (e) { while (undo.length) undo.pop()(); throw e; }
+    undo.push(() => { try { process.chdir(before); } catch { /* gone */ } });
+  }
+  return () => { while (undo.length) undo.pop()(); };
+}
+function hookIn(file, o = {}) {
+  const restore = enterProcessContext(o.env, o.cwd);
+  let out = null;
+  try {
+    const raw = o.input == null ? "" : Buffer.isBuffer(o.input) ? o.input.toString("utf8") : String(o.input);
+    out = require(file).decide(raw, { timedOut: o.timedOut === true });
+  } catch {
+    out = null;
+  } finally {
+    restore();
+  }
+  return { status: 0, signal: null, stdout: out ? JSON.stringify(out) : "", stderr: "" };
+}
 
 let pass = 0,
   fail = 0;
@@ -101,11 +148,6 @@ function shipFeature(dir, slug, at) {
   st.approvals = { ...(st.approvals || {}), execution: { at: at || "2026-09-01T00:00:00.000Z", by: "test" } };
   fs.writeFileSync(sp, JSON.stringify(st, null, 2));
 }
-
-const child = spawn(process.execPath, [SERVER], {
-  env: { ...process.env, SPEC_PROJECT_DIR: tmp },
-  stdio: ["pipe", "pipe", "inherit"],
-});
 
 const pending = new Map();
 let buf = "";
@@ -194,12 +236,13 @@ async function setup(chain) {
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
   const ntvSentence = (ctDesc.match(/A task with no runnable _Verify:_ and nothing recorded.*?\)\./) || [""])[0];
-  ok(/nothingToVerify: true/.test(ntvSentence) && /pass it too/.test(ntvSentence) && !/keep listing|counts it/.test(ntvSentence) &&
-    /plus a localized note; doctor, spec_finish and ROADMAP\.md list such an unverified task with its localized reason\./.test(ctDesc),
+  // (1.30 review 8: the same two rules, ~150 characters shorter — tools/list is paid every session)
+  ok(/nothingToVerify: true/.test(ntvSentence) && /never listed/.test(ntvSentence) && !/keep listing|counts it/.test(ntvSentence) &&
+    /plus a localized note — doctor, spec_finish and ROADMAP\.md list the task with that reason\./.test(ctDesc),
     "spec_complete_task's description: a nothingToVerify task passes doctor / finish / ROADMAP.md; only an unverified task is listed with its reason");
   muted = false;
   const ctx = {
-    ok, ...assertHelpers(ok), rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature,
+    ok, ...assertHelpers(ok), rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature, hookIn,
     child, abort, init, list, ctDesc, ntvSentence,
     require: createRequire(MCP_TEST), __dirname: MCP_DIR, __filename: MCP_TEST,
   };

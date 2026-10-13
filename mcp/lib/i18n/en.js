@@ -413,14 +413,15 @@ Justify anything that violates a constitution principle or adds non-obvious comp
     title: (name) => `# Tasks: ${name}`,
     intro: (label) => `<!-- Tracks: ${label}. Organized by user story so each is independently shippable
      (P1 first). Each task is tagged with its story: [US1]/[US2] or [shared] for cross-cutting work.
-     [P] = parallelizable (different files, no deps). Every task carries _Requirements:_; TDD tasks
-     carry _Makes green:_. Use _Implements: path_ to tie a task to a real source file. A **Checkpoint**
-     marks where a story is independently testable.
+     [P] = parallelizable (different files, no deps). Every task carries _Requirements:_ and, when it
+     writes code, _Implements: <path>_ — the files it creates or changes (the scope guard, drift, the
+     duplicate check and finish read them); TDD tasks carry _Makes green:_. A **Checkpoint** marks where
+     a story is independently testable.
      If the stories are NOT independently shippable, they were mis-sliced — re-slice them, or fall
      back to a technical-layer layout (Foundation→Logic→API→…) keeping the [US1] tags. -->`,
-    introS: (label) => `<!-- Tracks: ${label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_) and a
-     _Verify: <command>_ — spec_complete_task records its result as the task's evidence. Use _Implements: path_ to tie a
-     task to a real source file. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_), a
+     _Verify: <command>_ — spec_complete_task records its result as the task's evidence — and, when it writes code,
+     _Implements: <path>_: the files it creates or changes. -->`,
     constraints: `## Global Constraints
 <!-- Exact values every task must respect, copied verbatim from the spec/steering (version floors,
      naming rules, limits, formats) — spec_task_brief inlines this section into every task brief.
@@ -437,6 +438,7 @@ Justify anything that violates a constitution principle or adds non-obvious comp
     story1: "## Story US-1 (P1 — MVP)",
     coreTask: "[Core behavior for US-1]",
     verify: "[command that proves it, e.g. npm test -- path/to/file.test.js]",
+    implements: "[path of the code it creates or changes]",
     parallelTask: "[parallelizable task — different file, no deps]",
     checkpoint1: "US-1 is fully functional and independently testable/shippable.",
     story2: "## Story US-2 (P2)",
@@ -610,6 +612,10 @@ Tracks: ${label}. Tick before calling the feature done.`,
     specsEdit: "move or delete .specs/ or a folder in it with a file tool (it holds roadmap.json and the features' .state.json)",
     specsShell: "change .specs/ from the shell — write, move or delete through a glob, a variable or a whole folder that may reach roadmap.json or a feature's .state.json",
     link: "link a name to .specs/ or to a file in it (a symbolic link, junction or hard link) — writes through the link would reach roadmap.json and the .state.json files unseen",
+    guardianLauncher: "write or remove .specs/guardian.cjs — the launcher dev-guardian's gate (the project check 'guardian') runs",
+    guardianBaseline: "write or remove .guardian/baseline.json — the findings dev-guardian's gate accepts as known",
+    guardianBaselineUpdate: "run dev-guardian's `baseline update` — it accepts every current finding as known, this feature's included, and the gate stops reporting them",
+    guardianCli: "run dev-guardian's gate with a DEV_GUARDIAN_CLI or CLAUDE_CONFIG_DIR of its own — another dev-guardian would answer it",
     lower: (from, to) => `lower the approval guard from ${from} to ${to}`,
     revoke: (phase, feature) => `revoke the approval of the ${phase} phase of '${feature}'`,
     approve: (phase, feature) => `approve the ${phase} phase of '${feature}'`,
@@ -721,6 +727,7 @@ ${a.summary || "[one line: the bug being fixed]"}
 - [ ] 2. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
+  - _Implements: [path of the code the fix changes]_
   - _Verify: [full test suite command]_
 **Checkpoint:** the bug no longer reproduces and the full suite is green.
 `;
@@ -792,6 +799,7 @@ ${a.summary || "[one line: what changes and why]"}
 ## Tasks
 - [ ] 1. [US1] [the change]
   - _Requirements: US-1.AC-1_
+  - _Implements: [path of the code it creates or changes]_
   - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
 
 <!-- A change (size xs): 1–3 acceptance criteria and 1–3 tasks, core only — no classification, design, quickstart or
@@ -977,8 +985,12 @@ const msg = {
       noEvidence: "no evidence recorded",
       changedByDate: (list, slug) => `judged by file date only (approved before content fingerprints — a clone or copy resets file dates, so this may be no edit at all): ${list} — re-review, then re-approve to track it by content (/approve ${slug} <phase>)`,
       // 1.28: the duplicate-code detector — a warning, never a blocker
-      duplicates: (n, top, within, slug) => `the feature's code repeats existing code in ${n} place(s) — ${top}${n > 3 ? "; …" : ""}: reuse or extend the existing code, or note in the report why a copy is deliberate${within ? `; ${within} more repeat(s) inside the feature's own files` : ""} (all of them: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
-      duplicatesWithin: (n, slug) => `${n} block(s) of the feature's code repeat another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicates: (n, top, within, slug) => `the feature's code repeats existing code in ${n} ${n === 1 ? "place" : "places"} — ${top}${n > 3 ? "; …" : ""}: reuse or extend the existing code, or note in the report why a copy is deliberate${within ? `; ${within} more ${within === 1 ? "repeat" : "repeats"} inside the feature's own files` : ""} (all of them: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicatesPartial: (unread) => `; only part of the project was compared — the detector's byte budget left ${unread} source ${unread === 1 ? "file" : "files"} unread`,
+      duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "block of the feature's code repeats" : "blocks of the feature's code repeat"} another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // 1.30: no task names a file in _Implements:_ — what reads them sees no code of the feature. file: the one holding the tasks
+      // (tasks.md; an xs change's change.md — review 9)
+      noImplements: (file) => `no task names its files in _Implements:_ — the drift baseline, the duplicate check and dev-guardian's attribution see no code of this feature. Add _Implements: <path>_ to each task that wrote code (an edited ${file} is re-approved), or ignore this if none did.`,
       untrackedApproval: (list, slug) => `approved before change tracking — nothing about the signed-off file was recorded, so an edit can't be detected: ${list} — re-approve to start tracking it (/approve ${slug} design)`,
     },
     // right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.
@@ -1017,7 +1029,7 @@ const msg = {
       },
       optionalMark: "optional at this size",
       coveredMark: "covered by another track",
-      suggestTail: "Confirm it or pick another in Phase 0 — spec_create {size: xs | s | m | l}; no size keeps the pre-1.21 scaffold.",
+      suggestTail: "Confirm it or pick another in Phase 0 — spec_create {size} (CLI: create --size xs|s|m|l); no size: the full scaffold.",
     },
     kindKept: (kept, asked) => `'${kept}' is already the kind of this feature — kept it (asked for '${asked}'). Start a new one for a different kind.`,
     langKept: (kept, asked) => `This feature is already in '${kept}' — kept it (asked for '${asked}'). One feature, one language.`,
@@ -1057,7 +1069,6 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' already exists.`,
       renameArchived: (slug) => `'${slug}' is the name of an archived feature (.specs/_archive/${slug}) — pick another name (with one name, neither of them could be archived or restored).`,
       slugTaken: (slug, held, name) => `'${name}' reaches the folder .specs/${slug}/, which holds another feature ('${held}') — a folder name keeps the first 64 characters of the name. Nothing was changed: pass a shorter name that differs within them (to work on '${held}', name it '${slug}').`,
-      badAction: "action must be one of: remove | archive | rename | restore | flow",
       badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
@@ -1151,6 +1162,7 @@ const msg = {
       clarificationsOpen: (n) => `${n} unresolved [NEEDS CLARIFICATION] — resolve before design`,
       clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change
       clarificationsOpenBug: (n) => `${n} unresolved [NEEDS CLARIFICATION] in bug.md — resolve them before approving its Reproduction / Root Cause`, // a bugfix
+      clarificationsOpenDesign: (n) => `${n} unresolved [NEEDS CLARIFICATION] in design.md — resolve them before approving the design`, // the design gate counts them
       clarificationsNone: "none open",
       scPresent: "present",
       scMissing: "no measurable SC-### success criteria",
@@ -1467,7 +1479,8 @@ const msg = {
       backlogNotFound: (name, known) => `'${name}' is not in the backlog${known ? ` (backlog: ${known})` : " (the backlog is empty)"}.`,
       backlogIsFeature: (name, slug) => `'${name}' already has a spec (.specs/${slug}/) — the backlog is for features without one yet (status: ${DEV_SPEC} status ${slug}).`,
       // add of a name already in the backlog keeps its entry and appends the new note (exists: true, appended)
-      backlogAppended: (name) => `'${name}' is already in the backlog — the new note was appended to its note.`,
+      backlogAppended: (name) => `'${name}' is already in the backlog — the new note was appended to its note (to replace the note instead: remove the item, then add it again).`,
+      fromBacklog: (name, note) => `From the backlog (${name}): ${note}`, // 1.30: a feature created from a backlog item keeps its note (an HTML comment)
       backlogKept: (name) => `'${name}' is already in the backlog with that note — nothing changed.`,
       backlogNoteFull: (name, max) => `'${name}' is already in the backlog and its note would pass ${max} characters — the new note was not added: file it under another name.`,
       // a NEW entry's note past the same cap
@@ -1516,8 +1529,8 @@ const msg = {
       coverage: (pct, d, t) => `Spec coverage: ${pct}%  (${d}/${t} code files named in _Implements:_)`,
       undocumented: (list) => `  uncovered folders: ${list}`,
       // dupes (1.28): the duplicate-code report — spec_scan {duplicates: true}
-      dupesHead: (f, existing, within, n, files, lines) => `Duplicates — ${f}: ${existing} place(s) repeat existing code · ${within} repeated within the feature  (windows of ${n} code lines; ${files} files, ${lines} code lines read)`,
-      dupesHeadProject: (total, n, files, lines) => `Duplicates — the project: ${total} repeated block(s)  (windows of ${n} code lines; ${files} files, ${lines} code lines read)`,
+      dupesHead: (f, existing, within, n, files, lines) => `Duplicates — ${f}: ${existing} ${existing === 1 ? "place repeats" : "places repeat"} existing code · ${within} repeated within the feature  (windows of ${n} code lines; ${files} ${files === 1 ? "file" : "files"}, ${lines} code ${lines === 1 ? "line" : "lines"} read)`,
+      dupesHeadProject: (total, n, files, lines) => `Duplicates — the project: ${total} repeated ${total === 1 ? "block" : "blocks"}  (windows of ${n} code lines; ${files} ${files === 1 ? "file" : "files"}, ${lines} code ${lines === 1 ? "line" : "lines"} read)`,
       dupesNoCode: "  no source file its tasks' _Implements:_ name exists yet — nothing to compare",
       dupesNone: "  no repeated code found",
       dupesExisting: (at, n, also) => `  ⚠ ${at} (${n} lines) repeats ${also} — reuse or extend the existing code`,
@@ -1525,6 +1538,7 @@ const msg = {
       dupesAlsoMore: (n) => `+${n} more`,
       dupesMore: (n) => `  … and ${n} more (the longest are listed)`,
       dupesTruncated: (n) => `  (only the first ${n} source files were read — the cap: a repeat beyond them is not seen)`,
+      dupesPartial: (unread, mb) => `  (the byte budget — ${mb} MB of source — was reached: ${unread} more source ${unread === 1 ? "file was" : "files were"} not read, a repeat in them is not seen)`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  phase=${phase}  verdict=${verdict}  gatesOk=${gatesOk}`,
       changed: (list) => `  ⚠ changed since last approval: ${list}`,
@@ -1844,7 +1858,6 @@ const msg = {
     // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
     // IDs and file names stay English-stable.
     impact: {
-      badPhase: (p, known) => `Unknown phase '${p}' for spec_impact. Known: ${known}.`,
       reopenTasks: "reopen applies to requirements, design, test-plan and eval-plan — a change to tasks.md is reviewed and re-approved; it reopens nothing.",
       // a change: ONE approved artifact (change.md, its plan — phase tasks) holds its criteria and its tasks
       changePhase: (phase, slug) => `'${slug}' is a change: its criteria and its tasks are one file, change.md, approved as the plan (phase tasks) — there is no ${phase} phase. spec_impact {name: "${slug}"} (phase tasks, the default) diffs both: the criteria by ID, the tasks by number.`,
@@ -2380,7 +2393,6 @@ const msg = {
     // Project templates (.specs/templates/) — spec_templates / `dev-spec templates`, and the {{summary}} slot of a scaffold.
     templates: {
       noSummary: "[TBD]", // {{summary}} of a feature created without one: a generic slot, so the scaffold still reads 'placeholder'
-      badAction: (a) => `Unknown templates action '${a}' — one of: list, init, check.`,
       unknownArtifact: (a, list) => `Unknown template '${a}' — one of: ${list}, or steering/<file>.md.`,
       writeFailed: (rel, why) => `Could not write ${rel} (${why}).`,
       writeOutside: (rel) => `Refused to write ${rel}: its folder is a link to a place outside the project.`,
@@ -2443,7 +2455,6 @@ const msg = {
       missingReserved: (name, slug, builtIn, since) => `+${name} (a track pack from before ${since || "1.17"} — '${name}' is a reserved name now${builtIn ? `, and the built-in +${name} track is NOT applied to this feature` : ""}: rename .specs/tracks/${name}/ (and its marker, if that is reserved too), then ${DEV_SPEC} add-track ${slug} <new-name> and ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; to adopt the built-in track instead: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
       // a pack from before 1.19 (1.17 for [DIST]) whose MARKER is a built-in track's now
       missingReservedMarker: (name, marker, track, slug, since) => `+${name} (a track pack from before ${since || "1.19"} — its marker ${marker} is the built-in +${track} track's now, so the pack is ignored and its ${marker} sections don't count as +${track}'s: change the marker in .specs/tracks/${name}/track.json and in this feature's ${marker} headings, or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${track} (its sections are appended, the pack leaves this feature); to drop the pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
-      badAction: (a) => `Unknown tracks action '${a}' — one of: list, init, check, signals.`,
       nameRequired: "tracks init needs a name — " + DEV_SPEC + " tracks init <name> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `No track or track pack '${n}' — the project's packs: ${list}.`,
       legacyFeature: ".specs/tracks/ is the folder of a feature created before track packs existed (it holds a .state.json) — it stays that feature and is never read as packs. Rename it (" + DEV_SPEC + " feature rename tracks <new-name>, or spec_feature rename) to use track packs.",
@@ -2907,7 +2918,11 @@ const msg = {
     // and its duplication budget (.guardian/budgets.yml quality.duplication_pct) beside the duplicate detector's measure
     guardian: {
       offer: (installed, project) => `${installed && project ? "dev-guardian is installed and this project has .guardian/" : installed ? "dev-guardian is installed" : "This project has .guardian/ (dev-guardian)"}: ${DEV_SPEC} init --guardian (spec_init {guardian: true}) adds its gate as the project check 'guardian' — /spec-finish (finish --run) then runs dev-guardian's scan, which takes minutes and needs its scanners (Semgrep, Gitleaks, Trivy…).`,
-      on: (cmd) => `dev-guardian's gate is the project check 'guardian' (${cmd} — .specs/guardian.cjs runs the newest installed dev-guardian): finish --run runs it, and a new finding at or above high blocks the finish until it is fixed or the user accepts it in dev-guardian (dev-guardian baseline update, or a suppression).`,
+      // init --guardian on (1.30): project-wide (meta.checks and the launcher are committed); a finding is accepted inline, never by
+      // `baseline update`; + initBaseline (no .guardian/baseline.json yet) and initIgnore (the .gitignore lines the project lacks)
+      on: (cmd) => `dev-guardian's gate is the project check 'guardian' (${cmd} — .specs/guardian.cjs runs the installed dev-guardian). It is project-wide: meta.checks and the launcher are committed, so every clone's finish runs it, and every machine that finishes a feature needs dev-guardian and its scanners (Semgrep, Gitleaks, Trivy). finish --run runs it; a new finding at or above high blocks the finish until it is fixed — to accept one reviewed finding the user suppresses it inline with a reason, never with \`baseline update\` (it accepts every current finding).`,
+      initBaseline: "No baseline yet (.guardian/baseline.json) — without one every existing finding counts as new. Record it now, before a feature adds code (the user's step): node .specs/guardian.cjs baseline update --project . — then commit .guardian/baseline.json.",
+      initIgnore: (lines) => `dev-spec writes only under .specs/ — add to the project's .gitignore: ${lines.join(" · ")} (dev-guardian's reports stay out of git, its baseline and budgets in).`,
       off: "The project check 'guardian' is off (meta.checks.guardian and .specs/guardian.cjs removed).",
       badValue: (v) => `--guardian expects on or off (got '${v}') — a bare --guardian is on`,
       pass: (failOn, n) => `dev-guardian: pass — no new finding at or above ${failOn}` + (n ? ` (${n} new below it)` : ""),
@@ -2918,13 +2933,42 @@ const msg = {
       notFound: "dev-guardian was not found — install the dev-guardian plugin, or set DEV_GUARDIAN_CLI to the path of its cli/dev-guardian.mjs",
       noLauncher: `the check's launcher .specs/guardian.cjs is missing — ${DEV_SPEC} init --guardian writes it again`,
       exited: (code) => `dev-guardian exited ${code == null ? "?" : code}`,
+      // the head line's tails (1.30): the report says there is no baseline · the launcher ran a DEV_GUARDIAN_CLI
+      noBaseline: " — no baseline: every existing finding counts as new",
+      override: (p) => ` (dev-guardian from DEV_GUARDIAN_CLI=${p})`,
+      // dev-guardian older than 3.2.1, a report with no tool_version (≤ 3.2.1), a package it could not load (3.2.0 from a plugin install)
+      update: (v) => `update dev-guardian (Claude Code: /plugin) — ${v ? "this run used " + v + ", the gate needs 3.2.1 or later" : "this run named no version (3.3.0 and later do); the gate needs 3.2.1 or later"}`,
+      updateHint: (slug) => `Update the dev-guardian plugin (3.2.1 or later — Claude Code: /plugin), then run the check again: ${DEV_SPEC} finish ${slug} --run.`,
       finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [this feature]" : ""),
       blocker: (name, text) => `the project check '${name}' failed — ${text}.`,
       more: (n) => `+${n} more`,
-      fixHint: (slug) => `Fix the finding(s) — or, only when the user accepts one, record that in dev-guardian (dev-guardian baseline update, or a suppression) — then run the check again: ${DEV_SPEC} finish ${slug} --run. Never force the finish without the user.`,
+      // review 8: never `baseline update` to accept ONE finding — it accepts every current finding, the feature's own included
+      fixHint: (slug) => `Fix the finding(s), then run the check again: ${DEV_SPEC} finish ${slug} --run. To accept ONE reviewed finding, the user suppresses it inline with a reason (nosemgrep: <rule> -- <reason>, # nosec) — never \`baseline update\`, which accepts every current finding, this feature's included. Never force the finish without the user.`,
+      baselineHint: "No baseline: the user records one on the base commit, before this feature's code (a checkout of the base branch: node .specs/guardian.cjs baseline update --project . there, then commit .guardian/baseline.json) — recorded here it would accept this feature's findings too.",
       incompleteHint: "Install the missing scanner (dev-guardian's /guardian-init), or — offline, when Semgrep could not fetch its rules — add --local-only to the check's command; the check stays failed until it passes or the user changes it.",
+      // an incomplete scan, by the gating gaps' kinds (dev-guardian 3.3's coverage_gap_details); remedy: dev-guardian's own (English)
+      gap: {
+        missingTool: (tools) => `Install ${tools} (dev-guardian's /guardian-init installs its scanners).`,
+        noLockfile: (tools) => `${tools} found no lockfile — commit one (package-lock.json, yarn.lock, poetry.lock…) so the dependencies can be read.`,
+        partialParse: (tools) => `${tools} parsed some files only in part — fix them, or the user accepts that file by file (dev-guardian's --accept-partial-parse <path> on the check's command).`,
+        timeout: (tools) => `${tools} timed out on some files — run the check again; if it persists, leave generated or vendored files out of the scan (.guardianignore).`,
+        pathTooLong: "A path is too long for this system — enable long paths (Windows) or shorten it.",
+        remedy: (tool, r) => `${tool}: ${r}`,
+        other: (tool) => `${tool} did not run in full — dev-guardian's report says why.`,
+        tail: "The check stays failed until it passes or the user changes it.",
+      },
       configHint: (slug) => `Fix that, then run the check again: ${DEV_SPEC} finish ${slug} --run.`,
-      mcpRun: (name, cmd) => `The '${name}' check runs dev-guardian's scan (minutes): over MCP run \`${cmd}\` yourself from the project root and report it with spec_finish {evidence: [{name: "${name}", command, exitCode, summary: its stderr's last lines, report: its JSON stdout}]}.`,
+      // a guardian check still needing a run (1.30): Claude Code runs the CLI (it records the report itself; minutes — the Bash
+      // tool's 2-minute default is too short); another MCP client reports the run, a pass with its report (--compact keeps it short)
+      mcpRun: (name, cmd, slug) => `The '${name}' check runs dev-guardian's scan (minutes). In Claude Code run ${DEV_SPEC} finish ${slug} --run (Bash timeout 600000, or in the background): it runs the check and records its report itself. Elsewhere run \`${cmd}\` from the project root (dev-guardian 3.3+: add --compact for a short report) and report it with spec_finish {evidence: [{name: "${name}", command, exitCode, summary: its stderr's last lines, report: its JSON stdout}]} — a pass needs its report.`,
+      // the launcher verified before a run and when one is recorded (1.30)
+      launcherChanged: `.specs/guardian.cjs is not the launcher dev-spec-driven writes (edited, replaced or a link), so the gate does not run it — ${DEV_SPEC} init --guardian writes it again`,
+      launcherRefreshed: ".specs/guardian.cjs replaced by this version's launcher (it was an earlier version's).",
+      notRun: (name, why) => `the project check '${name}' was not run — ${why}. Nothing was recorded.`,
+      reportMismatch: (exit, reported, blocking) => `dev-guardian's report contradicts the exit code ${exit}` + (reported != null ? ` (the report says exit ${reported})` : "") + (blocking ? ` — it lists ${blocking} blocking finding(s)` : "") + `; report the run as it is (or let finish --run record it) — nothing was recorded`,
+      reportMissing: "a pass of dev-guardian's gate needs its JSON report — `report`: the run's stdout (dev-guardian 3.3+: add --compact for a short one) — or let finish --run record it; nothing was recorded",
+      upgradeLauncher: (state) => `.specs/guardian.cjs ${state === "missing" ? "is missing" : state === "outdated" ? "is an earlier version's launcher" : "is not the launcher dev-spec-driven writes"} — ${DEV_SPEC} upgrade --apply (or init --guardian) writes this version's.`,
+      migLauncher: ".specs/guardian.cjs — this version's launcher (dev-guardian's gate)",
       budget: (pct, limit, over, n) => `Duplicated code: ${pct}% of the code lines read — dev-guardian's budget (.guardian/budgets.yml quality.duplication_pct) is ${limit}%: ${over ? "OVER the budget" : "within it"}. (dev-spec counts windows of ${n} code lines; dev-guardian measures with jscpd — close, not identical.)`,
       finishBudget: (pct, limit) => `; the project as a whole is over dev-guardian's duplication budget — ${pct}% of its code lines repeat (budget ${limit}%, .guardian/budgets.yml; dev-spec's measure, close to jscpd's but not identical)`,
     },

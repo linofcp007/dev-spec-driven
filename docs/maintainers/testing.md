@@ -11,7 +11,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   06 gates · 07 approvals · 08 tasks · 09 evidence · 10 guards and hooks · 11 Claude Code integration · 12 lifecycle ·
   13 imports · 14 templates and exports · 15 spec quality · 16 conventions and source guards · 17 docs and prose ·
   18 cross-area regressions (`18-cross-area*.js` — findings that span several areas). `--list` prints every file with its
-  one-line summary (the file's first comment line). **A file is named after its topic** — `10-guards-shell-writes.js`,
+  one-line summary (the file's first comment line). `mcp/tests/fixtures/` holds files a test reads byte for byte (1.30: the
+  launcher dev-spec-driven 1.29 wrote, `guardian-launcher-1.29.cjs` — never edited: its sha1 is pinned); the runner loads only
+  `NN-*.js` files. **A file is named after its topic** — `10-guards-shell-writes.js`,
   `12-lifecycle-branch.js` — never after a release or a review round: 1.27 renamed the 23 that were (`10-guards-review7.js`
   → `10-guards-shell-writes.js`, `13-imports-1-25.js` → `13-imports-steering.js`, `18-reviews.js` → `18-cross-area.js`…) and
   merged six small ones into their area's topic file (`05-markdown-r7-readers.js` into `05-markdown-readers.js`). An
@@ -34,18 +36,30 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   cli/dev-spec.js <args>` with `SPEC_PROJECT_DIR` = `tmp`), `tmp`, `CLI`, and cli/test-cli.js's `require` / `__dirname` — and
   (1.27) **`runIn(args, {env, cwd, input})`** — the same `{ out, code }` IN the test process (cli/main.js `main`, the call's
   environment and working folder applied for it and restored; ~100× cheaper than a process) — and **`spawnIn(args, {env, cwd,
-  input})`**, spawnSync's `{ stdout, stderr, status }` the same way (its `env` the whole environment, as spawnSync's). **Call the
-  CLI in-process unless the test needs a real process:** a `--run` that runs commands (it waits: runIn / spawnIn throw on a call
-  that doesn't settle at once — every helper sends `--run` calls to spawnSync), EPIPE, a real stdin pipe or a TTY, a process's
+  input})`**, spawnSync's `{ stdout, stderr, status }` the same way (its `env` the whole environment, as spawnSync's) — and (1.30)
+  **`runAsync` / `spawnAsync`**, the same for a call that WAITS (`done --run` / `finish --run` running their commands — runIn /
+  spawnIn throw on a call that doesn't settle at once): a promise of the same shape (+ runAsync's `stdout` alone), awaited — the
+  run's commands are still processes, only the CLI's own start and engine load are saved (the --run files went 2–4× faster:
+  09-evidence-guardian 30.6 → 9.4 s). **Call the
+  CLI in-process unless the test needs a real process:** a signal during a run, EPIPE, a real stdin pipe or a TTY, a process's
   own timing or loaded modules (a preload), `DEV_SPEC_BUNDLE` (the facade picks the bundle at load), a lock held by another live
   process, `__complete` and the completion scripts' shells, git running the merge driver. 16-conventions-cli-modules.js checks
-  runIn = run on a set of calls.
+  runIn = run on a set of calls. **In-process calls run one at a time (1.30):** a call that waits keeps its env and cwd applied
+  until it ends, and `main()` called meanwhile is queued behind it (it then settles later — runIn / spawnIn refuse it as one that
+  waits); a test that lets a waiting call go on its own awaits `MAIN.whenIdle()` before its next in-process call. **The hooks the
+  same way (1.30, review 8):** the MCP harness's **`hookIn(file, {input, env, cwd, timedOut})`** runs a hook's exported `decide()`
+  in the test process with spawnSync's `{ status, stdout, stderr }` (env the whole environment, applied and restored with the
+  working folder — claude-code-integration.md → A hook IS its decision). **Call a hook in-process unless the test is about its
+  process:** stdin (an oversized or partial payload — `timedOut` stands in for the safety net in-process), the flushed exit, the exec
+  form, what a fresh process loads (a `-r` preload), its timing, a copy of the hooks over a broken engine. The hook tests' spawns
+  were most of 10-guards*.js's time (the area's critical path).
 - **How it runs.** A file is independent unless it declares `exports.deps` — the files it needs to have run first IN THE
   SAME PROCESS, because it reads a project folder they built or a value one of them returned (`return { vDir }` from
   `run` joins the context of the files after it) — say which in a comment above `deps`. A file and
   the files it needs form a chain; every chain runs in its own child process (its own temp dir and server), at most one
-  per CPU, the longest first (by the previous run's times, kept in `<os tmpdir>/dev-spec-test-times-<mcp|cli>.json`; a
-  file never timed starts first). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
+  per CPU, the longest first (by the previous run's times, kept in `<os tmpdir>/dev-spec-test-times-<mcp|cli>-<id>.json` —
+  `<id>` 10 hex of the checkout's root path (1.30): each worktree has its own, and each write keeps only the suite's current
+  files, so a renamed or deleted file's entry goes with the next run, `--only`'s too; a file never timed starts first). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
   slowest: …`, then the total: the LAST line is always `N passed, M failed` (scripts/test-docker.js reads it). A process
   that dies or never prints its total fails the suite, a file that throws is one FAIL (its chain goes on), a server that
   stops answering (15 s) fails the run — never a drain to exit 0. On a loaded machine (1.26): a chain whose process the OS
@@ -56,26 +70,45 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   run (≤ 3 s) before the total, and one fired after it prints the total again; the total is read from stdout alone (a Node
   warning on stderr after it doesn't void the count). cli/tests/16-conventions-runner.js tests the runner on a fake suite.
   The MCP chains today: `01-core → 17-docs` (17-docs reads
-  `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality`
-  (15-quality re-checks the behavioural fixtures 17-docs-evals builds under tmp). The handshake's assertions are counted
-  by the file exporting `handshake: true` (02-mcp-server); every other process runs the handshake muted.
+  `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality-fixtures`
+  (re-checks of the behavioural fixtures 17-docs-evals builds under tmp — 1.30: they were 15-quality's, and the two files were the
+  suite's critical path). The handshake's assertions are counted by the file exporting `handshake: true` (02-mcp-server); every
+  other process runs the handshake muted. A chain's process requires only its own files (1.30 — requiring the whole suite to find
+  them cost each chain ~0.25 s MCP / ~0.1 s CLI); the MCP harness starts its server before it loads the engine (the two starts
+  overlap). **Split a file that alone sets the critical path** (`--times`, the default `--jobs` = one per CPU) by topic, mechanically
+  — the blocks move verbatim, a shared fixture is exported by the main file (16-conventions-completion.js `fixture`), never copied.
+  At `--jobs 4` the wall time is the files' sum / 4: there only less work (fewer process starts) makes it shorter.
 - **Hermetic chains (1.26).** A chain never sees the shell the suite was started from: the runner spawns it with a fresh,
-  empty temp folder as its working folder (`<os tmpdir>/<spec-test-|cli-test->XXXXXX`, removed once it closed) and an
+  empty temp folder as its working folder (`<temp base>/<spec-test-|cli-test->XXXXXX`, removed once it closed — The temp base) and an
   environment without the variables that steer the plugin — `SPEC_PROJECT_DIR`, `CLAUDE_PROJECT_DIR`, `SPEC_MCP_*`,
   `CLAUDE_PLUGIN_*`, `COLUMNS` and every `DEV_SPEC_*` but the suites' own `DEV_SPEC_TEST_*` (`DEV_SPEC_TEST_CHAIN`,
   `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`) — scripts/test-runner.js `isolate()` / `hermeticEnv()`; 1.29:
   nor the maintainer's installed plugins — `DEV_GUARDIAN_CLI` is dropped and `CLAUDE_CONFIG_DIR` names an absent folder inside
   the chain's own (`no-claude-config`), so no dev-guardian plugin cache is seen (init / spec_upgrade would offer its gate on one
-  machine and not on another; a test that wants one builds a fake cache and passes it). The
+  machine and not on another; a test that wants one builds a fake cache and passes it); 1.30: nor Node's own steering
+  variables (`RE_NODE_ENV`) — `NODE_OPTIONS` (a `--require` preload: a VS Code JavaScript Debug Terminal's bootloader reached every
+  chain, server, hook and CLI process), `NODE_COMPILE_CACHE` / `NODE_DISABLE_COMPILE_CACHE`, `NODE_DEBUG` / `NODE_DEBUG_NATIVE`,
+  `NODE_V8_COVERAGE`, `NODE_PATH`, `NODE_PRESERVE_SYMLINKS(_MAIN)`, `NODE_NO_WARNINGS`, `NODE_PENDING_DEPRECATION`,
+  `NODE_REDIRECT_WARNINGS` — unless `DEV_SPEC_TEST_KEEP_NODE_ENV=1` (a coverage run's `NODE_V8_COVERAGE`, a profiler's preload). The
   child runs `isolate()` again before it loads a file, and both harnesses first thing (a no-op in the folder the runner gave
   it), so a chain started by hand (`DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js`) is isolated too. Why: the main checkout
   keeps a git-ignored dogfood `.specs/` (meta.lang pt) at the repo root, and a test that started the CLI or a hook without
   naming a project picked it up — green in a worktree, red after the merge; a `DEV_SPEC_DEFAULT_LANG` or `SPEC_PROJECT_DIR`
   exported in the maintainer's shell did the same. A test that needs one of these variables sets it for the process it
   starts; a test never reads `process.cwd()` for a path (use `tmp`, `root`, `__dirname`). cli/tests/16-conventions-runner.js
-  proves it on the fake suite (a decoy `.specs/` and the variables exported: none reaches a chain). The proof run: put a decoy
+  proves it on the fake suite (a decoy `.specs/` and the variables exported — a `NODE_OPTIONS` preload too: none reaches a chain). The proof run: put a decoy
   `.specs/` (`roadmap.json` `{"features":{},"meta":{"lang":"pt"}}` and a feature folder) at the repo root, export
   `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` at it and `DEV_SPEC_DEFAULT_LANG=es`, and run both suites — still green.
+- **The temp base (1.30).** No test depends on WHERE the temp folder is. The runner (and `isolate()` for a chain started by hand)
+  takes a neutral base — `neutralTmpBase()`: the shell's temp folder, unless its path names dev-spec (`dev-spec`, `devspec`,
+  a `.specs` segment), lies inside a folder holding a `.specs/`, holds a character a shell reads (`$`, a backtick, `%`, `!`, a
+  quote) or — on Windows — is longer than 100 characters; then the user's default one (`%LOCALAPPDATA%\Temp`; `/tmp`,
+  `/var/tmp`) — makes every chain's folder there and names it the chain's `TMP` / `TEMP` / `TMPDIR` (a line `# temp: …` says
+  so). Why: under a TMP whose path said "dev-spec" the approval hook's partial-payload test saw dev-spec named in the payload's
+  cwd, and under a 160-character one (Windows, git without `core.longpaths`) the pre-commit, worktree and eval-fixture tests
+  could not reach their repositories' files (a 99-character base passes). The proof run: `TMP` / `TEMP` set to
+  `<a long folder>\dev-spec-tmp`, both suites green; 16-conventions-runner.js checks the choice on the fake suite. No new nesting:
+  a temp path's length is what git's MAX_PATH tests feel — keep a test's own paths short.
 - **Running a part.** `--only <x>[,…]` (repeatable) takes a file by its full name (`17-docs` — that file alone; the CLI's
   `06-gates`, no file of that exact name, means `06-gates-*`), an area by its number (`09`) or its name (`gates`; `tracks`
   → `04-tracks` and `04-tracks-builtin`), and pulls in — and names — the files they need: `node mcp/test.js --only
@@ -88,7 +121,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   first comment line says what it holds, exporting
   `run` (async in the MCP suite) — the runner picks it up. Make your projects under `tmp` (`path.join(tmp, "proj-<name>")`, a name no other file uses); the MCP
   server's default project (`tmp` itself) is 01-core's. A test that reads what another file built declares it in `deps`
-  — never rely on file order. **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
+  — never rely on file order. **Check a message by its entry, not its words (1.30):** a result's stable `code` / key first; its
+  text against the rendered i18n entry — `S.msg(lang).<section>.<key>` (a string) or `….<key>(args)` (a function, with the
+  arguments the test knows); a CLI file reads `MSG = require(…/mcp/lib/i18n.js).msg` — so a rewording touches the locale file
+  alone; else a short fragment naming the message. A whole sentence is pinned only where the sentence IS the point: the prose
+  guards (README tables, rule files, no PR / CI steering), the i18n parity and translation checks. (Review 8 found ~150 such pins;
+  1.30 moved ~70 to their entries.) **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
   `eq(actual, expected, label)` (scripts/test-runner.js `assertHelpers`, built on the file's own `ok` — one call is ONE
   assertion, so the totals stay comparable, and a late one is a late assertion). **Prefer `all()` over `ok(a && b && …)` for
   more than ~4 conditions**: `ok()` with 15 conditions said only that one of them was false. `all(label, [() => a.ok, () =>
@@ -148,15 +186,33 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   projects, modules vs bundle: the same output, exit codes and `.specs/` tree).
 
 ## Tests (continued)
+- **Release counts (1.30):** the suites' totals are stated in two places — CLAUDE.md → Tests ("(N assertions, incl." and
+  "`node cli/test-cli.js` adds N") and the current CHANGELOG entry's tests line ("`node mcp/test.js` N assertions, `node
+  cli/test-cli.js` N") — and the user-facing docs state none (17-docs.js). They are WRITTEN FROM A RUN, at release, never
+  typed: **`npm run release:counts [-- --jobs 4]`** (`scripts/release-counts.js`) runs both suites, reads each one's last line
+  (`N passed, M failed` — the runner's `RE_TOTAL`) and rewrites those sentences; a suite with a failure records nothing (exit
+  1). `--check` writes nothing and exits 1 when a sentence states another total; `--mcp N --cli M` takes the totals of the full
+  run you just made instead of running again; a current entry without its tests line gets the line to paste, `(was …)` read
+  from the previous entry (exit 1). Between releases mcp/tests/17-docs.js holds the two records to each other, through the
+  script's own patterns (`readCounts()` — `SENTENCES`: one copy), and runs the script on a copy with fake suites. The release
+  step: write the CHANGELOG entry (its tests line with any numbers), then `npm run release:counts -- --jobs 4`, then commit.
+  The script's own run sets `DEV_SPEC_TEST_RELEASE_COUNTS=1`: under it 17-docs holds only that both records are present (the
+  assertion still counts) — the new entry states its numbers before CLAUDE.md does, so their comparison failed the very run
+  meant to rewrite them (1.30.0's release, the first one through the script).
 - **Linux, locally:** `npm run test:docker` (`scripts/test-docker.js`, zero-dep) runs both suites in
-  `node:18-alpine` (the engines floor, musl), `node:22-bookworm-slim` and `node:24-alpine`:
+  `node:18-alpine` (the engines floor, musl), `node:22-bookworm-slim`, `node:24-alpine` and `node:26-trixie-slim` (1.30). **The
+  matrix:** package.json's engines floor first — kept while `engines` says it (raise the floor, drop its image) —, then the LTS
+  lines, ascending, musl and glibc both (Node 20 is end-of-life and no floor: not tested); mcp/tests/16-conventions.js holds
+  `DEFAULT_IMAGES` to that shape. A new LTS line (an even major, LTS each October) joins it; one past its end of life leaves it.
+  Each image runs:
   `docker run --rm --network none --user 1000:1000 -v <repo>:/repo:ro`, `--init`, the repo READ-ONLY (the suites work
   under `os.tmpdir()`) and copied (without .git) into the container's own file system, where the suite runs — where an
   installed plugin lives: a Docker Desktop bind mount costs tens of ms per file loaded and the engine is ~36 files since
   1.18 (a 50-feature statusline took 9–10 s on the mount, 0.7 s on the copy); `--mounted` runs from the mount to measure a
   slow file system. No network, an unprivileged user (`--root` to opt out). Only the first run needs network — to pull
   and to build a cached derived image `dev-spec-test:<image>` that adds git (`--no-git` skips it; the git-dependent tests
-  then skip; `--rebuild` rebuilds it). Options `--image <name>` (repeatable), `--suite mcp|cli`. Exit 0 all passed · 1 a
+  then skip; `--rebuild` rebuilds it). Options `--image <name>` (repeatable), `--suite mcp|cli`, `--jobs <n>` (the suites'
+  own, in each container — a shared machine: `--jobs 4`). Exit 0 all passed · 1 a
   suite failed or an image couldn't be prepared · 2 no Docker (not installed, daemon down, Windows-containers mode) or a
   usage error; logs in `<tmp>/dev-spec-docker/<image>-<suite>.log`. Never wire it to hosted CI.
 - **Plugin evals** (`claude plugin eval`, maintainer-side, cost tokens, local only): the triggering suite
@@ -200,5 +256,33 @@ How the rules above came to be — grep a release here.
 - **1.28** — the guard runs the engine's detector (`S.duplicateRuns`) instead of its own scanner: one detector. Its reading
   of a template literal dropped the PT / ES design sample's allowance — the old scanner read the sample's `// …` line (it differs
   per language) as a comment, the detector as the string it is — so the stale allowance went; 56 of 40,697 code lines (0.1 %).
+- **1.30 review 8 (ds-engine 11)** — two overlapping in-process `main()` calls (two `ears -` waiting on their stdin) shared the
+  process's env and cwd: A's callback ran in B's context, and A ending first left A's env and cwd behind (B restored what it saw
+  at its start). Calls are serialized now (`WAITING` in cli/main.js); 16-conventions-cli-modules.js awaits `whenIdle()` instead
+  of a fixed 1.5 s.
 - **1.29** — hermetic chains also leave out the maintainer's installed plugins (`DEV_GUARDIAN_CLI` dropped, `CLAUDE_CONFIG_DIR` an
   absent folder of the chain's own): with dev-guardian installed, every `init` in the suites would have printed its offer.
+- **1.30 (review 8, ds-maint finding 1)** — the hooks had no in-process entry, so the MCP suite's hook tests spawned ~390 hook
+  processes (10-guards-guard-downs alone 57: ~24 of its 27 s). Every hook exports `decide()` and the harness's `hookIn` calls it;
+  real processes stay where the test is about one. Measured (the ten hook-heavy files, `--jobs 4`, two rounds each on a loaded
+  machine, seconds): 10-guards 57 / 47 → 17 / 24, 10-guards-guard-downs 32 / 36 → 16 / 23, 10-guards-shell-writes 14 / 13 → 3 / 6,
+  10-guards-hooks 10 / 11 → 3 / 4, 12-lifecycle 57 / 68 → 30 / 41, 05-markdown-trace 61 / 76 → 42 / 54, 16-conventions 50 / 53 →
+  31 / 34, 09-evidence 44 / 76 → 33 / 42.
+- **1.30** — `mcp/tests/fixtures/`, the first data folder beside the test files (the 1.29 dev-guardian launcher the gate must
+  recognize as genuine).
+- **1.30 (review 8, ds-maint 6 and 14)** — hermetic chains also drop Node's steering variables (`NODE_OPTIONS`, the compile cache's,
+  `NODE_DEBUG`…; `DEV_SPEC_TEST_KEEP_NODE_ENV=1` keeps them): a `--require` preload in `NODE_OPTIONS` reached every chain, server and hook.
+  The times file is the checkout's (`dev-spec-test-times-<suite>-<id>.json`) and pruned on each write: it was one per machine,
+  merged into by every worktree, and held 29 entries of files 1.27 had renamed.
+- **1.30 (review 8, ds-maint 7)** — the test totals in CLAUDE.md and the CHANGELOG were checked against each other only (two equal
+  typos passed): `npm run release:counts` writes them from a run (Release counts).
+- **1.30 (review 8, ds-maint 15)** — the Docker matrix was 18 / 22 / 24: Node 26 (the maintainer's own, LTS from October 2026)
+  was never run; `node:26-trixie-slim` joins, and 16-conventions holds the first image to the engines floor.
+- **1.30 (review 9)** — a TMP whose path named dev-spec, or a long one (Windows), failed 8–11 MCP assertions that pass under the
+  default TMP: the chains' temp base is chosen neutral now (The temp base), and the approval hook's partial-payload test no longer
+  carries the temp path in its "names nothing of dev-spec's" payload.
+- **1.30 (review 8, ds-maint 2)** — the critical-path files split by topic: 15-quality's re-checks of the built eval fixtures →
+  15-quality-fixtures.js (the MCP chain `17-docs-evals → 15-quality` was ~60 s in one process); 16-conventions-completion.js → -bash /
+  -pwsh (one PowerShell process per shell runs the three scripts: four starts of ~2–4 s each before); 09-evidence-done-run.js → -pwsh /
+  -verify. A chain requires only its own files; the MCP server starts before the harness's engine. Measured: see the notes of that
+  release (median of 3, `--jobs 4`, before / after interleaved).

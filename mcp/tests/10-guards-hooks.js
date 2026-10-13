@@ -6,13 +6,14 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the lexer, the candidates) — read through mcp/test.js's require
   const js = JSON.stringify;
   const BS = String.fromCharCode(92);
+  // the hook's decision in this process (harness hookIn, review 8)
   const hookOut = (name, payload, env) => {
-    const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", name + ".js")], { input: typeof payload === "string" ? payload : js(payload),
-      encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) }, timeout: 20000 });
+    const r = hookIn(path.join(__dirname, "..", "hooks", name + ".js"), { input: typeof payload === "string" ? payload : js(payload),
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) } });
     let j = null;
     try { j = r.stdout ? JSON.parse(r.stdout) : null; } catch { j = { unparsed: r.stdout }; }
     return { status: r.status, json: j, stdout: r.stdout, stderr: r.stderr };
@@ -130,17 +131,20 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
   }
 
   // The hook's pre-check and the engine's approvalCandidate agree (the hook's is a superset: an encoded-looking pwsh call goes on).
+  // (review 8: ONE test — the probe's approvalMayBe — no copy of its patterns in the hook; the hook exports its candidate.)
   {
     const src = fs.readFileSync(path.join(__dirname, "..", "hooks", "approval-hook.js"), "utf8");
+    const hookCand = require("../hooks/approval-hook.js").candidate;
     const enc = Buffer.from("node cli/dev-spec.js approve a b", "utf16le").toString("base64");
     const texts = ["node cli/dev-spec.js approve a b", "node (\"cli/dev\" + \"-spec.js\") approve a b", "node cli/dev-sp?c.js approve a b", "ls *.md",
-      "npm test", "powershell -enc " + enc, "cat .specs/x", "echo hello"];
-    // (1.25.1: the hook's own pattern constants — RE_CANDIDATE, RE_VERB, RE_DOT_GLOB, RE_WRITE_WORD — read from its source)
-    const consts = ["RE_CANDIDATE", "RE_VERB", "RE_DOT_GLOB", "RE_WRITE_WORD"].map((n) => (new RegExp("const " + n + " = [^\\n]+\\n").exec(src) || [""])[0]).join("");
-    const hookCand = new Function(consts + (/const candidate = \(c\) => \{[\s\S]*?\n\};/.exec(src) || ["const candidate = () => null;"])[0] + "\nreturn candidate;")();
+      "npm test", "powershell -enc " + enc, "cat .specs/x", "echo hello", "cp /tmp/x.json .s*/roadmap.jso?", "x=.spec?/roadmap.json", "Remove-Item * -Recurse",
+      "echo " + "=.".repeat(50) + " {; cp a .s*/b"];
     const bad = texts.filter((t) => E.approvalCandidate(t) && !hookCand(t));
-    ok(!bad.length && hookCand("ls *.md") === false && E.approvalCandidate("powershell -enc " + enc) === true,
-      "1.23 review 5: the approval hook's pre-check lets through every command the engine's approvalCandidate would read (joined strings, globs with an approval word, -EncodedCommand) (missed: " + js(bad) + ")");
+    all("1.23 review 5 / review 8: the approval hook's pre-check lets through every command the engine's approvalCandidate would read (joined strings, globs with an approval word, a dot-led glob, -EncodedCommand) — the probe's one test, no copy of its patterns in the hook", {
+      missed: () => !bad.length, plainLs: () => hookCand("ls *.md") === false, encoded: () => E.approvalCandidate("powershell -enc " + enc) === true,
+      dotGlob: () => E.approvalCandidate("cp /tmp/x.json .s*/roadmap.jso?") === true && E.approvalCandidate("x=.spec?/roadmap.json") === true,
+      noCopy: () => !/const RE_(?:CANDIDATE|VERB|DOT_GLOB|WRITE_WORD) =/.test(src) && /approvalMayBe\(/.test(src),
+    });
   }
 
   // L21 — the edit guard's target as the Windows file system reads it: an NTFS stream suffix (`a.ts::$DATA` IS a.ts) and Git Bash's
@@ -307,9 +311,9 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
     S.createFeature(own, "Own Thing", ["core"]);
     S.initProject(exported, ["core"], "en");
     S.createFeature(exported, "Exported Thing", ["core"]);
-    const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: js({ hook_event_name: "SessionStart" }), cwd: own,
+    const r = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: js({ hook_event_name: "SessionStart" }), cwd: own,
       encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: exported, SPEC_PROJECT_DIR: "" }, timeout: 20000 });
-    const r2 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: js({ hook_event_name: "SessionStart" }), cwd: own,
+    const r2 = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: js({ hook_event_name: "SessionStart" }), cwd: own,
       encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, timeout: 20000 });
     ok(/exported-thing/.test(r.stdout) && !/own-thing/.test(r.stdout) && /own-thing/.test(r2.stdout),
       "1.23 review 5 (M8): SessionStart without a payload cwd lists CLAUDE_PROJECT_DIR's features, never the hook process folder's .specs/ (that one only when nothing is exported) (got " + js([r.stdout.slice(0, 160), r2.stdout.slice(0, 160)]) + ")");

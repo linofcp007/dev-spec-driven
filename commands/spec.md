@@ -9,15 +9,16 @@ Use the **dev-spec-driven** skill. Request: $ARGUMENTS
 - **An existing feature** (`.specs/<feature>/`) → `spec_next_action {name}`: report its tracks, phase, doctor verdict and
   `changedSinceApproval`, then do the ONE step it names — never skip a step to reach a later one. With a phase named,
   do that phase once the phases before it are approved.
-- **A new idea** → Phase 0: the mode (Vibe / Bounded / Spec — a real defect goes to the bugfix flow, `/spec-bugfix`; a
-  question to investigate is a spike), then `spec_classify` for the tracks and its `suggestedSize` (xs = one `change.md`
-  · s = one story, its plan approved in one call · m / l = the full chain). Present the mode, tracks and size and get the
-  user's OK. Then `spec_init {tracks, lang}` if `.specs/steering/` is missing, and `spec_create {name, tracks, summary,
-  size, lang}` once — `brownfield: true` in existing code, `flow: "design-first"` when the architecture is the input,
-  `branch: "true"` for its own git branch (run the `branch.command` it returns). Size m / l: record the decisions in the
-  `classification.md` it seeds and get it approved; size s / xs: no `classification.md` — record mode, tracks and size in
-  the Summary of `requirements.md` (s) or `change.md` (xs). A spec or plan from Kiro, spec-kit, OpenSpec, plan mode or
-  BMAD: `spec_import` instead of re-typing it.
+- **A new idea** → Phase 0: the mode (Vibe / Bounded / Spec — a request made with `/spec` is Spec mode, a small one size
+  xs; a real defect goes to the bugfix flow, `/spec-bugfix`; a question to investigate is a spike), then `spec_classify`
+  for the tracks and its `suggestedSize` (xs = one `change.md` · s = one story, its plan approved in one call · m / l =
+  the full chain). Present the mode, tracks and size and get the user's OK. Then `spec_init {tracks, lang}` if
+  `.specs/steering/` is missing, and `spec_create {name, tracks, summary, size, lang}` once — `brownfield: true` in
+  existing code, `flow: "design-first"` when the architecture is the input, `branch: "true"` for its own git branch (run
+  the `branch.command` it returns). Size m / l: record the decisions in the `classification.md` it seeds and get it
+  approved; size s / xs: no `classification.md` — record mode, tracks and size in the Summary of `requirements.md` (s)
+  or `change.md` (xs). A spec or plan from Kiro, spec-kit, OpenSpec, plan mode or BMAD: `spec_import` instead of
+  re-typing it.
 
 **The phases** (each one: fill the artifact, `spec_doctor`, then the user's approval):
 - **requirements** — EARS criteria with stable IDs (`US-1.AC-1`, `EC-1`, `NFR-1`, `SC-001`), every placeholder
@@ -27,13 +28,15 @@ Use the **dev-spec-driven** skill. Request: $ARGUMENTS
   regression sets, thresholds, a baseline.
 - **tests** (+tdd / +ai) — every planned test written and red for the right reason, its T-ID in its name;
   `trace_check {name, code: true}`. No implementation code before this gate.
-- **tasks** — ordered, each with `_Requirements:_`, `_Implements:_` and `_Verify: <command>_` always (on +tdd the command
-  that runs its target tests); `trace_check {name}`.
+- **tasks** — ordered, each with `_Requirements:_` and `_Verify: <command>_` always (on +tdd the command that runs its
+  target tests), `_Implements: <path>_` on every task that writes code (the template's slot: fill it, or delete the line
+  on a task that writes none); `trace_check {name}`.
 
 **Approvals are the user's.** Present the artifact and the verdict, and record an approval with `spec_approve {name,
 phase}` only after their explicit yes (`/approve` is their own command). A refused gate names its failing checks: fix
 them — `force` only when the user explicitly accepts the failures. Implementation follows in Phase 6 of the skill (the
 user's `/executeTask`).
 
-Detail: `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/phase-guide.md` (each phase), with `workflows.md` (sizes)
-and `classification-matrix.md` beside it. Respond in the user's language (EN / PT / ES).
+Detail, read the section of the step you are on: `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/phase-guide.md`
+(the sizes and each phase); a track you doubt in Phase 0: its section of `classification-matrix.md` beside it. Respond in
+the user's language (EN / PT / ES).

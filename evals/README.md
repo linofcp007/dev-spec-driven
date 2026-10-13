@@ -4,8 +4,10 @@ Behaviour tests for the plugin itself, run with Claude Code's `claude plugin eva
 skill under pressure" idea from obra/superpowers' *writing-skills*. Two suites share this folder:
 
 - **Triggering** (tags `triggering` / `negative`): the workflow **triggers** on planning, bug-fix, upgrade and
-  close-the-feature requests in English, Portuguese and Spanish, and **stays silent** on an unrelated question and on near-misses
-  that only share a keyword (`requirements.txt`, `eval()`, one LLM call) or ask for a trivial fix (a typo in a label).
+  close-the-feature requests, on resuming a feature (where it stands, its next task), changing an approved spec, the roadmap,
+  adopting specs in existing code and a spike — in English, Portuguese and Spanish — and **stays silent** on an unrelated
+  question and on near-misses that only share a keyword (`requirements.txt`, `eval()`, one LLM call, a duplicated-code audit,
+  a security review of a diff, a product roadmap for investors) or ask for a trivial fix (a typo in a label).
 - **Behavioural** (tag `behavior`): once it fires, the agent **respects the workflow** — it plans before coding,
   takes the bugfix flow, records evidence instead of a bare tick, integrates locally, reports a refused gate
   instead of forcing it, and audits before upgrading. These cases load a fixture project and use the plugin's
@@ -21,8 +23,12 @@ These are not the `+ai` feature evals of a user's project (those live in `mcp/ev
 | `trigger-bugfix-en` | it fires on a defect report asking for a proper fix |
 | `trigger-upgrade-pt` | it fires on "I updated the plugin — update this project's specs and review what isn't implemented" (PT) |
 | `trigger-finish-pt` / `-es` | it fires on "the feature is done and verified — close it" (PT / ES; 1.29.1 — closing a feature runs `spec_finish` and the project's checks, dev-guardian's gate included) |
+| `trigger-resume-en` · `trigger-execute-es` | it fires on "where are we with csv-export, what's left?" and "continue with the next task" (ES) — 1.30: `spec_next_action`, then Phase 6, where the evidence rules apply most |
+| `trigger-change-pt` | it fires on "add a requirement to checkout — its design is already approved" (PT; `spec_impact`, then the re-approvals) |
+| `trigger-roadmap-en` · `trigger-adopt-es` · `trigger-spike-pt` | it fires on a roadmap milestone and its forecast, on "spec the payments module of a repo without specs before touching it" (ES) and on a timeboxed investigation that must end in a decision (PT) |
 | `no-trigger-unrelated` | nothing from the plugin fires on a general-knowledge question |
 | `no-trigger-requirements-txt` / `-eval-call` / `-llm-call` / `-trivial-fix` | near-misses (tag `near-miss`): pinning a package in `requirements.txt`, replacing an `eval()` call, adding one LLM API call, fixing a typo in a button label ("fix" alone is no bug report) — trivial edits the description excludes |
+| `no-trigger-dupes-en` / `-pr-review-en` / `-roadmap-doc` | near-misses against dev-guardian and the word "roadmap" (1.30): a project-wide duplicated-code audit (dev-guardian's quality skill), a security review of a diff before a push (dev-guardian's `guardian-review`), a one-page product roadmap for investors |
 
 ## Behavioural cases
 
@@ -56,8 +62,8 @@ MCP tool a grader names exists — fix a fixture there, not after a paid run.
 
 | Tag | Cases |
 |---|---|
-| `triggering` | the seven cases that must fire the workflow |
-| `negative` · `near-miss` | the cases that must stay silent (`near-miss`: only the four near-misses) |
+| `triggering` | the thirteen cases that must fire the workflow |
+| `negative` · `near-miss` | the cases that must stay silent (`near-miss`: only the seven near-misses) |
 | `behavior` | the seven behavioural cases (need `--scaffold` and the real MCP server — below) |
 | `evidence` · `bugfix` · `gates` · `finish` · `upgrade` | one workflow rule: `evidence` = the two evidence cases, `bugfix` = the bugfix trigger + behaviour cases, `upgrade` = the upgrade trigger + behaviour cases |
 | `en` · `pt` · `es` | every case in that language (triggering and behavioural mixed) |
@@ -137,6 +143,10 @@ Reference runs (default model, `-j 3`):
 - **1.29.1, 2026-10-12** (CLI 2.1.292, Windows): triggering + negative **12/12 at 1.0** (36 runs, $3.64) — the new
   `trigger-finish-pt` / `-es` ("the feature is done and verified — close it") fire 3/3 each with the description naming
   closing a feature; every near-miss stays silent.
+- **1.30.0, 2026-10-13** (CLI 2.1.292, Windows): triggering + negative **21/21 at 1.0** (63 runs, $6.43) — the six new
+  triggers (resume, the next task in ES, changing an approved spec in PT, the roadmap, adoption in ES, a spike in PT) fire
+  3/3 with the wider description; the three new near-misses (a duplicated-code question, a security review of a diff, a
+  product-roadmap document) stay silent 3/3, `no-trigger-roadmap-doc` included despite "manage a roadmap".
 - behavioural, 2026-09-26, CLI 2.1.282, Windows (no shell granted), 2 runs per case: **6/7 cases at 1.0, $3.30**
   for the 14 runs (about $0.12–0.54 per run; the bugfix case is the dearest). Per case, with the earlier smoke run
   (1 run each, $1.63) where it tells something:

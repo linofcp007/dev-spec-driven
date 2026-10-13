@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname, hookIn }) => {
 
   { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
     const call9 = async (args) => payload(await rpc("tools/call", { name: "trace_check", arguments: args }));
@@ -64,11 +64,12 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     ok(Array.isArray(fin9.warnings) && fin9.warnings.some((w) => /EC-2/.test(w)) && fin9.warnings.some((w) => /EC-9, NFR-7/.test(w)) &&
       !fin9.blockers.some((b) => /EC-|SC-|NFR-/.test(b)), "spec_finish lists the EC/NFR/SC findings under warnings — never as blockers");
     const clean9 = S.specDoctor(w9, "fresh-all");
-    const cleanFin9 = S.finishFeature(w9, "fresh-all").warnings;
+    // (1.30: a fresh scaffold's tasks name no _Implements:_ file yet — that warning is 08-tasks.js's, set aside here)
+    const cleanFin9 = S.finishFeature(w9, "fresh-all").warnings.filter((w) => !/^no task names its files in _Implements:_/.test(w));
     ok(!clean9.checks.some((c) => c.id === "secondary-trace") && cleanFin9.length === 1 && /^planned tests that no test file names \(put the T-ID in the test name\): T-01, T-02, .*T-10$/.test(cleanFin9[0]),
       "no secondary IDs written yet → no secondary-trace check and no EC/NFR/SC finish warning (only: no test file names the planned T-IDs yet)");
     // Hook on tasks.md: the warnings follow the trace line, under their own heading.
-    const hk9 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(d9.dir, "tasks.md") } }), encoding: "utf8" });
+    const hk9 = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(d9.dir, "tasks.md") } }), encoding: "utf8" });
     let hk9t = "";
     try { hk9t = JSON.parse(hk9.stdout).hookSpecificOutput.additionalContext; } catch { /* no output */ }
     ok(/Traceability: all 1 ACs covered by tasks/.test(hk9t) && /Warnings \(not blocking\):\n  ▲ edge cases \(EC\) that no task or test covers: EC-2/.test(hk9t) && /▲ tasks \/ test plan cite unknown EC\/NFR\/SC IDs \(typos\?\): EC-9, NFR-7/.test(hk9t),
@@ -344,7 +345,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     // hook, bugfix impact via bug.md, legacy bugfix approvals, and the per-call read cache ---
     const call12 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
     const hookJs12 = path.join(__dirname, "..", "hooks", "spec-hook.js");
-    const post12 = (file) => { const r = spawnSync(process.execPath, [hookJs12], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: file } }), encoding: "utf8",
+    const post12 = (file) => { const r = hookIn(hookJs12, { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: file } }), encoding: "utf8",
       env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
       try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
     const put12 = (dir, rel, s) => { const p = path.join(dir, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); return p; };
@@ -424,7 +425,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     fill12("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
       ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
     fill12("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-    fill12("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/*.ts_"]]);
+    fill12("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[path of the code the fix changes]", "src/auth.js, src/lib/*.ts"], ["[full test suite command]", "npm test"]]);
     fill12("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
       ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
       ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
@@ -444,7 +445,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     S.initProject(h12, ["core"], "en");
     const hf12 = S.createFeature(h12, "Billing", ["core"]);
     const hReq12 = path.join(hf12.dir, "requirements.md");
-    const stop12 = () => spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "stop-hook.js")], { input: JSON.stringify({ hook_event_name: "Stop", cwd: h12, last_assistant_message: "Here it is." }),
+    const stop12 = () => hookIn(path.join(__dirname, "..", "hooks", "stop-hook.js"), { input: JSON.stringify({ hook_event_name: "Stop", cwd: h12, last_assistant_message: "Here it is." }),
       encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
     fs.writeFileSync(hReq12, "# Requirements\n\n## Summary\nBilling.\n\n### US-1 (P1)\n\n#### Acceptance Criteria (EARS)\n1. **US-1.AC-1** — WHEN a user pays THE SYSTEM SHALL store the receipt\n");
     const specsMd12 = path.join(h12, ".specs", "SPECS.md");
@@ -723,7 +724,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
       phGate12.refused && phGate12.failing.includes("traceability") && /US-1\.AC-6/.test(phGate12.error) &&
       gDoc12.phase === "test-plan" && gTr12.status === "fail" && /the test plan covers unknown ACs \(typos\?\): US-1\.AC-2, US-1\.AC-3, US-1\.AC-4, US-2\.AC-1/.test(gTr12.detail) &&
       !/ACs with no task|tasks reference/.test(gTr12.detail) &&
-      /o plano de testes cobre ACs desconhecidos/.test(S.traceGapLines(ph12, "pt").join()) && /el plan de pruebas cubre ACs desconocidos/.test(S.traceGapLines(ph12, "es").join()),
+      String(S.traceGapLines(ph12, "pt").join()).includes(S.msg("pt").traceGapText.kinds.phantomAcsInTests) && String(S.traceGapLines(ph12, "es").join()).includes(S.msg("es").traceGapText.kinds.phantomAcsInTests),
       "trace_check: a test-plan row covering an AC requirements.md doesn't define is a phantom (phantomAcsInTests — a gap: the test-plan approval is refused, doctor fails once the test plan is the current phase and defers it while it is a later template; a fenced example is none; EN/PT/ES) (got " + phDoc12.detail + " | " + gTr12.status + ": " + gTr12.detail + ")");
 
     // A fenced example row in test-plan.md is no planned test either way: it neither covers its AC (a false traceability
@@ -1105,7 +1106,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
       () => rec("US-1.AC-1")[col("Decisions")] === "D-1 Stripe, as the PSP", () => rec("SC-001")[col("Test files")] === "T-03: run outside test code",
       () => rec("US-1.AC-2")[col("Test files")] === "T-02: in no test file",
       () => rec("US-1.AC-3")[col("Gaps")] === "no task cites it; no test-plan row covers it",
-      () => rec("SC-002")[col("Gaps")] === "no test-plan row or quickstart line covers it",
+      () => rec("SC-002")[col("Gaps")] === S.msg("en").rtm.gap["no-coverage-sc"],
       () => rec("US-1.AC-2")[col("Superseded by")] === "sso/US-1.AC-1", () => rec("NFR-2")[col("Changed since approval")] === "yes",
       () => rec("US-1.AC-1")[col("Changed since approval")] === "no", () => rec("US-1.AC-1")[col("Approved by")] === "alice (forced)",
       () => rec("US-1.AC-3")[col("Template")] === "yes", () => rec("EC-1")[col("Kind")] === "EC",
@@ -1513,7 +1514,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     put(u.dir, "test-plan.md", "| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n| T-01 | unit | example | signs in | US-1.AC-1 | `tests/Login.Tests.ps1` |\n");
     fs.writeFileSync(path.join(u.dir, "requirements.md"), le(reqU));
     const trLE = S.traceCheck(d, u.slug);
-    const hkU = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: js({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(u.dir, "requirements.md") } }), encoding: "utf8" });
+    const hkU = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: js({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(u.dir, "requirements.md") } }), encoding: "utf8" });
     let hkUt = "";
     try { hkUt = JSON.parse(hkU.stdout).hookSpecificOutput.additionalContext; } catch { /* no output */ }
     ok(/EARS check: 1 criteria, all clean/.test(hkUt), "1.22 review: the requirements.md save hook reads a UTF-16LE file (got " + js(hkUt) + ")");

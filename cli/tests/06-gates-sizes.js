@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
+exports.run = async ({ ok, run, runIn, tmp, require, __dirname, runAsync }) => {
   const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const p = path.join(tmp, "p121-sizes");
   S.initProject(p, ["core"], "en");
@@ -29,7 +29,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   fs.writeFileSync(path.join(p, ".specs", "footer-typo", "change.md"), txt);
   const ap = runIn(["approve", "footer-typo", "--through", "tasks", "--project", p]);
   const reqAp = runIn(["approve", "footer-typo", "requirements", "--project", p]);
-  const done = run(["done", "footer-typo", "1", "--run", "--project", p]);
+  const done = (await runAsync(["done", "footer-typo", "1", "--run", "--project", p]));
   const fin = runIn(["finish", "footer-typo", "--project", p]);
   const bad = runIn(["create", "Bad", "--size", "xl", "--project", p]);
   const tracked = runIn(["create", "Tracked", "sec", "--kind", "change", "--project", p]);
@@ -93,7 +93,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   // C4 / C5: impact without a phase diffs the change's plan; the matrix and the export read it as a change
   qwr("footer", "change.md", HEAD + task(1, "US-1.AC-1") + task(2, "US-1.AC-2"));
   const qAp = runIn(["approve", "footer", "--through", "tasks", "--project", q]);
-  run(["done", "footer", "1", "--run", "--project", q]);
+  (await runAsync(["done", "footer", "1", "--run", "--project", q]));
   qwr("footer", "change.md", qrd("footer", "change.md").replace("the footer text \"Copyright\"", "the footer text \"Copyright 2026 Acme\""));
   const qImp = runIn(["impact", "footer", "--project", q]);
   const qImpReq = runIn(["impact", "footer", "--phase", "requirements", "--project", q]);

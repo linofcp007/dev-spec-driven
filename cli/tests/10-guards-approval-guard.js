@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
@@ -16,7 +17,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const i3 = runIn(["init", "--approval-guard", "maybe", "--project", pg]);
   const i4 = runIn(["init", "--approval-guard", "--json", "--project", pg]);
   const i5 = jsonOf(runIn(["init", "--approval-guard=ASK", "--json", "--project", pg]));
-  ok(i1.code === 0 && /Approval guard DENY — an agent's approval/.test(i1.out) && meta(pg).approvalGuard === "ask" && i2 && i2.approvalGuard === "deny" && i2.approvalGuardNote === undefined &&
+  ok(i1.code === 0 && String(i1.out).includes(MSG("en").approvalGuard.on.deny) && meta(pg).approvalGuard === "ask" && i2 && i2.approvalGuard === "deny" && i2.approvalGuardNote === undefined &&
     i3.code === 1 && /--approval-guard takes off, ask or deny \(got 'maybe'\)/.test(i3.out) && i4.code === 1 &&
     i5 && i5.approvalGuard === "ask" && /^Approval guard ASK/.test(i5.approvalGuardNote) && /--approval-guard off\|ask\|deny/.test(runIn(["help"]).out),
     "feature F2: init --approval-guard deny / =ASK stores meta.approvalGuard with a note; init --json always reports it; 'maybe' or a missing value is refused (exit 1); help documents it (got " +

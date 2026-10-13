@@ -5,8 +5,12 @@
  *
  *   name, aliases      the word that runs it (`na` → next-action, `milestones` → milestone)
  *   options            the flags it reads, in its help's order (a flag every command knows aside: GLOBAL_OPTIONS). A VALUE flag
- *                      (the parser reads the word after it) is one of VALUE_FLAG_SPECS below; any other name is a switch of the
- *                      engine's spec.CLI_SWITCHES (the approval hook's lexer reads that list — a new switch goes THERE).
+ *                      (the parser reads the word after it) is one of VALUE_FLAG_SPECS below; any other name is a switch of
+ *                      mcp/lib/probe.js CLI_SWITCHES (the approval guard's lexer reads that list — a new switch goes THERE).
+ *                      TABLE: a command that runs operations — its flags DERIVE from the operations table (mcp/lib/operations.js
+ *                      cliOptions: each operation arg's `cli`, then `cliOnly`, in the table's order), read on first use. A list:
+ *                      a command that runs none, or one whose help shows another order than the table's (init, spike, done,
+ *                      undone, changelog, depend — cli/tests/02-surfaces-parity.js holds them to the table's set).
  *                      Absent: the command checks nothing itself (evals hands every flag to run-evals.js; help).
  *   max                the most positional arguments it takes (absent: any number, or its handler checks them)
  *   bounds             the largest value of an integer flag (next --max ≤ 8, --timeout ≤ TIMEOUT_MAX_S), or its [least, most] (dupes
@@ -33,15 +37,21 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const COMPLETION = require(path.join(__dirname, "completion.js")); // `completion <shell>` (and the hidden __complete)
-const RUN = require(path.join(__dirname, "run.js")); // done --run / finish --run: the user's commands, their process tree
-const GIT = require(path.join(__dirname, "git.js")); // every git call the CLI makes
+// done --run / finish --run (the user's commands, their process tree) and every git call the CLI makes — each module on first use
+// (review 8: the status line and the help required both on every call)
+let RUN_MODULE = null, GIT_MODULE = null;
+const RUN = new Proxy({}, { get: (_, k) => (RUN_MODULE || (RUN_MODULE = require(path.join(__dirname, "run.js"))))[k] });
+const GIT = new Proxy({}, { get: (_, k) => (GIT_MODULE || (GIT_MODULE = require(path.join(__dirname, "git.js"))))[k] });
 
 // the engine (~36 modules — ~80 ms of a ~140 ms run) loads on its first use, never at load: the status line
-// outside a dev-spec project (Claude Code runs it after every message, in every folder, once it is installed user-wide) and the
-// bare help print without it. `spec.x` reads through this proxy; the first read loads the facade.
+// outside a dev-spec project (Claude Code runs it after every message, in every folder, once it is installed user-wide), the
+// bare help, a command's help, an unknown command and a usage error found before the handler print without it (cli/main.js
+// c.projectText reads the language without it while engineLoaded() is false). `spec.x` reads through this proxy; the first read
+// loads the facade.
 let SPEC = null;
 const loadSpec = () => SPEC || (SPEC = require(path.join(__dirname, "..", "mcp", "lib", "spec.js")));
 const spec = new Proxy({}, { get: (_, k) => loadSpec()[k], has: (_, k) => k in loadSpec() });
+const engineLoaded = () => SPEC !== null;
 
 const CLI_FILE = path.join(__dirname, "dev-spec.js"); // the entry point: what the printed lines, the status line and git's merge driver run
 const CLI_PATH = CLI_FILE.replace(/\\/g, "/"); // forward slashes (the help's completion install lines, version, completion)
@@ -54,6 +64,13 @@ const TIMEOUT_MAX_S = Math.floor(2147483647 / 1000);
 // next --max — spec_next_task's schema maximum (8): --max 50 exited 0 and the engine clamped it to 8 silently,
 // where MCP refuses max: 9.
 const NEXT_MAX = 8;
+
+// ---- the options the operations table gives -------------------------------------------------------------------------------
+// `options: TABLE` — the command's flags derive from mcp/lib/operations.js (cliOptions), read on first use: the status line and the
+// bare help never load the table (main.js reads it on the first c.call the same way).
+const TABLE = Symbol("options from the operations table");
+let OPERATIONS_MODULE = null;
+const operationsTable = () => OPERATIONS_MODULE || (OPERATIONS_MODULE = require(path.join(__dirname, "..", "mcp", "lib", "operations.js")));
 
 // ---- the value flags -----------------------------------------------------------------------------------------------------------
 // Every flag that takes a value, as `--flag value` or `--flag=value` (any other `--flag` is a switch — `depend a b --order 3` no
@@ -393,9 +410,23 @@ function statusLineRender(c) {
         : given.concat([c.env.SPEC_PROJECT_DIR, c.env.CLAUDE_PROJECT_DIR, c.cwd]);
       // the engine-free walk first (cli/completion.js statusProbe, statusLineProject's null rule) — outside a
       // dev-spec project the line is empty without loading the engine (136–220 ms per render in any folder, user-wide)
-      const pdir = COMPLETION.statusProbe(cands) ? spec.statusLineProject(cands) : null;
       const cols = parseInt(c.env.COLUMNS, 10);
-      if (pdir) r = spec.statusLine(pdir, { columns: Number.isSafeInteger(cols) && cols > 0 ? cols : undefined });
+      const columns = Number.isSafeInteger(cols) && cols > 0 ? cols : undefined;
+      if (COMPLETION.statusProbe(cands)) {
+        // …and in one, the last render while its .specs/ is unchanged and it is fresh (review 8: the engine loaded after every
+        // message) — cli/completion.js statusCacheRead; else the engine renders, kept with the signature taken before it read
+        const key = { cands: cands.map((x) => (typeof x === "string" ? path.resolve(c.cwd, x) : null)), columns: columns || null };
+        const cached = COMPLETION.statusCacheRead(key);
+        if (cached) r = cached;
+        else {
+          const pdir = spec.statusLineProject(cands);
+          if (pdir) {
+            const sig = COMPLETION.specsSignature(pdir);
+            r = spec.statusLine(pdir, { columns });
+            COMPLETION.statusCacheWrite(key, pdir, sig, r);
+          }
+        }
+      }
     } catch {
       r = { ok: true, found: false, line: "" }; // never a stack trace in the status line
     }
@@ -500,14 +531,13 @@ function createCommand(c) {
     : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
   return createRun(c);
 }
-const CREATE_OPTIONS = ["tracks", "summary", "lang", "brownfield", "flow", "question", "timebox", "reproduction", "root-cause", "condition", "behaviour", "include-body", "size", "branch"];
 
 // ---- the table ------------------------------------------------------------------------------------------------------------------
 // In the help's order. A handler reads what it needs from its context (destructured first — the bodies read as they always have).
 const COMMANDS = [
   {
     name: "classify",
-    options: ["name", "lang", "explain"],
+    options: TABLE,
     help: `  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data), multilingual
                                   --explain: every keyword match (table tier → final tier, cue / override, negation) + the
                                   project's signal overrides`,
@@ -547,7 +577,7 @@ const COMMANDS = [
                                   --check name="cmd" (repeatable; name= removes one): the project's check commands (roadmap.json
                                   meta.checks, e.g. --check test="npm test" --check lint="npm run lint") — in every brief's definition of done
                                   --guardian [on|off]: dev-guardian's gate as the check 'guardian' (node .specs/guardian.cjs scan … — the
-                                  newest installed dev-guardian); finish --run runs it (minutes; needs its scanners). off removes it
+                                  installed dev-guardian); finish --run runs it (minutes; its scanners on every machine). off removes it
                                   --roles requirements=product,design=tech+security: approvals by role (a listed phase is approved once
                                   every role signed its current content); --roles none clears them
                                   --approval-guard off|ask|deny: the human approval guard — an agent's approve (MCP or this CLI through
@@ -617,7 +647,7 @@ const COMMANDS = [
   },
   {
     name: "steering",
-    options: ["lang"], max: 1,
+    options: TABLE, max: 1,
     help: `  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, glossary.md — the terms to
                                   use and the words to avoid (_Avoid:_), …) — any other
                                   name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)`,
@@ -634,7 +664,7 @@ const COMMANDS = [
   },
   {
     name: "templates",
-    options: ["lang"],
+    options: TABLE,
     args: ["list init check", "@template"],
     help: `  templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
                                   replace the built-in ones for new features / steering; init copies the built-in ones to
@@ -652,7 +682,7 @@ const COMMANDS = [
   },
   {
     name: "tracks",
-    options: ["lang"],
+    options: TABLE,
     args: ["list init check"],
     help: `  tracks [list|init <name>|check] [name] [--lang]   The project's own tracks: a pack .specs/tracks/<name>/ (track.json +
                                   fragments) is a marker track like +sec — classified, scaffolded, gated; init scaffolds
@@ -670,7 +700,7 @@ const COMMANDS = [
   },
   {
     name: "signals",
-    options: ["lang"],
+    options: TABLE,
     args: ["list set forget"], sub: { set: [null, "@track", null, "off weak strong"], forget: [null, "@track"] },
     help: `  signals [list | set <track> <word> off|weak|strong | forget <track> <word>]   The classifier's signal overrides of this
                                   project (.specs/classifier.json): create learns them from Phase 0 corrections (a word
@@ -690,7 +720,7 @@ const COMMANDS = [
   },
   {
     name: "create",
-    options: ["kind", ...CREATE_OPTIONS],
+    options: TABLE,
     args: [null, "@track..."],
     values: { kind: "feature bugfix spike change", size: "@size" },
     help: `  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike|change, --size xs|s|m|l, --lang en|pt|pt-BR|es)
@@ -705,7 +735,7 @@ const COMMANDS = [
   },
   {
     name: "bugfix",
-    options: CREATE_OPTIONS,
+    options: TABLE,
     args: [null, "@track..."],
     values: { size: "@size" },
     help: `  bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
@@ -736,7 +766,7 @@ const COMMANDS = [
   },
   {
     name: "decide",
-    options: ["title", "decision", "context", "consequences", "affects", "supersedes", "discovery", "kind"],
+    options: TABLE,
     args: ["@feature"],
     values: { kind: "decision discovery" },
     help: `  decide <feature> --title "…" --decision "…"   Append a D-n entry to decisions.md (append-only): [--context "…"]
@@ -761,18 +791,18 @@ const COMMANDS = [
   },
   {
     name: "list",
-    options: [], max: 0,
+    options: TABLE, max: 0,
     help: `  list                            List features (phase + task progress)`,
     run: (c) => main2list(c),
   },
   {
     name: "status",
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  status [feature]                Status of a feature, or all (sections: ✓ filled · ◐ unfilled · ✗ missing)`,
     run(c) {
       const { pos, projectDir, out, fail, log } = c;
-      if (!pos[0]) return main2list(c);
+      if (!pos[0] || !String(pos[0]).trim()) return main2list(c); // a blank name names no feature: the list (spec_status {name: "  "})
       const r = c.call("status");
       if (!r.ok) return fail(r);
       const T = c.featureText(r.feature);
@@ -797,7 +827,7 @@ const COMMANDS = [
   },
   {
     name: "doctor",
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  doctor <feature>                Health-check → ready to advance? (exit 1 on FAIL; trace/ears likewise on gaps/errors)`,
     run(c) {
@@ -815,7 +845,7 @@ const COMMANDS = [
   },
   {
     name: "trace",
-    options: ["code", "matrix", "csv"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  trace <feature> [--code]        Traceability AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs) — lists every gap,
                                   then the EC/NFR/SC warnings; --code also scans test files for the T-IDs they name
@@ -850,7 +880,7 @@ const COMMANDS = [
   },
   {
     name: "clarify",
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  clarify <feature>               Surface ambiguities/gaps in requirements before design`,
     run(c) {
@@ -868,7 +898,7 @@ const COMMANDS = [
   },
   {
     name: "ears",
-    options: ["text", "lang"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature @file"],
     help: `  ears <feature|file.md>          Lint EARS (SHALL/DEVE/DEBE, IDs, vague words);
        ears --text "…" | ears -   … or raw text / stdin (same as ears_validate {text})`,
@@ -887,7 +917,8 @@ const COMMANDS = [
           r.issues.forEach((i) => log("  L" + i.line + " [" + T.word(i.severity) + "] " + i.msg)); // `severity` stays English in --json
         });
       };
-      if (typeof flags.text === "string") return report(lint(flags.text), c.cliText(textLang));
+      // an empty --text beside a feature names no text: the feature is linted (ears_validate {name, text: ""}, the operation's `when`)
+      if (typeof flags.text === "string" && (flags.text !== "" || !pos[0])) return report(lint(flags.text), c.cliText(textLang));
       if (pos[0] === "-") return c.readStdin((txt) => report(lint(txt), c.cliText(textLang)));
       // A file path is read from the project when it was named (--project / the env), else from the working folder (argPath).
       const file = c.argPath(pos[0]);
@@ -903,7 +934,7 @@ const COMMANDS = [
   },
   {
     name: "next",
-    options: ["batch", "max", "waves"], max: 1,
+    options: TABLE, max: 1,
     bounds: { max: NEXT_MAX },
     args: ["@feature"],
     help: `  next <feature> [--batch]        Next task whose _Depends:_ are all done (--batch: + the [P] tasks that can run beside it; --max N, default 3);
@@ -935,7 +966,7 @@ const COMMANDS = [
   {
     name: "next-action",
     aliases: ["na"],
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  next-action <feature>           "You are here → do this next" (+ what changed since approval); alias: na`,
     run(c) {
@@ -953,7 +984,7 @@ const COMMANDS = [
   },
   {
     name: "brief",
-    options: ["write", "include-brief"], max: 2,
+    options: TABLE, max: 2,
     args: ["@feature"],
     help: `  brief <feature> [n] [--write]   Self-contained brief for task n (default: next open) — ACs, tests, design, DoD;
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)`,
@@ -1139,7 +1170,7 @@ const COMMANDS = [
   },
   {
     name: "finish",
-    options: ["write", "include-body", "run", "shell", "timeout"], max: 1,
+    options: TABLE, max: 1,
     bounds: { timeout: TIMEOUT_MAX_S },
     args: ["@feature"],
     help: `  finish <feature> [--write] [--include-body] [--run]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
@@ -1182,7 +1213,7 @@ const COMMANDS = [
   },
   {
     name: "append-tasks",
-    options: ["task", "req", "implements", "verify", "story", "parallel", "makes-green", "expect-fail", "size", "depends", "heading"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     values: { size: "@task-size", story: "shared" },
     help: `  append-tasks <feature> --task "…"   Append one task to tasks.md, numbered after the last (default phase 'Phase: Convergence'):
@@ -1223,7 +1254,7 @@ const COMMANDS = [
   },
   {
     name: "approve",
-    options: ["by", "force", "role", "through", "reason", "expires", "revoke"], max: 2,
+    options: TABLE, max: 2,
     args: ["@feature", "@phase"],
     help: `  approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
                                   --force records it anyway (flagged as forced, with the failing checks); --role ROLE signs off as
@@ -1235,8 +1266,9 @@ const COMMANDS = [
                                   own gate — stops at the first refused gate (exit 1) or a phase still waiting for another role`,
     run(c) {
       // --through <phase>: the fast-forward; --role <role>: the sign-off's role; --revoke / --reason / --expires.
-      const { flags, pos, projectDir, out, fail, usage, log } = c;
-      if (!pos[0] || (!pos[1] && typeof flags.through !== "string")) usage("dev-spec approve <feature> <phase> [--force [--reason \"…\"] [--expires YYYY-MM-DD|Nd]] [--by NAME] [--role ROLE] | dev-spec approve <feature> <phase> --revoke [--reason \"…\"] | dev-spec approve <feature> --through <phase>");
+      const { pos, projectDir, out, fail, usage, log } = c;
+      // (a feature without a phase reaches the engine: its refusal — missing-arguments [phase] — is spec_approve's own)
+      if (!pos[0]) usage("dev-spec approve <feature> <phase> [--force [--reason \"…\"] [--expires YYYY-MM-DD|Nd]] [--by NAME] [--role ROLE] | dev-spec approve <feature> <phase> --revoke [--reason \"…\"] | dev-spec approve <feature> --through <phase>");
       // Default approver: the engine's. A refusal exits 1 listing the failing checks.
       const r = c.call("approve");
       if (!r.ok) return fail(r); // a fast-forward stopped at a refused gate: its error names what was approved before it
@@ -1257,7 +1289,7 @@ const COMMANDS = [
   },
   {
     name: "impact",
-    options: ["phase", "reopen"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  impact <feature> [--phase p] [--reopen]   What an edit after approval touches, against the approved snapshot
                                   (--phase requirements|design|test-plan|eval-plan|tasks, default requirements): changed ACs/sections/tests/tasks →
@@ -1279,7 +1311,7 @@ const COMMANDS = [
   },
   {
     name: "metrics",
-    options: ["write"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate, velocity (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)`,
@@ -1293,7 +1325,7 @@ const COMMANDS = [
   },
   {
     name: "add-track",
-    options: ["tracks", "remove"],
+    options: TABLE,
     args: ["@feature", "@optional-track..."],
     help: `  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive);
@@ -1315,7 +1347,7 @@ const COMMANDS = [
   },
   {
     name: "feature",
-    options: ["yes", "flow"], // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its handler
+    options: TABLE, // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its handler
     args: ["remove archive rename restore flow"],
     sub: { remove: [null, "@feature"], archive: [null, "@feature"], rename: [null, "@feature"], restore: [null, "@archived"], flow: [null, "@feature", "@flow"] },
     help: `  feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
@@ -1367,7 +1399,7 @@ const COMMANDS = [
   },
   {
     name: "catalog",
-    options: ["write", "include-body"], max: 0,
+    options: TABLE, max: 0,
     help: `  catalog [--write]               Living catalog: every feature's ACs, superseded ones marked (_Supersedes:_); --write → .specs/SPECS.md
                                   (--json: the structure; --include-body adds the markdown)`,
     run(c) {
@@ -1387,7 +1419,7 @@ const COMMANDS = [
   },
   {
     name: "export",
-    options: ["md", "html", "csv", "gherkin", "adr", "tracker", "write", "include-body"],
+    options: TABLE,
     args: ["@feature"],
     help: `  export [feature] [--md] [--write]   One printable document for stakeholders — a feature (stories + EARS ACs, design, test plan,
                                   tasks with their verification, approvals, open clarifications) or, without one, the whole project;
@@ -1475,7 +1507,7 @@ const COMMANDS = [
   {
     name: "milestone",
     aliases: ["milestones"],
-    options: [],
+    options: TABLE,
     args: ["@milestone-action"], sub: { add: [null, null, null, "@feature..."] },
     help: `  milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]   Milestones (roadmap.json meta.milestones): a target date
                                   for a set of features, judged against their ETAs — on-track · at-risk · late · done; add replaces
@@ -1494,7 +1526,7 @@ const COMMANDS = [
   },
   {
     name: "drift",
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)`,
     run(c) {
@@ -1526,7 +1558,7 @@ const COMMANDS = [
   },
   {
     name: "stop-check",
-    options: ["message", "agent"],
+    options: TABLE,
     help: `  stop-check [--message "<text>"|-] [--agent <type>]   The Stop hook's evidence gate: does a closing message claim done /
                                   verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without verification
                                   evidence? Prints the reason it would send the turn back (exit 1) or why it lets it end; - reads stdin;
@@ -1555,7 +1587,7 @@ const COMMANDS = [
   },
   {
     name: "log",
-    options: ["max"], max: 2, // <feature> [-]
+    options: TABLE, max: 2, // <feature> [-]
     args: ["@feature", "-"],
     help: `  log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /executeTask commit
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
@@ -1625,7 +1657,7 @@ const COMMANDS = [
   },
   {
     name: "upgrade",
-    options: ["apply"], max: 0,
+    options: TABLE, max: 0,
     help: `  upgrade [--apply]               After a plugin update: audit every active feature against the current rules (read-only) — status,
                                   what doctor flags, next step, review (critic / converge); --apply saves inferred tracks, seeds the
                                   approval history, stamps meta.specVersion and writes .specs/UPGRADE.md (never edits a spec)`,
@@ -1642,7 +1674,7 @@ const COMMANDS = [
   },
   {
     name: "roadmap",
-    options: ["write", "md", "html", "lang"], max: 0,
+    options: TABLE, max: 0,
     help: `  roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles, ETA per feature (velocity from ticked tasks, _Size: XS|S|M|L|XL_), cross-feature file overlaps. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|pt-BR|es`,
     run(c) {
       // Same engine call as spec_roadmap: a failed write (e.g. a hand-written ROADMAP.md) is an error → exit 1.
@@ -1693,7 +1725,7 @@ const COMMANDS = [
   },
   {
     name: "backlog",
-    options: [], // add <name> [note words…] · rm|remove <name> · list — checked in its handler
+    options: TABLE, // add <name> [note words…] · rm|remove <name> · list — checked in its handler
     args: ["@backlog-action"],
     help: `  backlog [add|rm|remove <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)`,
     run(c) {
@@ -1719,7 +1751,7 @@ const COMMANDS = [
   },
   {
     name: "scan",
-    options: ["cap"], max: 1,
+    options: TABLE, max: 1,
     args: ["@dir"],
     help: `  scan [path]                     Brownfield: inventory an existing codebase (stack, frameworks, routes with file:line,
                                   tests, entrypoints, env var names, migrations)`,
@@ -1752,7 +1784,7 @@ const COMMANDS = [
   },
   {
     name: "dupes",
-    options: ["min-lines", "tests"], max: 1,
+    options: TABLE, max: 1,
     bounds: { "min-lines": [4, 100] },
     args: ["@feature"],
     help: `  dupes [feature] [--min-lines N] [--tests]   Repeated code: a feature's _Implements:_ code that repeats code elsewhere in
@@ -1776,13 +1808,14 @@ const COMMANDS = [
         }
         if (r.total > r.duplicates.length) log(T.dupesMore(r.total - r.duplicates.length));
         if (r.truncated) log(T.dupesTruncated(r.scanned.files));
+        if (r.partial) log(T.dupesPartial(r.partial.unread, Math.round(r.partial.bytes / 1048576))); // 1.30: the byte budget stopped the reading
         if (r.budget) log((r.budget.over ? "  ⚠ " : "  ") + r.budget.note); // 1.29: dev-guardian's duplication budget (.guardian/budgets.yml)
       });
     },
   },
   {
     name: "coverage",
-    options: [], max: 0,
+    options: TABLE, max: 0,
     help: `  coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder`,
     run(c) {
       const { projectDir, out, fail, log } = c;
@@ -1803,7 +1836,7 @@ const COMMANDS = [
   },
   {
     name: "import",
-    options: ["name", "lang", "tracks", "text", "dry-run"],
+    options: TABLE,
     args: ["@import-tool", "@file"],
     help: `  import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
                                   tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data
@@ -2053,6 +2086,15 @@ const COMMANDS = [
 ];
 
 // ---- derived from the table ----------------------------------------------------------------------------------------------------
+// `options: TABLE` → a getter: the operations table's flags for the command, read (once) on first use
+for (const e of COMMANDS) {
+  if (e.options !== TABLE) continue;
+  Object.defineProperty(e, "options", { enumerable: true, configurable: true, get() {
+    const options = operationsTable().cliOptions(e.name);
+    Object.defineProperty(e, "options", { value: options, enumerable: true, writable: true, configurable: true });
+    return options;
+  } });
+}
 // name or alias → its entry (a Map: `constructor` / `__proto__` are no commands)
 const COMMAND_INDEX = new Map();
 for (const e of COMMANDS) for (const n of [e.name, ...(e.aliases || [])]) COMMAND_INDEX.set(n, e);
@@ -2062,8 +2104,20 @@ const HELP_ALIASES = {};
 for (const e of COMMANDS) for (const a of e.aliases || []) HELP_ALIASES[a] = e.name;
 // each command's own options and the most arguments it takes (main's checkCommandArgs: another known flag, or an
 // argument past its last one, is a usage error). Not listed: evals (its flags are run-evals.js's) and help.
-const COMMAND_OPTIONS = {};
-for (const [n, e] of COMMAND_INDEX) if (e.options) COMMAND_OPTIONS[n] = e.max === undefined ? { options: e.options } : { options: e.options, max: e.max };
+// Built on first use (a TABLE entry's options load the operations table): an object read through a proxy, as a plain one.
+let COMMAND_OPTIONS_BUILT = null;
+function commandOptions() {
+  if (COMMAND_OPTIONS_BUILT) return COMMAND_OPTIONS_BUILT;
+  const out = {};
+  for (const [n, e] of COMMAND_INDEX) if (e.options) out[n] = e.max === undefined ? { options: e.options } : { options: e.options, max: e.max };
+  return (COMMAND_OPTIONS_BUILT = out);
+}
+const COMMAND_OPTIONS = new Proxy({}, {
+  get: (_, k) => commandOptions()[k],
+  has: (_, k) => k in commandOptions(),
+  ownKeys: () => Reflect.ownKeys(commandOptions()),
+  getOwnPropertyDescriptor: (_, k) => Reflect.getOwnPropertyDescriptor(commandOptions(), k),
+});
 // shell completion: a command's positionals ("<cmd>", and "<cmd> <word>" for the positions a first word picks) and the values
 // of a value flag ("<flag>" for every command — VALUE_FLAG_SPECS' own —, "<cmd> --<flag>" where commands differ).
 const COMMAND_ARGS = {};
@@ -2076,9 +2130,10 @@ for (const [k, o] of VALUE_FLAG_SPECS) if (o && o.values) FLAG_VALUES[k] = o.val
 for (const e of COMMANDS) for (const [k, v] of Object.entries(e.values || {})) FLAG_VALUES[e.name + " --" + k] = v;
 // The commands whose output is text only — no structured result — so --json is refused there (main; the help too).
 const TEXT_ONLY_COMMANDS = new Set(COMMANDS.filter((e) => e.text).map((e) => e.name));
-// Boolean switches: ONE list, spec.CLI_SWITCHES (the approval hook parses `dev-spec approve …` with it): add a new switch THERE. A
-// function: read on use — the engine's list (an unknown flag, a switch given a value), never at load.
-const BOOL_FLAGS = () => [...spec.CLI_SWITCHES];
+// Boolean switches: ONE list, mcp/lib/probe.js CLI_SWITCHES (the approval guard parses `dev-spec approve …` with it; the facade's
+// spec.CLI_SWITCHES is it): add a new switch THERE. Read on use, from the probe (Node core only, no engine — 1.30: a mistyped --flag
+// loaded the whole engine to be refused).
+const BOOL_FLAGS = () => [...require(path.join(__dirname, "..", "mcp", "lib", "probe.js")).CLI_SWITCHES];
 
 // ---- the help ----------------------------------------------------------------------------------------------------------------
 // `dev-spec help`: this head, every entry's lines in the table's order, then this foot — English, like the commands' synopses (only
@@ -2168,5 +2223,5 @@ function completionModel(c) {
 module.exports = {
   COMMANDS, COMMAND_INDEX, commandFor, COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES, HELP_ALIASES, TEXT_ONLY_COMMANDS, GLOBAL_OPTIONS,
   VALUE_FLAG_SPECS, VALUE_FLAGS, REPEATABLE_FLAGS, OPTIONAL_VALUE_FLAGS, BOOL_FLAGS, EVALS_VALUE_FLAGS, EVALS_SWITCHES, TIMEOUT_MAX_S, NEXT_MAX,
-  spec, CLI_FILE, CLI_PATH, RULE_FILES, mcpConfigBlocks, helpText, helpFor, completionModel, statusLineRender, printVersion,
+  spec, engineLoaded, CLI_FILE, CLI_PATH, RULE_FILES, mcpConfigBlocks, helpText, helpFor, completionModel, statusLineRender, printVersion,
 };

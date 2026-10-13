@@ -4,8 +4,8 @@
  * dev-spec-driven engine — the edit guard, the stop gate and the human approval guard.
  * Guard mode (meta.guard: on | scope — hooks/guard-hook.js), the end-of-turn stop gate (hooks/stop-hook.js: a "done"
  * claim with unverified recent ticks is sent back) and the human approval guard (meta.approvalGuard — hooks/
- * approval-hook.js: a pure decision over one PreToolUse payload, with its shell lexer). CLI_SWITCHES (the CLI's boolean
- * switches) lives here: the lexer reads it.
+ * approval-hook.js: a pure decision over one PreToolUse payload, with its shell lexer). The lexer reads CLI_SWITCHES (the CLI's
+ * boolean switches) from mcp/lib/probe.js, where the CLI reads it before the engine loads (1.30); the facade's is this module's export.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -20,6 +20,11 @@ const i18n = require("../i18n.js");
 // network path. ONE reading, the project probe's (mcp/lib/probe.js fsTargetPath / editTargets — the cases there): the approval hook's
 // pre-check reads the same functions before the engine loads.
 const { fsTargetPath: guardTargetPath, editTargets: approvalEditTargets } = require("../probe.js");
+// The guards' shared readings (probe.js — the hooks read the same ones before the engine loads, every one linear in its input): the
+// approval pre-filter (approvalPlain, approvalMayBe, RE_APPROVAL_VERB), the guarded files by path (guardedFileOf), another MCP server's
+// file tools and their path arguments (isMcpFileTool, mcpPathArgs), a trailing-separator trim (trimSlashEnd).
+const { approvalPlain, approvalMayBe, RE_APPROVAL_VERB, guardedFileOf, isMcpFileTool, mcpPathArgs: approvalPathArgs, trimSlashEnd,
+  RE_APPROVAL_MCP, CLI_SWITCHES } = require("../probe.js"); // CLI_SWITCHES: the CLI's boolean switches — the lexer's (one list, the CLI's too)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords, existingFeature,
   expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher, guessLang,
@@ -30,7 +35,9 @@ let activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAN
   validateApprovalRoles, verificationStatus, withRoadmapLock, writeRoadmap, phaseFile, withFeatureLock, writeFileAtomic, pwshOption,
   decodeText, isNetworkPath, runProvesVerify, withinRoot;
 let approvedContentSame, proofIncomplete; // gates.js (the guard's stale tasks approval) · evidence.js (an incomplete command runs nothing)
-function __link(E) { ({ approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
+let folderHoldsCode; // scan.js — a folder a command removes or moves as a whole, read for code (the edit guard)
+let guardianShellActions, guardianGuardFilter; // guardian.js — dev-guardian's gate rules (1.30), read through the hook points below
+function __link(E) { ({ folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
@@ -66,6 +73,8 @@ function guardEnabled(projectDir) {
 // next_action's and finish's own test (approvedContentSame, gates.js): trailing whitespace, final blank lines or a
 // "\r\r\n" file normalized to LF are no edit.
 // meta.guard "scope": once tasks are approved, a code file must also be in the plan — scopeGuardDecision.
+// A FOLDER holding code is a code target too (guardFolderCode): `rm -rf src`, `Remove-Item -Recurse src`, `find src -delete`, `mv src
+// old`, `rm -rf src/*` remove or move the code in it (review 8 C14: they passed while `sed -i src/util.js` asked).
 function guardCheck(projectDir, filePath, cwd) {
   const pdir = path.resolve(projectDir);
   const level = guardLevel(pdir);
@@ -81,7 +90,7 @@ function guardCheck(projectDir, filePath, cwd) {
   // Case-folded where the filesystem folds case: `.SPECS/x.ts` IS the spec folder on Windows/macOS.
   const rel = toPosix(path.relative(pdir, abs));
   if (rel.split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
-  if (!isCodeFile(rel)) return allow("not-code");
+  if (!isCodeFile(rel) && !guardFolderCode(pdir, abs)) return allow("not-code");
   const root = specsRoot(pdir);
   const covering = [], forced = [], pending = [], stale = [], spikes = [], testing = [];
   const texts = new Map(); // feature → tasks.md (the scope level reads its open tasks' _Implements:_)
@@ -123,6 +132,33 @@ function guardCheck(projectDir, filePath, cwd) {
   if (testing.length && isTestFile(rel)) return allow("tests-phase", { covering: testing });
   const list = (xs) => xs.slice(0, 3).join(", ") + (xs.length > 3 ? ", …" : "");
   return { guard: true, decision: "ask", why: "no-approved-tasks", pending, stale, reason: G.ask(list(pending), list(stale)) };
+}
+// An edit target that is no code file by its name: is it a folder holding code (scan.js folderHoldsCode — bounded, links not followed,
+// node_modules / dist / build… not code), or a glob in its last segment (`rm -rf src/*`) matching a code file or such a folder? A glob
+// higher up (`rm -rf */lib`) is not read (a known limit); a network path is never read (no SMB connection to a host the agent named).
+const GUARD_GLOB_ENTRIES = 200; // a glob's matches read, at most (past it: may hold code)
+function guardFolderCode(pdir, abs) {
+  if (isNetworkPath(abs)) return false;
+  const base = path.basename(abs);
+  if (!/[*?[]/.test(base)) {
+    let st = null;
+    try { st = fs.lstatSync(abs); } catch { st = null; }
+    return !!st && st.isDirectory() && folderHoldsCode(pdir, [abs]);
+  }
+  const parent = path.dirname(abs);
+  if (/[*?[]/.test(parent)) return false;
+  let entries;
+  try { entries = fs.readdirSync(parent, { withFileTypes: true }); } catch { return false; }
+  const match = globMatcher(base);
+  const dirs = [];
+  for (const e of entries) {
+    if (!match(e.name) || e.isSymbolicLink()) continue;
+    if (dirs.length >= GUARD_GLOB_ENTRIES) return true;
+    const p = path.join(parent, e.name);
+    if (e.isDirectory()) dirs.push(p);
+    else if (e.isFile() && isCodeFile(toPosix(path.relative(pdir, p)))) return true;
+  }
+  return folderHoldsCode(pdir, dirs);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,8 +302,8 @@ function setGuard(projectDir, on) {
 
 const APPROVAL_GUARD_LEVELS = ["off", "ask", "deny"]; // in order: a later level is stricter
 // The approve-shaped MCP tools, under any server prefix (Claude Code: mcp__plugin_dev-spec-driven_spec-driven__spec_approve;
-// a project server: mcp__spec-driven__spec_approve; any name a user registered the server under) or bare.
-const RE_APPROVAL_MCP = /^(?:mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track)$/; // spec_add_track: 1.24 review 6
+// a project server: mcp__spec-driven__spec_approve; any name a user registered the server under) or bare: probe.js RE_APPROVAL_MCP
+// (spec_approve, spec_feature, spec_init and — 1.24 review 6 — spec_add_track), the approval hook's and hooks.json's list too.
 // The tools that run a shell command (tool_input.command). Monitor — it runs its command in the Bash tool's
 // shell (with the Bash permission rules), and `node cli/dev-spec.js approve …` through it went past a deny-level guard.
 const APPROVAL_SHELL_TOOLS = new Set(["Bash", "PowerShell", "Monitor"]);
@@ -275,36 +311,22 @@ const APPROVAL_SHELL_TOOLS = new Set(["Bash", "PowerShell", "Monitor"]);
 // (the guard's own level, the project's gates) is a guard-down action like a shell write of it. MultiEdit: an older tool name.
 const APPROVAL_EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]); // NotebookEdit (notebook_path): 1.25.1
 // another MCP server's file tools — filesystem's write_file / edit_file / move_file, Desktop Commander's write_file /
-// edit_block, … — matched by the verb in the tool's name, never by the server (hooks/hooks.json's matcher is the same set); dev-spec's
-// own tools (spec_*, steering_scaffold, ears_validate, trace_check) are never one. Their path-like arguments are read as an Edit's path.
-const RE_MCP_FILE_TOOL = /^mcp__.+__[\w-]*?(?:write|edit|create|move|rename|delete|remove|copy|append|patch|replace|save|put|upload|mkdir|touch|truncate|unlink|insert)/i;
-const RE_DEVSPEC_MCP_TOOL = /__(?:spec_[a-z_]+|steering_scaffold|ears_validate|trace_check)$/;
-const RE_MCP_PATH_KEY = /path|file|source|src|dest|target|from|^to$|dir|folder|name|uri|location/i;
+// edit_block, … — matched by the verb in the tool's name, never by the server (probe.js isMcpFileTool over MCP_FILE_VERBS — hooks/
+// hooks.json's matcher is built from the same list); dev-spec's own tools (spec_*, steering_scaffold, ears_validate, trace_check) are
+// never one. Their path-like arguments (probe.js mcpPathArgs) are read as an Edit's path.
 // The `unreadable` reasons that ask at both levels (never refused outright — it may be no approval at all): a form the lexer can't
 // follow, a partial payload, a script fed to a shell out of sight, an unknown program run on .specs/ files, the hook's own
 // failure past its pre-check, a projectDir the hook can't read.
 const APPROVAL_ASK_WHYS = ["unparsed", "partial", "fed", "specs-arg", "error", "project"];
-const RE_STATE_FILE = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)+\.state\.json$/i;
-// the harness-observed run log (hooks/observe-hook.js appends the runs Claude Code SAW: .specs/<f>/.execution/
-// observed.jsonl, .specs/.execution/observed.jsonl for a project check) — an agent writing it forges observed evidence.
-const RE_OBSERVED_FILE = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)*\.execution[\\/]+observed\.jsonl$/i;
+// (The guarded files — .specs/roadmap.json, a .state.json below .specs/ and a harness-observed run log: hooks/observe-hook.js appends
+// the runs Claude Code SAW to .specs/<f>/.execution/observed.jsonl, .specs/.execution/observed.jsonl for a project check, and an agent
+// writing it forges observed evidence — are probe.js guardedFileOf's, read on the path's segments.)
 // the tracks that carry a gate of their own — +tdd (test-plan, Phase 4's failing tests), +ai (eval-plan, the eval
 // harness): turning one off drops that gate (gates.js phaseActive). No other built-in track or a pack adds a phase.
 const APPROVAL_GATED_TRACKS = ["tdd", "ai"];
 const APPROVAL_COMMAND_MAX = 64 * 1024; // characters of a shell command read (the hook's payload may be anything)
 const APPROVAL_SHELL_DEPTH = 3; // nested scripts (bash -c "cmd /c \"…\"") read at most this deep
 const APPROVAL_LEX_DEPTH = 32; // $( … ) / `…` / heredoc scripts lexed at most this deep (deeper: read as a plain subshell)
-// The CLI's boolean switches (cli/commands.js BOOL_FLAGS): any other `--flag` takes the next word as its value.
-const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
-  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves",
-  "print-config"]); // the CLI's BOOL_FLAGS ARE this list (print-config: 1.16 C1 — statusline --print-config)
-CLI_SWITCHES.add("revoke"); // approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
-CLI_SWITCHES.add("gherkin"); // export [f] --gherkin (= spec_export {format: "gherkin"})
-CLI_SWITCHES.add("install").add("uninstall"); // merge-state --install / --uninstall (the git merge driver's setup)
-CLI_SWITCHES.add("explain"); // classify "<text>" --explain (= spec_classify {explain: true})
-CLI_SWITCHES.add("adr"); // export [f] --adr (= spec_export {format: "adr"})
-CLI_SWITCHES.add("dry-run"); // import … --dry-run (= spec_import {dryRun: true} — nothing written, the same result + a preview)
-CLI_SWITCHES.add("tests"); // dupes [feature] --tests (= spec_scan {duplicates: true, tests: true} — test files too)
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
@@ -390,24 +412,20 @@ const RE_COMSPEC_WORD = /^(?:\$env:comspec|\$\{env:comspec\}|%comspec%)$/i;
 // hook's own pre-check is the same test.
 // or the files the guard stands on by name (`find . -name roadmap.json -delete`), or a glob / brace expansion that
 // may name .specs (`.s*/road*.json`, `.spec?/…`) or stand beside a writer / remover (PowerShell's `Remove-Item * -Recurse` reaches
-// .specs/). The hook's pre-check (approval-hook.js candidate) is the same test — mcp/tests/10-guards-shell-writes.js checks they agree.
-const RE_APPROVAL_CANDIDATE = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
-const RE_APPROVAL_DOT_GLOB = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*[*?[{]/;
-const RE_APPROVAL_WRITE_WORD = /(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|remove-item|ri|mv|move|move-item|mi|cp|copy|copy-item|cpi|set-content|sc|add-content|ac|clear-content|clc|out-file|new-item|ni|tee|robocopy|xcopy|rsync)(?=[\s;&|)]|$)/i;
-// The words that make a CLI call an approval or a guard-down (approve, feature remove, init's guard-down flags).
-const RE_APPROVAL_VERB = /(?:^|[^\w-])(?:approve|remove|--approval-guard|--stop-check|--evidence|--guard|--guardian|--roles|--check)(?![\w-])/i;
-const approvalPlain = (text) => String(text).replace(/(["'])\s*\+\s*\1/g, "").replace(/[\\`^]\r?\n|['"\\`^]/g, "");
+// .specs/). ONE test, the approval hook's pre-check too: probe.js approvalMayBe (APPROVAL_CANDIDATE_TESTS, on approvalPlain's text) —
+// a linear scan: the dot-glob regex it replaced rescanned a run of `=.=.…` from every start, and a hook past its timeout lets the call
+// through (review 8). The hook adds any encoded-looking pwsh call (a superset); here the decoded script is read.
 // …and a PowerShell -EncodedCommand / -ec / -e value whose decoded script names dev-spec (`powershell -enc <base64>`).
 const RE_PWSH_ENCODED = /(?:^|\s)[-/]e[a-z]*\s+([A-Za-z0-9+/]{8,}={0,2})(?=\s|$)/gi;
 const approvalCandidate = (text) => {
   const t = approvalPlain(text);
-  if (RE_APPROVAL_CANDIDATE.test(t) || (/[*?[{]/.test(t) && (RE_APPROVAL_VERB.test(t) || RE_APPROVAL_DOT_GLOB.test(t) || RE_APPROVAL_WRITE_WORD.test(t)))) return true;
+  if (approvalMayBe(t)) return true;
   if (!/powershell|pwsh/i.test(t)) return false;
   let n = 0;
   for (const m of t.matchAll(RE_PWSH_ENCODED)) {
     if (++n > 8) break;
     const s = decodePwshEncoded(m[1]);
-    if (s && RE_APPROVAL_CANDIDATE.test(approvalPlain(s))) return true;
+    if (s && approvalMayBe(approvalPlain(s))) return true;
   }
   return false;
 };
@@ -421,8 +439,7 @@ const APPROVAL_TEXT_PROGRAMS = new Set(["echo", "printf", "print", "git", "gh", 
   "dirname", "test-path", "resolve-path", "get-item", "gi", "measure-object", "format-list", "fl", "format-table", "ft"]);
 // The JavaScript runtimes that read their script from stdin with `-` (`cat cli/dev-spec.js | node - approve …`).
 const APPROVAL_STDIN_RUNTIMES = new Set(["node", "nodejs", "bun"]);
-// .specs/roadmap.json as a write target: a redirection's target, or the file a writer program names.
-const RE_ROADMAP_FILE = /(?:^|[\\/])\.specs[\\/]+roadmap\.json$/i;
+// .specs/ itself as a path (a folder a remover / mover / git restore names).
 const RE_SPECS_DIR = /(?:^|[\\/])\.specs[\\/]*$/i;
 // The programs whose operands are written (each one) — + sponge, dos2unix / unix2dos (in place), the PowerShell
 // file cmdlets read by their parameters (shellSegOps).
@@ -870,17 +887,10 @@ function approvalPathText(w) {
 // The files the approval guard stands on → { setting, feature? } | null for a path: .specs/roadmap.json ("roadmap": the guard and the
 // project's gates), a feature's .state.json ("state": its approvals, evidence, history) and a harness-observed run
 // log ("observed": .specs/<f>/.execution/observed.jsonl, or the project's .specs/.execution/observed.jsonl — feature null).
+// (probe.js guardedFileOf — the approval hook's reading too, one pass over the segments).
 function approvalGuardedFile(p) {
   const t = approvalPathText(p);
-  if (!t) return null;
-  if (RE_ROADMAP_FILE.test(t)) return { setting: "roadmap" };
-  if (RE_OBSERVED_FILE.test(t)) {
-    const segs = t.split("/");
-    const f = segs[segs.length - 3];
-    return { setting: "observed", feature: f && f.toLowerCase() !== ".specs" ? f : null };
-  }
-  if (RE_STATE_FILE.test(t)) { const segs = t.split("/"); return { setting: "state", feature: segs[segs.length - 2] || null }; }
-  return null;
+  return t ? guardedFileOf(t) : null;
 }
 // A folder a whole-folder writer (git checkout / restore -- <dir>) rewrites: .specs/ itself (roadmap.json with it) or a feature's
 // folder (its .state.json) → { setting, feature? } | null. Files (an extension: ROADMAP.md, roadmap.json) and dot folders aren't one.
@@ -950,6 +960,8 @@ function specsWriteActions(words, raw, ctx, mode, nextSeg) {
 const SHELL_VAR = "\u0001"; // in a path: a variable left unresolved ($X, ${X}, $env:X, %X%) — it may hold anything but is never read as .specs
 const SHELL_ANY = "\u0002"; // in a path: any chain of folders, dot folders included (find descends into .specs/, a recursive listing)
 const GUARDED_NAMES = ["roadmap.json", ".state.json", "observed.jsonl"];
+// dev-guardian's settings (guardian.js — guarded only while a check runs the gate: guardianGuardFilter)
+const isGuardianSetting = (h) => !!h && /^guardian-/.test(String(h.setting || ""));
 const RE_SHELL_WILD = /[*?[\u0001\u0002]/;
 // A path word with the variables the same command assigned put in (`D=.specs; … $D/roadmap.json`), any other one marked SHELL_VAR.
 function shellVarText(w, vars) {
@@ -1006,9 +1018,13 @@ function shellSegCould(seg, name, mode, varOk) {
   return !!re && re.test(name);
 }
 // A path (its variables already put in) → what it may name: { text, wild, specs (the first segment that is or may be .specs, else -1),
-// dir (it is — or may be — .specs itself), guarded (approvalGuardedFile: an exact path), may (it may be roadmap.json, a .state.json or an
-// observed log there), name (its last segment may be one of those names, wherever it lies), folder (it may be a folder: no extension),
-// execution (inside an .execution/ folder), lock (a lock file) }.
+// dir (it is — or may be — .specs itself), guarded (approvalGuardedFile: an exact path — dev-spec's own), guardianFile (dev-guardian's
+// launcher or baseline, exactly), may (it may be roadmap.json, a .state.json or an observed log there), name (its last segment may be
+// one of those names, wherever it lies), guardianSelf / guardianHit (.guardian/ itself / or its baseline, a glob too), folder (it may be
+// a folder: no extension), execution (inside an .execution/ folder), lock (a lock file) }.
+// dev-guardian's files are a fact of their OWN, never `guarded` (review 9): its actions count only while a check runs the gate
+// (guardianGuardFilter drops them), so every reading takes them as an action ADDED to what the path is without them — `git restore
+// .specs/guardian.cjs` stays a feature folder's restore (approvalGuardedDir) as in 1.29, the launcher's guard-down beside it.
 function shellPathFacts(t0, mode) {
   const t = approvalPathText(t0);
   const segs = t.split("/").filter(Boolean);
@@ -1018,13 +1034,22 @@ function shellPathFacts(t0, mode) {
   for (let i = 0; i < n && specs < 0; i++) if (shellSegCould(segs[i], ".specs", mode, false)) specs = i;
   const last = n ? segs[n - 1] : "";
   const could = (name) => shellSegCould(last, name, mode, true);
-  const guarded = wild ? null : approvalGuardedFile(t);
+  const found = wild ? null : approvalGuardedFile(t);
+  const guardianFile = isGuardianSetting(found) ? found : null;
+  const guarded = guardianFile ? null : found;
   const may = !!guarded || (wild && specs >= 0 && ((specs === n - 2 && could("roadmap.json")) || (specs < n - 1 && could(".state.json")) ||
     (specs < n - 2 && shellSegCould(segs[n - 2], ".execution", mode, true) && could("observed.jsonl")))) ||
     // a guarded name in a folder an unknown variable names (`$DIR/roadmap.json`, `$F/.state.json`): it may be there — fail closed
     (n >= 2 && !RE_SHELL_WILD.test(last) && segs.slice(0, -1).some((s) => s.includes(SHELL_VAR)) && GUARDED_NAMES.includes(last.toLowerCase()));
   const tail = wild ? last.replace(/^[\s\S]*[*?\]\u0001\u0002]/, "") : last;
-  return { text: t, wild, specs, dir: specs >= 0 && specs === n - 1, guarded, may, name: GUARDED_NAMES.some(could),
+  // dev-guardian's baseline folder (1.30, review 9): the first segment that is — or may be — .guardian; guardianSelf, the path IS it;
+  // guardianHit, the path is it or may be its baseline.json (an entry directly in it, a glob too: `.guardian/*`) — what replacing,
+  // removing or filling the folder reaches (`rm -rf .guardian`, `cp -r evil/. .guardian/`, `git checkout -- .guardian`)
+  let gi = -1;
+  for (let i = 0; i < n && gi < 0; i++) if (shellSegCould(segs[i], ".guardian", mode, false)) gi = i;
+  const guardianSelf = gi >= 0 && gi === n - 1;
+  const guardianHit = guardianSelf || (gi >= 0 && gi === n - 2 && could("baseline.json"));
+  return { text: t, wild, specs, dir: specs >= 0 && specs === n - 1, guarded, guardianFile, may, name: GUARDED_NAMES.some(could), guardianSelf, guardianHit,
     folder: wild ? !/\.[A-Za-z0-9]{1,10}$/.test(tail) : !/^[^.][\s\S]*\.[A-Za-z0-9]{1,10}$/.test(last),
     execution: specs >= 0 && segs.slice(specs + 1).some((s) => s.toLowerCase() === ".execution"), lock: !wild && /\.lock$/i.test(last) };
 }
@@ -1433,6 +1458,11 @@ function netFileOps(m, nextSeg) {
 // a lock file.
 const shellDown = (setting, extra) => Object.assign({ kind: "guard-down", setting, source: "shell" }, extra || {});
 const shellHit = (h) => shellDown(h.setting, h.setting === "roadmap" ? {} : { feature: h.feature || null });
+// dev-guardian's own: its launcher / baseline written, replaced, received, linked to or handed to an unknown program (guardianFile — an
+// action ADDED to the path's other reading, never one in its place: shellPathFacts), its baseline folder replaced, removed or filled as a
+// whole (guardianHit — review 9: `.guardian/` as a destination went unguarded). Counted only while a check runs the gate (1.30).
+const guardianFolderDown = () => shellDown("guardian-baseline");
+const guardianDowns = (f) => (f.guardianFile ? [shellHit(f.guardianFile)] : f.guardianHit ? [guardianFolderDown()] : []);
 function shellOpActions(o, mode, ctx) {
   const out = [];
   if (o.op === "piped") {
@@ -1444,15 +1474,19 @@ function shellOpActions(o, mode, ctx) {
       if (o.op === "write") {
         if (f.guarded) out.push(shellHit(f.guarded));
         else if (f.may) out.push(shellDown("specs"));
+        out.push(...guardianDowns(f));
       } else if (o.op === "replace" || o.op === "git") {
         const h = f.guarded || (o.op === "git" && !f.wild ? approvalGuardedDir(f.text) : null);
         if (h) out.push(shellHit(h));
         else if (f.dir && !f.wild) out.push(shellDown("roadmap"));
         else if (f.specs >= 0 && !f.execution && !f.lock && (f.may || f.folder || f.dir)) out.push(shellDown("specs"));
+        out.push(...guardianDowns(f));
       } else if (o.op === "into") {
         // (a destination that reads as a file — an extension, no glob — is the write above, not a folder receiving files)
-        if ((f.specs < 0 && !f.dir) || f.execution || (!f.folder && !f.wild && !/[\\/]$/.test(pr[0]))) continue;
-        if (o.archive) { out.push(shellDown("specs")); continue; }
+        // .specs/ or a folder under it; or dev-guardian's .guardian/ itself (its baseline.json lands directly in it)
+        const specsDest = f.specs >= 0 || f.dir;
+        if ((!specsDest && !f.guardianSelf) || f.execution || (!f.folder && !f.wild && !/[\\/]$/.test(pr[0]))) continue;
+        if (o.archive) { out.push(specsDest ? shellDown("specs") : guardianFolderDown()); continue; }
         for (const sp of o.sources || []) {
           const base = shellVarText(sp[0], ctx && ctx.vars).replace(/[\\/]+$/, "");
           const names = [base.replace(/^[\s\S]*[\\/]/, "") || "*"];
@@ -1460,14 +1494,20 @@ function shellOpActions(o, mode, ctx) {
           for (const name of names) {
             for (const sf of shellPathReadings(f.text + "/" + name, mode, null)) {
               if (sf.guarded) out.push(shellHit(sf.guarded));
-              else if (sf.may || (o.recursive && sf.folder)) out.push(shellDown("specs"));
+              else if (specsDest && (sf.may || (o.recursive && sf.folder))) out.push(shellDown("specs"));
+              if (sf.guardianFile) out.push(shellHit(sf.guardianFile));
+              else if (!specsDest && sf.guardianHit) out.push(guardianFolderDown());
             }
           }
         }
       } else if (o.op === "link") {
-        if (f.guarded || f.specs >= 0) out.push(shellDown("link"));
+        // a link made to .specs/ or under it, or to one of the files the guard stands on
+        if (f.specs >= 0 || f.guarded) out.push(shellDown("link"));
+        out.push(...guardianDowns(f));
       } else if (o.op === "unknown") {
+        // (dev-guardian's launcher / baseline: their own guard-down — never "unreadable" for them alone, so nothing asks without the check)
         if (f.guarded || f.dir || f.may || (!f.wild && f.name)) out.push({ kind: "unreadable", why: "specs-arg", source: "shell" });
+        out.push(...guardianDowns(f));
       }
     }
   }
@@ -1626,6 +1666,7 @@ function shellApprovalActions(command, level, depth, mode, meta, ctx) {
     const raw = words.raw || words;
     shellTrack(words, raw, mode, c);
     const at = devSpecWordAt(words, raw);
+    for (const read of approvalShellReaders()) out.push(...read(words, programAt(words, raw), at, c)); // another concern's (dev-guardian's, 1.30)
     if (at >= 0) {
       let args = words.slice(at + 1);
       if (mode === "ps" && args.length && args[args.length - 1] === "@" && segs[si + 1]) {
@@ -1947,7 +1988,8 @@ function approvalCommand(a, cli) {
   else if (a.kind === "guard-down") {
     // a write / edit of the file itself (or of the harness-observed log — evidence is recorded by the harness, never by hand):
     // the user makes it
-    if (a.setting === "roadmap" || a.setting === "state" || a.setting === "observed" || a.setting === "specs" || a.setting === "link") return null;
+    if (a.setting === "roadmap" || a.setting === "state" || a.setting === "observed" || a.setting === "specs" || a.setting === "link" ||
+      String(a.setting).startsWith("guardian-")) return null; // (dev-guardian's launcher, baseline, baseline update — 1.30)
     if (a.setting === "track") words.push("add-track", name(a.feature), ...(Array.isArray(a.tracks) ? a.tracks : []).map((t) => word(t, "<track>")), "--remove");
     else if (a.setting === "evidence") words.push("init", "--evidence", "reported");
     else if (a.setting === "stopCheck") words.push("init", "--stop-check", "off");
@@ -1987,6 +2029,13 @@ function approvalCommand(a, cli) {
 // opts.meta: the project's roadmap.json meta (what a spec_init / `init` change is compared with — absent: unknown, fail closed).
 // opts.resolveFeature (the MCP server): name → the slug the engine resolves it to, or null; a resolved action shows (and
 // its command names) that slug, never the raw argument — slugify drops text in other scripts, which must not reach the question.
+// Another concern's guard-down rules — the hook points, each list naming the readers its owner exports (linked; dev-guardian's gate,
+// guardian.js, 1.30): approvalShellReaders — one simple command's words → its guard-downs (shellApprovalActions, per command: (words,
+// prog, devSpecAt, ctx) → actions — `baseline update`, a DEV_GUARDIAN_CLI= its command sets); approvalActionFilters — the call's actions
+// and meta → the ones that apply (dev-guardian's rules guard nothing while no check runs its gate). Its guarded files are probe.js
+// guardedFileOf's (the hook reads them too), its pre-filter word probe.js APPROVAL_CANDIDATE_TESTS'. Every reader stays linear.
+const approvalShellReaders = () => [guardianShellActions];
+const approvalActionFilters = () => [guardianGuardFilter];
 function approvalGuardDecision(payload, level, opts = {}) {
   const lvl = approvalGuardInput(level) || "off";
   const allow = (why, extra) => Object.assign({ decision: "allow", why, level: lvl }, extra);
@@ -1997,6 +2046,11 @@ function approvalGuardDecision(payload, level, opts = {}) {
   const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";
   const ti = isObj(payload.tool_input) ? payload.tool_input : isObj(payload.toolInput) ? payload.toolInput : {};
   const meta = isObj(opts.meta) ? opts.meta : undefined;
+  // other concerns' rules over a reader's actions (approvalActionFilters — dev-guardian's: its rules guard nothing without its check),
+  // applied AS EACH READER RETURNS, before its own fallback: an action a filter drops never stands in for what the call would have been
+  // without it — the shell's unparsed ask, the next guarded path of an edit (review 9: `dev-guardian baseline update; eval node <cli>
+  // approve …` and an MCP move of .guardian/baseline.json onto .specs/roadmap.json went from ask / deny to allow without the check).
+  const keep = (list) => approvalActionFilters().reduce((l, filter) => filter(l, meta), list);
   let actions = [];
   const m = RE_APPROVAL_MCP.exec(tool);
   // the approval hook got the payload only in part (stdin still open at its 2 s safety net) and that part names
@@ -2012,7 +2066,7 @@ function approvalGuardDecision(payload, level, opts = {}) {
       // runs nothing of dev-spec's, and the head is read as before.
       actions = [{ kind: "unreadable", why: "too-long", length: ti.command.length, source: "shell" }];
     } else if (approvalCandidate(head)) {
-      actions = shellApprovalActions(head, lvl, 0, mode, meta);
+      actions = keep(shellApprovalActions(head, lvl, 0, mode, meta));
       // fail closed: the CLI named with an approval word, in a form the lexer can't follow (a launcher it doesn't
       // know, a string built by concatenation, a glob, a variable) — the user is asked instead of the call being allowed.
       if (!actions.length && approvalUnparsed(head, mode)) actions = [{ kind: "unreadable", why: "unparsed", source: "shell" }];
@@ -2021,12 +2075,13 @@ function approvalGuardDecision(payload, level, opts = {}) {
     // a hand edit of .specs/roadmap.json or of a feature's .state.json (its approvals, evidence, history); 
     // of a harness-observed log, the path read as the file system reads it — `./`, `..`, a stream, an 8.3 short name — and
     // through a link to .specs/ (the real path of its folder).
-    actions = approvalEditActions([typeof ti.file_path === "string" ? ti.file_path : ti.notebook_path], payload.cwd, false);
-  } else if (RE_MCP_FILE_TOOL.test(tool) && !RE_DEVSPEC_MCP_TOOL.test(tool)) {
+    actions = approvalEditActions([typeof ti.file_path === "string" ? ti.file_path : ti.notebook_path], payload.cwd, false, keep);
+  } else if (isMcpFileTool(tool)) {
     // another MCP server's file tool — each path-like argument read as an Edit's path; a move / rename / delete of
-    // .specs/ itself, of a folder or a glob under it, too
-    actions = approvalEditActions(approvalPathArgs(ti, opts.uriPath), payload.cwd, /(?:move|rename|delete|remove|unlink)/i.test(tool.replace(/^mcp__.+__/, "")));
+    // .specs/ itself, of a folder or a glob under it (dev-guardian's .guardian/ too), as well
+    actions = approvalEditActions(approvalPathArgs(ti, opts.uriPath), payload.cwd, /(?:move|rename|delete|remove|unlink)/i.test(tool.replace(/^mcp__.+__/, "")), keep);
   }
+  actions = keep(actions); // (every reader's list filtered already: a no-op but for the MCP approval tools' and the partial payload's)
   if (opts.projectUnreadable === true && actions.length) actions.push({ kind: "unreadable", why: "project", source: "mcp" });
   if (!actions.length) return allow("not-an-approval", { tool });
   if (typeof opts.resolveFeature === "function") {
@@ -2059,44 +2114,40 @@ function approvalGuardDecision(payload, level, opts = {}) {
   if (decision === "deny") res.userNote = A.denyUser(text, command);
   return res;
 }
-// The project folder of a .specs/ path (the folder holding .specs/) — the project an edit of its roadmap.json / .state.json acts on.
+// The project folder of a .specs/ (or dev-guardian's .guardian/) path (the folder holding it) — the project an edit of its roadmap.json /
+// .state.json / baseline acts on: the text before the first `.specs` / `.guardian` followed by a separator, its trailing separators taken
+// off (one pass — `^(.*?)[\\/]*\.specs` rescanned a run of separators at each step), else null.
 function approvalSpecsProject(fp) {
-  const m = /^(.*?)[\\/]*\.specs[\\/]/i.exec(String(fp));
-  return m && m[1] ? m[1] : null;
+  const t = String(fp);
+  const m = /\.(?:specs|guardian)[\\/]/i.exec(t);
+  return m ? trimSlashEnd(t.slice(0, m.index)) || null : null;
 }
 // Edited paths (a Write / Edit / NotebookEdit target, an MCP file tool's path arguments) → the guard-down actions: the first one that is
-// .specs/roadmap.json, a .state.json or an observed log (as the file system reads it — approvalEditTargets); with `whole` (a move /
-// rename / delete tool) also .specs/ itself, a folder or a glob under it (not an .execution/ folder, a lock).
-function approvalEditActions(paths, cwd, whole) {
+// .specs/roadmap.json, a .state.json, an observed log or a dev-guardian file (as the file system reads it — approvalEditTargets); with
+// `whole` (a move / rename / delete tool) also .specs/ itself, a folder or a glob under it (not an .execution/ folder, a lock), and
+// .guardian/ itself (or a glob that may be its baseline). `keep` (approvalGuardDecision's filters) runs on each hit before it is the
+// answer: a hit it drops (a dev-guardian file without the check) never hides what comes after it — the reading goes on as if that
+// path were not guarded (the whole-folder reading of the same path, the next target, the next path).
+function approvalEditActions(paths, cwd, whole, keep = (l) => l) {
   for (const p of paths) {
     for (const t of approvalEditTargets(p, cwd)) {
       const h = approvalGuardedFile(t);
-      if (h) return [Object.assign({ kind: "guard-down", setting: h.setting, source: "edit" }, h.setting === "roadmap" ? {} : { feature: h.feature || null }, { project: approvalSpecsProject(t) })];
+      if (h) {
+        const hit = keep([Object.assign({ kind: "guard-down", setting: h.setting, source: "edit" }, h.setting === "roadmap" ? {} : { feature: h.feature || null }, { project: approvalSpecsProject(t) })]);
+        if (hit.length) return hit;
+      }
       if (!whole) continue;
       const f = shellPathFacts(t, "ps");
       if ((f.dir || (f.specs >= 0 && (f.folder || f.may))) && !f.execution && !f.lock) return [{ kind: "guard-down", setting: "specs", source: "edit", project: approvalSpecsProject(t + "/") }];
+      if (f.guardianHit) {
+        const hit = keep([{ kind: "guard-down", setting: "guardian-baseline", source: "edit", project: approvalSpecsProject(t + "/") }]);
+        if (hit.length) return hit;
+      }
     }
   }
   return [];
 }
-// An MCP tool's arguments → the strings that may be paths: the values (strings, or arrays / objects of them, 3 levels deep) of keys
-// named like one (path, file, source, destination, target, from, to, dir…), one line each, at most 32; a file:// URI read as its path
-// (uriPath — hook-utils.js fileUriToPath, the hook's and the MCP server's one reading).
-function approvalPathArgs(ti, uriPath) {
-  const out = [];
-  const walk = (v, keyed, depth) => {
-    if (out.length >= 32 || depth > 3) return;
-    if (typeof v === "string") {
-      if (!keyed || !v.trim() || v.length > 4096 || /[\r\n]/.test(v)) return;
-      const s = v.trim();
-      const u = /^file:\/\//i.test(s) && typeof uriPath === "function" ? uriPath(s) : null;
-      out.push(u || s);
-    } else if (Array.isArray(v)) v.forEach((x) => walk(x, keyed, depth + 1));
-    else if (isObj(v)) for (const [k, x] of Object.entries(v)) walk(x, keyed || RE_MCP_PATH_KEY.test(k), depth + 1);
-  };
-  walk(ti, false, 0);
-  return out;
-}
+// (An MCP tool's arguments → the strings that may be paths: approvalPathArgs, probe.js mcpPathArgs — the approval hook's reading too.)
 // fail closed — a shell command that names the CLI (dev-spec, a glob that may be it, a string joined from pieces)
 // together with an approval word, in a simple command whose program is no text-only program (echo, git, grep, cat…), or a
 // JavaScript runtime whose script is a substitution / variable — when the lexer found no action in it. → true: ask the user.

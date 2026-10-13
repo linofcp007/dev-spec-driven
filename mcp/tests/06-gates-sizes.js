@@ -26,6 +26,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     return "concrete item " + fillN;
   };
   const fillText = (text) => {
+    text = text.replace(/\n  - _Implements: \[[^\]\n]*\]_/g, ""); // 1.30: the _Implements:_ slot — these fixtures write no code file
     for (let round = 0; round < 4; round++) {
       const ph = S.placeholderReport(text);
       if (!ph.length) break;
@@ -64,7 +65,8 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     // ON PURPOSE since: bugTasks — every bugfix's tasks.md is the short form (the red regression test, the fix; no
     // reproduce / root-cause tasks — bug.md's gates hold them); was ba448c6e3d63408cfd7451b9b568673889a43e91. 1.25.1 review: ES says
     // "fichero" for a file (tasks.md's comment and parallel slot, the test plan's Fichero column, the integration plan's
-    // heading); was 7b47ddfbbd0af1421ea315ecbdca5a1e65b5fadb.
+    // heading); was 7b47ddfbbd0af1421ea315ecbdca5a1e65b5fadb. 1.30 review 8: the _Implements:_ slot on the core task and the
+    // bugfix's fix (and the tasks comment that asks for it on every code task); was 352db345bb4e29784823bc13ccc166d02077172b.
     const TR = ["tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"];
     const combos = [[], ...TR.map((t) => [t]), ...TR.flatMap((t, i) => TR.slice(i + 1).map((u) => [t, u])), TR].map((x) => ["core", ...x]);
     const label = (t) => t.map((x) => (x === "core" ? "core" : "+" + x)).join(" ");
@@ -99,7 +101,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     const f = S.createFeature(p, "Plain", ["core", "sec"], "", undefined, "en");
     const same = rd(f.dir, "design.md") === i18n.design({ name: "Plain", tracks: ["core", "sec"], label: "core +sec" }, "en") &&
       rd(f.dir, "requirements.md") === i18n.requirements({ name: "Plain", tracks: ["core", "sec"], summary: "" }, "en");
-    ok(got === "352db345bb4e29784823bc13ccc166d02077172b" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
+    ok(got === "bdf2541dbb91b0883e17f776c8a19f6a3818ee5e" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
       has(f.dir, "classification.md") && same,
       "1.21 F5: no size = the 1.20 scaffolds byte for byte (but the bugfix tasks.md, the short form on purpose) — the pinned sha1 of every no-size builder output of every pre-1.21 track combination (EN / PT / ES), and a create without a size writes no size key and the builders' own text (got " +
       JSON.stringify({ got, n: keys.length, state: stateOf(f.dir).size, same }) + ")");
@@ -352,7 +354,8 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     const got = cases.map(([t]) => { const r = S.classify(t, {}); return [r.suggestedSize, r.sizeReason, r.sizeNote]; });
     const p = fresh("suggest");
     const created = S.createFeature(p, "Typo", undefined, "fix a typo in the footer", undefined, "en");
-    ok(got.every((g, i) => g[0] === cases[i][1] && g[1] === cases[i][2] && typeof g[2] === "string" && /spec_create \{size/.test(g[2])) &&
+    ok(got.every((g, i) => g[0] === cases[i][1] && g[1] === cases[i][2] && typeof g[2] === "string" && /spec_create \{size/.test(g[2]) &&
+      /\(CLI: create --size xs\|s\|m\|l\)/.test(g[2]) && !/1\.21/.test(g[2])) && // 1.30 review 8: the CLI's flag too, no version history
       /^Tamanho sugerido xs/.test(got[6][2]) && /^Tamaño sugerido s/.test(got[7][2]) && created.ok && created.kind === "feature" && !("size" in stateOf(created.dir)),
       "1.21 F5: spec_classify suggests a size (suggestedSize · stable sizeReason · a localized sizeNote) — a typo xs, one button / endpoint / screen s, a feature m, three tracks l, in EN / PT / ES; spec_create without a size never applies it (got " +
       JSON.stringify(got.map((g) => g.slice(0, 2))) + ")");

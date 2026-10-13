@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, __dirname, hookIn }) => {
 
   { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
   const w2 = path.join(tmp, "proj-wp2");
@@ -172,7 +172,11 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
   S.backlog(w2, "add", "SSO Login", "SAML");
   S.backlog(w2, "add", "Exports v2");
   const sso = S.createFeature(w2, "sso-login", ["core"]);
-  ok(sso.removedFromBacklog.join() === "SSO Login" && S.backlog(w2).backlog.map((b) => b.name).join() === "Exports v2", "spec_create drops the backlog item with the same slug");
+  // 1.30 (review 8 C10): the item's note comes along — in the result ([{name, note}]) and as an HTML comment under requirements.md's title
+  const ssoReq = fs.readFileSync(path.join(sso.dir, "requirements.md"), "utf8");
+  ok(JSON.stringify(sso.removedFromBacklog) === JSON.stringify([{ name: "SSO Login", note: "SAML" }]) && S.backlog(w2).backlog.map((b) => b.name).join() === "Exports v2" &&
+    sso.backlogNote === "requirements.md" && /^# [^\n]*\n\n<!-- From the backlog \(SSO Login\): SAML -->\n/.test(ssoReq),
+    "spec_create drops the backlog item with the same slug — and keeps its note: removedFromBacklog [{name, note}], an HTML comment under requirements.md's title (got " + JSON.stringify([sso.removedFromBacklog, ssoReq.slice(0, 120)]) + ")");
 
   // --- review fixes ---
   // placeholderReport: literals in code spans and number intervals are code/data, not placeholders
@@ -280,12 +284,12 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
   // localized removal / create-on-existing messages (PT, ES)
   const ptRel = S.createFeature(ptW2, "Relatórios", ["saas"]);
   const ptRelRm = S.addTrack(ptW2, ptRel.slug, "saas", { remove: true });
-  ok(/^Tracks desativados: \+saas\. Nenhum ficheiro foi apagado/.test(ptRelRm.note) && S.addTrack(ptW2, ptRel.slug, "core", { remove: true }).error === "O 'core' está sempre ativo — não pode ser removido." &&
+  ok(/^Tracks desativados: \+saas\. Nenhum ficheiro foi apagado/.test(ptRelRm.note) && S.addTrack(ptW2, ptRel.slug, "core", { remove: true }).error === S.msg("pt").tracks.cannotRemoveCore &&
     /^Não ativo: \+ai/.test(S.addTrack(ptW2, ptRel.slug, "ai", { remove: true }).note), "removal messages follow the feature language (PT: removed, core, not active)");
   S.createFeature(esW2, "Exportar", ["core"]);
   const esAgain = S.createFeature(esW2, "Exportar", ["saas"]);
   ok(/^'exportar' ya existía — tracks añadidos: \+saas/.test(esAgain.note) && esAgain.addedTracks.join() === "saas" &&
-    S.removeTrack(esW2, "error-de-pago", "tdd").error === "Un bugfix es siempre test-first — no se puede quitar +tdd.",
+    S.removeTrack(esW2, "error-de-pago", "tdd").error === S.msg("es").tracks.bugfixNeedsTdd,
     "create-on-existing note and the bugfix +tdd refusal are localized (ES)");
 
   // roadmap: planned-but-not-started (tasks-ready, 0 done) is its own state — never ⬜ next to 30%
@@ -617,7 +621,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     const rmap = rd(path.join(tp, ".specs", "ROADMAP.md"));
     const dsc = S.designSaveCheck(tp, crEs.slug);
     const exp = S.exportSpecs(tp, { name: "settings", format: "md" });
-    const hookOut = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse",
+    const hookOut = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "PostToolUse",
       tool_input: { file_path: path.join(packDir(tp, "a11y"), "requirements.md") } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
     ok(/\[A11Y\] Keyboard Navigation/.test(rmap) && dsc.ok && dsc.sections.some((x) => x.track === "a11y" && x.marker === "[A11Y]" && x.sections.length === 3) &&
       exp.ok && /\[A11Y\] Keyboard Navigation/.test(exp.content) && /core \+tdd \+a11y/.test(exp.content) && hookOut.status === 0 && !hookOut.stdout.trim(),

@@ -31,6 +31,28 @@ class CliExit {
   constructor(code) { this.code = code; }
 }
 
+// ---- what the light paths read without the engine -------------------------------------------------------------------------
+// The project probe (mcp/lib/probe.js — Node core only) and the i18n tables (mcp/lib/i18n.js — the engine's own, spec.msg IS
+// i18n.msg), each on first use; i18n loads with Node's compile cache on, as the facade does (its language files are large).
+let PROBE_MODULE = null, I18N_MODULE = null;
+const PROBE = () => PROBE_MODULE || (PROBE_MODULE = require(path.join(__dirname, "..", "mcp", "lib", "probe.js")));
+const I18N = () => {
+  if (I18N_MODULE) return I18N_MODULE;
+  try { require("module").enableCompileCache?.(); } catch { /* never a reason to fail */ }
+  return (I18N_MODULE = require(path.join(__dirname, "..", "mcp", "lib", "i18n.js")));
+};
+// The project's language without the engine: the folder the CLI would act in (cli/completion.js resolveProject — resolveProjectDir's
+// precedence and walk) and its roadmap.json meta.lang (the engine's projectLang: missing, broken or no string → "en"), normalized.
+function lightProjectLang(flag, env) {
+  let lang;
+  try {
+    const j = PROBE().readJsonFile(path.join(COMPLETION.resolveProject(flag, env), ".specs", "roadmap.json"));
+    const meta = j && typeof j === "object" && !Array.isArray(j) && j.meta && typeof j.meta === "object" && !Array.isArray(j.meta) ? j.meta : {};
+    lang = meta.lang;
+  } catch { lang = undefined; }
+  return I18N().normalizeLang(lang || "en");
+}
+
 // ---- the command line ------------------------------------------------------------------------------------------------------
 // → { argv (cut at `--`), ARGV0 (as given — evals hands its own flags to run-evals.js), flags, pos, cmd, cmdIdx (where the command
 // word stands in ARGV0), flagCount, versionAsked, unknownShort, missingValue, branchSpaced }.
@@ -156,20 +178,26 @@ function createContext(argv, io) {
     ((cmd === undefined && Object.keys(flags).every((k) => k === "help" && flags.help === true)) || (cmd === "help" && !pos.length && !Object.keys(flags).length));
   const LIGHT = c.STATUSLINE_RENDER || c.BARE_HELP;
   // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working folder with a dev-spec .specs/ > the
-  // working folder — the same resolution as the MCP server (spec.resolveProjectDir). --project is checked in main (checkProject).
-  c.projectDir = LIGHT ? null : spec.resolveProjectDir(flags.project);
+  // working folder — the same resolution as the MCP server (spec.resolveProjectDir), made on first read (review 8): a command's help,
+  // an unknown command and a usage error found before the handler runs never load the engine for it (c.projectText reads the
+  // language without it). --project is checked in main (checkProject).
+  let projectDir;
+  Object.defineProperty(c, "projectDir", { enumerable: true,
+    get: () => (projectDir !== undefined ? projectDir : (projectDir = LIGHT ? null : spec.resolveProjectDir(flags.project))) });
   // WHICH input chose it, read with resolveProjectDir's own precedence (a value that is empty or holds an unexpanded
-  // variable falls through): "flag" (--project) · "SPEC_PROJECT_DIR" · "CLAUDE_PROJECT_DIR" · "nearest" (a folder above the working one
-  // with a dev-spec .specs/) · "cwd" (the working folder). checkProject() checks a named one; `version` reports it.
-  const usableDir = (v) => v != null && String(v).trim() !== "" && !spec.unexpandedVar(v);
-  c.PROJECT_SOURCE = LIGHT ? null : typeof flags.project === "string" && usableDir(flags.project) ? "flag"
+  // variable falls through): "flag" (--project) · "SPEC_PROJECT_DIR" · "CLAUDE_PROJECT_DIR" — NAMED_SOURCE, read without the engine (the
+  // probe's unexpandedVar is files.js's) — else "nearest" (a folder above the working one with a dev-spec .specs/) · "cwd" (the
+  // working folder). checkProject() checks a named one; `version` reports it.
+  const usableDir = (v) => v != null && String(v).trim() !== "" && !PROBE().unexpandedVar(v);
+  c.NAMED_SOURCE = LIGHT ? null : typeof flags.project === "string" && usableDir(flags.project) ? "flag"
     : usableDir(env.SPEC_PROJECT_DIR) ? "SPEC_PROJECT_DIR"
-    : usableDir(env.CLAUDE_PROJECT_DIR) ? "CLAUDE_PROJECT_DIR"
-    : path.resolve(cwd) === c.projectDir ? "cwd" : "nearest";
+    : usableDir(env.CLAUDE_PROJECT_DIR) ? "CLAUDE_PROJECT_DIR" : null;
+  Object.defineProperty(c, "PROJECT_SOURCE", { enumerable: true,
+    get: () => (LIGHT ? null : c.NAMED_SOURCE || (path.resolve(cwd) === c.projectDir ? "cwd" : "nearest")) });
   // Where a PATH argument is read from (scan <path>, ears <file>, import <tool> <path>): the project folder when it was NAMED (--project,
   // SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR — as import always read it), else the working folder: a path typed in a subfolder of the
   // project found by walking up is relative to that subfolder, as in git.
-  c.projectNamed = typeof flags.project === "string" || c.PROJECT_SOURCE === "SPEC_PROJECT_DIR" || c.PROJECT_SOURCE === "CLAUDE_PROJECT_DIR";
+  c.projectNamed = typeof flags.project === "string" || c.NAMED_SOURCE === "SPEC_PROJECT_DIR" || c.NAMED_SOURCE === "CLAUDE_PROJECT_DIR";
   c.argPath = (q) => path.resolve(c.projectNamed ? c.projectDir : cwd, String(q));
 
   // ---- output: stdout under --json carries the JSON document (human lines go to stderr then: c.say); stderr is human text
@@ -183,8 +211,9 @@ function createContext(argv, io) {
 
   // Localized human output — the feature's language for feature commands, the project's otherwise (--json prints the structured
   // result, which is never localized).
+  // (the tables are mcp/lib/i18n.js's — spec.msg IS i18n.msg — read without the engine)
   c.cliText = (lang) => {
-    const m = spec.msg(lang);
+    const m = I18N().msg(lang);
     return Object.assign({}, m.cliOutput, {
       phase: (ph) => (m.phaseNames && m.phaseNames[ph]) || ph,
       word: (v) => (m.cliOutput.words && m.cliOutput.words[v]) || v,
@@ -192,7 +221,12 @@ function createContext(argv, io) {
     });
   };
   c.featureText = (name) => c.cliText(spec.featureLang(c.projectDir, name));
-  c.projectText = () => c.cliText(spec.projectLang(c.projectDir));
+  // the project's language: the engine's projectLang once the engine is loaded; before it (a command's help, an unknown command, a
+  // usage error found first) the same reading without it — the CLI's resolver walk (cli/completion.js resolveProject, the engine's
+  // resolveProjectDir mirrored) and roadmap.json's meta.lang read raw (the probe's reader: UTF-8 or UTF-16 by its BOM) — review 8:
+  // each such call loaded the whole engine (+170–185 ms) to print text. cli/tests/16-conventions-cli-modules.js checks the two agree.
+  c.projectLang = () => (CMD.engineLoaded() ? spec.projectLang(c.projectDir) : lightProjectLang(flags.project, env));
+  c.projectText = () => c.cliText(c.projectLang());
 
   c.out = (obj, human) => {
     if (flags.json) c.log(JSON.stringify(obj, null, 2));
@@ -343,7 +377,8 @@ function createContext(argv, io) {
 function refuseUnknownFlags(c) {
   const { flags, cmd } = c;
   if (cmd === "evals") return;
-  // VALUE_FLAGS, --help and --json are known without the engine's switch list (the bare help, version and completion never load it)
+  // VALUE_FLAGS, --help and --json are known without the switch list (the bare help, version and completion never read it); the
+  // switches and the did-you-mean are the probe's (mcp/lib/probe.js — no engine: a mistyped --flag is refused before it loads, 1.30)
   const keys = Object.keys(flags).filter((k) => !VALUE_FLAGS.has(k) && k !== "help" && k !== "json");
   if (c.unknownShort === null && !keys.length) return;
   const known = [...VALUE_FLAGS, ...BOOL_FLAGS()];
@@ -357,9 +392,9 @@ function refuseUnknownFlags(c) {
   }
   const bad = keys.find((k) => !known.includes(k));
   if (bad === undefined) return;
-  // the engine's did-you-mean (core.js closestName — optimal-string-alignment distance: a transposition, --rnu, costs 1; within
+  // the did-you-mean (probe.js closestName — the engine's: optimal-string-alignment distance, a transposition, --rnu, costs 1; within
   // max(1, ⌊length / 3⌋) edits), as the track's and the MCP server's
-  const near = spec.closestName(bad, known);
+  const near = PROBE().closestName(bad, known);
   c.die(c.projectText().unknownFlag("--" + bad, near ? "--" + near : null), c.unknownArg("--" + bad, near ? "--" + near : null));
 }
 // a single-value flag given twice is a usage error, never last-wins (--role, --by, --cmd, --summary, --through, --phase,
@@ -388,7 +423,7 @@ function normalizeBoolFlags(c) {
     if (["true", "1", "yes", "on"].includes(v)) flags[k] = true;
     else if (["false", "0", "no", "off"].includes(v)) flags[k] = false;
     else {
-      const A = spec.msg(spec.projectLang(c.projectDir)).args;
+      const A = I18N().msg(c.projectLang()).args; // (the engine's projectLang once it is loaded, else the same reading without it)
       c.die(A.invalid(A.item("--" + k, A.type.boolean, JSON.stringify(flags[k]))), c.invalidArg("--" + k));
     }
   }
@@ -417,11 +452,11 @@ function checkProject(c) {
   if ("project" in flags) {
     v = typeof flags.project === "string" ? flags.project.trim() : "";
     if (!v) c.die(T.projectEmpty, { code: "project-empty" });
-    if (spec.unexpandedVar(v)) c.die(T.projectUnexpanded(v), { code: "project-unexpanded" });
+    if (PROBE().unexpandedVar(v)) c.die(T.projectUnexpanded(v), { code: "project-unexpanded" });
     src = "--project";
-  } else if (c.PROJECT_SOURCE === "SPEC_PROJECT_DIR" || c.PROJECT_SOURCE === "CLAUDE_PROJECT_DIR") {
-    v = String(c.env[c.PROJECT_SOURCE]).trim();
-    src = c.PROJECT_SOURCE;
+  } else if (c.NAMED_SOURCE === "SPEC_PROJECT_DIR" || c.NAMED_SOURCE === "CLAUDE_PROJECT_DIR") {
+    v = String(c.env[c.NAMED_SOURCE]).trim();
+    src = c.NAMED_SOURCE;
   } else return;
   const abs = path.resolve(c.cwd, COMPLETION.expandHome(v)); // SPEC_PROJECT_DIR=~/x too (a JSON config never expands it)
   const flag = src === "--project";
@@ -512,8 +547,18 @@ function enterProcessContext(io) {
   return restore;
 }
 
-// One CLI call → a promise of its exit code (also handed to io.done). Synchronous unless the command waits.
+// In-process calls run one at a time. A call that waits (a stdin stream, done --run) keeps its environment and working folder
+// applied until it ends, so a call started meanwhile waits for it — it never runs in the other's context, nor restores it (two
+// overlapping calls that ended out of order left the first one's env and cwd behind, 1.30 review 8). The entry point makes one
+// call per process: nothing changes there. WAITING: the promise of the call still waiting, or null.
+let WAITING = null;
+// A promise settled once no in-process call is waiting (a test that let a run go on its own awaits it before its next call).
+const whenIdle = () => (WAITING ? WAITING.then(whenIdle, whenIdle) : Promise.resolve());
+
+// One CLI call → a promise of its exit code (also handed to io.done). Synchronous unless the command waits — or another call
+// still does (it then starts once that one ended).
 function main(argv, io) {
+  if (WAITING) { const later = () => main(argv, io); return WAITING.then(later, later); }
   let restore = () => {};
   let c = null;
   const finish = (e) => {
@@ -537,11 +582,17 @@ function main(argv, io) {
     restore = enterProcessContext(io); // (a working folder that can't be entered: one error line, like any other)
     c = createContext(argv, io);
     const r = dispatch(c);
-    if (r && typeof r.then === "function") return r.then(() => finish(), (e) => finish(e));
+    if (r && typeof r.then === "function") {
+      const p = r.then(() => finish(), (e) => finish(e));
+      WAITING = p;
+      const idle = () => { if (WAITING === p) WAITING = null; }; // before any call queued behind it (registered first)
+      p.then(idle, idle);
+      return p;
+    }
     return Promise.resolve(finish());
   } catch (e) {
     return Promise.resolve(finish(e));
   }
 }
 
-module.exports = { main, parseArgs, CliExit };
+module.exports = { main, parseArgs, CliExit, whenIdle };

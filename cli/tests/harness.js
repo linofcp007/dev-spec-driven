@@ -16,8 +16,11 @@
  *   spawnIn(args, o)  in-process with spawnSync's shape → { stdout, stderr, status }; o: env (the WHOLE environment, as
  *                     spawnSync's — default this process's), cwd, input — for a test that called spawnSync(node, [CLI, …])
  *                     Both are synchronous: a command that waits (done / finish --run running commands, stdin from a stream)
- *                     throws — keep run() there, and wherever the test needs a real process (exit on a signal, EPIPE, a TTY,
- *                     DEV_SPEC_BUNDLE — the facade picks the bundle at load —, a preload, the process's own timing).
+ *                     throws — use runAsync / spawnAsync there (1.30) —, and keep run() wherever the test needs a real process
+ *                     (exit on a signal, EPIPE, a TTY, DEV_SPEC_BUNDLE — the facade picks the bundle at load —, a preload, the
+ *                     process's own timing).
+ *   runAsync(args, o) · spawnAsync(args, o)   the same in-process call for a command that WAITS — a promise of runIn's shape
+ *                     (+ stdout alone) / spawnIn's; await each (in-process calls run one at a time)
  *   tmp · CLI         this process's temp dir · cli/dev-spec.js
  *   require · __dirname · __filename   cli/test-cli.js's, so the test code reads paths from cli/ —
  *                     path.join(__dirname, "..", "mcp", "lib", "spec.js") — whichever file of cli/tests/ it lives in
@@ -54,21 +57,40 @@ function run(args) {
 // In-process calls (1.27). cli/main.js main(argv, io) runs one call with captured streams and the given environment / working folder
 // (it applies them to this process for the call and restores them) and settles synchronously unless the command waits.
 let MAIN = null;
-function spawnIn(args, o) {
-  const opts = o || {};
+const sink = (to) => ({ write: (chunk) => { to.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8")); return true; } });
+// one in-process call: its captured streams and main()'s promise of the exit code (`done` reports it at once for a call that doesn't wait)
+function callIn(args, opts, done) {
   MAIN = MAIN || require(path.join(CLI_DIR, "main.js"));
   const out = [], err = [];
-  const sink = (to) => ({ write: (chunk) => { to.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8")); return true; } });
+  const settled = MAIN.main(args.map(String), { stdout: sink(out), stderr: sink(err), stdin: opts.input == null ? "" : opts.input,
+    env: opts.env || process.env, cwd: opts.cwd || process.cwd(), done });
+  return { out, err, settled };
+}
+function spawnIn(args, o) {
   let status;
-  MAIN.main(args.map(String), { stdout: sink(out), stderr: sink(err), stdin: opts.input == null ? "" : opts.input,
-    env: opts.env || process.env, cwd: opts.cwd || process.cwd(), done: (code) => { status = code; } });
-  if (status === undefined) throw new Error("runIn / spawnIn: `" + args.join(" ") + "` waits (a run, a stream) — call it with run() or spawnSync");
+  const { out, err } = callIn(args, o || {}, (code) => { status = code; });
+  if (status === undefined) throw new Error("runIn / spawnIn: `" + args.join(" ") + "` waits (a run, a stream) — call it with runAsync() / spawnAsync()");
   return { stdout: out.join(""), stderr: err.join(""), status };
 }
 function runIn(args, o) {
   const opts = o || {};
   const r = spawnIn(args, { env: { ...process.env, SPEC_PROJECT_DIR: tmp, ...(opts.env || {}) }, cwd: opts.cwd, input: opts.input });
   return { out: r.stdout + r.stderr, code: r.status };
+}
+// The same for a call that WAITS (1.30, review 8 — ds-maint 2): `done --run` / `finish --run` running their commands — a promise of
+// spawnIn's / runIn's shape (+ runAsync's `stdout` alone, for a --json document). The commands still run as processes (the run
+// module's own); only the CLI's own process start and engine load (~0.3 s a call) are saved. In-process calls run one at a time
+// (cli/main.js queues a call started while another waits), so await each. Keep a real process for what is about one: a signal
+// (SIGINT during a run), the exit once stdout flushed, EPIPE, DEV_SPEC_BUNDLE, a preload.
+async function spawnAsync(args, o) {
+  const { out, err, settled } = callIn(args, o || {});
+  const status = await settled;
+  return { stdout: out.join(""), stderr: err.join(""), status };
+}
+async function runAsync(args, o) {
+  const opts = o || {};
+  const r = await spawnAsync(args, { env: { ...process.env, SPEC_PROJECT_DIR: tmp, ...(opts.env || {}) }, cwd: opts.cwd, input: opts.input });
+  return { out: r.stdout + r.stderr, stdout: r.stdout, code: r.status };
 }
 
 // The end of a run: print the total, clean up, exit once stdout has flushed.
@@ -80,7 +102,7 @@ function end() {
 
 // One chain (scripts/test-runner.js): the context every file of it receives.
 function setup() {
-  const ctx = { ok, ...assertHelpers(ok), run, runIn, spawnIn, tmp, CLI, require: createRequire(CLI_TEST), __dirname: CLI_DIR, __filename: CLI_TEST };
+  const ctx = { ok, ...assertHelpers(ok), run, runIn, spawnIn, runAsync, spawnAsync, tmp, CLI, require: createRequire(CLI_TEST), __dirname: CLI_DIR, __filename: CLI_TEST };
   return { ctx, counts: () => ({ pass, fail }), fail: (label) => ok(false, label), end };
 }
 

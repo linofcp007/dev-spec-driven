@@ -1,5 +1,5 @@
 "use strict";
-// Shell completion (1.25) — `completion <shell>` built from the CLI's own tables (bash / PowerShell run here; zsh / fish when installed) and the hidden `__complete` (feature names without the engine).
+// Shell completion (1.25) — `completion <shell>` built from the CLI's own tables, the hidden `__complete` (feature names without the engine), zsh / fish when installed; bash and PowerShell at work: -bash / -pwsh.
 
 const fs = require("fs");
 const path = require("path");
@@ -53,16 +53,44 @@ function readScript(text, shell) {
 // A shell that runs: the first of the candidates that answers --version.
 const probe = (cands) => cands.filter(Boolean).find((b) => { try { return spawnSync(b, ["--version"], { encoding: "utf8", timeout: 20000 }).status === 0; } catch { return false; } });
 
-exports.run = async ({ ok, all, remeasure, run, runIn, tmp, CLI }) => {
+
+// What every completion file starts from (16-conventions-completion-bash.js and -pwsh.js require it — one copy): the CLI's tables,
+// the generated script of each shell asked for, a project with active, archived, hidden, reserved and hand-made folders (p), and a
+// fake plugin cache — <cache>/m/dev-spec-driven/<version>/cli/dev-spec.js stubs that print their version as a feature name (and their
+// argv as JSON otherwise): a script whose CLI path lies there follows the newest installed version (a plugin update).
+exports.fixture = ({ runIn, tmp, CLI }, shells) => {
   const ROOT = path.join(path.dirname(CLI), "..");
   const S = require(path.join(ROOT, "mcp", "lib", "spec.js"));
-  const C = require(path.join(ROOT, "cli", "completion.js"));
-  // The CLI's tables (1.27): its command table, cli/commands.js, and what it derives (COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES…).
-  const T = require(path.join(ROOT, "cli", "commands.js"));
   const cliFwd = fwd(path.resolve(CLI));
   const gen = (shell, env) => spawnSync(process.execPath, [CLI, "completion", shell], { encoding: "utf8", env: env || cleanEnv(), cwd: tmp });
   const scripts = {};
-  for (const sh of SHELLS) scripts[sh] = gen(sh);
+  for (const sh of shells) scripts[sh] = gen(sh);
+  const p = path.join(tmp, "c125-proj");
+  runIn(["init", "--project", p]);
+  for (const n of ["Login", "Logout", "Billing", "Reports"]) runIn(["create", n, "--project", p]);
+  runIn(["feature", "archive", "billing", "--project", p]);
+  const sp = path.join(p, ".specs");
+  for (const d of [".hidden", "_tmp", "My Notes", "exports", path.join("templates"), path.join("_archive", "old-thing"), path.join("_archive", ".x")]) fs.mkdirSync(path.join(sp, d), { recursive: true });
+  fs.writeFileSync(path.join(sp, "templates", ".state.json"), "{}"); // a feature made before "templates" was reserved stays one
+  fs.writeFileSync(path.join(sp, "notes.md"), "x");
+  fs.mkdirSync(path.join(p, "src", "deep"), { recursive: true });
+  fs.mkdirSync(path.join(tmp, "c125-outside"), { recursive: true }); // a folder with no .specs/ (completion run outside a project)
+  const cache =path.join(tmp, "c125-cache", "m", "dev-spec-driven");
+  for (const v of ["1.9.0", "1.10.0", "1.2.0-rc1"]) {
+    fs.mkdirSync(path.join(cache, v, "cli"), { recursive: true });
+    fs.writeFileSync(path.join(cache, v, "cli", "dev-spec.js"), "const a = process.argv.slice(2); process.stdout.write(a[0] === '__complete' ? 'from-" + v.replace(/\./g, "-") + "' + String.fromCharCode(10) : JSON.stringify(a));");
+  }
+  const staleCli = fwd(path.join(cache, "1.0.0", "cli", "dev-spec.js")); // gone: a plugin update replaced its folder
+  const withCli = (text, cli) => text.split(cliFwd).join(cli);
+  return { ROOT, S, cliFwd, gen, scripts, p, cache, staleCli, withCli };
+};
+exports.helpers = { fwd, cleanEnv, probe };
+
+exports.run = async ({ ok, all, remeasure, run, runIn, tmp, CLI }) => {
+  const { ROOT, S, cliFwd, gen, scripts, p } = exports.fixture({ runIn, tmp, CLI }, SHELLS);
+  const C = require(path.join(ROOT, "cli", "completion.js"));
+  // The CLI's tables (1.27): its command table, cli/commands.js, and what it derives (COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES…).
+  const T = require(path.join(ROOT, "cli", "commands.js"));
 
   // 1.25 completion: every shell's script holds every command (COMMAND_OPTIONS, + help and evals — every command and alias of the
   // CLI's table) and, for each command, every flag of its COMMAND_OPTIONS (+ --json --project --help): a new command or flag
@@ -142,16 +170,7 @@ exports.run = async ({ ok, all, remeasure, run, runIn, tmp, CLI }) => {
 
   // ---- __complete: the feature names without the engine ------------------------------------------------------------------------
 
-  // A project with active, archived, hidden, reserved and hand-made folders.
-  const p = path.join(tmp, "c125-proj");
-  runIn(["init", "--project", p]);
-  for (const n of ["Login", "Logout", "Billing", "Reports"]) runIn(["create", n, "--project", p]);
-  runIn(["feature", "archive", "billing", "--project", p]);
-  const sp = path.join(p, ".specs");
-  for (const d of [".hidden", "_tmp", "My Notes", "exports", path.join("templates"), path.join("_archive", "old-thing"), path.join("_archive", ".x")]) fs.mkdirSync(path.join(sp, d), { recursive: true });
-  fs.writeFileSync(path.join(sp, "templates", ".state.json"), "{}"); // a feature made before "templates" was reserved stays one
-  fs.writeFileSync(path.join(sp, "notes.md"), "x");
-  fs.mkdirSync(path.join(p, "src", "deep"), { recursive: true });
+  // (the project: exports.fixture's p — active, archived, hidden, reserved and hand-made folders)
   const engineNames = (cwd, env, project) => {
     const code = "const S = require(" + JSON.stringify(path.join(ROOT, "mcp", "lib", "spec.js")) + "); const fs = require('fs'), path = require('path');" +
       "const d = S.resolveProjectDir(process.argv[1] || undefined); const a = path.join(d, '.specs', '_archive'); let ar = [];" +
@@ -221,99 +240,8 @@ exports.run = async ({ ok, all, remeasure, run, runIn, tmp, CLI }) => {
       " ms (node -e 0: " + Math.round(n) + " ms; `list`, which loads the engine: " + Math.round(l) + " ms) (got " + JSON.stringify([odd.map((r) => [r.status, r.stdout, r.stderr]), pl.stderr.slice(-300)]) + ")");
   }
 
-  // ---- the scripts at work ------------------------------------------------------------------------------------------------------
-
-  // A fake plugin cache: <cache>/m/dev-spec-driven/<version>/cli/dev-spec.js stubs that print their version as a feature name (and
-  // their argv as JSON otherwise) — a script whose CLI path lies there follows the newest installed version (a plugin update).
-  const cache = path.join(tmp, "c125-cache", "m", "dev-spec-driven");
-  for (const v of ["1.9.0", "1.10.0", "1.2.0-rc1"]) {
-    fs.mkdirSync(path.join(cache, v, "cli"), { recursive: true });
-    fs.writeFileSync(path.join(cache, v, "cli", "dev-spec.js"), "const a = process.argv.slice(2); process.stdout.write(a[0] === '__complete' ? 'from-" + v.replace(/\./g, "-") + "' + String.fromCharCode(10) : JSON.stringify(a));");
-  }
-  const staleCli = fwd(path.join(cache, "1.0.0", "cli", "dev-spec.js")); // gone: a plugin update replaced its folder
-  const withCli = (text, cli) => text.split(cliFwd).join(cli);
-
-  // 1.25 completion: bash (Git Bash on Windows) — the script sourced, COMP_WORDS / COMP_CWORD set, the function called: commands,
-  // flags, values (also "--lang=" split at "=" and "tdd,s" lists), positionals by position and by sub-command, feature names of the
-  // working folder or of --project, `dev-spec` defined as a function that runs this CLI; in a plugin cache, the newest version.
-  {
-    const bash = probe(process.platform === "win32" ? [process.env.DEV_SPEC_TEST_BASH, "C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Program Files\\Git\\usr\\bin\\bash.exe"] : [process.env.DEV_SPEC_TEST_BASH, "bash"]);
-    if (!bash) ok(true, "1.25 completion: bash at work — skipped (no bash here; set DEV_SPEC_TEST_BASH)");
-    else {
-      const file = path.join(tmp, "c125-c.bash"), stale = path.join(tmp, "c125-stale.bash");
-      fs.writeFileSync(file, scripts.bash.stdout);
-      fs.writeFileSync(stale, withCli(scripts.bash.stdout, staleCli));
-      const drive = path.join(tmp, "c125-drive.sh");
-      fs.writeFileSync(drive, [
-        "S=$1; shift",
-        "t() { bash -c '. \"$1\"; shift; COMP_WORDS=(\"$@\"); COMP_CWORD=$(( $# - 1 )); __dev_spec_complete; printf \"%s \" \"${COMPREPLY[@]}\"' _ \"$S\" \"$@\"; echo; }",
-        "while IFS='|' read -r -a w; do t \"${w[@]}\"; done",
-      ].join("\n") + "\n");
-      const lines = [["dev-spec", "st"], ["dev-spec", "status", "lo"], ["dev-spec", "create", "--fl"], ["dev-spec", "create", "x", "--flow", "d"], ["dev-spec", "init", "--lang", "=", "p"],
-        ["dev-spec", "init", "--lang", "="], ["dev-spec", "approve", "login", ""], ["dev-spec", "feature", "restore", ""], ["dev-spec", "add-track", "login", "s"],
-        ["dev-spec", "help", "ap"], ["dev-spec", "--project", fwd(p), "status", "re"], ["dev-spec", "create", "x", "--tracks", "tdd,s"], ["dev-spec", "-"], ["dev-spec", "na", "lo"]];
-      const go = (script, cwd) => spawnSync(bash, [fwd(drive), fwd(script)], { encoding: "utf8", cwd, env: cleanEnv(), input: lines.map((l) => l.join("|") + "|").join("\n") + "\n" }); // a trailing | keeps an empty last word
-      const r = go(file, p);
-      const got = r.stdout.split("\n").map((s) => s.trim());
-      const fromOut = go(file, path.join(tmp, "c125-outside")).stdout.split("\n").map((s) => s.trim());
-      const fn = spawnSync(bash, ["-c", ". \"$1\"; type -t dev-spec; dev-spec version --json", "_", fwd(file)], { encoding: "utf8", cwd: p, env: cleanEnv() });
-      const st = go(stale, p).stdout.split("\n").map((s) => s.trim());
-      const want = ["status statusline steering stop-check", "login logout", "--flow", "design-first", "pt pt-BR", "=en =pt =es =pt-BR",
-        S.PHASES.join(" "), "billing old-thing", "saas sec", "append-tasks approve", "reports", "tdd,saas tdd,sec", "--json --project --help --version", "login logout"];
-      const fnJ = (() => { try { return JSON.parse(fn.stdout.slice(fn.stdout.indexOf("{"))); } catch { return null; } })();
-      ok(want.every((w, i) => got[i] === w) && fromOut[10] === "reports" && fromOut[1] === "" && /^function/.test(fn.stdout) && fnJ && fnJ.ok === true && fnJ.cli === cliFwd &&
-        st[7] === "from-1-10-0", "1.25 completion: bash — commands, flags, values (--lang = p, --lang =, tdd,s), approve's phases, archived names for feature restore, the aliases, " +
-        "feature names of the working folder or of --project, `dev-spec` as a function running this CLI; a CLI path gone in a plugin cache follows the newest version (1.10.0 over 1.9.0 and 1.2.0-rc1) (got " +
-        JSON.stringify({ got, fromOut: fromOut.slice(0, 2).concat(fromOut[10]), fn: fn.stdout.slice(0, 80), stale: st[7], err: r.stderr.slice(0, 300) }) + ")");
-    }
-  }
-
-  // 1.25 completion: Windows PowerShell 5.1 (and pwsh when installed) — the script dot-sourced, TabExpansion2 asked: the same answers,
-  // the cursor inside a line, `dev-spec` a function that runs this CLI (piped input too) and passes `--tracks tdd,saas` as ONE word and
-  // `--timebox 3d` as "3d"; in a plugin cache, the newest version. Skipped where no PowerShell runs (the Linux images).
-  {
-    const shells = [process.platform === "win32" ? "powershell.exe" : null, "pwsh"].filter((sh) => {
-      try { return spawnSync(sh, ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], { encoding: "utf8", timeout: 30000 }).status === 0; } catch { return false; }
-    });
-    if (!shells.length) ok(true, "1.25 completion: PowerShell at work — skipped (no PowerShell here)");
-    for (const psh of shells) {
-      const file = path.join(tmp, "c125-c.ps1"), stale = path.join(tmp, "c125-stale.ps1"), stub = path.join(tmp, "c125-stub.ps1");
-      fs.writeFileSync(file, scripts.powershell.stdout);
-      fs.writeFileSync(stale, withCli(scripts.powershell.stdout, staleCli));
-      fs.writeFileSync(stub, withCli(scripts.powershell.stdout, fwd(path.join(cache, "1.9.0", "cli", "dev-spec.js"))));
-      const drive = path.join(tmp, "c125-drive.ps1");
-      fs.writeFileSync(drive, [
-        "param([string]$Script, [string]$Project)",
-        ". $Script",
-        "Set-Location -LiteralPath $Project",
-        "foreach ($l in [Console]::In.ReadToEnd().Split([char]10)) {",
-        "  if (-not $l) { continue }",
-        "  $col = $l.Length; if ($l.Contains('^')) { $col = $l.IndexOf('^'); $l = $l.Replace('^', '') }",
-        "  $r = TabExpansion2 -inputScript $l -cursorColumn $col",
-        "  Write-Output ('@ ' + (@($r.CompletionMatches | ForEach-Object { $_.CompletionText }) -join ' '))",
-        "}",
-        "Write-Output ('@ ' + (Get-Command dev-spec).CommandType)",
-        "Write-Output ('@ ' + ((dev-spec version --json | Out-String) -match '\"ok\": true'))",
-        "Write-Output ('@ ' + (('x' | dev-spec ears - --json | Out-String) -match '\"verdict\"'))",
-        "Write-Output ('@ ' + (dev-spec x --tracks tdd,saas --timebox 3d | Out-String).Trim())",
-      ].join("\r\n") + "\r\n");
-      const lines = ["dev-spec st", "dev-spec status lo", "dev-spec create --fl", "dev-spec create x --flow d", "dev-spec init --lang=p", "dev-spec approve login ",
-        "dev-spec feature restore ", "dev-spec add-track login s", "dev-spec help ap", "dev-spec --project \"" + fwd(p) + "\" status re", "dev-spec create x --tracks tdd,s",
-        "dev-spec na lo", "dev-spec status lo^ --json"];
-      const go = (script) => spawnSync(psh, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", drive, "-Script", script, "-Project", p],
-        { encoding: "utf8", env: cleanEnv(), input: lines.join("\n") + "\n", timeout: 120000 });
-      const r = go(file);
-      const got = r.stdout.split(/\r?\n/).filter((l) => l.startsWith("@ ")).map((l) => l.slice(2).trim());
-      const st = go(stale).stdout.split(/\r?\n/).filter((l) => l.startsWith("@ ")).map((l) => l.slice(2).trim());
-      const sb = go(stub).stdout.split(/\r?\n/).filter((l) => l.startsWith("@ ")).map((l) => l.slice(2).trim());
-      const want = ["status statusline steering stop-check", "login logout", "--flow", "design-first", "--lang=pt --lang=pt-BR", S.PHASES.join(" "), "billing old-thing",
-        "saas sec", "append-tasks approve", "reports", "saas sec", "login logout", "login logout", "Function", "True", "True"];
-      ok(want.every((w, i) => got[i] === w) && st[6] === "from-1-10-0" && sb[6] === "from-1-10-0" && sb[16] === JSON.stringify(["x", "--tracks", "tdd,saas", "--timebox", "3d"]),
-        "1.25 completion: " + psh + " — TabExpansion2 completes commands, flags, values (--lang=p), phases, archived names, track names after 'tdd,', feature names (also of --project, " +
-        "and with the cursor inside the line); `dev-spec` is a function running this CLI (piped input too) that passes --tracks tdd,saas as one word and --timebox 3d as \"3d\"; a CLI path " +
-        "in a plugin cache — gone or older — follows the newest version (got " + JSON.stringify({ got, stale: st[6], stub: [sb[6], sb[16]], err: r.stderr.slice(0, 400) }) + ")");
-    }
-  }
+  // ---- the scripts at work: bash in 16-conventions-completion-bash.js, PowerShell in 16-conventions-completion-pwsh.js (1.30 — this
+  // file ran them all in one process: the CLI suite's critical path) ---------------------------------------------------------------
 
   // 1.25 completion: zsh and fish — their scripts are balanced (every block closed) and register the completion; run for real where
   // the shell is installed (zsh: the function with compadd / compset stubbed; fish: `complete -C`).

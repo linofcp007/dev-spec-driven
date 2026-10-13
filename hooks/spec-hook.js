@@ -24,7 +24,7 @@
 const fs = require("fs");
 const path = require("path");
 // The hooks' runner (stdin, the safety net, the one flushed exit) and the project probe getter (hooks/hook-utils.js).
-const { runHook, finish, payloadOf, eventOf, probe } = require("./hook-utils.js");
+const { runHook, payloadOf, eventOf, probe } = require("./hook-utils.js");
 
 // The engine is loaded LAZILY: this hook runs on every Write / Edit in EVERY project, and loading the engine cost
 // ~100 ms before the `/.specs/` path check could send an unrelated edit away (197 vs 71 ms median per edit). loadSpec() runs
@@ -35,16 +35,16 @@ function loadSpec() {
   try {
     spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   } catch {
-    process.exit(0); // engine not found — stay silent
+    return null; // engine not found — stay silent
   }
   return spec;
 }
 
 const DRIFT_MAX_FILES = 200; // SessionStart hashes at most this many recorded _Implements:_ files, else skips the drift check
 const SESSION_MAX_FEATURES = 20; // SessionStart lists at most this many features (the most relevant), then "+N more — /spec-status"
-// Emits exactly one JSON object — the context line(s) — and exits only after the write is flushed (hook-utils finish: Windows pipes
-// truncate otherwise); no text → a silent exit. Callers `return emit(...)` — nothing may call process.exit() after it.
-const emit = (eventName, text) => finish(text ? { hookSpecificOutput: { hookEventName: eventName, additionalContext: text } } : null);
+// The hook's answer: exactly one JSON object — the context line(s) — the runner prints (hook-utils finish: it exits once the write is
+// flushed); no text → null, a silent exit. Callers `return emit(...)`.
+const emit = (eventName, text) => (text ? { hookSpecificOutput: { hookEventName: eventName, additionalContext: text } } : null);
 
 // The hooks run in EVERY project. Only touch a .specs/ that dev-spec owns (another tool may use the name) — the project probe's one
 // rule (mcp/lib/probe.js isDevSpecProject: roadmap.json, steering/, a ROADMAP.md dev-spec generated — a v1.8-era project —, or a
@@ -77,9 +77,10 @@ function sessionMayBeDevSpec(payload) {
   return !cwd && !anchors.length && PR.isDevSpecProject(process.cwd());
 }
 
-function main(raw) {
+// The hook's decision on one payload → its additionalContext object, or null (silent).
+function decide(raw) {
   const payload = payloadOf(raw);
-  if (!payload) return finish();
+  if (!payload) return null;
   const event = eventOf(payload);
   // The cheap pre-check, before the engine loads: only SessionStart and a PostToolUse on a `.specs/` file (not its scratch
   // `.execution/` folder, not a folder being removed) go on.
@@ -87,11 +88,12 @@ function main(raw) {
     const ti = payload.tool_input || payload.toolInput || {};
     const filePath = typeof ti.file_path === "string" ? ti.file_path : typeof ti.path === "string" ? ti.path : "";
     const fwd = filePath.replace(/\\/g, "/");
-    if (!filePath || !fwd.includes("/.specs/") || fwd.includes("/.execution/") || fwd.includes("/.specs/.removing-")) process.exit(0);
-  } else if (event !== "SessionStart" || !sessionMayBeDevSpec(payload)) process.exit(0);
+    if (!filePath || !fwd.includes("/.specs/") || fwd.includes("/.execution/") || fwd.includes("/.specs/.removing-")) return null;
+  } else if (event !== "SessionStart" || !sessionMayBeDevSpec(payload)) return null;
   // One hook event = one engine call: every spec file is read once across the steps below (roadmap, catalog, the
   // check), however many of them ask — the engine's own writes (ROADMAP.md, SPECS.md) keep that cache true.
-  return loadSpec().withReadCache(() => handle(payload, event));
+  const sp = loadSpec();
+  return sp ? sp.withReadCache(() => handle(payload, event)) : null;
 }
 
 function handle(payload, event) {
@@ -105,11 +107,11 @@ function handle(payload, event) {
       const s = spec.sessionProject({ cwd: typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd : null, anchors });
       const pdir = s ? s.project : process.env.CLAUDE_PROJECT_DIR || process.env.SPEC_PROJECT_DIR || payload.cwd || process.cwd();
       // Same gate as PostToolUse: another tool's .specs/ gets no dev-spec status block in every session's context.
-      if (!isDevSpecProject(pdir)) process.exit(0);
+      if (!isDevSpecProject(pdir)) return null;
       // saves the last session made after its last Stop hook left ROADMAP.md / SPECS.md stale — refreshed once, here.
       try { spec.refreshStaleRoadmap(pdir); } catch { /* best-effort */ }
       const list = spec.listFeatures(pdir);
-      if (!list.exists || !list.features.length) process.exit(0);
+      if (!list.exists || !list.features.length) return null;
       const m = spec.msg(spec.projectLang(pdir));
       const h = m.hook;
       const phase = (p) => (m.phaseNames && m.phaseNames[p]) || p; // 'executing' → 'em execução' / 'en ejecución'
@@ -161,7 +163,7 @@ function handle(payload, event) {
       } catch { /* best-effort */ }
       return emit("SessionStart", h.sessionHeader + "\n" + lines.join("\n"));
     } catch {
-      process.exit(0);
+      return null;
     }
   }
 
@@ -169,11 +171,11 @@ function handle(payload, event) {
     const ti = payload.tool_input || payload.toolInput || {};
     const filePath = typeof ti.file_path === "string" ? ti.file_path : typeof ti.path === "string" ? ti.path : "";
     const fwd = filePath.replace(/\\/g, "/");
-    if (!filePath || !fwd.includes("/.specs/")) process.exit(0);
+    if (!filePath || !fwd.includes("/.specs/")) return null;
     // Subagent-execution scratch (briefs, reports, ledger) is not spec content: no lint, no roadmap churn.
-    if (fwd.includes("/.execution/")) process.exit(0);
+    if (fwd.includes("/.execution/")) return null;
     // A feature folder being removed (renamed to a `.removing-*` tombstone first) is no spec any more.
-    if (fwd.includes("/.specs/.removing-")) process.exit(0);
+    if (fwd.includes("/.specs/.removing-")) return null;
     // A network file path (\\host\share\…, //host/share/…, \\?\UNC\…) names a host the agent chose: nothing below stats it unless
     // it lies — as text — inside the session's own folder on that share (CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR / the payload's
     // cwd, Claude Code's own), or that folder inside the file's project — a project living on a share keeps its checks
@@ -182,20 +184,20 @@ function handle(payload, event) {
       const own = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR, payload.cwd]
         .filter((v) => typeof v === "string" && v.trim() && !/^\$\{[^}]*\}$/.test(v.trim())).map((v) => v.trim());
       const proj = findProjectDir(filePath);
-      if (!own.some((d) => spec.networkPathInside(d, filePath) != null || spec.networkPathInside(proj, d) != null)) process.exit(0);
+      if (!own.some((d) => spec.networkPathInside(d, filePath) != null || spec.networkPathInside(proj, d) != null)) return null;
     }
     // Project templates (.specs/templates/[<lang>/]requirements.md …) are no feature's spec: never linted as one (a
     // .specs/templates/pt/design.md is not feature 'pt''s design) and no roadmap churn — `dev-spec templates check` checks them.
     // (A FEATURE named templates created before 1.14 — its folder holds a .state.json — is still a feature.)
     const tplAt = fwd.match(/^(.*\/\.specs)\/templates\//i);
-    if (tplAt && !fs.existsSync(path.join(tplAt[1], "templates", ".state.json"))) process.exit(0);
+    if (tplAt && !fs.existsSync(path.join(tplAt[1], "templates", ".state.json"))) return null;
     // Track packs (.specs/tracks/<name>/requirements.md …) are no feature's spec either — `dev-spec tracks check` checks them.
     // (A FEATURE named tracks created before 1.15 — its folder holds a .state.json — is still a feature.)
     const packAt = fwd.match(/^(.*\/\.specs)\/tracks\//i);
-    if (packAt && !fs.existsSync(path.join(packAt[1], "tracks", ".state.json"))) process.exit(0);
+    if (packAt && !fs.existsSync(path.join(packAt[1], "tracks", ".state.json"))) return null;
     const base = path.basename(filePath).toLowerCase();
     const pdir = findProjectDir(filePath);
-    if (!isDevSpecProject(pdir)) process.exit(0);
+    if (!isDevSpecProject(pdir)) return null;
 
     const feature = path.basename(path.dirname(filePath));
     // a tasks.md / change.md saved by hand (a box ticked with the Edit tool) is activity the stop gate must see —
@@ -260,13 +262,13 @@ function handle(payload, event) {
       };
       if (base === "requirements.md") {
         const t = earsText("requirements.md");
-        if (t == null) process.exit(0);
+        if (t == null) return null;
         return emit("PostToolUse", t);
       }
 
       if (base === "tasks.md") {
         const t = traceText();
-        if (t == null) process.exit(0);
+        if (t == null) return null;
         return emit("PostToolUse", t);
       }
 
@@ -284,14 +286,15 @@ function handle(payload, event) {
         if (d.ok) return emit("PostToolUse", d.text);
       }
     } catch {
-      process.exit(0);
+      return null;
     }
     // Any other spec file (classification.md, a test plan, steering…): nothing to say — its roadmap refresh waits for the Stop hook.
   }
 
-  finish(); // nothing emitted: a silent exit
+  return null; // nothing emitted: a silent exit
 }
 
-// The payload from stdin (the safety net guards against a stdin that never ends), main run once; any unexpected error is a silent
-// no-op.
-runHook(main);
+module.exports = { decide };
+// As a process (hooks/hooks.json): the payload from stdin (the safety net guards against a stdin that never ends), decide run once; any
+// unexpected error is a silent no-op.
+if (require.main === module) runHook(decide);

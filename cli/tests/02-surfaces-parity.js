@@ -78,7 +78,7 @@ ok(frm.code === 1 && /Would permanently delete 'doomed'/.test(frm.out) && /requi
 runIn(["backlog", "add", "Zeta", "--project", w4]);
 const fdel = runIn(["feature", "delete", "doomed", "--yes", "--project", w4]);
 const brem = runIn(["backlog", "remove", "Zeta", "--project", w4]);
-ok(fdel.code === 1 && /remove \| archive \| rename \| restore/.test(fdel.out) && fs.existsSync(path.join(w4, ".specs", "doomed")) &&
+ok(fdel.code === 1 && /action must be one of: remove, archive, rename, restore, flow \(got "delete"\)/.test(fdel.out) && fs.existsSync(path.join(w4, ".specs", "doomed")) &&
   brem.code === 0 && /removed from the backlog/.test(brem.out) && !/Zeta/.test(runIn(["backlog", "--project", w4]).out),
   "feature delete is not an alias (exit 1, nothing deleted, as over MCP); backlog remove is rm's alias on both surfaces (got " + JSON.stringify([fdel.code, brem.code]) + ")");
 const fry = runIn(["feature", "remove", "doomed", "--yes", "--project", w4]);
@@ -237,6 +237,30 @@ ok(flagsRead.filter((x) => !["--run", "--evidence", "--exit", "--cmd"].includes(
     onlyDonesBrief: () => JSON.stringify(direct) === JSON.stringify(["taskBrief"]),
     wrongOperation: () => wrongOp.code === 1 && /the command 'doctor' does not run the operation 'drift'/.test(wrongOp.out),
     undeclaredOption: () => wrongOpt.code === 1 && /operation 'doctor' has no option 'bogus' for the cli/.test(wrongOpt.out),
+  });
+
+  // 1.30 review 8 (ds-maint 3): a command that runs operations takes its options FROM the table (`options: TABLE` — cliOptions: each
+  // argument's flags, then cliOnly, in the table's order); a hand-written list stays only where its help shows another order — and
+  // then names exactly the table's flags (a list kept by hand can't drift from the table)
+  const entryOptions = (name) => {
+    const m = new RegExp("\\n    name: \"" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\",[^\\n]*\\n(?:    [^\\n]*\\n)*?    options: (TABLE|\\[[^\\]]*\\])").exec(src);
+    return !m ? null : m[1] === "TABLE" ? "TABLE" : JSON.parse(m[1]);
+  };
+  const lists = [], tableBad = [];
+  for (const [cmd] of byCommand) {
+    const lit = entryOptions(cmd), derived = OPS.cliOptions(cmd);
+    if (lit === "TABLE") { if (JSON.stringify(T.commandFor(cmd).options) !== JSON.stringify(derived)) tableBad.push(cmd + ": TABLE reads " + JSON.stringify(T.commandFor(cmd).options)); continue; }
+    lists.push(cmd);
+    if (!Array.isArray(lit)) { tableBad.push(cmd + ": no options"); continue; }
+    if (JSON.stringify(lit.slice().sort()) !== JSON.stringify(derived.slice().sort()) && cmd !== "spike") tableBad.push(cmd + ": " + JSON.stringify(lit) + " ≠ the table's " + JSON.stringify(derived));
+    if (JSON.stringify(lit) === JSON.stringify(derived)) tableBad.push(cmd + ": its list is the table's, in its order — options: TABLE");
+  }
+  // spike: create's operation minus what a spike never takes (the bugfix prefill, its size, the body) — its own list, every name the table's
+  const spike = entryOptions("spike");
+  all("1.30 review 8: the CLI's options come from the operations table — " + (byCommand.size - lists.length) + " commands read `options: TABLE`; a list is kept only where the help's order is not the table's (" + lists.join(", ") + "), naming the table's flags (got " + JSON.stringify(tableBad) + ")", {
+    derived: () => !tableBad.length,
+    fewLists: () => JSON.stringify(lists.sort()) === JSON.stringify(["changelog", "depend", "done", "init", "spike", "undone"]),
+    spikeSubset: () => Array.isArray(spike) && spike.every((f) => OPS.cliOptions("spike").includes(f)),
   });
 }
 

@@ -6,7 +6,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 // 1.14 full review (Gb) — next_action, doctor, stop gate, guard.
-exports.run = ({ ok, run, runIn, tmp, __dirname }) => {
+exports.run = async ({ ok, run, runIn, tmp, __dirname, runAsync }) => {
   const gbP = (n) => path.join(tmp, "frgb-" + n);
   const gbW = (dir, rel, txt) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), txt); };
   const gbR = (dir, rel) => fs.readFileSync(path.join(dir, rel), "utf8");
@@ -38,8 +38,8 @@ exports.run = ({ ok, run, runIn, tmp, __dirname }) => {
   runIn(["create", "login", "core", "--project", p2]);
   gbFill(p2);
   const ff2 = runIn(["approve", "login", "--through", "tasks", "--project", p2]);
-  run(["done", "login", "1", "--run", "--project", p2]);
-  run(["done", "login", "2", "--run", "--project", p2]);
+  (await runAsync(["done", "login", "1", "--run", "--project", p2]));
+  (await runAsync(["done", "login", "2", "--run", "--project", p2]));
   const fin2 = runIn(["finish", "login", "--write", "--project", p2]);
   const na2 = runIn(["next-action", "login", "--project", p2]);
   runIn(["approve", "login", "execution", "--role", "qa", "--project", p2]);

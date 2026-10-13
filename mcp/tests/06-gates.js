@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname, hookIn }) => {
 
   { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
     const w5 = path.join(tmp, "proj-wp5");
@@ -59,7 +59,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     ok(e1.verdict === "pass" && e1.summary.placeholders === 1 && e1.issues.filter((i) => i.code === "placeholder").length === 1 &&
       e1.issues.find((i) => i.code === "placeholder").severity === "warn" && /\[trigger\] \[behavior\]/.test(e1.issues.find((i) => i.code === "placeholder").msg),
       "ears_validate reports template placeholder criteria with code 'placeholder' (warn)");
-    const hookReq = (file) => { const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: file } }), encoding: "utf8" }); try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
+    const hookReq = (file) => { const r = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: file } }), encoding: "utf8" }); try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
     const f1h = S.createFeature(w5, "Hook gate", ["core"]);
     write5(f1h, "requirements.md", REQ.replace("Export invoices as CSV.", "[1-2 sentences: what this does and why it matters]"));
     const hk1 = hookReq(path.join(f1h.dir, "requirements.md"));
@@ -197,7 +197,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
       fin4.blockers.some((b) => /template placeholders left in the spec chain: design\.md/.test(b)) && fin4.placeholders.includes("tasks.md") && fin4.readyToFinish === false,
       "spec_finish: an artifact changed after its approval (the same list next_action shows) and placeholders anywhere in the chain are blockers");
     const fin4b = S.finishFeature(w5, f2b.slug);
-    ok(fin4b.blockers.some((b) => b === "bug.md → Root Cause is not filled — no fix before the root cause is known") && !fin4b.blockers.some((b) => /blocking checks: [^\n]*root-cause/.test(b)),
+    ok(fin4b.blockers.some((b) => b === S.msg("en").gates.finishRootCause) && !fin4b.blockers.some((b) => /blocking checks: [^\n]*root-cause/.test(b)),
       "spec_finish on a bugfix: an unfilled Root Cause is its own blocker");
 
     // (5) bugfix execution gate + brief context — on a tasks.md that has a root-cause task: the four-task form every bugfix
@@ -246,7 +246,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     // anything is recorded ("only task 1"), the brief reports it gated; the red test itself can be recorded (no rootCausePending).
     {
       const fN = S.createFeature(w5, "Short bug", undefined, "x", undefined, "en", "bugfix");
-      write5(fN, "tasks.md", read5(fN, "tasks.md").replace("[command that runs T-01]", "node tests/t01.test.js").replace("[full test suite command]", "npm test"));
+      write5(fN, "tasks.md", read5(fN, "tasks.md").replace("\n  - _Implements: [path of the code the fix changes]_", "").replace("[command that runs T-01]", "node tests/t01.test.js").replace("[full test suite command]", "npm test"));
       const bt = S.taskBlocks(read5(fN, "tasks.md"));
       const fix = S.completeTask(w5, fN.slug, 2, { command: "npm test", exitCode: 0 });
       const brFix = S.taskBrief(w5, fN.slug, 2);
@@ -270,7 +270,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
       fillS("requirements.md", [["[the condition that triggers the bug]", "the list has two or more items"], ["[the correct behavior]", "return the sum of every item"],
         ["[the neighbouring behavior that already worked]", "the sum of an empty list as 0"], ["[nearby inputs that must keep working]", "an empty list"]]);
       fillS("test-plan.md", [["[unit/integration]", "unit"], ["`[path]`", "`tests/t01.test.js`"]]);
-      fillS("tasks.md", [["[command that runs T-01]", "node tests/t01.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 18"], ["[full test suite command]", "npm test"]]);
+      fillS("tasks.md", [["\n  - _Implements: [path of the code the fix changes]_", ""], ["[command that runs T-01]", "node tests/t01.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 18"], ["[full test suite command]", "npm test"]]);
       fillS("bug.md", [["[correct behavior]", "the sum of every item"], ["[what happens — error message, output, log lines]", "the first item is missing"],
         ["> **TODO** — exact steps, input and environment that reproduce it every time.", "total([1, 2]) returns 2."],
         ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The loop starts at index 1 (sum.js:3)."],
@@ -318,6 +318,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
       const fillAll = (rel, re, by) => { const p = path.join(b.dir, rel); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(re, by)); };
       fillAll("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
       fillAll("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+      fillAll("tasks.md", /\n  - _Implements: \[[^\]\n]*\]_/g, ""); // 1.30: the fix's _Implements:_ slot — no code file here
       fillAll("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
       ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph)); // task 1 is the red one
       return b;
@@ -838,8 +839,10 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const rt8 = S.impactReport(w8, "drafts", { phase: "tasks", reopen: true });
     const bad8m = await call8("spec_impact", { name: "drafts", phase: "plan", projectDir: w8 });
     const bad8e = S.impactReport(w8, "drafts", { phase: "plan" });
-    ok(rt8.ok === false && /reopen applies to requirements, design, test-plan and eval-plan/.test(rt8.error) && bad8m.isError && /phase must be one of: requirements, design, test-plan, eval-plan, tasks/.test(bad8m.p.error) &&
-      bad8e.ok === false && /Unknown phase 'plan' for spec_impact/.test(bad8e.error), "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine)");
+    ok(rt8.ok === false && String(rt8.error).includes(S.msg("en").impact.reopenTasks) && bad8m.isError && /phase must be one of: requirements, design, test-plan, eval-plan, tasks/.test(bad8m.p.error) &&
+      // 1.30 review 8: the engine refuses it as the MCP schema does — the same words and code (the CLI's --phase reaches the engine)
+      bad8e.ok === false && bad8e.error === bad8m.p.error && bad8e.code === "invalid-arguments" && JSON.stringify(bad8e.invalid) === '["phase"]',
+      "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine — the same message and code)");
 
     // test-plan: T-ID row diff (a row keyed by its first cell; re-padding is no change) → the tasks making a changed test
     // green; reopen unticks a MODIFIED test's done tasks, a REMOVED test's tasks are listed in retire (never redone);
@@ -1150,8 +1153,8 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const fpI = S.impactReport(w8, "slow-list", { phase: "design" });
     const fpR = S.impactReport(w8, "slow-list", { phase: "design", reopen: true });
     const fpDc = S.specDoctor(w8, "slow-list").checks.find((c) => c.id === "changed-since-approval");
-    ok(fpI.changed === true && fpI.designMd.baseline === "fingerprint-only" && /design\.md changed since the approval too, but this approval kept no snapshot of it/.test(fpI.designHint) &&
-      !S.impactLines(fpI).join("\n").includes("no changes since the approval") && fpR.recorded === false && /design\.md changed, but without a snapshot of it/.test(fpR.note) &&
+    ok(fpI.changed === true && fpI.designMd.baseline === "fingerprint-only" && fpI.designHint === S.msg("en").impact.designFingerprintOnly("slow-list") &&
+      !S.impactLines(fpI).join("\n").includes("no changes since the approval") && fpR.recorded === false && String(fpR.note).includes(S.msg("en").impact.reopenDesignUnknown) &&
       /^changed after their approval: design\.md — re-review/.test(fpDc.detail),
       "a bugfix approval with only design.md's fingerprint: impact and reopen say design.md changed but can't be diffed; doctor doesn't send to spec_impact");
 
@@ -1161,9 +1164,9 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const nc0 = (await call8("spec_impact", { name: "unchanged", reopen: true, projectDir: w8 })).p;
     fs.appendFileSync(path.join(nc8.dir, "requirements.md"), "\nA closing remark outside any criterion.\n");
     const nc1 = S.impactReport(w8, "unchanged", { reopen: true });
-    ok(nc0.recorded === false && nc0.note === "Nothing changed since the approval — nothing to reopen." && nc1.changed === true && nc1.recorded === false &&
-      /^Nothing to reopen: the edit changed no criterion or section/.test(nc1.note) && !(JSON.parse(fs.readFileSync(path.join(nc8.dir, ".state.json"), "utf8")).changes || []).length &&
-      ptNv8.note === "Nada mudou desde a aprovação — nada a reabrir.",
+    ok(nc0.recorded === false && nc0.note === S.msg("en").impact.nothingToReopen(false) && nc1.changed === true && nc1.recorded === false &&
+      nc1.note === S.msg("en").impact.nothingToReopen(true) && !(JSON.parse(fs.readFileSync(path.join(nc8.dir, ".state.json"), "utf8")).changes || []).length &&
+      ptNv8.note === S.msg("pt").impact.nothingToReopen(false) && ptNv8.note !== nc0.note,
       "reopen with nothing changed (or only text outside the criteria) says so (EN/PT) — not 'nothing new since the last reopen', which no reopen preceded");
 
     // Every WP8 message exists in EN, PT and ES (same keys).
@@ -1612,5 +1615,40 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
       eNew.snapshot === ".history/requirements@2.md" && js(eSnaps()) === '["requirements@1.md","requirements@2.md"]' && eM2.rework === 1 && eM2.reworkByPhase.requirements === 1,
       "r5 review: an identical re-approval shares the previous snapshot (.history/requirements@1.md, no copy) and is no rework in spec_metrics (still an approval in approvalsTotal); new content → requirements@2.md, rework 1 (got " +
       js([eRe.map((r) => r.snapshot), eSnaps1, eM1.rework, eM1.approvalsTotal, eNew.snapshot, eM2.rework]) + ")");
+  }
+
+  { // 1.30 review 8 (ds-engine 7): doctor's clarifications check agrees with the design approval — design.md's own
+    // [NEEDS CLARIFICATION] fails it (doctor said "none open", readyToAdvance, while approve design refused on clarifications);
+    // not while design.md is still a later phase's template
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-r8-clar-design");
+    S.initProject(p, ["core"], "en");
+    const f = S.createFeature(p, "Pay", ["core"], "Pay");
+    // the requirements phase, design.md still the template with a marker added to it: a later phase's template — not counted yet
+    const tpl = fs.readFileSync(path.join(f.dir, "design.md"), "utf8");
+    fs.writeFileSync(path.join(f.dir, "design.md"), tpl + "\n[NEEDS CLARIFICATION: Stripe or Adyen?]\n");
+    const early = S.specDoctor(p, "pay").checks.find((x) => x.id === "clarifications") || {};
+    fs.writeFileSync(path.join(f.dir, "requirements.md"), "# Requirements: Pay\n\n## User Stories\n\n### US-1 Pay (P1)\n**As a** buyer **I want** to pay **so that** I get the goods.\n\n" +
+      "#### Acceptance Criteria\n1. **US-1.AC-1** — WHEN the buyer pays THE SYSTEM SHALL record the order\n2. **US-1.AC-2** — IF the card is declined THEN THE SYSTEM SHALL show the reason\n\n" +
+      "## Success Criteria\n- **SC-001** — 99% of payments recorded within 2 s\n");
+    S.approvePhase(p, "pay", "classification", "t", { force: true });
+    const req = S.approvePhase(p, "pay", "requirements", "t");
+    fs.writeFileSync(path.join(f.dir, "design.md"), "# Design\n\n## Overview\nA payment service. Which PSP? [NEEDS CLARIFICATION: Stripe or Adyen?]\n\n## Architecture\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n" +
+      "## Reuse & Integration\n\n| Kind | What | Where | Why |\n|---|---|---|---|\n| Reuse | Money type | src/lib/money.ts | exact cents |\n\n## Alternatives & Trade-offs\n\n| Option | Pros | Cons |\n|---|---|---|\n" +
+      "| Stripe | fast | fees |\n| Adyen | cheap | slow |\n\n## Risks\n- Card network downtime — retry with backoff.\n\n## Constitution Check\nAll principles respected.\n");
+    const doc = S.specDoctor(p, "pay");
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { projectDir: p, name: "pay" } }));
+    const clar = doc.checks.find((x) => x.id === "clarifications") || {};
+    const ap = S.approvePhase(p, "pay", "design", "t");
+    all("1.30 review 8: design.md's [NEEDS CLARIFICATION] fails doctor's clarifications check — as the design approval refuses on it — named in design.md; readyToAdvance is false; spec_doctor over MCP the same; a marker in design.md while it is still a later phase's template is not counted (got " +
+      js([early, req.ok, clar, doc.readyToAdvance, ap.ok, ap.failing]) + ")", {
+      early: () => early.status === "pass",
+      requirements: () => req.ok === true,
+      doctor: () => clar.status === "fail" && clar.detail === "1 unresolved [NEEDS CLARIFICATION] in design.md — resolve them before approving the design",
+      notReady: () => doc.readyToAdvance === false,
+      mcp: () => js((viaMcp.checks || []).find((x) => x.id === "clarifications")) === js(clar),
+      approve: () => ap.ok === false && js(ap.failing) === js(["clarifications"]),
+      pt: () => /^2 \[NEEDS CLARIFICATION\] por resolver no design\.md — resolve-os antes de aprovar o design$/.test(S.msg("pt").doctor.clarificationsOpenDesign(2)),
+    });
   }
 };

@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
   const js = JSON.stringify;
   const HOOKS = path.join(__dirname, "..", "hooks");
   // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR never leak into the hooks.
@@ -205,5 +205,118 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
       [placeholder, backticked].every((x) => x.status === 0 && x.engine === false) && shellTest.engine === true && real.engine === true && lines() === before + 1,
       "1.25.1 (r7 finding 5): the observe hook's pre-filter skips a placeholder _Verify: [ … npm test … ]_ (bare or backticked) — the engine isn't loaded; `[ -f a ] && npm test` and a real `_Verify: npm test_` still pass it, and the real one is logged (got " +
       js({ placeholder: placeholder.engine, backticked: backticked.engine, shellTest: shellTest.engine, real: real.engine, logged: lines() - before }) + ")");
+  }
+
+  // Review 8 (ds-security finding 3) — the guards' pre-filters are LINEAR in the payload's text. A regex whose run class holds its own
+  // start delimiter rescans the run from every start: `echo =.=.…` (120 K characters) cost the approval hook 16.7 s against its 10 s
+  // timeout, and a timed-out PreToolUse hook doesn't block the call — the guard-down behind it went through. The same shape in the edit
+  // guard's path words (`=a=a…`), its `find … -delete` pre-filter (`find find …`), the guarded-file regexes (`.specs/.specs/…` in a
+  // Write path) and `[\\/]+$` trims. Timed by SHAPE, never by milliseconds: each reader on a hostile input of n and 4n characters — a
+  // linear scan ~4×, the old ones ~16× (2.8 s at 64 K for the dot glob) — bounded at 8× or a 50 ms floor, measured once more on a miss.
+  {
+    const E = require("./lib/engine/index.js");
+    const PR = require("./lib/probe.js");
+    const AH = require("../hooks/approval-hook.js"), GH = require("../hooks/guard-hook.js"), HU = require("../hooks/hook-utils.js");
+    const BS = String.fromCharCode(92);
+    const rep = (unit, n, tail) => unit.repeat(Math.ceil(n / unit.length)).slice(0, n) + (tail || "");
+    const dec = (tool, ti) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: ti }, "deny", { meta: {}, lang: "en" });
+    const READERS = [
+      ["approvalCandidate (=.=.… then a glob)", (s) => E.approvalCandidate(s), "=.", " {*"],
+      ["approvalCandidate ((.(.… then a glob)", (s) => E.approvalCandidate(s), "(.", " {*"],
+      ["the approval hook's candidate", (s) => AH.candidate(s), "=.", " {*"],
+      ["approvalGuardDecision, Bash", (s) => dec("Bash", { command: s }), "=.", " {; cp a .s*/b"],
+      ["approvalGuardDecision, PowerShell", (s) => dec("PowerShell", { command: s }), "(.", " {*"],
+      ["the edit guard's mayWrite (find find …)", (s) => GH.mayWrite(s), "find ", ""],
+      ["the edit guard's pathWords (=a=a…)", (s) => GH.pathWords(s), "=a", ""],
+      ["guardedFileOf (.specs/.specs/…)", (s) => PR.guardedFileOf(s), ".specs/", "x"],
+      ["approvalGuardDecision, Write (.specs\\.specs\\…)", (s) => dec("Write", { file_path: s }), BS + ".specs", BS + ".state.json"],
+      ["specsParentOf (////…)", (s) => PR.specsParentOf(s), "/", "x/.specs/roadmap.json"],
+      ["trimSlashEnd (////…x)", (s) => PR.trimSlashEnd(s), "/", "x"],
+      ["dotGlob (=.=.…)", (s) => PR.dotGlob(s), "=.", ""],
+      // dev-guardian's rules (1.30 — engine/guardian.js through the hook points): its files, its pre-filter word, its shell reader
+      ["guardedFileOf (.guardian/.guardian/…)", (s) => PR.guardedFileOf(s), ".guardian/", "baseline.json"],
+      ["specsParentOf (////…/.guardian/)", (s) => PR.specsParentOf(s), "/", "x/.guardian/baseline.json"],
+      ["approvalGuardDecision, Write (.guardian\\.guardian\\…)", (s) => dec("Write", { file_path: s }), BS + ".guardian", BS + "baseline.json"],
+      ["approvalGuardDecision, Bash (guardian guardian …)", (s) => dec("Bash", { command: s }), "guardian ", " baseline update"],
+      ["approvalGuardDecision, Bash (dev-guardian baseline update; …)", (s) => dec("Bash", { command: s }), "dev-guardian baseline update;", ""],
+      ["approvalGuardDecision, Bash (DEV_GUARDIAN_CLI=x …)", (s) => dec("Bash", { command: s }), "DEV_GUARDIAN_CLI=x ", "node .specs/guardian.cjs scan"],
+      ["the approval hook's decide, Write (.guardian\\.guardian\\…)", (s) => AH.decide(js({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: s } })),
+        BS + ".guardian", BS + "baseline.json"],
+      // review 9: .guardian/ as a whole (shellPathFacts' guardian segment), an MCP move onto it, the nested projects a command's path
+      // words name (hook-utils approvalProjects — quoted words too) and the backticked _Implements:_ slot (placeholderReport)
+      ["approvalGuardDecision, Bash (rm -rf .guardian/.guardian/…)", (s) => dec("Bash", { command: "rm -rf " + s }), ".guardian/", ""],
+      ["approvalGuardDecision, Bash (cp -r x .guardian/… then .guardian)", (s) => dec("Bash", { command: "cp -r x " + s }), "x/.guardian/", ".guardian"],
+      ["approvalGuardDecision, MCP move (.guardian\\.guardian\\…)", (s) => dec("mcp__fs__move_file", { source: "x", destination: s }), BS + ".guardian", ""],
+      ["approvalProjects (a/.specs/x a/.specs/x …)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "a/.specs/x ", ""],
+      ["approvalProjects ('\"'\"… then .guardian/)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "'\"", " sub/.guardian/"],
+      ["placeholderReport (_Implements: `[x]`, `[x]`, …)", (s) => E.placeholderReport("- _Implements: " + s + "_"), "`[x]`, ", ""],
+    ];
+    const time = (f, s) => { const t = process.hrtime.bigint(); f(s); return Number(process.hrtime.bigint() - t) / 1e6; };
+    const shape = {};
+    for (const [name, f, unit, tail] of READERS) {
+      const small = rep(unit, 16000, tail), big = rep(unit, 64000, tail);
+      const s = remeasure(() => { f(small); return { t1: time(f, small), t4: time(f, big) }; }, (x) => x.t4 <= Math.max(50, 8 * x.t1));
+      shape[name + " — " + s.t1.toFixed(1) + " ms at 16 K, " + s.t4.toFixed(1) + " ms at 64 K"] = s.t4 <= Math.max(50, 8 * s.t1);
+    }
+    all("review 8 (ds-security 3): every guard pre-filter scan is linear — 4× the input costs ≤ 8× the time (or ≤ 50 ms) on the hostile inputs that ran the approval hook past its timeout", shape);
+
+    // …and each answers as the pattern it replaced (kept here, on short inputs only): the same answer on random texts of the characters
+    // that matter — the path words a superset (an extra candidate only adds a check; none of the old ones is lost, at the 8-word cap too).
+    {
+      let seed = 8;
+      const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+      const gen = (alpha, max) => { let s = ""; for (let i = rnd(max + 1); i > 0; i--) s += alpha[rnd(alpha.length)]; return s; };
+      const OLD_DOT = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*[*?[{]/;
+      const OLD_ROADMAP = /(?:^|[\\/])\.specs[\\/]+roadmap\.json$/i, OLD_STATE = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)+\.state\.json$/i,
+        OLD_OBS = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)*\.execution[\\/]+observed\.jsonl$/i;
+      // (and 1.30's dev-guardian files — guardian.js's two regexes before they joined guardedFileOf)
+      const OLD_LAUNCHER = /(?:^|\/)\.specs\/+guardian\.cjs$/i, OLD_BASELINE = /(?:^|\/)\.guardian\/+baseline\.json$/i;
+      const oldGuarded = (t) => {
+        if (OLD_ROADMAP.test(t)) return { setting: "roadmap" };
+        const segs = t.split("/");
+        if (OLD_OBS.test(t)) { const f = segs[segs.length - 3]; return { setting: "observed", feature: f && f.toLowerCase() !== ".specs" ? f : null }; }
+        if (OLD_STATE.test(t)) return { setting: "state", feature: segs[segs.length - 2] || null };
+        if (OLD_LAUNCHER.test(t)) return { setting: "guardian-launcher" };
+        if (OLD_BASELINE.test(t)) return { setting: "guardian-baseline" };
+        return null;
+      };
+      const OLD_FIND = /(?:^|[^\w.-])(?:find[^|;&\n]*-(?:delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls))(?![\w-])/i;
+      const OLD_WORD = /(?:^|[\s'"=<>|;&(])[^\s'"<>|;&()]*[\\/][^\s'"<>|;&()]*/g;
+      const oldWords = (s) => (s.match(OLD_WORD) || []).slice(0, 8).map((w) => w.replace(/^[\s'"=<>|;&(]+/, ""));
+      const diff = { dotGlob: [], guardedFileOf: [], specsParentOf: [], mayWrite: [], pathWords: [] };
+      const SEG = [".specs", ".SPECS", "a", ".execution", "observed.jsonl", ".state.json", "roadmap.json", "x.specs", ".guardian", "guardian.cjs", "baseline.json"];
+      for (let i = 0; i < 20000; i++) {
+        const d = gen([".", "=", "*", "?", "{", "[", "a", " ", "/", BS, "'", "\"", ",", "(", ";", "&", "|"], 14);
+        if (OLD_DOT.test(d) !== PR.dotGlob(d)) diff.dotGlob.push(d);
+        const segs = []; for (let k = 1 + rnd(5); k > 0; k--) segs.push(SEG[rnd(SEG.length)]);
+        const g = (rnd(3) ? "" : "/") + segs.join("/");
+        if (js(oldGuarded(g)) !== js(PR.guardedFileOf(g))) diff.guardedFileOf.push(g);
+        const sp = gen(["/", BS, ".specs", ".SPECS", "a", "x.specs", ".guardian", "x.guardian"], 6);
+        if (/(?:^|[\\/])\.(?:specs|guardian)(?:[\\/]|$)/i.test(sp) && (sp.replace(/[\\/]*\.(?:specs|guardian)(?:[\\/][\s\S]*)?$/i, "") || ".") !== PR.specsParentOf(sp)) diff.specsParentOf.push(sp);
+        // (an alphabet no other writer's name can form: here mayWrite answers by its find branch alone)
+        const fw = gen(["find", " ", "-delete", "-exec", "x", "|", ";", "&", "\n", "-", ".", "findstr", "-okdir"], 8);
+        if (OLD_FIND.test(fw) !== GH.mayWrite(fw)) diff.mayWrite.push(fw);
+        const pw = gen(["a", "/", BS, "=", " ", "'", "<", "|", ";", "(", ")", "b"], i % 2 ? 12 : 60);
+        const nw = GH.pathWords(pw);
+        if (oldWords(pw).some((w) => !nw.includes(w))) diff.pathWords.push(pw);
+      }
+      all("review 8 (ds-security 3): the linear readers answer as the patterns they replaced on 20,000 random texts each — dotGlob, guardedFileOf, specsParentOf and mayWrite's find branch the same, pathWords a superset (got " +
+        js(Object.fromEntries(Object.entries(diff).map(([k, v]) => [k, v.slice(0, 2)]))) + ")", Object.fromEntries(Object.entries(diff).map(([k, v]) => [k, v.length === 0])));
+    }
+
+    // …and the process: the report's own payload at deny — answered (deny: a too-long command whose unread tail may name .specs/), well
+    // inside the hook's 10 s (a short command's time × 10, at least 5 s — it took 16.7 s and timed out).
+    const pg = path.join(tmp, "r8-redos");
+    S.initProject(pg, ["core"], "en", { approvalGuard: "deny" });
+    const pre = (command) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd: pg, tool_name: "Bash", tool_input: { command } });
+    const evil = "echo " + rep("=.", 120000) + " {; cp /tmp/x.json .s*/roadmap.jso?";
+    const run = (command) => { const t = Date.now(); const r = hook("approval-hook", pre(command), { CLAUDE_PROJECT_DIR: pg }); return { r, ms: Date.now() - t }; };
+    const decisionOf = (r) => { try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { return "silent"; } };
+    const m = remeasure(() => ({ short: run("cp /tmp/x.json .s*/roadmap.jso?"), long: run(evil) }), (x) => x.long.ms <= Math.max(5000, 10 * x.short.ms));
+    all("review 8 (ds-security 3): the approval hook answers the 120 K `=.=.…` payload at deny as the short command — deny, within max(5 s, 10 × the short command's time) (got " +
+      m.short.ms + " ms / " + m.long.ms + " ms)", {
+      shortDeny: () => decisionOf(m.short.r) === "deny", longDeny: () => decisionOf(m.long.r) === "deny",
+      fast: () => m.long.ms <= Math.max(5000, 10 * m.short.ms),
+    });
   }
 };

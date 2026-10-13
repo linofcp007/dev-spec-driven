@@ -21,8 +21,8 @@ Spanish.
 - **Claude Code 2.1.139 or later** (`claude --version`) — the hooks run in exec form (`node` started directly, no shell
   per call), which older versions don't run. Or any MCP client: Claude Desktop, Cursor, Windsurf, VS Code / Copilot,
   Gemini CLI, Codex CLI… ([INTEGRATIONS.md](./INTEGRATIONS.md)).
-- **Node.js ≥ 18** on PATH (`node --version`). Node 18 is end-of-life: 20 or later is recommended (the suites pass on 18,
-  22 and 24).
+- **Node.js ≥ 18** on PATH (`node --version`). Node 18 and 20 are end-of-life: 22 or later is recommended (the suites pass
+  on 18, 22, 24 and 26).
 - git — optional: a branch per feature, the commit a run was made on, the merge driver for the spec state.
 
 ## Install
@@ -85,7 +85,8 @@ you the `dev-spec done <feature> 1 --run` line to run yourself.
 asks for a fresh run of your full suite, drafts the merge summary from the spec and asks for your sign-off. Then you
 choose: merge locally or keep the branch. Nothing is pushed without you.
 With **dev-guardian** installed, `dev-spec init --guardian` makes its security gate a project check: `/spec-finish` runs it,
-and a new high finding blocks until it is fixed or you accept it in dev-guardian (`dev-guardian baseline update`).
+and a new high finding blocks until it is fixed (you accept one reviewed finding with an inline suppression, never
+`baseline update`). It is project-wide: every machine that finishes needs dev-guardian and its scanners.
 
 Lost at any point? `/spec <feature>` resumes at the one next step. Prefer a guided version on your own repo?
 `/dev-spec-driven:spec-tour` takes one tiny real change through every gate, explaining each as it happens.
@@ -98,7 +99,8 @@ Phase 0 suggests a size; you confirm it or pick another:
 - **s** — one story: requirements, design and tasks (with +tdd / +ai up to the test / eval plan) approved in one call,
   each track's core sections only.
 - **m / l** — the full chain, each phase approved: classification → requirements → design → test / eval plan → the
-  failing tests (+tdd / +ai, before any code) → tasks.
+  failing tests (+tdd / +ai, before any code) → tasks. The design names its **Reuse & Integration** — what it reuses,
+  extends or creates, with paths —, and its approval refuses it empty.
 
 At every size: EARS on every criterion, traceability, the evidence gate (`doctor`, `spec_finish` and the `ROADMAP.md`
 "Needs attention" line list each unverified task with a localized reason) and the finish gate. Tracks combine — a Stripe
@@ -228,7 +230,7 @@ project (`DEV_SPEC_DEFAULT_LANG`) or for one feature. EARS keywords work in each
 and the CLI's messages follow the feature's language; the command descriptions and the CLI's help are English. This
 README: [Português](./README.pt.md) · [Español](./README.es.md).
 
-## Upgrading from 1.25 or earlier
+## Upgrading
 
 1. **Update the plugin:** `/plugin marketplace update dev-spec-driven-marketplace`, then restart Claude Code (a clone:
    `git pull`, then restart). 1.26 needs Claude Code 2.1.139 or later.
@@ -236,7 +238,13 @@ README: [Português](./README.pt.md) · [Español](./README.es.md).
    (`--apply`) after your OK; it never edits a spec. Re-run anything that names the plugin's folder (the merge driver,
    the pre-commit hook — [INSTALL.md](./INSTALL.md) → Your plugin folder).
 
-Your specs need no change: 1.26 renamed the commands, not the files. There are no stubs for the old names:
+**From 1.27 or earlier:** an m / l design now needs its Reuse & Integration — `/spec-upgrade` lists each feature whose
+design was approved without one (write the section, then re-approve the design). Finish warns when a feature's code
+repeats code the project already has, and each task that writes code names its files in `_Implements:_`. dev-guardian's
+gate stays off until you ask for it (Quick start → step 5).
+
+**From 1.25 or earlier:** your specs need no change: 1.26 renamed the commands, not the files. There are no stubs for
+the old names:
 
 | Before 1.26 | Now |
 |---|---|
@@ -292,7 +300,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (32 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine: 23 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
+│   ├── lib/engine/                   ← the engine: 24 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← localized content (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)

@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const SQ = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -30,7 +31,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
     /\n {2}beta — requirements/.test(all.out) && /\n {2}→ Re-review each against the amended steering, then re-approve \(\/approve alpha requirements\)/.test(all.out) &&
     one.code === 0 && oneJ && js(oneJ) === js(SQ.impactReport(q, "beta", { phase: "steering" })) && oneJ.scope === "feature" && oneJ.features[0].approvals.length === 2 &&
     noName.code === 1 && /usage: dev-spec impact <feature> .* · dev-spec impact \[feature\] --phase steering/.test(noName.out) &&
-    reo.code === 1 && /reopen doesn't apply to phase 'steering'/.test(reo.out),
+    reo.code === 1 && String(reo.out).includes(MSG("en").quality.impactNoReopen),
     "1.16 Q1 CLI: impact --phase steering lists every active feature approved under changed steering (exit 0); <f> --json = spec_impact's result; impact without a feature is a usage error, --reopen is refused (exit 1) (got " + js(all.out.slice(0, 300)) + ")");
   const doc = r(["doctor", "alpha"]);
   const na = r(["next-action", "alpha"]);

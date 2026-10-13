@@ -63,6 +63,59 @@ function statusProbe(candidates) {
   return false;
 }
 
+// ---- the status line's render cache (no engine) — review 8 (ds-maint finding 5) ------------------------------------------------
+// The status line runs after every assistant message (Claude Code: at most every 300 ms), and in a dev-spec project each render
+// loaded the engine (~150 ms). A render is kept in the OS temp folder — dev-spec-statusline-<sha1 of its key>.json, the key being
+// this CLI and what the line is computed from (the candidate folders, $COLUMNS) — with the signature of the project's .specs/ taken
+// BEFORE it rendered: every entry's path, size, mtime and ctime (≤ STATUS_CACHE_ENTRIES, else no cache; links never entered). It is
+// reused while that signature still holds and it is under STATUS_CACHE_TTL_MS old: any change under .specs/ shows at the next render;
+// what the line reads outside .specs/ — a test file in Phase 4, a finished feature's code (finish again), a forced approval's code
+// checks, a worktree's mapping, a new .specs/ nearer the cwd — within the TTL.
+const STATUS_CACHE_TTL_MS = 10 * 1000;
+const STATUS_CACHE_ENTRIES = 4000;
+const sha1 = (s) => require("crypto").createHash("sha1").update(String(s)).digest("hex");
+// <project>/.specs/'s signature (a hex digest), or null: no .specs/, or past the entry bound.
+function specsSignature(projectDir) {
+  const h = require("crypto").createHash("sha1");
+  let n = 0;
+  const walk = (dir, rel, depth) => {
+    let ents;
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return rel !== ""; } // .specs/ itself must be read
+    ents.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const e of ents) {
+      if (++n > STATUS_CACHE_ENTRIES || depth > 16) return false;
+      const p = path.join(dir, e.name), r = rel + "/" + e.name;
+      let st = null;
+      try { st = fs.statSync(p); } catch { st = null; }
+      h.update(r + "\0" + (st ? [st.size, st.mtimeMs, st.ctimeMs, e.isDirectory() ? "d" : e.isSymbolicLink() ? "l" : "f"].join(":") : "?") + "\n");
+      if (e.isDirectory() && !walk(p, r, depth + 1)) return false;
+    }
+    return true;
+  };
+  return walk(path.join(projectDir, ".specs"), "", 0) ? h.digest("hex") : null;
+}
+const statusCacheFile = (key) => path.join(require("os").tmpdir(), "dev-spec-statusline-" + sha1(JSON.stringify([__filename, key])).slice(0, 16) + ".json");
+// The cached render for this key — its result object — while its project's .specs/ signature holds and it is fresh, else null.
+function statusCacheRead(key, now = Date.now()) {
+  let c;
+  try { c = JSON.parse(fs.readFileSync(statusCacheFile(key), "utf8")); } catch { return null; }
+  if (!c || typeof c !== "object" || typeof c.at !== "number" || typeof c.project !== "string" || typeof c.sig !== "string") return null;
+  if (now < c.at || now - c.at > STATUS_CACHE_TTL_MS || !c.r || typeof c.r !== "object") return null;
+  return specsSignature(c.project) === c.sig ? c.r : null;
+}
+// Keep a render (best effort: a temp file renamed into place — two status lines at once never read half a file).
+function statusCacheWrite(key, project, sig, r, at = Date.now()) {
+  if (!sig || !r || !r.found) return;
+  const file = statusCacheFile(key);
+  const tmpFile = file + "." + process.pid + ".tmp";
+  try {
+    fs.writeFileSync(tmpFile, JSON.stringify({ at, project, sig, r }));
+    fs.renameSync(tmpFile, file);
+  } catch {
+    try { fs.unlinkSync(tmpFile); } catch { /* gone */ }
+  }
+}
+
 // the status line command `statusline --print-config` prints (and /spec-statusline writes into settings.json).
 // In a plugin's versioned folder (…/dev-spec-driven/<version>/cli/dev-spec.js) the plain `node "<that path>" statusline` broke at the
 // first plugin update (Claude Code removes the old folder 14 days later): the command finds the newest installed <version> holding
@@ -223,4 +276,5 @@ function script(shell, model) {
   return body.replace(/@@([A-Z_]+)@@/g, (m, k) => (Object.prototype.hasOwnProperty.call(fill, k) ? fill[k] : m));
 }
 
-module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, statusProbe, STATUSLINE_LAUNCHER, statuslineCommand, featureNames, archivedNames };
+module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, statusProbe, STATUSLINE_LAUNCHER, statuslineCommand, featureNames, archivedNames,
+  STATUS_CACHE_TTL_MS, specsSignature, statusCacheFile, statusCacheRead, statusCacheWrite };

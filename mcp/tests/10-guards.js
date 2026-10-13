@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, require, __dirname }) => {
 
   // --- 1.13 WP11: guard mode (PreToolUse hook), scoped steering (front matter, custom files, brief, doctor), design.md save check ---
   {
@@ -14,7 +14,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
     const specHookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
     // The test runner may itself run inside Claude Code: never let its CLAUDE_PROJECT_DIR leak into the hook.
-    const runGuard = (input, env) => spawnSync(process.execPath, [guardJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+    // the hook in this process (harness hookIn, review 8); runGuardSpawn: one real process, end to end
+    const runGuardSpawn = (input, env) => spawnSync(process.execPath, [guardJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) } });
+    const runGuard = (input, env) => hookIn(guardJs, { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
       env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) } });
     const pre = (cwd, tool, input) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input });
     const asked = (r) => { try { const j = JSON.parse(r.stdout); return j.hookSpecificOutput && j.hookSpecificOutput.hookEventName === "PreToolUse" && j.hookSpecificOutput.permissionDecision === "ask" ? j.hookSpecificOutput.permissionDecisionReason : null; } catch { return null; } };
@@ -47,7 +50,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     const code = path.join(g, "src", "billing.ts");
     ok(silent(runGuard(pre(g, "Write", { file_path: code, content: "x" }))), "guard OFF (meta.guard false) → the hook prints nothing and exits 0");
     S.initProject(g, ["core"], undefined, { guard: true });
-    const askW = runGuard(pre(g, "Write", { file_path: code, content: "export const x = 1;" }));
+    const askW = runGuardSpawn(pre(g, "Write", { file_path: code, content: "export const x = 1;" }));
     const askReason = asked(askW);
     let oneJson = false;
     try { oneJson = typeof JSON.parse(askW.stdout) === "object" && !/\n./.test(askW.stdout.trim()); } catch { /* not one JSON object */ }
@@ -187,7 +190,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
       "task brief steering: defaults without front matter = always, tech.md with 'manual' drops out, fileMatch included only when an _Implements:_ path matches, always included, manual listed; no-front-matter extras stay out (got " + inc(br1) + ")");
     const brText = br1.brief.split("## Global constraints")[1] || "";
     ok(/Read before coding: .*`\.specs\/steering\/api-rules\.md`.*`\.specs\/steering\/security\.md`/.test(brText) &&
-      /Scoped steering \(fileMatch — matches this task's files\):/.test(brText) && /> - Every handler validates its input with zod\./.test(brText) &&
+      String(brText).includes(S.msg("en").scopedSteering.scoped) && /> - Every handler validates its input with zod\./.test(brText) &&
       !/inclusion:|fileMatchPattern:/.test(br1.brief) && !/A rule every file matching/.test(br1.brief) && /Available on request \(manual steering\): `\.specs\/steering\/tech\.md`, `\.specs\/steering\/release\.md`/.test(brText),
       "the brief quotes the matching fileMatch file with its front matter stripped (a placeholder-only stub is listed, never quoted) and lists manual files as available on request");
     const br2 = S.taskBrief(b11, "api", 2);
@@ -277,7 +280,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     S.scaffoldSteeringFile(d11, "api-rules.md");
     fs.unlinkSync(path.join(dSt, "tech.md"));
     const ds3 = docSt(d11, "dash");
-    ok(ds2.status === "pass" && ds2.detail === "core steering present (incl. constitution)" && ds3.status === "warn" && ds3.detail === "missing: tech.md; still template placeholders: api-rules.md (2)",
+    ok(ds2.status === "pass" && ds2.detail === S.msg("en").doctor.steeringOk && ds3.status === "warn" && ds3.detail === "missing: tech.md; still template placeholders: api-rules.md (2)",
       "filled steering → pass; a custom stub still holding placeholders (front matter set aside) and a missing core file are both reported");
     const d11pt = path.join(tmp, "proj-wp11-doctor-pt");
     S.initProject(d11pt, ["core"], "pt");
@@ -285,7 +288,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     ok(/ainda com placeholders do template: .*constitution\.md/.test(docSt(d11pt, "painel").detail), "the doctor steering detail is localized (PT)");
 
     // (D4) PostToolUse: saving design.md runs its mandatory checks for the ACTIVE tracks (EN + PT).
-    const runPost = (file) => { const r = spawnSync(process.execPath, [specHookJs], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: file } }), encoding: "utf8" });
+    const runPost = (file) => { const r = hookIn(specHookJs, { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: file } }), encoding: "utf8" });
       try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
     const e11 = path.join(tmp, "proj-wp11-design");
     S.initProject(e11, ["saas"], "en");
@@ -316,7 +319,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     const ptF = S.createFeature(e11, "Faturação", ["saas"], undefined, undefined, "pt");
     const dzPt = runPost(path.join(ptF.dir, "design.md"));
     ok(/^Verificação do design em design\.md \(faturacao \[core \+saas\]\):/.test(dzPt) && /secções \[SaaS\]: Orçamento de Desempenho:por preencher/.test(dzPt) &&
-      /Verificação da Constituição: por preencher/.test(dzPt) && /placeholder\(s\) do template por substituir/.test(dzPt) && /Preenche-os antes de aprovar o design/.test(dzPt),
+      String(dzPt).includes(S.msg("pt").designSaveCheck.constitution.unfilled) && /placeholder\(s\) do template por substituir/.test(dzPt) && /Preenche-os antes de aprovar o design/.test(dzPt),
       "hook on design.md is localized in the feature's language (PT)");
     const bugF = S.createFeature(e11, "Crash On Save", ["tdd"], undefined, undefined, undefined, "bugfix");
     fs.writeFileSync(path.join(bugF.dir, "design.md"), "# Design: Crash On Save\n\n## Notes\nThe fix stays inside the save handler.\n");
@@ -342,7 +345,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     const stopJs = path.join(__dirname, "..", "hooks", "stop-hook.js");
     const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
     // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR must never leak into the hooks.
-    const runHook = (js, input) => spawnSync(process.execPath, [js], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+    const runHook = (js, input) => hookIn(js, { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
       env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
     const stopPayload = (cwd, message, extra) => ({ session_id: "s1", prompt_id: "550e8400-e29b-41d4-a716-446655440000", transcript_path: path.join(cwd, "no-transcript.jsonl"),
       cwd, permission_mode: "default", hook_event_name: "Stop", stop_hook_active: false, last_assistant_message: message, effort: { level: "medium" }, ...(extra || {}) });
@@ -837,7 +840,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     const st4b = S.stopCheck(p4b, { message: "Finished — the feature is complete." });
     ok(fin4.readyToFinish && st4.block === false && !st4.features.length && st4b.block === true && st4b.features[0].suite.length === 1 &&
       /^dev-spec evidence gate: your last message says the work is done or verified, but the project checks have no passing run since the last task activity:\n {2}- export: /.test(st4b.reason) &&
-      !/tasks are ticked without verification evidence/.test(st4b.reason) && ["en", "pt", "es", "pt-BR"].every((l) => typeof S.msg(l).stopGate.headSuite === "string" && S.msg(l).stopGate.headSuite !== S.msg(l).stopGate.head),
+      !String(st4b.reason).includes(S.msg("en").stopGate.head) && ["en", "pt", "es", "pt-BR"].every((l) => typeof S.msg(l).stopGate.headSuite === "string" && S.msg(l).stopGate.headSuite !== S.msg(l).stopGate.head),
       "full review Gb4: a decided spike with every task ticked is never sent back over project checks (it has none); a checks-only reason heads with the checks, not 'tasks are ticked without verification evidence' (got " +
       JSON.stringify([st4.block, st4.why, st4.features, st4b.reason.split("\n")[0]]) + ")");
 
@@ -1043,7 +1046,9 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
 
     // The hook process (hooks/approval-hook.js): silent unless the project's meta.approvalGuard is ask / deny.
     const hookJs = path.join(__dirname, "..", "hooks", "approval-hook.js");
-    const runHook = (input, env) => spawnSync(process.execPath, [hookJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+    const runHookSpawn = (input, env) => spawnSync(process.execPath, [hookJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) }, timeout: 15000 });
+    const runHook = (input, env) => hookIn(hookJs, { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
       env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) }, timeout: 15000 });
     const pre = (cwd, tool, input) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input });
     const decided = (r) => { try { const h = JSON.parse(r.stdout).hookSpecificOutput; return h.hookEventName === "PreToolUse" && r.status === 0 ? h.permissionDecision + "|" + h.permissionDecisionReason : null; } catch { return null; } };
@@ -1084,7 +1089,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
       JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "spec_approve", tool_input: { name: "a", phase: "design" }, cwd: pAsk }),
       JSON.stringify(pre(pAsk, "Bash", { command: "npm test && git status" })), JSON.stringify(pre(pAsk, "Bash", { command: 12 })),
       JSON.stringify(approveCall(pBroken)), "x".repeat(3 * 1024 * 1024), JSON.stringify(pre(pAsk, "Bash", { command: "echo dev-spec " + "a ".repeat(400000) }))];
-    const oddGot = odd.map((s) => runHook(s));
+    const oddGot = odd.map((s) => runHookSpawn(s)); // the process: stdin of any size and shape
     ok(oddGot.every(silent) && !fs.readFileSync(hookJs, "utf8").includes(String.fromCharCode(0xfeff)),
       "feature F2: malformed / empty / 3 MB stdin, a non-object payload or tool_input, another event, a command that runs no approval and a broken roadmap.json → exit 0, no output (got " +
       JSON.stringify(oddGot.map((r) => [r.status, r.stdout.slice(0, 40)])) + ")");
@@ -1106,6 +1111,20 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
       scripts.length >= 6 && scripts.every((s) => s && fs.existsSync(path.join(__dirname, "..", s))),
       "feature F2: hooks.json wires hooks/approval-hook.js as PreToolUse (timeout 10) after the guard, its anchored matcher covering Bash, PowerShell, Monitor (1.23), Write / Edit (1.23: .specs/roadmap.json, .state.json) and spec_approve / spec_feature / spec_init under any MCP prefix only; every hook command names an existing script (got " +
       JSON.stringify([apCfg.matcher, scripts]) + ")");
+    // Review 8 (ds-maint finding 4): the MCP file tools' verbs lived three times — hooks.json's matcher (`[Ww]rite`: a matcher has no
+    // flags, so `mcp__x__FILE_WRITE` never reached the hook), the hook's and the engine's /i regexes. ONE list (probe.js MCP_FILE_VERBS):
+    // hooks.json's matcher IS approvalHookMatcher(), each verb case-blind; the engine and the hook test isMcpFileTool.
+    {
+      const PR = require("./lib/probe.js");
+      const upper = ["mcp__x__FILE_WRITE", "mcp__x__Move_File", "mcp__x__DELETE", "mcp__x__WriteFile"];
+      all("review 8 (ds-maint 4): hooks.json's approval matcher is built from the probe's one verb list (approvalHookMatcher), case-blind — an upper-case file tool reaches the hook, and the engine reads it", {
+        same: () => apCfg.matcher === PR.approvalHookMatcher(),
+        everyVerb: () => PR.MCP_FILE_VERBS.every((v) => mre.test("mcp__x__" + v.toUpperCase() + "_file") && mre.test("mcp__x__" + v + "_file") && PR.isMcpFileTool("mcp__x__" + v.toUpperCase())),
+        upperReaches: () => upper.every((n) => mre.test(n) && PR.isMcpFileTool(n)),
+        upperDecided: () => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "mcp__x__FILE_WRITE", tool_input: { path: ".specs/roadmap.json", content: "{}" } }, "deny", { meta: {} }).decision === "deny",
+        devSpecNever: () => ["mcp__x__spec_approve_all", "mcp__plugin_dev-spec-driven_spec-driven__spec_append_tasks", "mcp__x__steering_scaffold", "mcp__x__trace_check"].every((n) => !mre.test(n) && !PR.isMcpFileTool(n)),
+      });
+    }
 
     // spec_init over MCP: approvalGuard is a plain string enum (folded), always reported, refused when it is anything else.
     const pMcp = path.join(tmp, "proj-f2-mcp");
@@ -1287,7 +1306,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
       JSON.stringify([r1Bad, r1NoBad, dW.reason.slice(0, 120)]) + ")");
     // The level: engine and hook read a broken roadmap.json's raw text (the strictest level it names); no level named → off.
     const hookJs = path.join(__dirname, "..", "hooks", "approval-hook.js");
-    const runHook = (input) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify(input), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, timeout: 15000 });
+    const runHook = (input) => hookIn(hookJs, { input: JSON.stringify(input), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, timeout: 15000 });
     const pre = (cwd, tool, input) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input });
     const decision = (r) => { try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { return r.status === 0 && r.stdout === "" ? "silent" : "?"; } };
     const pB = path.join(tmp, "proj-f2-r1-broken"), pB2 = path.join(tmp, "proj-f2-r1-noguard"), pB3 = path.join(tmp, "proj-f2-r1-two"), pOffW = path.join(tmp, "proj-f2-r1-off");
@@ -1330,7 +1349,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     const js = (v) => JSON.stringify(v);
     const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
     const guardJs = path.join(__dirname, "..", "hooks", "guard-hook.js");
-    const hook = (cwd, file) => spawnSync(process.execPath, [guardJs], { input: JSON.stringify({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: "Write", tool_input: { file_path: file, content: "x" } }),
+    const hook = (cwd, file) => hookIn(guardJs, { input: JSON.stringify({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: "Write", tool_input: { file_path: file, content: "x" } }),
       encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
     const asks = (r) => { try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision === "ask"; } catch { return false; } };
     const g = (p, f) => { const r = S.guardCheck(p, f, p); return r.decision + ":" + r.why; };

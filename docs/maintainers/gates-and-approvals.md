@@ -37,6 +37,9 @@ review findings — is in History at the end.
   | tests | `tests-in-code` (+tdd with test-plan.md: every planned T-ID named by a test file), `eval-sets` (+ai with eval-plan.md: evals/golden.json the feature's own, neither empty nor the sample) |
   | tasks | placeholders, `placeholders:realTasks` (a real task beyond the scaffold's), traceability, task-deps; a change's plan (change.md): ears, placeholders, clarifications, ac-uniqueness, realTasks, change-scope, traceability, task-deps |
   | execution | spec_finish's blockers (`finishFeature(…, {gateOnly: true})`) |
+- **Doctor agrees with the gates.** An approval check is also a doctor check that fails on what the approval refuses —
+  `clarifications` counts requirements.md, a bugfix's bug.md AND design.md's own markers (`doctor.clarificationsOpenDesign`;
+  the design gate refuses on them), but not while design.md is still a later phase's template (`c.laterFiles`).
 - **Approve gate.** `approvePhase()` refuses (`refused`, `failing`, `checks`) while a check fails; `force:true` (`--force`)
   records it `forced: true` + the failing ids (doctor's `approval-gates` and the roadmap flag it; a clean re-approval
   replaces it). Before the gate: an invalid `.state.json` or unreadable `roadmap.json` refuses; a spike approves only
@@ -67,7 +70,8 @@ review findings — is in History at the end.
   " · " item) — never glued (`[]string`) or inside a sentence. `scanBrackets()` walks outermost first and descends into a
   non-placeholder group (a half-edited sentence still reports its `[N]`); it skips syntax (links, footnotes, callouts, wiki
   links, `x[0]`, checkboxes), stable tags / IDs, `[NEEDS CLARIFICATION]`, the legacy `[none beyond core]`, comments and
-  fences; code spans are opaque except a template's code-span slot (`templateSets().code`).
+  fences; code spans are opaque except a template's code-span slot (`templateSets().code`) and a template slot that is an
+  `_Implements:_` value in backticks (`implementsCodeSlots()`, review 9 — `` _Implements: `[path …]`_ `` passed the tasks gate).
 - **Linear, always.** `RE_STABLE_BRACKET`'s list separator is `\s*(?:[,;/]\s*)?` (`\s*[,;/]?\s*` backtracks 2^k).
   `scanBrackets()` finds every closer in ONE stack pass (`bracketCloser()`) and walks an explicit stack — no recursion per
   nesting level; a group longer than `SLOT_MAX` (1,000) is keyed nowhere (only `isGenericSlot`'s `[TODO: …]` prefix is
@@ -81,7 +85,11 @@ review findings — is in History at the end.
   and earlier phases, warns for later ones (`ears_validate`: code `placeholder`; the requirements.md hook never says "all
   clean" while one remains). `traceability` splits alike: gaps that read a LATER phase's template (`TRACE_TASK_KINDS` /
   `TRACE_PLAN_KINDS`) warn "not traced yet"; only `TRACE_VERDICT_KINDS` fail (testsNotMappedToTasks listed, never failing).
-- **`next_action` — the step order, phase by phase** (doctor shows the same gate as `nextGate`):
+- **`next_action` — the step order, phase by phase** (doctor shows the same gate as `nextGate`). One ordered registry, as the
+  checks are (1.30): `NEXT_STEPS` (engine/doctor.js) — `{id, when(x), run(x)}`, the first whose `when` holds answers, `run`
+  setting `x.step`, `x.recommendation` and the result's extras; after the last task `FINISH_STEPS` the same way (`when(x, f)`).
+  `nextAction` builds `x` (the doctor's context, the pending gate, `open` / `refused`, the walk…) and the result from it. A new
+  step = one entry at its place:
   1. an invalid `.state.json` (readState's `invalid`) is the ONE step, `fix` + `stateInvalid` (read as empty it would say
      "approve", which every mutator refuses: a loop); doctor fails `state`, spec_finish blocks on `state` first and reports
      nothing from the unknown approvals, statusNext answers `{step: fix, file: .state.json}`;
@@ -416,6 +424,11 @@ here. "r5 review" is 1.23's fifth review.
   byte-identical (doctor, every gate, next_action, finish, the status line, spec_upgrade). The `live` views exist because a
   cross-feature read can note another feature's missing-pack markers mid-call (the doctor's nextGate runs after
   featureOverlaps).
+- **1.30 review 8 (ds-maint 10)** — `nextAction` (295 lines, ~48 branches) became the `NEXT_STEPS` / `FINISH_STEPS` registries,
+  behaviour-preserving (the suites, and a differential of the old and new engine over 27 feature states — every step — alike).
+- **1.30 review 8 (ds-engine 7)** — a `[NEEDS CLARIFICATION]` in design.md: doctor said `clarifications: pass — none open` and
+  `readyToAdvance: true` while `approve design` refused on `clarifications` (only `approval-gates` mentioned it) — the doctor
+  check read requirements.md and bug.md alone; it reads design.md too now.
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

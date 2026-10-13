@@ -20,7 +20,7 @@ const path = require("path");
 
 require("../scripts/test-runner.js").main({
   suite: "CLI",
-  key: "cli", // the times file: <tmp>/dev-spec-test-times-cli.json (the longest files start first)
+  key: "cli", // the times file: <tmp>/dev-spec-test-times-cli-<this checkout>.json (the longest files start first)
   root: path.join(__dirname, ".."),
   dir: path.join(__dirname, "tests"),
   entry: __filename,

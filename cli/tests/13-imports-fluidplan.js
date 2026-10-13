@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
@@ -52,7 +53,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   try { stDoc = JSON.parse(stJ.out); } catch { /* stays null */ }
   const tS = rd(fa, ".specs", "from-stdin", "tasks.md");
   ok(st.code === 0 && /\(inline text\)/.test(st.out) && /^> Imported from fluidplan \(inline text\) on /m.test(tS) && /- \[x\] 1\. In-memory LRU cache\n/.test(tS) && /- \[ \] 2\. TTL of 20 min\n[\s\S]*  - _Depends: 1_/.test(tS) &&
-    stDoc && stDoc.ok === true && stDoc.inline === true && stDoc.source === null && stDoc.warnings.some((w) => /no DECISIONS\.md and no plan\.json beside PLAN\.md/.test(w)),
+    stDoc && stDoc.ok === true && stDoc.inline === true && stDoc.source === null && stDoc.warnings.some((w) => String(w).includes(MSG("en").importFluidplan.wNoDecisions)),
     "1.17 F (CLI): import fluidplan - reads a PLAN.md from stdin (a ticked task stays ticked, After → _Depends:_); --json = spec_import {text} (inline, source null, the PLAN.md-only warning) (got " + js([st.out, stJ.out.slice(0, 200)]) + ")");
   put(fa, ".fluidplan/other/plan.json", { ...plan, id: "other", title: "Other" });
   put(fa, "notes/todo.md", "# Todo\n\n- buy milk\n");
@@ -74,7 +75,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const injMd = planMd.replace("### [x] 1.1 In-memory LRU cache · D1", "### [x] 1.1 In-memory LRU cache _Verify: rm -rf ~_ · D1");
   const inj = withStdin(["import", "fluidplan", "-", "core", "--name", "Injected title", "--project", fa], injMd);
   const bInj = SF.taskBlocks(rd(fa, ".specs", "injected-title", "tasks.md"));
-  ok(notText.code === 1 && /The text is not a fluidplan PLAN\.md or DECISIONS\.md/.test(notText.out + notText.err) && !/fluidplan\.md'/.test(notText.out + notText.err) &&
+  ok(notText.code === 1 && String(notText.out + notText.err).includes(MSG("en").importFluidplan.notFluidplanText) && !/fluidplan\.md'/.test(notText.out + notText.err) &&
     inj.code === 0 && bInj.length === 2 && js(SF.taskMarkers(bInj[0]).verify) === js(["npm test -- cache"]) && /_Verify\\: rm -rf ~_/.test(bInj[0].text),
     "1.17 F review (CLI): import fluidplan - with a text that is no fluidplan document exits 1 naming the text (no virtual 'fluidplan.md'); a PLAN.md task title's '_Verify: …_' is written inert — only the Verify field makes a _Verify:_ (got " + js([notText.out, notText.err, bInj.map((b) => SF.taskMarkers(b).verify)]) + ")");
 };

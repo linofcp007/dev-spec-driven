@@ -30,37 +30,22 @@
 
 const fs = require("fs");
 const path = require("path");
-// The hooks' runner (stdin, the safety net, the exit — nothing is ever printed: finish() exits at once) and the project probe
+// The hooks' runner (stdin, the safety net, the exit — nothing is ever printed: decide answers null) and the project probe
 // (mcp/lib/probe.js: the one dev-spec project rule, the session's candidate projects, a file read as the engine reads it — UTF-8, or
 // UTF-16 with a BOM, Windows PowerShell 5.1's Out-File), required once the call is a completed Bash / PowerShell run: every other tool
 // call exits before it loads.
-const { runHook, finish, payloadOf, probe } = require("./hook-utils.js");
+const { runHook, payloadOf, probe } = require("./hook-utils.js");
 
 const MAX_INPUT = 4 * 1024 * 1024; // a larger payload is ignored (Claude Code truncates Bash output long before this)
 const MAX_COMMAND = 4000; // no _Verify:_ / project-check command is longer (the engine's OBSERVED_MAX_COMMAND, engine/evidence.js)
 const MAX_FEATURES = 200; // feature folders pre-filtered, at most
 const MAX_TASKS_BYTES = 2 * 1024 * 1024; // a tasks.md past this is skipped
 
-// The pre-filter's reading — a copy of the engine's observedNorm / observedBodies (engine/evidence.js; mcp/tests/09-evidence.js
-// checks the two agree): the run's command bodies — split at ` && ` and `;`, a `cd` / `set … pipefail` part dropped, leading
-// NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and quotes dropped, `\` read as `/`,
-// whitespace folded — must each appear in a tasks.md (or a meta.checks command) read the same way. A SUPERSET of the engine's
-// matcher (runProvesVerify — `node --test tests\x.test.js`, `CI=1 npm run lint`, a reversed join used to miss it): the
-// engine decides. Cheap: a few string passes, no parse. (pipes unspaced, a word's leading `./` dropped, npm's aliases of
-// `npm test`, `&&` however spaced, and chdir / pushd / popd / Set-Location / sl / Push-Location / Pop-Location parts too.)
-const norm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim()
-  .replace(/ ?(\|+) ?/g, "$1").replace(/(^|[ ;&|(=])\.\//g, "$1").replace(/\bnpm (?:run(?:-script)? test|t|tst)(?=$|[ ;&|])/g, "npm test");
-const RE_ENV = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+)+/;
-function bodies(cmd) {
-  const out = [];
-  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/\s*&&\s*|;/)) {
-    part = part.trim();
-    if (!part || /^(?:cd|chdir|pushd|popd|sl|set-location|push-location|pop-location)(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
-    const b = norm(part.replace(RE_ENV, "").replace(/\s+2>&1$/, ""));
-    if (b) out.push(b);
-  }
-  return out;
-}
+// The pre-filter's reading — the engine's own (probe.js observedNorm / observedBodies, which engine/evidence.js observeRun repeats):
+// the run's command bodies — split at ` && ` and `;`, a `cd` / `set … pipefail` part dropped, leading NAME=value assignments (quotes
+// honoured) and a trailing 2>&1 dropped, then backticks and quotes dropped, `\` read as `/`, whitespace folded — must each appear in a
+// tasks.md (or a meta.checks command) read the same way. A SUPERSET of the engine's matcher (runProvesVerify — `node --test
+// tests\x.test.js`, `CI=1 npm run lint`, a reversed join used to miss it): the engine decides. Cheap: a few string passes, no parse.
 
 // The projects a run belongs to: the session's dev-spec projects (probe.sessionProjects — the nearest dev-spec .specs/ at or above
 // the session's cwd, ≤ SESSION_MAX_UP levels (this walk stopped at 12), AND the project dir Claude Code or the user
@@ -113,7 +98,7 @@ const RE_VERIFY_PLACEHOLDER = /_Verify:[ \t]*`*[ \t]*\[[^\n]*?\][ \t]*`*[ \t]*_/
 // then is the engine loaded (it parses the tasks for real and skips archived features).
 function mentioned(pdir, parts) {
   const root = path.join(pdir, ".specs");
-  const has = (text) => { const t = norm(text); return parts.every((x) => t.includes(x)); };
+  const has = (text) => { const t = probe().observedNorm(text); return parts.every((x) => t.includes(x)); };
   try {
     const rm = probe().readJsonFile(path.join(root, "roadmap.json"));
     const checks = rm && rm.meta && typeof rm.meta === "object" ? rm.meta.checks : null;
@@ -154,25 +139,26 @@ function readTasksText(file) {
   }
 }
 
-function main(raw) {
-  if (!raw) return finish(); // an oversized payload (past MAX_INPUT) arrives as ""
+// The hook's work on one payload: the run logged where it belongs (spec.observeRun) — it prints nothing, so → null.
+function decide(raw) {
+  if (!raw) return null; // an oversized payload (past MAX_INPUT) arrives as ""
   const payload = payloadOf(raw);
-  if (!payload) return finish();
+  if (!payload) return null;
   // The Bash tool, and on Windows the PowerShell tool (strict: its exit code must be explicit).
-  if (payload.tool_name !== "Bash" && payload.tool_name !== "PowerShell") return finish();
+  if (payload.tool_name !== "Bash" && payload.tool_name !== "PowerShell") return null;
   const strict = payload.tool_name === "PowerShell";
   const event = typeof payload.hook_event_name === "string" ? payload.hook_event_name : "";
-  if (event && event !== "PostToolUse" && event !== "PostToolUseFailure") return finish();
+  if (event && event !== "PostToolUse" && event !== "PostToolUseFailure") return null;
   const failure = event === "PostToolUseFailure" || (!event && typeof payload.error === "string");
   const input = payload.tool_input;
   const command = input && typeof input === "object" && typeof input.command === "string" ? input.command.trim() : "";
-  if (!command || command.length > MAX_COMMAND) return finish();
+  if (!command || command.length > MAX_COMMAND) return null;
   const exitCode = exitCodeOf(payload, failure, strict);
-  if (exitCode == null) return finish();
+  if (exitCode == null) return null;
 
   let spec = null;
   const dirs = projectDirsOf(payload);
-  const parts = bodies(command);
+  const parts = probe().observedBodies(command);
   const hits = parts.length ? dirs.filter((d) => mentioned(d, parts)) : []; // the pre-filter, once per project
   // once some project passed the pre-filter, the session's project too (spec.sessionProject — a worktree's
   // copy mapped to the checkout the MCP server records in), when it isn't one of them already (no CLAUDE_PROJECT_DIR exported).
@@ -196,9 +182,10 @@ function main(raw) {
       session: typeof payload.session_id === "string" ? payload.session_id : undefined,
     });
   }
-  return finish();
+  return null;
 }
 
-// The payload from stdin (past MAX_INPUT the rest is drained unread and the payload ignored), main run once; any unexpected error is a
-// silent no-op.
-runHook(main, { maxInput: MAX_INPUT });
+// As a process (hooks/hooks.json): the payload from stdin (past MAX_INPUT the rest is drained unread and the payload ignored), decide
+// run once; any unexpected error is a silent no-op.
+module.exports = { decide };
+if (require.main === module) runHook(decide, { maxInput: MAX_INPUT });

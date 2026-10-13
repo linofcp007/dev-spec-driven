@@ -8,7 +8,7 @@ first; how they came to be — the releases and review findings — is in Histor
 ```
 .claude-plugin/plugin.json     manifest (skills, commands, mcpServers; NO hooks key — CLAUDE.md → Gotchas) · marketplace.json
 mcp/servers.json               registers the `spec-driven` stdio server (plugin.json → mcpServers; NOT a root .mcp.json — Config paths)
-skills/dev-spec-driven/SKILL.md the workflow — the decision-time rules, ≤ 5,000 words
+skills/dev-spec-driven/SKILL.md the workflow — the decision-time rules, ≤ 15,360 bytes
 skills/.../references/          read on demand — index.md lists every file; tool-catalog.md · track-checklists.md · workflows.md
                                hold what SKILL.md points to; tooling-reference.md every tool and doctor check id
 commands/*.md                  22 slash commands (only /spec and /spec-bugfix model-invocable) — also the MCP prompts
@@ -24,7 +24,9 @@ mcp/lib/spec.js                the engine's FACADE — every surface requires it
 mcp/lib/operations.js          THE operations table (`OPERATIONS`): each operation's MCP tool, CLI commands, arguments and engine
                                call; requires nothing (mcp.md → The operations)
 mcp/lib/probe.js               THE dev-spec project rule (`isDevSpecProject`) and the walks — Node core only: the hooks, the status
-                               line, shell completion and the engine's `isDevSpecDir` (claude-code-integration.md)
+                               line, shell completion and the engine's `isDevSpecDir` (claude-code-integration.md); and the guards'
+                               shared readings — the approval pre-filter, the guarded files, the MCP file tools, the observe pre-filter;
+                               the CLI's switches (CLI_SWITCHES) and the did-you-mean (closestName), read before the engine loads
 mcp/lib/latin1-scan.js         the stop gate's claim scan on a one-byte projection of a wide text (`latin1Text`) — Node core only
 mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): the engine + i18n in ONE file (The build)
 mcp/lib/engine/                ALL domain logic, one module per concern (The module rule):
@@ -41,6 +43,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   scaffold.js                  spec_init, spec_create, skeletons, steering stubs, spec_add_track, scoped steering, amendments
   tasks.js                     the tasks.md scanner (taskBlocks), markers, _Depends:_ + waves, next / complete / append, the brief
   evidence.js                  the evidence gate (taskVerification), run shells, red → green, observed runs, project checks
+  guardian.js                  dev-guardian's gate (the check `guardian`): the launcher, the CLI lookup, the verdict, its guard rules
   trace.js                     criterion blocks, the EARS linter, trace_check, the traceability matrix
   gates.js                     the gate walk, pending gates, flows, detectPhase; spec_approve; .history/, spec_impact
   doctor.js                    the check registry (DOCTOR_CHECKS, GATES, approvalChecks), spec_doctor, next_action, status,
@@ -49,7 +52,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   finish.js                    spec_finish, drift, remove / rename / archive / restore, _Supersedes:_, SPECS.md, metrics
   roadmap-md.js · decisions.js ROADMAP.md / .html, forecasts, overlaps · decisions.md, the ADR export, spikes
   export.js                    spec_export (markdown, HTML, Gherkin, CSV, changelog), milestones
-  guards.js                    guard mode, the stop gate and its claim scan, the approval guard + shell lexer; CLI_SWITCHES
+  guards.js                    guard mode, the stop gate and its claim scan, the approval guard + shell lexer (CLI_SWITCHES: probe.js)
   upgrade.js · scan.js         spec_upgrade · the brownfield scan, coverage, the ONE notion of code / test file (isCodeFile)
   dupes.js                     the duplicate-code detector (duplicationReport, duplicateRuns): spec_scan {duplicates}, finish
   import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering
@@ -66,7 +69,8 @@ cli/run.js · cli/git.js        done --run / finish --run (`execCommand`, `runVe
 cli/completion.js · completion/ shell completion (+ the hidden `__complete`, before the engine loads) and the status line's
                                pre-check · the bash / zsh / fish / PowerShell templates (conventions.md → Shell completion)
 cli/test-cli.js · cli/tests/   the CLI suite: entry point + NN-<area>-<topic>.js files + harness.js
-scripts/                       build.js (npm run build; --check; --bundle) · test-runner.js (--only, --list) · test-docker.js
+scripts/                       build.js (npm run build; --check; --bundle) · test-runner.js (--only, --list) · test-docker.js ·
+                               release-counts.js (npm run release:counts — the test totals CLAUDE.md and the CHANGELOG state)
 hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|NotebookEdit|Bash|PowerShell|Monitor) + approval-hook.js
                                (approval tools, shells, Write / Edit / NotebookEdit, other MCP servers' file tools) ·
                                PostToolUse → spec-hook.js (Write|Edit) + observe-hook.js (Bash|PowerShell, async) + plan-hook.js
@@ -74,7 +78,8 @@ hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|Notebook
                                SubagentStop (^(dev-spec-driven:)?spec-(implementer|simplifier)$) → stop-hook.js
 hooks/*-hook.js                guard (opt-in guard mode) · approval (opt-in human approval guard) · observe (logs _Verify:_ /
                                check runs, prints nothing) · spec (save checks + SessionStart lines) · stop (stale roadmap
-                               refresh, then the evidence gate) · plan (the plan-mode bridge)
+                               refresh, then the evidence gate) · plan (the plan-mode bridge) — each exports its decide(raw,
+                               opts), run as a process only as the main module (the tests call it in-process: hookIn)
 hooks/hook-utils.js            what the hooks share before the engine loads (the runner — runHook / finish —, probe.js
                                re-exported on first use, the claim pre-filter…)
 hooks/precommit-check.js       optional git pre-commit validator (a stale ROADMAP.* / SPECS.md refreshed and re-staged)
@@ -122,7 +127,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 23 modules (+ 9 in import/) of a few hundred to a few
+  costs ~0.65 ms before any compile (the open is the expensive part): 24 modules (+ 9 in import/) of a few hundred to a few
   thousand lines, never one per helper. Add to the module of the concept; a new file must earn its load cost. The facade's
   first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
@@ -245,6 +250,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — exports only what crosses a module's boundary: `E` went from 2,083 names (1,214 of them exported and used only
   inside their own module) to ~860; 80 facade keys are read only by tests. probe.js, latin1-scan.js and operations.js
   joined mcp/lib beside the engine.
+- **1.30** — dev-guardian's gate left evidence.js for its own module, guardian.js (~250 lines then; the cross-plugin contract —
+  the launcher, the report reader, the verdict, the guard rules — has one home; one more file, ~0.65 ms per load).
+- **1.30 (review 8, ds-maint finding 8 — measured, not done)** — the near-leaf tier no hook uses, loaded in every engine load
+  (median of 21 fresh processes, the rest already loaded, compile cache on): dupes.js 1.9 ms, import/ 13.9 ms of ~75–100 ms. Not
+  made lazy: dupes.js alone isn't worth a mechanism, and import/ is no leaf — trace.js links `inertOutsideCode` from
+  import/common.js and the facade reads `IMPORT_TOOLS` / `STEERING_IMPORT_TOOLS` while it loads — so a lazy tier needs a second
+  way to reach a name (call-time getters on `E`, the facade's entries defined after its wrap loop), the helper moved to a core
+  module, and the "1.18 module rule" checks taught both. Worth it only alongside other work on index.js / spec.js.
 
 ### The build
 - **1.19 → 1.20** — rendering the corpus (1,165 texts plus pt-BR's twins: ~200 ms) was the largest slice of a hook or CLI

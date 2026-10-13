@@ -3,8 +3,9 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
-exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, run, runIn, tmp, CLI, require, __dirname, runAsync }) => {
 // 1.13 WP10: catalog (SPECS.md), _Supersedes:_ warnings in trace, feature restore, drift since finish — CLI = MCP.
 const S10 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const w10 = path.join(tmp, "wp10-proj");
@@ -73,7 +74,7 @@ ok(ren10c.code === 0 && /Renamed 'billing' → 'payments' ✓\n {2}archive recor
 
 // drift: no baseline yet → a note, exit 0; a baseline + an edited implementing file → exit 1 with the file named.
 const dr10 = r10(["drift"]);
-ok(dr10.code === 0 && /No finished feature has a drift baseline yet/.test(dr10.out) && /no finish baseline yet: accounts, billing, billing-v2/.test(dr10.out), "drift without any baseline: a note + the unbaselined features, exit 0");
+ok(dr10.code === 0 && String(dr10.out).includes(MSG("en").drift.none) && /no finish baseline yet: accounts, billing, billing-v2/.test(dr10.out), "drift without any baseline: a note + the unbaselined features, exit 0");
 // A baseline on a feature whose tasks aren't all done (reworked after finish) is `reopened`: listed, never hashed, exit 0.
 fs.mkdirSync(path.join(w10, "src"), { recursive: true });
 fs.writeFileSync(path.join(w10, "src", "a.js"), "two\n");
@@ -82,14 +83,14 @@ const bStKeep = fs.readFileSync(bSt, "utf8");
 fs.writeFileSync(bSt, JSON.stringify({ ...JSON.parse(bStKeep), finished: { at: "2026-01-02T03:04:05.000Z", files: { "src/a.js": "0".repeat(40) } } }, null, 2));
 const drRe10 = r10(["drift", "billing"]);
 ok(drRe10.code === 0 && /reopened since finish \(tasks open again — checked once finished again\): billing/.test(drRe10.out) && !/⚠/.test(drRe10.out) &&
-  !/No finished feature has a drift baseline yet/.test(drRe10.out) && r10(["drift", "nope"]).code === 1,
+  !String(drRe10.out).includes(MSG("en").drift.none) && r10(["drift", "nope"]).code === 1,
   "drift <feature> on a baselined feature whose tasks are open again: listed as reopened, not drift (exit 0); an unknown feature exits 1");
 // An unreadable .state.json is not "clean": named → error, project-wide → the error printed, exit 1.
 fs.writeFileSync(bSt, "{ broken");
 const drBad10 = r10(["drift", "billing"]);
 const drBadAll10 = r10(["drift"]);
 fs.writeFileSync(bSt, bStKeep);
-ok(drBad10.code === 1 && /not valid JSON/.test(drBad10.out) && !/No finished feature has a drift baseline yet/.test(drBad10.out) &&
+ok(drBad10.code === 1 && /not valid JSON/.test(drBad10.out) && !String(drBad10.out).includes(MSG("en").drift.none) &&
   drBadAll10.code === 1 && /billing\/\.state\.json is not valid JSON/.test(drBadAll10.out),
   "drift with an unreadable .state.json exits 1 (named or project-wide) and never claims 'no baseline yet'");
 
@@ -103,7 +104,7 @@ const fill10 = (rel, pairs) => { const fp = path.join(bf10.dir, rel); let t = fs
 fill10("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
   ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
 fill10("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-fill10("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js_"]]);
+fill10("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[path of the code the fix changes]", "src/auth.js"], ["[full test suite command]", "npm test"]]);
 fill10("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
   ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
   ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
@@ -146,7 +147,7 @@ ok(naDrift10.code === 0 && new RegExp("→ 'login-loop' was finished on " + finD
 runIn(["append-tasks", "login-loop", "--task", "Audit log of logins", "--req", "US-1.AC-1", "--implements", "src/audit.js", "--verify", 'node -e "process.exit(0)"', "--project", w10f]);
 fs.writeFileSync(path.join(w10f, "src", "audit.js"), "audit\n");
 const apT10 = runIn(["approve", "login-loop", "tasks", "--project", w10f]);
-const done3 = run(["done", "login-loop", "3", "--run", "--project", w10f]); // the appended task, after the bugfix's red test (1) and fix (2)
+const done3 = (await runAsync(["done", "login-loop", "3", "--run", "--project", w10f])); // the appended task, after the bugfix's red test (1) and fix (2)
 const naSt10 = runIn(["next-action", "login-loop", "--project", w10f]);
 fs.appendFileSync(path.join(w10f, "src", "audit.js"), "// changed\n");
 const drSt10 = runIn(["drift", "login-loop", "--project", w10f]);
@@ -193,7 +194,7 @@ runIn(["create", "Pagamentos", "core", "--project", w10pt]);
 const catPt10 = runIn(["catalog", "--project", w10pt]).out;
 ok(/# Catálogo de specs — wp10-pt/.test(catPt10) && /AUTO-GERADO por dev-spec/.test(catPt10) && /pagamentos — em curso/.test(catPt10) &&
   /Não há nada arquivado como 'x'/.test(runIn(["feature", "restore", "x", "--project", w10pt]).out) &&
-  /Nenhuma feature fechada tem ainda uma baseline de drift/.test(runIn(["drift", "--project", w10pt]).out), "PT: catalog chrome, restore error and drift note are localized");
+  String(runIn(["drift", "--project", w10pt]).out).includes(MSG("pt").drift.none), "PT: catalog chrome, restore error and drift note are localized");
 
 // A _Supersedes:_ list hard-wrapped onto the next line: trace passes with no "never closed" warning, doctor's
 // traceability passes, the catalog strikes every target through.

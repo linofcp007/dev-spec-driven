@@ -7,13 +7,13 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, require, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, require, __dirname, hookIn }) => {
 
   // --- 1.13 WP10: living catalog (SPECS.md, _Supersedes:_), archive → restore round-trip, drift since finish ---
   {
     const call10 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
     const { spawnSync: spawn10 } = require("child_process");
-    const hook10 = (dir) => spawn10(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout;
+    const hook10 = (dir) => hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout;
     const w10 = path.join(tmp, "proj-wp10");
     const w10Specs = path.join(w10, ".specs");
     S.initProject(w10, ["core"]);
@@ -121,7 +121,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const featTool = list.result.tools.find((t) => t.name === "spec_feature");
     const again10 = await call10("spec_feature", { action: "restore", name: "Billing", projectDir: w10 });
     ok(featTool.inputSchema.properties.action.enum.includes("restore") && again10.isError && /Nothing is archived as 'billing'/.test(again10.p.error) &&
-      /remove \| archive \| rename \| restore/.test(S.manageFeature(w10, "wat", "billing").error), "restore is in the spec_feature enum; nothing archived under that name → error");
+      /action must be one of: remove, archive, rename, restore, flow \(got "wat"\)/.test(S.manageFeature(w10, "wat", "billing").error), "restore is in the spec_feature enum; nothing archived under that name → error");
 
     // Restore only re-adds references to features that still exist; one that would close a cycle stays out; errors refuse.
     ["Core Lib", "Consumer", "Helper"].forEach((n) => S.createFeature(w10, n, ["core"]));
@@ -156,7 +156,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const liveState = path.join(w10Specs, "accounts", ".state.json");
     fs.writeFileSync(liveState, "[]");
     const badArch = S.manageFeature(w10, "archive", "accounts");
-    ok(bad10.ok === false && /not valid JSON/.test(bad10.error) && old10.ok && /archived before archive recorded its roadmap entry/.test(old10.note) &&
+    ok(bad10.ok === false && /not valid JSON/.test(bad10.error) && old10.ok && String(old10.note).includes(S.msg("en").restore.noRecord) &&
       badArch.ok === false && /unexpected shape/.test(badArch.error) && fs.existsSync(path.join(w10Specs, "accounts")) && fs.readFileSync(liveState, "utf8") === "[]",
       "a broken archived .state.json refuses restore; a pre-1.13 archive restores with a note; archive refuses a broken .state.json (never rewritten, nothing moved)");
     fs.writeFileSync(liveState, JSON.stringify({ lang: "en", tracks: ["core"], approvals: {} }));
@@ -314,7 +314,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     fill10("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
       ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
     fill10("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-    fill10("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/_"]]);
+    fill10("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[path of the code the fix changes]", "src/auth.js, src/lib/"], ["[full test suite command]", "npm test"]]);
     fill10("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
       ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
       ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],
@@ -366,7 +366,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
       S.drift(w10d, null, { maxFiles: 2 }).skipped === true && S.drift(w10d, null, { maxBytes: 1 }).skipped === true && S.drift(w10d, null, { maxFiles: 2 }).features.length === 0,
       "SessionStart: one localized drift line per drifted finished feature; over the file/byte budget the check is skipped (nothing hashed)");
     ok(S.drift(w10d, "nope").ok === false && S.drift(w10d, "draft").features.length === 0 && S.drift(w10d, "draft").unbaselined.join() === "draft" &&
-      /No finished feature has a drift baseline yet/.test(S.drift(w10d, "draft").note), "drift: an unknown feature is an error; an unfinished one is listed as unbaselined, not an error");
+      String(S.drift(w10d, "draft").note).includes(S.msg("en").drift.none), "drift: an unknown feature is an error; an unfinished one is listed as unbaselined, not an error");
     S.manageFeature(w10d, "archive", "login-loop");
     const drArch = S.drift(w10d);
     const hookArch = hook10(w10d); // "draft" is still active, so the hook runs
@@ -567,7 +567,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const mdPt = fs.readFileSync(path.join(w10pt, ".specs", "SPECS.md"), "utf8");
     ok(catPt.ok && catPt.lang === "pt" && /^# Catálogo de specs — proj-wp10-pt$/m.test(mdPt) && /<!-- AUTO-GERADO por dev-spec/.test(mdPt) && /## 🟡 pagamentos — em curso \(/.test(mdPt) &&
       /1 feature\(s\) · 1 critérios de aceitação — 1 em vigor, 0 substituído\(s\)/.test(mdPt) && /Não há nada arquivado como 'x'/.test(S.manageFeature(w10pt, "restore", "x").error) &&
-      /Nenhuma feature fechada tem ainda uma baseline de drift/.test(S.drift(w10pt).note), "PT project: SPECS.md chrome (title, AUTO-GERADO marker, status, totals), restore and drift messages in Portuguese");
+      String(S.drift(w10pt).note).includes(S.msg("pt").drift.none), "PT project: SPECS.md chrome (title, AUTO-GERADO marker, status, totals), restore and drift messages in Portuguese");
     const w10es = path.join(tmp, "proj-wp10-es");
     S.initProject(w10es, ["core"], "es");
     S.createFeature(w10es, "Pagos", ["core"]);
@@ -610,7 +610,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
   { // --- 1.13 batch 8: spec_upgrade — meta.specVersion, the audit, the safe migrations, UPGRADE.md, the SessionStart notice ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
-    const sess = (dir) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout || "";
+    const sess = (dir) => hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout || "";
     const sha1 = (t) => require("crypto").createHash("sha1").update(String(t).replace(/\r\n/g, "\n")).digest("hex");
     const ENGINE = require(path.join(root, "package.json")).version;
     const readJ = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
@@ -721,7 +721,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const beforeSecond16 = snapTree(path.join(p16, ".specs"));
     const ap16b = payload(await call("spec_upgrade", { apply: true, projectDir: p16 }));
     ok(ap16b.migrations.changed === false && ap16b.migrations.report.written === false && ap16b.needsUpgrade === false && ap16b.from === ENGINE &&
-      S.upgradeLines(ap16b).includes("Nothing to migrate — .specs/ is already up to date; nothing was changed.") && snapTree(path.join(p16, ".specs")) === beforeSecond16,
+      S.upgradeLines(ap16b).includes(S.msg("en").upgrade.nothing) && snapTree(path.join(p16, ".specs")) === beforeSecond16,
       "a second apply changes nothing — no state, roadmap, .history or UPGRADE.md write — and says so");
 
     // 4. A brand-new project is stamped (spec_init, or its first spec_create) and never gets the notice; a legacy project is not
@@ -1011,7 +1011,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
       !/\*\*(refunds|payouts|notes|legacy)\*\* — plans/.test(attB4) && /planeia os mesmos ficheiros que payouts/.test(S.renderRoadmapMd(opB4, "pt")),
       "ROADMAP.md 'needs attention' names each overlap once, on its active side (PT too)");
 
-    const hkB4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
+    const hkB4 = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
     let ctxB4 = "";
     try { ctxB4 = JSON.parse(hkB4.stdout).hookSpecificOutput.additionalContext; } catch { /* no output */ }
     ok(ctxB4.split("\n").filter((l) => /overlap/.test(l)).length === 1 && /⚠ 3 cross-feature file overlap\(s\): billing ↔ payouts, billing ↔ refunds, search → legacy — run \/spec-doctor/.test(ctxB4),
@@ -1026,7 +1026,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     S.setDependency(opB4, "payouts", ["billing"]);
     fs.appendFileSync(path.join(searchO.dir, "requirements.md"), "\n- **US-9.AC-1** — WHEN a search runs THE SYSTEM SHALL use the new index _Supersedes: legacy/US-1.AC-1_\n");
     const ov2B4 = S.featureOverlaps(opB4);
-    const hk2B4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
+    const hk2B4 = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
     ok(JSON.stringify(ov2B4.pairs.map((p) => p.a + "/" + p.b)) === '["billing/refunds"]' && !chk("payouts") && !chk("search") && /⚠ 1 cross-feature file overlap\(s\): billing ↔ refunds —/.test(hk2B4.stdout),
       "no overlap once the pair is ordered by a dependency (payouts → billing) or the active feature declares _Supersedes:_ of the finished one's criteria (got " + JSON.stringify(ov2B4.pairs) + ")");
     const globB4 = path.join(tmp, "proj-b4-globs");
@@ -1044,7 +1044,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const c2 = S.createFeature(cleanB4, "Two", ["core"], "", undefined, "en");
     fs.writeFileSync(path.join(c1.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Implements: src/one/a.js, src/shared-one.js_\n- [ ] 2. [US1] Later\n  - _Implements: TBD_\n- [ ] 3. [US1] Else\n  - _Implements: [path]_\n");
     fs.writeFileSync(path.join(c2.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] B\n  - _Implements: src/one-two/b.js, src/shared.js_\n- [ ] 2. [US1] Later\n  - _Implements: tbd_\n- [ ] 3. [US1] Else\n  - _Implements: [path]_\n");
-    const hk3B4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: cleanB4 } });
+    const hk3B4 = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: cleanB4 } });
     ok(S.featureOverlaps(cleanB4).pairs.length === 0 && !S.specDoctor(cleanB4, "one").checks.some((c) => c.id === "cross-feature-overlap") && !/overlap/.test(hk3B4.stdout) &&
       !/plans the same files/.test(S.renderRoadmapMd(cleanB4, "en")),
       "no false positive for disjoint files (src/one/ vs src/one-two/, shared-one.js vs shared.js) nor for stand-ins both write (TBD, [path]): no pair, no doctor check, no hook line, no attention line");

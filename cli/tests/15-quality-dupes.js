@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, all, runIn, tmp, require, __dirname }) => {
   const SR = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -38,10 +39,10 @@ exports.run = ({ ok, all, runIn, tmp, require, __dirname }) => {
   const withTests = jsonOf(runIn(["dupes", "checkout", "--tests", "--min-lines", "4", "--project", p, "--json"]));
   all("1.28 dupes (CLI): the feature's report — its head, each run as file:from-to with the places it repeats (⚠ existing, reuse or extend it), exit 0; --json IS spec_scan {duplicates: true, name}'s result; no feature: the project's repeated blocks; --tests / --min-lines reach the engine (got " +
     js([human.code, human.out, whole.out.split("\n")[0], withTests.minLines, withTests.counts]) + ")", {
-    head: () => human.code === 0 && /^Duplicates — checkout: 1 place\(s\) repeat existing code · 0 repeated within the feature  \(windows of 6 code lines; 2 files, \d+ code lines read\)$/m.test(human.out),
+    head: () => human.code === 0 && /^Duplicates — checkout: 1 place repeats existing code · 0 repeated within the feature  \(windows of 6 code lines; 2 files, \d+ code lines read\)$/m.test(human.out),
     line: () => human.out.includes("  ⚠ src/checkout/total.js:4-14 (10 lines) repeats src/lib/money.js:4-15 — reuse or extend the existing code"),
     json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.duplicationReport(p, { name: "checkout" })),
-    project: () => whole.code === 0 && /^Duplicates — the project: 1 repeated block\(s\)/.test(whole.out) && /  · src\/checkout\/total\.js:4-14 \(10 lines\) also at src\/lib\/money\.js:4-15/.test(whole.out),
+    project: () => whole.code === 0 && /^Duplicates — the project: 1 repeated block  /.test(whole.out) && /  · src\/checkout\/total\.js:4-14 \(10 lines\) also at src\/lib\/money\.js:4-15/.test(whole.out),
     tests: () => withTests.minLines === 4 && withTests.duplicates[0].also.some((a) => a.file === "tests/money.test.js"),
   });
 
@@ -58,8 +59,31 @@ exports.run = ({ ok, all, runIn, tmp, require, __dirname }) => {
     low: () => low.code === 1 && /"code": "invalid-arguments"/.test(low.out) && /--min-lines must be an integer ≥ 4, at most 100/.test(low.out),
     high: () => high.code === 1,
     nope: () => nope.code === 1,
-    empty: () => empty.code === 0 && /no source file its tasks' _Implements:_ name exists yet — nothing to compare/.test(empty.out),
-    pt: () => /^Duplicados — checkout: 1 sítio\(s\) repetem código existente/m.test(pt.out) && /repete src\/lib\/money\.js:4-15 — reutilizar ou estender o código existente/.test(pt.out),
+    empty: () => empty.code === 0 && String(empty.out).includes(MSG("en").cliOutput.dupesNoCode),
+    pt: () => /^Duplicados — checkout: 1 sítio repete código existente/m.test(pt.out) && /repete src\/lib\/money\.js:4-15 — reutilizar ou estender o código existente/.test(pt.out),
     help: () => /dupes \[feature\] \[--min-lines N\] \[--tests\]/.test(help.out),
   });
+
+  // 1.30 review 8 (ds-prose 14): the head counts in words — "1 file", "1 ficheiro", "1 fichero", never "1 files" or "place(s)"; the
+  // byte budget's `partial` line (ds-security 9) in each language
+  {
+    const heads = {};
+    for (const lang of ["en", "pt", "es"]) {
+      const q = path.join(tmp, "p130-dupes-one-" + lang);
+      SR.initProject(q, ["core"], lang);
+      write(q, "src/only.js", "module.exports = function only(a, b) { return a + b; };\n"); // one code line
+      heads[lang] = runIn(["dupes", "--project", q]).out.split("\n")[0];
+    }
+    const partial = Object.fromEntries(["en", "pt", "es"].map((l) => [l, [SR.msg(l).cliOutput.dupesPartial(1, 32), SR.msg(l).cliOutput.dupesPartial(4, 32)]]));
+    all("1.30 review 8: dupes' head says 1 file / 1 ficheiro / 1 fichero and 0 repeated blocks (no '(s)'); the byte budget's partial line in EN / PT / ES, singular and plural (got " + js([heads, partial]) + ")", {
+      en: () => heads.en === "Duplicates — the project: 0 repeated blocks  (windows of 6 code lines; 1 file, 1 code line read)",
+      pt: () => heads.pt === "Duplicados — o projeto: 0 blocos repetidos  (janelas de 6 linhas de código; 1 ficheiro, 1 linha de código lida)",
+      es: () => heads.es === "Duplicados — el proyecto: 0 bloques repetidos  (ventanas de 6 líneas de código; 1 fichero, 1 línea de código leída)",
+      partialEn: () => partial.en[0] === "  (the byte budget — 32 MB of source — was reached: 1 more source file was not read, a repeat in them is not seen)" &&
+        /: 4 more source files were not read,/.test(partial.en[1]),
+      partialPt: () => /: mais 1 ficheiro de código ficou por ler,/.test(partial.pt[0]) && /: mais 4 ficheiros de código ficaram por ler,/.test(partial.pt[1]),
+      partialEs: () => /: 1 fichero de código más quedó sin leer,/.test(partial.es[0]) && /: 4 ficheros de código más quedaron sin leer,/.test(partial.es[1]),
+      noParens: () => !Object.values(heads).some((h) => /\(s\)|\(es\)|\(ões\)/.test(h)),
+    });
+  }
 };

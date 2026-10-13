@@ -156,9 +156,10 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources }) => {
   // --- spec_finish: a warning (never a blocker) naming how many places, the top 3, the call that lists them; EN / PT / ES ---
   {
     const L = {
-      en: [/the feature's code repeats existing code in 1 place\(s\) — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reuse or extend the existing code/, /1 more repeat\(s\) inside the feature's own files/],
-      pt: [/o código da feature repete código existente em 1 sítio\(s\) — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reutilizar ou estender/, /mais 1 repetição\(ões\) dentro dos ficheiros da própria feature/],
-      es: [/el código de la función repite código existente en 1 lugar\(es\) — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reutilizar o extender/, /1 repetición\(es\) más dentro de los ficheros de la propia función/],
+      en: [/the feature's code repeats existing code in 1 place — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reuse or extend the existing code/, /1 more repeat inside the feature's own files/],
+      pt: [/o código da feature repete código existente em 1 sítio — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reutilizar ou estender/, /mais 1 repetição dentro dos ficheiros da própria feature/],
+      // (1.30: "funcionalidad" — "el código de la función" read as a code function)
+      es: [/el código de la funcionalidad repite código existente en 1 lugar — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reutilizar o extender/, /1 repetición más dentro de los ficheros de la propia funcionalidad/],
     };
     const got = {};
     for (const lang of Object.keys(L)) {
@@ -190,7 +191,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources }) => {
     write(wp, "src/r2.js", "module.exports = {};\n");
     const w0 = payload(await call("spec_finish", { projectDir: wp, name: wf.slug }));
     const wWarn = (w1.warnings || []).find((w) => /dupes/.test(w));
-    ok(/^1 block\(s\) of the feature's code repeat another place in its own files — a candidate for the simplification pass/.test(wWarn || "") &&
+    ok(/^1 block of the feature's code repeats another place in its own files — a candidate for the simplification pass/.test(wWarn || "") &&
       js(w1.duplicates) === js({ existing: 0, within: 1, top: [] }) && w0.duplicates === undefined && !(w0.warnings || []).some((w) => /dupes/.test(w)),
       "1.28 spec_finish: repeats inside the feature only → one warning with the count (the simplification pass's); none → no warning and no `duplicates` key (got " + js([wWarn, w1.duplicates, w0.duplicates]) + ")");
   }
@@ -217,5 +218,166 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources }) => {
       js(runs.duplicates.slice(0, 20)) === js(rep.duplicates) && rep.counts.existing === 0 && rep.scanned.duplicated <= rep.scanned.lines,
       "1.28: duplicationReport over a folder (this repo's mcp/lib, minLines 8) = duplicateRuns over the same files read by hand — " + rep.scanned.files + " files, " +
       rep.scanned.lines + " code lines, " + rep.total + " repeated block(s) (got " + js([rep.scanned, rep.counts, runs.scanned, runs.counts]) + ")");
+  }
+
+  // --- 1.30 review 8 (ds-engine 3): an import spread over several lines is no code — Go's `import (`, TS `import {` … `} from`,
+  // Python's `from x import (`, Rust's `use a::{`, CommonJS `const {` … `} = require("x")`; a `const {` destructuring a value stays
+  // code, and a bracket left open never swallows the code after it ---
+  {
+    const pairOf = (ext, a, b) => S.duplicateRuns([{ file: "a." + ext, text: a }, { file: "b." + ext, text: b }]);
+    const GO = "import (\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"github.com/acme/project/internal/storage\"\n\t\"github.com/acme/project/internal/auth\"\n\t\"github.com/acme/project/pkg/logging\"\n)\n";
+    const TS = "import {\n  MatButtonModule,\n  MatCardModule,\n  MatDialogModule,\n  MatFormFieldModule,\n  MatIconModule,\n  MatInputModule,\n} from '@angular/material';\n";
+    const PY = "from app.models import (\n    CustomerAccount,\n    InvoiceLineItem,\n    PaymentProvider,\n    SubscriptionPlan,\n    TaxJurisdiction,\n    WarehouseLocation,\n)\n";
+    const RS = "use std::{\n    collections::HashMap,\n    collections::BTreeMap,\n    io::{self, Read, Write},\n    sync::{Arc, Mutex, RwLock},\n    time::{Duration, Instant},\n    path::{Path, PathBuf},\n};\n";
+    const NAMES = ["formatPriceWithCurrency,", "formatCurrencyCodeLabel,", "parseAmountFromString,", "roundHalfEvenToCents,", "convertBetweenCurrencies,", "currencySymbolForCode,"];
+    const CJS = "const {\n" + NAMES.map((n) => "  " + n).join("\n") + "\n} = require(\"./money\");\n";
+    const DESTRUCT = "const {\n" + NAMES.map((n) => "  " + n).join("\n") + "\n} = options.formatters;\n";
+    const r = {
+      go: pairOf("go", "package a\n\n" + GO + "\nfunc A() int { return 1 }\n", "package b\n\n" + GO + "\nfunc B() string { return \"b\" }\n"),
+      ts: pairOf("ts", TS + "export class A {}\n", TS + "export class B {}\n"),
+      py: pairOf("py", PY + "def a():\n    return 1\n", PY + "def b():\n    return 2\n"),
+      rs: pairOf("rs", RS + "fn a() -> u8 { 1 }\n", RS + "fn b() -> u8 { 2 }\n"),
+      cjs: pairOf("js", CJS + "module.exports = 1;\n", CJS + "module.exports = 2;\n"),
+      destructuring: pairOf("js", DESTRUCT + "module.exports = 1;\n", DESTRUCT + "module.exports = 2;\n"),
+      // `import {` never closed: the helper after it is still code, found in the other file
+      unclosed: pairOf("ts", "import {\n  Thing,\n" + HELPER.join("\n") + "\n", HELPER.join("\n") + "\n"),
+    };
+    const lines = (x) => x.scanned.lines, n = (x) => x.duplicates.length;
+    all("1.30 review 8: a multi-line import block is no code — Go / TS / Python / Rust / CommonJS blocks repeated in two files are no duplicate (their other lines alone are read); a `const {` … `} = options` destructuring stays code (found); an unclosed `import {` never hides the code after it (got " +
+      js(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, [v.scanned, v.counts]]))) + ")", {
+      go: () => n(r.go) === 0 && lines(r.go) === 2, ts: () => n(r.ts) === 0 && lines(r.ts) === 2, py: () => n(r.py) === 0 && lines(r.py) === 4,
+      rs: () => n(r.rs) === 0 && lines(r.rs) === 2, cjs: () => n(r.cjs) === 0 && lines(r.cjs) === 2,
+      destructuring: () => n(r.destructuring) === 1 && r.destructuring.duplicates[0].lines === 8,
+      unclosed: () => n(r.unclosed) === 1 && r.unclosed.duplicates[0].lines === 9,
+    });
+  }
+
+  // --- 1.30 review 8 (ds-engine 4): a notebook (.ipynb) is JSON — its metadata made any two notebooks one duplicate: no code lines,
+  // and the project report never reads one ---
+  {
+    const nb = (cells) => JSON.stringify({ cells, metadata: { kernelspec: { display_name: "Python 3", language: "python", name: "python3" },
+      language_info: { codemirror_mode: { name: "ipython", version: 3 }, file_extension: ".py", mimetype: "text/x-python", name: "python", nbconvert_exporter: "python",
+        pygments_lexer: "ipython3", version: "3.11.4" } }, nbformat: 4, nbformat_minor: 5 }, null, 1);
+    const a = nb([{ cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: ["import numpy as np\n", "print(np.zeros(3))"] }]);
+    const b = nb([{ cell_type: "markdown", metadata: {}, source: ["# Title"] }]);
+    const runs = S.duplicateRuns([{ file: "a.ipynb", text: a }, { file: "nb/B.IPYNB", text: b }]);
+    const np = path.join(tmp, "proj-dupes-notebooks");
+    S.initProject(np, ["core"], "en");
+    write(np, "notebooks/a.ipynb", a);
+    write(np, "notebooks/b.ipynb", b);
+    write(np, "src/a.js", HELPER.join("\n") + "\n");
+    write(np, "src/b.js", HELPER.join("\n") + "\n");
+    const rep = S.duplicationReport(np, {});
+    all("1.30 review 8: two notebooks are no duplicate (no code lines of their own); the project report reads none — only the two JS copies (got " + js([runs.scanned, runs.counts, rep.scanned, rep.counts]) + ")", {
+      matcher: () => runs.scanned.lines === 0 && runs.duplicates.length === 0,
+      report: () => rep.scanned.files === 2 && rep.counts.within === 1 && rep.duplicates.every((d) => !/ipynb/.test(d.file)),
+    });
+  }
+
+  // --- 1.30 review 8 (ds-engine 5): comment stripping — PHP's `#` comments (its `#[…]` attributes stay code), a JS regex literal
+  // (`/[/*]/` opens no block comment, `/`/` no template string — the rest of the file was dropped or its comments kept), JSX's
+  // `</div>` opens no regex; the generated-file header is a generator's convention, never any comment naming the word ---
+  {
+    const pairOf = (ext, a, b) => S.duplicateRuns([{ file: "a." + ext, text: a }, { file: "b." + ext, text: b }]);
+    const BODY = Array.from({ length: 8 }, (_, i) => "  total += computeLineItemValue(order.items[" + i + "], rates);");
+    const fn = (name, tail, body = BODY) => "function " + name + "(order, rates) {\n  let total = 0;\n" + body.map((l, i) => l + tail(i)).join("\n") + "\n  return total;\n}\n";
+    const HALVES = BODY.map((l) => l.replace(");", ") / 2;")); // a division (after a `)`), a comment after it
+    const PHP = ["function total($order) {", "    $total = 0;", "    foreach ($order->items as $item) { $total += $item->price * $item->qty; }", "    if ($order->coupon) { $total -= $order->coupon->amount; }",
+      "    $total = round($total, 2);", "    error_log(\"total=\" . $total);", "    $order->total = $total;", "    return $total;", "}"];
+    const phpWith = (tag) => "<?php\n" + PHP.map((l) => l + " # " + tag + " note").join("\n") + "\n";
+    const phpAttr = (route) => "<?php\n" + PHP.slice(0, 4).join("\n") + "\n#[Route(\"" + route + "\")]\n" + PHP.slice(4).join("\n") + "\n";
+    const JSX = Array.from({ length: 8 }, (_, i) => "  const row" + i + " = <div className=\"row\">{items[" + i + "].label}</div>;");
+    const jsx = (tag) => "function rows(items) {\n" + JSX.map((l, i) => l + " // " + tag + i).join("\n") + "\n  return [row0, row1];\n}\n";
+    const r = {
+      php: pairOf("php", phpWith("A"), phpWith("B")),
+      phpAttr: pairOf("php", phpAttr("/a"), phpAttr("/b")),
+      regexClass: pairOf("js", "const GLOB = /[/*]/;\n" + fn("a", () => ""), fn("b", () => "")),
+      regexBacktick: pairOf("js", "const RE = /`/;\n" + fn("a", (i) => " // note A" + i), fn("b", (i) => " // remark B" + i)),
+      division: pairOf("js", fn("a", (i) => " // half A" + i, HALVES), fn("b", (i) => " // half B" + i, HALVES)),
+      jsx: pairOf("jsx", jsx("A"), jsx("B")),
+    };
+    // the generated-file header: a generator's convention skips the file; a hand-written comment naming the word doesn't
+    const gp = path.join(tmp, "proj-dupes-generated");
+    S.initProject(gp, ["core"], "en");
+    const code = HELPER.join("\n") + "\n";
+    write(gp, "src/original.js", code);
+    write(gp, "src/ids.js", "// IDs generated by the server are UUIDs — never parse them\n" + code);
+    write(gp, "src/client.js", "\"use strict\";\n// Uses the auto-generated client from ../api; do not edit lightly.\n" + code);
+    write(gp, "src/django.py", "# Generated by Django 4.2 on 2026-01-01 10:00\n" + HELPER.map((l) => "# " + l).join("\n") + "\n");
+    write(gp, "src/fb.js", "/**\n * Copyright (c) Acme.\n *\n * @generated SignedSource<<abc>>\n */\n" + code);
+    write(gp, "src/donotedit.js", "#!/usr/bin/env node\n// DO NOT EDIT — written by tools/gen.js\n" + code);
+    write(gp, "src/cs.js", "// <auto-generated>\n//   This code was generated by a tool.\n// </auto-generated>\n" + code);
+    write(gp, "src/thisfile.js", "// This file was automatically generated\n" + code);
+    const rep = S.duplicationReport(gp, {});
+    const named = new Set(rep.duplicates.flatMap((d) => [d.file, ...d.also.map((a) => a.file)]));
+    const n = (x) => x.duplicates.length;
+    all("1.30 review 8: comment stripping — PHP `#` comments differ → still one duplicate, a `#[Route]` attribute is code (it splits the run); a JS regex literal `/[/*]/` or `/`/` hides no code and keeps no comment; a division then `//` is still a comment; JSX `</div>` opens no regex; generated headers (@generated, <auto-generated>, Generated by Django, DO NOT EDIT, \"This file was automatically generated\") skip a file, a hand-written comment naming the word doesn't (got " +
+      js([Object.fromEntries(Object.entries(r).map(([k, v]) => [k, [v.scanned.lines, v.counts]])), rep.skipped, [...named].sort()]) + ")", {
+      php: () => n(r.php) === 1 && r.php.duplicates[0].lines === 9, phpAttr: () => n(r.phpAttr) === 0,
+      regexClass: () => n(r.regexClass) === 1 && r.regexClass.duplicates[0].lines === 10 && r.regexClass.scanned.lines === 23,
+      regexBacktick: () => n(r.regexBacktick) === 1 && r.regexBacktick.duplicates[0].lines === 10,
+      division: () => n(r.division) === 1 && r.division.duplicates[0].lines === 10,
+      jsx: () => n(r.jsx) === 1 && r.jsx.duplicates[0].lines === 10,
+      generated: () => rep.skipped.generated === 5 && ["src/original.js", "src/ids.js", "src/client.js"].every((f) => named.has(f)) &&
+        !["src/django.py", "src/fb.js", "src/donotedit.js", "src/cs.js", "src/thisfile.js"].some((f) => named.has(f)),
+    });
+  }
+
+  // --- 1.30 review 8 (ds-security 9): a byte budget — past it the report reads only the feature's own files and says so
+  // (`partial` {bytes, unread}); a report under it has no `partial` ---
+  {
+    const bp = path.join(tmp, "proj-dupes-bytes");
+    S.initProject(bp, ["core"], "en");
+    const bf = S.createFeature(bp, "Pricing", ["core"], "x");
+    write(bp, "src/a/helper.js", "\"use strict\";\n" + HELPER.join("\n") + "\n");
+    write(bp, "src/b/other.js", RECEIPT.join("\n") + "\n");
+    write(bp, "src/c/more.js", RECEIPT.join("\n") + "\n");
+    write(bp, "src/z/pricing.js", HELPER.join("\n") + "\n");
+    fs.writeFileSync(path.join(bf.dir, "tasks.md"), TASKS("src/z/pricing.js"));
+    const cut = S.duplicationReport(bp, { name: "pricing", maxBytes: 1 });
+    const cutAll = S.duplicationReport(bp, { maxBytes: 1 });
+    const full = S.duplicationReport(bp, { name: "pricing" });
+    all("1.30 review 8: past the byte budget only the feature's own files are read — `partial` {bytes, unread} says how many files were left unread; the feature's repeat of a file read before the budget ran out is still found; without a feature the reading stops there; under the budget no `partial` (got " +
+      js([cut.scanned, cut.partial, cut.counts, cutAll.scanned, cutAll.partial, full.partial, full.scanned]) + ")", {
+      partial: () => js(cut.partial) === js({ bytes: 1, unread: 2 }) && cut.scanned.files === 2 && cut.featureFiles === 1 && cut.counts.existing === 1,
+      project: () => js(cutAll.partial) === js({ bytes: 1, unread: 3 }) && cutAll.scanned.files === 1,
+      full: () => full.partial === undefined && full.scanned.files === 4 && full.counts.existing === 1 && js(Object.keys(full)) === js(["ok", "feature", "minLines", "featureFiles", "scanned", "skipped", "truncated", "duplicates", "counts", "total"]),
+      keys: () => js(Object.keys(cut)) === js(["ok", "feature", "minLines", "featureFiles", "scanned", "skipped", "truncated", "duplicates", "counts", "total", "partial"]),
+      finishText: () => /^; only part of the project was compared — the detector's byte budget left 2 source files unread$/.test(S.msg("en").finish.duplicatesPartial(2)) &&
+        /left 1 source file unread$/.test(S.msg("en").finish.duplicatesPartial(1)),
+    });
+  }
+
+  // --- 1.30 review 8 (ds-engine 10): .guardian/budgets.yml read as dev-guardian reads it — quality.duplication_pct at the section's ONE
+  // indent; a file dev-guardian refuses (an unknown top-level key or field, a quoted value, a nested map, a list, an empty section)
+  // enforces no budget, so dev-spec reports none ---
+  {
+    const yp = path.join(tmp, "proj-dupes-budgets");
+    S.initProject(yp, ["core"], "en");
+    write(yp, "src/a.js", HELPER.join("\n") + "\n");
+    write(yp, "src/b.js", HELPER.join("\n") + "\n");
+    const limitOf = (text) => { write(yp, ".guardian/budgets.yml", text); const b = S.duplicationReport(yp, {}).budget; return b ? b.limit : null; };
+    const cases = {
+      plain: ["quality:\n  duplication_pct: 5\n", 5],
+      deeperIndent: ["quality:\n    complexity: 10\n    duplication_pct: 9\n", 9],
+      docStart: ["---\n# budgets\nquality:\n  duplication_pct: 3 # tight\n", 3],
+      crlf: ["perf:\r\n  lcp_ms: 2500\r\nquality:\r\n  duplication_pct: 6\r\n", 6],
+      decimal: ["quality:\n  duplication_pct: .5\n", 0.5],
+      flow: ["quality: { complexity: 15, duplication_pct: 4 }\n", 4],
+      nested: ["quality:\n  complexity:\n    duplication_pct: 1\n  duplication_pct: 50\n", null],
+      quoted: ["quality:\n  duplication_pct: \"5\"\n", null],
+      percent: ["quality:\n  duplication_pct: 5%\n", null],
+      unknownTop: ["quality:\n  duplication_pct: 7\nextra: 1\n", null],
+      unknownField: ["quality:\n  duplication_pct: 7\n  coverage_pct: 80\n", null],
+      perfUnknown: ["perf:\n  note: \"quality: x\"\nquality:\n  duplication_pct: 11\n", null],
+      flowNested: ["quality: {complexity: {max: 15}, duplication_pct: 4}\n", null],
+      list: ["quality:\n  - duplication_pct: 2\n", null],
+      emptySection: ["perf:\nquality:\n  duplication_pct: 2\n", null],
+      repeated: ["quality:\n  duplication_pct: 2\n  duplication_pct: 3\n", null],
+      noSpace: ["quality:\n  duplication_pct:5\n", null],
+    };
+    const got = Object.fromEntries(Object.entries(cases).map(([k, [text]]) => [k, limitOf(text)]));
+    all("1.30 review 8: the duplication budget read as dev-guardian's loadBudgets reads .guardian/budgets.yml — the key at the section's one indent (a nested `duplication_pct: 1` under complexity is no limit: the file is invalid there), a block or a flow mapping, comments, `---`, CRLF; a file dev-guardian refuses (unknown key or field, quoted or non-numeric value, nested map, list, empty section, a repeated key) → no budget (got " + js(got) + ")",
+      Object.fromEntries(Object.entries(cases).map(([k, [, want]]) => [k, () => got[k] === want])));
   }
 };

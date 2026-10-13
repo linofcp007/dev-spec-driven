@@ -48,17 +48,58 @@ function exitFlushed(code) {
 function rmTmpDir(dir) {
   try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 15, retryDelay: 100 }); } catch {}
 }
-function sweepStaleTmp(prefix) {
+function sweepStaleTmp(prefix, dir) {
+  const base = dir || os.tmpdir();
   let names = [];
-  try { names = fs.readdirSync(os.tmpdir()); } catch { return; }
+  try { names = fs.readdirSync(base); } catch { return; }
   const cutoff = Date.now() - 2 * 3600 * 1000;
   const shape = new RegExp("^" + prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[A-Za-z0-9]{6}$");
   for (const n of names) {
     if (!shape.test(n)) continue;
-    const p = path.join(os.tmpdir(), n);
+    const p = path.join(base, n);
     try { const st = fs.lstatSync(p); if (st.isDirectory() && !st.isSymbolicLink() && st.mtimeMs < cutoff) rmTmpDir(p); } catch {}
   }
 }
+
+// The temp root (1.30, review 8): a test never depends on WHERE the temp folder is. The shell's TMP / TEMP / TMPDIR may name a folder
+// whose path says "dev-spec" (a partial payload's cwd then "named dev-spec" to the approval hook), lies inside a dev-spec project
+// (a walk-up from a test's folder found ITS .specs/), holds a character a shell reads (a `cd "<tmp>/…"` a test writes broke on a
+// `$`), or — on Windows — is so long that git, with no core.longpaths, could not reach a test repository's files (the pre-commit,
+// worktree and eval-fixture tests failed under a 160-character TMP; a 99-character one passes). The runner
+// takes the first base without such a problem — the shell's temp folder, else the OS user's default one (Windows: %LOCALAPPDATA%\Temp;
+// elsewhere /tmp, /var/tmp) —, makes every chain's folder there and names the base its TMP / TEMP / TMPDIR (os.tmpdir() in a chain,
+// and in what it starts, is the base: the harness's `tmp` and every test's temp files go there too). No deeper nesting than before:
+// a temp path's length is what git's MAX_PATH tests feel. A chain started by hand (isolate()) does the same for itself.
+const RE_TMP_NAMES_US = /dev-?spec|(?:^|[\\/])\.specs(?:[\\/]|$)/i;
+const TMP_LONG_WIN = 100; // characters of a Windows temp base — git's paths stop at 260 without core.longpaths
+function tmpBaseProblem(dir) {
+  const abs = path.resolve(dir);
+  if (RE_TMP_NAMES_US.test(abs)) return "names dev-spec";
+  if (/[$`%!"'\s]/.test(abs.replace(/ /g, ""))) return "holds a character a shell reads ($ ` % ! a quote)"; // (a space is quoted everywhere)
+  if (process.platform === "win32" && abs.length > TMP_LONG_WIN) return `is ${abs.length} characters long`;
+  for (let d = abs; ; d = path.dirname(d)) {
+    try { if (fs.statSync(path.join(d, ".specs")).isDirectory()) return `lies in a project with a .specs/ folder (${d})`; } catch {}
+    if (path.dirname(d) === d) return null;
+  }
+}
+// → { dir, problem (the shell's temp folder's, or null), fallback: none was free of one }
+function neutralTmpBase() {
+  const shell = os.tmpdir();
+  const others = process.platform === "win32"
+    ? [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Temp"), path.join(os.homedir(), "AppData", "Local", "Temp")]
+    : ["/tmp", "/var/tmp"];
+  const problem = tmpBaseProblem(shell);
+  for (const c of [shell, ...others].filter(Boolean)) {
+    if (tmpBaseProblem(c)) continue;
+    try { if (fs.statSync(c).isDirectory()) { fs.accessSync(c, fs.constants.W_OK); return { dir: c, problem }; } } catch {}
+  }
+  return { dir: shell, problem, fallback: true };
+}
+// A chain's environment for its temp folder: TMP / TEMP / TMPDIR (Windows reads TEMP then TMP; POSIX TMPDIR) all name it.
+const tmpEnv = (dir) => ({ TMP: dir, TEMP: dir, TMPDIR: dir });
+// env with tmpEnv(dir) in place of the shell's own — whatever case its names are in (Windows' are case-blind: a `Temp` left beside
+// `TEMP` would give the child two values for one name)
+const withTmpEnv = (env, dir) => ({ ...Object.fromEntries(Object.entries(env).filter(([k]) => !/^(?:TMP|TEMP|TMPDIR)$/i.test(k))), ...tmpEnv(dir) });
 
 // Hermetic chains. A chain never sees the shell the suite was started from: the variables that steer the plugin — the
 // project (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR), the MCP server's switches (SPEC_MCP_*), Claude Code's plugin variables
@@ -69,8 +110,18 @@ function sweepStaleTmp(prefix) {
 // SPEC_PROJECT_DIR exported in the shell. A test that wants one of them sets it for the process it starts. 1.29: nor the
 // maintainer's installed plugins — DEV_GUARDIAN_CLI is dropped and CLAUDE_CONFIG_DIR names an absent folder of the chain's own
 // (isolate()): no dev-guardian plugin cache is found (init / spec_upgrade offer its gate on a machine that has one).
+// 1.30 (review 8, ds-maint 6): nor Node's own steering variables — RE_NODE_ENV: NODE_OPTIONS (a `--require` / `--import` preload, a
+// debugger's bootloader — a VS Code JavaScript Debug Terminal sets one —, --no-warnings, --trace-*: it reached every chain, server,
+// hook and CLI process), NODE_COMPILE_CACHE / NODE_DISABLE_COMPILE_CACHE (where — whether — the facade's compile cache goes),
+// NODE_DEBUG / NODE_DEBUG_NATIVE (stderr lines the stderr-empty checks would read), NODE_V8_COVERAGE, NODE_PATH,
+// NODE_PRESERVE_SYMLINKS(_MAIN), NODE_NO_WARNINGS, NODE_PENDING_DEPRECATION and NODE_REDIRECT_WARNINGS — what a process loads, prints
+// or writes. A test that wants one sets it for the process it starts (02-mcp-server.js's NODE_OPTIONS). DEV_SPEC_TEST_KEEP_NODE_ENV=1
+// keeps them: a run that WANTS them in every chain (NODE_V8_COVERAGE for a coverage run, a profiler's preload).
 const RE_HOST_ENV = /^(?:SPEC_PROJECT_DIR|SPEC_MCP_\w*|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_\w*|CLAUDE_CONFIG_DIR|DEV_GUARDIAN_CLI|DEV_SPEC_(?!TEST_)\w*|COLUMNS)$/i;
-const hostEnvKey = (k) => RE_HOST_ENV.test(k);
+const RE_NODE_ENV = /^NODE_(?:OPTIONS|COMPILE_CACHE|DISABLE_COMPILE_CACHE|DEBUG|DEBUG_NATIVE|V8_COVERAGE|PATH|PRESERVE_SYMLINKS(?:_MAIN)?|NO_WARNINGS|PENDING_DEPRECATION|REDIRECT_WARNINGS)$/i;
+const KEEP_NODE_ENV = "DEV_SPEC_TEST_KEEP_NODE_ENV";
+const keepNodeEnv = () => /^(?:1|true|yes|on)$/i.test(String(process.env[KEEP_NODE_ENV] || "").trim());
+const hostEnvKey = (k) => RE_HOST_ENV.test(k) || (RE_NODE_ENV.test(k) && !keepNodeEnv());
 // env without the host's steering variables (a new object; `env` untouched).
 function hermeticEnv(env) {
   const out = {};
@@ -85,34 +136,49 @@ const samePath = (a, b) => {
 // its own folder (CWD_ENV names the working folder) — it moves into a fresh temp folder of its own (`prefix` + 6 characters,
 // the shape sweepStaleTmp removes when a killed run left it), removed when it exits. Idempotent. The runner's child calls it
 // before it loads a test file; the harnesses call it first thing too, so a harness loaded any other way (a chain started by
-// hand: DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js) is just as isolated. → the working folder.
+// hand: DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js) is just as isolated — its folder made on a neutral temp base and named its
+// TMP / TEMP / TMPDIR, as the runner does (neutralTmpBase). → the working folder.
 function isolate(prefix) {
   for (const k of Object.keys(process.env)) if (hostEnvKey(k)) delete process.env[k];
   const given = process.env[CWD_ENV];
   // Claude Code's config folder (its plugin cache): one that does not exist, inside the chain's own folder
   if (given && samePath(given, process.cwd())) { process.env.CLAUDE_CONFIG_DIR = path.join(process.cwd(), "no-claude-config"); return process.cwd(); }
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix || "dev-spec-test-"));
+  const base = neutralTmpBase().dir;
+  const dir = fs.mkdtempSync(path.join(base, prefix || "test-chain-"));
   process.chdir(dir);
+  Object.assign(process.env, tmpEnv(base));
   process.env[CWD_ENV] = dir;
   process.env.CLAUDE_CONFIG_DIR = path.join(dir, "no-claude-config");
-  process.on("exit", () => { try { process.chdir(os.tmpdir()); } catch {} rmTmpDir(dir); }); // a folder can't go while it is the cwd
+  process.on("exit", () => { try { process.chdir(base); } catch {} rmTmpDir(dir); }); // a folder can't go while it is the cwd
   return dir;
 }
 
-// Start order: the longest chains first — by the files' times in the previous run (<tmp>/dev-spec-test-times-<key>.json;
-// a file never timed counts as the longest) — so the critical path starts at once. The output still comes in file order.
-// Best effort: an unreadable or unwritable times file only changes the order.
-const timesFile = (key) => path.join(os.tmpdir(), `dev-spec-test-times-${key}.json`);
-function readTimes(key) {
+// Start order: the longest chains first — by the files' times in the previous run (the times file; a file never timed counts as
+// the longest) — so the critical path starts at once. The output still comes in file order. Best effort: an unreadable or
+// unwritable times file only changes the order.
+// The times file is the CHECKOUT's (1.30, review 8 — ds-maint 14): <tmp>/dev-spec-test-times-<key>-<10 hex of the root's path>.json.
+// It was <tmp>/dev-spec-test-times-<key>.json, one per machine: every worktree merged its times into it (a worktree's renamed or
+// split files ordered another's run), and nothing ever left it (29 entries of files 1.27 renamed). Each write keeps only the
+// suite's current files — a renamed, merged or deleted file's entry goes with the next run, --only's too.
+function timesFile(key, root) {
+  let r = path.resolve(root || ".");
+  try { r = fs.realpathSync.native(r); } catch {}
+  if (process.platform === "win32" || process.platform === "darwin") r = r.toLowerCase(); // case-blind file systems: one checkout, one file
+  const id = require("crypto").createHash("sha1").update(r).digest("hex").slice(0, 10);
+  return path.join(os.tmpdir(), `dev-spec-test-times-${key}-${id}.json`);
+}
+function readTimes(file) {
   try {
-    const t = JSON.parse(fs.readFileSync(timesFile(key), "utf8"));
+    const t = JSON.parse(fs.readFileSync(file, "utf8"));
     return t && typeof t === "object" && !Array.isArray(t) ? t : {};
   } catch { return {}; }
 }
-function writeTimes(key, stats) {
-  const f = timesFile(key), part = `${f}.${process.pid}.tmp`;
+// `stems`: the suite's files now — an entry of any other (renamed, merged, deleted) is dropped.
+function writeTimes(file, stats, stems) {
+  const f = file, part = `${f}.${process.pid}.tmp`;
   try {
-    const t = readTimes(key);
+    const keep = new Set(stems);
+    const t = Object.fromEntries(Object.entries(readTimes(f)).filter(([stem, ms]) => keep.has(stem) && typeof ms === "number"));
     for (const s of stats) t[s.stem] = s.ms;
     fs.writeFileSync(part, JSON.stringify(t, null, 1));
     fs.renameSync(part, f);
@@ -121,20 +187,22 @@ function writeTimes(key, stats) {
   }
 }
 
-// The suite's files, in name order: { stem, nn, name, file, deps, handshake, head }. A malformed deps list, a dependency
-// naming no file or a dependency cycle is an error — the suite can't be scheduled.
+// One test file (its name in dir) → its entry { stem, nn, name, file, deps, handshake, head }; the file is required.
+function loadFile(dir, f) {
+  const [, nn, name] = f.match(RE_TEST_FILE);
+  const file = path.join(dir, f);
+  const mod = require(file);
+  if (typeof mod.run !== "function") throw new Error(`${f}: exports no run(ctx) function`);
+  const deps = mod.deps == null ? [] : mod.deps;
+  if (!Array.isArray(deps) || deps.some((d) => typeof d !== "string")) throw new Error(`${f}: deps must be a list of file names`);
+  const head = ((fs.readFileSync(file, "utf8").match(/^\/\/ (.+)$/m) || [])[1] || "").trim();
+  return { stem: f.slice(0, -3), nn, name, file, deps, handshake: mod.handshake === true, head };
+}
+// The suite's files, in name order (loadFile's entries). A malformed deps list, a dependency naming no file or a dependency
+// cycle is an error — the suite can't be scheduled.
 function loadFiles(dir) {
   const stemOrder = (a, b) => (a.slice(0, -3) < b.slice(0, -3) ? -1 : 1); // by stem: 04-tracks before 04-tracks-builtin
-  const files = fs.readdirSync(dir).filter((f) => RE_TEST_FILE.test(f)).sort(stemOrder).map((f) => {
-    const [, nn, name] = f.match(RE_TEST_FILE);
-    const file = path.join(dir, f);
-    const mod = require(file);
-    if (typeof mod.run !== "function") throw new Error(`${f}: exports no run(ctx) function`);
-    const deps = mod.deps == null ? [] : mod.deps;
-    if (!Array.isArray(deps) || deps.some((d) => typeof d !== "string")) throw new Error(`${f}: deps must be a list of file names`);
-    const head = ((fs.readFileSync(file, "utf8").match(/^\/\/ (.+)$/m) || [])[1] || "").trim();
-    return { stem: f.slice(0, -3), nn, name, file, deps, handshake: mod.handshake === true, head };
-  });
+  const files = fs.readdirSync(dir).filter((f) => RE_TEST_FILE.test(f)).sort(stemOrder).map((f) => loadFile(dir, f));
   const byStem = new Map(files.map((f) => [f.stem, f]));
   for (const f of files) {
     for (const d of f.deps) if (!byStem.has(d)) throw new Error(`${f.stem}: needs '${d}', which is no file of ${dir}`);
@@ -274,7 +342,13 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
     console.log(`# ${sel.run.length} of ${files.length} files: ${sel.run.map((f) => f.stem).join(", ")}` +
       (sel.pulled.length ? ` (${sel.pulled.map((p) => `${p.stem}, needed by ${p.by}`).join("; ")})` : ""));
   }
-  sweepStaleTmp(opts.tmpPrefix);
+  // the chains' temp base (neutralTmpBase): each chain's folder is made there, and it is the chain's TMP / TEMP / TMPDIR
+  const base = neutralTmpBase();
+  if (base.problem) {
+    console.log(`# temp: the shell's ${os.tmpdir()} ${base.problem} — ` +
+      (base.fallback ? "no neutral temp folder was found: tests that read their paths may fail" : `the chains' temp folder is ${base.dir}`));
+  }
+  sweepStaleTmp(opts.tmpPrefix, base.dir);
 
   const t0 = Date.now();
   // out: stdout and stderr as they came (what is printed) · stdout alone: where the total is read — a Node warning a chain
@@ -299,8 +373,8 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
     const start = (attempt) => {
       let kid;
       try {
-        cwd = cwd || fs.mkdtempSync(path.join(os.tmpdir(), opts.tmpPrefix || "dev-spec-test-"));
-        const env = { ...hermeticEnv(process.env), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
+        cwd = cwd || fs.mkdtempSync(path.join(base.dir, opts.tmpPrefix || "test-chain-"));
+        const env = { ...withTmpEnv(hermeticEnv(process.env), base.dir), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
         kid = spawn(process.execPath, [opts.entry], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
       } catch (e) {
         if (attempt === 0) return void setTimeout(() => start(1), 1000);
@@ -320,7 +394,8 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
   // At most one process per CPU at a time (each MCP chain also runs its own server), the longest chains first; results
   // keep the chain order.
   const all = new Array(chains.length);
-  const times = readTimes(opts.key);
+  const TIMES = timesFile(opts.key, opts.root);
+  const times = readTimes(TIMES);
   const weight = (chain) => chain.reduce((s, f) => s + (typeof times[f.stem] === "number" ? times[f.stem] : Infinity), 0);
   const order = chains.map((c, i) => [weight(c), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).map(([, i]) => i);
   let nextIdx = 0;
@@ -350,7 +425,7 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
       const w = Math.max(...stats.map((s) => s.stem.length), 4);
       for (const s of stats.sort((a, b) => b.ms - a.ms)) console.log(`#   ${s.stem.padEnd(w)}  ${String(s.passed).padStart(4)} passed  ${String(s.failed).padStart(3)} failed  ${secs(s.ms).padStart(7)}`);
     }
-    writeTimes(opts.key, stats);
+    writeTimes(TIMES, stats, files.map((f) => f.stem));
     console.log(`\n${passed} passed, ${failed} failed`);
     exitFlushed(failed ? 1 : 0);
   });
@@ -456,8 +531,10 @@ function remeasure(measure, holds, tries = 2) {
 async function runChildChain(opts) {
   isolate(opts.tmpPrefix); // before any test file or harness loads (a no-op in the folder the runner started it in)
   const stems = String(process.env[CHAIN_ENV]).split(",").filter(Boolean);
-  const files = loadFiles(opts.dir);
-  const chain = stems.map((s) => files.find((f) => f.stem === s));
+  // only the chain's own files (1.30, review 8 — ds-maint 2): requiring every file of the suite to find them cost each chain
+  // ~0.25 s (MCP) / ~0.1 s (CLI); the parent has checked the deps
+  const names = new Set(fs.readdirSync(opts.dir).filter((f) => RE_TEST_FILE.test(f)));
+  const chain = stems.map((s) => (names.has(s + ".js") ? loadFile(opts.dir, s + ".js") : null));
   if (chain.some((f) => !f)) {
     console.log(`unknown test file in ${CHAIN_ENV}='${process.env[CHAIN_ENV]}'\n\n0 passed, 1 failed`);
     return exitFlushed(1);
@@ -496,4 +573,5 @@ function main(opts) {
 }
 
 module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, isolate, hermeticEnv,
-  assertHelpers, firstDiff, remeasure, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_TEST_FILE, CHAIN_TIMEOUT_MS };
+  assertHelpers, firstDiff, remeasure, neutralTmpBase, tmpBaseProblem, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_NODE_ENV, KEEP_NODE_ENV, RE_TEST_FILE, RE_TOTAL, CHAIN_TIMEOUT_MS,
+  timesFile };

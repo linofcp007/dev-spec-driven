@@ -317,13 +317,15 @@ const LAYOUTS = {
   // (trackTasks, numbered on), US-2, Polish. Size S: one core task (US-1's two criteria), then the track blocks (the
   // engine keeps, per track, the tasks that implement a criterion — engine/scaffold.js trimTrackTasks); no setup / foundational /
   // US-2 / polish phases. +tdd: each template test made green by one task (_Makes green:_, templateTests of the tracks and size);
-  // +saas: the latency metric on the first task that carries it; +ai: the golden baseline on the core task.
+  // +saas: the latency metric on the first task that carries it; +ai: the golden baseline on the core task. The core task's
+  // _Implements:_ slot (1.30): the files a task writes are what the scope guard, drift, the duplicate check and dev-guardian's
+  // "[this feature]" read — a [bracketed] slot names no file (engine/tasks.js scanTaskMarkers), the placeholder gate refuses it.
   tasks(T, a) {
     const K = T.tasks, s = a.size === "s";
     const green = a.tracks.includes("tdd") ? templateTests(a.tracks, s ? "s" : undefined) : null;
     const evals = a.tracks.includes("ai") ? "\n  - _Affects evals: golden (maintain baseline)_" : "";
     const metrics = a.tracks.includes("saas") ? "\n  - _Emits metrics: req_duration_ms{feature=" + a.slug + "}_" : "";
-    const verify = `\n  - _Verify: ${K.verify}_`;
+    const verify = `\n  - _Implements: ${K.implements}_\n  - _Verify: ${K.verify}_`;
     let n = 0;
     // one task line (numbered in order), its _Requirements:_ and — makesGreen — the _Makes green:_ of those criteria
     const task = (tags, text, acs, makesGreen) => `- [ ] ${++n}. ${tags} ${text}` + (acs ? `\n  - _Requirements: ${acs.join(", ")}_` : "") +
@@ -434,6 +436,11 @@ function approvalAction(X, a) {
     if (a.setting === "roadmap") return X.roadmapShell;
     if (a.setting === "specs") return a.source === "edit" ? X.specsEdit : X.specsShell;
     if (a.setting === "link") return X.link;
+    // dev-guardian's gate (1.30): its launcher, its baseline, an agent-run `baseline update`, a DEV_GUARDIAN_CLI of the command's own
+    if (a.setting === "guardian-launcher") return X.guardianLauncher;
+    if (a.setting === "guardian-baseline") return X.guardianBaseline;
+    if (a.setting === "guardian-baseline-update") return X.guardianBaselineUpdate;
+    if (a.setting === "guardian-cli") return X.guardianCli;
     return X.lower(a.from, a.to);
   }
   const who = (a.role ? X.asRole(a.role) : "") + (a.by ? X.onBehalf(a.by) : "");

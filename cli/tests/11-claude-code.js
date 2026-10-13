@@ -218,6 +218,37 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
       "1.25.1 r7: statusline outside a dev-spec project prints nothing without loading any engine module (statusProbe agrees with statusLineProject on " + layouts.length +
       " layouts), a project still gets its line; the bare help loads none either; statusline (no project) " + Math.round(s) + " ms vs node -e 0 " + Math.round(n) + " ms and `version` (the engine) " + Math.round(v) +
       " ms (got " + js([disagree, slNone.status, slNone.stderr.slice(-40), slProj.stdout.slice(0, 80), slProj.stderr.slice(-20), help.stderr.slice(-20), dashHelp.stderr.slice(-20)]) + ")");
+
+    // Review 8 (ds-maint finding 5) — in a project the status line loaded the engine after every message. The render is kept
+    // (cli/completion.js statusCache*) with the signature of its .specs/: the same payload renders again without the engine while
+    // nothing under .specs/ changed and the render is fresh; a change under .specs/ (a tick) shows at once, an expired one renders anew.
+    const prc = path.join(tmp, "r8-sl-cache");
+    S16.initProject(prc, ["core"], "en");
+    cFill(S16.createFeature(prc, "Ledger", ["core"], "", undefined, "en").dir, "Ledger");
+    fs.writeFileSync(path.join(prc, ".specs", "ledger", "tasks.md"), "# Tasks: Ledger\n\n## Phase 1\n\n- [ ] 1. Post\n  - _Requirements: US-1.AC-1_\n- [ ] 2. Close\n  - _Requirements: US-1.AC-2_\n");
+    S16.approvePhase(prc, "ledger", null, "t", { through: "tasks" });
+    const payloadC = js({ cwd: prc, workspace: { current_dir: prc, project_dir: prc } });
+    const first = loaded(["statusline"], payloadC), second = loaded(["statusline"], payloadC);
+    S16.completeTask(prc, "ledger", 1, { summary: "posted" }); // a .specs/ change
+    const third = loaded(["statusline"], payloadC), fourth = loaded(["statusline"], payloadC);
+    const key = { cands: [prc, prc, prc].map((x) => path.resolve(x)), columns: null };
+    const cacheFile = C.statusCacheFile(key);
+    let expiredOk = false;
+    try {
+      const entry = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+      fs.writeFileSync(cacheFile, JSON.stringify({ ...entry, at: entry.at - C.STATUS_CACHE_TTL_MS - 1000 }));
+      expiredOk = !/LOADED 0$/.test(loaded(["statusline"], payloadC).stderr);
+    } catch { expiredOk = false; }
+    const fresh = S16.statusLine(prc).line;
+    all("review 8 (ds-maint 5): the status line's render is kept per payload with its .specs/ signature — the same payload again renders without the engine and as the engine does; a tick under .specs/ shows at once; an expired render loads the engine again (got " +
+      js([first.stdout, first.stderr.slice(-12), second.stdout, second.stderr.slice(-12), third.stdout, third.stderr.slice(-12), fourth.stderr.slice(-12)]) + ")", {
+      firstEngine: () => /ledger · 0\/2 tasks/.test(first.stdout) && !/LOADED 0$/.test(first.stderr),
+      secondCached: () => second.stdout === first.stdout && /LOADED 0$/.test(second.stderr),
+      tickShows: () => /ledger · 1\/2 tasks/.test(third.stdout) && !/LOADED 0$/.test(third.stderr) && third.stdout.trim() === fresh,
+      againCached: () => fourth.stdout === third.stdout && /LOADED 0$/.test(fourth.stderr),
+      cacheFile: () => fs.existsSync(cacheFile), expired: () => expiredOk,
+      otherColumns: () => !/LOADED 0$/.test(spawnSync(process.execPath, ["-r", pre, CLI, "statusline"], { encoding: "utf8", input: payloadC, cwd: none, env: { ...envNo, COLUMNS: "30" } }).stderr),
+    });
   }
 
   // 1.25.1 (review 7): in a plugin's versioned cache folder the status line command printed `node "<…/<version>/cli/dev-spec.js>"

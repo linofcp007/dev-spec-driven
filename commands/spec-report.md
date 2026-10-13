@@ -2,7 +2,7 @@
 description: "Reports from the specs: the living catalog, drift since finish, metrics and a retro, release notes, stakeholder exports."
 disable-model-invocation: true
 argument-hint: "[catalog | drift | metrics | changelog | export] [feature] [--write] [--since …] [--milestone …] [--md|--csv|…]"
-allowed-tools: mcp__plugin_dev-spec-driven_spec-driven__spec_drift, mcp__plugin_dev-spec-driven_spec-driven__spec_metrics
+allowed-tools: mcp__plugin_dev-spec-driven_spec-driven__spec_drift
 ---
 
 Args: $ARGUMENTS — everything is derived locally from `.specs/`; no model, nothing sent anywhere.

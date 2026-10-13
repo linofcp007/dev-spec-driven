@@ -63,7 +63,7 @@ No Claude needed: `node "$plugin\mcp\test.js"` and `node "$plugin\cli\test-cli.j
 exit 0 (N grows with every release; what matters is `0 failed`). The raw protocol:
 `'{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node "$plugin\mcp\server.js"` — it also answers `prompts/*` (one
 prompt per command) and `resources/*` (the specs as `specs://` URIs; INTEGRATIONS.md). On Linux too, with Docker:
-`npm run test:docker` from the clone runs both suites in containers (Node 18, 22, 24; read-only mount, no network after
+`npm run test:docker` from the clone runs both suites in containers (Node 18, 22, 24, 26; read-only mount, no network after
 the first pull) and exits 0 / 1 on a failure / 2 without Docker.
 
 ## How the MCP finds your project
@@ -108,9 +108,13 @@ A run Claude Code logged no exit code for (the PowerShell tool alone): record it
 
 **dev-guardian's gate (opt-in).** With the dev-guardian plugin installed, `node "$plugin\cli\dev-spec.js" init --guardian`
 (`spec_init {guardian: true}`; `--guardian off` removes it) adds the project check `guardian`, which `/spec-finish` runs:
-`.specs/guardian.cjs` finds the newest installed dev-guardian at each run (`DEV_GUARDIAN_CLI` overrides it), so updating
-either plugin never breaks it. Its scan takes minutes and needs dev-guardian's scanners; a new high finding blocks until it
-is fixed or you accept it in dev-guardian (`dev-guardian baseline update`, a suppression). `init` offers it, never sets it.
+`.specs/guardian.cjs` finds the installed dev-guardian (3.2.1 or later) at each run — the install Claude Code records, or
+`DEV_GUARDIAN_CLI` naming a `dev-guardian.mjs` — so updating either plugin never breaks it, and the gate runs it only while
+it is the file dev-spec-driven wrote. Its scan takes minutes and needs dev-guardian's scanners on every machine that
+finishes (the check is committed: project-wide). Record the baseline once, on the base commit (`node
+.specs/guardian.cjs baseline update --project .`), and add the `.gitignore` lines `init` prints. A new high finding
+blocks until it is fixed — accept one reviewed finding with an inline suppression, never `baseline update`. `init` offers
+it, never sets it.
 
 **Human approval guard (opt-in, off by default).** A PreToolUse hook (`hooks/approval-hook.js`) that makes approvals a
 human act: when Claude calls `spec_approve` (even with force), runs `dev-spec approve` / `feature remove --yes`, tries
@@ -239,8 +243,9 @@ expected: `CLAUDE.md` holds the maintainers' notes, not context for your project
    stamps `meta.specVersion`. It never edits a spec, approves, ticks or deletes anything.
 3. **Refresh what names the old folder** (a marketplace install): `merge-state --install`, the pre-commit hook, a bundle.
 
+From 1.27 or earlier: an m / l design needs its Reuse & Integration (the audit lists each design approved without one).
 From 1.25 or earlier: the slash commands were renamed — the table is in
-[README.md → Upgrading](./README.md#upgrading-from-125-or-earlier); your specs need no change.
+[README.md → Upgrading](./README.md#upgrading); your specs need no change.
 
 ## Troubleshooting
 

@@ -67,7 +67,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname, require }) => {
       // remove: the link alone goes — the preview says so (no file of the target counted), the target keeps every file and gets no lock
       const pv = S.manageFeature(p, "remove", "victim");
       const rm = S.manageFeature(p, "remove", "victim", undefined, { confirm: true });
-      ok(pv.needsConfirm === true && pv.link === true && pv.wouldDelete.files === 0 && /deletes only the link — the folder it points at and its files are kept/.test(pv.error) &&
+      ok(pv.needsConfirm === true && pv.link === true && pv.wouldDelete.files === 0 && String(pv.error).includes(S.msg("en").featureOps.removeNeedsConfirmLink("victim")) &&
         rm.ok === true && rm.link === true && !fs.existsSync(real) && snap(out) === before && !fs.existsSync(path.join(out, ".lock")) && !S.roadmap(p).features.some((f) => f.name === "victim"),
         "1.24 r6 G1: remove of a linked feature folder previews 'only the link' (0 files, link: true) and removes the link alone — the target folder and its files untouched, no lock created through it (got " +
         js([pv.wouldDelete, pv.error && pv.error.slice(0, 60), rm.ok, rm.error]) + ")");
@@ -241,7 +241,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname, require }) => {
     S.createFeature(p, "login", ["core"], "Users can log in");
     const b = S.backlog(p, "add", "Single sign on", "later");
     const rn = S.renameFeature(p, "login", "Single sign on");
-    ok(b.ok && rn.ok && rn.to === "single-sign-on" && js(rn.removedFromBacklog) === js(["Single sign on"]) && js(S.readRoadmap(p).backlog) === "[]" &&
+    ok(b.ok && rn.ok && rn.to === "single-sign-on" && js(rn.removedFromBacklog) === js([{ name: "Single sign on", note: "later" }]) && js(S.readRoadmap(p).backlog) === "[]" &&
       !/\*\*Single sign on\*\*/.test(rd(p, ".specs", "ROADMAP.md")),
       "1.24 r6 G5: renaming a feature onto a backlog item's name drops that item (removedFromBacklog) — never listed twice in ROADMAP.md (got " + js([rn.removedFromBacklog, S.readRoadmap(p).backlog]) + ")");
   }

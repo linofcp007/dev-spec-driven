@@ -867,7 +867,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require }) => {
     ok(/## Decisions\n\nThe context, choice and consequences of each decision are in decisions\.md\.\n\n- \*\*D-1\*\* — Where to store the offset: A column on tasks _\(critical\)_\n- \*\*D-2\*\* — How to send: SMTP\n- \*\*D-3\*\* — Digest or one e-mail per task\n- \*\*D-4\*\* — SMS as well: rejected — “Not now”/.test(des1) &&
       /## Alternatives & Trade-offs\n\n\| Decision \| Option \| Pros \| Cons \| Effort \|\n\|---\|---\|---\|---\|---\|\n\| D-1 Where to store the offset \| \*\*A column on tasks\*\* \(chosen\) \| One query \| A schema change \| S \|\n\| D-1 Where to store the offset \| A reminders table \| Several reminders per task \| A join on every read \| M \|/.test(des1) &&
       /## Context\n\nThe app is an Express API with a SQLite database\.\n\nSource document: `docs\/reminders\.md`/.test(des1) && /## Glossary\n\n- \*\*Offset\*\* — How long before/.test(des1) &&
-      /## Final check\n\n- \[ \] `npm test -- task`/.test(des1) && b1.warnings.some((w) => /round history \(rounds\/, the verdicts of earlier rounds\) is not imported — the settled decisions are, with their latest revision note/.test(w)) &&
+      /## Final check\n\n- \[ \] `npm test -- task`/.test(des1) && b1.warnings.some((w) => String(w).includes(S.msg("en").importFluidplan.wRounds)) &&
       rd(fa, ".fluidplan", "reminders", "PLAN.md") === planMd && rd(fa, ".fluidplan", "reminders", "DECISIONS.md") === decMd && js(JSON.parse(rd(fa, ".fluidplan", "reminders", "plan.json"))) === js(plan),
       "1.17 F1: design.md — ## Decisions (D-n + choice), ## Alternatives & Trade-offs (every option: pros / cons / effort, the chosen one first), the rest of the context + the source document, the glossary and the final check; the round history named in a warning; the source files untouched");
 
@@ -928,7 +928,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require }) => {
     const f4b = safe(() => S.importSpec(fc, "fluidplan", "out/PLAN_rem.md", { tracks: ["core"], name: "Plan and decisions" }));
     const log4b = S.decisionLog(fdir(fc, "plan-and-decisions", "decisions.md"));
     ok(f4.ok && f4.source === "docs/PLAN_reminders.md" && f4.mapping["Phase 1 — Data"] === "US-1" && f4.mapping["Phase 2 — Delivery"] === "US-2" && /### US-1: Phase 1 — Data/.test(req4) &&
-      f4.warnings.some((w) => /no DECISIONS\.md and no plan\.json beside PLAN\.md/.test(w)) &&
+      f4.warnings.some((w) => String(w).includes(S.msg("en").importFluidplan.wNoDecisions)) &&
       js(log4.map((e) => [e.id, e.title])) === js([["D-1", "Digest or one e-mail per task"], ["D-2", "Where to store the offset"], ["D-3", "How to send"], ["D-4", "SMS as well"]]) &&
       (log4[1] || {}).decision === "A column on tasks" && /Importance: critical/.test((log4[1] || {}).context || "") && /^Rejected — not part of this feature: “Not now”$/.test((log4[3] || {}).decision || "") &&
       f4b.ok && log4b.length === 4 && /pros: One query|con: A join on every read/.test(((log4b[0] || {}).consequences) || "") && !f4b.warnings.some((w) => /no DECISIONS\.md/.test(w)),

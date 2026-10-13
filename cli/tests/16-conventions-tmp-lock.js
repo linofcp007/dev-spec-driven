@@ -4,6 +4,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, run, runIn, tmp, CLI }) => {
@@ -52,7 +53,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI }) => {
   const kept14 = fs.existsSync(kDir14) && !fs.existsSync(path.join(kDir14, "load-test.md")) && !fs.existsSync(path.join(k14, ".specs", "sprint"));
   const rnFree14 = runIn(["feature", "rename", "race", "sprint", "--project", k14]);
   ok(rn14.code === 1 && /Another dev-spec process is updating 'race' right now/.test(rn14.out) && cr14.code === 1 && /updating 'race' right now/.test(cr14.out) &&
-    bl14r.code === 1 && /updating \.specs\/roadmap\.json right now \(\.specs\/\.roadmap\.lock\)/.test(bl14r.out) && kept14 && rnFree14.code === 0 && !fs.existsSync(path.join(k14, ".specs", "sprint", ".lock")) && !fs.existsSync(kDir14),
+    bl14r.code === 1 && String(bl14r.out).includes(MSG("en").err.roadmapBusy) && kept14 && rnFree14.code === 0 && !fs.existsSync(path.join(k14, ".specs", "sprint", ".lock")) && !fs.existsSync(kDir14),
     "feature rename / create on a held feature lock and backlog add on a held roadmap lock: exit 1, busy, nothing changed; once free the rename moves the folder and leaves no .lock (got " +
     JSON.stringify([rn14.code, rn14.out.slice(0, 80), cr14.code, cr14.out.slice(0, 80), bl14r.code, bl14r.out.slice(0, 80), rnFree14.code, rnFree14.out.slice(0, 80)]) + ")");
   // A stale lock that can't be removed (a folder named .lock, an hour old): done answers the stuck-lock error at the

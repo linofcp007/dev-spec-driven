@@ -13,7 +13,7 @@ const TOOLS_LIST_CAP = 44500;
 
 exports.handshake = true; // this file counts the handshake's assertions — every other process runs it muted
 exports.run = async ({
-  ok, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename,
+  ok, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename, hookIn,
 }) => {
 
   { // --- 1.13 WP3: robustness — MCP argument validation, prototype keys, JSON shapes, depend, evals, pre-commit ---
@@ -286,7 +286,7 @@ exports.run = async ({
     ok(evBadDry.status === 1 && itemLines(evBadDry.stdout) === ["regression.json — item r1: tipo de avaliador desconhecido 'contain' (usa contains | equals | regex | refuse | judge)",
       "regression.json — item r2: a regex não compila: Invalid regular expression: /(pago/i: Unterminated group", "regression.json — item #3: sem 'id' (texto não vazio); sem objeto 'expect'",
       "regression.json — item r4: sem 'input' (texto não vazio)", "regression.json — item #5: não é um objeto", "regression.json — item r6: 'judge' precisa de uma 'rubric'",
-      "regression.json — item r7: 'contains' precisa de um 'value'"].join("\n") && /golden: 1 item/.test(evBadDry.stdout) && /O dry run encontrou conjunto\(s\) de evals inválido\(s\)/.test(evBadDry.stdout) &&
+      "regression.json — item r7: 'contains' precisa de um 'value'"].join("\n") && /golden: 1 item/.test(evBadDry.stdout) && String(evBadDry.stdout).includes(S.msg("pt").evals.dryInvalid) &&
       evBadLive.status === 1 && itemLines(evBadLive.stdout) === itemLines(evBadDry.stdout) && /nenhum modelo foi chamado/.test(evBadLive.stdout) && !fs.existsSync(markEv),
       "run-evals validates every item (object, id, input, a known grader, value / a compiling regex / rubric) — dry run exit 1 with one line per bad item; a live run refuses before any model call (localized, PT) (got " + JSON.stringify(itemLines(evBadDry.stdout)) + ")");
     fs.rmSync(path.join(evDir, "regression.json"));
@@ -411,7 +411,9 @@ exports.run = async ({
     }
 
     // 8. No invisible code points in this file (the BOM test writes it as an escape).
-    const suiteSrc = [__filename, path.join(root, "scripts", "test-runner.js"), ...fs.readdirSync(path.join(__dirname, "tests")).map((f) => path.join(__dirname, "tests", f))]; // the runner, the shared runner, every file of mcp/tests/
+    // (1.30: mcp/tests/fixtures/ — its files too)
+    const testFiles = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? testFiles(path.join(d, e.name)) : [path.join(d, e.name)]));
+    const suiteSrc = [__filename, path.join(root, "scripts", "test-runner.js"), ...testFiles(path.join(__dirname, "tests"))]; // the runner, the shared runner, every file of mcp/tests/
     ok(suiteSrc.length > 10 && !suiteSrc.some((f) => fs.readFileSync(f, "utf8").includes(String.fromCharCode(0xfeff))), "mcp/test.js carries no literal U+FEFF");
   }
 
@@ -435,7 +437,7 @@ exports.run = async ({
     "doctor's traceability detail is localized (PT)");
   // The hook used to print "Traceability gaps in <f>:" and an empty "- " when the only gap was a missing file.
   fs.writeFileSync(path.join(w4f.dir, "tasks.md"), "- [x] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-02_\n  - _Implements: src/nope.js_\n"); // ticked: 1.13 plannedImplFiles
-  const hkTr = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(w4f.dir, "tasks.md") } }), encoding: "utf8" });
+  const hkTr = hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(w4f.dir, "tasks.md") } }), encoding: "utf8" });
   const hkTrTxt = JSON.parse(hkTr.stdout).hookSpecificOutput.additionalContext;
   ok(/Traceability gaps in gaps/.test(hkTrTxt) && /_Implements:_ files that don't exist: src\/nope\.js/.test(hkTrTxt) && !/^\s*-\s*$/m.test(hkTrTxt),
     "PostToolUse trace message lists the gap it found (missing _Implements:_ file), never an empty '- '");
@@ -443,7 +445,7 @@ exports.run = async ({
   S.initProject(esW4, [], "es");
   const esW4f = S.createFeature(esW4, "Pagos", ["core"]);
   fs.writeFileSync(path.join(esW4f.dir, "tasks.md"), "- [x] 1. a\n- [ ] 2. b\n");
-  const hkEs = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: esW4 } });
+  const hkEs = hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: esW4 } });
   ok(/en ejecución \(1\/2 tareas\)/.test(hkEs.stdout) && !/executing/.test(hkEs.stdout), "SessionStart phase names are localized (ES 'en ejecución')");
 
   // spec_roadmap: a failed write is an error with the reason (the CLI already exited 1), not wrote:[] + success.
@@ -615,7 +617,7 @@ exports.run = async ({
     ]);
     ok(gBad.every((r) => r.error && r.error.code === -32602 && !r.result) && /^Unknown prompt 'nope' — one of: .*spec-change/.test(gBad[0].error.message) &&
       /Unknown prompt '\.\.\/README'/.test(gBad[1].error.message) && /needs the prompt `name`/.test(gBad[3].error.message) &&
-      [4, 5, 6].every((i) => /`arguments` must be an object of strings/.test(gBad[i].error.message)),
+      [4, 5, 6].every((i) => String(gBad[i].error.message).includes(S.msg("en").promptsResources.err.badPromptArgs)),
       "prompts/get: an unknown prompt (also '../README', 'spec-change.md', 'constructor'), no name or non-string arguments → JSON-RPC -32602 with a clear message");
 
     // resources/list — ROADMAP.md, SPECS.md, steering, each active feature's allowlisted artifacts; nothing else.
@@ -1357,8 +1359,11 @@ exports.run = async ({
 
     { // 1.25.1 (review 7): the initialize instructions name spec_next_action (clients without the skill) and claim only what holds
       const ins = (await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })).result.instructions;
+      // 1.30 review 8: spec_import's limits moved from the instructions (paid every session) into its own description
+      const impDesc = ((await rpc("tools/list", {})).result.tools.find((t) => t.name === "spec_import") || {}).description || "";
       ok(/spec_next_action \{name\}/.test(ins) && /where am I \/ what now/.test(ins) && !/All file ops are local to the project's \.specs\/ directory/.test(ins) &&
-        /writes stay in the project's \.specs\/, reads inside the project/.test(ins) && /never a hidden folder or a non-document file/.test(ins),
+        /writes stay in the project's \.specs\/, reads inside the project/.test(ins) && !/never a hidden folder/.test(ins) &&
+        /inside the project \(never a hidden folder or a non-document file; with another projectDir, only a dev-spec project's\)/.test(impDesc),
         "1.25.1 r7: initialize's instructions point at spec_next_action for 'where am I / what now?' and say what is local (writes in .specs/, reads inside the project — spec_import's limits) instead of 'All file ops are local to .specs/' (got " + js(ins.slice(0, 200)) + ")");
     }
   }

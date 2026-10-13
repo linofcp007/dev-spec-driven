@@ -188,10 +188,18 @@ History at the end.
   user's commands (`execCommand`); cli/git.js every git call (`gitRun`: one environment, the user's locale — never parse git's
   words); cli/completion.js the completion.
 - **The table:** every command is ONE entry of `COMMANDS` (cli/commands.js) — `name`, `aliases`, `options` (value flags from
-  `VALUE_FLAG_SPECS`, else switches of `spec.CLI_SWITCHES`), `max`, `bounds`, completion `args` / `sub` / `values`, `text`,
+  `VALUE_FLAG_SPECS`, else switches of mcp/lib/probe.js `CLI_SWITCHES`), `max`, `bounds`, completion `args` / `sub` / `values`, `text`,
   `help` and `run(c)`. `VALUE_FLAGS`, `COMMAND_OPTIONS`, `COMMAND_ARGS`, `FLAG_VALUES`, `TEXT_ONLY_COMMANDS`, `HELP_ALIASES`,
-  `helpText()` / `helpFor()` and `completionModel()` are DERIVED — never hand-written. A new command is an entry, a new flag a
-  name in each reading entry's `options` (extending.md); one without a structured result says `text: true`.
+  `helpText()` / `helpFor()` and `completionModel()` are DERIVED — never hand-written. A new command is an entry; one without a
+  structured result says `text: true`.
+- **A command's options come from the operations table** (1.30): a command that runs operations says `options: TABLE` and
+  reads them from mcp/lib/operations.js `cliOptions(command)` — each of its operations' arguments' `cli` flags (but a flag its
+  command implies, `cmd`), then `cliOnly`, in the table's order, which is the order `--help` and completion show (keep an
+  operation's args in it). Read on first use (a getter; `COMMAND_OPTIONS` a proxy built then): the status line and the bare
+  help never load the table. A hand-written list stays only where the help shows another order than the table can give — init,
+  spike (create's operation minus the bugfix prefill, size and body), done / undone (one operation, two orders), changelog and
+  depend (whose args' order is the MCP mode's `takes` message) — and cli/tests/02-surfaces-parity.js holds it to the table's
+  flags. A new flag of an operation is its `cli` in the table (+ `VALUE_FLAG_SPECS` / `CLI_SWITCHES`, + a hand-kept list).
 - **The call:** `main` never exits the process and keeps no state between calls — each call has its own context `c`
   (`createContext`); a usage error or a refusal throws `CliExit`; `io.env` / `io.cwd` apply for the call and are restored. A
   call is SYNCHRONOUS unless the command waits (`done --run` / `finish --run`, stdin from a stream) — only there does a handler
@@ -203,8 +211,16 @@ History at the end.
   another runs. The regexes are built from char codes. A `_Verify:_` or project check holding control characters never runs
   (`code: "control-chars"`); spec_init refuses one, doctor fails `verify-control`.
 - **The engine loads on first use:** `spec` is a proxy (`loadSpec()`, cli/commands.js); the status line outside a project
-  (`statusProbe`) and the bare help (`BARE_HELP`) never load it, so nothing at the top of cli/main.js or cli/commands.js may
-  read `spec.*` at load (`BOOL_FLAGS()`, `spec.LANGS` are read on use).
+  (`statusProbe`) — and in one while its render cache holds (claude-code-integration.md → Status line) — and the bare help
+  (`BARE_HELP`) never load it, so nothing at the top of cli/main.js or cli/commands.js may read `spec.*` at load (`BOOL_FLAGS()`,
+  `spec.LANGS` are read on use). Nor does a command's help (`help <command>`, `<command> --help`), an unknown command or a usage
+  error found before the handler runs (review 8): `c.projectDir` / `PROJECT_SOURCE` resolve on first read (`NAMED_SOURCE`, which
+  checkProject reads, needs no engine), `c.cliText` reads mcp/lib/i18n.js's tables (`spec.msg` IS `i18n.msg`) and `c.projectLang()`
+  is the engine's `projectLang` once `engineLoaded()`, else `lightProjectLang()` — the CLI's resolver walk (cli/completion.js
+  `resolveProject`) and roadmap.json's `meta.lang` read raw; cli/tests/16-conventions-cli-modules.js checks both print the same.
+  cli/run.js and cli/git.js load on first use too. Nor does an unknown `--flag` or a switch given a non-boolean (1.30): the switch
+  list (`CLI_SWITCHES`) and the did-you-mean (`closestName`) are mcp/lib/probe.js's — one copy, the engine's are them. A handler's
+  own usage error still loads it where the handler reads `projectDir` (its destructure) before its usage check.
 
 ### CLI exit codes and `--json`
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
@@ -223,6 +239,12 @@ History at the end.
 ### CLI arguments — each command reads its own options and arguments
 - **CLI `--lang` is the MCP enum:** folded like it (`spec.canonicalLang`: `PT` → `pt`, `pt_BR` → `pt-BR`), refused outside
   `spec.LANGS` before any command runs — `normalizeLang()` would save `fr` as `en`.
+- **An enum the engine checks itself** (the CLI's raw word reaches it; MCP's schema refused it already): ONE reader,
+  `enumArg(name, values, v, lng, {fold, blankGiven})` (engine/state.js, 1.30) — trimmed and lower-cased (a fold of its own:
+  `langOption` canonicalizes), absent / null / blank = not given, else `{ok: false, error, code: "invalid-arguments",
+  invalid: [name]}` in the MCP validator's words. `parseFlow`, `sizeInput`, `langOption`, the backlog / milestone / templates /
+  tracks / feature actions (feature's: `blankGiven`), export's format, create's kind (`blankGiven`) and impact's phase read
+  through it — a new enum does too; a refusal the engine returns whole carries the code to the CLI's `--json` as MCP's does.
 - **Per command:** `checkCommandArgs()` refuses, before anything runs, a known flag the command doesn't read
   (`cliOutput.flagNotFor`) and an argument past its `max`; `--json`, `--project`, `--help` are global (`GLOBAL_OPTIONS`);
   `backlog`, `log` and `feature` check theirs per action. Contradictions are usage errors (`depend … --clear`, `--timeout`
@@ -243,10 +265,10 @@ History at the end.
 
 ### CLI boolean switches are read with `on(k)`, never by truthiness
 - **`--x=false` is the string "false".** `normalizeBoolFlags()` turns `true|false|1|0|yes|no|on|off` into booleans for every
-  name in `BOOL_FLAGS` and refuses other values. `BOOL_FLAGS` is `[...spec.CLI_SWITCHES]` — ONE list, which the approval hook's
+  name in `BOOL_FLAGS` and refuses other values. `BOOL_FLAGS` is `[...CLI_SWITCHES]` (mcp/lib/probe.js, 1.30 — `spec.CLI_SWITCHES` is the same Set) — ONE list, which the approval hook's
   lexer (`cliApprovalAction()`) reads too: a new switch goes there (in a CLI-only list the hook would read the next word as its
   value), a new value flag into `VALUE_FLAG_SPECS`. `refuseUnknownFlags()` refuses any other `--flag` (a did-you-mean:
-  `spec.closestName`, the engine's one, which the eval harness and the track / argument refusals read too); `evals`
+  probe.js `closestName` — the engine's one, which the eval harness and the track / argument refusals read too); `evals`
   is exempt (run-evals.js refuses its own, `dry-run` included); `--` ends the options. An explicit `--include-body=false`
   reaches the engine as false (`boolFlag()`), as on MCP.
 - **Help:** `--help` anywhere runs nothing. `<command> --help`, `-h` (a switch) and `help <command>` print `helpFor()` — the
@@ -398,6 +420,15 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — the command table (`COMMANDS`) and the call contract (`main(argv, io)`, `CliExit` — it was `process.exit(1)`); the
   CLI split into cli/dev-spec.js, cli/main.js, cli/commands.js, cli/run.js and cli/git.js; `guarded()` became the one choke
   point.
+- **1.30 review 8 (ds-maint 3)** — an option was declared in 5–6 places (the schema, the operations table's `cli`, the
+  command's `options`, its help, `CLI_SWITCHES` / `VALUE_FLAG_SPECS`), kept consistent by tests: 37 of the 43 commands that run
+  operations now take their `options` from the table (`options: TABLE`, `cliOptions`); the help, completion and every
+  `COMMAND_OPTIONS` entry stayed byte-identical (the table's args were put in the help's order for create, approve, feature,
+  import and decide). Switch vs value still comes from `CLI_SWITCHES` / `VALUE_FLAG_SPECS` (the approval hook's lexer reads them).
+- **1.30 (review 8, ds-maint finding 13)** — `help <command>`, `<command> --help` and an unknown command each loaded the whole
+  engine to print text (+170–185 ms over `node -e 0`), and every call required cli/run.js and cli/git.js. Measured (Windows, Node 26,
+  median of 21 interleaved fresh processes, `node -e 0` 51 ms): `help approve` 164 → 82 ms, `approve --help` 163 → 86, an unknown
+  command 167 → 79 (`version`, which loads the engine, 166 → 164).
 
 ### CLI exit codes and `--json`
 - **1.12** — the scriptable exit codes. **1.13** — `--json` prints refusals (`fail(r)`).
@@ -411,6 +442,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 
 ### CLI arguments
 - **1.13** — `--lang` is checked against the MCP enum (the engine saved `fr` as `en`).
+- **1.30 review 8 (ds-maint 12)** — seven copies of the enum check (`parseFlow`, `sizeInput`, `langOption`, the backlog and
+  milestone actions, export's format, create's kind) became `enumArg`; the templates / tracks / feature actions too, whose CLI
+  refusals had words of their own ("Unknown templates action 'x' — one of: …", "action must be one of: remove | archive | …")
+  and no code where MCP answered `invalid-arguments`.
 - **1.23 review** — each command reads its own options and arguments: `approve <f> <phase> --remove` (meant --revoke) approved,
   `done <f> 3 4` ticked task 3 alone. **L14** — `--project` names an existing folder: `create x --project <typo>` created the
   whole mistyped tree. **P1** — `evals` forwards every word: only the words after the feature were forwarded, so `evals
@@ -427,6 +462,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.13** — `--x=false` honored: `done --run=false` ran the `_Verify:_` commands. `refuseUnknownFlags()`: `done 2 --rnu` ticked
   the task with no evidence.
 - **1.14** — `BOOL_FLAGS` became `[...spec.CLI_SWITCHES]`, the list the approval hook's lexer reads.
+- **1.30 (review 8, ds-maint 13)** — `CLI_SWITCHES` moved from engine/guards.js and `closestName` from engine/core.js to
+  mcp/lib/probe.js (one copy; the engine and the facade export the probe's): a mistyped `--flag` loaded the whole engine (~0.17 s) to be
+  refused. Switch-vs-value stays a hand-kept list (not derived from the operations table's `type`): a third of the switches are
+  `parsed` arguments whose `cli` list mixes switches and value flags (export's `--md` … `--tracker`, done's `--run` / `--evidence`,
+  append-tasks' `--parallel` / `--expect-fail`), the rest commands with no operation (`--print-config`, `--install`) and the globals;
+  cli/tests/02-surfaces-parity.js holds every `type: switch | bool` argument to the list.
 - **1.22 review** — the validator's own words (`msg(lang).args`): `-1` read "must be an integer".
 - **1.24 r6 B-I3** — per-command help (`helpFor()`); `-h` became a switch (`status -h` looked for a feature "h"). **B6** —
   `--timeout` ≤ 2147483 (`cliOutput.atMost`). A roadmap `order` became a safe integer: `99999999999999999999` matched the digits

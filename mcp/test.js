@@ -22,7 +22,7 @@ const path = require("path");
 
 require("../scripts/test-runner.js").main({
   suite: "MCP server",
-  key: "mcp", // the times file: <tmp>/dev-spec-test-times-mcp.json (the longest files start first)
+  key: "mcp", // the times file: <tmp>/dev-spec-test-times-mcp-<this checkout>.json (the longest files start first)
   root: path.join(__dirname, ".."),
   dir: path.join(__dirname, "tests"),
   entry: __filename,
