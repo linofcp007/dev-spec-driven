@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSources, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSources, require, __dirname, hookIn }) => {
 
   { // --- 1.13 batch 4: localized roadmap phase / doctor ears detail / add-track entries, guard code types, numbers & enums refused on every surface ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -104,7 +104,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     fs.mkdirSync(path.join(specs14, "ROADMAP.md"));
     const bl14a = S.backlog(t14, "add", "Later one");
     const bl14b = payload(await call("spec_backlog", { action: "add", name: "Later two", projectDir: t14 }));
-    const post14 = (file, dir) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: file } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+    const post14 = (file, dir) => hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: file } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
     const hk14 = post14(path.join(t14f.dir, "tasks.md"), t14);
     let thrown14 = null;
     try { S.writeRoadmapMd(t14); } catch (e) { thrown14 = e; }
@@ -151,7 +151,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       fs.writeFileSync(path.join(d, "spec.md"), "# Spec\n");
       fs.writeFileSync(path.join(d, "tasks.md"), "- [x] 1. done thing\n- [ ] 2. open thing\n");
     });
-    const sess14 = (dir, source) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir, source }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
+    const sess14 = (dir, source) => hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir, source }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } });
     const fStart14 = sess14(f14, "startup"), fCompact14 = sess14(f14, "compact");
     const fList14 = fs.readdirSync(path.join(f14, ".specs")).sort().join();
     fs.writeFileSync(path.join(f14, ".specs", "auth", "classification.md"), "# Classification\n");
@@ -1054,7 +1054,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     // The SessionStart hook: ONE line while the configured script is missing (or another copy), none once it is this clone's.
     const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
     const session = () => {
-      const r = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: repo }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: repo, SPEC_PROJECT_DIR: repo } });
+      const r = hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: repo }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: repo, SPEC_PROJECT_DIR: repo } });
       try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; }
     };
     setDriver(gone);

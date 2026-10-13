@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
+exports.run = async ({ ok, all, S, tmp, rpc, payload, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the lexer) — read through mcp/test.js's require
   let HU; // what the hooks share before the engine loads (hooks/hook-utils.js — no engine)
   try { HU = require("../hooks/hook-utils.js"); } catch { HU = { approvalProjects: () => [], editTargets: () => [], sessionFlagFile: () => path.join(os.tmpdir(), "none") }; }
@@ -15,9 +15,10 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, __dirname, require }) => {
   const BS = String.fromCharCode(92);
   const WIN = process.platform === "win32";
   const hookEnv = (env) => ({ ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) });
+  // the hook's decision in this process (harness hookIn — review 8: its spawns were most of this file's time); the process
+  // boundary — stdin's safety net, the preloaded probe — keeps real processes below
   const hookOut = (name, pl, env) => {
-    const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", name + ".js")], { input: typeof pl === "string" ? pl : js(pl),
-      encoding: "utf8", env: hookEnv(env), cwd: tmp, timeout: 20000 });
+    const r = hookIn(path.join(__dirname, "..", "hooks", name + ".js"), { input: typeof pl === "string" ? pl : js(pl), env: hookEnv(env), cwd: tmp });
     let j = null;
     try { j = r.stdout ? JSON.parse(r.stdout) : null; } catch { j = { unparsed: r.stdout }; }
     return { status: r.status, json: j, stdout: r.stdout, stderr: r.stderr };

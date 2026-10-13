@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
-exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require }) => {
+exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, hookIn, require }) => {
 
   // 1.16 package (C) — Claude Code integration: status line, user defaults (DEV_SPEC_*), annotations / completion, plan-mode bridge.
 
@@ -69,7 +69,8 @@ exports.run = async ({ ok, rpc, payload, S, root, tmp, SERVER, abort, require })
       const stop = () => new Promise((resolve) => { kid.on("exit", resolve); kid.stdin.end(); });
       return { req, stop };
     };
-    const hook = (script, input, env) => spawnSync(process.execPath, [path.join(root, "hooks", script)],
+    // the hook in this process (harness hookIn, review 8); the network-path timings below keep real processes
+    const hook = (script, input, env) => hookIn(path.join(root, "hooks", script),
       { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8", env: childEnv(env), timeout: 30000 });
     const jsonOut = (r) => { try { return JSON.parse(r.stdout); } catch { return null; } };
     const none = fs.mkdtempSync(path.join(os.tmpdir(), "p16c-none-")); // no .specs/ at or above it

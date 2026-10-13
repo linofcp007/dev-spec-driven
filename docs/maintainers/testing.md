@@ -39,7 +39,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   that doesn't settle at once — every helper sends `--run` calls to spawnSync), EPIPE, a real stdin pipe or a TTY, a process's
   own timing or loaded modules (a preload), `DEV_SPEC_BUNDLE` (the facade picks the bundle at load), a lock held by another live
   process, `__complete` and the completion scripts' shells, git running the merge driver. 16-conventions-cli-modules.js checks
-  runIn = run on a set of calls.
+  runIn = run on a set of calls. **The hooks the same way (1.30, review 8):** the MCP harness's **`hookIn(file, {input, env, cwd,
+  timedOut})`** runs a hook's exported `decide()` in the test process with spawnSync's `{ status, stdout, stderr }` (env the whole
+  environment, applied and restored with the working folder — claude-code-integration.md → A hook IS its decision). **Call a hook
+  in-process unless the test is about its process:** stdin (an oversized or partial payload — `timedOut` stands in for the safety
+  net in-process), the flushed exit, the exec form, what a fresh process loads (a `-r` preload), its timing, a copy of the hooks over
+  a broken engine. The hook tests' spawns were most of 10-guards*.js's time (the area's critical path).
 - **How it runs.** A file is independent unless it declares `exports.deps` — the files it needs to have run first IN THE
   SAME PROCESS, because it reads a project folder they built or a value one of them returned (`return { vDir }` from
   `run` joins the context of the files after it) — say which in a comment above `deps`. A file and
@@ -202,3 +207,9 @@ How the rules above came to be — grep a release here.
   per language) as a comment, the detector as the string it is — so the stale allowance went; 56 of 40,697 code lines (0.1 %).
 - **1.29** — hermetic chains also leave out the maintainer's installed plugins (`DEV_GUARDIAN_CLI` dropped, `CLAUDE_CONFIG_DIR` an
   absent folder of the chain's own): with dev-guardian installed, every `init` in the suites would have printed its offer.
+- **1.30 (review 8, ds-maint finding 1)** — the hooks had no in-process entry, so the MCP suite's hook tests spawned ~390 hook
+  processes (10-guards-guard-downs alone 57: ~24 of its 27 s). Every hook exports `decide()` and the harness's `hookIn` calls it;
+  real processes stay where the test is about one. Measured (the ten hook-heavy files, `--jobs 4`, two rounds each on a loaded
+  machine, seconds): 10-guards 57 / 47 → 17 / 24, 10-guards-guard-downs 32 / 36 → 16 / 23, 10-guards-shell-writes 14 / 13 → 3 / 6,
+  10-guards-hooks 10 / 11 → 3 / 4, 12-lifecycle 57 / 68 → 30 / 41, 05-markdown-trace 61 / 76 → 42 / 54, 16-conventions 50 / 53 →
+  31 / 34, 09-evidence 44 / 76 → 33 / 42.

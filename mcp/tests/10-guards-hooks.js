@@ -6,13 +6,14 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the lexer, the candidates) — read through mcp/test.js's require
   const js = JSON.stringify;
   const BS = String.fromCharCode(92);
+  // the hook's decision in this process (harness hookIn, review 8)
   const hookOut = (name, payload, env) => {
-    const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", name + ".js")], { input: typeof payload === "string" ? payload : js(payload),
-      encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) }, timeout: 20000 });
+    const r = hookIn(path.join(__dirname, "..", "hooks", name + ".js"), { input: typeof payload === "string" ? payload : js(payload),
+      env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) } });
     let j = null;
     try { j = r.stdout ? JSON.parse(r.stdout) : null; } catch { j = { unparsed: r.stdout }; }
     return { status: r.status, json: j, stdout: r.stdout, stderr: r.stderr };
@@ -310,9 +311,9 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
     S.createFeature(own, "Own Thing", ["core"]);
     S.initProject(exported, ["core"], "en");
     S.createFeature(exported, "Exported Thing", ["core"]);
-    const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: js({ hook_event_name: "SessionStart" }), cwd: own,
+    const r = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: js({ hook_event_name: "SessionStart" }), cwd: own,
       encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: exported, SPEC_PROJECT_DIR: "" }, timeout: 20000 });
-    const r2 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: js({ hook_event_name: "SessionStart" }), cwd: own,
+    const r2 = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: js({ hook_event_name: "SessionStart" }), cwd: own,
       encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" }, timeout: 20000 });
     ok(/exported-thing/.test(r.stdout) && !/own-thing/.test(r.stdout) && /own-thing/.test(r2.stdout),
       "1.23 review 5 (M8): SessionStart without a payload cwd lists CLAUDE_PROJECT_DIR's features, never the hook process folder's .specs/ (that one only when nothing is exported) (got " + js([r.stdout.slice(0, 160), r2.stdout.slice(0, 160)]) + ")");

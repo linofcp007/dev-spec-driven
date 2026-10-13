@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, hookIn }) => {
 
   { // 1.14 B1 — project templates (.specs/templates/): scaffolds, variables, track blocks, the placeholder corpus, spec_templates
     const b1Root = path.join(tmp, "b1-templates");
@@ -280,7 +280,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname }) => {
       !mcpTrav.ok && /Unknown template/.test(mcpTrav.error) && list.result.tools.some((t) => t.name === "spec_templates" && !/\n/.test(t.description)),
       "B1: spec_templates (MCP) returns what the engine returns (list / check, a case-folded action), refuses an unknown action by its enum and a traversal by the allowlist");
     S.createFeature(pk, "pt", ["core"], "", undefined, "en");
-    const hkTpl = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], {
+    const hkTpl = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), {
       input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: tw(pk, "pt/design.md", "# D\n") } }), encoding: "utf8" });
     ok(hkTpl.status === 0 && hkTpl.stdout.trim() === "", "B1: the PostToolUse hook stays silent for .specs/templates/ files (pt/design.md is not feature 'pt''s design)");
   }

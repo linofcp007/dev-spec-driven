@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname, hookIn }) => {
 
   { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
     const w5 = path.join(tmp, "proj-wp5");
@@ -59,7 +59,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     ok(e1.verdict === "pass" && e1.summary.placeholders === 1 && e1.issues.filter((i) => i.code === "placeholder").length === 1 &&
       e1.issues.find((i) => i.code === "placeholder").severity === "warn" && /\[trigger\] \[behavior\]/.test(e1.issues.find((i) => i.code === "placeholder").msg),
       "ears_validate reports template placeholder criteria with code 'placeholder' (warn)");
-    const hookReq = (file) => { const r = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: file } }), encoding: "utf8" }); try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
+    const hookReq = (file) => { const r = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: file } }), encoding: "utf8" }); try { return JSON.parse(r.stdout).hookSpecificOutput.additionalContext; } catch { return ""; } };
     const f1h = S.createFeature(w5, "Hook gate", ["core"]);
     write5(f1h, "requirements.md", REQ.replace("Export invoices as CSV.", "[1-2 sentences: what this does and why it matters]"));
     const hk1 = hookReq(path.join(f1h.dir, "requirements.md"));

@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname, require }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -678,7 +678,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     const obsJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
     const obsCall = async (tool, args) => { const r = await rpc("tools/call", { name: tool, arguments: args }); let p; try { p = payload(r); } catch { p = { error: r.result.content[0].text }; } return { isError: r.result.isError === true, p }; };
     // The runner may itself run inside Claude Code: the hook gets the project it is told about, nothing else.
-    const obsHook = (pdir, input) => spawnSync(process.execPath, [obsJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+    // the hook in this process (harness hookIn, review 8); obsHookSpawn: a real one, for the stdin bound (an oversized payload)
+    const obsHookSpawn = (pdir, input) => spawnSync(process.execPath, [obsJs], { input: typeof input === "string" ? input : JSON.stringify(input), encoding: "utf8",
+      env: { ...process.env, CLAUDE_PROJECT_DIR: pdir, SPEC_PROJECT_DIR: "" } });
+    const obsHook = (pdir, input) => hookIn(obsJs, { input: typeof input === "string" ? input : JSON.stringify(input),
       env: { ...process.env, CLAUDE_PROJECT_DIR: pdir, SPEC_PROJECT_DIR: "" } });
     const bash = (cwd, command, extra) => ({ session_id: "s-obs", transcript_path: path.join(cwd, "t.jsonl"), cwd, permission_mode: "default", hook_event_name: "PostToolUse",
       tool_name: "Bash", tool_input: { command, description: "Run it", timeout: 120000, run_in_background: false }, tool_use_id: "toolu_01", ...extra });
@@ -740,8 +743,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     // Malformed / empty / huge stdin: exit 0, silent, nothing written. A .specs/ that is not dev-spec's: nothing written.
     const n0 = logOf(fO.dir).length;
     const bad = ["", "not json", "null", "[]", "42", JSON.stringify({ tool_name: "Bash" }), JSON.stringify({ tool_name: "Bash", tool_input: { command: 42 } }),
-      JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0 } })).slice(0, 60), "x".repeat(5 * 1024 * 1024)].map((s) => obsHook(pO, s));
-    const huge = obsHook(pO, JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0, stdout: "y".repeat(5 * 1024 * 1024) } })));
+      JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0 } })).slice(0, 60), "x".repeat(5 * 1024 * 1024)].map((s) => obsHookSpawn(pO, s));
+    const huge = obsHookSpawn(pO, JSON.stringify(bash(pO, "node t1.js", { tool_response: { exit_code: 0, stdout: "y".repeat(5 * 1024 * 1024) } })));
     const other = path.join(tmp, "ffobs-other");
     fs.mkdirSync(path.join(other, ".specs", "notes"), { recursive: true });
     fs.writeFileSync(path.join(other, ".specs", "notes", "tasks.md"), "- [ ] 1. x\n  - _Verify: node t1.js_\n");
@@ -907,7 +910,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
   // 1.14 feature review (F1 / F3 / F5) — one regression per finding of the independent review of the merged features.
   {
     const hookJs = path.join(__dirname, "..", "hooks", "observe-hook.js");
-    const runHook = (projectEnv, input) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify(input), encoding: "utf8",
+    const runHook = (projectEnv, input) => hookIn(hookJs, { input: JSON.stringify(input),
       env: { ...process.env, CLAUDE_PROJECT_DIR: projectEnv, SPEC_PROJECT_DIR: "" } });
     const post = (cwd, tool, command, resp, event) => ({ session_id: "s-rv", cwd, hook_event_name: event || "PostToolUse", tool_name: tool,
       tool_input: { command }, tool_response: resp });
@@ -1785,7 +1788,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
       "- [ ] 2. [US1] b\n  - _Verify: npm run build_\n  - _Verify: npm test_\n- [ ] 3. [US1] c\n  - _Verify: npm run typecheck_\n  - _Verify: npm run format_\n" +
       "- [ ] 4. [US1] d\n  - _Verify: npm run lint_\n- [ ] 5. [US1] e\n  - _Verify: cd packages/web && npm test_\n- [ ] 6. [US1] f\n  - _Verify: npm run e2e_\n");
     S.initProject(p3, ["core"], "en", { evidence: "observed" });
-    const hook = (command, code) => spawnSync(process.execPath, [obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
+    const hook = (command, code) => hookIn(obsJs, { env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
       input: js({ session_id: "s", cwd: p3, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: code } }) });
     for (const [c, x] of [["node --test tests" + BS + "x.test.js", 0], ["npm test && npm run build", 0], ["npm run typecheck", 0], ["npm run format", 0], ["CI=1 npm run lint", 0],
       ["cd ./packages/web && npm test", 0], ["cd ../elsewhere && npm run e2e", 0], ["CI=1 npm run e2e", 1]]) hook(c, x);
@@ -1835,7 +1838,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
     const pMain = path.join(tmp, "proj-122-cd-main"), pWt = path.join(tmp, "proj-122-cd-wt", "wt");
     const fMain = mk(pMain), fWt = mk(pWt);
     const logOf = (dir) => { try { return fs.readFileSync(path.join(dir, ".execution", "observed.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } };
-    const hook = (cwd, command, envDir) => spawnSync(process.execPath, [obsJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: envDir, SPEC_PROJECT_DIR: "" },
+    const hook = (cwd, command, envDir) => hookIn(obsJs, { env: { ...process.env, CLAUDE_PROJECT_DIR: envDir, SPEC_PROJECT_DIR: "" },
       input: JSON.stringify({ session_id: "s", cwd, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command }, tool_response: { exit_code: 0 } }) });
     const h1 = hook(pWt, "cd " + pWt + " && node t1.js", pMain);
     const h2 = hook(pMain, "cd " + path.join(tmp, "elsewhere") + " && node t1.js", pMain);

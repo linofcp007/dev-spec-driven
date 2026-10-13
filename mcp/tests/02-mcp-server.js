@@ -13,7 +13,7 @@ const TOOLS_LIST_CAP = 44500;
 
 exports.handshake = true; // this file counts the handshake's assertions — every other process runs it muted
 exports.run = async ({
-  ok, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename,
+  ok, rpc, payload, S, root, tmp, SERVER, approveBefore, abort, list, require, __dirname, __filename, hookIn,
 }) => {
 
   { // --- 1.13 WP3: robustness — MCP argument validation, prototype keys, JSON shapes, depend, evals, pre-commit ---
@@ -435,7 +435,7 @@ exports.run = async ({
     "doctor's traceability detail is localized (PT)");
   // The hook used to print "Traceability gaps in <f>:" and an empty "- " when the only gap was a missing file.
   fs.writeFileSync(path.join(w4f.dir, "tasks.md"), "- [x] 1. a\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Makes green: T-01, T-02_\n  - _Implements: src/nope.js_\n"); // ticked: 1.13 plannedImplFiles
-  const hkTr = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(w4f.dir, "tasks.md") } }), encoding: "utf8" });
+  const hkTr = hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_input: { file_path: path.join(w4f.dir, "tasks.md") } }), encoding: "utf8" });
   const hkTrTxt = JSON.parse(hkTr.stdout).hookSpecificOutput.additionalContext;
   ok(/Traceability gaps in gaps/.test(hkTrTxt) && /_Implements:_ files that don't exist: src\/nope\.js/.test(hkTrTxt) && !/^\s*-\s*$/m.test(hkTrTxt),
     "PostToolUse trace message lists the gap it found (missing _Implements:_ file), never an empty '- '");
@@ -443,7 +443,7 @@ exports.run = async ({
   S.initProject(esW4, [], "es");
   const esW4f = S.createFeature(esW4, "Pagos", ["core"]);
   fs.writeFileSync(path.join(esW4f.dir, "tasks.md"), "- [x] 1. a\n- [ ] 2. b\n");
-  const hkEs = spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: esW4 } });
+  const hkEs = hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: esW4 } });
   ok(/en ejecución \(1\/2 tareas\)/.test(hkEs.stdout) && !/executing/.test(hkEs.stdout), "SessionStart phase names are localized (ES 'en ejecución')");
 
   // spec_roadmap: a failed write is an error with the reason (the CLI already exited 1), not wrote:[] + success.

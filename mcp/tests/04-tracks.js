@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, __dirname, hookIn }) => {
 
   { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
   const w2 = path.join(tmp, "proj-wp2");
@@ -617,7 +617,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     const rmap = rd(path.join(tp, ".specs", "ROADMAP.md"));
     const dsc = S.designSaveCheck(tp, crEs.slug);
     const exp = S.exportSpecs(tp, { name: "settings", format: "md" });
-    const hookOut = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse",
+    const hookOut = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "PostToolUse",
       tool_input: { file_path: path.join(packDir(tp, "a11y"), "requirements.md") } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" } });
     ok(/\[A11Y\] Keyboard Navigation/.test(rmap) && dsc.ok && dsc.sections.some((x) => x.track === "a11y" && x.marker === "[A11Y]" && x.sections.length === 3) &&
       exp.ok && /\[A11Y\] Keyboard Navigation/.test(exp.content) && /core \+tdd \+a11y/.test(exp.content) && hookOut.status === 0 && !hookOut.stdout.trim(),

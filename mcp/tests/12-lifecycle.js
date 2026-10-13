@@ -7,13 +7,13 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, require, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, require, __dirname, hookIn }) => {
 
   // --- 1.13 WP10: living catalog (SPECS.md, _Supersedes:_), archive → restore round-trip, drift since finish ---
   {
     const call10 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
     const { spawnSync: spawn10 } = require("child_process");
-    const hook10 = (dir) => spawn10(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout;
+    const hook10 = (dir) => hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout;
     const w10 = path.join(tmp, "proj-wp10");
     const w10Specs = path.join(w10, ".specs");
     S.initProject(w10, ["core"]);
@@ -610,7 +610,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
   { // --- 1.13 batch 8: spec_upgrade — meta.specVersion, the audit, the safe migrations, UPGRADE.md, the SessionStart notice ---
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
     const hookJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
-    const sess = (dir) => spawnSync(process.execPath, [hookJs], { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout || "";
+    const sess = (dir) => hookIn(hookJs, { input: JSON.stringify({ hook_event_name: "SessionStart", cwd: dir }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: dir } }).stdout || "";
     const sha1 = (t) => require("crypto").createHash("sha1").update(String(t).replace(/\r\n/g, "\n")).digest("hex");
     const ENGINE = require(path.join(root, "package.json")).version;
     const readJ = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
@@ -1011,7 +1011,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
       !/\*\*(refunds|payouts|notes|legacy)\*\* — plans/.test(attB4) && /planeia os mesmos ficheiros que payouts/.test(S.renderRoadmapMd(opB4, "pt")),
       "ROADMAP.md 'needs attention' names each overlap once, on its active side (PT too)");
 
-    const hkB4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
+    const hkB4 = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
     let ctxB4 = "";
     try { ctxB4 = JSON.parse(hkB4.stdout).hookSpecificOutput.additionalContext; } catch { /* no output */ }
     ok(ctxB4.split("\n").filter((l) => /overlap/.test(l)).length === 1 && /⚠ 3 cross-feature file overlap\(s\): billing ↔ payouts, billing ↔ refunds, search → legacy — run \/spec-doctor/.test(ctxB4),
@@ -1026,7 +1026,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     S.setDependency(opB4, "payouts", ["billing"]);
     fs.appendFileSync(path.join(searchO.dir, "requirements.md"), "\n- **US-9.AC-1** — WHEN a search runs THE SYSTEM SHALL use the new index _Supersedes: legacy/US-1.AC-1_\n");
     const ov2B4 = S.featureOverlaps(opB4);
-    const hk2B4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
+    const hk2B4 = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: opB4 } });
     ok(JSON.stringify(ov2B4.pairs.map((p) => p.a + "/" + p.b)) === '["billing/refunds"]' && !chk("payouts") && !chk("search") && /⚠ 1 cross-feature file overlap\(s\): billing ↔ refunds —/.test(hk2B4.stdout),
       "no overlap once the pair is ordered by a dependency (payouts → billing) or the active feature declares _Supersedes:_ of the finished one's criteria (got " + JSON.stringify(ov2B4.pairs) + ")");
     const globB4 = path.join(tmp, "proj-b4-globs");
@@ -1044,7 +1044,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const c2 = S.createFeature(cleanB4, "Two", ["core"], "", undefined, "en");
     fs.writeFileSync(path.join(c1.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] A\n  - _Implements: src/one/a.js, src/shared-one.js_\n- [ ] 2. [US1] Later\n  - _Implements: TBD_\n- [ ] 3. [US1] Else\n  - _Implements: [path]_\n");
     fs.writeFileSync(path.join(c2.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] B\n  - _Implements: src/one-two/b.js, src/shared.js_\n- [ ] 2. [US1] Later\n  - _Implements: tbd_\n- [ ] 3. [US1] Else\n  - _Implements: [path]_\n");
-    const hk3B4 = spawnSync(process.execPath, [path.join(__dirname, "..", "hooks", "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: cleanB4 } });
+    const hk3B4 = hookIn(path.join(__dirname, "..", "hooks", "spec-hook.js"), { input: JSON.stringify({ hook_event_name: "SessionStart" }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: cleanB4 } });
     ok(S.featureOverlaps(cleanB4).pairs.length === 0 && !S.specDoctor(cleanB4, "one").checks.some((c) => c.id === "cross-feature-overlap") && !/overlap/.test(hk3B4.stdout) &&
       !/plans the same files/.test(S.renderRoadmapMd(cleanB4, "en")),
       "no false positive for disjoint files (src/one/ vs src/one-two/, shared-one.js vs shared.js) nor for stand-ins both write (TBD, [path]): no pair, no doctor check, no hook line, no attention line");

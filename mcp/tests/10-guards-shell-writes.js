@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the reader) — read through mcp/test.js's require
   const HU = require("../hooks/hook-utils.js");
   const js = JSON.stringify;
@@ -15,12 +15,14 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
   const C = "C:/plugins/dev-spec-driven/cli/dev-spec.js";
   const A = "node '" + C + "' approve login-flow classification --force";
   const hookEnv = (env) => ({ ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) });
-  const hookOut = (file, pl, env) => {
-    const r = spawnSync(process.execPath, [file], { input: typeof pl === "string" ? pl : js(pl), encoding: "utf8", env: hookEnv(env), cwd: tmp, timeout: 30000 });
+  // the hook's decision in this process (harness hookIn, review 8) — hookSpawn: a real one (a copy of the hooks over a broken engine)
+  const hookResult = (r) => {
     let j = null;
     try { j = r.stdout ? JSON.parse(r.stdout) : null; } catch { j = { unparsed: r.stdout }; }
     return { status: r.status, json: j, stdout: r.stdout };
   };
+  const hookOut = (file, pl, env) => hookResult(hookIn(file, { input: typeof pl === "string" ? pl : js(pl), env: hookEnv(env), cwd: tmp }));
+  const hookSpawn = (file, pl, env) => hookResult(spawnSync(process.execPath, [file], { input: typeof pl === "string" ? pl : js(pl), encoding: "utf8", env: hookEnv(env), cwd: tmp, timeout: 30000 }));
   const HOOKS = path.join(__dirname, "..", "hooks");
   const decisionOf = (r) => (r.json && r.json.hookSpecificOutput ? r.json.hookSpecificOutput.permissionDecision : r.json ? "?" : "silent");
   const reasonOf = (r) => (r.json && r.json.hookSpecificOutput && r.json.hookSpecificOutput.permissionDecisionReason) || "";
@@ -199,7 +201,7 @@ exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
     const mark = path.join(tmp, "r7-fake-loaded");
     fs.writeFileSync(path.join(fake, "mcp", "lib", "spec.js"), "require('fs').writeFileSync(process.env.R7_MARK, 'loaded');\nthrow new Error('engine broken');\n");
     const p = project("r7-fail", { approvalGuard: "deny", guard: true }, ["alpha"], "pt");
-    const run = (hook, tool, ti) => { try { fs.rmSync(mark); } catch { /* none */ } const r = hookOut(path.join(fake, "hooks", hook), pre(p, tool, ti), { CLAUDE_PROJECT_DIR: p, R7_MARK: mark }); return [decisionOf(r), fs.existsSync(mark), reasonOf(r)]; };
+    const run = (hook, tool, ti) => { try { fs.rmSync(mark); } catch { /* none */ } const r = hookSpawn(path.join(fake, "hooks", hook), pre(p, tool, ti), { CLAUDE_PROJECT_DIR: p, R7_MARK: mark }); return [decisionOf(r), fs.existsSync(mark), reasonOf(r)]; };
     const approve = run("approval-hook.js", "Bash", { command: "node cli/dev-spec.js approve alpha tasks" });
     const plainBash = run("approval-hook.js", "Bash", { command: "npm test" });
     const mcpSrc = run("approval-hook.js", "mcp__filesystem__write_file", { path: path.join(p, "src", "a.ts"), content: "x" });

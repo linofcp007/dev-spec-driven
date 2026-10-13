@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, remeasure, S, tmp, __dirname }) => {
+exports.run = async ({ ok, remeasure, S, tmp, hookIn, __dirname }) => {
   const js = JSON.stringify;
 
   // 1.22 review (finding 2) — a zero count is no admission ("All tasks done. 0 tests failing." was `admitted`, silent), and a
@@ -43,7 +43,7 @@ exports.run = async ({ ok, remeasure, S, tmp, __dirname }) => {
   // `no-recent` while #1 #2 had no evidence. The PostToolUse spec-hook now stamps .state.json lastEditAt (never a file date).
   {
     const specJs = path.join(__dirname, "..", "hooks", "spec-hook.js");
-    const hook = (file, cwd) => spawnSync(process.execPath, [specJs], { encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
+    const hook = (file, cwd) => hookIn(specJs, { env: { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" },
       input: JSON.stringify({ session_id: "s", cwd, hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: file, old_string: "- [ ]", new_string: "- [x]" }, tool_response: {} }) });
     const p = path.join(tmp, "g122-hand");
     S.initProject(p, ["core"], "en");
