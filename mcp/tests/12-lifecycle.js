@@ -721,7 +721,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const beforeSecond16 = snapTree(path.join(p16, ".specs"));
     const ap16b = payload(await call("spec_upgrade", { apply: true, projectDir: p16 }));
     ok(ap16b.migrations.changed === false && ap16b.migrations.report.written === false && ap16b.needsUpgrade === false && ap16b.from === ENGINE &&
-      S.upgradeLines(ap16b).includes("Nothing to migrate — .specs/ is already up to date; nothing was changed.") && snapTree(path.join(p16, ".specs")) === beforeSecond16,
+      S.upgradeLines(ap16b).includes(S.msg("en").upgrade.nothing) && snapTree(path.join(p16, ".specs")) === beforeSecond16,
       "a second apply changes nothing — no state, roadmap, .history or UPGRADE.md write — and says so");
 
     // 4. A brand-new project is stamped (spec_init, or its first spec_create) and never gets the notice; a legacy project is not

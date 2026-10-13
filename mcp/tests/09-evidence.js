@@ -101,7 +101,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     all("B5 spec_complete_task on an _Expect: fail_ task: a passing run is refused and recorded (unexpectedPass), then a FAILING run is the proof — ticked, verified, redRecorded, stored with expected: 'fail' (got " +
       JSON.stringify([pass0.error, red1]).slice(0, 300) + ")", [
       () => pass0.ok === false, () => pass0.recorded === true, () => pass0.unexpectedPass === true, () => pass0.expected === "fail",
-      () => /the test doesn't fail yet, so it tests nothing/.test(pass0.error), () => st0.exitCode === 0, () => st0.expected === "fail",
+      () => String(pass0.error).includes(S.msg("en").redGreen.passRefused(1)), () => st0.exitCode === 0, () => st0.expected === "fail",
       () => red1.ok === true, () => red1.completed === 1, () => red1.verified === true, () => red1.redRecorded === true,
       () => red1.expected === "fail", () => !red1.unverifiedReason, () => st1.exitCode === 1, () => st1.expected === "fail",
       () => st1.history.length === 2, () => /- \[x\] 1\./.test(b5Read(f1, "tasks.md")),
@@ -137,7 +137,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
       () => cant.ok === false, () => cant.recorded, () => !cant.unexpectedPass,
       () => /exit 127 means the command itself could not run/.test(cant.error), () => /Not marking it done/.test(cant.error), () => note2.ok,
       () => note2.verified === false, () => note2.unverifiedReason === "manual-note-on-runnable-verify", () => tick3.ok === false,
-      () => tick3.unexpectedPass, () => /is ticked, but it expects its test to FAIL/.test(tick3.error),
+      () => tick3.unexpectedPass, () => String(tick3.error).includes(S.msg("en").redGreen.passTicked(3)),
       () => vs2.unverifiedDetail.some((x) => x.number === 3 && x.reason === "unexpected-pass"),
       () => /#3 \(run passed, but _Expect: fail_ needs a red run\)/.test(docV2.detail), () => none4.ok, () => none4.verified,
       () => none4.nothingToVerify, () => none4.expected === "fail",

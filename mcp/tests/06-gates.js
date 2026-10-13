@@ -1153,7 +1153,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const fpI = S.impactReport(w8, "slow-list", { phase: "design" });
     const fpR = S.impactReport(w8, "slow-list", { phase: "design", reopen: true });
     const fpDc = S.specDoctor(w8, "slow-list").checks.find((c) => c.id === "changed-since-approval");
-    ok(fpI.changed === true && fpI.designMd.baseline === "fingerprint-only" && /design\.md changed since the approval too, but this approval kept no snapshot of it/.test(fpI.designHint) &&
+    ok(fpI.changed === true && fpI.designMd.baseline === "fingerprint-only" && fpI.designHint === S.msg("en").impact.designFingerprintOnly("slow-list") &&
       !S.impactLines(fpI).join("\n").includes("no changes since the approval") && fpR.recorded === false && String(fpR.note).includes(S.msg("en").impact.reopenDesignUnknown) &&
       /^changed after their approval: design\.md — re-review/.test(fpDc.detail),
       "a bugfix approval with only design.md's fingerprint: impact and reopen say design.md changed but can't be diffed; doctor doesn't send to spec_impact");
@@ -1164,9 +1164,9 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const nc0 = (await call8("spec_impact", { name: "unchanged", reopen: true, projectDir: w8 })).p;
     fs.appendFileSync(path.join(nc8.dir, "requirements.md"), "\nA closing remark outside any criterion.\n");
     const nc1 = S.impactReport(w8, "unchanged", { reopen: true });
-    ok(nc0.recorded === false && nc0.note === "Nothing changed since the approval — nothing to reopen." && nc1.changed === true && nc1.recorded === false &&
-      /^Nothing to reopen: the edit changed no criterion or section/.test(nc1.note) && !(JSON.parse(fs.readFileSync(path.join(nc8.dir, ".state.json"), "utf8")).changes || []).length &&
-      ptNv8.note === "Nada mudou desde a aprovação — nada a reabrir.",
+    ok(nc0.recorded === false && nc0.note === S.msg("en").impact.nothingToReopen(false) && nc1.changed === true && nc1.recorded === false &&
+      nc1.note === S.msg("en").impact.nothingToReopen(true) && !(JSON.parse(fs.readFileSync(path.join(nc8.dir, ".state.json"), "utf8")).changes || []).length &&
+      ptNv8.note === S.msg("pt").impact.nothingToReopen(false) && ptNv8.note !== nc0.note,
       "reopen with nothing changed (or only text outside the criteria) says so (EN/PT) — not 'nothing new since the last reopen', which no reopen preceded");
 
     // Every WP8 message exists in EN, PT and ES (same keys).

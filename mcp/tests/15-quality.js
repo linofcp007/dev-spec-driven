@@ -965,7 +965,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       bl3.exists === true && bl3.appended === false && /with that note — nothing changed/.test(bl3.note) &&
       blBig.exists === true && /would pass 2000 characters — the new note was not added/.test(blBig.error || "") &&
       blNote === "refactor: Repeated Switches in pricing.ts, invoice.ts · refactor: a rounding helper copied in cart.ts" &&
-      S.backlog(bl, "list").backlog.length === 1 && blPt.appended === true && /já está no backlog — a nova nota foi acrescentada/.test(blPt.note) &&
+      S.backlog(bl, "list").backlog.length === 1 && blPt.appended === true && String(blPt.note).includes(S.msg("pt").featureOps.backlogAppended("refactor-precos")) &&
       I.toPtBr(blPt.note) === I.msg("pt-BR").featureOps.backlogAppended("refactor-precos"),
       "1.19 R review 5: backlog add of an existing name (case-insensitive) appends the new note to its entry (exists, appended, a localized note — EN / PT / pt-BR), the same note twice changes nothing, past 2,000 characters it is refused; one entry, both notes (got " +
       js([bl1, bl2, bl3, blBig, blNote, blPt]) + ")");

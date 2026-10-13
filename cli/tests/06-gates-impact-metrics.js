@@ -94,7 +94,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   runIn(["create", "Plain", "core", "--project", w8]);
   runIn(["approve", "plain", "requirements", "--force", "--project", w8]);
   const pr8 = runIn(["impact", "plain", "--reopen", "--project", w8]);
-  ok(pr8.code === 0 && pr8.out.includes("no changes since the approval") && pr8.out.includes("Nothing changed since the approval — nothing to reopen.") && !/Nothing new since the last reopen/.test(pr8.out),
+  ok(pr8.code === 0 && pr8.out.includes("no changes since the approval") && pr8.out.includes(MSG("en").impact.nothingToReopen(false)) && !/Nothing new since the last reopen/.test(pr8.out),
     "impact --reopen right after the approval: 'nothing changed — nothing to reopen', never 'nothing new since the last reopen'");
   runIn(["bugfix", "Slow page", "saas", "--project", w8]);
   const sa8 = runIn(["approve", "slow-page", "design", "--force", "--project", w8]);

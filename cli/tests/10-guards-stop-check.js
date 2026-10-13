@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
@@ -95,12 +96,12 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
     JSON.stringify([scVer.out.slice(0, 140), scOld.out.slice(0, 120), scImp.out.slice(0, 160), scEs.out.slice(0, 120)]) + ")", [
     () => scVer.code === 0, () => /every ticked task of the recently active features has passing evidence \(billing\) — allowed/.test(scVer.stdout),
     () => scOld.code === 0, () => /no feature was active in the last 4 h/.test(scOld.stdout), () => scOff.code === 0,
-    () => /evidence gate: off \(roadmap\.json meta\.stopCheck: false\)/.test(scOff.stdout), () => scNone.code === 0,
+    () => scOff.stdout.includes(MSG("en").stopGate.allow.off()), () => scNone.code === 0,
     () => /no dev-spec \.specs\/ here/.test(scNone.stdout), () => scImp.code === 1,
     () => /you report task 2 of 'billing' as DONE, but its report \(\.specs\/billing\/\.execution\/task-2-report\.md\) doesn't show the _Verify:_ run/.test(scImp.out),
     () => scImpJ, () => scImpJ.why === "implementer-evidence", () => scImpJ.task === 2, () => scImpOk.code === 0,
     () => /the report of task 2 of 'billing' shows its _Verify:_ run — allowed/.test(scImpOk.stdout), () => scPt.code === 0,
-    () => /gate de evidência: a mensagem não afirma conclusão nem verificação — permitido/.test(scPt.stdout), () => scEs.code === 0,
+    () => scPt.stdout.includes(MSG("pt").stopGate.allow["no-claim"]()), () => scEs.code === 0,
     () => /gate de evidencia: ninguna función tuvo actividad en las últimas 4 h/.test(scEs.stdout),
   ]);
 
