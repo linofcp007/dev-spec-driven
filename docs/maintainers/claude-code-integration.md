@@ -288,8 +288,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   next path, the whole-folder reading) — and dev-guardian's file is a fact of its own in `shellPathFacts` (`guardianFile`, never
   `guarded`): each operation ADDS its action to the path's 1.29 reading (`git restore .specs/guardian.cjs` stays a feature
   folder's restore). So without the check every call decides as the same call without its dev-guardian part; a new filter keeps
-  that rule (mcp/tests/09-evidence-guardian.js pairs each call with its twin). Known limits: a glob write onto either file,
-  dev-guardian's own MCP tool `set_baseline` (not in the hook's matcher: dev-guardian's side) and a variable exported out of the
+  that rule (mcp/tests/09-evidence-guardian.js pairs each call with its twin). A glob onto either file is its write too (the
+  baseline's: `guardianHit`, review 9; the launcher's — `.specs/guard*.cjs`, `.s*/guardian.cjs` — `shellPathFacts`' `launcherGlob`, 1.30.1).
+  Known limits: dev-guardian's own MCP tool `set_baseline` (not in the hook's matcher: dev-guardian's side) and a variable exported out of the
   command's sight; for the launcher, its verification before every run is the backstop.
 - **The shell lexer** (`shellCommandWords(cmd, mode)`: one linear pass, nothing evaluated, ≤ `APPROVAL_LEX_DEPTH` = 32 deep)
   reads the tool's shell — `bash` (`\x`, `$'…'`; `raw` keeps backslashes for Windows paths), `ps` (the backtick escape, `@'…'@`,
@@ -632,6 +633,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `Set-Content .specs\roadmap.json. x` (PowerShell 5.1 and 7, cmd.exe: roadmap.json written; checked on Windows 11) — and a Write of
   `SPECS~1/newfeat/.state.json` (editTargets read two levels: the new folder hid the alias). Windows' own readings (above): the 8.3
   rule, the trim, the deepest existing folder's real path — probe.js, one copy (files.js `realPathLoose` is the probe's now).
+  **A glob onto dev-guardian's launcher** (`cp evil .specs/guard*.cjs`, `echo x > .specs/*.cjs`, `cp evil .s*/guardian.cjs`) was allowed at
+  deny with the check — the known limit "a glob write onto either file", whose baseline half review 9 had closed (`guardianHit`):
+  `launcherGlob`.
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import

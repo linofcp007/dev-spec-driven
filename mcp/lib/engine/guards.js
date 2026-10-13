@@ -1049,8 +1049,11 @@ function shellPathFacts(t0, mode) {
   const last = n ? segs[n - 1] : "";
   const could = (name) => shellSegCould(last, name, mode, true);
   const found = wild ? null : approvalGuardedFile(t);
-  const guardianFile = isGuardianSetting(found) ? found : null;
-  const guarded = guardianFile ? null : found;
+  // (1.30.1) a glob that may be dev-guardian's launcher — `.specs/guard*.cjs`, `.specs/*.cjs`, `.s*/guardian.cjs`: Bash expands it to the
+  // file when it exists (its baseline's glob is guardianHit below, since review 9)
+  const launcherGlob = wild && specs >= 0 && specs === n - 2 && could("guardian.cjs") ? { setting: "guardian-launcher" } : null;
+  const guardianFile = isGuardianSetting(found) ? found : launcherGlob;
+  const guarded = isGuardianSetting(found) ? null : found;
   const may = !!guarded || (wild && specs >= 0 && ((specs === n - 2 && could("roadmap.json")) || (specs < n - 1 && could(".state.json")) ||
     (specs < n - 2 && shellSegCould(segs[n - 2], ".execution", mode, true) && could("observed.jsonl")))) ||
     // a guarded name in a folder an unknown variable names (`$DIR/roadmap.json`, `$F/.state.json`): it may be there — fail closed
