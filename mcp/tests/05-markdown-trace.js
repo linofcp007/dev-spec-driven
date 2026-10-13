@@ -64,7 +64,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     ok(Array.isArray(fin9.warnings) && fin9.warnings.some((w) => /EC-2/.test(w)) && fin9.warnings.some((w) => /EC-9, NFR-7/.test(w)) &&
       !fin9.blockers.some((b) => /EC-|SC-|NFR-/.test(b)), "spec_finish lists the EC/NFR/SC findings under warnings — never as blockers");
     const clean9 = S.specDoctor(w9, "fresh-all");
-    const cleanFin9 = S.finishFeature(w9, "fresh-all").warnings;
+    // (1.30: a fresh scaffold's tasks name no _Implements:_ file yet — that warning is 08-tasks.js's, set aside here)
+    const cleanFin9 = S.finishFeature(w9, "fresh-all").warnings.filter((w) => !/^no task names its files in _Implements:_/.test(w));
     ok(!clean9.checks.some((c) => c.id === "secondary-trace") && cleanFin9.length === 1 && /^planned tests that no test file names \(put the T-ID in the test name\): T-01, T-02, .*T-10$/.test(cleanFin9[0]),
       "no secondary IDs written yet → no secondary-trace check and no EC/NFR/SC finish warning (only: no test file names the planned T-IDs yet)");
     // Hook on tasks.md: the warnings follow the trace line, under their own heading.

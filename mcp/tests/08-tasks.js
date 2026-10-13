@@ -1260,5 +1260,16 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
       read: () => JSON.stringify(filled.implementsFiles) === JSON.stringify(["src/coupons/apply.js", "app/[id]/page.tsx"]) && filled.missingImplFiles.length === 0,
       refs: () => JSON.stringify(S.taskMarkers(S.taskBlocks("- [ ] 1. a\n  - _Implements: [path of the code it creates or changes]_\n  - _Implements: [slug].tsx_\n")[0]).implements) === JSON.stringify(["[slug].tsx"]),
     });
+    // … and a feature whose tasks name no _Implements:_ file at all (the slot deleted) finishes with a warning that says what
+    // then sees nothing — never a blocker (a feature may write no code); one that names its files gets none. EN / PT / ES.
+    const fc = S.createFeature(p8, { name: "Copy only", size: "xs", lang: "pt" });
+    const chc = path.join(fc.dir, "change.md");
+    fs.writeFileSync(chc, fs.readFileSync(chc, "utf8").replace(/\n {2}- _Implements: \[[^\]\n]+\]_/, ""));
+    const noImpl = (slug, lang) => (S.finishFeature(p8, slug).warnings || []).some((w) => w === I.msg(lang).finish.noImplements);
+    all("1.30 review 8: finish warns (never blocks) when no task names a file in _Implements:_ — a feature that names its files gets no such warning", {
+      warned: () => noImpl(fc.slug, "pt") && /_Implements:_ — a baseline de deriva/.test(I.msg("pt").finish.noImplements),
+      quiet: () => !noImpl(fa.slug, "en"),
+      strings: () => ["en", "pt", "es", "pt-BR"].every((l) => /_Implements: <[^>]+>_/.test(I.msg(l).finish.noImplements)) && /dev-guardian/.test(I.msg("es").finish.noImplements),
+    });
   }
 };

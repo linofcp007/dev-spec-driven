@@ -981,6 +981,8 @@ const msg = {
       // 1.28: o detetor de código duplicado — um aviso, nunca um bloqueio
       duplicates: (n, top, within, slug) => `o código da feature repete código existente em ${n} sítio(s) — ${top}${n > 3 ? "; …" : ""}: reutilizar ou estender o código existente, ou explicar no relatório porque é que uma cópia é deliberada${within ? `; mais ${within} repetição(ões) dentro dos ficheiros da própria feature` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       duplicatesWithin: (n, slug) => `${n} bloco(s) do código da feature repete(m) outro sítio dos seus próprios ficheiros — candidato(s) para a passagem de simplificação (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // 1.30: nenhuma tarefa indica ficheiros em _Implements:_ — quem os lê não vê código da feature
+      noImplements: "nenhuma tarefa indica os seus ficheiros em _Implements:_ — a baseline de deriva, a deteção de duplicados e a atribuição do dev-guardian não veem código desta feature. Acrescenta _Implements: <caminho>_ a cada tarefa que escreveu código (um tasks.md editado volta a ser aprovado), ou ignora isto se nenhuma o fez.",
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
     // rigor à medida (o EN é a referência): tamanhos (spec_create {size}), a alteração (tamanho xs, um change.md).

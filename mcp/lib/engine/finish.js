@@ -231,6 +231,9 @@ function finishFeature(projectDir, name, opts = {}) {
   // the repeats inside the feature's own files only as a count. 1.29: with dev-guardian's duplication budget set
   // (.guardian/budgets.yml quality.duplication_pct — budget: true measures the whole project too), the warning says when the project
   // is over it.
+  // 1.30: no task names a file in _Implements:_ — the drift baseline, the duplicate check (below), the scope guard and
+  // dev-guardian's attribution then see no code of this feature, silently. A warning: a feature may write no code.
+  if (blocks.length && !implementsRefs(tasksText).length) warnings.push(F.noImplements);
   const dup = duplicationReport(projectDir, { name: slug, budget: true });
   let duplicates = null;
   if (dup.ok && dup.total) {

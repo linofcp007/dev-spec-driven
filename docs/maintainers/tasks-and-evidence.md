@@ -349,6 +349,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   file — the three readers drop it (`scanTaskMarkers`, `implementsRefs`, trace.js's `implFiles`; `app/[id]/page.tsx` and
   `[slug].tsx` stay paths) — and the placeholder gate refuses it left in: a code task fills it, a task that writes no code deletes
   the line. A test fixture that fills every `[bracket]` by regex drops the slot's line first (it would name a missing file).
+  A feature whose tasks name no file at all finishes with a warning (`finish.noImplements` — never a blocker: a feature may
+  write no code).
 
 ## End-of-turn evidence gate and scope guard
 - **`stopCheck(projectDir, {message, agent, stopHookActive})`** (engine; the Stop hook and `dev-spec stop-check` print the same

@@ -983,6 +983,8 @@ const msg = {
       // 1.28: the duplicate-code detector — a warning, never a blocker
       duplicates: (n, top, within, slug) => `the feature's code repeats existing code in ${n} place(s) — ${top}${n > 3 ? "; …" : ""}: reuse or extend the existing code, or note in the report why a copy is deliberate${within ? `; ${within} more repeat(s) inside the feature's own files` : ""} (all of them: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       duplicatesWithin: (n, slug) => `${n} block(s) of the feature's code repeat another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // 1.30: no task names a file in _Implements:_ — what reads them sees no code of the feature
+      noImplements: "no task names its files in _Implements:_ — the drift baseline, the duplicate check and dev-guardian's attribution see no code of this feature. Add _Implements: <path>_ to each task that wrote code (an edited tasks.md is re-approved), or ignore this if none did.",
       untrackedApproval: (list, slug) => `approved before change tracking — nothing about the signed-off file was recorded, so an edit can't be detected: ${list} — re-approve to start tracking it (/approve ${slug} design)`,
     },
     // right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.

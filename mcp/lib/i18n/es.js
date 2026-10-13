@@ -981,6 +981,8 @@ const msg = {
       // (1.30: "funcionalidad", never "función", where the text names code — "el código de la función" read as a code function)
       duplicates: (n, top, within, slug) => `el código de la funcionalidad repite código existente en ${n} lugar(es) — ${top}${n > 3 ? "; …" : ""}: reutilizar o extender el código existente, o explicar en el informe por qué una copia es deliberada${within ? `; ${within} repetición(es) más dentro de los ficheros de la propia funcionalidad` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       duplicatesWithin: (n, slug) => `${n} bloque(s) del código de la funcionalidad repite(n) otro lugar de sus propios ficheros — candidato(s) para la pasada de simplificación (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // 1.30: ninguna tarea indica ficheros en _Implements:_ — lo que los lee no ve código de la funcionalidad
+      noImplements: "ninguna tarea indica sus ficheros en _Implements:_ — la línea base de deriva, la detección de duplicados y la atribución de dev-guardian no ven código de esta funcionalidad. Añade _Implements: <ruta>_ a cada tarea que escribió código (un tasks.md editado se vuelve a aprobar), o ignóralo si ninguna lo hizo.",
       untrackedApproval: (list, slug) => `aprobado antes del registro de cambios — no se registró nada del fichero aprobado, así que una edición no puede detectarse: ${list} — vuelve a aprobar para empezar a seguirlo (/approve ${slug} design)`,
     },
     // rigor a medida (el EN es la referencia): tamaños (spec_create {size}), el cambio (tamaño xs, un change.md).
