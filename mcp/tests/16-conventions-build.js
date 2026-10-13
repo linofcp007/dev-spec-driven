@@ -5,7 +5,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 
 exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) => {
   // 1.20 build (scripts/build.js, `npm run build`): the committed, pre-generated placeholder corpus
@@ -23,6 +23,15 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
       const r = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 300000, env });
       try { return JSON.parse(r.stdout); } catch { return { stdout: r.stdout, stderr: String(r.stderr).slice(0, 300) }; }
     };
+    // the same as a promise, for children that run side by side (each on a clone of its own — r14)
+    const spawnJsonAsync = (args, env) => new Promise((resolve) => {
+      const kid = spawn(process.execPath, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+      let out = "", err = "";
+      kid.stdout.on("data", (d) => { out += d; });
+      kid.stderr.on("data", (d) => { err += d; });
+      const t = setTimeout(() => kid.kill(), 300000);
+      kid.on("close", () => { clearTimeout(t); try { resolve(JSON.parse(out)); } catch { resolve({ stdout: out, stderr: err.slice(0, 300) }); } });
+    });
     const script = (name, fn, args) => { const f = path.join(tmp, name); fs.writeFileSync(f, "\"use strict\";\n(" + fn.toString() + ")(" + args + ");\n"); return f; };
 
     // The committed corpus is what a fresh build of these sources writes: a change to a file of CORPUS_SOURCES (a template, a
@@ -293,9 +302,11 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
     const raceDirs = { en: raceClone("p20-race-en"), pt: raceClone("p20-race-pt"), version: raceClone("p20-race-version") };
     fs.mkdirSync(path.join(raceDirs.version, "hooks"), { recursive: true }); // …with its stop-claim filter, which the build rewrites too
     fs.copyFileSync(B.STOP_CLAIMS_PATH, path.join(raceDirs.version, "hooks", "stop-claims.generated.json"));
-    const race = (dir, mode) => spawnJson([raceJs, dir, mode], process.env);
-    const rEn = race(raceDirs.en, "en"), rLoc = race(raceDirs.pt, "locale"), rVer = race(raceDirs.version, "version");
-    const later = { en: race(raceDirs.en, "later-en"), pt: race(raceDirs.pt, "later-pt"), version: race(raceDirs.version, "later-en") }; // started after each update
+    const race = (dir, mode) => spawnJsonAsync([raceJs, dir, mode], process.env);
+    // each on its own clone: the three updates side by side, then the three later processes (each started after its update)
+    const [rEn, rLoc, rVer] = await Promise.all([race(raceDirs.en, "en"), race(raceDirs.pt, "locale"), race(raceDirs.version, "version")]);
+    const [lEn, lPt, lVer] = await Promise.all([race(raceDirs.en, "later-en"), race(raceDirs.pt, "later-pt"), race(raceDirs.version, "later-en")]);
+    const later = { en: lEn, pt: lPt, version: lVer };
     const version = require(path.join(root, "package.json")).version;
     const expected = S.placeholderReport(I.design({ name: "x", tracks: ["core"], label: "core", slug: "x", summary: "" }, "en")).map((p) => p.text); // this engine's answer
     ok(rEn.build === 0 && rEn.source === "render" && Array.isArray(rEn.probe) && expected.includes("[what it already does for this feature]") && js(rEn.probe) === js(expected) &&
@@ -357,17 +368,29 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
         brackets: S.templateSets().brackets.size, version: S.engineVersion() }));
     };
     const facadeJs = script("p20-facade.js", facadeChild, "process.argv[2]");
-    const facade = (v, bpath) => {
+    const facadeEnv = (v, bpath) => {
       const env = { ...process.env };
       if (v == null) delete env.DEV_SPEC_BUNDLE; else env.DEV_SPEC_BUNDLE = v;
       if (bpath == null) delete env.DEV_SPEC_BUNDLE_PATH; else env.DEV_SPEC_BUNDLE_PATH = bpath;
-      const r = spawnSync(process.execPath, [facadeJs, cloneLib], { encoding: "utf8", timeout: 300000, env });
+      return env;
+    };
+    const facadeOut = (r) => {
       let o;
       try { o = JSON.parse(r.stdout); } catch { o = { stdout: r.stdout }; }
       o.use = o.modules === 0 && o.bundles === 1 ? "bundle" : o.modules > 20 ? "modules" : "?";
       if (r.stderr) o.stderr = String(r.stderr).slice(0, 200);
       return o;
     };
+    const facade = (v, bpath) => facadeOut(spawnSync(process.execPath, [facadeJs, cloneLib], { encoding: "utf8", timeout: 300000, env: facadeEnv(v, bpath) }));
+    // the same as a promise: the calls that see one state of the clone run side by side (r14)
+    const facadeAsync = (v, bpath) => new Promise((resolve) => {
+      const kid = spawn(process.execPath, [facadeJs, cloneLib], { env: facadeEnv(v, bpath), stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "", stderr = "";
+      kid.stdout.on("data", (d) => { stdout += d; });
+      kid.stderr.on("data", (d) => { stderr += d; });
+      const t = setTimeout(() => kid.kill(), 300000);
+      kid.on("close", () => { clearTimeout(t); resolve(facadeOut({ stdout, stderr })); });
+    });
     const none = facade("1");
     // one module's mtime set to a whole second BEFORE the build, so the test can put it back exactly (a Date carries whole ms only)
     const scanPath = path.join(cloneLib, "engine", "scan.js"), scanText = fs.readFileSync(scanPath), t0 = Math.floor(Date.now() / 1000) - 60;
@@ -375,8 +398,8 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
     B.writeBundle(path.join(cloneLib, "spec.bundle.js"), { lib: cloneLib, E });
     const elsewhere = path.join(tmp, "p20-bundle-clone", "engine.bundle.js");
     B.writeBundle(elsewhere, { lib: cloneLib, E });
-    const on = facade("1"), off = facade(null), zero = facade("0"), relPath = facade("1", "spec.bundle.js"), txtPath = facade("1", path.join(tmp, "x.txt"));
-    const atPath = facade("1", elsewhere);
+    const [on, off, zero, relPath, txtPath, atPath] = await Promise.all([facadeAsync("1"), facadeAsync(null), facadeAsync("0"), facadeAsync("1", "spec.bundle.js"),
+      facadeAsync("1", path.join(tmp, "x.txt")), facadeAsync("1", elsewhere)]);
     fs.utimesSync(scanPath, t0, t0 + 5); // touched (a plugin update, an edit) since the build
     const touched = facade("1");
     fs.writeFileSync(scanPath, Buffer.concat([scanText, Buffer.from(" ")]));

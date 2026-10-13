@@ -6,7 +6,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 // (its re-checks of the behavioural fixtures 17-docs-evals builds: 15-quality-fixtures.js, which needs that file)
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, shipFeature, require, __dirname }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, shipFeature, require, __dirname, handRoadmap }) => {
 
   // 1.16 package (Q) — spec quality: steering amendments, cross-feature ACs, glossary.
 
@@ -182,7 +182,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     ok(!fpBad.length, "1.16 Q2 / Q1 / Q3: no new warning on copies of examples/demo-project and evals/fixtures/specs-en / specs-es — no cross-feature pair, no steering amendment, no glossary (got " + js(fpBad) + ")");
     // Bounded: 50 features × 20 criteria.
     const q2t = qDir("q2time");
-    S.initProject(q2t, ["core"], "en");
+    S.initProject(q2t, ["core"], "en"); handRoadmap(q2t); // roadmap not under test here: its refresh skipped (harness handRoadmap) — 50 creates
     const vocab = "account invoice payment report export order cart product price discount coupon shipment address refund review rating search filter page token session role permission audit backup schedule queue webhook email message notification upload download image video comment tag category inventory stock supplier warehouse tax currency locale theme profile avatar password".split(" ");
     let seed = 7;
     const rnd = (n) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };

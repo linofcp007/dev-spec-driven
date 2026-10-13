@@ -4,9 +4,9 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirname }) => {
+exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirname, handRoadmap, cliIn }) => {
 
   { // 1.14 B3 — team governance (approvals by role, roadmap.json meta.approvalRoles) and the fast-forward approval (spec_approve {through})
     const b3Root = path.join(tmp, "b3-governance");
@@ -368,8 +368,8 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirnam
     const js = (v) => JSON.stringify(v);
     const uCall = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
     const uRun = 'node -e "process.exit(0)"';
-    const CLI16 = path.join(__dirname, "..", "cli", "dev-spec.js");
-    const cli16 = (args, input) => { const r = spawnSync(process.execPath, [CLI16, ...args], { encoding: "utf8", input, env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } }); return { out: r.stdout || "", err: r.stderr || "", code: r.status }; };
+    // the CLI in this process (harness cliIn)
+    const cli16 = (args, input) => { const r = cliIn(args, { input, env: { ...process.env, SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } }); return { out: r.stdout || "", err: r.stderr || "", code: r.status }; };
     const uTasks = "# Tasks: login\n\n## Global Constraints\n- Node >= 18\n\n## Story US-1 (P1 — MVP)\n" +
       "- [ ] 1. [US1] Implement the login handler (EC-1, NFR-1)\n  - _Requirements: US-1.AC-1_\n  - _Verify: " + uRun + "_\n" +
       "- [ ] 2. [US1] Show the error message\n  - _Requirements: US-1.AC-2_\n  - _Verify: " + uRun + "_\n**Checkpoint:** US-1 works.\n";
@@ -985,7 +985,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, libSources, list, __dirnam
     // the `raw` ones (the scaffold's placeholders: the gate refuses).
     const project = (name, lang, level, features, raw = []) => {
       const p = path.join(fbRoot, name);
-      S.initProject(p, ["core"], lang, { approvalGuard: level });
+      S.initProject(p, ["core"], lang, { approvalGuard: level }); handRoadmap(p); // roadmap not under test here: its refresh skipped (harness handRoadmap)
       for (const ft of features) {
         const f = S.createFeature(p, ft, ["core"]);
         if (raw.includes(ft)) continue;

@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require, handRoadmap }) => {
 
   { // --- 1.13 WP6: brownfield depth (scan routes/tests/entrypoints/env/migrations, coverage by _Implements:_), spec_import, integration-plan ---
     const call6 = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); let body; try { body = JSON.parse(res.result.content[0].text); } catch { body = { ok: false, error: res.result.content[0].text }; } return { isError: !!res.result.isError, body }; };
@@ -105,7 +105,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require }) => {
 
     // 3. spec_import — Kiro.
     const im = path.join(tmp, "proj-wp6-import");
-    S.initProject(im, ["core"], "en");
+    S.initProject(im, ["core"], "en"); handRoadmap(im); // roadmap not under test here: its refresh skipped (harness handRoadmap)
     w6(im, ".kiro/specs/user-auth/requirements.md", ["# Requirements Document", "", "## Introduction", "", "Users sign in with email and password to reach their account.", "",
       "## Requirements", "", "### Requirement 1", "", "**User Story:** As a user, I want to sign in with my email, so that I can reach my account.", "", "#### Acceptance Criteria", "",
       "1. WHEN a user submits valid credentials THEN the system SHALL create a session", "2. IF the password is wrong THEN the system SHALL show an error and keep the form", "",

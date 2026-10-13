@@ -21,6 +21,10 @@
  *   libSources() · maintainerNotes() · GATE_ORDER · approveBefore() · shipFeature()     shared helpers (below)
  *   hookIn(file, o)          one hook run in this process (its exported decide) with spawnSync's shape — o: input, env (the whole
  *                            environment), cwd, timedOut — instead of spawnSync(process.execPath, [file], o) (below)
+ *   cliIn(args, o)           one CLI call in this process (cli/main.js main) with spawnSync's shape — o: env (the whole
+ *                            environment), cwd, input — instead of spawnSync(process.execPath, [cli/dev-spec.js, …args], o) (below)
+ *   handRoadmap(projectDir)  a hand-written .specs/ROADMAP.md: the project's mutations skip the roadmap refresh — for a project
+ *                            whose tests read nothing of its ROADMAP.md (below) → projectDir
  *   child · abort(reason)    the server process · fail the run now (a private server that stops answering)
  *   require · __dirname · __filename   mcp/test.js's, so the test code reads paths from mcp/ — require("./lib/i18n.js"),
  *                            path.join(__dirname, "server.js") — whichever file of mcp/tests/ it lives in
@@ -125,6 +129,30 @@ function hookIn(file, o = {}) {
     restore();
   }
   return { status: 0, signal: null, stdout: out ? JSON.stringify(out) : "", stderr: "" };
+}
+// One CLI call IN THIS PROCESS (r14): cliIn(args, { env, cwd, input }) → spawnSync's { status, stdout, stderr } for
+// `node cli/dev-spec.js <args>` — cli/main.js main, which applies the call's env (the WHOLE environment, as spawnSync's; default
+// this process's) and working folder for the call and restores them — as the CLI suite's spawnIn. A command that waits (done /
+// finish --run running commands, stdin from a stream) throws: keep a process there, and wherever the test is about one (a signal,
+// EPIPE, a TTY, DEV_SPEC_BUNDLE — the facade picks the bundle at load —, a preload, its timing).
+let MAIN = null;
+function cliIn(args, o = {}) {
+  MAIN = MAIN || require(path.join(root, "cli", "main.js"));
+  const out = [], err = [];
+  const sink = (to) => ({ write: (chunk) => { to.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8")); return true; } });
+  let status;
+  MAIN.main(args.map(String), { stdout: sink(out), stderr: sink(err), stdin: o.input == null ? "" : o.input, env: o.env || process.env,
+    cwd: o.cwd || process.cwd(), done: (code) => { status = code; } });
+  if (status === undefined) throw new Error("cliIn: `" + args.join(" ") + "` waits (a run, a stream) — run it as a process");
+  return { status, signal: null, stdout: out.join(""), stderr: err.join("") };
+}
+// A project whose tests read nothing of its ROADMAP.md (r14): a hand-written one — no AUTO-GENERATED marker, so the engine never
+// overwrites it and every mutation's roadmap refresh (maybeRefreshRoadmap: every feature's row, each time — quadratic over a test
+// that scaffolds many features) is skipped. The refresh swallows its errors, so in such a test it proved nothing; a test about the
+// roadmap renders it (renderRoadmapMd — in memory, unaffected) or uses a project of its own. → projectDir.
+function handRoadmap(projectDir) {
+  fs.writeFileSync(path.join(projectDir, ".specs", "ROADMAP.md"), "# Roadmap\n\nHand-written (the tests' setup): never refreshed.\n");
+  return projectDir;
 }
 
 let pass = 0,
@@ -242,7 +270,8 @@ async function setup(chain) {
     "spec_complete_task's description: a nothingToVerify task passes doctor / finish / ROADMAP.md; only an unverified task is listed with its reason");
   muted = false;
   const ctx = {
-    ok, ...assertHelpers(ok), rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature, hookIn,
+    ok, ...assertHelpers(ok), rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature, hookIn, cliIn,
+    handRoadmap,
     child, abort, init, list, ctDesc, ntvSentence,
     require: createRequire(MCP_TEST), __dirname: MCP_DIR, __filename: MCP_TEST,
   };

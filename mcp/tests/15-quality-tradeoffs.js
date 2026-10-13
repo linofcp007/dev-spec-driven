@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, require }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, require, handRoadmap }) => {
 
   // 1.17 package (A) — design trade-offs / risks, /grill constraint questions, the TDD micro-cycle.
   {
@@ -218,7 +218,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, requi
     // queue strategy … (events+fields)", +sec's "record a security audit event") fires nothing in EN / PT / ES / pt-BR; a template criterion
     // KEPT as written beside the user's own queue is still template text (one concept — no nudge); rewritten by the user, its "event" counts.
     const rv1 = aDir("rv1");
-    S.initProject(rv1, ["core"], "en");
+    S.initProject(rv1, ["core"], "en"); handRoadmap(rv1); // roadmap not under test here: its refresh skipped (harness handRoadmap) — 33 creates
     const rv1Fired = [];
     for (const lang of ["en", "pt", "es", "pt-BR"]) {
       [["core"], ["core", "tdd"], ["core", "saas"], ["core", "ai"], ["core", "sec"], ["core", "privacy"], ["core", "dist"], ["core", "tdd", "saas", "ai", "sec", "privacy"]].forEach((tr, i) => {
@@ -341,7 +341,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, requi
     // strong phrase do (EN / PT / ES); the answer is a multi-word phrase — "consistent UI styling", "eventually add caching", "atomic design",
     // "tenant isolation" answer nothing, PT "consistência eventual" / ES "al menos una vez" do.
     const rv7 = aDir("rv7");
-    S.initProject(rv7, ["core"], "en");
+    S.initProject(rv7, ["core"], "en"); handRoadmap(rv7); // roadmap not under test here: its refresh skipped (harness handRoadmap)
     const rv7N = (lang, body, designText) => {
       const f = S.createFeature(rv7, "N " + lang + " " + (rv7N.n = (rv7N.n || 0) + 1), ["core"], "", undefined, lang);
       fs.writeFileSync(path.join(f.dir, "requirements.md"), REQ.replace("hand the order to the warehouse queue", body));

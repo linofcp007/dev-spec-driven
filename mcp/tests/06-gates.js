@@ -6,11 +6,11 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname, hookIn }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname, hookIn, handRoadmap }) => {
 
   { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
     const w5 = path.join(tmp, "proj-wp5");
-    S.initProject(w5, ["core"], "en");
+    S.initProject(w5, ["core"], "en"); handRoadmap(w5); // roadmap not under test here: its refresh skipped (harness handRoadmap)
     const read5 = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
     const write5 = (f, rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
@@ -686,7 +686,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
   {
     const call8 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
     const w8 = path.join(tmp, "proj-wp8");
-    S.initProject(w8, ["tdd"]);
+    S.initProject(w8, ["tdd"]); handRoadmap(w8); // roadmap not under test here: its refresh skipped (harness handRoadmap)
     const cr8 = S.createFeature(w8, "Drafts", ["tdd"]);
     const f8 = (x) => path.join(cr8.dir, x);
     const st8 = () => JSON.parse(fs.readFileSync(f8(".state.json"), "utf8"));

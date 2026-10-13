@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, eq, S, tmp, root }) => {
+exports.run = async ({ ok, all, eq, S, tmp, root, handRoadmap }) => {
   const js = JSON.stringify;
   const E = require(path.join(root, "mcp", "lib", "engine", "index.js"));
   const { DOCTOR_CHECKS, GATES, CHECK_PHASE } = E;
@@ -57,7 +57,7 @@ exports.run = async ({ ok, all, eq, S, tmp, root }) => {
     // odd task markers, an unreadable state): every id spec_doctor emits resolves to ONE registry entry, and every id an approval
     // gate refuses on is one of the probes GATES lists for that phase (the execution sign-off: spec_finish's blockers).
     const p = path.join(tmp, "proj-registry");
-    S.initProject(p, ["core", "tdd", "ai", "saas", "sec", "privacy"], "en");
+    S.initProject(p, ["core", "tdd", "ai", "saas", "sec", "privacy"], "en"); handRoadmap(p); // roadmap not under test here: its refresh skipped (harness handRoadmap)
     const put = (slug, rel, text) => fs.writeFileSync(path.join(p, ".specs", slug, rel), text);
     const fill = (slug, rel) => {
       const fp = path.join(p, ".specs", slug, rel);

@@ -30,7 +30,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   throwaway temp dir), the handshake, and the context every file's `run` receives, destructured in its signature
   (`exports.run = async ({ ok, rpc, S, tmp }) => { … }` — no parameter name a test could redeclare): `ok`, `rpc`,
   `rawOnce`, `notify`, `payload`, `S` (the engine), `root`, `tmp`, `SERVER`, `libSources()`, `maintainerNotes()`,
-  `GATE_ORDER`, `approveBefore()`, `shipFeature()`, `child` / `abort()`, the handshake's `init` / `list`, and `require` /
+  `GATE_ORDER`, `approveBefore()`, `shipFeature()`, `hookIn()` / `cliIn()` / `handRoadmap()` (below), `child` / `abort()`, the
+  handshake's `init` / `list`, and `require` /
   `__dirname` / `__filename` **as mcp/test.js's**: test code reads paths from `mcp/` (`require("./lib/i18n.js")`,
   `path.join(__dirname, "server.js")`) whichever file it lives in. `cli/tests/harness.js`: `ok`, `run(args)` (`node
   cli/dev-spec.js <args>` with `SPEC_PROJECT_DIR` = `tmp`), `tmp`, `CLI`, and cli/test-cli.js's `require` / `__dirname` — and
@@ -52,7 +53,15 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   working folder — claude-code-integration.md → A hook IS its decision). **Call a hook in-process unless the test is about its
   process:** stdin (an oversized or partial payload — `timedOut` stands in for the safety net in-process), the flushed exit, the exec
   form, what a fresh process loads (a `-r` preload), its timing, a copy of the hooks over a broken engine. The hook tests' spawns
-  were most of 10-guards*.js's time (the area's critical path).
+  were most of 10-guards*.js's time (the area's critical path). **The CLI the same way in the MCP suite (r14):** **`cliIn(args,
+  {env, cwd, input})`** runs cli/main.js `main` in the test process with spawnSync's `{ status, stdout, stderr }` — the CLI suite's
+  `spawnIn`; a command that waits throws (keep a process there). **A project whose tests read nothing of its ROADMAP.md:**
+  **`handRoadmap(projectDir)`** right after its `initProject` writes a hand-written `.specs/ROADMAP.md`, which the engine never
+  overwrites — every mutation then skips the roadmap refresh, `roadmapData` over every feature of the project each time (quadratic
+  over a test that scaffolds many features: 50 creates cost 15 s). The refresh swallows its errors, so in such a test it proved
+  nothing; a roadmap test renders it in memory (`renderRoadmapMd`, `S.roadmap` — unaffected) or reads the file of a project of
+  its own. The refresh was a third of the heavy files' time (measured with a counting preload: proj-wp5 in 06-gates 15 s, the
+  50-feature project of 15-quality 15 s).
 - **How it runs.** A file is independent unless it declares `exports.deps` — the files it needs to have run first IN THE
   SAME PROCESS, because it reads a project folder they built or a value one of them returned (`return { vDir }` from
   `run` joins the context of the files after it) — say which in a comment above `deps`. A file and

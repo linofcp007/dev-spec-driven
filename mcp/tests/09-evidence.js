@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require, handRoadmap }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -1440,6 +1440,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     };
     const pR = path.join(tmp, "proj-122r2-evidence");
     S.initProject(pR, ["core"], "en", { checks: { api: "cd packages/api && npm test", long: "node --test " + "tests/unit/a-long-test-file-name.test.js ".repeat(11).trim() } });
+    handRoadmap(pR); // roadmap not under test here: its refresh skipped (harness handRoadmap)
 
     // 1a — `\` for `/`, quotes around a plain argument: the same command.
     const w1 = wrongOf([["node --test tests" + BS + "x.test.js", ["node --test tests/x.test.js"], true], ['node --test "tests/x.test.js"', ["node --test tests/x.test.js"], true],

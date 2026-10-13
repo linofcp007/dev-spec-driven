@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadmap }) => {
   const js = JSON.stringify;
   const HOOKS = path.join(__dirname, "..", "hooks");
   // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR never leak into the hooks.
@@ -164,7 +164,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
     S.createFeature(dev, "Alpha", ["core"]);
     const deep = path.join(dev, "src", "a", "b");
     fs.mkdirSync(deep, { recursive: true });
-    const big = project("r7-ss-big");
+    const big = handRoadmap(project("r7-ss-big")); // roadmap not under test here: its refresh skipped (harness handRoadmap) — 25 creates
     for (let i = 1; i <= 25; i++) S.createFeature(big, "Feature " + i, ["core"]);
     const r = {
       none: probed("spec-hook", ss(none)), other: probed("spec-hook", ss(other)), noCwd: probed("spec-hook", { session_id: "s", hook_event_name: "SessionStart" }, null, none),

@@ -3,7 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 
 exports.run = async ({ ok, S, root, tmp, require }) => {
 
@@ -128,12 +128,21 @@ exports.run = async ({ ok, S, root, tmp, require }) => {
       const env = { ...process.env, HOME: gitHome, USERPROFILE: gitHome, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: path.join(gitHome, "none.gitconfig") };
       const built = {};
       const buildErr = [];
-      for (const c of behav) {
+      // Each fixture builds in its own workspace, so they build side by side, four at a time (one after the other they were
+      // ~18 s, the suite's longest single assertion). A build still running after 120 s is killed and fails.
+      const build = (c) => new Promise((resolve) => {
         const ws = path.join(fxRoot, c);
         fs.mkdirSync(ws, { recursive: true });
-        const r = spawnSync(bashBin, [path.join(evDir, c, "fixture.sh")], { cwd: ws, env, encoding: "utf8", timeout: 120000 });
-        if (r.status === 0) built[c] = ws; else buildErr.push(`${c}: exit ${r.status} ${(r.stderr || "").trim().slice(0, 300)}`);
-      }
+        const kid = spawn(bashBin, [path.join(evDir, c, "fixture.sh")], { cwd: ws, env, stdio: ["ignore", "ignore", "pipe"] });
+        let err = "";
+        kid.stderr.on("data", (d) => { err += d; });
+        const t = setTimeout(() => kid.kill(), 120000);
+        const done = (status) => { clearTimeout(t); if (status === 0) built[c] = ws; else buildErr.push(`${c}: exit ${status} ${err.trim().slice(0, 300)}`); resolve(); };
+        kid.on("error", (e) => { err += String(e && e.message); done(null); });
+        kid.on("close", done);
+      });
+      const queue = behav.slice();
+      await Promise.all([1, 2, 3, 4].map(async () => { while (queue.length) await build(queue.shift()); }));
       const at = (c) => built[c] || path.join(fxRoot, "__missing__");
       const git = (c, ...a) => { const r = spawnSync("git", a, { cwd: at(c), env, encoding: "utf8" }); return r.status === 0 ? r.stdout.trim() : null; };
       const safeA3 = (f) => { try { return f(); } catch (e) { return { error: String(e && e.message || e) }; } };
