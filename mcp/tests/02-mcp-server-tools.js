@@ -5,9 +5,9 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 
-exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) => {
+exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list, cliIn }) => {
   const js = JSON.stringify;
   const call = async (name, args) => {
     const r = await rpc("tools/call", { name, arguments: args });
@@ -15,9 +15,8 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
     try { p = JSON.parse(r.result.content[0].text); } catch { p = { raw: r }; }
     return { isError: !!(r.result && r.result.isError), p, error: r.error };
   };
-  const CLI = path.join(root, "cli", "dev-spec.js");
   const cli = (args, dir) => {
-    const r = spawnSync(process.execPath, [CLI, ...args, "--project", dir], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: dir } });
+    const r = cliIn([...args, "--project", dir], { env: { ...process.env, SPEC_PROJECT_DIR: dir } }); // in this process (harness cliIn) — the same main() a process runs
     return { out: r.stdout || "", err: r.stderr || "", code: r.status };
   };
   const cliJson = (args, dir) => { try { return JSON.parse(cli([...args, "--json"], dir).out); } catch { return null; } };
@@ -326,14 +325,10 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
   { // the CLI's --json IS the MCP result: every operation run on twin projects — MCP on one, the CLI (in-process, cli/main.js) on the
     // other — the same calls in the same order, each answer compared with its project folder and ISO times blanked; nothing given
     // (status, roadmap, scan, export…) shows the defaults agree
-    const MAIN = require(path.join(root, "cli", "main.js"));
-    const cliIn = (args, dir, input) => {
-      const out = [];
-      let code;
-      MAIN.main([...args, "--json", "--project", dir], { stdout: { write: (s) => { out.push(String(s)); return true; } }, stderr: { write: () => true },
-        stdin: input == null ? "" : input, env: process.env, done: (c) => { code = c; } });
-      if (code === undefined) return { waits: args.join(" ") };
-      try { return JSON.parse(out.join("")); } catch { return { notJson: out.join("").slice(0, 200) }; }
+    const cliJsonIn = (args, dir, input) => { // the CLI in this process (harness cliIn) → its --json answer
+      let r;
+      try { r = cliIn([...args, "--json", "--project", dir], { input, env: process.env }); } catch { return { waits: args.join(" ") }; }
+      try { return JSON.parse(r.stdout); } catch { return { notJson: r.stdout.slice(0, 200) }; }
     };
     const pm = path.join(tmp, "proj-127-ops", "mcp", "shop"), pc = path.join(tmp, "proj-127-ops", "cli", "shop"); // one name (the project's title)
     for (const d of [pm, pc]) {
@@ -414,7 +409,7 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
       if (typeof s === "function") { s(pm); s(pc); continue; }
       const [id, tool, args, words, input] = s;
       const viaMcp = await call(tool, { ...args, projectDir: pm });
-      const viaCli = cliIn(words, pc, input);
+      const viaCli = cliJsonIn(words, pc, input);
       if (OPS.forTool(tool, args).id !== id) bad.push(words.join(" ") + ": " + tool + " runs " + OPS.forTool(tool, args).id + ", not " + id);
       const a = js(blank(viaMcp.p, pm)), b = js(blank(viaCli, pc));
       if (a !== b) {
@@ -434,11 +429,9 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
   { // 1.30 review 8 (ds-engine 8): the edges where the two surfaces answered differently — a blank name, an empty text beside a
     // feature, the engine refusals that carried no code on the CLI (order, backlog action, impact phase) or another one (approve
     // without a phase: `usage` on the CLI) — now the same JSON, project folder aside
-    const MAIN = require(path.join(root, "cli", "main.js"));
-    const cliIn = (args, dir) => {
-      const out = [];
-      MAIN.main([...args, "--json", "--project", dir], { stdout: { write: (s) => { out.push(String(s)); return true; } }, stderr: { write: () => true }, stdin: "", env: process.env });
-      try { return JSON.parse(out.join("")); } catch { return { notJson: out.join("").slice(0, 200) }; }
+    const cliJsonIn = (args, dir) => { // the CLI in this process (harness cliIn) → its --json answer
+      const r = cliIn([...args, "--json", "--project", dir], { env: process.env });
+      try { return JSON.parse(r.stdout); } catch { return { notJson: r.stdout.slice(0, 200) }; }
     };
     const pm = path.join(tmp, "proj-130-edges", "mcp", "p"), pc = path.join(tmp, "proj-130-edges", "cli", "p");
     for (const d of [pm, pc]) {
@@ -464,11 +457,11 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
     ];
     const got = [];
     for (const [tool, args, words, invalid] of cases) {
-      const m = blankDir((await call(tool, { ...args, projectDir: pm })).p, pm), c = blankDir(cliIn(words, pc), pc);
+      const m = blankDir((await call(tool, { ...args, projectDir: pm })).p, pm), c = blankDir(cliJsonIn(words, pc), pc);
       got.push({ words: words.join(" "), same: js(m) === js(c), code: [m.code, c.code], invalid, m: js(m).slice(0, 160), c: js(c).slice(0, 160) });
     }
     // order 1.5: MCP shows the number, the CLI the word it was given — the same code and argument
-    const fm = (await call("spec_roadmap_edit", { kind: "depend", name: "login", order: 1.5, projectDir: pm })).p, fc = cliIn(["depend", "login", "--order", "1.5"], pc);
+    const fm = (await call("spec_roadmap_edit", { kind: "depend", name: "login", order: 1.5, projectDir: pm })).p, fc = cliJsonIn(["depend", "login", "--order", "1.5"], pc);
     all("1.30 review 8: MCP and the CLI's --json agree on the edges — status \"   \" lists (= spec_status {name: \"   \"}), ears <f> --text \"\" lints the feature, a bad --order / backlog action / --phase is invalid-arguments with its argument, approve without a phase is missing-arguments [phase] (got " +
       js(got.filter((g) => !g.same)) + ")", {
       ...Object.fromEntries(got.map((g) => [g.words, () => g.same])),

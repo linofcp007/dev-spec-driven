@@ -25,6 +25,9 @@ const { fsTargetPath: guardTargetPath, editTargets: approvalEditTargets } = requ
 // file tools and their path arguments (isMcpFileTool, mcpPathArgs), a trailing-separator trim (trimSlashEnd).
 const { approvalPlain, approvalMayBe, RE_APPROVAL_VERB, guardedFileOf, isMcpFileTool, mcpPathArgs: approvalPathArgs, trimSlashEnd,
   RE_APPROVAL_MCP, CLI_SWITCHES } = require("../probe.js"); // CLI_SWITCHES: the CLI's boolean switches — the lexer's (one list, the CLI's too)
+// Windows' own readings of a path (1.30.1, probe.js — the edit tools' reading above walks the same way): an 8.3 alias of a guarded name
+// (mayShortName / shortNamesRead — the rule; longPath — through the file system), Win32's trailing dots and spaces (winPathTrim).
+const { mayShortName, shortNamesRead, winPathTrim, longPath, realPathLoose } = require("../probe.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords, existingFeature,
   expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher, guessLang,
@@ -36,8 +39,9 @@ let activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAN
   decodeText, isNetworkPath, runProvesVerify, withinRoot;
 let approvedContentSame, proofIncomplete; // gates.js (the guard's stale tasks approval) · evidence.js (an incomplete command runs nothing)
 let folderHoldsCode; // scan.js — a folder a command removes or moves as a whole, read for code (the edit guard)
+let builtinStopGate; // markdown.js — the stop gate's lists of every language from the corpus (stopPatterns)
 let guardianShellActions, guardianGuardFilter; // guardian.js — dev-guardian's gate rules (1.30), read through the hook points below
-function __link(E) { ({ folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
+function __link(E) { ({ builtinStopGate, folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
@@ -85,8 +89,16 @@ function guardCheck(projectDir, filePath, cwd) {
   // Inside the project as text or through an alias of it (8.3 short name, junction, symlink — they were "outside" and
   // allowed), spelled under pdir from here on. The path as the file system reads it first (guardTargetPath — 
   // `a.ts::$DATA` and Git Bash's `/c/…` were allowed as no code / outside).
-  const abs = insideDirAlias(pdir, path.resolve(cwd ? path.resolve(pdir, guardTargetPath(cwd)) : pdir, guardTargetPath(filePath)));
+  let abs = insideDirAlias(pdir, path.resolve(cwd ? path.resolve(pdir, guardTargetPath(cwd)) : pdir, guardTargetPath(filePath)));
   if (!abs) return allow("outside");
+  // An 8.3 short name inside (1.30.1, win32): the file it names as the file system reads it — `src/MAIN~1.JAV` IS src/Main.java (code),
+  // `SPECS~1/x.ts` IS .specs/x.ts. Only the real path (never the 8.3 rule: that reading would ALLOW more here); a name nothing on disk
+  // answers is the file a write would make — literally that name.
+  if (process.platform === "win32" && /~\d/.test(path.relative(pdir, abs))) {
+    const real = realPathLoose(abs, SHORT_DISK_UP);
+    const inside = real ? insideDirAlias(pdir, real) : null;
+    if (inside) abs = inside;
+  }
   // Case-folded where the filesystem folds case: `.SPECS/x.ts` IS the spec folder on Windows/macOS.
   const rel = toPosix(path.relative(pdir, abs));
   if (rel.split("/").some((s) => (FOLD_CASE ? s.toLowerCase() : s) === ".specs")) return allow("specs");
@@ -429,6 +441,9 @@ const approvalCandidate = (text) => {
   }
   return false;
 };
+// …as a decision reads a path on `win` (approvalGuardDecision's opts.win — the platform's by default, where approvalMayBe's own 8.3
+// test already holds): an 8.3 alias of a guarded name makes it a candidate there too.
+const approvalCandidateOn = (text, win) => approvalCandidate(text) || (win === true && mayShortName(approvalPlain(text)));
 // fail closed: the programs whose arguments are only text or files read — a simple command run by one of
 // them never runs the CLI (`echo dev-spec approve x`, `git commit -m "…approve…"`, `grep -r "dev-spec.js approve" .`).
 const APPROVAL_TEXT_PROGRAMS = new Set(["echo", "printf", "print", "git", "gh", "grep", "egrep", "fgrep", "rg", "ag", "ack", "findstr",
@@ -1035,8 +1050,11 @@ function shellPathFacts(t0, mode) {
   const last = n ? segs[n - 1] : "";
   const could = (name) => shellSegCould(last, name, mode, true);
   const found = wild ? null : approvalGuardedFile(t);
-  const guardianFile = isGuardianSetting(found) ? found : null;
-  const guarded = guardianFile ? null : found;
+  // (1.30.1) a glob that may be dev-guardian's launcher — `.specs/guard*.cjs`, `.specs/*.cjs`, `.s*/guardian.cjs`: Bash expands it to the
+  // file when it exists (its baseline's glob is guardianHit below, since review 9)
+  const launcherGlob = wild && specs >= 0 && specs === n - 2 && could("guardian.cjs") ? { setting: "guardian-launcher" } : null;
+  const guardianFile = isGuardianSetting(found) ? found : launcherGlob;
+  const guarded = isGuardianSetting(found) ? null : found;
   const may = !!guarded || (wild && specs >= 0 && ((specs === n - 2 && could("roadmap.json")) || (specs < n - 1 && could(".state.json")) ||
     (specs < n - 2 && shellSegCould(segs[n - 2], ".execution", mode, true) && could("observed.jsonl")))) ||
     // a guarded name in a folder an unknown variable names (`$DIR/roadmap.json`, `$F/.state.json`): it may be there — fail closed
@@ -1053,15 +1071,46 @@ function shellPathFacts(t0, mode) {
     folder: wild ? !/\.[A-Za-z0-9]{1,10}$/.test(tail) : !/^[^.][\s\S]*\.[A-Za-z0-9]{1,10}$/.test(last),
     execution: specs >= 0 && segs.slice(specs + 1).some((s) => s.toLowerCase() === ".execution"), lock: !wild && /\.lock$/i.test(last) };
 }
-// A path word → its readings: each brace expansion (Bash), as written and — after a `cd` earlier in the same command — under that folder.
+// A path word → its readings: each brace expansion (Bash), as written and — after a `cd` earlier in the same command — under that folder;
+// on win32 (ctx.win) each also as Windows reads it (shellWinReading: an 8.3 alias, a trailing dot / space).
 function shellPathReadings(w, mode, ctx) {
   const t = shellVarText(w, ctx && ctx.vars);
   const out = [];
   for (const a of mode === "bash" ? braceExpand(t) : [t]) {
-    out.push(shellPathFacts(a, mode));
-    if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:|\u0001)/.test(a)) out.push(shellPathFacts(ctx.cwd + "/" + a, mode));
+    const texts = [a];
+    if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:|\u0001)/.test(a)) texts.push(ctx.cwd + "/" + a);
+    for (const x of texts) {
+      out.push(shellPathFacts(x, mode));
+      const wr = shellWinReading(x, ctx);
+      if (wr !== null) out.push(shellPathFacts(wr, mode));
+    }
   }
   return out;
+}
+// A shell path as Windows reads it, when that differs from its text (ctx.win — the approval guard's on win32; null otherwise): Win32's
+// trailing dots / spaces dropped (winPathTrim — cmd.exe and PowerShell write `.specs\roadmap.json.` as roadmap.json), and each 8.3 alias
+// of a guarded name (`SPECS~1`, `GUARDI~1/BASELI~1.JSO`) read as its long name — through the file system when the path is local
+// (longPath: the real path of its deepest existing folder, ≤ SHORT_DISK_UP levels — an alias the volume made is expanded, a real folder
+// that merely looks like one stays itself), at most SHORT_DISK_PATHS paths a call (ctx.disk); else, or past that, by the 8.3 rule (fail
+// closed: a missing SPECS~1 is read as .specs). Never a disk call on a network path, nor on one an unknown variable / glob leads.
+const SHORT_DISK_PATHS = 32;
+const SHORT_DISK_UP = 8;
+function shellWinReading(x, ctx) {
+  if (!ctx || !ctx.win) return null;
+  const t = winPathTrim(x);
+  if (!mayShortName(t)) return t !== x ? t : null;
+  const abs = /^(?:[\\/]|[A-Za-z]:)/.test(t);
+  const base = abs ? "" : sessionUsable(ctx.base) && !isNetworkPath(ctx.base) ? path.resolve(guardTargetPath(ctx.base)) : null;
+  if (base !== null && !/^[\u0001\u0002*?[]/.test(t) && !isNetworkPath(t) && ctx.disk && ctx.disk.left > 0) {
+    ctx.disk.left--;
+    let long = null;
+    // (Windows' separators either way — the same reading wherever it runs: on win32 `/` and `\` are one, elsewhere only `/` would split)
+    const wt = guardTargetPath(t).replace(/\\/g, "/");
+    try { long = longPath(abs ? path.resolve(wt) : path.resolve(base, wt), true, SHORT_DISK_UP); } catch { long = null; }
+    if (long) return long;
+  }
+  const s = shortNamesRead(t);
+  return s !== x ? s : null;
 }
 // The operands of a POSIX-style command from words[from] → { pos: [indices], val: {option: {i} | {text}}, flags: [words] }: `--` ends the
 // options, `--x=v` carries its value, an option in `takes` takes the next word; `slash` (cmd.exe, robocopy, xcopy): `/x` is an option.
@@ -1491,8 +1540,10 @@ function shellOpActions(o, mode, ctx) {
           const base = shellVarText(sp[0], ctx && ctx.vars).replace(/[\\/]+$/, "");
           const names = [base.replace(/^[\s\S]*[\\/]/, "") || "*"];
           if (o.contents && shellPathFacts(base, mode).folder) names.push("*"); // xcopy / robocopy / rsync copy a folder's CONTENTS
+          // (the destination's reading already holds its cd; Windows' reading of the name landing there — BASELI~1.JSO — too)
+          const into = ctx ? { win: ctx.win, base: ctx.base, disk: ctx.disk } : null;
           for (const name of names) {
-            for (const sf of shellPathReadings(f.text + "/" + name, mode, null)) {
+            for (const sf of shellPathReadings(f.text + "/" + name, mode, into)) {
               if (sf.guarded) out.push(shellHit(sf.guarded));
               else if (specsDest && (sf.may || (o.recursive && sf.folder))) out.push(shellDown("specs"));
               if (sf.guardianFile) out.push(shellHit(sf.guardianFile));
@@ -1522,9 +1573,13 @@ function shellOpPaths(o, mode, ctx) {
   const read = (t) => {
     for (const a of mode === "bash" ? braceExpand(shellVarText(t, ctx && ctx.vars)) : [shellVarText(t, ctx && ctx.vars)]) {
       if (!a || a.startsWith(SHELL_VAR) || /^(?:\/dev\/|\$null$|nul$|con$)/i.test(a)) continue;
-      const h = (/^~(?=$|[\\/])/.test(a) ? os.homedir() + a.slice(1) : a).split(SHELL_VAR).join("_").split(SHELL_ANY).join("_");
-      out.push(h);
-      if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:)/.test(h)) out.push(ctx.cwd + "/" + h);
+      const h0 = (/^~(?=$|[\\/])/.test(a) ? os.homedir() + a.slice(1) : a).split(SHELL_VAR).join("_").split(SHELL_ANY).join("_");
+      // (1.30.1, win32 — ctx.win) also as Win32 reads it: PowerShell's `Set-Content src\a.ts. x` writes src\a.ts (the 8.3 short names:
+      // guardCheck reads each target's real path)
+      for (const h of ctx && ctx.win && winPathTrim(h0) !== h0 ? [h0, winPathTrim(h0)] : [h0]) {
+        out.push(h);
+        if (ctx && ctx.cwd && !/^(?:[\\/~]|[A-Za-z]:)/.test(h)) out.push(ctx.cwd + "/" + h);
+      }
     }
   };
   for (const pr of o.paths || []) {
@@ -1661,7 +1716,7 @@ function shellApprovalActions(command, level, depth, mode, meta, ctx) {
   const segs = shellCommandWords(command, mode);
   const namesCli = /dev-?spec/i.test(approvalPlain(command));
   const c = ctx || { vars: Object.create(null), cwd: "" };
-  const want = (script) => !!script && (c.collect ? true : approvalCandidate(script));
+  const want = (script) => !!script && (c.collect ? true : approvalCandidateOn(script, c.win));
   segs.forEach((words, si) => {
     const raw = words.raw || words;
     shellTrack(words, raw, mode, c);
@@ -1832,10 +1887,11 @@ function shellProcText(text) {
 // the edit guard on the shell (hooks/guard-hook.js, Bash / PowerShell / Monitor): the files a command writes, removes,
 // replaces or copies into (shellSegOps — the approval guard's own reader; nested scripts read too), as it names them (relative to its
 // cwd — and, after a `cd` in the command, to that folder too), `~` expanded; a path that starts with an unknown variable is left out
-// ($TMP/x.ts). Bounded: 64 paths. guardCheck decides which are code.
-function shellWriteTargets(command, mode) {
+// ($TMP/x.ts); on win32 (`win`, the platform's by default) a path is also read with Win32's trailing dots / spaces dropped. Bounded: 64
+// paths. guardCheck decides which are code.
+function shellWriteTargets(command, mode, win = process.platform === "win32") {
   const out = [];
-  const ctx = { vars: Object.create(null), cwd: "", collect: (o, m, c) => { for (const p of shellOpPaths(o, m, c)) if (out.length < 64) out.push(p); } };
+  const ctx = { vars: Object.create(null), cwd: "", win: win === true, collect: (o, m, c) => { for (const p of shellOpPaths(o, m, c)) if (out.length < 64) out.push(p); } };
   shellApprovalActions(String(command == null ? "" : command).slice(0, APPROVAL_COMMAND_MAX), "deny", 0, mode === "ps" ? "ps" : "bash", {}, ctx);
   return [...new Set(out)];
 }
@@ -2046,6 +2102,9 @@ function approvalGuardDecision(payload, level, opts = {}) {
   const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";
   const ti = isObj(payload.tool_input) ? payload.tool_input : isObj(payload.toolInput) ? payload.toolInput : {};
   const meta = isObj(opts.meta) ? opts.meta : undefined;
+  // win32: a path is also read as Windows reads it — an 8.3 alias of a guarded name, a trailing dot / space (opts.win: the platform's
+  // by default; tests read the other one)
+  const win = opts.win === undefined ? process.platform === "win32" : opts.win === true;
   // other concerns' rules over a reader's actions (approvalActionFilters — dev-guardian's: its rules guard nothing without its check),
   // applied AS EACH READER RETURNS, before its own fallback: an action a filter drops never stands in for what the call would have been
   // without it — the shell's unparsed ask, the next guarded path of an edit (review 9: `dev-guardian baseline update; eval node <cli>
@@ -2060,13 +2119,15 @@ function approvalGuardDecision(payload, level, opts = {}) {
   else if (APPROVAL_SHELL_TOOLS.has(tool) && typeof ti.command === "string") {
     const mode = tool === "PowerShell" ? "ps" : "bash"; // Monitor runs its command in the Bash tool's shell
     const head = ti.command.slice(0, APPROVAL_COMMAND_MAX);
-    if (ti.command.length > APPROVAL_COMMAND_MAX && approvalCandidate(ti.command.slice(APPROVAL_COMMAND_MAX - 64))) {
+    if (ti.command.length > APPROVAL_COMMAND_MAX && approvalCandidateOn(ti.command.slice(APPROVAL_COMMAND_MAX - 64), win)) {
       // past the read limit nothing was seen — an approval after the first 64 KB went through at deny. A
       // command whose unread tail names dev-spec (or .specs) is refused / asked as unreadable; an unread tail that names neither
       // runs nothing of dev-spec's, and the head is read as before.
       actions = [{ kind: "unreadable", why: "too-long", length: ti.command.length, source: "shell" }];
-    } else if (approvalCandidate(head)) {
-      actions = keep(shellApprovalActions(head, lvl, 0, mode, meta));
+    } else if (approvalCandidateOn(head, win)) {
+      // ctx: the payload's cwd (a relative path's folder for Windows' reading of it) and that reading's disk budget
+      const ctx = { vars: Object.create(null), cwd: "", win, base: payload.cwd, disk: { left: SHORT_DISK_PATHS } };
+      actions = keep(shellApprovalActions(head, lvl, 0, mode, meta, ctx));
       // fail closed: the CLI named with an approval word, in a form the lexer can't follow (a launcher it doesn't
       // know, a string built by concatenation, a glob, a variable) — the user is asked instead of the call being allowed.
       if (!actions.length && approvalUnparsed(head, mode)) actions = [{ kind: "unreadable", why: "unparsed", source: "shell" }];
@@ -2075,11 +2136,11 @@ function approvalGuardDecision(payload, level, opts = {}) {
     // a hand edit of .specs/roadmap.json or of a feature's .state.json (its approvals, evidence, history); 
     // of a harness-observed log, the path read as the file system reads it — `./`, `..`, a stream, an 8.3 short name — and
     // through a link to .specs/ (the real path of its folder).
-    actions = approvalEditActions([typeof ti.file_path === "string" ? ti.file_path : ti.notebook_path], payload.cwd, false, keep);
+    actions = approvalEditActions([typeof ti.file_path === "string" ? ti.file_path : ti.notebook_path], payload.cwd, false, keep, win);
   } else if (isMcpFileTool(tool)) {
     // another MCP server's file tool — each path-like argument read as an Edit's path; a move / rename / delete of
     // .specs/ itself, of a folder or a glob under it (dev-guardian's .guardian/ too), as well
-    actions = approvalEditActions(approvalPathArgs(ti, opts.uriPath), payload.cwd, /(?:move|rename|delete|remove|unlink)/i.test(tool.replace(/^mcp__.+__/, "")), keep);
+    actions = approvalEditActions(approvalPathArgs(ti, opts.uriPath), payload.cwd, /(?:move|rename|delete|remove|unlink)/i.test(tool.replace(/^mcp__.+__/, "")), keep, win);
   }
   actions = keep(actions); // (every reader's list filtered already: a no-op but for the MCP approval tools' and the partial payload's)
   if (opts.projectUnreadable === true && actions.length) actions.push({ kind: "unreadable", why: "project", source: "mcp" });
@@ -2128,9 +2189,9 @@ function approvalSpecsProject(fp) {
 // .guardian/ itself (or a glob that may be its baseline). `keep` (approvalGuardDecision's filters) runs on each hit before it is the
 // answer: a hit it drops (a dev-guardian file without the check) never hides what comes after it — the reading goes on as if that
 // path were not guarded (the whole-folder reading of the same path, the next target, the next path).
-function approvalEditActions(paths, cwd, whole, keep = (l) => l) {
+function approvalEditActions(paths, cwd, whole, keep = (l) => l, win = process.platform === "win32") {
   for (const p of paths) {
-    for (const t of approvalEditTargets(p, cwd)) {
+    for (const t of approvalEditTargets(p, cwd, win)) {
       const h = approvalGuardedFile(t);
       if (h) {
         const hit = keep([Object.assign({ kind: "guard-down", setting: h.setting, source: "edit" }, h.setting === "roadmap" ? {} : { feature: h.feature || null }, { project: approvalSpecsProject(t) })]);
@@ -2297,34 +2358,26 @@ function stopLazyPattern(source, flags, langs) {
 let STOP_PATTERNS = null;
 function stopPatterns() {
   if (STOP_PATTERNS) return STOP_PATTERNS;
-  const all = (k) => [...new Set(i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {})[k] || []))]; // pt-BR repeats pt's patterns
-  const langsOf = new Map();
-  for (const l of i18n.LANGS) for (const src of (i18n.msg(l).stopGate || {}).claims || []) {
-    if (!langsOf.has(src)) langsOf.set(src, new Set());
-    langsOf.get(src).add(i18n.baseLang(l));
-  }
+  // every language's lists (i18n.stopGateLists): from the trusted corpus (markdown.js builtinStopGate — no language file loads), else
+  // built from the tables (it loads pt.js, es.js and pt-BR: ~20 ms of an English Stop hook)
+  const g = builtinStopGate() || i18n.stopGateLists();
   // each base language's trigger words (i18n stopGate.triggers; pt-BR's are pt's): a claim pattern of a language runs only
   // when the text holds one of its triggers — every pattern holds one, so the answer is the same, and a message that triggers no
   // language compiles none of the ~47 patterns (~35 ms of the first stopClaims in a process).
-  const triggers = new Map();
-  for (const l of i18n.LANGS) {
-    const b = i18n.baseLang(l), src = ((i18n.msg(l).stopGate || {}).triggers || []).join("|");
-    if (src) triggers.set(b, triggers.has(b) ? triggers.get(b) + "|" + src : src);
-  }
   // triggers / admissions: built on first use too (a text scanned as its one-byte projection runs rewritten copies of them)
   let trig = null, adm = null;
   STOP_PATTERNS = {
-    claims: [...langsOf].map(([src, langs]) => stopLazyPattern(STOP_WORD.pre + src + STOP_WORD.post, STOP_WORD.flags, langs)),
-    triggerSources: new Map([...triggers].map(([b, src]) => [b, STOP_WORD.pre + src + STOP_WORD.post])), // flags "iu"
+    claims: g.claims.map((c) => stopLazyPattern(STOP_WORD.pre + c.source + STOP_WORD.post, STOP_WORD.flags, new Set(c.langs))),
+    triggerSources: new Map(g.triggers.map(([b, src]) => [b, STOP_WORD.pre + src + STOP_WORD.post])), // flags "iu"
     get triggers() { return trig || (trig = new Map([...this.triggerSources].map(([b, src]) => [b, new RegExp(src, "iu")]))); },
-    admissionSources: all("admissions").map((src) => STOP_WORD.pre + src + STOP_WORD.post), // flags STOP_WORD.flags
+    admissionSources: g.admissions.map((src) => STOP_WORD.pre + src + STOP_WORD.post), // flags STOP_WORD.flags
     get admissions() { return adm || (adm = this.admissionSources.map((src) => new RegExp(src, STOP_WORD.flags))); },
-    negators: new Set(all("negators").map((w) => w.toLowerCase())),
-    fixed: new Set(all("fixed").map((w) => w.toLowerCase())),
+    negators: new Set(g.negators.map((w) => w.toLowerCase())),
+    fixed: new Set(g.fixed.map((w) => w.toLowerCase())),
     // a zero count right before an admission ("0 tests failing", "none of the tests fail") — read on the few
     // characters before it, so `\s+$` anchors it to the admission; "now pass(es)" after a failure in its clause (fixed).
-    zero: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("zeroes").join("|") + ")\\s+$", "iu"),
-    passNow: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("passNow").join("|") + ")(?![\\p{L}\\p{N}_])", "iu"),
+    zero: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + g.zeroes.join("|") + ")\\s+$", "iu"),
+    passNow: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + g.passNow.join("|") + ")(?![\\p{L}\\p{N}_])", "iu"),
   };
   return STOP_PATTERNS;
 }

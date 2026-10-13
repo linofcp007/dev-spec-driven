@@ -42,6 +42,25 @@ function stripHtmlComments(s) {
   });
   return out;
 }
+// `<!--` (and, with `closers`, `-->`) → `&lt;!--` / `--&gt;` outside inline code spans, line by line, so a text written into a
+// spec never opens a comment there (the importers' lines, the traceability matrix's cells). Linear.
+function inertOutsideCode(text, closers) {
+  if (!text.includes("<!--") && !(closers && text.includes("-->"))) return text;
+  const esc = (t) => (closers ? t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;") : t.replace(/<!--/g, "&lt;!--"));
+  return text.split("\n").map((line) => {
+    if (!line.includes("`")) return esc(line);
+    const ticks = backtickRuns(line);
+    let out = "";
+    let from = 0;
+    // [k, spanEnd(k)) is a whole code span, or an unmatched backtick run (literal — the scan goes on after it): kept as written
+    for (let k = line.indexOf("`"); k !== -1; k = line.indexOf("`", from)) {
+      const e = ticks.spanEnd(k);
+      out += esc(line.slice(from, k)) + line.slice(k, e);
+      from = e;
+    }
+    return out + esc(line.slice(from));
+  }).join("\n");
+}
 // HTML comments as a markdown reader sees them, line by line — the ONE comment rule of stripHtmlComments, criterionBlocks
 // and visibleLines (the tasks scanner, scanTaskLines, adds its own list-item / paragraph reach). Fenced code (fenceStep)
 // and inline code spans are code: a "<!--" there is text (an AC saying "contains `<!--`" hid every
@@ -1087,11 +1106,18 @@ function renderCorpusData() {
     taskHeadings: Object.fromEntries(VALID_TRACKS.map((t) => [t, sort(renderTrackTaskHeadings(t))])),
     // the gates' other all-language sets
     steeringStubs: renderSteeringStubs(), diagrams: renderTemplateDiagrams(), sectionLines: renderSectionLines("base"),
-    sectionLinesBr: renderSectionLines("pt-BR"), bugSlots: renderBugSlots(), templateReqs: renderTemplateReqs() };
+    sectionLinesBr: renderSectionLines("pt-BR"), bugSlots: renderBugSlots(), templateReqs: renderTemplateReqs(),
+    // the stop gate's lists of every language (guards.js stopPatterns — builtinStopGate): the Stop hook then loads one language
+    stopGate: i18n.stopGateLists() };
 }
 // The corpus's task headings, steering stubs, requirement templates: { key: [string…] } — strings only, own keys.
 const taskHeadingsShape = (h) => !!h && typeof h === "object" && !Array.isArray(h) &&
   Object.values(h).every((v) => Array.isArray(v) && v.every((x) => typeof x === "string"));
+// The corpus's stop gate lists (i18n.stopGateLists' shape): claims [{source, langs}], triggers [[lang, source]], string lists.
+const strings = (v) => Array.isArray(v) && v.every((x) => typeof x === "string");
+const stopGateShape = (g) => !!g && typeof g === "object" && ["admissions", "negators", "fixed", "zeroes", "passNow"].every((k) => strings(g[k])) &&
+  Array.isArray(g.claims) && g.claims.every((c) => !!c && typeof c.source === "string" && strings(c.langs)) &&
+  Array.isArray(g.triggers) && g.triggers.every((t) => strings(t) && t.length === 2);
 let BUILTIN_CORPUS = undefined; // undefined: not looked for yet · null: none usable (render) · else the data
 let BUILTIN_CORPUS_FROM = "render"; // "file" | "bundle" | "render" — where this process's built-in corpus comes from
 function builtinCorpus() {
@@ -1104,7 +1130,7 @@ function builtinCorpus() {
     // file rewritten before or while it was hashed is never trusted. No version: a `version` key an older build wrote is
     // ignored — the hash alone decides, and an older corpus of the same sources is the same corpus.
     if (data && typeof data === "object" && CORPUS_KEYS.every((k) => Array.isArray(data[k]) && data[k].every((x) => typeof x === "string")) &&
-      taskHeadingsShape(data.taskHeadings) && taskHeadingsShape(data.steeringStubs) && taskHeadingsShape(data.templateReqs) && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
+      taskHeadingsShape(data.taskHeadings) && taskHeadingsShape(data.steeringStubs) && taskHeadingsShape(data.templateReqs) && stopGateShape(data.stopGate) && (b ? data.sources === b.corpusSources : data.sources === corpusSourcesHash() && sourcesUnchanged())) {
       BUILTIN_CORPUS = data;
       BUILTIN_CORPUS_FROM = b ? "bundle" : "file";
     }
@@ -1117,6 +1143,12 @@ const builtinCorpusSource = () => { builtinCorpus(); return BUILTIN_CORPUS_FROM;
 function builtinTaskHeadings(tr) {
   const c = builtinCorpus();
   return c && Object.prototype.hasOwnProperty.call(c.taskHeadings, tr) ? c.taskHeadings[tr] : null;
+}
+// The stop gate's lists of every language from the trusted corpus, or null: guards.js stopPatterns builds them then
+// (i18n.stopGateLists — it loads pt.js, es.js and pt-BR into an English Stop hook: ~20 ms).
+function builtinStopGate() {
+  const c = builtinCorpus();
+  return c ? c.stopGate : null;
 }
 // i18n.js tells us each language file it loads (en / pt / es.js on first use, pt-br.js): one changed since the engine loaded
 // makes a trusted file corpus the corpus of code this process doesn't run — dropped, with the sets built from it.
@@ -1483,13 +1515,13 @@ function builtinTemplateReqs() {
   return (TEMPLATE_REQS = i18n.LANGS.flatMap((l) => (Object.prototype.hasOwnProperty.call(by, l) ? by[l] : []).map((t) => [t, l])));
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs,
+module.exports = { stripHtmlComments, inertOutsideCode, commentLines,stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs,
   notASlug, featureRefTest, criterionLabel, planIdText, clarificationMarkers, templateTaskSet, bugStepSet, isBugStep,
   isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells, headingEntries, headingIndex,
   RE_HEADING_LEAD, headingLeadRe, headingMatches, synonymsOverlap, sectionOverlaps, extractSection, genericAnswer,
   mermaidState, RE_TODO_SENTINEL, ROOT_CAUSE_SYN, REPRO_SYN, sectionState, sectionOwnLines, trackSectionReport,
   sectionVerdict, isGenericSlot, unknownSteeringStub, templateCorpus, templateBracketKeys, templateSets, templateSetsBr,
-  CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData, builtinCorpusSource, builtinTaskHeadings,
+  CORPUS_FILE, CORPUS_SOURCES, corpusSourcesHash, renderCorpusData, builtinCorpusSource, builtinTaskHeadings, builtinStopGate,
   isTemplatePlaceholder, placeholderReport, bracketPlaceholders, artifactState, headingsOnly, artifactReport,
   featurePlaceholders, placeholderSummary, chainPlaceholders, hasProseOutsideBrackets, bugPlaceholders, bugTemplateSlots,
   renderBugSlots, renderSectionLines, renderTemplateDiagrams, templateDiagramSet, renderSteeringStubs, isSteeringStub,

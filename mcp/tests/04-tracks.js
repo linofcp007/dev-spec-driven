@@ -6,12 +6,12 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, __dirname, hookIn }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, __dirname, hookIn, handRoadmap }) => {
 
   { // --- 1.13 WP2: tracks, scaffolds & sections (own block scope: no name clashes with other packages) ---
   const w2 = path.join(tmp, "proj-wp2");
   const w2s = path.join(w2, ".specs");
-  S.initProject(w2, ["core"], "en");
+  S.initProject(w2, ["core"], "en"); handRoadmap(w2); // the file's roadmap checks render it (renderRoadmapMd / roadmap): the file's refresh skipped (harness handRoadmap)
   const readW2 = (...p) => fs.readFileSync(path.join(w2s, ...p), "utf8");
   const stateW2 = (slug) => JSON.parse(readW2(slug, ".state.json"));
   const headingCount = (md, marker) => md.split(/\r?\n/).filter((l) => /^#{1,6}\s/.test(l) && l.includes(marker)).length;

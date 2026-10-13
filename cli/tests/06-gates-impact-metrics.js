@@ -83,7 +83,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const pim8 = runIn(["impact", "rascunhos", "--project", p8]);
   const pmw8 = runIn(["metrics", "rascunhos", "--write", "--project", p8]);
   ok(/Impacto: rascunhos · requirements — face à aprovação de/.test(pim8.out) && /Afetado:/.test(pim8.out) && /tarefas: #1 \[x\] nada a verificar \(sem comando _Verify:_, nada registado\)/.test(pim8.out) &&
-    /Vê primeiro o que a edição afeta com spec_impact/.test(runIn(["na", "rascunhos", "--project", p8]).out) && /^Métricas: rascunhos \[core\] — criada a /.test(pmw8.out) &&
+    runIn(["na", "rascunhos", "--project", p8]).out.includes(MSG("pt").impact.nextHint("rascunhos", ["requirements"])) && /^Métricas: rascunhos \[core\] — criada a /.test(pmw8.out) &&
     /Retrospetiva → \.specs\/rascunhos\/retro\.md/.test(pmw8.out) && fs.readFileSync(pd8("retro.md"), "utf8").startsWith("# Retrospetiva: rascunhos") &&
     /nunca foi aprovada/.test(runIn(["impact", "rascunhos", "--phase", "design", "--project", p8]).out), "impact / next-action / metrics --write / errors (PT) are in European Portuguese");
   runIn(["create", "Nova", "core", "--project", p8]);

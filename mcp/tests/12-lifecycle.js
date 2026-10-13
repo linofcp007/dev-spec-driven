@@ -1333,7 +1333,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
       () => spBare.ok, () => naQ.step === "fill", () => naQ.file === "spike.md",
       () => /Write the question this spike answers/.test(naQ.recommendation), () => S.detectPhase(spBare.dir, ["core"]) === "requirements",
       () => naT.step === "implement", () => /^Investigate — task #1: Sharpen the question/.test(naT.recommendation), () => naD.step === "decide",
-      () => naD.phase === "executing", () => phD === "executing", () => /Record the decision in spike\.md → Decision/.test(naD.recommendation),
+      () => naD.phase === "executing", () => phD === "executing", () => naD.recommendation.includes(S.msg("en").spike.next.decide("cache-spike")),
       () => /\/spec-change cache-spike decide/.test(naD.recommendation), () => naO.step === "decide", () => /State the outcome/.test(naO.recommendation),
       () => c2Chk(docO, "decision").status === "warn", () => naGo.step === "promote", () => naGo.outcome === "go", () => naGo.phase === "complete",
       () => naGo.seed.name === "cache",

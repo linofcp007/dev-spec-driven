@@ -6,7 +6,7 @@ how they came to be — the releases and review findings — is in History at th
 
 ## When extending
 - **New operation** → the engine module of its concern (see Layout; a new module only for a new concern — `engine/index.js`
-  `MODULES`, each file costs load time) under the module rule, then its key in the `mcp/lib/spec.js` facade (`featureLocked`
+  `MODULES`, each file costs load time; one no hook needs: `LAZY`, architecture.md → The lazy tier) under the module rule, then its key in the `mcp/lib/spec.js` facade (`featureLocked`
   when it writes a feature) — every surface requires the facade, never a module. A name resolves through `resolveFeature()` /
   `existingFeature()`, never `path.join(specsRoot, slugify(name))`; state goes through `readJson()` / `writeFileAtomic` under
   the locks (conventions.md → Conventions & gotchas); every write goes through the write gate, never a raw `fs` write outside
@@ -52,9 +52,9 @@ how they came to be — the releases and review findings — is in History at th
   in mcp/tests/06-gates-sizes.js — update it only when the no-size scaffold changes on purpose), and its sized renders in
   `templateCorpus()` (then `npm run build`) and `glossBuiltinLines()`.
 - **New import source** → a parser `engine/import/<tool>.js` returning the import model (`newImportModel()`; reuse
-  import/common.js's readers), in `MODULES`; its `IMPORT_TOOLS` and `C3_PARSERS` entries (+ `TEXT_IMPORT_TOOLS` for a single
+  import/common.js's readers), in `LAZY` (the lazy tier); its `IMPORT_TOOLS` (scaffold.js) and `C3_PARSERS` entries (+ `TEXT_IMPORT_TOOLS` for a single
   document); the `tool` enum of `spec_import`, the CLI's `import` entry, tests. A source that is no feature
-  (`STEERING_IMPORT_TOOLS`) is dispatched by `importRun` before the feature path and reads through `importSourceAt` too. Every
+  (`STEERING_IMPORT_TOOLS`, scaffold.js) is dispatched by `importRun` before the feature path and reads through `importSourceAt` too. Every
   import is dry-runnable for free (`withDryRun`) while it writes and reads back through the files.js primitives.
 - **A dry run of another operation** → wrap it in `withDryRun` (conventions.md → The dry-run sink); every read of what it wrote
   goes through readRaw / existsRaw / readDirCached / safeReaddir / isDirSafe — a raw fs read sees the disk, not the sink; add
@@ -132,6 +132,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 review 8** — SKILL.md had 85 bytes left under 15 KiB with only the word cap tested: a byte cap (≤ 15,360); the
   description reached 618 of its 620 characters while resume, the next task, a spec change and a spike never fired the skill — the
   cap is 660 (the model-visible listing stays ≤ 1,500) and evals/ gained six triggering cases and three near-misses.
+- **1.30.1** — SKILL.md back to 14,034 bytes (from 15,306) without dropping a rule: lookup material went to the references it
+  already pointed to, a one-line pointer where text moved — the size table (phase-guide.md → Sizes), the tracks' glosses
+  (classification-matrix.md), the design's section list (phase-guide.md), the EARS patterns (ears-guide.md), the bugfix
+  prefill and the failed-fixes rule (bugfix.md), the feature branch and doctor's checks (tooling-reference.md), the no-MCP note
+  (tool-catalog.md), the suppression syntax (verification.md), the final review's duplicate pass (subagent-execution.md).
 - **1.28** — a tool's mode on a second key (`alt`); an integer flag's `bounds` as a `[least, most]` pair (the schema's
   minimum: `dupes --min-lines` 4–100).
 - **1.27** — one operations table (`OPERATIONS`, mcp/lib/operations.js) both surfaces run through and one CLI command table

@@ -6,11 +6,11 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname, hookIn }) => {
+exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list, __dirname, hookIn, handRoadmap }) => {
 
   { // --- 1.13 WP5: gates — placeholders, approve --force, finish/next-action, bugfix gate, clarify/EARS, roadmap, templates ---
     const w5 = path.join(tmp, "proj-wp5");
-    S.initProject(w5, ["core"], "en");
+    S.initProject(w5, ["core"], "en"); handRoadmap(w5); // roadmap not under test here: its refresh skipped (harness handRoadmap)
     const read5 = (f, rel) => fs.readFileSync(path.join(f.dir, rel), "utf8");
     const write5 = (f, rel, text) => fs.writeFileSync(path.join(f.dir, rel), text);
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
@@ -686,7 +686,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
   {
     const call8 = async (name, args) => { const r = await rpc("tools/call", { name, arguments: args }); return { isError: r.result.isError === true, p: payload(r) }; };
     const w8 = path.join(tmp, "proj-wp8");
-    S.initProject(w8, ["tdd"]);
+    S.initProject(w8, ["tdd"]); handRoadmap(w8); // roadmap not under test here: its refresh skipped (harness handRoadmap)
     const cr8 = S.createFeature(w8, "Drafts", ["tdd"]);
     const f8 = (x) => path.join(cr8.dir, x);
     const st8 = () => JSON.parse(fs.readFileSync(f8(".state.json"), "utf8"));
@@ -964,7 +964,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const ptNv8 = S.impactReport(w8, "rascunhos", { phase: "design", reopen: true });
     const ptDg = S.specDoctor(w8, "rascunhos").checks.find((c) => c.id === "changed-since-approval");
     ok(/^Impacto: rascunhos · requirements — face à aprovação de \d{4}/.test(ptL8) && ptL8.includes("US-1.AC-1 (alterado) — tarefas: #1 [x] nada a verificar (sem comando _Verify:_, nada registado)") && /volta a aprovar: \/approve rascunhos requirements/.test(ptL8) &&
-      /Vê primeiro o que a edição afeta com spec_impact/.test(ptNa8.recommendation) && ptNv8.ok && ptNv8.changed === false && ptNv8.recorded === false &&
+      ptNa8.recommendation.includes(S.msg("pt").impact.nextHint("rascunhos", ["requirements"])) && ptNv8.ok && ptNv8.changed === false && ptNv8.recorded === false &&
       /^alterado\(s\) após a aprovação: requirements\.md/.test(ptDg.detail) && /nunca foi aprovada em 'fresca'/.test(S.impactReport(w8, S.createFeature(w8, "Fresca", ["core"], undefined, undefined, "pt").slug, {}).error),
       "PT feature: impact lines, next_action's spec_impact hint, doctor's check and errors are in European Portuguese");
 
@@ -1399,7 +1399,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const ff = S.approvePhase(p, "api-keys", null, "u", { through: "tasks" });
     ok(naW.step === "approve" && /^The Phase 4 sign-off of .* — \/approve api-keys tests\./.test(naW.recommendation) && rT2.ok && js(rT2.approvals.tests.testsPlan.tests.slice(-1)) === '["T-08"]' &&
       naA.step === "implement" && js(naA.pendingGates) === "[]" && tick.ok && naX.step === "fix" && /planned since: T-09/.test(naX.recommendation) &&
-      /Phase 4 sign-off: the implementation has already started/.test(naX.recommendation) && ff.ok === false && ff.stoppedAt === "tests" && js(ff.approved) === "[]",
+      naX.recommendation.includes(S.msg("en").next.signOffTests("api-keys", "tdd")) && ff.ok === false && ff.stoppedAt === "tests" && js(ff.approved) === "[]",
       "1.22 review: once T-08 is in the test code next_action asks to approve tests, the new approval is in force (implement); on an executing feature a stale sign-off is asked for with Phase 4's sign-off wording, and a fast-forward re-runs the tests gate (got " +
       js([naW.step, naW.recommendation, naA.step, naX.step, naX.recommendation, ff.stoppedAt, ff.approved]) + ")");
   }
@@ -1543,7 +1543,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     fs.rmSync(path.join(c2.f.dir, "requirements.md"));
     fs.mkdirSync(path.join(c2.f.dir, "requirements.md"));
     const c2Na = run(() => S.nextAction(c2.p, "widget"));
-    ok(c2Na.step === "re-review" && js(c2Na.missingApproved) === '["requirements.md"]' && /was approved but no longer exists — restore it/.test(c2Na.recommendation),
+    ok(c2Na.step === "re-review" && js(c2Na.missingApproved) === '["requirements.md"]' && c2Na.recommendation.includes(S.msg("en").next.approvedMissing("requirements.md", "widget", "requirements")),
       "r5 review: an approved artifact that can't be read any more → next_action's re-review names it in missingApproved (restore it or revoke) (got " + js([c2Na.step, c2Na.missingApproved, c2Na.threw]) + ")");
 
     // M11: a bugfix's bug.md is its design — an open [NEEDS CLARIFICATION] in its Root Cause (or Reproduction) refuses the approval;

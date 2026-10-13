@@ -401,7 +401,8 @@ Engine: the `B5` block of `engine/evidence.js`.
   simplifier's `no-changes` · `no-report` · `simplify-ok` · `simplifier-evidence`. The reason is in the project language (a
   subagent's in its feature's; checks only → `headSuite`). An unreadable `.state.json` is skipped: the gate never blocks on its own
   trouble.
-- **Claims** (`stopClaims()`): every language's i18n `stopGate.claims` / `negators` / `admissions` compiled together (`STOP_WORD`:
+- **Claims** (`stopClaims()`): every language's i18n `stopGate.claims` / `negators` / `admissions` (read from the corpus —
+  `i18n.stopGateLists()` rendered by the build, `builtinStopGate()`: an English Stop hook loads no other language) compiled together (`STOP_WORD`:
   unicode word boundaries — `\b` never matches "concluído") over the last 20 000 characters of prose (`stopProse`: no code, HTML
   comments or `>` quotes). A negator or condition up to 3 words before a claim in its clause (`n't` / `'ll`, the claim's own first
   word — "Nothing is done"), or a question, cancels it; the window stops at `:` and dashes; "no" / "se" are read by language

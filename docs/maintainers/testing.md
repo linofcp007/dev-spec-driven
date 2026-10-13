@@ -30,7 +30,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   throwaway temp dir), the handshake, and the context every file's `run` receives, destructured in its signature
   (`exports.run = async ({ ok, rpc, S, tmp }) => { … }` — no parameter name a test could redeclare): `ok`, `rpc`,
   `rawOnce`, `notify`, `payload`, `S` (the engine), `root`, `tmp`, `SERVER`, `libSources()`, `maintainerNotes()`,
-  `GATE_ORDER`, `approveBefore()`, `shipFeature()`, `child` / `abort()`, the handshake's `init` / `list`, and `require` /
+  `GATE_ORDER`, `approveBefore()`, `shipFeature()`, `hookIn()` / `cliIn()` / `handRoadmap()` (below), `child` / `abort()`, the
+  handshake's `init` / `list`, and `require` /
   `__dirname` / `__filename` **as mcp/test.js's**: test code reads paths from `mcp/` (`require("./lib/i18n.js")`,
   `path.join(__dirname, "server.js")`) whichever file it lives in. `cli/tests/harness.js`: `ok`, `run(args)` (`node
   cli/dev-spec.js <args>` with `SPEC_PROJECT_DIR` = `tmp`), `tmp`, `CLI`, and cli/test-cli.js's `require` / `__dirname` — and
@@ -52,7 +53,15 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   working folder — claude-code-integration.md → A hook IS its decision). **Call a hook in-process unless the test is about its
   process:** stdin (an oversized or partial payload — `timedOut` stands in for the safety net in-process), the flushed exit, the exec
   form, what a fresh process loads (a `-r` preload), its timing, a copy of the hooks over a broken engine. The hook tests' spawns
-  were most of 10-guards*.js's time (the area's critical path).
+  were most of 10-guards*.js's time (the area's critical path). **The CLI the same way in the MCP suite (r14):** **`cliIn(args,
+  {env, cwd, input})`** runs cli/main.js `main` in the test process with spawnSync's `{ status, stdout, stderr }` — the CLI suite's
+  `spawnIn`; a command that waits throws (keep a process there). **A project whose tests read nothing of its ROADMAP.md:**
+  **`handRoadmap(projectDir)`** right after its `initProject` writes a hand-written `.specs/ROADMAP.md`, which the engine never
+  overwrites — every mutation then skips the roadmap refresh, `roadmapData` over every feature of the project each time (quadratic
+  over a test that scaffolds many features: 50 creates cost 15 s). The refresh swallows its errors, so in such a test it proved
+  nothing; a roadmap test renders it in memory (`renderRoadmapMd`, `S.roadmap` — unaffected) or reads the file of a project of
+  its own. The refresh was a third of the heavy files' time (measured with a counting preload: proj-wp5 in 06-gates 15 s, the
+  50-feature project of 15-quality 15 s).
 - **How it runs.** A file is independent unless it declares `exports.deps` — the files it needs to have run first IN THE
   SAME PROCESS, because it reads a project folder they built or a value one of them returned (`return { vDir }` from
   `run` joins the context of the files after it) — say which in a comment above `deps`. A file and
@@ -126,7 +135,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   arguments the test knows); a CLI file reads `MSG = require(…/mcp/lib/i18n.js).msg` — so a rewording touches the locale file
   alone; else a short fragment naming the message. A whole sentence is pinned only where the sentence IS the point: the prose
   guards (README tables, rule files, no PR / CI steering), the i18n parity and translation checks. (Review 8 found ~150 such pins;
-  1.30 moved ~70 to their entries.) **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
+  1.30 moved ~70 to their entries, 1.30.1 50 more (a stable `code` replaced two) — the 35 left are translation checks, a
+  template's own structure or an entry's own words.) **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
   `eq(actual, expected, label)` (scripts/test-runner.js `assertHelpers`, built on the file's own `ok` — one call is ONE
   assertion, so the totals stay comparable, and a late one is a late assertion). **Prefer `all()` over `ok(a && b && …)` for
   more than ~4 conditions**: `ok()` with 15 conditions said only that one of them was false. `all(label, [() => a.ok, () =>
@@ -286,3 +296,12 @@ How the rules above came to be — grep a release here.
   -pwsh (one PowerShell process per shell runs the three scripts: four starts of ~2–4 s each before); 09-evidence-done-run.js → -pwsh /
   -verify. A chain requires only its own files; the MCP server starts before the harness's engine. Measured: see the notes of that
   release (median of 3, `--jobs 4`, before / after interleaved).
+- **1.30.1** — where the MCP suite's summed time went, measured with two preloads (`NODE_OPTIONS=--require …`,
+  `DEV_SPEC_TEST_KEEP_NODE_ENV=1`): one timestamping every assertion line with the test line that made it, one counting the engine's
+  `roadmapData` calls per project. The long tail is engine work in-process (~2,200 assertions at ~0.2 s), not spawns (~450 a run);
+  its largest single slice was the roadmap refresh after every mutation — a third of the heavy files' time, quadratic in a project
+  that scaffolds many features (15 s for one 50-feature project). `handRoadmap()` on the projects whose tests read no ROADMAP.md,
+  `cliIn()` for ~27 CLI spawns, the eval fixtures built four at a time (18 s one after the other), 16-conventions-build's
+  independent children side by side. Measured (median of 3 interleaved rounds, `--jobs 4`, Windows 11, Node 26, a shared machine;
+  1.30.0 → 1.30.1): wall 119.2 → 107.4 s, the files' summed time 446.7 → 401.6 s; an earlier set under a drifting load had the
+  pairs at −14 % / +13 % (the 1.30.1 run first, in the heavier window) / −12 %.

@@ -2,7 +2,7 @@
 
 The bundled zero-dependency MCP server **`spec-driven`** does the mechanical work; prefer it over hand-rolled edits
 for the structural steps. The tools produce **skeletons and checks** (never overwriting your files); *you* fill them
-with real content from the `references/` templates. No MCP connection (e.g. claude.ai)? Write the files by hand.
+with real content from the `references/` templates. No MCP connection (e.g. claude.ai)? Write the files by hand; runs need a real environment.
 
 - **Start:** `spec_classify` (Phase 0 draft) → `spec_init` (steering; opt-in `guard`, project `checks`,
   `approvalRoles`, `evidence: "observed"`, `approvalGuard`) → `spec_create` (one feature; `kind: "bugfix"` for a defect

@@ -3,6 +3,57 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.30.1] — 2026-10-14
+
+Windows path spellings the guards did not read, and a faster engine, hooks and CLI.
+
+### Security
+- **The approval guard reads Windows' own spellings of a path in shell commands.** These were all allowed at deny:
+  - **8.3 short names:** `cp evil SPECS~1/guardian.cjs`, `cp x SPECS~1/roadmap.json`, `echo x > GUARDI~1/BASELI~1.JSO`,
+    `node …/DEV-GU~1.MJS baseline update`. This was a listed known limit.
+  - **Trailing dots and spaces**, which Win32 drops: PowerShell and cmd.exe write `.specs\roadmap.json.` as `roadmap.json`.
+  - **A folder's NTFS stream designation:** `.specs::$INDEX_ALLOCATION\roadmap.json` is written as `.specs\roadmap.json`.
+
+  Each now decides like its long name, at ask and deny, with dev-guardian's check and without. An existing path is expanded
+  through the file system; one that doesn't exist is read by the 8.3 rule, failing closed. Linux and macOS are unchanged:
+  there these are other names.
+- **A Write or MCP file tool into a new folder behind a short name** (`SPECS~1/newfeat/.state.json`) went through, because
+  only two folder levels were read. The real path is now read from the deepest existing folder.
+- **A glob onto dev-guardian's launcher** (`cp evil .specs/guard*.cjs`, `cp evil .s*/guardian.cjs`) counts as a write of the
+  launcher when the guardian check is set.
+- **Guard mode** asks for `echo x > src/MAIN~1.JAV` and PowerShell's `Set-Content src\a.ts. x`. Both used to be read as "no
+  code".
+
+### Changed
+- **The engine loads faster.** The importers and the duplicate-code detector now load the first time they are used, not with
+  every engine load. Engine load went 103 → 86 ms, and every hook's engine path is 8–29 ms faster: guard 195 → 167 ms, observe
+  177 → 160 ms. Medians of 21 fresh processes, Windows 11, Node 26.
+- **The Stop hook** no longer loads the Portuguese and Spanish tables in an English project: 205 → 189 ms on a closing
+  message.
+- **A CLI usage error no longer loads the engine.** `done`, `approve` or `trace` with no arguments: 228 → 108 ms. Across 256
+  usage-error calls the engine now loads in 12 instead of 122, with byte-identical output.
+- **The status line shows a change outside `.specs/` at the next render.** Before, a Phase 4 test file or a `.specs/` created
+  nearer the cwd took up to 10 s to show. Cache hits cost the same.
+- **SKILL.md is smaller:** 15,306 → 14,034 bytes, and it is loaded whole every time the skill fires. Lookup material moved to
+  the references it already pointed to; every rule, Principle and routing line, and the description, are unchanged.
+
+### Maintainers
+- `mcp/lib/probe.js` holds Windows' readings of a path, in one copy (`shortNameOf`, `winPathTrim`, `realPathLoose`), and
+  the ONE project resolver (`resolveProjectDir`).
+- The lazy tier: `engine/index.js` has a `LAZY` list with named stand-ins until first use, and the module-rule checks
+  understand it (architecture.md → The module rule). `inertOutsideCode` moved to markdown.js, the import tool lists to
+  scaffold.js.
+- The corpus carries the merged stop-gate lists (`i18n.stopGateLists()`).
+- Test speed:
+  - `handRoadmap()` / `cliIn()` in the MCP harness cut its summed time about 10 %.
+  - 50 more whole-sentence pins now read their i18n entries; 35 remain on purpose.
+  - A hook process that fails to start is reported, never a TypeError.
+- The repository's `.gitignore` keeps dev-guardian's shared files (budgets.yml, hooks.config.json, hooks-allowlist.json,
+  scan.yml), as dev-guardian 3.3 writes.
+
+### Tests
+- `node mcp/test.js` 2234 assertions, `node cli/test-cli.js` 652 (was 2227 / 650).
+
 ## [1.30.0] — 2026-10-13
 
 Review 8 (security, engine, prose, maintainability and the dev-guardian integration) and review 9 (the merged release).

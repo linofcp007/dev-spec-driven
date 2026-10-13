@@ -249,6 +249,54 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
       cacheFile: () => fs.existsSync(cacheFile), expired: () => expiredOk,
       otherColumns: () => !/LOADED 0$/.test(spawnSync(process.execPath, ["-r", pre, CLI, "statusline"], { encoding: "utf8", input: payloadC, cwd: none, env: { ...envNo, COLUMNS: "30" } }).stderr),
     });
+
+    // 1.30.1 — what the line reads OUTSIDE .specs/ showed only once the 10 s TTL ran out. The render reports the files it depends on
+    // there (statusLine opts.reads — Phase 4's test files) and the cache signs them beside .specs/: a test written outside .specs/ shows
+    // at the next render; the folder the candidates find is compared at each read (a .specs/ made nearer the cwd is a miss); a worktree
+    // mapped to its checkout keeps its render 2 s (STATUS_CACHE_MAPPED_TTL_MS); a reported file changed as the render ran is not kept.
+    const p4 = path.join(tmp, "r14-sl-tests");
+    S16.initProject(p4, ["core"], "en");
+    const f4 = S16.createFeature(p4, "Pay", ["tdd"], "", undefined, "en");
+    cFill(f4.dir, "Pay");
+    fs.writeFileSync(path.join(f4.dir, "test-plan.md"), "# Test Plan: Pay\n\n| Test ID | Covers | Type | File |\n|---|---|---|---|\n" +
+      "| T-01 | US-1.AC-1 | unit | tests/pay.test.js |\n| T-02 | US-1.AC-2 | unit | tests/pay.test.js |\n");
+    S16.approvePhase(p4, f4.slug, null, "t", { through: "test-plan" });
+    const pay4 = js({ cwd: p4, workspace: { current_dir: p4, project_dir: p4 } });
+    const t1 = loaded(["statusline"], pay4), t2 = loaded(["statusline"], pay4);
+    const entry4 = (() => { try { return JSON.parse(fs.readFileSync(C.statusCacheFile({ cands: [p4, p4, p4].map((x) => path.resolve(x)), columns: null }), "utf8")); } catch { return null; } })();
+    fs.mkdirSync(path.join(p4, "tests"), { recursive: true });
+    fs.writeFileSync(path.join(p4, "tests", "pay.test.js"), "test('T-01 charges', () => {});\ntest('T-02 declines', () => {});\n"); // outside .specs/
+    const t3 = loaded(["statusline"], pay4);
+    // a .specs/ made nearer the session's folder (app/ becomes a project of its own) — in the ledger project (no outside file read: the
+    // test just written above keeps p4's renders out of the cache for STATUS_CACHE_RACY_MS)
+    const app = path.join(prc, "app");
+    fs.mkdirSync(app, { recursive: true });
+    const payApp = js({ cwd: app, workspace: { current_dir: app, project_dir: prc } });
+    const n1 = loaded(["statusline"], payApp), n2 = loaded(["statusline"], payApp);
+    S16.initProject(app, ["core"], "en");
+    S16.createFeature(app, "Inner", ["core"], "", undefined, "en");
+    const n3 = loaded(["statusline"], payApp);
+    // the cache's own rules, in this process: a mapped render's shorter TTL, a file changed as the render ran
+    const K = { cands: ["r14-unit"], columns: 1 }, now = Date.now(), sig = C.specsSignature(p4), rr = { ok: true, found: true, line: "x" };
+    C.statusCacheWrite(K, p4, sig, rr, { at: now - 3000, near: p4, mapped: true });
+    const mappedOld = C.statusCacheRead(K, now, p4);
+    C.statusCacheWrite(K, p4, sig, rr, { at: now - 3000, near: p4 });
+    const plainOld = C.statusCacheRead(K, now, p4), otherNear = C.statusCacheRead(K, now, app);
+    fs.rmSync(C.statusCacheFile(K), { force: true });
+    const racyFile = path.join(p4, "tests", "racy.test.js");
+    fs.writeFileSync(racyFile, "test('T-02 x', () => {});\n"); // written just before the render "began": its mtime is past started - STATUS_CACHE_RACY_MS
+    C.statusCacheWrite(K, p4, sig, rr, { started: Date.now(), near: p4, reads: [racyFile] });
+    const racy = fs.existsSync(C.statusCacheFile(K));
+    fs.rmSync(C.statusCacheFile(K), { force: true });
+    all("1.30.1: the status line's cache signs what it read outside .specs/ — a Phase 4 test written outside .specs/ shows at the next render (write the tests → approve tests); a .specs/ made nearer the cwd is a miss; a worktree's mapped render keeps 2 s, a plain one 10 s; a reported file changed as the render ran is not kept (got " +
+      js([t1.stdout, t1.stderr.slice(-10), t2.stderr.slice(-10), t3.stdout, t3.stderr.slice(-10), n1.stdout, n2.stderr.slice(-10), n3.stdout, n3.stderr.slice(-10), entry4 && entry4.outside]) + ")", {
+      phase4: () => /write the tests/.test(t1.stdout) && !/LOADED 0$/.test(t1.stderr) && t2.stdout === t1.stdout && /LOADED 0$/.test(t2.stderr),
+      signed: () => !!entry4 && entry4.near === path.resolve(p4) && entry4.outside.length === 1 && /pay\.test\.js$/.test(entry4.outside[0]),
+      testShows: () => /approve tests/.test(t3.stdout) && !/LOADED 0$/.test(t3.stderr),
+      nearer: () => /◆ ledger/.test(n1.stdout) && /LOADED 0$/.test(n2.stderr) && /◆ inner/.test(n3.stdout) && !/LOADED 0$/.test(n3.stderr),
+      mappedTtl: () => mappedOld === null && !!plainOld && plainOld.line === "x" && otherNear === null && C.STATUS_CACHE_MAPPED_TTL_MS < C.STATUS_CACHE_TTL_MS,
+      racy: () => racy === false,
+    });
   }
 
   // 1.25.1 (review 7): in a plugin's versioned cache folder the status line command printed `node "<…/<version>/cli/dev-spec.js>"

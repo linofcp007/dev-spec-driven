@@ -133,7 +133,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     const wsl14 = [await call("spec_classify", { description: "export invoices", projectDir: "\\\\wsl.localhost\\Ubuntu\\home\\me\\proj" }),
       await call("spec_classify", { description: "export invoices", projectDir: "\\\\wsl$\\Ubuntu\\home\\me\\proj" })];
     const ext14 = process.platform === "win32" ? payload(await call("spec_list", { projectDir: "\\\\?\\" + t14 })) : { exists: true, features: [{ name: "alpha" }] };
-    ok(netRes14.every((r) => r.result.isError && /projectDir must be a local folder — a network or device path/.test(errText(r))) &&
+    ok(netRes14.every((r) => r.result.isError && /"code":"project-network"/.test(r.result.content[0].text)) &&
       netArg14.result.isError && /name must be a string/.test(errText(netArg14)) && netMs14 < 5000 &&
       // a WSL host is no network path: accepted — or, where that distribution's folder doesn't exist here, refused as missing
       // (1.24 r6 A3: projectDir names an existing folder), never as a network path
@@ -573,22 +573,32 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       "1.17: no regex literal in the engine, server, CLI or hooks looks backslash-stripped (got " + JSON.stringify(bad) + ")");
   }
 
+  // engine/index.js's lists, read from its source: MODULES (loaded with the engine), LAZY (1.30.1: the lazy tier, loaded on the
+  // first call of one of LAZY_ENTRIES) — module paths relative to engine/ ("import/kiro.js") — and LAZY_ENTRIES.
+  const indexLists = () => {
+    const idx = path.join(__dirname, "lib", "engine", "index.js");
+    const src = fs.existsSync(idx) ? fs.readFileSync(idx, "utf8") : "";
+    const list = (name) => [...((src.match(new RegExp("const " + name + " = \\[([\\s\\S]*?)\\];")) || ["", ""])[1]).matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    return { eager: list("MODULES").map((f) => f.replace(/^\.\//, "")), lazy: list("LAZY").map((f) => f.replace(/^\.\//, "")), entries: list("LAZY_ENTRIES") };
+  };
+
   // 1.18: the engine as modules — mcp/lib/spec.js and i18n.js are facades over mcp/lib/engine/ and mcp/lib/i18n/. Every
-  // engine module is loaded (listed in engine/index.js MODULES: a module left out would leave its names undefined behind
-  // __link), and every mcp/lib source stays zero-dependency: Node core (fs, path, os, crypto, module) or a relative file.
+  // engine module is loaded (listed in engine/index.js MODULES or, 1.30.1, LAZY: a module left out would leave its names
+  // undefined behind __link), and every mcp/lib source stays zero-dependency: Node core (fs, path, os, crypto, module) or a relative file.
   {
     const engDir = path.join(__dirname, "lib", "engine");
-    const idxSrc = fs.existsSync(path.join(engDir, "index.js")) ? fs.readFileSync(path.join(engDir, "index.js"), "utf8") : "";
-    const listed = [...((idxSrc.match(/const MODULES = \[([\s\S]*?)\];/) || ["", ""])[1]).matchAll(/"\.\/([^"]+)"/g)].map((m) => m[1]).sort();
+    const lists = indexLists();
+    const listed = [...lists.eager, ...lists.lazy].sort();
     const onDisk = libSources().map((f) => path.relative(engDir, f).split(path.sep).join("/"))
       .filter((f) => !f.startsWith("..") && f !== "index.js" && f !== "ctx.js").sort();
     const core = new Set(["fs", "path", "os", "crypto", "module"]);
     const badReq = [];
     for (const f of libSources()) for (const m of fs.readFileSync(f, "utf8").matchAll(/\brequire\(\s*(["'])([^"']+)\1\s*\)/g))
       if (!core.has(m[2].replace(/^node:/, "")) && !/^\.\.?\//.test(m[2])) badReq.push(path.relative(root, f) + ": " + m[2]);
-    ok(listed.length > 0 && JSON.stringify(listed) === JSON.stringify(onDisk) && badReq.length === 0 && typeof S.withReadCache === "function",
-      "1.18: every engine module is listed in engine/index.js MODULES (and only those), and every mcp/lib source requires Node core or a relative file only (got " +
-      JSON.stringify([listed.length, onDisk.filter((f) => !listed.includes(f)), listed.filter((f) => !onDisk.includes(f)), badReq]) + ")");
+    const twice = listed.filter((f, i) => listed.indexOf(f) !== i);
+    ok(lists.eager.length > 0 && lists.lazy.length > 0 && !twice.length && JSON.stringify(listed) === JSON.stringify(onDisk) && badReq.length === 0 && typeof S.withReadCache === "function",
+      "1.18: every engine module is listed in engine/index.js MODULES or LAZY (once, and only those), and every mcp/lib source requires Node core or a relative file only (got " +
+      JSON.stringify([listed.length, onDisk.filter((f) => !listed.includes(f)), listed.filter((f) => !onDisk.includes(f)), twice, badReq]) + ")");
   }
 
   // 1.18 module rule (review), read from the sources — no parser, zero dependencies. Per engine / i18n module: its bare
@@ -602,7 +612,11 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     const engDir = path.join(libDir, "engine"), i18nDir = path.join(libDir, "i18n");
     const rel = (f) => path.relative(libDir, f).split(path.sep).join("/");
     const E = require("./lib/engine/index.js"); // the instance spec.js loaded (module cache): every name the modules export
-    const engineNames = new Set(Object.keys(E));
+    const engineNames = new Set(Object.keys(E)); // the eager modules' names and the lazy tier's entries (their stubs)
+    // 1.30.1: a lazy-tier module links in the tier's namespace — E's names, every tier export (loading the tier here)
+    const lists = indexLists();
+    const tierFiles = new Set(lists.lazy.map((f) => path.join(engDir, ...f.split("/"))));
+    const tierNames = new Set(Object.keys(E.loadLazyTier()));
     const i18nNames = new Set(((fs.readFileSync(path.join(libDir, "i18n.js"), "utf8").match(/\.__link\(\{([^}]*)\}\)/) || ["", ""])[1])
       .split(",").map((s) => s.trim()).filter(Boolean));
     const inside = (f, d) => f.startsWith(d + path.sep);
@@ -623,10 +637,13 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       const names = list.split(",").map((s) => s.trim()).filter(Boolean);
       linkedModules++;
       linkedNames += names.length;
-      const ns = inside(f, i18nDir) ? i18nNames : engineNames;
+      const ns = inside(f, i18nDir) ? i18nNames : tierFiles.has(f) ? tierNames : engineNames;
       const dups = [...bare.filter((n, i) => bare.indexOf(n) !== i), ...names.filter((n, i) => names.indexOf(n) !== i)];
       const onlyLet = bare.filter((n) => !names.includes(n)), onlyLink = names.filter((n) => !bare.includes(n));
-      const unknown = names.filter((n) => !ns.has(n));
+      // an eager module linking a tier name that is no LAZY_ENTRIES entry would hold undefined for good (it links before the tier loads)
+      const tierOnly = ns === engineNames ? names.filter((n) => !ns.has(n) && tierNames.has(n)) : [];
+      if (tierOnly.length) bad.push(rel(f) + ": links the lazy tier's " + tierOnly.join(", ") + " — no entry of LAZY_ENTRIES (engine/index.js)");
+      const unknown = names.filter((n) => !ns.has(n) && !tierOnly.includes(n));
       const shadow = names.filter((n) => n === param || n === "arguments" || n === "eval" || !/^[A-Za-z_$][\w$]*$/.test(n));
       if (from !== param) bad.push(rel(f) + ": __link(" + param + ") destructures " + from);
       if (dups.length) bad.push(rel(f) + ": named twice " + dups.join(", "));
@@ -640,12 +657,12 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       "1.18 module rule: each engine / i18n module's bare `let` list names exactly its __link destructure, every name exists in the namespace __link receives, none shadows the __link parameter (got " +
       JSON.stringify({ linkedModules, linkedNames, bad }) + ")");
 
-    // The load-time graph: every top-level `const … = require("./…")` of mcp/lib, plus index.js → each module in MODULES.
-    // An engine → engine or i18n → i18n require (ctx.js aside) is marked `// load time`, as the rule says.
-    const modules = [...((fs.readFileSync(path.join(engDir, "index.js"), "utf8").match(/const MODULES = \[([\s\S]*?)\];/) || ["", ""])[1])
-      .matchAll(/"\.\/([^"]+)"/g)].map((m) => path.join(engDir, m[1]));
+    // The load-time graph: every top-level `const … = require("./…")` of mcp/lib, plus index.js → each module in MODULES and
+    // LAZY (the tier's at its first entry call). An engine → engine or i18n → i18n require (ctx.js aside) is marked `// load
+    // time`, as the rule says; an eager module never requires a tier module (it would load the tier with the engine).
+    const modules = lists.eager.map((f) => path.join(engDir, ...f.split("/")));
     const graph = new Map();
-    const unmarked = [];
+    const unmarked = [], intoTier = [];
     for (const f of libSources()) {
       const deps = [];
       for (const m of fs.readFileSync(f, "utf8").matchAll(/^(?:const|let|var)\s+(?:\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=\s*require\((["'])(\.\.?\/[^"']+)\1\);?(.*)$/gm)) {
@@ -653,8 +670,9 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
         deps.push(to);
         const sameTree = (inside(f, engDir) && inside(to, engDir)) || (inside(f, i18nDir) && inside(to, i18nDir));
         if (sameTree && path.basename(to) !== "ctx.js" && !/\/\/ load time/.test(m[3])) unmarked.push(rel(f) + " → " + rel(to));
+        if (tierFiles.has(to) && !tierFiles.has(f)) intoTier.push(rel(f) + " → " + rel(to));
       }
-      if (f === path.join(engDir, "index.js")) deps.push(...modules);
+      if (f === path.join(engDir, "index.js")) deps.push(...modules, ...tierFiles);
       graph.set(f, deps);
     }
     const state = new Map(), cycles = [];
@@ -672,12 +690,96 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       }
     }
     const loadTimeEdges = [...graph.values()].reduce((n, d) => n + d.length, 0);
-    ok(loadTimeEdges > modules.length && cycles.length === 0 && unmarked.length === 0,
-      "1.18 module rule: the load-time requires of mcp/lib form an acyclic graph, and every engine → engine / i18n → i18n one is marked // load time (got " +
-      JSON.stringify({ loadTimeEdges, cycles, unmarked }) + ")");
+    ok(loadTimeEdges > modules.length && cycles.length === 0 && unmarked.length === 0 && intoTier.length === 0,
+      "1.18 module rule: the load-time requires of mcp/lib form an acyclic graph, every engine → engine / i18n → i18n one is marked // load time, and none leads from outside the lazy tier into it (got " +
+      JSON.stringify({ loadTimeEdges, cycles, unmarked, intoTier }) + ")");
     const notLoaded = [...modules, path.join(engDir, "ctx.js")].filter((f) => !require.cache[f]).map(rel);
     ok(modules.length >= 20 && notLoaded.length === 0,
       "1.18 module rule: every module in engine/index.js MODULES is loaded once the facade is (got " + JSON.stringify({ modules: modules.length, notLoaded }) + ")");
+  }
+
+  // 1.30.1 lazy tier (engine/index.js LAZY): the importers and the duplicate-code detector load on the first call of one of
+  // LAZY_ENTRIES, never with the engine. (a) Each entry is a function exported by ONE tier module, stubbed in E (its name kept)
+  // until the tier loads, and used outside the tier (an eager module's link, the facade) — else it is no entry; E's keys are the
+  // eager modules' names and the entries alone (a tier internal is reached through E.loadLazyTier()). (b) A fresh process that
+  // loads the facade and runs every hook's engine path (each hook's decide() in-process: guard, approval, the spec save,
+  // SessionStart, observe, stop, plan) and the common calls (status, next_action, doctor, trace + its matrix, finish's
+  // readers aside) loads no tier module; the first entry call loads all of them, and its answer is the engine's.
+  {
+    const engDir = path.join(__dirname, "lib", "engine");
+    const lists = indexLists();
+    const E = require("./lib/engine/index.js");
+    const T = E.loadLazyTier();
+    const exportsOf = (f) => (((fs.readFileSync(path.join(engDir, ...f.split("/")), "utf8").replace(/\r\n/g, "\n").match(/^module\.exports = \{([^}]*)\};/m) || ["", ""])[1])
+      .replace(/\/\/[^\n]*/g, "").split(",").map((s) => s.trim()).filter((s) => s && s !== "__link"));
+    const owners = (name) => lists.lazy.filter((f) => exportsOf(f).includes(name));
+    const eagerExports = new Set(lists.eager.flatMap(exportsOf));
+    const eagerLinks = new Set(lists.eager.flatMap((f) => {
+      const src = fs.readFileSync(path.join(engDir, ...f.split("/")), "utf8");
+      const link = /function __link\(\s*[A-Za-z_$][\w$]*\s*\)\s*\{\s*\(\{([^}]*)\}/.exec(src);
+      return link ? link[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
+    }));
+    const facadeTakes = new Set(((fs.readFileSync(path.join(__dirname, "lib", "spec.js"), "utf8").match(/^const \{([^}]*)\} = engine;/m) || ["", ""])[1])
+      .split(",").map((s) => s.trim()).filter(Boolean));
+    const tierInternals = new Set(lists.lazy.flatMap(exportsOf).filter((n) => !lists.entries.includes(n)));
+    all("1.30.1 lazy tier: every LAZY_ENTRIES name is a function of exactly one tier module, stubbed in E under its own name, and used outside the tier; E holds no other tier name (got " +
+      JSON.stringify({ entries: lists.entries, owners: lists.entries.map((n) => [n, owners(n)]), leaked: Object.keys(E).filter((k) => tierInternals.has(k)) }) + ")", {
+      "an entry or more": () => lists.entries.length >= 2 && lists.lazy.length >= 2,
+      "one owner each, in the tier": () => lists.entries.every((n) => owners(n).length === 1 && !eagerExports.has(n)),
+      "a function in the tier": () => lists.entries.every((n) => typeof T[n] === "function" && T[n] !== E[n]),
+      "a stub in E, named": () => lists.entries.every((n) => typeof E[n] === "function" && E[n].name === n),
+      "used outside the tier": () => lists.entries.every((n) => eagerLinks.has(n) || facadeTakes.has(n)),
+      "E holds no tier internal": () => Object.keys(E).every((k) => !tierInternals.has(k)),
+      "loadLazyTier is no name of E": () => !Object.keys(E).includes("loadLazyTier") && E.loadLazyTier() === T,
+    });
+
+    const child = path.join(tmp, "p301-lazy.js");
+    const proj = path.join(tmp, "proj-p301-lazy");
+    fs.writeFileSync(child, [
+      "\"use strict\";",
+      "const fs = require(\"fs\"), path = require(\"path\");",
+      "const [lib, hooks, proj] = process.argv.slice(2);",
+      "const S = require(path.join(lib, \"spec.js\"));",
+      "const tier = () => Object.keys(require.cache).filter((k) => /[\\\\/]engine[\\\\/](?:import[\\\\/]|dupes\\.js$)/.test(k)).length;",
+      "const out = { afterLoad: tier() };",
+      "S.initProject(proj, [\"core\"], \"en\");",
+      "const rmf = path.join(proj, \".specs\", \"roadmap.json\"), rm = JSON.parse(fs.readFileSync(rmf, \"utf8\"));",
+      "rm.meta = Object.assign(rm.meta || {}, { guard: true, approvalGuard: \"ask\" });",
+      "fs.writeFileSync(rmf, JSON.stringify(rm, null, 2));",
+      "const f = S.createFeature(proj, \"Pay\", [\"core\"], \"\", undefined, \"en\");",
+      "fs.writeFileSync(path.join(f.dir, \"tasks.md\"), \"# Tasks\\n\\n- [ ] 1. [US1] Charge\\n  - _Verify: npm test_\\n\");",
+      "S.completeTask(proj, \"pay\", 1);",
+      "process.env.CLAUDE_PROJECT_DIR = proj;",
+      "process.chdir(proj);",
+      "const decide = (h, pl) => require(path.join(hooks, h + \"-hook.js\")).decide(JSON.stringify(Object.assign({ cwd: proj, session_id: \"p301\" }, pl)));",
+      "const said = {",
+      "  guard: decide(\"guard\", { hook_event_name: \"PreToolUse\", tool_name: \"Write\", tool_input: { file_path: path.join(proj, \"src\", \"a.js\"), content: \"x\" } }),",
+      "  approval: decide(\"approval\", { hook_event_name: \"PreToolUse\", tool_name: \"mcp__plugin_dev-spec-driven_spec-driven__spec_approve\", tool_input: { name: \"pay\", phase: \"requirements\" } }),",
+      "  save: decide(\"spec\", { hook_event_name: \"PostToolUse\", tool_name: \"Write\", tool_input: { file_path: path.join(f.dir, \"design.md\") } }),",
+      "  session: decide(\"spec\", { hook_event_name: \"SessionStart\", source: \"startup\" }),",
+      "  observe: decide(\"observe\", { hook_event_name: \"PostToolUse\", tool_name: \"Bash\", tool_input: { command: \"npm test\" }, tool_response: { exit_code: 0 } }),",
+      "  stop: decide(\"stop\", { hook_event_name: \"Stop\", stop_hook_active: false, last_assistant_message: \"All tasks are done.\" }),",
+      "  plan: decide(\"plan\", { hook_event_name: \"PostToolUse\", tool_name: \"ExitPlanMode\", tool_input: { plan: \"# Plan\\n\\n1. Add `src/a.js`\" } }),",
+      "};",
+      "out.hooks = Object.fromEntries(Object.entries(said).map(([k, v]) => [k, v == null ? null : JSON.stringify(v).slice(0, 60)]));",
+      "S.statusFeature(proj, \"pay\"); S.nextAction(proj, \"pay\"); S.specDoctor(proj, \"pay\"); S.traceCheck(proj, \"pay\"); S.traceMatrix(proj, \"pay\"); S.listFeatures(proj); S.statusLine(proj);",
+      "out.afterCalls = tier();",
+      "out.paths = S.planPaths(\"see [the store](src/theme.ts) and `lib/y.js`\");",
+      "out.afterEntry = tier();",
+      "out.dupes = S.duplicationReport(proj, {}).ok;",
+      "process.stdout.write(JSON.stringify(out));",
+    ].join("\n"));
+    const r = spawnSync(process.execPath, [child, path.join(__dirname, "lib"), path.join(root, "hooks"), proj], { encoding: "utf8", timeout: 120000, cwd: tmp });
+    let got;
+    try { got = JSON.parse(r.stdout); } catch { got = { stdout: String(r.stdout).slice(0, 300), stderr: String(r.stderr).slice(0, 600) }; }
+    all("1.30.1 lazy tier: a fresh process loads no tier module with the facade, every hook's engine path (each decide() said its piece) or the common calls; the first entry call (planPaths) loads the whole tier and answers as before (got " + JSON.stringify(got) + ")", {
+      "none with the facade": () => got.afterLoad === 0,
+      "every hook reached the engine": () => ["guard", "approval", "save", "session", "plan"].every((k) => typeof got.hooks[k] === "string") && got.hooks.observe === null,
+      "none after the hooks and calls": () => got.afterCalls === 0,
+      "the entry's answer": () => JSON.stringify(got.paths.slice().sort()) === "[\"lib/y.js\",\"src/theme.ts\"]",
+      "the whole tier after it": () => got.afterEntry === lists.lazy.length,
+      "another entry runs on it": () => got.dupes === true,
+    });
   }
 
   // 1.27 module boundaries, read from the sources with a small scanner (no parser, zero dependencies: it tells code from comments,

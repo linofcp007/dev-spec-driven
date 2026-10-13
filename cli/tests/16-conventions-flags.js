@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
@@ -160,14 +161,14 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     ["backlog", "rm", "a", "b"], ["log", "login", "x"], ["brief", "login", ""]].map((a) => runIn([...a, "--project", p23]));
   const after23 = fs.readFileSync(t23, "utf8") + fs.readFileSync(path.join(p23, ".specs", "login", ".state.json"), "utf8");
   const want23 = [/--remove is not an option of 'approve' \(its options: --by, --force, --role, --through, --reason, --expires, --revoke\)/, /'done' got unexpected argument\(s\): 2\./,
-    /--timeout only applies with --run/, /--shell only applies with --run/, /--run records the run it makes; --evidence \/ --exit \/ --cmd report a run made elsewhere/,
+    /--timeout only applies with --run/, /--shell only applies with --run/, MSG("en").cliOutput.runOrEvidence,
     /--lang is not an option of 'status' \(it takes none\)/, /'list' got unexpected argument\(s\): extra/, /'backlog rm' got unexpected argument\(s\): b/,
     /usage: dev-spec log <feature> \[--max N\] \[-\]/, /number must be an integer ≥ 0 \(got ""\)/];
   const j23 = runJ(["list", "extra", "--json", "--project", p23]), jMax23 = runJ(["next", "login", "--max", "0", "--json", "--project", p23]), jCmd23 = runJ(["frobnicate", "--json"]);
   const pt23 = path.join(tmp, "wp23-strict-pt");
   runIn(["init", "--lang", "pt", "--project", pt23]);
   const ptU23 = runIn(["roadmap", "--force", "--project", pt23]);
-  ok(u23.every((r, i) => r.code === 1 && want23[i].test(r.out) && !/^\$ /m.test(r.out)) && after23 === before23 &&
+  ok(u23.every((r, i) => r.code === 1 && (typeof want23[i] === "string" ? r.out.includes(want23[i]) : want23[i].test(r.out)) && !/^\$ /m.test(r.out)) && after23 === before23 &&
     j23.code === 1 && j23.j && j23.j.ok === false && /'list' got unexpected argument/.test(j23.j.error) && jMax23.j && jMax23.j.ok === false && /--max must be an integer ≥ 1/.test(jMax23.j.error) &&
     jCmd23.j && jCmd23.j.ok === false && /unknown command 'frobnicate'/.test(jCmd23.j.error) && ptU23.code === 1 && /--force não é uma opção de 'roadmap'/.test(ptU23.out),
     "1.23 review: a known flag a command doesn't read, an extra argument, --shell / --timeout without --run, --run with --evidence and brief '' exit 1 with the reason, nothing changed; --json prints {ok: false, error} on stdout for usage errors too; PT (got " +
@@ -187,7 +188,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     () => pj23[0].code === 1, () => /--project .*deeper: no such folder — check the path \(only init creates a project folder\)/.test(pj23[0].out),
     () => !fs.existsSync(path.join(tmp, "wp23-typo")), () => pj23[1].code === 1, () => /roadmap\.json is a file, not a folder/.test(pj23[1].out),
     () => pj23[2].code === 1, () => /--project is empty/.test(pj23[2].out),
-    () => pj23.slice(3).every((r) => r.code === 1 && /holds a variable that was never expanded/.test(r.out)), () => pjJ23.code === 1, () => pjJ23.j,
+    () => pj23.slice(3).every((r, i) => r.code === 1 && r.out.includes(MSG("en").cliOutput.projectUnexpanded(["$HOME/x", "%APPDATA%\\x"][i]))), () => pjJ23.code === 1, () => pjJ23.j,
     () => pjJ23.j.ok === false, () => /no such folder/.test(pjJ23.j.error), () => init23.code === 0,
     () => fs.existsSync(path.join(newP23, ".specs", "steering")), () => quote23.code === 0, () => /login/.test(quote23.out),
   ]);

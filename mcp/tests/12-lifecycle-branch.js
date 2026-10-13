@@ -64,7 +64,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp }) => {
       "a;b", "$x", "a'b", "a\"b", "a|b", "a&b", "a@{b", "@", "a,b", "a(b)", "x".repeat(201), "a\tb"];
     const refused = bad.map((n, i) => {
       const r = S.createFeature(p, "Bad " + i, ["core"], undefined, undefined, "en", undefined, { branch: n });
-      return r.ok === false && /is not a branch name dev-spec can hand to git/.test(r.error) && !fs.existsSync(path.join(p, ".specs", "bad-" + i)) ? null : n;
+      return r.ok === false && r.error === S.msg("en").branch.invalid(n) && !fs.existsSync(path.join(p, ".specs", "bad-" + i)) ? null : n;
     }).filter((x) => x !== null);
     const good = ["feature/login", "release-1.2", "user/joe/x+y", "ação/ünï", "a_b", "x".repeat(200)].map((n, i) => S.createFeature(p, "Good " + i, ["core"], undefined, undefined, "en", undefined, { branch: n }));
     const empty = S.createFeature(p, "Empty", ["core"], undefined, undefined, "en", undefined, { branch: "  " });

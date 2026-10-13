@@ -57,7 +57,7 @@ exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
   all("stop-check prints spec.stopCheck's reason and exits 1 when the turn would be sent back (--message, stdin via - or --message -, or the words after it); --json = the engine result; no claim / an admission → a line, exit 0 (got " +
     JSON.stringify([sc.code, sc.out.slice(0, 200), scNo.out.slice(0, 120)]) + ")", [
     () => sc.code === 1, () => sc.stdout.trim() === eng.reason, () => /billing: #1 \(no evidence\)/.test(sc.out),
-    () => /read each listed task's _Verify:_ command/.test(sc.out), () => !/--run/.test(sc.out), () => scJ,
+    () => sc.out.includes(MSG("en").stopGate.todoTasks("billing", 1)), () => !/--run/.test(sc.out), () => scJ,
     () => JSON.stringify(scJ) === JSON.stringify(eng), () => scIn.code === 1, () => scIn.stdout.trim() === eng.reason, () => scInFlag.code === 1,
     () => scPos.code === 1, () => scNo.code === 0,
     () => /^evidence gate: the message claims no completion or verification — allowed\./.test(scNo.stdout), () => scAdm.code === 0,

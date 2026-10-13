@@ -5,7 +5,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 
 exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) => {
   // 1.20 build (scripts/build.js, `npm run build`): the committed, pre-generated placeholder corpus
@@ -23,6 +23,15 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
       const r = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 300000, env });
       try { return JSON.parse(r.stdout); } catch { return { stdout: r.stdout, stderr: String(r.stderr).slice(0, 300) }; }
     };
+    // the same as a promise, for children that run side by side (each on a clone of its own — r14)
+    const spawnJsonAsync = (args, env) => new Promise((resolve) => {
+      const kid = spawn(process.execPath, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+      let out = "", err = "";
+      kid.stdout.on("data", (d) => { out += d; });
+      kid.stderr.on("data", (d) => { err += d; });
+      const t = setTimeout(() => kid.kill(), 300000);
+      kid.on("close", () => { clearTimeout(t); try { resolve(JSON.parse(out)); } catch { resolve({ stdout: out, stderr: err.slice(0, 300) }); } });
+    });
     const script = (name, fn, args) => { const f = path.join(tmp, name); fs.writeFileSync(f, "\"use strict\";\n(" + fn.toString() + ")(" + args + ");\n"); return f; };
 
     // The committed corpus is what a fresh build of these sources writes: a change to a file of CORPUS_SOURCES (a template, a
@@ -107,7 +116,8 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
     // and an English session of those calls loads no other language and answers as this process does.
     {
       const renderedSets = { steeringStubs: E.renderSteeringStubs(), diagrams: E.renderTemplateDiagrams(), sectionLines: E.renderSectionLines("base"),
-        sectionLinesBr: E.renderSectionLines("pt-BR"), bugSlots: E.renderBugSlots(), templateReqs: E.renderTemplateReqs() };
+        sectionLinesBr: E.renderSectionLines("pt-BR"), bugSlots: E.renderBugSlots(), templateReqs: E.renderTemplateReqs(),
+        stopGate: I.stopGateLists() }; // r14: the stop gate's lists of every language (guards.js stopPatterns)
       const same = Object.keys(renderedSets).filter((k) => js(fresh[k]) !== js(renderedSets[k]) || js(fileCorpus[k]) !== js(renderedSets[k]));
       const live = { diagrams: js(sorted(E.templateDiagramSet())) === js(fresh.diagrams), bugSlots: js(sorted(E.bugTemplateSlots())) === js(fresh.bugSlots),
         templateReqs: js(E.builtinTemplateReqs()) === js(I.LANGS.flatMap((l) => (fresh.templateReqs[l] || []).map((t) => [t, l]))),
@@ -131,7 +141,10 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
         out.done = S.completeTask(proj, "feature-a", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "ok" }).ok;
         out.finish = S.finishFeature(proj, "feature-a", {}).readyToFinish;
         out.catalog = S.catalog(proj).ok;
-        out.loaded = Object.keys(require.cache).map((f) => f.split(path.sep).join("/")).filter((f) => f.includes("/lib/i18n/")).map((f) => path.posix.basename(f)).sort();
+        // r14: the stop gate reads every language's claim patterns from the corpus — a Portuguese claim still counts
+        out.stop = S.stopCheck(proj, { message: "All tasks are done." }).why;
+        out.claimPt = S.stopClaims("A tarefa 2 está concluída.").claim;
+        out.loaded =Object.keys(require.cache).map((f) => f.split(path.sep).join("/")).filter((f) => f.includes("/lib/i18n/")).map((f) => path.posix.basename(f)).sort();
         out.source = E.builtinCorpusSource();
         process.stdout.write(JSON.stringify(out));
       };
@@ -144,9 +157,10 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
       const other = Array.isArray(en.loaded) ? en.loaded.filter((f) => ["pt.js", "es.js", "pt-br.js"].includes(f)) : null;
       ok(!same.length && Object.values(live).every(Boolean) && fresh.diagrams.length >= 3 && fresh.sectionLines.length > 100 && fresh.bugSlots.length > 5 &&
         Object.keys(fresh.templateReqs).length === I.LANGS.length && Array.isArray(other) && !other.length && en.loaded.includes("en.js") && en.source === "file" &&
-        ["feature-a", "feature-b", "crash-on-save"].every((f) => js(en[f]) === js(hereEn[f])) && en.done === true && en.catalog === true,
-        "1.24 r6 I-I2: the steering stubs, the template diagrams, the track design lines (EN / PT / ES and pt-BR), the bug report's slots and the requirement templates (their criteria read live) come from the corpus — each exactly the rendered set; an English doctor / next_action / done / finish / catalog loads no pt.js, es.js or pt-br.js and answers as this process does (got " +
-        js({ same, live, other, loaded: en.loaded, source: en.source, en: ["feature-a", "feature-b", "crash-on-save"].map((f) => [en[f], hereEn[f]]), done: en.done }) + ")");
+        ["feature-a", "feature-b", "crash-on-save"].every((f) => js(en[f]) === js(hereEn[f])) && en.done === true && en.catalog === true &&
+        typeof en.stop === "string" && en.claimPt === true && S.stopClaims("A tarefa 2 está concluída.").claim === true,
+        "1.24 r6 I-I2: the steering stubs, the template diagrams, the track design lines (EN / PT / ES and pt-BR), the bug report's slots and the requirement templates (their criteria read live) come from the corpus — each exactly the rendered set; an English doctor / next_action / done / finish / catalog / stop gate loads no pt.js, es.js or pt-br.js and answers as this process does — the stop gate's claim patterns of every language from the corpus (r14: a Portuguese claim still counts) (got " +
+        js({ same, live, other, loaded: en.loaded, source: en.source, stop: [en.stop, en.claimPt], en: ["feature-a", "feature-b", "crash-on-save"].map((f) => [en[f], hereEn[f]]), done: en.done }) + ")");
     }
 
     // CORPUS_SOURCES — what the sources stamp hashes — lists every mcp/lib file whose functions run while the corpus renders (V8
@@ -293,9 +307,11 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
     const raceDirs = { en: raceClone("p20-race-en"), pt: raceClone("p20-race-pt"), version: raceClone("p20-race-version") };
     fs.mkdirSync(path.join(raceDirs.version, "hooks"), { recursive: true }); // …with its stop-claim filter, which the build rewrites too
     fs.copyFileSync(B.STOP_CLAIMS_PATH, path.join(raceDirs.version, "hooks", "stop-claims.generated.json"));
-    const race = (dir, mode) => spawnJson([raceJs, dir, mode], process.env);
-    const rEn = race(raceDirs.en, "en"), rLoc = race(raceDirs.pt, "locale"), rVer = race(raceDirs.version, "version");
-    const later = { en: race(raceDirs.en, "later-en"), pt: race(raceDirs.pt, "later-pt"), version: race(raceDirs.version, "later-en") }; // started after each update
+    const race = (dir, mode) => spawnJsonAsync([raceJs, dir, mode], process.env);
+    // each on its own clone: the three updates side by side, then the three later processes (each started after its update)
+    const [rEn, rLoc, rVer] = await Promise.all([race(raceDirs.en, "en"), race(raceDirs.pt, "locale"), race(raceDirs.version, "version")]);
+    const [lEn, lPt, lVer] = await Promise.all([race(raceDirs.en, "later-en"), race(raceDirs.pt, "later-pt"), race(raceDirs.version, "later-en")]);
+    const later = { en: lEn, pt: lPt, version: lVer };
     const version = require(path.join(root, "package.json")).version;
     const expected = S.placeholderReport(I.design({ name: "x", tracks: ["core"], label: "core", slug: "x", summary: "" }, "en")).map((p) => p.text); // this engine's answer
     ok(rEn.build === 0 && rEn.source === "render" && Array.isArray(rEn.probe) && expected.includes("[what it already does for this feature]") && js(rEn.probe) === js(expected) &&
@@ -357,17 +373,29 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
         brackets: S.templateSets().brackets.size, version: S.engineVersion() }));
     };
     const facadeJs = script("p20-facade.js", facadeChild, "process.argv[2]");
-    const facade = (v, bpath) => {
+    const facadeEnv = (v, bpath) => {
       const env = { ...process.env };
       if (v == null) delete env.DEV_SPEC_BUNDLE; else env.DEV_SPEC_BUNDLE = v;
       if (bpath == null) delete env.DEV_SPEC_BUNDLE_PATH; else env.DEV_SPEC_BUNDLE_PATH = bpath;
-      const r = spawnSync(process.execPath, [facadeJs, cloneLib], { encoding: "utf8", timeout: 300000, env });
+      return env;
+    };
+    const facadeOut = (r) => {
       let o;
       try { o = JSON.parse(r.stdout); } catch { o = { stdout: r.stdout }; }
       o.use = o.modules === 0 && o.bundles === 1 ? "bundle" : o.modules > 20 ? "modules" : "?";
       if (r.stderr) o.stderr = String(r.stderr).slice(0, 200);
       return o;
     };
+    const facade = (v, bpath) => facadeOut(spawnSync(process.execPath, [facadeJs, cloneLib], { encoding: "utf8", timeout: 300000, env: facadeEnv(v, bpath) }));
+    // the same as a promise: the calls that see one state of the clone run side by side (r14)
+    const facadeAsync = (v, bpath) => new Promise((resolve) => {
+      const kid = spawn(process.execPath, [facadeJs, cloneLib], { env: facadeEnv(v, bpath), stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "", stderr = "";
+      kid.stdout.on("data", (d) => { stdout += d; });
+      kid.stderr.on("data", (d) => { stderr += d; });
+      const t = setTimeout(() => kid.kill(), 300000);
+      kid.on("close", () => { clearTimeout(t); resolve(facadeOut({ stdout, stderr })); });
+    });
     const none = facade("1");
     // one module's mtime set to a whole second BEFORE the build, so the test can put it back exactly (a Date carries whole ms only)
     const scanPath = path.join(cloneLib, "engine", "scan.js"), scanText = fs.readFileSync(scanPath), t0 = Math.floor(Date.now() / 1000) - 60;
@@ -375,8 +403,8 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
     B.writeBundle(path.join(cloneLib, "spec.bundle.js"), { lib: cloneLib, E });
     const elsewhere = path.join(tmp, "p20-bundle-clone", "engine.bundle.js");
     B.writeBundle(elsewhere, { lib: cloneLib, E });
-    const on = facade("1"), off = facade(null), zero = facade("0"), relPath = facade("1", "spec.bundle.js"), txtPath = facade("1", path.join(tmp, "x.txt"));
-    const atPath = facade("1", elsewhere);
+    const [on, off, zero, relPath, txtPath, atPath] = await Promise.all([facadeAsync("1"), facadeAsync(null), facadeAsync("0"), facadeAsync("1", "spec.bundle.js"),
+      facadeAsync("1", path.join(tmp, "x.txt")), facadeAsync("1", elsewhere)]);
     fs.utimesSync(scanPath, t0, t0 + 5); // touched (a plugin update, an edit) since the build
     const touched = facade("1");
     fs.writeFileSync(scanPath, Buffer.concat([scanText, Buffer.from(" ")]));

@@ -6,13 +6,20 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadmap }) => {
   const js = JSON.stringify;
   const HOOKS = path.join(__dirname, "..", "hooks");
   // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR never leak into the hooks.
   const hookEnv = (env) => ({ ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) });
-  const hook = (name, pl, env, args, cwd) => spawnSync(process.execPath, [...(args || []), path.join(HOOKS, name + ".js")],
-    { input: typeof pl === "string" ? pl : js(pl), encoding: "utf8", env: hookEnv(env), cwd: cwd || tmp, timeout: 20000 });
+  // A hook run that could not start or finish (spawn refused under memory pressure, the 20 s timeout) has no output: its stdout /
+  // stderr read "" and `spawnFailure` says why — the assertion fails naming it, never a TypeError that ends the file (r14).
+  const hook = (name, pl, env, args, cwd) => {
+    const r = spawnSync(process.execPath, [...(args || []), path.join(HOOKS, name + ".js")],
+      { input: typeof pl === "string" ? pl : js(pl), encoding: "utf8", env: hookEnv(env), cwd: cwd || tmp, timeout: 20000 });
+    const spawnFailure = r.error ? String(r.error.code || r.error.message) : r.status === null ? "killed by " + r.signal : null;
+    return { ...r, stdout: String(r.stdout || ""), stderr: String(r.stderr || ""), spawnFailure };
+  };
+  const spawnFailures = (rs) => rs.filter((r) => r.spawnFailure).map((r) => r.spawnFailure);
   const project = (name, lang) => {
     const p = path.join(tmp, name);
     S.initProject(p, ["core"], lang || "en");
@@ -56,7 +63,8 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
     const blockOf = (r) => { try { return JSON.parse(r.stdout).decision === "block"; } catch { return false; } };
     ok(!falseBlocks.length && !missed.length && hNot.every((r) => r.status === 0 && r.stdout === "") && hYes.every((r) => r.status === 0 && blockOf(r)),
       "1.25.1 (r7 finding 1): the stop gate claims the WORK only — no bare verb ('I verified that…', 'was completed in 2023', 'Verifiquei o ficheiro', 'Terminé de leer', 'Listo, aquí tienes…', 'Done. I updated the README') is sent back while a recent tick is unverified; first-person completion claims and 'ready to merge' / 'pronto para merge' / 'listo para el merge' are (false blocks: " +
-      js(falseBlocks) + ", missed: " + js(missed) + ", hook: " + js(hNot.map((r) => r.stdout.slice(0, 40)).concat(hYes.map(blockOf))) + ")");
+      js(falseBlocks) + ", missed: " + js(missed) + ", hook: " + js(hNot.map((r) => r.stdout.slice(0, 40)).concat(hYes.map(blockOf))) +
+      (spawnFailures(hNot.concat(hYes)).length ? ", hook runs that failed to run: " + js(spawnFailures(hNot.concat(hYes))) : "") + ")");
   }
 
   // Finding 2 — every hook ran in shell form (`node "${CLAUDE_PLUGIN_ROOT}/hooks/x.js"`): on Windows each spawn went through Git Bash
@@ -164,7 +172,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
     S.createFeature(dev, "Alpha", ["core"]);
     const deep = path.join(dev, "src", "a", "b");
     fs.mkdirSync(deep, { recursive: true });
-    const big = project("r7-ss-big");
+    const big = handRoadmap(project("r7-ss-big")); // roadmap not under test here: its refresh skipped (harness handRoadmap) — 25 creates
     for (let i = 1; i <= 25; i++) S.createFeature(big, "Feature " + i, ["core"]);
     const r = {
       none: probed("spec-hook", ss(none)), other: probed("spec-hook", ss(other)), noCwd: probed("spec-hook", { session_id: "s", hook_event_name: "SessionStart" }, null, none),
@@ -250,6 +258,26 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
       ["approvalProjects (a/.specs/x a/.specs/x …)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "a/.specs/x ", ""],
       ["approvalProjects ('\"'\"… then .guardian/)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "'\"", " sub/.guardian/"],
       ["placeholderReport (_Implements: `[x]`, `[x]`, …)", (s) => E.placeholderReport("- _Implements: " + s + "_"), "`[x]`, ", ""],
+      // 1.30.1: Windows' own readings of a path — the 8.3 rule (a word that may be an alias, a path's aliases read, the folder holding
+      // one), Win32's trailing dots / spaces, the engine's shell reading of them (its disk calls bounded: SHORT_DISK_PATHS paths, each
+      // ≤ SHORT_DISK_UP levels — past them the rule alone) and the edit tools' (≤ EDIT_MAX_UP levels)
+      ["mayShortName (SPECS~SPECS~…)", (s) => PR.mayShortName(s), "SPECS~", ""],
+      ["mayShortName (SP1A2B SP1A2B …)", (s) => PR.mayShortName(s), "SP1A2B ", ""],
+      ["shortNamesRead (SPECS~1/SPECS~1/…)", (s) => PR.shortNamesRead(s), "SPECS~1/", "ROADMA~1.JSO"],
+      ["winPathTrim (a./a./…)", (s) => PR.winPathTrim(s), "a./", ". . "],
+      ["winPathTrim (. . . … x)", (s) => PR.winPathTrim(s), ". ", "x"],
+      ["winPathTrim (a::$I/a::$I/…)", (s) => PR.winPathTrim(s), "a::$I/", "roadmap.json."],
+      ["specsParentOf (////…/SPECS~1/)", (s) => PR.specsParentOf(s, true), "/", "x/SPECS~1/guardian.cjs"],
+      ["editTargets (SPECS~1\\SPECS~1\\…)", (s) => PR.editTargets(s, tmp, true), BS + "SPECS~1", BS + "STATE~1.JSO."],
+      ["approvalGuardDecision, Bash (cp x SPECS~1/SPECS~1/…)", (s) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "cp x " + s },
+        cwd: tmp }, "deny", { meta: {}, lang: "en", win: true }), "SPECS~1/", "roadmap.json"],
+      ["approvalGuardDecision, Bash (rm SPECS~1/a SPECS~1/a …)", (s) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "rm " + s },
+        cwd: tmp }, "deny", { meta: {}, lang: "en", win: true }), "SPECS~1/a ", ""],
+      ["approvalGuardDecision, PowerShell (Set-Content a. a. …)", (s) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "PowerShell",
+        tool_input: { command: "Set-Content -Path " + s + " -Value x" }, cwd: tmp }, "deny", { meta: {}, lang: "en", win: true }), "a.\\", ".specs\\roadmap.json."],
+      ["approvalProjects (a/SPECS~1/x a/SPECS~1/x …)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "a/SPECS~1/x ", ""],
+      ["the approval hook's decide, Bash (echo x > GUARDI~1/… )", (s) => AH.decide(js({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "echo x > " + s } })),
+        "GUARDI~1/", "BASELI~1.JSO"],
     ];
     const time = (f, s) => { const t = process.hrtime.bigint(); f(s); return Number(process.hrtime.bigint() - t) / 1e6; };
     const shape = {};

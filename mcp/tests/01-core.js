@@ -643,7 +643,7 @@ exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, require, __
     ["index.md", "tool-catalog.md", "track-checklists.md", "workflows.md"].every((r) => refsCited.includes(r)),
     `1.21 F3: SKILL.md ≤ 5,000 words and every reference it or references/index.md cites exists; none is orphaned; it points to index / tool-catalog / track-checklists / workflows (got ${JSON.stringify({ words: skillWords, cited: refsCited.length, orphan: refsOrphan })})`);
   // 1.30 review 8: the word cap is loose (2,297 of 5,000 — the file could double unnoticed); the context it costs is its BYTES, held
-  // like the description and tools/list caps: ≤ 15,360 (15 KiB — 15,275 in 1.29.1, 14,746 in 1.26). A new rule pays for itself
+  // like the description and tools/list caps: ≤ 15,360 (15 KiB — 15,275 in 1.29.1, 14,746 in 1.26, 14,034 in 1.30.1). A new rule pays for itself
   // (a pointer to references/, a sentence cut); lookup material goes to references/ (extending.md → SKILL.md stays the source of truth).
   const skillBytes = Buffer.byteLength(skillNow, "utf8");
   ok(skillBytes <= 15360 && skillBytes > 8000, `1.30 review 8: SKILL.md ≤ 15,360 bytes — it is loaded whole every time the skill fires (got ${skillBytes})`);

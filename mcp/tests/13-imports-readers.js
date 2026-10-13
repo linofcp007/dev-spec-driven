@@ -35,7 +35,7 @@ exports.run = async ({ ok, S, tmp }) => {
       "- **FR-003**: System MUST [NEEDS CLARIFICATION: max photos per album?]\n- **FR-004**: System MUST let owners share an album by link\n");
     S.initProject(p, ["core"], "en");
     const r = S.importSpec(p, "spec-kit", "specs/001-photo-albums", {});
-    const w = (r.warnings || []).find((x) => /functional requirements no acceptance scenario covers/.test(x)) || "";
+    const w = (r.warnings || []).find((x) => x === S.msg("en").importSpec.wUncoveredFr("FR-002, FR-003")) || "";
     const pt = S.importSpec(p, "spec-kit", "specs/001-photo-albums", { lang: "pt", name: "albuns-pt" });
     ok(r.ok && /FR-002, FR-003/.test(w) && !/FR-001|FR-004/.test(w) && pt.ok && (pt.warnings || []).some((x) => /requisitos funcionais que nenhum cenário/.test(x) && /FR-002, FR-003/.test(x)),
       "1.25.1 (11): a spec-kit import warns for the FR-xxx no acceptance scenario covers (not covered by its words, not cited; one still [NEEDS CLARIFICATION]) — FR-002, FR-003; an FR a scenario covers or cites is not named; localized (PT) (got " +

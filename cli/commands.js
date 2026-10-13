@@ -408,22 +408,25 @@ function statusLineRender(c) {
       const given = typeof flags.project === "string" ? [flags.project] : [];
       const cands = payload ? given.concat([ws.current_dir, payload.cwd, ws.project_dir])
         : given.concat([c.env.SPEC_PROJECT_DIR, c.env.CLAUDE_PROJECT_DIR, c.cwd]);
-      // the engine-free walk first (cli/completion.js statusProbe, statusLineProject's null rule) — outside a
+      // the engine-free walk first (cli/completion.js statusNear, statusLineProject's null rule) — outside a
       // dev-spec project the line is empty without loading the engine (136–220 ms per render in any folder, user-wide)
       const cols = parseInt(c.env.COLUMNS, 10);
       const columns = Number.isSafeInteger(cols) && cols > 0 ? cols : undefined;
-      if (COMPLETION.statusProbe(cands)) {
-        // …and in one, the last render while its .specs/ is unchanged and it is fresh (review 8: the engine loaded after every
-        // message) — cli/completion.js statusCacheRead; else the engine renders, kept with the signature taken before it read
+      const near = COMPLETION.statusNear(cands);
+      if (near) {
+        // …and in one, the last render while its .specs/ and the outside files it read are unchanged, the candidates find the same
+        // folder and it is fresh (review 8: the engine loaded after every message) — cli/completion.js statusCacheRead; else the
+        // engine renders, kept with the .specs/ signature taken before it read and the outside paths it reports (1.30.1)
         const key = { cands: cands.map((x) => (typeof x === "string" ? path.resolve(c.cwd, x) : null)), columns: columns || null };
-        const cached = COMPLETION.statusCacheRead(key);
+        const cached = COMPLETION.statusCacheRead(key, Date.now(), near);
         if (cached) r = cached;
         else {
           const pdir = spec.statusLineProject(cands);
           if (pdir) {
             const sig = COMPLETION.specsSignature(pdir);
-            r = spec.statusLine(pdir, { columns });
-            COMPLETION.statusCacheWrite(key, pdir, sig, r);
+            const reads = [], started = Date.now();
+            r = spec.statusLine(pdir, { columns, reads });
+            COMPLETION.statusCacheWrite(key, pdir, sig, r, { started, near, reads, mapped: path.resolve(pdir) !== path.resolve(near) });
           }
         }
       }
@@ -1861,8 +1864,9 @@ const COMMANDS = [
       const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data] [--dry-run] · import <plan|execplan|fluidplan> - | --text \"<markdown>\" · import <kiro-steering|cursor-rules> [<path>] [--dry-run]";
       const fromStdin = pos[1] === "-";
       const hasText = typeof flags.text === "string";
-      const steering = spec.STEERING_IMPORT_TOOLS.includes(pos[0]);
-      if (!pos[0] || (!pos[1] && !hasText && !steering) || (fromStdin && hasText)) usage(usageLine);
+      // (the engine's list, read only when the usage needs it: `import` alone is refused without the engine)
+      const steering = () => spec.STEERING_IMPORT_TOOLS.includes(pos[0]);
+      if (!pos[0] || (!pos[1] && !hasText && !steering()) || (fromStdin && hasText)) usage(usageLine);
       // With --text the words after the tool are tracks; with - or a path, the words after it. A word after the tool that is no track
       // list next to --text is a path given with it: passed as the source, so the engine answers its "path or text, not both" (as
       // spec_import {path, text} does) — never "Unknown track: 'plans/x.md'".
@@ -1991,6 +1995,8 @@ const COMMANDS = [
       // dev-spec prompts [name] [--args "…"] — the MCP prompts (one per commands/*.md): the list (= prompts/list), or one rendered as
       // prompts/get returns it (the words after the name are the args when --args is absent).
       const { flags, pos, projectDir, out, fail, usage, log, write } = c;
+      // the usage first — before the prompts' module and the engine load (1.30.1); a listing (no name) is never one
+      if (pos[0] && typeof flags.args === "string" && pos.length > 1) usage('dev-spec prompts [name] [--args "…"]');
       const PR = require(path.join(__dirname, "..", "mcp", "lib", "prompts-resources.js"));
       const lang = spec.projectLang(projectDir);
       const P = spec.msg(lang).promptsResources;
@@ -2000,7 +2006,6 @@ const COMMANDS = [
           r.prompts.forEach((x) => log("  " + x.name + (x.argumentHint ? " " + x.argumentHint : "") + "\n      " + x.description));
         });
       }
-      if (typeof flags.args === "string" && pos.length > 1) usage('dev-spec prompts [name] [--args "…"]');
       const r = PR.getPrompt(pos[0], typeof flags.args === "string" ? flags.args : pos.slice(1).join(" "), { lang });
       if (!r.ok) return fail(r);
       return out(r, (r) => write(r.messages[0].content.text));

@@ -52,6 +52,14 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher } = E); }
 
+// spec_import's source formats — its `tool` enum, each with the name its notes print — and those that write .specs/steering/
+// files, not a feature. The importers (import/) load on first use (engine/index.js LAZY); these lists are read as the surfaces
+// load (server.js's schema and REQUIRED_ONE_OF, the CLI's completion), so they live in a module every process loads.
+// + plan · execplan · bmad; + fluidplan; + kiro-steering · cursor-rules (→ .specs/steering/ files, import/steering.js)
+const IMPORT_TOOLS = Object.freeze({ kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD",
+  fluidplan: "fluidplan", "kiro-steering": "Kiro steering", "cursor-rules": "Cursor rules" });
+const STEERING_IMPORT_TOOLS = Object.freeze(["kiro-steering", "cursor-rules"]);
+
 // the first of `files` a write would reach through a link (a .specs/<feature>/ or .specs/steering/ that is a
 // symbolic link / junction, or resolves outside the real .specs/ — specsWriteContained) → that folder as `.specs/<rel>/`, else
 // null. spec_export and templates init refused such a folder; init, steering_scaffold, create and add_track wrote through it.
@@ -1502,4 +1510,4 @@ module.exports = { linkedSpecsFolder, initProject, scaffoldSteeringFile, RE_CUST
   customSteeringStub, frontMatterScalar, frontMatterValues, steeringFrontMatter, briefSteering, steeringPlaceholders,
   trackDesignBlock, SAMPLE_GOLDEN, SAMPLE_ADVERSARIAL, createFeature, pruneBacklog, STEERING_GOVERNED, steeringFingerprints,
   steeringChanges, steeringChangeText, steeringImpact, steeringImpactLines, trackTemplateAcs, scaffoldTestPlan,
-  trackTaskBlock, addTrack, removeTrack, __link };
+  trackTaskBlock, addTrack, removeTrack, IMPORT_TOOLS, STEERING_IMPORT_TOOLS, __link };

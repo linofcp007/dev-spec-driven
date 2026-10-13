@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, __dirname, require, handRoadmap }) => {
 
   { // A4.2 — a _Verify:_ that pipes into another command reports the pipeline's LAST exit code: a failing check reads as passing.
     const call = (name, args) => rpc("tools/call", { name, arguments: args });
@@ -269,7 +269,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     const bs6 = S.initProject(d6, ["core"], undefined, { checks: { e2e: "x" } });
     const f6 = S.createFeature(d6, "Stored", ["core"], "", undefined, "en");
     const fin6 = S.finishFeature(d6, f6.slug);
-    ok(bs6.ok === false && /meta\.checks is not an object of name → command strings — fix it by hand/.test(bs6.error) && JSON.parse(fs.readFileSync(rp6, "utf8")).meta.checks.test === 5 &&
+    ok(bs6.ok === false && bs6.error === S.msg("en").projectChecks.badStored(".specs/roadmap.json") && JSON.parse(fs.readFileSync(rp6, "utf8")).meta.checks.test === 5 &&
       fin6.warnings.some((w) => /meta\.checks: invalid entries ignored \(test\)/.test(w)) && fin6.suiteChecks.length === 1 && fin6.suiteChecks[0].name === "lint",
       "B5 a hand-edited meta.checks with a non-string command: spec_init refuses to change it (never repaired); finish ignores the bad entry with a warning and keeps the valid ones");
 
@@ -285,7 +285,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     const docDone7 = (await b5Call("spec_doctor", { projectDir: d7, name: "suite" })).checks.find((c) => c.id === "suite-evidence");
     const gate7 = S.approvePhase(d7, f7.slug, "execution", "t");
     ok(!docOpen7 && finOpen7.suiteChecks.every((c) => c.status === "no-run") && finOpen7.blockers.some((b) => /project checks without a passing run since the last task activity: test \(no run recorded\), lint \(no run recorded\) — run them: node "[^"]*dev-spec\.js" finish suite --run/.test(b)) &&
-      docDone7 && docDone7.status === "warn" && /every task is done, but project checks have no passing run/.test(docDone7.detail) &&
+      docDone7 && docDone7.status === "warn" && docDone7.detail === S.msg("en").projectChecks.doctorWarn("test (no run recorded), lint (no run recorded)", "suite") &&
       gate7.ok === false && gate7.failing.includes("suite-evidence") && typeof b5State(f7).lastTickAt === "string",
       "B5 meta.checks set: finish blocks on suite-evidence (every check without a run named), doctor warns once every task is done (not before), the execution sign-off refuses on it; a tick stamps lastTickAt (got " +
       JSON.stringify([finOpen7.blockers, gate7.failing]).slice(0, 300) + ")");
@@ -533,7 +533,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     gaSetState(f3, st3);
     const fin3c = S.finishFeature(p3, f3.slug, {});
     ok(/^[0-9a-f]{40}$/.test(stamp3 || "") && suiteOf(fin3a) === "pass" && suiteOf(fin3b) === "code-changed" &&
-      fin3b.blockers.some((b) => /test \(the implementing files changed since the run\)/.test(b)) && doc3 && doc3.status === "warn" && /implementing files changed since the run/.test(doc3.detail) &&
+      fin3b.blockers.some((b) => b.includes("test (" + S.msg("en").projectChecks.status({ status: "code-changed" }) + ")")) && doc3 && doc3.status === "warn" &&
+      doc3.detail.includes(S.msg("en").projectChecks.status({ status: "code-changed" })) &&
       stop3.block === true && stop3.features.some((x) => x.suite.some((s) => s.status === "code-changed")) && suiteOf(fin3c) === "pass",
       "full review Ga3: a check run stamped with the implementing files' hash turns code-changed once src/limiter.js is edited (finish blocker, doctor warn, stop gate); an unstamped run keeps the older rule (got " +
       JSON.stringify([stamp3, suiteOf(fin3a), suiteOf(fin3b), doc3 && doc3.status, stop3.why, suiteOf(fin3c)]) + ")");
@@ -615,10 +616,11 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     const f7pt = S.createFeature(p7, "Brief vermelho", ["tdd"], "", undefined, "pt");
     gaW(f7pt.dir, "tasks.md", "- [ ] 1. [US1] Escrever T-01\n  - _Makes green: T-01_\n  - _Verify: npm test_\n  - _Expect: fail_\n");
     const br7pt = S.taskBrief(p7, f7pt.slug, 1).brief;
-    ok(/## Tests this task writes — they must FAIL first \(red\)/.test(br7) && !/## Tests to make green/.test(br7) && /\n1\. This is a RED task: write \(or keep\) the planned test\(s\)/.test(br7) &&
-      !/turns the target tests green/.test(br7) && !/nothing that passed before this task may fail/.test(br7) && /the only failures allowed are this task's new red test\(s\)/.test(br7) &&
-      /## Tests to make green/.test(br7g) && /turns the target tests green/.test(br7g) && /nothing that passed before this task may fail/.test(br7g) &&
-      /## Testes que esta tarefa escreve — têm de FALHAR primeiro \(vermelho\)/.test(br7pt) && /\n1\. Esta é uma tarefa VERMELHA/.test(br7pt),
+    const B7 = require("./lib/i18n.js").brief, PC7 = S.msg("en").projectChecks, CHK7 = "`npm test` (test)";
+    ok(br7.includes(B7("en").testsRed) && !br7.includes(B7("en").tests) && /\n1\. This is a RED task: write \(or keep\) the planned test\(s\)/.test(br7) &&
+      !/turns the target tests green/.test(br7) && !br7.includes(PC7.briefDod(CHK7)) && br7.includes(PC7.briefDodRed(CHK7)) &&
+      br7g.includes(B7("en").tests) && /turns the target tests green/.test(br7g) && br7g.includes(PC7.briefDod(CHK7)) &&
+      br7pt.includes(B7("pt").testsRed) && /\n1\. Esta é uma tarefa VERMELHA/.test(br7pt),
       "full review Ga7: an _Expect: fail_ task's brief: 'Tests this task writes — they must FAIL first', a red definition of done, the project checks allow its red test (PT too); a green task's brief is unchanged (got " +
       JSON.stringify(br7.split("\n").filter((l) => /^## |^\d+\. /.test(l)).slice(-8)).slice(0, 400) + ")");
 
@@ -1440,6 +1442,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     };
     const pR = path.join(tmp, "proj-122r2-evidence");
     S.initProject(pR, ["core"], "en", { checks: { api: "cd packages/api && npm test", long: "node --test " + "tests/unit/a-long-test-file-name.test.js ".repeat(11).trim() } });
+    handRoadmap(pR); // roadmap not under test here: its refresh skipped (harness handRoadmap)
 
     // 1a — `\` for `/`, quotes around a plain argument: the same command.
     const w1 = wrongOf([["node --test tests" + BS + "x.test.js", ["node --test tests/x.test.js"], true], ['node --test "tests/x.test.js"', ["node --test tests/x.test.js"], true],

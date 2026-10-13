@@ -40,7 +40,7 @@ exports.run = async ({ ok, run, runIn, tmp, require, __dirname, runAsync }) => {
   const vpLine = (docPp.out.match(/.*verify-pipes.*/) || [""])[0];
   ok(docPv.code === 1 && /privacy-sections.*Processors & International Transfers:missing/.test(docPv.out) &&
     /#1 .*#2 `bash -c "npm test \| tee test\.log"`/.test(vpLine) && !/#3 /.test(vpLine) &&
-    /pipes into another command: the shell reports only the LAST command's exit code/.test(donePp.out),
+    /only the LAST command's exit code/.test(donePp.out),
     "doctor: a deleted [PRIVACY] heading is missing even beside '## Processors and queues'; verify-pipes names the pipe that mentions pipefail and the one inside bash -c, not a real set -o pipefail; done --run hints it (got " +
     JSON.stringify([docPv.code, vpLine.slice(0, 200)]) + ")");
 };

@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname, hookIn }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, shipFeature, __dirname, hookIn, handRoadmap }) => {
 
   { // --- 1.13 WP9: deep traceability (EC/NFR/SC warnings, T-IDs in test code) + property-based test plans ---
     const call9 = async (args) => payload(await rpc("tools/call", { name: "trace_check", arguments: args }));
@@ -662,7 +662,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     // predate those tracks, so no template row for US-1.AC-5…AC-9 (they don't exist). The same through the MCP tool, and via
     // create core → add_track saas → create tdd. A test-plan row covering an AC requirements.md doesn't define is a phantom.
     const e12 = path.join(tmp, "proj-wp12-create-tracks");
-    S.initProject(e12, ["core"], "en");
+    S.initProject(e12, ["core"], "en"); handRoadmap(e12); // roadmap not under test here: its refresh skipped (harness handRoadmap)
     const planE12 = (slug) => fs.readFileSync(path.join(e12, ".specs", slug, "test-plan.md"), "utf8");
     const rowsE12 = (slug) => (planE12(slug).match(/^\| T-\d+ /gm) || []).map((r) => r.slice(2).trim()).join();
     S.createFeature(e12, "Shop A", ["core"]);
@@ -1627,7 +1627,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     const d = path.join(tmp, "proj-122r3-markdown");
     S.initProject(d, ["core"], "en");
     const reqOf = (lines) => "# Requirements\n\n## Acceptance Criteria (EARS)\n\n" + lines.join("\n") + "\n";
-    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const E = require(path.join(__dirname, "lib", "engine", "index.js")).loadLazyTier(); // + the lazy tier's internals (fluidplan.js fpInert)
 
     // F2. ownStableId accepted ANY ID mentioned in a criterion: `- AC-1: … (see EC-1)` / `… (T-01)` had "its own" ID — earsUnidentified
     // null, doctor's ears passed, trace counted 0 ACs with no gap, spec_upgrade's bareAcIds was []. Only the LABEL counts now; a bare

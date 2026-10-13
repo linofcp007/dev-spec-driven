@@ -21,7 +21,7 @@ fs.writeFileSync(tasksA4, "# Tasks\n\n" +
   "- [ ] 4. [US1] JSON run\n  - _Verify: node -e \"process.exit(0)\" | node -e \"process.exit(0)\"_\n");
 const ra4 = (args) => runIn([...args, "--project", pa4]);
 const ra4Run = (args) => runAsync([...args, "--project", pa4]); // a --run waits for its commands: in-process, awaited (1.30)
-const hintRe = /pipes into another command: the shell reports only the LAST command's exit code/;
+const hintRe = /only the LAST command's exit code/; // verifyPipe.runHint's (the command it names varies)
 const brA4 = ra4(["brief", "pipes", "4"]);
 const brQA4 = ra4(["brief", "pipes", "2"]);
 const docA4 = ra4(["doctor", "pipes"]);

@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
@@ -60,7 +61,7 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
     const after = json(fs.readFileSync(path.join(x.p, ".specs", "roadmap.json"), "utf8"));
     all("1.29 init --guardian: a bare --guardian (or on) stores meta.checks.guardian = `" + CMD + "` and writes .specs/guardian.cjs (its note printed — 1.30: project-wide, no baseline yet, the .gitignore lines); off removes both; another value is refused before anything is written (exit 1); --json is spec_init's result (got " +
       js([on.out.split("\n").slice(-2), onJ && onJ.guardian, off.out.split("\n").slice(-2), bad.out.trim(), badJ]) + ")", {
-      on: on.code === 0 && rm.meta.checks.guardian === CMD && launcher && /dev-guardian's gate is the project check 'guardian'/.test(on.out) &&
+      on: on.code === 0 && rm.meta.checks.guardian === CMD && launcher && on.out.includes(MSG("en").guardian.on(CMD)) &&
         /It is project-wide/.test(on.out) && /No baseline yet/.test(on.out) && /\.gitignore: \*\*\/\.guardian\/\*/.test(on.out),
       json: !!onJ && onJ.guardian === true && onJ.checks.guardian === CMD,
       off: off.code === 0 && /The project check 'guardian' is off/.test(off.out) && !fs.existsSync(path.join(x.p, ".specs", "guardian.cjs")) && !(after.meta.checks || {}).guardian,

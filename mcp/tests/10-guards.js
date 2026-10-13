@@ -54,7 +54,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     const askReason = asked(askW);
     let oneJson = false;
     try { oneJson = typeof JSON.parse(askW.stdout) === "object" && !/\n./.test(askW.stdout.trim()); } catch { /* not one JSON object */ }
-    ok(askW.status === 0 && oneJson && /no approved tasks cover code changes right now/.test(askReason) && /spec_approve/.test(askReason) && /billing/.test(askReason),
+    ok(askW.status === 0 && oneJson && askReason === S.msg("en").guardMode.ask("billing", ""),
       "guard ON + no approved tasks + a code file → exactly one JSON object: permissionDecision 'ask' with the localized reason (names the feature awaiting approval)");
     ok(asked(runGuard(pre(g, "Edit", { file_path: "src/billing.ts", old_string: "a", new_string: "b" }))) &&
       asked(runGuard(pre(g, "NotebookEdit", { notebook_path: path.join(g, "nb", "explore.ipynb"), new_source: "x" }))) && S.guardCheck(g, "lib/x.py", g).decision === "ask",
@@ -384,8 +384,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
       () => JSON.stringify(sBlock.features[0].unverified) === JSON.stringify([{ number: 1, reason: "no-evidence" }]),
       () => /^dev-spec evidence gate: your last message says the work is done or verified, but tasks are ticked without verification evidence:\n {2}- billing: #1 \(no evidence\)\n/.test(sBlock.reason),
       // (1.22 review 2: a task with several _Verify:_ commands is recorded as ONE run of all of them — the rule accepts nothing less)
-      () => /read each listed task's _Verify:_ command in \.specs\/billing\/tasks\.md \(task 1 first\) — a task with several: all of them, in ONE run joined with ` && ` —, run it on the final code only if it is safe to run/.test(sBlock.reason),
-      () => !/--run/.test(sBlock.reason), () => /spec_complete_task \{name, number, evidence: \{command, exitCode, summary\}\}/.test(sBlock.reason),
+      () => sBlock.reason.includes(S.msg("en").stopGate.todoTasks("billing", 1)),
+      () => !/--run/.test(sBlock.reason),
       () => /say plainly/.test(sBlock.reason), () => sNoClaim.block === false, () => sNoClaim.why === "no-claim", () => sActive.block === false,
       () => sActive.why === "stop-hook-active", () => sAdmit.block === false, () => sAdmit.why === "admitted",
     ]);
@@ -576,7 +576,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     const siBig = si();
     all("1.22 review 1: a baseline-only report, a failed run hidden by a later passing one, a code quoted in output, a run line without its code → block; a code in a passing run's output, a revert round's later '## Final runs', a fenced block, PT headings, a status in backticks (a claim), a report past the 256 KB cap (read from its end) are read right (got " +
       JSON.stringify([siBaseOnly.why, siHidden.why, siOutput.why, siNoCode.why, siQuoted.why, siRevert.why, siFenced.why, siPt.why, siTick.why, siBig.why]) + ")", [
-      () => siBaseOnly.block, () => /has no "## Final runs" section with a run in it/.test(siBaseOnly.reason), () => siHidden.block,
+      () => siBaseOnly.block, () => siBaseOnly.reason.includes(S.msg("en").stopGate.simplifier.noFinal(".specs/checkout/.execution/simplify-report.md")), () => siHidden.block,
       () => /fail: `npm test` — /.test(siHidden.reason), () => !/cart\.test/.test(siHidden.reason), () => siOutput.block,
       () => /fail: `npm test`/.test(siOutput.reason), () => siNoCode.block,
       () => /doesn't show these runs with their exit code: `npm test`/.test(siNoCode.reason), () => siQuoted.why === "simplify-ok",
@@ -990,7 +990,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     const dF = D(names[1], { name: "checkout", phase: "design", role: "tech", force: true }, "deny");
     const dT = D(names[1], { name: "my feature", through: "tasks" }, "deny");
     ok(/the agent wants to approve the design phase of 'checkout' as tech in the name of 'Ana' — FORCED \(--force\)/.test(aF.reason) && /⚠ FORCE: /.test(aF.reason) && aF.force === true && aF.userNote === undefined &&
-      /refused — approvals are the human's/.test(dF.reason) && /Stop and ask the user to run it themselves/.test(dF.reason) && /Do not retry it by another route/.test(dF.reason) &&
+      /refused — approvals are the human's/.test(dF.reason) && /ask the user to run it themselves/.test(dF.reason) && /Do not retry it by another route/.test(dF.reason) &&
       dF.command === '! node "/clone/cli/dev-spec.js" approve checkout design --role tech --force' && dF.reason.includes(dF.command) && dF.userNote.includes(dF.command) &&
       /approve every phase of 'my feature' through tasks/.test(dT.reason) && dT.command === '! node "/clone/cli/dev-spec.js" approve "my feature" --through tasks' &&
       !/FORCE/.test(D(names[1], inp, "ask").reason),
@@ -1300,7 +1300,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, r
     const r1NoBad = r1No.filter(([t, c]) => sh(c, t).decision !== "allow");
     const dW = sh("echo x >> .specs/roadmap.json"), dWpt = sh("rm .specs/roadmap.json", "Bash", { lang: "pt" }), aW = D("Bash", { command: "rm -rf .specs" }, "ask");
     ok(r1Bad.length === 0 && r1NoBad.length === 0 && dW.command === null && /may not change \.specs\/roadmap\.json from the shell — write, move or delete it/.test(dW.reason) &&
-      /Stop and ask the user to make that change themselves/.test(dW.reason) && !/null/.test(dW.reason + dW.userNote) && /Make that change yourself/.test(dW.userNote) &&
+      /ask the user to make that change/.test(dW.reason) && !/null/.test(dW.reason + dW.userNote) && /Make that change yourself/.test(dW.userNote) &&
       /alterar \.specs\/roadmap\.json a partir da shell/.test(dWpt.reason) && /faça ele próprio essa alteração/.test(dWpt.reason) && aW.decision === "ask" && aW.command === null,
       "feature F2 review R1: a shell write of .specs/roadmap.json (> >> &> 1>>, tee, sed / perl -i, cp / mv / Copy-Item onto it, rm / truncate / dd / Set-Content / Add-Content / Out-File, deleting or moving .specs/ away, inside cmd /c or bash -c) is a guard-down action with no command to hand over (the user makes the change); reading it (cat, jq, grep, cp FROM it, git add) is not (got " +
       JSON.stringify([r1Bad, r1NoBad, dW.reason.slice(0, 120)]) + ")");

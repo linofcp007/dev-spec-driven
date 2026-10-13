@@ -20,8 +20,9 @@ with the human. Read the procedure, then only the section of a track you doubt.
 2. **In Spec mode, check the tracks.** `spec_classify` returns the suggested set, the words behind each track and
    notes — a *possible* track (one weak word, or app-level words only), a negated keyword, a correction this project
    learned. Any row of a track's table below that matches turns the track on, whatever the classifier said.
-3. **Present for approval** the mode, the track set, the signals behind each, the size and the blast radius. If the
-   user disagrees, adjust the set before requirements.
+3. **Present for approval** the mode, the track set, the signals behind each, the size and the blast radius — per track,
+   its hot path, autonomy, volume and compliance where they apply. If the user disagrees, adjust the set before
+   requirements.
 4. **After approval**, `spec_init {tracks, lang}` if steering is missing, then `spec_create {name, tracks, size,
    summary, lang}` once — at size m / l (or no size) it seeds `classification.md` (format below), where you record the
    decision. Pass the description you classified as `summary`: when the chosen tracks differ from the suggestion, the

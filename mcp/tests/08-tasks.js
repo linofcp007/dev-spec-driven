@@ -425,7 +425,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
       [{ text: "x", story: "P1" }], [{ text: "x", verify: "npm test\nrm -rf /" }], [{ text: "x", verify: "pytest -k 'a_ b'" }], [{ text: "   " }], [{ text: "[US1][P]" }], [],
     ].map((t) => S.appendTasks(w7, "converge", t));
     const badHeads = [S.appendTasks(w7, "converge", [{ text: "x" }], { heading: "Global Constraints" }), S.appendTasks(w7, "converge", [{ text: "x" }], { heading: "a\nb" })];
-    ok(bads.concat(badHeads).every((r) => r.ok === false && r.error) && /relative to the project root, without '\.\.'/.test(bads[0].error) && /relative/.test(bads[1].error) && /relative/.test(bads[2].error) &&
+    ok(bads.concat(badHeads).every((r) => r.ok === false && r.error) && bads[0].error === S.msg("en").appendTasks.badPath(1, "../outside.js") && /relative/.test(bads[1].error) && /relative/.test(bads[2].error) &&
       /US<n>/.test(bads[3].error) && /single-line/.test(bads[4].error) && /would not read back/.test(bads[5].error) && /text is required/.test(bads[6].error) && /text is required/.test(bads[7].error) &&
       /at least one task/.test(bads[8].error) && /constraints/.test(badHeads[0].error) && /one line/.test(badHeads[1].error) && fs.readFileSync(cTasks, "utf8") === frozen,
       "bad paths (.., absolute, drive), story, multi-line/unstorable _Verify:_, empty text, no tasks, a non-phase heading: localized errors, nothing written");
@@ -559,8 +559,9 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
       "_Implements:_ refuses file:// / https:// and ~user / ~ paths; a '~' inside a relative path is kept");
     // Any heading globalConstraints() would read as the constraints section is refused (EN/PT/ES substrings).
     const gcFile = mk7("Gc", "# Tasks: gc\n\n## Phase 1\n- [ ] 1. Build the thing\n");
-    const gcR = ["Global constraints follow-up", "Restrições globais — revisão", "Revisar restricciones globales"].map((h) => S.appendTasks(w7r, "gc", [{ text: "Bump Node floor" }], { heading: h }));
-    ok(gcR.every((r) => r.ok === false && /holds the constraints every task respects/.test(r.error)) && fs.readFileSync(gcFile, "utf8") === "# Tasks: gc\n\n## Phase 1\n- [ ] 1. Build the thing\n" &&
+    const gcH = ["Global constraints follow-up", "Restrições globais — revisão", "Revisar restricciones globales"];
+    const gcR = gcH.map((h) => S.appendTasks(w7r, "gc", [{ text: "Bump Node floor" }], { heading: h }));
+    ok(gcR.every((r, i) => r.ok === false && r.error === S.msg("en").appendTasks.constraintsHeading(gcH[i])) && fs.readFileSync(gcFile, "utf8") === "# Tasks: gc\n\n## Phase 1\n- [ ] 1. Build the thing\n" &&
       !/Bump Node floor/.test(S.taskBrief(w7r, "gc", 1).brief), "a heading containing 'Global constraints' (EN/PT/ES) is refused — appended tasks never become brief constraints");
   }
 

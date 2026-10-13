@@ -65,7 +65,7 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const pt = runIn(["import", "fluidplan", ".fluidplan/cache", "core", "--lang", "pt", "--name", "Cache PT", "--project", fa]);
   const help = runIn(["help"]).out;
   ok(sev.code === 1 && sevJ && sevJ.ok === false && /'\.fluidplan' holds several fluidplan plans \(cache, other\)/.test(sevJ.error) && outside.code === 1 && /outside the project/.test(outside.out) &&
-    notFp.code === 1 && /is not a fluidplan PLAN\.md or DECISIONS\.md/.test(notFp.out) && pt.code === 0 && /^Importado de fluidplan \.fluidplan\/cache → feature 'cache-pt'/.test(pt.out) &&
+    notFp.code === 1 && notFp.out.includes(MSG("en").importFluidplan.notFluidplan("notes/todo.md")) && pt.code === 0 && /^Importado de fluidplan \.fluidplan\/cache → feature 'cache-pt'/.test(pt.out) &&
     /^> Importado de fluidplan `\.fluidplan\/cache` em /m.test(rd(fa, ".specs", "cache-pt", "tasks.md")) && /  - Decisão: D-2 — The time to live \(20 min\)/.test(rd(fa, ".specs", "cache-pt", "tasks.md")) &&
     /^# Decisões: Cache PT\n/.test(rd(fa, ".specs", "cache-pt", "decisions.md")) && /fluidplan = a fluidplan plan \(\.fluidplan\/<id>\/:/.test(help),
     "1.17 F (CLI): exit 1 for a plans folder holding several plans (--json: the refusal), a path outside the project, a document that is no fluidplan one; --lang pt localizes the note, the labels and decisions.md; help documents fluidplan (got " + js([sev.out, outside.out, notFp.out, pt.out]).slice(0, 400) + ")");

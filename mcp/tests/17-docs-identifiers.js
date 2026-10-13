@@ -74,7 +74,8 @@ exports.run = async ({ ok, root, require }) => {
     // 1.26: one README per language, each with the tree (its comments translated); the "New in 1.x" notes moved to CHANGELOG.md,
     // so no README states another module count — every "N modules / módulos" in them is the engine's own.
     const src = rd("mcp", "lib", "engine", "index.js");
-    const mods = (((src.match(/const MODULES = \[([\s\S]*?)\];/) || [])[1] || "").match(/"\.\/[^"]+\.js"/g) || []);
+    const listed = (name) => (((src.match(new RegExp("const " + name + " = \\[([\\s\\S]*?)\\];")) || [])[1] || "").match(/"\.\/[^"]+\.js"/g) || []);
+    const mods = [...listed("MODULES"), ...listed("LAZY")]; // 1.30.1: the lazy tier (dupes.js, import/) counts as ever
     const own = mods.filter((m) => !m.startsWith('"./import/')).length, importers = mods.length - own;
     const readmes = [["README.md", /(\d+) modules, one per concern/, /one importer per source tool \(import\/\)/],
       ["README.pt.md", /(\d+) módulos, um por assunto/, /um importador por ferramenta de origem \(import\/\)/],
