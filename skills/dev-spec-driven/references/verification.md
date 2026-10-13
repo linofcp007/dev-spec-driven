@@ -245,25 +245,42 @@ Without `meta.checks` nothing changes: `/spec-finish` lists "run the full suite"
 
 ### dev-guardian's gate — the check `guardian`
 
-With the sibling plugin **dev-guardian** installed, `spec_init {guardian: true}` (CLI `dev-spec init --guardian`; `off` /
-`false` removes it) adds the project check `guardian` = `node .specs/guardian.cjs scan --project . --fail-on high --format json`.
-`.specs/guardian.cjs` (written beside it, committed) runs the newest installed dev-guardian at each run — `DEV_GUARDIAN_CLI`
-(the path of its `cli/dev-guardian.mjs`) first, else Claude Code's plugin cache — so the check survives updates of both
-plugins. `init` and `spec_upgrade` only **offer** it when dev-guardian is installed or the project has `.guardian/`: the scan
-takes minutes and needs its scanners (Semgrep, Gitleaks, Trivy…), so it is the user's choice.
+With the sibling plugin **dev-guardian** (3.2.1 or later) installed, `spec_init {guardian: true}` (CLI `dev-spec init
+--guardian`; `off` / `false` removes it) adds the project check `guardian` = `node .specs/guardian.cjs scan --project .
+--fail-on high --format json`. `.specs/guardian.cjs` (written beside it, committed) runs the installed dev-guardian at each
+run — `DEV_GUARDIAN_CLI` (a file named `dev-guardian.mjs`) first, else the install Claude Code's
+`plugins/installed_plugins.json` records (this project's over the user's), else the newest version folder of its plugin cache
+— so the check survives updates of both plugins. It forwards only `scan`, `baseline`, `status` and help. `init` and
+`spec_upgrade` only **offer** it when dev-guardian is installed or the project has `.guardian/`: the scan takes minutes and
+needs its scanners (Semgrep, Gitleaks, Trivy…), so it is the user's choice — and a **project-wide** one: meta.checks and the
+launcher are committed, so every machine that finishes a feature needs dev-guardian and its scanners.
 
+- **Set it up once:** with no `.guardian/baseline.json`, every existing finding counts as new. `init --guardian` says so:
+  the user records the baseline on the base commit, before a feature adds code (`node .specs/guardian.cjs baseline update
+  --project .`), and commits it. dev-spec writes only under `.specs/`, so `init` names the `.gitignore` lines dev-guardian's
+  outputs need (`**/.guardian/*`, then `!` lines for `baseline.json`, `budgets.yml`, `hooks.config.json`); its report sets
+  under `.guardian/reports/` never make a run "dirty".
 - **It is a project check like any other** — `finish --run` runs it, `spec_finish {evidence}` records it — read by its exit
   code: **0** pass · **1** new findings at or above `--fail-on` (against `.guardian/baseline.json`) · **2** an incomplete scan
   (an expected scanner did not run) · **3** a usage or configuration error (also: no dev-guardian found). The verdict
   (`suiteChecks[].guardian` — `verdict`: pass · blocked · incomplete · config · not-found · no-launcher · exit) names the
-  top findings, **the feature's own `_Implements:_` files first**.
-- **Over MCP** run the command yourself from the project root and report it with its JSON stdout:
-  `spec_finish {name, evidence: [{name: "guardian", command, exitCode, summary: <stderr's last lines>, report: <stdout>}]}`.
-  Without `report` the exit code alone decides.
-- **A blocking finding is fixed** — or, only when the user accepts it, recorded in dev-guardian (`dev-guardian baseline
-  update`, or a suppression) and the check run again. An incomplete scan stays a failed check until the missing scanner
-  runs (dev-guardian's `/guardian-init`; offline, `--local-only` in the check's command keeps Semgrep to local rules).
-  Never force the finish, nor remove the check, without the user — the approval guard treats removing it as a guard-down.
+  top findings, **the feature's own `_Implements:_` files first**, says when there is no baseline, and says "update
+  dev-guardian" when its report names no version or one below 3.2.1.
+- **In Claude Code, run the CLI:** `node "<plugin>/cli/dev-spec.js" finish <feature> --run` with the Bash tool's `timeout:
+  600000` (or in the background) — it runs the check and records its report itself. **Over another MCP client** run the
+  command from the project root and report it with its JSON stdout: `spec_finish {name, evidence: [{name: "guardian",
+  command, exitCode, summary: <stderr's last lines>, report: <stdout>}]}` (dev-guardian 3.3+: add `--compact` to the command
+  for a short report — that run proves the check too). A pass needs its report; a report that contradicts the exit code is
+  refused (`report-mismatch`), and so is any run of a `.specs/guardian.cjs` that is not the launcher dev-spec-driven writes
+  (`launcher-changed` — `init --guardian` writes it again; `finish --run` replaces an earlier version's itself).
+- **A blocking finding is fixed**, then the check runs again. To accept ONE reviewed finding the user suppresses it inline
+  with a reason (`nosemgrep: <rule> -- <reason>`, `# nosec`) — never `baseline update`, which accepts every current
+  finding, the feature's own included (it belongs on the base commit, and it is the user's decision). An incomplete scan
+  stays a failed check until its gaps are fixed — the blocker names how, by kind: install a missing scanner
+  (dev-guardian's `/guardian-init`), commit a lockfile, …; offline, `--local-only` keeps Semgrep to local rules.
+  Never force the finish, nor remove the check, without the user — with the approval guard on, removing the check, an
+  agent's write of `.specs/guardian.cjs` or `.guardian/baseline.json`, an agent-run `baseline update` and a gate run under a
+  `DEV_GUARDIAN_CLI` / `CLAUDE_CONFIG_DIR` of its own are guard-downs.
 - **Duplication budget:** when `.guardian/budgets.yml` sets `quality.duplication_pct`, `dev-spec dupes` (no feature) /
   `spec_scan {duplicates: true}` shows the project's duplicated share beside it (`budget`), and finish's duplicate warning
   says when the project is over it. dev-spec counts windows of code lines, dev-guardian measures with jscpd — close, not

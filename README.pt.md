@@ -86,8 +86,9 @@ consegue correr, pede-te o output — ou dá-te a linha
 aprovação, placeholders), pede uma execução nova da tua suite completa, escreve o resumo de merge a partir da spec e pede
 a tua aprovação final. Depois escolhes: fazer o merge localmente ou manter o branch. Nada é enviado sem ti.
 Com o **dev-guardian** instalado, `dev-spec init --guardian` torna o gate de segurança dele uma verificação do projeto: o
-`/spec-finish` corre-o, e um finding novo de gravidade high bloqueia até ser corrigido ou o aceitares no dev-guardian
-(`dev-guardian baseline update`).
+`/spec-finish` corre-o, e um finding novo de gravidade high bloqueia até ser corrigido (aceitas um finding revisto com uma
+supressão na própria linha, nunca com `baseline update`). Vale para o projeto todo: cada máquina que fecha uma feature
+precisa do dev-guardian e dos scanners dele.
 
 Perdeste-te? O `/spec <feature>` retoma no único passo seguinte. Preferes uma versão guiada no teu repositório? O
 `/dev-spec-driven:spec-tour` leva uma alteração pequena e real por todos os gates e explica cada um à medida que acontece.
