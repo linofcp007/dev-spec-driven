@@ -35,7 +35,8 @@ told apart by a `mode` or a `when(args)` test), `legacy`, `cli`, `engine`, `args
 - **runTool has no dispatch of its own**: `forTool(name, args)` picks the operation, `run(op, spec, dir, "mcp", read, own)`
   reads its options by the shared rule (`options()`: a switch is true only when given true) and makes the call; runTool
   itself reads only `projectDir`. The CLI does the same through `c.call(id, given)` (cli/main.js). An option the operation
-  doesn't declare is thrown.
+  doesn't declare is thrown. The CLI's options themselves derive from the table (1.30, `cliOptions(command)`: the args' `cli`
+  flags in the table's order, then `cliOnly` — conventions.md → The CLI is one table and one call).
 - `createFeature` / `completeTask` take an options object; their positional forms still work (told apart by type —
   `featureLocked` reads either).
 - **Parity is structural**: `mcp/tests/02-mcp-server-tools.js` (every tool and alias runs an operation, every argument mapped

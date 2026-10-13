@@ -7,6 +7,10 @@
  *   options            the flags it reads, in its help's order (a flag every command knows aside: GLOBAL_OPTIONS). A VALUE flag
  *                      (the parser reads the word after it) is one of VALUE_FLAG_SPECS below; any other name is a switch of the
  *                      engine's spec.CLI_SWITCHES (the approval hook's lexer reads that list — a new switch goes THERE).
+ *                      TABLE: a command that runs operations — its flags DERIVE from the operations table (mcp/lib/operations.js
+ *                      cliOptions: each operation arg's `cli`, then `cliOnly`, in the table's order), read on first use. A list:
+ *                      a command that runs none, or one whose help shows another order than the table's (init, spike, done,
+ *                      undone, changelog, depend — cli/tests/02-surfaces-parity.js holds them to the table's set).
  *                      Absent: the command checks nothing itself (evals hands every flag to run-evals.js; help).
  *   max                the most positional arguments it takes (absent: any number, or its handler checks them)
  *   bounds             the largest value of an integer flag (next --max ≤ 8, --timeout ≤ TIMEOUT_MAX_S), or its [least, most] (dupes
@@ -54,6 +58,13 @@ const TIMEOUT_MAX_S = Math.floor(2147483647 / 1000);
 // next --max — spec_next_task's schema maximum (8): --max 50 exited 0 and the engine clamped it to 8 silently,
 // where MCP refuses max: 9.
 const NEXT_MAX = 8;
+
+// ---- the options the operations table gives -------------------------------------------------------------------------------
+// `options: TABLE` — the command's flags derive from mcp/lib/operations.js (cliOptions), read on first use: the status line and the
+// bare help never load the table (main.js reads it on the first c.call the same way).
+const TABLE = Symbol("options from the operations table");
+let OPERATIONS_MODULE = null;
+const operationsTable = () => OPERATIONS_MODULE || (OPERATIONS_MODULE = require(path.join(__dirname, "..", "mcp", "lib", "operations.js")));
 
 // ---- the value flags -----------------------------------------------------------------------------------------------------------
 // Every flag that takes a value, as `--flag value` or `--flag=value` (any other `--flag` is a switch — `depend a b --order 3` no
@@ -500,14 +511,13 @@ function createCommand(c) {
     : 'dev-spec create "<name>" [tracks...] [--summary "…"] [--kind feature|bugfix|spike|change] [--size xs|s|m|l] [--branch [<name>]] [--lang en|pt|pt-BR|es]');
   return createRun(c);
 }
-const CREATE_OPTIONS = ["tracks", "summary", "lang", "brownfield", "flow", "question", "timebox", "reproduction", "root-cause", "condition", "behaviour", "include-body", "size", "branch"];
 
 // ---- the table ------------------------------------------------------------------------------------------------------------------
 // In the help's order. A handler reads what it needs from its context (destructured first — the bodies read as they always have).
 const COMMANDS = [
   {
     name: "classify",
-    options: ["name", "lang", "explain"],
+    options: TABLE,
     help: `  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data), multilingual
                                   --explain: every keyword match (table tier → final tier, cue / override, negation) + the
                                   project's signal overrides`,
@@ -617,7 +627,7 @@ const COMMANDS = [
   },
   {
     name: "steering",
-    options: ["lang"], max: 1,
+    options: TABLE, max: 1,
     help: `  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, glossary.md — the terms to
                                   use and the words to avoid (_Avoid:_), …) — any other
                                   name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)`,
@@ -634,7 +644,7 @@ const COMMANDS = [
   },
   {
     name: "templates",
-    options: ["lang"],
+    options: TABLE,
     args: ["list init check", "@template"],
     help: `  templates [list|init|check] [artifact] [--lang]   The project's own scaffolds: .specs/templates/<artifact>.md (<lang>/ wins)
                                   replace the built-in ones for new features / steering; init copies the built-in ones to
@@ -652,7 +662,7 @@ const COMMANDS = [
   },
   {
     name: "tracks",
-    options: ["lang"],
+    options: TABLE,
     args: ["list init check"],
     help: `  tracks [list|init <name>|check] [name] [--lang]   The project's own tracks: a pack .specs/tracks/<name>/ (track.json +
                                   fragments) is a marker track like +sec — classified, scaffolded, gated; init scaffolds
@@ -670,7 +680,7 @@ const COMMANDS = [
   },
   {
     name: "signals",
-    options: ["lang"],
+    options: TABLE,
     args: ["list set forget"], sub: { set: [null, "@track", null, "off weak strong"], forget: [null, "@track"] },
     help: `  signals [list | set <track> <word> off|weak|strong | forget <track> <word>]   The classifier's signal overrides of this
                                   project (.specs/classifier.json): create learns them from Phase 0 corrections (a word
@@ -690,7 +700,7 @@ const COMMANDS = [
   },
   {
     name: "create",
-    options: ["kind", ...CREATE_OPTIONS],
+    options: TABLE,
     args: [null, "@track..."],
     values: { kind: "feature bugfix spike change", size: "@size" },
     help: `  create "<name>" [tracks...]     Scaffold a feature folder (auto-classifies if no tracks; --summary, --kind feature|bugfix|spike|change, --size xs|s|m|l, --lang en|pt|pt-BR|es)
@@ -705,7 +715,7 @@ const COMMANDS = [
   },
   {
     name: "bugfix",
-    options: CREATE_OPTIONS,
+    options: TABLE,
     args: [null, "@track..."],
     values: { size: "@size" },
     help: `  bugfix "<name>" [--summary]     Scaffold the bugfix flow: bug.md (repro · root cause · fix) + regression test plan
@@ -736,7 +746,7 @@ const COMMANDS = [
   },
   {
     name: "decide",
-    options: ["title", "decision", "context", "consequences", "affects", "supersedes", "discovery", "kind"],
+    options: TABLE,
     args: ["@feature"],
     values: { kind: "decision discovery" },
     help: `  decide <feature> --title "…" --decision "…"   Append a D-n entry to decisions.md (append-only): [--context "…"]
@@ -761,13 +771,13 @@ const COMMANDS = [
   },
   {
     name: "list",
-    options: [], max: 0,
+    options: TABLE, max: 0,
     help: `  list                            List features (phase + task progress)`,
     run: (c) => main2list(c),
   },
   {
     name: "status",
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  status [feature]                Status of a feature, or all (sections: ✓ filled · ◐ unfilled · ✗ missing)`,
     run(c) {
@@ -797,7 +807,7 @@ const COMMANDS = [
   },
   {
     name: "doctor",
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  doctor <feature>                Health-check → ready to advance? (exit 1 on FAIL; trace/ears likewise on gaps/errors)`,
     run(c) {
@@ -815,7 +825,7 @@ const COMMANDS = [
   },
   {
     name: "trace",
-    options: ["code", "matrix", "csv"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  trace <feature> [--code]        Traceability AC ↔ task ↔ test ↔ code (_Implements:_, phantom refs) — lists every gap,
                                   then the EC/NFR/SC warnings; --code also scans test files for the T-IDs they name
@@ -850,7 +860,7 @@ const COMMANDS = [
   },
   {
     name: "clarify",
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  clarify <feature>               Surface ambiguities/gaps in requirements before design`,
     run(c) {
@@ -868,7 +878,7 @@ const COMMANDS = [
   },
   {
     name: "ears",
-    options: ["text", "lang"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature @file"],
     help: `  ears <feature|file.md>          Lint EARS (SHALL/DEVE/DEBE, IDs, vague words);
        ears --text "…" | ears -   … or raw text / stdin (same as ears_validate {text})`,
@@ -904,7 +914,7 @@ const COMMANDS = [
   },
   {
     name: "next",
-    options: ["batch", "max", "waves"], max: 1,
+    options: TABLE, max: 1,
     bounds: { max: NEXT_MAX },
     args: ["@feature"],
     help: `  next <feature> [--batch]        Next task whose _Depends:_ are all done (--batch: + the [P] tasks that can run beside it; --max N, default 3);
@@ -936,7 +946,7 @@ const COMMANDS = [
   {
     name: "next-action",
     aliases: ["na"],
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  next-action <feature>           "You are here → do this next" (+ what changed since approval); alias: na`,
     run(c) {
@@ -954,7 +964,7 @@ const COMMANDS = [
   },
   {
     name: "brief",
-    options: ["write", "include-brief"], max: 2,
+    options: TABLE, max: 2,
     args: ["@feature"],
     help: `  brief <feature> [n] [--write]   Self-contained brief for task n (default: next open) — ACs, tests, design, DoD;
                                   --write → .specs/<feature>/.execution/task-<n>-brief.md (subagent execution)`,
@@ -1140,7 +1150,7 @@ const COMMANDS = [
   },
   {
     name: "finish",
-    options: ["write", "include-body", "run", "shell", "timeout"], max: 1,
+    options: TABLE, max: 1,
     bounds: { timeout: TIMEOUT_MAX_S },
     args: ["@feature"],
     help: `  finish <feature> [--write] [--include-body] [--run]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
@@ -1183,7 +1193,7 @@ const COMMANDS = [
   },
   {
     name: "append-tasks",
-    options: ["task", "req", "implements", "verify", "story", "parallel", "makes-green", "expect-fail", "size", "depends", "heading"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     values: { size: "@task-size", story: "shared" },
     help: `  append-tasks <feature> --task "…"   Append one task to tasks.md, numbered after the last (default phase 'Phase: Convergence'):
@@ -1224,7 +1234,7 @@ const COMMANDS = [
   },
   {
     name: "approve",
-    options: ["by", "force", "role", "through", "reason", "expires", "revoke"], max: 2,
+    options: TABLE, max: 2,
     args: ["@feature", "@phase"],
     help: `  approve <feature> <phase> [--force]  Record a phase approval (.state.json) — refused while that phase's checks fail;
                                   --force records it anyway (flagged as forced, with the failing checks); --role ROLE signs off as
@@ -1259,7 +1269,7 @@ const COMMANDS = [
   },
   {
     name: "impact",
-    options: ["phase", "reopen"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  impact <feature> [--phase p] [--reopen]   What an edit after approval touches, against the approved snapshot
                                   (--phase requirements|design|test-plan|eval-plan|tasks, default requirements): changed ACs/sections/tests/tasks →
@@ -1281,7 +1291,7 @@ const COMMANDS = [
   },
   {
     name: "metrics",
-    options: ["write"], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  metrics [feature] [--write]     Lead times, rework, forced approvals, change requests, evidence pass rate, velocity (project: + avg/median);
                                   --write → .specs/<feature>/retro.md (a pre-filled retrospective, never overwritten)`,
@@ -1295,7 +1305,7 @@ const COMMANDS = [
   },
   {
     name: "add-track",
-    options: ["tracks", "remove"],
+    options: TABLE,
     args: ["@feature", "@optional-track..."],
     help: `  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive);
@@ -1317,7 +1327,7 @@ const COMMANDS = [
   },
   {
     name: "feature",
-    options: ["yes", "flow"], // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its handler
+    options: TABLE, // its arguments per action (remove / archive / restore: 2, rename / flow: 3) — checked in its handler
     args: ["remove archive rename restore flow"],
     sub: { remove: [null, "@feature"], archive: [null, "@feature"], rename: [null, "@feature"], restore: [null, "@archived"], flow: [null, "@feature", "@flow"] },
     help: `  feature <remove|archive|rename|restore> <name> [new-name]   Manage a feature's lifecycle (remove shows what it would delete; --yes deletes;
@@ -1369,7 +1379,7 @@ const COMMANDS = [
   },
   {
     name: "catalog",
-    options: ["write", "include-body"], max: 0,
+    options: TABLE, max: 0,
     help: `  catalog [--write]               Living catalog: every feature's ACs, superseded ones marked (_Supersedes:_); --write → .specs/SPECS.md
                                   (--json: the structure; --include-body adds the markdown)`,
     run(c) {
@@ -1389,7 +1399,7 @@ const COMMANDS = [
   },
   {
     name: "export",
-    options: ["md", "html", "csv", "gherkin", "adr", "tracker", "write", "include-body"],
+    options: TABLE,
     args: ["@feature"],
     help: `  export [feature] [--md] [--write]   One printable document for stakeholders — a feature (stories + EARS ACs, design, test plan,
                                   tasks with their verification, approvals, open clarifications) or, without one, the whole project;
@@ -1477,7 +1487,7 @@ const COMMANDS = [
   {
     name: "milestone",
     aliases: ["milestones"],
-    options: [],
+    options: TABLE,
     args: ["@milestone-action"], sub: { add: [null, null, null, "@feature..."] },
     help: `  milestone [add <name> <YYYY-MM-DD> <features…> | rm <name> | list]   Milestones (roadmap.json meta.milestones): a target date
                                   for a set of features, judged against their ETAs — on-track · at-risk · late · done; add replaces
@@ -1496,7 +1506,7 @@ const COMMANDS = [
   },
   {
     name: "drift",
-    options: [], max: 1,
+    options: TABLE, max: 1,
     args: ["@feature"],
     help: `  drift [feature]                 Implementing files changed / missing / new since finish recorded its baseline (exit 1 on drift or a stale baseline)`,
     run(c) {
@@ -1528,7 +1538,7 @@ const COMMANDS = [
   },
   {
     name: "stop-check",
-    options: ["message", "agent"],
+    options: TABLE,
     help: `  stop-check [--message "<text>"|-] [--agent <type>]   The Stop hook's evidence gate: does a closing message claim done /
                                   verified (EN/PT/ES) while a feature active in the last hours has ticked tasks without verification
                                   evidence? Prints the reason it would send the turn back (exit 1) or why it lets it end; - reads stdin;
@@ -1557,7 +1567,7 @@ const COMMANDS = [
   },
   {
     name: "log",
-    options: ["max"], max: 2, // <feature> [-]
+    options: TABLE, max: 2, // <feature> [-]
     args: ["@feature", "-"],
     help: `  log <feature> [--max N] [-]     Per task, the commits whose message cites it — "task #N" / "#N" with the feature name (as /executeTask commit
                                   writes "Part of .specs/<feature>/ task #N."), or its T-/AC IDs ("Makes T-01 green") — and, +tdd, a
@@ -1627,7 +1637,7 @@ const COMMANDS = [
   },
   {
     name: "upgrade",
-    options: ["apply"], max: 0,
+    options: TABLE, max: 0,
     help: `  upgrade [--apply]               After a plugin update: audit every active feature against the current rules (read-only) — status,
                                   what doctor flags, next step, review (critic / converge); --apply saves inferred tracks, seeds the
                                   approval history, stamps meta.specVersion and writes .specs/UPGRADE.md (never edits a spec)`,
@@ -1644,7 +1654,7 @@ const COMMANDS = [
   },
   {
     name: "roadmap",
-    options: ["write", "md", "html", "lang"], max: 0,
+    options: TABLE, max: 0,
     help: `  roadmap [--write][--html][--lang]  Roadmap: %, deps, blocked, cycles, ETA per feature (velocity from ticked tasks, _Size: XS|S|M|L|XL_), cross-feature file overlaps. --write (alias --md) → .specs/ROADMAP.md (default); --html also writes the brand-styled ROADMAP.html (light/dark); --lang en|pt|pt-BR|es`,
     run(c) {
       // Same engine call as spec_roadmap: a failed write (e.g. a hand-written ROADMAP.md) is an error → exit 1.
@@ -1695,7 +1705,7 @@ const COMMANDS = [
   },
   {
     name: "backlog",
-    options: [], // add <name> [note words…] · rm|remove <name> · list — checked in its handler
+    options: TABLE, // add <name> [note words…] · rm|remove <name> · list — checked in its handler
     args: ["@backlog-action"],
     help: `  backlog [add|rm|remove <name> [note]]  Manage planned-but-unspecced features (shown in ROADMAP.md)`,
     run(c) {
@@ -1721,7 +1731,7 @@ const COMMANDS = [
   },
   {
     name: "scan",
-    options: ["cap"], max: 1,
+    options: TABLE, max: 1,
     args: ["@dir"],
     help: `  scan [path]                     Brownfield: inventory an existing codebase (stack, frameworks, routes with file:line,
                                   tests, entrypoints, env var names, migrations)`,
@@ -1754,7 +1764,7 @@ const COMMANDS = [
   },
   {
     name: "dupes",
-    options: ["min-lines", "tests"], max: 1,
+    options: TABLE, max: 1,
     bounds: { "min-lines": [4, 100] },
     args: ["@feature"],
     help: `  dupes [feature] [--min-lines N] [--tests]   Repeated code: a feature's _Implements:_ code that repeats code elsewhere in
@@ -1785,7 +1795,7 @@ const COMMANDS = [
   },
   {
     name: "coverage",
-    options: [], max: 0,
+    options: TABLE, max: 0,
     help: `  coverage                        Brownfield: % of code files named in any _Implements:_ (active + archived features), per folder`,
     run(c) {
       const { projectDir, out, fail, log } = c;
@@ -1806,7 +1816,7 @@ const COMMANDS = [
   },
   {
     name: "import",
-    options: ["name", "lang", "tracks", "text", "dry-run"],
+    options: TABLE,
     args: ["@import-tool", "@file"],
     help: `  import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
                                   tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data
@@ -2056,6 +2066,15 @@ const COMMANDS = [
 ];
 
 // ---- derived from the table ----------------------------------------------------------------------------------------------------
+// `options: TABLE` → a getter: the operations table's flags for the command, read (once) on first use
+for (const e of COMMANDS) {
+  if (e.options !== TABLE) continue;
+  Object.defineProperty(e, "options", { enumerable: true, configurable: true, get() {
+    const options = operationsTable().cliOptions(e.name);
+    Object.defineProperty(e, "options", { value: options, enumerable: true, writable: true, configurable: true });
+    return options;
+  } });
+}
 // name or alias → its entry (a Map: `constructor` / `__proto__` are no commands)
 const COMMAND_INDEX = new Map();
 for (const e of COMMANDS) for (const n of [e.name, ...(e.aliases || [])]) COMMAND_INDEX.set(n, e);
@@ -2065,8 +2084,20 @@ const HELP_ALIASES = {};
 for (const e of COMMANDS) for (const a of e.aliases || []) HELP_ALIASES[a] = e.name;
 // each command's own options and the most arguments it takes (main's checkCommandArgs: another known flag, or an
 // argument past its last one, is a usage error). Not listed: evals (its flags are run-evals.js's) and help.
-const COMMAND_OPTIONS = {};
-for (const [n, e] of COMMAND_INDEX) if (e.options) COMMAND_OPTIONS[n] = e.max === undefined ? { options: e.options } : { options: e.options, max: e.max };
+// Built on first use (a TABLE entry's options load the operations table): an object read through a proxy, as a plain one.
+let COMMAND_OPTIONS_BUILT = null;
+function commandOptions() {
+  if (COMMAND_OPTIONS_BUILT) return COMMAND_OPTIONS_BUILT;
+  const out = {};
+  for (const [n, e] of COMMAND_INDEX) if (e.options) out[n] = e.max === undefined ? { options: e.options } : { options: e.options, max: e.max };
+  return (COMMAND_OPTIONS_BUILT = out);
+}
+const COMMAND_OPTIONS = new Proxy({}, {
+  get: (_, k) => commandOptions()[k],
+  has: (_, k) => k in commandOptions(),
+  ownKeys: () => Reflect.ownKeys(commandOptions()),
+  getOwnPropertyDescriptor: (_, k) => Reflect.getOwnPropertyDescriptor(commandOptions(), k),
+});
 // shell completion: a command's positionals ("<cmd>", and "<cmd> <word>" for the positions a first word picks) and the values
 // of a value flag ("<flag>" for every command — VALUE_FLAG_SPECS' own —, "<cmd> --<flag>" where commands differ).
 const COMMAND_ARGS = {};
