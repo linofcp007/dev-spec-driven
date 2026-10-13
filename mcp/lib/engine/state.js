@@ -32,16 +32,26 @@ function featureLang(projectDir, name) {
   const st = readState(projectDir, name); // readState is hoisted below
   return normalizeLang(st.lang || projectLang(projectDir));
 }
+// An enum argument as a caller gave it — the MCP enum, or the CLI's raw word, which the engine checks itself (1.30: one reader for
+// every enum the engine validates — flow, size, lang, kind, action, format, impact's phase). → { value } — a member of `values`, or
+// null when not given (absent, null, a blank string) — or { ok: false, error, code: "invalid-arguments", invalid: [name] }: the MCP
+// validator's own words, in `lng` (a language, or a function giving it — read only on a refusal). The value is trimmed and
+// lower-cased (opts.fold: another reading — langOption canonicalizes a language); opts.blankGiven: a blank string is a value (refused).
+function enumArg(name, values, v, lng, opts = {}) {
+  if (v === undefined || v === null || (!opts.blankGiven && typeof v === "string" && !v.trim())) return { value: null };
+  const s = typeof v === "string" ? (opts.fold ? opts.fold(v) : v.trim().toLowerCase()) : null;
+  if (s && values.includes(s)) return { value: s };
+  const A = i18n.msg(typeof lng === "function" ? lng() : lng).args;
+  return { ok: false, error: A.invalid(A.item(name, A.oneOf(values.join(", ")), JSON.stringify(typeof v === "string" ? v : String(v)))), code: "invalid-arguments", invalid: [name] };
+}
 // A tool's `lang` option (spec_templates, spec_tracks and its signals action): a language of LANGS, canonical (pt-BR / pt_br / PTBR
 // → pt-BR — its folder is .specs/templates/pt-BR/) → { lang, lng }: lang the language asked for (null when absent or blank), lng the
 // one to answer in (lang, else the project's); a value naming no language → { error }, in the project's language.
 function langOption(projectDir, value) {
   const pl = projectLang(projectDir);
-  if (value == null || !String(value).trim()) return { lang: null, lng: pl };
-  const lang = i18n.canonicalLang(String(value));
-  if (lang) return { lang, lng: lang };
-  const A = i18n.msg(pl).args;
-  return { error: A.invalid(A.item("lang", A.oneOf(i18n.LANGS.join(", ")), JSON.stringify(String(value)))) };
+  const r = enumArg("lang", i18n.LANGS, value, pl, { fold: (s) => i18n.canonicalLang(s) });
+  if (r.error) return { error: r.error };
+  return r.value ? { lang: r.value, lng: r.value } : { lang: null, lng: pl };
 }
 // Localized engine errors: the feature's language when there is one, else the project's.
 function errs(projectDir, slug) {
@@ -234,11 +244,8 @@ const phaseFile = (phase, kind) => (phase === "design" && kind === "bugfix" ? "b
 const FEATURE_SIZES = ["xs", "s", "m", "l"];
 // A size as given (MCP / CLI; case-folded) → { size } | { size: null } (not given) | { error }.
 function sizeInput(v, lng) {
-  if (v === undefined || v === null || (typeof v === "string" && !v.trim())) return { size: null };
-  const s = typeof v === "string" ? v.trim().toLowerCase() : null;
-  if (s && FEATURE_SIZES.includes(s)) return { size: s };
-  const A = i18n.msg(lng).args;
-  return { error: A.invalid(A.item("size", A.oneOf(FEATURE_SIZES.join(", ")), JSON.stringify(typeof v === "string" ? v : String(v)))) };
+  const r = enumArg("size", FEATURE_SIZES, v, lng);
+  return r.error ? { error: r.error } : { size: r.value };
 }
 // A feature folder's size (its .state.json `size`, read-cached) → "xs" | "s" | "m" | "l" | null.
 function featureSize(dir) {
@@ -615,16 +622,15 @@ function removeBacklogUnlocked(projectDir, nm) {
 
 const BACKLOG_ACTIONS = ["add", "rm", "remove", "list"]; // = the spec_roadmap_edit {kind: "backlog"} enum (server.js reads it from here)
 function backlog(projectDir, action, name, note) {
-  const a = String(action == null ? "" : action).trim().toLowerCase(); // 'ADD' is add on every surface (the MCP enum folds it too)
+  // 'ADD' is add on every surface (the MCP enum folds it too); absent / "list" lists; anything else is an error (the MCP enum refuses
+  // it) — `backlog delete X` used to just list
+  const act = enumArg("action", BACKLOG_ACTIONS, action, () => projectLang(projectDir));
+  if (act.error) return act;
+  const a = act.value || "list";
   if (a === "add") return addBacklog(projectDir, name, note);
   // "remove" is an alias of "rm" on EVERY surface (the spec_roadmap_edit {kind: "backlog"} enum lists it too) — it used to be a CLI-only alias,
   // then refused everywhere while the docs still named it.
   if (a === "rm" || a === "remove") return removeBacklog(projectDir, name);
-  // Absent/"list" lists; anything else is an error (the MCP enum refuses it) — `backlog delete X` used to just list.
-  if (a && a !== "list") {
-    const A = i18n.msg(projectLang(projectDir)).args;
-    return { ok: false, error: A.invalid(A.item("action", A.oneOf(BACKLOG_ACTIONS.join(", ")), JSON.stringify(String(action)))), code: "invalid-arguments", invalid: ["action"] };
-  }
   // a roadmap.json that doesn't parse (or has the wrong shape) is an error, never "Backlog (0)" — milestone /
   // depend's rule (its sanitized copy read as an empty backlog)
   const bad = roadmapError(projectDir);
@@ -1609,7 +1615,7 @@ function featureBranch(projectDir, name) {
   return f.ok ? branchView(projectDir, readState(projectDir, f.slug)) : null;
 }
 
-module.exports = { normalizeLang, projectLang, featureLang, langOption, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
+module.exports = { normalizeLang, projectLang, featureLang, enumArg, langOption, errs, slugify, slugifyFull, legacySlugify, RE_WIN_RESERVED,
   reservedSlug, resolveFeature, existingFeature, isFeatureFolder, PHASES, statePath, readState, stateFromFile, PHASE_FILE,
   textFingerprint, wsText, wsFingerprint, sha1Hex, fingerprintMatches, BOM_CHAR, uncheckTasks, phaseFile, FEATURE_SIZES,
   sizeInput, featureSize, isChangeDir, PHASE_PERCENT, featurePercent, roadmapPath, loadRoadmap, readRoadmap, roadmapError,

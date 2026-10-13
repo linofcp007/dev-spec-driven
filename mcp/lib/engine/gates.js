@@ -15,7 +15,7 @@ const { featureLocked } = require("./files.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, activeDesign, activeTasks, artifactReport, artifactState,
   bugPlaceholders, criterionBlocks, designSections, detectTracks, duplicateTaskNumbers,
-  errs, evidenceRule, existingFeature, existsCached, extractSection, extractTestIds,
+  enumArg, errs, evidenceRule, existingFeature, existsCached, extractSection, extractTestIds,
   featureLang, fingerprintMatches, hasProseOutsideBrackets, headingsOnly, inactiveTaskLines, isBugStep,
   isInsideDir, isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap, maybeRefreshRoadmap, normalizeLang, own,
   ownRecord, parseTasks, PHASE_FILE, phaseFile, PHASES, placeholderReport, planIdText, projectLang,
@@ -30,7 +30,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, artifactState,
   approvalChecks, CHECK_PHASE; // doctor.js (the check registry)
 function __link(E) { ({ acIndex, activeDesign, activeTasks, artifactReport,
   artifactState, bugPlaceholders, criterionBlocks, designSections, detectTracks,
-  duplicateTaskNumbers, errs, evidenceRule, existingFeature, existsCached, extractSection,
+  duplicateTaskNumbers, enumArg, errs, evidenceRule, existingFeature, existsCached, extractSection,
   extractTestIds, featureLang, fingerprintMatches, hasProseOutsideBrackets, headingsOnly,
   inactiveTaskLines, isBugStep, isInsideDir, isObj, isPlaceholderTask, isRecord, isSpikeDir, loadRoadmap,
   maybeRefreshRoadmap, normalizeLang, own, ownRecord, parseTasks, PHASE_FILE, phaseFile, PHASES, placeholderReport,
@@ -1157,11 +1157,10 @@ function impactReport(projectDir, name, opts = {}) {
   // a change has ONE approved artifact, change.md (its plan: phase tasks) holding its criteria AND its tasks:
   // the default phase is tasks; its criteria are diffed by stable ID (as requirements), its tasks by number, and --reopen works.
   const isChange = isChangeDir(dir);
-  const phase = opts.phase == null || String(opts.phase).trim() === "" ? (isChange ? "tasks" : "requirements") : String(opts.phase).toLowerCase().trim();
-  if (!IMPACT_PHASES.includes(phase)) { // the MCP enum's refusal, in its words (the CLI passes --phase as typed)
-    const A = i18n.msg(projectLang(projectDir)).args;
-    return { ok: false, error: A.invalid(A.item("phase", A.oneOf([...IMPACT_PHASES, "steering"].join(", ")), JSON.stringify(String(opts.phase)))), code: "invalid-arguments", invalid: ["phase"] };
-  }
+  // the MCP enum's refusal, in its words (the CLI passes --phase as typed); steering was answered above
+  const ph = enumArg("phase", [...IMPACT_PHASES, "steering"], opts.phase, () => projectLang(projectDir));
+  if (ph.error) return ph;
+  const phase = ph.value || (isChange ? "tasks" : "requirements");
   if (isChange && phase !== "tasks") return { ok: false, change: true, error: I.changePhase(phase, slug) };
   const reopen = opts.reopen === true;
   if (reopen && phase === "tasks" && !isChange) return { ok: false, error: I.reopenTasks };
@@ -1494,11 +1493,8 @@ const checkPhaseIndex = (id, flow) => flowIndex((Object.prototype.hasOwnProperty
 const positionPhase = (phase, flow) => (flow === "design-first" && (phase === "design" || phase === "requirements") ? (phase === "design" ? "requirements" : "design") : phase);
 // A flow as given (MCP enum / CLI --flow, folded like the other enums) → { flow } | { flow: null } (not given) | { error }.
 function parseFlow(v, lng) {
-  if (v === undefined || v === null || (typeof v === "string" && !v.trim())) return { flow: null };
-  const s = typeof v === "string" ? v.trim().toLowerCase() : null;
-  if (s && FLOWS.includes(s)) return { flow: s };
-  const A = i18n.msg(lng).args;
-  return { error: A.invalid(A.item("flow", A.oneOf(FLOWS.join(", ")), JSON.stringify(typeof v === "string" ? v : String(v)))) };
+  const r = enumArg("flow", FLOWS, v, lng);
+  return r.error ? { error: r.error } : { flow: r.value };
 }
 // "classification → design → requirements → test-plan → tests → tasks" — the active phases of a feature in its flow's order.
 function flowOrderText(dir, tracks, flow) {

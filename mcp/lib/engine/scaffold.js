@@ -13,7 +13,7 @@ const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState, checksInput,
-  checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, errs, evidenceMode,
+  checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, enumArg, errs, evidenceMode,
   evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText, guardInput,
   guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord, isSpikeDir,
   learnSignalOverrides, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
@@ -33,7 +33,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
 let guardianChecks, guardianOffer, isGuardianCheck, setGuardianLauncher; // evidence.js — 1.29 (init --guardian)
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
-  checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, errs,
+  checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, enumArg, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
   guardInput, guardLevel, headingHasMarker, headRest, implementsRel, isInsideDir, isObj, isPackTrack, isRecord,
   isSpikeDir, learnSignalOverrides, legacyPackName, legacyPackMarkerTrack, maybeRefreshRoadmap, missingPackTracks, newProjectLang, normalizeLang, normalizeTracks,
@@ -675,6 +675,7 @@ function storeFeatureBranch(dir, record) {
 // the created artifacts' bodies (`bodies`).
 // The options form: createFeature(projectDir, { name, tracks, summary, cls, lang, kind, …opts }) — one object, no positional
 // holes; what both surfaces call (mcp/lib/operations.js). The positional form stays the same call.
+const FEATURE_KINDS = ["feature", "bugfix", "spike", "change"]; // = spec_create {kind}'s enum
 function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts = {}) {
   if (isObj(name)) ({ name, tracks, summary, cls, lang, kind, ...opts } = name);
   const f = resolveFeature(projectDir, name);
@@ -703,14 +704,12 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   if (pt.unknown.length) return { ok: false, error: unknownTracksError(existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir)), pt.unknown) };
   const storedState = existed ? readState(projectDir, slug) : null;
   const storedKind = existed ? storedState.kind || "feature" : null;
-  let askedKind = kind != null ? String(kind).trim().toLowerCase() : null;
   const inLang = existed ? featureLang(projectDir, slug) : normalizeLang(lang || projectLang(projectDir));
   // An unknown kind is an error on every surface (the MCP enum refuses it): the CLI's `--kind bugfx` used to scaffold a
-  // plain feature, and a re-run with the right kind then only "kept" the wrong one.
-  if (askedKind !== null && askedKind !== "feature" && askedKind !== "bugfix" && askedKind !== "spike" && askedKind !== "change") {
-    const A = i18n.msg(inLang).args;
-    return { ok: false, error: A.invalid(A.item("kind", A.oneOf("feature, bugfix, spike, change"), JSON.stringify(String(kind)))) };
-  }
+  // plain feature, and a re-run with the right kind then only "kept" the wrong one. A blank one too.
+  const ak = enumArg("kind", FEATURE_KINDS, kind, inLang, { blankGiven: true });
+  if (ak.error) return { ok: false, error: ak.error };
+  let askedKind = ak.value;
   // the feature's size (spec_create {size}: xs | s | m | l), validated before anything is written. A NEW feature only: an
   // existing one keeps its size (a note when another is asked). size xs on a plain feature IS a change (kind "change": one
   // change.md); kind "change" is size xs; a spike is timeboxed, never sized. No size = the 1.20 scaffolds and rules exactly.
