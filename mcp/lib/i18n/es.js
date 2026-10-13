@@ -1762,7 +1762,6 @@ const msg = {
     },
 
     impact: {
-      badPhase: (p, known) => `Fase '${p}' desconocida para spec_impact. Conocidas: ${known}.`,
       reopenTasks: "reopen se aplica a requirements, design, test-plan y eval-plan — un cambio en tasks.md se revisa y se vuelve a aprobar; no reabre nada.",
       changePhase: (phase, slug) => `'${slug}' es un cambio: sus criterios y sus tareas son un solo fichero, change.md, aprobado como el plan (fase tasks) — no hay fase ${phase}. spec_impact {name: "${slug}"} (fase tasks, la predeterminada) compara ambos: los criterios por ID, las tareas por número.`,
       retireTests: {

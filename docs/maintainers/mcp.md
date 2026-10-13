@@ -177,6 +177,11 @@ An argument error is the tool's JSON `{ok: false, error, code, …}` (`argError`
 `inapplicable-arguments` · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` ·
 `project-no-specs`. Callers branch on the code (English); the message is in the project language. The feature resolver's
 refusals carry `feature-not-found` · `feature-name-invalid` · `feature-name-reserved`, on every tool and the CLI's `--json`.
+An argument the ENGINE refuses (the CLI hands it the raw word the schema would have refused over MCP — depend's order, a
+backlog action, impact's phase, a task number) answers in the validator's words with the same code (`invalid-arguments` +
+`invalid`); `spec_approve` without a phase is `missing-arguments` [phase] on both surfaces (the CLI no longer stops it as
+`usage`). A blank `name` on spec_status lists, as `status "  "` does; an empty `text` beside a feature lints the feature, as
+`ears <f> --text ""` does.
 - **A tool that THROWS** answers JSON too: `toolFailure()` → `args.toolFailed`, the error's code (e.g. ENOTDIR).
 - **Compact results**: the result text is `JSON.stringify(out)`, unindented (`toolReply`) — indentation was ~22% of what an
   agent pays per reply; clients parse JSON, nothing reads the layout.
@@ -298,6 +303,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   the project's .specs/ directory" was not true of the scans and the import); the feature resolver's refusals got their codes
   (they were `{ok: false, error}` alone).
 - **1.26** — `inapplicable-arguments` (Arguments by mode): another mode's argument used to be another tool's, an unknown one.
+- **1.30 review 8 (ds-engine 8)** — the edges where the CLI's `--json` and MCP differed: `status "   "` refused
+  (`feature-name-invalid`) where spec_status listed; `ears login --text ""` answered "No text provided." where ears_validate
+  linted the feature; `depend --order abc` / `1.5`, `backlog frobnicate` and `impact --phase nope` refused with no code (impact
+  in words of its own); `approve login` was `usage` on the CLI and code-less over MCP.
 
 ### Protocol
 - **1.21 F1b** — the first server-initiated request (`elicitation/create`): the server answers other requests while one

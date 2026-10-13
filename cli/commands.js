@@ -772,7 +772,7 @@ const COMMANDS = [
     help: `  status [feature]                Status of a feature, or all (sections: ✓ filled · ◐ unfilled · ✗ missing)`,
     run(c) {
       const { pos, projectDir, out, fail, log } = c;
-      if (!pos[0]) return main2list(c);
+      if (!pos[0] || !String(pos[0]).trim()) return main2list(c); // a blank name names no feature: the list (spec_status {name: "  "})
       const r = c.call("status");
       if (!r.ok) return fail(r);
       const T = c.featureText(r.feature);
@@ -887,7 +887,8 @@ const COMMANDS = [
           r.issues.forEach((i) => log("  L" + i.line + " [" + T.word(i.severity) + "] " + i.msg)); // `severity` stays English in --json
         });
       };
-      if (typeof flags.text === "string") return report(lint(flags.text), c.cliText(textLang));
+      // an empty --text beside a feature names no text: the feature is linted (ears_validate {name, text: ""}, the operation's `when`)
+      if (typeof flags.text === "string" && (flags.text !== "" || !pos[0])) return report(lint(flags.text), c.cliText(textLang));
       if (pos[0] === "-") return c.readStdin((txt) => report(lint(txt), c.cliText(textLang)));
       // A file path is read from the project when it was named (--project / the env), else from the working folder (argPath).
       const file = c.argPath(pos[0]);
@@ -1235,8 +1236,9 @@ const COMMANDS = [
                                   own gate — stops at the first refused gate (exit 1) or a phase still waiting for another role`,
     run(c) {
       // --through <phase>: the fast-forward; --role <role>: the sign-off's role; --revoke / --reason / --expires.
-      const { flags, pos, projectDir, out, fail, usage, log } = c;
-      if (!pos[0] || (!pos[1] && typeof flags.through !== "string")) usage("dev-spec approve <feature> <phase> [--force [--reason \"…\"] [--expires YYYY-MM-DD|Nd]] [--by NAME] [--role ROLE] | dev-spec approve <feature> <phase> --revoke [--reason \"…\"] | dev-spec approve <feature> --through <phase>");
+      const { pos, projectDir, out, fail, usage, log } = c;
+      // (a feature without a phase reaches the engine: its refusal — missing-arguments [phase] — is spec_approve's own)
+      if (!pos[0]) usage("dev-spec approve <feature> <phase> [--force [--reason \"…\"] [--expires YYYY-MM-DD|Nd]] [--by NAME] [--role ROLE] | dev-spec approve <feature> <phase> --revoke [--reason \"…\"] | dev-spec approve <feature> --through <phase>");
       // Default approver: the engine's. A refusal exits 1 listing the failing checks.
       const r = c.call("approve");
       if (!r.ok) return fail(r); // a fast-forward stopped at a refused gate: its error names what was approved before it

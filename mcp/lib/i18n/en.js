@@ -1847,7 +1847,6 @@ const msg = {
     // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
     // IDs and file names stay English-stable.
     impact: {
-      badPhase: (p, known) => `Unknown phase '${p}' for spec_impact. Known: ${known}.`,
       reopenTasks: "reopen applies to requirements, design, test-plan and eval-plan — a change to tasks.md is reviewed and re-approved; it reopens nothing.",
       // a change: ONE approved artifact (change.md, its plan — phase tasks) holds its criteria and its tasks
       changePhase: (phase, slug) => `'${slug}' is a change: its criteria and its tasks are one file, change.md, approved as the plan (phase tasks) — there is no ${phase} phase. spec_impact {name: "${slug}"} (phase tasks, the default) diffs both: the criteria by ID, the tasks by number.`,

@@ -839,7 +839,9 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const bad8m = await call8("spec_impact", { name: "drafts", phase: "plan", projectDir: w8 });
     const bad8e = S.impactReport(w8, "drafts", { phase: "plan" });
     ok(rt8.ok === false && /reopen applies to requirements, design, test-plan and eval-plan/.test(rt8.error) && bad8m.isError && /phase must be one of: requirements, design, test-plan, eval-plan, tasks/.test(bad8m.p.error) &&
-      bad8e.ok === false && /Unknown phase 'plan' for spec_impact/.test(bad8e.error), "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine)");
+      // 1.30 review 8: the engine refuses it as the MCP schema does — the same words and code (the CLI's --phase reaches the engine)
+      bad8e.ok === false && bad8e.error === bad8m.p.error && bad8e.code === "invalid-arguments" && JSON.stringify(bad8e.invalid) === '["phase"]',
+      "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine — the same message and code)");
 
     // test-plan: T-ID row diff (a row keyed by its first cell; re-padding is no change) → the tasks making a changed test
     // green; reopen unticks a MODIFIED test's done tasks, a REMOVED test's tasks are listed in retire (never redone);

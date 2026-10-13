@@ -431,6 +431,46 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
       js({ bad, unseen, refused }) + ")");
   }
 
+  { // 1.30 review 8 (ds-engine 8): the edges where the two surfaces answered differently — a blank name, an empty text beside a
+    // feature, the engine refusals that carried no code on the CLI (order, backlog action, impact phase) or another one (approve
+    // without a phase: `usage` on the CLI) — now the same JSON, project folder aside
+    const MAIN = require(path.join(root, "cli", "main.js"));
+    const cliIn = (args, dir) => {
+      const out = [];
+      MAIN.main([...args, "--json", "--project", dir], { stdout: { write: (s) => { out.push(String(s)); return true; } }, stderr: { write: () => true }, stdin: "", env: process.env });
+      try { return JSON.parse(out.join("")); } catch { return { notJson: out.join("").slice(0, 200) }; }
+    };
+    const pm = path.join(tmp, "proj-130-edges", "mcp", "p"), pc = path.join(tmp, "proj-130-edges", "cli", "p");
+    for (const d of [pm, pc]) {
+      S.initProject(d, ["core"], "en");
+      S.createFeature(d, "Login", ["core"], "x");
+      S.createFeature(d, "Pay", ["core"], "x");
+    }
+    const blankDir = (v, dir) => JSON.parse(js(v).split(js(dir).slice(1, -1)).join("<P>").split(dir.split(path.sep).join("/")).join("<P>"));
+    const cases = [
+      ["spec_status", { name: "   " }, ["status", "   "]],
+      ["ears_validate", { name: "login", text: "" }, ["ears", "login", "--text", ""]],
+      ["spec_roadmap_edit", { kind: "depend", name: "login", order: "abc" }, ["depend", "login", "--order", "abc"], "order"],
+      ["spec_roadmap_edit", { kind: "backlog", action: "frobnicate" }, ["backlog", "frobnicate"], "action"],
+      ["spec_impact", { name: "login", phase: "nope" }, ["impact", "login", "--phase", "nope"], "phase"],
+      ["spec_approve", { name: "login" }, ["approve", "login"]],
+      ["spec_approve", { name: "login", revoke: true }, ["approve", "login", "--revoke"]],
+    ];
+    const got = [];
+    for (const [tool, args, words, invalid] of cases) {
+      const m = blankDir((await call(tool, { ...args, projectDir: pm })).p, pm), c = blankDir(cliIn(words, pc), pc);
+      got.push({ words: words.join(" "), same: js(m) === js(c), code: [m.code, c.code], invalid, m: js(m).slice(0, 160), c: js(c).slice(0, 160) });
+    }
+    // order 1.5: MCP shows the number, the CLI the word it was given — the same code and argument
+    const fm = (await call("spec_roadmap_edit", { kind: "depend", name: "login", order: 1.5, projectDir: pm })).p, fc = cliIn(["depend", "login", "--order", "1.5"], pc);
+    all("1.30 review 8: MCP and the CLI's --json agree on the edges — status \"   \" lists (= spec_status {name: \"   \"}), ears <f> --text \"\" lints the feature, a bad --order / backlog action / --phase is invalid-arguments with its argument, approve without a phase is missing-arguments [phase] (got " +
+      js(got.filter((g) => !g.same)) + ")", {
+      ...Object.fromEntries(got.map((g) => [g.words, () => g.same])),
+      codes: () => got.filter((g) => g.invalid).every((g) => g.code[0] === "invalid-arguments") && got.filter((g) => /^approve/.test(g.words)).every((g) => g.code[0] === "missing-arguments"),
+      fraction: () => fm.code === "invalid-arguments" && fc.code === "invalid-arguments" && js(fm.invalid) === js(["order"]) && js(fc.invalid) === js(["order"]),
+    });
+  }
+
   // 1.29 — the CONTRACT with dev-guardian: its skills and commands (≥ 3.2.0) call these dev-spec names — /guardian-improve hands
   // its seeds to the backlog and a feature, its prose names the gate /spec-finish runs. Each tool stays LISTED in tools/list (never
   // only a hidden alias) with the arguments dev-guardian passes, each command file exists, and spec_init {guardian: true} sets the

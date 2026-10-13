@@ -169,7 +169,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (opts.through != null) return approveThrough(projectDir, name, phase, by, opts); // the fast-forward (spec_approve {through})
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
-  if (phase == null || String(phase).trim() === "") return { ok: false, error: i18n.msg(featureLang(projectDir, f.slug)).governance.phaseRequired };
+  if (phase == null || String(phase).trim() === "") return { ok: false, error: i18n.msg(featureLang(projectDir, f.slug)).governance.phaseRequired, code: "missing-arguments", missing: ["phase"] };
   const p = String(phase || "").toLowerCase().trim();
   if (!PHASES.includes(p)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(phase, PHASES.join(", ")) };
   const state = readState(projectDir, f.slug);
@@ -451,7 +451,7 @@ function revokeApproval(projectDir, name, phase, by, opts) {
   const R = i18n.msg(lng).revoke;
   if (opts.through != null) return { ok: false, error: R.noThrough };
   if (opts.force === true || opts.expires != null) return { ok: false, error: R.noForce };
-  if (phase == null || String(phase).trim() === "") return { ok: false, error: R.phaseRequired };
+  if (phase == null || String(phase).trim() === "") return { ok: false, error: R.phaseRequired, code: "missing-arguments", missing: ["phase"] };
   const p = String(phase).toLowerCase().trim();
   if (!PHASES.includes(p)) return { ok: false, error: errs(projectDir, f.slug).unknownPhase(phase, PHASES.join(", ")) };
   const reason = reasonInput(opts.reason, lng);
@@ -1158,7 +1158,10 @@ function impactReport(projectDir, name, opts = {}) {
   // the default phase is tasks; its criteria are diffed by stable ID (as requirements), its tasks by number, and --reopen works.
   const isChange = isChangeDir(dir);
   const phase = opts.phase == null || String(opts.phase).trim() === "" ? (isChange ? "tasks" : "requirements") : String(opts.phase).toLowerCase().trim();
-  if (!IMPACT_PHASES.includes(phase)) return { ok: false, error: I.badPhase(String(opts.phase), [...IMPACT_PHASES, "steering"].join(", ")) };
+  if (!IMPACT_PHASES.includes(phase)) { // the MCP enum's refusal, in its words (the CLI passes --phase as typed)
+    const A = i18n.msg(projectLang(projectDir)).args;
+    return { ok: false, error: A.invalid(A.item("phase", A.oneOf([...IMPACT_PHASES, "steering"].join(", ")), JSON.stringify(String(opts.phase)))), code: "invalid-arguments", invalid: ["phase"] };
+  }
   if (isChange && phase !== "tasks") return { ok: false, change: true, error: I.changePhase(phase, slug) };
   const reopen = opts.reopen === true;
   if (reopen && phase === "tasks" && !isChange) return { ok: false, error: I.reopenTasks };

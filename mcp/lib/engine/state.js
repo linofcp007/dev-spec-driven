@@ -481,7 +481,7 @@ function dependencyUnlocked(projectDir, name, dependsOn, order, edits) {
   const orderNum = order == null ? null : orderInput(order);
   if (order != null && orderNum === null) {
     const A = i18n.msg(projectLang(projectDir)).args;
-    return { ok: false, error: A.invalid(A.item("order", A.type.integer, JSON.stringify(typeof order === "number" ? order : String(order)))) };
+    return { ok: false, error: A.invalid(A.item("order", A.type.integer, JSON.stringify(typeof order === "number" ? order : String(order)))), code: "invalid-arguments", invalid: ["order"] };
   }
   // Removals match the slug as typed, transliterated or legacy — a stale dep on a deleted feature can go too.
   const drop = new Set(names(edits.remove).flatMap((d) => [d, slugify(d), resolveFeature(projectDir, d).slug]).filter(Boolean));
@@ -623,7 +623,7 @@ function backlog(projectDir, action, name, note) {
   // Absent/"list" lists; anything else is an error (the MCP enum refuses it) — `backlog delete X` used to just list.
   if (a && a !== "list") {
     const A = i18n.msg(projectLang(projectDir)).args;
-    return { ok: false, error: A.invalid(A.item("action", A.oneOf(BACKLOG_ACTIONS.join(", ")), JSON.stringify(String(action)))) };
+    return { ok: false, error: A.invalid(A.item("action", A.oneOf(BACKLOG_ACTIONS.join(", ")), JSON.stringify(String(action)))), code: "invalid-arguments", invalid: ["action"] };
   }
   // a roadmap.json that doesn't parse (or has the wrong shape) is an error, never "Backlog (0)" — milestone /
   // depend's rule (its sanitized copy read as an empty backlog)
