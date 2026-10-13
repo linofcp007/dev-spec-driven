@@ -70,17 +70,31 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   near → the first dev-spec anchor. → `{project, root, worktree}`; `sessionPath(s, p, cwd)` spells a payload path under
   `project`. The hooks run `probe.sessionProjects` first (mcp/tests/10-guards-guard-downs.js), then ask the engine; the spec hook
   stamps a worktree's tasks.md save in the mapped project, SessionStart reports it, `statusLineProject()` maps the same way.
-- **Every hook runs on ONE runner — hook-utils.js `runHook(main, {maxInput})` and `finish(obj?)`.** It reads the payload from
-  stdin asynchronously (never `fs.readFileSync(0)`), runs `main(raw, timedOut)` once — at stdin's end or from the 2 s safety net
-  (`SAFETY_NET_MS`; `timedOut` true: the approval hook's `partial` path) —, turns an exception or a stdin error into a silent exit
-  0 (past its pre-check the approval hook catches its own and asks), feeds a terminal stdin `"{}"` and, past `maxInput` characters
-  (the observe and plan hooks, 4 MB), drains the rest and hands `main` `""`. `finish` prints at most one JSON object and exits in
-  the write's callback (conventions.md → Flush stdout before exiting); the spec hook's `emit()` and the observe hook (which prints
-  nothing) go through it. `payloadOf(raw)` is the payload object or null (not JSON, or no object: the hook exits), `eventOf(p)`
-  its event name — the approval hook alone parses its own (a partial payload asks). A hook keeps only its decision: its
-  pre-filter still runs first in its `main`, and hook-utils.js loads nothing heavier when required — the probe comes through
-  `probe()` on first use (requiring hook-utils.js: ~0.7 ms over an empty module; every fast path within the run-to-run spread of
-  1.27.0's — 1.27.1 History).
+- **A hook IS its decision — `decide(raw, opts)`, exported.** Each hooks/*-hook.js exports `decide(raw, {timedOut})` → the ONE
+  object its process prints (a permission decision, additionalContext, a block) or null (silent); it never writes stdout or exits,
+  and reads the process's environment and working folder as the engine does. The file runs as a hook only as the main module
+  (`if (require.main === module) runHook(decide, …)`), so a test calls it in-process — mcp/tests/harness.js `hookIn(file, {input,
+  env, cwd, timedOut})`, spawnSync's shape, the environment and folder applied for the call and restored like cli/main.js `main`
+  (testing.md → The harnesses). Exports beside `decide`: a hook's pre-filter where a test checks it (the approval hook's
+  `candidate`, the edit guard's `mayWrite` / `pathWords`, the Stop hook's `mayClaim`).
+- **Every hook runs on ONE runner — hook-utils.js `runHook(decide, {maxInput})` and `finish(obj?)`.** It reads the payload from
+  stdin asynchronously (never `fs.readFileSync(0)`), runs `decide(raw, {timedOut})` once — at stdin's end or from the 2 s safety net
+  (`SAFETY_NET_MS`; `timedOut` true: the approval hook's `partial` path) — and finishes with its answer; it turns an exception or a
+  stdin error into a silent exit 0 (past its pre-check the approval hook catches its own and asks), feeds a terminal stdin `"{}"`
+  and, past `maxInput` characters (the observe and plan hooks, 4 MB), drains the rest and hands `decide` `""`. `finish` prints at
+  most one JSON object and exits in the write's callback (conventions.md → Flush stdout before exiting). `payloadOf(raw)` is the
+  payload object or null (not JSON, or no object: the hook exits), `eventOf(p)` its event name — the approval hook alone parses its
+  own (a partial payload asks). A hook keeps only its decision: its pre-filter still runs first in its `decide`, and hook-utils.js
+  loads nothing heavier when required — the probe comes through `probe()` on first use (requiring hook-utils.js: ~0.7 ms over an
+  empty module; every fast path within the run-to-run spread of 1.27.0's — 1.27.1 History).
+- **Every scan a hook runs on payload text is LINEAR.** A PreToolUse hook that runs past its timeout doesn't block the call
+  (code.claude.com/docs/en/hooks), so a super-linear pattern is a way past the guard: no run class that holds its own start
+  delimiter (`(?:^|[=,(])\.[^\s/]*[*?]` rescans `=.=.…` from every start — 120 K characters took the approval hook 16.7 s), no
+  `[\\/]+$`-style tail, no nested quantifier over a path's segments — read the delimiter-free runs once (probe.js `dotGlob`, the
+  edit guard's `pathWords`), split first (`mayWrite`'s `find … -delete`), walk segments or the text by hand (`guardedFileOf`,
+  `trimSlashEnd`). mcp/tests/10-guards-hooks-cost.js times each reader by SHAPE (16 K vs 64 K characters of a hostile input: ≤ 8×)
+  and the report's 120 K payload through the hook process. The engine's lexer and readers past the pre-filter read ≤
+  `APPROVAL_COMMAND_MAX` (64 K) and stay linear (review 8 swept them: ~0.1–0.2 s at the cap).
 - **What the hooks share before the engine loads — `hooks/hook-utils.js`** (not a hook; Node core and probe.js only, the
   probe loaded on first use): the runner above, `probe()`, the probe's readers (`readJson`, `textOf` …: a UTF-16 BOM decides,
   else UTF-8 — files.js `decodeText`; Windows PowerShell 5.1 writes UTF-16, and a UTF-8-only reader sees the guards "off"; the
@@ -88,8 +102,17 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   guard), `sessionFlagFile` (`dev-spec-<kind>-<sha1(session_id)>.flag` in the
   OS temp folder), `claimProse` / `claimScan` / `claimMatch` (the Stop hook's pre-filter) and `parseProjectDir(v, base)` /
   `fileUriToPath` / `unexpandedVar` — ONE reading of an MCP tool's projectDir (`{none}` · `{dir}` · `{code: project-dotdot |
-  project-network | project-uri}`), which **mcp/server.js** requires too (`HOOK_UTILS`). mcp/tests/10-guards-guard-downs.js and
-  10-guards-shell-writes.js check they agree with the engine's.
+  project-network | project-uri}`), which **mcp/server.js** requires too (`HOOK_UTILS`, its `RE_DOTDOT` included). mcp/tests/
+  10-guards-guard-downs.js and 10-guards-shell-writes.js check they agree with the engine's.
+- **What the hooks and the engine both read — mcp/lib/probe.js, ONE copy** (never a renamed copy in a hook: the 8-line duplication
+  guard can't see one — review 8): the approval pre-filter (`approvalPlain`, `approvalMayBe` over `APPROVAL_CANDIDATE_TESTS`,
+  `RE_APPROVAL_VERB` — the engine's `approvalCandidate` adds a PowerShell `-EncodedCommand`'s decoded script, the hook passes any
+  encoded-looking call on), the guarded files by path (`guardedFileOf`, `specsParentOf`), dev-spec's approval-shaped tools
+  (`RE_APPROVAL_MCP`) and other servers' file tools (`MCP_FILE_VERBS` → `isMcpFileTool`, `approvalHookMatcher()` — hooks.json's
+  matcher, each verb spelled case-blind — and `mcpPathArgs`), and the observe pre-filter (`observedNorm` / `observedBodies`). guards.js
+  and evidence.js require them at load, the hooks through `probe()`. A guard-down another module reads in a command it names
+  (dev-guardian's, engine/guardian.js) adds its test to `APPROVAL_CANDIDATE_TESTS` and its file to `guardedFileOf`: the hook's pre-filter
+  and the engine's stay one.
 - **Commands never reuse a Claude Code built-in name** (`/init`, `/status`, `/doctor`, `/commit`, `/review`): one that could
   collide takes the `spec-` prefix (`/spec-setup`, `/spec-status`, `/spec-doctor`, `/spec-review`).
 - **22 commands, 2 of them model-invocable.** Model-invocable skill and command descriptions share ONE budget across all
@@ -121,12 +144,22 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   a MultiEdit payload is read too) is silent unless the guard is on (off costs one raw JSON read); `guardCheck()` reads
   roadmap.json + each feature's `.state.json` / tasks.md, never a repo walk. Its own errors never block: a malformed payload, a
   broken roadmap.json, any exception → exit 0.
-- **Shell writes are edits.** A command passes the pre-filter only with an output redirection or a writer's name
-  (`RE_SHELL_WRITE`; reads, test runs, builds and git exit there), then `spec.shellWriteTargets(command, mode)` — the approval
-  guard's reader (`shellSegOps`; git's restores and a path starting with an unknown variable left out) — sends each file through
-  `guardCheck`. **The candidate projects** add the nearest dev-spec `.specs/` above the edited file (≤ 8 path-like words of a
-  command; never a network path): at a monorepo's root, `packages/app/.specs` guards `packages/app/src/a.ts` — the engine checks
-  the session's project AND `sessionProject({cwd: dirname(file)})`, the first ask wins.
+- **Shell writes are edits.** A command passes the pre-filter only with an output redirection, a writer's name or `find` with a
+  writing action (`mayWrite`: `RE_SHELL_WRITE`, then each simple command's first `find` and its `-delete` / `-exec`… after it;
+  reads, test runs, builds and git exit there), then `spec.shellWriteTargets(command, mode)` — the approval guard's reader
+  (`shellSegOps`; git's restores and a path starting with an unknown variable left out) — sends each file through `guardCheck`.
+  **The candidate projects** add the nearest dev-spec `.specs/` above the edited file (`pathWords`: ≤ 8 path-like words of the
+  command's first 64 K; never a network path): at a monorepo's root, `packages/app/.specs` guards `packages/app/src/a.ts` — the
+  engine checks the session's project AND `sessionProject({cwd: dirname(file)})`, the first ask wins.
+- **A folder holding code is code** (`guardFolderCode`, review 8 C14 — `rm -rf src` passed while `sed -i src/util.js` asked): a
+  target that is no code file by its name but a folder (lstat, never a link) is a code edit when scan.js `folderHoldsCode` finds a
+  code file in it — breadth first, ≤ `FOLDER_CODE_ENTRIES` (2,000) entries (past them: it may — ask), links never followed, the scan's
+  ignored folders (`SCAN_IGNORE`: node_modules, dist, build, .git, .specs…) neither entered nor code themselves (`rm -rf
+  node_modules` asks nothing). A glob in the target's last segment (`rm -rf src/*`) reads the folder's entries it matches (≤
+  `GUARD_GLOB_ENTRIES`); a glob higher up is not read. So every removal / move spelling the guard reads — rm -r, rmdir /s and rd /s
+  (cmd), Remove-Item -Recurse and PowerShell's rm, find … -delete, mv / Move-Item — asks for a code folder as for a code file. A
+  network path is never read. git stays the user's — the edit guard reads no git command: `git rm -r src` asks nothing, as
+  `git rm src/a.ts` and `git checkout -- src/a.ts` don't.
 - **"Code" is `isCodeFile(rel)`** (engine/scan.js), ONE notion the guard, the brownfield scan, `spec_scan {coverage: true}` and
   the test-code scan share: `CODE_EXT` (a broad list) plus `TEST_EXTRA_EXT` (`.bats`, Perl's `.t`) on a file that IS a test
   (`isTestFile`: `t/basic.t` yes, `notes.t` no); `GUARD_CODE_EXT` = both (trace's `plannedOutsideCode`, the reuse check). The
@@ -154,15 +187,17 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `spec_init {approvalGuard}` / `init --approval-guard off|ask|deny` (else a localized CLI error; `approvalGuardInput()` →
   undefined leaves it unchanged); written under the roadmap lock, never when unchanged; the result reports `approvalGuard` (+
   `approvalGuardNote`).
-- **The hook** `hooks/approval-hook.js` (PreToolUse, anchored matcher: `Bash|PowerShell|Monitor|Write|Edit|NotebookEdit`,
-  `(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track)`, and other MCP servers' file tools by the verb in the name
-  — write, edit, move, delete… — dev-spec's own excluded by `(?!spec_|steering_scaffold|ears_validate|trace_check)`; the engine's
-  `RE_MCP_FILE_TOOL` / `RE_DEVSPEC_MCP_TOOL`, the hook's `RE_MCP_FILE`; mcp/tests/10-guards.js). Monitor runs its command in the
-  Bash tool's shell. A call that can't be an approval exits before any file read (the hook's `candidate()` mirrors the engine's
-  `approvalCandidate`, a superset: a command naming `dev-spec`, `.specs` or a guarded file; a path naming `.specs`, a `~N` short
-  name or a guarded file — `RE_EDIT_MAYBE`); else ONE raw roadmap.json read per candidate project, the STRICTEST level wins,
-  and only then the engine (`permissionDecision`, + `systemMessage` for deny). Its own trouble before that point exits 0; past
-  it, an engine failure ASKS (`failClosed`).
+- **The hook** `hooks/approval-hook.js` (PreToolUse, anchored matcher = probe.js `approvalHookMatcher()`:
+  `Bash|PowerShell|Monitor|Write|Edit|NotebookEdit`, `(mcp__.+__)?(spec_approve|spec_feature|spec_init|spec_add_track)`, and other
+  MCP servers' file tools by the verb in the name — `MCP_FILE_VERBS`: write, edit, move, delete…, each spelled case-blind
+  (`[Ww][Rr][Ii][Tt][Ee]` — a matcher is a regex without flags) — dev-spec's own excluded by
+  `(?!spec_|steering_scaffold|ears_validate|trace_check)`; the engine and the hook test `isMcpFileTool`; mcp/tests/10-guards.js checks
+  hooks.json holds the built matcher). Monitor runs its command in the Bash tool's shell. A call that can't be an approval exits
+  before any file read (the hook's `candidate()` is the probe's `approvalMayBe` — the engine's `approvalCandidate`, a superset: a
+  command naming `dev-spec`, `.specs` or a guarded file; a path naming `.specs`, a `~N` short name or a guarded file —
+  `RE_EDIT_MAYBE`); else ONE raw roadmap.json read per candidate project, the STRICTEST level wins, and only then the engine
+  (`permissionDecision`, + `systemMessage` for deny). Its own trouble before that point exits 0; past it, an engine failure ASKS
+  (`failClosed`).
 - **The candidate projects** (hook-utils.js `approvalProjects`, ≤ 12) follow where the CLI acts: the folders the call names (MCP
   `projectDir`, the edited file's project, `--project`, `SPEC_PROJECT_DIR=` / `$env:` assignments), each `cd` / `Set-Location`
   target (chained and from cwd alone) and the payload `cwd` through `probe.nearestProject`, then the anchors — text only, a
@@ -193,9 +228,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   · state · observed · track · specs · link): lowering the guard or weakening what it protects — evidence observed → reported,
   approval roles cleared or a required one dropped, a project check removed or changed, the stop gate off, the edit guard
   lowered, and **track removal** — `spec_add_track {remove: true}` (`RE_APPROVAL_MCP`) / `add-track … --remove` turning off +tdd
-  or +ai (`APPROVAL_GATED_TRACKS`: they carry a phase; +sec / +saas / a pack stay allowed). **The guarded files** —
-  `.specs/roadmap.json`, `.specs/**/.state.json` (`RE_STATE_FILE`), `.specs/**/.execution/observed.jsonl` (`RE_OBSERVED_FILE` —
-  a forged line would make a run "observed") — written through Write / Edit / MultiEdit / NotebookEdit (`APPROVAL_EDIT_TOOLS`), a
+  or +ai (`APPROVAL_GATED_TRACKS`: they carry a phase; +sec / +saas / a pack stay allowed). **The guarded files** (probe.js
+  `guardedFileOf`, read on the path's segments) — `.specs/roadmap.json`, `.specs/**/.state.json`, `.specs/**/.execution/observed.jsonl`
+  (a forged line would make a run "observed") — written through Write / Edit / MultiEdit / NotebookEdit (`APPROVAL_EDIT_TOOLS`), a
   shell writer or an MCP file tool: `command: null` (the user makes that change), `project` the folder above `.specs/`
   (`approvalSpecsProject()`). `dev-spec merge-state … <ours>` onto a state file is one too (git runs the driver itself, never
   through the Bash tool).
@@ -240,7 +275,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `.specs/` or a guarded file is `unreadable` why `specs-arg` (`npx prettier --write .specs/roadmap.json`).
   mcp/tests/10-guards-shell-writes.js holds 33 legitimate commands that stay allowed; mcp/tests/10-guards-hooks.js checks the hook's
   `candidate()` constants match the engine's.
-- **MCP file tools** (`approvalEditActions()` / `approvalPathArgs()`): string values of path-named keys (3 levels, ≤ 32; a
+- **MCP file tools** (`approvalEditActions()` / `approvalPathArgs()` — probe.js `mcpPathArgs`, the hook's reading too): string
+  values of path-named keys (3 levels, ≤ 32; a
   `file://` URI via `fileUriToPath`) are read as an Edit's path; a move / delete tool also on `.specs/` or under it. Content keys
   are never read.
 - **Unreadable actions** (`kind: "unreadable"`, no command). `too-long` — past `APPROVAL_COMMAND_MAX`, its unread tail naming
@@ -409,6 +445,18 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   in a project 230 → 208 ms, a Stop claim 287 → 247, ExitPlanMode 174 → 165 — noise, not a gain); requiring hook-utils.js
   costs ~0.7 ms over an empty module. The engine's `isNetworkPath`, `unexpandedVar`, `expandHome`, `guardTargetPath` and `approvalEditTargets` became
   the probe's functions (they had been copies).
+- **1.30 (review 8)** — **ds-security finding 3:** the approval hook's dot-glob pre-filter (and the engine's copy of it), the edit
+  guard's path-word regex and its `find … -delete` branch, the guarded-file regexes, the hook's `.specs`-parent regex and the
+  trailing-separator trims rescanned a run from every start: `echo =.=.…` (120 K characters) ran the approval hook 16.7 s against
+  its 10 s timeout, so the guard-down behind it went through (exp4 / exp9 of the report: the regex alone 3.5 s at 64 K; the guard
+  hook 4.1 s on an 80 K command outside any project). Every scan is linear (the rule above): at 64 K the dot glob 2.8 s → under 1 ms,
+  the path words ~2 s → under 1 ms; a sweep of every regex the hooks run on payload text, and of the engine's lexer at its 64 K cap
+  (pumped with ~80 token pairs), found no other super-linear one (the lexer: ~0.1–0.2 s at the cap). **ds-maint finding 1:** every
+  hook exports `decide()`; the MCP suite's hook tests run in-process (`hookIn`), real processes kept for stdin, the safety net,
+  oversized payloads, preloads and timing. **finding 4:** renamed copies the duplication guard couldn't see — the observe hook's
+  pre-filter, the approval hook's MCP path reader, verb list, approval-tool and guarded-file regexes, server.js's `RE_DOTDOT` — are
+  probe.js's / hook-utils.js's one copy; hooks.json's verbs (`[Ww]rite`) were case-sensitive, so `mcp__x__FILE_WRITE` never reached
+  the hook: the matcher is built from `MCP_FILE_VERBS`.
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.
@@ -429,6 +477,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   guarded package's `.specs/` didn't guard its files.
 - **1.27** — the edited file's candidate is the nearest DEV-SPEC `.specs/` (the probe); a network cwd is never walked up the
   share, as the engine's sessionProject (the observe hook's walk had climbed to the share root).
+- **1.30 (review 8, integration C14)** — `rm -rf src` passed both plugins' guards (dev-guardian only warned) while `sed -i
+  src/util.js` asked: a folder holding code is a code target (`guardFolderCode` / scan.js `folderHoldsCode`), for every removal and
+  move spelling the guard reads.
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer

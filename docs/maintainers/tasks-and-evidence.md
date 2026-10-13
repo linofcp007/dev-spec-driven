@@ -235,7 +235,7 @@ Engine: the `B5` block of `engine/evidence.js`.
   . --fail-on high --format json`: no versioned path, no shell syntax (claude-code-integration.md → The dev-guardian launcher).
   `init`'s result always carries `guardian` (does a check run the gate), `guardianNote` when it changed it. The approval guard
   reads the same map (`initGuardDowns`): removing the check, or replacing another command named `guardian`, is a guard-down
-  whose command is `init --guardian off|on`; `--guardian` is in `RE_APPROVAL_VERB` / the hook's `RE_VERB`.
+  whose command is `init --guardian off|on`; `--guardian` is in `RE_APPROVAL_VERB` (mcp/lib/probe.js — the hook's pre-filter too).
   - *Which check is it:* `isGuardianCheck(name, command)` — the name `guardian`, or a command naming `dev-guardian[.mjs]` /
     `guardian.cjs` followed by `scan`.
   - *Its run:* `recordFinishChecks` takes the evidence item's optional `report` (the JSON stdout; MCP schema `report: string`;
@@ -456,8 +456,9 @@ Engine: the `B5` block of `engine/evidence.js`.
   - *The cd prefix:* ONE engine function, `stripCdPrefix(cmd, roots, cwd)`, strips a leading `cd <project root> &&` / `;` (Git
     Bash's `/c/…` = `C:/…`) into any project the run belongs to, in `observeRun(pdir, {command, cwd, roots})` and in `observedRun`'s
     lookup alike (else the exact command reads unobserved); another folder keeps the whole command.
-  - *The pre-filter* (before the engine loads): a copy of `observedNorm` / `observedBodies` (mcp/tests/09-evidence.js compares the
-    sources) — the command's bodies, normalized as the matcher reads them, must each appear in a tasks.md read the same way (≤ 2 MB;
+  - *The pre-filter* (before the engine loads): `observedNorm` / `observedBodies` — ONE copy, mcp/lib/probe.js's, which the engine's
+    observeRun reads too (mcp/tests/09-evidence.js checks neither file keeps its own) — the command's bodies, normalized as the matcher
+    reads them, must each appear in a tasks.md read the same way (≤ 2 MB;
     dot / `_` folders skipped; UTF-16 decoded; change.md only without tasks.md; one open per folder) or a meta.checks command — a
     SUPERSET of the matcher (mcp/tests/09-evidence-matcher.js). A WHOLE bracketed `_Verify:_` value (`RE_VERIFY_PLACEHOLDER`, the
     scaffold's) is taken out first, as the engine never runs one (tasks.js `scanTaskMarkers`: `^\[.*\]$`). observeRun repeats the
@@ -677,3 +678,6 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — the project lookup is mcp/lib/probe.js `sessionProjects({cwd})` (the one rule `isDevSpecProject`, ≤ `SESSION_MAX_UP`
   levels). The hook used to take the nearest folder holding ANY `.specs/` at or above the cwd (≤ 40 levels — 12 before 1.24 r6 I2)
   and then test it with an inline copy of the rule, so another tool's `.specs/` in between hid the dev-spec project above it.
+- **1.30 (review 8, ds-maint finding 4)** — the hook's pre-filter was a renamed copy of `observedNorm` / `observedBodies`
+  (`norm` / `bodies` / `RE_ENV`) that the 8-line duplication guard couldn't see and a source comparison kept in step: both now read
+  mcp/lib/probe.js's one copy.
