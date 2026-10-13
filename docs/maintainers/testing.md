@@ -67,9 +67,14 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   run (≤ 3 s) before the total, and one fired after it prints the total again; the total is read from stdout alone (a Node
   warning on stderr after it doesn't void the count). cli/tests/16-conventions-runner.js tests the runner on a fake suite.
   The MCP chains today: `01-core → 17-docs` (17-docs reads
-  `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality`
-  (15-quality re-checks the behavioural fixtures 17-docs-evals builds under tmp). The handshake's assertions are counted
-  by the file exporting `handshake: true` (02-mcp-server); every other process runs the handshake muted.
+  `vDir`, the project whose login-loop feature 01-core took to its finish) and `17-docs-evals → 15-quality-fixtures`
+  (re-checks of the behavioural fixtures 17-docs-evals builds under tmp — 1.30: they were 15-quality's, and the two files were the
+  suite's critical path). The handshake's assertions are counted by the file exporting `handshake: true` (02-mcp-server); every
+  other process runs the handshake muted. A chain's process requires only its own files (1.30 — requiring the whole suite to find
+  them cost each chain ~0.25 s MCP / ~0.1 s CLI); the MCP harness starts its server before it loads the engine (the two starts
+  overlap). **Split a file that alone sets the critical path** (`--times`, the default `--jobs` = one per CPU) by topic, mechanically
+  — the blocks move verbatim, a shared fixture is exported by the main file (16-conventions-completion.js `fixture`), never copied.
+  At `--jobs 4` the wall time is the files' sum / 4: there only less work (fewer process starts) makes it shorter.
 - **Hermetic chains (1.26).** A chain never sees the shell the suite was started from: the runner spawns it with a fresh,
   empty temp folder as its working folder (`<temp base>/<spec-test-|cli-test->XXXXXX`, removed once it closed — The temp base) and an
   environment without the variables that steer the plugin — `SPEC_PROJECT_DIR`, `CLAUDE_PROJECT_DIR`, `SPEC_MCP_*`,
@@ -270,3 +275,8 @@ How the rules above came to be — grep a release here.
 - **1.30 (review 9)** — a TMP whose path named dev-spec, or a long one (Windows), failed 8–11 MCP assertions that pass under the
   default TMP: the chains' temp base is chosen neutral now (The temp base), and the approval hook's partial-payload test no longer
   carries the temp path in its "names nothing of dev-spec's" payload.
+- **1.30 (review 8, ds-maint 2)** — the critical-path files split by topic: 15-quality's re-checks of the built eval fixtures →
+  15-quality-fixtures.js (the MCP chain `17-docs-evals → 15-quality` was ~60 s in one process); 16-conventions-completion.js → -bash /
+  -pwsh (one PowerShell process per shell runs the three scripts: four starts of ~2–4 s each before); 09-evidence-done-run.js → -pwsh /
+  -verify. A chain requires only its own files; the MCP server starts before the harness's engine. Measured: see the notes of that
+  release (median of 3, `--jobs 4`, before / after interleaved).

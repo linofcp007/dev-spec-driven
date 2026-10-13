@@ -177,7 +177,7 @@ engine/files.js — the write gate, conventions.md; no block of 8+ code lines re
 16-conventions-duplication.js, with a reasoned allowlist) read every `mcp/lib` source
 — the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone; never a built bundle
 (its registry comes from scripts/build.js, which they read). Both suites run on the modules (the harnesses drop
-`DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp. Every chain is hermetic (1.26): a fresh empty temp folder as its
+`DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp. Every chain is hermetic (1.26): a fresh empty temp folder (on a neutral temp base, 1.30) as its
 cwd, none of the shell's `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `DEV_SPEC_*` (but `DEV_SPEC_TEST_*`) / `NODE_OPTIONS`… — a test sets what it
 needs for the process it starts, and never reads a path from `process.cwd()` (testing.md → Hermetic chains).
 Linux containers (`npm run test:docker`), plugin evals and the cross-platform test rules: docs/maintainers/testing.md.
