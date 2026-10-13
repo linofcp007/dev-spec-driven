@@ -487,9 +487,10 @@ const LEGACY_TOOLS = [
     inputSchema: { type: "object", properties: { name: { type: "string" }, dependsOn: STRINGS, add: STRINGS, remove: STRINGS, order: { type: "integer" }, projectDir: PROJECT_DIR }, required: ["name"] } },
   { name: "spec_milestone", to: "spec_roadmap_edit", args: (a) => ({ kind: "milestone", action: a.action, name: a.name, date: a.date, features: a.features }),
     inputSchema: { type: "object", properties: { action: ACTION(spec.MILESTONE_ACTIONS), name: { type: "string" }, date: { type: "string" }, features: STRINGS, projectDir: PROJECT_DIR } } },
-  { name: "spec_catalog", to: "spec_export", args: (a) => ({ format: "catalog", write: a.write }),
+  // the old catalog / changelog replies carried their markdown unless writing (1.25.1): the alias asks for it (includeBody)
+  { name: "spec_catalog", to: "spec_export", args: (a) => ({ format: "catalog", write: a.write, includeBody: a.write !== true }),
     inputSchema: { type: "object", properties: { write: { type: "boolean" }, projectDir: PROJECT_DIR } } },
-  { name: "spec_changelog", to: "spec_export", args: (a) => ({ format: "changelog", since: a.since, milestone: a.milestone, write: a.write }),
+  { name: "spec_changelog", to: "spec_export", args: (a) => ({ format: "changelog", since: a.since, milestone: a.milestone, write: a.write, includeBody: a.write !== true }),
     inputSchema: { type: "object", properties: { since: { type: "string" }, milestone: { type: "string" }, write: { type: "boolean" }, projectDir: PROJECT_DIR } } },
   { name: "spec_coverage", to: "spec_scan", args: () => ({ coverage: true }), inputSchema: { type: "object", properties: { projectDir: PROJECT_DIR } } },
 ];

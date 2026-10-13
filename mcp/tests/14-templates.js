@@ -230,7 +230,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname }) => {
       "/etc/passwd", "C:\\x\\requirements.md", "templates/requirements.md", "Requirements.md/.."];
     const badRes = bad.map((a) => S.templates(pt0, "init", { artifact: a }));
     ok(badRes.every((r) => !r.ok && /^Unknown template '/.test(r.error)) && !fs.existsSync(path.join(pt0, ".specs")) && !fs.existsSync(path.join(b1Root, "evil")) &&
-      !S.templates(pt0, "delete").ok && /Unknown templates action 'delete'/.test(S.templates(pt0, "delete").error) && !S.templates(pt0, "list", { lang: "fr" }).ok &&
+      !S.templates(pt0, "delete").ok && /action must be one of: list, init, check \(got "delete"\)/.test(S.templates(pt0, "delete").error) && S.templates(pt0, "delete").code === "invalid-arguments" && !S.templates(pt0, "list", { lang: "fr" }).ok &&
       S.templateKey("steering/api-rules") === "steering/api-rules.md" && S.templateKey("steering\\tech.md") === "steering/tech.md" && S.templateKey(" Bug-Tasks.md ") === "bug-tasks",
       "B1: spec_templates refuses any template name outside the allowlist (traversal, absolute paths, device / prototype names, nested steering) and an unknown action / lang — nothing is written");
     const outDir = b1("outside-tpl");

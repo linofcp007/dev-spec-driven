@@ -981,8 +981,9 @@ const msg = {
       noEvidence: "no evidence recorded",
       changedByDate: (list, slug) => `judged by file date only (approved before content fingerprints — a clone or copy resets file dates, so this may be no edit at all): ${list} — re-review, then re-approve to track it by content (/approve ${slug} <phase>)`,
       // 1.28: the duplicate-code detector — a warning, never a blocker
-      duplicates: (n, top, within, slug) => `the feature's code repeats existing code in ${n} place(s) — ${top}${n > 3 ? "; …" : ""}: reuse or extend the existing code, or note in the report why a copy is deliberate${within ? `; ${within} more repeat(s) inside the feature's own files` : ""} (all of them: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
-      duplicatesWithin: (n, slug) => `${n} block(s) of the feature's code repeat another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicates: (n, top, within, slug) => `the feature's code repeats existing code in ${n} ${n === 1 ? "place" : "places"} — ${top}${n > 3 ? "; …" : ""}: reuse or extend the existing code, or note in the report why a copy is deliberate${within ? `; ${within} more ${within === 1 ? "repeat" : "repeats"} inside the feature's own files` : ""} (all of them: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicatesPartial: (unread) => `; only part of the project was compared — the detector's byte budget left ${unread} source ${unread === 1 ? "file" : "files"} unread`,
+      duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "block of the feature's code repeats" : "blocks of the feature's code repeat"} another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       untrackedApproval: (list, slug) => `approved before change tracking — nothing about the signed-off file was recorded, so an edit can't be detected: ${list} — re-approve to start tracking it (/approve ${slug} design)`,
     },
     // right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.
@@ -1061,7 +1062,6 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' already exists.`,
       renameArchived: (slug) => `'${slug}' is the name of an archived feature (.specs/_archive/${slug}) — pick another name (with one name, neither of them could be archived or restored).`,
       slugTaken: (slug, held, name) => `'${name}' reaches the folder .specs/${slug}/, which holds another feature ('${held}') — a folder name keeps the first 64 characters of the name. Nothing was changed: pass a shorter name that differs within them (to work on '${held}', name it '${slug}').`,
-      badAction: "action must be one of: remove | archive | rename | restore | flow",
       badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
@@ -1155,6 +1155,7 @@ const msg = {
       clarificationsOpen: (n) => `${n} unresolved [NEEDS CLARIFICATION] — resolve before design`,
       clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change
       clarificationsOpenBug: (n) => `${n} unresolved [NEEDS CLARIFICATION] in bug.md — resolve them before approving its Reproduction / Root Cause`, // a bugfix
+      clarificationsOpenDesign: (n) => `${n} unresolved [NEEDS CLARIFICATION] in design.md — resolve them before approving the design`, // the design gate counts them
       clarificationsNone: "none open",
       scPresent: "present",
       scMissing: "no measurable SC-### success criteria",
@@ -1521,8 +1522,8 @@ const msg = {
       coverage: (pct, d, t) => `Spec coverage: ${pct}%  (${d}/${t} code files named in _Implements:_)`,
       undocumented: (list) => `  uncovered folders: ${list}`,
       // dupes (1.28): the duplicate-code report — spec_scan {duplicates: true}
-      dupesHead: (f, existing, within, n, files, lines) => `Duplicates — ${f}: ${existing} place(s) repeat existing code · ${within} repeated within the feature  (windows of ${n} code lines; ${files} files, ${lines} code lines read)`,
-      dupesHeadProject: (total, n, files, lines) => `Duplicates — the project: ${total} repeated block(s)  (windows of ${n} code lines; ${files} files, ${lines} code lines read)`,
+      dupesHead: (f, existing, within, n, files, lines) => `Duplicates — ${f}: ${existing} ${existing === 1 ? "place repeats" : "places repeat"} existing code · ${within} repeated within the feature  (windows of ${n} code lines; ${files} ${files === 1 ? "file" : "files"}, ${lines} code ${lines === 1 ? "line" : "lines"} read)`,
+      dupesHeadProject: (total, n, files, lines) => `Duplicates — the project: ${total} repeated ${total === 1 ? "block" : "blocks"}  (windows of ${n} code lines; ${files} ${files === 1 ? "file" : "files"}, ${lines} code ${lines === 1 ? "line" : "lines"} read)`,
       dupesNoCode: "  no source file its tasks' _Implements:_ name exists yet — nothing to compare",
       dupesNone: "  no repeated code found",
       dupesExisting: (at, n, also) => `  ⚠ ${at} (${n} lines) repeats ${also} — reuse or extend the existing code`,
@@ -1530,6 +1531,7 @@ const msg = {
       dupesAlsoMore: (n) => `+${n} more`,
       dupesMore: (n) => `  … and ${n} more (the longest are listed)`,
       dupesTruncated: (n) => `  (only the first ${n} source files were read — the cap: a repeat beyond them is not seen)`,
+      dupesPartial: (unread, mb) => `  (the byte budget — ${mb} MB of source — was reached: ${unread} more source ${unread === 1 ? "file was" : "files were"} not read, a repeat in them is not seen)`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  phase=${phase}  verdict=${verdict}  gatesOk=${gatesOk}`,
       changed: (list) => `  ⚠ changed since last approval: ${list}`,
@@ -1849,7 +1851,6 @@ const msg = {
     // Change requests: spec_impact (diff vs the approved snapshot, --reopen) + next_action / doctor hints. Phase tokens,
     // IDs and file names stay English-stable.
     impact: {
-      badPhase: (p, known) => `Unknown phase '${p}' for spec_impact. Known: ${known}.`,
       reopenTasks: "reopen applies to requirements, design, test-plan and eval-plan — a change to tasks.md is reviewed and re-approved; it reopens nothing.",
       // a change: ONE approved artifact (change.md, its plan — phase tasks) holds its criteria and its tasks
       changePhase: (phase, slug) => `'${slug}' is a change: its criteria and its tasks are one file, change.md, approved as the plan (phase tasks) — there is no ${phase} phase. spec_impact {name: "${slug}"} (phase tasks, the default) diffs both: the criteria by ID, the tasks by number.`,
@@ -2385,7 +2386,6 @@ const msg = {
     // Project templates (.specs/templates/) — spec_templates / `dev-spec templates`, and the {{summary}} slot of a scaffold.
     templates: {
       noSummary: "[TBD]", // {{summary}} of a feature created without one: a generic slot, so the scaffold still reads 'placeholder'
-      badAction: (a) => `Unknown templates action '${a}' — one of: list, init, check.`,
       unknownArtifact: (a, list) => `Unknown template '${a}' — one of: ${list}, or steering/<file>.md.`,
       writeFailed: (rel, why) => `Could not write ${rel} (${why}).`,
       writeOutside: (rel) => `Refused to write ${rel}: its folder is a link to a place outside the project.`,
@@ -2448,7 +2448,6 @@ const msg = {
       missingReserved: (name, slug, builtIn, since) => `+${name} (a track pack from before ${since || "1.17"} — '${name}' is a reserved name now${builtIn ? `, and the built-in +${name} track is NOT applied to this feature` : ""}: rename .specs/tracks/${name}/ (and its marker, if that is reserved too), then ${DEV_SPEC} add-track ${slug} <new-name> and ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; to adopt the built-in track instead: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
       // a pack from before 1.19 (1.17 for [DIST]) whose MARKER is a built-in track's now
       missingReservedMarker: (name, marker, track, slug, since) => `+${name} (a track pack from before ${since || "1.19"} — its marker ${marker} is the built-in +${track} track's now, so the pack is ignored and its ${marker} sections don't count as +${track}'s: change the marker in .specs/tracks/${name}/track.json and in this feature's ${marker} headings, or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${track} (its sections are appended, the pack leaves this feature); to drop the pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
-      badAction: (a) => `Unknown tracks action '${a}' — one of: list, init, check, signals.`,
       nameRequired: "tracks init needs a name — " + DEV_SPEC + " tracks init <name> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `No track or track pack '${n}' — the project's packs: ${list}.`,
       legacyFeature: ".specs/tracks/ is the folder of a feature created before track packs existed (it holds a .state.json) — it stays that feature and is never read as packs. Rename it (" + DEV_SPEC + " feature rename tracks <new-name>, or spec_feature rename) to use track packs.",

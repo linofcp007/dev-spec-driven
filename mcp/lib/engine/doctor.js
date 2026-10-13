@@ -298,7 +298,8 @@ function statusFeature(projectDir, name) {
 
 // The doctor runs first (lean: the verdict and the failing checks only); the feature's tracks, phase, .state.json, language, size,
 // flow and gate walk are read from the context its checks judged, never computed again. opts.doctor: this feature's specDoctor()
-// result, already computed in the same call (spec_upgrade) — never run twice (the context is then built here).
+// result, already computed in the same call (spec_upgrade) — never run twice (the context is then built here). The step is the
+// first of NEXT_STEPS (below) whose `when` holds.
 function nextAction(projectDir, name, opts = {}) {
   const f = existingFeature(projectDir, name);
   if (!f.ok) return { ok: false, error: f.error, code: f.code };
@@ -330,17 +331,7 @@ function nextAction(projectDir, name, opts = {}) {
     return { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict, gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [],
       changedSinceApproval: changed, step: "fix", roadmapInvalid: true, recommendation: nx.roadmapInvalid(roadmapBad, slug) };
   }
-  // Phase by phase (SKILL.md: each phase is presented for approval before the next one starts), so a brand-new feature
-  // is told to write its classification — never the design before the requirements are approved, and never to fix the
-  // checks of phases it hasn't reached:
-  // (1) an artifact changed since its approval → re-review;
-  // (2) the FIRST active phase not approved yet (gateWalk: the chain's order, execution apart, `tests` once due) — its
-  //     artifact missing / still a template → fill it; else the checks its approval runs failing → fix them (named —
-  //     never an approval the gate would refuse); else → approve it. Only that approval opens the next phase;
-  // (3) every phase approved: failing checks of the current phase (or an earlier one — e.g. a forced approval) → fix;
-  // (4) the next task; (5) all tasks done → a ticked task without passing evidence → verify it (spec_finish would
-  //     refuse), else drift since a finish → decide, else spec_finish (again, when its baseline is stale), else — finished —
-  //     project checks without a passing run since the last task activity → verify (res.suite), else finished.
+  // the first active phase not approved yet, its artifact still to fill (open) or the checks its approval would refuse on (refused)
   const pending = ctx.walk.find((ph) => !approvals[ph]) || null;
   let open = null;
   let refused = null;
@@ -381,202 +372,48 @@ function nextAction(projectDir, name, opts = {}) {
   const approveMsg = { classification: G.approveClassification, requirements: nx.approveRequirements,
     design: st.kind === "bugfix" ? nx.approveBugDesign : nx.approveDesign, "test-plan": nx.approveTestPlan, "eval-plan": nx.approveEvalPlan,
     tests: (s) => (testsSignOff ? nx.signOffTests(s, testsWhat) : nx.approveTests(s, testsWhat)), tasks: kind === "change" ? fm.sizes.approvePlan : nx.approveTasks };
-  let step;
-  let recommendation;
-  let gateFix = false;
-  let impactPhases = [];
-  let finishedDrift = null;
-  let staleBaseline = null;
-  let approveExtras = null; // {missingRoles?, fastForward?} of the approve step
-  let reReviewRefused = null; // the re-review phase whose approve gate would refuse (refusedGate names it)
-  let finishedRoles = null; // the roles still to sign the execution phase off (finished step)
-  let finishedComplete = false; // every execution role signed, yet no approval (finished step)
-  let suiteMissing = null; // the project checks without a passing run since the last task activity (verify step, finished)
-  let depsBlocked = null; // [{number, waitsOn}] — open tasks, none can start (fix step)
-  let missingApproved = []; // approved artifacts that are gone (re-review step)
-  // Phase 4 pending again because its sign-off no longer covers the plan — said before what the phase asks for
-  const testsStale = pending === "tests" ? testsStaleText(dir, tracks, st.approvals, lng) : null;
   // Re-review now only what can be re-approved now: an artifact of a phase AFTER the first pending gate waits for that gate
   // (approve refuses it on phase-order — next_action looped "re-review tasks.md" → refused → "re-review tasks.md"); the
   // chain reaches it again once the earlier gate is approved.
   const walk = ctx.walk;
   const phaseOfFile = (file) => Object.keys(PHASE_FILE).find((ph) => phaseFile(ph, kind) === file) || (file === "design.md" ? "design" : null);
   const reReviewNow = pending ? changed.filter((file) => { const i = walk.indexOf(phaseOfFile(file)); return i === -1 || i <= walk.indexOf(pending); }) : changed;
-  if (reReviewNow.length) {
-    step = "re-review";
-    // an approved artifact that is gone can't be re-reviewed nor re-approved (nothing to approve) — restore it, or
-    // withdraw its approval (revoke: the phase then waits for a new file, and the Phase 4 gate a test plan opened follows it).
-    // (one that can't be read — a folder of that name, no permission — is gone the same way: restore the file)
-    missingApproved = reReviewNow.filter((file) => readIfExists(path.join(dir, file)) == null);
-    const present = reReviewNow.filter((file) => !missingApproved.includes(file));
-    recommendation = [present.length ? nx.reReview(present.join(", ")) : null,
-      missingApproved.length ? nx.approvedMissing(missingApproved.join(", "), slug, phaseOfFile(missingApproved[0]) || "design") : null].filter(Boolean).join(" ");
-    // Never "re-approve" what the approve gate would refuse (an edit added a [NEEDS CLARIFICATION], a placeholder…): it
-    // looped re-review → refused → re-review. The first changed phase whose gate fails is named with its failing checks
-    // (refusedGate, as the fix step) — fix them, then re-approve.
-    for (const ph of walk.filter((p) => reReviewNow.some((file) => phaseOfFile(file) === p))) {
-      const g = approvalChecks(projectDir, slug, dir, ph, tracks, kind, lng);
-      if (!g.artifact || !g.checks.length) continue;
-      refused = g.checks;
-      reReviewRefused = ph;
-      gateFix = true;
-      recommendation += " " + G.fixGate(ph, g.checks.map((c) => c.id + (c.detail ? ` (${c.detail})` : "")).join("; "), slug);
-      break;
-    }
-    // An approval with a snapshot: spec_impact lists what the edit touches (tasks, tests, design) — before re-approving.
-    impactPhases = snapshotPhases(dir, st, reReviewNow);
-    if (impactPhases.length) recommendation += " " + fm.impact.nextHint(slug, impactPhases);
-    const resign = reReviewRoles(projectDir, dir, st, reReviewNow.map(phaseOfFile), kind, slug, lng); // each role signs again
-    if (resign) recommendation += " " + resign;
-  } else if (open) {
-    step = "fill";
-    const first = open.items.length ? open.items[0].text : "";
-    const what = open.state === "missing" ? G.fillMissing : open.empty && !open.items.length ? G.fillEmpty
-      : G.fillPlaceholders(open.items.length, `L${open.items[0].line} ${first.length > 48 ? first.slice(0, 47) + "…" : first}`);
-    recommendation = G.fill(open.file, what, (G.fillHint[open.file] || G.fillHint.default)(slug));
-    // size XS / S (a change's own hint says it already): the whole plan, then one approval call
-    if (planFf && kind !== "change") {
-      const files = [...new Set([open.file, ...planOpen.map((r) => r.file)])];
-      recommendation += " " + (ffEnd === "tasks" ? fm.sizes.planFastForward(slug, size, files.join(", "))
-        : fm.sizes.planFastForwardTests(slug, size, files.join(", "), ffEnd, testsWhat));
-    }
-  } else if (pending && approveMsg[pending] && refused) {
-    // Never recommend an approval the approve gate would refuse (it looped: "approve X" → refused → "approve X"…):
-    // name what it would fail on instead — classification.md placeholders, missing SC-### / P1 lines…
-    step = "fix";
-    gateFix = true;
-    const ids = refused.map((c) => c.id + (c.detail ? ` (${c.detail})` : "")).join("; ");
-    // Phase 4: what its gate refuses on (planned tests not in the test code, the sample eval set) IS the work the phase
-    // asks for — name that work (/writeTests), then what the gate checks.
-    recommendation = pending === "tests" ? approveMsg.tests(slug) + " " + G.testsGateChecks(refused.map((c) => c.id).join(", ")) : G.fixGate(pending, ids, slug);
-    if (testsStale) recommendation = testsStale + " " + recommendation; // why Phase 4 is asked for again
-  } else if (pending && approveMsg[pending]) {
-    step = "approve";
-    recommendation = approveMsg[pending](slug);
-    if (testsStale) recommendation = testsStale + " " + recommendation;
-    // the roles still to sign off this phase (the role to sign as), and the fast-forward when every gate through tasks passes.
-    approveExtras = approveStepExtras(projectDir, slug, dir, st, tracks, kind, pending, doc, lng);
-    // Phase 4's own wording says what the phase asks for (the tests / eval harness) — the role step is added to it there.
-    if (approveExtras.text) recommendation = pending === "tests" ? recommendation + " " + approveExtras.text : approveExtras.text;
-    if (approveExtras.hint) recommendation += " " + approveExtras.hint;
-  } else if (fails.length) {
-    step = "fix";
-    recommendation = nx.fixChecks(fails.map((c) => c.id).join(", "), slug);
-  } else {
-    const activeText = ctx.tasksActive;
-    const tasks = parseTasks(activeText);
-    const sch = taskSchedule(taskBlocks(activeText || "")); // the next task whose _Depends:_ are all done
-    const next = sch.next;
-    // Open tasks, none of which can start (a cycle, a _Depends:_ naming no task): fix the dependencies — never "finish".
-    const stuck = !next && tasks.some((t) => !t.done);
-    step = next ? "implement" : stuck ? "fix" : tasks.length ? "finish" : "tasks";
-    recommendation = next
-      ? nx.implement(next.number, cleanTaskText(next.text), slug)
-      : stuck ? taskDepsBlockedNote(sch, slug, lng) : (tasks.length ? nx.allDone(slug) : nx.breakIntoTasks(slug));
-    if (stuck) depsBlocked = sch.blocked.length ? sch.blocked : sch.skipped;
-    if (step === "finish") {
-      const stale = staleFinish(projectDir, st, activeText || "");
-      const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
-      // The recorded files are hashed whether or not the baseline is stale: a stale baseline (a change request, a
-      // re-approval, a new implementing file under a folder _Implements:_ names) still records them, and a re-finish would
-      // accept their drift. Skipping the hash when stale hid a changed file behind "finish it again" — adding one more file
-      // made the drift warning go away.
-      let dr = null;
-      if (fin) {
-        const root = path.resolve(projectDir);
-        dr = baselineDrift(root, realRootOf(root), fin);
-        finishedDrift = { finishedAt: typeof fin.at === "string" ? fin.at : null, files: Object.keys(fin.files).length, changed: dr.changed, missing: dr.missing, nowPresent: dr.nowPresent, drifted: dr.drifted };
-      }
-      if (stale) staleBaseline = stale;
-      const day = (fin && dayOf(fin.at)) || "?";
-      // Every task ticked, but not every tick verified: spec_finish and the execution sign-off refuse on exactly these
-      // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
-      // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
-      const vs = ctx.vs;
-      const suiteGap = fin && !vs.unverified.length ? ctx.suite.missing : [];
-      if (vs.unverified.length) {
-        step = "verify";
-        const n = vs.unverified[0];
-        const blk = taskBlocks(activeText || "").find((b) => b.number === n && b.done);
-        const runnable = !!blk && taskMarkers(blk).verify.some((c) => !/^\[.*\]$/.test(c.trim())); // what `done --run` would run
-        const detail = (vs.unverifiedDetail || []).find((d) => d.number === n);
-        // A number two tasks share: `done N` resolves to the first open "N." (or answers alreadyDone), so no re-run can
-        // ever verify the other one — it looped "re-run task N" forever. The way out is renumbering (doctor: duplicate-tasks).
-        if (detail && detail.reason === "duplicate-number") recommendation = nx.verifyDuplicate(slug, unverifiedLabel(vs, lng), n);
-        else {
-          recommendation = nx.verify(slug, unverifiedLabel(vs, lng), n, runnable);
-          if (detail && detail.reason === "unobserved") recommendation += " " + i18n.msg(lng).observed.naHint; // 1.14 F1 (meta.evidence "observed")
-          // A red-phase task can't pass its own must-pass _Verify:_: re-running it is no way out — say how to fix the task.
-          const red = redPhaseHint(blk, slug, lng);
-          if (red) recommendation += " " + red;
-          if (expectsFail(blk)) recommendation += " " + i18n.msg(lng).redGreen.naVerify(n, slug); // its proof is a FAILING run, not a passing one
-        }
-      } else if (dr && dr.drifted) {
-        // Drift since the finish → decide (change-management §7) before any re-baseline — a stale baseline included: it
-        // also needs finishing again, after that decision.
-        step = "drift";
-        recommendation = nx.drifted(slug, day, dr.changed.length + dr.missing.length + dr.nowPresent.length, finishedDrift.files, [...dr.changed, ...dr.missing, ...dr.nowPresent].slice(0, 5).join(", "));
-        if (stale) recommendation += " " + nx.driftedStale(staleFinishText(stale, lng));
-      } else if (stale) {
-        // Finished once, then changed (a change request, a re-approval, a new implementing file) and done again: finish it
-        // AGAIN — a fresh readiness report, merge summary and baseline — then the execution sign-off again. step stays
-        // "finish"; staleBaseline says why.
-        recommendation = nx.refinish(slug, dayOf(stale.finishedAt) || "?", staleFinishText(stale, lng));
-      } else if (fin && suiteGap.length) {
-        // Finished, but a project check (meta.checks) has no passing run since the last task activity (a task re-run after
-        // the finish, a check whose command changed…): spec_finish refuses on it, doctor warns, the stop gate sends a "done"
-        // back — never "finished — nothing left to do". Any status but pass counts (suiteStatus().missing).
-        step = "verify";
-        suiteMissing = suiteGap.map((i) => ({ name: i.name, status: i.status }));
-        recommendation = nx.verifySuite(slug, suiteLabel(suiteGap, lng)) + suiteGuardianHint(suiteGap, slug, lng); // + dev-guardian's gate (1.29)
-      } else if (fin) {
-        // Already finished (spec_finish {write} recorded the baseline): not "close the feature" again. The sign-off, if
-        // the execution phase isn't approved yet (or its approval predates a change), or nothing left to do.
-        step = "finished";
-        // No execution approval → sign it off; one that predates a later change (an upgraded feature's new tests sign-off,
-        // a change request) → re-confirm it, naming what came after — never "missing" when it exists.
-        const exAt = isRecord(approvals.execution) && typeof approvals.execution.at === "string" ? approvals.execution.at : null;
-        const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: dayOf(exAt) || "?", why: signOffWhyText(st, lng) } : null;
-        // With roadmap.json meta.approvalRoles.execution the sign-off is per role (a role-less /approve is refused): name
-        // the roles still missing and the one to sign as. A stale sign-off is renewed by every role signing again (a role's
-        // sign-off older than the change no longer counts — roleSignOffs): the role named is the first one still missing.
-        const exRoles = approvalRolesOf(projectDir).execution || [];
-        if (signOff && exRoles.length) {
-          if (!approvals.execution) {
-            const v = roleSignOffs(st, "execution", exRoles, phaseContent(dir, "execution", kind));
-            const all = !v.missing.length && v.signed.length > 0; // every role signed, no approval — one re-signs
-            finishedRoles = all ? null : v.missing;
-            if (all) finishedComplete = true;
-            Object.assign(signOff, { role: v.missing[0] || v.signed[0] || exRoles[0], missing: all ? fm.governance.signedAll(v.signed.join(", ")) : v.missing.length ? fm.governance.missing(v.missing) : null,
-              signed: all ? "" : v.signed.join(", ") });
-          } else signOff.role = roleSignOffs(st, "execution", exRoles, phaseContent(dir, "execution", kind)).missing[0] || exRoles[0];
-        }
-        recommendation = nx.finished(slug, day, finishedDrift.files, signOff);
-      }
-      // with project checks configured (meta.checks), a plain /spec-finish is refused until each has a passing
-      // run since the last task activity (or on the code as it is now: Ga3's code-changed) — say how to run and record them
-      // (dev-spec finish <f> --run / spec_finish {evidence}); also on `drift`, whose "harmless → re-finish" needs that run.
-      if ((step === "finish" || step === "drift") && !st.invalid) {
-        const suite = ctx.suite;
-        if (suite.missing.length) recommendation += " " + i18n.msg(lng).projectChecks.naFinish(slug, suiteLabel(suite.missing, lng)) + suiteGuardianHint(suite.missing, slug, lng);
-      }
-    }
-  }
+  // the call's context, and what its step sets — the step and its recommendation, and the extras the result carries
+  const x = { projectDir, slug, dir, doc, ctx, st, tracks, kind, lng, fm, nx, G, approvals, pending, open, refused, size, planFf, ffEnd, planOpen,
+    fails, testsWhat, approveMsg, walk, phaseOfFile, reReviewNow,
+    // Phase 4 pending again because its sign-off no longer covers the plan — said before what the phase asks for
+    testsStale: pending === "tests" ? testsStaleText(dir, tracks, st.approvals, lng) : null,
+    step: undefined, recommendation: undefined,
+    gateFix: false,
+    impactPhases: [],
+    finishedDrift: null,
+    staleBaseline: null,
+    approveExtras: null, // {missingRoles?, fastForward?} of the approve step
+    reReviewRefused: null, // the re-review phase whose approve gate would refuse (refusedGate names it)
+    finishedRoles: null, // the roles still to sign the execution phase off (finished step)
+    finishedComplete: false, // every execution role signed, yet no approval (finished step)
+    suiteMissing: null, // the project checks without a passing run since the last task activity (verify step, finished)
+    depsBlocked: null, // [{number, waitsOn}] — open tasks, none can start (fix step)
+    missingApproved: [], // approved artifacts that are gone (re-review step)
+  };
+  NEXT_STEPS.find((s) => s.when(x)).run(x);
 
+  const step = x.step;
   const res = { ok: true, feature: slug, tracks: trackLabel(tracks), phase, verdict: doc.verdict,
-    gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [], changedSinceApproval: changed, step, recommendation };
-  if (finishedDrift) res.drift = finishedDrift; // stable: {finishedAt, files, changed, missing, nowPresent, drifted}
-  if (staleBaseline) res.staleBaseline = staleBaseline; // stable: {finishedAt, since: [{kind, n | phase, at}], newFiles}
-  if (open) res.file = open.file;
-  if (gateFix) res.refusedGate = { phase: reReviewRefused || pending, failing: refused.map((c) => c.id) }; // stable ids to branch on
-  if (finishedRoles) res.missingRoles = finishedRoles; // the execution sign-off's roles still to sign (finished step)
-  if (suiteMissing) res.suite = suiteMissing; // stable: [{name, status}] — the project checks the verify step asks to run
-  if (depsBlocked) res.blocked = depsBlocked; // stable — the open tasks and the dependencies each waits on
-  if (impactPhases.length) res.impact = { tool: "spec_impact", phases: impactPhases }; // what to run before re-approval
-  if (missingApproved.length) res.missingApproved = missingApproved; // stable — approved artifacts that no longer exist
-  if (approveExtras && approveExtras.missingRoles) res.missingRoles = approveExtras.missingRoles; // stable — the roles to sign
-  if ((approveExtras && approveExtras.signoffsComplete) || finishedComplete) res.signoffsComplete = true; // stable — every role signed, one re-signs to approve
-  if (approveExtras && approveExtras.fastForward) res.fastForward = approveExtras.fastForward; // {through, phases, role}
+    gatesOk: doc.gatesOk, pendingGates: doc.pendingGates || [], changedSinceApproval: changed, step, recommendation: x.recommendation };
+  if (x.finishedDrift) res.drift = x.finishedDrift; // stable: {finishedAt, files, changed, missing, nowPresent, drifted}
+  if (x.staleBaseline) res.staleBaseline = x.staleBaseline; // stable: {finishedAt, since: [{kind, n | phase, at}], newFiles}
+  if (x.open) res.file = x.open.file;
+  if (x.gateFix) res.refusedGate = { phase: x.reReviewRefused || pending, failing: x.refused.map((c) => c.id) }; // stable ids to branch on
+  if (x.finishedRoles) res.missingRoles = x.finishedRoles; // the execution sign-off's roles still to sign (finished step)
+  if (x.suiteMissing) res.suite = x.suiteMissing; // stable: [{name, status}] — the project checks the verify step asks to run
+  if (x.depsBlocked) res.blocked = x.depsBlocked; // stable — the open tasks and the dependencies each waits on
+  if (x.impactPhases.length) res.impact = { tool: "spec_impact", phases: x.impactPhases }; // what to run before re-approval
+  if (x.missingApproved.length) res.missingApproved = x.missingApproved; // stable — approved artifacts that no longer exist
+  const extras = x.approveExtras;
+  if (extras && extras.missingRoles) res.missingRoles = extras.missingRoles; // stable — the roles to sign
+  if ((extras && extras.signoffsComplete) || x.finishedComplete) res.signoffsComplete = true; // stable — every role signed, one re-signs to approve
+  if (extras && extras.fastForward) res.fastForward = extras.fastForward; // {through, phases, role}
   // size XS / S — the one approval call the plan ends with, named from the start (the fill step)
   if (!res.fastForward && planFf && pending && step === "fill" && walk.includes(ffEnd)) {
     res.fastForward = { through: ffEnd, phases: walk.slice(walk.indexOf(pending), walk.indexOf(ffEnd) + 1).filter((ph) => !approvals[ph]), role: null };
@@ -586,13 +423,216 @@ function nextAction(projectDir, name, opts = {}) {
   if (Array.isArray(doc.steeringChanged) && doc.steeringChanged.length) {
     res.steeringChanged = doc.steeringChanged;
     res.recommendation += " " + fm.quality.naSteering(doc.steeringChanged.map((c) => c.phase).join(", "),
-      [...new Set(doc.steeringChanged.flatMap((c) => c.files.map((x) => x.file)))].join(", "), slug);
+      [...new Set(doc.steeringChanged.flatMap((c) => c.files.map((y) => y.file)))].join(", "), slug);
   }
   if (flow === "design-first") { // stable `flow`; the order is named while the design / requirements gates are the open ones
     res.flow = flow;
     if (["fill", "fix", "approve"].includes(step) && (pending === "design" || pending === "requirements")) res.recommendation += " " + fm.flow.nextNote(flowOrderText(dir, tracks, flow));
   }
   return withBranchStep(projectDir, slug, st, res);
+}
+
+// NEXT_STEPS — next_action's steps (1.30: the shape of DOCTOR_CHECKS), in the order they are tried: the first whose `when(x)` holds
+// answers, its `run(x)` setting x.step, x.recommendation and the extras its step names (x: nextAction's context). Phase by phase
+// (SKILL.md: each phase is presented for approval before the next one starts), so a brand-new feature is told to write its
+// classification — never the design before the requirements are approved, and never to fix the checks of phases it hasn't reached:
+// (1) an artifact changed since its approval → re-review; (2) the FIRST active phase not approved yet (gateWalk: the chain's order,
+// execution apart, `tests` once due) — its artifact missing / still a template → fill it; else the checks its approval runs failing →
+// fix them (named — never an approval the gate would refuse); else → approve it. Only that approval opens the next phase; (3) every
+// phase approved: failing checks of the current phase (or an earlier one — e.g. a forced approval) → fix; (4) the next task, and
+// after the last one FINISH_STEPS.
+const NEXT_STEPS = [
+  { id: "re-review", when: (x) => x.reReviewNow.length > 0, run: reReviewStep },
+  { id: "fill", when: (x) => !!x.open, run: fillStep },
+  { id: "fix-gate", when: (x) => !!(x.pending && x.approveMsg[x.pending] && x.refused), run: fixGateStep },
+  { id: "approve", when: (x) => !!(x.pending && x.approveMsg[x.pending]), run: approveStep },
+  { id: "fix", when: (x) => x.fails.length > 0, run: (x) => { x.step = "fix"; x.recommendation = x.nx.fixChecks(x.fails.map((c) => c.id).join(", "), x.slug); } },
+  { id: "tasks", when: () => true, run: tasksStep },
+];
+// (5) all tasks done (step "finish"): a ticked task without passing evidence → verify it (spec_finish would refuse), else drift since a
+// finish → decide, else spec_finish again (its baseline is stale), else — finished — project checks without a passing run since the
+// last task activity → verify (res.suite), else finished. The first whose `when(x, fin)` holds; none: finish it.
+const FINISH_STEPS = [
+  { id: "verify", when: (x, f) => f.vs.unverified.length > 0, run: verifyStep },
+  { id: "drift", when: (x, f) => !!(f.dr && f.dr.drifted), run: driftStep },
+  { id: "refinish", when: (x, f) => !!f.stale, run: refinishStep },
+  { id: "verify-suite", when: (x, f) => !!(f.fin && f.suiteGap.length), run: verifySuiteStep },
+  { id: "finished", when: (x, f) => !!f.fin, run: finishedStep },
+];
+
+function reReviewStep(x) {
+  const { nx, G, fm, slug, dir, st, kind, lng, walk, phaseOfFile, reReviewNow } = x;
+  x.step = "re-review";
+  // an approved artifact that is gone can't be re-reviewed nor re-approved (nothing to approve) — restore it, or
+  // withdraw its approval (revoke: the phase then waits for a new file, and the Phase 4 gate a test plan opened follows it).
+  // (one that can't be read — a folder of that name, no permission — is gone the same way: restore the file)
+  x.missingApproved = reReviewNow.filter((file) => readIfExists(path.join(dir, file)) == null);
+  const present = reReviewNow.filter((file) => !x.missingApproved.includes(file));
+  x.recommendation = [present.length ? nx.reReview(present.join(", ")) : null,
+    x.missingApproved.length ? nx.approvedMissing(x.missingApproved.join(", "), slug, phaseOfFile(x.missingApproved[0]) || "design") : null].filter(Boolean).join(" ");
+  // Never "re-approve" what the approve gate would refuse (an edit added a [NEEDS CLARIFICATION], a placeholder…): it
+  // looped re-review → refused → re-review. The first changed phase whose gate fails is named with its failing checks
+  // (refusedGate, as the fix step) — fix them, then re-approve.
+  for (const ph of walk.filter((p) => reReviewNow.some((file) => phaseOfFile(file) === p))) {
+    const g = approvalChecks(x.projectDir, slug, dir, ph, x.tracks, kind, lng);
+    if (!g.artifact || !g.checks.length) continue;
+    x.refused = g.checks;
+    x.reReviewRefused = ph;
+    x.gateFix = true;
+    x.recommendation += " " + G.fixGate(ph, g.checks.map((c) => c.id + (c.detail ? ` (${c.detail})` : "")).join("; "), slug);
+    break;
+  }
+  // An approval with a snapshot: spec_impact lists what the edit touches (tasks, tests, design) — before re-approving.
+  x.impactPhases = snapshotPhases(dir, st, reReviewNow);
+  if (x.impactPhases.length) x.recommendation += " " + fm.impact.nextHint(slug, x.impactPhases);
+  const resign = reReviewRoles(x.projectDir, dir, st, reReviewNow.map(phaseOfFile), kind, slug, lng); // each role signs again
+  if (resign) x.recommendation += " " + resign;
+}
+function fillStep(x) {
+  const { open, G, fm, slug } = x;
+  x.step = "fill";
+  const first = open.items.length ? open.items[0].text : "";
+  const what = open.state === "missing" ? G.fillMissing : open.empty && !open.items.length ? G.fillEmpty
+    : G.fillPlaceholders(open.items.length, `L${open.items[0].line} ${first.length > 48 ? first.slice(0, 47) + "…" : first}`);
+  x.recommendation = G.fill(open.file, what, (G.fillHint[open.file] || G.fillHint.default)(slug));
+  // size XS / S (a change's own hint says it already): the whole plan, then one approval call
+  if (x.planFf && x.kind !== "change") {
+    const files = [...new Set([open.file, ...x.planOpen.map((r) => r.file)])];
+    x.recommendation += " " + (x.ffEnd === "tasks" ? fm.sizes.planFastForward(slug, x.size, files.join(", "))
+      : fm.sizes.planFastForwardTests(slug, x.size, files.join(", "), x.ffEnd, x.testsWhat));
+  }
+}
+// Never recommend an approval the approve gate would refuse (it looped: "approve X" → refused → "approve X"…): name what it
+// would fail on instead — classification.md placeholders, missing SC-### / P1 lines…
+function fixGateStep(x) {
+  const { pending, refused, G, slug } = x;
+  x.step = "fix";
+  x.gateFix = true;
+  const ids = refused.map((c) => c.id + (c.detail ? ` (${c.detail})` : "")).join("; ");
+  // Phase 4: what its gate refuses on (planned tests not in the test code, the sample eval set) IS the work the phase
+  // asks for — name that work (/writeTests), then what the gate checks.
+  x.recommendation = pending === "tests" ? x.approveMsg.tests(slug) + " " + G.testsGateChecks(refused.map((c) => c.id).join(", ")) : G.fixGate(pending, ids, slug);
+  if (x.testsStale) x.recommendation = x.testsStale + " " + x.recommendation; // why Phase 4 is asked for again
+}
+function approveStep(x) {
+  const { pending, slug } = x;
+  x.step = "approve";
+  x.recommendation = x.approveMsg[pending](slug);
+  if (x.testsStale) x.recommendation = x.testsStale + " " + x.recommendation;
+  // the roles still to sign off this phase (the role to sign as), and the fast-forward when every gate through tasks passes.
+  const extras = x.approveExtras = approveStepExtras(x.projectDir, slug, x.dir, x.st, x.tracks, x.kind, pending, x.doc, x.lng);
+  // Phase 4's own wording says what the phase asks for (the tests / eval harness) — the role step is added to it there.
+  if (extras.text) x.recommendation = pending === "tests" ? x.recommendation + " " + extras.text : extras.text;
+  if (extras.hint) x.recommendation += " " + extras.hint;
+}
+// (4) the next task — open tasks none of which can start: fix the dependencies; none at all: break the plan into tasks; all done:
+// finish (FINISH_STEPS), and the project checks' hint
+function tasksStep(x) {
+  const { ctx, nx, slug, lng, st } = x;
+  const activeText = ctx.tasksActive;
+  const tasks = parseTasks(activeText);
+  const sch = taskSchedule(taskBlocks(activeText || "")); // the next task whose _Depends:_ are all done
+  const next = sch.next;
+  // Open tasks, none of which can start (a cycle, a _Depends:_ naming no task): fix the dependencies — never "finish".
+  const stuck = !next && tasks.some((t) => !t.done);
+  x.step = next ? "implement" : stuck ? "fix" : tasks.length ? "finish" : "tasks";
+  x.recommendation = next
+    ? nx.implement(next.number, cleanTaskText(next.text), slug)
+    : stuck ? taskDepsBlockedNote(sch, slug, lng) : (tasks.length ? nx.allDone(slug) : nx.breakIntoTasks(slug));
+  if (stuck) x.depsBlocked = sch.blocked.length ? sch.blocked : sch.skipped;
+  if (x.step !== "finish") return;
+  const stale = staleFinish(x.projectDir, st, activeText || "");
+  const fin = isObj(st.finished) && isObj(st.finished.files) ? st.finished : null;
+  // The recorded files are hashed whether or not the baseline is stale: a stale baseline (a change request, a
+  // re-approval, a new implementing file under a folder _Implements:_ names) still records them, and a re-finish would
+  // accept their drift. Skipping the hash when stale hid a changed file behind "finish it again" — adding one more file
+  // made the drift warning go away.
+  let dr = null;
+  if (fin) {
+    const root = path.resolve(x.projectDir);
+    dr = baselineDrift(root, realRootOf(root), fin);
+    x.finishedDrift = { finishedAt: typeof fin.at === "string" ? fin.at : null, files: Object.keys(fin.files).length, changed: dr.changed, missing: dr.missing, nowPresent: dr.nowPresent, drifted: dr.drifted };
+  }
+  if (stale) x.staleBaseline = stale;
+  // Every task ticked, but not every tick verified: spec_finish and the execution sign-off refuse on exactly these
+  // (verificationStatus) — never "close the feature" / "finished, nothing left to do" while a latest run failed or a
+  // runnable _Verify:_ was never run (that looped: next_action → /spec-finish → refused → next_action …).
+  const vs = ctx.vs;
+  const f = { activeText, stale, fin, dr, vs, day: (fin && dayOf(fin.at)) || "?", suiteGap: fin && !vs.unverified.length ? ctx.suite.missing : [] };
+  const s = FINISH_STEPS.find((e) => e.when(x, f));
+  if (s) s.run(x, f);
+  // with project checks configured (meta.checks), a plain /spec-finish is refused until each has a passing
+  // run since the last task activity (or on the code as it is now: Ga3's code-changed) — say how to run and record them
+  // (dev-spec finish <f> --run / spec_finish {evidence}); also on `drift`, whose "harmless → re-finish" needs that run.
+  if ((x.step === "finish" || x.step === "drift") && !st.invalid) {
+    const suite = ctx.suite;
+    if (suite.missing.length) x.recommendation += " " + i18n.msg(lng).projectChecks.naFinish(slug, suiteLabel(suite.missing, lng)) + suiteGuardianHint(suite.missing, slug, lng);
+  }
+}
+function verifyStep(x, f) {
+  const { nx, slug, lng } = x, vs = f.vs;
+  x.step = "verify";
+  const n = vs.unverified[0];
+  const blk = taskBlocks(f.activeText || "").find((b) => b.number === n && b.done);
+  const runnable = !!blk && taskMarkers(blk).verify.some((c) => !/^\[.*\]$/.test(c.trim())); // what `done --run` would run
+  const detail = (vs.unverifiedDetail || []).find((d) => d.number === n);
+  // A number two tasks share: `done N` resolves to the first open "N." (or answers alreadyDone), so no re-run can
+  // ever verify the other one — it looped "re-run task N" forever. The way out is renumbering (doctor: duplicate-tasks).
+  if (detail && detail.reason === "duplicate-number") { x.recommendation = nx.verifyDuplicate(slug, unverifiedLabel(vs, lng), n); return; }
+  x.recommendation = nx.verify(slug, unverifiedLabel(vs, lng), n, runnable);
+  if (detail && detail.reason === "unobserved") x.recommendation += " " + i18n.msg(lng).observed.naHint; // 1.14 F1 (meta.evidence "observed")
+  // A red-phase task can't pass its own must-pass _Verify:_: re-running it is no way out — say how to fix the task.
+  const red = redPhaseHint(blk, slug, lng);
+  if (red) x.recommendation += " " + red;
+  if (expectsFail(blk)) x.recommendation += " " + i18n.msg(lng).redGreen.naVerify(n, slug); // its proof is a FAILING run, not a passing one
+}
+// Drift since the finish → decide (change-management §7) before any re-baseline — a stale baseline included: it also needs
+// finishing again, after that decision.
+function driftStep(x, f) {
+  const { nx, slug, lng } = x, dr = f.dr;
+  x.step = "drift";
+  x.recommendation = nx.drifted(slug, f.day, dr.changed.length + dr.missing.length + dr.nowPresent.length, x.finishedDrift.files, [...dr.changed, ...dr.missing, ...dr.nowPresent].slice(0, 5).join(", "));
+  if (f.stale) x.recommendation += " " + nx.driftedStale(staleFinishText(f.stale, lng));
+}
+// Finished once, then changed (a change request, a re-approval, a new implementing file) and done again: finish it AGAIN — a
+// fresh readiness report, merge summary and baseline — then the execution sign-off again. The step stays "finish";
+// staleBaseline says why.
+function refinishStep(x, f) {
+  x.recommendation = x.nx.refinish(x.slug, dayOf(f.stale.finishedAt) || "?", staleFinishText(f.stale, x.lng));
+}
+// Finished, but a project check (meta.checks) has no passing run since the last task activity (a task re-run after the finish, a
+// check whose command changed…): spec_finish refuses on it, doctor warns, the stop gate sends a "done" back — never "finished —
+// nothing left to do". Any status but pass counts (suiteStatus().missing).
+function verifySuiteStep(x, f) {
+  const { nx, slug, lng } = x;
+  x.step = "verify";
+  x.suiteMissing = f.suiteGap.map((i) => ({ name: i.name, status: i.status }));
+  x.recommendation = nx.verifySuite(slug, suiteLabel(f.suiteGap, lng)) + suiteGuardianHint(f.suiteGap, slug, lng); // + dev-guardian's gate (1.29)
+}
+// Already finished (spec_finish {write} recorded the baseline): not "close the feature" again. The sign-off, if the execution
+// phase isn't approved yet (or its approval predates a change), or nothing left to do.
+function finishedStep(x, f) {
+  const { nx, fm, slug, dir, st, kind, lng, approvals } = x;
+  x.step = "finished";
+  // No execution approval → sign it off; one that predates a later change (an upgraded feature's new tests sign-off,
+  // a change request) → re-confirm it, naming what came after — never "missing" when it exists.
+  const exAt = isRecord(approvals.execution) && typeof approvals.execution.at === "string" ? approvals.execution.at : null;
+  const signOff = !approvals.execution ? {} : executionSignOffStale(st) ? { at: dayOf(exAt) || "?", why: signOffWhyText(st, lng) } : null;
+  // With roadmap.json meta.approvalRoles.execution the sign-off is per role (a role-less /approve is refused): name
+  // the roles still missing and the one to sign as. A stale sign-off is renewed by every role signing again (a role's
+  // sign-off older than the change no longer counts — roleSignOffs): the role named is the first one still missing.
+  const exRoles = approvalRolesOf(x.projectDir).execution || [];
+  if (signOff && exRoles.length) {
+    if (!approvals.execution) {
+      const v = roleSignOffs(st, "execution", exRoles, phaseContent(dir, "execution", kind));
+      const all = !v.missing.length && v.signed.length > 0; // every role signed, no approval — one re-signs
+      x.finishedRoles = all ? null : v.missing;
+      if (all) x.finishedComplete = true;
+      Object.assign(signOff, { role: v.missing[0] || v.signed[0] || exRoles[0], missing: all ? fm.governance.signedAll(v.signed.join(", ")) : v.missing.length ? fm.governance.missing(v.missing) : null,
+        signed: all ? "" : v.signed.join(", ") });
+    } else signOff.role = roleSignOffs(st, "execution", exRoles, phaseContent(dir, "execution", kind)).missing[0] || exRoles[0];
+  }
+  x.recommendation = nx.finished(slug, f.day, x.finishedDrift.files, signOff);
 }
 // next_action names the feature's own git branch (create --branch): `branch` {name, base, commit, at, current, exists}, and —
 // while there is work left (the phase isn't complete) and HEAD is on ANOTHER branch — the switch first, appended to the step's
@@ -853,13 +893,18 @@ const DOCTOR_CHECKS = [
     tasks: (c) => earsGate(c, c.planEars, CHANGE_FILE), // a change's plan: change.md's criteria
   } },
   // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains. A bugfix's bug.md (its Reproduction and
-  // Root Cause — what its requirements / design gates sign off) counts too.
+  // Root Cause — what its requirements / design gates sign off) counts too, and design.md's own (the design gate refuses on them:
+  // doctor passed "none open" while the approval refused) — not while design.md is still a LATER phase's template.
   { id: "clarifications", phase: 1, applies: hasReqs, run: (c) => {
     const markers = clarificationMarkers(c.read("requirements.md"));
     const bug = c.kind === "bugfix" ? clarificationMarkers(c.read("bug.md") || "") : [];
-    return laterReqs(c, { status: markers.length || bug.length ? "fail" : "pass", detail: markers.length || bug.length
+    const v = laterReqs(c, { status: markers.length || bug.length ? "fail" : "pass", detail: markers.length || bug.length
       ? [markers.length ? (c.isChange ? c.m.clarificationsOpenPlan : c.m.clarificationsOpen)(markers.length) : null, bug.length ? c.m.clarificationsOpenBug(bug.length) : null].filter(Boolean).join("; ")
       : c.m.clarificationsNone }); // a change has no design
+    const design = c.laterFiles.includes("design.md") ? [] : clarificationMarkers(c.read("design.md") || "");
+    if (!design.length) return v;
+    const d = c.m.clarificationsOpenDesign(design.length);
+    return { status: "fail", detail: v.status === "pass" ? d : v.detail + "; " + d };
   }, gate: {
     // the requirements and, for a bugfix, bug.md → Reproduction (an open question there is no reproduction)
     requirements: (c) => {

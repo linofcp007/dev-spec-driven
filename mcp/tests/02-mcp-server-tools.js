@@ -60,8 +60,9 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
       ["spec_depend", { name: "login" }, "spec_roadmap_edit", { kind: "depend", name: "login" }],
       ["spec_milestone", { action: "add", name: "M1", date: "2099-01-01", features: ["login"] }, "spec_roadmap_edit", null],
       ["spec_milestone", {}, "spec_roadmap_edit", { kind: "milestone" }],
-      ["spec_catalog", {}, "spec_export", { format: "catalog" }],
-      ["spec_changelog", { since: "all" }, "spec_export", { format: "changelog", since: "all" }],
+      // 1.30 review 8: the old catalog / changelog replies carried the markdown (unless writing) — the alias still does
+      ["spec_catalog", {}, "spec_export", { format: "catalog", includeBody: true }],
+      ["spec_changelog", { since: "all" }, "spec_export", { format: "changelog", since: "all", includeBody: true }],
       ["spec_coverage", {}, "spec_scan", { coverage: true }],
       ["spec_list", {}, "spec_status", {}],
     ];
@@ -77,6 +78,18 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
     const ms = S.milestone(p, "list");
     ok(!bad.length && dep.dependsOn.join() === "billing" && bl.backlog.map((x) => x.name).join() === "Later" && ms.milestones.map((m) => m.name).join() === "M1",
       "1.26: each hidden alias (spec_list, spec_backlog, spec_depend, spec_milestone, spec_catalog, spec_changelog, spec_coverage) answers what the new tool answers, and its writes land (got " + js(bad) + ")");
+    // 1.30 review 8 (ds-engine 6): "the old names still work" holds for the reply too — spec_catalog / spec_changelog carry the
+    // document (markdown) as their 1.25.1 replies did; the new tool leaves it out unless includeBody
+    const catOld = await call("spec_catalog", { projectDir: p });
+    const chgOld = await call("spec_changelog", { since: "all", projectDir: p });
+    const catNew = await call("spec_export", { format: "catalog", projectDir: p });
+    const chgNew = await call("spec_export", { format: "changelog", since: "all", projectDir: p });
+    all("1.30 review 8: the hidden aliases spec_catalog / spec_changelog return the document again (markdown, as before 1.26); spec_export {format: catalog | changelog} stays lean without includeBody (got " +
+      js([Object.keys(catOld.p), Object.keys(chgOld.p), Object.keys(catNew.p), Object.keys(chgNew.p)]) + ")", {
+      catalog: () => !catOld.isError && catOld.p.ok === true && typeof catOld.p.markdown === "string" && catOld.p.markdown.length > 0,
+      changelog: () => !chgOld.isError && chgOld.p.ok === true && typeof chgOld.p.markdown === "string" && chgOld.p.markdown.length > 0,
+      lean: () => catNew.p.markdown === undefined && chgNew.p.markdown === undefined,
+    });
     // the OLD schema decides the refusals: the old required key, an argument only the new tool takes, an old enum
     const depNoName = await call("spec_depend", { projectDir: p });
     const blKind = await call("spec_backlog", { kind: "backlog", action: "list", projectDir: p });
@@ -287,11 +300,13 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
     const legacy = OPS.OPERATIONS.flatMap((op) => (op.legacy || []).map((n) => [n, op]));
     const ARGS = { spec_list: {}, spec_backlog: { action: "list" }, spec_depend: { name: "login" }, spec_milestone: { action: "list" }, spec_catalog: {},
       spec_changelog: { since: "all" }, spec_coverage: {} };
+    // what the alias's translation adds (1.30: the catalog / changelog document, as the old replies carried it)
+    const ADDS = { spec_catalog: { includeBody: true }, spec_changelog: { includeBody: true } };
     const bad = [];
     for (const [alias, op] of legacy) {
-      const a = ARGS[alias] || {};
+      const a = ARGS[alias] || {}, t = { ...a, ...(ADDS[alias] || {}) };
       const got = await call(alias, { ...a, projectDir: p });
-      const want = OPS.run(op, S, p, "mcp", (x) => a[x.mcp]);
+      const want = OPS.run(op, S, p, "mcp", (x) => t[x.mcp]);
       if (got.isError || js(drop(got.p, "generatedAt")) !== js(drop(want, "generatedAt"))) bad.push(alias + " → " + op.id + ": " + js(got.p).slice(0, 120));
     }
     ok(js(legacy.map(([n]) => n).sort()) === js(removed.slice().sort()) && !bad.length,
@@ -414,6 +429,52 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
     ok(!bad.length && !unseen.length && js(refused) === js(["approve login requirements", "impact login"]),
       "1.27 operations: the CLI's --json is the MCP result — " + (steps.length - 1) + " calls on twin projects (create / bugfix / spike, approve / revoke, done / undone, status, roadmap and its edits, export / catalog / changelog, scan / coverage… — every operation), project folder and ISO times aside; the two refusals (an approval whose gate fails, an impact never approved) alike (got " +
       js({ bad, unseen, refused }) + ")");
+  }
+
+  { // 1.30 review 8 (ds-engine 8): the edges where the two surfaces answered differently — a blank name, an empty text beside a
+    // feature, the engine refusals that carried no code on the CLI (order, backlog action, impact phase) or another one (approve
+    // without a phase: `usage` on the CLI) — now the same JSON, project folder aside
+    const MAIN = require(path.join(root, "cli", "main.js"));
+    const cliIn = (args, dir) => {
+      const out = [];
+      MAIN.main([...args, "--json", "--project", dir], { stdout: { write: (s) => { out.push(String(s)); return true; } }, stderr: { write: () => true }, stdin: "", env: process.env });
+      try { return JSON.parse(out.join("")); } catch { return { notJson: out.join("").slice(0, 200) }; }
+    };
+    const pm = path.join(tmp, "proj-130-edges", "mcp", "p"), pc = path.join(tmp, "proj-130-edges", "cli", "p");
+    for (const d of [pm, pc]) {
+      S.initProject(d, ["core"], "en");
+      S.createFeature(d, "Login", ["core"], "x");
+      S.createFeature(d, "Pay", ["core"], "x");
+    }
+    const blankDir = (v, dir) => JSON.parse(js(v).split(js(dir).slice(1, -1)).join("<P>").split(dir.split(path.sep).join("/")).join("<P>"));
+    const cases = [
+      ["spec_status", { name: "   " }, ["status", "   "]],
+      ["ears_validate", { name: "login", text: "" }, ["ears", "login", "--text", ""]],
+      ["spec_roadmap_edit", { kind: "depend", name: "login", order: "abc" }, ["depend", "login", "--order", "abc"], "order"],
+      ["spec_roadmap_edit", { kind: "backlog", action: "frobnicate" }, ["backlog", "frobnicate"], "action"],
+      ["spec_impact", { name: "login", phase: "nope" }, ["impact", "login", "--phase", "nope"], "phase"],
+      ["spec_approve", { name: "login" }, ["approve", "login"]],
+      ["spec_approve", { name: "login", revoke: true }, ["approve", "login", "--revoke"]],
+      // the actions the engine reads through enumArg (1.30, ds-maint 12): their refusals are the validator's too
+      ["spec_templates", { action: "frob" }, ["templates", "frob"], "action"],
+      ["spec_tracks", { action: "frob" }, ["tracks", "frob"], "action"],
+      ["spec_feature", { action: "frob", name: "login" }, ["feature", "frob", "login"], "action"],
+      ["spec_roadmap_edit", { kind: "milestone", action: "frob" }, ["milestone", "frob"], "action"],
+      ["spec_create", { name: "Other", kind: "bugfx" }, ["create", "Other", "--kind", "bugfx"], "kind"],
+    ];
+    const got = [];
+    for (const [tool, args, words, invalid] of cases) {
+      const m = blankDir((await call(tool, { ...args, projectDir: pm })).p, pm), c = blankDir(cliIn(words, pc), pc);
+      got.push({ words: words.join(" "), same: js(m) === js(c), code: [m.code, c.code], invalid, m: js(m).slice(0, 160), c: js(c).slice(0, 160) });
+    }
+    // order 1.5: MCP shows the number, the CLI the word it was given — the same code and argument
+    const fm = (await call("spec_roadmap_edit", { kind: "depend", name: "login", order: 1.5, projectDir: pm })).p, fc = cliIn(["depend", "login", "--order", "1.5"], pc);
+    all("1.30 review 8: MCP and the CLI's --json agree on the edges — status \"   \" lists (= spec_status {name: \"   \"}), ears <f> --text \"\" lints the feature, a bad --order / backlog action / --phase is invalid-arguments with its argument, approve without a phase is missing-arguments [phase] (got " +
+      js(got.filter((g) => !g.same)) + ")", {
+      ...Object.fromEntries(got.map((g) => [g.words, () => g.same])),
+      codes: () => got.filter((g) => g.invalid).every((g) => g.code[0] === "invalid-arguments") && got.filter((g) => /^approve/.test(g.words)).every((g) => g.code[0] === "missing-arguments"),
+      fraction: () => fm.code === "invalid-arguments" && fc.code === "invalid-arguments" && js(fm.invalid) === js(["order"]) && js(fc.invalid) === js(["order"]),
+    });
   }
 
   // 1.29 — the CONTRACT with dev-guardian: its skills and commands (≥ 3.2.0) call these dev-spec names — /guardian-improve hands

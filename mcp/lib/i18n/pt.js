@@ -979,8 +979,9 @@ const msg = {
       noEvidence: "sem evidência registada",
       changedByDate: (list, slug) => `avaliado só pela data do ficheiro (aprovado antes das impressões digitais de conteúdo — um clone ou uma cópia repõe as datas, por isso pode nem ser uma edição): ${list} — revê e volta a aprovar para o seguir pelo conteúdo (/approve ${slug} <fase>)`,
       // 1.28: o detetor de código duplicado — um aviso, nunca um bloqueio
-      duplicates: (n, top, within, slug) => `o código da feature repete código existente em ${n} sítio(s) — ${top}${n > 3 ? "; …" : ""}: reutilizar ou estender o código existente, ou explicar no relatório porque é que uma cópia é deliberada${within ? `; mais ${within} repetição(ões) dentro dos ficheiros da própria feature` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
-      duplicatesWithin: (n, slug) => `${n} bloco(s) do código da feature repete(m) outro sítio dos seus próprios ficheiros — candidato(s) para a passagem de simplificação (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicates: (n, top, within, slug) => `o código da feature repete código existente em ${n} ${n === 1 ? "sítio" : "sítios"} — ${top}${n > 3 ? "; …" : ""}: reutilizar ou estender o código existente, ou explicar no relatório porque é que uma cópia é deliberada${within ? `; mais ${within} ${within === 1 ? "repetição" : "repetições"} dentro dos ficheiros da própria feature` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicatesPartial: (unread) => `; só parte do projeto foi comparada — o limite de bytes do detetor deixou ${unread === 1 ? "1 ficheiro de código" : `${unread} ficheiros de código`} por ler`,
+      duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "bloco do código da feature repete" : "blocos do código da feature repetem"} outro sítio dos seus próprios ficheiros — ${n === 1 ? "candidato" : "candidatos"} para a passagem de simplificação (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
     // rigor à medida (o EN é a referência): tamanhos (spec_create {size}), a alteração (tamanho xs, um change.md).
@@ -1052,7 +1053,6 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' já existe.`,
       renameArchived: (slug) => `'${slug}' é o nome de uma feature arquivada (.specs/_archive/${slug}) — escolhe outro nome (com o mesmo nome, nenhuma das duas poderia ser arquivada nem restaurada).`,
       slugTaken: (slug, held, name) => `'${name}' chega à pasta .specs/${slug}/, que tem outra feature ('${held}') — o nome da pasta guarda só os primeiros 64 caracteres do nome. Nada foi alterado: usa um nome mais curto que difira dentro deles (para trabalhar em '${held}', usa o nome '${slug}').`,
-      badAction: "a ação tem de ser: remove | archive | rename | restore | flow",
       badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
@@ -1149,6 +1149,7 @@ const msg = {
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] por resolver — resolve antes do design`,
       clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] por resolver no change.md — resolve antes de aprovar o plano`,
       clarificationsOpenBug: (n) => `${n} [NEEDS CLARIFICATION] por resolver no bug.md — resolve-os antes de aprovar a Reprodução / Causa Raiz`,
+      clarificationsOpenDesign: (n) => `${n} [NEEDS CLARIFICATION] por resolver no design.md — resolve-os antes de aprovar o design`,
       clarificationsNone: "nenhum por resolver",
       scPresent: "presente",
       scMissing: "sem critérios de sucesso mensuráveis SC-###",
@@ -1474,8 +1475,8 @@ const msg = {
       coverage: (pct, d, t) => `Cobertura de specs: ${pct}%  (${d}/${t} ficheiros de código nomeados em _Implements:_)`,
       undocumented: (list) => `  pastas sem cobertura: ${list}`,
       // dupes (1.28): o relatório de código duplicado — spec_scan {duplicates: true}
-      dupesHead: (f, existing, within, n, files, lines) => `Duplicados — ${f}: ${existing} sítio(s) repetem código existente · ${within} repetido(s) dentro da feature  (janelas de ${n} linhas de código; ${files} ficheiros, ${lines} linhas de código lidas)`,
-      dupesHeadProject: (total, n, files, lines) => `Duplicados — o projeto: ${total} bloco(s) repetido(s)  (janelas de ${n} linhas de código; ${files} ficheiros, ${lines} linhas de código lidas)`,
+      dupesHead: (f, existing, within, n, files, lines) => `Duplicados — ${f}: ${existing} ${existing === 1 ? "sítio repete" : "sítios repetem"} código existente · ${within} ${within === 1 ? "repetido" : "repetidos"} dentro da feature  (janelas de ${n} linhas de código; ${files} ${files === 1 ? "ficheiro" : "ficheiros"}, ${lines} ${lines === 1 ? "linha de código lida" : "linhas de código lidas"})`,
+      dupesHeadProject: (total, n, files, lines) => `Duplicados — o projeto: ${total} ${total === 1 ? "bloco repetido" : "blocos repetidos"}  (janelas de ${n} linhas de código; ${files} ${files === 1 ? "ficheiro" : "ficheiros"}, ${lines} ${lines === 1 ? "linha de código lida" : "linhas de código lidas"})`,
       dupesNoCode: "  ainda não existe nenhum ficheiro de código nomeado pelos _Implements:_ das suas tarefas — nada a comparar",
       dupesNone: "  nenhum código repetido",
       dupesExisting: (at, n, also) => `  ⚠ ${at} (${n} linhas) repete ${also} — reutilizar ou estender o código existente`,
@@ -1483,6 +1484,7 @@ const msg = {
       dupesAlsoMore: (n) => `+${n}`,
       dupesMore: (n) => `  … e mais ${n} (listam-se os mais longos)`,
       dupesTruncated: (n) => `  (só os primeiros ${n} ficheiros de código foram lidos — o limite: uma repetição para lá deles não se vê)`,
+      dupesPartial: (unread, mb) => `  (atingido o limite de bytes — ${mb} MB de código: ${unread === 1 ? "mais 1 ficheiro de código ficou" : `mais ${unread} ficheiros de código ficaram`} por ler, uma repetição neles não se vê)`,
       clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  fase: ${phase}  veredicto=${verdict}  gates aprovados: ${gatesOk}`,
       changed: (list) => `  ⚠ alterado desde a última aprovação: ${list}`,
@@ -1765,7 +1767,6 @@ const msg = {
     },
 
     impact: {
-      badPhase: (p, known) => `Fase '${p}' desconhecida para spec_impact. Conhecidas: ${known}.`,
       reopenTasks: "reopen aplica-se a requirements, design, test-plan e eval-plan — uma alteração ao tasks.md revê-se e volta a aprovar-se; não reabre nada.",
       changePhase: (phase, slug) => `'${slug}' é uma alteração: os seus critérios e as suas tarefas são um só ficheiro, change.md, aprovado como o plano (fase tasks) — não há fase ${phase}. spec_impact {name: "${slug}"} (fase tasks, a predefinida) compara os dois: os critérios por ID, as tarefas por número.`,
       retireTests: {
@@ -2267,7 +2268,6 @@ const msg = {
 
     templates: {
       noSummary: "[a definir]",
-      badAction: (a) => `Ação de templates desconhecida '${a}' — uma de: list, init, check.`,
       unknownArtifact: (a, list) => `Template desconhecido '${a}' — um de: ${list}, ou steering/<ficheiro>.md.`,
       writeFailed: (rel, why) => `Não foi possível escrever ${rel} (${why}).`,
       writeOutside: (rel) => `Recusei escrever ${rel}: a pasta é uma ligação para fora do projeto.`,
@@ -2326,7 +2326,6 @@ const msg = {
       missingInvalid: (name, codes) => `+${name} (o pack é inválido: ${codes})`,
       missingReserved: (name, slug, builtIn, since) => `+${name} (um track pack anterior à ${since || "1.17"} — '${name}' é agora um nome reservado${builtIn ? `, e o track +${name} incluído NÃO se aplica a esta feature` : ""}: muda o nome de .specs/tracks/${name}/ (e do marcador, se também estiver reservado) e depois ${DEV_SPEC} add-track ${slug} <novo-nome> e ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; para usar o track incluído em vez dele: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
       missingReservedMarker: (name, marker, track, slug, since) => `+${name} (um track pack anterior à ${since || "1.19"} — o seu marcador ${marker} é agora o do track +${track} incluído, por isso o pack é ignorado e as suas secções ${marker} não contam como as do +${track}: muda o marcador em .specs/tracks/${name}/track.json e nos títulos ${marker} desta feature; para usar o track incluído em vez dele: ${DEV_SPEC} add-track ${slug} ${track} (as secções dele são acrescentadas e o pack sai desta feature); para retirar o pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
-      badAction: (a) => `Ação de tracks desconhecida '${a}' — uma de: list, init, check, signals.`,
       nameRequired: "o tracks init precisa de um nome — " + DEV_SPEC + " tracks init <nome> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `Não há track nem track pack '${n}' — os packs do projeto: ${list}.`,
       legacyFeature: ".specs/tracks/ é a pasta de uma feature criada antes de existirem track packs (tem um .state.json) — continua a ser essa feature e nunca é lida como packs. Muda-lhe o nome (" + DEV_SPEC + " feature rename tracks <novo-nome>, ou spec_feature rename) para usar track packs.",
