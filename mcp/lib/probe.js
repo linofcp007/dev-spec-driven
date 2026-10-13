@@ -29,6 +29,8 @@
  *   nearestProject(start, {io})      the CLI's resolver walk (the engine's resolveProjectDir, through its own reads — files.js
  *                                    nearestProject): start itself with any .specs/, else the nearest dev-spec one above it
  *                                    (≤ PROJECT_MAX_UP levels)
+ *   resolveProjectDir(arg, {env, io})   THE resolver: --project / projectDir > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > nearestProject >
+ *                                    the working folder (files.js resolveProjectDir, the CLI's context and completion read it)
  *   sessionAnchors(env) · sessionProjects({cwd, anchors})   the session resolution the hooks share before the engine loads
  *   usable · unexpandedVar · expandHome · isNetwork          reading a folder value as the engine does (isNetwork IS files.js
  *                                    isNetworkPath)
@@ -354,6 +356,19 @@ function nearestProject(start, opts = {}) {
   if (!s || isNetwork(s)) return null;
   return nearestSpecs(s, { maxUp: 1, io: opts.io }) || nearestDevSpec(s, { maxUp: PROJECT_MAX_UP, io: opts.io });
 }
+// The project folder every surface works in — THE resolver (files.js resolveProjectDir is it through the engine's reads; the CLI's
+// context and its completion read it without the engine, 1.30.1): the explicit argument (--project, a tool's projectDir) >
+// SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one holding a dev-spec .specs/ (nearestProject) >
+// the working folder. A value that is empty or holds an unexpanded variable falls through; a leading ~ is the home folder.
+// opts: { env (default process.env), io (nearestProject's) }.
+function resolveProjectDir(arg, opts = {}) {
+  const env = opts.env || process.env;
+  const use = (v) => (v != null && String(v).trim() && !unexpandedVar(v) ? String(v).trim() : null);
+  const dir = use(arg) || use(env.SPEC_PROJECT_DIR) || use(env.CLAUDE_PROJECT_DIR);
+  if (dir) return path.resolve(expandHome(dir));
+  const cwd = path.resolve(process.cwd());
+  return nearestProject(cwd, { io: opts.io }) || cwd;
+}
 
 // ---- the session -------------------------------------------------------------------------------------------------------------
 // The session's anchors, each usable one in this order: CLAUDE_PROJECT_DIR (where Claude Code started — the plugin's MCP server works
@@ -575,7 +590,7 @@ module.exports = {
   SESSION_MAX_UP, PROJECT_MAX_UP, RE_AUTOGEN, RE_UNEXPANDED_VAR, unexpandedVar, usable, RE_HOME_PREFIX, expandHome, isNetwork,
   fsTargetPath, editTargets, utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16,
   SHORT_NAME_LONGS, shortNameOf, mayShortName, shortNamesRead, shortDirAt, winPathTrim, realPrefix, realPathLoose, longPath,
-  isDevSpecProject, nearestDevSpec, nearestSpecs, nearestProject, sessionAnchors, sessionProjects,
+  isDevSpecProject, nearestDevSpec, nearestSpecs, nearestProject, resolveProjectDir, sessionAnchors, sessionProjects,
   trimSlashEnd, approvalPlain, approvalMayBe, APPROVAL_CANDIDATE_TESTS, RE_APPROVAL_VERB, dotGlob, guardedFileOf, specsParentOf,
   MCP_FILE_VERBS, isMcpFileTool, APPROVAL_TOOLS, RE_APPROVAL_MCP, approvalHookMatcher, mcpPathArgs, observedNorm, observedBodies,
   CLI_SWITCHES, closestName,

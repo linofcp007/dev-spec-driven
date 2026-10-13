@@ -178,12 +178,13 @@ function createContext(argv, io) {
     ((cmd === undefined && Object.keys(flags).every((k) => k === "help" && flags.help === true)) || (cmd === "help" && !pos.length && !Object.keys(flags).length));
   const LIGHT = c.STATUSLINE_RENDER || c.BARE_HELP;
   // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working folder with a dev-spec .specs/ > the
-  // working folder — the same resolution as the MCP server (spec.resolveProjectDir), made on first read (review 8): a command's help,
-  // an unknown command and a usage error found before the handler runs never load the engine for it (c.projectText reads the
+  // working folder — the MCP server's resolution: THE resolver, mcp/lib/probe.js resolveProjectDir (the engine's spec.resolveProjectDir
+  // IS it, through its own reads), made on first read (review 8) and WITHOUT the engine (1.30.1): a command's help, an unknown command
+  // and a usage error never load the engine for it — a handler reads projectDir before its usage check (c.projectText reads the
   // language without it). --project is checked in main (checkProject).
   let projectDir;
   Object.defineProperty(c, "projectDir", { enumerable: true,
-    get: () => (projectDir !== undefined ? projectDir : (projectDir = LIGHT ? null : spec.resolveProjectDir(flags.project))) });
+    get: () => (projectDir !== undefined ? projectDir : (projectDir = LIGHT ? null : PROBE().resolveProjectDir(flags.project))) });
   // WHICH input chose it, read with resolveProjectDir's own precedence (a value that is empty or holds an unexpanded
   // variable falls through): "flag" (--project) · "SPEC_PROJECT_DIR" · "CLAUDE_PROJECT_DIR" — NAMED_SOURCE, read without the engine (the
   // probe's unexpandedVar is files.js's) — else "nearest" (a folder above the working one with a dev-spec .specs/) · "cwd" (the
@@ -287,7 +288,7 @@ function createContext(argv, io) {
     const [min, max] = Array.isArray(b) ? b : [1, b];
     const v = String(flags[k]).trim();
     if (/^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) >= min && (max === undefined || Number(v) <= max)) return Number(v);
-    const A = spec.msg(spec.projectLang(c.projectDir)).args;
+    const A = I18N().msg(c.projectLang()).args; // (the engine's projectLang once it is loaded, else the same reading without it)
     const most = max === undefined ? "" : c.projectText().atMost(max);
     return c.die(A.invalid(A.item("--" + k, A.type.integer + " " + A.atLeast(min) + most, JSON.stringify(String(flags[k])))), c.invalidArg("--" + k));
   };
@@ -495,10 +496,11 @@ function dispatch(c) {
   // --lang is checked once, like the MCP `lang` enum: an unknown value (fr, spanish, portugues…) is refused before any command runs —
   // the engine would quietly turn it into 'en' and SAVE it (init rewrote the project language).
   if (flags.lang !== undefined) {
-    const langs = spec.LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
-    const l = spec.canonicalLang(String(flags.lang)); // PT → pt · pt-br / pt_BR / ptbr → pt-BR · pt-PT → pt (the MCP enum folds the same)
+    // (the i18n tables' own — spec.LANGS / spec.canonicalLang / spec.msg ARE them: no engine for this refusal, 1.30.1)
+    const langs = I18N().LANGS; // = the MCP tools' `lang` enum (en · pt · es · pt-BR)
+    const l = I18N().canonicalLang(String(flags.lang)); // PT → pt · pt-br / pt_BR / ptbr → pt-BR · pt-PT → pt (the MCP enum folds the same)
     if (!l || !langs.includes(l)) {
-      const A = spec.msg(spec.projectLang(c.projectDir)).args;
+      const A = I18N().msg(c.projectLang()).args;
       c.die(A.invalid(A.item("--lang", A.oneOf(langs.join(", ")), JSON.stringify(String(flags.lang)))), c.invalidArg("--lang"));
     }
     flags.lang = l;

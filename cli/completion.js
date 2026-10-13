@@ -6,8 +6,8 @@
  *   complete(args)        `dev-spec __complete features|archived [--project <dir>]` — the hidden call the completion scripts
  *                         make on Tab where a command takes a feature: one slug per line, nothing else, exit 0 always. It runs
  *                         BEFORE the engine loads (cli/dev-spec.js hands it over first thing): Node core and mcp/lib/probe.js only
- *                         (the engine-free project probe — the one dev-spec project rule, the CLI's resolver walk), a small mirror
- *                         of the engine's resolveProjectDir (files.js) and listFeatures (doctor.js / state.js isFeatureFolder) —
+ *                         (the engine-free project probe — the one dev-spec project rule, the resolver: resolveProjectDir, the
+ *                         engine's too), a small mirror of listFeatures (doctor.js / state.js isFeatureFolder) —
  *                         cli/tests/16-conventions-completion.js checks that they agree on several layouts and that no engine
  *                         module is loaded. It costs about Node's own startup (it runs on every Tab).
  *   script(shell, model)  the completion script `dev-spec completion <shell>` prints — the template in cli/completion/ filled
@@ -36,18 +36,12 @@ const probe = () => PROBE || (PROBE = require(path.join(__dirname, "..", "mcp", 
 const exists = (p) => { try { fs.statSync(p); return true; } catch { return false; } };
 const expandHome = (p) => probe().expandHome(p);
 // --project > SPEC_PROJECT_DIR > CLAUDE_PROJECT_DIR > the nearest folder at or above the working one with a dev-spec .specs/ >
-// the working folder (an empty value or one holding an unexpanded variable falls through) — the CLI's resolution (files.js
-// resolveProjectDir).
+// the working folder (an empty value or one holding an unexpanded variable falls through) — the CLI's resolution: the probe's
+// resolveProjectDir (files.js resolveProjectDir is it too — one copy since 1.30.1).
 function resolveProject(arg, env) {
-  const P = probe();
-  const e = env || process.env;
-  const usable = (v) => (v != null && String(v).trim() && !P.unexpandedVar(v) ? String(v).trim() : null);
   // Windows: `--project "C:\dir\"` reaches node as `C:\dir"` — the CLI drops the trailing quote
   const flag = typeof arg === "string" && process.platform === "win32" ? arg.replace(/"+$/, "") : arg;
-  const dir = usable(flag) || usable(e.SPEC_PROJECT_DIR) || usable(e.CLAUDE_PROJECT_DIR);
-  if (dir) return path.resolve(P.expandHome(dir));
-  const cwd = path.resolve(process.cwd());
-  return P.nearestProject(cwd) || cwd;
+  return probe().resolveProjectDir(flag, { env: env || process.env });
 }
 // doctor.js statusLineProject's null rule — the status line's pre-check, before the engine loads: is there a
 // folder holding a dev-spec .specs/ at or above one of the candidates (the probe's SESSION_MAX_UP levels — statusLineProject's
