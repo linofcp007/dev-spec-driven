@@ -62,6 +62,8 @@ const PTBR_OVERRIDES = [
   ["o controlador pára para revisão", "o controlador faz uma pausa para revisão"],
   ["— lê de outra forma", "— lê de outra forma"], // cmd.exe "reads it differently": a 3rd person after a parenthetical dash
   ["; aceita uma lista", "; aceita uma lista"], // a glob syntax note: "accepts a list"
+  // dev-guardian's path_too_long gap: an order ("ativa" is no imperative key — "(ativa ou arquivada)" is an adjective elsewhere)
+  ["— ativa os caminhos longos (Windows) ou encurta-o", "— ative os caminhos longos (Windows) ou encurte-o"],
   // +obs: in Brazil a "ligação" is a phone call — the runbook gets a link, the on-call person is "de plantão"
   ["dispara e chama com a ligação ao runbook", "dispara e aciona o plantão com o link para o runbook"],
   // a symlink is a "link" in Brazil (the phrase table misses this one: its "symlink / junction" reads as a path)

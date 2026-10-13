@@ -176,6 +176,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require }
       run: () => br8.run === "o finish --run a executa, e o spec_decide a registra no log; o controlador os registra com o spec_complete_task",
       dot: () => br8.dot === "substitua-o por um .gitattributes normal e execute-o de novo.",
       dup: () => br8.dup === "o código repete código existente em 4 lugar(es): explicar no relatório por que uma cópia é deliberada",
+      plural: () => / em 4 lugares — /.test(I.msg("pt-BR").finish.duplicates(4, "a.js:1-9 ↔ b.js:1-9", 0, "x")), // the dupes plural "sítios"
+      gap: () => /— ative os caminhos longos \(Windows\) ou encurte-o\.$/.test(I.msg("pt-BR").guardian.gap.pathTooLong),
       lint: () => !Object.values(br8).some((t) => EU_ONLY.test(t)),
       idempotent: () => Object.values(br8).every((t) => I.toPtBr(t) === t),
     });
