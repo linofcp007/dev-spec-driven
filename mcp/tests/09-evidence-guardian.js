@@ -433,6 +433,8 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, require, __dirname }) => {
       ["Bash", { command: "cp /tmp/stub.cjs .specs/guardian.cjs" }, "guardian-launcher"],
       ["PowerShell", { command: "Set-Content .guardian/baseline.json '{}'" }, "guardian-baseline"],
       ["Bash", { command: "git checkout HEAD~3 -- .guardian/baseline.json" }, "guardian-baseline"],
+      ["Bash", { command: "rm .guardian/baseline.json" }, "guardian-baseline"],
+      ["Bash", { command: "mytool --rewrite .specs/guardian.cjs" }, "guardian-launcher"], // an unknown program: never "unreadable" without the check
       ["Bash", { command: "node .specs/guardian.cjs baseline update --project ." }, "guardian-baseline-update"],
       ["Bash", { command: "node \"" + DG + "\" baseline update --project ." }, "guardian-baseline-update"],
       ["Bash", { command: "cd app && dev-guardian baseline update" }, "guardian-baseline-update"],

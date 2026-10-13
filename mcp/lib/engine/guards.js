@@ -1468,7 +1468,9 @@ function shellOpActions(o, mode, ctx) {
       } else if (o.op === "link") {
         if (f.guarded || f.specs >= 0) out.push(shellDown("link"));
       } else if (o.op === "unknown") {
-        if (f.guarded || f.dir || f.may || (!f.wild && f.name)) out.push({ kind: "unreadable", why: "specs-arg", source: "shell" });
+        // (dev-guardian's launcher / baseline: their own guard-down — counted only while a check runs the gate, 1.30)
+        if (f.guarded && String(f.guarded.setting).startsWith("guardian-")) out.push(shellHit(f.guarded));
+        else if (f.guarded || f.dir || f.may || (!f.wild && f.name)) out.push({ kind: "unreadable", why: "specs-arg", source: "shell" });
       }
     }
   }
