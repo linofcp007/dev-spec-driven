@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, runIn, tmp }) => {
+exports.run = async ({ ok, run, runIn, tmp, runAsync }) => {
   const w5 = path.join(tmp, "wp5-proj");
   runIn(["init", "core", "--project", w5]);
   runIn(["create", "Gate", "core", "--project", w5]);
@@ -55,7 +55,7 @@ exports.run = ({ ok, run, runIn, tmp }) => {
   // done --run checks the same gate BEFORE running the task's _Verify:_ command (it used to run it, then refuse)
   const crashTasks = path.join(w5, ".specs", "crash", "tasks.md");
   fs.writeFileSync(crashTasks, fs.readFileSync(crashTasks, "utf8").replace("_Verify: [full test suite command]_", "_Verify: node -e \"require('fs').writeFileSync('ran-wp5.txt','x')\"_"));
-  const bugRun = run(["done", "crash", "2", "--run", "--project", w5]);
+  const bugRun = (await runAsync(["done", "crash", "2", "--run", "--project", w5]));
   ok(/_Verify: node -e/.test(fs.readFileSync(crashTasks, "utf8")) && bugRun.code === 1 && /Task 2 can't be completed yet: bug\.md → Root Cause is not filled/.test(bugRun.out) &&
     !/\$ node/.test(bugRun.out) && !fs.existsSync(path.join(w5, "ran-wp5.txt")), "done --run on a gated bugfix task exits 1 WITHOUT running its _Verify:_ command");
   runIn(["create", "Plan", "core", "--project", w5]);

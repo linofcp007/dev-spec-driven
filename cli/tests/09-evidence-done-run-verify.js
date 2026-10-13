@@ -6,7 +6,7 @@ const path = require("path");
 
 // 1.30 (review 8, ds-maint 2): split from 09-evidence-done-run.js by topic — the one file ran 37 `done --run` processes in a row
 // (the CLI suite's critical path, ~55 s).
-exports.run = ({ ok, all, run, runIn, tmp, require, __dirname }) => {
+exports.run = async ({ ok, all, run, runIn, tmp, require, __dirname, runAsync }) => {
 // 1.22 review (finding 1): `done --cmd <another command> --exit 0` ticks the task WITHOUT "(verified)" and says why
 // (command-mismatch); `--run` (the CLI runs the _Verify:_ itself) verifies.
 const cm = path.join(tmp, "122-cmd-mismatch");
@@ -15,7 +15,7 @@ runIn(["create", "Proof", "core", "--project", cm]);
 fs.writeFileSync(path.join(cm, ".specs", "proof", "tasks.md"), "- [ ] 1. a\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. b\n  - _Verify: node -e \"process.exit(0)\"_\n");
 const cm1 = runIn(["done", "proof", "1", "--cmd", "echo hello", "--exit", "0", "--project", cm]);
 const cm1j = JSON.parse(runIn(["done", "proof", "1", "--cmd", "echo hello", "--exit", "0", "--json", "--project", cm]).out);
-const cm2 = run(["done", "proof", "2", "--run", "--project", cm]);
+const cm2 = (await runAsync(["done", "proof", "2", "--run", "--project", cm]));
 ok(cm1.code === 0 && /Task 1 done\. 1\/2/.test(cm1.out) && !/\(verified\)/.test(cm1.out) && /is not a run of its _Verify:_ command/.test(cm1.out) &&
   cm1j.verified === false && cm1j.unverifiedReason === "command-mismatch" && cm2.code === 0 && /Task 2 done \(verified\)/.test(cm2.out),
   "1.22 review: done --cmd \"echo hello\" --exit 0 on a task whose _Verify:_ is another command ticks it unverified (no '(verified)', the command-mismatch note; --json: unverifiedReason command-mismatch); done --run verifies (got " +
@@ -34,8 +34,8 @@ const winPath = process.platform === "win32" ? "node t" + String.fromCharCode(92
 fs.writeFileSync(path.join(dm, ".specs", "multi", "tasks.md"), "- [ ] 1. a\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Verify: node --version_\n" +
   "- [ ] 2. b\n  - _Verify: " + winPath + "_\n  - _Verify: node --version_\n- [ ] 3. c\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Verify: node --version_\n");
 // (runIn() hands back stdout and stderr together: the JSON document, then the commands it ran)
-const dmJ = (n) => { const r = run(["done", "multi", n, "--run", "--json", "--project", dm]); try { return JSON.parse(r.out.slice(0, r.out.indexOf("\n}") + 2)); } catch { return { raw: r.out }; } };
-const dm1 = dmJ("1"), dm2 = dmJ("2");
+const dmJ = async (n) => { const r = (await runAsync(["done", "multi", n, "--run", "--json", "--project", dm])); try { return JSON.parse(r.out.slice(0, r.out.indexOf("\n}") + 2)); } catch { return { raw: r.out }; } };
+const dm1 = await dmJ("1"), dm2 = await dmJ("2");
 const dm3 = JSON.parse(runIn(["done", "multi", "3", "--cmd", "node --version", "--exit", "0", "--json", "--project", dm]).out);
 const evDm = JSON.parse(fs.readFileSync(path.join(dm, ".specs", "multi", ".state.json"), "utf8")).evidence;
 const vDm = (n) => SR2.taskBrief(dm, "multi", n).verify;
@@ -48,7 +48,7 @@ ok(dm1.ok && dm1.verified === true && dm2.ok && dm2.verified === true && evDm["1
 // the record kept the LAST command's summary alone; four noisy ones are each cut to fit the record's 2,000 characters.
 fs.writeFileSync(path.join(dm, "t", "noisy.js"), "const n = process.argv[2];\nfor (let i = 0; i < 400; i++) console.log('run ' + n + ' line ' + i + ' ' + 'x'.repeat(120));\nconsole.log('# pass ' + n);\n");
 fs.appendFileSync(path.join(dm, ".specs", "multi", "tasks.md"), "- [ ] 4. d\n" + [1, 2, 3, 4].map((n) => "  - _Verify: node t/noisy.js " + n + "_\n").join(""));
-const dm4 = dmJ("4");
+const dm4 = await dmJ("4");
 const evDm2 = JSON.parse(fs.readFileSync(path.join(dm, ".specs", "multi", ".state.json"), "utf8")).evidence;
 const sm1 = String((evDm2["1"] && evDm2["1"].summary) || ""), sm4 = String((evDm2["4"] && evDm2["4"].summary) || "");
 ok(/^\$ node -e "process\.exit\(0\)"$/m.test(sm1) && /^\$ node --version\r?\nv\d+\.\d+\.\d+/m.test(sm1) &&
@@ -71,8 +71,8 @@ ok(/^\$ node -e "process\.exit\(0\)"$/m.test(sm1) && /^\$ node --version\r?\nv\d
     "- [ ] 2. Write the failing test T-01\n  - _Verify: node --test tests/syn.test.js_\n  - _Expect: fail_\n" +
     "- [ ] 3. Write the failing test T-03\n  - _Verify: node -e \"console.error('/usr/bin/python3: No module named pytest'); process.exit(1)\"_\n  - _Expect: fail_\n" +
     "- [ ] 4. Real test\n  - _Verify: node --test tests/real.test.js_\n");
-  const vj = (n) => { const r = run(["done", "vac", n, "--run", "--json", "--project", vp]); try { return Object.assign(JSON.parse(r.out.slice(0, r.out.indexOf("\n}") + 2)), { code: r.code }); } catch { return { raw: r.out, code: r.code }; } };
-  const v1 = vj("1"), v2 = vj("2"), v3 = vj("3"), v4 = vj("4");
+  const vj = async (n) => { const r = (await runAsync(["done", "vac", n, "--run", "--json", "--project", vp])); try { return Object.assign(JSON.parse(r.out.slice(0, r.out.indexOf("\n}") + 2)), { code: r.code }); } catch { return { raw: r.out, code: r.code }; } };
+  const v1 = await vj("1"), v2 = await vj("2"), v3 = await vj("3"), v4 = await vj("4");
   const stFile = path.join(vp, ".specs", "vac", ".state.json");
   const st = fs.existsSync(stFile) ? JSON.parse(fs.readFileSync(stFile, "utf8")) : {};
   const ev = st.evidence || {};

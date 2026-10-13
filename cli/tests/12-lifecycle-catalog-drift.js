@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
-exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, run, runIn, tmp, CLI, require, __dirname, runAsync }) => {
 // 1.13 WP10: catalog (SPECS.md), _Supersedes:_ warnings in trace, feature restore, drift since finish — CLI = MCP.
 const S10 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
 const w10 = path.join(tmp, "wp10-proj");
@@ -147,7 +147,7 @@ ok(naDrift10.code === 0 && new RegExp("→ 'login-loop' was finished on " + finD
 runIn(["append-tasks", "login-loop", "--task", "Audit log of logins", "--req", "US-1.AC-1", "--implements", "src/audit.js", "--verify", 'node -e "process.exit(0)"', "--project", w10f]);
 fs.writeFileSync(path.join(w10f, "src", "audit.js"), "audit\n");
 const apT10 = runIn(["approve", "login-loop", "tasks", "--project", w10f]);
-const done3 = run(["done", "login-loop", "3", "--run", "--project", w10f]); // the appended task, after the bugfix's red test (1) and fix (2)
+const done3 = (await runAsync(["done", "login-loop", "3", "--run", "--project", w10f])); // the appended task, after the bugfix's red test (1) and fix (2)
 const naSt10 = runIn(["next-action", "login-loop", "--project", w10f]);
 fs.appendFileSync(path.join(w10f, "src", "audit.js"), "// changed\n");
 const drSt10 = runIn(["drift", "login-loop", "--project", w10f]);

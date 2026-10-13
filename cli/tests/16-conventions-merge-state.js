@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI }) => {
+exports.run = async ({ ok, all, run, runIn, spawnIn, runAsync, tmp, CLI }) => {
   const js = JSON.stringify;
   const parse = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
   const jsonOf = (r) => { try { return JSON.parse(r.out); } catch { return null; } };
@@ -162,13 +162,13 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI }) => {
   const main = git(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.trim();
   git(repo, "checkout", "-q", "-b", "a");
   const aTasks = runIn(["approve", "invoice-export", "tasks", "--by", "bo", ...P]);
-  const aDone = run(["done", "invoice-export", "1", "--run", ...P]);
+  const aDone = (await runAsync(["done", "invoice-export", "1", "--run", ...P]));
   runIn(["backlog", "add", "PDF export", "later", ...P]);
   git(repo, "add", "-A");
   git(repo, "commit", "-q", "-m", "a: tasks approved, task 1");
   git(repo, "checkout", "-q", main);
   git(repo, "checkout", "-q", "-b", "b");
-  const bDone = run(["done", "invoice-export", "2", "--run", ...P]);
+  const bDone = (await runAsync(["done", "invoice-export", "2", "--run", ...P]));
   runIn(["backlog", "add", "XLSX export", ...P]);
   runIn(["depend", "invoice-export", "audit-log", ...P]);
   git(repo, "add", "-A");

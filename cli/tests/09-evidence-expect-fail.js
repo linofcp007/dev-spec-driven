@@ -6,7 +6,7 @@ const path = require("path");
 const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, all, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
 // B5 — `done --run` honours _Expect: fail_ (+ records the git commit), `init --check` / `finish --run` (meta.checks), `dev-spec log`.
 // Commands run in cmd.exe and sh alike (node -e "…" in double quotes); git runs isolated from the user's config and is optional.
 const Sb5 = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -16,6 +16,11 @@ const b5Env = { ...process.env, SPEC_PROJECT_DIR: tmp, GIT_CONFIG_NOSYSTEM: "1",
   GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
 const rb5 = (args, input) => { // in-process (1.27), but a --run — it waits for its commands: spawned
   const r = args.includes("--run") ? spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: b5Env, input }) : spawnIn(args, { env: b5Env, input });
+  return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", stderr: r.stderr || "", code: r.status };
+};
+// …and a --run, which waits for its commands: in-process and awaited (1.30 — spawnAsync: the CLI's own start saved)
+const rb5Run = async (args, input) => {
+  const r = await spawnAsync(args, { env: b5Env, input });
   return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", stderr: r.stderr || "", code: r.status };
 };
 const gitB5 = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: b5Env });
@@ -29,9 +34,9 @@ Sb5.initProject(pb, ["tdd"], "en");
 const fb = Sb5.createFeature(pb, "Redcli", ["tdd"], "", undefined, "en");
 fs.writeFileSync(path.join(fb.dir, "tasks.md"), "- [ ] 1. [US1] Write T-01 red\n  - _Verify: node -e \"process.exit(0)\"_\n  - _Expect: fail_\n" +
   "- [ ] 2. [US1] Write T-02 red\n  - _Verify: node -e \"process.exit(3)\"_\n  - _Expect: fail_\n- [ ] 3. [US1] Must pass\n  - _Verify: node -e \"process.exit(0)\"_\n");
-const dPass = rb5(["done", "redcli", "1", "--run", "--project", pb]);
-const dRed = rb5(["done", "redcli", "2", "--run", "--project", pb]);
-const dRedJ = rb5(["done", "redcli", "2", "--run", "--json", "--project", pb]);
+const dPass = (await rb5Run(["done", "redcli", "1", "--run", "--project", pb]));
+const dRed = (await rb5Run(["done", "redcli", "2", "--run", "--project", pb]));
+const dRedJ = (await rb5Run(["done", "redcli", "2", "--run", "--json", "--project", pb]));
 const dRedJr = jsonB5(dRedJ.stdout);
 const tasksB5 = fs.readFileSync(path.join(fb.dir, "tasks.md"), "utf8");
 const ev2B5 = stB5(pb, "redcli").evidence["2"];
@@ -57,9 +62,9 @@ if (hasGitB5) {
   Sb5.initProject(pg, ["core"], "en");
   const fg = Sb5.createFeature(pg, "Gitrun", ["core"], "", undefined, "en");
   fs.writeFileSync(path.join(fg.dir, "tasks.md"), "- [ ] 1. [US1] A\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] B\n  - _Verify: node -e \"process.exit(0)\"_\n");
-  const g1 = rb5(["done", "gitrun", "1", "--run", "--project", pg]);
+  const g1 = (await rb5Run(["done", "gitrun", "1", "--run", "--project", pg]));
   fs.appendFileSync(path.join(pg, "app.js"), "// edited\n");
-  const g2 = rb5(["done", "gitrun", "2", "--run", "--project", pg]);
+  const g2 = (await rb5Run(["done", "gitrun", "2", "--run", "--project", pg]));
   const evg = stB5(pg, "gitrun").evidence;
   ok(g1.code === 0 && g2.code === 0 && /^[0-9a-f]{4,40}$/.test(headB5) && evg["1"].commit === headB5 && evg["1"].dirty === false && evg["2"].commit === headB5 && evg["2"].dirty === true &&
     evg["1"].history[0].commit === headB5,
@@ -97,14 +102,14 @@ const pf = path.join(tmp, "b5-finish");
 rb5(["init", "--check", "test=node -e \"process.exit(0)\"", "--check", "lint=node -e \"process.exit(2)\"", "--project", pf]);
 const ffB5 = Sb5.createFeature(pf, "Fin", ["core"], "", undefined, "en");
 fs.writeFileSync(path.join(ffB5.dir, "tasks.md"), "- [x] 1. [US1] Done\n");
-const fr = rb5(["finish", "fin", "--run", "--project", pf]);
+const fr = (await rb5Run(["finish", "fin", "--run", "--project", pf]));
 const fcB5 = stB5(pf, "fin").finishChecks;
-const frJ = rb5(["finish", "fin", "--run", "--json", "--project", pf]);
+const frJ = (await rb5Run(["finish", "fin", "--run", "--json", "--project", pf]));
 const frJr = jsonB5(frJ.stdout);
 const fPtB5 = Sb5.createFeature(pf, "Fim", ["core"], "", undefined, "pt");
 fs.writeFileSync(path.join(fPtB5.dir, "tasks.md"), "- [x] 1. [US1] Feito\n");
-const frPt = rb5(["finish", "fim", "--run", "--project", pf]);
-const frNone = rb5(["finish", "redcli", "--run", "--project", pb]);
+const frPt = (await rb5Run(["finish", "fim", "--run", "--project", pf]));
+const frNone = (await rb5Run(["finish", "redcli", "--run", "--project", pb]));
 all("finish --run runs each meta.checks command and records it (a failure stays the suite-evidence blocker); --json keeps stdout one document; PT; without meta.checks it runs nothing and exits 1 (got " +
   JSON.stringify([fr.out.slice(0, 300), frNone.out.slice(0, 120)]) + ")", [
   () => fr.code === 1, () => /\$ node -e "process\.exit\(0\)" {3}\(test\)/.test(fr.out),
@@ -122,13 +127,13 @@ all("finish --run runs each meta.checks command and records it (a failure stays 
 const pp = path.join(tmp, "b5-finish-pipe");
 rb5(["init", "--check", "piped=node -e \"process.exit(0)\" | node -e \"process.exit(0)\"", "--project", pp]);
 Sb5.createFeature(pp, "Pipe", ["core"], "", undefined, "en");
-const fpipe = rb5(["finish", "pipe", "--run", "--project", pp]);
+const fpipe = (await rb5Run(["finish", "pipe", "--run", "--project", pp]));
 let posixOk = true;
 if (process.platform === "win32") {
   const px = path.join(tmp, "b5-finish-posix");
   rb5(["init", "--check", "sq=node -e 'process.exit(0)'", "--project", px]);
   Sb5.createFeature(px, "Posix", ["core"], "", undefined, "en");
-  const fpx = rb5(["finish", "posix", "--run", "--project", px]);
+  const fpx = (await rb5Run(["finish", "posix", "--run", "--project", px]));
   posixOk = fpx.code === 1 && /the project check 'sq' \(`node -e 'process\.exit\(0\)'`\) uses POSIX shell syntax \(single quotes/.test(fpx.out) && !stB5(px, "posix").finishChecks;
 }
 ok(/pipes into another command: the shell reports only the LAST command's exit code/.test(fpipe.out) && stB5(pp, "pipe").finishChecks.piped.exitCode === 0 && posixOk,

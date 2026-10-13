@@ -8,7 +8,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, run, runIn, tmp, CLI }) => {
+exports.run = async ({ ok, run, runIn, tmp, CLI, runAsync }) => {
 // help
 ok(runIn(["help"]).out.includes("universal spec-driven CLI"), "help prints usage");
 
@@ -153,12 +153,12 @@ runIn(["create", "Pay", "tdd", "--project", vp]);
 fs.writeFileSync(path.join(vp, ".specs", "pay", "tasks.md"),
   "- [ ] 1. [US1] ok task\n  - _Verify: node -e \"process.exit(0)\"_\n- [ ] 2. [US1] failing task\n  - _Verify: node -e \"process.exit(3)\"_\n" +
   "- [ ] 3. [US1][P] a\n  - _Implements: src/a.js_\n- [ ] 4. [US1][P] b\n  - _Implements: src/b.js_\n");
-const d1 = run(["done", "pay", "1", "--run", "--project", vp]);
+const d1 = (await runAsync(["done", "pay", "1", "--run", "--project", vp]));
 ok(d1.code === 0 && /\(verified\)/.test(d1.out) && /process\.exit\(0\)/.test(JSON.parse(fs.readFileSync(path.join(vp, ".specs", "pay", ".state.json"), "utf8")).evidence["1"].command),
   "done --run executes the _Verify:_ command and records the evidence");
-const d2 = run(["done", "pay", "2", "--run", "--project", vp]);
+const d2 = (await runAsync(["done", "pay", "2", "--run", "--project", vp]));
 ok(d2.code === 1 && /exit 3/.test(d2.out) && /- \[ \] 2\./.test(fs.readFileSync(path.join(vp, ".specs", "pay", "tasks.md"), "utf8")), "done --run with a failing _Verify:_ leaves the task open (exit 1)");
-const dBad = run(["done", "pay", "", "--run", "--project", vp]);
+const dBad = (await runAsync(["done", "pay", "", "--run", "--project", vp]));
 ok(dBad.code === 1 && !/^\$ /m.test(dBad.out), "done with a non-integer task number fails BEFORE running any command");
 runIn(["done", "pay", "2", "--evidence", "manual check", "--project", vp]);
 ok(/parallel batch: #3 \[src\/a\.js\]\s+#4 \[src\/b\.js\]/.test(runIn(["next", "pay", "--batch", "--project", vp]).out), "next --batch lists the [P] tasks that can run in parallel");

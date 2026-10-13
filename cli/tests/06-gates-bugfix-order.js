@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = ({ ok, run, runIn, tmp }) => {
+exports.run = async ({ ok, run, runIn, tmp, runAsync }) => {
   const p = path.join(tmp, "r7-bugorder-proj");
   runIn(["init", "core", "--project", p]);
   runIn(["bugfix", "Crash", "--summary", "crash on save", "--project", p]);
@@ -17,7 +17,7 @@ exports.run = ({ ok, run, runIn, tmp }) => {
     "- [ ] 3. [US1] Document the root cause in bug.md\n  - _Requirements: US-1.AC-1_\n");
   const t1 = runIn(["done", "crash", "1", "--project", p]);
   const t2 = runIn(["done", "crash", "2", "--project", p]);
-  const t2run = run(["done", "crash", "2", "--run", "--project", p]);
+  const t2run = (await runAsync(["done", "crash", "2", "--run", "--project", p]));
   const tasks = fs.readFileSync(path.join(dir, "tasks.md"), "utf8");
   ok(t1.code === 0 && t2.code === 1 && /Task 2 can't be completed yet: bug\.md → Root Cause is not filled\. .*do task 3 first/.test(t2.out) &&
     t2run.code === 1 && /do task 3 first/.test(t2run.out) && !fs.existsSync(ran) && /- \[ \] 2\./.test(tasks),

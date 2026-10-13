@@ -7,7 +7,7 @@ const { spawnSync } = require("child_process");
 
 // 1.30 (review 8, ds-maint 2): split from 09-evidence-done-run.js by topic — the one file ran 37 `done --run` processes in a row
 // (the CLI suite's critical path, ~55 s).
-exports.run = ({ ok, run, runIn, tmp, CLI }) => {
+exports.run = async ({ ok, run, runIn, tmp, CLI, runAsync }) => {
 // 1.21.1 languages: PowerShell as the run shell — --shell pwsh / powershell and DEV_SPEC_SHELL=pwsh run the _Verify:_ as
 // `<shell> -NoProfile -NonInteractive -Command <cmd>` (the exit code propagates, `$` is PowerShell's); under the default cmd.exe
 // a `pwsh -NoProfile -Command "…; exit $LASTEXITCODE"` _Verify:_ runs (1.21.0 refused it as POSIX syntax) while a single-quoted
@@ -28,8 +28,8 @@ fs.writeFileSync(path.join(lp, ".specs", "pwsh", "tasks.md"), [
   "- [ ] 6. a single-quoted script", "  - _Verify: pwsh -c 'exit 0'_",
   "- [ ] 7. Windows PowerShell 5.1", "  - _Verify: if ($PSVersionTable.PSEdition -eq 'Desktop') { exit 0 } else { exit 9 }_", ""].join("\n"));
 if (hasPwsh) {
-  const r1 = run(["done", "pwsh", "1", "--run", "--shell", "pwsh", "--project", lp]);
-  const r2 = run(["done", "pwsh", "2", "--run", "--shell", "pwsh", "--project", lp]);
+  const r1 = (await runAsync(["done", "pwsh", "1", "--run", "--shell", "pwsh", "--project", lp]));
+  const r2 = (await runAsync(["done", "pwsh", "2", "--run", "--shell", "pwsh", "--project", lp]));
   const r3 = spawnSync(process.execPath, [CLI, "done", "pwsh", "3", "--run", "--project", lp], { encoding: "utf8", env: { ...process.env, DEV_SPEC_SHELL: "pwsh" } });
   const ev = lpEv();
   ok(r1.code === 0 && /ran 0/.test(r1.out) && /Task 1 done \(verified\)/.test(r1.out) && ev["1"].exitCode === 0 && ev["1"].observed === "cli" &&
@@ -39,9 +39,9 @@ if (hasPwsh) {
     JSON.stringify([r1.out.slice(0, 120), r2.out.slice(0, 120), (r3.stdout + r3.stderr).slice(0, 200)]) + ")");
 } else ok(true, "1.21.1 languages: done --run --shell pwsh — skipped: pwsh is not installed here");
 if (process.platform === "win32" && hasPwsh) {
-  const r4 = run(["done", "pwsh", "4", "--run", "--project", lp]);
-  const r5 = run(["done", "pwsh", "5", "--run", "--project", lp]);
-  const r6 = run(["done", "pwsh", "6", "--run", "--project", lp]);
+  const r4 = (await runAsync(["done", "pwsh", "4", "--run", "--project", lp]));
+  const r5 = (await runAsync(["done", "pwsh", "5", "--run", "--project", lp]));
+  const r6 = (await runAsync(["done", "pwsh", "6", "--run", "--project", lp]));
   const ev = lpEv();
   ok(r4.code === 0 && /Task 4 done \(verified\)/.test(r4.out) && r5.code === 1 && ev["5"].exitCode === 5 && !/--shell bash \(or set/.test(r5.out) &&
     r6.code === 1 && /uses POSIX shell syntax \(single quotes/.test(r6.out) && /--shell pwsh for a PowerShell command/.test(r6.out) && !ev["6"],
@@ -49,7 +49,7 @@ if (process.platform === "win32" && hasPwsh) {
     JSON.stringify([r4.out.slice(0, 160), r5.out.slice(0, 160), r6.out.slice(0, 120)]) + ")");
 } else ok(true, "1.21.1 languages: a pwsh -Command _Verify:_ under cmd.exe — skipped: Windows with pwsh only");
 if (hasWinPs) {
-  const r7 = run(["done", "pwsh", "7", "--run", "--shell", "powershell", "--project", lp]);
+  const r7 = (await runAsync(["done", "pwsh", "7", "--run", "--shell", "powershell", "--project", lp]));
   ok(r7.code === 0 && /Task 7 done \(verified\)/.test(r7.out) && lpEv()["7"].exitCode === 0,
     "1.21.1 languages: done --run --shell powershell runs the _Verify:_ under Windows PowerShell 5.1 (PSEdition Desktop → exit 0) (got " + r7.out.slice(0, 160) + ")");
 } else ok(true, "1.21.1 languages: done --run --shell powershell — skipped: Windows PowerShell only");
@@ -68,8 +68,8 @@ fs.writeFileSync(path.join(rp, ".specs", "posix", "tasks.md"), [
   "- [ ] 5. [US1] Write T-03 and watch it fail", "  - _Verify: node -e \"process.exit(1)\" && node -e \"process.exit(0)\"_", "  - _Expect: fail_", ""].join("\n"));
 const rpEv = () => { try { return JSON.parse(fs.readFileSync(path.join(rp, ".specs", "posix", ".state.json"), "utf8")).evidence || {}; } catch { return {}; } };
 const posixArgs = process.platform === "win32" ? ["--shell", "bash"] : [];
-const rq1 = run(["done", "posix", "1", "--run", ...posixArgs, "--project", rp]);
-const rqf = run(["finish", "posix", "--run", ...posixArgs, "--project", rp]);
+const rq1 = (await runAsync(["done", "posix", "1", "--run", ...posixArgs, "--project", rp]));
+const rqf = (await runAsync(["finish", "posix", "--run", ...posixArgs, "--project", rp]));
 if (/no Git Bash was found/.test(rq1.out)) ok(true, "1.21.1 languages (review): a pwsh script under a POSIX shell — skipped: no Git Bash on this Windows machine");
 else {
   const rqState = JSON.parse(fs.readFileSync(path.join(rp, ".specs", "posix", ".state.json"), "utf8"));
@@ -78,7 +78,7 @@ else {
     "1.21.1 languages (review): done --run / finish --run under a POSIX shell (" + (posixArgs.length ? "--shell bash" : "/bin/sh") + ") refuse a double-quoted pwsh script holding $LASTEXITCODE before anything runs — nothing recorded, the message names single quotes and --shell pwsh (got " +
     JSON.stringify([rq1.out.slice(0, 200), rqf.out.slice(0, 160)]) + ")");
   if (hasPwsh) {
-    const rq2 = run(["done", "posix", "2", "--run", ...posixArgs, "--project", rp]);
+    const rq2 = (await runAsync(["done", "posix", "2", "--run", ...posixArgs, "--project", rp]));
     ok(rq2.code === 1 && rpEv()["2"] && rpEv()["2"].exitCode === 3,
       "1.21.1 languages (review): the single-quoted `pwsh -NoProfile -Command '…; exit $LASTEXITCODE'` runs under the POSIX shell as written — exit 3 recorded as 3 (got " + JSON.stringify([rq2.out.slice(0, 200), rpEv()["2"]]) + ")");
   } else ok(true, "1.21.1 languages (review): a single-quoted pwsh script under a POSIX shell — skipped: pwsh is not installed here");
@@ -95,7 +95,7 @@ fs.writeFileSync(path.join(rp, "t", "pester-throw.js"), pesterOut([E_ + "[91m[-]
   E_ + "[91m RuntimeException: not implemented", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0"], 1));
 const runJ = (args) => { const r = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, SPEC_PROJECT_DIR: tmp } }); let j = null; try { j = JSON.parse(r.stdout); } catch { /* not JSON */ } return { code: r.status, j }; };
 const rq3 = runJ(["done", "posix", "3", "--run", "--json", "--project", rp]);
-const rq4 = run(["done", "posix", "4", "--run", "--project", rp]);
+const rq4 = (await runAsync(["done", "posix", "4", "--run", "--project", rp]));
 const rq3j = rq3.j;
 ok(rq3.code === 1 && rq3j && rq3j.couldNotRun === "output" && /Describe Get-Greeting failed|was not loaded/.test(rq3j.error) && !rpEv()["3"] &&
   rq4.code === 0 && /red run recorded for task 4/.test(rq4.out) && rpEv()["4"].exitCode === 1,
@@ -130,8 +130,8 @@ fs.writeFileSync(path.join(rm2, "t", "pester-mixed.js"), pesterOut(["Running tes
 fs.writeFileSync(path.join(rm2, "t", "pester-quoted.js"), pesterOut(["[-] Quoter.T-05 quotes 38ms", " RuntimeException: line one", " [-] Describe Foo failed", " line three",
   " at <ScriptBlock>, C:/p/tests/Q.Tests.ps1:2", "Tests completed in 754ms", "Tests Passed: 0, Failed: 1, Skipped: 0, Inconclusive: 0, NotRun: 0"], 1));
 const rmEv = () => { try { return JSON.parse(fs.readFileSync(path.join(rm2, ".specs", "mixed", ".state.json"), "utf8")).evidence || {}; } catch { return {}; } };
-const rm1 = run(["done", "mixed", "1", "--run", "--project", rm2]);
-const rmq = run(["done", "mixed", "2", "--run", "--project", rm2]);
+const rm1 = (await runAsync(["done", "mixed", "1", "--run", "--project", rm2]));
+const rmq = (await runAsync(["done", "mixed", "2", "--run", "--project", rm2]));
 const rmTasks = fs.readFileSync(path.join(rm2, ".specs", "mixed", "tasks.md"), "utf8");
 ok(rm1.code === 0 && /red run recorded for task 1/.test(rm1.out) && rmEv()["1"] && rmEv()["1"].exitCode === 3 && /\[-\] Greeter\.T-01 greets by name 121ms/.test(rmEv()["1"].summary || "") &&
   rmq.code === 0 && /red run recorded for task 2/.test(rmq.out) && rmEv()["2"] && rmEv()["2"].exitCode === 1 && /- \[x\] 1\./.test(rmTasks) && /- \[x\] 2\./.test(rmTasks),

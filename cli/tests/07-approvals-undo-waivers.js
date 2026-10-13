@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, all, run, runIn, spawnIn, runAsync, tmp, CLI, require, __dirname }) => {
   const SU = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = (x) => JSON.stringify(x);
   const RUN = 'node -e "process.exit(0)"';
@@ -29,7 +29,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
 
   // U1 — `dev-spec undone <feature> <n> [--reason "…"]` = spec_complete_task {undo: true, reason}.
   const pe = mk("en");
-  run(["done", "login", "1", "--run", "--project", pe]);
+  (await runAsync(["done", "login", "1", "--run", "--project", pe]));
   const u1 = runIn(["undone", "login", "1", "--reason", "wrong task", "--project", pe]);
   const u2 = runIn(["undone", "login", "1", "--project", pe]);
   const u3 = runIn(["undone", "login", "7", "--project", pe]);
@@ -45,7 +45,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     js([u1.out, u2.out, u3.out.trim(), d5.out.trim()]) + ")");
   // MCP ↔ CLI parity: the same engine call — `undone --json` prints spec_complete_task {undo}'s result.
   const pa = mk("par-a"), pb = mk("par-b");
-  [pa, pb].forEach((p) => run(["done", "login", "1", "--run", "--project", p]));
+  for (const p of [pa, pb]) await runAsync(["done", "login", "1", "--run", "--project", p]);
   const cj = runJ(["undone", "login", "1", "--reason", "r", "--json", "--project", pa]);
   const ej = SU.completeTask(pb, "login", 1, undefined, { undo: true, reason: "r" });
   const cjErr = runJ(["undone", "login", "9", "--json", "--project", pa]);
@@ -53,7 +53,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     "1.16 U1: `undone --json` prints exactly spec_complete_task {undo, reason}'s result — a refusal too ({ok: false, error}, exit 1) (got " + js([cj.j, ej]) + ")");
   // PT output.
   const pp = mk("pt", "pt");
-  run(["done", "login", "1", "--run", "--project", pp]);
+  (await runAsync(["done", "login", "1", "--run", "--project", pp]));
   const up = runIn(["undone", "login", "1", "--project", pp]);
   ok(up.code === 0 && /^Tarefa 1 desmarcada\. 0\/2  próxima → #1 first\n  ⚠ A tarefa 1 voltou a ficar aberta \(desmarcada\)\./.test(up.out),
     "1.16 U1: `undone` speaks the feature's language (PT) (got " + js(up.out) + ")");
@@ -129,7 +129,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
 
   // 1.16 U review 5 — `undone` refuses done's evidence flags (it silently ignored them); --run=false is no run.
   const pv = mk("review-flags", "pt");
-  run(["done", "login", "1", "--run", "--project", pv]);
+  (await runAsync(["done", "login", "1", "--run", "--project", pv]));
   const tv = fs.readFileSync(path.join(pv, ".specs", "login", "tasks.md"), "utf8");
   const vf = [["--evidence", "ok"], ["--exit", "0"], ["--cmd", RUN], ["--run"], ["--run", "--shell", "bash"]].map((fl) => runIn(["undone", "login", "1", ...fl, "--project", pv]));
   const vj = runJ(["undone", "login", "1", "--cmd", RUN, "--exit", "0", "--json", "--project", pv]);
@@ -142,7 +142,7 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
   // 1.16 U review 2 — two ticked tasks share the number: `undone` exits 1 (duplicateTicked), nothing changed.
   const pw = mk("review-dup");
   fs.writeFileSync(path.join(pw, ".specs", "login", "tasks.md"), "- [ ] 1. Alpha\n  - _Verify: " + RUN + "_\n- [ ] 1. Beta\n- [ ] 2. second\n");
-  run(["done", "login", "1", "--run", "--project", pw]);
+  (await runAsync(["done", "login", "1", "--run", "--project", pw]));
   runIn(["done", "login", "1", "--project", pw]);
   const tw = fs.readFileSync(path.join(pw, ".specs", "login", "tasks.md"), "utf8");
   const dw = runJ(["undone", "login", "1", "--json", "--project", pw]);
