@@ -55,3 +55,7 @@ mcp/lib/spec.bundle.js
 # dev-guardian outputs
 **/.guardian/*
 !**/.guardian/baseline.json
+!**/.guardian/budgets.yml
+!**/.guardian/hooks.config.json
+!**/.guardian/hooks-allowlist.json
+!**/.guardian/scan.yml
