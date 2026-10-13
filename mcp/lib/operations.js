@@ -20,7 +20,9 @@
  *   args        engine option → where each surface reads it, and how:
  *                 mcp       the tool's argument
  *                 pos       the CLI positional (0: the first word after the command) — rest: the words from there on
- *                 cli       the CLI flag(s) — several: a switch any of them sets, the flags a handler reads for a `parsed` value
+ *                 cli       the CLI flag(s) — several: a switch any of them sets, the flags a handler reads for a `parsed` value.
+ *                           The CLI command's options DERIVE from these (cliOptions): every flag of its operations, in this
+ *                           table's order (its `--help` and completion order), then `cliOnly` — keep an entry's args in that order
  *                 type      "switch": true only when given true, else false — on both surfaces · "bool": an explicit boolean, else
  *                           undefined (the engine's default) · "int": an integer (the CLI's checked by c.intFlag, the command's
  *                           bounds) · "list": every occurrence of a repeatable CLI flag · none: the value as given
@@ -73,17 +75,17 @@ const OPERATIONS = [
     id: "create", tool: "spec_create", cli: ["create", "bugfix", "spike"], engine: "createFeature",
     args: {
       name: NAME,
+      kind: { mcp: "kind", cli: "--kind", cmd: { bugfix: "bugfix", spike: "spike" } },
       tracks: { mcp: "tracks", pos: 1, rest: true, cli: "--tracks" },
       summary: { mcp: "summary", cli: "--summary" },
       lang: LANG,
-      kind: { mcp: "kind", cli: "--kind", cmd: { bugfix: "bugfix", spike: "spike" } },
-      size: { mcp: "size", cli: "--size" }, // 1.21 F5 (xs: a change — one change.md)
+      brownfield: SWITCH("brownfield", "--brownfield"),
       flow: { mcp: "flow", cli: "--flow" }, // C3
       question: { mcp: "question", cli: "--question" }, timebox: { mcp: "timebox", cli: "--timebox" }, // a spike's
       reproduction: { mcp: "reproduction", cli: "--reproduction" }, rootCause: { mcp: "rootCause", cli: "--root-cause" }, // the bugfix prefill
       condition: { mcp: "condition", cli: "--condition" }, behaviour: { mcp: "behaviour", cli: "--behaviour" },
-      brownfield: SWITCH("brownfield", "--brownfield"),
       includeBody: SWITCH("includeBody", "--include-body"),
+      size: { mcp: "size", cli: "--size" }, // 1.21 F5 (xs: a change — one change.md)
       branch: { mcp: "branch", cli: "--branch", parsed: true }, // a bare --branch is true; a spaced track word is refused
     },
     // cli: a refusal names the flag (--root-cause), not the MCP key; git: what git said (the engine reads no git process)
@@ -156,8 +158,8 @@ const OPERATIONS = [
     // through: the fast-forward · role: the sign-off's role · reason / expires: a forced approval's waiver · by: the engine's default approver
     id: "approve", tool: "spec_approve", cli: ["approve"], engine: "approvePhase",
     args: {
-      name: NAME, phase: { mcp: "phase", pos: 1 }, through: { mcp: "through", cli: "--through" }, role: { mcp: "role", cli: "--role" },
-      by: { mcp: "by", cli: "--by" }, force: SWITCH("force", "--force"), reason: { mcp: "reason", cli: "--reason" },
+      name: NAME, phase: { mcp: "phase", pos: 1 }, by: { mcp: "by", cli: "--by" }, force: SWITCH("force", "--force"),
+      role: { mcp: "role", cli: "--role" }, through: { mcp: "through", cli: "--through" }, reason: { mcp: "reason", cli: "--reason" },
       expires: { mcp: "expires", cli: "--expires" }, revoke: SWITCH("revoke", "--revoke"),
     },
     // the elicitation's dry run, the user's confirmation, and what that dry run judged
@@ -233,7 +235,7 @@ const OPERATIONS = [
   {
     // remove needs confirm (the CLI's --yes); flow: action 'flow' (the CLI's third word is read as it too)
     id: "feature", tool: "spec_feature", cli: ["feature"], engine: "manageFeature",
-    args: { action: { mcp: "action", pos: 0 }, name: { mcp: "name", pos: 1 }, newName: { mcp: "newName", pos: 2 }, flow: { mcp: "flow", cli: "--flow" }, confirm: SWITCH("confirm", "--yes") },
+    args: { action: { mcp: "action", pos: 0 }, name: { mcp: "name", pos: 1 }, newName: { mcp: "newName", pos: 2 }, confirm: SWITCH("confirm", "--yes"), flow: { mcp: "flow", cli: "--flow" } },
     internal: { mcp: ["preview"] }, // 1.23 (remove): the folder the user was asked about
     call: (S, dir, o) => S.manageFeature(dir, o.action, o.name, o.newName, { confirm: o.confirm, flow: o.flow, preview: o.preview }),
   },
@@ -243,10 +245,10 @@ const OPERATIONS = [
     args: {
       tool: { mcp: "tool", pos: 0 },
       path: { mcp: "path", pos: 1, parsed: true }, // resolved from the folder it was typed in
-      text: { mcp: "text", cli: "--text", parsed: true },
       name: { mcp: "name", cli: "--name" },
-      tracks: { mcp: "tracks", cli: "--tracks", parsed: true }, // + the words after the source
       lang: LANG,
+      tracks: { mcp: "tracks", cli: "--tracks", parsed: true }, // + the words after the source
+      text: { mcp: "text", cli: "--text", parsed: true },
       dryRun: SWITCH("dryRun", "--dry-run"),
     },
     call: (S, dir, o) => S.importSpec(dir, o.tool, o.path, { name: o.name, tracks: o.tracks, lang: o.lang, text: o.text, dryRun: o.dryRun }),
@@ -329,7 +331,7 @@ const OPERATIONS = [
       name: NAME, title: { mcp: "title", cli: "--title" }, decision: { mcp: "decision", cli: "--decision" }, context: { mcp: "context", cli: "--context" },
       consequences: { mcp: "consequences", cli: "--consequences" }, affects: { mcp: "affects", cli: "--affects", type: "list" },
       supersedes: { mcp: "supersedes", cli: "--supersedes", type: "list" },
-      kind: { mcp: "kind", cli: ["--kind", "--discovery"], parsed: true }, // --discovery: kind discovery
+      kind: { mcp: "kind", cli: ["--discovery", "--kind"], parsed: true }, // --discovery: kind discovery
     },
     call: (S, dir, o) => S.decide(dir, o.name, { title: o.title, decision: o.decision, context: o.context, consequences: o.consequences,
       affects: o.affects, supersedes: o.supersedes, kind: o.kind }),
@@ -407,6 +409,22 @@ function argModes() {
   }
   return out;
 }
+// A CLI command's options, derived (the command table's `options` where it names none of its own — cli/commands.js): the flags of
+// every operation that lists the command, in the table's order — a flag the command implies (`cmd`: bugfix's kind) aside — then
+// the operation's `cliOnly`; without the leading "--", each once.
+function cliOptions(command) {
+  const out = [];
+  const add = (f) => { const n = String(f).replace(/^--/, ""); if (!out.includes(n)) out.push(n); };
+  for (const op of OPERATIONS) {
+    if (!(op.cli || []).includes(command)) continue;
+    for (const a of Object.values(op.args)) {
+      if (a.cmd && hasOwn(a.cmd, command)) continue;
+      for (const f of a.cli === undefined ? [] : [].concat(a.cli)) add(f);
+    }
+    for (const f of op.cliOnly || []) add(f);
+  }
+  return out;
+}
 // The engine options a surface may set itself for this operation.
 const internalOf = (op, surface) => (op.internal && op.internal[surface]) || [];
 // The options of one call: each argument read by the surface — read(arg) → its raw value (the MCP argument; the CLI's flag, words or
@@ -431,4 +449,4 @@ function run(op, S, dir, surface, read, given) {
   return op.call(S, dir, options(op, surface, read, given));
 }
 
-module.exports = { OPERATIONS, byId, forTool, toolOperations, argModes, internalOf, options, run };
+module.exports = { OPERATIONS, byId, forTool, toolOperations, argModes, internalOf, options, run, cliOptions };

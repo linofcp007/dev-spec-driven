@@ -16,7 +16,7 @@ const { B, E } = require("./trace.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR, buildTraceMatrix, catalogData,
   changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, dayOf, today, designSections, detectPhase,
-  detectTracks, dirKey, existingFeature, extractAcIds, extractSection, fcDay, fcIso, featureDirs, featureLang,
+  detectTracks, dirKey, enumArg, existingFeature, extractAcIds, extractSection, fcDay, fcIso, featureDirs, featureLang,
   featurePercent, fenceStep, flatText, flowOfState, forecastData, headingIndex, headRest, htmlEsc, indentOf,
   isApprovalRecord, isGeneratedOrAbsent, isObj, isRecord, listFeatures, markerTracks, matrixCsv, maybeRefreshRoadmap,
   normalizeLang, own, pendingGateList, PHASE_FILE, phaseActive, phaseFile, PHASES, placeholderReport, projectLang,
@@ -28,7 +28,7 @@ let acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM
   wsOrUnitIn, changeViews, CHANGE_FILE, cutText, existsCached, exportAdr, catalog;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, activeTasks, atxHeading, backtickRuns, BOM_CHAR,
   buildTraceMatrix, catalogData, changedSinceApproval, clarificationMarkers, cleanTaskText, closesFence, csvRecord, dayOf, today,
-  designSections, detectPhase, detectTracks, dirKey, existingFeature, extractAcIds, extractSection, fcDay, fcIso,
+  designSections, detectPhase, detectTracks, dirKey, enumArg, existingFeature, extractAcIds, extractSection, fcDay, fcIso,
   featureDirs, featureLang, featurePercent, fenceStep, flatText, flowOfState, forecastData, headingIndex, headRest,
   htmlEsc, indentOf, isApprovalRecord, isGeneratedOrAbsent, isObj, isRecord, listFeatures, markerTracks, matrixCsv,
   maybeRefreshRoadmap, normalizeLang, own, pendingGateList, PHASE_FILE, phaseActive, phaseFile, PHASES,
@@ -643,11 +643,9 @@ ${EXPORT_JS}
 // catalog / changelog leave their markdown out (the structure carries the same data). Omitted: the whole document (callers in code).
 function exportSpecs(projectDir, opts = {}) {
   const pl = projectLang(projectDir);
-  const fmt = opts.format == null || String(opts.format).trim() === "" ? "html" : String(opts.format).trim().toLowerCase();
-  if (!EXPORT_FORMATS.includes(fmt)) {
-    const A = i18n.msg(pl).args;
-    return { ok: false, error: A.invalid(A.item("format", A.oneOf(EXPORT_FORMATS.join(", ")), JSON.stringify(String(opts.format)))) };
-  }
+  const asked = enumArg("format", EXPORT_FORMATS, opts.format, pl);
+  if (asked.error) return asked;
+  const fmt = asked.value || "html";
   if (fmt === "catalog") return catalog(projectDir, { write: opts.write === true, includeBody: opts.includeBody });
   if (fmt === "changelog") return changelog(projectDir, { since: opts.since, milestone: opts.milestone, write: opts.write === true, includeBody: opts.includeBody });
   const root = specsRoot(projectDir);
@@ -1508,9 +1506,9 @@ function milestonesNow(projectDir, opts = {}) {
 function milestone(projectDir, action, opts = {}) {
   const lang = projectLang(projectDir);
   const MS = i18n.msg(lang).milestone;
-  const A = i18n.msg(lang).args;
-  const a = String(action == null ? "" : action).trim().toLowerCase() || "list";
-  if (!MILESTONE_ACTIONS.includes(a)) return { ok: false, error: A.invalid(A.item("action", A.oneOf(MILESTONE_ACTIONS.join(", ")), JSON.stringify(String(action)))) };
+  const act = enumArg("action", MILESTONE_ACTIONS, action, lang);
+  if (act.error) return act;
+  const a = act.value || "list";
   const root = specsRoot(projectDir);
   const report = (res) => {
     const d = milestonesNow(projectDir, opts);

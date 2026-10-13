@@ -13,13 +13,13 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in place)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds, headingIndex,
+let acIndex, allTracks, commentLines, earsValidate, enumArg, existsCached, extractAcIds, extractTestIds, headingIndex,
   isInsideDir, writeInsideProject, isObj, MARKER_TRACKS, normalizeLang, planIdText, langOption, PROTO_KEYS, RE_CUSTOM_STEERING,
   RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists, readJson,
   requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription, templateBracketKeys,
   templateLangChain, testIndex, TRACK_ALIASES, TRACK_MARKER, TRACK_SECTIONS, TRACK_STEERING, trackAcIds, trackMarker,
   trackTaskHeading, VALID_TRACKS, writeIfAbsent, nextTaskNumber;
-function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, existsCached, extractAcIds, extractTestIds,
+function __link(E) { ({ acIndex, allTracks, commentLines, earsValidate, enumArg, existsCached, extractAcIds, extractTestIds,
   headingIndex, isInsideDir, writeInsideProject, isObj, MARKER_TRACKS, normalizeLang, planIdText, langOption, PROTO_KEYS,
   RE_CUSTOM_STEERING, RE_HEADING_LEAD, RE_TEMPLATE_VAR, RE_WIN_RESERVED, readCacheKey, readDirCached, readIfExists,
   readJson, requirementAcIds, signalOverrides, specsRoot, statePath, stripFencedCode, synonymsOverlap, stripHtmlComments, taskDescription,
@@ -865,8 +865,10 @@ function trackPacks(projectDir, action, opts = {}) {
   if (L.error) return { ok: false, error: L.error };
   const { lang, lng } = L;
   const K = i18n.msg(lng).trackPacks;
-  const act = action == null || !String(action).trim() ? "list" : String(action).trim().toLowerCase();
-  if (!["list", "init", "check"].includes(act)) return { ok: false, error: K.badAction(String(action)) };
+  // the MCP enum's refusal, in its words (signals was answered above)
+  const asked = enumArg("action", ["list", "init", "check", "signals"], action, lng);
+  if (asked.error) return asked;
+  const act = asked.value || "list";
   const root = specsRoot(projectDir);
   const tdir = path.join(root, TRACK_PACKS_DIR);
   // .specs/tracks/ of a feature created before 1.15 stays that feature: nothing is read from it, nothing written into it.

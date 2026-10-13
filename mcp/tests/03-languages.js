@@ -13,8 +13,9 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require }
     // European-only vocabulary a pt-BR string must never hold (the transform's job) — whole words, case-insensitive.
     // (1.24 r6 H-I5: + revisto / revista(s) / revistos — Brazil says revisado)
     // (1.30 review 8: + the European residue the guardian / dupes messages showed — "porque é que", a tu order mid-sentence
-    // ("nunca forces", "corre tu" → "roda você"), a 3rd person with its pronoun after it ("roda-a", "registra-as"), "lugar(s)")
-    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|revist[oa]s?|contigo|tens|podes|queres|forces|porque é que|roda você|(?:roda|registra)-(?:o|a|os|as))(?![\p{L}])|(?<![\p{L}])(?:a correr|à espera)(?![\p{L}])|por defeito|por omissão|lugar\(s\)/iu;
+    // ("nunca forces", "corre tu" → "roda você"), a 3rd person with its pronoun after it ("roda-a", "registra-as"), "lugar(s)",
+    // "sítio(s)" for a place — the dupes plurals print "sítios")
+    const EU_ONLY = /(?<![\p{L}])(?:utilizador(?:es|as?)?|ficheiros?|ecrãs?|equipas?|registos?|registar|registad[oa]s?|palavras?-passe|telemóve(?:l|is)|secç(?:ão|ões)|factos?|contactos?|planead[oa]s?|planeamento|artefactos?|controlos?|revist[oa]s?|contigo|tens|podes|queres|forces|porque é que|roda você|(?:roda|registra)-(?:o|a|os|as)|sítios?)(?![\p{L}])|(?<![\p{L}])(?:a correr|à espera)(?![\p{L}])|por defeito|por omissão|lugar\(s\)/iu;
     // 1. language codes: aliases fold to pt-BR; pt / pt-PT stay European; the strict reader refuses the unknown
     ok(["pt-BR", "pt_BR", "pt-br", "ptbr", "PT-BR", " pt_br "].every((l) => S.normalizeLang(l) === "pt-BR" && S.canonicalLang(l) === "pt-BR") &&
       ["pt", "pt-PT", "pt_pt", "PT"].every((l) => S.normalizeLang(l) === "pt" && S.canonicalLang(l) === "pt") &&

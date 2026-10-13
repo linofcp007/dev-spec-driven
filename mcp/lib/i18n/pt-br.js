@@ -296,7 +296,7 @@ const PTBR_WORDS = {
   percentagens: "porcentagens", descarregar: "baixar", descarregado: "baixado", subscrição: "assinatura", subscrições: "assinaturas",
   correr: "executar", corre: "roda", correm: "rodam", correu: "rodou", correram: "rodaram", corrido: "executado", corrida: "executada",
   corridos: "executados", corridas: "executadas", correria: "executaria", correriam: "executariam", "corrê-lo": "executá-lo",
-  "corrê-la": "executá-la", "corrê-los": "executá-los", "corrê-las": "executá-las", pára: "para", sítio: "lugar", aceites: "aceitos",
+  "corrê-la": "executá-la", "corrê-los": "executá-los", "corrê-las": "executá-las", pára: "para", sítio: "lugar", sítios: "lugares", aceites: "aceitos",
   // a 3rd person with its pronoun after it ("o finish --run corre-a e regista-a") takes it before in Brazil — the clause-start
   // imperative ("Corre-a") is stage 4's, read first
   "corre-o": "o executa", "corre-a": "a executa", "corre-os": "os executa", "corre-as": "as executa",

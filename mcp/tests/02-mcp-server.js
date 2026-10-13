@@ -411,7 +411,9 @@ exports.run = async ({
     }
 
     // 8. No invisible code points in this file (the BOM test writes it as an escape).
-    const suiteSrc = [__filename, path.join(root, "scripts", "test-runner.js"), ...fs.readdirSync(path.join(__dirname, "tests")).map((f) => path.join(__dirname, "tests", f))]; // the runner, the shared runner, every file of mcp/tests/
+    // (1.30: mcp/tests/fixtures/ — its files too)
+    const testFiles = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? testFiles(path.join(d, e.name)) : [path.join(d, e.name)]));
+    const suiteSrc = [__filename, path.join(root, "scripts", "test-runner.js"), ...testFiles(path.join(__dirname, "tests"))]; // the runner, the shared runner, every file of mcp/tests/
     ok(suiteSrc.length > 10 && !suiteSrc.some((f) => fs.readFileSync(f, "utf8").includes(String.fromCharCode(0xfeff))), "mcp/test.js carries no literal U+FEFF");
   }
 

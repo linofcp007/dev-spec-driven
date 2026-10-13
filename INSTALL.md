@@ -108,9 +108,13 @@ A run Claude Code logged no exit code for (the PowerShell tool alone): record it
 
 **dev-guardian's gate (opt-in).** With the dev-guardian plugin installed, `node "$plugin\cli\dev-spec.js" init --guardian`
 (`spec_init {guardian: true}`; `--guardian off` removes it) adds the project check `guardian`, which `/spec-finish` runs:
-`.specs/guardian.cjs` finds the newest installed dev-guardian at each run (`DEV_GUARDIAN_CLI` overrides it), so updating
-either plugin never breaks it. Its scan takes minutes and needs dev-guardian's scanners; a new high finding blocks until it
-is fixed or you accept it in dev-guardian (`dev-guardian baseline update`, a suppression). `init` offers it, never sets it.
+`.specs/guardian.cjs` finds the installed dev-guardian (3.2.1 or later) at each run — the install Claude Code records, or
+`DEV_GUARDIAN_CLI` naming a `dev-guardian.mjs` — so updating either plugin never breaks it, and the gate runs it only while
+it is the file dev-spec-driven wrote. Its scan takes minutes and needs dev-guardian's scanners on every machine that
+finishes (the check is committed: project-wide). Record the baseline once, on the base commit (`node
+.specs/guardian.cjs baseline update --project .`), and add the `.gitignore` lines `init` prints. A new high finding
+blocks until it is fixed — accept one reviewed finding with an inline suppression, never `baseline update`. `init` offers
+it, never sets it.
 
 **Human approval guard (opt-in, off by default).** A PreToolUse hook (`hooks/approval-hook.js`) that makes approvals a
 human act: when Claude calls `spec_approve` (even with force), runs `dev-spec approve` / `feature remove --yes`, tries

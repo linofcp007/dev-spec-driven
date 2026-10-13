@@ -89,8 +89,9 @@ ejecutarla, te pide la salida — o te da la línea
 aprobación, placeholders), pide una ejecución nueva de tu suite completa, redacta el resumen del merge a partir de la spec
 y pide tu aprobación final. Después eliges: hacer el merge en local o mantener la rama. No se envía nada sin ti.
 Con **dev-guardian** instalado, `dev-spec init --guardian` convierte su gate de seguridad en una verificación del proyecto:
-`/spec-finish` lo ejecuta, y un finding nuevo de gravedad high bloquea hasta que se corrija o lo aceptes en dev-guardian
-(`dev-guardian baseline update`).
+`/spec-finish` lo ejecuta, y un finding nuevo de gravedad high bloquea hasta que se corrija (aceptas un finding revisado
+con una supresión en la propia línea, nunca con `baseline update`). Vale para todo el proyecto: cada máquina que cierra
+una función necesita dev-guardian y sus escáneres.
 
 ¿Te has perdido? `/spec <feature>` retoma en el único paso siguiente. ¿Prefieres una versión guiada en tu repositorio?
 `/dev-spec-driven:spec-tour` lleva un cambio pequeño y real por todos los gates y explica cada uno a medida que ocurre.
@@ -309,7 +310,7 @@ dev-spec-driven/                      ← raíz del plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 herramientas + prompts + recursos, sin dependencias)
 │   ├── servers.json                  ← registro MCP del plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← la fachada del motor (el único objeto que cargan el servidor, la CLI y los hooks)
-│   ├── lib/engine/                   ← el motor: 23 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
+│   ├── lib/engine/                   ← el motor: 24 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← contenido localizado (en · pt · es) + la derivación pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (uno por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (tu clave de API; --dry-run sin conexión)

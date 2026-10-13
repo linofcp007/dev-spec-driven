@@ -13,8 +13,10 @@ Args: $ARGUMENTS — the opt-in settings live in `.specs/roadmap.json → meta`;
 check commands (`{"test": "npm test"}` — ask for the real ones, never guess), which `/spec-finish` then needs a passing
 run of; `approvalRoles` — phases signed off per role; `stopCheck: false` — the end-of-turn evidence gate off;
 `approvalGuard` `"ask"` / `"deny"` — an agent's approval asks the user or is refused; `evidence: "observed"` — only runs
-the harness saw count (suggest the approval guard with it). Then help fill each steering file with real content
-(`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/steering-templates.md`). A team on branches: suggest the merge
+the harness saw count (suggest the approval guard with it); `guardian: true` (`--guardian`) — dev-guardian's gate as the
+check `guardian`, project-wide (every machine that finishes needs dev-guardian and its scanners): relay init's note — the
+user records the baseline now, on the base commit, and adds the `.gitignore` lines it names. Then help fill each
+steering file with real content (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/steering-templates.md`). A team on branches: suggest the merge
 driver once — `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" merge-state --install` (the user runs it; it writes
 `.gitattributes` and the clone's git config), again after each plugin update.
 

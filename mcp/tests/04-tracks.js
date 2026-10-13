@@ -172,7 +172,11 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
   S.backlog(w2, "add", "SSO Login", "SAML");
   S.backlog(w2, "add", "Exports v2");
   const sso = S.createFeature(w2, "sso-login", ["core"]);
-  ok(sso.removedFromBacklog.join() === "SSO Login" && S.backlog(w2).backlog.map((b) => b.name).join() === "Exports v2", "spec_create drops the backlog item with the same slug");
+  // 1.30 (review 8 C10): the item's note comes along — in the result ([{name, note}]) and as an HTML comment under requirements.md's title
+  const ssoReq = fs.readFileSync(path.join(sso.dir, "requirements.md"), "utf8");
+  ok(JSON.stringify(sso.removedFromBacklog) === JSON.stringify([{ name: "SSO Login", note: "SAML" }]) && S.backlog(w2).backlog.map((b) => b.name).join() === "Exports v2" &&
+    sso.backlogNote === "requirements.md" && /^# [^\n]*\n\n<!-- From the backlog \(SSO Login\): SAML -->\n/.test(ssoReq),
+    "spec_create drops the backlog item with the same slug — and keeps its note: removedFromBacklog [{name, note}], an HTML comment under requirements.md's title (got " + JSON.stringify([sso.removedFromBacklog, ssoReq.slice(0, 120)]) + ")");
 
   // --- review fixes ---
   // placeholderReport: literals in code spans and number intervals are code/data, not placeholders
