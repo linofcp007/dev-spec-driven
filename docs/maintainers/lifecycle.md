@@ -96,6 +96,9 @@ first; how they came to be — the releases and review findings — is in Histor
   dev-guardian is installed or the project has `.guardian/` and no check runs its gate — `upgradeLines()` prints it under the
   summary (`▲`), UPGRADE.md as a `- [ ]` line. Never set by `apply` (the user runs `init --guardian`); finish then runs it like
   any project check, its verdict read from its exit code and JSON report (tasks-and-evidence.md → Project checks).
+  **Its launcher (1.30):** a guardian check runs `.specs/guardian.cjs` and it is not this version's (an earlier version's, edited,
+  missing — `guardianLauncherAudit`) → `guardianLauncher`, a second project line (`▲` / `- [ ]`) and `plan.guardianLauncher`;
+  `apply` writes this version's (`migrations.guardianLauncher: "written"` — rewriting it to the engine's own text is always safe).
 - **The migrations** (`apply: true`) never edit an artifact, approve, tick, untick or delete. Per feature, under its lock,
   `upgradePlan()` → `applyUpgradePlan()` writes `.state.json` once: `tracks` when absent (a malformed list left alone);
   approvals missing from `approvalHistory` as `legacy` records (`legacyRecord()`, as `approvePhase` seeds); for a snapshot-less
@@ -193,7 +196,13 @@ first; how they came to be — the releases and review findings — is in Histor
   only ROADMAP.md's marker. The `specs://roadmap` / `specs://catalog` resources serve `staleGeneratedText()` while stamped. Still
   stale: a commit inside the turn without the pre-commit check, a stamp in a project the session never stops in.
 - **The backlog:** `roadmap.json` `backlog: [{name,note}]`, one line each (`flatText()`); `spec_create`, restore and a rename
-  onto the name drop the item; an ACTIVE feature's name is refused (`backlogIsFeature`). `remove` is a documented alias of `rm`
+  onto the name drop the item — and return it with its note, `removedFromBacklog: [{name, note}]` (1.30); a NEW feature created
+  from it keeps the note as an HTML comment under its first artifact's title (`backlogNoteInto`: bug.md, requirements.md,
+  change.md or the spike's file — `<!-- From the backlog (<name>): <note> -->`, inert; `backlogNote` names the file), so a
+  guardian-improve seed's current → target metrics reach the spec. Adding a name already there APPENDS the note (` · `), never
+  replaces it: two candidates filed under one name must both survive (1.19 R review 5); a tool that re-measures one item
+  replaces its note by `rm`, then `add` — dev-guardian's guardian-improve does (review 8 C9 — the append note says how).
+  An ACTIVE feature's name is refused (`backlogIsFeature`). `remove` is a documented alias of `rm`
   on both surfaces — the engine and the `spec_roadmap_edit {kind: "backlog"}` enum (and the legacy `spec_backlog`) accept it
   (`BACKLOG_ACTIONS`).
 - **What reaches ROADMAP.* from roadmap.json:** `dependsOn` is only shape-checked. Mermaid edges join EXISTING features only,
@@ -245,6 +254,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `design-reuse`), never failed or migrated. **1.22 review 3** — a change has no tasks.md / test-plan.md:
   the item names its tasks' `_Requirements:_` in change.md.
 - **1.29** — the dev-guardian offer (`guardianOffer`): the audit's first project-level item.
+- **1.30** — the gate's launcher (`guardianLauncher`): 1.30's launcher differs from 1.29's, which the gate would refuse until
+  rewritten — the audit says so and `apply` writes it (finish --run also replaces a known earlier version's itself).
 
 ### Decisions and spikes
 - **1.14** — `decisions.md`, `spec_decide` and the spike kind.
@@ -288,6 +299,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   the four reads per feature, 381 opens, no file twice; the scan itself ~60 ms. A cross-call file cache was rejected (the rule
   above).
 - **1.24 r6** — restore and a rename onto a backlog name drop the backlog item too, like `spec_create`.
+- **1.30 (review 8 C10)** — the dropped item's note came back: create returned names only and wrote nothing of the note, so a
+  guardian-improve seed's targets were lost at the first `create`. C9 (a re-added name appends contradictory metrics) is kept
+  as designed — the replacing tool removes, then adds.
 - **1.24 r6 I-I1** — the save hook refreshed ROADMAP.md + SPECS.md on every Write / Edit of a spec file — a one-shot process, no
   `ROW_CACHE`, ~75 % of the hook; it now leaves the stamp, and the "Roadmap updated → N%" line (`hook.roadmapUpdated`) went with
   the refresh. Measured (p50 of 11 fresh processes, Windows 11, Node 24; 10 / 52 / ~150 features): a tasks.md save 243 / 384 /

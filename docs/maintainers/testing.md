@@ -11,7 +11,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   06 gates · 07 approvals · 08 tasks · 09 evidence · 10 guards and hooks · 11 Claude Code integration · 12 lifecycle ·
   13 imports · 14 templates and exports · 15 spec quality · 16 conventions and source guards · 17 docs and prose ·
   18 cross-area regressions (`18-cross-area*.js` — findings that span several areas). `--list` prints every file with its
-  one-line summary (the file's first comment line). **A file is named after its topic** — `10-guards-shell-writes.js`,
+  one-line summary (the file's first comment line). `mcp/tests/fixtures/` holds files a test reads byte for byte (1.30: the
+  launcher dev-spec-driven 1.29 wrote, `guardian-launcher-1.29.cjs` — never edited: its sha1 is pinned); the runner loads only
+  `NN-*.js` files. **A file is named after its topic** — `10-guards-shell-writes.js`,
   `12-lifecycle-branch.js` — never after a release or a review round: 1.27 renamed the 23 that were (`10-guards-review7.js`
   → `10-guards-shell-writes.js`, `13-imports-1-25.js` → `13-imports-steering.js`, `18-reviews.js` → `18-cross-area.js`…) and
   merged six small ones into their area's topic file (`05-markdown-r7-readers.js` into `05-markdown-readers.js`). An
@@ -202,3 +204,5 @@ How the rules above came to be — grep a release here.
   per language) as a comment, the detector as the string it is — so the stale allowance went; 56 of 40,697 code lines (0.1 %).
 - **1.29** — hermetic chains also leave out the maintainer's installed plugins (`DEV_GUARDIAN_CLI` dropped, `CLAUDE_CONFIG_DIR` an
   absent folder of the chain's own): with dev-guardian installed, every `init` in the suites would have printed its offer.
+- **1.30** — `mcp/tests/fixtures/`, the first data folder beside the test files (the 1.29 dev-guardian launcher the gate must
+  recognize as genuine).
