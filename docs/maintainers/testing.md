@@ -113,7 +113,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   first comment line says what it holds, exporting
   `run` (async in the MCP suite) — the runner picks it up. Make your projects under `tmp` (`path.join(tmp, "proj-<name>")`, a name no other file uses); the MCP
   server's default project (`tmp` itself) is 01-core's. A test that reads what another file built declares it in `deps`
-  — never rely on file order. **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
+  — never rely on file order. **Check a message by its entry, not its words (1.30):** a result's stable `code` / key first; its
+  text against the rendered i18n entry — `S.msg(lang).<section>.<key>` (a string) or `….<key>(args)` (a function, with the
+  arguments the test knows); a CLI file reads `MSG = require(…/mcp/lib/i18n.js).msg` — so a rewording touches the locale file
+  alone; else a short fragment naming the message. A whole sentence is pinned only where the sentence IS the point: the prose
+  guards (README tables, rule files, no PR / CI steering), the i18n parity and translation checks. (Review 8 found ~150 such pins;
+  1.30 moved ~70 to their entries.) **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
   `eq(actual, expected, label)` (scripts/test-runner.js `assertHelpers`, built on the file's own `ok` — one call is ONE
   assertion, so the totals stay comparable, and a late one is a late assertion). **Prefer `all()` over `ok(a && b && …)` for
   more than ~4 conditions**: `ok()` with 15 conditions said only that one of them was false. `all(label, [() => a.ok, () =>
