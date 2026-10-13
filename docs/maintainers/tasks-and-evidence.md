@@ -378,12 +378,15 @@ Engine: the `B5` block of `engine/evidence.js`.
 - **The `_Implements:_` slot.** Every tasks template carries `_Implements: [path of the code …]_` on its code task (tasks.md's
   core task, no size and size s; change.md's task; the bugfix's fix — `text.tasks.implements` + the LAYOUTS / the builders): the
   duplicate check, the drift baseline, the scope guard, the cross-feature overlap and dev-guardian's `[this feature]` read that
-  marker, and an agent that left it out got a silent zero everywhere. A value wholly in ONE `[bracket]` group is the slot, never a
-  file — the three readers drop it (`scanTaskMarkers`, `implementsRefs`, trace.js's `implFiles`; `app/[id]/page.tsx` and
-  `[slug].tsx` stay paths) — and the placeholder gate refuses it left in: a code task fills it, a task that writes no code deletes
-  the line. A test fixture that fills every `[bracket]` by regex drops the slot's line first (it would name a missing file).
-  A feature whose tasks name no file at all finishes with a warning (`finish.noImplements` — never a blocker: a feature may
-  write no code).
+  marker, and an agent that left it out got a silent zero everywhere. A value wholly in ONE `[bracket]` group — its backticks off
+  first: `` `[path …]` `` too (review 9: `scanTaskMarkers` tested before stripping them, a path to it while `implementsRefs` dropped
+  it) — is the slot, never a file — the three readers drop it (`scanTaskMarkers`, `implementsRefs`, trace.js's `implFiles`;
+  `app/[id]/page.tsx` and `[slug].tsx` stay paths) — and the placeholder gate refuses it left in, in a code span too
+  (markdown.js `implementsCodeSlots`: a template slot that is an `_Implements:_` value in backticks; any other code span stays
+  opaque): a code task fills it, a task that writes no code deletes the line. A test fixture that fills every `[bracket]` by regex
+  drops the slot's line first (it would name a missing file). A feature whose tasks name no file at all finishes with a warning
+  (`finish.noImplements(file)` — never a blocker: a feature may write no code; it names the file the tasks are in, `phaseFile`:
+  tasks.md, an xs change's change.md — review 9).
 
 ## End-of-turn evidence gate and scope guard
 - **`stopCheck(projectDir, {message, agent, stopHookActive})`** (engine; the Stop hook and `dev-spec stop-check` print the same

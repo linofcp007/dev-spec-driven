@@ -70,7 +70,8 @@ review findings — is in History at the end.
   " · " item) — never glued (`[]string`) or inside a sentence. `scanBrackets()` walks outermost first and descends into a
   non-placeholder group (a half-edited sentence still reports its `[N]`); it skips syntax (links, footnotes, callouts, wiki
   links, `x[0]`, checkboxes), stable tags / IDs, `[NEEDS CLARIFICATION]`, the legacy `[none beyond core]`, comments and
-  fences; code spans are opaque except a template's code-span slot (`templateSets().code`).
+  fences; code spans are opaque except a template's code-span slot (`templateSets().code`) and a template slot that is an
+  `_Implements:_` value in backticks (`implementsCodeSlots()`, review 9 — `` _Implements: `[path …]`_ `` passed the tasks gate).
 - **Linear, always.** `RE_STABLE_BRACKET`'s list separator is `\s*(?:[,;/]\s*)?` (`\s*[,;/]?\s*` backtracks 2^k).
   `scanBrackets()` finds every closer in ONE stack pass (`bracketCloser()`) and walks an explicit stack — no recursion per
   nesting level; a group longer than `SLOT_MAX` (1,000) is keyed nowhere (only `isGenericSlot`'s `[TODO: …]` prefix is

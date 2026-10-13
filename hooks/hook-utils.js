@@ -137,12 +137,18 @@ function parseProjectDir(v, base) {
 const RE_CD = /(?:^|[\s;&|(){}])(?:cd|chdir|pushd|sl|set-location|push-location)(?:[ \t]+(?:\/d|-(?:literalpath|path|lp):?))?[ \t]+(?:"([^"]*)"|'([^']*)'|([^\s;&|)'"]+))/gi;
 const RE_ENV_SET = /(?:^|[\s;&|(){}])(?:\$env:)?(?:SPEC_PROJECT_DIR|CLAUDE_PROJECT_DIR)[ \t]*=[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s;&|)'"]+))/gi;
 const RE_PROJECT_FLAG = /--project(?:=|\s+)(?:"([^"]*)"|'([^']*)'|([^\s;&|)]+))/g;
+// A command's words (quoted or bare — linear: an unclosed quote fails once, at the last one) and the ones that name a .specs/ or
+// .guardian/ folder: `cp evil.cjs sub/.specs/guardian.cjs`, `echo x > sub/.guardian/baseline.json` act on sub/'s guarded files — sub/ is
+// a project the call may act on (review 9: a nested project's level and checks were never read). An `--opt=` prefix is no path.
+const RE_PATH_WORD = /"([^"]*)"|'([^']*)'|([^\s'"<>|;&()]+)/g;
+const RE_GUARDED_SEG = /(?:^|[\\/])\.(?:specs|guardian)(?:[\\/]|$)/i;
 
-// The projects an approval-shaped tool call may act on, the session's own first-class: → [folders] (≤ max, distinct), for a raw read
-// of each one's .specs/roadmap.json (the strictest level wins). opts: { cwd (the payload's), env ({CLAUDE_PROJECT_DIR,
-// SPEC_PROJECT_DIR}), named ([folders the call names: MCP projectDir, the edited file's project]), command (a shell command: its
-// --project values, SPEC_PROJECT_DIR= assignments — the folders themselves — and cd targets — where the CLI acts from each: the probe's
-// nearestProject, the CLI's own resolver walk), max }.
+// The projects an approval-shaped tool call may act on, the session's own first-class: → [folders] (distinct: ≤ max the call names,
+// then the session's), for a raw read of each one's .specs/roadmap.json (each one with the guard on judges the call — approval-hook.js).
+// opts: { cwd (the payload's), env ({CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR}), named ([folders the call names: MCP projectDir, the edited
+// file's project]), command (a shell command: its --project values, SPEC_PROJECT_DIR= assignments — the folders themselves —, cd
+// targets — where the CLI acts from each: the probe's nearestProject, the CLI's own resolver walk — and the folder holding each
+// .specs/ / .guardian/ a word names: a nested project's guarded files), max }.
 // The session's folders (the payload cwd — walked up like the CLI —, CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR) are Claude Code's / the
 // user's: read even on a network share. A network path the AGENT names is refused unless it lies on a share the session is on.
 function approvalProjects(opts = {}) {
@@ -185,12 +191,24 @@ function approvalProjects(opts = {}) {
       const next = named(t, base);
       if (next) base = next;
     }
+    // the folders holding a .specs/ / .guardian/ a word names (≤ 16), each from the session's folder and the last cd target
+    const parents = new Set();
+    for (const m of command.matchAll(RE_PATH_WORD)) {
+      const w = (m[1] || m[2] || m[3] || "").replace(/^-[^=\\/]*=/, "");
+      if (!RE_GUARDED_SEG.test(w)) continue;
+      const parent = P.specsParentOf(w);
+      if (parent === "." || parents.has(parent)) continue;
+      if (parents.size >= 16) break;
+      parents.add(parent);
+      for (const b of new Set([cwd, base])) add(named(parent, b));
+    }
   }
-  add(cwd && (P.nearestProject(cwd) || cwd));
-  for (const a of anchors) add(isNetwork(a) ? a : path.resolve(a));
+  // the session's own folders always (≤ max of the call's — a command naming many folders never pushes them out), after the call's
   const key = (d) => (process.platform === "win32" || process.platform === "darwin" ? String(d).toLowerCase() : String(d));
-  const seen = new Set();
-  return out.filter((d) => !seen.has(key(d)) && seen.add(key(d))).slice(0, opts.max || 12);
+  const distinct = (list, seen) => list.filter((d) => d && !seen.has(key(d)) && seen.add(key(d)));
+  const called = distinct(out, new Set()).slice(0, opts.max || 12);
+  const own = [cwd && (P.nearestProject(cwd) || cwd), ...anchors.map((a) => (isNetwork(a) ? a : path.resolve(a)))];
+  return called.concat(distinct(own, new Set(called.map(key))));
 }
 
 // A per-session marker file in the OS temp folder: dev-spec-<kind>-<sha1(session id), 16 hex>.flag (the session id is Claude Code's;

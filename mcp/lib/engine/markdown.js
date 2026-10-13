@@ -17,14 +17,14 @@ const { CTX } = require("./ctx.js"); // the shared per-call state (mutated in pl
 const { MARKER_TRACKS } = require("./tracks.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, existingFeature, extractAcIds,
-  featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isPackMarkerBracket,
+  featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isBacktickUnit, isPackMarkerBracket,
   locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists, renderTrackTaskHeadings,
-  replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf,
+  replaceCodeSpans, stripEnds, stripSupersedes, TASK_HEADINGS, taskDescription, taskMarkerSpans, trackLabel, trackMarker, TRACK_OVERLAPS, useTemplateScopeOf,
   VALID_TRACKS, wildcardMatch;
 function __link(E) { ({ activeSectionTracks, atxHeading, backtickRuns, chainArtifacts, codeSpans, detectTracks, dirKey, existingFeature,
-  extractAcIds, featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf,
+  extractAcIds, featureFlow, flowPhaseIndex, FOLD_CASE, hasOutsideCode, inactiveMarkerLines, inactiveTaskLines, indentOf, isBacktickUnit,
   isPackMarkerBracket, locateFeatures, markerTracks, OPTIONAL_TRACKS, packDesignBlock, packRegistry, parseTasks, projectTemplateHas, RE_THEMATIC_BREAK, readIfExists,
-  renderTrackTaskHeadings, replaceCodeSpans, stripSupersedes, TASK_HEADINGS, taskDescription, trackLabel, trackMarker, TRACK_OVERLAPS,
+  renderTrackTaskHeadings, replaceCodeSpans, stripEnds, stripSupersedes, TASK_HEADINGS, taskDescription, taskMarkerSpans, trackLabel, trackMarker, TRACK_OVERLAPS,
   useTemplateScopeOf, VALID_TRACKS, wildcardMatch } = E); }
 
 // The text minus its HTML comments (commentLines' reading: a "<!--" in fenced code or an inline code span is text, one
@@ -1165,7 +1165,8 @@ function visibleLines(text) {
 //   • a bracket whose text a template writes (isTemplatePlaceholder): `[trigger]`, `[1-2 sentences: what this does and
 //     why it matters]`, `[N]`, `$[0.03]`, an empty `[]` / `[ ]` slot, the code-span slots (`` `[path]` ``), and the
 //     generic TODO / TBD / FIXME / … tokens — a half-edited template sentence still reports the slot left inside it;
-//   • the `> **TODO**` sentinel line.
+//   • the `> **TODO**` sentinel line;
+//   • a template slot that is an _Implements:_ value in a code span (`` _Implements: `[path of the code …]`_ `` — implementsCodeSlots).
 // NOT placeholders: every other bracket (the user's own values — `[free: 60, pro: 600]`, `[owner, admin]`, `[0, 1]`),
 // links/images `[x](y)`, reference links `[x][y]` (and a bare `[x]` whose `[x]: url` is defined), footnotes `[^1]`,
 // callouts `> [!NOTE]`, wiki links `[[x]]`, list checkboxes `- [ ]` / `- [x]`, the English-stable tags ([US1] [P]
@@ -1177,6 +1178,25 @@ function placeholderReport(text) {
   for (const [ln, line, refs] of visibleLines(text)) {
     if (RE_TODO_SENTINEL.test(line)) { out.push({ line: ln, text: line.trim(), kind: "todo" }); continue; }
     bracketPlaceholders(line, refs).forEach((t) => out.push({ line: ln, text: t, kind: "bracket" }));
+    implementsCodeSlots(line).forEach((t) => out.push({ line: ln, text: t, kind: "bracket" }));
+  }
+  return out;
+}
+// The template slots an _Implements:_ marker of a line holds in a code span — `` _Implements: `[path of the code it creates or
+// changes]`_ ``: every Implements reader takes the backticks off and drops the slot as no file (tasks.js scanTaskMarkers, core.js
+// implementsRefs), so the task names nothing, while a code span hid the slot from bracketPlaceholders (review 9: the tasks gate
+// passed with it). A code span elsewhere stays opaque; a bracket outside one is bracketPlaceholders'.
+function implementsCodeSlots(line) {
+  if (!line.includes("`") || !/implements/i.test(line)) return [];
+  const out = [];
+  for (const sp of taskMarkerSpans(line)) {
+    if (sp.key !== "implements") continue;
+    for (const part of sp.value.split(/[,;]/)) {
+      const p = part.trim();
+      if (!p.startsWith("`")) continue;
+      const b = /^\[([^[\]]*)\]$/.exec(stripEnds(p, isBacktickUnit).trim());
+      if (b && b[1].trim() && isTemplatePlaceholder(b[1])) out.push("[" + b[1] + "]");
+    }
   }
   return out;
 }
