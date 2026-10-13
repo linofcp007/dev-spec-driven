@@ -1,13 +1,11 @@
 "use strict";
 // Spec quality — steering amendments, cross-feature criteria, the glossary, Reuse & Integration and clean code.
-// Also re-checks the behavioural fixtures 17-docs-evals built (no new warning on them).
 
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-// Runs after 17-docs-evals, in the same process: it reads the behavioural fixtures it built under tmp (a3-eval-fixtures/): 1.16 Q2 and 1.19 R1 re-check them.
-exports.deps = ["17-docs-evals"];
+// (its re-checks of the behavioural fixtures 17-docs-evals builds: 15-quality-fixtures.js, which needs that file)
 exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBefore, shipFeature, require, __dirname }) => {
 
   // 1.16 package (Q) — spec quality: steering amendments, cross-feature ACs, glossary.
@@ -180,16 +178,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       if (S.catalog(d).crossAcs.pairs.length) fpBad.push(n + ": catalog pairs");
       for (const f of S.listFeatures(d).features || []) for (const c of qChecks(d, f.name)) if (c.status !== "pass") fpBad.push(n + "/" + f.name + ": " + c.id);
     }
-    const fxRoot = path.join(tmp, "a3-eval-fixtures"); // the behavioural fixtures built above (when bash is here)
-    let fxSeen = 0;
-    for (const c of fs.existsSync(fxRoot) ? fs.readdirSync(fxRoot) : []) {
-      const d = path.join(fxRoot, c);
-      if (!fs.existsSync(path.join(d, ".specs"))) continue;
-      fxSeen++;
-      if (S.catalog(d).crossAcs.pairs.length) fpBad.push(c + ": catalog pairs");
-      for (const f of S.listFeatures(d).features || []) for (const q of qChecks(d, f.name)) if (q.status !== "pass") fpBad.push(c + "/" + f.name + ": " + q.id);
-    }
-    ok(!fpBad.length, "1.16 Q2 / Q1 / Q3: no new warning on copies of examples/demo-project, evals/fixtures/specs-en / specs-es and the " + fxSeen + " built behavioural fixture(s) with a .specs/ — no cross-feature pair, no steering amendment, no glossary (got " + js(fpBad) + ")");
+    // (the behavioural fixtures 17-docs-evals builds: 15-quality-fixtures.js)
+    ok(!fpBad.length, "1.16 Q2 / Q1 / Q3: no new warning on copies of examples/demo-project and evals/fixtures/specs-en / specs-es — no cross-feature pair, no steering amendment, no glossary (got " + js(fpBad) + ")");
     // Bounded: 50 features × 20 criteria.
     const q2t = qDir("q2time");
     S.initProject(q2t, ["core"], "en");
@@ -826,20 +816,9 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       const doc = S.specDoctor(d, feat);
       if (!ap.ok || reuseSt(doc) !== "pass" || /approved before/.test(chk(doc, "design-reuse").detail || "")) fxBad.push(lang + ": " + ap.ok + " " + reuseSt(doc) + " " + chk(doc, "design-reuse").detail);
     }
-    const fxRoot = path.join(tmp, "a3-eval-fixtures"); // the behavioural fixtures built above (when bash is here)
-    let fxSeen = 0;
-    for (const c of fs.existsSync(fxRoot) ? fs.readdirSync(fxRoot) : []) {
-      const d = path.join(fxRoot, c);
-      if (!fs.existsSync(path.join(d, ".specs"))) continue;
-      for (const f of S.listFeatures(d).features || []) {
-        const st = S.readState(d, f.name);
-        if (!st.approvals || !st.approvals.design) continue;
-        fxSeen++;
-        if (reuseSt(S.specDoctor(d, f.name)) !== "pass") fxBad.push(c + "/" + f.name);
-      }
-    }
+    // (the built behavioural fixtures' approved designs: 15-quality-fixtures.js)
     ok(dmDoc.verdict === "pass" && /^design approved before 1\.19/.test(chk(dmDoc, "design-reuse").detail) && !dmDoc.checks.some((c) => c.status === "warn") && !fxBad.length,
-      "1.19 R1: examples/demo-project stays doctor PASS with no warning (its pre-1.19 design approval → design-reuse passes with the note); evals/fixtures specs-en / specs-es designs pass design-reuse once approved, and so do the " + fxSeen + " approved design(s) of the built behavioural fixtures (got " +
+      "1.19 R1: examples/demo-project stays doctor PASS with no warning (its pre-1.19 design approval → design-reuse passes with the note); evals/fixtures specs-en / specs-es designs pass design-reuse once approved (got " +
       js([dmDoc.verdict, chk(dmDoc, "design-reuse").detail, fxBad]) + ")");
 
     // 1.19 R review 1 (security) — a network _Implements:_ never reaches the file system: the brief decides on the TEXT that a UNC

@@ -143,20 +143,22 @@ function writeTimes(file, stats, stems) {
   }
 }
 
-// The suite's files, in name order: { stem, nn, name, file, deps, handshake, head }. A malformed deps list, a dependency
-// naming no file or a dependency cycle is an error — the suite can't be scheduled.
+// One test file (its name in dir) → its entry { stem, nn, name, file, deps, handshake, head }; the file is required.
+function loadFile(dir, f) {
+  const [, nn, name] = f.match(RE_TEST_FILE);
+  const file = path.join(dir, f);
+  const mod = require(file);
+  if (typeof mod.run !== "function") throw new Error(`${f}: exports no run(ctx) function`);
+  const deps = mod.deps == null ? [] : mod.deps;
+  if (!Array.isArray(deps) || deps.some((d) => typeof d !== "string")) throw new Error(`${f}: deps must be a list of file names`);
+  const head = ((fs.readFileSync(file, "utf8").match(/^\/\/ (.+)$/m) || [])[1] || "").trim();
+  return { stem: f.slice(0, -3), nn, name, file, deps, handshake: mod.handshake === true, head };
+}
+// The suite's files, in name order (loadFile's entries). A malformed deps list, a dependency naming no file or a dependency
+// cycle is an error — the suite can't be scheduled.
 function loadFiles(dir) {
   const stemOrder = (a, b) => (a.slice(0, -3) < b.slice(0, -3) ? -1 : 1); // by stem: 04-tracks before 04-tracks-builtin
-  const files = fs.readdirSync(dir).filter((f) => RE_TEST_FILE.test(f)).sort(stemOrder).map((f) => {
-    const [, nn, name] = f.match(RE_TEST_FILE);
-    const file = path.join(dir, f);
-    const mod = require(file);
-    if (typeof mod.run !== "function") throw new Error(`${f}: exports no run(ctx) function`);
-    const deps = mod.deps == null ? [] : mod.deps;
-    if (!Array.isArray(deps) || deps.some((d) => typeof d !== "string")) throw new Error(`${f}: deps must be a list of file names`);
-    const head = ((fs.readFileSync(file, "utf8").match(/^\/\/ (.+)$/m) || [])[1] || "").trim();
-    return { stem: f.slice(0, -3), nn, name, file, deps, handshake: mod.handshake === true, head };
-  });
+  const files = fs.readdirSync(dir).filter((f) => RE_TEST_FILE.test(f)).sort(stemOrder).map((f) => loadFile(dir, f));
   const byStem = new Map(files.map((f) => [f.stem, f]));
   for (const f of files) {
     for (const d of f.deps) if (!byStem.has(d)) throw new Error(`${f.stem}: needs '${d}', which is no file of ${dir}`);
@@ -479,8 +481,10 @@ function remeasure(measure, holds, tries = 2) {
 async function runChildChain(opts) {
   isolate(opts.tmpPrefix); // before any test file or harness loads (a no-op in the folder the runner started it in)
   const stems = String(process.env[CHAIN_ENV]).split(",").filter(Boolean);
-  const files = loadFiles(opts.dir);
-  const chain = stems.map((s) => files.find((f) => f.stem === s));
+  // only the chain's own files (1.30, review 8 — ds-maint 2): requiring every file of the suite to find them cost each chain
+  // ~0.25 s (MCP) / ~0.1 s (CLI); the parent has checked the deps
+  const names = new Set(fs.readdirSync(opts.dir).filter((f) => RE_TEST_FILE.test(f)));
+  const chain = stems.map((s) => (names.has(s + ".js") ? loadFile(opts.dir, s + ".js") : null));
   if (chain.some((f) => !f)) {
     console.log(`unknown test file in ${CHAIN_ENV}='${process.env[CHAIN_ENV]}'\n\n0 passed, 1 failed`);
     return exitFlushed(1);

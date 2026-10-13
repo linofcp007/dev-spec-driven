@@ -46,6 +46,15 @@ const { exitFlushed, rmTmpDir, isolate, assertHelpers } = require("../../scripts
 isolate("spec-test-");
 const MCP_DIR = path.join(__dirname, ".."); // mcp/ — where mcp/test.js lives: the tests' __dirname
 const MCP_TEST = path.join(MCP_DIR, "test.js");
+const SERVER = path.join(MCP_DIR, "server.js");
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "spec-test-"));
+// The server starts FIRST (1.30, review 8 — ds-maint 2): its own start (node + the engine, ~0.3 s) overlaps this process's engine
+// load below instead of following it — every chain paid both in a row. Its stdout reader is attached further down, in this same
+// synchronous module evaluation (no reply can arrive before it).
+const child = spawn(process.execPath, [SERVER], {
+  env: { ...process.env, SPEC_PROJECT_DIR: tmp },
+  stdio: ["pipe", "pipe", "inherit"],
+});
 const S = require("../lib/spec.js");
 const root = path.join(MCP_DIR, "..");
 // Every engine source file (1.18): the facades (mcp/lib/spec.js, i18n.js, prompts-resources.js) and their modules under
@@ -118,8 +127,6 @@ function hookIn(file, o = {}) {
   return { status: 0, signal: null, stdout: out ? JSON.stringify(out) : "", stderr: "" };
 }
 
-const SERVER = path.join(MCP_DIR, "server.js");
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "spec-test-"));
 
 let pass = 0,
   fail = 0;
@@ -143,10 +150,6 @@ function shipFeature(dir, slug, at) {
   fs.writeFileSync(sp, JSON.stringify(st, null, 2));
 }
 
-const child = spawn(process.execPath, [SERVER], {
-  env: { ...process.env, SPEC_PROJECT_DIR: tmp },
-  stdio: ["pipe", "pipe", "inherit"],
-});
 
 const pending = new Map();
 let buf = "";
