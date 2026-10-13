@@ -455,6 +455,12 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
       ["spec_impact", { name: "login", phase: "nope" }, ["impact", "login", "--phase", "nope"], "phase"],
       ["spec_approve", { name: "login" }, ["approve", "login"]],
       ["spec_approve", { name: "login", revoke: true }, ["approve", "login", "--revoke"]],
+      // the actions the engine reads through enumArg (1.30, ds-maint 12): their refusals are the validator's too
+      ["spec_templates", { action: "frob" }, ["templates", "frob"], "action"],
+      ["spec_tracks", { action: "frob" }, ["tracks", "frob"], "action"],
+      ["spec_feature", { action: "frob", name: "login" }, ["feature", "frob", "login"], "action"],
+      ["spec_roadmap_edit", { kind: "milestone", action: "frob" }, ["milestone", "frob"], "action"],
+      ["spec_create", { name: "Other", kind: "bugfx" }, ["create", "Other", "--kind", "bugfx"], "kind"],
     ];
     const got = [];
     for (const [tool, args, words, invalid] of cases) {

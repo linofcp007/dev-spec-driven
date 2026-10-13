@@ -1048,7 +1048,6 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' ya existe.`,
       renameArchived: (slug) => `'${slug}' es el nombre de una función archivada (.specs/_archive/${slug}) — elige otro nombre (con el mismo nombre, ninguna de las dos podría archivarse ni restaurarse).`,
       slugTaken: (slug, held, name) => `'${name}' llega a la carpeta .specs/${slug}/, que contiene otra función ('${held}') — el nombre de la carpeta conserva solo los primeros 64 caracteres del nombre. No se cambió nada: usa un nombre más corto que se diferencie dentro de ellos (para trabajar en '${held}', usa el nombre '${slug}').`,
-      badAction: "la acción debe ser: remove | archive | rename | restore | flow",
       badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
@@ -2263,7 +2262,6 @@ const msg = {
 
     templates: {
       noSummary: "[por definir]",
-      badAction: (a) => `Acción de plantillas desconocida '${a}' — una de: list, init, check.`,
       unknownArtifact: (a, list) => `Plantilla desconocida '${a}' — una de: ${list}, o steering/<fichero>.md.`,
       writeFailed: (rel, why) => `No se pudo escribir ${rel} (${why}).`,
       writeOutside: (rel) => `Me niego a escribir ${rel}: su carpeta es un enlace a un lugar fuera del proyecto.`,
@@ -2322,7 +2320,6 @@ const msg = {
       missingInvalid: (name, codes) => `+${name} (el pack no es válido: ${codes})`,
       missingReserved: (name, slug, builtIn, since) => `+${name} (un track pack anterior a la ${since || "1.17"} — '${name}' es ahora un nombre reservado${builtIn ? `, y el track +${name} de serie NO se aplica a esta función` : ""}: cambia el nombre de .specs/tracks/${name}/ (y el de su marcador, si también está reservado) y después ${DEV_SPEC} add-track ${slug} <nuevo-nombre> y ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; para usar el track de serie en su lugar: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
       missingReservedMarker: (name, marker, track, slug, since) => `+${name} (un track pack anterior a la ${since || "1.19"} — su marcador ${marker} es ahora el del track +${track} de serie, así que el pack se ignora y sus secciones ${marker} no cuentan como las de +${track}: cambia el marcador en .specs/tracks/${name}/track.json y en los títulos ${marker} de esta función; para usar el track de serie en su lugar: ${DEV_SPEC} add-track ${slug} ${track} (se añaden sus secciones y el pack sale de esta función); para quitar el pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
-      badAction: (a) => `Acción de tracks desconocida '${a}' — una de: list, init, check, signals.`,
       nameRequired: "tracks init necesita un nombre — " + DEV_SPEC + " tracks init <nombre> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `No hay track ni track pack '${n}' — los packs del proyecto: ${list}.`,
       legacyFeature: ".specs/tracks/ es la carpeta de una función creada antes de que existieran los track packs (tiene un .state.json) — sigue siendo esa función y nunca se lee como packs. Cámbiale el nombre (" + DEV_SPEC + " feature rename tracks <nuevo-nombre>, o spec_feature rename) para usar track packs.",

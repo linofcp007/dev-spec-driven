@@ -226,8 +226,9 @@ History at the end.
 - **An enum the engine checks itself** (the CLI's raw word reaches it; MCP's schema refused it already): ONE reader,
   `enumArg(name, values, v, lng, {fold, blankGiven})` (engine/state.js, 1.30) — trimmed and lower-cased (a fold of its own:
   `langOption` canonicalizes), absent / null / blank = not given, else `{ok: false, error, code: "invalid-arguments",
-  invalid: [name]}` in the MCP validator's words. `parseFlow`, `sizeInput`, `langOption`, the backlog / milestone actions,
-  export's format, create's kind (`blankGiven`) and impact's phase read through it — a new enum does too.
+  invalid: [name]}` in the MCP validator's words. `parseFlow`, `sizeInput`, `langOption`, the backlog / milestone / templates /
+  tracks / feature actions (feature's: `blankGiven`), export's format, create's kind (`blankGiven`) and impact's phase read
+  through it — a new enum does too; a refusal the engine returns whole carries the code to the CLI's `--json` as MCP's does.
 - **Per command:** `checkCommandArgs()` refuses, before anything runs, a known flag the command doesn't read
   (`cliOutput.flagNotFor`) and an argument past its `max`; `--json`, `--project`, `--help` are global (`GLOBAL_OPTIONS`);
   `backlog`, `log` and `feature` check theirs per action. Contradictions are usage errors (`depend … --clear`, `--timeout`
@@ -417,7 +418,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 ### CLI arguments
 - **1.13** — `--lang` is checked against the MCP enum (the engine saved `fr` as `en`).
 - **1.30 review 8 (ds-maint 12)** — seven copies of the enum check (`parseFlow`, `sizeInput`, `langOption`, the backlog and
-  milestone actions, export's format, create's kind) became `enumArg`.
+  milestone actions, export's format, create's kind) became `enumArg`; the templates / tracks / feature actions too, whose CLI
+  refusals had words of their own ("Unknown templates action 'x' — one of: …", "action must be one of: remove | archive | …")
+  and no code where MCP answered `invalid-arguments`.
 - **1.23 review** — each command reads its own options and arguments: `approve <f> <phase> --remove` (meant --revoke) approved,
   `done <f> 3 4` ticked task 3 alone. **L14** — `--project` names an existing folder: `create x --project <typo>` created the
   whole mistyped tree. **P1** — `evals` forwards every word: only the words after the feature were forwarded, so `evals

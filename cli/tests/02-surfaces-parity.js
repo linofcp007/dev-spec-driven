@@ -78,7 +78,7 @@ ok(frm.code === 1 && /Would permanently delete 'doomed'/.test(frm.out) && /requi
 runIn(["backlog", "add", "Zeta", "--project", w4]);
 const fdel = runIn(["feature", "delete", "doomed", "--yes", "--project", w4]);
 const brem = runIn(["backlog", "remove", "Zeta", "--project", w4]);
-ok(fdel.code === 1 && /remove \| archive \| rename \| restore/.test(fdel.out) && fs.existsSync(path.join(w4, ".specs", "doomed")) &&
+ok(fdel.code === 1 && /action must be one of: remove, archive, rename, restore, flow \(got "delete"\)/.test(fdel.out) && fs.existsSync(path.join(w4, ".specs", "doomed")) &&
   brem.code === 0 && /removed from the backlog/.test(brem.out) && !/Zeta/.test(runIn(["backlog", "--project", w4]).out),
   "feature delete is not an alias (exit 1, nothing deleted, as over MCP); backlog remove is rm's alias on both surfaces (got " + JSON.stringify([fdel.code, brem.code]) + ")");
 const fry = runIn(["feature", "remove", "doomed", "--yes", "--project", w4]);

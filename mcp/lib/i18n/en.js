@@ -1058,7 +1058,6 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' already exists.`,
       renameArchived: (slug) => `'${slug}' is the name of an archived feature (.specs/_archive/${slug}) — pick another name (with one name, neither of them could be archived or restored).`,
       slugTaken: (slug, held, name) => `'${name}' reaches the folder .specs/${slug}/, which holds another feature ('${held}') — a folder name keeps the first 64 characters of the name. Nothing was changed: pass a shorter name that differs within them (to work on '${held}', name it '${slug}').`,
-      badAction: "action must be one of: remove | archive | rename | restore | flow",
       badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
@@ -2382,7 +2381,6 @@ const msg = {
     // Project templates (.specs/templates/) — spec_templates / `dev-spec templates`, and the {{summary}} slot of a scaffold.
     templates: {
       noSummary: "[TBD]", // {{summary}} of a feature created without one: a generic slot, so the scaffold still reads 'placeholder'
-      badAction: (a) => `Unknown templates action '${a}' — one of: list, init, check.`,
       unknownArtifact: (a, list) => `Unknown template '${a}' — one of: ${list}, or steering/<file>.md.`,
       writeFailed: (rel, why) => `Could not write ${rel} (${why}).`,
       writeOutside: (rel) => `Refused to write ${rel}: its folder is a link to a place outside the project.`,
@@ -2445,7 +2443,6 @@ const msg = {
       missingReserved: (name, slug, builtIn, since) => `+${name} (a track pack from before ${since || "1.17"} — '${name}' is a reserved name now${builtIn ? `, and the built-in +${name} track is NOT applied to this feature` : ""}: rename .specs/tracks/${name}/ (and its marker, if that is reserved too), then ${DEV_SPEC} add-track ${slug} <new-name> and ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; to adopt the built-in track instead: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
       // a pack from before 1.19 (1.17 for [DIST]) whose MARKER is a built-in track's now
       missingReservedMarker: (name, marker, track, slug, since) => `+${name} (a track pack from before ${since || "1.19"} — its marker ${marker} is the built-in +${track} track's now, so the pack is ignored and its ${marker} sections don't count as +${track}'s: change the marker in .specs/tracks/${name}/track.json and in this feature's ${marker} headings, or adopt the built-in track: ${DEV_SPEC} add-track ${slug} ${track} (its sections are appended, the pack leaves this feature); to drop the pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
-      badAction: (a) => `Unknown tracks action '${a}' — one of: list, init, check, signals.`,
       nameRequired: "tracks init needs a name — " + DEV_SPEC + " tracks init <name> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `No track or track pack '${n}' — the project's packs: ${list}.`,
       legacyFeature: ".specs/tracks/ is the folder of a feature created before track packs existed (it holds a .state.json) — it stays that feature and is never read as packs. Rename it (" + DEV_SPEC + " feature rename tracks <new-name>, or spec_feature rename) to use track packs.",

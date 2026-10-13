@@ -16,7 +16,7 @@ const { TRACE_INFO_FIELDS } = require("./trace.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions, chainArtifacts,
   changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks, crossFeatureAcs,
-  DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir, errs,
+  DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir, enumArg, errs,
   evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs, featureFlow,
   featureLang, featurePercent, featureShipped, featureVelocity, findCycle, FOLD_CASE, forcedApprovalList, forecastInput,
   globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord, isBacktickUnit,
@@ -37,7 +37,7 @@ let today, dayOf; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ duplicationReport, suiteBlocker, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
-  errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
+  enumArg, errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
   featureFlow, featureLang, featurePercent, featureShipped, featureVelocity, findCycle, FOLD_CASE, forcedApprovalList,
   forecastInput, globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord,
   isBacktickUnit, isDirSafe, isFeatureFolder, isGeneratedOrAbsent, isImplementsGlob, isInsideDir, isObj, isRecord,
@@ -921,8 +921,12 @@ function removePreview(projectDir, name) {
 
 // The actions are spec_feature's enum, exactly — no hidden alias (a CLI-only `feature delete` used to remove a folder
 // the MCP tool refused to, and the help never named it).
+const FEATURE_ACTIONS = ["remove", "archive", "rename", "restore", "flow"];
 function manageFeature(projectDir, action, name, arg, opts = {}) {
-  switch (String(action || "").trim().toLowerCase()) {
+  // the MCP enum's refusal, in its words (the CLI passes its first word as typed); none is no action either
+  const act = enumArg("action", FEATURE_ACTIONS, action == null ? "" : action, () => projectLang(projectDir), { blankGiven: true });
+  if (act.error) return act;
+  switch (act.value) {
     case "remove":
       // Deleting a spec folder can't be undone: without an explicit confirm (MCP confirm:true, CLI --yes)
       // nothing is deleted and the caller gets what WOULD be.
@@ -936,9 +940,8 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
       return restoreFeature(projectDir, name);
     case "flow": // opts.flow (MCP `flow`), else the positional value (CLI `feature flow <name> <flow>`)
       return setFeatureFlowLocked(projectDir, name, opts.flow != null ? opts.flow : arg);
-    default:
-      return { ok: false, error: errs(projectDir).badAction };
   }
+  return null; // (unreachable: enumArg answered every other value)
 }
 
 // ---------------------------------------------------------------------------

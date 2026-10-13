@@ -708,7 +708,7 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
   // An unknown kind is an error on every surface (the MCP enum refuses it): the CLI's `--kind bugfx` used to scaffold a
   // plain feature, and a re-run with the right kind then only "kept" the wrong one. A blank one too.
   const ak = enumArg("kind", FEATURE_KINDS, kind, inLang, { blankGiven: true });
-  if (ak.error) return { ok: false, error: ak.error };
+  if (ak.error) return ak;
   let askedKind = ak.value;
   // the feature's size (spec_create {size}: xs | s | m | l), validated before anything is written. A NEW feature only: an
   // existing one keeps its size (a note when another is asked). size xs on a plain feature IS a change (kind "change": one

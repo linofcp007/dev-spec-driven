@@ -644,7 +644,7 @@ ${EXPORT_JS}
 function exportSpecs(projectDir, opts = {}) {
   const pl = projectLang(projectDir);
   const asked = enumArg("format", EXPORT_FORMATS, opts.format, pl);
-  if (asked.error) return { ok: false, error: asked.error };
+  if (asked.error) return asked;
   const fmt = asked.value || "html";
   if (fmt === "catalog") return catalog(projectDir, { write: opts.write === true, includeBody: opts.includeBody });
   if (fmt === "changelog") return changelog(projectDir, { since: opts.since, milestone: opts.milestone, write: opts.write === true, includeBody: opts.includeBody });
@@ -1507,7 +1507,7 @@ function milestone(projectDir, action, opts = {}) {
   const lang = projectLang(projectDir);
   const MS = i18n.msg(lang).milestone;
   const act = enumArg("action", MILESTONE_ACTIONS, action, lang);
-  if (act.error) return { ok: false, error: act.error };
+  if (act.error) return act;
   const a = act.value || "list";
   const root = specsRoot(projectDir);
   const report = (res) => {

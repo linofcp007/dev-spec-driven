@@ -48,7 +48,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const travJ = jsonOf(runIn(["templates", "init", "steering/../../x", "--json", "--project", b1]));
   const badLang = runIn(["templates", "list", "--lang", "fr", "--project", b1]);
   const extra = runIn(["templates", "list", "a", "b", "--project", b1]);
-  ok(badAct.code === 1 && /Unknown templates action 'delete'/.test(badAct.out) && trav.code === 1 && /Unknown template '\.\.\/\.\.\/evil'/.test(trav.out) &&
+  ok(badAct.code === 1 && /action must be one of: list, init, check \(got "delete"\)/.test(badAct.out) && trav.code === 1 && /Unknown template '\.\.\/\.\.\/evil'/.test(trav.out) &&
     travJ && travJ.ok === false && /Unknown template/.test(travJ.error) && !fs.existsSync(path.join(tmp, "evil")) && !fs.existsSync(path.join(b1, ".specs", "evil")) &&
     badLang.code === 1 && /--lang must be one of: en, pt, es/.test(badLang.out) && extra.code === 1 && /dev-spec templates \[list\|init\|check\]/.test(extra.out),
     "templates refuses an unknown action, a name outside the allowlist (traversal — --json prints the refusal), an unknown --lang and extra arguments (exit 1)");

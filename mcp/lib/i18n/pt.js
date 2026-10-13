@@ -1049,7 +1049,6 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' já existe.`,
       renameArchived: (slug) => `'${slug}' é o nome de uma feature arquivada (.specs/_archive/${slug}) — escolhe outro nome (com o mesmo nome, nenhuma das duas poderia ser arquivada nem restaurada).`,
       slugTaken: (slug, held, name) => `'${name}' chega à pasta .specs/${slug}/, que tem outra feature ('${held}') — o nome da pasta guarda só os primeiros 64 caracteres do nome. Nada foi alterado: usa um nome mais curto que difira dentro deles (para trabalhar em '${held}', usa o nome '${slug}').`,
-      badAction: "a ação tem de ser: remove | archive | rename | restore | flow",
       badTrack: "o track tem de ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
       cycle: (chain) => `Dependência circular: ${chain}`,
       nameRequired: "o nome é obrigatório",
@@ -2264,7 +2263,6 @@ const msg = {
 
     templates: {
       noSummary: "[a definir]",
-      badAction: (a) => `Ação de templates desconhecida '${a}' — uma de: list, init, check.`,
       unknownArtifact: (a, list) => `Template desconhecido '${a}' — um de: ${list}, ou steering/<ficheiro>.md.`,
       writeFailed: (rel, why) => `Não foi possível escrever ${rel} (${why}).`,
       writeOutside: (rel) => `Recusei escrever ${rel}: a pasta é uma ligação para fora do projeto.`,
@@ -2323,7 +2321,6 @@ const msg = {
       missingInvalid: (name, codes) => `+${name} (o pack é inválido: ${codes})`,
       missingReserved: (name, slug, builtIn, since) => `+${name} (um track pack anterior à ${since || "1.17"} — '${name}' é agora um nome reservado${builtIn ? `, e o track +${name} incluído NÃO se aplica a esta feature` : ""}: muda o nome de .specs/tracks/${name}/ (e do marcador, se também estiver reservado) e depois ${DEV_SPEC} add-track ${slug} <novo-nome> e ${DEV_SPEC} add-track ${slug} ${name} --remove${builtIn ? `; para usar o track incluído em vez dele: ${DEV_SPEC} add-track ${slug} ${name}` : ""})`,
       missingReservedMarker: (name, marker, track, slug, since) => `+${name} (um track pack anterior à ${since || "1.19"} — o seu marcador ${marker} é agora o do track +${track} incluído, por isso o pack é ignorado e as suas secções ${marker} não contam como as do +${track}: muda o marcador em .specs/tracks/${name}/track.json e nos títulos ${marker} desta feature; para usar o track incluído em vez dele: ${DEV_SPEC} add-track ${slug} ${track} (as secções dele são acrescentadas e o pack sai desta feature); para retirar o pack: ${DEV_SPEC} add-track ${slug} ${name} --remove)`,
-      badAction: (a) => `Ação de tracks desconhecida '${a}' — uma de: list, init, check, signals.`,
       nameRequired: "o tracks init precisa de um nome — " + DEV_SPEC + " tracks init <nome> (spec_tracks {action: \"init\", name}).",
       unknownPack: (n, list) => `Não há track nem track pack '${n}' — os packs do projeto: ${list}.`,
       legacyFeature: ".specs/tracks/ é a pasta de uma feature criada antes de existirem track packs (tem um .state.json) — continua a ser essa feature e nunca é lida como packs. Muda-lhe o nome (" + DEV_SPEC + " feature rename tracks <novo-nome>, ou spec_feature rename) para usar track packs.",
