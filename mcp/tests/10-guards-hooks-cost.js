@@ -11,8 +11,15 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
   const HOOKS = path.join(__dirname, "..", "hooks");
   // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR never leak into the hooks.
   const hookEnv = (env) => ({ ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "", ...(env || {}) });
-  const hook = (name, pl, env, args, cwd) => spawnSync(process.execPath, [...(args || []), path.join(HOOKS, name + ".js")],
-    { input: typeof pl === "string" ? pl : js(pl), encoding: "utf8", env: hookEnv(env), cwd: cwd || tmp, timeout: 20000 });
+  // A hook run that could not start or finish (spawn refused under memory pressure, the 20 s timeout) has no output: its stdout /
+  // stderr read "" and `spawnFailure` says why — the assertion fails naming it, never a TypeError that ends the file (r14).
+  const hook = (name, pl, env, args, cwd) => {
+    const r = spawnSync(process.execPath, [...(args || []), path.join(HOOKS, name + ".js")],
+      { input: typeof pl === "string" ? pl : js(pl), encoding: "utf8", env: hookEnv(env), cwd: cwd || tmp, timeout: 20000 });
+    const spawnFailure = r.error ? String(r.error.code || r.error.message) : r.status === null ? "killed by " + r.signal : null;
+    return { ...r, stdout: String(r.stdout || ""), stderr: String(r.stderr || ""), spawnFailure };
+  };
+  const spawnFailures = (rs) => rs.filter((r) => r.spawnFailure).map((r) => r.spawnFailure);
   const project = (name, lang) => {
     const p = path.join(tmp, name);
     S.initProject(p, ["core"], lang || "en");
@@ -56,7 +63,8 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require, handRoadm
     const blockOf = (r) => { try { return JSON.parse(r.stdout).decision === "block"; } catch { return false; } };
     ok(!falseBlocks.length && !missed.length && hNot.every((r) => r.status === 0 && r.stdout === "") && hYes.every((r) => r.status === 0 && blockOf(r)),
       "1.25.1 (r7 finding 1): the stop gate claims the WORK only — no bare verb ('I verified that…', 'was completed in 2023', 'Verifiquei o ficheiro', 'Terminé de leer', 'Listo, aquí tienes…', 'Done. I updated the README') is sent back while a recent tick is unverified; first-person completion claims and 'ready to merge' / 'pronto para merge' / 'listo para el merge' are (false blocks: " +
-      js(falseBlocks) + ", missed: " + js(missed) + ", hook: " + js(hNot.map((r) => r.stdout.slice(0, 40)).concat(hYes.map(blockOf))) + ")");
+      js(falseBlocks) + ", missed: " + js(missed) + ", hook: " + js(hNot.map((r) => r.stdout.slice(0, 40)).concat(hYes.map(blockOf))) +
+      (spawnFailures(hNot.concat(hYes)).length ? ", hook runs that failed to run: " + js(spawnFailures(hNot.concat(hYes))) : "") + ")");
   }
 
   // Finding 2 — every hook ran in shell form (`node "${CLAUDE_PLUGIN_ROOT}/hooks/x.js"`): on Windows each spawn went through Git Bash
