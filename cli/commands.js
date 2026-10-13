@@ -547,7 +547,7 @@ const COMMANDS = [
                                   --check name="cmd" (repeatable; name= removes one): the project's check commands (roadmap.json
                                   meta.checks, e.g. --check test="npm test" --check lint="npm run lint") — in every brief's definition of done
                                   --guardian [on|off]: dev-guardian's gate as the check 'guardian' (node .specs/guardian.cjs scan … — the
-                                  newest installed dev-guardian); finish --run runs it (minutes; needs its scanners). off removes it
+                                  installed dev-guardian); finish --run runs it (minutes; its scanners on every machine). off removes it
                                   --roles requirements=product,design=tech+security: approvals by role (a listed phase is approved once
                                   every role signed its current content); --roles none clears them
                                   --approval-guard off|ask|deny: the human approval guard — an agent's approve (MCP or this CLI through

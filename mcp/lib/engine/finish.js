@@ -32,9 +32,9 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
-let suiteBlocker; // evidence.js — 1.29: the suite blocker (with dev-guardian's gate: its verdict and what to do)
+let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ duplicationReport, suiteBlocker, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+function __link(E) { ({ duplicationReport, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
@@ -148,7 +148,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (opts.evidence != null) {
     // ranBy "cli": `finish --run` (never from MCP) — with runStart {at, code}: the stamps taken BEFORE it ran
     const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng, opts.ranBy, opts.ranBy === "cli" ? opts.runStart : undefined);
-    if (rc.error) return { ok: false, error: rc.error };
+    if (rc.error) return { ok: false, error: rc.error, ...(rc.code ? { code: rc.code } : {}) }; // 1.30: a refused guardian run names why (code)
     recordedChecks = rc.recorded;
   }
   const state = readState(projectDir, slug);
@@ -223,6 +223,7 @@ function finishFeature(projectDir, name, opts = {}) {
   // (+ dev-guardian's gate: how to clear a failed one, or how to run and report it over MCP — 1.29)
   if (suite.missing.length) block("suite-evidence", suiteBlocker(suite.missing, slug, lng));
   if (suite.invalid.length) warnings.push(i18n.msg(lng).projectChecks.invalidStored(suite.invalid.join(", ")));
+  warnings.push(...guardianWarnings(suite.items, lng)); // 1.30: dev-guardian should be updated (older than 3.2.1, no version reported)
   if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);

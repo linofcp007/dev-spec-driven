@@ -57,16 +57,18 @@ const EDITS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 // tools are none) — their path arguments read like an Edit's path.
 const RE_MCP_FILE = /^mcp__.+__[\w-]*?(?:write|edit|create|move|rename|delete|remove|copy|append|patch|replace|save|put|upload|mkdir|touch|truncate|unlink|insert)/i;
 const RE_DEVSPEC_TOOL = /__(?:spec_[a-z_]+|steering_scaffold|ears_validate|trace_check)$/;
-const RE_GUARDED_FILE = /(?:^|[\\/])\.specs[\\/]+(?:roadmap\.json|(?:[^\\/]+[\\/]+)+\.state\.json|(?:[^\\/]+[\\/]+)*\.execution[\\/]+observed\.jsonl)$/i;
+const RE_GUARDED_FILE = /(?:^|[\\/])(?:\.specs[\\/]+(?:roadmap\.json|guardian\.cjs|(?:[^\\/]+[\\/]+)+\.state\.json|(?:[^\\/]+[\\/]+)*\.execution[\\/]+observed\.jsonl)|\.guardian[\\/]+baseline\.json)$/i;
+// (.specs/guardian.cjs and .guardian/baseline.json — dev-guardian's gate, 1.30: the engine counts them only while a check runs it)
+const RE_GUARDED_DIR = /(?:^|[\\/])\.(?:specs|guardian)(?:[\\/]|$)/i; // a path under .specs/ or .guardian/
 // A Write / Edit target that can't be one: its text names no .specs, no 8.3 short name (`SPECS~1`, `ROADMA~1.JSO`) and none of
 // the guarded file names — through a folder linked to .specs/ (`sx/roadmap.json`) only its real path names .specs.
-const RE_EDIT_MAYBE = /\.specs|~\d|(?:^|[\\/])(?:roadmap\.json|\.state\.json|observed\.jsonl)\s*$/i;
+const RE_EDIT_MAYBE = /\.specs|\.guardian|~\d|(?:^|[\\/])(?:roadmap\.json|\.state\.json|observed\.jsonl|guardian\.cjs|baseline\.json)\s*$/i;
 // The engine's approvalCandidate: a command can run the CLI or write .specs/roadmap.json only if it names dev-spec or .specs
 // (string joints, quotes, escapes and line continuations taken out — `dev\-spec`, `d'e'v-spec`, `"cli/dev" + "-spec.js"`), or holds
 // a glob together with an approval word (the glob may name the CLI). The WHOLE command: one past the engine's read limit that
 // names dev-spec is refused / asked as unreadable (an approval after the first 64 KB went through). 
 // or a guarded file's name, or a glob / brace expansion that may name .specs (`.s*/…`) or stands beside a writer / remover.
-const RE_CANDIDATE = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
+const RE_CANDIDATE = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl|guardian/i; // guardian: dev-guardian's gate (1.30)
 const RE_VERB = /(?:^|[^\w-])(?:approve|remove|--approval-guard|--stop-check|--evidence|--guard|--guardian|--roles|--check)(?![\w-])/i;
 const RE_DOT_GLOB = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*[*?[{]/;
 const RE_WRITE_WORD = /(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|remove-item|ri|mv|move|move-item|mi|cp|copy|copy-item|cpi|set-content|sc|add-content|ac|clear-content|clc|out-file|new-item|ni|tee|robocopy|xcopy|rsync)(?=[\s;&|)]|$)/i;
@@ -77,7 +79,7 @@ const candidate = (c) => {
     (/powershell|pwsh/i.test(t) && /(?:^|\s)[-/]e[a-z]*\s+[A-Za-z0-9+/]{8,}/i.test(t));
 };
 // An MCP file tool's input may touch a guarded file only if its text names .specs (also %-encoded), a guarded name or a short name.
-const RE_MCP_MAYBE = /\.specs|%2especs|roadmap\.json|\.state\.json|observed\.jsonl|~\d/i;
+const RE_MCP_MAYBE = /\.specs|%2especs|\.guardian|%2eguardian|roadmap\.json|\.state\.json|observed\.jsonl|guardian\.cjs|~\d/i;
 // A roadmap.json that doesn't parse: the strictest level its raw text names (fail closed) — the engine's rawApprovalGuard.
 const RE_RAW_GUARD = /"approvalGuard"\s*:\s*"\s*(ask|deny)\s*"/gi;
 // a payload cut short — what it may be about (dev-spec, .specs/, an approval-shaped MCP tool).
@@ -205,7 +207,7 @@ function main(raw, timedOut) {
   // the edited path as the file system reads it — `./`, `..`, an NTFS stream, an 8.3 short name and a folder linked
   // to .specs/ (hook-utils editTargets, the engine's approvalEditTargets).
   const paths = fp ? [fp] : mcpFile ? mcpPathArgs(ti) : [];
-  const touched = paths.flatMap((p) => HU.editTargets(p, cwd)).filter((t) => /(?:^|[\\/])\.specs(?:[\\/]|$)/i.test(t));
+  const touched = paths.flatMap((p) => HU.editTargets(p, cwd)).filter((t) => RE_GUARDED_DIR.test(t));
   const edited = touched.find((t) => RE_GUARDED_FILE.test(t)) || null;
   if (fp && !edited) return finish();
   if (mcpFile && !touched.length) return finish();
@@ -218,7 +220,7 @@ function main(raw, timedOut) {
   // server refuses — go to approvalProjects as before: a '..' path is read, a network one only on the session's share.)
   let named = [];
   let unreadableProject = false;
-  if (touched.length) named = [...new Set(touched.map((t) => t.replace(/[\\/]*\.specs(?:[\\/][\s\S]*)?$/i, "") || "."))];
+  if (touched.length) named = [...new Set(touched.map((t) => t.replace(/[\\/]*\.(?:specs|guardian)(?:[\\/][\s\S]*)?$/i, "") || "."))];
   else if (!command) {
     const bases = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR, cwd].filter((b) => typeof b === "string" && b.trim() && !HU.unexpandedVar(b));
     for (const b of bases.length ? bases : [process.cwd()]) {

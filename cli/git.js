@@ -46,7 +46,8 @@ function gitText(args, opts) {
 function gitState(cwd) {
   const commit = String(gitText(["rev-parse", "--short", "HEAD"], { cwd }) || "").trim();
   if (!/^[0-9a-f]{4,40}$/i.test(commit)) return {};
-  const st = gitText(["status", "--porcelain", "--", ".", ":(exclude).specs"], { cwd });
+  // (and dev-guardian's report sets, .guardian/reports/ — written by its gate on every run, never code: 1.30)
+  const st = gitText(["status", "--porcelain", "--", ".", ":(exclude).specs", ":(exclude).guardian/reports"], { cwd });
   return st == null ? { commit } : { commit, dirty: st.trim() !== "" };
 }
 

@@ -199,6 +199,20 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   shell writer or an MCP file tool: `command: null` (the user makes that change), `project` the folder above `.specs/`
   (`approvalSpecsProject()`). `dev-spec merge-state … <ours>` onto a state file is one too (git runs the driver itself, never
   through the Bash tool).
+- **dev-guardian's gate (1.30, review 8)** — its rules live in engine/guardian.js; guards.js calls them at a few one-line hook
+  points (`approvalGuardedFile`, `shellOpActions`' unknown program — the two files' own guard-down, never "unreadable", so
+  nothing asks without the check —, `shellApprovalActions`, `approvalCommand`, `approvalGuardDecision`; keep them so). With a check running the gate (`guardianGuardOn(meta)`; meta
+  unknown → yes, fail closed), these are guard-downs (`command: null` — the user makes them): an agent's write of
+  `.specs/guardian.cjs` (`guardian-launcher` — code the gate runs) or `.guardian/baseline.json` (`guardian-baseline` — what it
+  accepts as known), through every writer above (`approvalGuardedFile` → `guardianGuardedFile`); an agent-run `baseline update`
+  of the launcher or of dev-guardian's own CLI in program position (`guardian-baseline-update` — it accepts every current
+  finding, the feature's included; `guardianShellActions`, given `programAt`); a gate run — the launcher, or `dev-spec finish
+  … --run` — under a `DEV_GUARDIAN_CLI` / `CLAUDE_CONFIG_DIR` the command sets (`guardian-cli`: a prefix assignment, or one an
+  earlier command set — `ctx.vars`). Without the check they are dropped (`guardianGuardFilter`, in `approvalGuardDecision`).
+  The pre-filters let them through: `guardian` in `RE_APPROVAL_CANDIDATE` / the hook's `RE_CANDIDATE`, `.guardian` and the two
+  names in `RE_EDIT_MAYBE` / `RE_MCP_MAYBE`, `.guardian/` paths in the hook's `RE_GUARDED_DIR` / `RE_GUARDED_FILE`. Known
+  limits: a glob write onto either file, dev-guardian's own MCP tool `set_baseline` (not in the hook's matcher: dev-guardian's
+  side) and a variable exported out of the command's sight; for the launcher, its verification before every run is the backstop.
 - **The shell lexer** (`shellCommandWords(cmd, mode)`: one linear pass, nothing evaluated, ≤ `APPROVAL_LEX_DEPTH` = 32 deep)
   reads the tool's shell — `bash` (`\x`, `$'…'`; `raw` keeps backslashes for Windows paths), `ps` (the backtick escape, `@'…'@`,
   `<# #>`), `cmd` (`^`). `{` / `}` separate only standing alone (inside a word they are brace expansion). Redirections go to
@@ -305,20 +319,39 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (`plugins/cache/<marketplace>/dev-guardian/<version>/cli/dev-guardian.mjs`), so its path can't be baked into a check either.
   A `node -e` one-liner like the status line's did NOT fit: with DEV_GUARDIAN_CLI, CLAUDE_CONFIG_DIR, every marketplace, the
   numeric order and a clear exit 3 it was ~730 characters against meta.checks' 500. So the check is `node .specs/guardian.cjs
-  scan --project . --fail-on high --format json` and `.specs/guardian.cjs` is a small generated script (evidence.js
-  `GUARDIAN_LAUNCHER`, committed with the project: a teammate's clone runs the same check): `DEV_GUARDIAN_CLI` (a file) first,
-  else the newest `<version>` by numeric parts (a missing part 0, a version folder without the CLI skipped) under
-  `CLAUDE_CONFIG_DIR` — else `~/.claude` (Claude Code's own rule: one config folder, never both) — `/plugins/cache/*/dev-guardian/`;
-  it sets `argv[1]` to that CLI (dev-guardian runs `main()` only when argv[1] is itself — realpaths compared) and imports it by
-  its file URL (`import("node:url")`: `require("url")` would be a Node core module CLAUDE.md doesn't list), so dev-guardian's
-  own exit code is the run's. Nothing found, a DEV_GUARDIAN_CLI naming no file, a CLI that doesn't load → `exitCode = 3`
-  (never `process.exit`: a message to a pipe would be cut) and a "dev-guardian not found: …" / "could not be loaded" line.
-  `nosemgrep` comments on its three `path.join` lines: dev-guardian's own Semgrep flagged them (medium) in every project.
-  Source rules: no backslash in it, Node core only. `guardianCli()` mirrors the rule for the engine's offer (folder listings,
-  outside the project — the one engine read of the user's config folder); mcp/tests/09-evidence-guardian.js runs both on a
-  fake plugin cache. The command runs under cmd.exe, bash, PowerShell 5.1 and pwsh alike (cli/tests/09-evidence-guardian.js).
-  **Hermetic tests:** the runner drops `DEV_GUARDIAN_CLI` and points `CLAUDE_CONFIG_DIR` at an absent folder of the chain's own
-  (testing.md), or init would offer the gate on a maintainer's machine with dev-guardian installed.
+  scan --project . --fail-on high --format json` and `.specs/guardian.cjs` is a small generated script (guardian.js
+  `GUARDIAN_LAUNCHER`, committed with the project: a teammate's clone runs the same check).
+  - *The lookup is ONE function* (1.30), `findDevGuardian(env, cwd, fs, path, os)`: the engine runs it for the offer
+    (`guardianCli(env, cwd)`) and the launcher carries its source (`Function.prototype.toString`, CRLF folded) — the two can't
+    drift. Its source rules: Node core only, handed in; no backslash, no backtick, no `${`. `DEV_GUARDIAN_CLI` first — only a
+    file whose basename is `dev-guardian.mjs` (review 8: any file was imported, the launcher was a trampoline); else Claude
+    Code's `plugins/installed_plugins.json` under `CLAUDE_CONFIG_DIR` — else `~/.claude` (Claude Code's own rule: one config
+    folder, never both): the `installPath` of a `dev-guardian@<marketplace>` entry whose `cli/dev-guardian.mjs` is a file — one
+    scoped to this project (`projectPath` = the cwd) over the user's, then the newest version. That file decides once it parses
+    (a dev-guardian it doesn't list is not installed: an update's leftover folder, a disabled copy). Without it, the newest x.y.z
+    folder (semver only — a commit-hash folder like `9f3e2a1b7c` read as 9 before) of `plugins/cache/*/dev-guardian/` holding
+    the CLI and not marked `.orphaned_at` (Claude Code marks an update's leftovers so).
+  - *What it runs:* only `scan`, `baseline` (the user's `baseline update`), `status` and help (`GUARDIAN_FORWARDED`); anything
+    else exits 3 ("not forwarded"). A `DEV_GUARDIAN_CLI` it ran is said on stderr (`dev-guardian launcher: DEV_GUARDIAN_CLI=…`)
+    and lands in the verdict (`override`) and the merge summary.
+  - *How it runs it:* it sets `argv[1]` to that CLI (dev-guardian runs `main()` only when argv[1] is itself — realpaths
+    compared) and imports it by its file URL (`import("node:url")`: `require("url")` would be a Node core module CLAUDE.md
+    doesn't list), so dev-guardian's own exit code is the run's. Nothing found, a subcommand not forwarded, a CLI that doesn't
+    load → `exitCode = 3` (never `process.exit`: a message to a pipe would be cut) and a "dev-guardian not found: …" /
+    "could not be loaded" line. `nosemgrep` comments on its `path.join` / `path.resolve` helpers: dev-guardian's own Semgrep
+    flagged them (medium) in every project.
+  - *It is verified, never trusted* (1.30, review 8 ds-security 1): the gate runs code from the project, so `guardianLauncherState()`
+    compares `.specs/guardian.cjs` (lstat: a regular file, ≤ 256 KB, read raw, CRLF folded) with `GUARDIAN_LAUNCHER` → ok ·
+    outdated (an earlier version's, byte for byte: `GUARDIAN_LAUNCHER_PAST`, sha1 — 1.29's is mcp/tests/fixtures) · missing ·
+    changed. `finish --run` checks it before running anything (`guardianPreRun`: outdated → rewritten first, with a note;
+    missing → `no-launcher`, changed → `launcher-changed`, both refused with nothing run or recorded), `recordFinishChecks`
+    refuses a reported run of a changed one (and a pass of a missing one), `spec_upgrade` flags it and `--apply` writes it;
+    `init --guardian` (no guard-down while the check is already set) writes it again. **A launcher edit is a release item:**
+    add the old text's sha1 to `GUARDIAN_LAUNCHER_PAST`, or every project's gate refuses until `init --guardian`.
+  - The command runs under cmd.exe, bash, PowerShell 5.1 and pwsh alike (cli/tests/09-evidence-guardian.js).
+    mcp/tests/09-evidence-guardian.js runs the launcher and `guardianCli` on fake caches and installed_plugins.json files.
+    **Hermetic tests:** the runner drops `DEV_GUARDIAN_CLI` and points `CLAUDE_CONFIG_DIR` at an absent folder of the chain's own
+    (testing.md), or init would offer the gate on a maintainer's machine with dev-guardian installed.
 - **User defaults** — `DEV_SPEC_DEFAULT_LANG` / `DEV_SPEC_STOP_CHECK` / `DEV_SPEC_GUARD_DEFAULT` (`userOptionRaw()` →
   `userDefaults()`), FALLBACKS only: project meta wins; empty, invalid or unexpanded changes nothing. `newProjectLang()` only for
   a brand-new project (no meta.lang, no feature, active or archived), seeded by `seedProjectLang()` under the roadmap lock;
@@ -465,6 +498,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   **finding 11:** the threat model, said as it is in every doc; the known limits listed.
 - **1.27** — the candidate projects' `cd` targets go through `probe.nearestProject` (the folder itself with any `.specs/`, else
   the nearest dev-spec one above, ≤ 64 levels); it took the nearest `.specs/` of any tool, ≤ 40.
+- **1.30 (review 8)** — dev-guardian's gate joined the guard: at deny, an agent overwrote `.specs/guardian.cjs` with a stub
+  printing exit 0 (recorded as the CLI's own observed pass), ran `baseline update` or wrote `.guardian/baseline.json` to clear a
+  failed gate, or pointed `DEV_GUARDIAN_CLI` at a stub — all allowed. Now guard-downs while a check runs the gate (rules in
+  guardian.js, one-line hook points in guards.js).
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import
@@ -481,3 +518,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `statusLineRender`, run first by cli/main.js.
 - **1.29** — the dev-guardian launcher, `.specs/guardian.cjs`: a generated script rather than the status line's `node -e`
   one-liner, which did not fit a project check's 500 characters.
+- **1.30 (review 8)** — the launcher's lookup became one function the launcher carries (`findDevGuardian`); installed_plugins.json
+  first (the cache's newest numeric folder ran an orphaned or another project's copy, and a commit-hash folder read as version 9);
+  DEV_GUARDIAN_CLI only a `dev-guardian.mjs` and only the gate's subcommands forwarded (it imported any file with any arguments:
+  `DEV_GUARDIAN_CLI=…/dev-spec.js node .specs/guardian.cjs approve … --force` recorded a forced approval at deny); the launcher
+  verified before every run and recorded run (`launcher-changed`), an earlier version's replaced (`GUARDIAN_LAUNCHER_PAST`).

@@ -31,7 +31,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
-let guardianChecks, guardianOffer, isGuardianCheck, setGuardianLauncher; // evidence.js — 1.29 (init --guardian)
+let guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher; // guardian.js — 1.29 (init --guardian)
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -50,7 +50,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
-  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianOffer, isGuardianCheck, setGuardianLauncher } = E); }
+  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher } = E); }
 
 // the first of `files` a write would reach through a link (a .specs/<feature>/ or .specs/steering/ that is a
 // symbolic link / junction, or resolves outside the real .specs/ — specsWriteContained) → that folder as `.specs/<rel>/`, else
@@ -123,6 +123,11 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const roles = setsRoles ? validateApprovalRoles(opts.approvalRoles, normalizeLang(lang || projectLang(projectDir))) : null;
   if (roles && !roles.ok) return { ok: false, error: roles.error };
   const approvalGuard = approvalGuardInput(opts.approvalGuard); // "off" | "ask" | "deny" — anything else leaves it unchanged
+  // 1.30: dev-guardian's gate on → its launcher, .specs/guardian.cjs, is written FIRST: a path the write gate refuses (a folder, a
+  // link) stops init before meta.checks names a check that could never run; a launcher this call created is removed again when
+  // meta.checks can't be written (review 8: init was not atomic).
+  const launcher = opts.guardian === true ? guardianLauncherOn(projectDir, normalizeLang(lang || projectLang(projectDir))) : {};
+  if (launcher.refusal) return launcher.refusal;
   if (lang || setsGuard || nc || setsRoles || setsStop || approvalGuard || evMode) {
     const meta = withRoadmapLock(projectDir, () => {
       const bad = roadmapError(projectDir) || (nc ? checksPlanError(projectDir, nc) : null);
@@ -138,12 +143,15 @@ function initProject(projectDir, tracks, lang, opts = {}) {
       if (approvalGuard) setApprovalGuard(projectDir, approvalGuard);
       return { ok: true };
     });
-    if (!meta.ok) return meta;
+    if (!meta.ok) {
+      if (launcher.wrote) setGuardianLauncher(projectDir, false);
+      return meta;
+    }
   }
   ensureDir(steering);
   ensureLockIgnore(root); // .specs/.gitignore: the lock files are never committable
-  // the check's launcher, .specs/guardian.cjs — written (or removed) once meta.checks says so
-  if (setsGuardian) setGuardianLauncher(projectDir, opts.guardian);
+  // the gate off: its launcher removed (only the generated one) once meta.checks no longer names it
+  if (opts.guardian === false) setGuardianLauncher(projectDir, false);
   // meta.specVersion: a brand-new project is at this engine's version, so it never gets the upgrade notice. A project that
   // already has features is never stamped here — spec_upgrade {apply: true} does it, after its audit.
   if (fresh) { try { stampSpecVersion(projectDir); } catch { /* best-effort */ } }
@@ -190,7 +198,8 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   if (setsRoles) res.rolesNote = Object.keys(current).length ? i18n.msg(lng).governance.rolesSet(rolesSummary(current)) : i18n.msg(lng).governance.rolesCleared;
   // dev-guardian's gate: what this call set (guardianNote), else offered — never enabled — when dev-guardian is installed or the
   // project holds .guardian/ (its scan takes minutes and needs its scanners: the user decides)
-  if (setsGuardian) res.guardianNote = res.guardian ? i18n.msg(lng).guardian.on(res.checks.guardian) : i18n.msg(lng).guardian.off;
+  // (on: + no baseline yet, record one now — the user's step — and the .gitignore lines the project lacks: guardianOnNote)
+  if (setsGuardian) res.guardianNote = res.guardian ? guardianOnNote(projectDir, res.checks.guardian, lng) : i18n.msg(lng).guardian.off;
   else { const offer = guardianOffer(projectDir, lng); if (offer) res.guardianOffer = offer; }
   return res;
 }
@@ -836,7 +845,10 @@ function createFeature(projectDir, name, tracks, summary, cls, lang, kind, opts 
     }
     if (Object.keys(fromTemplates).length) res.templates = fromTemplates;
     const fromBacklog = pruneBacklog(projectDir, slug);
-    if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
+    if (fromBacklog.length) {
+      res.removedFromBacklog = fromBacklog; // [{name, note}] (1.30: the note too — it was names only)
+      if (!existed) { const kept = backlogNoteInto(dir, created, fromBacklog, lng); if (kept) res.backlogNote = kept; }
+    }
     if (fresh) { try { stampSpecVersion(projectDir); } catch { /* best-effort */ } }
     if (userLang && !stored) { try { if (seedProjectLang(projectDir, lng)) res.userDefaults = { lang: lng }; } catch { /* best-effort */ } } // 1.16 C2
     // a Phase 0 correction: a NEW plain feature whose summary the classifier read, created with other tracks than it
@@ -1005,11 +1017,30 @@ function pruneBacklog(projectDir, slug) {
       if (!gone.length) return [];
       rm.backlog = before.filter((b) => !gone.includes(b));
       writeRoadmap(projectDir, rm);
-      return gone.map((b) => b.name);
+      return gone.map((b) => ({ name: b.name, note: typeof b.note === "string" ? b.note : "" }));
     }, () => []); // roadmap busy: the entry stays (best-effort, like an unreadable roadmap.json)
   } catch {
     return [];
   }
+}
+// A NEW feature created from a backlog item keeps the item's note — a guardian-improve seed's current → target metrics, a plan's
+// why — as an HTML comment under the title of its first artifact (bug.md, requirements.md, change.md, the spike's file): the
+// readers skip it, the author sees it (review 8 C10: create dropped the note with the entry). Inert: one line, "<!--" / "-->"
+// escaped. → the file it went into | null.
+function backlogNoteInto(dir, created, items, lng) {
+  const notes = items.filter((b) => b.note);
+  const file = ["bug.md", "requirements.md", CHANGE_FILE, SPIKE_FILE].find((f) => created.includes(f));
+  if (!notes.length || !file) return null;
+  const abs = path.join(dir, file);
+  const text = readIfExists(abs);
+  if (text == null) return null;
+  const inert = (s) => flatText(s).replace(/<!--/g, "&lt;!--").replace(/--!?>/g, "--&gt;");
+  const nl = text.includes("\r\n") ? "\r\n" : "\n";
+  const lines = notes.map((b) => "<!-- " + inert(i18n.msg(lng).featureOps.fromBacklog(b.name, b.note)) + " -->").join(nl);
+  const title = /^#[ \t][^\r\n]*/m.exec(text);
+  const end = title ? title.index + title[0].length : 0;
+  writeFileAtomic(abs, title ? text.slice(0, end) + nl + nl + lines + text.slice(end) : lines + nl + nl + text);
+  return file;
 }
 
 // --- Q1: steering amendments ---
