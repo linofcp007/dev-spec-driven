@@ -49,12 +49,18 @@ function resolveProject(arg, env) {
 // (an empty line): nothing to load. true → the engine decides (it also maps a worktree to its checkout, which only ever starts from a
 // folder this walk finds).
 function statusProbe(candidates) {
+  return statusNear(candidates) !== null;
+}
+// …and the folder it found: the nearest dev-spec folder of the first candidate that has one — the folder statusLineProject finds
+// before it maps a worktree (1.30.1: the render cache compares it at each read — a nearer .specs/ made since is a miss), or null.
+function statusNear(candidates) {
   const P = probe();
   for (const c of Array.isArray(candidates) ? candidates : []) {
     const u = P.usable(c);
-    if (u && !P.isNetwork(u) && P.nearestDevSpec(P.expandHome(u), { maxUp: P.SESSION_MAX_UP })) return true;
+    const near = u && !P.isNetwork(u) ? P.nearestDevSpec(P.expandHome(u), { maxUp: P.SESSION_MAX_UP }) : null;
+    if (near) return near;
   }
-  return false;
+  return null;
 }
 
 // ---- the status line's render cache (no engine) — review 8 (ds-maint finding 5) ------------------------------------------------
@@ -62,10 +68,16 @@ function statusProbe(candidates) {
 // loaded the engine (~150 ms). A render is kept in the OS temp folder — dev-spec-statusline-<sha1 of its key>.json, the key being
 // this CLI and what the line is computed from (the candidate folders, $COLUMNS) — with the signature of the project's .specs/ taken
 // BEFORE it rendered: every entry's path, size, mtime and ctime (≤ STATUS_CACHE_ENTRIES, else no cache; links never entered). It is
-// reused while that signature still holds and it is under STATUS_CACHE_TTL_MS old: any change under .specs/ shows at the next render;
-// what the line reads outside .specs/ — a test file in Phase 4, a finished feature's code (finish again), a forced approval's code
-// checks, a worktree's mapping, a new .specs/ nearer the cwd — within the TTL.
+// reused while that signature still holds and it is under STATUS_CACHE_TTL_MS old: any change under .specs/ shows at the next render.
+// What the line reads OUTSIDE .specs/ (1.30.1 — it showed only once the TTL ran out): the files the render reports (statusLine's
+// opts.reads — Phase 4's test files, ≤ 20: each one's size, mtime and ctime or its absence, in the same signature — `outside`), the
+// folder the candidates find (statusNear, compared at each read: a .specs/ made nearer the cwd is a miss) and, for a worktree mapped
+// to its checkout (git's files outside .specs/ decide it), a TTL of STATUS_CACHE_MAPPED_TTL_MS. A reported file changed within
+// STATUS_CACHE_RACY_MS of the render (the render may have read it before the change) is not kept.
 const STATUS_CACHE_TTL_MS = 10 * 1000;
+const STATUS_CACHE_MAPPED_TTL_MS = 2 * 1000;
+const STATUS_CACHE_RACY_MS = 2 * 1000;
+const STATUS_CACHE_OUTSIDE = 64; // reported paths kept, at most (past them: no cache)
 const STATUS_CACHE_ENTRIES = 4000;
 const sha1 = (s) => require("crypto").createHash("sha1").update(String(s)).digest("hex");
 // <project>/.specs/'s signature (a hex digest), or null: no .specs/, or past the entry bound.
@@ -89,21 +101,40 @@ function specsSignature(projectDir) {
   return walk(path.join(projectDir, ".specs"), "", 0) ? h.digest("hex") : null;
 }
 const statusCacheFile = (key) => path.join(require("os").tmpdir(), "dev-spec-statusline-" + sha1(JSON.stringify([__filename, key])).slice(0, 16) + ".json");
-// The cached render for this key — its result object — while its project's .specs/ signature holds and it is fresh, else null.
-function statusCacheRead(key, now = Date.now()) {
+// The paths outside .specs/ a render reported → their signature: each one's size, mtime and ctime, or its absence (a test file not
+// written yet is read as one — writing it changes the line).
+const statOf = (p) => { try { return fs.statSync(p); } catch { return null; } };
+function outsideSignature(paths) {
+  const h = require("crypto").createHash("sha1");
+  for (const p of paths) { const st = statOf(p); h.update(p + "\0" + (st ? [st.size, st.mtimeMs, st.ctimeMs].join(":") : "-") + "\n"); }
+  return h.digest("hex");
+}
+// The cached render for this key — its result object — while it is fresh, its project's .specs/ signature and its outside paths' hold
+// and the candidates still find the folder it was rendered for (`near`: statusNear's — given by the caller), else null.
+function statusCacheRead(key, now = Date.now(), near) {
   let c;
   try { c = JSON.parse(fs.readFileSync(statusCacheFile(key), "utf8")); } catch { return null; }
   if (!c || typeof c !== "object" || typeof c.at !== "number" || typeof c.project !== "string" || typeof c.sig !== "string") return null;
-  if (now < c.at || now - c.at > STATUS_CACHE_TTL_MS || !c.r || typeof c.r !== "object") return null;
-  return specsSignature(c.project) === c.sig ? c.r : null;
+  const ttl = c.mapped === true ? STATUS_CACHE_MAPPED_TTL_MS : STATUS_CACHE_TTL_MS;
+  if (now < c.at || now - c.at > ttl || !c.r || typeof c.r !== "object" || !Array.isArray(c.outside) || typeof c.osig !== "string") return null;
+  if (near !== undefined && c.near !== near) return null;
+  return specsSignature(c.project) === c.sig && outsideSignature(c.outside) === c.osig ? c.r : null;
 }
-// Keep a render (best effort: a temp file renamed into place — two status lines at once never read half a file).
-function statusCacheWrite(key, project, sig, r, at = Date.now()) {
+// Keep a render (best effort: a temp file renamed into place — two status lines at once never read half a file). opts: { at (now),
+// started (when the render began — default at), near (statusNear's folder), mapped (the project is a worktree's checkout, not near),
+// reads (the outside paths it reported) }.
+function statusCacheWrite(key, project, sig, r, opts = {}) {
   if (!sig || !r || !r.found) return;
+  const at = typeof opts.at === "number" ? opts.at : Date.now();
+  const outside = [...new Set(Array.isArray(opts.reads) ? opts.reads.filter((p) => typeof p === "string") : [])];
+  if (outside.length > STATUS_CACHE_OUTSIDE) return;
+  const since = (typeof opts.started === "number" ? opts.started : at) - STATUS_CACHE_RACY_MS;
+  if (outside.some((p) => { const st = statOf(p); return !!st && Math.max(st.mtimeMs, st.ctimeMs) >= since; })) return; // changed as it rendered
   const file = statusCacheFile(key);
   const tmpFile = file + "." + process.pid + ".tmp";
   try {
-    fs.writeFileSync(tmpFile, JSON.stringify({ at, project, sig, r }));
+    fs.writeFileSync(tmpFile, JSON.stringify({ at, project, sig, r, near: typeof opts.near === "string" ? opts.near : null, mapped: opts.mapped === true,
+      outside, osig: outsideSignature(outside) }));
     fs.renameSync(tmpFile, file);
   } catch {
     try { fs.unlinkSync(tmpFile); } catch { /* gone */ }
@@ -270,5 +301,6 @@ function script(shell, model) {
   return body.replace(/@@([A-Z_]+)@@/g, (m, k) => (Object.prototype.hasOwnProperty.call(fill, k) ? fill[k] : m));
 }
 
-module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, statusProbe, STATUSLINE_LAUNCHER, statuslineCommand, featureNames, archivedNames,
-  STATUS_CACHE_TTL_MS, specsSignature, statusCacheFile, statusCacheRead, statusCacheWrite };
+module.exports = { SHELLS, shellName, complete, script, tables, resolveProject, expandHome, statusProbe, statusNear, STATUSLINE_LAUNCHER, statuslineCommand,
+  featureNames, archivedNames, STATUS_CACHE_TTL_MS, STATUS_CACHE_MAPPED_TTL_MS, STATUS_CACHE_RACY_MS, specsSignature, outsideSignature, statusCacheFile,
+  statusCacheRead, statusCacheWrite };

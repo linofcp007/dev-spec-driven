@@ -393,11 +393,17 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (cli/completion.js `statusCacheRead` / `statusCacheWrite`, no engine): kept in the OS temp folder per key (this CLI, the
   candidate folders resolved, `$COLUMNS`) with `specsSignature()` of the project's `.specs/` taken BEFORE it rendered — every
   entry's path, size, mtime and ctime, ≤ `STATUS_CACHE_ENTRIES` (4,000; past it: no cache), links never entered — and served while
-  that signature holds and it is under `STATUS_CACHE_TTL_MS` (10 s) old. Any change under `.specs/` shows at the next render; what
-  the line reads OUTSIDE `.specs/` (a Phase 4 test file, a finished feature's code — finish again —, a forced approval's code checks,
-  a worktree's mapping, a nearer `.specs/` made since) within the TTL. Measured (Windows, Node 26, median of 21 interleaved fresh
-  processes, `node -e 0` 51 ms): a 5-feature project 194 → 80 ms on a hit (outside a project 72; a loaded machine, `node -e 0` 96:
-  414 → 152, outside 135). `--print-config` prints the `statusLine`
+  that signature holds and it is under `STATUS_CACHE_TTL_MS` (10 s) old. Any change under `.specs/` shows at the next render. **What
+  it reads OUTSIDE `.specs/` (1.30.1)** shows at the next render too: the render reports the paths its answer depends on there
+  (`statusLine(dir, {reads})` — Phase 4's test files, read or missing, `statusTestsGate`; the gates and the finish step read only the
+  spec and state files) and the entry signs them (`outside` / `osig`: size, mtime, ctime or absent — ≤ 64, else no cache); a file
+  among them changed within `STATUS_CACHE_RACY_MS` (2 s) of the render is not kept (the render may have read it before the change);
+  the folder the candidates find (`statusNear` — the probe's walk the render makes anyway) is compared at each read (a `.specs/`
+  made nearer the cwd is a miss); a worktree mapped to its checkout (git's files decide it) keeps its render
+  `STATUS_CACHE_MAPPED_TTL_MS` (2 s). Measured (Windows, Node 26, median of 21 interleaved fresh processes, `node -e 0` 51 ms): a
+  5-feature project 194 → 80 ms on a hit (outside a project 72; a loaded machine, `node -e 0` 96: 414 → 152, outside 135); 1.30.1's
+  signatures cost nothing measurable (`node -e 0` 49–59 ms: 5 features 80 → 81 ms, a Phase 4 line with its test file 94 → 90; a
+  miss, the engine rendering, 232). `--print-config` prints the `statusLine`
   entry — in a plugin's versioned cache folder, a `node -e` one-liner that finds the newest installed `<version>` at each run
   (cli/completion.js `statuslineCommand`: no quote, dollar, backtick, percent, ! or backslash, so every shell passes it; else the
   plain command and `cacheNote`). A plugin can't ship a status line (plugin `settings` honour only `agent` /
@@ -649,3 +655,6 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   verified before every run and recorded run (`launcher-changed`), an earlier version's replaced (`GUARDIAN_LAUNCHER_PAST`).
 - **1.30 (review 8, ds-maint finding 5)** — the status line loaded the whole engine after every message in a project (+158 ms over
   `node -e 0`), its most frequent engine load: the render cache (Status line above).
+- **1.30.1** — the cache's blind spot: for up to 10 s a change OUTSIDE `.specs/` the line reads didn't show (a Phase 4 test written —
+  "write the tests" stayed; a `.specs/` made nearer the cwd; a worktree's mapping): the render reports its outside paths and the
+  entry signs them, the probe's folder is compared at each read, a mapped render keeps 2 s.

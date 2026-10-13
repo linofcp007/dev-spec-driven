@@ -408,22 +408,25 @@ function statusLineRender(c) {
       const given = typeof flags.project === "string" ? [flags.project] : [];
       const cands = payload ? given.concat([ws.current_dir, payload.cwd, ws.project_dir])
         : given.concat([c.env.SPEC_PROJECT_DIR, c.env.CLAUDE_PROJECT_DIR, c.cwd]);
-      // the engine-free walk first (cli/completion.js statusProbe, statusLineProject's null rule) — outside a
+      // the engine-free walk first (cli/completion.js statusNear, statusLineProject's null rule) — outside a
       // dev-spec project the line is empty without loading the engine (136–220 ms per render in any folder, user-wide)
       const cols = parseInt(c.env.COLUMNS, 10);
       const columns = Number.isSafeInteger(cols) && cols > 0 ? cols : undefined;
-      if (COMPLETION.statusProbe(cands)) {
-        // …and in one, the last render while its .specs/ is unchanged and it is fresh (review 8: the engine loaded after every
-        // message) — cli/completion.js statusCacheRead; else the engine renders, kept with the signature taken before it read
+      const near = COMPLETION.statusNear(cands);
+      if (near) {
+        // …and in one, the last render while its .specs/ and the outside files it read are unchanged, the candidates find the same
+        // folder and it is fresh (review 8: the engine loaded after every message) — cli/completion.js statusCacheRead; else the
+        // engine renders, kept with the .specs/ signature taken before it read and the outside paths it reports (1.30.1)
         const key = { cands: cands.map((x) => (typeof x === "string" ? path.resolve(c.cwd, x) : null)), columns: columns || null };
-        const cached = COMPLETION.statusCacheRead(key);
+        const cached = COMPLETION.statusCacheRead(key, Date.now(), near);
         if (cached) r = cached;
         else {
           const pdir = spec.statusLineProject(cands);
           if (pdir) {
             const sig = COMPLETION.specsSignature(pdir);
-            r = spec.statusLine(pdir, { columns });
-            COMPLETION.statusCacheWrite(key, pdir, sig, r);
+            const reads = [], started = Date.now();
+            r = spec.statusLine(pdir, { columns, reads });
+            COMPLETION.statusCacheWrite(key, pdir, sig, r, { started, near, reads, mapped: path.resolve(pdir) !== path.resolve(near) });
           }
         }
       }
