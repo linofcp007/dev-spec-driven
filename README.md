@@ -98,7 +98,8 @@ Phase 0 suggests a size; you confirm it or pick another:
 - **s** — one story: requirements, design and tasks (with +tdd / +ai up to the test / eval plan) approved in one call,
   each track's core sections only.
 - **m / l** — the full chain, each phase approved: classification → requirements → design → test / eval plan → the
-  failing tests (+tdd / +ai, before any code) → tasks.
+  failing tests (+tdd / +ai, before any code) → tasks. The design names its **Reuse & Integration** — what it reuses,
+  extends or creates, with paths —, and its approval refuses it empty.
 
 At every size: EARS on every criterion, traceability, the evidence gate (`doctor`, `spec_finish` and the `ROADMAP.md`
 "Needs attention" line list each unverified task with a localized reason) and the finish gate. Tracks combine — a Stripe
@@ -228,7 +229,7 @@ project (`DEV_SPEC_DEFAULT_LANG`) or for one feature. EARS keywords work in each
 and the CLI's messages follow the feature's language; the command descriptions and the CLI's help are English. This
 README: [Português](./README.pt.md) · [Español](./README.es.md).
 
-## Upgrading from 1.25 or earlier
+## Upgrading
 
 1. **Update the plugin:** `/plugin marketplace update dev-spec-driven-marketplace`, then restart Claude Code (a clone:
    `git pull`, then restart). 1.26 needs Claude Code 2.1.139 or later.
@@ -236,7 +237,13 @@ README: [Português](./README.pt.md) · [Español](./README.es.md).
    (`--apply`) after your OK; it never edits a spec. Re-run anything that names the plugin's folder (the merge driver,
    the pre-commit hook — [INSTALL.md](./INSTALL.md) → Your plugin folder).
 
-Your specs need no change: 1.26 renamed the commands, not the files. There are no stubs for the old names:
+**From 1.27 or earlier:** an m / l design now needs its Reuse & Integration — `/spec-upgrade` lists each feature whose
+design was approved without one (write the section, then re-approve the design). Finish warns when a feature's code
+repeats code the project already has, and each task that writes code names its files in `_Implements:_`. dev-guardian's
+gate stays off until you ask for it (Quick start → step 5).
+
+**From 1.25 or earlier:** your specs need no change: 1.26 renamed the commands, not the files. There are no stubs for
+the old names:
 
 | Before 1.26 | Now |
 |---|---|

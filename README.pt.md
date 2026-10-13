@@ -100,7 +100,8 @@ A Fase 0 sugere um tamanho; confirmas ou escolhes outro:
 - **s** — uma história: requisitos, design e tarefas (com +tdd / +ai até ao plano de testes / de avaliação) aprovados
   numa só chamada, só com as secções core de cada track.
 - **m / l** — a cadeia completa, cada fase aprovada: classificação → requisitos → design → plano de testes / de
-  avaliação → os testes que falham (+tdd / +ai, antes de qualquer código) → tarefas.
+  avaliação → os testes que falham (+tdd / +ai, antes de qualquer código) → tarefas. O design indica a sua **Reutilização
+  e Integração** — o que reutiliza, estende ou cria, com os caminhos —, e a aprovação recusa-a vazia.
 
 Em todos os tamanhos: EARS em cada critério, rastreabilidade, o gate de evidência (o `doctor`, o `spec_finish` e a linha
 "Precisa de atenção" do `ROADMAP.md` listam cada tarefa por verificar com o motivo) e o gate de fecho. Os tracks
@@ -232,7 +233,7 @@ novos (`DEV_SPEC_DEFAULT_LANG`) ou para uma funcionalidade. As palavras-chave EA
 são os mesmos em todas. As mensagens das ferramentas e da CLI seguem a língua da funcionalidade; as descrições dos
 comandos e a ajuda da CLI estão em inglês. Este README: [English](./README.md) · [Español](./README.es.md).
 
-## Atualizar a partir da 1.25 ou anterior
+## Atualizar
 
 1. **Atualiza o plugin:** `/plugin marketplace update dev-spec-driven-marketplace` e depois reinicia o Claude Code (um
    clone: `git pull` e depois reinicia). A 1.26 precisa do Claude Code 2.1.139 ou posterior.
@@ -240,8 +241,13 @@ comandos e a ajuda da CLI estão em inglês. Este README: [English](./README.md)
    migrações seguras (`--apply`) depois do teu OK; nunca edita uma spec. Volta a configurar o que aponta para a pasta do
    plugin (o merge driver, o hook de pre-commit — [INSTALL.md](./INSTALL.md) → Your plugin folder).
 
-As tuas specs não precisam de alterações: a 1.26 mudou o nome dos comandos, não os ficheiros. Os nomes antigos deixaram
-de existir — não há atalhos para eles:
+**A partir da 1.27 ou anterior:** um design m / l passa a precisar da sua Reutilização e Integração — o `/spec-upgrade`
+lista cada feature cujo design foi aprovado sem ela (escreve a secção e volta a aprovar o design). O finish avisa quando o
+código de uma feature repete código que o projeto já tem, e cada tarefa que escreve código indica os seus ficheiros em
+`_Implements:_`. O gate do dev-guardian fica desligado até o pedires (Começar em 5 minutos → passo 5).
+
+**A partir da 1.25 ou anterior:** as tuas specs não precisam de alterações: a 1.26 mudou o nome dos comandos, não os
+ficheiros. Os nomes antigos deixaram de existir — não há atalhos para eles:
 
 | Antes da 1.26 | Agora |
 |---|---|
