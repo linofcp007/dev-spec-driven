@@ -25,7 +25,8 @@ mcp/lib/operations.js          THE operations table (`OPERATIONS`): each operati
                                call; requires nothing (mcp.md → The operations)
 mcp/lib/probe.js               THE dev-spec project rule (`isDevSpecProject`) and the walks — Node core only: the hooks, the status
                                line, shell completion and the engine's `isDevSpecDir` (claude-code-integration.md); and the guards'
-                               shared readings — the approval pre-filter, the guarded files, the MCP file tools, the observe pre-filter
+                               shared readings — the approval pre-filter, the guarded files, the MCP file tools, the observe pre-filter;
+                               the CLI's switches (CLI_SWITCHES) and the did-you-mean (closestName), read before the engine loads
 mcp/lib/latin1-scan.js         the stop gate's claim scan on a one-byte projection of a wide text (`latin1Text`) — Node core only
 mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): the engine + i18n in ONE file (The build)
 mcp/lib/engine/                ALL domain logic, one module per concern (The module rule):
@@ -51,7 +52,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   finish.js                    spec_finish, drift, remove / rename / archive / restore, _Supersedes:_, SPECS.md, metrics
   roadmap-md.js · decisions.js ROADMAP.md / .html, forecasts, overlaps · decisions.md, the ADR export, spikes
   export.js                    spec_export (markdown, HTML, Gherkin, CSV, changelog), milestones
-  guards.js                    guard mode, the stop gate and its claim scan, the approval guard + shell lexer; CLI_SWITCHES
+  guards.js                    guard mode, the stop gate and its claim scan, the approval guard + shell lexer (CLI_SWITCHES: probe.js)
   upgrade.js · scan.js         spec_upgrade · the brownfield scan, coverage, the ONE notion of code / test file (isCodeFile)
   dupes.js                     the duplicate-code detector (duplicationReport, duplicateRuns): spec_scan {duplicates}, finish
   import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering

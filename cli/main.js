@@ -377,7 +377,8 @@ function createContext(argv, io) {
 function refuseUnknownFlags(c) {
   const { flags, cmd } = c;
   if (cmd === "evals") return;
-  // VALUE_FLAGS, --help and --json are known without the engine's switch list (the bare help, version and completion never load it)
+  // VALUE_FLAGS, --help and --json are known without the switch list (the bare help, version and completion never read it); the
+  // switches and the did-you-mean are the probe's (mcp/lib/probe.js — no engine: a mistyped --flag is refused before it loads, 1.30)
   const keys = Object.keys(flags).filter((k) => !VALUE_FLAGS.has(k) && k !== "help" && k !== "json");
   if (c.unknownShort === null && !keys.length) return;
   const known = [...VALUE_FLAGS, ...BOOL_FLAGS()];
@@ -391,9 +392,9 @@ function refuseUnknownFlags(c) {
   }
   const bad = keys.find((k) => !known.includes(k));
   if (bad === undefined) return;
-  // the engine's did-you-mean (core.js closestName — optimal-string-alignment distance: a transposition, --rnu, costs 1; within
+  // the did-you-mean (probe.js closestName — the engine's: optimal-string-alignment distance, a transposition, --rnu, costs 1; within
   // max(1, ⌊length / 3⌋) edits), as the track's and the MCP server's
-  const near = spec.closestName(bad, known);
+  const near = PROBE().closestName(bad, known);
   c.die(c.projectText().unknownFlag("--" + bad, near ? "--" + near : null), c.unknownArg("--" + bad, near ? "--" + near : null));
 }
 // a single-value flag given twice is a usage error, never last-wins (--role, --by, --cmd, --summary, --through, --phase,
@@ -422,7 +423,7 @@ function normalizeBoolFlags(c) {
     if (["true", "1", "yes", "on"].includes(v)) flags[k] = true;
     else if (["false", "0", "no", "off"].includes(v)) flags[k] = false;
     else {
-      const A = spec.msg(spec.projectLang(c.projectDir)).args;
+      const A = I18N().msg(c.projectLang()).args; // (the engine's projectLang once it is loaded, else the same reading without it)
       c.die(A.invalid(A.item("--" + k, A.type.boolean, JSON.stringify(flags[k]))), c.invalidArg("--" + k));
     }
   }

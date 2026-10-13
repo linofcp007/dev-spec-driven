@@ -5,8 +5,8 @@
  *
  *   name, aliases      the word that runs it (`na` → next-action, `milestones` → milestone)
  *   options            the flags it reads, in its help's order (a flag every command knows aside: GLOBAL_OPTIONS). A VALUE flag
- *                      (the parser reads the word after it) is one of VALUE_FLAG_SPECS below; any other name is a switch of the
- *                      engine's spec.CLI_SWITCHES (the approval hook's lexer reads that list — a new switch goes THERE).
+ *                      (the parser reads the word after it) is one of VALUE_FLAG_SPECS below; any other name is a switch of
+ *                      mcp/lib/probe.js CLI_SWITCHES (the approval guard's lexer reads that list — a new switch goes THERE).
  *                      TABLE: a command that runs operations — its flags DERIVE from the operations table (mcp/lib/operations.js
  *                      cliOptions: each operation arg's `cli`, then `cliOnly`, in the table's order), read on first use. A list:
  *                      a command that runs none, or one whose help shows another order than the table's (init, spike, done,
@@ -2130,9 +2130,10 @@ for (const [k, o] of VALUE_FLAG_SPECS) if (o && o.values) FLAG_VALUES[k] = o.val
 for (const e of COMMANDS) for (const [k, v] of Object.entries(e.values || {})) FLAG_VALUES[e.name + " --" + k] = v;
 // The commands whose output is text only — no structured result — so --json is refused there (main; the help too).
 const TEXT_ONLY_COMMANDS = new Set(COMMANDS.filter((e) => e.text).map((e) => e.name));
-// Boolean switches: ONE list, spec.CLI_SWITCHES (the approval hook parses `dev-spec approve …` with it): add a new switch THERE. A
-// function: read on use — the engine's list (an unknown flag, a switch given a value), never at load.
-const BOOL_FLAGS = () => [...spec.CLI_SWITCHES];
+// Boolean switches: ONE list, mcp/lib/probe.js CLI_SWITCHES (the approval guard parses `dev-spec approve …` with it; the facade's
+// spec.CLI_SWITCHES is it): add a new switch THERE. Read on use, from the probe (Node core only, no engine — 1.30: a mistyped --flag
+// loaded the whole engine to be refused).
+const BOOL_FLAGS = () => [...require(path.join(__dirname, "..", "mcp", "lib", "probe.js")).CLI_SWITCHES];
 
 // ---- the help ----------------------------------------------------------------------------------------------------------------
 // `dev-spec help`: this head, every entry's lines in the table's order, then this foot — English, like the commands' synopses (only

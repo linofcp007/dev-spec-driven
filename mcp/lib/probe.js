@@ -40,6 +40,8 @@
  *     guardedFileOf · specsParentOf    the files the approval guard stands on, by path; the project a .specs/ path belongs to
  *     MCP_FILE_VERBS · isMcpFileTool · approvalHookMatcher · mcpPathArgs   another MCP server's file tools (hooks.json's matcher)
  *     observedNorm · observedBodies    the observe hook's pre-filter (evidence.js's observed runs)
+ *   the CLI's flags before the engine loads (1.30): CLI_SWITCHES (the boolean switches — the CLI's BOOL_FLAGS and the approval guard's
+ *     lexer) · closestName (the did-you-mean; the engine's IS it)
  * A network or device path (\\host\share, //host/share, \\?\UNC\…) is never walked up: no stat climbs a share, and none is made on a
  * path only the agent named (the callers pass the session's own folders). mcp/tests/10-guards-probe.js checks every caller agrees.
  */
@@ -394,10 +396,56 @@ function observedBodies(cmd) {
   return out;
 }
 
+// ---- the CLI's flags, read before the engine loads (1.30, review 8 — ds-maint 13) ---------------------------------------------------
+// The CLI's boolean switches — ONE list: the CLI's BOOL_FLAGS (cli/commands.js; its value flags are VALUE_FLAG_SPECS there) and the
+// approval guard's shell lexer (guards.js cliApprovalAction — `dev-spec approve …` parsed: any other `--flag` takes the next word as
+// its value) read it, and so does the facade (spec.CLI_SWITCHES). It lived in engine/guards.js: a mistyped `--flag` loaded the whole
+// engine (~0.17 s) to be refused. A new switch goes HERE (in a CLI-only list the lexer would read the next word as its value);
+// cli/tests/02-surfaces-parity.js holds an operation argument's `type` (switch / bool) to it.
+const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
+  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves",
+  "print-config"]); // (print-config: 1.16 C1 — statusline --print-config)
+CLI_SWITCHES.add("revoke"); // approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
+CLI_SWITCHES.add("gherkin"); // export [f] --gherkin (= spec_export {format: "gherkin"})
+CLI_SWITCHES.add("install").add("uninstall"); // merge-state --install / --uninstall (the git merge driver's setup)
+CLI_SWITCHES.add("explain"); // classify "<text>" --explain (= spec_classify {explain: true})
+CLI_SWITCHES.add("adr"); // export [f] --adr (= spec_export {format: "adr"})
+CLI_SWITCHES.add("dry-run"); // import … --dry-run (= spec_import {dryRun: true} — nothing written, the same result + a preview)
+CLI_SWITCHES.add("tests"); // dupes [feature] --tests (= spec_scan {duplicates: true, tests: true} — test files too)
+
+// Did-you-mean — the one edit distance behind every suggestion: a track (tracks.js suggestTrack), a tool argument (the MCP server's
+// unknown-argument refusal), a CLI flag (cli/main.js — before the engine loads), an eval-harness flag. The engine's closestName IS this
+// one (core.js). Words are short (names, keys), so the O(a·b) table is cheap.
+// The optimal-string-alignment distance: insert, delete, substitute — and a transposition ('sasa', 'revokde') — cost 1.
+function osaDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+// The candidate nearest to `word` — compared case-insensitively — within `limit(candidate, word)` edits (default: max(1,
+// ⌊candidate length / 3⌋), the CLI's rule for a mistyped flag; the first of equals wins), else null. A suggestion only:
+// never accepted as input.
+function closestName(word, candidates, limit) {
+  const w = String(word == null ? "" : word).toLowerCase();
+  const max = typeof limit === "function" ? limit : (c) => Math.max(1, Math.floor(c.length / 3));
+  let best = null;
+  for (const c of candidates || []) {
+    if (typeof c !== "string") continue;
+    const n = osaDistance(w, c.toLowerCase());
+    if (n <= max(c, w) && (!best || n < best.n)) best = { c, n };
+  }
+  return best ? best.c : null;
+}
+
 module.exports = {
   SESSION_MAX_UP, PROJECT_MAX_UP, RE_AUTOGEN, RE_UNEXPANDED_VAR, unexpandedVar, usable, RE_HOME_PREFIX, expandHome, isNetwork,
   fsTargetPath, editTargets, utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16,
   isDevSpecProject, nearestDevSpec, nearestSpecs, nearestProject, sessionAnchors, sessionProjects,
   trimSlashEnd, approvalPlain, approvalMayBe, APPROVAL_CANDIDATE_TESTS, RE_APPROVAL_VERB, dotGlob, guardedFileOf, specsParentOf,
   MCP_FILE_VERBS, isMcpFileTool, APPROVAL_TOOLS, RE_APPROVAL_MCP, approvalHookMatcher, mcpPathArgs, observedNorm, observedBodies,
+  CLI_SWITCHES, closestName,
 };

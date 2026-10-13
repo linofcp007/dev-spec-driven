@@ -263,7 +263,7 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   skips launchers' value options (`APPROVAL_OPTION_VALUES`, `APPROVAL_POSITIONALS`), takes npm / pnpm / yarn / bun / deno only
   through a run subcommand (`APPROVAL_SUBCOMMANDS`) and `$env:ComSpec` as cmd (`RE_COMSPEC_WORD`); the CLI fed on stdin counts
   (`stdinScriptAt()`). `cliApprovalAction()` reads its words with `CLI_SWITCHES` (a non-switch `--flag` takes the next word),
-  then with every flag a switch — `spec.CLI_SWITCHES` is the ONE list of CLI boolean switches (conventions.md → CLI boolean
+  then with every flag a switch — `CLI_SWITCHES` (mcp/lib/probe.js, `spec.CLI_SWITCHES`) is the ONE list of CLI boolean switches (conventions.md → CLI boolean
   switches): a CLI-only switch would shift this reading.
 - **Nested scripts.** A word holding whitespace and `dev-spec` after an `APPROVAL_SHELLS` program is lexed in turn, ≤
   `APPROVAL_SHELL_DEPTH` = 3, reading ≤ `APPROVAL_COMMAND_MAX` (64 K) characters. Where cmd / pwsh RUNS, the words after `/c` /

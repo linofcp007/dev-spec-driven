@@ -241,7 +241,7 @@ engine/scan.js — area 13 of the suites.
     `milestone.attention.invalid` / `notList`).
   - **Release notes:** `{format: "changelog", milestone}` → its features and archived ones, `since` = `all`,
     `RELEASE-NOTES.<milestoneFileKey>.md`, `meta.changelogAt` untouched (`changelogData(…, only)`).
-- **CLI flags of this area:** switches `revoke`, `print-config`, `gherkin`, `adr`, `dry-run` (`spec.CLI_SWITCHES`); value
+- **CLI flags of this area:** switches `revoke`, `print-config`, `gherkin`, `adr`, `dry-run` (`CLI_SWITCHES`, mcp/lib/probe.js); value
   flags `reason`, `expires`, `text`, `tracker`, `milestone`.
 
 ## History

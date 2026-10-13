@@ -73,7 +73,7 @@ how they came to be — the releases and review findings — is in History at th
 - **A mode on a second key of a tool** (1.28 `spec_scan {duplicates}`) → its operation's `mode: {key, values}` with the new
   key; `argModes()` derives `alt`, `forTool()` / the server's `argMode()` try it first; its arguments in the tool's schema
   (mcp.md → Arguments by mode).
-- **New CLI switch** (no value) → `CLI_SWITCHES` in `mcp/lib/engine/guards.js` (the CLI and the approval hook's lexer read
+- **New CLI switch** (no value) → `CLI_SWITCHES` in `mcp/lib/probe.js` (the CLI and the approval hook's lexer read
   it); a new **value flag** → `VALUE_FLAG_SPECS` in cli/commands.js (completion `values` by `@source` where the facade has
   the list, never copied; `repeatable: true` when a command reads EVERY occurrence — any other given twice is a usage error).
   Either → when it fills an engine option, that option's `cli` in the operations table (a switch `type: "switch"` /

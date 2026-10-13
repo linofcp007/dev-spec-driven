@@ -306,5 +306,24 @@ exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) 
       codes: () => got.map((r) => r.status).join() === "0,0,0,1,0,0",
       sameAsEngine: () => T.engineLoaded() && got.every((r, i) => r.stdout + r.stderr.replace(/HEAVY \d+$/, "") === engineOut[i].out),
     });
+
+    // 1.30 (ds-maint 13, the rest): a mistyped --flag (or -j) and a switch given a word that is no boolean loaded the engine too — the
+    // switch list (CLI_SWITCHES) lived in engine/guards.js, the did-you-mean in engine/core.js. Both are mcp/lib/probe.js's now, ONE
+    // copy: the engine's facade and the approval guard's lexer read the same Set, the engine's closestName IS the probe's.
+    const P = require(path.join(path.dirname(CLI), "..", "mcp", "lib", "probe.js"));
+    const flagCalls = [["status", "--rnu"], ["approve", "x", "y", "--rmove"], ["status", "-j"], ["status", "--json=maybe"]];
+    const fGot = flagCalls.map((a) => light(a));
+    const fEngine = flagCalls.map((a) => runIn(a, { cwd: pt, env: { SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } }));
+    const guardsSrc = fs.readFileSync(path.join(path.dirname(CLI), "..", "mcp", "lib", "engine", "guards.js"), "utf8");
+    const coreSrc = fs.readFileSync(path.join(path.dirname(CLI), "..", "mcp", "lib", "engine", "core.js"), "utf8");
+    all("1.30 (ds-maint 13): an unknown --flag / -x and a switch given a non-boolean are refused without the engine — the switches and the did-you-mean are the probe's, one copy (the facade's CLI_SWITCHES and closestName ARE them); the same text and code as with the engine loaded, in the project's language (got " +
+      js(fGot.map((r) => [r.status, r.stderr.slice(-8), r.stderr.split("\n")[0].slice(0, 90)])) + ")", {
+      noEngine: () => fGot.every((r) => /HEAVY 0$/.test(r.stderr) && r.status === 1),
+      suggestions: () => /--rnu[\s\S]*--run/.test(fGot[0].stderr) && /--rmove[\s\S]*--remove/.test(fGot[1].stderr) && /-j[\s\S]*--json/.test(fGot[2].stderr) && /--json/.test(fGot[3].stderr),
+      sameAsEngine: () => fGot.every((r, i) => r.stdout + r.stderr.replace(/HEAVY \d+$/, "") === fEngine[i].out),
+      oneCopy: () => S.CLI_SWITCHES === P.CLI_SWITCHES && /const \{ closestName \} = require\("\.\.\/probe\.js"\)/.test(coreSrc) && !/function (?:osaDistance|closestName)\b/.test(coreSrc) &&
+        !/new Set\(\["json", "run"/.test(guardsSrc) && /CLI_SWITCHES \} = require\("\.\.\/probe\.js"\)/.test(guardsSrc),
+      boolFlags: () => js(T.BOOL_FLAGS()) === js([...P.CLI_SWITCHES]),
+    });
   }
 };

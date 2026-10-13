@@ -4,8 +4,8 @@
  * dev-spec-driven engine — the edit guard, the stop gate and the human approval guard.
  * Guard mode (meta.guard: on | scope — hooks/guard-hook.js), the end-of-turn stop gate (hooks/stop-hook.js: a "done"
  * claim with unverified recent ticks is sent back) and the human approval guard (meta.approvalGuard — hooks/
- * approval-hook.js: a pure decision over one PreToolUse payload, with its shell lexer). CLI_SWITCHES (the CLI's boolean
- * switches) lives here: the lexer reads it.
+ * approval-hook.js: a pure decision over one PreToolUse payload, with its shell lexer). The lexer reads CLI_SWITCHES (the CLI's
+ * boolean switches) from mcp/lib/probe.js, where the CLI reads it before the engine loads (1.30); the facade's is this module's export.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -24,7 +24,7 @@ const { fsTargetPath: guardTargetPath, editTargets: approvalEditTargets } = requ
 // approval pre-filter (approvalPlain, approvalMayBe, RE_APPROVAL_VERB), the guarded files by path (guardedFileOf), another MCP server's
 // file tools and their path arguments (isMcpFileTool, mcpPathArgs), a trailing-separator trim (trimSlashEnd).
 const { approvalPlain, approvalMayBe, RE_APPROVAL_VERB, guardedFileOf, isMcpFileTool, mcpPathArgs: approvalPathArgs, trimSlashEnd,
-  RE_APPROVAL_MCP } = require("../probe.js");
+  RE_APPROVAL_MCP, CLI_SWITCHES } = require("../probe.js"); // CLI_SWITCHES: the CLI's boolean switches — the lexer's (one list, the CLI's too)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords, existingFeature,
   expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher, guessLang,
@@ -327,17 +327,6 @@ const APPROVAL_GATED_TRACKS = ["tdd", "ai"];
 const APPROVAL_COMMAND_MAX = 64 * 1024; // characters of a shell command read (the hook's payload may be anything)
 const APPROVAL_SHELL_DEPTH = 3; // nested scripts (bash -c "cmd /c \"…\"") read at most this deep
 const APPROVAL_LEX_DEPTH = 32; // $( … ) / `…` / heredoc scripts lexed at most this deep (deeper: read as a plain subshell)
-// The CLI's boolean switches (cli/commands.js BOOL_FLAGS): any other `--flag` takes the next word as its value.
-const CLI_SWITCHES = new Set(["json", "run", "remove", "write", "md", "html", "batch", "include-brief", "include-body", "code", "force",
-  "reopen", "yes", "brownfield", "parallel", "clear", "apply", "discovery", "expect-fail", "help", "matrix", "csv", "waves",
-  "print-config"]); // the CLI's BOOL_FLAGS ARE this list (print-config: 1.16 C1 — statusline --print-config)
-CLI_SWITCHES.add("revoke"); // approve <feature> <phase> --revoke (the approval hook reads it as a switch too)
-CLI_SWITCHES.add("gherkin"); // export [f] --gherkin (= spec_export {format: "gherkin"})
-CLI_SWITCHES.add("install").add("uninstall"); // merge-state --install / --uninstall (the git merge driver's setup)
-CLI_SWITCHES.add("explain"); // classify "<text>" --explain (= spec_classify {explain: true})
-CLI_SWITCHES.add("adr"); // export [f] --adr (= spec_export {format: "adr"})
-CLI_SWITCHES.add("dry-run"); // import … --dry-run (= spec_import {dryRun: true} — nothing written, the same result + a preview)
-CLI_SWITCHES.add("tests"); // dupes [feature] --tests (= spec_scan {duplicates: true, tests: true} — test files too)
 // Words that may come before the CLI's script in the same simple command (a launcher, an env assignment, an option, a timeout, a
 // shell keyword — `! node … approve`, the very line the deny reason suggests, run by the agent itself is still an approval).
 const APPROVAL_WRAPPERS = new Set(["node", "nodejs", "bun", "deno", "npx", "bunx", "pnpx", "npm", "pnpm", "yarn", "sudo", "doas", "env", "nohup",
