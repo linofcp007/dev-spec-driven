@@ -481,6 +481,128 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
     });
   }
 
+  // review 9 (HIGH): a dev-guardian action switched off the approval guard's fail-closed fallback. A guardian rule added an action, so
+  // approvalUnparsed() never ran; guardianGuardFilter then dropped it (no guardian check) and the call was ALLOWED — `dev-guardian
+  // baseline update; eval node <cli> approve …` (1.29.1: ask). The same in the edit / MCP readers (the first hit returned: a move of
+  // .guardian/baseline.json onto .specs/roadmap.json) and inside a shell operation (the launcher's hit in place of `git restore`'s feature
+  // folder). The filters now run as each reader returns, before its fallback, and dev-guardian's actions are always ADDED to the
+  // path's reading: without the check every call decides as the same call without its dev-guardian part; with it, guarded at both levels.
+  {
+    const C = "C:/plugins/dev-spec-driven/cli/dev-spec.js";
+    const p = path.join(tmp, "g-r9-high");
+    const on = { checks: { guardian: CMD } }, off = { checks: { test: "npm test" } };
+    const d = (tool, input, m, lvl) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: input, cwd: p }, lvl, { meta: m, lang: "en" });
+    const appr = "approve alpha requirements --force";
+    // [tool, the call, the same call without its dev-guardian part, its decision at deny without the check]
+    const pairs = [
+      ["Bash", { command: "dev-guardian baseline update; eval node \"" + C + "\" " + appr }, { command: "eval node \"" + C + "\" " + appr }, "ask"],
+      ["Bash", { command: "node .specs/guardian.cjs baseline update; eval node \"" + C + "\" " + appr }, { command: "eval node \"" + C + "\" " + appr }, "ask"],
+      ["Bash", { command: "DEV_GUARDIAN_CLI=x node \"" + C + "\" finish alpha --run; eval node \"" + C + "\" " + appr }, { command: "node \"" + C + "\" finish alpha --run; eval node \"" + C + "\" " + appr }, "ask"],
+      ["Bash", { command: "dev-guardian baseline update 2>/dev/null; X=approve; node \"" + C + "\" $X alpha requirements --force" }, { command: "X=approve; node \"" + C + "\" $X alpha requirements --force" }, "ask"],
+      ["Bash", { command: "bash -c 'dev-guardian baseline update; eval node " + C + " " + appr + "'" }, { command: "bash -c 'eval node " + C + " " + appr + "'" }, "ask"],
+      ["PowerShell", { command: "dev-guardian baseline update; iex \"node " + C + " " + appr + "\"" }, { command: "iex \"node " + C + " " + appr + "\"" }, "deny"],
+      ["mcp__fs__move_file", { source: ".guardian/baseline.json", destination: ".specs/roadmap.json" }, { source: "src/x.json", destination: ".specs/roadmap.json" }, "deny"],
+      ["mcp__fs__copy_file", { source: ".specs/guardian.cjs", destination: ".specs/alpha/.state.json" }, { source: "src/x.cjs", destination: ".specs/alpha/.state.json" }, "deny"],
+      ["mcp__fs__move_file", { source: ".guardian", destination: ".specs" }, { source: "tmp", destination: ".specs" }, "deny"],
+      ["Bash", { command: "git restore .specs/guardian.cjs" }, { command: "git restore .specs/other.cjs" }, "deny"],
+      ["Bash", { command: "git checkout -- .specs/guardian.cjs .specs/roadmap.json" }, { command: "git checkout -- .specs/roadmap.json" }, "deny"],
+    ];
+    const label = (t, i) => t + " " + js(i);
+    const wrong = [];
+    for (const [tool, input, rest, offDeny] of pairs) {
+      for (const lvl of ["ask", "deny"]) {
+        const a = d(tool, input, off, lvl), b = d(tool, rest, off, lvl), g = d(tool, input, on, lvl);
+        if (a.decision !== b.decision) wrong.push("off/" + lvl + ": " + label(tool, input) + " → " + a.decision + ", without its dev-guardian part " + b.decision);
+        if (a.decision !== (lvl === "ask" ? "ask" : offDeny)) wrong.push("off/" + lvl + ": " + label(tool, input) + " → " + a.decision + " " + js(a.actions));
+        if (g.decision !== lvl || !(g.actions || []).some((x) => /^guardian-/.test(x.setting || ""))) wrong.push("on/" + lvl + ": " + label(tool, input) + " → " + g.decision + " " + js(g.actions));
+      }
+    }
+    all("1.30 review 9 (HIGH): a dev-guardian action never stands in for the approval guard's fallback — without the check every call decides as the same call without its dev-guardian part (the unparsed ask, the roadmap / state write after it, git's feature-folder restore: as 1.29.1), never allowed; with the check, guarded at ask and deny (got " + js(wrong) + ")", {
+      noCheck: !wrong.some((w) => w.startsWith("off/")),
+      check: !wrong.some((w) => w.startsWith("on/")),
+    });
+  }
+
+  // review 9 (MEDIUM): .guardian/ as a whole — a folder destination (cp / rsync / Copy-Item into it, an archive extracted there, a
+  // folder moved onto it, an MCP move), removed, replaced by git or a link — reaches its baseline.json: with the check it is the
+  // baseline's guard-down, like .specs/'s; what leaves the baseline alone (budgets.yml, reports/, reading) stays allowed; without the
+  // check nothing changes.
+  {
+    const p = path.join(tmp, "g-r9-folder");
+    const on = { checks: { guardian: CMD } }, off = { checks: { test: "npm test" } };
+    const d = (tool, input, m, lvl) => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: input, cwd: p }, lvl, { meta: m, lang: "en" });
+    const folder = [
+      ["Bash", { command: "cp /tmp/evil/baseline.json .guardian/" }], ["Bash", { command: "cp -r /tmp/evil/. .guardian/" }],
+      ["Bash", { command: "cp -r /tmp/evil .guardian/" }], ["Bash", { command: "rsync -a /tmp/evil/ .guardian/" }],
+      ["Bash", { command: "mv /tmp/evil .guardian" }], ["Bash", { command: "git checkout HEAD~1 -- .guardian" }],
+      ["Bash", { command: "git restore --source HEAD~2 .guardian" }], ["Bash", { command: "rm -rf .guardian" }],
+      ["Bash", { command: "tar -xf evil.tar -C .guardian" }], ["Bash", { command: "ln -s /tmp/evil .guardian" }],
+      ["Bash", { command: "cp /tmp/evil/baseline.json app/.guardian/" }], ["Bash", { command: "rm -f .guardian/*.json" }],
+      ["PowerShell", { command: "Copy-Item C:/tmp/evil/baseline.json .guardian/" }], ["PowerShell", { command: "Move-Item C:/tmp/evil .guardian" }],
+      ["PowerShell", { command: "Remove-Item -Recurse .guardian" }],
+      ["mcp__filesystem__move_file", { source: "/tmp/evildir", destination: ".guardian" }], ["mcp__filesystem__delete_file", { path: ".guardian" }],
+    ];
+    const leftAlone = [
+      ["Bash", { command: "rm -rf .guardian/reports" }], ["Bash", { command: "cp x.yml .guardian/budgets.yml" }], ["Bash", { command: "mkdir -p .guardian/reports" }],
+      ["Bash", { command: "ls .guardian/" }], ["Bash", { command: "cp .guardian/baseline.json /tmp/backup.json" }], ["Bash", { command: "cp -r src .guardian-backup" }],
+      ["Bash", { command: "rm -rf .guardian.old" }], ["mcp__filesystem__move_file", { source: "/tmp/x", destination: ".guardian/budgets.yml" }],
+      ["mcp__filesystem__delete_file", { path: ".guardian/reports" }],
+    ];
+    const setting = (r) => [...new Set((r.actions || []).map((a) => a.setting))].join(",");
+    const wrong = folder.filter(([t, i]) => { const r = d(t, i, on, "deny"); return r.decision !== "deny" || setting(r) !== "guardian-baseline" || r.command !== null || d(t, i, on, "ask").decision !== "ask"; })
+      .map(([t, i]) => "not guarded: " + t + " " + js(i) + " → " + js(d(t, i, on, "deny").actions))
+      .concat(leftAlone.filter(([t, i]) => d(t, i, on, "deny").decision !== "allow").map(([t, i]) => "not allowed: " + t + " " + js(i)));
+    const noCheck = folder.filter(([t, i]) => d(t, i, off, "deny").decision !== "allow").map(([t, i]) => t + " " + js(i));
+    all("1.30 review 9 (MEDIUM): with the check, .guardian/ as a folder destination, removed, replaced by git or a link, or moved over by an MCP tool is the baseline's guard-down (deny / ask); budgets.yml, reports/ and reads stay allowed; without the check all allowed (got " + js({ wrong, noCheck }) + ")", {
+      guarded: !wrong.length,
+      noCheck: !noCheck.length,
+    });
+  }
+
+  // review 9 (3a / 3c): a nested project's guarded files, named from the folder above it — `cp evil.cjs sub/.specs/guardian.cjs`,
+  // `echo x > sub/.guardian/baseline.json` — were judged by the outer project's level and meta alone (sub/ was never a candidate):
+  // allowed, or only asked. Every folder holding a .specs/ / .guardian/ a command names is a candidate now, and each candidate with the
+  // guard on judges the call with its own level and meta (the strictest answer wins) — an outer project at deny without the check no
+  // longer drops sub/'s dev-guardian files. And a payload cut short (the 2 s stdin safety net) that names dev-guardian asks.
+  {
+    const mk = (dir, opts) => { S.initProject(dir, [], "en", opts); return dir; };
+    const outer = mk(path.join(tmp, "g-r9-outer"), { approvalGuard: "ask" });
+    mk(path.join(outer, "sub"), { guardian: true, approvalGuard: "deny" });
+    const outer2 = mk(path.join(tmp, "g-r9-outer2"), { approvalGuard: "deny" });
+    mk(path.join(outer2, "sub"), { guardian: true, approvalGuard: "ask" });
+    const env = { ...process.env, CLAUDE_PROJECT_DIR: "", SPEC_PROJECT_DIR: "" };
+    const hook = (cwd, tool, input) => {
+      const r = hookIn(path.join(__dirname, "..", "hooks", "approval-hook.js"), { input: js({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: tool, tool_input: input }), env, cwd });
+      try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { return r.stdout ? "?" : "silent"; }
+    };
+    const cut = (cwd, command) => {
+      const raw = js({ session_id: "s", hook_event_name: "PreToolUse", cwd, tool_name: "Bash", tool_input: { command } }).slice(0, -8);
+      const r = hookIn(path.join(__dirname, "..", "hooks", "approval-hook.js"), { input: raw, env, cwd, timedOut: true });
+      try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { return r.stdout ? "?" : "silent"; }
+    };
+    const got = {
+      launcher: hook(outer, "Bash", { command: "cp evil.cjs sub/.specs/guardian.cjs" }),
+      baseline: hook(outer, "Bash", { command: "echo x > sub/.guardian/baseline.json" }),
+      roadmap: hook(outer, "Bash", { command: "cp x sub/.specs/roadmap.json" }),
+      quoted: hook(outer, "Bash", { command: "cp evil.cjs \"sub/.specs/guardian.cjs\"" }),
+      ps: hook(outer, "PowerShell", { command: "Copy-Item evil.cjs sub/.specs/guardian.cjs" }),
+      option: hook(outer, "Bash", { command: "install --target-directory=sub/.guardian baseline.json" }),
+      mixedBaseline: hook(outer2, "Bash", { command: "echo x > sub/.guardian/baseline.json" }),
+      mixedRoadmap: hook(outer2, "Bash", { command: "cp x sub/.specs/roadmap.json" }),
+      outerOwn: hook(outer, "Bash", { command: "cp evil.cjs .specs/guardian.cjs" }),
+      otherFile: hook(outer, "Bash", { command: "cp x sub/src/app.js" }),
+      partialGuardian: cut(path.join(outer, "sub"), "dev-guardian baseline update --project ."),
+      partialPlain: cut(path.join(outer, "sub"), "ls -la src"),
+    };
+    all("1.30 review 9 (3a / 3c): from the folder above a nested project, its .specs/ / .guardian/ files are judged by ITS level and checks (each candidate with the guard on judges the call; the strictest answer wins); a payload cut short naming dev-guardian asks (got " + js(got) + ")", {
+      nested: got.launcher === "deny" && got.baseline === "deny" && got.roadmap === "deny" && got.quoted === "deny" && got.ps === "deny" && got.option === "deny",
+      mixed: got.mixedBaseline === "ask" && got.mixedRoadmap === "deny",
+      outerOwn: got.outerOwn === "silent", // outer runs no gate: its own launcher is no guard-down
+      unrelated: got.otherFile === "silent",
+      partial: got.partialGuardian === "ask" && got.partialPlain === "silent",
+    });
+  }
+
   // dev-guardian's duplication budget (.guardian/budgets.yml → quality.duplication_pct): the project report shows the project's share
   // beside it; finish's duplicate warning says so only when the project is over it; a missing, broken or other-shaped file reads as none.
   {

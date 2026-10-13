@@ -34,7 +34,8 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
 let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ duplicationReport, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+let phaseFile; // state.js — the file a phase writes (tasks: an xs change's change.md)
+function __link(E) { ({ phaseFile, duplicationReport, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   enumArg, errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
@@ -229,7 +230,8 @@ function finishFeature(projectDir, name, opts = {}) {
   const blockers = blocked.map((b) => b.detail);
   // 1.30: no task names a file in _Implements:_ — the drift baseline, the duplicate check (below), the scope guard and
   // dev-guardian's attribution then see no code of this feature, silently. A warning: a feature may write no code.
-  if (blocks.length && !implementsRefs(tasksText).length) warnings.push(F.noImplements);
+  // (the file to add them to: tasks.md, an xs change's change.md — phaseFile)
+  if (blocks.length && !implementsRefs(tasksText).length) warnings.push(F.noImplements(phaseFile("tasks", kind)));
   // 1.28: the feature's code repeats code the project already has (the duplicate-code detector, its _Implements:_ files against the
   // rest) — a warning, never a blocker: how many places, the top 3 (`file:from-to ↔ file:from-to`) and the call listing them all;
   // the repeats inside the feature's own files only as a count. 1.29: with dev-guardian's duplication budget set

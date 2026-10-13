@@ -197,13 +197,17 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   hooks.json holds the built matcher). Monitor runs its command in the Bash tool's shell. A call that can't be an approval exits
   before any file read (the hook's `candidate()` is the probe's `approvalMayBe` — the engine's `approvalCandidate`, a superset: a
   command naming `dev-spec`, `.specs` or a guarded file; a path naming `.specs`, a `~N` short name or a guarded file —
-  `RE_EDIT_MAYBE`); else ONE raw roadmap.json read per candidate project, the STRICTEST level wins, and only then the engine
-  (`permissionDecision`, + `systemMessage` for deny). Its own trouble before that point exits 0; past it, an engine failure ASKS
-  (`failClosed`).
-- **The candidate projects** (hook-utils.js `approvalProjects`, ≤ 12) follow where the CLI acts: the folders the call names (MCP
-  `projectDir`, the edited file's project, `--project`, `SPEC_PROJECT_DIR=` / `$env:` assignments), each `cd` / `Set-Location`
-  target (chained and from cwd alone) and the payload `cwd` through `probe.nearestProject`, then the anchors — text only, a
-  superset (an extra candidate only makes the answer stricter). The session's own folders are read on a share too; a network path
+  `RE_EDIT_MAYBE`); else ONE raw roadmap.json read per candidate project, and only then the engine — EACH candidate with the
+  guard on judges the call with its own level and meta (its checks: dev-guardian's files are guarded only where a check runs the
+  gate), the strictest level's first, the strictest ANSWER wins (`permissionDecision`, + `systemMessage` for deny). One meta for
+  every project (the strictest level's) let an outer project at deny without the check drop a nested one's dev-guardian files
+  (review 9). Its own trouble before that point exits 0; past it, an engine failure ASKS (`failClosed`).
+- **The candidate projects** (hook-utils.js `approvalProjects`, ≤ 12 the call names, then the session's own — always kept) follow
+  where the CLI acts: the folders the call names (MCP `projectDir`, the edited file's project, `--project`, `SPEC_PROJECT_DIR=` /
+  `$env:` assignments), each `cd` / `Set-Location` target (chained and from cwd alone), the folder holding each `.specs/` /
+  `.guardian/` a command's word names (quoted or bare, an `--opt=` prefix off, ≤ 16 — `cp evil sub/.specs/guardian.cjs` from the
+  folder above acts on `sub/`'s files: review 9), and the payload `cwd` through `probe.nearestProject`, then the anchors — text
+  only, a superset (an extra candidate only makes the answer stricter). The session's own folders are read on a share too; a network path
   the AGENT names only on a share the session is on; none is walked up. An MCP `projectDir` goes through `parseProjectDir`
   (relative: from `CLAUDE_PROJECT_DIR`, `SPEC_PROJECT_DIR` and the cwd, each a candidate); a `file://` URI that is no local path
   asks at least (`opts.projectUnreadable`, why `project`); `..` and network values still go to `approvalProjects` (the server
@@ -249,9 +253,21 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   `dev-spec finish … --run` — under a `DEV_GUARDIAN_CLI` / `CLAUDE_CONFIG_DIR` the command sets (`guardian-cli`: a prefix
   assignment, or one an earlier command set — `ctx.vars`). Without the check they are dropped (`guardianGuardFilter`). The
   pre-filters let them through: `guardian` in `APPROVAL_CANDIDATE_TESTS` (the engine's and the hook's), `.guardian` and the two
-  names in the hook's `RE_EDIT_MAYBE` / `RE_MCP_MAYBE`, `.guardian/` paths in its `RE_GUARDED_DIR` and `specsParentOf`. Known
-  limits: a glob write onto either file, dev-guardian's own MCP tool `set_baseline` (not in the hook's matcher: dev-guardian's
-  side) and a variable exported out of the command's sight; for the launcher, its verification before every run is the backstop.
+  names in the hook's `RE_EDIT_MAYBE` / `RE_MCP_MAYBE`, `.guardian/` paths in its `RE_GUARDED_DIR` and `specsParentOf`.
+  **`.guardian/` as a whole** is the baseline's guard-down too (`guardian-baseline`, review 9 — like `.specs/`'s): a folder
+  destination (`cp … .guardian/`, `cp -r evil/. .guardian/`, `rsync`, `Copy-Item`, `tar -C .guardian`), removed, moved onto,
+  replaced by git or a link (`rm -rf .guardian`, `mv evil .guardian`, `git checkout HEAD~1 -- .guardian`), an MCP move / delete of
+  it — `shellPathFacts`' `guardianSelf` / `guardianHit` (the folder itself, or an entry that may be its baseline: `.guardian/*`),
+  `approvalEditActions`' whole-folder reading; `budgets.yml`, `reports/` and reads stay allowed.
+  **A filter never stands in for a fallback** (review 9 — `dev-guardian baseline update; eval node <cli> approve …` was ALLOWED
+  without the check, 1.29.1 asked): `approvalGuardDecision` runs `approvalActionFilters()` as EACH reader returns — before the
+  shell's `approvalUnparsed` fallback, on each edit / MCP hit before it is the answer (a dropped hit lets the reading go on: the
+  next path, the whole-folder reading) — and dev-guardian's file is a fact of its own in `shellPathFacts` (`guardianFile`, never
+  `guarded`): each operation ADDS its action to the path's 1.29 reading (`git restore .specs/guardian.cjs` stays a feature
+  folder's restore). So without the check every call decides as the same call without its dev-guardian part; a new filter keeps
+  that rule (mcp/tests/09-evidence-guardian.js pairs each call with its twin). Known limits: a glob write onto either file,
+  dev-guardian's own MCP tool `set_baseline` (not in the hook's matcher: dev-guardian's side) and a variable exported out of the
+  command's sight; for the launcher, its verification before every run is the backstop.
 - **The shell lexer** (`shellCommandWords(cmd, mode)`: one linear pass, nothing evaluated, ≤ `APPROVAL_LEX_DEPTH` = 32 deep)
   reads the tool's shell — `bash` (`\x`, `$'…'`; `raw` keeps backslashes for Windows paths), `ps` (the backtick escape, `@'…'@`,
   `<# #>`), `cmd` (`^`). `{` / `}` separate only standing alone (inside a word they are brace expansion). Redirections go to
@@ -305,8 +321,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   with an unreadable subcommand (`cliSubcommandUnread()`) beside an approval word; `--%` right after the CLI
   (`RE_PS_STOP_AFTER_CLI`); a subcommand glob / brace that may expand to a guarded one (`cliSubcommandGlob()`,
   `CLI_GUARDED_COMMANDS`: `appro?e` asks, `st?tus` doesn't). `partial`: the hook's 2 s stdin safety net fired, the payload
-  doesn't parse, and its text names dev-spec, `.specs` or an approval tool while a project the session may be in has the guard
-  on.
+  doesn't parse, and its text names dev-spec, `.specs`, dev-guardian (`guardian` — `RE_PARTIAL`, review 9) or an approval tool
+  while a project the session may be in has the guard on.
 - **ask** → `permissionDecision: "ask"`: the reason names the feature, phase(s), role, `by` and, loudly, `--force`; Claude Code
   shows it in auto mode too (only bypass-permissions skips it; dontAsk refuses it). **deny** (auto mode included): the reason
   tells the agent
@@ -327,8 +343,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   when the command names nothing of dev-spec's (`… | base64 -d | bash`), splatting the CLI's own path (`& node @a`), `git -c
   alias.x='!…'`, a copy of the CLI under another name, git forms whose files can't be known from the command (`git apply` /
   `am`, `git stash pop`, `git reset --hard`, a branch switch), an archive extracted into the project root without naming
-  `.specs/`, `patch` without a file operand, and a link to a guarded FILE (not a folder) made by one of those routes and then
-  edited through (only its folder's real path is read). Outside Claude Code the elicitation path gates spec_approve /
+  `.specs/`, `patch` without a file operand, a link to a guarded FILE (not a folder) made by one of those routes and then
+  edited through (only its folder's real path is read), and a Windows 8.3 short name in a SHELL command (`cp x SPECS~1\roadmap.json`,
+  `echo x > GUARDI~1\baseline.json` — a shell word is read as text, nothing touches the disk; the edit tools' and MCP file tools'
+  paths go through their real path, `approvalEditTargets`). Outside Claude Code the elicitation path gates spec_approve /
   spec_feature / spec_init only (not a `spec_add_track {remove}` — gates-and-approvals.md → Approvals the user confirmed over
   MCP).
 
@@ -568,6 +586,16 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   printing exit 0 (recorded as the CLI's own observed pass), ran `baseline update` or wrote `.guardian/baseline.json` to clear a
   failed gate, or pointed `DEV_GUARDIAN_CLI` at a stub — all allowed. Now guard-downs while a check runs the gate (rules in
   guardian.js, one-line hook points in guards.js).
+- **1.30 (review 9)** — **HIGH:** a dev-guardian action switched the fail-closed fallback off: it made the action list non-empty,
+  so `approvalUnparsed()` never ran, then `guardianGuardFilter` dropped it without the check — `dev-guardian baseline update; eval
+  node <cli> approve … --force` (and the launcher's, a `DEV_GUARDIAN_CLI=` prefix, `X=approve; … $X`) went from 1.29.1's ask to
+  allow; PowerShell's `…; iex "node <cli> approve …"` and an MCP move of `.guardian/baseline.json` onto `.specs/roadmap.json` from
+  deny to allow (the first hit returned); `git restore .specs/guardian.cjs` lost its feature-folder reading. The filters run as each
+  reader returns, dev-guardian's file is `guardianFile` (added, never in place). **MEDIUM:** `.guardian/` as a folder destination
+  (`cp … .guardian/`, `rsync`, `mv evil .guardian`, `git checkout -- .guardian`, an MCP move) was unguarded with the check:
+  `guardian-baseline` now. **3a:** a nested project's files named from the folder above (`cp evil sub/.specs/guardian.cjs`) were
+  judged by the outer project alone: the folders a command's words name are candidates, each candidate judges with its own meta.
+  **3c:** `RE_PARTIAL` names `guardian`. **3b:** 8.3 short names in shell commands — a known limit (listed).
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import
