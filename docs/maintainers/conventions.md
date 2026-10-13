@@ -407,8 +407,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   point.
 - **1.30 (review 8, ds-maint finding 13)** — `help <command>`, `<command> --help` and an unknown command each loaded the whole
   engine to print text (+170–185 ms over `node -e 0`), and every call required cli/run.js and cli/git.js. Measured (Windows, Node 26,
-  median of 21 interleaved fresh processes on a loaded machine, `node -e 0` 93 ms): `help approve` 316 → 149 ms, `approve --help`
-  317 → 156, an unknown command 335 → 164.
+  median of 21 interleaved fresh processes, `node -e 0` 51 ms): `help approve` 164 → 82 ms, `approve --help` 163 → 86, an unknown
+  command 167 → 79 (`version`, which loads the engine, 166 → 164).
 
 ### CLI exit codes and `--json`
 - **1.12** — the scriptable exit codes. **1.13** — `--json` prints refusals (`fail(r)`).

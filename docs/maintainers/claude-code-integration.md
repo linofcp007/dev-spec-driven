@@ -338,7 +338,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   that signature holds and it is under `STATUS_CACHE_TTL_MS` (10 s) old. Any change under `.specs/` shows at the next render; what
   the line reads OUTSIDE `.specs/` (a Phase 4 test file, a finished feature's code — finish again —, a forced approval's code checks,
   a worktree's mapping, a nearer `.specs/` made since) within the TTL. Measured (Windows, Node 26, median of 21 interleaved fresh
-  processes on a loaded machine, `node -e 0` 96 ms): a 5-feature project 414 → 152 ms (outside a project 135). `--print-config` prints the `statusLine`
+  processes, `node -e 0` 51 ms): a 5-feature project 194 → 80 ms on a hit (outside a project 72; a loaded machine, `node -e 0` 96:
+  414 → 152, outside 135). `--print-config` prints the `statusLine`
   entry — in a plugin's versioned cache folder, a `node -e` one-liner that finds the newest installed `<version>` at each run
   (cli/completion.js `statuslineCommand`: no quote, dollar, backtick, percent, ! or backslash, so every shell passes it; else the
   plain command and `cacheNote`). A plugin can't ship a status line (plugin `settings` honour only `agent` /
