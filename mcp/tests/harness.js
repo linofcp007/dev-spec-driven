@@ -19,6 +19,8 @@
  *   init · list              the handshake's initialize / tools/list replies (ctDesc · ntvSentence: spec_complete_task's
  *                            description and its nothingToVerify sentence)
  *   libSources() · maintainerNotes() · GATE_ORDER · approveBefore() · shipFeature()     shared helpers (below)
+ *   hookIn(file, o)          one hook run in this process (its exported decide) with spawnSync's shape — o: input, env (the whole
+ *                            environment), cwd, timedOut — instead of spawnSync(process.execPath, [file], o) (below)
  *   child · abort(reason)    the server process · fail the run now (a private server that stops answering)
  *   require · __dirname · __filename   mcp/test.js's, so the test code reads paths from mcp/ — require("./lib/i18n.js"),
  *                            path.join(__dirname, "server.js") — whichever file of mcp/tests/ it lives in
@@ -75,6 +77,45 @@ function maintainerNotes() {
 const GATE_ORDER = ["classification", "requirements", "design", "test-plan", "eval-plan", "tests", "tasks", "execution"];
 function approveBefore(dir, slug, phase) {
   for (const ph of S.specDoctor(dir, slug).pendingGates || []) if (GATE_ORDER.indexOf(ph) < GATE_ORDER.indexOf(phase)) S.approvePhase(dir, slug, ph, "t", { force: true });
+}
+// One hook run IN THIS PROCESS (review 8): hookIn(file, { input, env, cwd, timedOut }) → spawnSync's { status, stdout, stderr } for
+// `node <file>` fed that stdin — the hook's exported decide(raw, {timedOut}) answer, printed as its process prints it (one JSON object,
+// or nothing), without a process start (a hook spawn costs ~60–200 ms; here the hook shares this process's engine, S). env is the WHOLE
+// environment, as spawnSync's (default: this process's), cwd the working folder (default: this process's) — both applied for the call
+// and restored, as cli/main.js main does for the CLI: the hooks and the engine read process.env / process.cwd() themselves. An
+// exception is a silent exit 0, as the runner's. Keep a real process where the test is about one: stdin and the 2 s safety net
+// (timedOut stands in for it here), the flushed exit, the exec form, an oversized payload, what a fresh process loads (a -r preload),
+// its timing.
+function enterProcessContext(env, cwd) {
+  const undo = [];
+  if (env && env !== process.env) {
+    const before = { ...process.env };
+    const apply = (to) => {
+      for (const k of Object.keys(process.env)) if (!Object.prototype.hasOwnProperty.call(to, k) || to[k] === undefined) delete process.env[k];
+      for (const [k, v] of Object.entries(to)) if (v !== undefined && process.env[k] !== String(v)) process.env[k] = String(v);
+    };
+    apply(env);
+    undo.push(() => apply(before));
+  }
+  if (cwd && path.resolve(cwd) !== process.cwd()) {
+    const before = process.cwd();
+    try { process.chdir(cwd); } catch (e) { while (undo.length) undo.pop()(); throw e; }
+    undo.push(() => { try { process.chdir(before); } catch { /* gone */ } });
+  }
+  return () => { while (undo.length) undo.pop()(); };
+}
+function hookIn(file, o = {}) {
+  const restore = enterProcessContext(o.env, o.cwd);
+  let out = null;
+  try {
+    const raw = o.input == null ? "" : Buffer.isBuffer(o.input) ? o.input.toString("utf8") : String(o.input);
+    out = require(file).decide(raw, { timedOut: o.timedOut === true });
+  } catch {
+    out = null;
+  } finally {
+    restore();
+  }
+  return { status: 0, signal: null, stdout: out ? JSON.stringify(out) : "", stderr: "" };
 }
 
 const SERVER = path.join(MCP_DIR, "server.js");
@@ -199,7 +240,7 @@ async function setup(chain) {
     "spec_complete_task's description: a nothingToVerify task passes doctor / finish / ROADMAP.md; only an unverified task is listed with its reason");
   muted = false;
   const ctx = {
-    ok, ...assertHelpers(ok), rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature,
+    ok, ...assertHelpers(ok), rpc, rawOnce, notify, payload, S, root, tmp, SERVER, libSources, maintainerNotes, GATE_ORDER, approveBefore, shipFeature, hookIn,
     child, abort, init, list, ctDesc, ntvSentence,
     require: createRequire(MCP_TEST), __dirname: MCP_DIR, __filename: MCP_TEST,
   };

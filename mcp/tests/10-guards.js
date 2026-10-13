@@ -1106,6 +1106,20 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
       scripts.length >= 6 && scripts.every((s) => s && fs.existsSync(path.join(__dirname, "..", s))),
       "feature F2: hooks.json wires hooks/approval-hook.js as PreToolUse (timeout 10) after the guard, its anchored matcher covering Bash, PowerShell, Monitor (1.23), Write / Edit (1.23: .specs/roadmap.json, .state.json) and spec_approve / spec_feature / spec_init under any MCP prefix only; every hook command names an existing script (got " +
       JSON.stringify([apCfg.matcher, scripts]) + ")");
+    // Review 8 (ds-maint finding 4): the MCP file tools' verbs lived three times — hooks.json's matcher (`[Ww]rite`: a matcher has no
+    // flags, so `mcp__x__FILE_WRITE` never reached the hook), the hook's and the engine's /i regexes. ONE list (probe.js MCP_FILE_VERBS):
+    // hooks.json's matcher IS approvalHookMatcher(), each verb case-blind; the engine and the hook test isMcpFileTool.
+    {
+      const PR = require("./lib/probe.js");
+      const upper = ["mcp__x__FILE_WRITE", "mcp__x__Move_File", "mcp__x__DELETE", "mcp__x__WriteFile"];
+      all("review 8 (ds-maint 4): hooks.json's approval matcher is built from the probe's one verb list (approvalHookMatcher), case-blind — an upper-case file tool reaches the hook, and the engine reads it", {
+        same: () => apCfg.matcher === PR.approvalHookMatcher(),
+        everyVerb: () => PR.MCP_FILE_VERBS.every((v) => mre.test("mcp__x__" + v.toUpperCase() + "_file") && mre.test("mcp__x__" + v + "_file") && PR.isMcpFileTool("mcp__x__" + v.toUpperCase())),
+        upperReaches: () => upper.every((n) => mre.test(n) && PR.isMcpFileTool(n)),
+        upperDecided: () => S.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "mcp__x__FILE_WRITE", tool_input: { path: ".specs/roadmap.json", content: "{}" } }, "deny", { meta: {} }).decision === "deny",
+        devSpecNever: () => ["mcp__x__spec_approve_all", "mcp__plugin_dev-spec-driven_spec-driven__spec_append_tasks", "mcp__x__steering_scaffold", "mcp__x__trace_check"].every((n) => !mre.test(n) && !PR.isMcpFileTool(n)),
+      });
+    }
 
     // spec_init over MCP: approvalGuard is a plain string enum (folded), always reported, refused when it is anything else.
     const pMcp = path.join(tmp, "proj-f2-mcp");

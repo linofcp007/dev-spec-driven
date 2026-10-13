@@ -25,14 +25,19 @@ const os = require("os");
 const path = require("path");
 
 // ---- the hooks' runner ------------------------------------------------------------------------------------------------------
-// ONE process shape for every hook (each still decides in its own main, before anything heavier loads). finish(obj?) is the hook's
-// one exit: at most one JSON object on stdout, the process exiting only once it is flushed (Windows and Linux pipes truncate
-// otherwise — conventions.md → Flush stdout before exiting); a second call is a no-op. runHook(main, opts) reads the payload from
-// stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes) and runs main(raw, timedOut) ONCE — at stdin's end, or
-// from the safety net (SAFETY_NET_MS, 2 s: a stdin that never ends; timedOut true — the approval hook asks on a partial payload
-// naming dev-spec). It never crashes: an exception in main, or a stdin error, is a silent exit 0 — never a block (past its
-// pre-check the approval hook catches its own and asks). A terminal stdin runs main("{}"). opts.maxInput: past that many
-// characters the rest is drained unread and main gets "" (the observe and plan hooks ignore an oversized payload).
+// ONE process shape for every hook. A hook is its decision — `decide(raw, opts)` → the ONE object it prints (a permission decision,
+// additionalContext, a block) or null — exported for in-process callers (mcp/tests/harness.js hookIn: no process start, ~100× cheaper)
+// and run here when the file is the process's main module. decide never exits and never writes stdout; it reads the process's
+// environment and working folder as the engine does, so an in-process caller applies its own for the call. Each hook's pre-filter
+// still runs first in its decide, before anything heavier loads.
+// finish(obj?) is the process's one exit: at most one JSON object on stdout, the process exiting only once it is flushed (Windows and
+// Linux pipes truncate otherwise — conventions.md → Flush stdout before exiting); a second call is a no-op. runHook(decide, opts) reads
+// the payload from stdin asynchronously (fs.readFileSync(0) is unreliable on Windows pipes) and runs decide(raw, { timedOut }) ONCE —
+// at stdin's end, or from the safety net (SAFETY_NET_MS, 2 s: a stdin that never ends; timedOut true — the approval hook asks on a
+// partial payload naming dev-spec) — then finishes with its answer. It never crashes: an exception in decide, or a stdin error, is a
+// silent exit 0 — never a block (past its pre-check the approval hook catches its own and asks). A terminal stdin runs decide("{}").
+// opts.maxInput: past that many characters the rest is drained unread and decide gets "" (the observe and plan hooks ignore an
+// oversized payload).
 const SAFETY_NET_MS = 2000;
 let finished = false;
 function finish(obj) {
@@ -41,13 +46,15 @@ function finish(obj) {
   if (!obj) process.exit(0);
   process.stdout.write(JSON.stringify(obj), () => process.exit(0));
 }
-function runHook(main, opts = {}) {
+function runHook(decide, opts = {}) {
   const max = opts.maxInput > 0 ? opts.maxInput : Infinity;
   let ran = false, input = "", tooBig = false;
   const run = (raw, timedOut) => {
     if (ran) return; // stdin's end and the safety net must not both run it
     ran = true;
-    try { main(raw, timedOut); } catch { finish(); }
+    let out = null;
+    try { out = decide(raw, { timedOut }); } catch { out = null; }
+    finish(out);
   };
   if (process.stdin.isTTY) return run("{}", false);
   process.stdin.setEncoding("utf8");
@@ -154,7 +161,7 @@ function approvalProjects(opts = {}) {
     if (isNetwork(h)) return shares.has(shareOf(h)) ? h : null;
     if (base && isNetwork(base)) { // relative to a network folder of the session's: on its share
       if (path.isAbsolute(h) || /^[A-Za-z]:/.test(h)) return path.resolve(h);
-      return base.replace(/[\\/]+$/, "") + "\\" + h.replace(/\//g, "\\");
+      return probe().trimSlashEnd(base) + "\\" + h.replace(/\//g, "\\");
     }
     try { return path.resolve(base || localBase || process.cwd(), h); } catch { return null; }
   };

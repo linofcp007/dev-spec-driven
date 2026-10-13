@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
   const js = JSON.stringify;
   const HOOKS = path.join(__dirname, "..", "hooks");
   // The runner may itself run inside Claude Code: its CLAUDE_PROJECT_DIR / SPEC_PROJECT_DIR never leak into the hooks.
@@ -205,5 +205,57 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
       [placeholder, backticked].every((x) => x.status === 0 && x.engine === false) && shellTest.engine === true && real.engine === true && lines() === before + 1,
       "1.25.1 (r7 finding 5): the observe hook's pre-filter skips a placeholder _Verify: [ … npm test … ]_ (bare or backticked) — the engine isn't loaded; `[ -f a ] && npm test` and a real `_Verify: npm test_` still pass it, and the real one is logged (got " +
       js({ placeholder: placeholder.engine, backticked: backticked.engine, shellTest: shellTest.engine, real: real.engine, logged: lines() - before }) + ")");
+  }
+
+  // Review 8 (ds-security finding 3) — the guards' pre-filters are LINEAR in the payload's text. A regex whose run class holds its own
+  // start delimiter rescans the run from every start: `echo =.=.…` (120 K characters) cost the approval hook 16.7 s against its 10 s
+  // timeout, and a timed-out PreToolUse hook doesn't block the call — the guard-down behind it went through. The same shape in the edit
+  // guard's path words (`=a=a…`), its `find … -delete` pre-filter (`find find …`), the guarded-file regexes (`.specs/.specs/…` in a
+  // Write path) and `[\\/]+$` trims. Timed by SHAPE, never by milliseconds: each reader on a hostile input of n and 4n characters — a
+  // linear scan ~4×, the old ones ~16× (2.8 s at 64 K for the dot glob) — bounded at 8× or a 50 ms floor, measured once more on a miss.
+  {
+    const E = require("./lib/engine/index.js");
+    const PR = require("./lib/probe.js");
+    const AH = require("../hooks/approval-hook.js"), GH = require("../hooks/guard-hook.js");
+    const BS = String.fromCharCode(92);
+    const rep = (unit, n, tail) => unit.repeat(Math.ceil(n / unit.length)).slice(0, n) + (tail || "");
+    const dec = (tool, ti) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: ti }, "deny", { meta: {}, lang: "en" });
+    const READERS = [
+      ["approvalCandidate (=.=.… then a glob)", (s) => E.approvalCandidate(s), "=.", " {*"],
+      ["approvalCandidate ((.(.… then a glob)", (s) => E.approvalCandidate(s), "(.", " {*"],
+      ["the approval hook's candidate", (s) => AH.candidate(s), "=.", " {*"],
+      ["approvalGuardDecision, Bash", (s) => dec("Bash", { command: s }), "=.", " {; cp a .s*/b"],
+      ["approvalGuardDecision, PowerShell", (s) => dec("PowerShell", { command: s }), "(.", " {*"],
+      ["the edit guard's mayWrite (find find …)", (s) => GH.mayWrite(s), "find ", ""],
+      ["the edit guard's pathWords (=a=a…)", (s) => GH.pathWords(s), "=a", ""],
+      ["guardedFileOf (.specs/.specs/…)", (s) => PR.guardedFileOf(s), ".specs/", "x"],
+      ["approvalGuardDecision, Write (.specs\\.specs\\…)", (s) => dec("Write", { file_path: s }), BS + ".specs", BS + ".state.json"],
+      ["specsParentOf (////…)", (s) => PR.specsParentOf(s), "/", "x/.specs/roadmap.json"],
+      ["trimSlashEnd (////…x)", (s) => PR.trimSlashEnd(s), "/", "x"],
+      ["dotGlob (=.=.…)", (s) => PR.dotGlob(s), "=.", ""],
+    ];
+    const time = (f, s) => { const t = process.hrtime.bigint(); f(s); return Number(process.hrtime.bigint() - t) / 1e6; };
+    const shape = {};
+    for (const [name, f, unit, tail] of READERS) {
+      const small = rep(unit, 16000, tail), big = rep(unit, 64000, tail);
+      const s = remeasure(() => { f(small); return { t1: time(f, small), t4: time(f, big) }; }, (x) => x.t4 <= Math.max(50, 8 * x.t1));
+      shape[name + " — " + s.t1.toFixed(1) + " ms at 16 K, " + s.t4.toFixed(1) + " ms at 64 K"] = s.t4 <= Math.max(50, 8 * s.t1);
+    }
+    all("review 8 (ds-security 3): every guard pre-filter scan is linear — 4× the input costs ≤ 8× the time (or ≤ 50 ms) on the hostile inputs that ran the approval hook past its timeout", shape);
+
+    // …and the process: the report's own payload at deny — answered (deny: a too-long command whose unread tail may name .specs/), well
+    // inside the hook's 10 s (a short command's time × 10, at least 5 s — it took 16.7 s and timed out).
+    const pg = path.join(tmp, "r8-redos");
+    S.initProject(pg, ["core"], "en", { approvalGuard: "deny" });
+    const pre = (command) => ({ session_id: "s", hook_event_name: "PreToolUse", cwd: pg, tool_name: "Bash", tool_input: { command } });
+    const evil = "echo " + rep("=.", 120000) + " {; cp /tmp/x.json .s*/roadmap.jso?";
+    const run = (command) => { const t = Date.now(); const r = hook("approval-hook", pre(command), { CLAUDE_PROJECT_DIR: pg }); return { r, ms: Date.now() - t }; };
+    const decisionOf = (r) => { try { return JSON.parse(r.stdout).hookSpecificOutput.permissionDecision; } catch { return "silent"; } };
+    const m = remeasure(() => ({ short: run("cp /tmp/x.json .s*/roadmap.jso?"), long: run(evil) }), (x) => x.long.ms <= Math.max(5000, 10 * x.short.ms));
+    all("review 8 (ds-security 3): the approval hook answers the 120 K `=.=.…` payload at deny as the short command — deny, within max(5 s, 10 × the short command's time) (got " +
+      m.short.ms + " ms / " + m.long.ms + " ms)", {
+      shortDeny: () => decisionOf(m.short.r) === "deny", longDeny: () => decisionOf(m.long.r) === "deny",
+      fast: () => m.long.ms <= Math.max(5000, 10 * m.short.ms),
+    });
   }
 };

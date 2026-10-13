@@ -21,29 +21,32 @@ const path = require("path");
 // them, the engine's network-path rule), required once the tool is ExitPlanMode. A network path (UNC `\\host\share`,
 // `//host/share`, `\\?\UNC\…`, other device paths) is never stat'ed here: it would open an SMB connection and block this hook until
 // an unreachable host times out (`\\?\C:\…` and WSL's `\\wsl$\…` are local).
-const { runHook, finish, payloadOf, eventOf, probe } = require("./hook-utils.js");
+const { runHook, payloadOf, eventOf, probe } = require("./hook-utils.js");
 
 const PAYLOAD_MAX = 4 * 1024 * 1024; // characters of the hook payload read (an approved plan rides in it); a longer one is ignored
 
-function main(raw) {
+// The hook's decision on one payload → its one line of additionalContext, or null (silent).
+function decide(raw) {
   const payload = payloadOf(raw);
-  if (!payload) return finish();
+  if (!payload) return null;
   const event = eventOf(payload);
-  if (event && event !== "PostToolUse") return finish();
-  if ((payload.tool_name || payload.toolName) !== "ExitPlanMode") return finish();
+  if (event && event !== "PostToolUse") return null;
+  if ((payload.tool_name || payload.toolName) !== "ExitPlanMode") return null;
 
   // The project: the session's first dev-spec project (probe.sessionProjects — the nearest at or above the session's cwd, then the
   // project dir Claude Code or the user exported), network folders left out.
   const P = probe();
   const local = (v) => (v && !P.isNetwork(v) ? v : null);
   const pdir = P.sessionProjects({ cwd: local(P.usable(payload.cwd)), anchors: P.sessionAnchors().filter(local) })[0];
-  if (!pdir) return finish();
+  if (!pdir) return null;
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const r = spec.planBridge(pdir, payload);
-  if (r && typeof r.hint === "string" && r.hint) return finish({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: r.hint } });
-  return finish();
+  if (r && typeof r.hint === "string" && r.hint) return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: r.hint } };
+  return null;
 }
 
-// The payload from stdin (past PAYLOAD_MAX: "" — silent), main run once; any unexpected error is a silent no-op (never a block).
-runHook(main, { maxInput: PAYLOAD_MAX });
+module.exports = { decide };
+// As a process (hooks/hooks.json): the payload from stdin (past PAYLOAD_MAX: "" — silent), decide run once; any unexpected error is a
+// silent no-op (never a block).
+if (require.main === module) runHook(decide, { maxInput: PAYLOAD_MAX });

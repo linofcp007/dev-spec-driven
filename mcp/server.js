@@ -893,7 +893,8 @@ function nestedUnknown(schema, value, where, label, unknown, scopes) {
 // engine and be coerced: number 1.9 ticked task 1, name {a:1} created .specs/object-object/, cap "abc"
 // scanned 0 files, text 123 threw 'text.trim is not a function'. An argument the schema doesn't list is refused before
 // (unknownArgs; it used to be ignored — nested keys too since 1.25.1), and so is a missing nested required key.
-const RE_DOTDOT = /(^|[\\/])\.\.([\\/]|$)/;
+// A `..` segment in projectDir: the hooks' own test (hooks/hook-utils.js — parseProjectDir's, one reading for the hook and the server).
+const RE_DOTDOT = HOOK_UTILS.RE_DOTDOT;
 // A network path in projectDir — UNC `\\host\share`, `//host/share`, `\\?\UNC\host\share`, `\\.\UNC\…` — made this
 // local server open an SMB/WebDAV connection to whatever host a tool call named (on Windows the redirector sends the
 // user's NTLM credentials) and, the engine being synchronous, stop answering every call while an unreachable host

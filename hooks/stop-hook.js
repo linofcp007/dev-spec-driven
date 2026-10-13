@@ -33,7 +33,7 @@ const path = require("path");
 // (mcp/lib/probe.js: the one dev-spec project rule, the session's candidate projects, a JSON file read as the engine reads it — UTF-8,
 // or UTF-16 with a BOM), required once the event is a Stop / SubagentStop.
 const HU = require("./hook-utils.js");
-const { runHook, finish, payloadOf, eventOf, probe } = HU;
+const { runHook, payloadOf, eventOf, probe } = HU;
 
 const TRANSCRIPT_TAIL = 512 * 1024; // bytes read from the end of a transcript when the payload carries no last message
 
@@ -170,11 +170,12 @@ function lastAssistantText(file) {
   return "";
 }
 
-function main(raw) {
+// The hook's decision on one payload → {decision: "block", reason} or null (silent); a stale ROADMAP.md / SPECS.md refreshed first.
+function decide(raw) {
   const payload = payloadOf(raw);
-  if (!payload) return finish();
+  if (!payload) return null;
   const event = eventOf(payload);
-  if (event !== "Stop" && event !== "SubagentStop") return finish();
+  if (event !== "Stop" && event !== "SubagentStop") return null;
 
   // The raw pre-check: the projects this stop may be about (probe.sessionProjects — the nearest dev-spec .specs/ at or above the
   // session's cwd: a cd'd subfolder, a worktree; the project dir Claude Code or the user exported) — with the gate on. The engine then
@@ -183,30 +184,31 @@ function main(raw) {
   const anchors = probe().sessionAnchors();
   const projects = probe().sessionProjects({ cwd, anchors });
   refreshStale(projects); // the turn's spec saves → ROADMAP.md / SPECS.md, once
-  if (payload.stop_hook_active === true) return finish(); // already sent back once: never twice in a row
+  if (payload.stop_hook_active === true) return null; // already sent back once: never twice in a row
   const cands = projects.filter((d) => !gateOff(d));
-  if (!cands.length) return finish();
+  if (!cands.length) return null;
 
   const sub = event === "SubagentStop";
   // Stop only (a subagent's gate reads its report, not the activity): no feature active lately → nothing the gate could say.
-  if (!sub && !cands.some(recentActivity)) return finish();
+  if (!sub && !cands.some(recentActivity)) return null;
   let message = typeof payload.last_assistant_message === "string" ? payload.last_assistant_message : "";
   if (!message.trim()) message = lastAssistantText(sub ? payload.agent_transcript_path || payload.transcript_path : payload.transcript_path);
-  if (!message.trim()) return finish();
+  if (!message.trim()) return null;
   // Stop only (a subagent's DONE is read with its report and its status line): no claim pattern in the prose → nothing to say.
-  if (!sub && !mayClaim(message)) return finish();
+  if (!sub && !mayClaim(message)) return null;
 
   const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const s = spec.sessionProject({ cwd, anchors });
   const pdir = s ? s.project : cands[0];
-  if (gateOff(pdir)) return finish();
+  if (gateOff(pdir)) return null;
   // hooks.json registers SubagentStop for the spec-implementer and the spec-simplifier: a payload without agent_type (older
   // versions) is read as the implementer — a simplifier's reply names no task report, so that check lets it through.
   const agent = !sub ? "" : typeof payload.agent_type === "string" && payload.agent_type.trim() ? payload.agent_type : "spec-implementer";
   const r = spec.stopCheck(pdir, { message, agent });
-  if (r && r.block === true && typeof r.reason === "string" && r.reason) return finish({ decision: "block", reason: r.reason });
-  return finish();
+  if (r && r.block === true && typeof r.reason === "string" && r.reason) return { decision: "block", reason: r.reason };
+  return null;
 }
 
-// The payload from stdin, main run once; any unexpected error is a silent no-op (never a block).
-runHook(main);
+module.exports = { decide, mayClaim };
+// As a process (hooks/hooks.json): the payload from stdin, decide run once; any unexpected error is a silent no-op (never a block).
+if (require.main === module) runHook(decide);

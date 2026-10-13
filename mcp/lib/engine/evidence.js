@@ -10,6 +10,8 @@
 const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
+// The observe hook's pre-filter, which observeRun repeats: ONE copy, the probe's (the hook runs it before the engine loads).
+const { observedNorm, observedBodies } = require("../probe.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let featureBranchRecord, specWrite, activeTasks, baselineFiles, cleanTaskText, codeSpan, detectTracks, duplicateTaskNumbers, errs, existingFeature,
   extractAcIds, extractTestIds, featureDirs, featureLang, fileHash, FOLD_CASE, headRest, isBacktickUnit,
@@ -1572,28 +1574,8 @@ function observedProof(e, expectFail, since, verify, root) {
   if (seen(run)) return true;
   return !!(expectFail && since != null && isRecord(run) && timeOf(run.at) != null && timeOf(run.at) < since && seen(e) && e.exitCode === 0);
 }
-// the cheap text test run before a tasks.md is parsed (here, and — a copy, as it runs before the engine loads — in
-// hooks/observe-hook.js): the run's command bodies as no matcher reading tells apart — split at ` && ` and `;`, a `cd` /
-// `set … pipefail` part dropped, leading NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and
-// quotes dropped, `\` read as `/`, whitespace folded (observedNorm) — must each appear in the normalized text. A SUPERSET of
-// runProvesVerify (every transformation keeps a body a substring of its _Verify:_'s normalized text): a run the matcher accepts
-// always passes it. → the bodies ([] — a run of cds / pipefail only — matches nothing).
-// (also pipes unspaced, a `./` at a word's start dropped, npm's aliases of `npm test` read as it, `&&` split however
-// spaced, and a part that is cmd.exe's / PowerShell's change of folder — chdir, pushd, popd, Set-Location, sl, Push-Location,
-// Pop-Location — dropped like `cd`: the matcher's review-5 readings, so the filter stays a superset of it)
-const observedNorm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim()
-  .replace(/ ?(\|+) ?/g, "$1").replace(/(^|[ ;&|(=])\.\//g, "$1").replace(/\bnpm (?:run(?:-script)? test|t|tst)(?=$|[ ;&|])/g, "npm test");
-const RE_OBSERVED_ENV = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+)+/;
-function observedBodies(cmd) {
-  const out = [];
-  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/\s*&&\s*|;/)) {
-    part = part.trim();
-    if (!part || /^(?:cd|chdir|pushd|popd|sl|set-location|push-location|pop-location)(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
-    const b = observedNorm(part.replace(RE_OBSERVED_ENV, "").replace(/\s+2>&1$/, ""));
-    if (b) out.push(b);
-  }
-  return out;
-}
+// (the cheap text test run before a tasks.md is parsed — observedNorm / observedBodies, the run's command bodies as no matcher reading
+// tells apart, a SUPERSET of runProvesVerify — is probe.js's: the observe hook runs the same one before the engine loads.)
 // hooks/observe-hook.js, once its cheap text pre-filter found the command's bodies in a tasks.md or meta.checks: one log line per
 // target the run belongs to — each non-archived feature with a task the run is a run of (runProvesVerify, the matcher
 // the verdict uses — one of its runnable _Verify:_ commands, or all of them joined in any order; `node --test tests\x.test.js`,

@@ -1803,19 +1803,21 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, __dirname
       !logged.includes("cd ../elsewhere && npm run e2e") && logged.includes("node --test tests" + BS + "x.test.js") && js(projLog) === js(["CI=1 npm run lint"]),
       "1.22 review 3 (3): under meta.evidence observed, runs in the forms the matcher accepts are logged and found — `node --test tests\\x.test.js`, `npm test && npm run build` (reversed), two separate Bash runs reported joined, `CI=1 npm run lint` (task and project check), `cd ./packages/web && npm test`; a run in another folder is logged nowhere and the harness's failed run stays failed (got " +
       js([[c1, c2, c3, c4, c4b, c5, c6].map(pick), logged, projLog]) + ")");
-    // the hook's pre-filter is the engine's: the same functions, and a superset of the matcher on the probe commands
+    // the hook's pre-filter is the engine's: the same functions (review 8, ds-maint finding 4: ONE copy, mcp/lib/probe.js — it was a
+    // renamed copy the source guard couldn't see), and a superset of the matcher on the probe commands
     const E3 = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const PR3 = require(path.join(__dirname, "lib", "probe.js"));
     const hookSrc = fs.readFileSync(obsJs, "utf8"), engSrc = fs.readFileSync(path.join(__dirname, "lib", "engine", "evidence.js"), "utf8");
-    const grab = (src, from, to) => { const a = src.indexOf(from), b = src.indexOf(to, a); return a < 0 || b < 0 ? null : src.slice(a, b); };
-    const hookFns = (grab(hookSrc, "const norm = ", "\n}\n") || "").replace(/\bnorm\b/g, "observedNorm").replace(/\bRE_ENV\b/g, "RE_OBSERVED_ENV").replace(/\bbodies\b/g, "observedBodies");
-    const engFns = grab(engSrc, "const observedNorm = ", "\n}\n") || "";
-    const strip = (s) => s.replace(/\s+/g, " ").trim();
     const probes = [["node --test tests" + BS + "x.test.js", "node --test tests/x.test.js"], ['X="a b" npm test', "npm test"], ["CI=1 npm run lint 2>&1", "npm run lint"],
       ["cd /x && set -o pipefail; npm test | tee log", "set -o pipefail; npm test | tee log"], ["`npm test`", "npm test"], ['node --test "tests/x.test.js"', "node --test tests/x.test.js"],
       ["npm test && npm run build", "npm run build"]];
     const notSuperset = probes.filter(([run, v]) => { const t = E3.observedNorm(v + " " + "npm test"); return !E3.observedBodies(run).every((b) => t.includes(b)); });
-    ok(hookFns && strip(hookFns) === strip(engFns) && !notSuperset.length,
-      "1.22 review 3 (3): hooks/observe-hook.js's pre-filter (norm / RE_ENV / bodies) is the engine's observedNorm / RE_OBSERVED_ENV / observedBodies, and reads every probe run as mentioned by its _Verify:_ (got " + js([!!hookFns, strip(hookFns) === strip(engFns), notSuperset]) + ")");
+    all("1.22 review 3 (3) / review 8: hooks/observe-hook.js's pre-filter is the engine's observedNorm / observedBodies — the probe's one copy, none in the hook or evidence.js — and reads every probe run as mentioned by its _Verify:_", {
+      oneCopy: () => E3.observedNorm === PR3.observedNorm && E3.observedBodies === PR3.observedBodies,
+      hookReadsProbe: () => /probe\(\)\.observedBodies\(/.test(hookSrc) && /probe\(\)\.observedNorm\(/.test(hookSrc) && !/const norm = |function bodies\(|RE_ENV =/.test(hookSrc),
+      engineNoCopy: () => !/const observedNorm = |function observedBodies\(|RE_OBSERVED_ENV =/.test(engSrc),
+      superset: () => !notSuperset.length,
+    });
   }
 
   // 1.22 review (finding 6) — ONE `cd <root> &&` stripping (spec.stripCdPrefix) for the observe hook's log and the reported run's

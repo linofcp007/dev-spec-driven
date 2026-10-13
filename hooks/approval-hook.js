@@ -44,37 +44,29 @@ const path = require("path");
 // The hooks' runner (stdin, the safety net, the one flushed exit) and what the hooks share before the engine loads (hooks/hook-utils.js:
 // the probe's readers, editTargets, approvalProjects, parseProjectDir — each loading the probe on first use, past the cheap pre-check).
 const HU = require("./hook-utils.js");
-const { runHook, finish } = HU;
+const { runHook, probe } = HU;
 
 const LEVELS = ["off", "ask", "deny"];
-const RE_MCP = /^(?:mcp__.+__)?(?:spec_approve|spec_feature|spec_init|spec_add_track)$/;
 // The tools that run a shell command — Monitor too (it runs its command in the Bash tool's shell).
 const SHELLS = new Set(["Bash", "PowerShell", "Monitor"]);
 // the file-editing tools, on .specs/roadmap.json, a feature's .state.json or a harness-observed log only.
 // NotebookEdit (its notebook_path): 1.25.1.
 const EDITS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
-// another MCP server's file tools, by the verb in the tool's name (the engine's RE_MCP_FILE_TOOL; dev-spec's own
-// tools are none) — their path arguments read like an Edit's path.
-const RE_MCP_FILE = /^mcp__.+__[\w-]*?(?:write|edit|create|move|rename|delete|remove|copy|append|patch|replace|save|put|upload|mkdir|touch|truncate|unlink|insert)/i;
-const RE_DEVSPEC_TOOL = /__(?:spec_[a-z_]+|steering_scaffold|ears_validate|trace_check)$/;
-const RE_GUARDED_FILE = /(?:^|[\\/])\.specs[\\/]+(?:roadmap\.json|(?:[^\\/]+[\\/]+)+\.state\.json|(?:[^\\/]+[\\/]+)*\.execution[\\/]+observed\.jsonl)$/i;
+// (dev-spec's approval-shaped tools under any prefix — probe.js RE_APPROVAL_MCP; another MCP server's file tools by the verb in the
+// tool's name — probe.js isMcpFileTool, the engine's test and hooks.json's matcher built from the same list; the guarded files by path —
+// probe.js guardedFileOf, the engine's approvalGuardedFile. The probe loads only once the call may be one of them.)
 // A Write / Edit target that can't be one: its text names no .specs, no 8.3 short name (`SPECS~1`, `ROADMA~1.JSO`) and none of
 // the guarded file names — through a folder linked to .specs/ (`sx/roadmap.json`) only its real path names .specs.
 const RE_EDIT_MAYBE = /\.specs|~\d|(?:^|[\\/])(?:roadmap\.json|\.state\.json|observed\.jsonl)\s*$/i;
-// The engine's approvalCandidate: a command can run the CLI or write .specs/roadmap.json only if it names dev-spec or .specs
-// (string joints, quotes, escapes and line continuations taken out — `dev\-spec`, `d'e'v-spec`, `"cli/dev" + "-spec.js"`), or holds
-// a glob together with an approval word (the glob may name the CLI). The WHOLE command: one past the engine's read limit that
-// names dev-spec is refused / asked as unreadable (an approval after the first 64 KB went through). 
-// or a guarded file's name, or a glob / brace expansion that may name .specs (`.s*/…`) or stands beside a writer / remover.
-const RE_CANDIDATE = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
-const RE_VERB = /(?:^|[^\w-])(?:approve|remove|--approval-guard|--stop-check|--evidence|--guard|--guardian|--roles|--check)(?![\w-])/i;
-const RE_DOT_GLOB = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*[*?[{]/;
-const RE_WRITE_WORD = /(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|remove-item|ri|mv|move|move-item|mi|cp|copy|copy-item|cpi|set-content|sc|add-content|ac|clear-content|clc|out-file|new-item|ni|tee|robocopy|xcopy|rsync)(?=[\s;&|)]|$)/i;
-// (a PowerShell -EncodedCommand value — base64 — is decoded by the engine: here any encoded-looking pwsh call goes on to it)
+// The engine's approvalCandidate — ONE test, probe.js approvalMayBe on approvalPlain's text (linear: the dot-glob regex this hook
+// carried rescanned `=.=.…` from every start — 120 K characters ran it past its 10 s timeout, and a timed-out hook lets the call
+// through). The WHOLE command: one past the engine's read limit that names dev-spec is refused / asked as unreadable (an approval after
+// the first 64 KB went through). A PowerShell -EncodedCommand value — base64 — is decoded by the engine: here any encoded-looking pwsh
+// call goes on to it (a superset).
 const candidate = (c) => {
-  const t = c.replace(/(["'])\s*\+\s*\1/g, "").replace(/[\\`^]\r?\n|['"\\`^]/g, "");
-  return RE_CANDIDATE.test(t) || (/[*?[{]/.test(t) && (RE_VERB.test(t) || RE_DOT_GLOB.test(t) || RE_WRITE_WORD.test(t))) ||
-    (/powershell|pwsh/i.test(t) && /(?:^|\s)[-/]e[a-z]*\s+[A-Za-z0-9+/]{8,}/i.test(t));
+  const P = probe();
+  const t = P.approvalPlain(c);
+  return P.approvalMayBe(t) || (/powershell|pwsh/i.test(t) && /(?:^|\s)[-/]e[a-z]*\s+[A-Za-z0-9+/]{8,}/i.test(t));
 };
 // An MCP file tool's input may touch a guarded file only if its text names .specs (also %-encoded), a guarded name or a short name.
 const RE_MCP_MAYBE = /\.specs|%2especs|roadmap\.json|\.state\.json|observed\.jsonl|~\d/i;
@@ -124,18 +116,18 @@ const sessionEnv = () => ({ CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR, 
 // .specs/ or an approval tool and a project the session may be in has the guard on: ask (it used to exit 0 — allowed).
 function partial(raw) {
   const text = String(raw || "");
-  if (!RE_PARTIAL.test(text)) return finish();
+  if (!RE_PARTIAL.test(text)) return null;
   let cwd = null;
   const m = /"cwd"\s*:\s*"((?:[^"\\]|\\.){1,4096})"/.exec(text);
   if (m) try { cwd = JSON.parse('"' + m[1] + '"'); } catch { cwd = null; }
   const dirs = HU.approvalProjects({ cwd: cwd || process.cwd(), env: sessionEnv() });
   const s = strictest(dirs);
-  if (!s.level) return finish();
+  if (!s.level) return null;
   try {
     const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
     const r = spec.approvalGuardDecision({ hook_event_name: "PreToolUse" }, LEVELS[s.level], { lang: spec.projectLang(s.dir), meta: s.meta, partial: true });
-    if (r.decision !== "ask") return finish();
-    return finish({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: r.reason } });
+    if (r.decision !== "ask") return null;
+    return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: r.reason } };
   } catch {
     return failClosed(s.meta);
   }
@@ -164,51 +156,40 @@ function failClosed(meta) {
   }
   const out = { hookEventName: "PreToolUse", permissionDecision: "ask" };
   if (typeof reason === "string") out.permissionDecisionReason = reason;
-  return finish({ hookSpecificOutput: out });
-}
-// An MCP file tool's arguments → the strings that may be paths (the engine's approvalPathArgs: keys named like one, 3 levels deep, one
-// line each, at most 32; a file:// URI read as its path).
-function mcpPathArgs(ti) {
-  const out = [];
-  const walk = (v, keyed, depth) => {
-    if (out.length >= 32 || depth > 3) return;
-    if (typeof v === "string") {
-      if (!keyed || !v.trim() || v.length > 4096 || /[\r\n]/.test(v)) return;
-      const t = v.trim();
-      out.push(/^file:\/\//i.test(t) ? HU.fileUriToPath(t) || t : t);
-    } else if (Array.isArray(v)) v.forEach((x) => walk(x, keyed, depth + 1));
-    else if (isObj(v)) for (const [k, x] of Object.entries(v)) walk(x, keyed || /path|file|source|src|dest|target|from|^to$|dir|folder|name|uri|location/i.test(k), depth + 1);
-  };
-  walk(ti, false, 0);
-  return out;
+  return { hookSpecificOutput: out };
 }
 
-function main(raw, timedOut) {
+// The hook's decision on one payload → the object it prints (ask / deny) or null (silent). opts.timedOut: the stdin safety net fired —
+// a payload that doesn't parse is a partial one.
+function decide(raw, opts = {}) {
   let payload;
   try {
     payload = JSON.parse(raw || "{}");
   } catch {
-    return timedOut ? partial(raw) : finish();
+    return opts.timedOut ? partial(raw) : null;
   }
-  if (!isObj(payload)) return finish();
+  if (!isObj(payload)) return null;
   const event = payload.hook_event_name || payload.hookEventName || "";
-  if (event && event !== "PreToolUse") return finish();
+  if (event && event !== "PreToolUse") return null;
   const tool = typeof payload.tool_name === "string" ? payload.tool_name : typeof payload.toolName === "string" ? payload.toolName : "";
   const ti = isObj(payload.tool_input) ? payload.tool_input : isObj(payload.toolInput) ? payload.toolInput : {};
   const command = SHELLS.has(tool) && typeof ti.command === "string" ? ti.command : null;
   const fpRaw = EDITS.has(tool) ? (typeof ti.file_path === "string" ? ti.file_path : typeof ti.notebook_path === "string" ? ti.notebook_path : null) : null;
   const fp = fpRaw && RE_EDIT_MAYBE.test(fpRaw) ? fpRaw.trim() : null;
-  // another MCP server's file tool — only when its input names .specs or a guarded file at all (no engine load else)
-  const mcpFile = !RE_MCP.test(tool) && RE_MCP_FILE.test(tool) && !RE_DEVSPEC_TOOL.test(tool) && RE_MCP_MAYBE.test(JSON.stringify(ti));
-  if (!RE_MCP.test(tool) && !(command && candidate(command)) && !fp && !mcpFile) return finish();
+  // the shell and edit tools are known by name; any other tool here is an MCP one — dev-spec's approval-shaped tool, or another server's
+  // file tool whose input names .specs or a guarded file at all (no engine load else)
+  const other = command === null && !EDITS.has(tool) && !SHELLS.has(tool);
+  const approvalTool = other && probe().RE_APPROVAL_MCP.test(tool);
+  const mcpFile = other && !approvalTool && probe().isMcpFileTool(tool) && RE_MCP_MAYBE.test(JSON.stringify(ti));
+  if (!approvalTool && !(command && candidate(command)) && !fp && !mcpFile) return null;
   const cwd = typeof payload.cwd === "string" && payload.cwd.trim() ? payload.cwd.trim() : null;
   // the edited path as the file system reads it — `./`, `..`, an NTFS stream, an 8.3 short name and a folder linked
   // to .specs/ (hook-utils editTargets, the engine's approvalEditTargets).
-  const paths = fp ? [fp] : mcpFile ? mcpPathArgs(ti) : [];
+  const paths = fp ? [fp] : mcpFile ? probe().mcpPathArgs(ti, HU.fileUriToPath) : [];
   const touched = paths.flatMap((p) => HU.editTargets(p, cwd)).filter((t) => /(?:^|[\\/])\.specs(?:[\\/]|$)/i.test(t));
-  const edited = touched.find((t) => RE_GUARDED_FILE.test(t)) || null;
-  if (fp && !edited) return finish();
-  if (mcpFile && !touched.length) return finish();
+  const edited = touched.find((t) => probe().guardedFileOf(t)) || null;
+  if (fp && !edited) return null;
+  if (mcpFile && !touched.length) return null;
 
   // The projects this call may act on: the one it names (MCP projectDir, CLI --project, the edited file's, a cd target, a
   // SPEC_PROJECT_DIR= assignment), then the session's (its cwd and the nearest .specs/ above it, the exported anchors).
@@ -218,7 +199,7 @@ function main(raw, timedOut) {
   // server refuses — go to approvalProjects as before: a '..' path is read, a network one only on the session's share.)
   let named = [];
   let unreadableProject = false;
-  if (touched.length) named = [...new Set(touched.map((t) => t.replace(/[\\/]*\.specs(?:[\\/][\s\S]*)?$/i, "") || "."))];
+  if (touched.length) named = [...new Set(touched.map((t) => probe().specsParentOf(t)))];
   else if (!command) {
     const bases = [process.env.CLAUDE_PROJECT_DIR, process.env.SPEC_PROJECT_DIR, cwd].filter((b) => typeof b === "string" && b.trim() && !HU.unexpandedVar(b));
     for (const b of bases.length ? bases : [process.cwd()]) {
@@ -230,7 +211,7 @@ function main(raw, timedOut) {
   }
   const s = strictest(HU.approvalProjects({ cwd, env: sessionEnv(), named, command: command || "" }));
   if (unreadableProject && s.level < 1) s.level = 1;
-  if (!s.level) return finish();
+  if (!s.level) return null;
 
   // Past the pre-check: an engine failure asks (failClosed), it never allows silently.
   try {
@@ -241,15 +222,16 @@ function main(raw, timedOut) {
     const resolveFeature = (n) => { const f = spec.existingFeature(dir, n); return f.ok ? f.slug : null; };
     const r = spec.approvalGuardDecision(payload, LEVELS[s.level], { lang: spec.projectLang(dir), meta: s.meta, resolveFeature,
       uriPath: HU.fileUriToPath, projectUnreadable: unreadableProject });
-    if (r.decision !== "ask" && r.decision !== "deny") return finish();
+    if (r.decision !== "ask" && r.decision !== "deny") return null;
     const out = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: r.decision, permissionDecisionReason: r.reason } };
     if (r.userNote) out.systemMessage = r.userNote; // deny: the reason goes to the agent — the user sees the command to run
-    return finish(out);
+    return out;
   } catch {
     return failClosed(s.meta);
   }
 }
 
-// The payload from stdin, main run once — from the 2 s safety net with timedOut (a partial payload naming dev-spec: ask); any
-// unexpected error before the pre-check passes is a silent no-op (never a block).
-runHook(main);
+module.exports = { decide, candidate };
+// As a process (hooks/hooks.json): the payload from stdin, decide run once — from the 2 s safety net with timedOut (a partial payload
+// naming dev-spec: ask); any unexpected error before the pre-check passes is a silent no-op (never a block).
+if (require.main === module) runHook(decide);

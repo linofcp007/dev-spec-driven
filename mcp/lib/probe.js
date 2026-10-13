@@ -35,6 +35,11 @@
  *   fsTargetPath · editTargets       a Write / Edit target as the file system reads it (guards.js guardTargetPath /
  *                                    approvalEditTargets ARE them; hooks/hook-utils.js re-exports them)
  *   utf16OrUtf8 · textOf · jsonOf · readText · readJsonFile · isUtf16   a file as the engine reads it (files.js decodeText)
+ *   the guards' shared readings (one copy for the hooks, before the engine loads, and the engine):
+ *     trimSlashEnd · approvalPlain · approvalMayBe (APPROVAL_CANDIDATE_TESTS) · RE_APPROVAL_VERB   the approval guard's pre-filter
+ *     guardedFileOf · specsParentOf    the files the approval guard stands on, by path; the project a .specs/ path belongs to
+ *     MCP_FILE_VERBS · isMcpFileTool · approvalHookMatcher · mcpPathArgs   another MCP server's file tools (hooks.json's matcher)
+ *     observedNorm · observedBodies    the observe hook's pre-filter (evidence.js's observed runs)
  * A network or device path (\\host\share, //host/share, \\?\UNC\…) is never walked up: no stat climbs a share, and none is made on a
  * path only the agent named (the callers pass the session's own folders). mcp/tests/10-guards-probe.js checks every caller agrees.
  */
@@ -105,7 +110,7 @@ function editTargets(fp, cwd, win = process.platform === "win32") {
   const s = fsTargetPath(String(fp).trim(), win);
   if (isNetwork(s)) return [s];
   const c = usable(cwd);
-  if (c && isNetwork(c) && !path.isAbsolute(s) && !/^[A-Za-z]:/.test(s)) return [c.replace(/[\\/]+$/, "") + "/" + s]; // under a network cwd: text only
+  if (c && isNetwork(c) && !path.isAbsolute(s) && !/^[A-Za-z]:/.test(s)) return [trimSlashEnd(c) + "/" + s]; // under a network cwd: text only
   const base = c && !isNetwork(c) ? path.resolve(fsTargetPath(c, win)) : process.cwd();
   let abs;
   try { abs = path.resolve(base, s); } catch { return [s]; }
@@ -240,8 +245,153 @@ function sessionProjects(opts = {}) {
   return found.filter((d) => d && !seen.has(folderKey(d)) && seen.add(folderKey(d)));
 }
 
+// ---- the guards' shared readings ----------------------------------------------------------------------------------------------
+// ONE copy each for the hooks (before the engine loads) and the engine (guards.js, evidence.js) — renamed copies drifted where no
+// test could see them (review 8, ds-maint finding 4). Every scan here is LINEAR in its input: a hook that runs past its timeout lets
+// the tool call through (code.claude.com/docs/en/hooks), so a pattern that rescans a run from each of its starts is a way past the
+// guard — /(?:^|[=,(])\.[^\s/]*[*?]/ on `=.=.=.…`: 120 K characters cost the approval hook 16.7 s against its 10 s timeout (review 8,
+// ds-security finding 3). The rule for a pattern a hook runs on payload text: no run class that holds its own start delimiter, no
+// `[\\/]+$`-style tail, no nested quantifier — scan the delimiter-free runs once, or walk the text by hand. mcp/tests/
+// 10-guards-hooks-cost.js times each reader on growing hostile inputs (the ratio, never milliseconds).
+
+const isSlashCode = (c) => c === 47 || c === 92;
+// A text without its trailing slashes / backslashes — one pass from the end.
+function trimSlashEnd(s) {
+  const t = String(s);
+  let e = t.length;
+  while (e > 0 && isSlashCode(t.charCodeAt(e - 1))) e--;
+  return t.slice(0, e);
+}
+
+// The approval guard's pre-filter — the approval hook's before the engine loads, and the engine's approvalCandidate (guards.js:
+// plus a PowerShell -EncodedCommand's decoded script): may this shell command run the CLI or touch a file the guard stands on? Read on
+// its plain text (approvalPlain — quotes, escapes, line continuations and string joints taken out: `dev\-spec`, `d'e'v-spec`,
+// `"cli/dev" + "-spec.js"`). APPROVAL_CANDIDATE_TESTS, any one: it names dev-spec, .specs or a guarded file by name; or it holds a
+// glob / brace character together with an approval word (the glob may name the CLI), a dot-led word holding one (`.s*/road*.json`,
+// `x=.spec?/…`) or a writer / remover (PowerShell's `Remove-Item * -Recurse` reaches .specs/). A guard-down another module reads in a
+// command it names adds its test here (the list is the hook point): the hook's pre-filter and the engine's stay one.
+const RE_APPROVAL_NAMES = /dev-?spec|\.specs|roadmap\.json|\.state\.json|observed\.jsonl/i;
+// The words that make a CLI call an approval or a guard-down (approve, feature remove, init's guard-down flags).
+const RE_APPROVAL_VERB = /(?:^|[^\w-])(?:approve|remove|--approval-guard|--stop-check|--evidence|--guard|--guardian|--roles|--check)(?![\w-])/i;
+const RE_APPROVAL_WRITE_WORD = /(?:^|[\s;&|(])(?:rm|rmdir|rd|del|erase|remove-item|ri|mv|move|move-item|mi|cp|copy|copy-item|cpi|set-content|sc|add-content|ac|clear-content|clc|out-file|new-item|ni|tee|robocopy|xcopy|rsync)(?=[\s;&|)]|$)/i;
+const RE_GLOB_CHAR = /[*?[{]/;
+const approvalPlain = (text) => String(text).replace(/(["'])\s*\+\s*\1/g, "").replace(/[\\`^]\r?\n|['"\\`^]/g, "");
+// A dot-led word — a `.` after the start, a blank, a quote, a slash, `=`, `,`, `(` or a separator — holding a glob / brace character
+// after its dot. Each match takes a whole delimiter-free run at once (the next search starts past it), so no run is read twice; the
+// first qualifying dot of a run sees every glob character a later one would.
+const RE_DOT_RUN = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*/g;
+function dotGlob(t) {
+  const re = new RegExp(RE_DOT_RUN.source, "g");
+  for (let m; (m = re.exec(t));) if (RE_GLOB_CHAR.test(m[0])) return true;
+  return false;
+}
+const APPROVAL_CANDIDATE_TESTS = [
+  (t) => RE_APPROVAL_NAMES.test(t),
+  (t) => RE_GLOB_CHAR.test(t) && (RE_APPROVAL_VERB.test(t) || dotGlob(t) || RE_APPROVAL_WRITE_WORD.test(t)),
+];
+// plain: approvalPlain(command) → may it be an approval / a guard-down?
+const approvalMayBe = (plain) => APPROVAL_CANDIDATE_TESTS.some((test) => test(plain));
+
+// The files the approval guard stands on, by their path (any separators, case-blind) → { setting, feature? } | null:
+// .specs/roadmap.json ("roadmap": the guard and the project's gates), a .state.json anywhere below .specs/ ("state": a feature's
+// approvals, evidence, history — feature: its folder) and a harness-observed run log .specs/[…/].execution/observed.jsonl
+// ("observed" — feature null for the project's own .specs/.execution/). Read on the path's segments, one pass (the regexes this
+// replaces rescanned `.specs/.specs/…` from each `.specs`). The engine's approvalGuardedFile reads its normalized path text here, the
+// approval hook the edited path as the file system reads it.
+function guardedFileOf(p) {
+  const segs = String(p).split(/[\\/]+/);
+  const n = segs.length;
+  if (n < 2) return null;
+  const low = (i) => segs[i].toLowerCase();
+  const last = low(n - 1);
+  const specsBefore = (k) => { for (let i = 0; i < k; i++) if (low(i) === ".specs") return true; return false; };
+  if (last === "roadmap.json") return low(n - 2) === ".specs" ? { setting: "roadmap" } : null;
+  if (last === "observed.jsonl" && n >= 3 && low(n - 2) === ".execution" && specsBefore(n - 2)) {
+    const f = segs[n - 3];
+    return { setting: "observed", feature: f && f.toLowerCase() !== ".specs" ? f : null };
+  }
+  if (last === ".state.json" && n >= 3 && specsBefore(n - 2)) return { setting: "state", feature: segs[n - 2] || null };
+  return null;
+}
+// The folder holding a path's .specs/ — the text before the first `.specs` followed by a separator or the end, its separators taken
+// off ("" → "."): the project an edit of a guarded file acts on.
+function specsParentOf(p) {
+  const t = String(p);
+  const m = /\.specs(?=[\\/]|$)/i.exec(t);
+  return m ? trimSlashEnd(t.slice(0, m.index)) || "." : t;
+}
+
+// Another MCP server's file tools — filesystem's write_file / edit_file / move_file, Desktop Commander's write_file / edit_block, … —
+// by the verb in the tool's name, never by the server; dev-spec's own tools (spec_*, steering_scaffold, ears_validate, trace_check) are
+// never one. MCP_FILE_VERBS is the ONE list: the engine's and the approval hook's test (isMcpFileTool) and hooks/hooks.json's matcher
+// (approvalHookMatcher — a matcher is a regex without flags, so each verb is spelled case-blind there, [Ww][Rr]…: `mcp__x__FILE_WRITE`
+// never reached the hook) are built from it. mcp/tests/10-guards.js checks hooks.json holds approvalHookMatcher().
+const MCP_FILE_VERBS = ["write", "edit", "create", "move", "rename", "delete", "remove", "copy", "append", "patch", "replace", "save", "put",
+  "upload", "mkdir", "touch", "truncate", "unlink", "insert"];
+const RE_MCP_FILE_TOOL = new RegExp("^mcp__.+__[\\w-]*?(?:" + MCP_FILE_VERBS.join("|") + ")", "i");
+const DEVSPEC_TOOL_HEADS = ["spec_", "steering_scaffold", "ears_validate", "trace_check"];
+const RE_DEVSPEC_MCP_TOOL = /__(?:spec_[a-z_]+|steering_scaffold|ears_validate|trace_check)$/;
+const isMcpFileTool = (tool) => RE_MCP_FILE_TOOL.test(tool) && !RE_DEVSPEC_MCP_TOOL.test(tool);
+// The approval-shaped dev-spec tools, under any MCP server prefix (Claude Code: mcp__plugin_dev-spec-driven_spec-driven__spec_approve;
+// a project server: mcp__spec-driven__spec_approve; any name a user registered the server under) or bare — m[1] the tool.
+const APPROVAL_TOOLS = ["spec_approve", "spec_feature", "spec_init", "spec_add_track"];
+const RE_APPROVAL_MCP = new RegExp("^(?:mcp__.+__)?(" + APPROVAL_TOOLS.join("|") + ")$");
+// hooks/hooks.json's matcher for the approval hook: the shell and edit tools, dev-spec's approval-shaped tools under any prefix, and
+// another server's file tools by their verb.
+function approvalHookMatcher() {
+  const blind = (w) => w.replace(/[a-z]/g, (c) => "[" + c.toUpperCase() + c + "]");
+  return "^(Bash|PowerShell|Monitor|Write|Edit|NotebookEdit|(mcp__.+__)?(" + APPROVAL_TOOLS.join("|") + ")|mcp__.+__(?!" + DEVSPEC_TOOL_HEADS.join("|") +
+    ")[\\w-]*?(" + MCP_FILE_VERBS.map(blind).join("|") + ")[\\w-]*)$";
+}
+// An MCP file tool's path-named keys.
+const RE_MCP_PATH_KEY = /path|file|source|src|dest|target|from|^to$|dir|folder|name|uri|location/i;
+// An MCP file tool's arguments → the strings that may be paths: the values (strings, or arrays / objects of them, 3 levels deep) of
+// keys named like one (path, file, source, destination, target, from, to, dir…), one line each, at most 32; a file:// URI read as its
+// path (uriPath — hooks/hook-utils.js fileUriToPath, the hook's and the MCP server's one reading; none: as written).
+function mcpPathArgs(ti, uriPath) {
+  const out = [];
+  const walk = (v, keyed, depth) => {
+    if (out.length >= 32 || depth > 3) return;
+    if (typeof v === "string") {
+      if (!keyed || !v.trim() || v.length > 4096 || /[\r\n]/.test(v)) return;
+      const s = v.trim();
+      const u = /^file:\/\//i.test(s) && typeof uriPath === "function" ? uriPath(s) : null;
+      out.push(u || s);
+    } else if (Array.isArray(v)) v.forEach((x) => walk(x, keyed, depth + 1));
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) walk(x, keyed || RE_MCP_PATH_KEY.test(k), depth + 1);
+  };
+  walk(ti, false, 0);
+  return out;
+}
+
+// The observe hook's pre-filter, before a tasks.md is parsed (here — the hook runs it before the engine loads — and in the engine's
+// observeRun, engine/evidence.js): the run's command bodies as no matcher reading tells apart — split at ` && ` and `;`, a `cd` /
+// `set … pipefail` part dropped, leading NAME=value assignments (quotes honoured) and a trailing 2>&1 dropped, then backticks and
+// quotes dropped, `\` read as `/`, whitespace folded (observedNorm) — must each appear in the normalized text. A SUPERSET of
+// runProvesVerify (every transformation keeps a body a substring of its _Verify:_'s normalized text): a run the matcher accepts
+// always passes it. → the bodies ([] — a run of cds / pipefail only — matches nothing).
+// (also pipes unspaced, a `./` at a word's start dropped, npm's aliases of `npm test` read as it, `&&` split however spaced, and a
+// part that is cmd.exe's / PowerShell's change of folder — chdir, pushd, popd, Set-Location, sl, Push-Location, Pop-Location —
+// dropped like `cd`: the matcher's review-5 readings, so the filter stays a superset of it). The whitespace is folded BEFORE the
+// split (`\s*&&\s*` never meets a run of blanks).
+const observedNorm = (s) => String(s == null ? "" : s).replace(/[`"']/g, "").split(String.fromCharCode(92)).join("/").replace(/\s+/g, " ").trim()
+  .replace(/ ?(\|+) ?/g, "$1").replace(/(^|[ ;&|(=])\.\//g, "$1").replace(/\bnpm (?:run(?:-script)? test|t|tst)(?=$|[ ;&|])/g, "npm test");
+const RE_OBSERVED_ENV = /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"'`;&|]*)\s+)+/;
+function observedBodies(cmd) {
+  const out = [];
+  for (let part of String(cmd == null ? "" : cmd).replace(/\s+/g, " ").split(/\s*&&\s*|;/)) {
+    part = part.trim();
+    if (!part || /^(?:cd|chdir|pushd|popd|sl|set-location|push-location|pop-location)(?:\s|$)/i.test(part) || /^set\s.*pipefail\s*$/.test(part)) continue;
+    const b = observedNorm(part.replace(RE_OBSERVED_ENV, "").replace(/\s+2>&1$/, ""));
+    if (b) out.push(b);
+  }
+  return out;
+}
+
 module.exports = {
   SESSION_MAX_UP, PROJECT_MAX_UP, RE_AUTOGEN, RE_UNEXPANDED_VAR, unexpandedVar, usable, RE_HOME_PREFIX, expandHome, isNetwork,
   fsTargetPath, editTargets, utf16OrUtf8, textOf, jsonOf, readText, readJsonFile, isUtf16,
   isDevSpecProject, nearestDevSpec, nearestSpecs, nearestProject, sessionAnchors, sessionProjects,
+  trimSlashEnd, approvalPlain, approvalMayBe, APPROVAL_CANDIDATE_TESTS, RE_APPROVAL_VERB, dotGlob, guardedFileOf, specsParentOf,
+  MCP_FILE_VERBS, isMcpFileTool, APPROVAL_TOOLS, RE_APPROVAL_MCP, approvalHookMatcher, mcpPathArgs, observedNorm, observedBodies,
 };

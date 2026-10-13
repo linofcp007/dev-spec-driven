@@ -6,7 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = async ({ ok, S, tmp, __dirname, require }) => {
+exports.run = async ({ ok, all, S, tmp, __dirname, require }) => {
   const E = require("./lib/engine/index.js"); // engine internals (the reader) — read through mcp/test.js's require
   const HU = require("../hooks/hook-utils.js");
   const js = JSON.stringify;
@@ -242,14 +242,45 @@ exports.run = async ({ ok, S, tmp, __dirname, require }) => {
       ["Bash", "cp src/a.ts /tmp/a.ts"]];
     const wrong = asks.filter(([t, c]) => gh(t, c) !== "ask").map((x) => "ask? " + x[1]).concat(silent.filter(([t, c]) => gh(t, c) !== "silent").map((x) => "silent? " + x[1]));
     const t1 = S.shellWriteTargets("D=src; sed -i x $D/a.ts; cat > b.js <<EOF\nx\nEOF\ncd lib && echo > c.rb; git checkout -- d.ts; echo x > $TMP/e.ts", "bash");
-    const src = fs.readFileSync(path.join(HOOKS, "guard-hook.js"), "utf8");
-    const reShell = new Function((/const RE_SHELL_WRITE = [\s\S]*?\n(?=\/\/)/.exec(src) || ["const RE_SHELL_WRITE = /$^/;\n"])[0] + "return RE_SHELL_WRITE;")();
+    // (the hook's pre-filter, exported since review 8 — it read the hook's RE_SHELL_WRITE from its source)
+    const mayWrite = require("../hooks/guard-hook.js").mayWrite;
     const progs = [...E.APPROVAL_WRITERS_ANY, ...E.APPROVAL_REMOVERS, ...E.APPROVAL_MOVERS, ...E.APPROVAL_WRITERS_TARGET, ...E.APPROVAL_WRITERS_INPLACE,
       ...E.APPROVAL_WRITERS_OTHER, ...E.PS_FILE_CMDLETS, ...Object.keys(E.PS_FILE_ALIASES)].filter((p) => !/^(?:git|find|cd|chdir|pushd|popd|sl|set-location|push-location|pop-location)$/.test(p));
-    const missed = progs.filter((p) => !reShell.test(p + " x"));
-    ok(!wrong.length && js(t1) === js(["src/a.ts", "b.js", "c.rb", "lib/c.rb"]) && !missed.length && reShell.test("find . -name x.ts -delete") && !reShell.test("git status && npm test"),
+    const missed = progs.filter((p) => !mayWrite(p + " x"));
+    ok(!wrong.length && js(t1) === js(["src/a.ts", "b.js", "c.rb", "lib/c.rb"]) && !missed.length && mayWrite("find . -name x.ts -delete") && !mayWrite("git status && npm test") &&
+      mayWrite("find src -type f -exec rm {} +") && !mayWrite("find src -name x.ts; echo -delete") && !mayWrite("findstr x a.ts"),
       "1.25.1 r7 F8: the edit guard (PreToolUse Bash|PowerShell|Monitor) asks for a code file a shell command writes (sed -i, cat > <<EOF, Set-Content, tee, cp, a redirect after cd, perl -pi, [IO.File]::WriteAllText) with no approved tasks; a write to a doc or .specs/, test runs, builds, reads, git and a copy out of the project stay silent; shellWriteTargets reads variables, heredocs and cd and leaves $TMP and git out; the hook's pre-filter names every writer the engine reads (wrong: " +
       js([wrong, t1, missed]) + ")");
+  }
+
+  // Review 8 (integration C14) — removing or moving a FOLDER that holds code is a code edit: `rm -rf src` passed the guard silently while
+  // `sed -i src/util.js` asked. Every removal / move spelling the guard reads for files — rm -r, rmdir /s (cmd), rd /s, Remove-Item
+  // -Recurse, PowerShell's rm, find … -delete, mv, a glob below the folder — asks when the folder holds a code file; a docs folder,
+  // node_modules / dist / build (the scan's ignored folders) and an empty folder stay silent. git stays the user's (git rm -r, as git rm
+  // of a file). The engine's guardCheck answers the same for the folder itself.
+  {
+    const g = project("r8-c14-guard", { guard: true }, ["billing"]);
+    for (const [d, f] of [["src/lib", "util.js"], ["docs", "a.md"], ["node_modules/x", "index.js"], ["dist", "app.js"], ["empty", null]]) {
+      fs.mkdirSync(path.join(g, ...d.split("/")), { recursive: true });
+      if (f) fs.writeFileSync(path.join(g, ...d.split("/"), f), "x");
+    }
+    const gh = (tool, command) => decisionOf(hookOut(path.join(HOOKS, "guard-hook.js"), pre(g, tool, { command }), { CLAUDE_PROJECT_DIR: g }));
+    const asks = [["Bash", "rm -rf src"], ["Bash", "rm -r src/"], ["Bash", "rm -rf src/*"], ["Bash", "rm -rf src/lib"], ["Bash", "cmd /c rmdir /s /q src"], ["Bash", "cmd /c rd /s /q src"],
+      ["PowerShell", "Remove-Item -Recurse -Force src"], ["PowerShell", "rm -r src"], ["Bash", "find src -delete"], ["Bash", "find src -type f -delete"], ["Bash", "mv src old"],
+      ["Bash", "rm -rf ."], ["Bash", "rm -rf *"]];
+    const silent = [["Bash", "rm -rf docs"], ["Bash", "rm -rf node_modules"], ["Bash", "rm -rf dist"], ["Bash", "rmdir empty"], ["Bash", "rm -rf missing"], ["Bash", "git rm -r src"],
+      ["Bash", "rm -rf docs/*"]];
+    const wrong = asks.filter(([t, c]) => gh(t, c) !== "ask").map((x) => "ask? " + x[1]).concat(silent.filter(([t, c]) => gh(t, c) !== "silent").map((x) => "silent? " + x[1]));
+    all("review 8 (C14): with guard mode on, removing or moving a folder that holds code asks like editing a code file — rm -rf, rmdir /s, rd /s, Remove-Item -Recurse, find -delete, mv, a glob below it; docs, node_modules / dist, an empty or missing folder and git stay silent (wrong: " + js(wrong) + ")", {
+      hook: () => !wrong.length,
+      engineFolder: () => S.guardCheck(g, path.join(g, "src")).decision === "ask" && S.guardCheck(g, path.join(g, "docs")).decision === "allow",
+      engineGlob: () => S.guardCheck(g, path.join(g, "src", "*")).decision === "ask" && S.guardCheck(g, path.join(g, "docs", "*")).decision === "allow",
+      approvedCovers: () => { // approved, unfinished tasks cover the removal as they cover a code edit
+        S.approvePhase(g, "billing", "tasks", "t", { force: true });
+        const r = S.guardCheck(g, path.join(g, "src"));
+        return r.decision === "allow" && r.why === "forced";
+      },
+    });
   }
 
   // Finding 9 — a monorepo: the session at the repository's root, packages/app/.specs with the guard on — a Write (or a shell write) of
