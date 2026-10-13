@@ -243,6 +243,46 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
     }
     all("review 8 (ds-security 3): every guard pre-filter scan is linear — 4× the input costs ≤ 8× the time (or ≤ 50 ms) on the hostile inputs that ran the approval hook past its timeout", shape);
 
+    // …and each answers as the pattern it replaced (kept here, on short inputs only): the same answer on random texts of the characters
+    // that matter — the path words a superset (an extra candidate only adds a check; none of the old ones is lost, at the 8-word cap too).
+    {
+      let seed = 8;
+      const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+      const gen = (alpha, max) => { let s = ""; for (let i = rnd(max + 1); i > 0; i--) s += alpha[rnd(alpha.length)]; return s; };
+      const OLD_DOT = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*[*?[{]/;
+      const OLD_ROADMAP = /(?:^|[\\/])\.specs[\\/]+roadmap\.json$/i, OLD_STATE = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)+\.state\.json$/i,
+        OLD_OBS = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)*\.execution[\\/]+observed\.jsonl$/i;
+      const oldGuarded = (t) => {
+        if (OLD_ROADMAP.test(t)) return { setting: "roadmap" };
+        const segs = t.split("/");
+        if (OLD_OBS.test(t)) { const f = segs[segs.length - 3]; return { setting: "observed", feature: f && f.toLowerCase() !== ".specs" ? f : null }; }
+        if (OLD_STATE.test(t)) return { setting: "state", feature: segs[segs.length - 2] || null };
+        return null;
+      };
+      const OLD_FIND = /(?:^|[^\w.-])(?:find[^|;&\n]*-(?:delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls))(?![\w-])/i;
+      const OLD_WORD = /(?:^|[\s'"=<>|;&(])[^\s'"<>|;&()]*[\\/][^\s'"<>|;&()]*/g;
+      const oldWords = (s) => (s.match(OLD_WORD) || []).slice(0, 8).map((w) => w.replace(/^[\s'"=<>|;&(]+/, ""));
+      const diff = { dotGlob: [], guardedFileOf: [], specsParentOf: [], mayWrite: [], pathWords: [] };
+      const SEG = [".specs", ".SPECS", "a", ".execution", "observed.jsonl", ".state.json", "roadmap.json", "x.specs"];
+      for (let i = 0; i < 20000; i++) {
+        const d = gen([".", "=", "*", "?", "{", "[", "a", " ", "/", BS, "'", "\"", ",", "(", ";", "&", "|"], 14);
+        if (OLD_DOT.test(d) !== PR.dotGlob(d)) diff.dotGlob.push(d);
+        const segs = []; for (let k = 1 + rnd(5); k > 0; k--) segs.push(SEG[rnd(SEG.length)]);
+        const g = (rnd(3) ? "" : "/") + segs.join("/");
+        if (js(oldGuarded(g)) !== js(PR.guardedFileOf(g))) diff.guardedFileOf.push(g);
+        const sp = gen(["/", BS, ".specs", ".SPECS", "a", "x.specs"], 6);
+        if (/(?:^|[\\/])\.specs(?:[\\/]|$)/i.test(sp) && (sp.replace(/[\\/]*\.specs(?:[\\/][\s\S]*)?$/i, "") || ".") !== PR.specsParentOf(sp)) diff.specsParentOf.push(sp);
+        // (an alphabet no other writer's name can form: here mayWrite answers by its find branch alone)
+        const fw = gen(["find", " ", "-delete", "-exec", "x", "|", ";", "&", "\n", "-", ".", "findstr", "-okdir"], 8);
+        if (OLD_FIND.test(fw) !== GH.mayWrite(fw)) diff.mayWrite.push(fw);
+        const pw = gen(["a", "/", BS, "=", " ", "'", "<", "|", ";", "(", ")", "b"], i % 2 ? 12 : 60);
+        const nw = GH.pathWords(pw);
+        if (oldWords(pw).some((w) => !nw.includes(w))) diff.pathWords.push(pw);
+      }
+      all("review 8 (ds-security 3): the linear readers answer as the patterns they replaced on 20,000 random texts each — dotGlob, guardedFileOf, specsParentOf and mayWrite's find branch the same, pathWords a superset (got " +
+        js(Object.fromEntries(Object.entries(diff).map(([k, v]) => [k, v.slice(0, 2)]))) + ")", Object.fromEntries(Object.entries(diff).map(([k, v]) => [k, v.length === 0])));
+    }
+
     // …and the process: the report's own payload at deny — answered (deny: a too-long command whose unread tail may name .specs/), well
     // inside the hook's 10 s (a short command's time × 10, at least 5 s — it took 16.7 s and timed out).
     const pg = path.join(tmp, "r8-redos");

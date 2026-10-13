@@ -58,15 +58,29 @@ function mayWrite(command) {
   }
   return false;
 }
-// A shell command's path-like words (holding a / or \; a leading `=` taken off), at most `max`, from its first 64 K characters — the
-// nearest dev-spec .specs/ above each is a candidate project (a monorepo's package). The delimiter-free runs, each read once.
+// A shell command's path-like words (holding a / or \), at most `max`, from its first 64 K characters — the nearest dev-spec .specs/
+// above each is a candidate project (a monorepo's package). Each delimiter-free run is read once: its word is the run (a leading `=`
+// taken off) — or, right after a `)`, its part after the first `=` (`$(x)a=b/c`: b/c) — as the regex this replaced read it; the run's
+// other reading (the value of `--out=src/a.ts`, the whole run after a `)`) joins as one more candidate, at most `max` of them (an extra
+// candidate only adds a check).
 const RE_WORD_RUN = /[^\s'"<>|;&()]+/g;
+const hasSlash = (w) => /[\\/]/.test(w);
 function pathWords(command, max = 8) {
-  const out = [];
+  const words = [], extras = [];
   const re = new RegExp(RE_WORD_RUN.source, "g");
   const c = String(command).slice(0, 64 * 1024);
-  for (let m; out.length < max && (m = re.exec(c));) if (/[\\/]/.test(m[0])) out.push(m[0].replace(/^=+/, ""));
-  return out;
+  for (let m; words.length < max && (m = re.exec(c));) {
+    const t = m[0];
+    if (!hasSlash(t)) continue;
+    const eq = t.indexOf("=");
+    const value = eq >= 0 ? t.slice(eq).replace(/^=+/, "") : "";
+    const afterParen = m.index > 0 && c[m.index - 1] === ")";
+    const word = afterParen ? value : t.replace(/^=+/, "");
+    const other = afterParen ? t : value;
+    if (hasSlash(word)) words.push(word);
+    if (hasSlash(other) && other !== word && extras.length < max) extras.push(other);
+  }
+  return [...new Set(words.concat(extras))];
 }
 
 // The user's default (the environment variable DEV_SPEC_GUARD_DEFAULT, e.g. from Claude Code's settings.json `env`):
