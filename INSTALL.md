@@ -243,8 +243,9 @@ expected: `CLAUDE.md` holds the maintainers' notes, not context for your project
    stamps `meta.specVersion`. It never edits a spec, approves, ticks or deletes anything.
 3. **Refresh what names the old folder** (a marketplace install): `merge-state --install`, the pre-commit hook, a bundle.
 
+From 1.27 or earlier: an m / l design needs its Reuse & Integration (the audit lists each design approved without one).
 From 1.25 or earlier: the slash commands were renamed — the table is in
-[README.md → Upgrading](./README.md#upgrading-from-125-or-earlier); your specs need no change.
+[README.md → Upgrading](./README.md#upgrading); your specs need no change.
 
 ## Troubleshooting
 

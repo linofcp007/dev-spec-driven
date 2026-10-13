@@ -220,6 +220,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
       const fillAll = (rel, re, by) => { const p = path.join(b.dir, rel); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(re, by)); };
       fillAll("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
       fillAll("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+      fillAll("tasks.md", /\n  - _Implements: \[[^\]\n]*\]_/g, ""); // 1.30: the fix's _Implements:_ slot — no code file here
       fillAll("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
       ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph));
       const pass1 = S.completeTask(d, b.slug, 1, { command: "node tests/t01.test.js", exitCode: 0 });
@@ -828,6 +829,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, hookIn, _
     naFill("bug.md", /\[[^\]\n]+\]/g, "the dashboard opens");
     naFill("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
     naFill("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+    naFill("tasks.md", /\n  - _Implements: \[[^\]\n]*\]_/g, ""); // 1.30: the fix's _Implements:_ slot — no code file here
     naFill("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
     ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(pNa, bNa.slug, ph));
     const red1 = S.completeTask(pNa, bNa.slug, 1, { command: "node tests/t01.test.js", exitCode: 1, summary: "not ok 1 - T-01" }); // the red task (_Expect: fail_)

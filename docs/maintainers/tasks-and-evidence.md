@@ -375,6 +375,15 @@ Engine: the `B5` block of `engine/evidence.js`.
   task + each track's tasks that implement a criterion (`sizeTasksText()`); a bugfix's, any size: the red regression test (task 1)
   + the fix (`bugfixGate()` lets only task 1 through while bug.md → Root Cause is empty — `bugGateFirst`; gates-and-approvals.md →
   Bugfix and finish).
+- **The `_Implements:_` slot.** Every tasks template carries `_Implements: [path of the code …]_` on its code task (tasks.md's
+  core task, no size and size s; change.md's task; the bugfix's fix — `text.tasks.implements` + the LAYOUTS / the builders): the
+  duplicate check, the drift baseline, the scope guard, the cross-feature overlap and dev-guardian's `[this feature]` read that
+  marker, and an agent that left it out got a silent zero everywhere. A value wholly in ONE `[bracket]` group is the slot, never a
+  file — the three readers drop it (`scanTaskMarkers`, `implementsRefs`, trace.js's `implFiles`; `app/[id]/page.tsx` and
+  `[slug].tsx` stay paths) — and the placeholder gate refuses it left in: a code task fills it, a task that writes no code deletes
+  the line. A test fixture that fills every `[bracket]` by regex drops the slot's line first (it would name a missing file).
+  A feature whose tasks name no file at all finishes with a warning (`finish.noImplements` — never a blocker: a feature may
+  write no code).
 
 ## End-of-turn evidence gate and scope guard
 - **`stopCheck(projectDir, {message, agent, stopHookActive})`** (engine; the Stop hook and `dev-spec stop-check` print the same
@@ -651,6 +660,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   phase was null and `taskSchedule` served a later section's task first. **1.25.1 review 7** — a sibling is no body (a mistyped `- [
   ] 2 B` became task 1's body and vanished from every tool); `unread-tasks` names one-character boxes and quoted ones, skipped
   silently before.
+- **1.30 review 8** — the `_Implements:_` slot: the model-facing prose never required the marker, so a filled xs change.md
+  finished "ready" with "0 implementing file(s)" and `dupes` had "nothing to compare". The templates carry the slot, the readers
+  drop it as a placeholder, the gate refuses it left in (mcp/tests/08-tasks.js).
 
 ### End-of-turn evidence gate and scope guard
 - **1.14** — the end-of-turn gate (`stopCheck`, the Stop / SubagentStop hook, `dev-spec stop-check`) and the scope guard's `"scope"`

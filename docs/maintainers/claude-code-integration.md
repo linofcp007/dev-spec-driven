@@ -130,8 +130,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   bare `references/…`). Only `/spec`, `/spec-bugfix`, `/executeTask`, `/spec-review` and `/spec-tour` say "use the
   dev-spec-driven skill"; the self-contained ones don't pull SKILL.md in.
 - **`allowed-tools` on the read-only commands** — `/spec-status` and `/dss` (`spec_status`, `spec_next_action`),
-  `/spec-doctor`, `/roadmap` (it writes only the generated ROADMAP files) and `/spec-report` (`spec_drift`, `spec_metrics`) grant
-  their tools for the invoking turn by plugin name (`mcp__plugin_dev-spec-driven_spec-driven__<tool>`, comma-separated). `claude
+  `/spec-doctor` and `/spec-report` (`spec_drift`) grant their tools for the invoking turn by plugin name
+  (`mcp__plugin_dev-spec-driven_spec-driven__<tool>`, comma-separated). Only a tool no argument makes write (`readOnlyHint`
+  true): `/roadmap`'s `spec_roadmap` and `/spec-report`'s `spec_metrics` write with `write` and ask like any writer
+  (mcp/tests/10-guards-guard-downs.js reads every command's list against tools/list). `claude
   plugin validate` (2.1.292) doesn't parse a command's front matter: it checks none of this.
 - **The aliases follow the full command.** `/ds`, `/dss`, `/dsx` read and follow
   `${CLAUDE_PLUGIN_ROOT}/commands/<spec | spec-status | executeTask>.md` with their arguments (Claude Code substitutes the
@@ -500,6 +502,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   pre-filter, the approval hook's MCP path reader, verb list, approval-tool and guarded-file regexes, server.js's `RE_DOTDOT` — are
   probe.js's / hook-utils.js's one copy; hooks.json's verbs (`[Ww]rite`) were case-sensitive, so `mcp__x__FILE_WRITE` never reached
   the hook: the matcher is built from `MCP_FILE_VERBS`.
+- **1.30 review 8** — `allowed-tools` pre-approved two writers (`/roadmap`'s `spec_roadmap`, `/spec-report`'s `spec_metrics`,
+  both writing with `write`) although the 1.26 rule was read-only tools only: dropped, and a test reads every command's list
+  against tools/list's `readOnlyHint`.
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.

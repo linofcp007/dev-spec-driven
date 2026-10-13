@@ -622,9 +622,9 @@ function traceCheck(projectDir, name, opts = {}) {
   // Spec ↔ code: tasks may carry `_Implements: path/to/file_` markers. Verify the files exist.
   const implFiles = [];
   // The task-marker reader (taskMarkerSpans): `src/user_service.py` stays whole, and `_Implements: src/a.ts_;` /
-  // `(see _Implements: src/old.ts_).` are markers too (they read as no file at all).
+  // `(see _Implements: src/old.ts_).` are markers too (they read as no file at all). The template's [bracketed] slot is no file.
   for (const v of taskMarkerValues(tasks, "implements")) {
-    v.split(/[,;]/).map((s) => s.trim().replace(/^`|`$/g, "")).filter(Boolean).forEach((p) => { if (!implFiles.includes(p)) implFiles.push(p); });
+    v.split(/[,;]/).map((s) => s.trim().replace(/^`|`$/g, "")).filter((p) => p && !/^\[[^\]]*\]$/.test(p)).forEach((p) => { if (!implFiles.includes(p)) implFiles.push(p); });
   }
   // Clamp to the project root: paths that escape it count as missing without probing arbitrary FS.
   const projRoot = path.resolve(projectDir);

@@ -24,7 +24,8 @@ When the task is non-trivial, follow the spec-driven workflow in `AGENTS.md` (re
   PATH).
   The `spec-driven` MCP server (VS Code agent mode, `.vscode/mcp.json`) exposes the same operations, and the plugin's
   commands as MCP prompts (`/` in Copilot Chat).
-- Artifacts go in `.specs/<feature>/`. Keep AC IDs and task markers stable. Run `dev-spec doctor`
+- Artifacts go in `.specs/<feature>/`. Keep AC IDs and task markers stable. Every task carries
+  `_Requirements:_` and `_Verify: <command>_`, and `_Implements: <path>_` when it writes code (the files it creates or changes). Run `dev-spec doctor`
   before advancing a phase.
 - Approvals are the user's: run `dev-spec approve <feature> <phase>` only after their explicit yes for that phase — it
   refuses while the phase's checks fail; `--force` only when the user explicitly accepts the failing checks (it stays

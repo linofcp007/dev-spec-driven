@@ -642,6 +642,11 @@ exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, require, __
   ok(refsCited.length > 15 && [...refsReached].every((r) => fs.existsSync(path.join(refDir, r))) && !refsOrphan.length && skillWords <= 5000 &&
     ["index.md", "tool-catalog.md", "track-checklists.md", "workflows.md"].every((r) => refsCited.includes(r)),
     `1.21 F3: SKILL.md ≤ 5,000 words and every reference it or references/index.md cites exists; none is orphaned; it points to index / tool-catalog / track-checklists / workflows (got ${JSON.stringify({ words: skillWords, cited: refsCited.length, orphan: refsOrphan })})`);
+  // 1.30 review 8: the word cap is loose (2,297 of 5,000 — the file could double unnoticed); the context it costs is its BYTES, held
+  // like the description and tools/list caps: ≤ 15,360 (15 KiB — 15,275 in 1.29.1, 14,746 in 1.26). A new rule pays for itself
+  // (a pointer to references/, a sentence cut); lookup material goes to references/ (extending.md → SKILL.md stays the source of truth).
+  const skillBytes = Buffer.byteLength(skillNow, "utf8");
+  ok(skillBytes <= 15360 && skillBytes > 8000, `1.30 review 8: SKILL.md ≤ 15,360 bytes — it is loaded whole every time the skill fires (got ${skillBytes})`);
 
   // --- review round 3 regressions ---
   const enNeg = ["Do the export; no auth", "Export page for da Vinci museum; no auth, no payment", "Static page on example.com with no billing",
@@ -712,7 +717,7 @@ exports.run = async ({ ok, all, rpc, rawOnce, payload, S, root, tmp, require, __
   llFill("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
     ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
   llFill("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-  llFill("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
+  llFill("tasks.md", [["\n  - _Implements: [path of the code the fix changes]_", ""], ["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[full test suite command]", "npm test"]]);
   llFill("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"]]);
   // Two tasks (the reproduce / root-cause steps are bug.md's, gated by the approvals): the red regression test, then the fix.
   S.completeTask(vDir, "login-loop", 1, { command: "node --test tests/integration/auth.test.js", exitCode: 1, summary: "T-01 fails: 302 back to /login" }); // the red run (_Expect: fail_)

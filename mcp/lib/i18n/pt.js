@@ -419,13 +419,14 @@ Justifica tudo o que viole um princípio da constituição ou acrescente complex
     intro: (label) => `<!-- Tracks: ${label}. Organizado por história de utilizador para cada uma ser lançável de forma
      independente (P1 primeiro). Cada tarefa é marcada com a sua história: [US1]/[US2] ou [shared] para
      trabalho transversal. [P] = paralelizável (ficheiros diferentes, sem deps). Cada tarefa leva
-     _Requirements:_; tarefas TDD levam _Makes green:_. Usa _Implements: caminho_ para ligar uma tarefa
-     a um ficheiro de código real. Um **Checkpoint** marca onde uma história é testável de forma independente.
+     _Requirements:_ e, quando escreve código, _Implements: <caminho>_ — os ficheiros que cria ou altera (o
+     guarda de âmbito, a deriva, a deteção de duplicados e o finish leem-nos); tarefas TDD levam _Makes green:_.
+     Um **Checkpoint** marca onde uma história é testável de forma independente.
      Se as histórias NÃO forem lançáveis de forma independente, foram mal fatiadas — volta a fatiá-las, ou
      recorre a um layout por camada técnica (Fundação→Lógica→API→…) mantendo as tags [US1]. -->`,
-    introS: (label) => `<!-- Tracks: ${label} · tamanho s. Uma história; cada tarefa leva _Requirements:_ (as TDD _Makes green:_) e um
-     _Verify: <comando>_ — o spec_complete_task regista o resultado como evidência da tarefa. Usa _Implements: caminho_
-     para ligar uma tarefa a um ficheiro de código real. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · tamanho s. Uma história; cada tarefa leva _Requirements:_ (as TDD _Makes green:_), um
+     _Verify: <comando>_ — o spec_complete_task regista o resultado como evidência da tarefa — e, quando escreve código,
+     _Implements: <caminho>_: os ficheiros que cria ou altera. -->`,
     constraints: `## Restrições Globais
 <!-- Valores exatos que todas as tarefas têm de respeitar, copiados tal e qual da spec/steering (versões
      mínimas, regras de nomes, limites, formatos) — o spec_task_brief copia esta secção para cada brief.
@@ -442,6 +443,7 @@ Justifica tudo o que viole um princípio da constituição ou acrescente complex
     story1: "## História US-1 (P1 — MVP)",
     coreTask: "[Comportamento central para US-1]",
     verify: "[comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]",
+    implements: "[caminho do código que cria ou altera]",
     parallelTask: "[tarefa paralelizável — ficheiro diferente, sem deps]",
     checkpoint1: "US-1 está totalmente funcional e testável/lançável de forma independente.",
     story2: "## História US-2 (P2)",
@@ -730,6 +732,7 @@ ${a.summary || "[uma linha: o bug a corrigir]"}
 - [ ] 2. [US1] Corrigir a causa raiz — uma alteração, não um pacote; o teste de proteção T-02 continua verde
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
+  - _Implements: [caminho do código que a correção altera]_
   - _Verify: [comando da suite de testes completa]_
 **Checkpoint:** o bug deixa de se reproduzir e a suite completa está verde.
 `;
@@ -800,6 +803,7 @@ ${a.summary || "[uma linha: o que muda e porquê]"}
 ## Tarefas
 - [ ] 1. [US1] [a alteração]
   - _Requirements: US-1.AC-1_
+  - _Implements: [caminho do código que cria ou altera]_
   - _Verify: [comando que o prova, ex.: npm test -- caminho/ficheiro.test.js]_
 
 <!-- Uma alteração (tamanho xs): 1–3 critérios de aceitação e 1–3 tarefas, só core — sem classificação, design, quickstart
@@ -982,6 +986,8 @@ const msg = {
       duplicates: (n, top, within, slug) => `o código da feature repete código existente em ${n} ${n === 1 ? "sítio" : "sítios"} — ${top}${n > 3 ? "; …" : ""}: reutilizar ou estender o código existente, ou explicar no relatório porque é que uma cópia é deliberada${within ? `; mais ${within} ${within === 1 ? "repetição" : "repetições"} dentro dos ficheiros da própria feature` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       duplicatesPartial: (unread) => `; só parte do projeto foi comparada — o limite de bytes do detetor deixou ${unread === 1 ? "1 ficheiro de código" : `${unread} ficheiros de código`} por ler`,
       duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "bloco do código da feature repete" : "blocos do código da feature repetem"} outro sítio dos seus próprios ficheiros — ${n === 1 ? "candidato" : "candidatos"} para a passagem de simplificação (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // 1.30: nenhuma tarefa indica ficheiros em _Implements:_ — quem os lê não vê código da feature
+      noImplements: "nenhuma tarefa indica os seus ficheiros em _Implements:_ — a baseline de deriva, a deteção de duplicados e a atribuição do dev-guardian não veem código desta feature. Acrescenta _Implements: <caminho>_ a cada tarefa que escreveu código (um tasks.md editado volta a ser aprovado), ou ignora isto se nenhuma o fez.",
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
     // rigor à medida (o EN é a referência): tamanhos (spec_create {size}), a alteração (tamanho xs, um change.md).
@@ -1015,7 +1021,7 @@ const msg = {
       },
       optionalMark: "opcional neste tamanho",
       coveredMark: "coberta por outro track",
-      suggestTail: "Confirmar ou escolher outro na Fase 0 — spec_create {size: xs | s | m | l}; sem tamanho fica o scaffold anterior ao 1.21.",
+      suggestTail: "Confirmar ou escolher outro na Fase 0 — spec_create {size} (CLI: create --size xs|s|m|l); sem tamanho: o scaffold completo.",
     },
     kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
     langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,

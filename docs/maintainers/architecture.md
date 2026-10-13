@@ -8,7 +8,7 @@ first; how they came to be — the releases and review findings — is in Histor
 ```
 .claude-plugin/plugin.json     manifest (skills, commands, mcpServers; NO hooks key — CLAUDE.md → Gotchas) · marketplace.json
 mcp/servers.json               registers the `spec-driven` stdio server (plugin.json → mcpServers; NOT a root .mcp.json — Config paths)
-skills/dev-spec-driven/SKILL.md the workflow — the decision-time rules, ≤ 5,000 words
+skills/dev-spec-driven/SKILL.md the workflow — the decision-time rules, ≤ 15,360 bytes
 skills/.../references/          read on demand — index.md lists every file; tool-catalog.md · track-checklists.md · workflows.md
                                hold what SKILL.md points to; tooling-reference.md every tool and doctor check id
 commands/*.md                  22 slash commands (only /spec and /spec-bugfix model-invocable) — also the MCP prompts

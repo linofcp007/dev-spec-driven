@@ -246,7 +246,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     // anything is recorded ("only task 1"), the brief reports it gated; the red test itself can be recorded (no rootCausePending).
     {
       const fN = S.createFeature(w5, "Short bug", undefined, "x", undefined, "en", "bugfix");
-      write5(fN, "tasks.md", read5(fN, "tasks.md").replace("[command that runs T-01]", "node tests/t01.test.js").replace("[full test suite command]", "npm test"));
+      write5(fN, "tasks.md", read5(fN, "tasks.md").replace("\n  - _Implements: [path of the code the fix changes]_", "").replace("[command that runs T-01]", "node tests/t01.test.js").replace("[full test suite command]", "npm test"));
       const bt = S.taskBlocks(read5(fN, "tasks.md"));
       const fix = S.completeTask(w5, fN.slug, 2, { command: "npm test", exitCode: 0 });
       const brFix = S.taskBrief(w5, fN.slug, 2);
@@ -270,7 +270,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
       fillS("requirements.md", [["[the condition that triggers the bug]", "the list has two or more items"], ["[the correct behavior]", "return the sum of every item"],
         ["[the neighbouring behavior that already worked]", "the sum of an empty list as 0"], ["[nearby inputs that must keep working]", "an empty list"]]);
       fillS("test-plan.md", [["[unit/integration]", "unit"], ["`[path]`", "`tests/t01.test.js`"]]);
-      fillS("tasks.md", [["[command that runs T-01]", "node tests/t01.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 18"], ["[full test suite command]", "npm test"]]);
+      fillS("tasks.md", [["\n  - _Implements: [path of the code the fix changes]_", ""], ["[command that runs T-01]", "node tests/t01.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 18"], ["[full test suite command]", "npm test"]]);
       fillS("bug.md", [["[correct behavior]", "the sum of every item"], ["[what happens — error message, output, log lines]", "the first item is missing"],
         ["> **TODO** — exact steps, input and environment that reproduce it every time.", "total([1, 2]) returns 2."],
         ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The loop starts at index 1 (sum.js:3)."],
@@ -318,6 +318,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
       const fillAll = (rel, re, by) => { const p = path.join(b.dir, rel); fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace(re, by)); };
       fillAll("requirements.md", /\[[^\]\n]+\]/g, "the refresh token has expired");
       fillAll("test-plan.md", /\[[^\]\n]+\]/g, "tests/t01.test.js");
+      fillAll("tasks.md", /\n  - _Implements: \[[^\]\n]*\]_/g, ""); // 1.30: the fix's _Implements:_ slot — no code file here
       fillAll("tasks.md", /\[(?!shared\]|US\d+\]|[ xX]\])[^\]\n]+\]/g, "npm test");
       ["requirements", "design", "test-plan", "tasks"].forEach((ph) => S.approvePhase(d, b.slug, ph)); // task 1 is the red one
       return b;

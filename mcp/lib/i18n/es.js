@@ -418,13 +418,14 @@ Justifica todo lo que viole un principio de la constitución o añada complejida
     intro: (label) => `<!-- Tracks: ${label}. Organizado por historia de usuario para que cada una sea lanzable de forma
      independiente (P1 primero). Cada tarea se marca con su historia: [US1]/[US2] o [shared] para
      trabajo transversal. [P] = paralelizable (ficheros distintos, sin deps). Cada tarea lleva
-     _Requirements:_; las tareas TDD llevan _Makes green:_. Usa _Implements: ruta_ para vincular una tarea
-     a un fichero de código real. Un **Checkpoint** marca dónde una historia es testeable de forma independiente.
+     _Requirements:_ y, cuando escribe código, _Implements: <ruta>_ — los ficheros que crea o cambia (la guardia
+     de alcance, la deriva, la detección de duplicados y el finish los leen); las tareas TDD llevan _Makes green:_.
+     Un **Checkpoint** marca dónde una historia es testeable de forma independiente.
      Si las historias NO son lanzables de forma independiente, se trocearon mal — vuelve a trocearlas, o
      recurre a un layout por capa técnica (Fundación→Lógica→API→…) manteniendo las tags [US1]. -->`,
-    introS: (label) => `<!-- Tracks: ${label} · tamaño s. Una historia; cada tarea lleva _Requirements:_ (las TDD _Makes green:_) y un
-     _Verify: <comando>_ — spec_complete_task registra el resultado como evidencia de la tarea. Usa _Implements: ruta_
-     para vincular una tarea a un fichero de código real. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · tamaño s. Una historia; cada tarea lleva _Requirements:_ (las TDD _Makes green:_), un
+     _Verify: <comando>_ — spec_complete_task registra el resultado como evidencia de la tarea — y, cuando escribe código,
+     _Implements: <ruta>_: los ficheros que crea o cambia. -->`,
     constraints: `## Restricciones Globales
 <!-- Valores exactos que toda tarea debe respetar, copiados tal cual de la spec/steering (versiones
      mínimas, reglas de nombres, límites, formatos) — spec_task_brief copia esta sección en cada brief.
@@ -441,6 +442,7 @@ Justifica todo lo que viole un principio de la constitución o añada complejida
     story1: "## Historia US-1 (P1 — MVP)",
     coreTask: "[Comportamiento central para US-1]",
     verify: "[comando que lo demuestra, p. ej.: npm test -- ruta/fichero.test.js]",
+    implements: "[ruta del código que crea o cambia]",
     parallelTask: "[tarea paralelizable — fichero distinto, sin deps]",
     checkpoint1: "US-1 está totalmente funcional y es testeable/lanzable de forma independiente.",
     story2: "## Historia US-2 (P2)",
@@ -592,7 +594,7 @@ Tracks: ${label}. Marca antes de dar la función por terminada.`,
   approvalActions: {
     remove: (feature) => `borrar definitivamente la función '${feature}' (su carpeta en .specs/, sus aprobaciones y su historial)`,
     partial: "ejecutar una llamada de herramienta que la guardia de aprobaciones solo recibió en parte (la entrada llegó cortada) y que menciona dev-spec o .specs/",
-    fed: "darle a una shell un script que la guardia de aprobaciones no puede ver (llegado por una tubería desde un archivo o un programa, o una sustitución de procesos) en un comando que menciona dev-spec o .specs/",
+    fed: "darle a una shell un script que la guardia de aprobaciones no puede ver (llegado por una tubería desde un fichero o un programa, o una sustitución de procesos) en un comando que menciona dev-spec o .specs/",
     specsArg: "ejecutar un programa que la guardia de aprobaciones no conoce sobre .specs/, su roadmap.json o un .state.json (puede cambiarlos)",
     error: "ejecutar una llamada de herramienta que la guardia de aprobaciones no pudo comprobar (falló) con la guardia de aprobaciones activa",
     project: "actuar sobre una carpeta de proyecto (projectDir) que la guardia de aprobaciones no puede leer",
@@ -614,12 +616,12 @@ Tracks: ${label}. Marca antes de dar la función por terminada.`,
     checkRemove: (name) => `eliminar la verificación del proyecto '${name}' (meta.checks)`,
     checkChange: (name) => `cambiar el comando de la verificación del proyecto '${name}' (meta.checks)`,
     roadmapShell: "cambiar .specs/roadmap.json desde la shell — escribirlo, moverlo o borrarlo (ahí están la guardia de aprobaciones y los gates del proyecto)",
-    specsEdit: "mover o borrar .specs/ o una carpeta dentro de ella con una herramienta de archivos (ahí están el roadmap.json y los .state.json de las funciones)",
+    specsEdit: "mover o borrar .specs/ o una carpeta dentro de ella con una herramienta de ficheros (ahí están el roadmap.json y los .state.json de las funciones)",
     specsShell: "cambiar .specs/ desde la shell — escribir, mover o borrar mediante un glob, una variable o una carpeta entera que puede alcanzar el roadmap.json o el .state.json de una función",
-    link: "crear un enlace a .specs/ o a un archivo dentro (enlace simbólico, junction o enlace duro) — lo que se escriba a través de él llega al roadmap.json y a los .state.json sin ser visto",
+    link: "crear un enlace a .specs/ o a un fichero dentro (enlace simbólico, junction o enlace duro) — lo que se escriba a través de él llega al roadmap.json y a los .state.json sin ser visto",
     guardianLauncher: "escribir o borrar .specs/guardian.cjs — el lanzador que ejecuta el gate de dev-guardian (la verificación del proyecto 'guardian')",
     guardianBaseline: "escribir o borrar .guardian/baseline.json — los findings que el gate de dev-guardian acepta como conocidos",
-    guardianBaselineUpdate: "ejecutar el `baseline update` de dev-guardian — acepta como conocidos todos los findings actuales, incluidos los de la función, y el gate deja de informarlos",
+    guardianBaselineUpdate: "ejecutar el `baseline update` de dev-guardian — acepta como conocidos todos los findings actuales, incluidos los de la funcionalidad, y el gate deja de informarlos",
     guardianCli: "ejecutar el gate de dev-guardian con un DEV_GUARDIAN_CLI o CLAUDE_CONFIG_DIR propio — respondería otro dev-guardian",
     lower: (from, to) => `bajar la guardia de aprobaciones de ${from} a ${to}`,
     revoke: (phase, feature) => `revocar la aprobación de la fase ${phase} de '${feature}'`,
@@ -729,6 +731,7 @@ ${a.summary || "[una línea: el bug a corregir]"}
 - [ ] 2. [US1] Corregir la causa raíz — un cambio, no un paquete; la prueba de protección T-02 sigue en verde
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
+  - _Implements: [ruta del código que cambia la corrección]_
   - _Verify: [comando de la suite de pruebas completa]_
 **Checkpoint:** el bug deja de reproducirse y la suite completa está en verde.
 `;
@@ -799,6 +802,7 @@ ${a.summary || "[una línea: qué cambia y por qué]"}
 ## Tareas
 - [ ] 1. [US1] [el cambio]
   - _Requirements: US-1.AC-1_
+  - _Implements: [ruta del código que crea o cambia]_
   - _Verify: [comando que lo demuestra, p. ej.: npm test -- ruta/fichero.test.js]_
 
 <!-- Un cambio (tamaño xs): 1–3 criterios de aceptación y 1–3 tareas, solo core — sin clasificación, diseño, quickstart ni
@@ -978,9 +982,12 @@ const msg = {
       noEvidence: "sin evidencia registrada",
       changedByDate: (list, slug) => `juzgado solo por la fecha del fichero (aprobado antes de las huellas de contenido — un clon o una copia restablece las fechas, así que puede no ser una edición): ${list} — revísalo y vuelve a aprobar para seguirlo por contenido (/approve ${slug} <fase>)`,
       // 1.28: el detector de código duplicado — un aviso, nunca un bloqueo
-      duplicates: (n, top, within, slug) => `el código de la función repite código existente en ${n} ${n === 1 ? "lugar" : "lugares"} — ${top}${n > 3 ? "; …" : ""}: reutilizar o extender el código existente, o explicar en el informe por qué una copia es deliberada${within ? `; ${within} ${within === 1 ? "repetición" : "repeticiones"} más dentro de los ficheros de la propia función` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // (1.30: "funcionalidad", never "función", where the text names code — "el código de la función" read as a code function)
+      duplicates: (n, top, within, slug) => `el código de la funcionalidad repite código existente en ${n} ${n === 1 ? "lugar" : "lugares"} — ${top}${n > 3 ? "; …" : ""}: reutilizar o extender el código existente, o explicar en el informe por qué una copia es deliberada${within ? `; ${within} ${within === 1 ? "repetición" : "repeticiones"} más dentro de los ficheros de la propia funcionalidad` : ""} (todos: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       duplicatesPartial: (unread) => `; solo se comparó una parte del proyecto — el límite de bytes del detector dejó ${unread === 1 ? "1 fichero de código" : `${unread} ficheros de código`} sin leer`,
-      duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "bloque del código de la función repite" : "bloques del código de la función repiten"} otro lugar de sus propios ficheros — ${n === 1 ? "candidato" : "candidatos"} para la pasada de simplificación (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "bloque del código de la funcionalidad repite" : "bloques del código de la funcionalidad repiten"} otro lugar de sus propios ficheros — ${n === 1 ? "candidato" : "candidatos"} para la pasada de simplificación (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // 1.30: ninguna tarea indica ficheros en _Implements:_ — lo que los lee no ve código de la funcionalidad
+      noImplements: "ninguna tarea indica sus ficheros en _Implements:_ — la línea base de deriva, la detección de duplicados y la atribución de dev-guardian no ven código de esta funcionalidad. Añade _Implements: <ruta>_ a cada tarea que escribió código (un tasks.md editado se vuelve a aprobar), o ignóralo si ninguna lo hizo.",
       untrackedApproval: (list, slug) => `aprobado antes del registro de cambios — no se registró nada del fichero aprobado, así que una edición no puede detectarse: ${list} — vuelve a aprobar para empezar a seguirlo (/approve ${slug} design)`,
     },
     // rigor a medida (el EN es la referencia): tamaños (spec_create {size}), el cambio (tamaño xs, un change.md).
@@ -1014,7 +1021,7 @@ const msg = {
       },
       optionalMark: "opcional en este tamaño",
       coveredMark: "cubierta por otro track",
-      suggestTail: "Confírmalo o elige otro en la Fase 0 — spec_create {size: xs | s | m | l}; sin tamaño se mantiene el scaffold anterior a 1.21.",
+      suggestTail: "Confírmalo o elige otro en la Fase 0 — spec_create {size} (CLI: create --size xs|s|m|l); sin tamaño: el scaffold completo.",
     },
     kindKept: (kept, asked) => `Esta función ya es del tipo '${kept}' — se mantiene (pediste '${asked}'). Crea otra para un tipo distinto.`,
     langKept: (kept, asked) => `Esta función ya está en '${kept}' — se mantiene (pediste '${asked}'). Una función, un idioma.`,
@@ -1191,7 +1198,7 @@ const msg = {
       signOffTests: (slug, what) => `Aprobación de la Fase 4: la implementación ya empezó, así que las pruebas ya no se escriben primero — ${({ tdd: "comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test(\"T-01 …\")) para que tests-in-code la encuentre", ai: `comprueba que el conjunto de evals es el de la propia función y registra la línea base (/eval ${slug} baseline)`, both: `comprueba que cada prueba planificada existe con su T-ID en el nombre de la prueba (test("T-01 …")) y que el conjunto de evals es el de la propia función, y registra la línea base (/eval ${slug} baseline)` })[what]}. Después apruébalo — /approve ${slug} tests.`,
       approveTests: (slug, what) => `Fase 4, el gate estricto: ${({ tdd: "escribe todas las pruebas planificadas y confirma que cada una falla por la razón correcta", ai: "escribe las pruebas deterministas y el harness de evals, y registra la línea base", both: "escribe todas las pruebas planificadas (cada una fallando por la razón correcta) y el harness de evals, y registra la línea base" })[what]} — /spec ${slug} tests; ningún código de implementación antes. Después apruébalo — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa la tarea #${n}: ${text} — /executeTask ${slug}.`,
-      allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge. Opcional, antes: /spec-review ${slug} simplify — una limpieza del código de la propia función sin cambiar el comportamiento, probada por sus pruebas.`,
+      allDone: (slug) => `Todas las tareas hechas — cierra la función con /spec-finish ${slug} (spec_finish): informe de preparación + resumen del merge. Opcional, antes: /spec-review ${slug} simplify — una limpieza del código de la propia funcionalidad sin cambiar el comportamiento, probada por sus pruebas.`,
       breakIntoTasks: (slug) => `Desglosa el diseño en tareas — /spec ${slug} tasks.`,
       drifted: (slug, day, n, total, files) => `'${slug}' se cerró el ${day}, pero ${n} de ${total} fichero(s) de implementación cambiaron desde entonces: ${files} (${DEV_SPEC} drift ${slug}). Decide: la spec ahora es incorrecta → /spec-change ${slug} impact (o una función nueva con _Supersedes:_); el código es incorrecto → corrígelo (/spec-bugfix); inofensivo → vuelve a ejecutar /spec-finish ${slug} para una línea base nueva.`,
       finished: (slug, day, total, signOff) => `'${slug}' está cerrada (${day}) — sus ${total} fichero(s) de implementación no han cambiado desde entonces.` +
@@ -1474,7 +1481,7 @@ const msg = {
       coverage: (pct, d, t) => `Cobertura de specs: ${pct}%  (${d}/${t} ficheros de código nombrados en _Implements:_)`,
       undocumented: (list) => `  carpetas sin cobertura: ${list}`,
       // dupes (1.28): el informe de código duplicado — spec_scan {duplicates: true}
-      dupesHead: (f, existing, within, n, files, lines) => `Duplicados — ${f}: ${existing} ${existing === 1 ? "lugar repite" : "lugares repiten"} código existente · ${within} ${within === 1 ? "repetido" : "repetidos"} dentro de la función  (ventanas de ${n} líneas de código; ${files} ${files === 1 ? "fichero" : "ficheros"}, ${lines} ${lines === 1 ? "línea de código leída" : "líneas de código leídas"})`,
+      dupesHead: (f, existing, within, n, files, lines) => `Duplicados — ${f}: ${existing} ${existing === 1 ? "lugar repite" : "lugares repiten"} código existente · ${within} ${within === 1 ? "repetido" : "repetidos"} dentro de la funcionalidad  (ventanas de ${n} líneas de código; ${files} ${files === 1 ? "fichero" : "ficheros"}, ${lines} ${lines === 1 ? "línea de código leída" : "líneas de código leídas"})`,
       dupesHeadProject: (total, n, files, lines) => `Duplicados — el proyecto: ${total} ${total === 1 ? "bloque repetido" : "bloques repetidos"}  (ventanas de ${n} líneas de código; ${files} ${files === 1 ? "fichero" : "ficheros"}, ${lines} ${lines === 1 ? "línea de código leída" : "líneas de código leídas"})`,
       dupesNoCode: "  aún no existe ningún fichero de código nombrado por los _Implements:_ de sus tareas — nada que comparar",
       dupesNone: "  no hay código repetido",
@@ -2756,13 +2763,13 @@ const msg = {
     guardian: {
       offer: (installed, project) => `${installed && project ? "dev-guardian está instalado y este proyecto tiene .guardian/" : installed ? "dev-guardian está instalado" : "Este proyecto tiene .guardian/ (dev-guardian)"}: ${DEV_SPEC} init --guardian (spec_init {guardian: true}) añade su gate como la verificación del proyecto 'guardian' — /spec-finish (finish --run) ejecuta entonces el escaneo de dev-guardian, que tarda minutos y necesita sus escáneres (Semgrep, Gitleaks, Trivy…).`,
       on: (cmd) => `El gate de dev-guardian es la verificación del proyecto 'guardian' (${cmd} — .specs/guardian.cjs ejecuta el dev-guardian instalado). Vale para todo el proyecto: meta.checks y el lanzador van en el commit, así que el finish de cada clon lo ejecuta, y cada máquina que cierra una función necesita dev-guardian y sus escáneres (Semgrep, Gitleaks, Trivy). finish --run la ejecuta; un finding nuevo de gravedad high o superior bloquea el finish hasta que se corrija — para aceptar un finding revisado, el usuario lo suprime en la propia línea con un motivo, nunca con \`baseline update\` (acepta todos los findings actuales).`,
-      initBaseline: "Aún no hay baseline (.guardian/baseline.json) — sin ella, todos los findings que ya existen cuentan como nuevos. Regístrala ahora, antes de que una función añada código (es un paso del usuario): node .specs/guardian.cjs baseline update --project . — y haz commit de .guardian/baseline.json.",
+      initBaseline: "Aún no hay baseline (.guardian/baseline.json) — sin ella, todos los findings que ya existen cuentan como nuevos. Regístrala ahora, antes de que una funcionalidad añada código (es un paso del usuario): node .specs/guardian.cjs baseline update --project . — y haz commit de .guardian/baseline.json.",
       initIgnore: (lines) => `dev-spec solo escribe dentro de .specs/ — añade al .gitignore del proyecto: ${lines.join(" · ")} (los informes de dev-guardian quedan fuera de git, la baseline y los presupuestos dentro).`,
       off: "La verificación del proyecto 'guardian' está desactivada (meta.checks.guardian y .specs/guardian.cjs eliminados).",
       badValue: (v) => `--guardian acepta on u off (recibido '${v}') — un --guardian sin valor es on`,
       pass: (failOn, n) => `dev-guardian: pasa — ningún finding nuevo de gravedad ${failOn} o superior` + (n ? ` (${n} nuevo(s) por debajo)` : ""),
       blocked: (n, failOn, own) => (n == null ? `dev-guardian: el gate falló — un finding nuevo de gravedad ${failOn} o superior (no se pudo leer su informe JSON)`
-        : `dev-guardian: ${n} finding(s) nuevo(s) de gravedad ${failOn} o superior` + (own ? `, ${own} en los ficheros de esta función` : "")),
+        : `dev-guardian: ${n} finding(s) nuevo(s) de gravedad ${failOn} o superior` + (own ? `, ${own} en los ficheros de esta funcionalidad` : "")),
       incomplete: (gaps) => `dev-guardian no pudo ejecutar todos los escáneres (escaneo incompleto${gaps ? ": " + gaps : ""})`,
       config: (m) => `dev-guardian no pudo ejecutarse — un error de configuración o de uso${m ? ": " + m : ""}`,
       notFound: "no se encontró dev-guardian — instala el plugin dev-guardian, o define DEV_GUARDIAN_CLI con la ruta de su cli/dev-guardian.mjs",
@@ -2772,11 +2779,11 @@ const msg = {
       override: (p) => ` (dev-guardian de DEV_GUARDIAN_CLI=${p})`,
       update: (v) => `actualiza dev-guardian (Claude Code: /plugin) — ${v ? "esta ejecución usó la " + v + ", el gate necesita la 3.2.1 o posterior" : "esta ejecución no indicó versión (la 3.3.0 y posteriores la indican); el gate necesita la 3.2.1 o posterior"}`,
       updateHint: (slug) => `Actualiza el plugin dev-guardian (3.2.1 o posterior — Claude Code: /plugin) y vuelve a ejecutar la verificación: ${DEV_SPEC} finish ${slug} --run.`,
-      finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [esta función]" : ""),
+      finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [esta funcionalidad]" : ""),
       blocker: (name, text) => `la verificación del proyecto '${name}' falló — ${text}.`,
       more: (n) => `+${n} más`,
-      fixHint: (slug) => `Corrige el/los finding(s) y vuelve a ejecutar la verificación: ${DEV_SPEC} finish ${slug} --run. Para aceptar UN finding revisado, el usuario lo suprime en la propia línea con un motivo (nosemgrep: <regla> -- <motivo>, # nosec) — nunca con \`baseline update\`, que acepta todos los findings actuales, incluidos los de esta función. Nunca fuerces el finish sin el usuario.`,
-      baselineHint: "Sin baseline: el usuario registra una en el commit base, antes del código de esta función (en un checkout de la rama base: node .specs/guardian.cjs baseline update --project . allí, y luego commit de .guardian/baseline.json) — registrada aquí, aceptaría también los findings de esta función.",
+      fixHint: (slug) => `Corrige el/los finding(s) y vuelve a ejecutar la verificación: ${DEV_SPEC} finish ${slug} --run. Para aceptar UN finding revisado, el usuario lo suprime en la propia línea con un motivo (nosemgrep: <regla> -- <motivo>, # nosec) — nunca con \`baseline update\`, que acepta todos los findings actuales, incluidos los de esta funcionalidad. Nunca fuerces el finish sin el usuario.`,
+      baselineHint: "Sin baseline: el usuario registra una en el commit base, antes del código de esta funcionalidad (en un checkout de la rama base: node .specs/guardian.cjs baseline update --project . allí, y luego commit de .guardian/baseline.json) — registrada aquí, aceptaría también los findings de esta funcionalidad.",
       incompleteHint: "Instala el escáner que falta (el /guardian-init de dev-guardian), o — sin red, cuando Semgrep no pudo obtener sus reglas — añade --local-only al comando de la verificación; la verificación sigue fallida hasta que pase o el usuario la cambie.",
       gap: {
         missingTool: (tools) => `Instala ${tools} (el /guardian-init de dev-guardian instala sus escáneres).`,

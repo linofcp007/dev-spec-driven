@@ -227,6 +227,9 @@ function finishFeature(projectDir, name, opts = {}) {
   if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);
+  // 1.30: no task names a file in _Implements:_ — the drift baseline, the duplicate check (below), the scope guard and
+  // dev-guardian's attribution then see no code of this feature, silently. A warning: a feature may write no code.
+  if (blocks.length && !implementsRefs(tasksText).length) warnings.push(F.noImplements);
   // 1.28: the feature's code repeats code the project already has (the duplicate-code detector, its _Implements:_ files against the
   // rest) — a warning, never a blocker: how many places, the top 3 (`file:from-to ↔ file:from-to`) and the call listing them all;
   // the repeats inside the feature's own files only as a count. 1.29: with dev-guardian's duplication budget set

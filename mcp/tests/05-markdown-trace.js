@@ -64,7 +64,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     ok(Array.isArray(fin9.warnings) && fin9.warnings.some((w) => /EC-2/.test(w)) && fin9.warnings.some((w) => /EC-9, NFR-7/.test(w)) &&
       !fin9.blockers.some((b) => /EC-|SC-|NFR-/.test(b)), "spec_finish lists the EC/NFR/SC findings under warnings — never as blockers");
     const clean9 = S.specDoctor(w9, "fresh-all");
-    const cleanFin9 = S.finishFeature(w9, "fresh-all").warnings;
+    // (1.30: a fresh scaffold's tasks name no _Implements:_ file yet — that warning is 08-tasks.js's, set aside here)
+    const cleanFin9 = S.finishFeature(w9, "fresh-all").warnings.filter((w) => !/^no task names its files in _Implements:_/.test(w));
     ok(!clean9.checks.some((c) => c.id === "secondary-trace") && cleanFin9.length === 1 && /^planned tests that no test file names \(put the T-ID in the test name\): T-01, T-02, .*T-10$/.test(cleanFin9[0]),
       "no secondary IDs written yet → no secondary-trace check and no EC/NFR/SC finish warning (only: no test file names the planned T-IDs yet)");
     // Hook on tasks.md: the warnings follow the trace line, under their own heading.
@@ -424,7 +425,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     fill12("requirements.md", [["[the condition that triggers the bug]", "the refresh token has expired"], ["[the correct behavior]", "clear the session cookie before redirecting to /login"],
       ["[the neighbouring behavior that already worked]", "a login with a valid refresh token"], ["[nearby inputs that must keep working]", "a token that expires mid-request"]]);
     fill12("test-plan.md", [["[unit/integration]", "integration"], ["`[path]`", "`tests/integration/auth.test.js`"]]);
-    fill12("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["_Verify: [full test suite command]_", "_Verify: npm test_\n  - _Implements: src/auth.js, src/lib/*.ts_"]]);
+    fill12("tasks.md", [["[command that runs T-01]", "node --test tests/integration/auth.test.js"], ["[exact values the fix must respect — versions, limits, formats]", "Node >= 20"], ["[path of the code the fix changes]", "src/auth.js, src/lib/*.ts"], ["[full test suite command]", "npm test"]]);
     fill12("bug.md", [["[correct behavior]", "the dashboard opens"], ["[what happens — error message, output, log lines]", "302 back to /login in a loop"],
       ["> **TODO** — exact steps, input and environment that reproduce it every time.", "Log in with an expired refresh token."],
       ["> **TODO** — the cause, with evidence (stack trace, log, failing assertion, the change that introduced it). Not \"probably\".", "The refresh handler redirects before clearing the cookie (auth.js:88)."],

@@ -235,8 +235,9 @@ async function setup(chain) {
   // never list it (the description said they "keep listing such a task", a clause left over from the unverified sentence).
   const ctDesc = (list.result.tools.find((t) => t.name === "spec_complete_task") || {}).description || "";
   const ntvSentence = (ctDesc.match(/A task with no runnable _Verify:_ and nothing recorded.*?\)\./) || [""])[0];
-  ok(/nothingToVerify: true/.test(ntvSentence) && /pass it too/.test(ntvSentence) && !/keep listing|counts it/.test(ntvSentence) &&
-    /plus a localized note; doctor, spec_finish and ROADMAP\.md list such an unverified task with its localized reason\./.test(ctDesc),
+  // (1.30 review 8: the same two rules, ~150 characters shorter — tools/list is paid every session)
+  ok(/nothingToVerify: true/.test(ntvSentence) && /never listed/.test(ntvSentence) && !/keep listing|counts it/.test(ntvSentence) &&
+    /plus a localized note — doctor, spec_finish and ROADMAP\.md list the task with that reason\./.test(ctDesc),
     "spec_complete_task's description: a nothingToVerify task passes doctor / finish / ROADMAP.md; only an unverified task is listed with its reason");
   muted = false;
   const ctx = {

@@ -67,13 +67,17 @@ exports.run = async ({
   // roadmap, update the specs after a plugin update) — and SAYS it works in Portuguese and Spanish instead of listing their
   // trigger phrases (280 of its 1,011 characters); ≤ ~600 characters, the near-miss exclusions kept. 1.29.1: it names closing a
   // finished feature too ("fecha a feature" reached spec_finish through the tools, the skill only sometimes) — its checks,
-  // dev-guardian's gate included, then a local merge (evals/trigger-finish-pt / -es).
-  ok(docsDesc.length > 200 && docsDesc.length <= 620 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /eval\(\) or an LLM/.test(docsDesc) &&
+  // dev-guardian's gate included, then a local merge (evals/trigger-finish-pt / -es). 1.30 review 8: resuming a feature (where it
+  // stands, what's left, the next task — Phase 6, where the evidence rules apply most), changing its approved spec and a spike
+  // never reached the skill — the cap goes 620 → 660 (the model-visible listing stays ≤ 1,500: 10-guards-guard-downs.js) and
+  // evals/trigger-resume-en, -execute-es, -change-pt, -roadmap-en, -adopt-es, -spike-pt check each intent.
+  ok(docsDesc.length > 200 && docsDesc.length <= 660 && /Not for trivial edits, requirements\.txt/.test(docsDesc) && /eval\(\) or an LLM/.test(docsDesc) &&
     /Works in English, Portuguese and Spanish/.test(docsDesc) && !/antes de|especificar|corrige|arregla|atualizar|actualizar/.test(docsDesc) &&
     /before coding/.test(docsDesc) && /fix a reported bug/.test(docsDesc) && /existing codebase/.test(docsDesc) && /roadmap/.test(docsDesc) &&
+    /resume one \(where it stands, what's left, the next task\)/.test(docsDesc) && /change its approved spec/.test(docsDesc) && /run a spike/.test(docsDesc) &&
     /close a finished feature/.test(docsDesc) && /dev-guardian's gate/.test(docsDesc) && /local merge/.test(docsDesc) &&
     /update the specs/.test(docsDesc) && /after a dev-spec-driven update/.test(docsDesc) && !/^## When to use this skill/m.test(docsSkill) && !/\| Replaces \|/.test(docsSkill) && !/^\*\*One sentence:\*\*/m.test(docsSkill),
-    `SKILL.md description is intent-based, says it works in EN / PT / ES (no literal PT / ES trigger list), scoped ("Not for …") and ≤ 620 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
+    `SKILL.md description is intent-based, says it works in EN / PT / ES (no literal PT / ES trigger list), scoped ("Not for …"), names resume / change / spike, ≤ 660 chars (${docsDesc.length}); no in-body trigger list, Replaces column or closing summary`);
   const docsLoops = (docsSkill.split("## Phase 6")[1] || "").split("Track-gated")[0];
   ok(["**core task", "**+tdd task", "**+ai generation/prompt task"].every((k) => /spec_complete_task \{evidence\}/.test(((docsLoops.split(k)[1] || "").split("\n- **")[0]))),
     "every Phase 6 execution loop (core, +tdd, +ai) ends in spec_complete_task {evidence}");

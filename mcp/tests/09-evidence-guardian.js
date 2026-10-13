@@ -219,7 +219,8 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
         /nunca com `baseline update`, que aceita todos os findings atuais/.test(bPt) && /Nunca forces o finish sem o utilizador\./.test(bPt),
       esIncomplete: /^la verificación del proyecto 'guardian' falló — dev-guardian no pudo ejecutar todos los escáneres \(escaneo incompleto: semgrep: not installed\)\. Instala el escáner que falta/.test(iEs),
       ptConfig: /o dev-guardian não conseguiu correr — um erro de configuração ou de utilização: error: unknown flag\. Corrige isso e volta a correr a verificação/.test(cPt),
-      esBlocked: /\[esta función\]/.test(bEs) && /Nunca fuerces el finish sin el usuario\./.test(bEs),
+      // 1.30 review 8: "función" next to a file and a rule read as a code function — the code-level text says "funcionalidad"
+      esBlocked: /\[esta funcionalidad\]/.test(bEs) && /en los ficheros de esta funcionalidad/.test(bEs) && !/función/.test(bEs) && /Nunca fuerces el finish sin el usuario\./.test(bEs),
     });
   }
 

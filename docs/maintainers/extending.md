@@ -101,8 +101,10 @@ how they came to be — the releases and review findings — is in History at th
   `CORPUS_SOURCES` (the V8-coverage test names it). Never commit `mcp/lib/spec.bundle.js`.
 - **Renaming or removing a code identifier** → fix the notes citing it: `mcp/tests/17-docs-identifiers.js` fails on a backticked
   name in CLAUDE.md or `docs/maintainers/*.md` that no code file holds (a name from outside the code goes into its allowlist).
-- **SKILL.md stays the source of truth for the workflow** — the rules an agent needs at decision time, ≤ 5,000 words
-  (`mcp/tests/01-core.js`; loaded whole every time the skill fires). Lookup material goes into `references/` with a one-line
+- **SKILL.md stays the source of truth for the workflow** — the rules an agent needs at decision time, ≤ 15,360 bytes
+  and ≤ 5,000 words (`mcp/tests/01-core.js`; loaded whole every time the skill fires — a new rule pays for itself). Its
+  `description` (≤ 660 characters, `mcp/tests/17-docs.js`) names the intents the skill serves; a new intent gets its triggering
+  case in `evals/` (and a near-miss where a neighbour — dev-guardian — shares the words). Lookup material goes into `references/` with a one-line
   pointer ("read X when Y"), every file listed in `references/index.md` (a test fails on an orphan). A rule agents need even
   when they skip the skill also goes into the MCP tool description that acts on it. Commands stay thin.
 
@@ -127,6 +129,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   constants the 1.20 cue rules had replaced, so `mcp/tests/17-docs-identifiers.js` checks every backticked identifier of the notes.
 - **1.26** — tools folded into others behind hidden aliases (`LEGACY_TOOLS`, the modes); the 55 slash commands folded into 22
   (the table below); the corpus stopped carrying the version, so a version bump alone no longer needs a rebuild.
+- **1.30 review 8** — SKILL.md had 85 bytes left under 15 KiB with only the word cap tested: a byte cap (≤ 15,360); the
+  description reached 618 of its 620 characters while resume, the next task, a spec change and a spike never fired the skill — the
+  cap is 660 (the model-visible listing stays ≤ 1,500) and evals/ gained six triggering cases and three near-misses.
 - **1.28** — a tool's mode on a second key (`alt`); an integer flag's `bounds` as a `[least, most]` pair (the schema's
   minimum: `dupes --min-lines` 4–100).
 - **1.27** — one operations table (`OPERATIONS`, mcp/lib/operations.js) both surfaces run through and one CLI command table

@@ -322,6 +322,26 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, hookIn, __dirname, require
       js([marked.length, human.length, long, tails]) + ")");
   }
 
+  // 1.30 review 8 (ds-prose 16): a command's `allowed-tools` grants its tools for the invoking turn without asking — only a tool
+  // that can't write (readOnlyHint true in tools/list) may be there. /roadmap granted spec_roadmap (write: ROADMAP.md / .html)
+  // and /spec-report spec_metrics (write: retro.md). The server's own name is the plugin's (mcp__plugin_<plugin>_<server>__).
+  {
+    const PR = require("./lib/prompts-resources.js");
+    const dir = path.join(__dirname, "..", "commands");
+    const tools = (await rpc("tools/list", {})).result.tools;
+    const readOnly = new Set(tools.filter((t) => t.annotations && t.annotations.readOnlyHint === true).map((t) => t.name));
+    const pluginName = JSON.parse(fs.readFileSync(path.join(__dirname, "..", ".claude-plugin", "plugin.json"), "utf8")).name;
+    const serverName = Object.keys(JSON.parse(fs.readFileSync(path.join(__dirname, "servers.json"), "utf8")).mcpServers)[0];
+    const prefix = `mcp__plugin_${pluginName}_${serverName}__`;
+    const granted = fs.readdirSync(dir).filter((f) => f.endsWith(".md")).flatMap((f) => {
+      const at = PR.parseFrontMatter(fs.readFileSync(path.join(dir, f), "utf8")).data["allowed-tools"] || "";
+      return at.split(",").map((t) => t.trim()).filter(Boolean).map((t) => [f, t]);
+    });
+    const bad = granted.filter(([, t]) => !t.startsWith(prefix) || !readOnly.has(t.slice(prefix.length)));
+    ok(granted.length >= 4 && !bad.length && !granted.some(([f]) => f === "roadmap.md") && readOnly.has("spec_drift") && !readOnly.has("spec_metrics"),
+      "1.30 review 8: every command's allowed-tools pre-approves only read-only tools of this plugin's server (" + granted.length + " grants; bad: " + js(bad) + ")");
+  }
+
   // C-I9 — the aliases hand over to the full command (its file, resolved by Claude Code and by the MCP prompt alike) instead of a lossy summary.
   {
     const PR = require("./lib/prompts-resources.js");

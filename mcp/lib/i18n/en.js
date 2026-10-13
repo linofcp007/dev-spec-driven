@@ -413,14 +413,15 @@ Justify anything that violates a constitution principle or adds non-obvious comp
     title: (name) => `# Tasks: ${name}`,
     intro: (label) => `<!-- Tracks: ${label}. Organized by user story so each is independently shippable
      (P1 first). Each task is tagged with its story: [US1]/[US2] or [shared] for cross-cutting work.
-     [P] = parallelizable (different files, no deps). Every task carries _Requirements:_; TDD tasks
-     carry _Makes green:_. Use _Implements: path_ to tie a task to a real source file. A **Checkpoint**
-     marks where a story is independently testable.
+     [P] = parallelizable (different files, no deps). Every task carries _Requirements:_ and, when it
+     writes code, _Implements: <path>_ — the files it creates or changes (the scope guard, drift, the
+     duplicate check and finish read them); TDD tasks carry _Makes green:_. A **Checkpoint** marks where
+     a story is independently testable.
      If the stories are NOT independently shippable, they were mis-sliced — re-slice them, or fall
      back to a technical-layer layout (Foundation→Logic→API→…) keeping the [US1] tags. -->`,
-    introS: (label) => `<!-- Tracks: ${label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_) and a
-     _Verify: <command>_ — spec_complete_task records its result as the task's evidence. Use _Implements: path_ to tie a
-     task to a real source file. -->`,
+    introS: (label) => `<!-- Tracks: ${label} · size s. One story; every task carries _Requirements:_ (TDD tasks _Makes green:_), a
+     _Verify: <command>_ — spec_complete_task records its result as the task's evidence — and, when it writes code,
+     _Implements: <path>_: the files it creates or changes. -->`,
     constraints: `## Global Constraints
 <!-- Exact values every task must respect, copied verbatim from the spec/steering (version floors,
      naming rules, limits, formats) — spec_task_brief inlines this section into every task brief.
@@ -437,6 +438,7 @@ Justify anything that violates a constitution principle or adds non-obvious comp
     story1: "## Story US-1 (P1 — MVP)",
     coreTask: "[Core behavior for US-1]",
     verify: "[command that proves it, e.g. npm test -- path/to/file.test.js]",
+    implements: "[path of the code it creates or changes]",
     parallelTask: "[parallelizable task — different file, no deps]",
     checkpoint1: "US-1 is fully functional and independently testable/shippable.",
     story2: "## Story US-2 (P2)",
@@ -725,6 +727,7 @@ ${a.summary || "[one line: the bug being fixed]"}
 - [ ] 2. [US1] Fix the root cause — one change, not a bundle; guard test T-02 stays green
   - _Requirements: US-1.AC-1, US-1.AC-2_
   - _Makes green: T-01_
+  - _Implements: [path of the code the fix changes]_
   - _Verify: [full test suite command]_
 **Checkpoint:** the bug no longer reproduces and the full suite is green.
 `;
@@ -796,6 +799,7 @@ ${a.summary || "[one line: what changes and why]"}
 ## Tasks
 - [ ] 1. [US1] [the change]
   - _Requirements: US-1.AC-1_
+  - _Implements: [path of the code it creates or changes]_
   - _Verify: [command that proves it, e.g. npm test -- path/to/file.test.js]_
 
 <!-- A change (size xs): 1–3 acceptance criteria and 1–3 tasks, core only — no classification, design, quickstart or
@@ -984,6 +988,8 @@ const msg = {
       duplicates: (n, top, within, slug) => `the feature's code repeats existing code in ${n} ${n === 1 ? "place" : "places"} — ${top}${n > 3 ? "; …" : ""}: reuse or extend the existing code, or note in the report why a copy is deliberate${within ? `; ${within} more ${within === 1 ? "repeat" : "repeats"} inside the feature's own files` : ""} (all of them: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       duplicatesPartial: (unread) => `; only part of the project was compared — the detector's byte budget left ${unread} source ${unread === 1 ? "file" : "files"} unread`,
       duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "block of the feature's code repeats" : "blocks of the feature's code repeat"} another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // 1.30: no task names a file in _Implements:_ — what reads them sees no code of the feature
+      noImplements: "no task names its files in _Implements:_ — the drift baseline, the duplicate check and dev-guardian's attribution see no code of this feature. Add _Implements: <path>_ to each task that wrote code (an edited tasks.md is re-approved), or ignore this if none did.",
       untrackedApproval: (list, slug) => `approved before change tracking — nothing about the signed-off file was recorded, so an edit can't be detected: ${list} — re-approve to start tracking it (/approve ${slug} design)`,
     },
     // right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.
@@ -1022,7 +1028,7 @@ const msg = {
       },
       optionalMark: "optional at this size",
       coveredMark: "covered by another track",
-      suggestTail: "Confirm it or pick another in Phase 0 — spec_create {size: xs | s | m | l}; no size keeps the pre-1.21 scaffold.",
+      suggestTail: "Confirm it or pick another in Phase 0 — spec_create {size} (CLI: create --size xs|s|m|l); no size: the full scaffold.",
     },
     kindKept: (kept, asked) => `'${kept}' is already the kind of this feature — kept it (asked for '${asked}'). Start a new one for a different kind.`,
     langKept: (kept, asked) => `This feature is already in '${kept}' — kept it (asked for '${asked}'). One feature, one language.`,

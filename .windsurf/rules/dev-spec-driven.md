@@ -18,7 +18,8 @@ Follow the spec-driven workflow in `AGENTS.md` (repo root). Summary:
   Below, `dev-spec <command>` stands for `node cli/dev-spec.js <command>` (a bare `dev-spec` works only when it is on
   PATH).
   The `spec-driven` MCP server exposes the same operations if configured.
-- Artifacts live in `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable.
+- Artifacts live in `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable. Every task carries
+  `_Requirements:_` and `_Verify: <command>_`, and `_Implements: <path>_` when it writes code (the files it creates or changes).
 - Mandatory +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data design sections must be filled (no leftover `> TODO`).
 - Approvals are the user's: run `dev-spec approve <feature> <phase>` only after their explicit yes for that phase — it
   refuses while the phase's checks fail; `--force` only when the user explicitly accepts the failing checks (it stays
