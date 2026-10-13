@@ -283,7 +283,9 @@ exports.run = ({ ok, all, run, runIn, spawnIn, tmp, CLI, require, __dirname }) =
     C.statusCacheWrite(K, p4, sig, rr, { at: now - 3000, near: p4 });
     const plainOld = C.statusCacheRead(K, now, p4), otherNear = C.statusCacheRead(K, now, app);
     fs.rmSync(C.statusCacheFile(K), { force: true });
-    C.statusCacheWrite(K, p4, sig, rr, { started: now, near: p4, reads: [path.join(p4, "tests", "pay.test.js")] }); // written a moment ago
+    const racyFile = path.join(p4, "tests", "racy.test.js");
+    fs.writeFileSync(racyFile, "test('T-02 x', () => {});\n"); // written just before the render "began": its mtime is past started - STATUS_CACHE_RACY_MS
+    C.statusCacheWrite(K, p4, sig, rr, { started: Date.now(), near: p4, reads: [racyFile] });
     const racy = fs.existsSync(C.statusCacheFile(K));
     fs.rmSync(C.statusCacheFile(K), { force: true });
     all("1.30.1: the status line's cache signs what it read outside .specs/ — a Phase 4 test written outside .specs/ shows at the next render (write the tests → approve tests); a .specs/ made nearer the cwd is a miss; a worktree's mapped render keeps 2 s, a plain one 10 s; a reported file changed as the render ran is not kept (got " +
