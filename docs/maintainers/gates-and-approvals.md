@@ -37,6 +37,9 @@ review findings — is in History at the end.
   | tests | `tests-in-code` (+tdd with test-plan.md: every planned T-ID named by a test file), `eval-sets` (+ai with eval-plan.md: evals/golden.json the feature's own, neither empty nor the sample) |
   | tasks | placeholders, `placeholders:realTasks` (a real task beyond the scaffold's), traceability, task-deps; a change's plan (change.md): ears, placeholders, clarifications, ac-uniqueness, realTasks, change-scope, traceability, task-deps |
   | execution | spec_finish's blockers (`finishFeature(…, {gateOnly: true})`) |
+- **Doctor agrees with the gates.** An approval check is also a doctor check that fails on what the approval refuses —
+  `clarifications` counts requirements.md, a bugfix's bug.md AND design.md's own markers (`doctor.clarificationsOpenDesign`;
+  the design gate refuses on them), but not while design.md is still a later phase's template (`c.laterFiles`).
 - **Approve gate.** `approvePhase()` refuses (`refused`, `failing`, `checks`) while a check fails; `force:true` (`--force`)
   records it `forced: true` + the failing ids (doctor's `approval-gates` and the roadmap flag it; a clean re-approval
   replaces it). Before the gate: an invalid `.state.json` or unreadable `roadmap.json` refuses; a spike approves only
@@ -416,6 +419,9 @@ here. "r5 review" is 1.23's fifth review.
   byte-identical (doctor, every gate, next_action, finish, the status line, spec_upgrade). The `live` views exist because a
   cross-feature read can note another feature's missing-pack markers mid-call (the doctor's nextGate runs after
   featureOverlaps).
+- **1.30 review 8 (ds-engine 7)** — a `[NEEDS CLARIFICATION]` in design.md: doctor said `clarifications: pass — none open` and
+  `readyToAdvance: true` while `approve design` refused on `clarifications` (only `approval-gates` mentioned it) — the doctor
+  check read requirements.md and bug.md alone; it reads design.md too now.
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

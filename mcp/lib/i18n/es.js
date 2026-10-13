@@ -1145,6 +1145,7 @@ const msg = {
       clarificationsOpen: (n) => `${n} [NEEDS CLARIFICATION] sin resolver — resuelve antes del diseño`,
       clarificationsOpenPlan: (n) => `${n} [NEEDS CLARIFICATION] sin resolver en change.md — resuelve antes de aprobar el plan`,
       clarificationsOpenBug: (n) => `${n} [NEEDS CLARIFICATION] sin resolver en bug.md — resuélvelos antes de aprobar su Reproducción / Causa Raíz`,
+      clarificationsOpenDesign: (n) => `${n} [NEEDS CLARIFICATION] sin resolver en design.md — resuélvelos antes de aprobar el diseño`,
       clarificationsNone: "ninguno sin resolver",
       scPresent: "presente",
       scMissing: "sin criterios de éxito medibles SC-###",

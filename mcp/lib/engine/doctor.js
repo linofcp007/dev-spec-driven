@@ -853,13 +853,18 @@ const DOCTOR_CHECKS = [
     tasks: (c) => earsGate(c, c.planEars, CHANGE_FILE), // a change's plan: change.md's criteria
   } },
   // Clarifications gate — design is blocked while any [NEEDS CLARIFICATION] remains. A bugfix's bug.md (its Reproduction and
-  // Root Cause — what its requirements / design gates sign off) counts too.
+  // Root Cause — what its requirements / design gates sign off) counts too, and design.md's own (the design gate refuses on them:
+  // doctor passed "none open" while the approval refused) — not while design.md is still a LATER phase's template.
   { id: "clarifications", phase: 1, applies: hasReqs, run: (c) => {
     const markers = clarificationMarkers(c.read("requirements.md"));
     const bug = c.kind === "bugfix" ? clarificationMarkers(c.read("bug.md") || "") : [];
-    return laterReqs(c, { status: markers.length || bug.length ? "fail" : "pass", detail: markers.length || bug.length
+    const v = laterReqs(c, { status: markers.length || bug.length ? "fail" : "pass", detail: markers.length || bug.length
       ? [markers.length ? (c.isChange ? c.m.clarificationsOpenPlan : c.m.clarificationsOpen)(markers.length) : null, bug.length ? c.m.clarificationsOpenBug(bug.length) : null].filter(Boolean).join("; ")
       : c.m.clarificationsNone }); // a change has no design
+    const design = c.laterFiles.includes("design.md") ? [] : clarificationMarkers(c.read("design.md") || "");
+    if (!design.length) return v;
+    const d = c.m.clarificationsOpenDesign(design.length);
+    return { status: "fail", detail: v.status === "pass" ? d : v.detail + "; " + d };
   }, gate: {
     // the requirements and, for a bugfix, bug.md → Reproduction (an open question there is no reproduction)
     requirements: (c) => {

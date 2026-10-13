@@ -1152,6 +1152,7 @@ const msg = {
       clarificationsOpen: (n) => `${n} unresolved [NEEDS CLARIFICATION] — resolve before design`,
       clarificationsOpenPlan: (n) => `${n} unresolved [NEEDS CLARIFICATION] in change.md — resolve before approving the plan`, // a change
       clarificationsOpenBug: (n) => `${n} unresolved [NEEDS CLARIFICATION] in bug.md — resolve them before approving its Reproduction / Root Cause`, // a bugfix
+      clarificationsOpenDesign: (n) => `${n} unresolved [NEEDS CLARIFICATION] in design.md — resolve them before approving the design`, // the design gate counts them
       clarificationsNone: "none open",
       scPresent: "present",
       scMissing: "no measurable SC-### success criteria",
