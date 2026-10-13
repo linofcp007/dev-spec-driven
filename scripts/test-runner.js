@@ -48,17 +48,55 @@ function exitFlushed(code) {
 function rmTmpDir(dir) {
   try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 15, retryDelay: 100 }); } catch {}
 }
-function sweepStaleTmp(prefix) {
+function sweepStaleTmp(prefix, dir) {
+  const base = dir || os.tmpdir();
   let names = [];
-  try { names = fs.readdirSync(os.tmpdir()); } catch { return; }
+  try { names = fs.readdirSync(base); } catch { return; }
   const cutoff = Date.now() - 2 * 3600 * 1000;
   const shape = new RegExp("^" + prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[A-Za-z0-9]{6}$");
   for (const n of names) {
     if (!shape.test(n)) continue;
-    const p = path.join(os.tmpdir(), n);
+    const p = path.join(base, n);
     try { const st = fs.lstatSync(p); if (st.isDirectory() && !st.isSymbolicLink() && st.mtimeMs < cutoff) rmTmpDir(p); } catch {}
   }
 }
+
+// The temp root (1.30, review 8): a test never depends on WHERE the temp folder is. The shell's TMP / TEMP / TMPDIR may name a folder
+// whose path says "dev-spec" (a partial payload's cwd then "named dev-spec" to the approval hook), lies inside a dev-spec project
+// (a walk-up from a test's folder found ITS .specs/), holds a character a shell reads (a `cd "<tmp>/…"` a test writes broke on a
+// `$`), or — on Windows — is so long that git, with no core.longpaths, could not reach a test repository's files (the pre-commit,
+// worktree and eval-fixture tests failed under a 160-character TMP; a 99-character one passes). The runner
+// takes the first base without such a problem — the shell's temp folder, else the OS user's default one (Windows: %LOCALAPPDATA%\Temp;
+// elsewhere /tmp, /var/tmp) —, makes every chain's folder there and names the base its TMP / TEMP / TMPDIR (os.tmpdir() in a chain,
+// and in what it starts, is the base: the harness's `tmp` and every test's temp files go there too). No deeper nesting than before:
+// a temp path's length is what git's MAX_PATH tests feel. A chain started by hand (isolate()) does the same for itself.
+const RE_TMP_NAMES_US = /dev-?spec|(?:^|[\\/])\.specs(?:[\\/]|$)/i;
+const TMP_LONG_WIN = 100; // characters of a Windows temp base — git's paths stop at 260 without core.longpaths
+function tmpBaseProblem(dir) {
+  const abs = path.resolve(dir);
+  if (RE_TMP_NAMES_US.test(abs)) return "names dev-spec";
+  if (/[$`%!"'\s]/.test(abs.replace(/ /g, ""))) return "holds a character a shell reads ($ ` % ! a quote)"; // (a space is quoted everywhere)
+  if (process.platform === "win32" && abs.length > TMP_LONG_WIN) return `is ${abs.length} characters long`;
+  for (let d = abs; ; d = path.dirname(d)) {
+    try { if (fs.statSync(path.join(d, ".specs")).isDirectory()) return `lies in a project with a .specs/ folder (${d})`; } catch {}
+    if (path.dirname(d) === d) return null;
+  }
+}
+// → { dir, problem (the shell's temp folder's, or null), fallback: none was free of one }
+function neutralTmpBase() {
+  const shell = os.tmpdir();
+  const others = process.platform === "win32"
+    ? [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Temp"), path.join(os.homedir(), "AppData", "Local", "Temp")]
+    : ["/tmp", "/var/tmp"];
+  const problem = tmpBaseProblem(shell);
+  for (const c of [shell, ...others].filter(Boolean)) {
+    if (tmpBaseProblem(c)) continue;
+    try { if (fs.statSync(c).isDirectory()) { fs.accessSync(c, fs.constants.W_OK); return { dir: c, problem }; } } catch {}
+  }
+  return { dir: shell, problem, fallback: true };
+}
+// A chain's environment for its temp folder: TMP / TEMP / TMPDIR (Windows reads TEMP then TMP; POSIX TMPDIR) all name it.
+const tmpEnv = (dir) => ({ TMP: dir, TEMP: dir, TMPDIR: dir });
 
 // Hermetic chains. A chain never sees the shell the suite was started from: the variables that steer the plugin — the
 // project (SPEC_PROJECT_DIR, CLAUDE_PROJECT_DIR), the MCP server's switches (SPEC_MCP_*), Claude Code's plugin variables
@@ -95,17 +133,20 @@ const samePath = (a, b) => {
 // its own folder (CWD_ENV names the working folder) — it moves into a fresh temp folder of its own (`prefix` + 6 characters,
 // the shape sweepStaleTmp removes when a killed run left it), removed when it exits. Idempotent. The runner's child calls it
 // before it loads a test file; the harnesses call it first thing too, so a harness loaded any other way (a chain started by
-// hand: DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js) is just as isolated. → the working folder.
+// hand: DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js) is just as isolated — its folder made on a neutral temp base and named its
+// TMP / TEMP / TMPDIR, as the runner does (neutralTmpBase). → the working folder.
 function isolate(prefix) {
   for (const k of Object.keys(process.env)) if (hostEnvKey(k)) delete process.env[k];
   const given = process.env[CWD_ENV];
   // Claude Code's config folder (its plugin cache): one that does not exist, inside the chain's own folder
   if (given && samePath(given, process.cwd())) { process.env.CLAUDE_CONFIG_DIR = path.join(process.cwd(), "no-claude-config"); return process.cwd(); }
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix || "dev-spec-test-"));
+  const base = neutralTmpBase().dir;
+  const dir = fs.mkdtempSync(path.join(base, prefix || "test-chain-"));
   process.chdir(dir);
+  Object.assign(process.env, tmpEnv(base));
   process.env[CWD_ENV] = dir;
   process.env.CLAUDE_CONFIG_DIR = path.join(dir, "no-claude-config");
-  process.on("exit", () => { try { process.chdir(os.tmpdir()); } catch {} rmTmpDir(dir); }); // a folder can't go while it is the cwd
+  process.on("exit", () => { try { process.chdir(base); } catch {} rmTmpDir(dir); }); // a folder can't go while it is the cwd
   return dir;
 }
 
@@ -298,7 +339,13 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
     console.log(`# ${sel.run.length} of ${files.length} files: ${sel.run.map((f) => f.stem).join(", ")}` +
       (sel.pulled.length ? ` (${sel.pulled.map((p) => `${p.stem}, needed by ${p.by}`).join("; ")})` : ""));
   }
-  sweepStaleTmp(opts.tmpPrefix);
+  // the chains' temp base (neutralTmpBase): each chain's folder is made there, and it is the chain's TMP / TEMP / TMPDIR
+  const base = neutralTmpBase();
+  if (base.problem) {
+    console.log(`# temp: the shell's ${os.tmpdir()} ${base.problem} — ` +
+      (base.fallback ? "no neutral temp folder was found: tests that read their paths may fail" : `the chains' temp folder is ${base.dir}`));
+  }
+  sweepStaleTmp(opts.tmpPrefix, base.dir);
 
   const t0 = Date.now();
   // out: stdout and stderr as they came (what is printed) · stdout alone: where the total is read — a Node warning a chain
@@ -323,8 +370,8 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
     const start = (attempt) => {
       let kid;
       try {
-        cwd = cwd || fs.mkdtempSync(path.join(os.tmpdir(), opts.tmpPrefix || "dev-spec-test-"));
-        const env = { ...hermeticEnv(process.env), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
+        cwd = cwd || fs.mkdtempSync(path.join(base.dir, opts.tmpPrefix || "test-chain-"));
+        const env = { ...hermeticEnv(process.env), ...tmpEnv(base.dir), [CHAIN_ENV]: chain.map((f) => f.stem).join(","), [CWD_ENV]: cwd };
         kid = spawn(process.execPath, [opts.entry], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
       } catch (e) {
         if (attempt === 0) return void setTimeout(() => start(1), 1000);
@@ -523,5 +570,5 @@ function main(opts) {
 }
 
 module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, isolate, hermeticEnv,
-  assertHelpers, firstDiff, remeasure, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_NODE_ENV, KEEP_NODE_ENV, RE_TEST_FILE, RE_TOTAL, CHAIN_TIMEOUT_MS,
+  assertHelpers, firstDiff, remeasure, neutralTmpBase, tmpBaseProblem, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_NODE_ENV, KEEP_NODE_ENV, RE_TEST_FILE, RE_TOTAL, CHAIN_TIMEOUT_MS,
   timesFile };

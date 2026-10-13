@@ -71,7 +71,7 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   (15-quality re-checks the behavioural fixtures 17-docs-evals builds under tmp). The handshake's assertions are counted
   by the file exporting `handshake: true` (02-mcp-server); every other process runs the handshake muted.
 - **Hermetic chains (1.26).** A chain never sees the shell the suite was started from: the runner spawns it with a fresh,
-  empty temp folder as its working folder (`<os tmpdir>/<spec-test-|cli-test->XXXXXX`, removed once it closed) and an
+  empty temp folder as its working folder (`<temp base>/<spec-test-|cli-test->XXXXXX`, removed once it closed — The temp base) and an
   environment without the variables that steer the plugin — `SPEC_PROJECT_DIR`, `CLAUDE_PROJECT_DIR`, `SPEC_MCP_*`,
   `CLAUDE_PLUGIN_*`, `COLUMNS` and every `DEV_SPEC_*` but the suites' own `DEV_SPEC_TEST_*` (`DEV_SPEC_TEST_CHAIN`,
   `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`) — scripts/test-runner.js `isolate()` / `hermeticEnv()`; 1.29:
@@ -91,6 +91,16 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   proves it on the fake suite (a decoy `.specs/` and the variables exported — a `NODE_OPTIONS` preload too: none reaches a chain). The proof run: put a decoy
   `.specs/` (`roadmap.json` `{"features":{},"meta":{"lang":"pt"}}` and a feature folder) at the repo root, export
   `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` at it and `DEV_SPEC_DEFAULT_LANG=es`, and run both suites — still green.
+- **The temp base (1.30).** No test depends on WHERE the temp folder is. The runner (and `isolate()` for a chain started by hand)
+  takes a neutral base — `neutralTmpBase()`: the shell's temp folder, unless its path names dev-spec (`dev-spec`, `devspec`,
+  a `.specs` segment), lies inside a folder holding a `.specs/`, holds a character a shell reads (`$`, a backtick, `%`, `!`, a
+  quote) or — on Windows — is longer than 100 characters; then the user's default one (`%LOCALAPPDATA%\Temp`; `/tmp`,
+  `/var/tmp`) — makes every chain's folder there and names it the chain's `TMP` / `TEMP` / `TMPDIR` (a line `# temp: …` says
+  so). Why: under a TMP whose path said "dev-spec" the approval hook's partial-payload test saw dev-spec named in the payload's
+  cwd, and under a 160-character one (Windows, git without `core.longpaths`) the pre-commit, worktree and eval-fixture tests
+  could not reach their repositories' files (a 99-character base passes). The proof run: `TMP` / `TEMP` set to
+  `<a long folder>\dev-spec-tmp`, both suites green; 16-conventions-runner.js checks the choice on the fake suite. No new nesting:
+  a temp path's length is what git's MAX_PATH tests feel — keep a test's own paths short.
 - **Running a part.** `--only <x>[,…]` (repeatable) takes a file by its full name (`17-docs` — that file alone; the CLI's
   `06-gates`, no file of that exact name, means `06-gates-*`), an area by its number (`09`) or its name (`gates`; `tracks`
   → `04-tracks` and `04-tracks-builtin`), and pulls in — and names — the files they need: `node mcp/test.js --only
@@ -252,3 +262,6 @@ How the rules above came to be — grep a release here.
   typos passed): `npm run release:counts` writes them from a run (Release counts).
 - **1.30 (review 8, ds-maint 15)** — the Docker matrix was 18 / 22 / 24: Node 26 (the maintainer's own, LTS from October 2026)
   was never run; `node:26-trixie-slim` joins, and 16-conventions holds the first image to the engines floor.
+- **1.30 (review 9)** — a TMP whose path named dev-spec, or a long one (Windows), failed 8–11 MCP assertions that pass under the
+  default TMP: the chains' temp base is chosen neutral now (The temp base), and the approval hook's partial-payload test no longer
+  carries the temp path in its "names nothing of dev-spec's" payload.

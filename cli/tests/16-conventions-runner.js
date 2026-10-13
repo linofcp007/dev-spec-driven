@@ -11,7 +11,7 @@ exports.run = ({ ok, all, tmp, __dirname }) => {
   // A fake suite built under tmp: its entry, a harness shaped like the real ones (ok, counts, fail, end → the total line and
   // an exit once stdout has flushed) and its files. Its own temp dir (TMPDIR / TEMP / TMP) holds the times file and nothing else.
   const root = path.join(tmp, "runner-fake");
-  const own = path.join(root, "tmpdir");
+  const own = path.join(tmp, "runner-fake-tmpdir"); // beside the suite, never in it: the hermetic block gives the suite a decoy .specs/ (1.30: a temp base in a project is moved)
   const w = (rel, text) => { const p = path.join(root, ...rel.split("/")); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, text); };
   fs.mkdirSync(own, { recursive: true });
   w("suite.js", `"use strict";
@@ -244,6 +244,37 @@ exports.run = async ({ ok }) => {
       byHandChildrenClean: () => none(b) && b.preloaded === true && b.kid === "false",
       optIn: () => !!c && c.preloaded === true && c.kid === "true" && c.env.NODE_OPTIONS === host.NODE_OPTIONS && c.env.NODE_V8_COVERAGE === host.NODE_V8_COVERAGE,
       regex: () => NODE_KEYS.every((k) => R.RE_NODE_ENV.test(k)) && !R.RE_NODE_ENV.test("NODE_ENV") && !R.RE_NODE_ENV.test("NODE_EXTRA_CA_CERTS"),
+    });
+  }
+
+  // 1.30 (review 9): no test depends on WHERE the temp folder is. A shell TMP whose path says "dev-spec" made the approval hook's
+  // partial-payload test "name dev-spec"; a 160-character one (Windows) left git unable to reach a test repository's files (the
+  // pre-commit, worktree and eval-fixture tests). The runner gives every chain a neutral temp base — the shell's, else the user's
+  // default one — as its folder's parent AND its TMP / TEMP / TMPDIR, and says so; a chain started by hand does the same.
+  {
+    w("tests/12-tmp.js", `// where a chain's temp folder is
+exports.run = async ({ ok }) => {
+  console.log("TMPSEEN " + JSON.stringify({ cwd: process.cwd(), tmpdir: require("os").tmpdir(), TMP: process.env.TMP || null, TEMP: process.env.TEMP || null, TMPDIR: process.env.TMPDIR || null }));
+  ok(true, "tmp seen");
+};
+`);
+    const named = path.join(own, "dev-spec-tmp"), long = path.join(own, "l".repeat(Math.max(1, 110 - own.length)), "tmp");
+    for (const d of [named, long]) fs.mkdirSync(d, { recursive: true });
+    const viaTmp = (dir, extra) => spawnSync(process.execPath, [path.join(root, "suite.js"), ...(extra || ["--only", "12"])], { encoding: "utf8", timeout: 60000,
+      env: { ...env, TMP: dir, TEMP: dir, TMPDIR: dir, ...(extra ? { DEV_SPEC_TEST_CHAIN: "12-tmp" } : {}) } });
+    const view = (r) => { const l = String(r.stdout || "").split(/\r?\n/).find((x) => x.startsWith("TMPSEEN ")); try { return JSON.parse(l.slice(8)); } catch { return null; } };
+    const fold = (p) => (process.platform === "win32" ? path.resolve(String(p)).toLowerCase() : path.resolve(String(p)));
+    const plainR = viaTmp(own), namedR = viaTmp(named), handR = viaTmp(named, []), longR = viaTmp(long);
+    const [pl, nm, hd, lg] = [plainR, namedR, handR, longR].map(view);
+    const neutral = (v) => !!v && !/dev-?spec/i.test(v.cwd) && fold(v.tmpdir) === fold(path.dirname(v.cwd)) && [v.TMP, v.TEMP, v.TMPDIR].every((x) => fold(x) === fold(v.tmpdir));
+    all("1.30 (review 9): every chain's temp folder lies on a neutral base, which is its TMP / TEMP / TMPDIR — the shell's temp folder when it is fine, another one when its path names dev-spec (by hand too) or, on Windows, is long; the run says so (got " +
+      js({ pl, nm, hd, lg, notes: [namedR, longR].map((r) => String(r.stdout || "").split(/\r?\n/).filter((l) => l.startsWith("# temp:"))) }) + ")", {
+      plain: () => neutral(pl) && fold(pl.tmpdir) === fold(own) && !/^# temp:/m.test(plainR.stdout),
+      named: () => neutral(nm) && !fold(nm.cwd).startsWith(fold(named)) && /^# temp: the shell's .*dev-spec-tmp names dev-spec — the chains' temp folder is /m.test(namedR.stdout),
+      byHand: () => neutral(hd) && !fold(hd.cwd).startsWith(fold(named)),
+      long: () => (process.platform === "win32" ? neutral(lg) && !fold(lg.cwd).startsWith(fold(long)) && /characters long/.test(longR.stdout) : neutral(lg)),
+      problems: () => /dev-spec/.test(R.tmpBaseProblem(named)) && R.tmpBaseProblem(own) === null && /shell reads/.test(R.tmpBaseProblem(path.join(own, "a$b")) || "") &&
+        /\.specs/.test(R.tmpBaseProblem(path.join(root, "x")) || ""),
     });
   }
 };

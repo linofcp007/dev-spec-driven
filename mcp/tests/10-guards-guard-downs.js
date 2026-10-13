@@ -271,7 +271,8 @@ exports.run = async ({ ok, all, S, tmp, rpc, payload, hookIn, __dirname, require
       kid.stdin.write(text); // never ended: the safety net fires
     });
     const head = "{\"session_id\":\"s\",\"cwd\":" + js(p) + ",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"";
-    const [cut, plain, off] = await Promise.all([partial(head + "node cli/dev-spec.js approve alpha tas", p), partial(head + "npm run build && npm te", p),
+    // (the plain payload's cwd field names a neutral folder: the temp folder's own path may say "dev-spec" — 1.30)
+    const [cut, plain, off] = await Promise.all([partial(head + "node cli/dev-spec.js approve alpha tas", p), partial(head.replace(js(p), js("/work/app")) + "npm run build && npm te", p),
       partial(head.replace(js(p), js(pOff)) + "node cli/dev-spec.js approve alpha tas", pOff)]);
     const d = (j) => (j && j.hookSpecificOutput ? j.hookSpecificOutput.permissionDecision : j ? "?" : "silent");
     ok(d(cut) === "ask" && /only in part/.test(cut.hookSpecificOutput.permissionDecisionReason) && d(plain) === "silent" && d(off) === "silent",
