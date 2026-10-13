@@ -467,6 +467,26 @@ defineDerivedLocale(MSG, { stopGate: { claims: true, triggers: true, negators: t
 
 function L(lang) { return BUILD[normalizeLang(lang)]; }
 
+// The stop gate's lists of EVERY language (msg(l).stopGate), merged as the engine's claim scan reads them (engine/guards.js
+// stopPatterns): each claim pattern with the base languages that list it (pt-BR is pt), each base language's trigger words (one
+// alternation), the other lists pooled. Built from every language's table — so the engine reads it from the corpus
+// (engine/markdown.js renderCorpusData, `stopGate`) and an English Stop hook loads no pt.js, es.js or pt-br.js.
+function stopGateLists() {
+  const gate = (l) => MSG[l].stopGate || {};
+  const all = (k) => [...new Set(LANGS.flatMap((l) => gate(l)[k] || []))];
+  const langsOf = new Map(), triggers = new Map();
+  for (const l of LANGS) {
+    const b = baseLang(l);
+    for (const src of gate(l).claims || []) (langsOf.get(src) || langsOf.set(src, []).get(src)).push(b);
+    for (const w of gate(l).triggers || []) (triggers.get(b) || triggers.set(b, []).get(b)).push(w);
+  }
+  return {
+    claims: [...langsOf].map(([source, ls]) => ({ source, langs: [...new Set(ls)] })),
+    triggers: [...triggers].map(([b, ws]) => [b, [...new Set(ws)].join("|")]),
+    admissions: all("admissions"), negators: all("negators"), fixed: all("fixed"), zeroes: all("zeroes"), passNow: all("passNow"),
+  };
+}
+
 module.exports = {
   LANGS,
   BASE_LANGS,
@@ -506,6 +526,7 @@ module.exports = {
   steeringKnownFiles: () => Object.keys(STEERING.en),
   // tool messages
   msg: (lang) => MSG[normalizeLang(lang)],
+  stopGateLists, // the stop gate's lists of every language, merged (the corpus's `stopGate` — engine/guards.js stopPatterns)
   // task brief (spec_task_brief)
   brief: (lang) => BRIEF[normalizeLang(lang)],
   // bugfix templates (spec_create kind:"bugfix")

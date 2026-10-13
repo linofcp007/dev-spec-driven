@@ -39,8 +39,9 @@ let activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAN
   decodeText, isNetworkPath, runProvesVerify, withinRoot;
 let approvedContentSame, proofIncomplete; // gates.js (the guard's stale tasks approval) · evidence.js (an incomplete command runs nothing)
 let folderHoldsCode; // scan.js — a folder a command removes or moves as a whole, read for code (the edit guard)
+let builtinStopGate; // markdown.js — the stop gate's lists of every language from the corpus (stopPatterns)
 let guardianShellActions, guardianGuardFilter; // guardian.js — dev-guardian's gate rules (1.30), read through the hook points below
-function __link(E) { ({ folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
+function __link(E) { ({ builtinStopGate, folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
@@ -2357,34 +2358,26 @@ function stopLazyPattern(source, flags, langs) {
 let STOP_PATTERNS = null;
 function stopPatterns() {
   if (STOP_PATTERNS) return STOP_PATTERNS;
-  const all = (k) => [...new Set(i18n.LANGS.flatMap((l) => (i18n.msg(l).stopGate || {})[k] || []))]; // pt-BR repeats pt's patterns
-  const langsOf = new Map();
-  for (const l of i18n.LANGS) for (const src of (i18n.msg(l).stopGate || {}).claims || []) {
-    if (!langsOf.has(src)) langsOf.set(src, new Set());
-    langsOf.get(src).add(i18n.baseLang(l));
-  }
+  // every language's lists (i18n.stopGateLists): from the trusted corpus (markdown.js builtinStopGate — no language file loads), else
+  // built from the tables (it loads pt.js, es.js and pt-BR: ~20 ms of an English Stop hook)
+  const g = builtinStopGate() || i18n.stopGateLists();
   // each base language's trigger words (i18n stopGate.triggers; pt-BR's are pt's): a claim pattern of a language runs only
   // when the text holds one of its triggers — every pattern holds one, so the answer is the same, and a message that triggers no
   // language compiles none of the ~47 patterns (~35 ms of the first stopClaims in a process).
-  const triggers = new Map();
-  for (const l of i18n.LANGS) {
-    const b = i18n.baseLang(l), src = ((i18n.msg(l).stopGate || {}).triggers || []).join("|");
-    if (src) triggers.set(b, triggers.has(b) ? triggers.get(b) + "|" + src : src);
-  }
   // triggers / admissions: built on first use too (a text scanned as its one-byte projection runs rewritten copies of them)
   let trig = null, adm = null;
   STOP_PATTERNS = {
-    claims: [...langsOf].map(([src, langs]) => stopLazyPattern(STOP_WORD.pre + src + STOP_WORD.post, STOP_WORD.flags, langs)),
-    triggerSources: new Map([...triggers].map(([b, src]) => [b, STOP_WORD.pre + src + STOP_WORD.post])), // flags "iu"
+    claims: g.claims.map((c) => stopLazyPattern(STOP_WORD.pre + c.source + STOP_WORD.post, STOP_WORD.flags, new Set(c.langs))),
+    triggerSources: new Map(g.triggers.map(([b, src]) => [b, STOP_WORD.pre + src + STOP_WORD.post])), // flags "iu"
     get triggers() { return trig || (trig = new Map([...this.triggerSources].map(([b, src]) => [b, new RegExp(src, "iu")]))); },
-    admissionSources: all("admissions").map((src) => STOP_WORD.pre + src + STOP_WORD.post), // flags STOP_WORD.flags
+    admissionSources: g.admissions.map((src) => STOP_WORD.pre + src + STOP_WORD.post), // flags STOP_WORD.flags
     get admissions() { return adm || (adm = this.admissionSources.map((src) => new RegExp(src, STOP_WORD.flags))); },
-    negators: new Set(all("negators").map((w) => w.toLowerCase())),
-    fixed: new Set(all("fixed").map((w) => w.toLowerCase())),
+    negators: new Set(g.negators.map((w) => w.toLowerCase())),
+    fixed: new Set(g.fixed.map((w) => w.toLowerCase())),
     // a zero count right before an admission ("0 tests failing", "none of the tests fail") — read on the few
     // characters before it, so `\s+$` anchors it to the admission; "now pass(es)" after a failure in its clause (fixed).
-    zero: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("zeroes").join("|") + ")\\s+$", "iu"),
-    passNow: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + all("passNow").join("|") + ")(?![\\p{L}\\p{N}_])", "iu"),
+    zero: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + g.zeroes.join("|") + ")\\s+$", "iu"),
+    passNow: new RegExp("(?<![\\p{L}\\p{N}_])(?:" + g.passNow.join("|") + ")(?![\\p{L}\\p{N}_])", "iu"),
   };
   return STOP_PATTERNS;
 }

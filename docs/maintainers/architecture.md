@@ -175,9 +175,10 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the built-in tracks' task headings in every language (`taskHeadings`) and every other all-language set a gate asks about
   (`steeringStubs` — hashes, `isSteeringStub()`; `diagrams` — `templateDiagramSet()`; `sectionLines` / `sectionLinesBr` —
   `sectionTemplateLines()`; `bugSlots` — `bugTemplateSlots()`; `templateReqs` — `builtinTemplateReqs()`, whose criteria
-  quality.js `builtinTemplateAcs` reads live). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
+  quality.js `builtinTemplateAcs` reads live; `stopGate` — `builtinStopGate()`, the stop gate's lists of every language,
+  `i18n.stopGateLists()`, which guards.js `stopPatterns` reads). The build renders it once (`renderCorpusData()`). **The rule for a new set:**
   an engine set built from EVERY language's texts belongs here — a process loads only the languages it speaks
-  (mcp/tests/16-conventions-build.js "I-I2" asserts an English doctor / next_action / done / finish / catalog loads no pt.js,
+  (mcp/tests/16-conventions-build.js "I-I2" asserts an English doctor / next_action / done / finish / catalog / stop gate loads no pt.js,
   es.js or pt-br.js). A new builder or artifact goes into `templateCorpus()`, then rebuild. The per-project part (the
   project's templates and packs — `projectTemplateHas`, `packCorpusSets`) stays per call. Only `.has()` is asked of the sets.
 - **The corpus is trusted only for the engine the process LOADED.** markdown.js stats every source as it loads
@@ -309,6 +310,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `engineVersion()`'s upgrade.js is outside the render, so the sources hash says everything the version could.
 - **1.27** — the bundle holds the engine's helpers, probe.js and latin1-scan.js (41 files): a bundle without them loaded
   them from disk at their original path, outside the bundle's staleness stamp.
+- **1.30.1** — the stop gate's lists (`stopGate`) joined the corpus: built from every language's table, they loaded pt.js, es.js
+  and pt-br.js into every English Stop hook. Measured (median of 21 interleaved fresh processes, Windows 11, Node 26): the Stop
+  hook on a claim 204.6 → 188.7 ms; the corpus grew from ~129 KB to ~152 KB.
 
 ### Config paths
 - **v1.11** — `mcp/servers.json` replaced the root `.mcp.json` (CONNECTION_CLOSED in every maintainer session).

@@ -116,7 +116,8 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
     // and an English session of those calls loads no other language and answers as this process does.
     {
       const renderedSets = { steeringStubs: E.renderSteeringStubs(), diagrams: E.renderTemplateDiagrams(), sectionLines: E.renderSectionLines("base"),
-        sectionLinesBr: E.renderSectionLines("pt-BR"), bugSlots: E.renderBugSlots(), templateReqs: E.renderTemplateReqs() };
+        sectionLinesBr: E.renderSectionLines("pt-BR"), bugSlots: E.renderBugSlots(), templateReqs: E.renderTemplateReqs(),
+        stopGate: I.stopGateLists() }; // r14: the stop gate's lists of every language (guards.js stopPatterns)
       const same = Object.keys(renderedSets).filter((k) => js(fresh[k]) !== js(renderedSets[k]) || js(fileCorpus[k]) !== js(renderedSets[k]));
       const live = { diagrams: js(sorted(E.templateDiagramSet())) === js(fresh.diagrams), bugSlots: js(sorted(E.bugTemplateSlots())) === js(fresh.bugSlots),
         templateReqs: js(E.builtinTemplateReqs()) === js(I.LANGS.flatMap((l) => (fresh.templateReqs[l] || []).map((t) => [t, l]))),
@@ -140,7 +141,10 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
         out.done = S.completeTask(proj, "feature-a", 1, { command: "node -e \"process.exit(0)\"", exitCode: 0, summary: "ok" }).ok;
         out.finish = S.finishFeature(proj, "feature-a", {}).readyToFinish;
         out.catalog = S.catalog(proj).ok;
-        out.loaded = Object.keys(require.cache).map((f) => f.split(path.sep).join("/")).filter((f) => f.includes("/lib/i18n/")).map((f) => path.posix.basename(f)).sort();
+        // r14: the stop gate reads every language's claim patterns from the corpus — a Portuguese claim still counts
+        out.stop = S.stopCheck(proj, { message: "All tasks are done." }).why;
+        out.claimPt = S.stopClaims("A tarefa 2 está concluída.").claim;
+        out.loaded =Object.keys(require.cache).map((f) => f.split(path.sep).join("/")).filter((f) => f.includes("/lib/i18n/")).map((f) => path.posix.basename(f)).sort();
         out.source = E.builtinCorpusSource();
         process.stdout.write(JSON.stringify(out));
       };
@@ -153,9 +157,10 @@ exports.run = async ({ ok, all, S, root, tmp, libSources, require, __dirname }) 
       const other = Array.isArray(en.loaded) ? en.loaded.filter((f) => ["pt.js", "es.js", "pt-br.js"].includes(f)) : null;
       ok(!same.length && Object.values(live).every(Boolean) && fresh.diagrams.length >= 3 && fresh.sectionLines.length > 100 && fresh.bugSlots.length > 5 &&
         Object.keys(fresh.templateReqs).length === I.LANGS.length && Array.isArray(other) && !other.length && en.loaded.includes("en.js") && en.source === "file" &&
-        ["feature-a", "feature-b", "crash-on-save"].every((f) => js(en[f]) === js(hereEn[f])) && en.done === true && en.catalog === true,
-        "1.24 r6 I-I2: the steering stubs, the template diagrams, the track design lines (EN / PT / ES and pt-BR), the bug report's slots and the requirement templates (their criteria read live) come from the corpus — each exactly the rendered set; an English doctor / next_action / done / finish / catalog loads no pt.js, es.js or pt-br.js and answers as this process does (got " +
-        js({ same, live, other, loaded: en.loaded, source: en.source, en: ["feature-a", "feature-b", "crash-on-save"].map((f) => [en[f], hereEn[f]]), done: en.done }) + ")");
+        ["feature-a", "feature-b", "crash-on-save"].every((f) => js(en[f]) === js(hereEn[f])) && en.done === true && en.catalog === true &&
+        typeof en.stop === "string" && en.claimPt === true && S.stopClaims("A tarefa 2 está concluída.").claim === true,
+        "1.24 r6 I-I2: the steering stubs, the template diagrams, the track design lines (EN / PT / ES and pt-BR), the bug report's slots and the requirement templates (their criteria read live) come from the corpus — each exactly the rendered set; an English doctor / next_action / done / finish / catalog / stop gate loads no pt.js, es.js or pt-br.js and answers as this process does — the stop gate's claim patterns of every language from the corpus (r14: a Portuguese claim still counts) (got " +
+        js({ same, live, other, loaded: en.loaded, source: en.source, stop: [en.stop, en.claimPt], en: ["feature-a", "feature-b", "crash-on-save"].map((f) => [en[f], hereEn[f]]), done: en.done }) + ")");
     }
 
     // CORPUS_SOURCES — what the sources stamp hashes — lists every mcp/lib file whose functions run while the corpus renders (V8
