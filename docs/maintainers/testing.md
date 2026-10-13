@@ -36,9 +36,12 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   cli/dev-spec.js <args>` with `SPEC_PROJECT_DIR` = `tmp`), `tmp`, `CLI`, and cli/test-cli.js's `require` / `__dirname` — and
   (1.27) **`runIn(args, {env, cwd, input})`** — the same `{ out, code }` IN the test process (cli/main.js `main`, the call's
   environment and working folder applied for it and restored; ~100× cheaper than a process) — and **`spawnIn(args, {env, cwd,
-  input})`**, spawnSync's `{ stdout, stderr, status }` the same way (its `env` the whole environment, as spawnSync's). **Call the
-  CLI in-process unless the test needs a real process:** a `--run` that runs commands (it waits: runIn / spawnIn throw on a call
-  that doesn't settle at once — every helper sends `--run` calls to spawnSync), EPIPE, a real stdin pipe or a TTY, a process's
+  input})`**, spawnSync's `{ stdout, stderr, status }` the same way (its `env` the whole environment, as spawnSync's) — and (1.30)
+  **`runAsync` / `spawnAsync`**, the same for a call that WAITS (`done --run` / `finish --run` running their commands — runIn /
+  spawnIn throw on a call that doesn't settle at once): a promise of the same shape (+ runAsync's `stdout` alone), awaited — the
+  run's commands are still processes, only the CLI's own start and engine load are saved (the --run files went 2–4× faster:
+  09-evidence-guardian 30.6 → 9.4 s). **Call the
+  CLI in-process unless the test needs a real process:** a signal during a run, EPIPE, a real stdin pipe or a TTY, a process's
   own timing or loaded modules (a preload), `DEV_SPEC_BUNDLE` (the facade picks the bundle at load), a lock held by another live
   process, `__complete` and the completion scripts' shells, git running the merge driver. 16-conventions-cli-modules.js checks
   runIn = run on a set of calls. **In-process calls run one at a time (1.30):** a call that waits keeps its env and cwd applied
