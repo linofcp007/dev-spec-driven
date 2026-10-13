@@ -181,7 +181,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   project is inside), never for a NETWORK path (`isNetworkPath`): its realpath would open an SMB connection to a host the agent
   named — `networkPathInside()` decides on the text (inside only under root's own `\\host\share\…`), so a project on a share
   stays guarded. On win32 the target is read as the file system reads it (`guardTargetPath(p, win)`: `a.ts::$DATA` IS a.ts;
-  `/c/…` is `C:/…`). The session's own folders (payload `cwd`, the anchors) are Claude Code's / the user's: hooks use a network
+  `/c/…` is `C:/…`; an inside target holding `~<digit>` through its real path — `src/MAIN~1.JAV` IS src/Main.java — and a shell
+  target also as Win32 trims it: Human approval guard → Windows' own readings). The session's own folders (payload `cwd`, the anchors) are Claude Code's / the user's: hooks use a network
   cwd, never walk up the share or realpath it; the save hook skips a network `.specs/` file outside them.
 
 ## Human approval guard
@@ -214,9 +215,31 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   refuses them).
 - **The edited path as the file system reads it** (`approvalEditTargets` = the probe's `editTargets`, which hook-utils
   re-exports for the hook): resolved against the
-  payload cwd (`.` / `..` folded), `guardTargetPath()` on win32, and its real path on every platform (the file's, else its
-  parent's + the name; never a network path's) — an 8.3 name (`ROADMA~1.JSO`), a folder linked to `.specs/` (`sx/roadmap.json`).
-  Either reading counts. A trailing dot / space needs no rule (Node's file calls keep it: another file).
+  payload cwd (`.` / `..` folded), `guardTargetPath()` on win32, and its real path on every platform (`longPath`: the real path of
+  its deepest existing folder, ≤ `EDIT_MAX_UP` = 16 levels up, + the rest — never a network path's) — an 8.3 name (`ROADMA~1.JSO`,
+  `SPECS~1/newfeat/.state.json`: a folder Write makes), a folder linked to `.specs/` (`sx/roadmap.json`). On win32 also Windows' own
+  readings (below): the 8.3 rule on what nothing on disk answers, Win32's trailing dot / space (`roadmap.json.` — Node keeps it, a
+  Python or .NET MCP file tool writes roadmap.json). Every reading counts.
+- **Windows' own readings of a path (1.30.1)** — probe.js, ONE copy for the hooks and the engine; on win32 only (`win`: the platform's,
+  `approvalGuardDecision`'s `opts.win` / `shellWriteTargets`' third argument for tests — Linux and macOS have neither: `SPECS~1` and
+  `roadmap.json.` are other names there). **8.3 short names:** NTFS gives every non-8.3 name an alias (`.specs` SPECS~1, `.guardian`
+  GUARDI~1, `baseline.json` BASELI~1.JSO, dev-guardian's CLI DEV-GU~1.MJS) that every program opens. `shortNameOf(seg)` — the rule over
+  `SHORT_NAME_LONGS` (the guarded files, `.specs` / `.guardian` / `.execution`, dev-guardian's CLI): `<base>~<N>[.<ext>]`, base 1–6
+  characters starting the long name's (dots but the last and a leading run dropped, upper case) or, past four collisions, its first 2 +
+  4 hex (`SP1A2B~1`), ext its first 3 — fail closed (an alias of a missing file may be made for it). `mayShortName(text)` is the
+  pre-filters' superset (`APPROVAL_CANDIDATE_TESTS` on win32, the hook's `partial`, hook-utils `approvalProjects` through `shortDirAt` /
+  `specsParentOf`: `cp evil sub/SPECS~1/guardian.cjs` makes sub/ a candidate). **Win32's trimming** (`winPathTrim`): a segment ending in
+  one period loses it (`.specs.\x`), the last segment its trailing periods and spaces (cmd.exe, PowerShell and native programs write
+  `.specs\roadmap.json.` as roadmap.json; Node and Git Bash keep the name). **The shell reading** (guards.js `shellWinReading`, a third
+  reading in `shellPathReadings`, the `into` names too): the trim, then each alias through the file system for a local path (`longPath`
+  from the payload cwd, ≤ `SHORT_DISK_UP` = 8 levels, ≤ `SHORT_DISK_PATHS` = 32 paths a call — `ctx.disk`; an alias the volume made
+  expands, a folder that merely looks like one — `spe cs` holding SPECS~1 — stays itself), else (a network path, a variable or glob
+  first, past the budget, nothing on disk) by the rule. dev-guardian's CLI or launcher in program position by its alias
+  (`guardianShellActions`). **The edit guard** (`guardCheck`): a target inside the project holding a `~<digit>` is read through its real
+  path only — never the rule, which would ALLOW more there (`src/MAIN~1.JAV` IS src/Main.java: code; `SPECS~1/x.ts` IS .specs/x.ts);
+  its shell targets also as Win32 trims them (`Set-Content src\a.ts. x` writes src\a.ts). mcp/tests/10-guards-shell-writes.js pairs
+  each Windows spelling with its long-name twin (ask / deny, the check on / off; win: false allowed), 10-guards-hooks-cost.js times
+  every new reader by shape.
 - **A missing or broken roadmap.json fails closed.** A dev-spec `.specs/` holding a feature (with its `.state.json`) but no
   roadmap.json — every feature-making write writes it, so it was deleted — reads as `ask` (`approvalGuardLevel` →
   `approvalRoadmapGone()`; the hook's `rawLevel` → `roadmapGone()`; meta unknown, so every weakening init change counts); without
@@ -344,9 +367,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   alias.x='!…'`, a copy of the CLI under another name, git forms whose files can't be known from the command (`git apply` /
   `am`, `git stash pop`, `git reset --hard`, a branch switch), an archive extracted into the project root without naming
   `.specs/`, `patch` without a file operand, a link to a guarded FILE (not a folder) made by one of those routes and then
-  edited through (only its folder's real path is read), and a Windows 8.3 short name in a SHELL command (`cp x SPECS~1\roadmap.json`,
-  `echo x > GUARDI~1\baseline.json` — a shell word is read as text, nothing touches the disk; the edit tools' and MCP file tools'
-  paths go through their real path, `approvalEditTargets`). Outside Claude Code the elicitation path gates spec_approve /
+  edited through (only its folder's real path is read), and an 8.3 short name SET by hand (`fsutil file setshortname .specs ZZZ` —
+  administrator rights; any name, no `~N`: the rule can't know it). Outside Claude Code the elicitation path gates spec_approve /
   spec_feature / spec_init only (not a `spec_add_track {remove}` — gates-and-approvals.md → Approvals the user confirmed over
   MCP).
 
@@ -546,6 +568,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 (review 8, integration C14)** — `rm -rf src` passed both plugins' guards (dev-guardian only warned) while `sed -i
   src/util.js` asked: a folder holding code is a code target (`guardFolderCode` / scan.js `folderHoldsCode`), for every removal and
   move spelling the guard reads.
+- **1.30.1** — on win32 `echo x > src/MAIN~1.JAV` (or a Write there) edited src/Main.java as no code (`.JAV`) and PowerShell's
+  `Set-Content src\a.ts. x` wrote src\a.ts as no code: a target holding `~<digit>` is read through its real path, a shell target also
+  as Win32 trims it (Human approval guard → Windows' own readings).
 
 ### Human approval guard
 - **1.14 F2** — the human approval guard (`meta.approvalGuard`, `hooks/approval-hook.js`, `approvalGuardDecision()`); the lexer
@@ -596,6 +621,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `guardian-baseline` now. **3a:** a nested project's files named from the folder above (`cp evil sub/.specs/guardian.cjs`) were
   judged by the outer project alone: the folders a command's words name are candidates, each candidate judges with its own meta.
   **3c:** `RE_PARTIAL` names `guardian`. **3b:** 8.3 short names in shell commands — a known limit (listed).
+- **1.30.1** — **3b closed:** on win32 `cp evil SPECS~1/guardian.cjs`, `cp x SPECS~1/roadmap.json`, `echo x > GUARDI~1/BASELI~1.JSO`,
+  `node …/DEV-GU~1.MJS baseline update` were allowed at deny (a shell word read as text), and so were Win32's trailing dots —
+  `Set-Content .specs\roadmap.json. x` (PowerShell 5.1 and 7, cmd.exe: roadmap.json written; checked on Windows 11) — and a Write of
+  `SPECS~1/newfeat/.state.json` (editTargets read two levels: the new folder hid the alias). Windows' own readings (above): the 8.3
+  rule, the trim, the deepest existing folder's real path — probe.js, one copy (files.js `realPathLoose` is the probe's now).
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import

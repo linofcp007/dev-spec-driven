@@ -14,6 +14,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const i18n = require("../i18n.js");
+const { shortNameOf } = require("../probe.js"); // load time — an 8.3 alias of dev-guardian's CLI or the launcher (the approval guard's shell reader)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let activeTasks, baselineFiles, BOM_CHAR, detectTracks, FOLD_CASE, gateRefusal, isDirSafe, isObj, isRecord, oneLine, projectChecks,
   readIfExists, removeSpecFile, sha1Hex, specsRoot, suiteLabel, toPosix, writeFileAtomic;
@@ -526,7 +527,10 @@ const RE_GUARDIAN_ENV = /^(?:DEV_GUARDIAN_CLI|CLAUDE_CONFIG_DIR)=/i;
 // node and the other launchers), devSpecAt: the CLI's script (devSpecWordAt) or -1; ctx.vars: the variables the command set before it.
 function guardianShellActions(words, prog, devSpecAt, ctx) {
   const out = [];
-  const runsGuardian = prog >= 0 && RE_GUARDIAN_PROGRAM.test(String(words[prog]).replace(/\\/g, "/"));
+  // (1.30.1, win32 — ctx.win) the program named by its 8.3 alias: `node …/cli/DEV-GU~1.MJS baseline update`, `node SPECS~1/GUARDI~1.CJS …`
+  const program = prog >= 0 ? String(words[prog]).replace(/\\/g, "/") : "";
+  const alias = ctx && ctx.win ? shortNameOf(program.replace(/^[\s\S]*\//, "")) : null;
+  const runsGuardian = prog >= 0 && (RE_GUARDIAN_PROGRAM.test(program) || alias === "dev-guardian.mjs" || alias === "guardian.cjs");
   if (runsGuardian && /^baseline$/i.test(words[prog + 1] || "") && /^update$/i.test(words[prog + 2] || "")) {
     out.push({ kind: "guard-down", setting: "guardian-baseline-update", source: "shell" });
   }
