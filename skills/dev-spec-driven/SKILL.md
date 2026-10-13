@@ -38,10 +38,10 @@ Prefill `spec_create {kind: "bugfix", reproduction, rootCause, condition, behavi
 reading the scaffolds back. With dev-guardian, offer its `bug_hunt` to reproduce and isolate. After three failed
 fixes, question the design.
 
-**Size** (`spec_classify`'s `suggestedSize` is a draft the user confirms): **xs** — one `change.md`, core only, ≤ 3
-criteria and tasks, two approvals (the plan via `{through: "tasks"}`, then execution) · **s** — one story, no
-`classification.md`, the tracks' core-tier sections, the plan approved in one call · **m / l** — the full chain. Every
-size keeps EARS, trace, evidence, the bugfix iron law and the finish gate (`references/phase-guide.md` → Sizes).
+**Size** (`spec_classify` suggests, the user confirms): **xs** — one `change.md`, core only, ≤ 3 criteria and tasks,
+two approvals (the plan via `{through: "tasks"}`, then execution) · **s** — one story, no `classification.md`, the
+tracks' core-tier sections, the plan approved in one call · **m / l** — the full chain. Every size keeps EARS, trace,
+evidence, the bugfix iron law and the finish gate (`references/phase-guide.md` → Sizes).
 
 ## Language
 
@@ -72,11 +72,11 @@ section markers (`[SaaS]` … `[DATA]`) and `[NEEDS CLARIFICATION:]` never chang
 
 The local MCP server **`spec-driven`** writes skeletons and runs checks, never over your files — you fill them (which
 tool when: `references/tool-catalog.md`; tools, CLI, hooks, check ids: `references/tooling-reference.md`). No MCP
-(claude.ai)? Write the files by hand and say runs need a real environment. A CLI line you hand the user is the one the
-tools print, `node "<clone>/cli/dev-spec.js" …`. Slash commands: `/spec` and `/spec-bugfix` start work; every other
-one (`/approve`, `/spec-review`, `/spec-change`…) is the user's to type — you never run it, you call the tool it
-wraps. Spec conformance of the code is the user's `/spec-review`; a security / quality review of a diff,
-dev-guardian's `guardian-review` when installed.
+(claude.ai)? Write the files by hand; runs need a real environment. A CLI line you hand the user is the one the tools
+print, `node "<clone>/cli/dev-spec.js" …`. Slash commands: `/spec` and `/spec-bugfix` start work; every other one
+(`/approve`, `/spec-review`, `/spec-change`…) is the user's to type — you never run it, you call the tool it wraps.
+Spec conformance of the code is the user's `/spec-review`; a security / quality review of a diff, dev-guardian's
+`guardian-review` when installed.
 
 **Tracks** (`core` always; what each adds per phase: `references/track-checklists.md`): +tdd tests first · +saas scale,
 tenancy, cost · +ai evals, prompts, safety · +sec threats, auth, secrets · +privacy personal data · +dist writes across
@@ -114,7 +114,7 @@ artifacts → fill → `spec_doctor` → present → the user's yes → `spec_ap
 **Phase 1.** EARS (WHEN · WHILE · IF…THEN · WHERE · ubiquitous; PT / ES keywords pass too) with stable AC IDs, P1
 stories first, Success Criteria (`SC-001`), `EC-` / `NFR-` IDs; concrete values, never "fast". Ask, don't guess — mark
 ambiguity `[NEEDS CLARIFICATION: …]` (the design can't start while one remains). `ears_validate`, `spec_clarify`
-(offer the grill), present.
+(offer the grill and its constraints round), present.
 
 **Phase 2.** Base sections: Overview · Architecture · **Reuse & Integration** · **Alternatives & Trade-offs** · Data
 Models · API Contracts · Security · Error Handling · Testing Strategy · **Risks** · **Constitution Check** ·
@@ -160,7 +160,7 @@ round), at most 5 rounds, then `spec_complete_task`. The final review starts fro
 (`spec_scan {duplicates: true, name}` — candidates, verified like any finding). You never write feature code; stop at
 every `**Checkpoint:**`; a finding that changes an AC, the design or a planned test goes back to that phase; +ai prompt
 tasks stay inline.
-`references/subagent-execution.md` (also converge and simplify).
+`references/subagent-execution.md` (also converge, the simplification pass).
 
 ## Gates and approvals
 
