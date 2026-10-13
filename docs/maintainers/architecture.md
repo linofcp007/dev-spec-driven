@@ -282,7 +282,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   destructure read every name at once, and a getter would load the tier right there). Measured (Windows 11, Node 26, median of
   21 interleaved fresh processes, a loaded machine; 1.30.0 → 1.30.1): `require(spec.js)` in-process 102.9 → 86.3 ms; the process
   166 → 146; each hook on a payload taking its engine path — guard 195 → 167, approval 187 → 161, a spec save 202 → 189,
-  SessionStart 203 → 187, observe 177 → 160, stop 253 → 246, plan 180 → 161.
+  SessionStart 203 → 187, observe 177 → 160, stop 253 → 246, plan 180 → 161 (a second set on a quieter machine: 97.6 → 80.2 ms
+  in-process, every hook 12–29 ms faster). The Stop hook's engine path stays the slowest: ~60 ms of it is stopClaims, which loads
+  every language's file to build the claim patterns.
 
 ### The build
 - **1.19 → 1.20** — rendering the corpus (1,165 texts plus pt-BR's twins: ~200 ms) was the largest slice of a hook or CLI

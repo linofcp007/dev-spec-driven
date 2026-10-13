@@ -296,3 +296,12 @@ How the rules above came to be — grep a release here.
   -pwsh (one PowerShell process per shell runs the three scripts: four starts of ~2–4 s each before); 09-evidence-done-run.js → -pwsh /
   -verify. A chain requires only its own files; the MCP server starts before the harness's engine. Measured: see the notes of that
   release (median of 3, `--jobs 4`, before / after interleaved).
+- **1.30.1** — where the MCP suite's summed time went, measured with two preloads (`NODE_OPTIONS=--require …`,
+  `DEV_SPEC_TEST_KEEP_NODE_ENV=1`): one timestamping every assertion line with the test line that made it, one counting the engine's
+  `roadmapData` calls per project. The long tail is engine work in-process (~2,200 assertions at ~0.2 s), not spawns (~450 a run);
+  its largest single slice was the roadmap refresh after every mutation — a third of the heavy files' time, quadratic in a project
+  that scaffolds many features (15 s for one 50-feature project). `handRoadmap()` on the projects whose tests read no ROADMAP.md,
+  `cliIn()` for ~27 CLI spawns, the eval fixtures built four at a time (18 s one after the other), 16-conventions-build's
+  independent children side by side. Measured (median of 3 interleaved rounds, `--jobs 4`, Windows 11, Node 26, a shared machine;
+  1.30.0 → 1.30.1): wall 119.2 → 107.4 s, the files' summed time 446.7 → 401.6 s; an earlier set under a drifting load had the
+  pairs at −14 % / +13 % (the 1.30.1 run first, in the heavier window) / −12 %.
