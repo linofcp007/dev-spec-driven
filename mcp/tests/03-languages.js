@@ -178,6 +178,15 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require }
       lint: () => !Object.values(br8).some((t) => EU_ONLY.test(t)),
       idempotent: () => Object.values(br8).every((t) => I.toPtBr(t) === t),
     });
+    // … and in Spanish (ds-prose 7, 13): "función" (= feature) beside a file path and a rule read as a code function — the
+    // code-level messages say "funcionalidad" (a file is a "fichero": the 1.25.1 sweep below reads the approval guard's sentences too)
+    const es8 = I.msg("es");
+    const esCode = [es8.finish.duplicates(4, "src/a.js:1-9 ↔ src/b.js:3-11", 2, "x"), es8.finish.duplicatesWithin(2, "x"),
+      es8.guardian.finding("src/a.js:4", "github-pat", "high", true), es8.guardian.blocked(2, "high", 1)];
+    all("1.30 review 8: Spanish code-level messages name the feature 'funcionalidad', never 'función'", {
+      funcionalidad: () => esCode.every((t) => !/función/.test(t)) && esCode.filter((t) => /funcionalidad/.test(t)).length === esCode.length,
+      cleanup: () => /limpieza del código de la propia funcionalidad/.test(es8.next.allDone("x")),
+    });
     // … a 3rd-person description at a clause start stays one ("— começa por _ ou *": the command starts with); European residue
     // (a link is no "ligação", enclisis after a subject, the interrogative "porque") goes through the derivation's tables
     const brM = I.msg("pt-BR"), sv = brM.markerSyntax.suspiciousVerify("x");
@@ -215,6 +224,8 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require }
     for (const tracks of [["core"], ["core", ...allTr]]) for (const b of ["classification", "requirements", "design", "tasks", "checklist", "change"]) esTexts.push(I[b]({ name: "n", tracks, label: "core", slug: "n", summary: "", signals: {} }, "es"));
     for (const b of ["evalPlan", "loadTest", "quickstart", "integrationPlan", "promptStub", "bugTestPlan", "bugTasks"]) esTexts.push(I[b]("n", "es"));
     esTexts.push(I.testPlan("n", "es", ["core", ...allTr]), I.evalsReadme("es"), ...I.steeringKnownFiles().map((n) => I.steeringStub(n, "es")));
+    // (1.30 review 8: + the approval guard's action sentences — text.approvalActions, which no probe of msg reaches — "archivo" in three)
+    esTexts.push(...Object.values(require("./lib/i18n/es.js").text.approvalActions).filter((v) => typeof v === "string"));
     const esFile = esTexts.map((t) => t.replace(/columna Fichero \(o Archivo, en un plan más antiguo\)/g, "")).filter((t) => /(?<![\p{L}])[Aa]rchivos?(?![\p{L}])/u.test(t));
     ok(esTexts.length > 1000 && !esFile.length && /registros de archivado/.test(I.msg("es").restore.renamedRecords("x")) && /\| Fichero \|/.test(I.testPlan("n", "es", ["core", "tdd"])),
       "1.25.1 review: ES says 'fichero' for a file in every message and scaffold (the archive keeps archivo / archivado) (" + esTexts.length + " strings; " + esFile.slice(0, 2).map((t) => t.slice(0, 80)).join(" · ") + ")");

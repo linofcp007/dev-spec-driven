@@ -158,7 +158,8 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, libSources }) => {
     const L = {
       en: [/the feature's code repeats existing code in 1 place\(s\) — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reuse or extend the existing code/, /1 more repeat\(s\) inside the feature's own files/],
       pt: [/o código da feature repete código existente em 1 sítio\(s\) — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reutilizar ou estender/, /mais 1 repetição\(ões\) dentro dos ficheiros da própria feature/],
-      es: [/el código de la función repite código existente en 1 lugar\(es\) — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reutilizar o extender/, /1 repetición\(es\) más dentro de los ficheros de la propia función/],
+      // (1.30: "funcionalidad" — "el código de la función" read as a code function)
+      es: [/el código de la funcionalidad repite código existente en 1 lugar\(es\) — src\/checkout\/total\.js:6-17 ↔ src\/lib\/money\.js:4-12: reutilizar o extender/, /1 repetición\(es\) más dentro de los ficheros de la propia funcionalidad/],
     };
     const got = {};
     for (const lang of Object.keys(L)) {

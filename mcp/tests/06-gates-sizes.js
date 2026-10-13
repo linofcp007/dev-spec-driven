@@ -352,7 +352,8 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     const got = cases.map(([t]) => { const r = S.classify(t, {}); return [r.suggestedSize, r.sizeReason, r.sizeNote]; });
     const p = fresh("suggest");
     const created = S.createFeature(p, "Typo", undefined, "fix a typo in the footer", undefined, "en");
-    ok(got.every((g, i) => g[0] === cases[i][1] && g[1] === cases[i][2] && typeof g[2] === "string" && /spec_create \{size/.test(g[2])) &&
+    ok(got.every((g, i) => g[0] === cases[i][1] && g[1] === cases[i][2] && typeof g[2] === "string" && /spec_create \{size/.test(g[2]) &&
+      /\(CLI: create --size xs\|s\|m\|l\)/.test(g[2]) && !/1\.21/.test(g[2])) && // 1.30 review 8: the CLI's flag too, no version history
       /^Tamanho sugerido xs/.test(got[6][2]) && /^Tamaño sugerido s/.test(got[7][2]) && created.ok && created.kind === "feature" && !("size" in stateOf(created.dir)),
       "1.21 F5: spec_classify suggests a size (suggestedSize · stable sizeReason · a localized sizeNote) — a typo xs, one button / endpoint / screen s, a feature m, three tracks l, in EN / PT / ES; spec_create without a size never applies it (got " +
       JSON.stringify(got.map((g) => g.slice(0, 2))) + ")");

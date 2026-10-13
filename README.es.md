@@ -201,7 +201,7 @@ cliente MCP — llaman al mismo motor:
 | `spec_roadmap` | Progreso, dependencias, ETAs a partir de la velocidad de las tareas marcadas, hitos, funciones que se solapan; `write` → `.specs/ROADMAP.md` (+ `html`) |
 | `spec_roadmap_edit` | `kind`: `depend` (detecta ciclos) · `backlog` (planificadas, aún sin spec) · `milestone` (una fecha objetivo para un conjunto de funciones) |
 | `spec_export` | `format`: html / md para stakeholders, csv (matriz de trazabilidad), gherkin, jira / linear, adr, `catalog` (`.specs/SPECS.md`), `changelog` (notas de versión) |
-| `spec_scan` | Inventario brownfield — stack, rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones; `coverage: true` — la parte del código que nombran las specs; `duplicates: true` — el código que una función repite (`existing` / `within`) |
+| `spec_scan` | Inventario brownfield — stack, rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones; `coverage: true` — la parte del código que nombran las specs; `duplicates: true` — el código que una funcionalidad repite (`existing` / `within`) |
 | `spec_upgrade` | Después de actualizar el plugin: audita `.specs/` frente a las reglas actuales; `apply` aplica las migraciones seguras (nunca edita una spec) |
 | `spec_templates` | Las plantillas propias del equipo en `.specs/templates/`: list · init · check |
 | `spec_tracks` | Los tracks propios del equipo, packs en `.specs/tracks/<nombre>/`: list · init · check |

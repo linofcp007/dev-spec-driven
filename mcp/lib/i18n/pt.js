@@ -1010,7 +1010,7 @@ const msg = {
       },
       optionalMark: "opcional neste tamanho",
       coveredMark: "coberta por outro track",
-      suggestTail: "Confirmar ou escolher outro na Fase 0 — spec_create {size: xs | s | m | l}; sem tamanho fica o scaffold anterior ao 1.21.",
+      suggestTail: "Confirmar ou escolher outro na Fase 0 — spec_create {size} (CLI: create --size xs|s|m|l); sem tamanho: o scaffold completo.",
     },
     kindKept: (kept, asked) => `Esta feature já é do tipo '${kept}' — mantive-o (pediste '${asked}'). Cria outra para um tipo diferente.`,
     langKept: (kept, asked) => `Esta feature já está em '${kept}' — mantive-a (pediste '${asked}'). Uma feature, uma língua.`,
