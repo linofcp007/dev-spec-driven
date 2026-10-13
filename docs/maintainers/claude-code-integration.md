@@ -331,7 +331,14 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   — exit 0, stdin capped, silent outside a project, cut to `$COLUMNS`, `--json`. It runs after every message in every folder, so
   cli/commands.js's `spec` is a proxy that loads the facade on first use and the render tries `statusProbe()` first
   (cli/completion.js — the probe's `nearestDevSpec`): no project → the empty line at about Node's startup
-  (cli/tests/11-claude-code.js checks the two agree and that no mcp/lib module loads). `--print-config` prints the `statusLine`
+  (cli/tests/11-claude-code.js checks the two agree and that no mcp/lib module loads). **In a project, the last render is reused**
+  (cli/completion.js `statusCacheRead` / `statusCacheWrite`, no engine): kept in the OS temp folder per key (this CLI, the
+  candidate folders resolved, `$COLUMNS`) with `specsSignature()` of the project's `.specs/` taken BEFORE it rendered — every
+  entry's path, size, mtime and ctime, ≤ `STATUS_CACHE_ENTRIES` (4,000; past it: no cache), links never entered — and served while
+  that signature holds and it is under `STATUS_CACHE_TTL_MS` (10 s) old. Any change under `.specs/` shows at the next render; what
+  the line reads OUTSIDE `.specs/` (a Phase 4 test file, a finished feature's code — finish again —, a forced approval's code checks,
+  a worktree's mapping, a nearer `.specs/` made since) within the TTL. Measured (Windows, Node 26, median of 21 interleaved fresh
+  processes on a loaded machine, `node -e 0` 96 ms): a 5-feature project 414 → 152 ms (outside a project 135). `--print-config` prints the `statusLine`
   entry — in a plugin's versioned cache folder, a `node -e` one-liner that finds the newest installed `<version>` at each run
   (cli/completion.js `statuslineCommand`: no quote, dollar, backtick, percent, ! or backslash, so every shell passes it; else the
   plain command and `cacheNote`). A plugin can't ship a status line (plugin `settings` honour only `agent` /
@@ -532,3 +539,5 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `statusLineRender`, run first by cli/main.js.
 - **1.29** — the dev-guardian launcher, `.specs/guardian.cjs`: a generated script rather than the status line's `node -e`
   one-liner, which did not fit a project check's 500 characters.
+- **1.30 (review 8, ds-maint finding 5)** — the status line loaded the whole engine after every message in a project (+158 ms over
+  `node -e 0`), its most frequent engine load: the render cache (Status line above).

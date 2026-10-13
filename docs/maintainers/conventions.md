@@ -203,8 +203,15 @@ History at the end.
   another runs. The regexes are built from char codes. A `_Verify:_` or project check holding control characters never runs
   (`code: "control-chars"`); spec_init refuses one, doctor fails `verify-control`.
 - **The engine loads on first use:** `spec` is a proxy (`loadSpec()`, cli/commands.js); the status line outside a project
-  (`statusProbe`) and the bare help (`BARE_HELP`) never load it, so nothing at the top of cli/main.js or cli/commands.js may
-  read `spec.*` at load (`BOOL_FLAGS()`, `spec.LANGS` are read on use).
+  (`statusProbe`) — and in one while its render cache holds (claude-code-integration.md → Status line) — and the bare help
+  (`BARE_HELP`) never load it, so nothing at the top of cli/main.js or cli/commands.js may read `spec.*` at load (`BOOL_FLAGS()`,
+  `spec.LANGS` are read on use). Nor does a command's help (`help <command>`, `<command> --help`), an unknown command or a usage
+  error found before the handler runs (review 8): `c.projectDir` / `PROJECT_SOURCE` resolve on first read (`NAMED_SOURCE`, which
+  checkProject reads, needs no engine), `c.cliText` reads mcp/lib/i18n.js's tables (`spec.msg` IS `i18n.msg`) and `c.projectLang()`
+  is the engine's `projectLang` once `engineLoaded()`, else `lightProjectLang()` — the CLI's resolver walk (cli/completion.js
+  `resolveProject`) and roadmap.json's `meta.lang` read raw; cli/tests/16-conventions-cli-modules.js checks both print the same.
+  cli/run.js and cli/git.js load on first use too. An unknown `--flag` still loads the engine (its switch list, `CLI_SWITCHES`,
+  lives in guards.js).
 
 ### CLI exit codes and `--json`
 - **CLI exit codes are scriptable**: `doctor` (FAIL), `trace` (gaps), `ears` (errors), `finish` (not ready),
@@ -398,6 +405,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — the command table (`COMMANDS`) and the call contract (`main(argv, io)`, `CliExit` — it was `process.exit(1)`); the
   CLI split into cli/dev-spec.js, cli/main.js, cli/commands.js, cli/run.js and cli/git.js; `guarded()` became the one choke
   point.
+- **1.30 (review 8, ds-maint finding 13)** — `help <command>`, `<command> --help` and an unknown command each loaded the whole
+  engine to print text (+170–185 ms over `node -e 0`), and every call required cli/run.js and cli/git.js. Measured (Windows, Node 26,
+  median of 21 interleaved fresh processes on a loaded machine, `node -e 0` 93 ms): `help approve` 316 → 149 ms, `approve --help`
+  317 → 156, an unknown command 335 → 164.
 
 ### CLI exit codes and `--json`
 - **1.12** — the scriptable exit codes. **1.13** — `--json` prints refusals (`fail(r)`).

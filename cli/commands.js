@@ -33,15 +33,21 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const COMPLETION = require(path.join(__dirname, "completion.js")); // `completion <shell>` (and the hidden __complete)
-const RUN = require(path.join(__dirname, "run.js")); // done --run / finish --run: the user's commands, their process tree
-const GIT = require(path.join(__dirname, "git.js")); // every git call the CLI makes
+// done --run / finish --run (the user's commands, their process tree) and every git call the CLI makes — each module on first use
+// (review 8: the status line and the help required both on every call)
+let RUN_MODULE = null, GIT_MODULE = null;
+const RUN = new Proxy({}, { get: (_, k) => (RUN_MODULE || (RUN_MODULE = require(path.join(__dirname, "run.js"))))[k] });
+const GIT = new Proxy({}, { get: (_, k) => (GIT_MODULE || (GIT_MODULE = require(path.join(__dirname, "git.js"))))[k] });
 
 // the engine (~36 modules — ~80 ms of a ~140 ms run) loads on its first use, never at load: the status line
-// outside a dev-spec project (Claude Code runs it after every message, in every folder, once it is installed user-wide) and the
-// bare help print without it. `spec.x` reads through this proxy; the first read loads the facade.
+// outside a dev-spec project (Claude Code runs it after every message, in every folder, once it is installed user-wide), the
+// bare help, a command's help, an unknown command and a usage error found before the handler print without it (cli/main.js
+// c.projectText reads the language without it while engineLoaded() is false). `spec.x` reads through this proxy; the first read
+// loads the facade.
 let SPEC = null;
 const loadSpec = () => SPEC || (SPEC = require(path.join(__dirname, "..", "mcp", "lib", "spec.js")));
 const spec = new Proxy({}, { get: (_, k) => loadSpec()[k], has: (_, k) => k in loadSpec() });
+const engineLoaded = () => SPEC !== null;
 
 const CLI_FILE = path.join(__dirname, "dev-spec.js"); // the entry point: what the printed lines, the status line and git's merge driver run
 const CLI_PATH = CLI_FILE.replace(/\\/g, "/"); // forward slashes (the help's completion install lines, version, completion)
@@ -393,9 +399,23 @@ function statusLineRender(c) {
         : given.concat([c.env.SPEC_PROJECT_DIR, c.env.CLAUDE_PROJECT_DIR, c.cwd]);
       // the engine-free walk first (cli/completion.js statusProbe, statusLineProject's null rule) — outside a
       // dev-spec project the line is empty without loading the engine (136–220 ms per render in any folder, user-wide)
-      const pdir = COMPLETION.statusProbe(cands) ? spec.statusLineProject(cands) : null;
       const cols = parseInt(c.env.COLUMNS, 10);
-      if (pdir) r = spec.statusLine(pdir, { columns: Number.isSafeInteger(cols) && cols > 0 ? cols : undefined });
+      const columns = Number.isSafeInteger(cols) && cols > 0 ? cols : undefined;
+      if (COMPLETION.statusProbe(cands)) {
+        // …and in one, the last render while its .specs/ is unchanged and it is fresh (review 8: the engine loaded after every
+        // message) — cli/completion.js statusCacheRead; else the engine renders, kept with the signature taken before it read
+        const key = { cands: cands.map((x) => (typeof x === "string" ? path.resolve(c.cwd, x) : null)), columns: columns || null };
+        const cached = COMPLETION.statusCacheRead(key);
+        if (cached) r = cached;
+        else {
+          const pdir = spec.statusLineProject(cands);
+          if (pdir) {
+            const sig = COMPLETION.specsSignature(pdir);
+            r = spec.statusLine(pdir, { columns });
+            COMPLETION.statusCacheWrite(key, pdir, sig, r);
+          }
+        }
+      }
     } catch {
       r = { ok: true, found: false, line: "" }; // never a stack trace in the status line
     }
@@ -2168,5 +2188,5 @@ function completionModel(c) {
 module.exports = {
   COMMANDS, COMMAND_INDEX, commandFor, COMMAND_OPTIONS, COMMAND_ARGS, FLAG_VALUES, HELP_ALIASES, TEXT_ONLY_COMMANDS, GLOBAL_OPTIONS,
   VALUE_FLAG_SPECS, VALUE_FLAGS, REPEATABLE_FLAGS, OPTIONAL_VALUE_FLAGS, BOOL_FLAGS, EVALS_VALUE_FLAGS, EVALS_SWITCHES, TIMEOUT_MAX_S, NEXT_MAX,
-  spec, CLI_FILE, CLI_PATH, RULE_FILES, mcpConfigBlocks, helpText, helpFor, completionModel, statusLineRender, printVersion,
+  spec, engineLoaded, CLI_FILE, CLI_PATH, RULE_FILES, mcpConfigBlocks, helpText, helpFor, completionModel, statusLineRender, printVersion,
 };
