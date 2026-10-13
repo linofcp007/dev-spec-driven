@@ -298,7 +298,7 @@ dev-spec-driven/                      ← raiz do plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 ferramentas + prompts + recursos, sem dependências)
 │   ├── servers.json                  ← registo MCP do plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← a fachada do motor (o único objeto que o servidor, a CLI e os hooks carregam)
-│   ├── lib/engine/                   ← o motor: 23 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
+│   ├── lib/engine/                   ← o motor: 24 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← conteúdo localizado (en · pt · es) + a derivação pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (um por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (a tua chave de API; --dry-run offline)

@@ -31,7 +31,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
-let guardianChecks, guardianOffer, isGuardianCheck, setGuardianLauncher; // evidence.js — 1.29 (init --guardian)
+let guardianChecks, guardianOffer, isGuardianCheck, setGuardianLauncher; // guardian.js — 1.29 (init --guardian)
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,

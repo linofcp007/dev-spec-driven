@@ -17,7 +17,7 @@ let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, cr
   readJson, readRoadmap, realRootOf, roadmapBusyResult, roadmapError, savedTracks, scanTestCode, shortIdList, specDoctor, specsRoot,
   staleFinish, stateFromFile, statePath, timeOf, trackLabel, unverifiedLabel, verificationStatus, withFeatureLock,
   withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot;
-let guardianOffer; // evidence.js — 1.29: dev-guardian's gate offered (never set) when it is installed or the project has .guardian/
+let guardianOffer; // guardian.js — 1.29: dev-guardian's gate offered (never set) when it is installed or the project has .guardian/
 function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir,
   isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,

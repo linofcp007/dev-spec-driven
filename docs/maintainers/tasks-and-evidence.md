@@ -227,7 +227,7 @@ Engine: the `B5` block of `engine/evidence.js`.
   `dev-spec finish <f> --run` / `spec_finish {evidence}` while one is missing (`projectChecks.naFinish`). No meta.checks, no change.
 - **`finish <f> --run`** (`runChecks`): `done --run`'s shell rules and refusals and the pipe hint; a check that could not run records
   nothing.
-- **dev-guardian's gate — the check `guardian` (1.29; evidence.js's guardian block).** `spec_init {guardian: true}` / `init
+- **dev-guardian's gate — the check `guardian` (1.29; engine/guardian.js since 1.30).** `spec_init {guardian: true}` / `init
   --guardian [on|off]` (an optional-value CLI flag, bare = on) folds `{guardian: GUARDIAN_COMMAND | ""}` into the checks input
   (`guardianChecks()`) — the meta.checks rules unchanged (merged, validated, ≤ 20, the control-character refusal) — and, once
   written, `setGuardianLauncher()` writes `.specs/guardian.cjs` (`GUARDIAN_LAUNCHER`; rewritten when it differs, a CRLF copy

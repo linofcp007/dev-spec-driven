@@ -32,7 +32,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
-let suiteBlocker; // evidence.js — 1.29: the suite blocker (with dev-guardian's gate: its verdict and what to do)
+let suiteBlocker; // guardian.js — 1.29: the suite blocker (with dev-guardian's gate: its verdict and what to do)
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ duplicationReport, suiteBlocker, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,

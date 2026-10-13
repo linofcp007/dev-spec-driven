@@ -305,7 +305,7 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   (`plugins/cache/<marketplace>/dev-guardian/<version>/cli/dev-guardian.mjs`), so its path can't be baked into a check either.
   A `node -e` one-liner like the status line's did NOT fit: with DEV_GUARDIAN_CLI, CLAUDE_CONFIG_DIR, every marketplace, the
   numeric order and a clear exit 3 it was ~730 characters against meta.checks' 500. So the check is `node .specs/guardian.cjs
-  scan --project . --fail-on high --format json` and `.specs/guardian.cjs` is a small generated script (evidence.js
+  scan --project . --fail-on high --format json` and `.specs/guardian.cjs` is a small generated script (guardian.js
   `GUARDIAN_LAUNCHER`, committed with the project: a teammate's clone runs the same check): `DEV_GUARDIAN_CLI` (a file) first,
   else the newest `<version>` by numeric parts (a missing part 0, a version folder without the CLI skipped) under
   `CLAUDE_CONFIG_DIR` — else `~/.claude` (Claude Code's own rule: one config folder, never both) — `/plugins/cache/*/dev-guardian/`;
