@@ -132,6 +132,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 review 8** — SKILL.md had 85 bytes left under 15 KiB with only the word cap tested: a byte cap (≤ 15,360); the
   description reached 618 of its 620 characters while resume, the next task, a spec change and a spike never fired the skill — the
   cap is 660 (the model-visible listing stays ≤ 1,500) and evals/ gained six triggering cases and three near-misses.
+- **1.30.1** — SKILL.md back to 14,034 bytes (from 15,306) without dropping a rule: lookup material went to the references it
+  already pointed to, a one-line pointer where text moved — the size table (phase-guide.md → Sizes), the tracks' glosses
+  (classification-matrix.md), the design's section list (phase-guide.md), the EARS patterns (ears-guide.md), the bugfix
+  prefill and the failed-fixes rule (bugfix.md), the feature branch and doctor's checks (tooling-reference.md), the no-MCP note
+  (tool-catalog.md), the suppression syntax (verification.md), the final review's duplicate pass (subagent-execution.md).
 - **1.28** — a tool's mode on a second key (`alt`); an integer flag's `bounds` as a `[least, most]` pair (the schema's
   minimum: `dupes --min-lines` 4–100).
 - **1.27** — one operations table (`OPERATIONS`, mcp/lib/operations.js) both surfaces run through and one CLI command table
