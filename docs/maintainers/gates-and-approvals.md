@@ -84,7 +84,11 @@ review findings — is in History at the end.
   and earlier phases, warns for later ones (`ears_validate`: code `placeholder`; the requirements.md hook never says "all
   clean" while one remains). `traceability` splits alike: gaps that read a LATER phase's template (`TRACE_TASK_KINDS` /
   `TRACE_PLAN_KINDS`) warn "not traced yet"; only `TRACE_VERDICT_KINDS` fail (testsNotMappedToTasks listed, never failing).
-- **`next_action` — the step order, phase by phase** (doctor shows the same gate as `nextGate`):
+- **`next_action` — the step order, phase by phase** (doctor shows the same gate as `nextGate`). One ordered registry, as the
+  checks are (1.30): `NEXT_STEPS` (engine/doctor.js) — `{id, when(x), run(x)}`, the first whose `when` holds answers, `run`
+  setting `x.step`, `x.recommendation` and the result's extras; after the last task `FINISH_STEPS` the same way (`when(x, f)`).
+  `nextAction` builds `x` (the doctor's context, the pending gate, `open` / `refused`, the walk…) and the result from it. A new
+  step = one entry at its place:
   1. an invalid `.state.json` (readState's `invalid`) is the ONE step, `fix` + `stateInvalid` (read as empty it would say
      "approve", which every mutator refuses: a loop); doctor fails `state`, spec_finish blocks on `state` first and reports
      nothing from the unknown approvals, statusNext answers `{step: fix, file: .state.json}`;
@@ -419,6 +423,8 @@ here. "r5 review" is 1.23's fifth review.
   byte-identical (doctor, every gate, next_action, finish, the status line, spec_upgrade). The `live` views exist because a
   cross-feature read can note another feature's missing-pack markers mid-call (the doctor's nextGate runs after
   featureOverlaps).
+- **1.30 review 8 (ds-maint 10)** — `nextAction` (295 lines, ~48 branches) became the `NEXT_STEPS` / `FINISH_STEPS` registries,
+  behaviour-preserving (the suites, and a differential of the old and new engine over 27 feature states — every step — alike).
 - **1.30 review 8 (ds-engine 7)** — a `[NEEDS CLARIFICATION]` in design.md: doctor said `clarifications: pass — none open` and
   `readyToAdvance: true` while `approve design` refused on `clarifications` (only `approval-gates` mentioned it) — the doctor
   check read requirements.md and bug.md alone; it reads design.md too now.
