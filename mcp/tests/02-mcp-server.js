@@ -1357,8 +1357,11 @@ exports.run = async ({
 
     { // 1.25.1 (review 7): the initialize instructions name spec_next_action (clients without the skill) and claim only what holds
       const ins = (await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {} })).result.instructions;
+      // 1.30 review 8: spec_import's limits moved from the instructions (paid every session) into its own description
+      const impDesc = ((await rpc("tools/list", {})).result.tools.find((t) => t.name === "spec_import") || {}).description || "";
       ok(/spec_next_action \{name\}/.test(ins) && /where am I \/ what now/.test(ins) && !/All file ops are local to the project's \.specs\/ directory/.test(ins) &&
-        /writes stay in the project's \.specs\/, reads inside the project/.test(ins) && /never a hidden folder or a non-document file/.test(ins),
+        /writes stay in the project's \.specs\/, reads inside the project/.test(ins) && !/never a hidden folder/.test(ins) &&
+        /inside the project \(never a hidden folder or a non-document file; with another projectDir, only a dev-spec project's\)/.test(impDesc),
         "1.25.1 r7: initialize's instructions point at spec_next_action for 'where am I / what now?' and say what is local (writes in .specs/, reads inside the project — spec_import's limits) instead of 'All file ops are local to .specs/' (got " + js(ins.slice(0, 200)) + ")");
     }
   }

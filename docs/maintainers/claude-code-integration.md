@@ -411,6 +411,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   in a project 230 → 208 ms, a Stop claim 287 → 247, ExitPlanMode 174 → 165 — noise, not a gain); requiring hook-utils.js
   costs ~0.7 ms over an empty module. The engine's `isNetworkPath`, `unexpandedVar`, `expandHome`, `guardTargetPath` and `approvalEditTargets` became
   the probe's functions (they had been copies).
+- **1.30 review 8** — `allowed-tools` pre-approved two writers (`/roadmap`'s `spec_roadmap`, `/spec-report`'s `spec_metrics`,
+  both writing with `write`) although the 1.26 rule was read-only tools only: dropped, and a test reads every command's list
+  against tools/list's `readOnlyHint`.
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.
