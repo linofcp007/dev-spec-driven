@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, all, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
+exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, __dirname }) => {
   const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
   const js = (v) => JSON.stringify(v);
   const json = (s) => { try { return JSON.parse(s); } catch { return null; } };
@@ -13,9 +13,9 @@ exports.run = ({ ok, all, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   const CMD = "node .specs/guardian.cjs scan --project . --fail-on high --format json";
   const LAUNCHER_129 = fs.readFileSync(path.join(__dirname, "..", "mcp", "tests", "fixtures", "guardian-launcher-1.29.cjs"), "utf8");
   const cli = (proj, args, env) => runIn([...args, "--project", proj], { env: { ...process.env, ...(env || {}) } });
-  // finish --run runs the check: a real process (it waits for it)
-  const finishRun = (proj, slug, env, extra) => {
-    const r = spawnSync(process.execPath, [CLI, "finish", slug, "--run", "--project", proj, ...(extra || [])], { encoding: "utf8", env: { ...process.env, ...env }, timeout: 60000 });
+  // finish --run runs the check: in-process, awaited (1.30 — spawnAsync: the CLI's own process start saved; the check is still a process)
+  const finishRun = async (proj, slug, env, extra) => {
+    const r = await spawnAsync(["finish", slug, "--run", "--project", proj, ...(extra || [])], { env: { ...process.env, ...env } });
     return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status };
   };
   // a fake dev-guardian: the JSON report of a gate (FAKE_EXIT 0 · 1 · 2) in 3.3.0's shape (tool_version, baseline_status) — FAKE_SHAPE=old:
@@ -74,12 +74,12 @@ exports.run = ({ ok, all, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
   {
     const en = project("dg-fin-en", "en");
     S.initProject(en.p, [], undefined, { guardian: true });
-    const r0 = finishRun(en.p, en.slug, env(0));
-    const r1 = finishRun(en.p, en.slug, env(1));
-    const r2 = finishRun(en.p, en.slug, env(2));
-    const r3 = finishRun(en.p, en.slug, env(3));
-    const r1j = json(finishRun(en.p, en.slug, env(1), ["--json"]).stdout);
-    const nf = finishRun(en.p, en.slug, { DEV_GUARDIAN_CLI: path.join(tmp, "no-such", "dev-guardian.mjs") });
+    const r0 = await finishRun(en.p, en.slug, env(0));
+    const r1 = await finishRun(en.p, en.slug, env(1));
+    const r2 = await finishRun(en.p, en.slug, env(2));
+    const r3 = await finishRun(en.p, en.slug, env(3));
+    const r1j = json((await finishRun(en.p, en.slug, env(1), ["--json"])).stdout);
+    const nf = await finishRun(en.p, en.slug, { DEV_GUARDIAN_CLI: path.join(tmp, "no-such", "dev-guardian.mjs") });
     const st = stateOf(en).finishChecks.guardian;
     all("1.29 finish --run with the guardian check: its verdict printed instead of the JSON (pass; N new findings at or above high with the feature's own file first; incomplete scan; dev-guardian's own message; not found) and recorded — the report never stored; the blocker says how to clear it, never to force; --json carries suiteChecks[].guardian (got " +
       js([r0.out.split("\n").slice(0, 3), r1.out.split("\n").slice(0, 5), r2.out.split("\n")[1], r3.out.split("\n")[1], nf.out.split("\n")[1]]) + ")", {
@@ -97,8 +97,8 @@ exports.run = ({ ok, all, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
     S.initProject(pt.p, [], undefined, { guardian: true });
     const es = project("dg-fin-es", "es");
     S.initProject(es.p, [], undefined, { guardian: true });
-    const p1 = finishRun(pt.p, pt.slug, env(1));
-    const e2 = finishRun(es.p, es.slug, env(2));
+    const p1 = await finishRun(pt.p, pt.slug, env(1));
+    const e2 = await finishRun(es.p, es.slug, env(2));
     all("1.29 finish --run's guardian lines in the feature's language — PT / ES (got " + js([p1.out.split("\n").slice(1, 3), e2.out.split("\n")[1]]) + ")", {
       pt: /\n {2}dev-guardian: 2 finding\(s\) novo\(s\) de gravidade high ou superior, 1 nos ficheiros desta feature[^\n]*\n {4}src\/login\.js:12 js\.sqli \(high\) \[esta feature\]/.test(p1.out) && /✗ a verificação do projeto 'guardian' falhou/.test(p1.out),
       es: /\n {2}dev-guardian no pudo ejecutar todos los escáneres \(escaneo incompleto: trivy: not installed\)[^\n]*\n/.test(e2.out) && /✗ la verificación del proyecto 'guardian' falló/.test(e2.out),
@@ -106,7 +106,8 @@ exports.run = ({ ok, all, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
     // the stored command is shell-neutral: the same verdict under every shell finish --run can use here (POSIX: sh always —
     // an Alpine image has no bash —, and bash where it exists)
     const shells = (process.platform === "win32" ? ["cmd", "bash", "powershell", "pwsh"] : ["sh", "bash"]).filter((sh) => spawnSync(sh === "cmd" ? "cmd.exe" : sh, sh === "cmd" ? ["/c", "exit 0"] : sh === "bash" || sh === "sh" ? ["-c", "exit 0"] : ["-NoProfile", "-Command", "exit 0"], { timeout: 20000 }).status === 0);
-    const bySh = shells.map((sh) => [sh, finishRun(en.p, en.slug, env(1), ["--shell", sh])]);
+    const bySh = [];
+    for (const sh of shells) bySh.push([sh, await finishRun(en.p, en.slug, env(1), ["--shell", sh])]);
     const badSh = bySh.filter(([, r]) => !/\n {2}dev-guardian: 2 new finding\(s\) at or above high, 1 in this feature's files/.test(r.out)).map(([sh, r]) => sh + ": " + r.out.slice(0, 200));
     ok(shells.length >= 1 && !badSh.length, "1.29 the guardian check's command runs alike under " + shells.join(", ") + " (no shell syntax but its arguments) (bad: " + js(badSh) + ")");
   }
@@ -123,19 +124,19 @@ exports.run = ({ ok, all, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
     const genuine = fs.readFileSync(lf, "utf8");
     const mark = path.join(tmp, "dg-launcher-ran");
     fs.writeFileSync(lf, "process.stdout.write(JSON.stringify({ exit_code: 0, new_findings: [], blocking_findings: [], tool_version: \"3.3.0\" }));\n");
-    const stub = finishRun(x.p, x.slug, env(1, { FAKE_MARK: mark }));
+    const stub = await finishRun(x.p, x.slug, env(1, { FAKE_MARK: mark }));
     const afterStub = stateOf(x).finishChecks;
     fs.unlinkSync(lf);
-    const gone = finishRun(x.p, x.slug, env(1, { FAKE_MARK: mark }));
+    const gone = await finishRun(x.p, x.slug, env(1, { FAKE_MARK: mark }));
     const ranGone = fs.existsSync(mark);
     fs.writeFileSync(lf, LAUNCHER_129);
-    const old = finishRun(x.p, x.slug, env(0, { FAKE_MARK: mark }));
+    const old = await finishRun(x.p, x.slug, env(0, { FAKE_MARK: mark }));
     const replaced = fs.readFileSync(lf, "utf8") === genuine;
-    const noise = finishRun(x.p, x.slug, env(3, { FAKE_NOISE: "1" }));
+    const noise = await finishRun(x.p, x.slug, env(3, { FAKE_NOISE: "1" }));
     const noiseSt = stateOf(x).finishChecks.guardian;
-    const oldShape = finishRun(x.p, x.slug, env(0, { FAKE_SHAPE: "old" }));
+    const oldShape = await finishRun(x.p, x.slug, env(0, { FAKE_SHAPE: "old" }));
     const before = stateOf(x).finishChecks.guardian;
-    const mis = finishRun(x.p, x.slug, env(0, { FAKE_MISMATCH: "1" }));
+    const mis = await finishRun(x.p, x.slug, env(0, { FAKE_MISMATCH: "1" }));
     const afterMis = stateOf(x).finishChecks.guardian;
     all("1.30 review 8: finish --run refuses a launcher that is not the one dev-spec-driven writes (nothing runs, nothing is recorded) and a missing one (no-launcher); the 1.29 launcher is replaced, then runs; dev-guardian's own error line reaches the verdict from the raw stderr; a 3.2.1 report prints update dev-guardian; a report contradicting the exit code is refused (got " +
       js([stub.out.slice(0, 400), stub.code, afterStub, gone.out.slice(0, 300), old.out.slice(0, 300), noiseSt && noiseSt.guardian, oldShape.out.split("\n").slice(0, 4), mis.out.slice(0, 400)]) + ")", {
@@ -164,12 +165,12 @@ exports.run = ({ ok, all, runIn, spawnIn, tmp, CLI, require, __dirname }) => {
       git(x.p, "init", "-q");
       git(x.p, "add", "-A");
       git(x.p, "commit", "-q", "-m", "init");
-      const r1 = finishRun(x.p, x.slug, { ...genv, ...env(0, { FAKE_REPORTS: "1" }) });
-      const r2 = finishRun(x.p, x.slug, { ...genv, ...env(0, { FAKE_REPORTS: "1" }) });
+      const r1 = await finishRun(x.p, x.slug, { ...genv, ...env(0, { FAKE_REPORTS: "1" }) });
+      const r2 = await finishRun(x.p, x.slug, { ...genv, ...env(0, { FAKE_REPORTS: "1" }) });
       const st = stateOf(x).finishChecks.guardian;
       const untracked = (git(x.p, "status", "--porcelain").stdout || "").trim();
       fs.appendFileSync(path.join(x.p, "src", "login.js"), "// edited\n");
-      finishRun(x.p, x.slug, { ...genv, ...env(0) });
+      await finishRun(x.p, x.slug, { ...genv, ...env(0) });
       const st3 = stateOf(x).finishChecks.guardian;
       ok(st.exitCode === 0 && /\.guardian\//.test(untracked) && st.dirty === false && st3.dirty === true,
         "1.30 review 8 (C5): dev-guardian's untracked report sets under .guardian/reports/ never make a finish --run dirty — a code edit still does (got " + js([untracked, st.dirty, st3.dirty]) + ")");
