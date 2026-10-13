@@ -982,7 +982,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     S.initProject(blp, ["core"], "pt");
     await blAdd(blp, "refactor-precos", "refactor: a");
     const blPt = await blAdd(blp, "refactor-precos", "refactor: b");
-    ok(bl1.exists === undefined && bl2.exists === true && bl2.appended === true && bl2.note === "'refactor-pricing' is already in the backlog — the new note was appended to its note." &&
+    ok(bl1.exists === undefined && bl2.exists === true && bl2.appended === true && bl2.note === "'refactor-pricing' is already in the backlog — the new note was appended to its note (to replace the note instead: remove the item, then add it again)." &&
       bl3.exists === true && bl3.appended === false && /with that note — nothing changed/.test(bl3.note) &&
       blBig.exists === true && /would pass 2000 characters — the new note was not added/.test(blBig.error || "") &&
       blNote === "refactor: Repeated Switches in pricing.ts, invoice.ts · refactor: a rounding helper copied in cart.ts" &&

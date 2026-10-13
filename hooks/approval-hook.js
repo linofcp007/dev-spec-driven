@@ -55,9 +55,12 @@ const EDITS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 // (dev-spec's approval-shaped tools under any prefix — probe.js RE_APPROVAL_MCP; another MCP server's file tools by the verb in the
 // tool's name — probe.js isMcpFileTool, the engine's test and hooks.json's matcher built from the same list; the guarded files by path —
 // probe.js guardedFileOf, the engine's approvalGuardedFile. The probe loads only once the call may be one of them.)
+// A path under .specs/ or .guardian/ — where the guarded files live (.guardian/baseline.json and .specs/guardian.cjs: dev-guardian's
+// gate, 1.30 — the engine counts them only while a check runs it).
+const RE_GUARDED_DIR = /(?:^|[\\/])\.(?:specs|guardian)(?:[\\/]|$)/i;
 // A Write / Edit target that can't be one: its text names no .specs, no 8.3 short name (`SPECS~1`, `ROADMA~1.JSO`) and none of
 // the guarded file names — through a folder linked to .specs/ (`sx/roadmap.json`) only its real path names .specs.
-const RE_EDIT_MAYBE = /\.specs|~\d|(?:^|[\\/])(?:roadmap\.json|\.state\.json|observed\.jsonl)\s*$/i;
+const RE_EDIT_MAYBE = /\.specs|\.guardian|~\d|(?:^|[\\/])(?:roadmap\.json|\.state\.json|observed\.jsonl|guardian\.cjs|baseline\.json)\s*$/i;
 // The engine's approvalCandidate — ONE test, probe.js approvalMayBe on approvalPlain's text (linear: the dot-glob regex this hook
 // carried rescanned `=.=.…` from every start — 120 K characters ran it past its 10 s timeout, and a timed-out hook lets the call
 // through). The WHOLE command: one past the engine's read limit that names dev-spec is refused / asked as unreadable (an approval after
@@ -69,7 +72,7 @@ const candidate = (c) => {
   return P.approvalMayBe(t) || (/powershell|pwsh/i.test(t) && /(?:^|\s)[-/]e[a-z]*\s+[A-Za-z0-9+/]{8,}/i.test(t));
 };
 // An MCP file tool's input may touch a guarded file only if its text names .specs (also %-encoded), a guarded name or a short name.
-const RE_MCP_MAYBE = /\.specs|%2especs|roadmap\.json|\.state\.json|observed\.jsonl|~\d/i;
+const RE_MCP_MAYBE = /\.specs|%2especs|\.guardian|%2eguardian|roadmap\.json|\.state\.json|observed\.jsonl|guardian\.cjs|~\d/i;
 // A roadmap.json that doesn't parse: the strictest level its raw text names (fail closed) — the engine's rawApprovalGuard.
 const RE_RAW_GUARD = /"approvalGuard"\s*:\s*"\s*(ask|deny)\s*"/gi;
 // a payload cut short — what it may be about (dev-spec, .specs/, an approval-shaped MCP tool).
@@ -186,7 +189,7 @@ function decide(raw, opts = {}) {
   // the edited path as the file system reads it — `./`, `..`, an NTFS stream, an 8.3 short name and a folder linked
   // to .specs/ (hook-utils editTargets, the engine's approvalEditTargets).
   const paths = fp ? [fp] : mcpFile ? probe().mcpPathArgs(ti, HU.fileUriToPath) : [];
-  const touched = paths.flatMap((p) => HU.editTargets(p, cwd)).filter((t) => /(?:^|[\\/])\.specs(?:[\\/]|$)/i.test(t));
+  const touched = paths.flatMap((p) => HU.editTargets(p, cwd)).filter((t) => RE_GUARDED_DIR.test(t));
   const edited = touched.find((t) => probe().guardedFileOf(t)) || null;
   if (fp && !edited) return null;
   if (mcpFile && !touched.length) return null;

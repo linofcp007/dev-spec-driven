@@ -839,7 +839,9 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
     const bad8m = await call8("spec_impact", { name: "drafts", phase: "plan", projectDir: w8 });
     const bad8e = S.impactReport(w8, "drafts", { phase: "plan" });
     ok(rt8.ok === false && /reopen applies to requirements, design, test-plan and eval-plan/.test(rt8.error) && bad8m.isError && /phase must be one of: requirements, design, test-plan, eval-plan, tasks/.test(bad8m.p.error) &&
-      bad8e.ok === false && /Unknown phase 'plan' for spec_impact/.test(bad8e.error), "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine)");
+      // 1.30 review 8: the engine refuses it as the MCP schema does — the same words and code (the CLI's --phase reaches the engine)
+      bad8e.ok === false && bad8e.error === bad8m.p.error && bad8e.code === "invalid-arguments" && JSON.stringify(bad8e.invalid) === '["phase"]',
+      "reopen on tasks is refused; an unknown phase is refused (MCP schema and engine — the same message and code)");
 
     // test-plan: T-ID row diff (a row keyed by its first cell; re-padding is no change) → the tasks making a changed test
     // green; reopen unticks a MODIFIED test's done tasks, a REMOVED test's tasks are listed in retire (never redone);
@@ -1612,5 +1614,40 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, list,
       eNew.snapshot === ".history/requirements@2.md" && js(eSnaps()) === '["requirements@1.md","requirements@2.md"]' && eM2.rework === 1 && eM2.reworkByPhase.requirements === 1,
       "r5 review: an identical re-approval shares the previous snapshot (.history/requirements@1.md, no copy) and is no rework in spec_metrics (still an approval in approvalsTotal); new content → requirements@2.md, rework 1 (got " +
       js([eRe.map((r) => r.snapshot), eSnaps1, eM1.rework, eM1.approvalsTotal, eNew.snapshot, eM2.rework]) + ")");
+  }
+
+  { // 1.30 review 8 (ds-engine 7): doctor's clarifications check agrees with the design approval — design.md's own
+    // [NEEDS CLARIFICATION] fails it (doctor said "none open", readyToAdvance, while approve design refused on clarifications);
+    // not while design.md is still a later phase's template
+    const js = JSON.stringify;
+    const p = path.join(tmp, "proj-r8-clar-design");
+    S.initProject(p, ["core"], "en");
+    const f = S.createFeature(p, "Pay", ["core"], "Pay");
+    // the requirements phase, design.md still the template with a marker added to it: a later phase's template — not counted yet
+    const tpl = fs.readFileSync(path.join(f.dir, "design.md"), "utf8");
+    fs.writeFileSync(path.join(f.dir, "design.md"), tpl + "\n[NEEDS CLARIFICATION: Stripe or Adyen?]\n");
+    const early = S.specDoctor(p, "pay").checks.find((x) => x.id === "clarifications") || {};
+    fs.writeFileSync(path.join(f.dir, "requirements.md"), "# Requirements: Pay\n\n## User Stories\n\n### US-1 Pay (P1)\n**As a** buyer **I want** to pay **so that** I get the goods.\n\n" +
+      "#### Acceptance Criteria\n1. **US-1.AC-1** — WHEN the buyer pays THE SYSTEM SHALL record the order\n2. **US-1.AC-2** — IF the card is declined THEN THE SYSTEM SHALL show the reason\n\n" +
+      "## Success Criteria\n- **SC-001** — 99% of payments recorded within 2 s\n");
+    S.approvePhase(p, "pay", "classification", "t", { force: true });
+    const req = S.approvePhase(p, "pay", "requirements", "t");
+    fs.writeFileSync(path.join(f.dir, "design.md"), "# Design\n\n## Overview\nA payment service. Which PSP? [NEEDS CLARIFICATION: Stripe or Adyen?]\n\n## Architecture\n\n```mermaid\nflowchart LR\n  A-->B\n```\n\n" +
+      "## Reuse & Integration\n\n| Kind | What | Where | Why |\n|---|---|---|---|\n| Reuse | Money type | src/lib/money.ts | exact cents |\n\n## Alternatives & Trade-offs\n\n| Option | Pros | Cons |\n|---|---|---|\n" +
+      "| Stripe | fast | fees |\n| Adyen | cheap | slow |\n\n## Risks\n- Card network downtime — retry with backoff.\n\n## Constitution Check\nAll principles respected.\n");
+    const doc = S.specDoctor(p, "pay");
+    const viaMcp = payload(await rpc("tools/call", { name: "spec_doctor", arguments: { projectDir: p, name: "pay" } }));
+    const clar = doc.checks.find((x) => x.id === "clarifications") || {};
+    const ap = S.approvePhase(p, "pay", "design", "t");
+    all("1.30 review 8: design.md's [NEEDS CLARIFICATION] fails doctor's clarifications check — as the design approval refuses on it — named in design.md; readyToAdvance is false; spec_doctor over MCP the same; a marker in design.md while it is still a later phase's template is not counted (got " +
+      js([early, req.ok, clar, doc.readyToAdvance, ap.ok, ap.failing]) + ")", {
+      early: () => early.status === "pass",
+      requirements: () => req.ok === true,
+      doctor: () => clar.status === "fail" && clar.detail === "1 unresolved [NEEDS CLARIFICATION] in design.md — resolve them before approving the design",
+      notReady: () => doc.readyToAdvance === false,
+      mcp: () => js((viaMcp.checks || []).find((x) => x.id === "clarifications")) === js(clar),
+      approve: () => ap.ok === false && js(ap.failing) === js(["clarifications"]),
+      pt: () => /^2 \[NEEDS CLARIFICATION\] por resolver no design\.md — resolve-os antes de aprovar o design$/.test(S.msg("pt").doctor.clarificationsOpenDesign(2)),
+    });
   }
 };

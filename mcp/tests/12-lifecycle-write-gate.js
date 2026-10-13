@@ -241,7 +241,7 @@ exports.run = async ({ ok, rpc, payload, S, tmp, __dirname, require }) => {
     S.createFeature(p, "login", ["core"], "Users can log in");
     const b = S.backlog(p, "add", "Single sign on", "later");
     const rn = S.renameFeature(p, "login", "Single sign on");
-    ok(b.ok && rn.ok && rn.to === "single-sign-on" && js(rn.removedFromBacklog) === js(["Single sign on"]) && js(S.readRoadmap(p).backlog) === "[]" &&
+    ok(b.ok && rn.ok && rn.to === "single-sign-on" && js(rn.removedFromBacklog) === js([{ name: "Single sign on", note: "later" }]) && js(S.readRoadmap(p).backlog) === "[]" &&
       !/\*\*Single sign on\*\*/.test(rd(p, ".specs", "ROADMAP.md")),
       "1.24 r6 G5: renaming a feature onto a backlog item's name drops that item (removedFromBacklog) — never listed twice in ROADMAP.md (got " + js([rn.removedFromBacklog, S.readRoadmap(p).backlog]) + ")");
   }

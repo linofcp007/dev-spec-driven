@@ -16,7 +16,7 @@ const { TRACE_INFO_FIELDS } = require("./trace.js"); // load time
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
 let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions, chainArtifacts,
   changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks, crossFeatureAcs,
-  DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir, errs,
+  DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir, enumArg, errs,
   evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs, featureFlow,
   featureLang, featurePercent, featureShipped, featureVelocity, findCycle, FOLD_CASE, forcedApprovalList, forecastInput,
   globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord, isBacktickUnit,
@@ -32,12 +32,12 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
-let suiteBlocker; // evidence.js — 1.29: the suite blocker (with dev-guardian's gate: its verdict and what to do)
+let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ duplicationReport, suiteBlocker, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+function __link(E) { ({ duplicationReport, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
-  errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
+  enumArg, errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
   featureFlow, featureLang, featurePercent, featureShipped, featureVelocity, findCycle, FOLD_CASE, forcedApprovalList,
   forecastInput, globFiles, implementsPath, implementsRefs, invalidateReadCache, isApprovalRecord,
   isBacktickUnit, isDirSafe, isFeatureFolder, isGeneratedOrAbsent, isImplementsGlob, isInsideDir, isObj, isRecord,
@@ -148,7 +148,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (opts.evidence != null) {
     // ranBy "cli": `finish --run` (never from MCP) — with runStart {at, code}: the stamps taken BEFORE it ran
     const rc = recordFinishChecks(projectDir, slug, dir, opts.evidence, lng, opts.ranBy, opts.ranBy === "cli" ? opts.runStart : undefined);
-    if (rc.error) return { ok: false, error: rc.error };
+    if (rc.error) return { ok: false, error: rc.error, ...(rc.code ? { code: rc.code } : {}) }; // 1.30: a refused guardian run names why (code)
     recordedChecks = rc.recorded;
   }
   const state = readState(projectDir, slug);
@@ -223,6 +223,7 @@ function finishFeature(projectDir, name, opts = {}) {
   // (+ dev-guardian's gate: how to clear a failed one, or how to run and report it over MCP — 1.29)
   if (suite.missing.length) block("suite-evidence", suiteBlocker(suite.missing, slug, lng));
   if (suite.invalid.length) warnings.push(i18n.msg(lng).projectChecks.invalidStored(suite.invalid.join(", ")));
+  warnings.push(...guardianWarnings(suite.items, lng)); // 1.30: dev-guardian should be updated (older than 3.2.1, no version reported)
   if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);
@@ -230,15 +231,16 @@ function finishFeature(projectDir, name, opts = {}) {
   // rest) — a warning, never a blocker: how many places, the top 3 (`file:from-to ↔ file:from-to`) and the call listing them all;
   // the repeats inside the feature's own files only as a count. 1.29: with dev-guardian's duplication budget set
   // (.guardian/budgets.yml quality.duplication_pct — budget: true measures the whole project too), the warning says when the project
-  // is over it.
+  // is over it. 1.30: a project past the detector's byte budget was compared in part — the warning says so (`partial`).
   const dup = duplicationReport(projectDir, { name: slug, budget: true });
   let duplicates = null;
   if (dup.ok && dup.total) {
     const top = dup.duplicates.filter((d) => d.kind === "existing").slice(0, 3);
     const pair = (d) => `${d.file}:${d.from}-${d.to} ↔ ${d.also[0].file}:${d.also[0].from}-${d.also[0].to}`;
     const over = dup.budget && dup.budget.over ? i18n.msg(lng).guardian.finishBudget(dup.budget.measured, dup.budget.limit) : "";
-    warnings.push((dup.counts.existing ? F.duplicates(dup.counts.existing, top.map(pair).join("; "), dup.counts.within, slug) : F.duplicatesWithin(dup.counts.within, slug)) + over);
-    duplicates = { existing: dup.counts.existing, within: dup.counts.within, top };
+    const part = dup.partial ? F.duplicatesPartial(dup.partial.unread) : "";
+    warnings.push((dup.counts.existing ? F.duplicates(dup.counts.existing, top.map(pair).join("; "), dup.counts.within, slug) : F.duplicatesWithin(dup.counts.within, slug)) + part + over);
+    duplicates = Object.assign({ existing: dup.counts.existing, within: dup.counts.within, top }, dup.partial ? { partial: dup.partial } : {});
   }
 
   // What only a human (or a fresh run) can confirm — the track-gated "done" checks.
@@ -321,7 +323,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (baseline) res.baseline = baseline;
   if (branch) res.branch = branch; // {name, base, commit, at, current, exists} — option 1 merges `name` into `base` locally
   if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
-  if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats} — spec_scan {duplicates: true} lists all
+  if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats, partial? (1.30)} — spec_scan {duplicates: true} lists all
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // the runs this call recorded
   if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // the roles each pending phase waits for
@@ -920,8 +922,12 @@ function removePreview(projectDir, name) {
 
 // The actions are spec_feature's enum, exactly — no hidden alias (a CLI-only `feature delete` used to remove a folder
 // the MCP tool refused to, and the help never named it).
+const FEATURE_ACTIONS = ["remove", "archive", "rename", "restore", "flow"];
 function manageFeature(projectDir, action, name, arg, opts = {}) {
-  switch (String(action || "").trim().toLowerCase()) {
+  // the MCP enum's refusal, in its words (the CLI passes its first word as typed); none is no action either
+  const act = enumArg("action", FEATURE_ACTIONS, action == null ? "" : action, () => projectLang(projectDir), { blankGiven: true });
+  if (act.error) return act;
+  switch (act.value) {
     case "remove":
       // Deleting a spec folder can't be undone: without an explicit confirm (MCP confirm:true, CLI --yes)
       // nothing is deleted and the caller gets what WOULD be.
@@ -935,9 +941,8 @@ function manageFeature(projectDir, action, name, arg, opts = {}) {
       return restoreFeature(projectDir, name);
     case "flow": // opts.flow (MCP `flow`), else the positional value (CLI `feature flow <name> <flow>`)
       return setFeatureFlowLocked(projectDir, name, opts.flow != null ? opts.flow : arg);
-    default:
-      return { ok: false, error: errs(projectDir).badAction };
   }
+  return null; // (unreachable: enumArg answered every other value)
 }
 
 // ---------------------------------------------------------------------------

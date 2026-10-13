@@ -233,6 +233,15 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
       ["specsParentOf (////…)", (s) => PR.specsParentOf(s), "/", "x/.specs/roadmap.json"],
       ["trimSlashEnd (////…x)", (s) => PR.trimSlashEnd(s), "/", "x"],
       ["dotGlob (=.=.…)", (s) => PR.dotGlob(s), "=.", ""],
+      // dev-guardian's rules (1.30 — engine/guardian.js through the hook points): its files, its pre-filter word, its shell reader
+      ["guardedFileOf (.guardian/.guardian/…)", (s) => PR.guardedFileOf(s), ".guardian/", "baseline.json"],
+      ["specsParentOf (////…/.guardian/)", (s) => PR.specsParentOf(s), "/", "x/.guardian/baseline.json"],
+      ["approvalGuardDecision, Write (.guardian\\.guardian\\…)", (s) => dec("Write", { file_path: s }), BS + ".guardian", BS + "baseline.json"],
+      ["approvalGuardDecision, Bash (guardian guardian …)", (s) => dec("Bash", { command: s }), "guardian ", " baseline update"],
+      ["approvalGuardDecision, Bash (dev-guardian baseline update; …)", (s) => dec("Bash", { command: s }), "dev-guardian baseline update;", ""],
+      ["approvalGuardDecision, Bash (DEV_GUARDIAN_CLI=x …)", (s) => dec("Bash", { command: s }), "DEV_GUARDIAN_CLI=x ", "node .specs/guardian.cjs scan"],
+      ["the approval hook's decide, Write (.guardian\\.guardian\\…)", (s) => AH.decide(js({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: s } })),
+        BS + ".guardian", BS + "baseline.json"],
     ];
     const time = (f, s) => { const t = process.hrtime.bigint(); f(s); return Number(process.hrtime.bigint() - t) / 1e6; };
     const shape = {};
@@ -252,26 +261,30 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
       const OLD_DOT = /(?:^|[\s/\\'"=,(;&|])\.[^\s/\\'";&|]*[*?[{]/;
       const OLD_ROADMAP = /(?:^|[\\/])\.specs[\\/]+roadmap\.json$/i, OLD_STATE = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)+\.state\.json$/i,
         OLD_OBS = /(?:^|[\\/])\.specs[\\/]+(?:[^\\/]+[\\/]+)*\.execution[\\/]+observed\.jsonl$/i;
+      // (and 1.30's dev-guardian files — guardian.js's two regexes before they joined guardedFileOf)
+      const OLD_LAUNCHER = /(?:^|\/)\.specs\/+guardian\.cjs$/i, OLD_BASELINE = /(?:^|\/)\.guardian\/+baseline\.json$/i;
       const oldGuarded = (t) => {
         if (OLD_ROADMAP.test(t)) return { setting: "roadmap" };
         const segs = t.split("/");
         if (OLD_OBS.test(t)) { const f = segs[segs.length - 3]; return { setting: "observed", feature: f && f.toLowerCase() !== ".specs" ? f : null }; }
         if (OLD_STATE.test(t)) return { setting: "state", feature: segs[segs.length - 2] || null };
+        if (OLD_LAUNCHER.test(t)) return { setting: "guardian-launcher" };
+        if (OLD_BASELINE.test(t)) return { setting: "guardian-baseline" };
         return null;
       };
       const OLD_FIND = /(?:^|[^\w.-])(?:find[^|;&\n]*-(?:delete|exec|execdir|ok|okdir|fprint0?|fprintf|fls))(?![\w-])/i;
       const OLD_WORD = /(?:^|[\s'"=<>|;&(])[^\s'"<>|;&()]*[\\/][^\s'"<>|;&()]*/g;
       const oldWords = (s) => (s.match(OLD_WORD) || []).slice(0, 8).map((w) => w.replace(/^[\s'"=<>|;&(]+/, ""));
       const diff = { dotGlob: [], guardedFileOf: [], specsParentOf: [], mayWrite: [], pathWords: [] };
-      const SEG = [".specs", ".SPECS", "a", ".execution", "observed.jsonl", ".state.json", "roadmap.json", "x.specs"];
+      const SEG = [".specs", ".SPECS", "a", ".execution", "observed.jsonl", ".state.json", "roadmap.json", "x.specs", ".guardian", "guardian.cjs", "baseline.json"];
       for (let i = 0; i < 20000; i++) {
         const d = gen([".", "=", "*", "?", "{", "[", "a", " ", "/", BS, "'", "\"", ",", "(", ";", "&", "|"], 14);
         if (OLD_DOT.test(d) !== PR.dotGlob(d)) diff.dotGlob.push(d);
         const segs = []; for (let k = 1 + rnd(5); k > 0; k--) segs.push(SEG[rnd(SEG.length)]);
         const g = (rnd(3) ? "" : "/") + segs.join("/");
         if (js(oldGuarded(g)) !== js(PR.guardedFileOf(g))) diff.guardedFileOf.push(g);
-        const sp = gen(["/", BS, ".specs", ".SPECS", "a", "x.specs"], 6);
-        if (/(?:^|[\\/])\.specs(?:[\\/]|$)/i.test(sp) && (sp.replace(/[\\/]*\.specs(?:[\\/][\s\S]*)?$/i, "") || ".") !== PR.specsParentOf(sp)) diff.specsParentOf.push(sp);
+        const sp = gen(["/", BS, ".specs", ".SPECS", "a", "x.specs", ".guardian", "x.guardian"], 6);
+        if (/(?:^|[\\/])\.(?:specs|guardian)(?:[\\/]|$)/i.test(sp) && (sp.replace(/[\\/]*\.(?:specs|guardian)(?:[\\/][\s\S]*)?$/i, "") || ".") !== PR.specsParentOf(sp)) diff.specsParentOf.push(sp);
         // (an alphabet no other writer's name can form: here mayWrite answers by its find branch alone)
         const fw = gen(["find", " ", "-delete", "-exec", "x", "|", ";", "&", "\n", "-", ".", "findstr", "-okdir"], 8);
         if (OLD_FIND.test(fw) !== GH.mayWrite(fw)) diff.mayWrite.push(fw);

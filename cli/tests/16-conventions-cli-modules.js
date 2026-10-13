@@ -225,13 +225,47 @@ exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) 
     const refused = spawnIn(["done", "login", "2", "--run", "--project", p]);
     let threw = null;
     try { spawnIn(["done", "login", "1", "--run", "--project", p]); } catch (e) { threw = e.message; }
-    await new Promise((r) => setTimeout(r, 1500));
+    await MAIN.whenIdle(); // 1.30: the next in-process call would wait for it anyway (calls run one at a time)
     all("1.27 main: a synchronous command is done when main returns (io.done called), done --run settles through its promise (exit 0, the run's output, task 1 verified), stdin as a string is read at once; spawnIn answers a refusal made before any run and refuses a call that waits (got " +
       js([sync.syncCode, later.syncCode, laterCode, later.out.join(""), piped.syncCode, piped.out.join(""), refused.status, threw]) + ")", {
       sync: sync.syncCode === 0 && /login/.test(sync.out.join("")), async: later.syncCode === undefined && laterCode === 0 && /\$ node -e/.test(later.out.join("")) && /42/.test(later.out.join("")),
       ticked: /- \[x\] 1\./.test(fs.readFileSync(path.join(p, ".specs", "login", "tasks.md"), "utf8")),
       piped: piped.syncCode === 0 && /1 criteria, 1 with modal, verdict=pass/.test(piped.out.join("")),
       refusedSync: refused.status === 1 && /_Verify/.test(refused.stderr), waits: typeof threw === "string" && /waits/.test(threw),
+    });
+  }
+
+  // 1.30 review 8 (ds-engine 11): in-process calls never share a context — a call started while another waits (here a stdin stream)
+  // waits for it, so neither runs in the other's environment or working folder; A ending first left A's env and cwd behind (B
+  // restored what it saw at its start: A's)
+  {
+    const { PassThrough } = require("stream");
+    const p = path.join(tmp, "main-mod-overlap");
+    runIn(["init", "--project", p]);
+    const dA = path.join(tmp, "main-mod-overlap-a"), dB = path.join(tmp, "main-mod-overlap-b");
+    fs.mkdirSync(dA, { recursive: true });
+    fs.mkdirSync(dB, { recursive: true });
+    const envNow = () => js(Object.entries(process.env).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
+    const envBefore = envNow(), cwdBefore = process.cwd();
+    const sink = (to) => ({ write: (s) => { to.push(String(s)); return true; } });
+    const TEXT = "- **US-1.AC-1** — WHEN a user signs in THE SYSTEM SHALL open a session\n";
+    const order = [], outA = [], outB = [];
+    const sA = new PassThrough(), sB = new PassThrough();
+    const pA = MAIN.main(["ears", "-", "--project", p], { stdout: sink(outA), stderr: sink([]), stdin: sA, env: { ...process.env, MAIN_OVERLAP: "A" }, cwd: dA, done: () => order.push("A") });
+    const pB = MAIN.main(["ears", "-", "--project", p], { stdout: sink(outB), stderr: sink([]), stdin: sB, env: { ...process.env, MAIN_OVERLAP: "B" }, cwd: dB, done: () => order.push("B") });
+    const whileWaiting = [process.env.MAIN_OVERLAP, process.cwd() === path.resolve(dA)]; // B queued: A's context only
+    sA.end(TEXT); // A ends first, then B
+    const codeA = await pA;
+    sB.end(TEXT);
+    const codes = [codeA, await pB];
+    await MAIN.whenIdle();
+    all("1.30 review 8: overlapping in-process calls run one at a time — B, started while A waits on stdin, waits for A (A's context alone meanwhile), both end with their output; A ending first, process.env and the working folder are left as they were (got " +
+      js([whileWaiting, order, codes, outA.join(""), outB.join(""), process.env.MAIN_OVERLAP, process.cwd() === cwdBefore]) + ")", {
+      queued: () => whileWaiting[0] === "A" && whileWaiting[1] === true,
+      order: () => js(order) === js(["A", "B"]) && js(codes) === js([0, 0]),
+      outputs: () => /verdict=pass/.test(outA.join("")) && /verdict=pass/.test(outB.join("")),
+      envRestored: () => !("MAIN_OVERLAP" in process.env) && envNow() === envBefore,
+      cwdRestored: () => process.cwd() === cwdBefore,
     });
   }
 

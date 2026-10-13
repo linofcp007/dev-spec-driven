@@ -35,7 +35,8 @@ told apart by a `mode` or a `when(args)` test), `legacy`, `cli`, `engine`, `args
 - **runTool has no dispatch of its own**: `forTool(name, args)` picks the operation, `run(op, spec, dir, "mcp", read, own)`
   reads its options by the shared rule (`options()`: a switch is true only when given true) and makes the call; runTool
   itself reads only `projectDir`. The CLI does the same through `c.call(id, given)` (cli/main.js). An option the operation
-  doesn't declare is thrown.
+  doesn't declare is thrown. The CLI's options themselves derive from the table (1.30, `cliOptions(command)`: the args' `cli`
+  flags in the table's order, then `cliOnly` — conventions.md → The CLI is one table and one call).
 - `createFeature` / `completeTask` take an options object; their positional forms still work (told apart by type —
   `featureLocked` reads either).
 - **Parity is structural**: `mcp/tests/02-mcp-server-tools.js` (every tool and alias runs an operation, every argument mapped
@@ -55,7 +56,9 @@ of its own — the duplicate detector, `dev-spec dupes` — never a tool of its 
 `LEGACY_TOOLS` (server.js) keeps the seven old names callable: a call's arguments are checked against the OLD schema
 (`toolDef()`: an old caller gets its old refusals), translated (`translateLegacy`), and the new tool runs and answers. Never
 listed, never completed, no operation of their own — each is in the `legacy` of the operation it lands on;
-`mcp/tests/02-mcp-server-tools.js` asserts alias = new tool = its operation's call.
+`mcp/tests/02-mcp-server-tools.js` asserts alias = new tool = its operation's call. The reply is the old one too:
+`spec_catalog` / `spec_changelog` translate to `includeBody: write !== true` — their 1.25.1 replies carried the markdown unless
+writing (Lean replies leave it out of the NEW tool's only).
 
 ### Arguments by mode
 `ARG_MODES` (server.js) is derived from the table (`argModes()`): a mode — of `kind`, `format` (default html) or `coverage`
@@ -175,6 +178,11 @@ An argument error is the tool's JSON `{ok: false, error, code, …}` (`argError`
 `inapplicable-arguments` · `project-dotdot` · `project-network` · `project-uri` · `project-missing` · `project-not-dir` ·
 `project-no-specs`. Callers branch on the code (English); the message is in the project language. The feature resolver's
 refusals carry `feature-not-found` · `feature-name-invalid` · `feature-name-reserved`, on every tool and the CLI's `--json`.
+An argument the ENGINE refuses (the CLI hands it the raw word the schema would have refused over MCP — depend's order, a
+backlog action, impact's phase, a task number) answers in the validator's words with the same code (`invalid-arguments` +
+`invalid`); `spec_approve` without a phase is `missing-arguments` [phase] on both surfaces (the CLI no longer stops it as
+`usage`). A blank `name` on spec_status lists, as `status "  "` does; an empty `text` beside a feature lints the feature, as
+`ears <f> --text ""` does.
 - **A tool that THROWS** answers JSON too: `toolFailure()` → `args.toolFailed`, the error's code (e.g. ENOTDIR).
 - **Compact results**: the result text is `JSON.stringify(out)`, unindented (`toolReply`) — indentation was ~22% of what an
   agent pays per reply; clients parse JSON, nothing reads the layout.
@@ -231,6 +239,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   other descriptions (43,272 → 43,611).
 - **1.29** — `spec_init {guardian}` and spec_finish's evidence `report` (dev-guardian's gate, ~260 characters) paid back in full
   by trimming spec_scan's, spec_import's, spec_tracks', spec_roadmap_edit's and spec_export's descriptions: still 43,611.
+- **1.30 review 8 (ds-engine 6)** — the hidden aliases `spec_catalog` / `spec_changelog` had lost their document: 1.26's lean
+  replies made `spec_export` leave the markdown out unless `includeBody`, and the aliases (whose old schema has no `includeBody`)
+  translated without it — "the old names still work" held for the call, not the reply. They translate to `includeBody: write !==
+  true` now.
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.
@@ -292,6 +304,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   the project's .specs/ directory" was not true of the scans and the import); the feature resolver's refusals got their codes
   (they were `{ok: false, error}` alone).
 - **1.26** — `inapplicable-arguments` (Arguments by mode): another mode's argument used to be another tool's, an unknown one.
+- **1.30 review 8 (ds-engine 8)** — the edges where the CLI's `--json` and MCP differed: `status "   "` refused
+  (`feature-name-invalid`) where spec_status listed; `ears login --text ""` answered "No text provided." where ears_validate
+  linted the feature; `depend --order abc` / `1.5`, `backlog frobnicate` and `impact --phase nope` refused with no code (impact
+  in words of its own); `approve login` was `usage` on the CLI and code-less over MCP.
 
 ### Protocol
 - **1.21 F1b** — the first server-initiated request (`elicitation/create`): the server answers other requests while one

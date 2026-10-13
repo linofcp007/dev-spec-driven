@@ -121,7 +121,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const featTool = list.result.tools.find((t) => t.name === "spec_feature");
     const again10 = await call10("spec_feature", { action: "restore", name: "Billing", projectDir: w10 });
     ok(featTool.inputSchema.properties.action.enum.includes("restore") && again10.isError && /Nothing is archived as 'billing'/.test(again10.p.error) &&
-      /remove \| archive \| rename \| restore/.test(S.manageFeature(w10, "wat", "billing").error), "restore is in the spec_feature enum; nothing archived under that name → error");
+      /action must be one of: remove, archive, rename, restore, flow \(got "wat"\)/.test(S.manageFeature(w10, "wat", "billing").error), "restore is in the spec_feature enum; nothing archived under that name → error");
 
     // Restore only re-adds references to features that still exist; one that would close a cycle stays out; errors refuse.
     ["Core Lib", "Consumer", "Helper"].forEach((n) => S.createFeature(w10, n, ["core"]));

@@ -42,6 +42,7 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   scaffold.js                  spec_init, spec_create, skeletons, steering stubs, spec_add_track, scoped steering, amendments
   tasks.js                     the tasks.md scanner (taskBlocks), markers, _Depends:_ + waves, next / complete / append, the brief
   evidence.js                  the evidence gate (taskVerification), run shells, red → green, observed runs, project checks
+  guardian.js                  dev-guardian's gate (the check `guardian`): the launcher, the CLI lookup, the verdict, its guard rules
   trace.js                     criterion blocks, the EARS linter, trace_check, the traceability matrix
   gates.js                     the gate walk, pending gates, flows, detectPhase; spec_approve; .history/, spec_impact
   doctor.js                    the check registry (DOCTOR_CHECKS, GATES, approvalChecks), spec_doctor, next_action, status,
@@ -124,7 +125,7 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 23 modules (+ 9 in import/) of a few hundred to a few
+  costs ~0.65 ms before any compile (the open is the expensive part): 24 modules (+ 9 in import/) of a few hundred to a few
   thousand lines, never one per helper. Add to the module of the concept; a new file must earn its load cost. The facade's
   first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
@@ -247,6 +248,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — exports only what crosses a module's boundary: `E` went from 2,083 names (1,214 of them exported and used only
   inside their own module) to ~860; 80 facade keys are read only by tests. probe.js, latin1-scan.js and operations.js
   joined mcp/lib beside the engine.
+- **1.30** — dev-guardian's gate left evidence.js for its own module, guardian.js (~250 lines then; the cross-plugin contract —
+  the launcher, the report reader, the verdict, the guard rules — has one home; one more file, ~0.65 ms per load).
 - **1.30 (review 8, ds-maint finding 8 — measured, not done)** — the near-leaf tier no hook uses, loaded in every engine load
   (median of 21 fresh processes, the rest already loaded, compile cache on): dupes.js 1.9 ms, import/ 13.9 ms of ~75–100 ms. Not
   made lazy: dupes.js alone isn't worth a mechanism, and import/ is no leaf — trace.js links `inertOutsideCode` from

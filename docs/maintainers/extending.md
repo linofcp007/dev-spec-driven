@@ -63,7 +63,8 @@ how they came to be — the releases and review findings — is in History at th
   `trackMarker()`, `trackSectionTable()`, `trackSteeringFiles()`, `trackSignalTable()`), never the built-in constants, which
   miss the project's track packs (only the process-wide template corpus and `spec_tracks list`'s built-in lists read them).
 - **New CLI command** → ONE entry of `COMMANDS` in cli/commands.js (its header lists the fields), in the help's order: its
-  `options` (any other flag is refused), completion specs, `help` lines (byte for byte what `help` prints) and `run(c)` —
+  `options` (any other flag is refused — `TABLE` when it runs operations: their flags, in the table's order), completion specs,
+  `help` lines (byte for byte what `help` prints) and `run(c)` —
   synchronous, a promise only where it waits, never an `async` function. The flag checks, the help, the completion scripts
   and `checkCommandArgs()` read the table (conventions.md → The CLI is one table and one call;
   cli/tests/16-conventions-cli-modules.js checks the entry). A command wrapping an operation runs `c.call(id, given)`, `given`
@@ -75,8 +76,10 @@ how they came to be — the releases and review findings — is in History at th
 - **New CLI switch** (no value) → `CLI_SWITCHES` in `mcp/lib/engine/guards.js` (the CLI and the approval hook's lexer read
   it); a new **value flag** → `VALUE_FLAG_SPECS` in cli/commands.js (completion `values` by `@source` where the facade has
   the list, never copied; `repeatable: true` when a command reads EVERY occurrence — any other given twice is a usage error).
-  Either → the `options` of every command that reads it and, when it fills an engine option, that option's `cli` in the
-  operations table (a switch `type: "switch"` / `"bool"`, a repeatable one `"list"`).
+  Either → when it fills an engine option, that option's `cli` in the operations table (a switch `type: "switch"` /
+  `"bool"`, a repeatable one `"list"`), at the place the help shows it — a command with `options: TABLE` reads it from there;
+  else (a hand-kept list: init, spike, done, undone, changelog, depend, or a command that runs no operation) the `options` of
+  every command that reads it.
 - **A tool argument that is a string OR a true/false switch** (`spec_create {branch}`) → `type: "string"`, never a list-valued
   type (mcp.md → Argument validation), + its key in server.js `BOOL_STRING_ARGS`, the engine reading `"true"` / `"false"`;
   its CLI flag → `optional: true` in `VALUE_FLAG_SPECS` (a bare `--branch` is `true`), never `CLI_SWITCHES`.

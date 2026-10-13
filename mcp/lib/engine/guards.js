@@ -36,7 +36,8 @@ let activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAN
   decodeText, isNetworkPath, runProvesVerify, withinRoot;
 let approvedContentSame, proofIncomplete; // gates.js (the guard's stale tasks approval) · evidence.js (an incomplete command runs nothing)
 let folderHoldsCode; // scan.js — a folder a command removes or moves as a whole, read for code (the edit guard)
-function __link(E) { ({ folderHoldsCode, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
+let guardianShellActions, guardianGuardFilter; // guardian.js — dev-guardian's gate rules (1.30), read through the hook points below
+function __link(E) { ({ folderHoldsCode, guardianShellActions, guardianGuardFilter, approvedContentSame, proofIncomplete, activeTasks, approvalRolesFrom, checksInput, guardianChecks, GUARDIAN_COMMAND, detectTracks, evidenceModeInput, evidenceRecords,
   existingFeature, expectsFail, featureDirs, featureLang, FOLD_CASE, globMatcher,
   guessLang, implementsRel, insideDirAlias, isCodeFile, isDevSpecDir, isDirSafe, isFeatureFolder, isImplementsGlob, isObj, isRecord,
   isTestFile, loadRoadmap, normalizeLang, own, parseApprovalRolesText, parseTasks, projectChecks, projectLang, readIfExists, readJson,
@@ -1487,7 +1488,9 @@ function shellOpActions(o, mode, ctx) {
       } else if (o.op === "link") {
         if (f.guarded || f.specs >= 0) out.push(shellDown("link"));
       } else if (o.op === "unknown") {
-        if (f.guarded || f.dir || f.may || (!f.wild && f.name)) out.push({ kind: "unreadable", why: "specs-arg", source: "shell" });
+        // (dev-guardian's launcher / baseline: their own guard-down — counted only while a check runs the gate, 1.30)
+        if (f.guarded && String(f.guarded.setting).startsWith("guardian-")) out.push(shellHit(f.guarded));
+        else if (f.guarded || f.dir || f.may || (!f.wild && f.name)) out.push({ kind: "unreadable", why: "specs-arg", source: "shell" });
       }
     }
   }
@@ -1646,6 +1649,7 @@ function shellApprovalActions(command, level, depth, mode, meta, ctx) {
     const raw = words.raw || words;
     shellTrack(words, raw, mode, c);
     const at = devSpecWordAt(words, raw);
+    for (const read of approvalShellReaders()) out.push(...read(words, programAt(words, raw), at, c)); // another concern's (dev-guardian's, 1.30)
     if (at >= 0) {
       let args = words.slice(at + 1);
       if (mode === "ps" && args.length && args[args.length - 1] === "@" && segs[si + 1]) {
@@ -1967,7 +1971,8 @@ function approvalCommand(a, cli) {
   else if (a.kind === "guard-down") {
     // a write / edit of the file itself (or of the harness-observed log — evidence is recorded by the harness, never by hand):
     // the user makes it
-    if (a.setting === "roadmap" || a.setting === "state" || a.setting === "observed" || a.setting === "specs" || a.setting === "link") return null;
+    if (a.setting === "roadmap" || a.setting === "state" || a.setting === "observed" || a.setting === "specs" || a.setting === "link" ||
+      String(a.setting).startsWith("guardian-")) return null; // (dev-guardian's launcher, baseline, baseline update — 1.30)
     if (a.setting === "track") words.push("add-track", name(a.feature), ...(Array.isArray(a.tracks) ? a.tracks : []).map((t) => word(t, "<track>")), "--remove");
     else if (a.setting === "evidence") words.push("init", "--evidence", "reported");
     else if (a.setting === "stopCheck") words.push("init", "--stop-check", "off");
@@ -2007,8 +2012,13 @@ function approvalCommand(a, cli) {
 // opts.meta: the project's roadmap.json meta (what a spec_init / `init` change is compared with — absent: unknown, fail closed).
 // opts.resolveFeature (the MCP server): name → the slug the engine resolves it to, or null; a resolved action shows (and
 // its command names) that slug, never the raw argument — slugify drops text in other scripts, which must not reach the question.
-// The other readers of a call's guard-downs, in order (none yet): a module that owns one returns it from here, linked.
-const approvalExtraReaders = () => [];
+// Another concern's guard-down rules — the hook points, each list naming the readers its owner exports (linked; dev-guardian's gate,
+// guardian.js, 1.30): approvalShellReaders — one simple command's words → its guard-downs (shellApprovalActions, per command: (words,
+// prog, devSpecAt, ctx) → actions — `baseline update`, a DEV_GUARDIAN_CLI= its command sets); approvalActionFilters — the call's actions
+// and meta → the ones that apply (dev-guardian's rules guard nothing while no check runs its gate). Its guarded files are probe.js
+// guardedFileOf's (the hook reads them too), its pre-filter word probe.js APPROVAL_CANDIDATE_TESTS'. Every reader stays linear.
+const approvalShellReaders = () => [guardianShellActions];
+const approvalActionFilters = () => [guardianGuardFilter];
 function approvalGuardDecision(payload, level, opts = {}) {
   const lvl = approvalGuardInput(level) || "off";
   const allow = (why, extra) => Object.assign({ decision: "allow", why, level: lvl }, extra);
@@ -2049,9 +2059,8 @@ function approvalGuardDecision(payload, level, opts = {}) {
     // .specs/ itself, of a folder or a glob under it, too
     actions = approvalEditActions(approvalPathArgs(ti, opts.uriPath), payload.cwd, /(?:move|rename|delete|remove|unlink)/i.test(tool.replace(/^mcp__.+__/, "")));
   }
-  // the guard-downs another concern reads in the same call (each reader: {tool, ti, payload, meta, level} → actions) — the hook
-  // point for one a module owns (dev-guardian's, engine/guardian.js); its pre-filter test joins probe.js APPROVAL_CANDIDATE_TESTS
-  if (opts.partial !== true) for (const read of approvalExtraReaders()) actions.push(...read({ tool, ti, payload, meta, level: lvl }));
+  // other concerns' rules over the call's actions (approvalActionFilters — dev-guardian's: its rules guard nothing without its check)
+  for (const keep of approvalActionFilters()) actions = keep(actions, meta);
   if (opts.projectUnreadable === true && actions.length) actions.push({ kind: "unreadable", why: "project", source: "mcp" });
   if (!actions.length) return allow("not-an-approval", { tool });
   if (typeof opts.resolveFeature === "function") {

@@ -190,8 +190,16 @@ History at the end.
 - **The table:** every command is ONE entry of `COMMANDS` (cli/commands.js) — `name`, `aliases`, `options` (value flags from
   `VALUE_FLAG_SPECS`, else switches of `spec.CLI_SWITCHES`), `max`, `bounds`, completion `args` / `sub` / `values`, `text`,
   `help` and `run(c)`. `VALUE_FLAGS`, `COMMAND_OPTIONS`, `COMMAND_ARGS`, `FLAG_VALUES`, `TEXT_ONLY_COMMANDS`, `HELP_ALIASES`,
-  `helpText()` / `helpFor()` and `completionModel()` are DERIVED — never hand-written. A new command is an entry, a new flag a
-  name in each reading entry's `options` (extending.md); one without a structured result says `text: true`.
+  `helpText()` / `helpFor()` and `completionModel()` are DERIVED — never hand-written. A new command is an entry; one without a
+  structured result says `text: true`.
+- **A command's options come from the operations table** (1.30): a command that runs operations says `options: TABLE` and
+  reads them from mcp/lib/operations.js `cliOptions(command)` — each of its operations' arguments' `cli` flags (but a flag its
+  command implies, `cmd`), then `cliOnly`, in the table's order, which is the order `--help` and completion show (keep an
+  operation's args in it). Read on first use (a getter; `COMMAND_OPTIONS` a proxy built then): the status line and the bare
+  help never load the table. A hand-written list stays only where the help shows another order than the table can give — init,
+  spike (create's operation minus the bugfix prefill, size and body), done / undone (one operation, two orders), changelog and
+  depend (whose args' order is the MCP mode's `takes` message) — and cli/tests/02-surfaces-parity.js holds it to the table's
+  flags. A new flag of an operation is its `cli` in the table (+ `VALUE_FLAG_SPECS` / `CLI_SWITCHES`, + a hand-kept list).
 - **The call:** `main` never exits the process and keeps no state between calls — each call has its own context `c`
   (`createContext`); a usage error or a refusal throws `CliExit`; `io.env` / `io.cwd` apply for the call and are restored. A
   call is SYNCHRONOUS unless the command waits (`done --run` / `finish --run`, stdin from a stream) — only there does a handler
@@ -230,6 +238,12 @@ History at the end.
 ### CLI arguments — each command reads its own options and arguments
 - **CLI `--lang` is the MCP enum:** folded like it (`spec.canonicalLang`: `PT` → `pt`, `pt_BR` → `pt-BR`), refused outside
   `spec.LANGS` before any command runs — `normalizeLang()` would save `fr` as `en`.
+- **An enum the engine checks itself** (the CLI's raw word reaches it; MCP's schema refused it already): ONE reader,
+  `enumArg(name, values, v, lng, {fold, blankGiven})` (engine/state.js, 1.30) — trimmed and lower-cased (a fold of its own:
+  `langOption` canonicalizes), absent / null / blank = not given, else `{ok: false, error, code: "invalid-arguments",
+  invalid: [name]}` in the MCP validator's words. `parseFlow`, `sizeInput`, `langOption`, the backlog / milestone / templates /
+  tracks / feature actions (feature's: `blankGiven`), export's format, create's kind (`blankGiven`) and impact's phase read
+  through it — a new enum does too; a refusal the engine returns whole carries the code to the CLI's `--json` as MCP's does.
 - **Per command:** `checkCommandArgs()` refuses, before anything runs, a known flag the command doesn't read
   (`cliOutput.flagNotFor`) and an argument past its `max`; `--json`, `--project`, `--help` are global (`GLOBAL_OPTIONS`);
   `backlog`, `log` and `feature` check theirs per action. Contradictions are usage errors (`depend … --clear`, `--timeout`
@@ -405,6 +419,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — the command table (`COMMANDS`) and the call contract (`main(argv, io)`, `CliExit` — it was `process.exit(1)`); the
   CLI split into cli/dev-spec.js, cli/main.js, cli/commands.js, cli/run.js and cli/git.js; `guarded()` became the one choke
   point.
+- **1.30 review 8 (ds-maint 3)** — an option was declared in 5–6 places (the schema, the operations table's `cli`, the
+  command's `options`, its help, `CLI_SWITCHES` / `VALUE_FLAG_SPECS`), kept consistent by tests: 37 of the 43 commands that run
+  operations now take their `options` from the table (`options: TABLE`, `cliOptions`); the help, completion and every
+  `COMMAND_OPTIONS` entry stayed byte-identical (the table's args were put in the help's order for create, approve, feature,
+  import and decide). Switch vs value still comes from `CLI_SWITCHES` / `VALUE_FLAG_SPECS` (the approval hook's lexer reads them).
 - **1.30 (review 8, ds-maint finding 13)** — `help <command>`, `<command> --help` and an unknown command each loaded the whole
   engine to print text (+170–185 ms over `node -e 0`), and every call required cli/run.js and cli/git.js. Measured (Windows, Node 26,
   median of 21 interleaved fresh processes, `node -e 0` 51 ms): `help approve` 164 → 82 ms, `approve --help` 163 → 86, an unknown
@@ -422,6 +441,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 
 ### CLI arguments
 - **1.13** — `--lang` is checked against the MCP enum (the engine saved `fr` as `en`).
+- **1.30 review 8 (ds-maint 12)** — seven copies of the enum check (`parseFlow`, `sizeInput`, `langOption`, the backlog and
+  milestone actions, export's format, create's kind) became `enumArg`; the templates / tracks / feature actions too, whose CLI
+  refusals had words of their own ("Unknown templates action 'x' — one of: …", "action must be one of: remove | archive | …")
+  and no code where MCP answered `invalid-arguments`.
 - **1.23 review** — each command reads its own options and arguments: `approve <f> <phase> --remove` (meant --revoke) approved,
   `done <f> 3 4` ticked task 3 alone. **L14** — `--project` names an existing folder: `create x --project <typo>` created the
   whole mistyped tree. **P1** — `evals` forwards every word: only the words after the feature were forwarded, so `evals

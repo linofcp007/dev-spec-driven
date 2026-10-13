@@ -288,6 +288,8 @@ function dotGlob(t) {
 const APPROVAL_CANDIDATE_TESTS = [
   (t) => RE_APPROVAL_NAMES.test(t),
   (t) => RE_GLOB_CHAR.test(t) && (RE_APPROVAL_VERB.test(t) || dotGlob(t) || RE_APPROVAL_WRITE_WORD.test(t)),
+  // dev-guardian's gate (1.30, engine/guardian.js): its launcher (.specs/guardian.cjs), its baseline, dev-guardian's `baseline update`
+  (t) => /guardian/i.test(t),
 ];
 // plain: approvalPlain(command) → may it be an approval / a guard-down?
 const approvalMayBe = (plain) => APPROVAL_CANDIDATE_TESTS.some((test) => test(plain));
@@ -295,9 +297,11 @@ const approvalMayBe = (plain) => APPROVAL_CANDIDATE_TESTS.some((test) => test(pl
 // The files the approval guard stands on, by their path (any separators, case-blind) → { setting, feature? } | null:
 // .specs/roadmap.json ("roadmap": the guard and the project's gates), a .state.json anywhere below .specs/ ("state": a feature's
 // approvals, evidence, history — feature: its folder) and a harness-observed run log .specs/[…/].execution/observed.jsonl
-// ("observed" — feature null for the project's own .specs/.execution/). Read on the path's segments, one pass (the regexes this
-// replaces rescanned `.specs/.specs/…` from each `.specs`). The engine's approvalGuardedFile reads its normalized path text here, the
-// approval hook the edited path as the file system reads it.
+// ("observed" — feature null for the project's own .specs/.execution/); and dev-guardian's gate (1.30, engine/guardian.js — the engine
+// counts these only while a check runs the gate: guardianGuardFilter): its launcher .specs/guardian.cjs ("guardian-launcher") and its
+// baseline .guardian/baseline.json ("guardian-baseline"). Read on the path's segments, one pass (the regexes this replaces rescanned
+// `.specs/.specs/…` from each `.specs`). The engine's approvalGuardedFile reads its normalized path text here, the approval hook the
+// edited path as the file system reads it.
 function guardedFileOf(p) {
   const segs = String(p).split(/[\\/]+/);
   const n = segs.length;
@@ -311,13 +315,15 @@ function guardedFileOf(p) {
     return { setting: "observed", feature: f && f.toLowerCase() !== ".specs" ? f : null };
   }
   if (last === ".state.json" && n >= 3 && specsBefore(n - 2)) return { setting: "state", feature: segs[n - 2] || null };
+  if (last === "guardian.cjs" && low(n - 2) === ".specs") return { setting: "guardian-launcher" };
+  if (last === "baseline.json" && low(n - 2) === ".guardian") return { setting: "guardian-baseline" };
   return null;
 }
-// The folder holding a path's .specs/ — the text before the first `.specs` followed by a separator or the end, its separators taken
-// off ("" → "."): the project an edit of a guarded file acts on.
+// The folder holding a path's .specs/ (or dev-guardian's .guardian/) — the text before the first `.specs` / `.guardian` followed by a
+// separator or the end, its separators taken off ("" → "."): the project an edit of a guarded file acts on.
 function specsParentOf(p) {
   const t = String(p);
-  const m = /\.specs(?=[\\/]|$)/i.exec(t);
+  const m = /\.(?:specs|guardian)(?=[\\/]|$)/i.exec(t);
   return m ? trimSlashEnd(t.slice(0, m.index)) || "." : t;
 }
 

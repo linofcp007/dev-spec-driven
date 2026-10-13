@@ -98,9 +98,9 @@ exports.run = ({ ok, run, runIn, tmp, CLI, require, __dirname }) => {
   const bothB3 = runIn(["approve", "quick-spec", "design", "--through", "tasks", "--project", pf2]);
   const execB3 = runIn(["approve", "quick-spec", "--through", "execution", "--project", pf2]);
   ok(cliJ && JSON.stringify([cliJ.ok, cliJ.complete, cliJ.approved, cliJ.steps, cliJ.message]) === JSON.stringify([eng.ok, eng.complete, eng.approved, eng.steps, eng.message]) &&
-    usageB3.code === 1 && /approve <feature> --through <phase>/.test(usageB3.out) && bothB3.code === 1 && /either a phase or through/.test(bothB3.out) &&
+    usageB3.code === 1 && /Name the phase to approve — or through: <phase> \(CLI: --through <phase>\)/.test(usageB3.out) && bothB3.code === 1 && /either a phase or through/.test(bothB3.out) &&
     execB3.code === 1 && /covers the planning phases only/.test(execB3.out),
-    "approve --through --json = spec_approve {through} (same approved / steps / message); approve without a phase or --through is a usage error; a phase plus --through and --through execution are refused");
+    "approve --through --json = spec_approve {through} (same approved / steps / message); approve without a phase or --through is refused as spec_approve refuses it (1.30: missing-arguments [phase], naming --through); a phase plus --through and --through execution are refused");
 
   // PT: role sign-off and fast-forward messages in European Portuguese; --roles none clears
   const pp = path.join(tmp, "pb3-pt");

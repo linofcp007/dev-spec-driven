@@ -85,7 +85,8 @@ you the `dev-spec done <feature> 1 --run` line to run yourself.
 asks for a fresh run of your full suite, drafts the merge summary from the spec and asks for your sign-off. Then you
 choose: merge locally or keep the branch. Nothing is pushed without you.
 With **dev-guardian** installed, `dev-spec init --guardian` makes its security gate a project check: `/spec-finish` runs it,
-and a new high finding blocks until it is fixed or you accept it in dev-guardian (`dev-guardian baseline update`).
+and a new high finding blocks until it is fixed (you accept one reviewed finding with an inline suppression, never
+`baseline update`). It is project-wide: every machine that finishes needs dev-guardian and its scanners.
 
 Lost at any point? `/spec <feature>` resumes at the one next step. Prefer a guided version on your own repo?
 `/dev-spec-driven:spec-tour` takes one tiny real change through every gate, explaining each as it happens.
@@ -292,7 +293,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (32 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine: 23 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
+│   ├── lib/engine/                   ← the engine: 24 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← localized content (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)
