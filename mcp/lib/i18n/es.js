@@ -987,7 +987,7 @@ const msg = {
       duplicatesPartial: (unread) => `; solo se comparó una parte del proyecto — el límite de bytes del detector dejó ${unread === 1 ? "1 fichero de código" : `${unread} ficheros de código`} sin leer`,
       duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "bloque del código de la funcionalidad repite" : "bloques del código de la funcionalidad repiten"} otro lugar de sus propios ficheros — ${n === 1 ? "candidato" : "candidatos"} para la pasada de simplificación (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       // 1.30: ninguna tarea indica ficheros en _Implements:_ — lo que los lee no ve código de la funcionalidad
-      noImplements: "ninguna tarea indica sus ficheros en _Implements:_ — la línea base de deriva, la detección de duplicados y la atribución de dev-guardian no ven código de esta funcionalidad. Añade _Implements: <ruta>_ a cada tarea que escribió código (un tasks.md editado se vuelve a aprobar), o ignóralo si ninguna lo hizo.",
+      noImplements: (file) => `ninguna tarea indica sus ficheros en _Implements:_ — la línea base de deriva, la detección de duplicados y la atribución de dev-guardian no ven código de esta funcionalidad. Añade _Implements: <ruta>_ a cada tarea que escribió código (un ${file} editado se vuelve a aprobar), o ignóralo si ninguna lo hizo.`,
       untrackedApproval: (list, slug) => `aprobado antes del registro de cambios — no se registró nada del fichero aprobado, así que una edición no puede detectarse: ${list} — vuelve a aprobar para empezar a seguirlo (/approve ${slug} design)`,
     },
     // rigor a medida (el EN es la referencia): tamaños (spec_create {size}), el cambio (tamaño xs, un change.md).

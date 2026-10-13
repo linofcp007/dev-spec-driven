@@ -1387,7 +1387,9 @@ function scanTaskMarkers(prose) {
       if (key === "verify") parts = parts.map((p) => stripEnds(p, isBacktickUnit).trim()).filter((p) => p && !/^\[.*\]$/.test(p));
       // the template's `_Implements: [path of the code …]_` slot names no file (1.30) — as a [bracketed] _Verify:_ runs nothing.
       // One bracket group alone: `app/[id]/page.tsx` and `[slug].tsx` are paths. (core.js implementsRefs and trace.js read alike.)
-      if (key === "implements") parts = parts.filter((p) => !/^\[[^\]]*\]$/.test(p));
+      // Its backticks off first, as implementsRefs reads it: `` `[path …]` `` is the slot too (review 9 — it was a path here while
+      // implementsRefs dropped it; placeholderReport flags it, markdown.js implementsCodeSlots).
+      if (key === "implements") parts = parts.filter((p) => !/^\[[^\]]*\]$/.test(stripEnds(p, isBacktickUnit).trim()));
       const have = seen[key] || (seen[key] = new Set());
       parts.filter(Boolean).forEach((p) => { if (!have.has(p)) { have.add(p); out[key].push(p); } });
     }

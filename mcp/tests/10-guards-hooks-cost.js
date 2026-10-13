@@ -216,7 +216,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
   {
     const E = require("./lib/engine/index.js");
     const PR = require("./lib/probe.js");
-    const AH = require("../hooks/approval-hook.js"), GH = require("../hooks/guard-hook.js");
+    const AH = require("../hooks/approval-hook.js"), GH = require("../hooks/guard-hook.js"), HU = require("../hooks/hook-utils.js");
     const BS = String.fromCharCode(92);
     const rep = (unit, n, tail) => unit.repeat(Math.ceil(n / unit.length)).slice(0, n) + (tail || "");
     const dec = (tool, ti) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: ti }, "deny", { meta: {}, lang: "en" });
@@ -242,6 +242,14 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
       ["approvalGuardDecision, Bash (DEV_GUARDIAN_CLI=x …)", (s) => dec("Bash", { command: s }), "DEV_GUARDIAN_CLI=x ", "node .specs/guardian.cjs scan"],
       ["the approval hook's decide, Write (.guardian\\.guardian\\…)", (s) => AH.decide(js({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: s } })),
         BS + ".guardian", BS + "baseline.json"],
+      // review 9: .guardian/ as a whole (shellPathFacts' guardian segment), an MCP move onto it, the nested projects a command's path
+      // words name (hook-utils approvalProjects — quoted words too) and the backticked _Implements:_ slot (placeholderReport)
+      ["approvalGuardDecision, Bash (rm -rf .guardian/.guardian/…)", (s) => dec("Bash", { command: "rm -rf " + s }), ".guardian/", ""],
+      ["approvalGuardDecision, Bash (cp -r x .guardian/… then .guardian)", (s) => dec("Bash", { command: "cp -r x " + s }), "x/.guardian/", ".guardian"],
+      ["approvalGuardDecision, MCP move (.guardian\\.guardian\\…)", (s) => dec("mcp__fs__move_file", { source: "x", destination: s }), BS + ".guardian", ""],
+      ["approvalProjects (a/.specs/x a/.specs/x …)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "a/.specs/x ", ""],
+      ["approvalProjects ('\"'\"… then .guardian/)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "'\"", " sub/.guardian/"],
+      ["placeholderReport (_Implements: `[x]`, `[x]`, …)", (s) => E.placeholderReport("- _Implements: " + s + "_"), "`[x]`, ", ""],
     ];
     const time = (f, s) => { const t = process.hrtime.bigint(); f(s); return Number(process.hrtime.bigint() - t) / 1e6; };
     const shape = {};

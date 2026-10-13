@@ -31,12 +31,13 @@
  * roadmap.json that exists and doesn't parse: the strictest "approvalGuard": "ask" | "deny" its raw text names still holds
  * (appending a byte to the file must not switch the guard off; a BOM-less UTF-16 file is read through its NULs), on a missing one
  * while the .specs/ holds features (ask), on a projectDir that is no local path (a bad file:// URI — ask), and
- * on a payload that arrived only in part (the 2 s stdin safety net) naming dev-spec / .specs / an approval tool: ask. It is cheap: a
- * tool call that can't be an approval (a Bash command naming neither dev-spec nor .specs, a Write / Edit of a file whose path
+ * on a payload that arrived only in part (the 2 s stdin safety net) naming dev-spec / .specs / dev-guardian / an approval tool: ask. It
+ * is cheap: a tool call that can't be an approval (a Bash command naming neither dev-spec nor .specs, a Write / Edit of a file whose path
  * names no .specs/) exits before any file read; otherwise one raw read of roadmap.json (UTF-8 or UTF-16 — hook-utils.js) per
  * candidate project (hook-utils.js approvalProjects: the session's cwd and the nearest .specs/ above it, CLAUDE_PROJECT_DIR,
  * SPEC_PROJECT_DIR, the project the call names — MCP projectDir, CLI --project, the edited file's — and a command's cd /
- * Set-Location / pushd targets and SPEC_PROJECT_DIR= assignments; the strictest level wins; a network path only when it is the
+ * Set-Location / pushd targets, SPEC_PROJECT_DIR= assignments and the folders holding a .specs/ / .guardian/ it names; each one with
+ * the guard on judges the call with its own level and meta, the strictest answer wins; a network path only when it is the
  * session's own or on its share).
  */
 
@@ -75,8 +76,9 @@ const candidate = (c) => {
 const RE_MCP_MAYBE = /\.specs|%2especs|\.guardian|%2eguardian|roadmap\.json|\.state\.json|observed\.jsonl|guardian\.cjs|~\d/i;
 // A roadmap.json that doesn't parse: the strictest level its raw text names (fail closed) — the engine's rawApprovalGuard.
 const RE_RAW_GUARD = /"approvalGuard"\s*:\s*"\s*(ask|deny)\s*"/gi;
-// a payload cut short — what it may be about (dev-spec, .specs/, an approval-shaped MCP tool).
-const RE_PARTIAL = /dev-?spec|\.specs|spec_(?:approve|feature|init|add_track)/i;
+// a payload cut short — what it may be about (dev-spec, .specs/, an approval-shaped MCP tool, dev-guardian's gate: `dev-guardian
+// baseline update`, .guardian/baseline.json — 1.30, review 9; the probe's pre-filter word, APPROVAL_CANDIDATE_TESTS, is the same).
+const RE_PARTIAL = /dev-?spec|\.specs|guardian|spec_(?:approve|feature|init|add_track)/i;
 
 const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 
@@ -104,27 +106,24 @@ function rawLevel(dir) {
   const v = meta ? meta.approvalGuard : undefined;
   return { level: Math.max(0, LEVELS.indexOf(typeof v === "string" ? v.trim().toLowerCase() : "")), meta: meta || {} };
 }
-// The strictest level among the candidate folders → { level, dir, meta }.
-function strictest(dirs) {
+// The candidate folders' levels ([{ dir, level, meta }] — rawLevel each) → the first of the strictest: { level, dir, meta }.
+const levelsOf = (dirs) => dirs.map((d) => Object.assign({ dir: d }, rawLevel(d)));
+function strictest(levels) {
   let level = 0, dir = null, meta;
-  for (const d of dirs) {
-    const l = rawLevel(d);
-    if (l.level > level) { level = l.level; dir = d; meta = l.meta; }
-  }
+  for (const l of levels) if (l.level > level) ({ level, dir, meta } = l);
   return { level, dir, meta };
 }
 const sessionEnv = () => ({ CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR, SPEC_PROJECT_DIR: process.env.SPEC_PROJECT_DIR });
 
 // stdin never ended within the safety net's 2 s — the payload is partial (it doesn't parse). When its text names dev-spec,
-// .specs/ or an approval tool and a project the session may be in has the guard on: ask (it used to exit 0 — allowed).
+// .specs/, dev-guardian or an approval tool and a project the session may be in has the guard on: ask (it used to exit 0 — allowed).
 function partial(raw) {
   const text = String(raw || "");
   if (!RE_PARTIAL.test(text)) return null;
   let cwd = null;
   const m = /"cwd"\s*:\s*"((?:[^"\\]|\\.){1,4096})"/.exec(text);
   if (m) try { cwd = JSON.parse('"' + m[1] + '"'); } catch { cwd = null; }
-  const dirs = HU.approvalProjects({ cwd: cwd || process.cwd(), env: sessionEnv() });
-  const s = strictest(dirs);
+  const s = strictest(levelsOf(HU.approvalProjects({ cwd: cwd || process.cwd(), env: sessionEnv() })));
   if (!s.level) return null;
   try {
     const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -212,19 +211,30 @@ function decide(raw, opts = {}) {
       else if (pd.dir) named.push(pd.dir);
     }
   }
-  const s = strictest(HU.approvalProjects({ cwd, env: sessionEnv(), named, command: command || "" }));
+  const levels = levelsOf(HU.approvalProjects({ cwd, env: sessionEnv(), named, command: command || "" }));
+  const s = strictest(levels);
   if (unreadableProject && s.level < 1) s.level = 1;
   if (!s.level) return null;
 
   // Past the pre-check: an engine failure asks (failClosed), it never allows silently.
   try {
     const spec = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
-    const dir = s.dir || cwd || process.cwd();
-    // resolveFeature (as the MCP server): the prompt and the command name the feature the engine will act on
-    // in that project — its slug — never the raw argument (slugify drops text in other scripts, which must not reach the prompt).
-    const resolveFeature = (n) => { const f = spec.existingFeature(dir, n); return f.ok ? f.slug : null; };
-    const r = spec.approvalGuardDecision(payload, LEVELS[s.level], { lang: spec.projectLang(dir), meta: s.meta, resolveFeature,
-      uriPath: HU.fileUriToPath, projectUnreadable: unreadableProject });
+    // Each candidate project with the guard on judges the call with ITS level and meta (its checks — dev-guardian's gate guards its
+    // files only where a check runs it), the strictest project's first; the strictest answer wins (a later one only when stricter).
+    // review 9: one meta (the strictest level's) judged every project's files — sub/.guardian/baseline.json of a nested project whose
+    // check runs, from a stricter outer one without it, went through.
+    const rank = (d) => Math.max(0, LEVELS.indexOf(d));
+    let r = null;
+    for (const j of [s, ...levels.filter((l) => l.level > 0 && l.dir !== s.dir)]) {
+      const dir = j.dir || cwd || process.cwd();
+      // resolveFeature (as the MCP server): the prompt and the command name the feature the engine will act on
+      // in that project — its slug — never the raw argument (slugify drops text in other scripts, which must not reach the prompt).
+      const resolveFeature = (n) => { const f = spec.existingFeature(dir, n); return f.ok ? f.slug : null; };
+      const one = spec.approvalGuardDecision(payload, LEVELS[j.level], { lang: spec.projectLang(dir), meta: j.meta, resolveFeature,
+        uriPath: HU.fileUriToPath, projectUnreadable: unreadableProject });
+      if (!r || rank(one.decision) > rank(r.decision)) r = one;
+      if (r.decision === "deny") break;
+    }
     if (r.decision !== "ask" && r.decision !== "deny") return null;
     const out = { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: r.decision, permissionDecisionReason: r.reason } };
     if (r.userNote) out.systemMessage = r.userNote; // deny: the reason goes to the agent — the user sees the command to run
