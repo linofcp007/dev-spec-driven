@@ -8,29 +8,10 @@
  */
 const i18n = require("../../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let backtickRuns, closesFence, headingEntries, headRest, indentOf, isLtUnit, isWsUnit, RE_EARS_KEYWORD, RE_FENCE,
+let closesFence, headingEntries, headRest, indentOf, isLtUnit, isWsUnit, RE_EARS_KEYWORD, RE_FENCE,
   RE_MODAL, restAfterBlanks, shortTitle, stripEnd, wsOrUnitIn;
-function __link(E) { ({ backtickRuns, closesFence, headingEntries, headRest, indentOf, isLtUnit, isWsUnit,
+function __link(E) { ({ closesFence, headingEntries, headRest, indentOf, isLtUnit, isWsUnit,
   RE_EARS_KEYWORD, RE_FENCE, RE_MODAL, restAfterBlanks, shortTitle, stripEnd, wsOrUnitIn } = E); }
-
-// `<!--` (and, with `closers`, `-->`) → `&lt;!--` / `--&gt;` outside inline code spans, line by line. Linear.
-function inertOutsideCode(text, closers) {
-  if (!text.includes("<!--") && !(closers && text.includes("-->"))) return text;
-  const esc = (t) => (closers ? t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;") : t.replace(/<!--/g, "&lt;!--"));
-  return text.split("\n").map((line) => {
-    if (!line.includes("`")) return esc(line);
-    const ticks = backtickRuns(line);
-    let out = "";
-    let from = 0;
-    // [k, spanEnd(k)) is a whole code span, or an unmatched backtick run (literal — the scan goes on after it): kept as written
-    for (let k = line.indexOf("`"); k !== -1; k = line.indexOf("`", from)) {
-      const e = ticks.spanEnd(k);
-      out += esc(line.slice(from, k)) + line.slice(k, e);
-      from = e;
-    }
-    return out + esc(line.slice(from));
-  }).join("\n");
-}
 
 // Headings outside fenced code and HTML comments: [{ i, level, text }] — the ONE heading reader's (headingEntries: a SETEXT
 // heading and an ATX one indented 1–3 spaces too; the importers read only margin ATX headings, so "Requirements\n============" or
@@ -351,6 +332,6 @@ function titleAfterDash(s, i) {
   return restAfterBlanks(s, i, false);
 }
 
-module.exports = { inertOutsideCode, mdHeadings, mdRange, mdBody, markRange, unusedLines, RE_MD_HR, firstParagraph,
+module.exports = { mdHeadings, mdRange, mdBody, markRange, unusedLines, RE_MD_HR, firstParagraph,
   mdListItems, leftoverExtras, trimClause, tidyLines, earsThen, earsFromClauses, clauseScanner, earsFromGwt, titleFromStory,
   newImportModel, titleAfterDash, __link };

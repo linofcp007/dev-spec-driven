@@ -20,8 +20,7 @@ function __link(E) { ({ today, artifactState, customSteeringError, existsRaw, fl
   IMPORT_MAX_BYTES, IMPORT_TOOLS, importSourceAt, isSteeringStub, linkedSpecsFolder, parseTracks, readIfExists, slugify, specsRoot,
   steeringFrontMatter, stripHtmlComments, toPosix, writeIfAbsent } = E); }
 
-// The steering sources spec_import takes (its `tool` enum) and, without a path, where each looks in the project (those that exist).
-const STEERING_IMPORT_TOOLS = ["kiro-steering", "cursor-rules"];
+// Without a path, where each steering source spec_import takes (scaffold.js STEERING_IMPORT_TOOLS) looks in the project (those that exist).
 const STEERING_IMPORT_DEFAULTS = { "kiro-steering": [".kiro/steering"], "cursor-rules": [".cursor/rules", ".cursorrules"] };
 // The files one import writes (the rest: one warning with their count) and the characters they hold together (a file that would
 // pass it is skipped, too-large — like every import, the source is read whole or not at all).
@@ -209,4 +208,4 @@ function steeringText(t, text, legacy, L, from, date, warn) {
   return lines.join("\n") + "\n\n" + note + "\n\n" + body + "\n";
 }
 
-module.exports = { STEERING_IMPORT_TOOLS, importSteering, __link };
+module.exports = { importSteering, __link };

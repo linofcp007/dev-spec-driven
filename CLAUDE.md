@@ -101,7 +101,8 @@ codes (`step`, `code`, `unverifiedReason`, check ids) never change, while messag
 
 **The module rule (1.18), in short:** a name an engine module needs at LOAD time comes from a destructured `require()`
 marked `// load time` (an acyclic graph); every other one is a bare `let` bound by `__link(E)`; shared mutable state is
-`CTX` (`engine/ctx.js`). A new module goes into `engine/index.js` `MODULES` — details: architecture.md → The module rule.
+`CTX` (`engine/ctx.js`). A new module goes into `engine/index.js` `MODULES` (`LAZY`: the tier loaded on first use —
+dupes.js, import/) — details: architecture.md → The module rule.
 
 **i18n:** every user-facing string lives in `mcp/lib/i18n/*` — `en.js` · `pt.js` · `es.js` hold the same keys (EN is the
 reference), assembled by the `mcp/lib/i18n.js` facade; pt-BR is DERIVED from pt (`i18n/pt-br.js`, `toPtBr`), never
@@ -141,7 +142,7 @@ mcp/lib/operations.js          THE operations table: each operation's MCP tool, 
 mcp/lib/probe.js               THE dev-spec project rule + walks (Node core only): hooks, status line, completion, the engine
 mcp/lib/latin1-scan.js         the stop gate's claim scan on a one-byte projection of a wide text (Node core only)
 mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): the engine in one file — DEV_SPEC_BUNDLE=1 only
-mcp/lib/engine/                ALL domain logic, one module per concern (index.js loads MODULES; ctx.js holds CTX; import/;
+mcp/lib/engine/                ALL domain logic, one module per concern (index.js: MODULES, LAZY on first use; ctx.js: CTX; import/;
                                corpus.generated.json — GENERATED: the built-in placeholder corpus)
 mcp/lib/i18n.js · i18n/        the localized content: en.js · pt.js · es.js · common.js · pt-br.js (the derivation)
 mcp/lib/prompts-resources.js   MCP prompts (= commands/*.md) + specs:// resources

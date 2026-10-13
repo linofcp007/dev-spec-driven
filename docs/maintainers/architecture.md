@@ -30,7 +30,7 @@ mcp/lib/probe.js               THE dev-spec project rule (`isDevSpecProject`) an
 mcp/lib/latin1-scan.js         the stop gate's claim scan on a one-byte projection of a wide text (`latin1Text`) — Node core only
 mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): the engine + i18n in ONE file (The build)
 mcp/lib/engine/                ALL domain logic, one module per concern (The module rule):
-  index.js · ctx.js            the loader (MODULES → the namespace E → __link(E)) · CTX, the shared per-call state
+  index.js · ctx.js            the loader (MODULES → the namespace E → __link(E); LAZY on first use) · CTX, the shared per-call state
   core.js                      linear text scans, own-key lookup, globs, the _Implements:_ readers, calendar dates (today, dayOf)
   files.js                     paths, the write gate (create-only / atomic writes), JSON reads, the read cache, readFileHead,
                                path containment, the feature / roadmap locks, folder moves, resolveProjectDir
@@ -54,8 +54,9 @@ mcp/lib/engine/                ALL domain logic, one module per concern (The mod
   export.js                    spec_export (markdown, HTML, Gherkin, CSV, changelog), milestones
   guards.js                    guard mode, the stop gate and its claim scan, the approval guard + shell lexer (CLI_SWITCHES: probe.js)
   upgrade.js · scan.js         spec_upgrade · the brownfield scan, coverage, the ONE notion of code / test file (isCodeFile)
-  dupes.js                     the duplicate-code detector (duplicationReport, duplicateRuns): spec_scan {duplicates}, finish
-  import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering
+  dupes.js                     the duplicate-code detector (duplicationReport, duplicateRuns): spec_scan {duplicates}, finish — LAZY
+  import/                      spec_import: index.js · common.js · kiro · speckit · openspec · plan · bmad · fluidplan · steering —
+                               LAZY (the tool lists IMPORT_TOOLS / STEERING_IMPORT_TOOLS: scaffold.js)
 mcp/lib/i18n.js · i18n/        the localized content: the facade (the tables, LAYOUTS — the structure every language shares)
                                + en.js · pt.js · es.js (each language's `text`) · common.js · pt-br.js (the derivation)
 mcp/lib/prompts-resources.js   MCP prompts (= commands/*.md) + specs:// resources (read-only, confined)
@@ -114,11 +115,29 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   `CTX.TEMPLATE_MEMO`, `CTX.PACK_MEMO`, `CTX.GHOST_MARKERS`, reset by `withReadCache`; `CTX.BUILTIN_CORPUS_BUILD`). A module's
   own lazy caches (`TEMPLATE_SETS`, `PACK_CACHE`, `KW_RE`, `ENGINE_VERSION`…) stay private; a `let` another module reads moves
   into `CTX`.
-- **A new module** goes into `MODULES`. `__dirname` in a module is `mcp/lib/engine/` (the clone's root is three levels up —
+- **A new module** goes into `MODULES` (or, one no hook needs, `LAZY` — below). `__dirname` in a module is `mcp/lib/engine/` (the clone's root is three levels up —
   `approvalGuardDecision`'s CLI path, `engineVersion`'s package.json). Every `mcp/lib` source requires only Node core or a
   relative file.
-- **Checked from the sources** (mcp/tests/16-conventions.js, no parser): "1.18 module rule" — the `let` lists, the links, the
-  load-time graph (acyclic, every engine → engine / i18n → i18n require marked), `MODULES` = the files, all loaded;
+- **The lazy tier (1.30.1) — the second way to reach a name.** `LAZY` lists the modules no hook and no frequent call needs —
+  dupes.js and import/ (~15 ms of every engine load until then) —, loaded on the first call of one of `LAZY_ENTRIES`
+  (`duplicateRuns`, `duplicationReport`, `importSpec`, `planPaths`): the tier's functions an eager module links or the facade
+  takes. Until then `E` holds a STUB of each (a function of the same name that loads the tier, then calls the real one), so the
+  eager modules and the facade keep the ordinary `__link` / destructure — the stub IS the name they link. `loadLazyTier()`
+  requires the tier's modules in order, merges their exports into the tier's own namespace (`E`'s names, every tier export, the
+  real entries in place of the stubs; another name defined twice throws) and calls each tier module's `__link` with it. Inside the
+  tier the rule above holds as ever (load-time requires among the tier and of eager modules, `// load time`; the rest linked).
+  The rules: an eager module never requires a tier module, and links only an ENTRY of it (a name linked before the tier loads
+  stays undefined) — a helper both sides need lives in an eager module (`inertOutsideCode`: markdown.js); a constant read while
+  the surfaces load (a tool list) too (`IMPORT_TOOLS` / `STEERING_IMPORT_TOOLS`: scaffold.js); an entry is a FUNCTION. `E`'s keys
+  never change: a tier name other than an entry is reached through `E.loadLazyTier()` (non-enumerable; the tests reaching an
+  importer's internal). A new tier module goes into `LAZY`; a tier function the eager world calls joins `LAZY_ENTRIES`. The
+  bundle is unchanged: its registry resolves the loader's requires at call time.
+- **Checked from the sources** (mcp/tests/16-conventions.js, no parser): "1.18 module rule" — the `let` lists, the links (a tier
+  module's in the tier's namespace; an eager module linking a tier name that is no entry is named), the load-time graph
+  (acyclic, every engine → engine / i18n → i18n require marked, none from outside the tier into it), `MODULES` + `LAZY` = the
+  files, every eager one loaded; "1.30.1 lazy tier" — each entry a function of exactly one tier module, stubbed in `E` and used
+  outside the tier, no other tier name in `E`, and a fresh process running every hook's `decide()` and the common calls loads no
+  tier module, the first entry call all of them;
   "1.27 module boundaries" — (a) every linked name is used, (b) every export is used outside its module, (c) every facade key
   is read by a surface or a test and every engine name the facade takes is used.
 - **Beside the engine:** a zero-dependency module a process needs WITHOUT the engine (~100 ms to load) lives in `mcp/lib/`
@@ -127,8 +146,8 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 24 modules (+ 9 in import/) of a few hundred to a few
-  thousand lines, never one per helper. Add to the module of the concept; a new file must earn its load cost. The facade's
+  costs ~0.65 ms before any compile (the open is the expensive part): 23 modules loaded with the engine (+ dupes.js and 9 in
+  import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to the module of the concept; a new file must earn its load cost. The facade's
   first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
   loads SLOWER with it. Measure by interleaving the variants in fresh processes, p50 + spread — never one run. On a slow file
@@ -258,6 +277,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   import/common.js and the facade reads `IMPORT_TOOLS` / `STEERING_IMPORT_TOOLS` while it loads — so a lazy tier needs a second
   way to reach a name (call-time getters on `E`, the facade's entries defined after its wrap loop), the helper moved to a core
   module, and the "1.18 module rule" checks taught both. Worth it only alongside other work on index.js / spec.js.
+- **1.30.1** — the lazy tier, done (The lazy tier): `inertOutsideCode` moved to markdown.js, the tool lists to scaffold.js, and the
+  second way to reach a name is a call-time STUB per entry in `E` (no getter: the eager modules' `__link` and the facade's
+  destructure read every name at once, and a getter would load the tier right there). Measured (Windows 11, Node 26, median of
+  21 interleaved fresh processes, a loaded machine; 1.30.0 → 1.30.1): `require(spec.js)` in-process 102.9 → 86.3 ms; the process
+  166 → 146; each hook on a payload taking its engine path — guard 195 → 167, approval 187 → 161, a spec save 202 → 189,
+  SessionStart 203 → 187, observe 177 → 160, stop 253 → 246, plan 180 → 161.
 
 ### The build
 - **1.19 → 1.20** — rendering the corpus (1,165 texts plus pt-BR's twins: ~200 ms) was the largest slice of a hook or CLI

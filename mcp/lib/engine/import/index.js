@@ -20,7 +20,7 @@ let BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, 
   parseKiro, parseOpenSpec, parseSpecKit, parseTracks, projectLang, RE_FENCE, RE_TESTABILITY, readIfExists,
   requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines, slugify, stripHtmlComments, testIndex,
   toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs, unknownTracksError, withTrackBlocks,
-  writeFileAtomic, appendSpecText, flatText, specNameText, importSteering, isDryRun, STEERING_IMPORT_TOOLS, withDryRun;
+  writeFileAtomic, appendSpecText, flatText, specNameText, importSteering, isDryRun, IMPORT_TOOLS, STEERING_IMPORT_TOOLS, withDryRun;
 let today; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ today, BOM_CHAR, classify, closesFence, decodeText, configuredLang, createFeature, decisionEntryLines,
   DECISIONS_FILE, extractAcIds, fenceStep, headingHasMarker, indentOf, inertOutsideCode, insertPackRequirements,
@@ -29,7 +29,7 @@ function __link(E) { ({ today, BOM_CHAR, classify, closesFence, decodeText, conf
   RE_TESTABILITY, readIfExists, requirementAcIds, resolveFeature, restAfterBlanks, scaffoldTestPlan, sectionDropLines,
   slugify, stripHtmlComments, testIndex, toPosix, trackAcIds, trackDesignBlock, trackMarker, trackTaskHeadingIs,
   unknownTracksError, withTrackBlocks, writeFileAtomic, appendSpecText, flatText, specNameText, importSteering, isDryRun,
-  STEERING_IMPORT_TOOLS, withDryRun } = E); }
+  IMPORT_TOOLS, STEERING_IMPORT_TOOLS, withDryRun } = E); }
 
 // ---------------------------------------------------------------------------
 // spec_import — a spec written for another tool (Kiro · spec-kit · OpenSpec) becomes a NEW dev-spec feature
@@ -39,9 +39,7 @@ function __link(E) { ({ today, BOM_CHAR, classify, closesFence, decodeText, conf
 // imported content. Requirement/story N, criterion/scenario M → US-N.AC-M; scenarios become ONE EARS criterion
 // where possible (else the text is kept with [NEEDS CLARIFICATION]); spec-kit FR-xxx / SC-xxx lines keep their IDs.
 
-// + plan · execplan · bmad; + fluidplan; + kiro-steering · cursor-rules (→ .specs/steering/ files, import/steering.js)
-const IMPORT_TOOLS = { kiro: "Kiro", "spec-kit": "spec-kit", openspec: "OpenSpec", plan: "plan", execplan: "ExecPlan", bmad: "BMAD", fluidplan: "fluidplan",
-  "kiro-steering": "Kiro steering", "cursor-rules": "Cursor rules" };
+// The source formats (IMPORT_TOOLS, STEERING_IMPORT_TOOLS) are scaffold.js's: read as the surfaces load, never from this tier.
 const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 const TEXT_IMPORT_TOOLS = ["plan", "execplan", "fluidplan"]; // the single-document sources spec_import {text} accepts (a fluidplan PLAN.md, DECISIONS.md after it)
 // An imported line never opens an HTML comment: every parser reads its source without its comments, so a `<!--`
@@ -622,4 +620,4 @@ function importRun(projectDir, tool, source, opts) {
   };
 }
 
-module.exports = { IMPORT_TOOLS, IMPORT_MAX_BYTES, importHiddenPart, importSpec, importSourceAt, __link };
+module.exports = { IMPORT_MAX_BYTES, importHiddenPart, importSpec, importSourceAt, __link };

@@ -1215,7 +1215,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require }) => {
     const js = (v) => JSON.stringify(v);
     const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
     const call = async (name, args) => payload(await rpc("tools/call", { name, arguments: args }));
-    const E = require("./lib/engine/index.js");
+    const E = require("./lib/engine/index.js").loadLazyTier(); // the namespace with the lazy tier's internals (engine/index.js LAZY: plan.js)
 
     // 1. The test-name conventions per language, table-driven — positives AND negatives (a name that merely ends in
     // "spec" / "test" without the separator is code; a t/ folder makes only a Perl .t a test).
@@ -1349,7 +1349,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require }) => {
     const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
     const rd = (root, ...p) => { try { return fs.readFileSync(path.join(root, ...p), "utf8"); } catch { return ""; } };
     const raw = async (name, args) => { const res = await rpc("tools/call", { name, arguments: args }); return { isError: !!res.result.isError, body: payload(res) }; };
-    const E = require("./lib/engine/index.js");
+    const E = require("./lib/engine/index.js").loadLazyTier(); // the namespace with the lazy tier's internals (plan.js)
 
     // F2. The cap counts code files and manifests only — 60 PNGs in assets/ before src/ used up a cap of 50 (filesScanned 50,
     // truncated, 0 routes); `truncated` = a code file was left unscanned; a huge tree still stops at the entry cap.

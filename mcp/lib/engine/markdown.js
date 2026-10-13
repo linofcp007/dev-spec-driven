@@ -42,6 +42,25 @@ function stripHtmlComments(s) {
   });
   return out;
 }
+// `<!--` (and, with `closers`, `-->`) → `&lt;!--` / `--&gt;` outside inline code spans, line by line, so a text written into a
+// spec never opens a comment there (the importers' lines, the traceability matrix's cells). Linear.
+function inertOutsideCode(text, closers) {
+  if (!text.includes("<!--") && !(closers && text.includes("-->"))) return text;
+  const esc = (t) => (closers ? t.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;") : t.replace(/<!--/g, "&lt;!--"));
+  return text.split("\n").map((line) => {
+    if (!line.includes("`")) return esc(line);
+    const ticks = backtickRuns(line);
+    let out = "";
+    let from = 0;
+    // [k, spanEnd(k)) is a whole code span, or an unmatched backtick run (literal — the scan goes on after it): kept as written
+    for (let k = line.indexOf("`"); k !== -1; k = line.indexOf("`", from)) {
+      const e = ticks.spanEnd(k);
+      out += esc(line.slice(from, k)) + line.slice(k, e);
+      from = e;
+    }
+    return out + esc(line.slice(from));
+  }).join("\n");
+}
 // HTML comments as a markdown reader sees them, line by line — the ONE comment rule of stripHtmlComments, criterionBlocks
 // and visibleLines (the tasks scanner, scanTaskLines, adds its own list-item / paragraph reach). Fenced code (fenceStep)
 // and inline code spans are code: a "<!--" there is text (an AC saying "contains `<!--`" hid every
@@ -1483,7 +1502,7 @@ function builtinTemplateReqs() {
   return (TEMPLATE_REQS = i18n.LANGS.flatMap((l) => (Object.prototype.hasOwnProperty.call(by, l) ? by[l] : []).map((t) => [t, l])));
 }
 
-module.exports = { stripHtmlComments, commentLines, stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs,
+module.exports = { stripHtmlComments, inertOutsideCode, commentLines,stripFencedCode, codeBlockLines, requirementAcIds, stripForeignAcRefs,
   notASlug, featureRefTest, criterionLabel, planIdText, clarificationMarkers, templateTaskSet, bugStepSet, isBugStep,
   isPlaceholderTask, RE_FENCE, RE_FENCE_CLOSE, closesFence, fenceStep, tableCells, headingEntries, headingIndex,
   RE_HEADING_LEAD, headingLeadRe, headingMatches, synonymsOverlap, sectionOverlaps, extractSection, genericAnswer,

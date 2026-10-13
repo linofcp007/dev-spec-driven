@@ -6,7 +6,7 @@ how they came to be — the releases and review findings — is in History at th
 
 ## When extending
 - **New operation** → the engine module of its concern (see Layout; a new module only for a new concern — `engine/index.js`
-  `MODULES`, each file costs load time) under the module rule, then its key in the `mcp/lib/spec.js` facade (`featureLocked`
+  `MODULES`, each file costs load time; one no hook needs: `LAZY`, architecture.md → The lazy tier) under the module rule, then its key in the `mcp/lib/spec.js` facade (`featureLocked`
   when it writes a feature) — every surface requires the facade, never a module. A name resolves through `resolveFeature()` /
   `existingFeature()`, never `path.join(specsRoot, slugify(name))`; state goes through `readJson()` / `writeFileAtomic` under
   the locks (conventions.md → Conventions & gotchas); every write goes through the write gate, never a raw `fs` write outside
@@ -52,9 +52,9 @@ how they came to be — the releases and review findings — is in History at th
   in mcp/tests/06-gates-sizes.js — update it only when the no-size scaffold changes on purpose), and its sized renders in
   `templateCorpus()` (then `npm run build`) and `glossBuiltinLines()`.
 - **New import source** → a parser `engine/import/<tool>.js` returning the import model (`newImportModel()`; reuse
-  import/common.js's readers), in `MODULES`; its `IMPORT_TOOLS` and `C3_PARSERS` entries (+ `TEXT_IMPORT_TOOLS` for a single
+  import/common.js's readers), in `LAZY` (the lazy tier); its `IMPORT_TOOLS` (scaffold.js) and `C3_PARSERS` entries (+ `TEXT_IMPORT_TOOLS` for a single
   document); the `tool` enum of `spec_import`, the CLI's `import` entry, tests. A source that is no feature
-  (`STEERING_IMPORT_TOOLS`) is dispatched by `importRun` before the feature path and reads through `importSourceAt` too. Every
+  (`STEERING_IMPORT_TOOLS`, scaffold.js) is dispatched by `importRun` before the feature path and reads through `importSourceAt` too. Every
   import is dry-runnable for free (`withDryRun`) while it writes and reads back through the files.js primitives.
 - **A dry run of another operation** → wrap it in `withDryRun` (conventions.md → The dry-run sink); every read of what it wrote
   goes through readRaw / existsRaw / readDirCached / safeReaddir / isDirSafe — a raw fs read sees the disk, not the sink; add

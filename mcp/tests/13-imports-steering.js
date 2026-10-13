@@ -258,7 +258,7 @@ exports.run = async ({ ok, all, rpc, S, tmp, require }) => {
   // (project-no-specs); in any project a hidden folder or file but the importers' own (import-hidden) and a named file that is no
   // document (import-not-source) are refused — before anything is read; a link into a hidden folder too; the CLI's engine call alike.
   {
-    const E = require("./lib/engine/index.js");
+    const E = require("./lib/engine/index.js").loadLazyTier(); // + the lazy tier's internals (import/index.js importHiddenPart)
     const SECRET = "SECRETVALUE-r7";
     const home = path.join(tmp, "proj-r7-home");
     put(home, ".aws/credentials", "[default]\naws_secret_access_key = " + SECRET + "\n");

@@ -1627,7 +1627,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
     const d = path.join(tmp, "proj-122r3-markdown");
     S.initProject(d, ["core"], "en");
     const reqOf = (lines) => "# Requirements\n\n## Acceptance Criteria (EARS)\n\n" + lines.join("\n") + "\n";
-    const E = require(path.join(__dirname, "lib", "engine", "index.js"));
+    const E = require(path.join(__dirname, "lib", "engine", "index.js")).loadLazyTier(); // + the lazy tier's internals (fluidplan.js fpInert)
 
     // F2. ownStableId accepted ANY ID mentioned in a criterion: `- AC-1: … (see EC-1)` / `… (T-01)` had "its own" ID — earsUnidentified
     // null, doctor's ears passed, trace counted 0 ACs with no gap, spec_upgrade's bareAcIds was []. Only the LABEL counts now; a bare
