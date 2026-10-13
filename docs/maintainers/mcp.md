@@ -55,7 +55,9 @@ of its own — the duplicate detector, `dev-spec dupes` — never a tool of its 
 `LEGACY_TOOLS` (server.js) keeps the seven old names callable: a call's arguments are checked against the OLD schema
 (`toolDef()`: an old caller gets its old refusals), translated (`translateLegacy`), and the new tool runs and answers. Never
 listed, never completed, no operation of their own — each is in the `legacy` of the operation it lands on;
-`mcp/tests/02-mcp-server-tools.js` asserts alias = new tool = its operation's call.
+`mcp/tests/02-mcp-server-tools.js` asserts alias = new tool = its operation's call. The reply is the old one too:
+`spec_catalog` / `spec_changelog` translate to `includeBody: write !== true` — their 1.25.1 replies carried the markdown unless
+writing (Lean replies leave it out of the NEW tool's only).
 
 ### Arguments by mode
 `ARG_MODES` (server.js) is derived from the table (`argModes()`): a mode — of `kind`, `format` (default html) or `coverage`
@@ -231,6 +233,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   other descriptions (43,272 → 43,611).
 - **1.29** — `spec_init {guardian}` and spec_finish's evidence `report` (dev-guardian's gate, ~260 characters) paid back in full
   by trimming spec_scan's, spec_import's, spec_tracks', spec_roadmap_edit's and spec_export's descriptions: still 43,611.
+- **1.30 review 8 (ds-engine 6)** — the hidden aliases `spec_catalog` / `spec_changelog` had lost their document: 1.26's lean
+  replies made `spec_export` leave the markdown out unless `includeBody`, and the aliases (whose old schema has no `includeBody`)
+  translated without it — "the old names still work" held for the call, not the reply. They translate to `includeBody: write !==
+  true` now.
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.

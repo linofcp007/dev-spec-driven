@@ -60,8 +60,9 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
       ["spec_depend", { name: "login" }, "spec_roadmap_edit", { kind: "depend", name: "login" }],
       ["spec_milestone", { action: "add", name: "M1", date: "2099-01-01", features: ["login"] }, "spec_roadmap_edit", null],
       ["spec_milestone", {}, "spec_roadmap_edit", { kind: "milestone" }],
-      ["spec_catalog", {}, "spec_export", { format: "catalog" }],
-      ["spec_changelog", { since: "all" }, "spec_export", { format: "changelog", since: "all" }],
+      // 1.30 review 8: the old catalog / changelog replies carried the markdown (unless writing) — the alias still does
+      ["spec_catalog", {}, "spec_export", { format: "catalog", includeBody: true }],
+      ["spec_changelog", { since: "all" }, "spec_export", { format: "changelog", since: "all", includeBody: true }],
       ["spec_coverage", {}, "spec_scan", { coverage: true }],
       ["spec_list", {}, "spec_status", {}],
     ];
@@ -77,6 +78,18 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
     const ms = S.milestone(p, "list");
     ok(!bad.length && dep.dependsOn.join() === "billing" && bl.backlog.map((x) => x.name).join() === "Later" && ms.milestones.map((m) => m.name).join() === "M1",
       "1.26: each hidden alias (spec_list, spec_backlog, spec_depend, spec_milestone, spec_catalog, spec_changelog, spec_coverage) answers what the new tool answers, and its writes land (got " + js(bad) + ")");
+    // 1.30 review 8 (ds-engine 6): "the old names still work" holds for the reply too — spec_catalog / spec_changelog carry the
+    // document (markdown) as their 1.25.1 replies did; the new tool leaves it out unless includeBody
+    const catOld = await call("spec_catalog", { projectDir: p });
+    const chgOld = await call("spec_changelog", { since: "all", projectDir: p });
+    const catNew = await call("spec_export", { format: "catalog", projectDir: p });
+    const chgNew = await call("spec_export", { format: "changelog", since: "all", projectDir: p });
+    all("1.30 review 8: the hidden aliases spec_catalog / spec_changelog return the document again (markdown, as before 1.26); spec_export {format: catalog | changelog} stays lean without includeBody (got " +
+      js([Object.keys(catOld.p), Object.keys(chgOld.p), Object.keys(catNew.p), Object.keys(chgNew.p)]) + ")", {
+      catalog: () => !catOld.isError && catOld.p.ok === true && typeof catOld.p.markdown === "string" && catOld.p.markdown.length > 0,
+      changelog: () => !chgOld.isError && chgOld.p.ok === true && typeof chgOld.p.markdown === "string" && chgOld.p.markdown.length > 0,
+      lean: () => catNew.p.markdown === undefined && chgNew.p.markdown === undefined,
+    });
     // the OLD schema decides the refusals: the old required key, an argument only the new tool takes, an old enum
     const depNoName = await call("spec_depend", { projectDir: p });
     const blKind = await call("spec_backlog", { kind: "backlog", action: "list", projectDir: p });
@@ -287,11 +300,13 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list }) =>
     const legacy = OPS.OPERATIONS.flatMap((op) => (op.legacy || []).map((n) => [n, op]));
     const ARGS = { spec_list: {}, spec_backlog: { action: "list" }, spec_depend: { name: "login" }, spec_milestone: { action: "list" }, spec_catalog: {},
       spec_changelog: { since: "all" }, spec_coverage: {} };
+    // what the alias's translation adds (1.30: the catalog / changelog document, as the old replies carried it)
+    const ADDS = { spec_catalog: { includeBody: true }, spec_changelog: { includeBody: true } };
     const bad = [];
     for (const [alias, op] of legacy) {
-      const a = ARGS[alias] || {};
+      const a = ARGS[alias] || {}, t = { ...a, ...(ADDS[alias] || {}) };
       const got = await call(alias, { ...a, projectDir: p });
-      const want = OPS.run(op, S, p, "mcp", (x) => a[x.mcp]);
+      const want = OPS.run(op, S, p, "mcp", (x) => t[x.mcp]);
       if (got.isError || js(drop(got.p, "generatedAt")) !== js(drop(want, "generatedAt"))) bad.push(alias + " → " + op.id + ": " + js(got.p).slice(0, 120));
     }
     ok(js(legacy.map(([n]) => n).sort()) === js(removed.slice().sort()) && !bad.length,
