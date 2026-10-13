@@ -163,6 +163,16 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   projects, modules vs bundle: the same output, exit codes and `.specs/` tree).
 
 ## Tests (continued)
+- **Release counts (1.30):** the suites' totals are stated in two places — CLAUDE.md → Tests ("(N assertions, incl." and
+  "`node cli/test-cli.js` adds N") and the current CHANGELOG entry's tests line ("`node mcp/test.js` N assertions, `node
+  cli/test-cli.js` N") — and the user-facing docs state none (17-docs.js). They are WRITTEN FROM A RUN, at release, never
+  typed: **`npm run release:counts [-- --jobs 4]`** (`scripts/release-counts.js`) runs both suites, reads each one's last line
+  (`N passed, M failed` — the runner's `RE_TOTAL`) and rewrites those sentences; a suite with a failure records nothing (exit
+  1). `--check` writes nothing and exits 1 when a sentence states another total; `--mcp N --cli M` takes the totals of the full
+  run you just made instead of running again; a current entry without its tests line gets the line to paste, `(was …)` read
+  from the previous entry (exit 1). Between releases mcp/tests/17-docs.js holds the two records to each other, through the
+  script's own patterns (`readCounts()` — `SENTENCES`: one copy), and runs the script on a copy with fake suites. The release
+  step: write the CHANGELOG entry (its tests line with any numbers), then `npm run release:counts -- --jobs 4`, then commit.
 - **Linux, locally:** `npm run test:docker` (`scripts/test-docker.js`, zero-dep) runs both suites in
   `node:18-alpine` (the engines floor, musl), `node:22-bookworm-slim`, `node:24-alpine` and `node:26-trixie-slim` (1.30). **The
   matrix:** package.json's engines floor first — kept while `engines` says it (raise the floor, drop its image) —, then the LTS
@@ -214,11 +224,6 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
 ## History
 How the rules above came to be — grep a release here.
 
-- **1.30 (review 8, ds-maint 6 and 14)** — hermetic chains also drop Node's steering variables (`NODE_OPTIONS`, the compile cache's,
-  `NODE_DEBUG`…; `DEV_SPEC_TEST_KEEP_NODE_ENV=1` keeps them): a `--require` preload in `NODE_OPTIONS` reached every chain, server and hook.
-  The times file is the checkout's (`dev-spec-test-times-<suite>-<id>.json`) and pruned on each write: it was one per machine,
-  merged into by every worktree, and held 29 entries of files 1.27 had renamed.
-
 - **1.27.1** — the duplication guard (16-conventions-duplication.js): the cleanup took the plugin's duplicated code lines (window
   of 6, mcp/evals and mcp/test.js counted too) from 364 of 39,680 (0.9 %; the hooks 13.2 %) to 72 of 39,435 (0.2 %; the hooks
   0) — 60 of them the two allowed duplications — and the guard keeps new copies out.
@@ -239,3 +244,11 @@ How the rules above came to be — grep a release here.
   31 / 34, 09-evidence 44 / 76 → 33 / 42.
 - **1.30** — `mcp/tests/fixtures/`, the first data folder beside the test files (the 1.29 dev-guardian launcher the gate must
   recognize as genuine).
+- **1.30 (review 8, ds-maint 6 and 14)** — hermetic chains also drop Node's steering variables (`NODE_OPTIONS`, the compile cache's,
+  `NODE_DEBUG`…; `DEV_SPEC_TEST_KEEP_NODE_ENV=1` keeps them): a `--require` preload in `NODE_OPTIONS` reached every chain, server and hook.
+  The times file is the checkout's (`dev-spec-test-times-<suite>-<id>.json`) and pruned on each write: it was one per machine,
+  merged into by every worktree, and held 29 entries of files 1.27 had renamed.
+- **1.30 (review 8, ds-maint 7)** — the test totals in CLAUDE.md and the CHANGELOG were checked against each other only (two equal
+  typos passed): `npm run release:counts` writes them from a run (Release counts).
+- **1.30 (review 8, ds-maint 15)** — the Docker matrix was 18 / 22 / 24: Node 26 (the maintainer's own, LTS from October 2026)
+  was never run; `node:26-trixie-slim` joins, and 16-conventions holds the first image to the engines floor.

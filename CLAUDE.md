@@ -156,7 +156,7 @@ skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) +
 evals/                         plugin evals for `claude plugin eval` (maintainer-side, local only)
 mcp/test.js · cli/test-cli.js  the suites' entry points — their files: mcp/tests/ · cli/tests/ (NN-<area>…, + harness.js)
 scripts/                       build.js (npm run build: the corpus; --bundle) · test-runner.js (both suites' runner: --only,
-                               --list) · test-docker.js (both in Linux containers)
+                               --list) · test-docker.js (both in Linux containers) · release-counts.js (the totals, from a run)
 docs/maintainers/              these notes by topic — NOT loaded automatically; the topic map above says when to read each
 AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions.md   rule files for other tools
 ```

@@ -68,7 +68,8 @@ cli/run.js · cli/git.js        done --run / finish --run (`execCommand`, `runVe
 cli/completion.js · completion/ shell completion (+ the hidden `__complete`, before the engine loads) and the status line's
                                pre-check · the bash / zsh / fish / PowerShell templates (conventions.md → Shell completion)
 cli/test-cli.js · cli/tests/   the CLI suite: entry point + NN-<area>-<topic>.js files + harness.js
-scripts/                       build.js (npm run build; --check; --bundle) · test-runner.js (--only, --list) · test-docker.js
+scripts/                       build.js (npm run build; --check; --bundle) · test-runner.js (--only, --list) · test-docker.js ·
+                               release-counts.js (npm run release:counts — the test totals CLAUDE.md and the CHANGELOG state)
 hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|NotebookEdit|Bash|PowerShell|Monitor) + approval-hook.js
                                (approval tools, shells, Write / Edit / NotebookEdit, other MCP servers' file tools) ·
                                PostToolUse → spec-hook.js (Write|Edit) + observe-hook.js (Bash|PowerShell, async) + plan-hook.js
