@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   const w6 = path.join(tmp, "wp6-proj");
@@ -143,7 +144,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
   try { scMj = JSON.parse(runIn(["scan", "--json", "--project", w6, missing]).out); } catch { /* invalid JSON */ }
   const covM = runIn(["coverage", "--project", missing]);
   const scF = runIn(["scan", "--project", w6, path.join(w6, "package.json")]);
-  ok(scM.code === 1 && /is not a folder \(it doesn't exist, or it is a file\)/.test(scM.out) && !/stack: unknown|files: 0/.test(scM.out) &&
+  ok(scM.code === 1 && scM.out.includes(MSG("en").brownfield.notFolder(missing)) && !/stack: unknown|files: 0/.test(scM.out) &&
     scMj && scMj.ok === false && /is not a folder/.test(scMj.error) && covM.code === 1 && /--project .*wp6-missing-folder: no such folder/.test(covM.out) && scF.code === 1 && !fs.existsSync(missing),
     "1.22 review: `scan <missing>` / `scan <a file>` exit 1 with 'is not a folder' (--json: ok false), never an empty codebase; 1.23 review: `coverage --project <missing>` is refused as a --project that doesn't exist (got " +
     JSON.stringify([scM.code, scM.out.slice(0, 120), covM.code, scF.code]) + ")");

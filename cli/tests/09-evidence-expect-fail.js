@@ -136,7 +136,7 @@ if (process.platform === "win32") {
   const fpx = (await rb5Run(["finish", "posix", "--run", "--project", px]));
   posixOk = fpx.code === 1 && /the project check 'sq' \(`node -e 'process\.exit\(0\)'`\) uses POSIX shell syntax \(single quotes/.test(fpx.out) && !stB5(px, "posix").finishChecks;
 }
-ok(/pipes into another command: the shell reports only the LAST command's exit code/.test(fpipe.out) && stB5(pp, "pipe").finishChecks.piped.exitCode === 0 && posixOk,
+ok(fpipe.out.includes(MSG("en").verifyPipe.runHint("node -e \"process.exit(0)\" | node -e \"process.exit(0)\"")) && stB5(pp, "pipe").finishChecks.piped.exitCode === 0 && posixOk,
   "finish --run prints the pipe hint for a piped check (it still runs and is recorded); on Windows a check in POSIX syntax is refused before anything runs under cmd.exe");
 
 // dev-spec log: per task the commits citing it + the +tdd red-first check, from git log (read-only) or a log on stdin; localized.

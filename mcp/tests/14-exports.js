@@ -137,7 +137,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
     fs.writeFileSync(path.join(oldEx, ".specs", "exports", "requirements.md"), "# Feature: Exports\n");
     const oldW = S.exportSpecs(oldEx, { write: true });
     const keys = (o) => Object.keys(o).sort().map((k) => k + (o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) ? "{" + keys(o[k]) + "}" : Array.isArray(o[k]) ? "[" + o[k].length + "]" : "")).join(",");
-    ok(oldW.ok === false && /is a feature folder from before dev-spec reserved the name 'exports'/.test(oldW.error) && !fs.existsSync(path.join(oldEx, ".specs", "exports", "project.html")) &&
+    ok(oldW.ok === false && oldW.error === S.msg("en").stakeholderExport.exportsIsFeature(".specs/exports/") && !fs.existsSync(path.join(oldEx, ".specs", "exports", "project.html")) &&
       ["stakeholderExport", "releaseNotes"].every((g) => keys(S.msg("en")[g]) === keys(S.msg("pt")[g]) && keys(S.msg("pt")[g]) === keys(S.msg("es")[g])),
       "spec_export {write} never drops a document into a pre-1.14 feature folder named 'exports' (error, nothing written); the export / release-notes messages have the same keys in EN / PT / ES");
 
@@ -242,8 +242,9 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
       () => cLate.fixed.map((x) => x.feature).join() === "crash-on-save", () => cLate.counts.changed === 0,
       () => /\n## Added\n\n_Nothing\._\n/.test(cLate.markdown),
     ]);
-    const badSince = ["yesterday", "2026-02-30", "2026-13-01", "2026-06-01T25:00"].map((v) => S.changelog(cp, { since: v }));
-    ok(badSince.every((r) => r.ok === false && /is not an ISO date \(YYYY-MM-DD, or a full ISO timestamp\), 'last' or 'all'/.test(r.error)),
+    const badV = ["yesterday", "2026-02-30", "2026-13-01", "2026-06-01T25:00"];
+    const badSince = badV.map((v) => S.changelog(cp, { since: v }));
+    ok(badSince.every((r, i) => r.ok === false && r.error === S.msg("en").releaseNotes.badSince(badV[i])),
       "spec_changelog: a since that is not an ISO date / timestamp (or a day that doesn't exist) is an error — never rolled over");
 
     // write: RELEASE-NOTES.md + meta.changelogAt; the next default run starts there; nothing to report → nothing written.
@@ -581,7 +582,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
     const badAdd = S.milestone(mp, "add", { name: "New", date: "2026-10-01", features: ["beta"] });
     const badList = S.milestone(mp, "list", { now });
     const badRoad = S.roadmapReport(mp, { now });
-    ok(badAdd.ok === false && /meta\.milestones is not a list of \{name, date, features\}/.test(badAdd.error) && JSON.parse(rdf(rmPath)).meta.milestones.length === 2 &&
+    ok(badAdd.ok === false && badAdd.error === S.msg("en").milestone.badStored(".specs/roadmap.json") && JSON.parse(rdf(rmPath)).meta.milestones.length === 2 &&
       badList.ok && /meta\.milestones/.test(badList.warning) && js(badList.milestones.map((m) => m.name)) === js(["ok"]) && badRoad.milestones.length === 1,
       "1.16 E3: a malformed meta.milestones is never 'repaired' — add refuses, list warns and reads its valid entries (got " + js([badAdd.error, badList.warning]) + ")");
     rmj.meta.milestones = good;
@@ -832,7 +833,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
       const inFiles = fs.readdirSync(inDir);
       unlink(exDir);
       const plain = S.exportSpecs(lx, { name: "billing", write: true }); // a plain folder again: written
-      ok(rs.every((r) => r.ok === false && /is a link \(a symbolic link, a junction\) or resolves outside \.specs\//.test(r.error) && !r.wrote) && outFiles.length === 0 &&
+      ok(rs.every((r) => r.ok === false && /a symbolic link, a junction/.test(r.error) && !r.wrote) && outFiles.length === 0 &&
         mcp.result.isError && /Refused to write \.specs\/exports\/billing\.html/.test(payload(mcp).error) &&
         rsIn.every((r) => r.ok === false) && inFiles.length === 0 && plain.ok && plain.wrote && fs.existsSync(path.join(exDir, "billing.html")) &&
         /Recusei escrever/.test(i18n.msg("pt").stakeholderExport.exportsLinked("x")) && /Me niego a escribir/.test(i18n.msg("es").stakeholderExport.exportsLinked("x")),
@@ -1066,7 +1067,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, shipFeature }) => {
       const lr = S.exportSpecs(lp, { name: "billing", format: "adr", write: true });
       const lpr = S.exportSpecs(lp, { format: "adr", write: true });
       const prev = S.exportSpecs(lp, { format: "adr" });
-      ok(!lr.ok && /is a link \(a symbolic link, a junction\) or resolves outside \.specs\//.test(lr.error || "") && !lpr.ok && fs.readdirSync(outDir).length === 0 &&
+      ok(!lr.ok && /a symbolic link, a junction/.test(lr.error || "") && !lpr.ok && fs.readdirSync(outDir).length === 0 &&
         prev.ok && js(prev.stale) === "[]",
         "1.25 ADR: a linked .specs/exports/adr/ refuses the write (feature and project), nothing written through it; a preview lists nothing stale through it (got " + js([lr.error, lpr.error]) + ")");
     } else ok(true, "1.25 ADR: links unavailable here — the linked adr/ check is skipped");

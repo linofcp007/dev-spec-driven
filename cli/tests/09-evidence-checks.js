@@ -40,7 +40,7 @@ exports.run = async ({ ok, all, spawnIn, spawnAsync, tmp, CLI, require, __dirnam
   const g1f = (await rgaRun(gpc, ["finish", fc.slug, "--run", "--shell", "no-such-shell-dsd", "--json"]));
   const g1fj = jsonGa(g1f.stdout);
   ok(g1.code === 1 && g1j && g1j.couldNotRun === "shell-not-started" && /could not run \(the shell 'no-such-shell-dsd' could not be started: ENOENT\) — nothing was recorded; the task stays open/.test(g1j.error) &&
-    g1env.code === 1 && /nothing was recorded; the task stays open/.test(g1env.out) && !(stGa(f1).evidence || {})["1"] && /- \[ \] 1\./.test(tasksGa(f1)) &&
+    g1env.code === 1 && /the task stays open/.test(g1env.out) && !(stGa(f1).evidence || {})["1"] && /- \[ \] 1\./.test(tasksGa(f1)) &&
     g1f.code === 1 && g1fj && g1fj.couldNotRun === "shell-not-started" && g1fj.check === "test" && /the project check 'test' .* could not run/.test(g1fj.error) && !stGa(fc).finishChecks,
     "full review Ga1: done --run / finish --run with a shell that can't start refuse and record nothing (no 'red run', no failed check run; --shell and DEV_SPEC_SHELL) (got " +
     JSON.stringify([g1.code, g1j, g1env.out.slice(-160), g1f.code, g1fj && g1fj.error]).slice(0, 600) + ")");

@@ -60,8 +60,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
     all("1.29 init {guardian: true}: meta.checks.guardian = the launcher's command (merged with the other checks), .specs/guardian.cjs written (rewritten when edited), `guardian: true` and a note in the result; {guardian: false} removes the check and the generated launcher (never another file); every init reports `guardian`; a non-boolean is refused by the schema; 1.30: the note — project-wide, its scanners on every machine, never `baseline update` to accept a finding, no baseline yet (the user's runnable line), the .gitignore lines missing (got " +
       js([on.checks, on.guardian, on.guardianNote, settled.guardianNote, partial.guardianNote, off.checks, off.guardian, rm2.meta]) + ")", {
       stored: rm.meta.checks.guardian === CMD && rm.meta.checks.test === "npm test" && on.checks.guardian === CMD && on.guardian === true,
-      note: /^dev-guardian's gate is the project check 'guardian' \(node \.specs\/guardian\.cjs scan[^)]*\.specs\/guardian\.cjs runs the installed dev-guardian\)\. It is project-wide: meta\.checks and the launcher are committed/.test(on.guardianNote) &&
-        /every machine that finishes a feature needs dev-guardian and its scanners \(Semgrep, Gitleaks, Trivy\)/.test(on.guardianNote) &&
+      note: String(on.guardianNote).startsWith(S.msg("en").guardian.on(CMD)) &&
         /never with `baseline update` \(it accepts every current finding\)/.test(on.guardianNote) && !/dev-guardian baseline update/.test(on.guardianNote),
       baseline: String(on.guardianNote).includes(S.msg("en").guardian.initBaseline) &&
         !/No baseline yet/.test(settled.guardianNote),

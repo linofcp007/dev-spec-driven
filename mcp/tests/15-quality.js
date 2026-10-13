@@ -70,7 +70,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       () => imB.feature === "beta", () => imB.features.length === 1,
       () => js(imB.features[0].approvals[0].files) === js([{ file: "constitution.md", change: "modified" }]),
       () => /^Steering — beta: approved under an older version of steering/.test(S.impactLines(imB)[0]), () => imNo.isError,
-      () => /name required — only phase 'steering' works project-wide/.test(imNo.p.error), () => imRe.ok === false,
+      () => /^name required — only phase .steering./.test(imNo.p.error), () => imRe.ok === false,
       () => String(imRe.error).includes(S.msg("en").quality.impactNoReopen),
     ]);
     approveAll(q1, "alpha", ["requirements", "design"]);
@@ -653,7 +653,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       () => b1.reuse.state === "filled",
       () => /\n- Reuse · the order repository · `src\/orders\/repo\.ts` · reads and writes orders already\n/.test(sec(b1)),
       () => /\n- `src\/orders\/helpers\.ts`\n/.test(sec(b1)),
-      () => /search the codebase by concept and synonyms \(references\/code-reuse-and-quality\.md\)/.test(sec(b1)),
+      () => sec(b1).includes(require("./lib/i18n.js").brief("en").reuseRule),
       () => !b1.designSections.includes("Reuse & Integration"), () => b2.reuse.entries.length === 2,
       () => /US-1\.AC-2 — an empty cart/.test(b2.reuse.entries[1]), () => !b2.reuse.files.length, () => !b3.reuse.entries.length,
       () => b3.reuse.total === 4, () => /lists 4 item\(s\), none naming this task's files or criteria/.test(sec(b3)),
@@ -679,7 +679,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     fs.writeFileSync(path.join(ptf.dir, "tasks.md"), "# Tarefas\n\n## História US-1 (P1)\n- [ ] 1. [US1] Guardar a encomenda\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/orders/api.ts_\n");
     const bPt = S.taskBrief(ptp, ptf.slug, 1);
     ok(bMany.reuse.entries.length === 8 && bMany.reuse.omitted === 4 && /4 more matching item\(s\) — read them in design\.md/.test(bMany.brief) && manyMs < 3000 &&
-      /## Reutilização — pesquisar antes de escrever\nProcura no código, pelo conceito e por sinónimos/.test(bPt.brief) && /As entradas de Reutilização e Integração do design para esta tarefa/.test(bPt.brief),
+      /## Reutilização — pesquisar antes de escrever\nProcura no código, pelo conceito e por sinónimos/.test(bPt.brief) && bPt.brief.includes(require("./lib/i18n.js").brief("pt").reuseEntries),
       "1.19 R2: the Reuse section is bounded (8 entries, the rest counted), a 200,000-character slash-less line stays fast, and the brief speaks the feature's language (PT) (got " +
       js([bMany.reuse.entries.length, bMany.reuse.omitted, manyMs, (bPt.brief.split("## Reutiliza")[1] || "").slice(0, 160)]) + ")");
 

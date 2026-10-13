@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = ({ ok, all, spawnIn, tmp, CLI, require, __dirname }) => {
@@ -85,7 +86,7 @@ all("spike on the CLI: doctor exits 1 until the decision is written; approve / a
   JSON.stringify([docS.out.slice(0, 200), naS.out.slice(0, 160)]) + ")", [
   () => docS.code === 1, () => /✗ decision — spike\.md → Decision is not written yet/.test(docS.out),
   () => /✓ timebox — timebox until 2099-01-31/.test(docS.out), () => apS.code === 1, () => /is a spike: it has no design gate/.test(apS.out),
-  () => atS.code === 1, () => /is a spike — it has no tracks/.test(atS.out), () => /Record the decision in spike\.md → Decision/.test(naS.out),
+  () => atS.code === 1, () => /is a spike — it has no tracks/.test(atS.out), () => naS.out.includes(MSG("en").spike.next.decide("cache-spike")),
   () => docS2.code === 0, () => /✓ decision — decision recorded \(_Outcome: no-go_\)/.test(docS2.out), () => jsonC2(naS2.stdout),
   () => jsonC2(naS2.stdout).step === "archive", () => jsonC2(naS2.stdout).outcome === "no-go", () => finS.code === 0,
   () => /spike 'cache-spike' is ready to finish/.test(finS.out),

@@ -736,9 +736,9 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
       JSON.stringify({ gh: gh.split("\n")[2], dOk: dOk.error || dOk.affects, dBad: dBad.error, cl: cl.detail, ap: apCl.detail }).slice(0, 1400) + ")", [
       () => /^# Source: \.specs\/footer\/change\.md — /m.test(gh), () => /dev-spec task #1 — \.specs\/footer\/change\.md/.test(jira),
       () => !/tasks\.md|requirements\.md/.test(gh + jira), () => dOk.ok, () => dOk.affects.join() === "Approach,US-1.AC-1,Summary",
-      () => dBad.ok === false, () => /a section heading of change\.md \(Summary, Acceptance Criteria, Approach, Tasks\)/.test(dBad.error),
+      () => dBad.ok === false, () => dBad.error === S.msg("en").decisions.badAffectsChange("Data Model"),
       () => !/design\.md/.test(dBad.error), () => (tr.phantomAffects || []).length === 0, () => cl.status === "fail",
-      () => /in change\.md — resolve before approving the plan/.test(cl.detail), () => !/design/.test(cl.detail), () => ap.ok === false,
+      () => cl.detail === S.msg("en").doctor.clarificationsOpenPlan(1), () => !/design/.test(cl.detail), () => ap.ok === false,
       () => /approving the plan/.test(apCl.detail || ""),
       () => /em change\.md — [\s\S]*aprovar o plano/.test(pt.hook.earsIssues(1, 0, "L1", true, "change.md")),
       () => /antes de aprobar el plan/.test(es.gates.hookPlaceholders(1, "L1 [x]", "change.md")),

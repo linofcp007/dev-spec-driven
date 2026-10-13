@@ -4,6 +4,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 
 exports.run = async ({ ok, run, runIn, tmp, require, __dirname, runAsync }) => {
   const S = require(path.join(__dirname, "..", "mcp", "lib", "spec.js"));
@@ -156,7 +157,7 @@ exports.run = async ({ ok, run, runIn, tmp, require, __dirname, runAsync }) => {
   const vHook = spawnSync(process.execPath, [path.join(hookDir, "spec-hook.js")], { input: JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "Write", cwd: v,
     tool_input: { file_path: path.join(v, ".specs", "header", "change.md") } }), encoding: "utf8", env: { ...process.env, CLAUDE_PROJECT_DIR: v, SPEC_PROJECT_DIR: v } });
   const vCtx = (() => { try { return JSON.parse(vHook.stdout).hookSpecificOutput.additionalContext; } catch { return vHook.stdout; } })();
-  ok(vHook.status === 0 && /EARS check on change\.md — 1 error/.test(vCtx) && /Fix the errors before approving the plan\./.test(vCtx) &&
+  ok(vHook.status === 0 && /EARS check on change\.md — 1 error/.test(vCtx) && vCtx.includes(MSG("en").hook.earsIssues(1, 0, "", true, "change.md").split("\n").pop()) &&
     /left in change\.md \([^)]*\) — replace them before approving the plan\./.test(vCtx) && !/requirements\.md|design/.test(vCtx),
     "1.21 verify V7 (CLI, save hook): saving a change.md with an EARS error and a slot says 'EARS check on change.md … before approving the plan' and 'left in change.md … approving the plan' — never requirements.md or the design (got " +
     JSON.stringify(String(vCtx).slice(0, 600)) + ")");

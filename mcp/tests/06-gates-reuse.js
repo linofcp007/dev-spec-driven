@@ -92,7 +92,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore }) => {
       js({ legacyDoc, attention: upF.attention, due: upF.designReuseDue, item: lines.split("\n").filter((l) => /Reuse & Integration/.test(l)), after: after.approvals.design.reuseGate, filled: upFilled.attention }) + ")", {
       doctor: () => legacyDoc.status === "warn" && /— approved before 1\.28: a size m design needs it at its next approval$/.test(legacyDoc.detail),
       attention: () => upF.attention.includes("design-reuse") && upF.designReuseDue === true && upF.group === "attention",
-      item: () => lines.includes("Write its design's Reuse & Integration section") && lines.includes("/approve " + lg.slug + " design"),
+      item: () => lines.includes(S.msg("en").upgrade.item.designReuse(lg.slug)),
       untouched: () => after.approvals.design.reuseGate === undefined && js(after.approvals.design) === js(JSON.parse(before).approvals.design),
       filled: () => upFilled.designReuseDue === false && !upFilled.attention.includes("design-reuse"),
     });

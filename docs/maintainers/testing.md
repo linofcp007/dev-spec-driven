@@ -135,7 +135,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   arguments the test knows); a CLI file reads `MSG = require(…/mcp/lib/i18n.js).msg` — so a rewording touches the locale file
   alone; else a short fragment naming the message. A whole sentence is pinned only where the sentence IS the point: the prose
   guards (README tables, rule files, no PR / CI steering), the i18n parity and translation checks. (Review 8 found ~150 such pins;
-  1.30 moved ~70 to their entries.) **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
+  1.30 moved ~70 to their entries, 1.30.1 40 more (a stable `code` replaced two) — 45 are left: 35 translation checks, a
+  template's own structure or an entry's own words, and 10 in the guard and CLI-usage tests (10-guards*, 16-conventions-flags).) **Say what failed (1.26):** beside `ok(cond, label)` every file receives `all(label, conds)` and
   `eq(actual, expected, label)` (scripts/test-runner.js `assertHelpers`, built on the file's own `ok` — one call is ONE
   assertion, so the totals stay comparable, and a late one is a late assertion). **Prefer `all()` over `ok(a && b && …)` for
   more than ~4 conditions**: `ok()` with 15 conditions said only that one of them was false. `all(label, [() => a.ok, () =>

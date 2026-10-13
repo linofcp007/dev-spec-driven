@@ -133,7 +133,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     const wsl14 = [await call("spec_classify", { description: "export invoices", projectDir: "\\\\wsl.localhost\\Ubuntu\\home\\me\\proj" }),
       await call("spec_classify", { description: "export invoices", projectDir: "\\\\wsl$\\Ubuntu\\home\\me\\proj" })];
     const ext14 = process.platform === "win32" ? payload(await call("spec_list", { projectDir: "\\\\?\\" + t14 })) : { exists: true, features: [{ name: "alpha" }] };
-    ok(netRes14.every((r) => r.result.isError && /projectDir must be a local folder — a network or device path/.test(errText(r))) &&
+    ok(netRes14.every((r) => r.result.isError && /"code":"project-network"/.test(r.result.content[0].text)) &&
       netArg14.result.isError && /name must be a string/.test(errText(netArg14)) && netMs14 < 5000 &&
       // a WSL host is no network path: accepted — or, where that distribution's folder doesn't exist here, refused as missing
       // (1.24 r6 A3: projectDir names an existing folder), never as a network path

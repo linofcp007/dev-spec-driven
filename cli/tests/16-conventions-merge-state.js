@@ -3,6 +3,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const MSG = require(path.join(__dirname, "..", "..", "mcp", "lib", "i18n.js")).msg; // a message checked against its i18n entry, not a pinned sentence (1.30)
 const { spawnSync } = require("child_process");
 
 exports.run = async ({ ok, all, run, runIn, spawnIn, runAsync, tmp, CLI }) => {
@@ -230,7 +231,7 @@ exports.run = async ({ ok, all, run, runIn, spawnIn, runAsync, tmp, CLI }) => {
     () => /which no longer exists/.test(cGone.out), () => /merge-state --install/.test(cGone.out), () => cGoneJ, () => cGoneJ.status === "missing",
     () => cGoneJ.script === gone, () => hGone.length === 1, () => hGone[0].includes(gone), () => cOther.code === 1,
     () => /not from this clone's CLI/.test(cOther.out), () => hOther.length === 1, () => cNone.code === 1,
-    () => /names the dev-spec-state merge driver, but this clone's git config has none/.test(cNone.out), () => hNone.length === 0,
+    () => cNone.out.includes(MSG("en").mergeState.checkNotInstalled(".gitattributes")), () => hNone.length === 0,
     () => reinstall.code === 0, () => cBack.code === 0, () => cPlain, () => cPlain.status === "none", () => cNoRepo.code === 1,
     () => cUsage.code === 1, () => /--check/.test(cUsage.out),
   ]);
