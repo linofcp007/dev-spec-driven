@@ -199,8 +199,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   shell writer or an MCP file tool: `command: null` (the user makes that change), `project` the folder above `.specs/`
   (`approvalSpecsProject()`). `dev-spec merge-state … <ours>` onto a state file is one too (git runs the driver itself, never
   through the Bash tool).
-- **dev-guardian's gate (1.30, review 8)** — its rules live in engine/guardian.js; guards.js calls them at four hook points
-  (keep it so: the guard's own refactors don't touch them). With a check running the gate (`guardianGuardOn(meta)`; meta
+- **dev-guardian's gate (1.30, review 8)** — its rules live in engine/guardian.js; guards.js calls them at a few one-line hook
+  points (`approvalGuardedFile`, `shellOpActions`' unknown program — the two files' own guard-down, never "unreadable", so
+  nothing asks without the check —, `shellApprovalActions`, `approvalCommand`, `approvalGuardDecision`; keep them so). With a check running the gate (`guardianGuardOn(meta)`; meta
   unknown → yes, fail closed), these are guard-downs (`command: null` — the user makes them): an agent's write of
   `.specs/guardian.cjs` (`guardian-launcher` — code the gate runs) or `.guardian/baseline.json` (`guardian-baseline` — what it
   accepts as known), through every writer above (`approvalGuardedFile` → `guardianGuardedFile`); an agent-run `baseline update`
@@ -500,7 +501,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 (review 8)** — dev-guardian's gate joined the guard: at deny, an agent overwrote `.specs/guardian.cjs` with a stub
   printing exit 0 (recorded as the CLI's own observed pass), ran `baseline update` or wrote `.guardian/baseline.json` to clear a
   failed gate, or pointed `DEV_GUARDIAN_CLI` at a stub — all allowed. Now guard-downs while a check runs the gate (rules in
-  guardian.js, four hook points in guards.js).
+  guardian.js, one-line hook points in guards.js).
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import
