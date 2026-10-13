@@ -230,7 +230,9 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   pre-filters' superset (`APPROVAL_CANDIDATE_TESTS` on win32, the hook's `partial`, hook-utils `approvalProjects` through `shortDirAt` /
   `specsParentOf`: `cp evil sub/SPECS~1/guardian.cjs` makes sub/ a candidate). **Win32's trimming** (`winPathTrim`): a segment ending in
   one period loses it (`.specs.\x`), the last segment its trailing periods and spaces (cmd.exe, PowerShell and native programs write
-  `.specs\roadmap.json.` as roadmap.json; Node and Git Bash keep the name). **The shell reading** (guards.js `shellWinReading`, a third
+  `.specs\roadmap.json.` as roadmap.json; Node and Git Bash keep the name), and NTFS reads a folder segment's stream designation as the
+  folder (`.specs::$INDEX_ALLOCATION\roadmap.json` IS .specs\roadmap.json — cmd.exe, .NET, Node): an inner segment's `:<stream>` is
+  dropped (a drive's `C:` kept; the last segment's is `guardTargetPath`'s). **The shell reading** (guards.js `shellWinReading`, a third
   reading in `shellPathReadings`, the `into` names too): the trim, then each alias through the file system for a local path (`longPath`
   from the payload cwd, ≤ `SHORT_DISK_UP` = 8 levels, ≤ `SHORT_DISK_PATHS` = 32 paths a call — `ctx.disk`; an alias the volume made
   expands, a folder that merely looks like one — `spe cs` holding SPECS~1 — stays itself), else (a network path, a variable or glob
@@ -635,7 +637,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   rule, the trim, the deepest existing folder's real path — probe.js, one copy (files.js `realPathLoose` is the probe's now).
   **A glob onto dev-guardian's launcher** (`cp evil .specs/guard*.cjs`, `echo x > .specs/*.cjs`, `cp evil .s*/guardian.cjs`) was allowed at
   deny with the check — the known limit "a glob write onto either file", whose baseline half review 9 had closed (`guardianHit`):
-  `launcherGlob`.
+  `launcherGlob`. **A folder's stream designation** (`cmd /c 'echo x> .specs::$INDEX_ALLOCATION\roadmap.json'`, .NET's
+  `[IO.File]::WriteAllText` there) wrote roadmap.json past the guard at deny (the edit tools were caught through the real path):
+  `winPathTrim` drops it.
 
 ### Claude Code integration
 - **1.16 C** — the status line (`dev-spec statusline`), user defaults, MCP annotations and the plan-mode bridge (`spec_import

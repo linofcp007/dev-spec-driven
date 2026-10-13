@@ -191,13 +191,18 @@ function shortNamesRead(p) {
 }
 // A path as Win32 reads it (Microsoft's path normalization — cmd.exe, PowerShell, a native program; Node's file calls go around it
 // through `\\?\`): a segment ending in ONE period loses it (`.specs.\x` IS .specs\x; `a..` stays), the last segment loses its trailing
-// periods and spaces (`roadmap.json. .` IS roadmap.json); `.` / `..` stay. One pass (each segment's tail walked once from its end).
+// periods and spaces (`roadmap.json. .` IS roadmap.json); `.` / `..` stay. And NTFS reads a folder segment's stream designation as the
+// folder itself — `.specs::$INDEX_ALLOCATION\roadmap.json` IS .specs\roadmap.json (cmd.exe, .NET, Node alike; checked on Windows 11):
+// a segment's `:<stream>` suffix is dropped (a drive's `C:` stays; the last segment's is fsTargetPath's). One pass (each segment's tail
+// walked once from its end).
 function winPathTrim(p) {
   const s = String(p);
   let out = "", start = 0;
   for (let i = 0; i <= s.length; i++) {
     if (i < s.length && !isSlashCode(s.charCodeAt(i))) continue;
     let seg = s.slice(start, i);
+    const colon = i < s.length && !/^[A-Za-z]:$/.test(seg) ? seg.indexOf(":", start === 0 && /^[A-Za-z]:/.test(seg) ? 2 : 0) : -1;
+    if (colon > 0) seg = seg.slice(0, colon);
     if (seg !== "." && seg !== "..") {
       if (i === s.length) {
         let e = seg.length;

@@ -358,6 +358,13 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
       ["PowerShell", { command: "Copy-Item evil.json GUARDI~1" + BS + "BASELI~1.JSO" }, { command: "Copy-Item evil.json .guardian" + BS + "baseline.json" }],
       ["Bash", { command: "cmd /c \"echo x> .specs" + BS + "roadmap.json.\"" }, { command: "cmd /c \"echo x> .specs" + BS + "roadmap.json\"" }],
     ];
+    // NTFS reads a folder's stream designation as the folder: `.specs::$INDEX_ALLOCATION/roadmap.json` IS .specs/roadmap.json (cmd.exe, .NET
+    // — checked on Windows 11). (Its `$INDEX_ALLOCATION` reads as an unknown variable in any shell — a guarded name under it fails closed
+    // on every platform: not in the win: false check.)
+    const streams = [
+      ["Bash", { command: "cmd /c 'echo x> .specs::$INDEX_ALLOCATION" + BS + "roadmap.json'" }, { command: "cmd /c 'echo x> .specs" + BS + "roadmap.json'" }],
+      ["PowerShell", { command: "[IO.File]::WriteAllText('.specs:$I30:$INDEX_ALLOCATION" + BS + "guardian.cjs', 'x')" }, { command: "[IO.File]::WriteAllText('.specs" + BS + "guardian.cjs', 'x')" }],
+    ];
     // the edit tools and another server's file tools (their paths go through the file system on every platform: win32 only here)
     const edits = [
       ["Write", { file_path: "SPECS~1/alpha/STATE~1.JSO", content: "{}" }, { file_path: ".specs/alpha/.state.json", content: "{}" }],
@@ -365,14 +372,15 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
       ["Edit", { file_path: "GUARDI~1/BASELI~1.JSO", old_string: "a", new_string: "b" }, { file_path: ".guardian/baseline.json", old_string: "a", new_string: "b" }],
       ["mcp__fs__write_file", { path: "SPECS~1/GUARDIAN.CJS", content: "x" }, { path: ".specs/guardian.cjs", content: "x" }],
       ["mcp__fs__write_file", { path: ".specs/roadmap.json. ", content: "{}" }, { path: ".specs/roadmap.json", content: "{}" }], // a Python / .NET server
+      ["mcp__fs__write_file", { path: ".specs::$INDEX_ALLOCATION/zz/.state.json", content: "{}" }, { path: ".specs/zz/.state.json", content: "{}" }],
     ];
     const label = (t, i) => t + " " + js(i);
     const wrong = [];
-    for (const [tool, input, twin] of shell.concat(edits)) {
+    for (const [tool, input, twin] of shell.concat(streams, edits)) {
       for (const lvl of ["ask", "deny"]) {
         for (const [mk, m] of [["on", on], ["off", off]]) {
           const a = d(tool, input, m, lvl, true), b = d(tool, twin, m, lvl, true);
-          if (a.decision !== b.decision || settings(a) !== settings(b)) wrong.push("win/" + mk + "/" + lvl + ": " + label(tool, input) + " → " + a.decision + " " + settings(a) + ", its twin " + b.decision + " " + settings(b));
+          if (a.decision !== b.decision || !settings(b).split(",").every((x) => settings(a).split(",").includes(x))) wrong.push("win/" + mk + "/" + lvl + ": " + label(tool, input) + " → " + a.decision + " " + settings(a) + ", its twin " + b.decision + " " + settings(b));
         }
       }
     }
@@ -385,7 +393,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
     const P = require("./lib/probe.js");
     const names = ["SPECS~1", "spec~12", "SP1A2B~1", "GUARDI~1", "GUARDI~1.CJS", "BASELI~1.JSO", "STATE~1.JSO", "ROADMA~1.JSO", "OBSERV~1.JSO", "EXECUT~1", "DEV-GU~1.MJS",
       "ROADMA~1", "SPECS~1.JSO", "SPECSX~1", "HEAD~1", "PROGRA~1", "~1", "SPECS~"].map((x) => x + "=" + P.shortNameOf(x)).join(" ");
-    const trims = [".specs" + BS + "roadmap.json.", ".specs." + BS + "x", "a.." + BS + "x", "x. . .", ".." + BS + "x.", "./a.", "a./"].map((x) => P.winPathTrim(x)).join(" | ");
+    const trims = [".specs" + BS + "roadmap.json.", ".specs." + BS + "x", "a.." + BS + "x", "x. . .", ".." + BS + "x.", "./a.", "a./", ".specs::$INDEX_ALLOCATION" + BS + "roadmap.json", "C:" + BS + "a:$I30:$INDEX_ALLOCATION/b", "notes.txt:s"].map((x) => P.winPathTrim(x)).join(" | ");
     const gone = path.join(tmp, "r14-gone");
     const linuxTargets = P.editTargets("SPECS~1/beta/.state.json. ", gone, false);
     all("1.30.1: on win32 an 8.3 short name (SPECS~1, GUARDI~1/BASELI~1.JSO, ROADMA~1.JSO, STATE~1.JSO, OBSERV~1.JSO, SP1A2B~1, DEV-GU~1.MJS) and Win32's trailing dot / space (.specs\\roadmap.json., .specs.\\guardian.cjs) decide as the long name — shell, edit and MCP file tools, at ask and deny, with dev-guardian's check and without; on Linux / macOS the shell spellings stay allowed; lookalikes, HEAD~1 and reads stay allowed (got " +
@@ -394,7 +402,7 @@ exports.run = async ({ ok, all, S, tmp, hookIn, __dirname, require }) => {
       linux: () => !linux.length,
       allowed: () => !allowed.length,
       rule: () => names === "SPECS~1=.specs spec~12=.specs SP1A2B~1=.specs GUARDI~1=.guardian GUARDI~1.CJS=guardian.cjs BASELI~1.JSO=baseline.json STATE~1.JSO=.state.json ROADMA~1.JSO=roadmap.json OBSERV~1.JSO=observed.jsonl EXECUT~1=.execution DEV-GU~1.MJS=dev-guardian.mjs ROADMA~1=null SPECS~1.JSO=null SPECSX~1=null HEAD~1=null PROGRA~1=null ~1=null SPECS~=null",
-      trim: () => trims === [".specs" + BS + "roadmap.json", ".specs" + BS + "x", "a.." + BS + "x", "x", ".." + BS + "x", "./a", "a/"].join(" | "),
+      trim: () => trims === [".specs" + BS + "roadmap.json", ".specs" + BS + "x", "a.." + BS + "x", "x", ".." + BS + "x", "./a", "a/", ".specs" + BS + "roadmap.json", "C:" + BS + "a/b", "notes.txt:s"].join(" | "),
       linuxEdit: () => !linuxTargets.some((t) => /[\\/]\.specs[\\/]|\.state\.json$/.test(t)), // no alias, no trim, nothing on disk
       winEdit: () => P.editTargets("SPECS~1/beta/.state.json. ", gone, true).some((t) => /[\\/]\.specs[\\/]beta[\\/]\.state\.json$/.test(t)),
     });

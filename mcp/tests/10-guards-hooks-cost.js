@@ -258,6 +258,7 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
       ["shortNamesRead (SPECS~1/SPECS~1/…)", (s) => PR.shortNamesRead(s), "SPECS~1/", "ROADMA~1.JSO"],
       ["winPathTrim (a./a./…)", (s) => PR.winPathTrim(s), "a./", ". . "],
       ["winPathTrim (. . . … x)", (s) => PR.winPathTrim(s), ". ", "x"],
+      ["winPathTrim (a::$I/a::$I/…)", (s) => PR.winPathTrim(s), "a::$I/", "roadmap.json."],
       ["specsParentOf (////…/SPECS~1/)", (s) => PR.specsParentOf(s, true), "/", "x/SPECS~1/guardian.cjs"],
       ["editTargets (SPECS~1\\SPECS~1\\…)", (s) => PR.editTargets(s, tmp, true), BS + "SPECS~1", BS + "STATE~1.JSO."],
       ["approvalGuardDecision, Bash (cp x SPECS~1/SPECS~1/…)", (s) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "cp x " + s },
