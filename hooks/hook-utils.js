@@ -8,7 +8,7 @@
  * system reads it: mcp/lib/probe.js (ONE rule for the hooks, the status line and the engine), re-exported here under the names
  * this file always had (readJson = probe.readJsonFile) — loaded on first use: the runner alone needs none of it.
  *
- *   - runHook / finish / payloadOf / eventOf — every hook's process: the payload read from stdin and parsed, main run once, the
+ *   - runHook / finish / payloadOf / eventOf — every hook's process: the payload read from stdin and parsed, decide run once, the
  *     safety net, the one flushed exit.
  *   - probe() — mcp/lib/probe.js, required on first use (each hook's pre-filter runs before it).
  *   - editTargets / fsTargetPath — the probe's (the engine's approvalEditTargets / guardTargetPath ARE them).
@@ -67,7 +67,7 @@ function runHook(decide, opts = {}) {
   process.stdin.on("error", () => finish());
   setTimeout(() => run(input, true), SAFETY_NET_MS).unref(); // the safety net
 }
-// The payload main reads: its raw text → the object it holds, or null (not JSON, or JSON that is no object — an array, a string…);
+// The payload a decide reads: its raw text → the object it holds, or null (not JSON, or JSON that is no object — an array, a string…);
 // an empty text is {}. eventOf: its event name (hook_event_name, or the camelCase hookEventName), else "".
 function payloadOf(raw) {
   let p;

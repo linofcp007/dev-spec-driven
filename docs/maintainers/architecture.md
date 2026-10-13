@@ -24,7 +24,8 @@ mcp/lib/spec.js                the engine's FACADE — every surface requires it
 mcp/lib/operations.js          THE operations table (`OPERATIONS`): each operation's MCP tool, CLI commands, arguments and engine
                                call; requires nothing (mcp.md → The operations)
 mcp/lib/probe.js               THE dev-spec project rule (`isDevSpecProject`) and the walks — Node core only: the hooks, the status
-                               line, shell completion and the engine's `isDevSpecDir` (claude-code-integration.md)
+                               line, shell completion and the engine's `isDevSpecDir` (claude-code-integration.md); and the guards'
+                               shared readings — the approval pre-filter, the guarded files, the MCP file tools, the observe pre-filter
 mcp/lib/latin1-scan.js         the stop gate's claim scan on a one-byte projection of a wide text (`latin1Text`) — Node core only
 mcp/lib/spec.bundle.js         GIT-IGNORED, built on demand (dev-spec bundle): the engine + i18n in ONE file (The build)
 mcp/lib/engine/                ALL domain logic, one module per concern (The module rule):
@@ -74,7 +75,8 @@ hooks/hooks.json               PreToolUse → guard-hook.js (Write|Edit|Notebook
                                SubagentStop (^(dev-spec-driven:)?spec-(implementer|simplifier)$) → stop-hook.js
 hooks/*-hook.js                guard (opt-in guard mode) · approval (opt-in human approval guard) · observe (logs _Verify:_ /
                                check runs, prints nothing) · spec (save checks + SessionStart lines) · stop (stale roadmap
-                               refresh, then the evidence gate) · plan (the plan-mode bridge)
+                               refresh, then the evidence gate) · plan (the plan-mode bridge) — each exports its decide(raw,
+                               opts), run as a process only as the main module (the tests call it in-process: hookIn)
 hooks/hook-utils.js            what the hooks share before the engine loads (the runner — runHook / finish —, probe.js
                                re-exported on first use, the claim pre-filter…)
 hooks/precommit-check.js       optional git pre-commit validator (a stale ROADMAP.* / SPECS.md refreshed and re-staged)
@@ -245,6 +247,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.27** — exports only what crosses a module's boundary: `E` went from 2,083 names (1,214 of them exported and used only
   inside their own module) to ~860; 80 facade keys are read only by tests. probe.js, latin1-scan.js and operations.js
   joined mcp/lib beside the engine.
+- **1.30 (review 8, ds-maint finding 8 — measured, not done)** — the near-leaf tier no hook uses, loaded in every engine load
+  (median of 21 fresh processes, the rest already loaded, compile cache on): dupes.js 1.9 ms, import/ 13.9 ms of ~75–100 ms. Not
+  made lazy: dupes.js alone isn't worth a mechanism, and import/ is no leaf — trace.js links `inertOutsideCode` from
+  import/common.js and the facade reads `IMPORT_TOOLS` / `STEERING_IMPORT_TOOLS` while it loads — so a lazy tier needs a second
+  way to reach a name (call-time getters on `E`, the facade's entries defined after its wrap loop), the helper moved to a core
+  module, and the "1.18 module rule" checks taught both. Worth it only alongside other work on index.js / spec.js.
 
 ### The build
 - **1.19 → 1.20** — rendering the corpus (1,165 texts plus pt-BR's twins: ~200 ms) was the largest slice of a hook or CLI
