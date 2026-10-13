@@ -69,8 +69,18 @@ function sweepStaleTmp(prefix) {
 // SPEC_PROJECT_DIR exported in the shell. A test that wants one of them sets it for the process it starts. 1.29: nor the
 // maintainer's installed plugins — DEV_GUARDIAN_CLI is dropped and CLAUDE_CONFIG_DIR names an absent folder of the chain's own
 // (isolate()): no dev-guardian plugin cache is found (init / spec_upgrade offer its gate on a machine that has one).
+// 1.30 (review 8, ds-maint 6): nor Node's own steering variables — RE_NODE_ENV: NODE_OPTIONS (a `--require` / `--import` preload, a
+// debugger's bootloader — a VS Code JavaScript Debug Terminal sets one —, --no-warnings, --trace-*: it reached every chain, server,
+// hook and CLI process), NODE_COMPILE_CACHE / NODE_DISABLE_COMPILE_CACHE (where — whether — the facade's compile cache goes),
+// NODE_DEBUG / NODE_DEBUG_NATIVE (stderr lines the stderr-empty checks would read), NODE_V8_COVERAGE, NODE_PATH,
+// NODE_PRESERVE_SYMLINKS(_MAIN), NODE_NO_WARNINGS, NODE_PENDING_DEPRECATION and NODE_REDIRECT_WARNINGS — what a process loads, prints
+// or writes. A test that wants one sets it for the process it starts (02-mcp-server.js's NODE_OPTIONS). DEV_SPEC_TEST_KEEP_NODE_ENV=1
+// keeps them: a run that WANTS them in every chain (NODE_V8_COVERAGE for a coverage run, a profiler's preload).
 const RE_HOST_ENV = /^(?:SPEC_PROJECT_DIR|SPEC_MCP_\w*|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_\w*|CLAUDE_CONFIG_DIR|DEV_GUARDIAN_CLI|DEV_SPEC_(?!TEST_)\w*|COLUMNS)$/i;
-const hostEnvKey = (k) => RE_HOST_ENV.test(k);
+const RE_NODE_ENV = /^NODE_(?:OPTIONS|COMPILE_CACHE|DISABLE_COMPILE_CACHE|DEBUG|DEBUG_NATIVE|V8_COVERAGE|PATH|PRESERVE_SYMLINKS(?:_MAIN)?|NO_WARNINGS|PENDING_DEPRECATION|REDIRECT_WARNINGS)$/i;
+const KEEP_NODE_ENV = "DEV_SPEC_TEST_KEEP_NODE_ENV";
+const keepNodeEnv = () => /^(?:1|true|yes|on)$/i.test(String(process.env[KEEP_NODE_ENV] || "").trim());
+const hostEnvKey = (k) => RE_HOST_ENV.test(k) || (RE_NODE_ENV.test(k) && !keepNodeEnv());
 // env without the host's steering variables (a new object; `env` untouched).
 function hermeticEnv(env) {
   const out = {};
@@ -99,20 +109,32 @@ function isolate(prefix) {
   return dir;
 }
 
-// Start order: the longest chains first — by the files' times in the previous run (<tmp>/dev-spec-test-times-<key>.json;
-// a file never timed counts as the longest) — so the critical path starts at once. The output still comes in file order.
-// Best effort: an unreadable or unwritable times file only changes the order.
-const timesFile = (key) => path.join(os.tmpdir(), `dev-spec-test-times-${key}.json`);
-function readTimes(key) {
+// Start order: the longest chains first — by the files' times in the previous run (the times file; a file never timed counts as
+// the longest) — so the critical path starts at once. The output still comes in file order. Best effort: an unreadable or
+// unwritable times file only changes the order.
+// The times file is the CHECKOUT's (1.30, review 8 — ds-maint 14): <tmp>/dev-spec-test-times-<key>-<10 hex of the root's path>.json.
+// It was <tmp>/dev-spec-test-times-<key>.json, one per machine: every worktree merged its times into it (a worktree's renamed or
+// split files ordered another's run), and nothing ever left it (29 entries of files 1.27 renamed). Each write keeps only the
+// suite's current files — a renamed, merged or deleted file's entry goes with the next run, --only's too.
+function timesFile(key, root) {
+  let r = path.resolve(root || ".");
+  try { r = fs.realpathSync.native(r); } catch {}
+  if (process.platform === "win32" || process.platform === "darwin") r = r.toLowerCase(); // case-blind file systems: one checkout, one file
+  const id = require("crypto").createHash("sha1").update(r).digest("hex").slice(0, 10);
+  return path.join(os.tmpdir(), `dev-spec-test-times-${key}-${id}.json`);
+}
+function readTimes(file) {
   try {
-    const t = JSON.parse(fs.readFileSync(timesFile(key), "utf8"));
+    const t = JSON.parse(fs.readFileSync(file, "utf8"));
     return t && typeof t === "object" && !Array.isArray(t) ? t : {};
   } catch { return {}; }
 }
-function writeTimes(key, stats) {
-  const f = timesFile(key), part = `${f}.${process.pid}.tmp`;
+// `stems`: the suite's files now — an entry of any other (renamed, merged, deleted) is dropped.
+function writeTimes(file, stats, stems) {
+  const f = file, part = `${f}.${process.pid}.tmp`;
   try {
-    const t = readTimes(key);
+    const keep = new Set(stems);
+    const t = Object.fromEntries(Object.entries(readTimes(f)).filter(([stem, ms]) => keep.has(stem) && typeof ms === "number"));
     for (const s of stats) t[s.stem] = s.ms;
     fs.writeFileSync(part, JSON.stringify(t, null, 1));
     fs.renameSync(part, f);
@@ -320,7 +342,8 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
   // At most one process per CPU at a time (each MCP chain also runs its own server), the longest chains first; results
   // keep the chain order.
   const all = new Array(chains.length);
-  const times = readTimes(opts.key);
+  const TIMES = timesFile(opts.key, opts.root);
+  const times = readTimes(TIMES);
   const weight = (chain) => chain.reduce((s, f) => s + (typeof times[f.stem] === "number" ? times[f.stem] : Infinity), 0);
   const order = chains.map((c, i) => [weight(c), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).map(([, i]) => i);
   let nextIdx = 0;
@@ -350,7 +373,7 @@ Exit: 0 all passed · 1 an assertion failed or a process died · 2 a usage error
       const w = Math.max(...stats.map((s) => s.stem.length), 4);
       for (const s of stats.sort((a, b) => b.ms - a.ms)) console.log(`#   ${s.stem.padEnd(w)}  ${String(s.passed).padStart(4)} passed  ${String(s.failed).padStart(3)} failed  ${secs(s.ms).padStart(7)}`);
     }
-    writeTimes(opts.key, stats);
+    writeTimes(TIMES, stats, files.map((f) => f.stem));
     console.log(`\n${passed} passed, ${failed} failed`);
     exitFlushed(failed ? 1 : 0);
   });
@@ -496,4 +519,5 @@ function main(opts) {
 }
 
 module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, isolate, hermeticEnv,
-  assertHelpers, firstDiff, remeasure, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_TEST_FILE, CHAIN_TIMEOUT_MS };
+  assertHelpers, firstDiff, remeasure, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_NODE_ENV, KEEP_NODE_ENV, RE_TEST_FILE, RE_TOTAL, CHAIN_TIMEOUT_MS,
+  timesFile };

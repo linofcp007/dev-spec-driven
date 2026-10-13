@@ -54,8 +54,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   SAME PROCESS, because it reads a project folder they built or a value one of them returned (`return { vDir }` from
   `run` joins the context of the files after it) — say which in a comment above `deps`. A file and
   the files it needs form a chain; every chain runs in its own child process (its own temp dir and server), at most one
-  per CPU, the longest first (by the previous run's times, kept in `<os tmpdir>/dev-spec-test-times-<mcp|cli>.json`; a
-  file never timed starts first). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
+  per CPU, the longest first (by the previous run's times, kept in `<os tmpdir>/dev-spec-test-times-<mcp|cli>-<id>.json` —
+  `<id>` 10 hex of the checkout's root path (1.30): each worktree has its own, and each write keeps only the suite's current
+  files, so a renamed or deleted file's entry goes with the next run, `--only`'s too; a file never timed starts first). The output comes file by file (a `# <file>` line before each), then `# N file(s) in M process(es), T s —
   slowest: …`, then the total: the LAST line is always `N passed, M failed` (scripts/test-docker.js reads it). A process
   that dies or never prints its total fails the suite, a file that throws is one FAIL (its chain goes on), a server that
   stops answering (15 s) fails the run — never a drain to exit 0. On a loaded machine (1.26): a chain whose process the OS
@@ -76,14 +77,18 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   `DEV_SPEC_TEST_CWD`, `DEV_SPEC_TEST_BASH` / `_ZSH` / `_FISH`) — scripts/test-runner.js `isolate()` / `hermeticEnv()`; 1.29:
   nor the maintainer's installed plugins — `DEV_GUARDIAN_CLI` is dropped and `CLAUDE_CONFIG_DIR` names an absent folder inside
   the chain's own (`no-claude-config`), so no dev-guardian plugin cache is seen (init / spec_upgrade would offer its gate on one
-  machine and not on another; a test that wants one builds a fake cache and passes it). The
+  machine and not on another; a test that wants one builds a fake cache and passes it); 1.30: nor Node's own steering
+  variables (`RE_NODE_ENV`) — `NODE_OPTIONS` (a `--require` preload: a VS Code JavaScript Debug Terminal's bootloader reached every
+  chain, server, hook and CLI process), `NODE_COMPILE_CACHE` / `NODE_DISABLE_COMPILE_CACHE`, `NODE_DEBUG` / `NODE_DEBUG_NATIVE`,
+  `NODE_V8_COVERAGE`, `NODE_PATH`, `NODE_PRESERVE_SYMLINKS(_MAIN)`, `NODE_NO_WARNINGS`, `NODE_PENDING_DEPRECATION`,
+  `NODE_REDIRECT_WARNINGS` — unless `DEV_SPEC_TEST_KEEP_NODE_ENV=1` (a coverage run's `NODE_V8_COVERAGE`, a profiler's preload). The
   child runs `isolate()` again before it loads a file, and both harnesses first thing (a no-op in the folder the runner gave
   it), so a chain started by hand (`DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js`) is isolated too. Why: the main checkout
   keeps a git-ignored dogfood `.specs/` (meta.lang pt) at the repo root, and a test that started the CLI or a hook without
   naming a project picked it up — green in a worktree, red after the merge; a `DEV_SPEC_DEFAULT_LANG` or `SPEC_PROJECT_DIR`
   exported in the maintainer's shell did the same. A test that needs one of these variables sets it for the process it
   starts; a test never reads `process.cwd()` for a path (use `tmp`, `root`, `__dirname`). cli/tests/16-conventions-runner.js
-  proves it on the fake suite (a decoy `.specs/` and the variables exported: none reaches a chain). The proof run: put a decoy
+  proves it on the fake suite (a decoy `.specs/` and the variables exported — a `NODE_OPTIONS` preload too: none reaches a chain). The proof run: put a decoy
   `.specs/` (`roadmap.json` `{"features":{},"meta":{"lang":"pt"}}` and a feature folder) at the repo root, export
   `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` at it and `DEV_SPEC_DEFAULT_LANG=es`, and run both suites — still green.
 - **Running a part.** `--only <x>[,…]` (repeatable) takes a file by its full name (`17-docs` — that file alone; the CLI's
@@ -203,6 +208,11 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
 
 ## History
 How the rules above came to be — grep a release here.
+
+- **1.30 (review 8, ds-maint 6 and 14)** — hermetic chains also drop Node's steering variables (`NODE_OPTIONS`, the compile cache's,
+  `NODE_DEBUG`…; `DEV_SPEC_TEST_KEEP_NODE_ENV=1` keeps them): a `--require` preload in `NODE_OPTIONS` reached every chain, server and hook.
+  The times file is the checkout's (`dev-spec-test-times-<suite>-<id>.json`) and pruned on each write: it was one per machine,
+  merged into by every worktree, and held 29 entries of files 1.27 had renamed.
 
 - **1.27.1** — the duplication guard (16-conventions-duplication.js): the cleanup took the plugin's duplicated code lines (window
   of 6, mcp/evals and mcp/test.js counted too) from 364 of 39,680 (0.9 %; the hooks 13.2 %) to 72 of 39,435 (0.2 %; the hooks

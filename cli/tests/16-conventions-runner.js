@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-exports.run = ({ ok, tmp, __dirname }) => {
+exports.run = ({ ok, all, tmp, __dirname }) => {
   const js = JSON.stringify;
   const RUNNER = path.join(__dirname, "..", "scripts", "test-runner.js");
   // A fake suite built under tmp: its entry, a harness shaped like the real ones (ok, counts, fail, end → the total line and
@@ -52,13 +52,13 @@ exports.run = async ({ ok }) => { ok(true, "w on time"); process.emitWarning("a 
   const fake = (...args) => { const r = spawnSync(process.execPath, [path.join(root, "suite.js"), ...args], { encoding: "utf8", env, timeout: 60000 }); return { out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "", code: r.status }; };
   const lastLine = (s) => s.trimEnd().split(/\r?\n/).pop();
 
-  const all = fake();
-  ok(all.code === 1 && lastLine(all.stdout) === "5 passed, 2 failed" &&
-    /FAIL - late assertion from 02-late — it ran after the file's run\(\) had resolved \(a missing await\?\): fired by a timer after run\(\) resolved/.test(all.out) &&
-    /FAIL - late assertion from 03-pair-a — [^\n]*: a's late one/.test(all.out) && !/ok {3}- (?:fired by a timer|a's late one)/.test(all.out) &&
-    !/without a clean total/.test(all.out) && /STDERR-AFTER-TOTAL/.test(all.out),
+  const whole = fake();
+  ok(whole.code === 1 && lastLine(whole.stdout) === "5 passed, 2 failed" &&
+    /FAIL - late assertion from 02-late — it ran after the file's run\(\) had resolved \(a missing await\?\): fired by a timer after run\(\) resolved/.test(whole.out) &&
+    /FAIL - late assertion from 03-pair-a — [^\n]*: a's late one/.test(whole.out) && !/ok {3}- (?:fired by a timer|a's late one)/.test(whole.out) &&
+    !/without a clean total/.test(whole.out) && /STDERR-AFTER-TOTAL/.test(whole.out),
     "1.20 review: the runner fails a late assertion — an ok() a file makes after its run() resolved (a forgotten await), whether it fires during the next file of its chain or after the last one — labelled with its file, counted before the total; stderr written after a chain's total line (a Node warning, an exit handler) is shown and never voids its count (got " +
-    js([all.code, lastLine(all.stdout), all.out.split(/\r?\n/).filter((l) => /FAIL|clean total/.test(l))]) + ")");
+    js([whole.code, lastLine(whole.stdout), whole.out.split(/\r?\n/).filter((l) => /FAIL|clean total/.test(l))]) + ")");
   const st = fake("--only", "05");
   ok(st.code === 0 && lastLine(st.stdout) === "1 passed, 0 failed" && /STDERR-AFTER-TOTAL/.test(st.out) && /a warning/.test(st.out),
     "1.20 review: a chain whose stderr carries a Node warning and a line written after its total line still counts (got " + js([st.code, lastLine(st.stdout)]) + ")");
@@ -69,12 +69,39 @@ exports.run = async ({ ok }) => { ok(true, "w on time"); process.emitWarning("a 
     "1.20 review: --only with an empty token list is a usage error (exit 2), never the whole suite (got " + js(only.map((r) => [r.code, r.out.split(/\r?\n/)[0]])) + ")");
 
   // The times file can't be replaced (a folder of that name — as a held file refuses a rename on Windows): no .tmp is left.
+  const R = require(RUNNER);
+  const timesName = (suiteRoot) => path.basename(R.timesFile("fake", suiteRoot)); // <tmp>/dev-spec-test-times-fake-<the checkout's id>.json
   fs.rmSync(own, { recursive: true, force: true });
-  fs.mkdirSync(path.join(own, "dev-spec-test-times-fake.json"), { recursive: true });
+  fs.mkdirSync(path.join(own, timesName(root)), { recursive: true });
   const held = fake("--only", "01");
   const left = fs.readdirSync(own).filter((f) => /\.tmp$/.test(f));
   ok(held.code === 0 && lastLine(held.stdout) === "1 passed, 0 failed" && left.length === 0,
-    "1.20 review: a times file the runner can't replace leaves no dev-spec-test-times-<key>.json.<pid>.tmp behind (got " + js([held.code, left]) + ")");
+    "1.20 review: a times file the runner can't replace leaves no dev-spec-test-times-<key>-<checkout>.json.<pid>.tmp behind (got " + js([held.code, left]) + ")");
+
+  // 1.30 review 8 (ds-maint 14): the times file is the CHECKOUT's — keyed by its root (two worktrees never share one; it was
+  // <tmp>/dev-spec-test-times-<key>.json, which every worktree merged into) — and each write keeps only the suite's current files:
+  // an entry of a renamed or deleted file goes with the next run, --only's too (it kept 29 entries of files renamed in 1.27).
+  {
+    fs.rmSync(own, { recursive: true, force: true });
+    fs.mkdirSync(own, { recursive: true });
+    const twin = path.join(tmp, "runner-fake-twin"); // the same suite in another checkout
+    fs.mkdirSync(path.join(twin, "tests"), { recursive: true });
+    for (const f of ["suite.js", "harness.js", "tests/01-clean.js"]) fs.copyFileSync(path.join(root, ...f.split("/")), path.join(twin, ...f.split("/")));
+    const mine = path.join(own, timesName(root)), theirs = path.join(own, timesName(twin));
+    fs.writeFileSync(mine, js({ "01-clean": 987654321, "99-gone": 7, "05-stderr": 9 }));
+    const a = fake("--only", "01");
+    const b = spawnSync(process.execPath, [path.join(twin, "suite.js"), "--only", "01"], { encoding: "utf8", env, timeout: 60000 });
+    const read = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
+    const t1 = read(mine), t2 = read(theirs);
+    all("1.30 review 8 (ds-maint 14): each checkout has its own times file (keyed by its root), and a run drops the entries of files the suite no longer has — --only keeps the others' (got " +
+      js([a.code, b.status, timesName(root), timesName(twin), t1, t2]) + ")", {
+      bothRan: () => a.code === 0 && b.status === 0,
+      perCheckout: () => mine !== theirs && /^dev-spec-test-times-fake-[0-9a-f]{10}\.json$/.test(timesName(root)),
+      noShared: () => !fs.existsSync(path.join(own, "dev-spec-test-times-fake.json")),
+      pruned: () => !!t1 && !("99-gone" in t1) && typeof t1["01-clean"] === "number" && t1["01-clean"] !== 987654321 && t1["05-stderr"] === 9,
+      twinsOwn: () => !!t2 && js(Object.keys(t2)) === js(["01-clean"]),
+    });
+  }
 
   // 1.26 — the assertion helpers every file receives beside ok: all(label, conds) and eq(actual, expected, label), one assertion
   // each (the totals stay comparable), built on the file's own ok (a late one is a late assertion). A FAIL says WHAT failed: the
@@ -183,5 +210,40 @@ exports.run = async ({ ok }) => {
       first(harnesses[0], "isolate(\"spec-test-\")") && first(harnesses[1], "isolate(\"cli-test-\")"),
       "1.26: a chain started by hand (DEV_SPEC_TEST_CHAIN set, no runner parent) isolates itself the same way; mcp/tests/harness.js and cli/tests/harness.js call isolate() before the engine loads and their temp dir is made (got " +
       js([byHand.status, lastLine(byHand.stdout || ""), one]) + ")");
+  }
+
+  // 1.30 review 8 (ds-maint 6): nor Node's own steering variables — a NODE_OPTIONS=--require <file> exported in the shell (a VS Code
+  // JavaScript Debug Terminal's bootloader is one) reached every chain, server, hook and CLI process; NODE_COMPILE_CACHE /
+  // NODE_DISABLE_COMPILE_CACHE moved or turned off the facade's compile cache. The runner's parent still runs with them (the shell's
+  // own process); its chains, and what a chain starts, never see them — a chain started by hand drops them for what it starts.
+  // DEV_SPEC_TEST_KEEP_NODE_ENV=1 keeps them (a coverage run's NODE_V8_COVERAGE).
+  {
+    const NODE_KEYS = ["NODE_OPTIONS", "NODE_COMPILE_CACHE", "NODE_DISABLE_COMPILE_CACHE", "NODE_DEBUG", "NODE_V8_COVERAGE", "NODE_PATH"];
+    const pre = path.join(root, "host preload.js"); // a space in its path: NODE_OPTIONS quotes it
+    fs.writeFileSync(pre, "globalThis.__hostPreload = true; process.stderr.write('HOST-PRELOAD' + String.fromCharCode(10));\n");
+    w("tests/11-node-env.js", `// what a chain sees of Node's own variables, and whether the host's preload reached it or what it starts
+exports.run = async ({ ok }) => {
+  const env = Object.fromEntries(${js(NODE_KEYS)}.map((k) => [k, process.env[k] === undefined ? null : process.env[k]]));
+  const kid = require("child_process").spawnSync(process.execPath, ["-e", "process.stdout.write(String(!!globalThis.__hostPreload))"], { encoding: "utf8" }).stdout;
+  console.log("NODEENV " + JSON.stringify({ preloaded: !!globalThis.__hostPreload, kid, env }));
+  ok(true, "node env seen");
+};
+`);
+    const host = { ...env, NODE_OPTIONS: "--require " + js(pre), NODE_COMPILE_CACHE: path.join(own, "cc"), NODE_DISABLE_COMPILE_CACHE: "1",
+      NODE_DEBUG: "dev-spec-none", NODE_V8_COVERAGE: path.join(own, "cov"), NODE_PATH: own };
+    const view = (r) => { const l = String(r.stdout || "").split(/\r?\n/).find((x) => x.startsWith("NODEENV ")); try { return JSON.parse(l.slice(8)); } catch { return null; } };
+    const none = (v) => !!v && NODE_KEYS.every((k) => v.env[k] === null);
+    const viaRunner = spawnSync(process.execPath, [path.join(root, "suite.js"), "--only", "11"], { encoding: "utf8", env: host, timeout: 60000 });
+    const byHand = spawnSync(process.execPath, [path.join(root, "suite.js")], { encoding: "utf8", env: { ...host, DEV_SPEC_TEST_CHAIN: "11-node-env" }, timeout: 60000 });
+    const kept = spawnSync(process.execPath, [path.join(root, "suite.js"), "--only", "11"], { encoding: "utf8", env: { ...host, DEV_SPEC_TEST_KEEP_NODE_ENV: "1" }, timeout: 60000 });
+    const [a, b, c] = [viaRunner, byHand, kept].map(view);
+    all("1.30 review 8 (ds-maint 6): a NODE_OPTIONS preload, NODE_COMPILE_CACHE / NODE_DISABLE_COMPILE_CACHE and Node's other steering variables exported in the shell reach no chain nor what a chain starts (a chain started by hand drops them for its children); DEV_SPEC_TEST_KEEP_NODE_ENV=1 keeps them (got " +
+      js([[viaRunner.status, lastLine(viaRunner.stdout || ""), a], [byHand.status, b], [kept.status, c]]) + ")", {
+      parentPreloaded: () => /HOST-PRELOAD/.test(viaRunner.stderr) && viaRunner.status === 0 && lastLine(viaRunner.stdout) === "1 passed, 0 failed",
+      chainClean: () => none(a) && a.preloaded === false && a.kid === "false" && !/HOST-PRELOAD/.test(viaRunner.stdout),
+      byHandChildrenClean: () => none(b) && b.preloaded === true && b.kid === "false",
+      optIn: () => !!c && c.preloaded === true && c.kid === "true" && c.env.NODE_OPTIONS === host.NODE_OPTIONS && c.env.NODE_V8_COVERAGE === host.NODE_V8_COVERAGE,
+      regex: () => NODE_KEYS.every((k) => R.RE_NODE_ENV.test(k)) && !R.RE_NODE_ENV.test("NODE_ENV") && !R.RE_NODE_ENV.test("NODE_EXTRA_CA_CERTS"),
+    });
   }
 };
