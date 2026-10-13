@@ -7,10 +7,12 @@
  * happens before a release, with no hosted CI (the owner's cost rule).
  *
  *   npm run test:docker
- *   node scripts/test-docker.js [--image <name>]... [--suite mcp|cli] [--no-git] [--rebuild] [--root] [--help]
+ *   node scripts/test-docker.js [--image <name>]... [--suite mcp|cli] [--jobs <n>] [--no-git] [--rebuild] [--root] [--help]
  *
- * Default images: node:18-alpine (the engines floor, musl), node:22-bookworm-slim (glibc/Debian), node:24-alpine
- * (the current LTS). `--image` (repeatable) replaces the list.
+ * Default images (DEFAULT_IMAGES): node:18-alpine — package.json's engines floor (>=18), musl; kept while engines says 18 —,
+ * then the LTS lines: node:22-bookworm-slim (glibc, Debian 12; maintenance LTS), node:24-alpine (musl; LTS) and
+ * node:26-trixie-slim (glibc, Debian 13; LTS from October 2026). Node 20 is end-of-life and no floor: not tested. `--image`
+ * (repeatable) replaces the list. mcp/tests/16-conventions.js holds the first image to the engines floor.
  *
  * How each suite runs: `docker run --rm --network none --user 1000:1000 -v <repo>:/repo:ro <image> sh -c "<copy> && node
  * <suite>"`. The repo is mounted READ-ONLY (a test can't write into it — the suites work under os.tmpdir()) and copied
@@ -39,17 +41,19 @@ const os = require("os");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const DEFAULT_IMAGES = ["node:18-alpine", "node:22-bookworm-slim", "node:24-alpine"];
+// The engines floor first (package.json engines.node — raise it, drop its image), then the LTS lines, musl and glibc both.
+const DEFAULT_IMAGES = ["node:18-alpine", "node:22-bookworm-slim", "node:24-alpine", "node:26-trixie-slim"];
 const SUITES = { mcp: "mcp/test.js", cli: "cli/test-cli.js" };
 const SUITE_TIMEOUT_MS = 20 * 60 * 1000;
 const LOG_DIR = path.join(os.tmpdir(), "dev-spec-docker");
 
-const USAGE = `usage: node scripts/test-docker.js [--image <name>]... [--suite mcp|cli] [--no-git] [--rebuild] [--root] [--mounted]
+const USAGE = `usage: node scripts/test-docker.js [--image <name>]... [--suite mcp|cli] [--jobs <n>] [--no-git] [--rebuild] [--root] [--mounted]
 
 Runs mcp/test.js and cli/test-cli.js inside Linux containers (repo mounted read-only and copied into the container,
 --network none).
   --image <name>  a Docker image with Node >= 18 (repeatable; replaces the defaults: ${DEFAULT_IMAGES.join(", ")})
   --suite <name>  only one suite: mcp | cli (default: both)
+  --jobs <n>      at most n test processes at once in each container (the suites' --jobs; default: one per CPU)
   --no-git        use the images as they are (no derived image with git; the git-dependent tests skip)
   --rebuild       rebuild the cached derived images (dev-spec-test:<image>)
   --root          run the suites as root (default: an unprivileged user, uid 1000)
@@ -58,7 +62,7 @@ The first run needs network to pull the images (and apk/apt to add git); later r
 Exit: 0 all passed · 1 a suite failed · 2 Docker is not available (or a usage error).`;
 
 function parseArgs(argv) {
-  const o = { images: [], suites: Object.keys(SUITES), git: true, rebuild: false, root: false, mounted: false };
+  const o = { images: [], suites: Object.keys(SUITES), jobs: 0, git: true, rebuild: false, root: false, mounted: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -72,6 +76,10 @@ function parseArgs(argv) {
       const s = val().toLowerCase();
       if (!SUITES[s]) usageError(`unknown suite '${s}' (mcp | cli)`);
       o.suites = [s];
+    } else if (a === "--jobs" || a.startsWith("--jobs=")) {
+      const n = val();
+      if (!/^[1-9]\d*$/.test(n)) usageError(`--jobs needs a whole number >= 1 (got '${n}')`);
+      o.jobs = +n;
     } else if (a === "--no-git") o.git = false;
     else if (a === "--rebuild") o.rebuild = true;
     else if (a === "--root") o.root = true;
@@ -181,8 +189,9 @@ function main() {
       const t0 = Date.now();
       // Default: copy the repo (without .git) into the container's own file system and run from there — where an installed
       // plugin lives. --mounted: straight from the read-only bind mount.
-      const cmd = o.mounted ? ["node", SUITES[suite]]
-        : ["sh", "-c", `mkdir -p /tmp/dev-spec && cd /repo && tar --exclude=./.git -cf - . | tar -C /tmp/dev-spec -xf - && cd /tmp/dev-spec && exec node ${SUITES[suite]}`];
+      const jobs = o.jobs ? ["--jobs", String(o.jobs)] : []; // the suite's own --jobs (a shared machine)
+      const cmd = o.mounted ? ["node", SUITES[suite], ...jobs]
+        : ["sh", "-c", `mkdir -p /tmp/dev-spec && cd /repo && tar --exclude=./.git -cf - . | tar -C /tmp/dev-spec -xf - && cd /tmp/dev-spec && exec node ${[SUITES[suite], ...jobs].join(" ")}`];
       const r = runInImage(p.ref, cmd, o);
       const ms = Date.now() - t0;
       const out = (r.stdout || "") + (r.stderr || "");

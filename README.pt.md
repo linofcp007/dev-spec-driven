@@ -21,8 +21,8 @@ em inglês, português (PT-PT e PT-BR) e espanhol.
 - **Claude Code 2.1.139 ou posterior** (`claude --version`) — os hooks correm em exec form (o `node` arranca
   diretamente, sem shell em cada chamada), que as versões anteriores não correm. Ou qualquer cliente MCP: Claude
   Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI, Codex CLI… ([INTEGRATIONS.md](./INTEGRATIONS.md)).
-- **Node.js ≥ 18** no PATH (`node --version`). O Node 18 já chegou ao fim de vida: recomenda-se o 20 ou posterior (as
-  suites passam no 18, no 22 e no 24).
+- **Node.js ≥ 18** no PATH (`node --version`). O Node 18 e o 20 já chegaram ao fim de vida: recomenda-se o 22 ou
+  posterior (as suites passam no 18, no 22, no 24 e no 26).
 - git — opcional: um branch por funcionalidade, o commit em que uma execução foi feita, o merge driver do estado das specs.
 
 ## Instalação

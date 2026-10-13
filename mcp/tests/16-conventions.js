@@ -533,6 +533,20 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       () => /Docker is not available: the docker command was not found/.test(noDocker.stderr), () => /npm test/.test(noDocker.stderr),
       () => /"--network", "none"/.test(src), () => /:\/repo:ro/.test(src), () => !/\.github|workflow/i.test(src),
     ]);
+    // 1.30 review 8 (ds-maint 15): the matrix — the FIRST image is package.json's engines floor (kept while engines says it; raise
+    // the floor, drop its image), then the LTS lines ascending, musl (alpine) and glibc both; --jobs reaches the suites.
+    const floor = (String(require(path.join(root, "package.json")).engines.node).match(/^>=\s*(\d+)/) || [])[1];
+    const images = ((help.stdout || "").match(/replaces the defaults: ([^)\n]+)\)/) || [])[1] || "";
+    const majors = images.split(/,\s*/).map((im) => Number((im.match(/^node:(\d+)-/) || [])[1]));
+    const badJobs = spawnSync(process.execPath, [dockerJs, "--jobs", "0"], { encoding: "utf8" });
+    all("1.30 review 8 (ds-maint 15): test-docker's default images start at the engines floor (node:" + floor + "), then the LTS lines ascending, alpine and glibc both; --jobs is the suites' (got " +
+      JSON.stringify([floor, images, majors, badJobs.status]) + ")", {
+      floorFirst: () => !!floor && majors[0] === Number(floor) && new RegExp("^node:" + floor + "-").test(images),
+      ascending: () => majors.length >= 3 && majors.every((m, i) => Number.isInteger(m) && (i === 0 || m > majors[i - 1])),
+      ltsLines: () => majors.slice(1).every((m) => m % 2 === 0 && m >= 22),
+      bothLibcs: () => /-alpine\b/.test(images) && /-(?:bookworm|trixie)(?:-slim)?\b/.test(images),
+      jobs: () => badJobs.status === 2 && /--jobs needs a whole number >= 1/.test(badJobs.stderr) && /--jobs <n>/.test(help.stdout) && /\.\.\.jobs/.test(src),
+    });
   }
 
   // 1.17: no regex literal lost its backslashes (a heredoc'd edit once turned /^\s*status\s*:/i into /^s*statuss*:/i in

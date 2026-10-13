@@ -63,7 +63,7 @@ No Claude needed: `node "$plugin\mcp\test.js"` and `node "$plugin\cli\test-cli.j
 exit 0 (N grows with every release; what matters is `0 failed`). The raw protocol:
 `'{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node "$plugin\mcp\server.js"` — it also answers `prompts/*` (one
 prompt per command) and `resources/*` (the specs as `specs://` URIs; INTEGRATIONS.md). On Linux too, with Docker:
-`npm run test:docker` from the clone runs both suites in containers (Node 18, 22, 24; read-only mount, no network after
+`npm run test:docker` from the clone runs both suites in containers (Node 18, 22, 24, 26; read-only mount, no network after
 the first pull) and exits 0 / 1 on a failure / 2 without Docker.
 
 ## How the MCP finds your project

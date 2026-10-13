@@ -35,7 +35,7 @@ node mcp/test.js        # MCP server end-to-end (must end `0 failed`)
 node cli/test-cli.js    # universal CLI (must end `0 failed`)
 # or both:
 npm test
-npm run test:docker     # optional: both suites in Linux containers (Node 18 / 22 / 24) on your own Docker
+npm run test:docker     # optional: both suites in Linux containers (Node 18 / 22 / 24 / 26) on your own Docker
 
 # one part of a suite — a file, an area or its number (plus the files it needs):
 node mcp/test.js --only gates           # mcp/tests/06-gates.js
