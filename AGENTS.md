@@ -106,7 +106,10 @@ At each phase boundary run `dev-spec doctor <feature>` and advance only on `read
 - **`finish` blocks** on doctor failures, an artifact changed since approval, placeholders, open or unverified tasks,
   pending approvals and project checks (`init --check`) without a passing run on the current code (`finish --run`).
   With dev-guardian installed, `init --guardian` (only on the user's request) makes its gate the check `guardian`: a
-  blocking finding is fixed, or the user accepts it in dev-guardian — never force the finish without the user.
+  blocking finding is fixed or, once the user accepts it, suppressed inline with a reason (`nosemgrep: <rule> -- <reason>`
+  / `# nosec`) or dropped by a baseline rebuilt on the base commit. Never advise `baseline update` with the feature's code
+  in the tree — it accepts every finding, the feature's own too; that is the user's decision. Never force the finish
+  without the user.
   A bugfix's fix can't complete before `bug.md` → Root Cause is written.
 
 ## When the spec changes

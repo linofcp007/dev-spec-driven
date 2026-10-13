@@ -12,15 +12,15 @@ description: >
 
 # Dev Spec-Driven
 
-Idea → production code through approval gates, the rigor scaled to the feature: one pipeline (requirements → design →
-tasks → execute) plus composable **tracks** that add what this feature needs.
+Idea → production code through approval gates: one pipeline (requirements → design → tasks → execute) plus composable
+**tracks** for what a feature needs.
 
 ## Mode first — say it out loud
 
 | Mode | When | Do |
 |---|---|---|
 | **Vibe** | trivial: a typo, a copy change, a one-file fix under ~30 min; "just do it" | Build it — no artifacts. Stop reading here. |
-| **Bounded** | a contained change to a flow that **already exists** in this repo (a flag, a small endpoint) | Ask what matters, a short design in chat (the files, how you'll verify), then STOP for an explicit yes — as binding as a gate. No artifacts; no existing flow → not bounded. |
+| **Bounded** | a contained change to a flow that **already exists** in this repo (a flag, a small endpoint) | Ask what matters, a short design in chat (the files, how you'll verify), then STOP for an explicit yes. No artifacts; no existing flow → not bounded. |
 | **Bugfix** | a real defect: it worked (or is specified to work) and doesn't | `/spec-bugfix` — the flow below, `references/bugfix.md`. |
 | **Spike** | a question that must end in a decision (which queue? can the API do X?) | `spec_create {kind: "spike", question, timebox}` → go / no-go / pivot (`references/design-first.md`). |
 | **Spec** | everything else — formal, complex, "system", "integration", "properly"; or whatever the user asks to spec (`/spec`) — a small change is then size xs, not Vibe | Phase 0 → 6 below. |
@@ -35,8 +35,8 @@ dev-spec: `spec_upgrade` audits it first; apply after an OK.
 **Bugfix flow** — fixed order: reproduce → root cause with evidence → STOP for the `bug.md` approval ("fix it" asks
 for the outcome, not an approval of the root cause) → the regression test (`_Expect: fail_`), seen red → fix → verify.
 Prefill `spec_create {kind: "bugfix", reproduction, rootCause, condition, behaviour, includeBody: true}` instead of
-reading the scaffolds back. With dev-guardian installed, offer its `bug_hunt` to reproduce and isolate. After three
-failed fixes, question the design.
+reading the scaffolds back. With dev-guardian, offer its `bug_hunt` to reproduce and isolate. After three failed
+fixes, question the design.
 
 **Size** (`spec_classify`'s `suggestedSize` is a draft the user confirms): **xs** — one `change.md`, core only, ≤ 3
 criteria and tasks, two approvals (the plan via `{through: "tasks"}`, then execution) · **s** — one story, no
@@ -72,10 +72,10 @@ section markers (`[SaaS]` … `[DATA]`) and `[NEEDS CLARIFICATION:]` never chang
 
 The local MCP server **`spec-driven`** writes skeletons and runs checks, never over your files — you fill them (which
 tool when: `references/tool-catalog.md`; tools, CLI, hooks, check ids: `references/tooling-reference.md`). No MCP
-(claude.ai)? Write the files by hand and say runs need a real environment. A CLI line you hand the user is the
-runnable one the tools print, `node "<clone>/cli/dev-spec.js" …`. Slash commands: `/spec` and `/spec-bugfix` start
-work; every other one (`/approve`, `/spec-review`, `/spec-change`…) is the user's to type — you never run it, you call
-the tool it wraps. Spec conformance of the code is the user's `/spec-review`; a security / quality review of a diff,
+(claude.ai)? Write the files by hand and say runs need a real environment. A CLI line you hand the user is the one the
+tools print, `node "<clone>/cli/dev-spec.js" …`. Slash commands: `/spec` and `/spec-bugfix` start work; every other
+one (`/approve`, `/spec-review`, `/spec-change`…) is the user's to type — you never run it, you call the tool it
+wraps. Spec conformance of the code is the user's `/spec-review`; a security / quality review of a diff,
 dev-guardian's `guardian-review` when installed.
 
 **Tracks** (`core` always; what each adds per phase: `references/track-checklists.md`): +tdd tests first · +saas scale,
@@ -114,7 +114,7 @@ artifacts → fill → `spec_doctor` → present → the user's yes → `spec_ap
 **Phase 1.** EARS (WHEN · WHILE · IF…THEN · WHERE · ubiquitous; PT / ES keywords pass too) with stable AC IDs, P1
 stories first, Success Criteria (`SC-001`), `EC-` / `NFR-` IDs; concrete values, never "fast". Ask, don't guess — mark
 ambiguity `[NEEDS CLARIFICATION: …]` (the design can't start while one remains). `ears_validate`, `spec_clarify`
-(offer the grill and its constraints round), present.
+(offer the grill), present.
 
 **Phase 2.** Base sections: Overview · Architecture · **Reuse & Integration** · **Alternatives & Trade-offs** · Data
 Models · API Contracts · Security · Error Handling · Testing Strategy · **Risks** · **Constitution Check** ·
@@ -126,11 +126,11 @@ size m / l the Reuse & Integration is a gate). For the Constitution Check
 **Phases 3–4.** Every AC in ≥ 1 test row (`T-nn`, a layer, Kind `example` / `property`); +ai: golden, adversarial and
 regression sets with thresholds and a baseline. Phase 4 is the hard gate: every planned test written, red for the
 right reason, its T-ID in its name (`trace_check {code: true}`); no implementation until the user approves `tests` —
-show the red / green counts (the engine can't see the run). A bugfix's regression test is its task 1 instead.
+show the red / green counts. A bugfix's regression test is its task 1 instead.
 
 **Phase 5.** Tasks of ~30 min–2 h by story, each ending in a `**Checkpoint:**`; `[US1]` / `[shared]`, `[P]` when
-parallel. Always `_Requirements:_`, `_Implements: <path>_` on a code task (the scope guard, drift, the duplicate check
-and dev-guardian's attribution read it) and `_Verify: <command>_` (no pipe); `_Expect: fail_` on a test before its
+parallel. Always `_Requirements:_`, `_Implements: <path>_` on a code task (drift, duplicates, the scope guard and
+dev-guardian read it) and `_Verify: <command>_` (no pipe); `_Expect: fail_` on a test before its
 code; optional `_Depends:_`, `_Size:_`. `trace_check`: every AC → a task. Later work is appended
 (`spec_append_tasks`).
 
@@ -160,13 +160,13 @@ round), at most 5 rounds, then `spec_complete_task`. The final review starts fro
 (`spec_scan {duplicates: true, name}` — candidates, verified like any finding). You never write feature code; stop at
 every `**Checkpoint:**`; a finding that changes an AC, the design or a planned test goes back to that phase; +ai prompt
 tasks stay inline.
-`references/subagent-execution.md` (also the converge and simplification passes).
+`references/subagent-execution.md` (also converge and simplify).
 
 ## Gates and approvals
 
 `spec_doctor` before a phase advances: one `readyToAdvance` verdict (EARS, placeholders, trace, steering, track
 sections filled with your own text, evidence, edits since approval, gates). Present the artifact, the key decisions,
-the risks, the verdict and the next step; ask. On the user's yes for that phase, record it with
+the risks, the verdict, the next step; ask. On the user's yes for that phase, record it with
 `spec_approve {name, phase}` (`/approve` is the user's own command). A failing check refuses it; `force: true` only
 when the user explicitly accepts the failures. Phases go in order (one edited since its approval is re-approved
 first); `{through: "tasks"}` approves several filled ones only after the user said go. When the approval guard asks
@@ -177,11 +177,13 @@ names ONE next step.
 ## Finish and after
 
 `spec_finish` lists the blockers, the checks to run fresh and a merge summary (`write`: the drift baseline). With the
-project check `guardian` (`spec_init {guardian: true}`, only on the user's request) it runs dev-guardian's gate: a blocking
-finding is fixed or the user accepts it in dev-guardian — never forced (`references/verification.md`). After the
-`execution` sign-off the user picks **merge into the base branch locally** or **keep the branch** — no pull requests,
-no CI; never merge or push on your own (pushing the merged base is a step they approve too). An approved artifact
-edited later: `spec_impact` lists what each change reaches; with the user's OK, `reopen: true` unticks the affected
-done tasks (a removed criterion's are never redone — `retire` lists them), then re-approve. Decisions, drift, metrics,
-exports, archive, roles, waivers and the user's other commands: `references/workflows.md`, `references/change-management.md`; every
-file: `references/index.md`.
+project check `guardian` (`spec_init {guardian: true}`, only on the user's request) it runs dev-guardian's gate: a
+blocking finding is fixed or, once the user accepts it, suppressed inline with a reason
+(`nosemgrep: <rule> -- <reason>` / `# nosec`) or dropped by a baseline rebuilt on the base commit — never advise
+`baseline update` with the feature's code in the tree (it accepts every finding, the feature's own too — the user's
+call); never forced (`references/verification.md`). After the `execution` sign-off the user picks **merge into the
+base branch locally** or **keep the branch** — no pull requests, no CI; never merge or push on your own (pushing the
+merged base too). An approved artifact edited later: `spec_impact` lists what each change reaches; with the user's OK,
+`reopen: true` unticks the affected done tasks (a removed criterion's are never redone — `retire` lists them), then
+re-approve. Drift, metrics, exports, archive, roles, waivers, the user's other commands: `references/workflows.md`,
+`references/change-management.md`; every file: `references/index.md`.
