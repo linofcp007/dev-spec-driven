@@ -1776,6 +1776,7 @@ const COMMANDS = [
         }
         if (r.total > r.duplicates.length) log(T.dupesMore(r.total - r.duplicates.length));
         if (r.truncated) log(T.dupesTruncated(r.scanned.files));
+        if (r.partial) log(T.dupesPartial(r.partial.unread, Math.round(r.partial.bytes / 1048576))); // 1.30: the byte budget stopped the reading
         if (r.budget) log((r.budget.over ? "  ⚠ " : "  ") + r.budget.note); // 1.29: dev-guardian's duplication budget (.guardian/budgets.yml)
       });
     },

@@ -977,8 +977,9 @@ const msg = {
       noEvidence: "no evidence recorded",
       changedByDate: (list, slug) => `judged by file date only (approved before content fingerprints — a clone or copy resets file dates, so this may be no edit at all): ${list} — re-review, then re-approve to track it by content (/approve ${slug} <phase>)`,
       // 1.28: the duplicate-code detector — a warning, never a blocker
-      duplicates: (n, top, within, slug) => `the feature's code repeats existing code in ${n} place(s) — ${top}${n > 3 ? "; …" : ""}: reuse or extend the existing code, or note in the report why a copy is deliberate${within ? `; ${within} more repeat(s) inside the feature's own files` : ""} (all of them: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
-      duplicatesWithin: (n, slug) => `${n} block(s) of the feature's code repeat another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicates: (n, top, within, slug) => `the feature's code repeats existing code in ${n} ${n === 1 ? "place" : "places"} — ${top}${n > 3 ? "; …" : ""}: reuse or extend the existing code, or note in the report why a copy is deliberate${within ? `; ${within} more ${within === 1 ? "repeat" : "repeats"} inside the feature's own files` : ""} (all of them: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      duplicatesPartial: (unread) => `; only part of the project was compared — the detector's byte budget left ${unread} source ${unread === 1 ? "file" : "files"} unread`,
+      duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "block of the feature's code repeats" : "blocks of the feature's code repeat"} another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       untrackedApproval: (list, slug) => `approved before change tracking — nothing about the signed-off file was recorded, so an edit can't be detected: ${list} — re-approve to start tracking it (/approve ${slug} design)`,
     },
     // right-sized rigor: feature sizes (spec_create {size}), the change kind (size xs, one change.md), the size's rules.
@@ -1516,8 +1517,8 @@ const msg = {
       coverage: (pct, d, t) => `Spec coverage: ${pct}%  (${d}/${t} code files named in _Implements:_)`,
       undocumented: (list) => `  uncovered folders: ${list}`,
       // dupes (1.28): the duplicate-code report — spec_scan {duplicates: true}
-      dupesHead: (f, existing, within, n, files, lines) => `Duplicates — ${f}: ${existing} place(s) repeat existing code · ${within} repeated within the feature  (windows of ${n} code lines; ${files} files, ${lines} code lines read)`,
-      dupesHeadProject: (total, n, files, lines) => `Duplicates — the project: ${total} repeated block(s)  (windows of ${n} code lines; ${files} files, ${lines} code lines read)`,
+      dupesHead: (f, existing, within, n, files, lines) => `Duplicates — ${f}: ${existing} ${existing === 1 ? "place repeats" : "places repeat"} existing code · ${within} repeated within the feature  (windows of ${n} code lines; ${files} ${files === 1 ? "file" : "files"}, ${lines} code ${lines === 1 ? "line" : "lines"} read)`,
+      dupesHeadProject: (total, n, files, lines) => `Duplicates — the project: ${total} repeated ${total === 1 ? "block" : "blocks"}  (windows of ${n} code lines; ${files} ${files === 1 ? "file" : "files"}, ${lines} code ${lines === 1 ? "line" : "lines"} read)`,
       dupesNoCode: "  no source file its tasks' _Implements:_ name exists yet — nothing to compare",
       dupesNone: "  no repeated code found",
       dupesExisting: (at, n, also) => `  ⚠ ${at} (${n} lines) repeats ${also} — reuse or extend the existing code`,
@@ -1525,6 +1526,7 @@ const msg = {
       dupesAlsoMore: (n) => `+${n} more`,
       dupesMore: (n) => `  … and ${n} more (the longest are listed)`,
       dupesTruncated: (n) => `  (only the first ${n} source files were read — the cap: a repeat beyond them is not seen)`,
+      dupesPartial: (unread, mb) => `  (the byte budget — ${mb} MB of source — was reached: ${unread} more source ${unread === 1 ? "file was" : "files were"} not read, a repeat in them is not seen)`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  phase=${phase}  verdict=${verdict}  gatesOk=${gatesOk}`,
       changed: (list) => `  ⚠ changed since last approval: ${list}`,

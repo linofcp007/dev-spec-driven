@@ -230,15 +230,16 @@ function finishFeature(projectDir, name, opts = {}) {
   // rest) — a warning, never a blocker: how many places, the top 3 (`file:from-to ↔ file:from-to`) and the call listing them all;
   // the repeats inside the feature's own files only as a count. 1.29: with dev-guardian's duplication budget set
   // (.guardian/budgets.yml quality.duplication_pct — budget: true measures the whole project too), the warning says when the project
-  // is over it.
+  // is over it. 1.30: a project past the detector's byte budget was compared in part — the warning says so (`partial`).
   const dup = duplicationReport(projectDir, { name: slug, budget: true });
   let duplicates = null;
   if (dup.ok && dup.total) {
     const top = dup.duplicates.filter((d) => d.kind === "existing").slice(0, 3);
     const pair = (d) => `${d.file}:${d.from}-${d.to} ↔ ${d.also[0].file}:${d.also[0].from}-${d.also[0].to}`;
     const over = dup.budget && dup.budget.over ? i18n.msg(lng).guardian.finishBudget(dup.budget.measured, dup.budget.limit) : "";
-    warnings.push((dup.counts.existing ? F.duplicates(dup.counts.existing, top.map(pair).join("; "), dup.counts.within, slug) : F.duplicatesWithin(dup.counts.within, slug)) + over);
-    duplicates = { existing: dup.counts.existing, within: dup.counts.within, top };
+    const part = dup.partial ? F.duplicatesPartial(dup.partial.unread) : "";
+    warnings.push((dup.counts.existing ? F.duplicates(dup.counts.existing, top.map(pair).join("; "), dup.counts.within, slug) : F.duplicatesWithin(dup.counts.within, slug)) + part + over);
+    duplicates = Object.assign({ existing: dup.counts.existing, within: dup.counts.within, top }, dup.partial ? { partial: dup.partial } : {});
   }
 
   // What only a human (or a fresh run) can confirm — the track-gated "done" checks.
@@ -321,7 +322,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (baseline) res.baseline = baseline;
   if (branch) res.branch = branch; // {name, base, commit, at, current, exists} — option 1 merges `name` into `base` locally
   if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
-  if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats} — spec_scan {duplicates: true} lists all
+  if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats, partial? (1.30)} — spec_scan {duplicates: true} lists all
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // the runs this call recorded
   if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // the roles each pending phase waits for
