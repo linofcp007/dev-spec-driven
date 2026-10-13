@@ -512,8 +512,18 @@ function enterProcessContext(io) {
   return restore;
 }
 
-// One CLI call → a promise of its exit code (also handed to io.done). Synchronous unless the command waits.
+// In-process calls run one at a time. A call that waits (a stdin stream, done --run) keeps its environment and working folder
+// applied until it ends, so a call started meanwhile waits for it — it never runs in the other's context, nor restores it (two
+// overlapping calls that ended out of order left the first one's env and cwd behind, 1.30 review 8). The entry point makes one
+// call per process: nothing changes there. WAITING: the promise of the call still waiting, or null.
+let WAITING = null;
+// A promise settled once no in-process call is waiting (a test that let a run go on its own awaits it before its next call).
+const whenIdle = () => (WAITING ? WAITING.then(whenIdle, whenIdle) : Promise.resolve());
+
+// One CLI call → a promise of its exit code (also handed to io.done). Synchronous unless the command waits — or another call
+// still does (it then starts once that one ended).
 function main(argv, io) {
+  if (WAITING) { const later = () => main(argv, io); return WAITING.then(later, later); }
   let restore = () => {};
   let c = null;
   const finish = (e) => {
@@ -537,11 +547,17 @@ function main(argv, io) {
     restore = enterProcessContext(io); // (a working folder that can't be entered: one error line, like any other)
     c = createContext(argv, io);
     const r = dispatch(c);
-    if (r && typeof r.then === "function") return r.then(() => finish(), (e) => finish(e));
+    if (r && typeof r.then === "function") {
+      const p = r.then(() => finish(), (e) => finish(e));
+      WAITING = p;
+      const idle = () => { if (WAITING === p) WAITING = null; }; // before any call queued behind it (registered first)
+      p.then(idle, idle);
+      return p;
+    }
     return Promise.resolve(finish());
   } catch (e) {
     return Promise.resolve(finish(e));
   }
 }
 
-module.exports = { main, parseArgs, CliExit };
+module.exports = { main, parseArgs, CliExit, whenIdle };

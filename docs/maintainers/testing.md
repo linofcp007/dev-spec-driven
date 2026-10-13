@@ -39,7 +39,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   that doesn't settle at once — every helper sends `--run` calls to spawnSync), EPIPE, a real stdin pipe or a TTY, a process's
   own timing or loaded modules (a preload), `DEV_SPEC_BUNDLE` (the facade picks the bundle at load), a lock held by another live
   process, `__complete` and the completion scripts' shells, git running the merge driver. 16-conventions-cli-modules.js checks
-  runIn = run on a set of calls.
+  runIn = run on a set of calls. **In-process calls run one at a time (1.30):** a call that waits keeps its env and cwd applied
+  until it ends, and `main()` called meanwhile is queued behind it (it then settles later — runIn / spawnIn refuse it as one that
+  waits); a test that lets a waiting call go on its own awaits `MAIN.whenIdle()` before its next in-process call.
 - **How it runs.** A file is independent unless it declares `exports.deps` — the files it needs to have run first IN THE
   SAME PROCESS, because it reads a project folder they built or a value one of them returned (`return { vDir }` from
   `run` joins the context of the files after it) — say which in a comment above `deps`. A file and
@@ -200,5 +202,9 @@ How the rules above came to be — grep a release here.
 - **1.28** — the guard runs the engine's detector (`S.duplicateRuns`) instead of its own scanner: one detector. Its reading
   of a template literal dropped the PT / ES design sample's allowance — the old scanner read the sample's `// …` line (it differs
   per language) as a comment, the detector as the string it is — so the stale allowance went; 56 of 40,697 code lines (0.1 %).
+- **1.30 review 8 (ds-engine 11)** — two overlapping in-process `main()` calls (two `ears -` waiting on their stdin) shared the
+  process's env and cwd: A's callback ran in B's context, and A ending first left A's env and cwd behind (B restored what it saw
+  at its start). Calls are serialized now (`WAITING` in cli/main.js); 16-conventions-cli-modules.js awaits `whenIdle()` instead
+  of a fixed 1.5 s.
 - **1.29** — hermetic chains also leave out the maintainer's installed plugins (`DEV_GUARDIAN_CLI` dropped, `CLAUDE_CONFIG_DIR` an
   absent folder of the chain's own): with dev-guardian installed, every `init` in the suites would have printed its offer.
