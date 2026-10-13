@@ -60,8 +60,9 @@ const EDITS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 // gate, 1.30 — the engine counts them only while a check runs it).
 const RE_GUARDED_DIR = /(?:^|[\\/])\.(?:specs|guardian)(?:[\\/]|$)/i;
 // A Write / Edit target that can't be one: its text names no .specs, no 8.3 short name (`SPECS~1`, `ROADMA~1.JSO`) and none of
-// the guarded file names — through a folder linked to .specs/ (`sx/roadmap.json`) only its real path names .specs.
-const RE_EDIT_MAYBE = /\.specs|\.guardian|~\d|(?:^|[\\/])(?:roadmap\.json|\.state\.json|observed\.jsonl|guardian\.cjs|baseline\.json)\s*$/i;
+// the guarded file names (a trailing dot or space too: Win32 drops it) — through a folder linked to .specs/ (`sx/roadmap.json`) only its
+// real path names .specs.
+const RE_EDIT_MAYBE = /\.specs|\.guardian|~\d|(?:^|[\\/])(?:roadmap\.json|\.state\.json|observed\.jsonl|guardian\.cjs|baseline\.json)[\s.]*$/i;
 // The engine's approvalCandidate — ONE test, probe.js approvalMayBe on approvalPlain's text (linear: the dot-glob regex this hook
 // carried rescanned `=.=.…` from every start — 120 K characters ran it past its 10 s timeout, and a timed-out hook lets the call
 // through). The WHOLE command: one past the engine's read limit that names dev-spec is refused / asked as unreadable (an approval after
@@ -119,7 +120,8 @@ const sessionEnv = () => ({ CLAUDE_PROJECT_DIR: process.env.CLAUDE_PROJECT_DIR, 
 // .specs/, dev-guardian or an approval tool and a project the session may be in has the guard on: ask (it used to exit 0 — allowed).
 function partial(raw) {
   const text = String(raw || "");
-  if (!RE_PARTIAL.test(text)) return null;
+  // (an 8.3 alias of a guarded name too, on win32 — SPECS~1, GUARDI~1: the pre-filter's own test, probe.js mayShortName)
+  if (!RE_PARTIAL.test(text) && !(process.platform === "win32" && probe().mayShortName(text))) return null;
   let cwd = null;
   const m = /"cwd"\s*:\s*"((?:[^"\\]|\\.){1,4096})"/.exec(text);
   if (m) try { cwd = JSON.parse('"' + m[1] + '"'); } catch { cwd = null; }

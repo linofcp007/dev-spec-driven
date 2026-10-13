@@ -1364,7 +1364,9 @@ function statusActivity(dir, st) {
 // when it can be proven without the walk — no planned T-ID (the gate refuses: noPlannedTests), or every planned T-ID found in a
 // test FILE its own plan row names (read directly: at most STATUS_TEST_FILES files, inside the project, never through a hidden or
 // ignored folder the scan skips, never a link) or checked outside test code. Anything else is unknown. → "pass" | "fail" | "unknown"
-function statusTestsGate(pdir, dir, tracks) {
+// reads (an array, optional): each test file it looks at is pushed there — read or missing (the status line's render cache signs them:
+// a test written or changed outside .specs/ shows at the next render, 1.30.1).
+function statusTestsGate(pdir, dir, tracks, reads) {
   const tdd = tracks.includes("tdd") && fs.existsSync(path.join(dir, "test-plan.md"));
   const ai = tracks.includes("ai") && fs.existsSync(path.join(dir, "eval-plan.md"));
   if (ai && !evalSetsState(dir).ok) return "fail";
@@ -1383,6 +1385,7 @@ function statusTestsGate(pdir, dir, tracks) {
     const segs = toPosix(path.relative(root, abs)).split("/");
     if (read.size < STATUS_TEST_FILES && withinRoot(root, abs) && !segs.slice(0, -1).some((s) => s.startsWith(".") || SCAN_IGNORE.has(s)) &&
       !SCAN_IGNORE.has(segs[segs.length - 1]) && isTestCodePath(segs.join("/"))) {
+      if (Array.isArray(reads)) reads.push(abs);
       try {
         if (fs.lstatSync(abs).isFile()) {
           const head = readFileHead(abs, SCAN_READ_BYTES); // the first SCAN_READ_BYTES characters, one bounded read
@@ -1423,7 +1426,7 @@ function statusTestsGate(pdir, dir, tracks) {
 // "1.16 C review (parity)"):
 // blocked → fix; tests → fix | approve; sign-off / finished → finished; every other code is next_action's own — and any end state
 // (finish · verify of the checks · sign-off · finished) may be next_action's `drift`.
-function statusNext(pdir, f, kind, lng, unverified) {
+function statusNext(pdir, f, kind, lng, unverified, reads) { // reads: statusLine's opts.reads
   const st = f.st;
   if (st.invalid) return { step: "fix", file: ".state.json" }; // next_action's step — repair the state file first
   if (roadmapError(pdir)) return { step: "fix", file: "roadmap.json" }; // …and roadmap.json (its roles / checks)
@@ -1449,7 +1452,7 @@ function statusNext(pdir, f, kind, lng, unverified) {
     const art = gateArtifacts(f.dir, f.tracks, kind, pending).map((file) => artifactReport(f.dir, file, f.tracks)).find((r) => r.state !== "filled");
     if (art) return { step: "fill", file: art.file, phase: pending };
     if (pending === "tests") {
-      const g = statusTestsGate(pdir, f.dir, f.tracks);
+      const g = statusTestsGate(pdir, f.dir, f.tracks, reads);
       return g === "pass" ? { step: "approve", phase: "tests" } : g === "fail" ? { step: "fix", phase: "tests" } : { step: "tests" };
     }
     const g = approvalChecks(pdir, f.slug, f.dir, pending, f.tracks, kind, lng);
@@ -1491,7 +1494,10 @@ function statusNext(pdir, f, kind, lng, unverified) {
 // "◆ billing · 4/9 tasks · 1 unverified · next: approve tasks", in the project language. The feature shown: the most recently
 // active one with work under way (some tasks done, some open), else the most recently active one. Read-only and bounded: each
 // active feature's .state.json + tasks.md (at most STATUS_MAX_FEATURES), then the chosen feature's evidence and the step
-// statusNext names. opts: { columns } — the line is cut to that width. → { ok, found, project, lang, feature, kind, tasks,
+// statusNext names. opts: { columns — the line is cut to that width; reads — an array: every path OUTSIDE .specs/ the line depends on is
+// pushed there (Phase 4's test files — statusTestsGate; nothing else the cheap step's answer depends on lies outside: a gate and the
+// finish step read the spec and state files — a gate's trace stats `_Implements:_` files, but no approval check reads that gap) — the
+// CLI's render cache signs them }. → { ok, found, project, lang, feature, kind, tasks,
 // unverified, next, features, line }; found false (line "") when there is no .specs/.
 function statusLine(projectDir, opts = {}) {
   const pdir = path.resolve(projectDir);
@@ -1520,7 +1526,7 @@ function statusLine(projectDir, opts = {}) {
   const kind = typeof f.st.kind === "string" ? f.st.kind : "feature";
   const unverified = f.done ? verificationStatus(pdir, f.slug, f.dir).unverified : [];
   let next = null;
-  try { next = statusNext(pdir, f, kind, lng, unverified); } catch { next = null; } // a status line never fails on one feature's files
+  try { next = statusNext(pdir, f, kind, lng, unverified, Array.isArray(opts.reads) ? opts.reads : null); } catch { next = null; } // a status line never fails on one feature's files
   const stepText = next && own(SL.steps, next.step) ? SL.steps[next.step](next) : null;
   const parts = [SL.head(f.slug, kind)];
   if (f.total) parts.push(SL.tasks(f.done, f.total));

@@ -39,12 +39,10 @@ const PROBE = require("../probe.js");
 // server refuses such a projectDir before any fs call; the status line and the hooks skip such a candidate folder. All three are
 // the probe's — cli/completion.js and the hooks read the same functions.
 const { unexpandedVar, expandHome, isNetwork: isNetworkPath } = PROBE;
+// THE resolver is the probe's (1.30.1: the CLI resolves its project before — and, for a usage error, without — the engine), read here
+// through the engine's view of the disk (PROBE_IO).
 function resolveProjectDir(arg) {
-  const usable = (v) => (v != null && String(v).trim() && !unexpandedVar(v) ? String(v).trim() : null);
-  const dir = usable(arg) || usable(process.env.SPEC_PROJECT_DIR) || usable(process.env.CLAUDE_PROJECT_DIR);
-  if (dir) return path.resolve(expandHome(dir));
-  const cwd = path.resolve(process.cwd());
-  return nearestProject(cwd) || cwd;
+  return PROBE.resolveProjectDir(arg, { io: PROBE_IO });
 }
 // The probe's rule through the engine's view of the disk: a dry run's folders and files seen as made (isDirSafe, readFileHead,
 // safeReaddir). doctor.js isDevSpecDir reads the rule with it.
@@ -1099,23 +1097,9 @@ function writeInsideProject(projectDir, abs) {
 }
 
 // The real path of p even when it doesn't exist yet: the real path (fs.realpathSync.native — 8.3 short names, junctions
-// and symlinks resolved) of its nearest EXISTING ancestor, plus the segments below it. null when nothing resolves.
-function realPathLoose(p) {
-  let cur = path.resolve(p);
-  const rest = [];
-  for (let i = 0; i < 256; i++) {
-    try {
-      return path.join(fs.realpathSync.native(cur), ...rest);
-    } catch (e) {
-      if (!e || (e.code !== "ENOENT" && e.code !== "ENOTDIR")) return null; // EACCES, ELOOP…: no answer
-    }
-    const up = path.dirname(cur);
-    if (up === cur) return null;
-    rest.unshift(path.basename(cur));
-    cur = up;
-  }
-  return null;
-}
+// and symlinks resolved) of its nearest EXISTING ancestor, plus the segments below it. null when nothing resolves (EACCES, ELOOP…:
+// no answer). The probe's (mcp/lib/probe.js realPathLoose — the guards' readings of a path walk the same way): one copy.
+const realPathLoose = (p) => PROBE.realPathLoose(p);
 // A network path in its plain UNC spelling (`\\?\UNC\host\share\…` and `\\.\UNC\…` → `\\host\share\…`), for a text comparison.
 function plainUnc(p) {
   const s = String(p);

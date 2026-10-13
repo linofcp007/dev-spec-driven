@@ -325,5 +325,31 @@ exports.run = async ({ ok, all, eq, run, runIn, spawnIn, tmp, CLI, __dirname }) 
         !/new Set\(\["json", "run"/.test(guardsSrc) && /CLI_SWITCHES \} = require\("\.\.\/probe\.js"\)/.test(guardsSrc),
       boolFlags: () => js(T.BOOL_FLAGS()) === js([...P.CLI_SWITCHES]),
     });
+
+    // 1.30.1: a command's own usage error still loaded the engine wherever its handler read projectDir before its usage check (~25
+    // handlers — `done`, `approve`, `trace` alone: ~230 ms against ~110): the CLI resolves its project with THE resolver, the probe's
+    // resolveProjectDir (files.js resolveProjectDir and the completion's resolveProject ARE it), never the engine; --lang and the integer
+    // flags are refused from the i18n tables. The same text, --json document and exit code as a call with the engine loaded — every
+    // command's usage line was compared byte for byte with 1.30.0's (stdout, stderr, exit code, text and --json, in a PT project and
+    // outside one: the same). Still the engine's: `import <tool>` (its tool list), a repeated `--task` and `done … --timeout` (the
+    // feature's language, read first).
+    const usageCalls = [["done"], ["done", "alpha"], ["undone", "x"], ["approve"], ["trace"], ["doctor"], ["next"], ["next-action"], ["brief"], ["finish"],
+      ["feature", "remove"], ["log"], ["decide"], ["ears"], ["steering"], ["append-tasks", "x"], ["export", "a", "b"], ["import"], ["prompts", "a", "b", "--args", "x"],
+      ["evals"], ["completion"], ["depend"], ["add-track", "x"], ["status", "--lang", "fr"], ["next", "x", "--max", "abc"]].flatMap((a) => [a, a.concat("--json")]);
+    const uGot = usageCalls.map((a) => light(a));
+    const uEngine = usageCalls.map((a) => runIn(a, { cwd: pt, env: { SPEC_PROJECT_DIR: "", CLAUDE_PROJECT_DIR: "" } }));
+    const loaded = usageCalls.filter((a, i) => !/HEAVY 0$/.test(uGot[i].stderr)).map((a) => a.join(" "));
+    const differ = usageCalls.filter((a, i) => uGot[i].stdout + uGot[i].stderr.replace(/HEAVY \d+$/, "") !== uEngine[i].out || uGot[i].status !== uEngine[i].code).map((a) => a.join(" "));
+    const filesSrc = fs.readFileSync(path.join(path.dirname(CLI), "..", "mcp", "lib", "engine", "files.js"), "utf8");
+    const complSrc = fs.readFileSync(path.join(path.dirname(CLI), "completion.js"), "utf8");
+    all("1.30.1: every command's usage error (and --lang / an integer flag refused) is answered without the engine — the project resolved by the probe's resolveProjectDir, one copy (files.js and the completion read it) — with the same text, --json and exit code as with the engine loaded (got " +
+      js({ loaded, differ, codes: [...new Set(uGot.map((r) => r.status))] }) + ")", {
+      noEngine: () => !loaded.length,
+      same: () => !differ.length,
+      exit1: () => uGot.every((r) => r.status === 1),
+      portuguese: () => /uso: dev-spec done <feature> <task-number>/.test(uGot[0].stderr),
+      oneResolver: () => /PROBE\.resolveProjectDir\(arg, \{ io: PROBE_IO \}\)/.test(filesSrc) && /probe\(\)\.resolveProjectDir\(/.test(complSrc) &&
+        !/SPEC_PROJECT_DIR\)/.test(filesSrc.replace(/\/\/[^\n]*/g, "")),
+    });
   }
 };

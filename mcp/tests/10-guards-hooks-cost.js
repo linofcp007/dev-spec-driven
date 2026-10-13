@@ -250,6 +250,26 @@ exports.run = async ({ ok, all, remeasure, S, tmp, __dirname, require }) => {
       ["approvalProjects (a/.specs/x a/.specs/x …)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "a/.specs/x ", ""],
       ["approvalProjects ('\"'\"… then .guardian/)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "'\"", " sub/.guardian/"],
       ["placeholderReport (_Implements: `[x]`, `[x]`, …)", (s) => E.placeholderReport("- _Implements: " + s + "_"), "`[x]`, ", ""],
+      // 1.30.1: Windows' own readings of a path — the 8.3 rule (a word that may be an alias, a path's aliases read, the folder holding
+      // one), Win32's trailing dots / spaces, the engine's shell reading of them (its disk calls bounded: SHORT_DISK_PATHS paths, each
+      // ≤ SHORT_DISK_UP levels — past them the rule alone) and the edit tools' (≤ EDIT_MAX_UP levels)
+      ["mayShortName (SPECS~SPECS~…)", (s) => PR.mayShortName(s), "SPECS~", ""],
+      ["mayShortName (SP1A2B SP1A2B …)", (s) => PR.mayShortName(s), "SP1A2B ", ""],
+      ["shortNamesRead (SPECS~1/SPECS~1/…)", (s) => PR.shortNamesRead(s), "SPECS~1/", "ROADMA~1.JSO"],
+      ["winPathTrim (a./a./…)", (s) => PR.winPathTrim(s), "a./", ". . "],
+      ["winPathTrim (. . . … x)", (s) => PR.winPathTrim(s), ". ", "x"],
+      ["winPathTrim (a::$I/a::$I/…)", (s) => PR.winPathTrim(s), "a::$I/", "roadmap.json."],
+      ["specsParentOf (////…/SPECS~1/)", (s) => PR.specsParentOf(s, true), "/", "x/SPECS~1/guardian.cjs"],
+      ["editTargets (SPECS~1\\SPECS~1\\…)", (s) => PR.editTargets(s, tmp, true), BS + "SPECS~1", BS + "STATE~1.JSO."],
+      ["approvalGuardDecision, Bash (cp x SPECS~1/SPECS~1/…)", (s) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "cp x " + s },
+        cwd: tmp }, "deny", { meta: {}, lang: "en", win: true }), "SPECS~1/", "roadmap.json"],
+      ["approvalGuardDecision, Bash (rm SPECS~1/a SPECS~1/a …)", (s) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "rm " + s },
+        cwd: tmp }, "deny", { meta: {}, lang: "en", win: true }), "SPECS~1/a ", ""],
+      ["approvalGuardDecision, PowerShell (Set-Content a. a. …)", (s) => E.approvalGuardDecision({ hook_event_name: "PreToolUse", tool_name: "PowerShell",
+        tool_input: { command: "Set-Content -Path " + s + " -Value x" }, cwd: tmp }, "deny", { meta: {}, lang: "en", win: true }), "a.\\", ".specs\\roadmap.json."],
+      ["approvalProjects (a/SPECS~1/x a/SPECS~1/x …)", (s) => HU.approvalProjects({ cwd: tmp, command: s }), "a/SPECS~1/x ", ""],
+      ["the approval hook's decide, Bash (echo x > GUARDI~1/… )", (s) => AH.decide(js({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "echo x > " + s } })),
+        "GUARDI~1/", "BASELI~1.JSO"],
     ];
     const time = (f, s) => { const t = process.hrtime.bigint(); f(s); return Number(process.hrtime.bigint() - t) / 1e6; };
     const shape = {};
