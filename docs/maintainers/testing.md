@@ -196,6 +196,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   from the previous entry (exit 1). Between releases mcp/tests/17-docs.js holds the two records to each other, through the
   script's own patterns (`readCounts()` — `SENTENCES`: one copy), and runs the script on a copy with fake suites. The release
   step: write the CHANGELOG entry (its tests line with any numbers), then `npm run release:counts -- --jobs 4`, then commit.
+  The script's own run sets `DEV_SPEC_TEST_RELEASE_COUNTS=1`: under it 17-docs holds only that both records are present (the
+  assertion still counts) — the new entry states its numbers before CLAUDE.md does, so their comparison failed the very run
+  meant to rewrite them (1.30.0's release, the first one through the script).
 - **Linux, locally:** `npm run test:docker` (`scripts/test-docker.js`, zero-dep) runs both suites in
   `node:18-alpine` (the engines floor, musl), `node:22-bookworm-slim`, `node:24-alpine` and `node:26-trixie-slim` (1.30). **The
   matrix:** package.json's engines floor first — kept while `engines` says it (raise the floor, drop its image) —, then the LTS

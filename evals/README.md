@@ -143,6 +143,10 @@ Reference runs (default model, `-j 3`):
 - **1.29.1, 2026-10-12** (CLI 2.1.292, Windows): triggering + negative **12/12 at 1.0** (36 runs, $3.64) — the new
   `trigger-finish-pt` / `-es` ("the feature is done and verified — close it") fire 3/3 each with the description naming
   closing a feature; every near-miss stays silent.
+- **1.30.0, 2026-10-13** (CLI 2.1.292, Windows): triggering + negative **21/21 at 1.0** (63 runs, $6.43) — the six new
+  triggers (resume, the next task in ES, changing an approved spec in PT, the roadmap, adoption in ES, a spike in PT) fire
+  3/3 with the wider description; the three new near-misses (a duplicated-code question, a security review of a diff, a
+  product-roadmap document) stay silent 3/3, `no-trigger-roadmap-doc` included despite "manage a roadmap".
 - behavioural, 2026-09-26, CLI 2.1.282, Windows (no shell granted), 2 runs per case: **6/7 cases at 1.0, $3.30**
   for the 14 runs (about $0.12–0.54 per run; the bugfix case is the dearest). Per case, with the earlier smoke run
   (1 run each, $1.63) where it tells something:

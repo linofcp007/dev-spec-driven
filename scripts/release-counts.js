@@ -82,7 +82,11 @@ function rewrite(root, totals) {
 // Run one suite in `root` → { total: {passed, failed} | null, out }.
 function runSuite(root, suite, jobs) {
   const args = [path.join(root, SUITES[suite]), ...(jobs ? ["--jobs", String(jobs)] : [])];
-  const r = spawnSync(process.execPath, args, { cwd: root, encoding: "utf8", maxBuffer: 512 * 1024 * 1024 });
+  // DEV_SPEC_TEST_RELEASE_COUNTS: 17-docs holds CLAUDE.md's and the CHANGELOG's totals to each other — during THIS run they are
+  // about to be rewritten (a new entry states its new totals before CLAUDE.md does), so that one comparison stands down (the
+  // assertion still counts: the totals are the suite's).
+  const env = { ...process.env, DEV_SPEC_TEST_RELEASE_COUNTS: "1" };
+  const r = spawnSync(process.execPath, args, { cwd: root, encoding: "utf8", env, maxBuffer: 512 * 1024 * 1024 });
   const out = (r.stdout || "") + (r.stderr || "");
   const m = String(r.stdout || "").match(RE_TOTAL);
   return { total: m ? { passed: Number(m[1]), failed: Number(m[2]) } : null, code: r.status, out };

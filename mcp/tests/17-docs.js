@@ -53,7 +53,9 @@ exports.run = async ({
     // them from a RUN's totals — the release step; this only holds the two records to each other between releases).
     const RC = require(path.join(root, "scripts", "release-counts.js"));
     const counts15 = RC.readCounts(root).map((c) => c.value); // CLAUDE.md mcp, cli · CHANGELOG mcp, cli
-    ok(stale15.length === 0 && counts15.every((n) => n !== null) && counts15[0] === counts15[2] && counts15[1] === counts15[3],
+    // Under release:counts' own run the two records are about to be rewritten from it: only their presence is held then.
+    const releasing15 = process.env.DEV_SPEC_TEST_RELEASE_COUNTS === "1";
+    ok(stale15.length === 0 && counts15.every((n) => n !== null) && (releasing15 || (counts15[0] === counts15[2] && counts15[1] === counts15[3])),
       "README / INSTALL / llms-install / CONTRIBUTING hard-code no test count; CLAUDE.md and the current CHANGELOG entry state the same mcp / cli totals (stale: " +
       stale15.join(", ") + "; CLAUDE.md " + counts15.slice(0, 2).join("/") + " vs CHANGELOG " + counts15.slice(2).join("/") + ")");
 

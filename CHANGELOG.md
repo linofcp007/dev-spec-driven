@@ -3,6 +3,129 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.30.0] — 2026-10-13
+
+Review 8 (security, engine, prose, maintainability and the dev-guardian integration) and review 9 (the merged release).
+dev-guardian's finish gate is now verified rather than trusted, and the hooks can no longer be timed out. Pair it with
+dev-guardian **3.3.0**, released alongside: its verdict carries `tool_version` and a kind and remedy for every coverage gap,
+and 3.2.1 still works (with an "update dev-guardian" note).
+
+### Security
+- **The approval and edit guards can no longer be timed out.** A crafted command of about 120 K characters (`echo =.=.…`)
+  kept the approval hook busy for 16.7 s, past its 10 s timeout, and Claude Code lets a timed-out PreToolUse hook's call
+  through. Every scan a hook runs on a tool call's text is now linear: the approval pre-filter, the edit guard's path words
+  and `find … -delete` check, the guarded-file checks and the trailing-slash trims. Shape tests (16 K vs 64 K hostile input)
+  and an equivalence check against the old regexes on 20,000 random texts hold this.
+- **A dev-guardian rule never stands in for the approval guard's fallback** (review 9). In 1.30's merged code, a command that
+  began with a dev-guardian action (`dev-guardian baseline update; eval node … approve … --force`) skipped the "unreadable
+  command" fallback and was allowed in projects without the guardian check. Filters now run as each reader returns, before
+  the fallback, so every call decides like the same call without its dev-guardian part (tested in pairs). Without the check,
+  `git checkout -- .specs/guardian.cjs` / `git restore` ask again, as in 1.29.1.
+- **The gate's launcher is verified, never trusted.** `finish --run` checks `.specs/guardian.cjs` before it runs anything:
+  - an edited, replaced or linked launcher is refused (`launcher-changed`), so nothing runs and nothing is recorded;
+  - a missing one is refused as `no-launcher` (1.29 recorded it as "blocked");
+  - a reported run of a changed launcher is refused too.
+
+  The 1.29 launcher is recognised and replaced (`upgrade` flags it, `upgrade --apply` writes it), and `init --guardian`
+  writes it again.
+- **The launcher is no longer a trampoline.** `DEV_GUARDIAN_CLI` must name a file called `dev-guardian.mjs`. The launcher
+  forwards only `scan`, `baseline`, `status` and help; anything else exits 3. An override it ran is named in the verdict and
+  in the merge summary.
+- **With the check set, more actions count as guard-downs** (ask or deny):
+  - an agent-run `baseline update`;
+  - an agent's write of `.specs/guardian.cjs` or `.guardian/baseline.json`;
+  - `.guardian/` as a whole: copying into it, `rsync`, `tar -C`, moving onto it, removing it, a git restore, or an MCP move;
+  - a gate run under its own `DEV_GUARDIAN_CLI=` or `CLAUDE_CONFIG_DIR=`.
+- **A contradicted gate never passes.** A run whose JSON report disagrees with its exit code is refused
+  (`report-mismatch`), and so is a pass with no readable report (`report-missing`). Report text can no longer inject lines
+  into the merge summary or the blocker.
+- **Nested projects are judged by their own guard.** A call naming another project's `.specs/` or `.guardian/` is judged
+  with that project's level and meta, and the strictest answer wins.
+- **Guard mode: removing a code folder asks.** `rm -rf src`, `rm -rf src/*`, `rmdir /s`, `rd /s`, `Remove-Item -Recurse`,
+  `find src -delete` and `mv src old` now ask like editing a code file when the folder holds code. node_modules, dist, build,
+  docs and empty folders stay silent.
+- **Upper-case MCP file tools reach the approval hook.** Another server's `mcp__x__FILE_WRITE` never did, because the
+  hooks.json matcher was case-sensitive.
+
+### dev-guardian's finish gate
+- **It finds the right dev-guardian.** It reads Claude Code's `installed_plugins.json` first, preferring a project-scoped
+  install over the user's. Failing that, it searches the plugin cache by semver only: a commit-hash folder no longer reads as
+  version 9, and `.orphaned_at` folders are skipped.
+- **Never `baseline update` to accept one finding.** Every hint now says: fix it, or let the user suppress the ONE reviewed
+  finding inline with a reason (`nosemgrep: <rule> -- <reason>`, `# nosec`). `baseline update` accepts every current
+  finding, the feature's own included.
+- **"No baseline" is said.** The head line and the blocker say "every existing finding counts as new" and how to record a
+  baseline on the base commit. `init --guardian` says so at once, with the runnable `node .specs/guardian.cjs baseline update
+  --project .`.
+- **An incomplete scan says what to do, by kind.** dev-guardian 3.3's `coverage_gap_details` give the kind; dev-spec says
+  "install" only for a missing tool, "commit a lockfile" for a missing lockfile, and so on, falling back to dev-guardian's
+  own remedy.
+- **"Update dev-guardian" is said** when its report names no version or one below 3.2.1, or when it can't load a package.
+- **From Claude Code, run the gate with the CLI.** The blocker says to run `finish <feature> --run` with the Bash tool's
+  `timeout: 600000` (or in the background), because the scan can outlast 2 minutes and its report 30,000 characters. Over
+  another MCP client, a dev-guardian 3.3 `--compact` report is accepted.
+- **`init --guardian`:**
+  - It says the gate is project-wide: every machine that finishes needs dev-guardian and its scanners.
+  - It says which `.gitignore` lines dev-guardian's outputs need; dev-spec never writes outside `.specs/`.
+  - It is atomic.
+- **Evidence:** `.guardian/reports/` no longer makes a run "dirty".
+- **A feature created from a backlog item keeps its note.** `removedFromBacklog` is `[{name, note}]`, and the note lands as
+  an HTML comment in the new spec, so a guardian-improve seed's metrics reach requirements.md.
+
+### Changed
+- **`_Implements:_` is part of every tasks template.** tasks.md, change.md (xs) and the bugfix's fix task carry an
+  `_Implements: [path of the code it creates or changes]_` slot. The tasks approval refuses the slot left in, including one
+  inside backticks. The duplicate check, the drift baseline, the scope guard, overlaps and dev-guardian's `[this feature]` all
+  read it. Before, a filled xs change could finish with 0 implementing files and every one of those saw nothing. `finish` warns
+  (never blocks) when no task names a file, and names change.md or tasks.md as the case may be.
+- **The skill fires on more requests:** resuming a feature (where it stands, the next task), changing an approved spec, and
+  a spike. Six triggering and three near-miss evals were added; `claude plugin eval` (triggering + negative, CLI 2.1.292,
+  Windows): **21/21 cases at 1.0** (63 runs, $6.43).
+- **The prose:**
+  - SKILL.md, AGENTS.md and the Cursor / Windsurf / Copilot / Gemini rule files require `_Implements:_`.
+  - An explicit `/spec` on a small change is Spec mode at size xs, never Vibe.
+  - A security or quality review of a diff goes to dev-guardian's `guardian-review`, and spec conformance to `/spec-review`.
+  - The bugfix flow offers dev-guardian's `bug_hunt`.
+  - The phase guide holds the sizes, so a `/spec` start reads about 33K characters instead of 60K, and it says the m / l
+    Reuse gate refuses the design approval.
+- **Translations.** Brazilian Portuguese loses its European residue in the 1.28/1.29 strings. Spanish says "funcionalidad"
+  for a feature and "fichero" for a file.
+- **`/roadmap` and `/spec-report`** no longer pre-approve a tool that writes.
+- **The status line** reuses its last render while nothing under `.specs/` changed (at most 10 s): 194 → 80 ms per render.
+- **CLI help** (`help <cmd>`, `--help`, an unknown command or a mistyped flag) no longer loads the engine: about 165 → 80 ms.
+
+### Fixed
+- **The duplicate detector:**
+  - It no longer reports multi-line import blocks (Go, TS/JS, Python, Rust, CommonJS) or notebooks.
+  - It reads PHP `#` comments and JS/TS regex literals correctly.
+  - It skips a file as generated only when the file carries a generator's header.
+  - It reads at most 32 MiB of source and says when the result is partial (200 files × 500 KB: 634 MB → 280 MB).
+- `budgets.yml` is read as dev-guardian reads it.
+- The hidden aliases `spec_catalog` / `spec_changelog` return the document again.
+- `spec_doctor`'s `clarifications` check agrees with the design approval.
+- MCP and the CLI's `--json` answer the same on more edges: blank `status`, `ears --text ""`, bad enum values with
+  `invalid-arguments`, and `approve` without a phase.
+- In-process CLI calls run one at a time and no longer leak their environment or working folder.
+- Counts read "1 file", "1 place", "1 block".
+
+### Maintainers
+- New engine module `engine/guardian.js` (24 modules). **A launcher edit is a release item:** add the old text's sha1 to
+  `GUARDIAN_LAUNCHER_PAST`.
+- `mcp/lib/probe.js` holds the ONE copy of the guards' shared readings, the CLI's switch list and its did-you-mean. Every
+  hook exports `decide()`, and the MCP suite runs hook tests in-process (`hookIn`).
+- `enumArg` is the one enum reader. `nextAction` runs a step registry (`NEXT_STEPS` / `FINISH_STEPS`). 37 commands take their
+  options from `operations.js` `cliOptions()`.
+- The test suites:
+  - The runner drops `NODE_OPTIONS` and the other Node variables.
+  - Every chain gets a neutral temp folder.
+  - The times file is per checkout and pruned.
+  - `runAsync` / `spawnAsync` run `--run` calls in-process, so the CLI suite is about 21 % faster.
+  - The Docker matrix is 18 / 22 / 24 / 26.
+  - `npm run release:counts` writes the totals below from a real run.
+
+### Tests
+- `node mcp/test.js` 2227 assertions, `node cli/test-cli.js` 650 (was 2191 / 639).
+
 ## [1.29.1] — 2026-10-12
 
 ### Changed
