@@ -254,12 +254,17 @@ Engine: the `B5` block of `engine/evidence.js`.
     `guardianStored(guardianRecord(projectDir, dir, command, exitCode, report, output))`: `{verdict, exit, failOn (the command's
     --fail-on, else high), parsed, newFindings? (the report's `new_findings_count` — `--compact` —, else `new_findings`),
     blocking?, own?, top? (≤ 5: {severity, rule, file, line, own} — the feature's `_Implements:_` files (`baselineFiles`) first,
-    then severity, then the report's order), gaps? (≤ 3), gapDetails? (the gating `coverage_gap_details`, ≤ 5: {tool, kind,
-    remedy?}), accepted? (`accepted_gaps` — 1.30.2: {timeout, parse, other}: distinct files a per-file timeout accepted in
-    `.guardian/scan.yml` left unanalysed · files a `--accept-partial-parse` left partly parsed · other accepted gaps. Each
-    line is read from its `accepted_gap_details` entry at the same index (dev-guardian 3.4.1+: `{tool, kind, file, reason}`,
-    one per line, in order) when that entry is a record with a kind — else, 3.4.0 or an entry missing, from the line itself:
-    dev-guardian's two shapes, gate.ts `judgeMissing`'s; another shape is one gap — `acceptedCounts`), notes?
+    then severity, then the report's order), gaps? (≤ 3, each whole up to `GUARDIAN_LINE_MAX` 1000 characters, then cut at its
+    end with "…" — `wholeLine`; review 12 R2: at 200 the "changed since BASE" at a line's end was lost), gapDetails? (the gating
+    `coverage_gap_details`, ≤ 5: {tool, kind, remedy?, changed? — a `file_timeout` whose detail or reason says the file is
+    listed in accept_timeouts but changed since: `RE_ACCEPT_CHANGED`}), accepted? (`accepted_gaps` — 1.30.2: {timeout, parse,
+    other}: distinct files a per-file timeout accepted in `.guardian/scan.yml` left unanalysed · files a
+    `--accept-partial-parse` left partly parsed · other accepted gaps. Each line is read from its `accepted_gap_details`
+    entry at the same index (dev-guardian 3.4.0: `{tool, kind, file, reason}`, one per line, in order) when that entry is a
+    record with a kind — else, 3.3.x or an entry missing, from the line itself: dev-guardian's two shapes, gate.ts
+    `judgeMissing`'s; another shape is one gap — `acceptedGaps`; a file in one spelling, `acceptedFile`), acceptedOwn? (review
+    12 R1: those files that are the feature's own `_Implements:_` files — the `own` set behind `[this feature]`, read lazily
+    (`mine()`): `{count, files ≤ 3: [{file, kind}]}`), notes?
     (`coverage_notes`, 3.4+: their count), staleTimeouts? (`unused_timeout_acceptances`, 3.4+: `{count, files ≤ 3}` — distinct
     accept_timeouts entries no step reported a timeout on), message?,
     baseline? ("absent": `baseline_absent` / `baseline_status`), tool? (`tool_version`), update? (no
@@ -286,7 +291,8 @@ Engine: the `B5` block of `engine/evidence.js`.
     evidence.js `checkProof`, in `suiteStatus` and the observed stamp) — the short report an agent can pass over MCP.
   - *What surfaces say:* `suiteLabel` gives a failed guardian item its verdict (`guardianText`: the head — + "no baseline", +
     the DEV_GUARDIAN_CLI it ran, + the accepted gaps ("N file(s) not analysed (accepted in .guardian/scan.yml)" · "… only
-    partly parsed (accepted with --accept-partial-parse)" · "N other accepted gap(s)", `guardian.accepted`) — + 3 findings +
+    partly parsed (accepted with --accept-partial-parse)" · "N other accepted gap(s)", `guardian.accepted`; + the feature's
+    own among them by name, "src/big.js is this feature's and was not analysed (accepted timeout)", `guardian.acceptedOwn`) — + 3 findings +
     "update dev-guardian"); the merge summary's check line too, + the notes counted (`guardianText(g, lng, true)` →
     `guardian.notes` — the merge summary only, never a blocker: taint notes come with most real scans). An accepted gap never
     changes the status (the exit code decides it). `suiteBlocker()`
@@ -295,13 +301,19 @@ Engine: the `B5` block of `engine/evidence.js`.
     every current finding, the feature's own included; never forced · + `baselineHint` with no baseline · an incomplete scan by
     its gaps' kinds — `incompleteHint(g)`: install only a `missing_tool`, a lockfile for `no_lockfile`, a Semgrep `file_timeout`
     → `gap.timeout` (dev-guardian's own remedy, localized: a larger `semgrep.timeout`, or the reviewed file under
-    `semgrep.accept_timeouts`, in the committed `.guardian/scan.yml` — whose settings are Semgrep's), …, dev-guardian's
+    `semgrep.accept_timeouts`, in the committed `.guardian/scan.yml` — whose settings are Semgrep's); a `changed` one (listed,
+    changed since — never "list it there") → dev-guardian's own remedy, unless that remedy says to list the file
+    (`RE_LIST_REMEDY`) → `gap.timeoutChanged` (review the change by hand, or raise semgrep.timeout); a distinct kind
+    dev-guardian may give that case reads as `other`; …, dev-guardian's
     `remedy` for the rest (another scanner's timeout, `taint_timeout`, `scanner_failed`, `skipped`, `other`), the generic
     `incompleteHint` without details · `updateHint` · `configHint`); a guardian check still
     needing a run adds `guardian.mcpRun` (Claude Code: `finish <f> --run` with the Bash tool's 600000 timeout or in the
     background — it records the report itself; elsewhere run the command, `--compact`, report it with `report`). next_action's
     `finish` / `verify` steps append the same (`suiteGuardianHint`). spec_finish's `warnings` say "update dev-guardian"
-    and, for a pass with accepted gaps, that those files go unanalysed — review a change to them by hand (`acceptedWarn`),
+    and, for a pass with accepted gaps, the feature's own among them by name — "… — review it by hand" (`acceptedOwnWarn`:
+    the gate runs without a ref, so a file accept_timeouts lists stays accepted whatever the feature appends to it; a warning,
+    not a blocker — dev-guardian refuses a listed file that changed since scan.yml did) — and that those files go unanalysed —
+    review a change to them by hand (`acceptedWarn`),
     and, on any verdict, the stale accept_timeouts entries — remove them, or a future timeout on that file is accepted unseen
     (`staleTimeouts`: an entry never expires) — warnings, never blockers (`guardianWarnings`).
   - *finish --run* (cli/run.js): `guardianPreRun()` first — a guardian check that runs the launcher needs this version's
@@ -666,8 +678,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   counted in the merge summary only — they come with most real scans. The Semgrep `file_timeout` hint said "run again / leave
   files out (.guardianignore)" and dropped dev-guardian's scan.yml remedy. `GUARDIAN_IGNORE` lacked `hooks-allowlist.json` and
   `scan.yml`: with only dev-spec's lines, git ignored `.guardian/scan.yml` until dev-guardian wrote its own `.guardian/.gitignore`.
-  Then dev-guardian 3.4.1's `accepted_gap_details` came first, line by line (the English lines only where no entry stands), and
+  Then dev-guardian 3.4.0's `accepted_gap_details` came first, line by line (the English lines only where no entry stands), and
   `unused_timeout_acceptances` became a finish warning: a stale entry would accept a future timeout on its file unseen.
+  **Review 12** (real release/3.4.0 outputs through the reader): R1 — dev-spec runs the gate without a ref, so a feature that
+  appended a vulnerability to an accepted file passed with the generic warning only: the feature's own accepted files are named
+  (`acceptedOwn`), a warning rather than a blocker. R2 — gap lines were cut at 200 characters, losing dev-guardian's "changed since
+  BASE", and the timeout hint then said to list a file that was listed: lines kept whole to 1000, a listed file that changed gets
+  dev-guardian's own remedy or `timeoutChanged`. (These notes first said "3.4.1" for dev-guardian's new keys; it ships them as 3.4.0.)
 
 ### Task dependencies and execution waves
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks

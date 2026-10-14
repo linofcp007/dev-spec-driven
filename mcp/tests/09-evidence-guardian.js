@@ -396,40 +396,88 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
         /aceito\(s\) no \.guardian\/scan\.yml/.test(S.msg("pt-BR").guardian.accepted(1, 0, 0)),
     });
 
-    // follow-up 1: dev-guardian 3.4.1's accepted_gap_details ({tool, kind, file, reason}, one per accepted_gaps line, in order) is
-    // read before the line at the same index — the English line only where no entry stands (3.4.0, or an entry missing / not one).
+    // follow-up 1: dev-guardian 3.4.0's accepted_gap_details ({tool, kind, file, reason}, one per accepted_gaps line, in order) is
+    // read before the line at the same index — the English line only where no entry stands (3.3.x, or an entry missing / not one).
     // follow-up 2: unused_timeout_acceptances — accept_timeouts entries no step reported a timeout on — is a spec_finish warning on
     // any verdict, never a blocker (an entry never expires: a future timeout on its file would be accepted unseen).
     const ad = (kind, file, tool, reason) => ({ tool: tool || "semgrep", kind, file, reason: reason || "Timeout" });
     const NEW = "security_scan_full: semgrep: src/big.js not analysed (Timeout) — accepted in .guardian/scan.yml"; // a wording the 3.4.0 reader can't parse
-    const rec = (extra) => E.guardianRecord(x.p, null, CMD, 0, report(0, v34({ tool_version: "3.4.1", ...extra })), "").accepted;
+    const rec = (extra) => E.guardianRecord(x.p, null, CMD, 0, report(0, v34({ tool_version: "3.4.0", ...extra })), "").accepted;
     const preferred = rec({ accepted_gaps: step2(NEW), accepted_gap_details: [ad("file_timeout", "src/big.js"), ad("file_timeout", "src/big.js")] });
     const fallback = rec({ accepted_gaps: step2(NEW) });
     const P = "security_scan_full: semgrep only partly parsed lib/x.php — accepted (--accept-partial-parse)";
     const perIndex = rec({ accepted_gaps: [T, P, NEW], accepted_gap_details: [ad("file_timeout", "src/other.js")] }); // index 0 from the entry; 1, 2 from the lines
     const badEntries = rec({ accepted_gaps: [T, P], accepted_gap_details: [null, { tool: "semgrep", file: "lib/z.php" }] }); // no record / no kind: the lines
     const otherKinds = rec({ accepted_gaps: step2("security_scan_full: trivy skipped vendor/ — accepted"), accepted_gap_details: [ad("skipped", "", "trivy", "vendored"), ad("skipped", "", "trivy", "vendored")] });
-    const d341 = await fin(x, 0, report(0, v34({ tool_version: "3.4.1", coverage: "partial", accepted_gaps: step2(NEW), accepted_gap_details: [ad("file_timeout", "src/big.js"), ad("file_timeout", "src/big.js")],
+    const dDet = await fin(x, 0, report(0, v34({ tool_version: "3.4.0", coverage: "partial", accepted_gaps: step2(NEW), accepted_gap_details: [ad("file_timeout", "src/big.js"), ad("file_timeout", "src/big.js")],
       unused_timeout_acceptances: ["src/gone.js", "src/old.js", "src/gone.js", "src/a.js", "src/b.js", " "] })));
     const ST4 = S.msg("en").guardian.staleTimeouts(4, "src/gone.js, src/old.js, src/a.js, +1 more");
     const staleBlocked = await fin(x, 1, report(1, v34({ unused_timeout_acceptances: ["src/gone.js"] })));
     const stalePt = await fin(ptX, 0, report(0, v34({ unused_timeout_acceptances: ["src/gone.js"] })));
     const staleEs = await fin(esX, 0, report(0, v34({ unused_timeout_acceptances: ["src/gone.js"] })));
-    all("1.30.2 review 11 (follow-ups): dev-guardian 3.4.1's accepted_gap_details read before the English line at the same index (a line the 3.4.0 reader can't parse counted as the file it names; an entry missing or not a record with a kind → its line; another kind one gap per kind / tool / file or reason; the 3.4.0 lines alone still read); unused_timeout_acceptances → a spec_finish warning naming the stale entries (distinct, 3 named + the rest counted), on any verdict, never a blocker, EN / PT / ES (got " +
-      js({ preferred, fallback, perIndex, badEntries, otherKinds, d341: [d341.suiteChecks[0].guardian, d341.warnings, d341.mergeSummary.split("\n").filter((l) => /^- guardian/.test(l))], staleBlocked: staleBlocked.warnings, stalePt: stalePt.warnings, staleEs: staleEs.warnings }) + ")", {
+    all("1.30.2 review 11 (follow-ups): dev-guardian 3.4.0's accepted_gap_details read before the English line at the same index (a line the line reader can't parse counted as the file it names; an entry missing or not a record with a kind → its line; another kind one gap per kind / tool / file or reason; the lines alone — 3.3.x — still read); unused_timeout_acceptances → a spec_finish warning naming the stale entries (distinct, 3 named + the rest counted), on any verdict, never a blocker, EN / PT / ES (got " +
+      js({ preferred, fallback, perIndex, badEntries, otherKinds, dDet: [dDet.suiteChecks[0].guardian, dDet.warnings, dDet.mergeSummary.split("\n").filter((l) => /^- guardian/.test(l))], staleBlocked: staleBlocked.warnings, stalePt: stalePt.warnings, staleEs: staleEs.warnings }) + ")", {
       preferred: js(preferred) === js({ timeout: 1, parse: 0, other: 0 }) && js(fallback) === js({ timeout: 0, parse: 0, other: 1 }),
       perIndex: js(perIndex) === js({ timeout: 1, parse: 1, other: 1 }) && js(badEntries) === js({ timeout: 1, parse: 1, other: 0 }) && js(otherKinds) === js({ timeout: 0, parse: 0, other: 1 }),
-      pass341: d341.suiteChecks[0].status === "pass" && js(d341.suiteChecks[0].guardian.accepted) === js({ timeout: 1, parse: 0, other: 0 }) && d341.suiteChecks[0].guardian.tool === "3.4.1" &&
-        d341.mergeSummary.includes("→ exit 0 · " + PASS + " · " + ACC1) && (d341.warnings || []).includes(S.msg("en").guardian.acceptedWarn(ACC1)),
-      stale: js(d341.suiteChecks[0].guardian.staleTimeouts) === js({ count: 4, files: ["src/gone.js", "src/old.js", "src/a.js"] }) && (d341.warnings || []).includes(ST4) &&
+      passDetails: dDet.suiteChecks[0].status === "pass" && js(dDet.suiteChecks[0].guardian.accepted) === js({ timeout: 1, parse: 0, other: 0 }) && dDet.suiteChecks[0].guardian.tool === "3.4.0" &&
+        dDet.mergeSummary.includes("→ exit 0 · " + PASS + " · " + ACC1) && (dDet.warnings || []).includes(S.msg("en").guardian.acceptedWarn(ACC1)),
+      stale: js(dDet.suiteChecks[0].guardian.staleTimeouts) === js({ count: 4, files: ["src/gone.js", "src/old.js", "src/a.js"] }) && (dDet.warnings || []).includes(ST4) &&
         ST4 === "4 stale accept_timeouts entries in .guardian/scan.yml (src/gone.js, src/old.js, src/a.js, +1 more) — remove them, or a future timeout on those files is accepted unseen." &&
         S.msg("en").guardian.staleTimeouts(1, "src/gone.js") === "1 stale accept_timeouts entry in .guardian/scan.yml (src/gone.js) — remove it, or a future timeout on that file is accepted unseen." &&
-        !(d341.blockers || []).some((b) => /accept_timeouts/.test(b)) && !/stale/.test(d341.mergeSummary),
+        !(dDet.blockers || []).some((b) => /accept_timeouts/.test(b)) && !/stale/.test(dDet.mergeSummary),
       anyVerdict: staleBlocked.suiteChecks[0].guardian.verdict === "blocked" && (staleBlocked.warnings || []).includes(S.msg("en").guardian.staleTimeouts(1, "src/gone.js")) &&
         !/accept_timeouts/.test(suiteBlocker(staleBlocked)),
       localized: (stalePt.warnings || []).includes(S.msg("pt").guardian.staleTimeouts(1, "src/gone.js")) && /^1 entrada obsoleta em accept_timeouts no \.guardian\/scan\.yml \(src\/gone\.js\) — remove-a/.test(S.msg("pt").guardian.staleTimeouts(1, "src/gone.js")) &&
         (staleEs.warnings || []).includes(S.msg("es").guardian.staleTimeouts(1, "src/gone.js")) && /— elimínala, o un timeout futuro/.test(S.msg("es").guardian.staleTimeouts(1, "src/gone.js")) &&
         /— remova-a, ou um timeout futuro nesse arquivo é aceito/.test(S.msg("pt-BR").guardian.staleTimeouts(1, "src/gone.js")),
+    });
+
+    // review 12 R1: dev-spec runs the gate without a ref, so a file accept_timeouts lists stays accepted whatever a feature appends to
+    // it. The feature's own files (its _Implements:_, the `own` set) among the accepted ones are named — in the head line, and as a
+    // finish warning on a pass ("src/login.js is this feature's and was not analysed (accepted timeout) — review it by hand"); never a
+    // blocker. From accepted_gap_details, or the lines without it.
+    const G0 = S.msg("en").guardian;
+    const LOGIN = "security_scan_full: semgrep timed out on src/login.js — accepted (.guardian/scan.yml semgrep.accept_timeouts)";
+    const ownRep = report(0, v34({ coverage: "partial", accepted_gaps: step2(LOGIN), accepted_gap_details: [ad("file_timeout", "src/login.js"), ad("file_timeout", "./src/login.js")] }));
+    const ownD = await fin(x, 0, ownRep);
+    const ownL = await fin(x, 0, report(0, v34({ accepted_gaps: ["security_scan_full: semgrep timed out on src/big.js, src/login.js — accepted (.guardian/scan.yml semgrep.accept_timeouts)",
+      "security_scan_full: semgrep only partly parsed lib/x.php — accepted (--accept-partial-parse)"] })));
+    const ownB = await fin(x, 1, report(1, v34({ accepted_gaps: step2(LOGIN), accepted_gap_details: [ad("file_timeout", "src/login.js"), ad("file_timeout", "src/login.js")] })));
+    const ownNoDir = E.guardianRecord(x.p, null, CMD, 0, ownRep, "");
+    const ownPt = await fin(ptX, 0, report(0, v34({ accepted_gaps: step2(LOGIN), accepted_gap_details: [ad("file_timeout", "src/login.js"), ad("file_timeout", "src/login.js")] })));
+    const OWN1 = G0.acceptedOwn("src/login.js", "file_timeout");
+    // review 12 R2: a gap line kept whole (dev-guardian's "… but changed since BASE …" sat past the 200th character), cut only at its end;
+    // a timeout on a file accept_timeouts lists that changed since: never "list it there" — dev-guardian's own remedy when it has one,
+    // else the localized timeoutChanged; a distinct kind dev-guardian may give it reads as other (its remedy)
+    const CHG = step2("security_scan_full: semgrep ran with reduced coverage (partial: 1 file(s) only partly parsed — findings in the unparsed spans may be missing (Timeout: src/big.js)) — not accepted: Timeout on src/big.js, listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE: an acceptance covers a file only as it was at the ref — review the change as if no SAST ran on it, or raise semgrep.timeout");
+    const chg = await fin(x, 2, report(2, v34({ coverage_gaps: CHG, coverage_gap_details: CHG.map((l) => det("semgrep", "file_timeout", l, TR, true)) })));
+    const LONG = "security_scan_full: semgrep " + "x".repeat(2500) + " the end";
+    const long = E.guardianRecord(x.p, null, CMD, 2, report(2, v34({ coverage_gaps: [LONG] })), "");
+    const OWN_R = "Review the change by hand as if no SAST ran on it, or raise semgrep.timeout; re-review the file and commit .guardian/scan.yml again.";
+    const chgReason = await fin(x, 2, report(2, v34({ coverage_gaps: ["semgrep: timeout on src/big.js"], coverage_gap_details: [{ ...det("semgrep", "file_timeout", "semgrep: timeout on src/big.js", OWN_R, true),
+      reason: "Timeout — listed in .guardian/scan.yml semgrep.accept_timeouts but changed since .guardian/scan.yml last changed" }] })));
+    const chgKind = await fin(x, 2, report(2, v34({ coverage_gaps: ["semgrep: timeout on src/big.js"], coverage_gap_details: [det("semgrep", "accepted_file_changed", "semgrep: timeout on src/big.js", OWN_R, true)] })));
+    all("1.30.2 review 12: R1 — the feature's own files among the accepted ones named in the head line and a pass's finish warning (never a blocker), from accepted_gap_details or the lines, a file once; none without the feature; R2 — a gap line kept whole up to 1000 characters, then cut at its end; a timeout on a listed file that changed since gets dev-guardian's own remedy, else timeoutChanged — never the 'list it there' hint (got " +
+      js({ ownD: [ownD.suiteChecks[0].guardian, ownD.warnings, ownD.mergeSummary.split("\n").filter((l) => /^- guardian/.test(l))], ownL: ownL.suiteChecks[0].guardian, ownB: [suiteBlocker(ownB).slice(0, 300), ownB.warnings], ownPt: ownPt.warnings,
+        chg: [chg.suiteChecks[0].guardian.gapDetails, suiteBlocker(chg)], chgReason: suiteBlocker(chgReason), chgKind: suiteBlocker(chgKind) }) + ")", {
+      ownDetails: ownD.suiteChecks[0].status === "pass" && js(ownD.suiteChecks[0].guardian.acceptedOwn) === js({ count: 1, files: [{ file: "src/login.js", kind: "file_timeout" }] }) &&
+        ownD.mergeSummary.includes("→ exit 0 · " + PASS + " · " + ACC1 + " · " + OWN1) && OWN1 === "src/login.js is this feature's and was not analysed (accepted timeout)" &&
+        (ownD.warnings || []).includes("src/login.js is this feature's and was not analysed (accepted timeout) — review it by hand.") &&
+        (ownD.warnings || []).includes(G0.acceptedWarn(ACC1)) && !suiteBlocker(ownD) && !("acceptedOwn" in accG),
+      ownLines: js(ownL.suiteChecks[0].guardian.accepted) === js({ timeout: 2, parse: 1, other: 0 }) &&
+        js(ownL.suiteChecks[0].guardian.acceptedOwn) === js({ count: 1, files: [{ file: "src/login.js", kind: "file_timeout" }] }),
+      ownBlocked: ownB.suiteChecks[0].guardian.verdict === "blocked" && suiteBlocker(ownB).includes("· " + ACC1 + " · " + OWN1 + " — src/login.js:12") &&
+        !(ownB.warnings || []).some((w) => w.startsWith(OWN1)),
+      noFeature: !("acceptedOwn" in ownNoDir) && js(ownNoDir.accepted) === js({ timeout: 1, parse: 0, other: 0 }),
+      ownPt: (ownPt.warnings || []).includes(S.msg("pt").guardian.acceptedOwnWarn(S.msg("pt").guardian.acceptedOwn("src/login.js", "file_timeout"), 1)) &&
+        /^src\/login\.js é desta feature e não foi analisado \(timeout aceite\) — revê-o à mão\.$/.test(S.msg("pt").guardian.acceptedOwnWarn(S.msg("pt").guardian.acceptedOwn("src/login.js", "file_timeout"), 1)) &&
+        /\(timeout aceito\) — revise-o à mão\.$/.test(S.msg("pt-BR").guardian.acceptedOwnWarn(S.msg("pt-BR").guardian.acceptedOwn("src/login.js", "file_timeout"), 1)),
+      wholeLine: js(chg.suiteChecks[0].guardian.gaps) === js(CHG) && suiteBlocker(chg).includes("but changed since BASE: an acceptance covers a file only as it was at the ref") &&
+        long.gaps[0].length === 1000 && long.gaps[0].endsWith("…") && long.gaps[0].startsWith("security_scan_full: semgrep xxx"),
+      changedHint: chg.suiteChecks[0].guardian.gapDetails.every((d) => d.changed === true) && suiteBlocker(chg).includes(H.timeoutChanged("semgrep") + " " + H.tail) &&
+        !suiteBlocker(chg).includes(H.timeout("semgrep")) && !suiteBlocker(chg).includes(H.remedy("semgrep", TR)) && !timeout.suiteChecks[0].guardian.gapDetails.some((d) => d.changed),
+      theirRemedy: suiteBlocker(chgReason).includes(H.remedy("semgrep", OWN_R)) && !suiteBlocker(chgReason).includes(H.timeoutChanged("semgrep")) && !suiteBlocker(chgReason).includes(H.timeout("semgrep")) &&
+        chgKind.suiteChecks[0].guardian.gapDetails[0].kind === "other" && suiteBlocker(chgKind).includes(H.remedy("semgrep", OWN_R)),
     });
   }
 

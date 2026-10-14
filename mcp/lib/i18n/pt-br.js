@@ -108,6 +108,7 @@ const PTBR_PHRASES = {
   "fora de âmbito": "fora do escopo", "fora do âmbito": "fora do escopo", "em âmbito": "no escopo",
   "é aceite": "é aceito", "for aceite": "for aceito", "foi aceite": "foi aceito", "seja aceite": "seja aceito", "ser aceite": "ser aceito",
   "aceite(s)": "aceito(s)", "aceite (não bloqueia)": "aceito (não bloqueia)", // dev-guardian's accepted gaps (1.30.2): files, a gap's line
+  "timeout aceite": "timeout aceito", "parcial aceite": "parcial aceito", // … and the feature's own among them
   "correu bem": "deu certo", "correu mal": "deu errado", "corre bem": "dá certo", "corre mal": "dá errado",
   "pôr a passar": "fazer passar", "di-lo": "diga isso", "fá-lo": "faça isso",
   "efeitos secundários": "efeitos colaterais", "batem sempre certo": "sempre fecham", "porque se aplica": "por que se aplica",

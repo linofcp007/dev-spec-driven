@@ -267,7 +267,9 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   top findings, **the feature's own `_Implements:_` files first**, says when there is no baseline, and says "update
   dev-guardian" when its report names no version or one below 3.2.1. A pass with gaps the project accepted (a per-file
   timeout listed in `.guardian/scan.yml` `semgrep.accept_timeouts`: no scanner analysed that file) stays a pass but says
-  "N file(s) not analysed", and finish warns — review a change to those files by hand; the merge summary also counts
+  "N file(s) not analysed", and finish warns — review a change to those files by hand. The feature's own files among them are
+  named ("src/big.js is this feature's and was not analysed (accepted timeout) — review it by hand"): the gate runs without a
+  ref, so read the feature's change to that file yourself — no scanner did. The merge summary also counts
   dev-guardian's coverage notes (taint timeouts, a baseline entry it could not read — never gating). An `accept_timeouts`
   entry no scan used is a finish warning too: the user removes it, or a future timeout on that file is accepted unseen.
 - **In Claude Code, run the CLI:** `node "<plugin>/cli/dev-spec.js" finish <feature> --run` with the Bash tool's `timeout:
@@ -282,7 +284,8 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   finding, the feature's own included (it belongs on the base commit, and it is the user's decision). An incomplete scan
   stays a failed check until its gaps are fixed — the blocker names how, by kind: install a missing scanner
   (dev-guardian's `/guardian-init`), commit a lockfile, a Semgrep per-file timeout → a larger `semgrep.timeout`, or the file
-  under `semgrep.accept_timeouts` once the user has reviewed it, in the committed `.guardian/scan.yml`, …; offline,
+  under `semgrep.accept_timeouts` once the user has reviewed it, in the committed `.guardian/scan.yml` (a listed file that
+  changed since it was accepted: review the change by hand, or raise the timeout), …; offline,
   `--local-only` keeps Semgrep to local rules.
   Never force the finish, nor remove the check, without the user — with the approval guard on, removing the check, an
   agent's write of `.specs/guardian.cjs` or `.guardian/baseline.json`, an agent-run `baseline update` and a gate run under a

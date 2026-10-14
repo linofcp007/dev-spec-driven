@@ -2941,6 +2941,10 @@ const msg = {
       accepted: (t, p, o) => [t ? `${t} file(s) not analysed (accepted in .guardian/scan.yml)` : "", p ? `${p} file(s) only partly parsed (accepted with --accept-partial-parse)` : "",
         o ? `${o} other accepted gap(s)` : ""].filter(Boolean).join(" · "),
       acceptedWarn: (what) => `dev-guardian's gate passed with ${what} — review a change to those files by hand: a finding where no scanner looked passes the gate.`,
+      // the feature's own files among them (review 12 R1: the gate runs without a ref, so an accepted file stays accepted whatever the
+      // feature appends) — named in the head line, and a finish warning on a pass
+      acceptedOwn: (file, kind) => (kind === "partial_parse" ? `${file} is this feature's and was only partly parsed (accepted partial parse)` : `${file} is this feature's and was not analysed (accepted timeout)`),
+      acceptedOwnWarn: (text, n) => `${text} — review ${n === 1 ? "it" : "them"} by hand.`,
       acceptedLine: (line) => `accepted (not gating): ${line}`,
       notes: (n) => `${n} coverage note(s) (not gating)`,
       noteLine: (line) => `note (not gating): ${line}`,
@@ -2963,6 +2967,8 @@ const msg = {
         partialParse: (tools) => `${tools} parsed some files only in part — fix them, or the user accepts that file by file (dev-guardian's --accept-partial-parse <path> on the check's command).`,
         // Semgrep's per-file timeout (1.30.2): dev-guardian's own remedy — .guardian/scan.yml, reviewed and committed
         timeout: (tools) => `${tools} timed out on some files — raise semgrep.timeout in .guardian/scan.yml, or, once the user has reviewed a file, list it under semgrep.accept_timeouts there (the gate then passes without analysing it); commit .guardian/scan.yml.`,
+        // a timeout on a file accept_timeouts already lists, changed since it was accepted (review 12 R2) — never "list it there"
+        timeoutChanged: (tools) => `${tools} timed out on a file .guardian/scan.yml accepts, but the file changed since it was accepted, so the acceptance no longer covers it — review the change by hand as if no scanner read it, or raise semgrep.timeout.`,
         pathTooLong: "A path is too long for this system — enable long paths (Windows) or shorten it.",
         remedy: (tool, r) => `${tool}: ${r}`,
         other: (tool) => `${tool} did not run in full — dev-guardian's report says why.`,

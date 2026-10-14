@@ -6,8 +6,8 @@
  * dev-guardian CLI lookup (one rule: the launcher carries the engine's own function), the reading of a run (its exit code +
  * JSON report → the verdict finish records), what surfaces say about it (the verdict's lines, how to clear a failed gate, the
  * suite blocker) and the approval guard's dev-guardian rules. The cross-plugin contract (dev-guardian ≥ 3.2.1; 3.3.0's
- * tool_version, coverage_gap_details, baseline_status, accepted_gaps and --compact, 3.4.0's coverage_notes and
- * unused_timeout_acceptances, 3.4.1's accepted_gap_details read when present; its .gitignore block's shared files) has this one home.
+ * tool_version, coverage_gap_details, baseline_status, accepted_gaps and --compact, 3.4.0's coverage_notes,
+ * unused_timeout_acceptances and accepted_gap_details read when present; its .gitignore block's shared files) has this one home.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -346,21 +346,23 @@ function distinctLines(list) {
 }
 // What the accepted gaps leave unread: distinct files a per-file timeout accepted in .guardian/scan.yml left unanalysed (timeout), files
 // a --accept-partial-parse on the check's command left partly parsed (parse), and any other accepted gap (other). Each accepted_gaps line
-// is read from its accepted_gap_details entry — the same index (dev-guardian 3.4.1+: {tool, kind, file, reason}, one per line, in order)
-// — when that entry is a record with a kind; else (3.4.0, or an entry missing) from the line itself, dev-guardian's two shapes (ci/gate.ts
+// is read from its accepted_gap_details entry — the same index (dev-guardian 3.4.0: {tool, kind, file, reason}, one per line, in order)
+// — when that entry is a record with a kind; else (3.3.x, or an entry missing) from the line itself, dev-guardian's two shapes (ci/gate.ts
 // judgeMissing): "<step>: <scanner> timed out on a.js, b.js — accepted (.guardian/scan.yml semgrep.accept_timeouts)" and "<step>:
 // <scanner> only partly parsed a.php — accepted (--accept-partial-parse)"; a line of another shape is one gap. Every scan step repeats
 // its gap: a file counts once, an other gap once per kind / tool / file (or reason; or its line without the step).
-// → { timeout, parse, other } | null (none)
+// → { timeout, parse, other } — Sets: the files as the report names them (timeout, parse), the other gaps' keys
 const RE_ACCEPTED_TIMEOUT = /^\S+ timed out on (.+) — accepted \(/;
 const RE_ACCEPTED_PARSE = /^\S+ only partly parsed (.+) — accepted \(/;
-function acceptedCounts(lines, details) {
+// (a file as the report names it, one spelling: `\` → `/`, no leading `./` — dev-guardian matches accept_timeouts entries the same way)
+const acceptedFile = (f) => (typeof f === "string" ? f.trim().replace(/\\/g, "/").replace(/^(?:\.\/)+/, "") : "");
+function acceptedGaps(lines, details) {
   const timeout = new Set(), parse = new Set(), other = new Set();
   const list = Array.isArray(lines) ? lines : [], det = Array.isArray(details) ? details : [];
   for (let i = 0; i < Math.max(list.length, det.length); i++) {
     const d = det[i];
     if (isRecord(d) && typeof d.kind === "string" && d.kind.trim()) {
-      const file = typeof d.file === "string" ? d.file.trim() : "";
+      const file = acceptedFile(d.file);
       if (file && d.kind === "file_timeout") timeout.add(file);
       else if (file && d.kind === "partial_parse") parse.add(file);
       else other.add([d.kind, typeof d.tool === "string" ? d.tool : "", file || (typeof d.reason === "string" ? d.reason.trim() : "")].join("\n"));
@@ -370,19 +372,34 @@ function acceptedCounts(lines, details) {
     const key = list[i].trim().replace(RE_STEP_PREFIX, "");
     const t = RE_ACCEPTED_TIMEOUT.exec(key), p = t ? null : RE_ACCEPTED_PARSE.exec(key);
     if (!t && !p) { other.add(key); continue; }
-    for (const f of (t || p)[1].split(", ")) if (f.trim()) (t ? timeout : parse).add(f.trim());
+    for (const f of (t || p)[1].split(", ")) if (acceptedFile(f)) (t ? timeout : parse).add(acceptedFile(f));
   }
-  return timeout.size || parse.size || other.size ? { timeout: timeout.size, parse: parse.size, other: other.size } : null;
+  return { timeout, parse, other };
 }
+// A gating file_timeout on a file accept_timeouts lists but that changed since it was accepted (1.30.2, review 12 R2 — dev-guardian
+// 3.4.0 under a ref: "… listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE …", "… could not be told …"; a
+// reason of the same sense when dev-guardian adds one). Its fix is not "list it there" — it is listed.
+const RE_ACCEPT_CHANGED = /accept_timeouts,? but\b|\bchanged since\b|could not be told/i;
+// dev-guardian's remedy that says to list the file under accept_timeouts (its file_timeout remedy) — wrong for a file already listed
+const RE_LIST_REMEDY = /\blist\b[^;]{0,80}?accept_timeouts/i;
+// A gap line kept whole up to this length — cut at its end with "…", never in the middle (review 12 R2: 200 characters lost the
+// "changed since BASE" at the end of dev-guardian's line).
+const GUARDIAN_LINE_MAX = 1000;
+const wholeLine = (v) => {
+  const s = cleanLine(v, GUARDIAN_REPORT_MAX);
+  return s.length > GUARDIAN_LINE_MAX ? s.slice(0, GUARDIAN_LINE_MAX - 1) + "…" : s;
+};
 // A guardian check's run → its summary (finishChecks[name].guardian, suiteChecks[].guardian): { verdict — stable: pass · blocked ·
 // incomplete · config · not-found (the launcher found no dev-guardian) · no-launcher (.specs/guardian.cjs is missing) · exit (any
 // other code) —, exit, failOn (the command's --fail-on, else high), parsed (the JSON report was read), blocking?, newFindings? (the
 // report's new_findings_count — --compact —, else its new_findings), own? (blocking findings in the feature's _Implements:_ files),
 // top? (≤ GUARDIAN_TOP: {severity, rule, file, line, own} — own first, then by severity, then the report's order), gaps? (coverage
-// gaps, ≤ 3), gapDetails? (the gating coverage_gap_details, ≤ 5: {tool, kind, remedy?}), accepted? (the accepted_gaps: {timeout —
+// gaps, ≤ 3, each whole up to GUARDIAN_LINE_MAX), gapDetails? (the gating coverage_gap_details, ≤ 5: {tool, kind, remedy?, changed?
+// — a file_timeout on a file accept_timeouts lists that changed since: RE_ACCEPT_CHANGED}), accepted? (the accepted_gaps: {timeout —
 // files not analysed, accepted in .guardian/scan.yml —, parse — files only partly parsed, accepted with --accept-partial-parse —,
-// other — gaps of another shape}: accepted_gap_details per line when present, else the line), notes? (the coverage_notes, each
-// once), staleTimeouts? (unused_timeout_acceptances: {count, files ≤ GUARDIAN_SAID}), message? (config: dev-guardian's own),
+// other — gaps of another shape}: accepted_gap_details per line when present, else the line), acceptedOwn? (those files that are the
+// feature's own _Implements:_ files: {count, files ≤ GUARDIAN_SAID: [{file, kind}]}), notes? (the coverage_notes, each once),
+// staleTimeouts? (unused_timeout_acceptances: {count, files ≤ GUARDIAN_SAID}), message? (config: dev-guardian's own),
 // baseline? ("absent": every existing finding counted as new), tool? (the report's tool_version), update? (dev-guardian is older
 // than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran) }
 // — and what recordFinishChecks refuses on (never stored): launcher ("changed" | "missing" — the launcher as the run is recorded),
@@ -427,29 +444,54 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output) {
     if (Number.isInteger(j.exit_code)) g.reportExit = j.exit_code;
   }
   if (Array.isArray(j.coverage_gaps)) {
-    const gaps = j.coverage_gaps.filter((x) => typeof x === "string" && x.trim()).slice(0, 3).map((x) => cleanLine(x, 200));
+    const gaps = j.coverage_gaps.filter((x) => typeof x === "string" && x.trim()).slice(0, 3).map(wholeLine);
     if (gaps.length) g.gaps = gaps;
   }
   if (Array.isArray(j.coverage_gap_details)) {
     const det = j.coverage_gap_details.filter((d) => isRecord(d) && d.gating !== false).slice(0, 5).map((d) => {
-      const remedy = typeof d.remedy === "string" ? cleanLine(d.remedy, 200) : "";
-      return { tool: cleanLine(d.tool, 40) || "?", kind: GUARDIAN_GAP_KINDS.includes(d.kind) ? d.kind : "other", ...(remedy ? { remedy } : {}) };
+      const remedy = typeof d.remedy === "string" ? wholeLine(d.remedy) : "";
+      const changed = d.kind === "file_timeout" && [d.detail, d.reason].some((t) => typeof t === "string" && RE_ACCEPT_CHANGED.test(t));
+      return { tool: cleanLine(d.tool, 40) || "?", kind: GUARDIAN_GAP_KINDS.includes(d.kind) ? d.kind : "other", ...(remedy ? { remedy } : {}), ...(changed ? { changed: true } : {}) };
     });
     if (det.length) g.gapDetails = det;
   }
+  const root = path.resolve(projectDir);
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  let mineSet = null; // the feature's _Implements:_ files, folded — read once, when a finding or an accepted file needs them
+  const mine = () => {
+    if (mineSet) return mineSet;
+    const tasksText = dir ? activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "" : "";
+    return (mineSet = new Set(tasksText ? baselineFiles(root, tasksText).files.map(fold) : []));
+  };
+  const rel = (f) => { // a report's file, project-relative with forward slashes, one inert line
+    let p = f.replace(/\\/g, "/").replace(/^\.\//, "");
+    if (path.isAbsolute(p)) { const r = path.relative(root, p); if (r && !r.startsWith("..") && !path.isAbsolute(r)) p = toPosix(r); }
+    return cleanLine(p, 300);
+  };
   // What never gates (1.30.2, review 11 — a pass with accepted gaps read as a plain pass): the accepted gaps — files no scanner
   // analysed (or parsed in full), accepted by the project: the verdict stays, and says so — and dev-guardian's notes (3.4: taint
   // timeouts, a baseline entry it could not read), counted. Their lines only for finish --run's output (never stored).
-  const accepted = distinctLines(j.accepted_gaps), counts = acceptedCounts(j.accepted_gaps, j.accepted_gap_details);
-  if (counts) {
-    g.accepted = counts;
-    g.acceptedLines = [...accepted.values()].slice(0, GUARDIAN_SAID).map((l) => cleanLine(l, 300));
+  const acc = acceptedGaps(j.accepted_gaps, j.accepted_gap_details);
+  if (acc.timeout.size || acc.parse.size || acc.other.size) {
+    const accepted = distinctLines(j.accepted_gaps);
+    g.accepted = { timeout: acc.timeout.size, parse: acc.parse.size, other: acc.other.size };
+    g.acceptedLines = [...accepted.values()].slice(0, GUARDIAN_SAID).map(wholeLine);
     if (accepted.size > GUARDIAN_SAID) g.acceptedMore = accepted.size - GUARDIAN_SAID;
+    // review 12 R1: the gate runs without a ref, so an accepted file stays accepted whatever a feature appends to it — the feature's
+    // own (its _Implements:_ files) among them are named: a warning to review each by hand, never a blocker
+    const own = new Map();
+    for (const [set, kind] of [[acc.timeout, "file_timeout"], [acc.parse, "partial_parse"]]) {
+      for (const f of set) {
+        const file = rel(f), key = fold(file);
+        if (file && !own.has(key) && mine().has(key)) own.set(key, { file, kind });
+      }
+    }
+    if (own.size) g.acceptedOwn = { count: own.size, files: [...own.values()].slice(0, GUARDIAN_SAID) };
   }
   const notes = distinctLines(j.coverage_notes);
   if (notes.size) {
     g.notes = notes.size;
-    g.noteLines = [...notes.values()].slice(0, GUARDIAN_SAID).map((l) => cleanLine(l, 300));
+    g.noteLines = [...notes.values()].slice(0, GUARDIAN_SAID).map(wholeLine);
   }
   // .guardian/scan.yml accept_timeouts entries no step reported a timeout on (3.4+: unused_timeout_acceptances): an entry never
   // expires, so a stale one accepts a future timeout on its file unseen — a finish warning, never a blocker (1.30.2)
@@ -458,20 +500,11 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output) {
   if (stale.length) g.staleTimeouts = { count: stale.length, files: stale.slice(0, GUARDIAN_SAID).map((f) => cleanLine(f, 200)) };
   if (!blocking) return g;
   g.blocking = blocking.length;
-  const root = path.resolve(projectDir);
-  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
-  const tasksText = dir ? activeTasks(readIfExists(path.join(dir, "tasks.md")) || "", detectTracks(dir)) || "" : "";
-  const mine = new Set(tasksText ? baselineFiles(root, tasksText).files.map(fold) : []);
-  const rel = (f) => { // a finding's file, project-relative with forward slashes, one inert line
-    let p = f.replace(/\\/g, "/").replace(/^\.\//, "");
-    if (path.isAbsolute(p)) { const r = path.relative(root, p); if (r && !r.startsWith("..") && !path.isAbsolute(r)) p = toPosix(r); }
-    return cleanLine(p, 300);
-  };
   const rank = (s) => (Object.prototype.hasOwnProperty.call(SEVERITY_RANK, s) ? SEVERITY_RANK[s] : -1);
   const items = blocking.map((f) => {
     const file = typeof f.file_path === "string" && f.file_path.trim() ? rel(f.file_path.trim()) || null : null;
     return { severity: typeof f.severity === "string" ? cleanLine(f.severity.toLowerCase(), 20) || "?" : "?", rule: cleanLine(f.rule_id || f.title || f.tool || "?", 160) || "?",
-      file, line: Number.isSafeInteger(f.line_start) && f.line_start > 0 ? f.line_start : null, own: !!file && mine.has(fold(file)) };
+      file, line: Number.isSafeInteger(f.line_start) && f.line_start > 0 ? f.line_start : null, own: !!file && mine().has(fold(file)) };
   });
   items.sort((a, b) => (b.own ? 1 : 0) - (a.own ? 1 : 0) || rank(b.severity) - rank(a.severity)); // stable: the report's order next
   g.own = items.filter((x) => x.own).length;
@@ -506,11 +539,20 @@ function guardianCompact(name, command) {
 // A stored count (a hand-edited .state.json reads as none) · the accepted gaps a summary says ("" none — 1.30.2).
 const countOf = (v) => (Number.isSafeInteger(v) && v > 0 ? v : 0);
 const acceptedText = (g, G) => (isRecord(g.accepted) ? G.accepted(countOf(g.accepted.timeout), countOf(g.accepted.parse), countOf(g.accepted.other)) : "");
+// The feature's own files among them, by name (review 12 R1): "src/big.js is this feature's and was not analysed (accepted timeout)",
+// joined, the rest counted · their count (0: none).
+const ownCount = (g) => (isRecord(g.acceptedOwn) ? countOf(g.acceptedOwn.count) : 0);
+function acceptedOwnText(g, G) {
+  const files = ownCount(g) && Array.isArray(g.acceptedOwn.files) ? g.acceptedOwn.files.filter((x) => isRecord(x) && typeof x.file === "string" && x.file) : [];
+  if (!files.length) return "";
+  const rest = ownCount(g) - files.length;
+  return files.map((x) => G.acceptedOwn(x.file, x.kind)).join("; ") + (rest > 0 ? "; " + G.more(rest) : "");
+}
 // A guardian summary → its localized head line (the verdict, + no baseline, + a DEV_GUARDIAN_CLI the launcher ran, + the gaps the
-// project accepted).
+// project accepted, + the feature's own files among them).
 function guardianHead(g, lng) {
   const G = i18n.msg(lng).guardian;
-  const accepted = acceptedText(g, G);
+  const accepted = acceptedText(g, G) + (acceptedText(g, G) && acceptedOwnText(g, G) ? " · " + acceptedOwnText(g, G) : "");
   let head;
   switch (g.verdict) {
     case "pass": head = G.pass(g.failOn, g.newFindings || 0); break;
@@ -554,20 +596,27 @@ function guardianText(g, lng, summary) {
 // tool, a lockfile for no_lockfile, … — dev-guardian's own remedy for the others, the generic hint without details (≤ 3.2.1). A
 // Semgrep file_timeout (1.30.2, review 11 — the hint said "run again / .guardianignore"): dev-guardian's remedy, localized — a larger
 // semgrep.timeout, or the file accepted under semgrep.accept_timeouts after review, in the committed .guardian/scan.yml (the settings
-// it holds are Semgrep's); another scanner's timeout: dev-guardian's own remedy.
+// it holds are Semgrep's); another scanner's timeout: dev-guardian's own remedy. A timeout on a file accept_timeouts lists that changed
+// since (review 12 R2 — `changed`): dev-guardian's own remedy, unless it says to list the file there (it is listed) — then
+// gap.timeoutChanged: review the change by hand, or raise semgrep.timeout. A distinct kind dev-guardian gives it reads as "other": its
+// remedy.
 const isSemgrep = (d) => /^semgrep(?::|$)/i.test(d.tool);
 function incompleteHint(g, G) {
   const det = Array.isArray(g.gapDetails) ? g.gapDetails : [];
   if (!det.length) return G.incompleteHint;
   const H = G.gap;
   const tools = (kinds, only) => [...new Set(det.filter((d) => kinds.includes(d.kind) && (!only || only(d))).map((d) => d.tool))].join(", ");
+  const plain = (d) => isSemgrep(d) && d.changed !== true; // a Semgrep timeout on a file not (or no longer) accepted
+  const listedChanged = (d) => d.changed === true && (!d.remedy || RE_LIST_REMEDY.test(d.remedy)); // listed, changed — no remedy of its own
   const out = [];
   if (tools(["missing_tool"])) out.push(H.missingTool(tools(["missing_tool"])));
   if (tools(["no_lockfile"])) out.push(H.noLockfile(tools(["no_lockfile"])));
   if (tools(["partial_parse"])) out.push(H.partialParse(tools(["partial_parse"])));
-  if (tools(["file_timeout"], isSemgrep)) out.push(H.timeout(tools(["file_timeout"], isSemgrep)));
+  if (tools(["file_timeout"], plain)) out.push(H.timeout(tools(["file_timeout"], plain)));
+  if (tools(["file_timeout"], listedChanged)) out.push(H.timeoutChanged(tools(["file_timeout"], listedChanged)));
   if (tools(["path_too_long"])) out.push(H.pathTooLong);
-  const theirs = (x) => ["scanner_failed", "skipped", "other", "taint_timeout"].includes(x.kind) || (x.kind === "file_timeout" && !isSemgrep(x));
+  const theirs = (x) => ["scanner_failed", "skipped", "other", "taint_timeout"].includes(x.kind) ||
+    (x.kind === "file_timeout" && !plain(x) && !listedChanged(x));
   for (const d of det.filter(theirs)) out.push(d.remedy ? H.remedy(d.tool, d.remedy) : H.other(d.tool));
   return [...new Set(out)].join(" ") + " " + H.tail;
 }
@@ -599,17 +648,18 @@ function suiteBlocker(missing, slug, lng) {
   return parts.join(" · ");
 }
 // spec_finish's warnings: a recorded guardian run says dev-guardian should be updated (older than GUARDIAN_MIN_VERSION, no version
-// reported, a package it could not load); a pass left files unread that the project accepted (1.30.2: accepted_gaps — review a
-// change to them by hand); .guardian/scan.yml holds accept_timeouts entries no step used (1.30.2: staleTimeouts — whatever the
-// verdict). Warnings, never blockers. → the localized lines
+// reported, a package it could not load); a pass left the feature's own files unread (review 12 R1: acceptedOwn — each by name, to
+// review by hand) and files the project accepted (1.30.2: accepted_gaps — review a change to them by hand); .guardian/scan.yml holds
+// accept_timeouts entries no step used (1.30.2: staleTimeouts — whatever the verdict). Warnings, never blockers. → the localized lines
 function guardianWarnings(items, lng) {
   const G = i18n.msg(lng).guardian;
   const mine = (items || []).filter((i) => isRecord(i.guardian) && isGuardianCheck(i.name, i.command));
   const up = mine.find((i) => i.guardian.update);
   const acc = mine.find((i) => i.guardian.verdict === "pass" && acceptedText(i.guardian, G));
+  const own = acc && acceptedOwnText(acc.guardian, G) ? [G.acceptedOwnWarn(acceptedOwnText(acc.guardian, G), ownCount(acc.guardian))] : [];
   const st = mine.map((i) => i.guardian.staleTimeouts).find((s) => isRecord(s) && countOf(s.count));
   const files = st ? (Array.isArray(st.files) ? st.files.filter((f) => typeof f === "string" && f) : []) : [];
-  return [...(up ? [G.update(up.guardian.tool || null)] : []), ...(acc ? [G.acceptedWarn(acceptedText(acc.guardian, G))] : []),
+  return [...(up ? [G.update(up.guardian.tool || null)] : []), ...own, ...(acc ? [G.acceptedWarn(acceptedText(acc.guardian, G))] : []),
     ...(st ? [G.staleTimeouts(countOf(st.count), files.join(", ") + (countOf(st.count) > files.length && files.length ? ", " + G.more(countOf(st.count) - files.length) : ""))] : [])];
 }
 
