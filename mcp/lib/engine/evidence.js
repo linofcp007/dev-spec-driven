@@ -1874,7 +1874,7 @@ function commitTag(r) {
 function suiteSummaryLines(items, lng) {
   const P = i18n.msg(lng).projectChecks;
   return [P.prChecks, ...items.map((i) => {
-    const said = isRecord(i.guardian) ? guardianText(i.guardian, lng) : oneLine(i.summary); // a guardian check: its verdict
+    const said = isRecord(i.guardian) ? guardianText(i.guardian, lng, true) : oneLine(i.summary); // a guardian check: its verdict (+ its notes, counted)
     const run = i.status === "no-run" ? P.prNoRun : [codeSpan(i.ranCommand || i.command) + " → exit " + i.exitCode, said, commitTag(i)].filter(Boolean).join(" · ");
     return `- ${i.name}: ${run}` + (i.status !== "pass" && i.status !== "no-run" ? ` (${P.status(i)})` : "");
   })];

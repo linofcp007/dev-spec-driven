@@ -3,6 +3,37 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.30.2] — 2026-10-14
+
+dev-guardian 3.4.0's verdict, read in full. Pair it with dev-guardian 3.4.0, released alongside. Earlier dev-guardian
+verdicts still read as before.
+
+### Changed
+- **A pass whose files no scanner analysed is no longer a plain pass.** These are files the project accepts in
+  `.guardian/scan.yml`, such as a per-file Semgrep timeout.
+  - The verdict says "N file(s) not analysed (accepted in .guardian/scan.yml)", in finish --run's output, the blocker
+    label and the merge summary.
+  - spec_finish warns, never blocks: review a change to those files by hand.
+  - **The feature's own files are named:** "src/big.js is this feature's and was not analysed (accepted timeout)".
+  - It reads dev-guardian 3.4's `accepted_gap_details` first, and dev-guardian 3.3's lines otherwise.
+- **A changed accepted file has its own hint.** A file `accept_timeouts` lists but which changed since it was accepted
+  (dev-guardian 3.4's `cause: "accepted_file_changed"`, an incomplete scan) gets "the acceptance no longer covers it —
+  review the change by hand as if no scanner read it, or raise semgrep.timeout", followed by dev-guardian's own remedy.
+- **A per-file Semgrep timeout's hint names `.guardian/scan.yml`:** raise `semgrep.timeout`, or list the reviewed file
+  under `semgrep.accept_timeouts`. It used to say "run again / .guardianignore".
+- **Stale `accept_timeouts` entries are a warning:** "N stale accept_timeouts entr(y/ies) in .guardian/scan.yml (…) —
+  remove them, or a future timeout on that file is accepted unseen".
+- **dev-guardian's coverage notes** (taint-analysis timeouts, never gating) are counted in the merge summary.
+- **Coverage-gap lines are kept whole,** up to 1000 characters; "… but changed since BASE" was lost at 200.
+
+### Fixed
+- `init --guardian` names every `.gitignore` line dev-guardian's own block writes. `!**/.guardian/hooks-allowlist.json`
+  and `!**/.guardian/scan.yml` were missing, so git ignored `.guardian/scan.yml` until dev-guardian wrote its own
+  `.guardian/.gitignore`.
+
+### Tests
+- `node mcp/test.js` 2238 assertions, `node cli/test-cli.js` 654 (was 2234 / 652).
+
 ## [1.30.1] — 2026-10-14
 
 Windows path spellings the guards did not read, and a faster engine, hooks and CLI.

@@ -258,14 +258,20 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
 - **Set it up once:** with no `.guardian/baseline.json`, every existing finding counts as new. `init --guardian` says so:
   the user records the baseline on the base commit, before a feature adds code (`node .specs/guardian.cjs baseline update
   --project .`), and commits it. dev-spec writes only under `.specs/`, so `init` names the `.gitignore` lines dev-guardian's
-  outputs need (`**/.guardian/*`, then `!` lines for `baseline.json`, `budgets.yml`, `hooks.config.json`); its report sets
-  under `.guardian/reports/` never make a run "dirty".
+  outputs need (`**/.guardian/*`, then `!` lines for the files a team shares: `baseline.json`, `budgets.yml`,
+  `hooks.config.json`, `hooks-allowlist.json`, `scan.yml`); its report sets under `.guardian/reports/` never make a run "dirty".
 - **It is a project check like any other** — `finish --run` runs it, `spec_finish {evidence}` records it — read by its exit
   code: **0** pass · **1** new findings at or above `--fail-on` (against `.guardian/baseline.json`) · **2** an incomplete scan
   (an expected scanner did not run) · **3** a usage or configuration error (also: no dev-guardian found). The verdict
   (`suiteChecks[].guardian` — `verdict`: pass · blocked · incomplete · config · not-found · no-launcher · exit) names the
   top findings, **the feature's own `_Implements:_` files first**, says when there is no baseline, and says "update
-  dev-guardian" when its report names no version or one below 3.2.1.
+  dev-guardian" when its report names no version or one below 3.2.1. A pass with gaps the project accepted (a per-file
+  timeout listed in `.guardian/scan.yml` `semgrep.accept_timeouts`: no scanner analysed that file) stays a pass but says
+  "N file(s) not analysed", and finish warns — review a change to those files by hand. The feature's own files among them are
+  named ("src/big.js is this feature's and was not analysed (accepted timeout) — review it by hand"): the gate runs without a
+  ref, so read the feature's change to that file yourself — no scanner did. The merge summary also counts
+  dev-guardian's coverage notes (taint timeouts, a baseline entry it could not read — never gating). An `accept_timeouts`
+  entry no scan used is a finish warning too: the user removes it, or a future timeout on that file is accepted unseen.
 - **In Claude Code, run the CLI:** `node "<plugin>/cli/dev-spec.js" finish <feature> --run` with the Bash tool's `timeout:
   600000` (or in the background) — it runs the check and records its report itself. **Over another MCP client** run the
   command from the project root and report it with its JSON stdout: `spec_finish {name, evidence: [{name: "guardian",
@@ -277,7 +283,10 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   with a reason (`nosemgrep: <rule> -- <reason>`, `# nosec`) — never `baseline update`, which accepts every current
   finding, the feature's own included (it belongs on the base commit, and it is the user's decision). An incomplete scan
   stays a failed check until its gaps are fixed — the blocker names how, by kind: install a missing scanner
-  (dev-guardian's `/guardian-init`), commit a lockfile, …; offline, `--local-only` keeps Semgrep to local rules.
+  (dev-guardian's `/guardian-init`), commit a lockfile, a Semgrep per-file timeout → a larger `semgrep.timeout`, or the file
+  under `semgrep.accept_timeouts` once the user has reviewed it, in the committed `.guardian/scan.yml` (a listed file that
+  changed since it was accepted: review the change by hand, or raise the timeout), …; offline,
+  `--local-only` keeps Semgrep to local rules.
   Never force the finish, nor remove the check, without the user — with the approval guard on, removing the check, an
   agent's write of `.specs/guardian.cjs` or `.guardian/baseline.json`, an agent-run `baseline update` and a gate run under a
   `DEV_GUARDIAN_CLI` / `CLAUDE_CONFIG_DIR` of its own are guard-downs.

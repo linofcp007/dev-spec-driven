@@ -32,7 +32,7 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
-let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian
+let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian, accepted gaps
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
 let phaseFile; // state.js — the file a phase writes (tasks: an xs change's change.md)
 function __link(E) { ({ phaseFile, duplicationReport, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
@@ -224,7 +224,7 @@ function finishFeature(projectDir, name, opts = {}) {
   // (+ dev-guardian's gate: how to clear a failed one, or how to run and report it over MCP — 1.29)
   if (suite.missing.length) block("suite-evidence", suiteBlocker(suite.missing, slug, lng));
   if (suite.invalid.length) warnings.push(i18n.msg(lng).projectChecks.invalidStored(suite.invalid.join(", ")));
-  warnings.push(...guardianWarnings(suite.items, lng)); // 1.30: dev-guardian should be updated (older than 3.2.1, no version reported)
+  warnings.push(...guardianWarnings(suite.items, lng)); // 1.30: dev-guardian should be updated (older than 3.2.1, no version reported) · 1.30.2: a pass that left files the project accepted unread
   if (pendingGates.length) block("approval-gates", F.gates(pendingGates.map((p) => roleLabel(doc.pendingRoles, p, lng)).join(", "))); // + the roles a phase waits for
   if (opts.gateOnly) return { ok: true, checks: blocked };
   const blockers = blocked.map((b) => b.detail);

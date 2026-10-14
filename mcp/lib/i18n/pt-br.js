@@ -107,6 +107,8 @@ const PTBR_PHRASES = {
   "sistema operativo": "sistema operacional", "sistemas operativos": "sistemas operacionais", "correio eletrónico": "e-mail",
   "fora de âmbito": "fora do escopo", "fora do âmbito": "fora do escopo", "em âmbito": "no escopo",
   "é aceite": "é aceito", "for aceite": "for aceito", "foi aceite": "foi aceito", "seja aceite": "seja aceito", "ser aceite": "ser aceito",
+  "aceite(s)": "aceito(s)", "aceite (não bloqueia)": "aceito (não bloqueia)", // dev-guardian's accepted gaps (1.30.2): files, a gap's line
+  "timeout aceite": "timeout aceito", "parcial aceite": "parcial aceito", // … and the feature's own among them
   "correu bem": "deu certo", "correu mal": "deu errado", "corre bem": "dá certo", "corre mal": "dá errado",
   "pôr a passar": "fazer passar", "di-lo": "diga isso", "fá-lo": "faça isso",
   "efeitos secundários": "efeitos colaterais", "batem sempre certo": "sempre fecham", "porque se aplica": "por que se aplica",
@@ -231,7 +233,7 @@ const PTBR_IMPERATIVES = {
   elimina: "elimine", exclui: "exclua", reporta: "reporte", anexa: "anexe", clica: "clique", reaprova: "reaprove", prefere: "prefira",
   aplica: "aplique", acaba: "acabe", regenera: "regenere", corta: "corte", limita: "limite", reduz: "reduza", explica: "explique",
   comenta: "comente", pega: "pegue", confia: "confie", assume: "assuma", delega: "delegue", estima: "estime", calcula: "calcule",
-  obtém: "obtenha", ouve: "ouça", cumpre: "cumpra",
+  obtém: "obtenha", ouve: "ouça", cumpre: "cumpra", aumenta: "aumente",
 };
 // After these at a clause start, the next word starts the clause too ("depois corre", "(ou usa …)").
 const RE_PTBR_LEADIN = /^(?:(?:e|ou|mas|depois|primeiro|então|agora|senão|finalmente|antes|em seguida|a seguir|por fim|por favor|no fim|no final|por isso|assim|de novo)(?![\p{L}\p{N}_])[ \t]*,?|(?:se não|caso contrário)[ \t]*,)[ \t]+/iu;
