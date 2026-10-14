@@ -24,7 +24,8 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
   // exits 0. FAKE_MARK: a file it writes when it runs. FAKE_REPORTS: it writes .guardian/reports/<n>.json in the project, as dev-guardian does.
   // FAKE_V34 (1.30.2 — dev-guardian 3.4.0's keys, each scan step repeating its line): "accepted" (a per-file timeout accepted in
   // .guardian/scan.yml, an unused acceptance, a taint note and the dropped-baseline note) · "timeout" (a Semgrep timeout not accepted) ·
-  // "gout" (a tracked file in .guardian/'s output: kind other, dev-guardian's remedy).
+  // "gout" (a tracked file in .guardian/'s output: kind other, dev-guardian's remedy) · "accepted341" (3.4.1: accepted_gap_details beside
+  // lines of a wording the 3.4.0 reader can't parse, and two unused acceptances).
   const fake = path.join(tmp, "dg-fake", "dev-guardian.mjs");
   write(tmp, "dg-fake/dev-guardian.mjs", [
     "import fs from \"node:fs\";",
@@ -39,7 +40,9 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
     "const GOUT_R = \"Stop tracking the named files (`git rm --cached <file>`) and move any code they hold out of .guardian/ — dev-guardian's reports, database and dashboard are never committed, and no scan reads them.\";",
     "const v34 = ({ accepted: { coverage: \"partial\", accepted_gaps: ACC, unused_timeout_acceptances: [\"src/gone.js\"], coverage_notes: NOTES, coverage_gap_details: ACC.map((l) => det(\"semgrep\", \"file_timeout\", l, TR, false)) },",
     "  timeout: { coverage_gaps: TO, coverage_gap_details: TO.map((l) => det(\"semgrep\", \"file_timeout\", l, TR, true)) },",
-    "  gout: { coverage_gaps: GOUT, coverage_gap_details: GOUT.map((l) => det(\"semgrep\", \"other\", l, GOUT_R, true)) } })[process.env.FAKE_V34 || \"\"] || {};",
+    "  gout: { coverage_gaps: GOUT, coverage_gap_details: GOUT.map((l) => det(\"semgrep\", \"other\", l, GOUT_R, true)) },",
+    "  accepted341: { tool_version: \"3.4.1\", coverage: \"partial\", accepted_gaps: steps(\"semgrep: src/big.js not analysed (Timeout) — accepted in .guardian/scan.yml\"),",
+    "    accepted_gap_details: [0, 1].map(() => ({ tool: \"semgrep\", kind: \"file_timeout\", file: \"src/big.js\", reason: \"Timeout\" })), unused_timeout_acceptances: [\"src/gone.js\", \"src/old.js\"] } })[process.env.FAKE_V34 || \"\"] || {};",
     "if (process.env.FAKE_MARK) fs.writeFileSync(process.env.FAKE_MARK, process.argv.slice(2).join(\" \"));",
     "if (process.env.FAKE_REPORTS) { fs.mkdirSync(\".guardian/reports\", { recursive: true }); fs.writeFileSync(\".guardian/reports/\" + Date.now() + \".json\", \"{}\"); }",
     "const f = (severity, rule, file, line) => ({ fingerprint: \"x\", tool: \"semgrep\", severity, category: \"security\", title: rule, rule_id: rule, file_path: file, line_start: line, fix_available: false });",
@@ -140,14 +143,21 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
     const st = stateOf(x).finishChecks.guardian;
     const rT = await finishRun(x.p, x.slug, env(2, { FAKE_V34: "timeout" }));
     const rG = await finishRun(x.p, x.slug, env(2, { FAKE_V34: "gout" }));
+    // 3.4.1: accepted_gap_details read before lines the 3.4.0 reader can't parse; two unused acceptances
+    const r341 = await finishRun(x.p, x.slug, env(0, { FAKE_V34: "accepted341" }));
+    const st341 = stateOf(x).finishChecks.guardian;
     const lines = rA.out.split("\n");
     const goutRemedy = G.gap.remedy("semgrep", "Stop tracking the named files (`git rm --cached <file>`) and move any code they hold out of .guardian/");
-    all("1.30.2 review 11: finish --run with dev-guardian 3.4.0's keys — an accepted timeout: the pass says '1 file(s) not analysed (accepted in .guardian/scan.yml)', prints the accepted line once and the 2 distinct notes, warns (never blocks), the merge summary counts the notes; the stored verdict keeps the counts only; a Semgrep timeout → the scan.yml remedy; the tracked .guardian/ output → dev-guardian's remedy once (got " +
-      js([lines.slice(0, 6), lines.filter((l) => /▲|✗|^- guardian/.test(l)), st && st.guardian, rT.out.split("\n").filter((l) => /✗/.test(l)), rG.out.split("\n").filter((l) => /✗/.test(l))]) + ")", {
+    all("1.30.2 review 11: finish --run with dev-guardian 3.4.0's keys — an accepted timeout: the pass says '1 file(s) not analysed (accepted in .guardian/scan.yml)', prints the accepted line once and the 2 distinct notes, warns (never blocks) — and on the unused acceptance —, the merge summary counts the notes; the stored verdict keeps the counts only; a Semgrep timeout → the scan.yml remedy; the tracked .guardian/ output → dev-guardian's remedy once; 3.4.1's accepted_gap_details counted where its lines are of an unknown wording, its two stale acceptances warned (got " +
+      js([lines.slice(0, 6), lines.filter((l) => /▲|✗|^- guardian/.test(l)), st && st.guardian, rT.out.split("\n").filter((l) => /✗/.test(l)), rG.out.split("\n").filter((l) => /✗/.test(l)),
+        r341.out.split("\n").filter((l) => /dev-guardian:|▲/.test(l)), st341 && st341.guardian]) + ")", {
       head: lines.some((l) => l.startsWith("  dev-guardian: pass — no new finding at or above high (dev-guardian from DEV_GUARDIAN_CLI=") && l.endsWith("dev-guardian.mjs) · " + ACC1)),
       lines: lines.filter((l) => l.startsWith("    " + G.acceptedLine(""))).length === 1 && lines.includes("    " + G.acceptedLine("security_scan_full: semgrep timed out on src/big.js — accepted (.guardian/scan.yml semgrep.accept_timeouts)")) &&
         lines.filter((l) => l.startsWith("    " + G.noteLine(""))).length === 2 && lines.includes("    " + G.noteLine("baseline: 1 entry could not be read and is no longer suppressed")),
-      warned: lines.includes("  ▲ " + G.acceptedWarn(ACC1)) && !/✗ the project check 'guardian'/.test(rA.out),
+      warned: lines.includes("  ▲ " + G.acceptedWarn(ACC1)) && lines.includes("  ▲ " + G.staleTimeouts(1, "src/gone.js")) && !/✗ the project check 'guardian'/.test(rA.out),
+      v341: r341.out.split("\n").some((l) => l.startsWith("  dev-guardian: pass — no new finding at or above high (dev-guardian from DEV_GUARDIAN_CLI=") && l.endsWith("dev-guardian.mjs) · " + ACC1)) &&
+        r341.out.includes("  ▲ " + G.staleTimeouts(2, "src/gone.js, src/old.js") + "\n") && !/✗ the project check 'guardian'/.test(r341.out) &&
+        !!st341 && st341.guardian.tool === "3.4.1" && js(st341.guardian.accepted) === js({ timeout: 1, parse: 0, other: 0 }) && js(st341.guardian.staleTimeouts) === js({ count: 2, files: ["src/gone.js", "src/old.js"] }),
       summary: lines.some((l) => l.startsWith("- guardian: `" + CMD + "` → exit 0 · dev-guardian: pass") && l.includes(" · " + ACC1) && l.endsWith(" · " + G.notes(2))),
       stored: !!st && st.exitCode === 0 && js(st.guardian.accepted) === js({ timeout: 1, parse: 0, other: 0 }) && st.guardian.notes === 2 && !("acceptedLines" in st.guardian) && !("noteLines" in st.guardian),
       timeout: rT.out.includes(G.gap.timeout("semgrep")) && !/guardianignore/.test(rT.out),

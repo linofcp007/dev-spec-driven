@@ -2944,6 +2944,8 @@ const msg = {
       acceptedLine: (line) => `accepted (not gating): ${line}`,
       notes: (n) => `${n} coverage note(s) (not gating)`,
       noteLine: (line) => `note (not gating): ${line}`,
+      // accept_timeouts entries no step reported a timeout on (unused_timeout_acceptances): a finish warning, never a blocker
+      staleTimeouts: (n, files) => `${n} stale accept_timeouts ${n === 1 ? "entry" : "entries"} in .guardian/scan.yml${files ? " (" + files + ")" : ""} — remove ${n === 1 ? "it" : "them"}, or a future timeout on ${n === 1 ? "that file" : "those files"} is accepted unseen.`,
       // dev-guardian older than 3.2.1, a report with no tool_version (≤ 3.2.1), a package it could not load (3.2.0 from a plugin install)
       update: (v) => `update dev-guardian (Claude Code: /plugin) — ${v ? "this run used " + v + ", the gate needs 3.2.1 or later" : "this run named no version (3.3.0 and later do); the gate needs 3.2.1 or later"}`,
       updateHint: (slug) => `Update the dev-guardian plugin (3.2.1 or later — Claude Code: /plugin), then run the check again: ${DEV_SPEC} finish ${slug} --run.`,

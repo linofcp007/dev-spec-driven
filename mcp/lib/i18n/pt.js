@@ -2784,6 +2784,7 @@ const msg = {
       acceptedLine: (line) => `aceite (não bloqueia): ${line}`,
       notes: (n) => `${n} nota(s) de cobertura (não bloqueiam)`,
       noteLine: (line) => `nota (não bloqueia): ${line}`,
+      staleTimeouts: (n, files) => `${n} ${n === 1 ? "entrada obsoleta" : "entradas obsoletas"} em accept_timeouts no .guardian/scan.yml${files ? " (" + files + ")" : ""} — remove-${n === 1 ? "a" : "as"}, ou um timeout futuro ${n === 1 ? "nesse ficheiro" : "nesses ficheiros"} é aceite sem que ninguém o veja.`,
       update: (v) => `atualiza o dev-guardian (Claude Code: /plugin) — ${v ? "esta execução usou o " + v + ", o gate precisa do 3.2.1 ou posterior" : "esta execução não indicou versão (o 3.3.0 e posteriores indicam); o gate precisa do 3.2.1 ou posterior"}`,
       updateHint: (slug) => `Atualiza o plugin dev-guardian (3.2.1 ou posterior — Claude Code: /plugin) e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run.`,
       finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [esta feature]" : ""),

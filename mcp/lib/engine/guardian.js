@@ -6,8 +6,8 @@
  * dev-guardian CLI lookup (one rule: the launcher carries the engine's own function), the reading of a run (its exit code +
  * JSON report → the verdict finish records), what surfaces say about it (the verdict's lines, how to clear a failed gate, the
  * suite blocker) and the approval guard's dev-guardian rules. The cross-plugin contract (dev-guardian ≥ 3.2.1; 3.3.0's
- * tool_version, coverage_gap_details, baseline_status, accepted_gaps and --compact, 3.4.0's coverage_notes read when present;
- * its .gitignore block's shared files) has this one home.
+ * tool_version, coverage_gap_details, baseline_status, accepted_gaps and --compact, 3.4.0's coverage_notes and
+ * unused_timeout_acceptances, 3.4.1's accepted_gap_details read when present; its .gitignore block's shared files) has this one home.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -344,21 +344,35 @@ function distinctLines(list) {
   }
   return out;
 }
-// What the accepted gaps leave unread, from dev-guardian's two lines (ci/gate.ts judgeMissing): "<scanner> timed out on a.js, b.js —
-// accepted (.guardian/scan.yml semgrep.accept_timeouts)" — files the project accepts no scanner analysed — and "<scanner> only partly
-// parsed a.php — accepted (--accept-partial-parse)" — the check's command accepts it. A line of another shape (a later dev-guardian's)
-// is one gap. lines: distinctLines'. → { timeout, parse, other } (distinct files, files, lines) | null (none)
+// What the accepted gaps leave unread: distinct files a per-file timeout accepted in .guardian/scan.yml left unanalysed (timeout), files
+// a --accept-partial-parse on the check's command left partly parsed (parse), and any other accepted gap (other). Each accepted_gaps line
+// is read from its accepted_gap_details entry — the same index (dev-guardian 3.4.1+: {tool, kind, file, reason}, one per line, in order)
+// — when that entry is a record with a kind; else (3.4.0, or an entry missing) from the line itself, dev-guardian's two shapes (ci/gate.ts
+// judgeMissing): "<step>: <scanner> timed out on a.js, b.js — accepted (.guardian/scan.yml semgrep.accept_timeouts)" and "<step>:
+// <scanner> only partly parsed a.php — accepted (--accept-partial-parse)"; a line of another shape is one gap. Every scan step repeats
+// its gap: a file counts once, an other gap once per kind / tool / file (or reason; or its line without the step).
+// → { timeout, parse, other } | null (none)
 const RE_ACCEPTED_TIMEOUT = /^\S+ timed out on (.+) — accepted \(/;
 const RE_ACCEPTED_PARSE = /^\S+ only partly parsed (.+) — accepted \(/;
-function acceptedCounts(lines) {
-  const timeout = new Set(), parse = new Set();
-  let other = 0;
-  for (const key of lines.keys()) {
+function acceptedCounts(lines, details) {
+  const timeout = new Set(), parse = new Set(), other = new Set();
+  const list = Array.isArray(lines) ? lines : [], det = Array.isArray(details) ? details : [];
+  for (let i = 0; i < Math.max(list.length, det.length); i++) {
+    const d = det[i];
+    if (isRecord(d) && typeof d.kind === "string" && d.kind.trim()) {
+      const file = typeof d.file === "string" ? d.file.trim() : "";
+      if (file && d.kind === "file_timeout") timeout.add(file);
+      else if (file && d.kind === "partial_parse") parse.add(file);
+      else other.add([d.kind, typeof d.tool === "string" ? d.tool : "", file || (typeof d.reason === "string" ? d.reason.trim() : "")].join("\n"));
+      continue;
+    }
+    if (typeof list[i] !== "string" || !list[i].trim()) continue;
+    const key = list[i].trim().replace(RE_STEP_PREFIX, "");
     const t = RE_ACCEPTED_TIMEOUT.exec(key), p = t ? null : RE_ACCEPTED_PARSE.exec(key);
-    if (!t && !p) { other++; continue; }
+    if (!t && !p) { other.add(key); continue; }
     for (const f of (t || p)[1].split(", ")) if (f.trim()) (t ? timeout : parse).add(f.trim());
   }
-  return timeout.size || parse.size || other ? { timeout: timeout.size, parse: parse.size, other } : null;
+  return timeout.size || parse.size || other.size ? { timeout: timeout.size, parse: parse.size, other: other.size } : null;
 }
 // A guardian check's run → its summary (finishChecks[name].guardian, suiteChecks[].guardian): { verdict — stable: pass · blocked ·
 // incomplete · config · not-found (the launcher found no dev-guardian) · no-launcher (.specs/guardian.cjs is missing) · exit (any
@@ -367,7 +381,8 @@ function acceptedCounts(lines) {
 // top? (≤ GUARDIAN_TOP: {severity, rule, file, line, own} — own first, then by severity, then the report's order), gaps? (coverage
 // gaps, ≤ 3), gapDetails? (the gating coverage_gap_details, ≤ 5: {tool, kind, remedy?}), accepted? (the accepted_gaps: {timeout —
 // files not analysed, accepted in .guardian/scan.yml —, parse — files only partly parsed, accepted with --accept-partial-parse —,
-// other — gaps of another shape}), notes? (the coverage_notes, each once), message? (config: dev-guardian's own),
+// other — gaps of another shape}: accepted_gap_details per line when present, else the line), notes? (the coverage_notes, each
+// once), staleTimeouts? (unused_timeout_acceptances: {count, files ≤ GUARDIAN_SAID}), message? (config: dev-guardian's own),
 // baseline? ("absent": every existing finding counted as new), tool? (the report's tool_version), update? (dev-guardian is older
 // than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran) }
 // — and what recordFinishChecks refuses on (never stored): launcher ("changed" | "missing" — the launcher as the run is recorded),
@@ -425,7 +440,7 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output) {
   // What never gates (1.30.2, review 11 — a pass with accepted gaps read as a plain pass): the accepted gaps — files no scanner
   // analysed (or parsed in full), accepted by the project: the verdict stays, and says so — and dev-guardian's notes (3.4: taint
   // timeouts, a baseline entry it could not read), counted. Their lines only for finish --run's output (never stored).
-  const accepted = distinctLines(j.accepted_gaps), counts = acceptedCounts(accepted);
+  const accepted = distinctLines(j.accepted_gaps), counts = acceptedCounts(j.accepted_gaps, j.accepted_gap_details);
   if (counts) {
     g.accepted = counts;
     g.acceptedLines = [...accepted.values()].slice(0, GUARDIAN_SAID).map((l) => cleanLine(l, 300));
@@ -436,6 +451,11 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output) {
     g.notes = notes.size;
     g.noteLines = [...notes.values()].slice(0, GUARDIAN_SAID).map((l) => cleanLine(l, 300));
   }
+  // .guardian/scan.yml accept_timeouts entries no step reported a timeout on (3.4+: unused_timeout_acceptances): an entry never
+  // expires, so a stale one accepts a future timeout on its file unseen — a finish warning, never a blocker (1.30.2)
+  const stale = Array.isArray(j.unused_timeout_acceptances)
+    ? [...new Set(j.unused_timeout_acceptances.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()))] : [];
+  if (stale.length) g.staleTimeouts = { count: stale.length, files: stale.slice(0, GUARDIAN_SAID).map((f) => cleanLine(f, 200)) };
   if (!blocking) return g;
   g.blocking = blocking.length;
   const root = path.resolve(projectDir);
@@ -580,13 +600,17 @@ function suiteBlocker(missing, slug, lng) {
 }
 // spec_finish's warnings: a recorded guardian run says dev-guardian should be updated (older than GUARDIAN_MIN_VERSION, no version
 // reported, a package it could not load); a pass left files unread that the project accepted (1.30.2: accepted_gaps — review a
-// change to them by hand; a warning, never a blocker). → the localized lines
+// change to them by hand); .guardian/scan.yml holds accept_timeouts entries no step used (1.30.2: staleTimeouts — whatever the
+// verdict). Warnings, never blockers. → the localized lines
 function guardianWarnings(items, lng) {
   const G = i18n.msg(lng).guardian;
   const mine = (items || []).filter((i) => isRecord(i.guardian) && isGuardianCheck(i.name, i.command));
   const up = mine.find((i) => i.guardian.update);
   const acc = mine.find((i) => i.guardian.verdict === "pass" && acceptedText(i.guardian, G));
-  return [...(up ? [G.update(up.guardian.tool || null)] : []), ...(acc ? [G.acceptedWarn(acceptedText(acc.guardian, G))] : [])];
+  const st = mine.map((i) => i.guardian.staleTimeouts).find((s) => isRecord(s) && countOf(s.count));
+  const files = st ? (Array.isArray(st.files) ? st.files.filter((f) => typeof f === "string" && f) : []) : [];
+  return [...(up ? [G.update(up.guardian.tool || null)] : []), ...(acc ? [G.acceptedWarn(acceptedText(acc.guardian, G))] : []),
+    ...(st ? [G.staleTimeouts(countOf(st.count), files.join(", ") + (countOf(st.count) > files.length && files.length ? ", " + G.more(countOf(st.count) - files.length) : ""))] : [])];
 }
 
 // --- the approval guard's dev-guardian rules (guards.js calls them; with a guardian check set — guardianGuardOn) -------------------

@@ -268,7 +268,8 @@ launcher are committed, so every machine that finishes a feature needs dev-guard
   dev-guardian" when its report names no version or one below 3.2.1. A pass with gaps the project accepted (a per-file
   timeout listed in `.guardian/scan.yml` `semgrep.accept_timeouts`: no scanner analysed that file) stays a pass but says
   "N file(s) not analysed", and finish warns — review a change to those files by hand; the merge summary also counts
-  dev-guardian's coverage notes (taint timeouts, a baseline entry it could not read — never gating).
+  dev-guardian's coverage notes (taint timeouts, a baseline entry it could not read — never gating). An `accept_timeouts`
+  entry no scan used is a finish warning too: the user removes it, or a future timeout on that file is accepted unseen.
 - **In Claude Code, run the CLI:** `node "<plugin>/cli/dev-spec.js" finish <feature> --run` with the Bash tool's `timeout:
   600000` (or in the background) — it runs the check and records its report itself. **Over another MCP client** run the
   command from the project root and report it with its JSON stdout: `spec_finish {name, evidence: [{name: "guardian",
