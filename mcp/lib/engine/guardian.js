@@ -6,7 +6,8 @@
  * dev-guardian CLI lookup (one rule: the launcher carries the engine's own function), the reading of a run (its exit code +
  * JSON report → the verdict finish records), what surfaces say about it (the verdict's lines, how to clear a failed gate, the
  * suite blocker) and the approval guard's dev-guardian rules. The cross-plugin contract (dev-guardian ≥ 3.2.1; 3.3.0's
- * tool_version, coverage_gap_details, baseline_status and --compact read when present) has this one home.
+ * tool_version, coverage_gap_details, baseline_status, accepted_gaps and --compact, 3.4.0's coverage_notes read when present;
+ * its .gitignore block's shared files) has this one home.
  *
  * Part of the engine behind mcp/lib/spec.js (the facade); the module rule is in engine/index.js.
  */
@@ -237,9 +238,12 @@ function guardianOffer(projectDir, lng) {
   const installed = !!guardianCli(null, path.resolve(projectDir)), project = isDirSafe(path.join(path.resolve(projectDir), ".guardian"));
   return installed || project ? i18n.msg(lng).guardian.offer(installed, project) : null;
 }
-// The lines dev-guardian's own .gitignore block writes (gitignoreGuard: its outputs ignored, the files a team shares kept) — dev-spec
-// never writes outside .specs/, so `init --guardian` names the ones the project's .gitignore lacks.
-const GUARDIAN_IGNORE = ["**/.guardian/*", "!**/.guardian/baseline.json", "!**/.guardian/budgets.yml", "!**/.guardian/hooks.config.json"];
+// The lines dev-guardian's own .gitignore block writes (gitignoreGuard: its outputs ignored, the files a team shares kept — 3.3+'s
+// SHARED_GUARDIAN_FILES, in its order: the baseline, the budgets, the hook settings and allowlist, the scan settings) — dev-spec never
+// writes outside .specs/, so `init --guardian` names the ones the project's .gitignore lacks. (1.30.2, review 11: without the last two,
+// `git check-ignore` said .guardian/scan.yml — the timeouts the gate accepts — was ignored until dev-guardian wrote .guardian/.gitignore.)
+const GUARDIAN_SHARED = ["baseline.json", "budgets.yml", "hooks.config.json", "hooks-allowlist.json", "scan.yml"];
+const GUARDIAN_IGNORE = ["**/.guardian/*", ...GUARDIAN_SHARED.map((f) => "!**/.guardian/" + f)];
 const RE_GUARDIAN_IGNORED = /^\/?(?:\*\*\/)?\.guardian\/?\*?$/; // the ignore line in any spelling dev-guardian wrote
 function guardianIgnoreMissing(projectDir) {
   const text = readIfExists(path.join(path.resolve(projectDir), ".gitignore")) || "";
@@ -260,6 +264,7 @@ function guardianOnNote(projectDir, command, lng) {
 }
 
 const GUARDIAN_TOP = 5; // the blocking findings a summary keeps — the feature's own first
+const GUARDIAN_SAID = 3; // the accepted gaps / notes finish --run prints (each once: every scan step repeats its line)
 const GUARDIAN_REPORT_MAX = 16 * 1024 * 1024; // a larger report is not parsed: the exit code alone
 const GUARDIAN_JSON_STARTS = 8; // lines starting with "{" tried as the report's start, at most (text around the JSON)
 const GUARDIAN_GAP_KINDS = ["missing_tool", "no_lockfile", "partial_parse", "file_timeout", "taint_timeout", "path_too_long", "scanner_failed", "skipped", "other"];
@@ -325,16 +330,49 @@ function versionBelow(v, min) {
   for (let i = 0; i < 3; i++) if (Number(m[i + 1]) !== want[i]) return Number(m[i + 1]) < want[i];
   return false;
 }
+// The lines of the report that never gate — accepted_gaps (3.3+) and coverage_notes (3.4+) — each fact once: every scan step
+// (security_scan_full, map_attack_surface) repeats its line under its own name, "<step>: <scanner> …". → Map(the line without its
+// step → the line as written), in the report's order.
+const RE_STEP_PREFIX = /^[^:\s]+: /;
+function distinctLines(list) {
+  const out = new Map();
+  if (!Array.isArray(list)) return out;
+  for (const x of list) {
+    if (typeof x !== "string" || !x.trim()) continue;
+    const line = x.trim(), key = line.replace(RE_STEP_PREFIX, "");
+    if (!out.has(key)) out.set(key, line);
+  }
+  return out;
+}
+// What the accepted gaps leave unread, from dev-guardian's two lines (ci/gate.ts judgeMissing): "<scanner> timed out on a.js, b.js —
+// accepted (.guardian/scan.yml semgrep.accept_timeouts)" — files the project accepts no scanner analysed — and "<scanner> only partly
+// parsed a.php — accepted (--accept-partial-parse)" — the check's command accepts it. A line of another shape (a later dev-guardian's)
+// is one gap. lines: distinctLines'. → { timeout, parse, other } (distinct files, files, lines) | null (none)
+const RE_ACCEPTED_TIMEOUT = /^\S+ timed out on (.+) — accepted \(/;
+const RE_ACCEPTED_PARSE = /^\S+ only partly parsed (.+) — accepted \(/;
+function acceptedCounts(lines) {
+  const timeout = new Set(), parse = new Set();
+  let other = 0;
+  for (const key of lines.keys()) {
+    const t = RE_ACCEPTED_TIMEOUT.exec(key), p = t ? null : RE_ACCEPTED_PARSE.exec(key);
+    if (!t && !p) { other++; continue; }
+    for (const f of (t || p)[1].split(", ")) if (f.trim()) (t ? timeout : parse).add(f.trim());
+  }
+  return timeout.size || parse.size || other ? { timeout: timeout.size, parse: parse.size, other } : null;
+}
 // A guardian check's run → its summary (finishChecks[name].guardian, suiteChecks[].guardian): { verdict — stable: pass · blocked ·
 // incomplete · config · not-found (the launcher found no dev-guardian) · no-launcher (.specs/guardian.cjs is missing) · exit (any
 // other code) —, exit, failOn (the command's --fail-on, else high), parsed (the JSON report was read), blocking?, newFindings? (the
 // report's new_findings_count — --compact —, else its new_findings), own? (blocking findings in the feature's _Implements:_ files),
 // top? (≤ GUARDIAN_TOP: {severity, rule, file, line, own} — own first, then by severity, then the report's order), gaps? (coverage
-// gaps, ≤ 3), gapDetails? (the gating coverage_gap_details, ≤ 5: {tool, kind, remedy?}), message? (config: dev-guardian's own),
+// gaps, ≤ 3), gapDetails? (the gating coverage_gap_details, ≤ 5: {tool, kind, remedy?}), accepted? (the accepted_gaps: {timeout —
+// files not analysed, accepted in .guardian/scan.yml —, parse — files only partly parsed, accepted with --accept-partial-parse —,
+// other — gaps of another shape}), notes? (the coverage_notes, each once), message? (config: dev-guardian's own),
 // baseline? ("absent": every existing finding counted as new), tool? (the report's tool_version), update? (dev-guardian is older
 // than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran) }
 // — and what recordFinishChecks refuses on (never stored): launcher ("changed" | "missing" — the launcher as the run is recorded),
-// mismatch (the report contradicts the exit code: reportExit = its exit_code), noReport (exit 0 with no readable report).
+// mismatch (the report contradicts the exit code: reportExit = its exit_code), noReport (exit 0 with no readable report); and what
+// finish --run prints (never stored): acceptedLines / noteLines (≤ GUARDIAN_SAID of each, as dev-guardian wrote them), acceptedMore.
 // report: the JSON on stdout; output: the rest (stderr — over MCP the evidence's summary). dir: the feature folder (own), or null.
 function guardianRecord(projectDir, dir, command, exitCode, report, output) {
   const code = Number.isInteger(exitCode) ? exitCode : parseInt(exitCode, 10);
@@ -384,6 +422,20 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output) {
     });
     if (det.length) g.gapDetails = det;
   }
+  // What never gates (1.30.2, review 11 — a pass with accepted gaps read as a plain pass): the accepted gaps — files no scanner
+  // analysed (or parsed in full), accepted by the project: the verdict stays, and says so — and dev-guardian's notes (3.4: taint
+  // timeouts, a baseline entry it could not read), counted. Their lines only for finish --run's output (never stored).
+  const accepted = distinctLines(j.accepted_gaps), counts = acceptedCounts(accepted);
+  if (counts) {
+    g.accepted = counts;
+    g.acceptedLines = [...accepted.values()].slice(0, GUARDIAN_SAID).map((l) => cleanLine(l, 300));
+    if (accepted.size > GUARDIAN_SAID) g.acceptedMore = accepted.size - GUARDIAN_SAID;
+  }
+  const notes = distinctLines(j.coverage_notes);
+  if (notes.size) {
+    g.notes = notes.size;
+    g.noteLines = [...notes.values()].slice(0, GUARDIAN_SAID).map((l) => cleanLine(l, 300));
+  }
   if (!blocking) return g;
   g.blocking = blocking.length;
   const root = path.resolve(projectDir);
@@ -419,9 +471,10 @@ function guardianRefusal(g, lng) {
   if (g.noReport) return { code: "report-missing", why: G.reportMissing };
   return null;
 }
-// What a stored summary keeps (finishChecks[name].guardian): the verdict and its facts — never the refusal flags.
+// What a stored summary keeps (finishChecks[name].guardian): the verdict and its facts — never the refusal flags, nor the report's
+// own lines finish --run prints.
 function guardianStored(g) {
-  const { launcher, mismatch, reportExit, noReport, ...kept } = g;
+  const { launcher, mismatch, reportExit, noReport, acceptedLines, acceptedMore, noteLines, ...kept } = g;
   return kept;
 }
 // The run's command proves a guardian check's command — or that command with --compact (dev-guardian 3.3+: the short report an
@@ -430,9 +483,14 @@ function guardianCompact(name, command) {
   const c = String(command || "");
   return isGuardianCheck(name, c) && /--format[=\s]+json\b/i.test(c) && !/--compact\b/.test(c) ? c + " --compact" : null;
 }
-// A guardian summary → its localized head line (the verdict, + no baseline, + a DEV_GUARDIAN_CLI the launcher ran).
+// A stored count (a hand-edited .state.json reads as none) · the accepted gaps a summary says ("" none — 1.30.2).
+const countOf = (v) => (Number.isSafeInteger(v) && v > 0 ? v : 0);
+const acceptedText = (g, G) => (isRecord(g.accepted) ? G.accepted(countOf(g.accepted.timeout), countOf(g.accepted.parse), countOf(g.accepted.other)) : "");
+// A guardian summary → its localized head line (the verdict, + no baseline, + a DEV_GUARDIAN_CLI the launcher ran, + the gaps the
+// project accepted).
 function guardianHead(g, lng) {
   const G = i18n.msg(lng).guardian;
+  const accepted = acceptedText(g, G);
   let head;
   switch (g.verdict) {
     case "pass": head = G.pass(g.failOn, g.newFindings || 0); break;
@@ -443,40 +501,54 @@ function guardianHead(g, lng) {
     case "no-launcher": head = G.noLauncher; break;
     default: head = G.exited(g.exit);
   }
-  return head + (g.baseline === "absent" ? G.noBaseline : "") + (g.override ? G.override(g.override) : "");
+  return head + (g.baseline === "absent" ? G.noBaseline : "") + (g.override ? G.override(g.override) : "") + (accepted ? " · " + accepted : "");
 }
 const guardianAt = (f) => (f.file ? f.file + (f.line ? ":" + f.line : "") : "?");
-// finish --run's lines: the head, one per finding kept, the rest counted, then — when dev-guardian should be updated — a line saying so.
+// finish --run's lines: the head, one per finding kept, the rest counted, the accepted gaps' and the notes' own lines (dev-guardian's
+// text, ≤ GUARDIAN_SAID of each, the rest counted), then — when dev-guardian should be updated — a line saying so.
 function guardianLines(g, lng) {
   const G = i18n.msg(lng).guardian;
   const top = Array.isArray(g.top) ? g.top : [];
   const out = [guardianHead(g, lng), ...top.map((f) => "  " + G.finding(guardianAt(f), f.rule, f.severity, f.own))];
   if (g.blocking > top.length && top.length) out.push("  " + G.more(g.blocking - top.length));
+  const said = (lines, more, label) => {
+    const list = Array.isArray(lines) ? lines : [];
+    for (const l of list) out.push("  " + label(l));
+    if (list.length && more > 0) out.push("  " + G.more(more));
+  };
+  said(g.acceptedLines, countOf(g.acceptedMore), G.acceptedLine);
+  said(g.noteLines, countOf(g.notes) - (Array.isArray(g.noteLines) ? g.noteLines.length : 0), G.noteLine);
   if (g.update) out.push(G.update(g.tool || null));
   return out;
 }
-// One line — a blocker's or a status's label: the verdict, then up to 3 findings (+ update dev-guardian).
-function guardianText(g, lng) {
+// One line — a blocker's or a status's label: the verdict, then up to 3 findings (+ update dev-guardian). summary (the merge summary's
+// check line, 1.30.2): + dev-guardian's coverage notes, counted — never in a blocker.
+function guardianText(g, lng, summary) {
   const G = i18n.msg(lng).guardian;
   const top = (Array.isArray(g.top) ? g.top : []).slice(0, 3);
   const rest = (g.blocking || 0) - top.length;
   return guardianHead(g, lng) + (top.length ? " — " + top.map((f) => G.finding(guardianAt(f), f.rule, f.severity, f.own)).join(", ") + (rest > 0 ? ", " + G.more(rest) : "") : "") +
-    (g.update ? " · " + G.update(g.tool || null) : "");
+    (summary && countOf(g.notes) ? " · " + G.notes(countOf(g.notes)) : "") + (g.update ? " · " + G.update(g.tool || null) : "");
 }
 // An incomplete scan → what to do, by the gating gaps' kinds (dev-guardian 3.3's coverage_gap_details): install only for a missing
-// tool, a lockfile for no_lockfile, … — dev-guardian's own remedy for the others, the generic hint without details (≤ 3.2.1).
+// tool, a lockfile for no_lockfile, … — dev-guardian's own remedy for the others, the generic hint without details (≤ 3.2.1). A
+// Semgrep file_timeout (1.30.2, review 11 — the hint said "run again / .guardianignore"): dev-guardian's remedy, localized — a larger
+// semgrep.timeout, or the file accepted under semgrep.accept_timeouts after review, in the committed .guardian/scan.yml (the settings
+// it holds are Semgrep's); another scanner's timeout: dev-guardian's own remedy.
+const isSemgrep = (d) => /^semgrep(?::|$)/i.test(d.tool);
 function incompleteHint(g, G) {
   const det = Array.isArray(g.gapDetails) ? g.gapDetails : [];
   if (!det.length) return G.incompleteHint;
   const H = G.gap;
-  const tools = (kinds) => [...new Set(det.filter((d) => kinds.includes(d.kind)).map((d) => d.tool))].join(", ");
+  const tools = (kinds, only) => [...new Set(det.filter((d) => kinds.includes(d.kind) && (!only || only(d))).map((d) => d.tool))].join(", ");
   const out = [];
   if (tools(["missing_tool"])) out.push(H.missingTool(tools(["missing_tool"])));
   if (tools(["no_lockfile"])) out.push(H.noLockfile(tools(["no_lockfile"])));
   if (tools(["partial_parse"])) out.push(H.partialParse(tools(["partial_parse"])));
-  if (tools(["file_timeout", "taint_timeout"])) out.push(H.timeout(tools(["file_timeout", "taint_timeout"])));
+  if (tools(["file_timeout"], isSemgrep)) out.push(H.timeout(tools(["file_timeout"], isSemgrep)));
   if (tools(["path_too_long"])) out.push(H.pathTooLong);
-  for (const d of det.filter((x) => ["scanner_failed", "skipped", "other"].includes(x.kind))) out.push(d.remedy ? H.remedy(d.tool, d.remedy) : H.other(d.tool));
+  const theirs = (x) => ["scanner_failed", "skipped", "other", "taint_timeout"].includes(x.kind) || (x.kind === "file_timeout" && !isSemgrep(x));
+  for (const d of det.filter(theirs)) out.push(d.remedy ? H.remedy(d.tool, d.remedy) : H.other(d.tool));
   return [...new Set(out)].join(" ") + " " + H.tail;
 }
 // What to do about the guardian checks among a feature's checks still missing a pass (suiteStatus().missing): a failed one with
@@ -507,10 +579,14 @@ function suiteBlocker(missing, slug, lng) {
   return parts.join(" · ");
 }
 // spec_finish's warnings: a recorded guardian run says dev-guardian should be updated (older than GUARDIAN_MIN_VERSION, no version
-// reported, a package it could not load). → [the localized line] | []
+// reported, a package it could not load); a pass left files unread that the project accepted (1.30.2: accepted_gaps — review a
+// change to them by hand; a warning, never a blocker). → the localized lines
 function guardianWarnings(items, lng) {
-  const g = (items || []).find((i) => isRecord(i.guardian) && i.guardian.update && isGuardianCheck(i.name, i.command));
-  return g ? [i18n.msg(lng).guardian.update(g.guardian.tool || null)] : [];
+  const G = i18n.msg(lng).guardian;
+  const mine = (items || []).filter((i) => isRecord(i.guardian) && isGuardianCheck(i.name, i.command));
+  const up = mine.find((i) => i.guardian.update);
+  const acc = mine.find((i) => i.guardian.verdict === "pass" && acceptedText(i.guardian, G));
+  return [...(up ? [G.update(up.guardian.tool || null)] : []), ...(acc ? [G.acceptedWarn(acceptedText(acc.guardian, G))] : [])];
 }
 
 // --- the approval guard's dev-guardian rules (guards.js calls them; with a guardian check set — guardianGuardOn) -------------------
@@ -555,6 +631,6 @@ function guardianGuardOn(meta) {
 const guardianGuardFilter = (actions, meta) => (guardianGuardOn(meta) ? actions : actions.filter((a) => !/^guardian-/.test(String(a.setting || ""))));
 
 module.exports = { GUARDIAN_COMMAND, isGuardianCheck, guardianChecks, setGuardianLauncher, guardianLauncherOn, guardianLauncherState,
-  guardianPreRun, guardianLauncherAudit, guardianCli, guardianOffer, guardianOnNote, guardianRecord, guardianRefusal, guardianStored,
+  guardianPreRun, guardianLauncherAudit, guardianCli, guardianOffer, GUARDIAN_IGNORE, guardianOnNote, guardianRecord, guardianRefusal, guardianStored,
   guardianCompact, guardianText, guardianLines, suiteGuardianHint, suiteBlocker, guardianWarnings,
   guardianShellActions, guardianGuardFilter, __link };

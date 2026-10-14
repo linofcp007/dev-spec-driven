@@ -22,10 +22,24 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
   // a fake dev-guardian: the JSON report of a gate (FAKE_EXIT 0 · 1 · 2) in 3.3.0's shape (tool_version, baseline_status) — FAKE_SHAPE=old:
   // 3.2.1's (neither) —, or a usage error on stderr (3; FAKE_NOISE: 30 lines after it). FAKE_MISMATCH: the report says exit 1, the process
   // exits 0. FAKE_MARK: a file it writes when it runs. FAKE_REPORTS: it writes .guardian/reports/<n>.json in the project, as dev-guardian does.
+  // FAKE_V34 (1.30.2 — dev-guardian 3.4.0's keys, each scan step repeating its line): "accepted" (a per-file timeout accepted in
+  // .guardian/scan.yml, an unused acceptance, a taint note and the dropped-baseline note) · "timeout" (a Semgrep timeout not accepted) ·
+  // "gout" (a tracked file in .guardian/'s output: kind other, dev-guardian's remedy).
   const fake = path.join(tmp, "dg-fake", "dev-guardian.mjs");
   write(tmp, "dg-fake/dev-guardian.mjs", [
     "import fs from \"node:fs\";",
     "const code = Number(process.env.FAKE_EXIT || 0);",
+    "const steps = (l) => [\"security_scan_full: \" + l, \"map_attack_surface: \" + l];",
+    "const det = (tool, kind, detail, remedy, gating) => ({ tool, kind, detail, remedy, gating });",
+    "const TR = \"Raise semgrep.timeout in .guardian/scan.yml, or after review list the file under semgrep.accept_timeouts there and commit it.\";",
+    "const ACC = steps(\"semgrep timed out on src/big.js — accepted (.guardian/scan.yml semgrep.accept_timeouts)\");",
+    "const NOTES = steps(\"semgrep taint analysis incomplete (Semgrep fixpoint timeout) in 1 file(s): src/a.js — taint findings in those functions may be missing (not gating)\").concat([\"baseline: 1 entry could not be read and is no longer suppressed\"]);",
+    "const TO = steps(\"semgrep ran with reduced coverage (partial: 1 file(s) only partly parsed (Timeout: src/big.js)) — not accepted: Timeout on src/big.js\");",
+    "const GOUT = steps(\"semgrep ran with reduced coverage (1 file(s) git tracks in .guardian/'s generated output were not scanned: .guardian/reports/evil.js)\");",
+    "const GOUT_R = \"Stop tracking the named files (`git rm --cached <file>`) and move any code they hold out of .guardian/ — dev-guardian's reports, database and dashboard are never committed, and no scan reads them.\";",
+    "const v34 = ({ accepted: { coverage: \"partial\", accepted_gaps: ACC, unused_timeout_acceptances: [\"src/gone.js\"], coverage_notes: NOTES, coverage_gap_details: ACC.map((l) => det(\"semgrep\", \"file_timeout\", l, TR, false)) },",
+    "  timeout: { coverage_gaps: TO, coverage_gap_details: TO.map((l) => det(\"semgrep\", \"file_timeout\", l, TR, true)) },",
+    "  gout: { coverage_gaps: GOUT, coverage_gap_details: GOUT.map((l) => det(\"semgrep\", \"other\", l, GOUT_R, true)) } })[process.env.FAKE_V34 || \"\"] || {};",
     "if (process.env.FAKE_MARK) fs.writeFileSync(process.env.FAKE_MARK, process.argv.slice(2).join(\" \"));",
     "if (process.env.FAKE_REPORTS) { fs.mkdirSync(\".guardian/reports\", { recursive: true }); fs.writeFileSync(\".guardian/reports/\" + Date.now() + \".json\", \"{}\"); }",
     "const f = (severity, rule, file, line) => ({ fingerprint: \"x\", tool: \"semgrep\", severity, category: \"security\", title: rule, rule_id: rule, file_path: file, line_start: line, fix_available: false });",
@@ -34,7 +48,7 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
     "if (code === 3) { console.error(\"error: Unknown flag: --bogus\"); if (process.env.FAKE_NOISE) for (let i = 0; i < 30; i++) console.error(\"  at frame \" + i); process.exitCode = 3; }",
     "else {",
     "  process.stdout.write(JSON.stringify({ exit_code: process.env.FAKE_MISMATCH ? 1 : code, coverage: code === 2 ? \"partial\" : \"full\", coverage_gaps: code === 2 ? [\"trivy: not installed\"] : [],",
-    "    new_findings: blocking, blocking_findings: blocking, baseline_absent: false, ...shape }, null, 2) + \"\\n\");",
+    "    new_findings: blocking, blocking_findings: blocking, baseline_absent: false, ...shape, ...v34 }, null, 2) + \"\\n\");",
     "  process.exitCode = code;",
     "}",
     ""].join("\n"));
@@ -111,6 +125,34 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
     for (const sh of shells) bySh.push([sh, await finishRun(en.p, en.slug, env(1), ["--shell", sh])]);
     const badSh = bySh.filter(([, r]) => !/\n {2}dev-guardian: 2 new finding\(s\) at or above high, 1 in this feature's files/.test(r.out)).map(([sh, r]) => sh + ": " + r.out.slice(0, 200));
     ok(shells.length >= 1 && !badSh.length, "1.29 the guardian check's command runs alike under " + shells.join(", ") + " (no shell syntax but its arguments) (bad: " + js(badSh) + ")");
+  }
+
+  // 1.30.2 (review 11): dev-guardian 3.4.0's keys through finish --run — a pass with an accepted per-file timeout prints how many files
+  // were not analysed, the accepted line once (not once per scan step) and the notes, warns (▲, never ✗), and the merge summary counts
+  // the notes; nothing of the report's own lines is stored. A Semgrep timeout's hint is the scan.yml remedy; the tracked .guardian/
+  // output gets dev-guardian's remedy, once.
+  {
+    const x = project("dg-fin-340", "en");
+    S.initProject(x.p, [], undefined, { guardian: true });
+    const G = MSG("en").guardian;
+    const ACC1 = G.accepted(1, 0, 0);
+    const rA = await finishRun(x.p, x.slug, env(0, { FAKE_V34: "accepted" }), ["--include-body"]);
+    const st = stateOf(x).finishChecks.guardian;
+    const rT = await finishRun(x.p, x.slug, env(2, { FAKE_V34: "timeout" }));
+    const rG = await finishRun(x.p, x.slug, env(2, { FAKE_V34: "gout" }));
+    const lines = rA.out.split("\n");
+    const goutRemedy = G.gap.remedy("semgrep", "Stop tracking the named files (`git rm --cached <file>`) and move any code they hold out of .guardian/");
+    all("1.30.2 review 11: finish --run with dev-guardian 3.4.0's keys — an accepted timeout: the pass says '1 file(s) not analysed (accepted in .guardian/scan.yml)', prints the accepted line once and the 2 distinct notes, warns (never blocks), the merge summary counts the notes; the stored verdict keeps the counts only; a Semgrep timeout → the scan.yml remedy; the tracked .guardian/ output → dev-guardian's remedy once (got " +
+      js([lines.slice(0, 6), lines.filter((l) => /▲|✗|^- guardian/.test(l)), st && st.guardian, rT.out.split("\n").filter((l) => /✗/.test(l)), rG.out.split("\n").filter((l) => /✗/.test(l))]) + ")", {
+      head: lines.some((l) => l.startsWith("  dev-guardian: pass — no new finding at or above high (dev-guardian from DEV_GUARDIAN_CLI=") && l.endsWith("dev-guardian.mjs) · " + ACC1)),
+      lines: lines.filter((l) => l.startsWith("    " + G.acceptedLine(""))).length === 1 && lines.includes("    " + G.acceptedLine("security_scan_full: semgrep timed out on src/big.js — accepted (.guardian/scan.yml semgrep.accept_timeouts)")) &&
+        lines.filter((l) => l.startsWith("    " + G.noteLine(""))).length === 2 && lines.includes("    " + G.noteLine("baseline: 1 entry could not be read and is no longer suppressed")),
+      warned: lines.includes("  ▲ " + G.acceptedWarn(ACC1)) && !/✗ the project check 'guardian'/.test(rA.out),
+      summary: lines.some((l) => l.startsWith("- guardian: `" + CMD + "` → exit 0 · dev-guardian: pass") && l.includes(" · " + ACC1) && l.endsWith(" · " + G.notes(2))),
+      stored: !!st && st.exitCode === 0 && js(st.guardian.accepted) === js({ timeout: 1, parse: 0, other: 0 }) && st.guardian.notes === 2 && !("acceptedLines" in st.guardian) && !("noteLines" in st.guardian),
+      timeout: rT.out.includes(G.gap.timeout("semgrep")) && !/guardianignore/.test(rT.out),
+      gout: rG.out.split(goutRemedy).length === 2,
+    });
   }
 
   // 1.30 (review 8): finish --run verifies the launcher BEFORE it runs anything — any other file (a stub printing a pass) refuses the

@@ -2922,7 +2922,7 @@ const msg = {
       // `baseline update`; + initBaseline (no .guardian/baseline.json yet) and initIgnore (the .gitignore lines the project lacks)
       on: (cmd) => `dev-guardian's gate is the project check 'guardian' (${cmd} — .specs/guardian.cjs runs the installed dev-guardian). It is project-wide: meta.checks and the launcher are committed, so every clone's finish runs it, and every machine that finishes a feature needs dev-guardian and its scanners (Semgrep, Gitleaks, Trivy). finish --run runs it; a new finding at or above high blocks the finish until it is fixed — to accept one reviewed finding the user suppresses it inline with a reason, never with \`baseline update\` (it accepts every current finding).`,
       initBaseline: "No baseline yet (.guardian/baseline.json) — without one every existing finding counts as new. Record it now, before a feature adds code (the user's step): node .specs/guardian.cjs baseline update --project . — then commit .guardian/baseline.json.",
-      initIgnore: (lines) => `dev-spec writes only under .specs/ — add to the project's .gitignore: ${lines.join(" · ")} (dev-guardian's reports stay out of git, its baseline and budgets in).`,
+      initIgnore: (lines) => `dev-spec writes only under .specs/ — add to the project's .gitignore: ${lines.join(" · ")} (dev-guardian's reports stay out of git; the files a team shares — its baseline, budgets, hook settings and scan.yml — stay in).`,
       off: "The project check 'guardian' is off (meta.checks.guardian and .specs/guardian.cjs removed).",
       badValue: (v) => `--guardian expects on or off (got '${v}') — a bare --guardian is on`,
       pass: (failOn, n) => `dev-guardian: pass — no new finding at or above ${failOn}` + (n ? ` (${n} new below it)` : ""),
@@ -2936,6 +2936,14 @@ const msg = {
       // the head line's tails (1.30): the report says there is no baseline · the launcher ran a DEV_GUARDIAN_CLI
       noBaseline: " — no baseline: every existing finding counts as new",
       override: (p) => ` (dev-guardian from DEV_GUARDIAN_CLI=${p})`,
+      // what never gates (1.30.2): the gaps the project accepted (accepted_gaps, counted by file — the head line, and a finish warning
+      // on a pass) and dev-guardian's coverage notes (counted in the merge summary); finish --run prints their lines as dev-guardian wrote them
+      accepted: (t, p, o) => [t ? `${t} file(s) not analysed (accepted in .guardian/scan.yml)` : "", p ? `${p} file(s) only partly parsed (accepted with --accept-partial-parse)` : "",
+        o ? `${o} other accepted gap(s)` : ""].filter(Boolean).join(" · "),
+      acceptedWarn: (what) => `dev-guardian's gate passed with ${what} — review a change to those files by hand: a finding where no scanner looked passes the gate.`,
+      acceptedLine: (line) => `accepted (not gating): ${line}`,
+      notes: (n) => `${n} coverage note(s) (not gating)`,
+      noteLine: (line) => `note (not gating): ${line}`,
       // dev-guardian older than 3.2.1, a report with no tool_version (≤ 3.2.1), a package it could not load (3.2.0 from a plugin install)
       update: (v) => `update dev-guardian (Claude Code: /plugin) — ${v ? "this run used " + v + ", the gate needs 3.2.1 or later" : "this run named no version (3.3.0 and later do); the gate needs 3.2.1 or later"}`,
       updateHint: (slug) => `Update the dev-guardian plugin (3.2.1 or later — Claude Code: /plugin), then run the check again: ${DEV_SPEC} finish ${slug} --run.`,
@@ -2951,7 +2959,8 @@ const msg = {
         missingTool: (tools) => `Install ${tools} (dev-guardian's /guardian-init installs its scanners).`,
         noLockfile: (tools) => `${tools} found no lockfile — commit one (package-lock.json, yarn.lock, poetry.lock…) so the dependencies can be read.`,
         partialParse: (tools) => `${tools} parsed some files only in part — fix them, or the user accepts that file by file (dev-guardian's --accept-partial-parse <path> on the check's command).`,
-        timeout: (tools) => `${tools} timed out on some files — run the check again; if it persists, leave generated or vendored files out of the scan (.guardianignore).`,
+        // Semgrep's per-file timeout (1.30.2): dev-guardian's own remedy — .guardian/scan.yml, reviewed and committed
+        timeout: (tools) => `${tools} timed out on some files — raise semgrep.timeout in .guardian/scan.yml, or, once the user has reviewed a file, list it under semgrep.accept_timeouts there (the gate then passes without analysing it); commit .guardian/scan.yml.`,
         pathTooLong: "A path is too long for this system — enable long paths (Windows) or shorten it.",
         remedy: (tool, r) => `${tool}: ${r}`,
         other: (tool) => `${tool} did not run in full — dev-guardian's report says why.`,
