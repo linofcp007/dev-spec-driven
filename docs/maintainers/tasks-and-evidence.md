@@ -256,8 +256,9 @@ Engine: the `B5` block of `engine/evidence.js`.
     blocking?, own?, top? (≤ 5: {severity, rule, file, line, own} — the feature's `_Implements:_` files (`baselineFiles`) first,
     then severity, then the report's order), gaps? (≤ 3, each whole up to `GUARDIAN_LINE_MAX` 1000 characters, then cut at its
     end with "…" — `wholeLine`; review 12 R2: at 200 the "changed since BASE" at a line's end was lost), gapDetails? (the gating
-    `coverage_gap_details`, ≤ 5: {tool, kind, remedy?, changed? — a `file_timeout` whose detail or reason says the file is
-    listed in accept_timeouts but changed since: `RE_ACCEPT_CHANGED`}), accepted? (`accepted_gaps` — 1.30.2: {timeout, parse,
+    `coverage_gap_details`, ≤ 5: {tool, kind, remedy?, changed? — a timeout on a file accept_timeouts lists that changed since
+    (`acceptChanged`): dev-guardian 3.4.0's `cause: "accepted_file_changed"`; a report without `cause`, a `file_timeout` whose
+    detail or reason says so — `RE_ACCEPT_CHANGED`; a `cause` of another value wins over the wording}), accepted? (`accepted_gaps` — 1.30.2: {timeout, parse,
     other}: distinct files a per-file timeout accepted in `.guardian/scan.yml` left unanalysed · files a
     `--accept-partial-parse` left partly parsed · other accepted gaps. Each line is read from its `accepted_gap_details`
     entry at the same index (dev-guardian 3.4.0: `{tool, kind, file, reason}`, one per line, in order) when that entry is a
@@ -302,9 +303,9 @@ Engine: the `B5` block of `engine/evidence.js`.
     its gaps' kinds — `incompleteHint(g)`: install only a `missing_tool`, a lockfile for `no_lockfile`, a Semgrep `file_timeout`
     → `gap.timeout` (dev-guardian's own remedy, localized: a larger `semgrep.timeout`, or the reviewed file under
     `semgrep.accept_timeouts`, in the committed `.guardian/scan.yml` — whose settings are Semgrep's); a `changed` one (listed,
-    changed since — never "list it there") → dev-guardian's own remedy, unless that remedy says to list the file
-    (`RE_LIST_REMEDY`) → `gap.timeoutChanged` (review the change by hand, or raise semgrep.timeout); a distinct kind
-    dev-guardian may give that case reads as `other`; …, dev-guardian's
+    changed since — never "list it there") → `gap.timeoutChanged` (review the change by hand, or raise semgrep.timeout) +
+    dev-guardian's own remedy, unless that remedy says to list the file (`RE_LIST_REMEDY`); a distinct kind dev-guardian might
+    give that case without the cause reads as `other`; …, dev-guardian's
     `remedy` for the rest (another scanner's timeout, `taint_timeout`, `scanner_failed`, `skipped`, `other`), the generic
     `incompleteHint` without details · `updateHint` · `configHint`); a guardian check still
     needing a run adds `guardian.mcpRun` (Claude Code: `finish <f> --run` with the Bash tool's 600000 timeout or in the
@@ -684,7 +685,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   appended a vulnerability to an accepted file passed with the generic warning only: the feature's own accepted files are named
   (`acceptedOwn`), a warning rather than a blocker. R2 — gap lines were cut at 200 characters, losing dev-guardian's "changed since
   BASE", and the timeout hint then said to list a file that was listed: lines kept whole to 1000, a listed file that changed gets
-  dev-guardian's own remedy or `timeoutChanged`. (These notes first said "3.4.1" for dev-guardian's new keys; it ships them as 3.4.0.)
+  `timeoutChanged` + dev-guardian's own remedy — read from its `cause: "accepted_file_changed"` once dev-guardian added that marker
+  (with or without a ref; the file then in no accepted gap), the wording only for a report without it. (These notes first said
+  "3.4.1" for dev-guardian's new keys; it ships them as 3.4.0.)
 
 ### Task dependencies and execution waves
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks

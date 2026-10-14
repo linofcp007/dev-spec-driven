@@ -447,8 +447,18 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
     const ownPt = await fin(ptX, 0, report(0, v34({ accepted_gaps: step2(LOGIN), accepted_gap_details: [ad("file_timeout", "src/login.js"), ad("file_timeout", "src/login.js")] })));
     const OWN1 = G0.acceptedOwn("src/login.js", "file_timeout");
     // review 12 R2: a gap line kept whole (dev-guardian's "… but changed since BASE …" sat past the 200th character), cut only at its end;
-    // a timeout on a file accept_timeouts lists that changed since: never "list it there" — dev-guardian's own remedy when it has one,
-    // else the localized timeoutChanged; a distinct kind dev-guardian may give it reads as other (its remedy)
+    // a timeout on a file accept_timeouts lists that changed since: never "list it there" — the localized timeoutChanged + dev-guardian's
+    // own remedy (unless that remedy is the "list it there" one). Marked by dev-guardian 3.4.0's `cause: "accepted_file_changed"` (with
+    // a ref, and without one — BASE: "the last commit of .guardian/scan.yml (<hex>)"); a report without `cause`: the wording (detail or
+    // reason); a cause of another value wins over the wording; a distinct kind without the cause reads as other (its remedy)
+    const FINAL_R = "The file is listed in .guardian/scan.yml semgrep.accept_timeouts, but it changed since that acceptance was reviewed (…): review the change as if no SAST ran on it, then raise semgrep.timeout … — or, after review, commit .guardian/scan.yml again … to accept the file as it is now.";
+    const FINAL = { tool: "semgrep", kind: "file_timeout", detail: "security_scan_full: semgrep ran with reduced coverage (partial) — not accepted: Timeout on src/huge.js, listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE: …",
+      remedy: FINAL_R, gating: true, cause: "accepted_file_changed" };
+    const finalRef = await fin(x, 2, report(2, v34({ coverage_gaps: [FINAL.detail], coverage_gap_details: [FINAL] })));
+    const NOREF = { ...FINAL, detail: FINAL.detail.replace("since BASE", "since the last commit of .guardian/scan.yml (0123456789ab)") };
+    const finalNoRef = await fin(x, 2, report(2, v34({ coverage_gaps: [NOREF.detail], coverage_gap_details: [NOREF] })));
+    const causeOnly = await fin(x, 2, report(2, v34({ coverage_gaps: ["semgrep: timeout on src/huge.js"], coverage_gap_details: [{ ...FINAL, detail: "semgrep: timeout on src/huge.js" }] })));
+    const otherCause = await fin(x, 2, report(2, v34({ coverage_gaps: [FINAL.detail], coverage_gap_details: [{ ...FINAL, cause: "something_else", remedy: TR }] })));
     const CHG = step2("security_scan_full: semgrep ran with reduced coverage (partial: 1 file(s) only partly parsed — findings in the unparsed spans may be missing (Timeout: src/big.js)) — not accepted: Timeout on src/big.js, listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE: an acceptance covers a file only as it was at the ref — review the change as if no SAST ran on it, or raise semgrep.timeout");
     const chg = await fin(x, 2, report(2, v34({ coverage_gaps: CHG, coverage_gap_details: CHG.map((l) => det("semgrep", "file_timeout", l, TR, true)) })));
     const LONG = "security_scan_full: semgrep " + "x".repeat(2500) + " the end";
@@ -457,9 +467,10 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
     const chgReason = await fin(x, 2, report(2, v34({ coverage_gaps: ["semgrep: timeout on src/big.js"], coverage_gap_details: [{ ...det("semgrep", "file_timeout", "semgrep: timeout on src/big.js", OWN_R, true),
       reason: "Timeout — listed in .guardian/scan.yml semgrep.accept_timeouts but changed since .guardian/scan.yml last changed" }] })));
     const chgKind = await fin(x, 2, report(2, v34({ coverage_gaps: ["semgrep: timeout on src/big.js"], coverage_gap_details: [det("semgrep", "accepted_file_changed", "semgrep: timeout on src/big.js", OWN_R, true)] })));
-    all("1.30.2 review 12: R1 — the feature's own files among the accepted ones named in the head line and a pass's finish warning (never a blocker), from accepted_gap_details or the lines, a file once; none without the feature; R2 — a gap line kept whole up to 1000 characters, then cut at its end; a timeout on a listed file that changed since gets dev-guardian's own remedy, else timeoutChanged — never the 'list it there' hint (got " +
+    all("1.30.2 review 12: R1 — the feature's own files among the accepted ones named in the head line and a pass's finish warning (never a blocker), from accepted_gap_details or the lines, a file once; none without the feature; R2 — a gap line kept whole up to 1000 characters, then cut at its end; a timeout on a listed file that changed since — dev-guardian's cause accepted_file_changed (with or without a ref), else its wording — gets timeoutChanged + dev-guardian's own remedy, never the 'list it there' hint; another cause wins over the wording (got " +
       js({ ownD: [ownD.suiteChecks[0].guardian, ownD.warnings, ownD.mergeSummary.split("\n").filter((l) => /^- guardian/.test(l))], ownL: ownL.suiteChecks[0].guardian, ownB: [suiteBlocker(ownB).slice(0, 300), ownB.warnings], ownPt: ownPt.warnings,
-        chg: [chg.suiteChecks[0].guardian.gapDetails, suiteBlocker(chg)], chgReason: suiteBlocker(chgReason), chgKind: suiteBlocker(chgKind) }) + ")", {
+        chg: [chg.suiteChecks[0].guardian.gapDetails, suiteBlocker(chg)], chgReason: suiteBlocker(chgReason), chgKind: suiteBlocker(chgKind),
+        finalRef: [finalRef.suiteChecks[0].guardian.gapDetails, suiteBlocker(finalRef)], finalNoRef: suiteBlocker(finalNoRef), causeOnly: suiteBlocker(causeOnly), otherCause: suiteBlocker(otherCause) }) + ")", {
       ownDetails: ownD.suiteChecks[0].status === "pass" && js(ownD.suiteChecks[0].guardian.acceptedOwn) === js({ count: 1, files: [{ file: "src/login.js", kind: "file_timeout" }] }) &&
         ownD.mergeSummary.includes("→ exit 0 · " + PASS + " · " + ACC1 + " · " + OWN1) && OWN1 === "src/login.js is this feature's and was not analysed (accepted timeout)" &&
         (ownD.warnings || []).includes("src/login.js is this feature's and was not analysed (accepted timeout) — review it by hand.") &&
@@ -476,8 +487,14 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
         long.gaps[0].length === 1000 && long.gaps[0].endsWith("…") && long.gaps[0].startsWith("security_scan_full: semgrep xxx"),
       changedHint: chg.suiteChecks[0].guardian.gapDetails.every((d) => d.changed === true) && suiteBlocker(chg).includes(H.timeoutChanged("semgrep") + " " + H.tail) &&
         !suiteBlocker(chg).includes(H.timeout("semgrep")) && !suiteBlocker(chg).includes(H.remedy("semgrep", TR)) && !timeout.suiteChecks[0].guardian.gapDetails.some((d) => d.changed),
-      theirRemedy: suiteBlocker(chgReason).includes(H.remedy("semgrep", OWN_R)) && !suiteBlocker(chgReason).includes(H.timeoutChanged("semgrep")) && !suiteBlocker(chgReason).includes(H.timeout("semgrep")) &&
-        chgKind.suiteChecks[0].guardian.gapDetails[0].kind === "other" && suiteBlocker(chgKind).includes(H.remedy("semgrep", OWN_R)),
+      wordingFallback: suiteBlocker(chgReason).includes(H.timeoutChanged("semgrep") + " " + H.remedy("semgrep", OWN_R) + " " + H.tail) && !suiteBlocker(chgReason).includes(H.timeout("semgrep")) &&
+        chgKind.suiteChecks[0].guardian.gapDetails[0].kind === "other" && suiteBlocker(chgKind).includes(H.remedy("semgrep", OWN_R)) && !suiteBlocker(chgKind).includes(H.timeoutChanged("semgrep")),
+      cause: js(finalRef.suiteChecks[0].guardian.gapDetails) === js([{ tool: "semgrep", kind: "file_timeout", remedy: FINAL_R, changed: true }]) &&
+        suiteBlocker(finalRef).endsWith(H.timeoutChanged("semgrep") + " " + H.remedy("semgrep", FINAL_R) + " " + H.tail) && !suiteBlocker(finalRef).includes(H.timeout("semgrep")) &&
+        suiteBlocker(finalRef).includes("listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE: …") &&
+        suiteBlocker(finalNoRef).includes("but changed since the last commit of .guardian/scan.yml (0123456789ab)") && suiteBlocker(finalNoRef).endsWith(H.timeoutChanged("semgrep") + " " + H.remedy("semgrep", FINAL_R) + " " + H.tail) &&
+        causeOnly.suiteChecks[0].guardian.gapDetails[0].changed === true && suiteBlocker(causeOnly).includes(H.timeoutChanged("semgrep") + " " + H.remedy("semgrep", FINAL_R)),
+      causeWins: !otherCause.suiteChecks[0].guardian.gapDetails[0].changed && suiteBlocker(otherCause).includes(H.timeout("semgrep")) && !suiteBlocker(otherCause).includes(H.timeoutChanged("semgrep")),
     });
   }
 

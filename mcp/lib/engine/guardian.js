@@ -376,10 +376,15 @@ function acceptedGaps(lines, details) {
   }
   return { timeout, parse, other };
 }
-// A gating file_timeout on a file accept_timeouts lists but that changed since it was accepted (1.30.2, review 12 R2 — dev-guardian
-// 3.4.0 under a ref: "… listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE …", "… could not be told …"; a
-// reason of the same sense when dev-guardian adds one). Its fix is not "list it there" — it is listed.
+// A gating file_timeout on a file accept_timeouts lists but that changed since it was accepted (1.30.2, review 12 R2). dev-guardian
+// 3.4.0 marks it: `cause: "accepted_file_changed"` on its coverage_gap_details entry (BASE: the ref, or without one "the last commit
+// of .guardian/scan.yml (<hex>)"; exit 2, the file in no accepted_gaps). A report without `cause` (the pre-release builds): the
+// wording — "… listed in .guardian/scan.yml semgrep.accept_timeouts, but changed since BASE …", "… could not be told …", in its
+// detail or a reason. Its fix is not "list it there" — it is listed.
+const CAUSE_ACCEPT_CHANGED = "accepted_file_changed";
 const RE_ACCEPT_CHANGED = /accept_timeouts,? but\b|\bchanged since\b|could not be told/i;
+const acceptChanged = (d) => (typeof d.cause === "string" && d.cause.trim() ? d.cause === CAUSE_ACCEPT_CHANGED
+  : d.kind === "file_timeout" && [d.detail, d.reason].some((t) => typeof t === "string" && RE_ACCEPT_CHANGED.test(t)));
 // dev-guardian's remedy that says to list the file under accept_timeouts (its file_timeout remedy) — wrong for a file already listed
 const RE_LIST_REMEDY = /\blist\b[^;]{0,80}?accept_timeouts/i;
 // A gap line kept whole up to this length — cut at its end with "…", never in the middle (review 12 R2: 200 characters lost the
@@ -395,7 +400,7 @@ const wholeLine = (v) => {
 // report's new_findings_count — --compact —, else its new_findings), own? (blocking findings in the feature's _Implements:_ files),
 // top? (≤ GUARDIAN_TOP: {severity, rule, file, line, own} — own first, then by severity, then the report's order), gaps? (coverage
 // gaps, ≤ 3, each whole up to GUARDIAN_LINE_MAX), gapDetails? (the gating coverage_gap_details, ≤ 5: {tool, kind, remedy?, changed?
-// — a file_timeout on a file accept_timeouts lists that changed since: RE_ACCEPT_CHANGED}), accepted? (the accepted_gaps: {timeout —
+// — a timeout on a file accept_timeouts lists that changed since: its cause, else its wording — acceptChanged}), accepted? (the accepted_gaps: {timeout —
 // files not analysed, accepted in .guardian/scan.yml —, parse — files only partly parsed, accepted with --accept-partial-parse —,
 // other — gaps of another shape}: accepted_gap_details per line when present, else the line), acceptedOwn? (those files that are the
 // feature's own _Implements:_ files: {count, files ≤ GUARDIAN_SAID: [{file, kind}]}), notes? (the coverage_notes, each once),
@@ -450,7 +455,7 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output) {
   if (Array.isArray(j.coverage_gap_details)) {
     const det = j.coverage_gap_details.filter((d) => isRecord(d) && d.gating !== false).slice(0, 5).map((d) => {
       const remedy = typeof d.remedy === "string" ? wholeLine(d.remedy) : "";
-      const changed = d.kind === "file_timeout" && [d.detail, d.reason].some((t) => typeof t === "string" && RE_ACCEPT_CHANGED.test(t));
+      const changed = acceptChanged(d);
       return { tool: cleanLine(d.tool, 40) || "?", kind: GUARDIAN_GAP_KINDS.includes(d.kind) ? d.kind : "other", ...(remedy ? { remedy } : {}), ...(changed ? { changed: true } : {}) };
     });
     if (det.length) g.gapDetails = det;
@@ -597,26 +602,24 @@ function guardianText(g, lng, summary) {
 // Semgrep file_timeout (1.30.2, review 11 — the hint said "run again / .guardianignore"): dev-guardian's remedy, localized — a larger
 // semgrep.timeout, or the file accepted under semgrep.accept_timeouts after review, in the committed .guardian/scan.yml (the settings
 // it holds are Semgrep's); another scanner's timeout: dev-guardian's own remedy. A timeout on a file accept_timeouts lists that changed
-// since (review 12 R2 — `changed`): dev-guardian's own remedy, unless it says to list the file there (it is listed) — then
-// gap.timeoutChanged: review the change by hand, or raise semgrep.timeout. A distinct kind dev-guardian gives it reads as "other": its
-// remedy.
+// since (review 12 R2 — `changed`, acceptChanged): gap.timeoutChanged (review the change by hand, or raise semgrep.timeout) + its
+// remedy — dev-guardian's own, unless that remedy says to list the file there (it is listed). A distinct kind dev-guardian may give it
+// without the cause reads as "other": its remedy.
 const isSemgrep = (d) => /^semgrep(?::|$)/i.test(d.tool);
 function incompleteHint(g, G) {
   const det = Array.isArray(g.gapDetails) ? g.gapDetails : [];
   if (!det.length) return G.incompleteHint;
   const H = G.gap;
-  const tools = (kinds, only) => [...new Set(det.filter((d) => kinds.includes(d.kind) && (!only || only(d))).map((d) => d.tool))].join(", ");
-  const plain = (d) => isSemgrep(d) && d.changed !== true; // a Semgrep timeout on a file not (or no longer) accepted
-  const listedChanged = (d) => d.changed === true && (!d.remedy || RE_LIST_REMEDY.test(d.remedy)); // listed, changed — no remedy of its own
+  const changed = (d) => d.changed === true;
+  const tools = (kinds, only) => [...new Set(det.filter((d) => kinds.includes(d.kind) && !changed(d) && (!only || only(d))).map((d) => d.tool))].join(", ");
   const out = [];
   if (tools(["missing_tool"])) out.push(H.missingTool(tools(["missing_tool"])));
   if (tools(["no_lockfile"])) out.push(H.noLockfile(tools(["no_lockfile"])));
   if (tools(["partial_parse"])) out.push(H.partialParse(tools(["partial_parse"])));
-  if (tools(["file_timeout"], plain)) out.push(H.timeout(tools(["file_timeout"], plain)));
-  if (tools(["file_timeout"], listedChanged)) out.push(H.timeoutChanged(tools(["file_timeout"], listedChanged)));
+  if (tools(["file_timeout"], isSemgrep)) out.push(H.timeout(tools(["file_timeout"], isSemgrep)));
+  for (const d of det.filter(changed)) out.push(H.timeoutChanged(d.tool) + (d.remedy && !RE_LIST_REMEDY.test(d.remedy) ? " " + H.remedy(d.tool, d.remedy) : ""));
   if (tools(["path_too_long"])) out.push(H.pathTooLong);
-  const theirs = (x) => ["scanner_failed", "skipped", "other", "taint_timeout"].includes(x.kind) ||
-    (x.kind === "file_timeout" && !plain(x) && !listedChanged(x));
+  const theirs = (x) => !changed(x) && (["scanner_failed", "skipped", "other", "taint_timeout"].includes(x.kind) || (x.kind === "file_timeout" && !isSemgrep(x)));
   for (const d of det.filter(theirs)) out.push(d.remedy ? H.remedy(d.tool, d.remedy) : H.other(d.tool));
   return [...new Set(out)].join(" ") + " " + H.tail;
 }
