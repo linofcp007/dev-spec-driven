@@ -75,7 +75,7 @@ a cold read does without.
    `.specs/steering/` (Grep the term): a term defined there is not a finding — at most a Minor "link it" when the
    artifact leans on it. Only now read beyond the artifact, and only to settle a gap.
 
-Not this mode's job: the tracks, the trade-offs, test coverage, style.
+Not this mode's job: the tracks, the trade-offs, test coverage, style, what the tooling (`spec_doctor`) checks.
 
 ## Brief mode — the pre-flight
 
