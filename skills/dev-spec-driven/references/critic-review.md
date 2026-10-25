@@ -2,8 +2,8 @@
 
 `spec_doctor` checks an artifact's structure; the deep review checks its meaning, with reviewers that start fresh. It
 runs on `/spec-doctor <feature> --deep`, and SKILL.md → Gates has you offer it at size m / l or no size, before the
-requirements approval (a bugfix's bug.md, a design-first feature's design) — never at the classification gate, which
-it has no checklist for.
+requirements approval (a bugfix: its requirements approval, with bug.md; a design-first feature: the design's) —
+never at the classification gate, which it has no checklist for.
 Adapted from google/elephant-goldfish-model (Apache-2.0): the *elephant* — you, the session that wrote the spec and
 remembers why — drafts and resolves; the *goldfish* — subagents with no history — review. A review written by the
 context that wrote the artifact validates its own assumptions; a fresh one finds what the text leaves out.

@@ -29,8 +29,9 @@ feature `spec_drift {name}`: its changed files go to the reviewer, the baseline 
 `dev-spec-driven:spec-reviewer` in converge mode (inline without subagents): per AC implemented (file:line)? tested
 (T-ID)? → ✅ / ❌ / ⚠️, with proposed tasks (an ❌ checked by a `dev-spec-driven:spec-verifier` before it costs a task).
 A gap that needs another AC, design decision or test is no task:
-`/spec-change <feature> impact`. After a drift, an ❌ is a regression of a shipped AC: `/spec-bugfix`, not a task. Append only the tasks the user approves — `spec_append_tasks {name, tasks}` — then, on
-their yes, re-approve `tasks` with `spec_approve`.
+`/spec-change <feature> impact`. After a drift, an ❌ the change didn't intend is a regression of a shipped AC
+(`/spec-bugfix`, not a task); one it intended is a spec change. Append only the tasks the user approves —
+`spec_append_tasks {name, tasks}` — then, on their yes, re-approve `tasks` with `spec_approve`.
 
 **simplify [--subagents]** — optional, every task done, **before** `/spec-finish`: behaviour-preserving cleanups of the
 lines the branch added or changed — never a test, a contract or code the feature didn't write (a smell there → the

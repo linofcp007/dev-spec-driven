@@ -425,14 +425,14 @@ finished feature's files changed — the baseline only says THAT they changed; c
 2. **Dispatch `dev-spec-driven:spec-reviewer` in converge mode** (standard tier; most capable for a large or
    security-sensitive feature) with: the feature folder `.specs/<feature>/`, the active tracks, the
    `trace_check` result (its gaps and `code` block, pasted), the source roots to inspect and, after a drift, the
-   drifted files. The reviewer is
-   read-only and works AC by AC: implemented? (file:line) · tested? (test name / T-ID) → ✅ / ❌ / ⚠️, then
+   drifted files. The reviewer is read-only and works AC by AC: implemented? (file:line) · tested? (test name / T-ID) → ✅ / ❌ / ⚠️, then
    returns — in its reply — the missing work as **proposed tasks** shaped for `spec_append_tasks`.
 3. **Triage the proposals yourself.** A gap fixable within the approved ACs and design is a task. A gap that
    needs a different AC, design decision or test expectation is a **spec change** — back to its phase
-   (`spec_impact` after the edit), never a task. **After a drift** (a finished feature): an ❌ is code that no longer
-   delivers an AC that shipped — a regression: `/spec-bugfix` (root cause, red test), never a task appended to the
-   finished feature; every AC ✅ → the change is harmless: finish again for a fresh baseline.
+   (`spec_impact` after the edit), never a task. **After a drift** (a finished feature), ask what the change meant: an ❌
+   it didn't intend is a regression of an AC that shipped — `/spec-bugfix` (root cause, red test), never a task
+   appended to the finished feature; one it intended is a spec change (`/spec-change <feature> impact`, or a new
+   feature with `_Supersedes:_`); every AC ✅ → the change is harmless: finish again for a fresh baseline.
 4. **Human approves** the list (edited as needed) → `spec_append_tasks {name, tasks: [{text, requirements,
    implements, verify, makesGreen, expectFail, size, story, parallel}]}`: appended under "Phase: Convergence",
    numbered after the highest task, existing tasks untouched, an unknown AC ID (or a `makesGreen` T-ID test-plan.md

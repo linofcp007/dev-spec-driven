@@ -15,8 +15,8 @@ before a gate and before each subagent task, and asks the author to triage what 
   lists the terms never defined, the steps taken for granted, the vague mechanisms ("the system handles it") and the
   sentences two engineers would build differently. It checks the glossary and the steering before it flags a term.
 - **The deep review, by size** (`/spec-doctor --deep`, and offered once per feature before the requirements approval at
-  size m / l or no size — never at the classification gate). The reviewers depend on the size: at s the gate critic alone; at m or no size, the critic and a cold read; at l,
-  two independent critics and a cold read. The cold read is only for `requirements.md`, `design.md` and `bug.md`. They are
+  size m / l or no size — never at the classification gate). The reviewers depend on the size: at s the gate critic
+  alone; at m or no size, the critic and a cold read; at l, two independent critics and a cold read. The cold read is only for `requirements.md`, `design.md` and `bug.md`. They are
   dispatched in one message, with none of the author's reasoning.
   - **The author triages every Blocking and Important finding.** Each one gets a call: **Fix** (with the exact edit),
     **Contest** (with the evidence; without it, it is a fix) or **Ask** (only the user can settle it). The user then answers
@@ -47,7 +47,8 @@ before a gate and before each subagent task, and asks the author to triage what 
 - **A drift points to the converge pass.** next_action's `drift` step, `/spec-report drift` and the upgrade audit said
   "decide: spec wrong, code wrong or harmless", from a baseline that only says a file changed. They now name
   `/spec-review <feature> converge`, which reads the code AC by AC starting from the drifted files. An AC it finds broken
-  is a regression of a shipped feature: `/spec-bugfix`, not a task appended to it. EN / PT / ES.
+  by a change nobody intended is a regression: `/spec-bugfix`, not a task appended to the finished feature; an intended
+  one is a spec change. EN / PT / ES.
 
 ### Tests
 - `node mcp/test.js` 2240 assertions, `node cli/test-cli.js` 654 (was 2238 / 654).

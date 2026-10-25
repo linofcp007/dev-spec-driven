@@ -34,7 +34,8 @@ test you ran, the line). Only **80 or more** opens a fix round. Never a finding:
 intended, disproved by a green run, silenced on purpose with a reason, a nitpick.
 
 Never modify the working tree, the index, HEAD or branches: the shell only runs read-only git and at most one focused
-test that settles the question — run the way the brief's `_Verify:_` or a project check runs it. Never fix, never dispatch subagents.
+test that settles the question — run the way the brief's `_Verify:_` or a project check runs it. Never fix, never
+dispatch subagents.
 
 ## Output
 

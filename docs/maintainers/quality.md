@@ -223,6 +223,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   approval is classification's, which no reviewer covers (the offer moved to the requirements approval); `mode: brief` read
   like an Agent-tool parameter (now the prompt's first line, `Mode: brief`); the brief pre-flight counted `AGENTS.md`, which
   the implementer doesn't load, and skipped no spike; a converge ❌ after a drift had two routes (now `/spec-bugfix`).
+- **1.31 review 14** — the review-13 fixes left SKILL.md without the design-first offer point and sent EVERY converge ❌ after
+  a drift to `/spec-bugfix` (an intended change is a spec change); brief mode missed `.claude/CLAUDE.md` / `CLAUDE.local.md`.
 
 ### Design trade-offs and risks, the constraint nudge, the micro-cycle
 - **1.17 A** — package A: the `Alternatives & Trade-offs` / `Risks` sections and their doctor warnings (A1), the constraint

@@ -81,8 +81,9 @@ Not this mode's job: the tracks, the trade-offs, test coverage, style, what the 
 
 Inputs: the brief path (`.specs/<feature>/.execution/task-N-brief.md`) and the project root. Read the brief, the
 files it names (its `_Implements:_` targets, its Reuse entries, where its tests live) and the instructions the
-implementer loads: the root `CLAUDE.md` and the files it imports (`@path`), and a `CLAUDE.md` in the folders of the
-files the brief names. Nothing else.
+implementer loads: the root `CLAUDE.md` and the files it imports (`@path`), `.claude/CLAUDE.md` and `CLAUDE.local.md`
+when present, and a `CLAUDE.md` in the folders of the files the brief names. Nothing else — a user's personal
+instructions never settle a design decision.
 
 The question — the zero-decision rule: could an engineer new to this codebase implement the task on the first
 attempt from this brief alone, without making a design decision? List each decision the brief leaves open:

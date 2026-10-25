@@ -163,8 +163,8 @@ Present (1) what was produced · (2) key decisions + rationale · (3) tracks / s
 
 At size m / l (or no size), offer the deep review once per feature, before the requirements approval (a design-first
 feature: the design's) — never at the classification gate, which it has no checklist for; the user's answer holds for
-the later gates. The critic, a cold read of the artifact and, at l, a second critic, each a fresh subagent; you triage
-what they find and the user decides (`references/critic-review.md`). It never replaces the user's yes and never blocks
+the later gates. Its reviewers — the critic, a cold read of the artifact and, at l, a second critic — are each a fresh
+subagent; you triage what they find and the user decides (`references/critic-review.md`). It never replaces the user's yes and never blocks
 it.
 
 `spec_next_action` gives ONE next step, in this order: re-review what changed since an approval → the first phase not
