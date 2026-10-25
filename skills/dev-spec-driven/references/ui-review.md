@@ -60,27 +60,29 @@ both of them report counts at once, and one that only one of them reports is con
 
 - **INVALID** (the two images show different states) → capture both again in the same state; after two failed
   recaptures, ask the user.
-- **Blocker** → the task's fix loop (`references/subagent-execution.md` → 7): resume the implementer with the
-  differences verbatim and the pair paths — it may open the images. The rounds count toward the task's 5. An
-  implementer that disputes a difference: recapture, and a fresh reviewer decides.
-- **A Major only one reviewer reported** (at size m or no size, every Major; at size l, any difference only one of the
-  two saw) → confirm it first: a fresh reviewer on that pair alone. Confirmed → the fix loop; not confirmed → ledger it
-  as a minor. One look at pictures never costs a round on an arguable difference.
+- **Blocker** (at size l: one both reviewers report) → the task's fix loop (`references/subagent-execution.md` → 7):
+  resume the implementer with the differences verbatim and the pair paths — it may open the images. The rounds count
+  toward the task's 5. An implementer that disputes a difference: recapture, and a fresh reviewer decides.
+- **A Major at size m or no size, and at size l any difference only one of the two reported** → confirm it first: a
+  fresh reviewer on that pair alone. Confirmed → the fix loop; not confirmed → ledger it as a minor. One look at
+  pictures never costs a round on an arguable difference.
 - **Minor** → ledger `Task N: ui minor (deferred): <one line>`; the final review triages them.
 - **Match**, nothing open → the task goes on to its code review.
 - Keep the reviewer's reply in `.specs/<feature>/.execution/task-N-ui-review.md` (the evidence the checkpoint shows).
 
-**The reference stays as approved.** Before every capture and before the tick, run `git diff --stat BASE` (the task's
-BASE: what was committed since, and what isn't yet): a file `design.md → [UI] UI States` names in it is refused —
-revert it and send the round back. A reference that looks wrong is the user's call (§1), never the implementer's. A
-reference outside the repository can't be checked this way: say so at the checkpoint.
+**The reference stays as approved.** Before every capture and before the tick, run `git diff --stat BASE` — BASE as
+recorded for the task (inline: the commit the task started from); the diff shows what was committed since and what
+isn't committed yet. A reference file (one `design.md → [UI] UI States` names) in it is refused — revert it and send
+the round back (inline: undo it yourself). A reference that looks wrong is the user's call (§1), never the
+implementer's. A reference outside the repository or not tracked by git can't be checked this way: say so at the
+checkpoint.
 
 ## 5. After a fix — run it again
 
 A later fix round of this task — a visual one or a code-review one — whose diff changes what a reviewed view renders:
 capture the pairs it changed again and dispatch a fresh reviewer. The task is ticked only with no Blocker or Major
-open — after round 5, a visual finding is parked only on a fresh `spec-ui-reviewer`'s verdict, never on your own
-(you don't look at the images).
+open (one parked with a ruling after round 5 is not open); whether a visual finding is still there is a fresh
+`spec-ui-reviewer`'s verdict, never your own look (you don't open the images).
 
 ## 6. At the checkpoint
 

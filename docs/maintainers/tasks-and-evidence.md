@@ -35,9 +35,8 @@ Phase 6, opt-in.
   Twig, Handlebars, EJS, Pug —, Android `res/layout*/*.xml`; never `.ts` / `.swift` / `.kt` / `.dart`, which are as often
   logic, nor a bare folder — a glob of view files, `src/components/*.tsx`, is one); never a red `_Expect: fail_` task
   (it renders nothing yet). On true the controller runs `references/ui-review.md` after the task's `_Verify:_` is green
-  and before
-  the code review; its Blockers, and the Majors a fresh reviewer confirms, are fix rounds, and a later round that
-  changes a reviewed view runs it again.
+  and before the code review; its Blockers, and the Majors a fresh reviewer confirms, are fix rounds, and a later round
+  that changes a reviewed view runs it again.
 - **The protocol is prose; the engine never dispatches anything** (it stays cross-tool): `references/subagent-execution.md` and the
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges

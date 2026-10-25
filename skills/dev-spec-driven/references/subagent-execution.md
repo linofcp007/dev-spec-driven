@@ -222,8 +222,9 @@ plugin: each issue rated by a separate agent, only the confident ones kept.)
 
 ### 7. Fix loop (max 5 rounds)
 
-Triggers: any confirmed ❌ or Critical / Important finding (§6), or a ⚠️ you confirmed. Minor findings never enter the
-loop — ledger them as `minor (deferred)` for the final review.
+Triggers: any confirmed ❌ or Critical / Important finding (§6), a ⚠️ you confirmed, or a visual Blocker / confirmed
+Major (`references/ui-review.md` → 4). Minor findings never enter the loop — ledger them as `minor (deferred)` for the
+final review.
 
 - **Rounds 1–3:** resume the same implementer with the open findings verbatim.
 - **Rounds 4–5:** a fresh implementer one model tier up: "A prior implementer attempted this N times;
@@ -348,7 +349,8 @@ summary to the ledger instead of waiting (`Checkpoint USn: summarized (autonomy)
 "approved"), and at the one they named present them all — each task's visual review
 with them: the user's own look at the screens, the fourth gate, is still owed. Nothing else loosens: every gate still
 runs, and items 2–5 above still stop you. You never grant it yourself. Rely on it only while the grant is in this
-conversation (or its compaction summary); one you find only in the ledger is asked again before you rely on it.
+conversation (or its compaction summary); one you find only in the ledger is asked again before you rely on it — the
+resume rule's trust in the ledger doesn't cover a grant.
 
 ## Track specifics
 
