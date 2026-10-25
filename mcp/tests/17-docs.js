@@ -350,15 +350,23 @@ exports.run = async ({
       loop: () => /With `uiReview: true`, the visual review comes first/.test(subW) && /on `uiReview: true` the visual review \(`dev-spec-driven:spec-ui-reviewer`/.test(execCmd) &&
         /4\. \*\*A \+ui task that changes what renders\*\*/.test(execCmd) && /on `uiReview: true`, the visual review against the design's reference/.test(skillW) &&
         /`references\/ui-review\.md` — the visual review of a \+ui task/.test(docsRef("index.md")),
-      autonomy: () => /\*\*More autonomy, on the user's word only\.\*\*/.test(subW) && /You never grant it yourself\. It holds across a compaction/.test(subW) &&
-        /a grant in the ledger of an earlier session is asked again before you rely on it\./.test(subW) && /at the one they named present them all/.test(subW),
+      autonomy: () => /\*\*More autonomy, on the user's word only\.\*\*/.test(subW) && /You never grant it yourself\. Rely on it only while the grant is in this conversation/.test(subW) &&
+        /one you find only in the ledger is asked again before you rely on it\./.test(subW) && /at the one they named present them all/.test(subW) &&
+        /`Checkpoint USn: summarized \(autonomy\) — not yet seen by the user`, never "approved"/.test(subW) &&
+        /stop at every `\*\*Checkpoint:\*\*` \(past it only on the user's word\)/.test(skillW) && /Stop at every `\*\*Checkpoint:\*\*` \(past it only on the user's word\)/.test(execCmd),
       // review 15: the reference is the approved design's (never edited to pass), a Major / a one-reviewer difference is
       // confirmed before it costs a round, a visual round is re-checked by the visual review, the capture writes files.
       reference: () => /The reference is part of the approved design: the implementer never edits it/.test(uiRef) &&
-        /a reference file in it is refused — revert it and send the round back/.test(uiRef) &&
+        /run `git diff --stat BASE` \(the task's BASE: what was committed since, and what isn't yet\)/.test(uiRef) &&
+        /names in it is refused — revert it and send the round back/.test(uiRef) && /never an earlier `--ref\.png` copy/.test(uiRef) &&
         /\*\*Never edit the design's visual reference\*\*/.test(docsWs(docsRead("agents", "spec-implementer.md"))),
-      confirmFirst: () => /\*\*Major\*\*, and at size l a difference only one of the two reviewers reported → confirm it first/.test(uiRef) &&
-        /A round that answered the visual review is checked by that review/.test(subW),
+      confirmFirst: () => /\*\*A Major only one reviewer reported\*\* \(at size m or no size, every Major; at size l, any difference only one of the two saw\) → confirm it first/.test(uiRef) &&
+        /A round that answered the visual review is checked by that review/.test(subW) &&
+        /its Blockers, and the Majors a fresh reviewer confirms/.test(subW) && /fix its Blockers, and the Majors a fresh reviewer confirms, before the tick/.test(execCmd) &&
+        /its Blockers, and the Majors a fresh reviewer confirms, are fixed first/.test(execCmd) &&
+        /a visual one on a fresh `spec-ui-reviewer`'s verdict, never yours/.test(subW),
+      // review 16: SKILL.md runs the visual review after the implementer (the old text put it before the dispatch)
+      skillOrder: () => /with its path, then, on `uiReview: true`, the visual review against the design's reference/.test(skillW),
       captureFiles: () => /A browser tool that only shows you the screen doesn't do/.test(uiRef) && /--screenshot=<file>/.test(uiRef),
       feedbackRule: () => /a rule for every later task → fix it here, then propose it as a steering amendment/.test(docsWs(docsRead("commands", "spec-review.md"))),
       learnings: () => /is a \*\*learning\*\* — propose it as a steering amendment/.test(subW) && /\| \*\*Project rule\*\* \|/.test(docsRef("review-feedback.md")),

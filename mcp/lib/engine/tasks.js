@@ -1519,7 +1519,8 @@ function isPromptTask(block, mk, tracks) {
 }
 // A +ui task whose rendered output the visual review compares with the design's reference: it proves a [UI] criterion,
 // sits in the track's template task block, or creates / changes a view file (markup, a component, a stylesheet, a server
-// template, an Android layout). A folder or a glob names no view file: such a task is one through its [UI] criterion.
+// template, an Android layout) — a glob of them too (`src/components/*.tsx`); a bare folder names no view file: such a
+// task is one through its [UI] criterion.
 const RE_VIEW_FILE = /\.(?:tsx|jsx|vue|svelte|astro|html?|css|scss|sass|less|xib|storyboard|erb|cshtml|razor|twig|hbs|handlebars|mustache|ejs|pug)$|\.blade\.php$|(?:^|\/)res\/layout[^/]*\/[^/]+\.xml$/i;
 function uiTask(tracks, reqText, acIds, block, implementsFiles) {
   if (!tracks.includes("ui")) return false;

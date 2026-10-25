@@ -772,7 +772,14 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
     const byHeading = uiOf(uiF.slug, inUiBlock.number);
     fs.writeFileSync(path.join(uiF.dir, "tasks.md"), uiTasks);
     const uiPt = S.createFeature(pfRoot, "Ecra de encomendas", ["core", "ui"], "", undefined, "pt");
-    const ptBlock = S.taskBlocks(fs.readFileSync(path.join(uiPt.dir, "tasks.md"), "utf8")).find((b) => /Interface/.test(b.phase || ""));
+    const ptTasks = fs.readFileSync(path.join(uiPt.dir, "tasks.md"), "utf8");
+    const ptBlock = S.taskBlocks(ptTasks).find((b) => /Interface/.test(b.phase || ""));
+    // the PT heading alone (its task citing a core criterion): the localized track heading is recognized
+    const ptLine = ptTasks.split("\n").findIndex((l) => ptBlock && l.startsWith("- [ ] " + ptBlock.number + ". "));
+    const ptHeadingOnly = ptTasks.split("\n").map((l, i) => (i > ptLine && i < ptLine + 4 && /^ {2}- _Requisitos:|^ {2}- _Requirements:/.test(l) ? "  - _Requirements: US-1.AC-1_" : l)).join("\n");
+    fs.writeFileSync(path.join(uiPt.dir, "tasks.md"), ptHeadingOnly);
+    const ptByHeading = ptBlock ? uiOf(uiPt.slug, ptBlock.number) : "no pt ui block";
+    fs.writeFileSync(path.join(uiPt.dir, "tasks.md"), ptTasks);
     const files = (f, extra = []) => {
       fs.writeFileSync(path.join(plain.dir, "tasks.md"), tl("- [ ] 1. The page", "  - _Requirements: US-1.AC-1_", "  - _Implements: " + f + "_", ...extra));
       return uiOf(plain.slug, 1);
@@ -787,15 +794,16 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
     const red = uiOf(uiPlain.slug, 1);
     const got = { block: uiOf(uiF.slug, inUiBlock.number), blockW: uiOf(uiF.slug, inUiBlock.number, { write: true }), core: uiOf(uiF.slug, coreTask.number),
       viewFile, backendFile, small: uiSBlock ? uiOf(uiS.slug, uiSBlock.number) : "no ui task at s", noUi: uiOf(plain.slug, 1),
-      byHeading, pt: ptBlock ? uiOf(uiPt.slug, ptBlock.number) : "no pt ui block", viewCases, red, noUiView: files("app/views/orders/index.html.erb") };
+      byHeading, headingRewritten: headingOnly !== uiTasks, pt: ptBlock ? uiOf(uiPt.slug, ptBlock.number) : "no pt ui block", ptByHeading,
+      ptRewritten: ptHeadingOnly !== ptTasks, viewCases, red, noUiView: files("app/views/orders/index.html.erb") };
     all("1.32: spec_task_brief's uiReview is true for a +ui task (its track block / a [UI] criterion) or one naming a view file, false for a core task with no view file, at size s and without +ui — with write:true too (got " + js(got) + ")", {
       block: () => got.block === true && got.blockW === true,
       core: () => got.core === false && got.backendFile === false,
       viewFile: () => got.viewFile === true,
       small: () => got.small === false,
       noUi: () => got.noUi === false && got.noUiView === false,
-      byHeading: () => got.byHeading === true,
-      pt: () => got.pt === true,
+      byHeading: () => got.byHeading === true && got.headingRewritten === true,
+      pt: () => got.pt === true && got.ptByHeading === true && got.ptRewritten === true,
       serverTemplates: () => ["app/views/orders/index.html.erb", "Views/Orders/Index.cshtml", "resources/views/orders.blade.php", "app/src/main/res/layout/orders.xml"].every((f) => got.viewCases[f] === true),
       notViews: () => got.viewCases["src/orders/handler.ts"] === false && got.viewCases["src/components/"] === false,
       red: () => got.red === false,

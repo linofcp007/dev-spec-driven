@@ -35,8 +35,8 @@ can pass every test and still look nothing like its design. Until now no step co
   prototype, and its path. It is a second line in the scaffold, so designs scaffolded before still read as template text.
 - **More autonomy, on the user's word only.** The user can let subagent execution run past checkpoints ("go through US3",
   "run the rest overnight"). Every gate still runs, and a spec change still stops everything. At the checkpoint where
-  it stops, every skipped checkpoint's summary is presented. The grant is a ledger line, never assumed; a grant from an
-  earlier session is asked again.
+  it stops, every skipped checkpoint's summary is presented. The grant is a ledger line, never assumed; one found only in
+  the ledger, from an earlier session, is asked again.
 - **Learnings go to the steering.** Checkpoint feedback that holds for every later task ("money always as integer
   cents") is proposed as a steering amendment, so every later brief carries it. `/spec-review feedback` has a new class
   for it, **Project rule**.

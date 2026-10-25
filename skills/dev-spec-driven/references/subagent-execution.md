@@ -73,6 +73,7 @@ Task 3: refactor candidate filed: refactor-pricing-rules (backlog)
 Task 3: complete (commits a1b2c3d..e4f5a6b, review clean)
 Checkpoint US1: presented → approved
 Autonomy: through checkpoint US3 — granted by the user
+Checkpoint US2: summarized (autonomy) — not yet seen by the user
 Learning: <the rule> → steering/<file> (the user's OK)
 ```
 
@@ -162,7 +163,8 @@ command (`spec_complete_task` records the run you pass it, and refuses a failed 
 - **DONE** → check the report has its **Reuse** block (what was searched, reused, extended or created, and why —
   missing for a task that added code: resume the implementer). With `uiReview: true`, the visual review comes first
   (`references/ui-review.md`: the build captured beside the design's reference, state by state, and a
-  `dev-spec-driven:spec-ui-reviewer` that sees only the images); its Blockers and Majors enter the fix loop (§7).
+  `dev-spec-driven:spec-ui-reviewer` that sees only the images); its Blockers, and the Majors a fresh reviewer
+  confirms (`ui-review.md` → 4), enter the fix loop (§7).
   Then build the review package, dispatch the reviewer.
 - **DONE_WITH_CONCERNS** → read the concerns; correctness/scope concerns get resolved before review,
   observations get noted.
@@ -226,16 +228,18 @@ loop — ledger them as `minor (deferred)` for the final review.
 - **Rounds 1–3:** resume the same implementer with the open findings verbatim.
 - **Rounds 4–5:** a fresh implementer one model tier up: "A prior implementer attempted this N times;
   you own it now — read the report file for what was tried."
-- Every round: the implementer fixes, re-runs the covering tests, appends a fix report (tests, command,
-  output). A round that answered the visual review is checked by that review — the pairs captured again and a fresh
-  `spec-ui-reviewer` (`references/ui-review.md` → 5) —, then the code review runs as usual. A round that answered the
-  code review gets a **scoped** re-review: package `FIX_BASE..HEAD` (FIX_BASE = the head the last review
-  saw) and dispatch `dev-spec-driven:spec-reviewer` in **re-review** mode with the findings list. New breakage in the
-  fix diff joins the list once its verify pass confirms it; out-of-scope observations become deferred minors.
+- Every round: the implementer fixes, re-runs the covering tests, appends a fix report (tests, command, output). A round
+  that answered the visual review is checked by that review — the pairs captured again and a fresh `spec-ui-reviewer`
+  (`references/ui-review.md` → 5) —, then the code review: the task's first one if none ran yet, else a scoped re-review
+  of the round's diff. A round that answered the code review gets a **scoped** re-review: package `FIX_BASE..HEAD`
+  (FIX_BASE = the head the last review saw) and dispatch `dev-spec-driven:spec-reviewer` in **re-review** mode with the
+  findings list. New breakage in the fix diff joins the list once its verify pass confirms it; out-of-scope observations
+  become deferred minors.
 - **Gates a fix can undo run again.** A round's diff changes what a reviewed view renders → capture the pairs it
   changed again and a fresh `spec-ui-reviewer` (`references/ui-review.md` → 5), whichever review the round answered.
 - Never fix findings yourself — it pollutes your context and skips review.
-- **Breaker (after round 5):** adjudicate each open finding. Reviewer wrong/contestable, or real but
+- **Breaker (after round 5):** adjudicate each open finding — a visual one on a fresh `spec-ui-reviewer`'s verdict,
+  never yours (you don't look at the images). Reviewer wrong/contestable, or real but
   nothing builds on it → `parked` with a ruling. Real and load-bearing → rule on the smallest change
   that unblocks dependent work and carry it into the next dispatch. Every adjudication is a ledger line.
 
@@ -340,10 +344,11 @@ a conflict between two tasks' file plans — you decide, and ledger the ruling.
 
 **More autonomy, on the user's word only.** The user can let you run past checkpoints — "go through US3", "run
 the rest overnight": ledger `Autonomy: through checkpoint USn — granted by the user`, then write each checkpoint's
-summary to the ledger instead of waiting, and at the one they named present them all — each task's visual review
+summary to the ledger instead of waiting (`Checkpoint USn: summarized (autonomy) — not yet seen by the user`, never
+"approved"), and at the one they named present them all — each task's visual review
 with them: the user's own look at the screens, the fourth gate, is still owed. Nothing else loosens: every gate still
-runs, and items 2–5 above still stop you. You never grant it yourself. It holds across a compaction (the ledger keeps
-it); a grant in the ledger of an earlier session is asked again before you rely on it.
+runs, and items 2–5 above still stop you. You never grant it yourself. Rely on it only while the grant is in this
+conversation (or its compaction summary); one you find only in the ledger is asked again before you rely on it.
 
 ## Track specifics
 
