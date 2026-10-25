@@ -42,7 +42,10 @@ Read every image of every pair. Nothing else.
    - **reference** vs **build**: what each shows, in words and, where you can read them, measures ("16 px gap" vs
      "about 8 px");
    - **fixable in code**: yes or no.
-4. **Not differences:** what the scope leaves out (another region, a later task's state), the reference's placeholder
+4. **One cause, one finding:** a difference that follows from another — a wider button from its longer label, columns
+   moved by a missing one, a shorter table from tighter rows — goes under that finding ("also moves …"), never as one
+   of its own; the fix of the cause fixes it.
+5. **Not differences:** what the scope leaves out (another region, a later task's state), the reference's placeholder
    content against real data, and a difference you can't make out at this resolution — say that instead, and which crop
    would settle it.
 
