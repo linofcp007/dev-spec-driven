@@ -15,7 +15,8 @@ steps and what to present. What each active track adds: `references/track-checkl
 - `constitution.md` is core (always): the project's few, concrete, testable non-negotiables ("every write is
   idempotent", "no PII in logs"). Every design carries a Constitution Check (the design approval refuses it empty);
   whether the design honours each principle is judged by the human at the gate, by the `spec-critic` agent (the user's
-  `/spec-doctor --deep`) and, on the code, by the branch review (`/spec-review branch`).
+  `/spec-doctor --deep`, offered at size m / l or none — `references/critic-review.md`) and, on the code, by the branch review
+  (`/spec-review branch`).
 - New to the plugin? Offer the user `/spec-tour`: one tiny real change on their repo through every gate in ~10 minutes.
 
 ## Sizes — right-sized rigor
@@ -159,6 +160,12 @@ Keep task numbers unique and replace every scaffold placeholder task (the tasks 
 
 Present (1) what was produced · (2) key decisions + rationale · (3) tracks / sections affected · (4) risks to review ·
 (5) the `spec_doctor` verdict · (6) the next step — then ask for approval. Keep it tight.
+
+At size m / l (or no size), offer the deep review once per feature, before the requirements approval (a design-first
+feature: the design's) — never at the classification gate, which it has no checklist for; the user's answer holds for
+the later gates. Its reviewers — the critic, a cold read of the artifact and, at l, a second critic — are each a fresh
+subagent; you triage what they find and the user decides (`references/critic-review.md`). It never replaces the user's
+yes and never blocks it.
 
 `spec_next_action` gives ONE next step, in this order: re-review what changed since an approval → the first phase not
 approved yet (fill → fix what its gate would refuse → approve) → fix → implement → verify an unverified tick → finish

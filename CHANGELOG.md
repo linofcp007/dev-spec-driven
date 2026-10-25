@@ -3,6 +3,57 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.31.0] — 2026-10-25
+
+Fresh reviewers, after google/elephant-goldfish-model (Apache-2.0). The session that wrote a spec knows why it says what it
+says, so it can't see what the spec leaves out. A reviewer that starts with nothing can. 1.31 adds that kind of review
+before a gate and before each subagent task, and asks the author to triage what comes back.
+
+### Added
+- **A cold read before a gate.** The spec critic has a `naive` mode. It reads the artifact and what the artifact links,
+  and nothing else. It starts with **Understood as**: what is built, for whom, and why, in two or three sentences. Then it
+  lists the terms never defined, the steps taken for granted, the vague mechanisms ("the system handles it") and the
+  sentences two engineers would build differently. It checks the glossary and the steering before it flags a term.
+- **The deep review, by size** (`/spec-doctor --deep`, and offered once per feature before the requirements approval at
+  size m / l or no size — never at the classification gate). The reviewers depend on the size: at s the gate critic
+  alone; at m or no size, the critic and a cold read; at l, two independent critics and a cold read. The cold read is
+  only for `requirements.md`, `design.md` and `bug.md`. They are dispatched in one message, with none of the author's
+  reasoning.
+  - **The author triages every Blocking and Important finding.** Each one gets a call: **Fix** (with the exact edit),
+    **Contest** (with the evidence; without it, it is a fix) or **Ask** (only the user can settle it). The user then answers
+    one question: apply the fixes, go one by one, or leave it.
+  - **One re-audit after the fixes, never two.** Whatever is still open goes to the user as it is.
+  - The protocol is the new `references/critic-review.md`.
+- **A pre-flight of each task brief** in subagent execution. Before the implementer is dispatched, the critic in `brief`
+  mode reads only the brief, the files it names and the `CLAUDE.md` files the implementer loads. It lists every design decision
+  the brief leaves open: a data shape, a signature or path to invent, a dependency to choose, an error case the criteria
+  don't settle, a `_Verify:_` that can't run as written. The controller settles each one from the spec, rules on it, or
+  sends it back to its phase. Before this, an open decision showed up only when the implementer came back NEEDS_CONTEXT,
+  or never, when it chose alone.
+  - `spec_task_brief` returns `preflight`: true at size m / l or no size, false for an xs change, size s, a spike, a +ai
+    prompt task and a done task.
+- **`spec_doctor` returns the feature's `size`** (no key when it has none). The deep review picks its reviewers by it.
+
+### Changed
+- **The critic and the verifier start without your CLAUDE.md** (`omitClaudeMd: true`, Claude Code 2.1.271 or later; older
+  versions ignore it). The verifier reads a rule a finding cites from its file. The implementer, the simplifier and the
+  reviewer keep the project's instructions.
+- **The critic's gate checklist:**
+  - **Readiness** at the plan gate: a task that leaves a design decision to the implementer is a finding.
+  - **YAGNI:** it searches the code for each `New` row of the design's Reuse & Integration, and flags a cache, a queue,
+    sharding or async processing with no measured need behind it.
+  - **Completeness:** a change to stored data, a serialized format or a public contract with no migration or rollback path.
+  - **Scope:** a design that treats a symptom instead of the cause.
+  - No praise and no softening.
+- **A drift points to the converge pass.** next_action's `drift` step, `/spec-report drift` and the upgrade audit said
+  "decide: spec wrong, code wrong or harmless", from a baseline that only says a file changed. They now name
+  `/spec-review <feature> converge`, which reads the code AC by AC starting from the drifted files. An AC it finds broken
+  by a change nobody intended is a regression: `/spec-bugfix`, not a task appended to the finished feature; an intended
+  one is a spec change. EN / PT / ES.
+
+### Tests
+- `node mcp/test.js` 2240 assertions, `node cli/test-cli.js` 654 (was 2238 / 654).
+
 ## [1.30.2] — 2026-10-14
 
 dev-guardian 3.4.0's verdict, read in full. Pair it with dev-guardian 3.4.0, released alongside. Earlier dev-guardian

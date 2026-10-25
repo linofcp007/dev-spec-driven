@@ -144,6 +144,7 @@ discoveries go to `decisions.md` (`spec_decide`). In Claude Code a Stop hook ret
 evidence: run the check or say what is unverified.
 
 **Subagents (opt-in, ~6+ independent tasks, 2–3× the tokens):** per task `spec_task_brief {name, number, write: true}`,
+at size m / l (or none) its pre-flight (the critic, brief mode: the decisions it leaves open, settled before the dispatch),
 dispatch **`dev-spec-driven:spec-implementer`** with its path, send the diff to **`dev-spec-driven:spec-reviewer`**,
 verify each ❌ / Critical / Important finding (a `dev-spec-driven:spec-verifier` per finding; only 80+ opens a fix
 round), at most 5 rounds, then `spec_complete_task`. You never write feature code; stop at every `**Checkpoint:**`; a
@@ -153,7 +154,10 @@ finding that changes an AC, the design or a planned test goes back to that phase
 ## Gates and approvals
 
 `spec_doctor` before a phase advances: one `readyToAdvance` verdict over every check (a track section counts only
-filled with your own text). Present the artifact, the key decisions, the risks, the verdict, the next step; ask. On the
+filled with your own text). At size m / l (or none), offer once per feature the deep review before the requirements
+approval (design-first: the design's; never at classification): fresh reviewers — the critic, a cold read — whose
+findings you triage, never apply unasked (`references/critic-review.md`).
+Present the artifact, the key decisions, the risks, the verdict, the next step; ask. On the
 user's yes for that phase, record it with `spec_approve {name, phase}` (`/approve` is the user's own command). A
 failing check refuses it; `force: true` only when the user explicitly accepts the failures. Phases go in order (one
 edited since its approval is re-approved first); `{through: "tasks"}` approves several filled ones only after the user

@@ -15,6 +15,14 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   so the SubagentStop matcher leaves it out (`^(dev-spec-driven:)?spec-(implementer|simplifier)$`). Descriptions stay ≤ ~250
   characters — what the agent does and when, never "see the agent body" (the dispatcher sees only the description). The critic
   runs on `model: inherit` (one judgment-heavy dispatch per gate), the agents dispatched in bulk on `sonnet`.
+- **Fresh reviewers: `omitClaudeMd: true` (1.31)** on spec-critic and spec-verifier — they start without the user / project /
+  local CLAUDE.md files (Claude Code 2.1.271+; an older version ignores the key and they load them as before). A reviewer
+  that judges an artifact or a finding must not inherit the author's context; a rule it needs is in the steering or read
+  from its file — the verifier's question 5, and the critic's brief mode, which reads the project's CLAUDE.md files the
+  implementer loads (the root one with its `@` imports, `.claude/CLAUDE.md`, `CLAUDE.local.md`, those in the folders of
+  the files the brief names) with its Read tool. The
+  implementer, the simplifier and the reviewer keep CLAUDE.md: they write or judge code against the project's
+  conventions. mcp/tests/17-docs.js holds both sides.
 - **One dev-spec project rule — `mcp/lib/probe.js`.** Node core only, never the engine; every surface asks it — the hooks
   (lazily, past each one's pre-filter), hooks/hook-utils.js (it re-exports the readers), the CLI's engine-free paths
   (cli/completion.js `statusProbe` / `resolveProject`) and the engine: doctor.js `isDevSpecDir` IS `probe.isDevSpecProject`
@@ -554,6 +562,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.30 review 8** — `allowed-tools` pre-approved two writers (`/roadmap`'s `spec_roadmap`, `/spec-report`'s `spec_metrics`,
   both writing with `write`) although the 1.26 rule was read-only tools only: dropped, and a test reads every command's list
   against tools/list's `readOnlyHint`.
+- **1.31** — `omitClaudeMd: true` on spec-critic and spec-verifier (google/elephant-goldfish-model's reviewer isolation): a
+  fresh subagent had no conversation, but every CLAUDE.md file still loaded — the author's context in the reviewer's.
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.

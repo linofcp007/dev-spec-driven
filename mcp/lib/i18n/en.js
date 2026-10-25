@@ -1212,7 +1212,7 @@ const msg = {
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary. Optional, before it: /spec-review ${slug} simplify — a behaviour-preserving cleanup of the feature's own code, proven by its tests.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /spec ${slug} tasks.`,
-      drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). Decide: the spec is now wrong → /spec-change ${slug} impact (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). The baseline only says that they changed — /spec-review ${slug} converge reads the code AC by AC, from those files. Then decide: the spec is now wrong → /spec-change ${slug} impact (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
       // but predates a later change: re-confirm it — never "sign it off" as if there were none).
       // signOff.role (meta.approvalRoles.execution): the role to sign as; signOff.missing / signed: the roles still missing / signed.
@@ -2195,7 +2195,7 @@ const msg = {
         reReview: (list, cmds) => `Re-review what changed after its approval: ${list}` + (cmds ? ` — diff it first: ${cmds}` : "") + "; then re-approve",
         reapprove: (list) => `Re-approve to start the change history (spec_impact can't diff these yet): ${list}`,
         verify: (list, slug) => `Record a passing run for the ticked tasks without one: ${list} — ${DEV_SPEC} done ${slug} <n> --run`,
-        drift: (n, slug) => `Decide on the drift: ${n} implementing file(s) changed since finish — ${DEV_SPEC} drift ${slug}`,
+        drift: (n, slug) => `Decide on the drift: ${n} implementing file(s) changed since finish — ${DEV_SPEC} drift ${slug}; /spec-review ${slug} converge checks the code AC by AC`,
         stale: (slug) => `It changed after its finish — finish it again: /spec-finish ${slug}`,
         packReserved: (list, slug, since) => `Rename its track pack(s) from before ${since || "1.17"} — ${list}: the name is reserved now, so the track is inactive (details: ${DEV_SPEC} doctor ${slug}, check track-pack-missing)`,
         // a pack whose marker is a built-in track's now

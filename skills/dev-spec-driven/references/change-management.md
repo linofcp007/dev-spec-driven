@@ -161,7 +161,9 @@ file the baseline never recorded: the old baseline no longer covers them — the
 one that drifted lists the feature as drifted too: a stale baseline never hides a changed file). An archived feature
 is never walked for new files (it can't be finished again where it is); when it is stale the CLI line says to restore
 it first (`spec_feature restore`, finish, archive again). The SessionStart hook prints one line
-per drifted active feature (bounded; `dev-spec drift` checks on demand). Decide per feature: the spec is now wrong
+per drifted active feature (bounded; `dev-spec drift` checks on demand). The baseline says only that a file changed,
+not whether the feature still holds: `/spec-review <feature> converge`, given the drifted files, reads the code AC by AC
+(`references/subagent-execution.md` → Converge mode). Then decide per feature: the spec is now wrong
 → `spec_impact` / a new feature with `_Supersedes:_`; the code is wrong → fix it (`/spec-bugfix`); harmless →
 accept and re-run `spec_finish {write: true}` for a fresh baseline (its `baseline.replaced` names the drift it
 accepted — a re-finish never erases it silently). `spec_next_action` on a finished feature answers `drift` (with the

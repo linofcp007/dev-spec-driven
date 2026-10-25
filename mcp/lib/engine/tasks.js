@@ -24,7 +24,7 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame;
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize;
 let dayOf; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
   briefGlossary, briefSteering, bugSectionFilled, cleanTaskText, closesFence, criterionBlocks, detectTracks, ensureDir,
@@ -37,7 +37,7 @@ function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
   briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
-  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame } = E); }
+  decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
 // scanner — so status/next/phase can never count a task that complete/brief/finish don't see.
@@ -1804,6 +1804,10 @@ function taskBrief(projectDir, name, number, opts = {}) {
     },
     paths,
     wrote: write,
+    // 1.31: whether the controller pre-flights this brief before the dispatch (the critic's brief mode —
+    // references/subagent-execution.md): sizes m / l or none; never an xs change, size s, a spike (its tasks exist to
+    // make the decision), a +ai prompt task or a done task.
+    preflight: !block.done && !inlineOnly && kind !== "spike" && !["xs", "s"].includes(featureSize(dir)) && !isChangeDir(dir),
   };
   if (bug) res.bug = bug;
   if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });

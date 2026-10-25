@@ -358,10 +358,12 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
       "spec_drift after edits: changed / missing / now present per file; a recorded path outside the project is never probed (ignored)");
     const naD10 = S.nextAction(w10d, "login-loop");
     ok(naD10.step === "drift" && naD10.drift.drifted && naD10.drift.changed.join() === "src/auth.js" && naD10.drift.missing.join() === "src/lib/x.js" && naD10.drift.nowPresent.join() === "src/new.js" &&
-      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 3 of 5 implementing file\(s\) changed since: src\/auth\.js, src\/lib\/x\.js, src\/new\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naD10.recommendation) &&
+      /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 3 of 5 implementing file\(s\) changed since: src\/auth\.js, src\/lib\/x\.js, src\/new\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. The baseline only says that they changed — \/spec-review login-loop converge reads the code AC by AC, from those files\. Then decide: /.test(naD10.recommendation) &&
       /\/spec-change login-loop impact/.test(naD10.recommendation) && /re-run \/spec-finish login-loop for a fresh baseline/.test(naD10.recommendation) &&
-      /mudaram desde então/.test(S.msg("pt").next.drifted("x", "2026-01-01", 1, 2, "a.js")) && /cambiaron desde entonces/.test(S.msg("es").next.drifted("x", "2026-01-01", 1, 2, "a.js")),
-      "next_action on a finished feature whose implementing files drifted: step 'drift' with the files and the decision (spec wrong → spec_impact, code wrong → fix, harmless → re-finish); PT/ES localized");
+      /mudaram desde então\b.*\/spec-review x converge lê o código critério a critério/.test(S.msg("pt").next.drifted("x", "2026-01-01", 1, 2, "a.js")) &&
+      /cambiaron desde entonces\b.*\/spec-review x converge lee el código criterio a criterio/.test(S.msg("es").next.drifted("x", "2026-01-01", 1, 2, "a.js")) &&
+      ["en", "pt", "es"].every((l) => /; \/spec-review x converge \S+ (?:the code AC by AC|o código critério a critério|el código criterio a criterio)$/.test(S.msg(l).upgrade.item.drift(1, "x"))),
+      "next_action on a finished feature whose implementing files drifted: step 'drift' with the files, the converge pass that reads the code AC by AC (1.31 — the baseline only says the files changed) and the decision (spec wrong → spec_impact, code wrong → fix, harmless → re-finish); the upgrade audit's drift line names converge too; PT/ES localized");
     ok(/ {2}⚠ login-loop: 3 implementing file\(s\) changed since finish — run node \\?"[^"]*dev-spec\.js\\?" drift login-loop/.test(hook10(w10d)) /* the hook's JSON escapes the quotes */ &&
       S.drift(w10d, null, { maxFiles: 2 }).skipped === true && S.drift(w10d, null, { maxBytes: 1 }).skipped === true && S.drift(w10d, null, { maxFiles: 2 }).features.length === 0,
       "SessionStart: one localized drift line per drifted finished feature; over the file/byte budget the check is skipped (nothing hashed)");
@@ -419,7 +421,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
       JSON.stringify([naSD10.step, naSD10.drift && naSD10.drift.changed, drSD10.verdict, drSD10.features.map((f) => f.feature)]) + ")", [
       () => naSD10.step === "drift", () => naSD10.staleBaseline, () => naSD10.staleBaseline.newFiles.join() === "src/audit.js", () => naSD10.drift,
       () => naSD10.drift.changed.join() === "src/auth.js",
-      () => /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 1 of 2 implementing file\(s\) changed since: src\/auth\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naSD10.recommendation),
+      () => /^'login-loop' was finished on \d{4}-\d\d-\d\d, but 1 of 2 implementing file\(s\) changed since: src\/auth\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. The baseline only says that they changed — \/spec-review login-loop converge reads the code AC by AC, from those files\. Then decide: /.test(naSD10.recommendation),
       () => /It also changed since that finish \(re-approved: tasks; 1 implementing file\(s\) not in the baseline: src\/audit\.js\): whichever you decide, finish it again afterwards/.test(naSD10.recommendation),
       () => drSD10.verdict === "drift", () => drSD10.drifted.join() === "login-loop", () => drSD10.features.length === 1,
       () => drSD10.features[0].stale === true, () => drSD10.features[0].changed.join() === "src/auth.js", () => drSD10.stale.length === 1,
@@ -475,7 +477,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, shipFeature, list, r
     const naNF10 = (await call10("spec_next_action", { name: "login-loop", projectDir: w10d })).p;
     const drNF10 = S.drift(w10d, "login-loop");
     ok(naNF10.step === "drift" && naNF10.drift.changed.join() === "src/lib/y.ts" && naNF10.staleBaseline && naNF10.staleBaseline.since.length === 0 &&
-      naNF10.staleBaseline.newFiles.join() === "src/lib/z.ts" && /changed since: src\/lib\/y\.ts \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naNF10.recommendation) &&
+      naNF10.staleBaseline.newFiles.join() === "src/lib/z.ts" && /changed since: src\/lib\/y\.ts \(node "[^"]*dev-spec\.js" drift login-loop\)\. The baseline only says that they changed — \/spec-review login-loop converge reads the code AC by AC, from those files\. Then decide: /.test(naNF10.recommendation) &&
       /It also changed since that finish \(1 implementing file\(s\) not in the baseline: src\/lib\/z\.ts\)/.test(naNF10.recommendation) &&
       drNF10.verdict === "drift" && drNF10.features.length === 1 && drNF10.features[0].changed.join() === "src/lib/y.ts" && drNF10.features[0].stale === true && drNF10.stale[0].drifted === true &&
       /Também mudou desde esse fecho \(x\)/.test(S.msg("pt").next.driftedStale("x")) && /También cambió desde ese cierre \(x\)/.test(S.msg("es").next.driftedStale("x")),
