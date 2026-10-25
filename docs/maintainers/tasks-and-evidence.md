@@ -31,8 +31,9 @@ Phase 6, opt-in.
   on the key, never on the brief's text.
 - **`uiReview` (1.32)** — the same base rule (`freshReviews`) and a UI task (`uiTask()`): a +ui feature's task that proves a
   `[UI]` criterion (`trackAcIds`), sits in the track's template block (`trackTaskHeadings("ui")` on `block.phase`) or names a
-  view file in `_Implements:_` (`RE_VIEW_FILE`: markup, components, stylesheets — never `.ts` / `.swift` / `.kt`, which are
-  as often logic). On true the controller runs `references/ui-review.md` after the task's `_Verify:_` is green and before
+  view file in `_Implements:_` (`RE_VIEW_FILE`: markup, components, stylesheets, server templates — ERB, Razor, Blade,
+  Twig, Handlebars, EJS, Pug —, Android `res/layout*/*.xml`; never `.ts` / `.swift` / `.kt` / `.dart`, which are as often
+  logic, nor a folder or a glob); never a red `_Expect: fail_` task (it renders nothing yet). On true the controller runs `references/ui-review.md` after the task's `_Verify:_` is green and before
   the code review; its Blockers / Majors are fix rounds, and a later round that changes a reviewed view runs it again.
 - **The protocol is prose; the engine never dispatches anything** (it stays cross-tool): `references/subagent-execution.md` and the
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
@@ -595,7 +596,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.28** — the review flow runs the duplicate detector first; until then duplication was found only by the reviewer's own
   searches (prose).
 - **1.32** — the brief's `uiReview` key and the visual review (Shopify's Helix UI gate): a +ui task could pass its tests
-  and still look nothing like the design — no step ever looked at the screen against its reference.
+  and still look nothing like the design — no step ever looked at the screen against its reference. **Review 15:** SKILL.md
+  put the review before the implementer; a visual round was sent to the code re-review; an implementer could edit the
+  reference until it matched (the reference is the approved design's now, a round touching it is refused); a red task
+  and server templates / Android layouts were misread.
 - **1.31** — the brief's `preflight` key and the pre-flight (from google/elephant-goldfish-model's zero-decision rule): a
   brief that left a design choice open was found only when the implementer came back NEEDS_CONTEXT — a dispatch spent — or
   not at all when it chose alone.

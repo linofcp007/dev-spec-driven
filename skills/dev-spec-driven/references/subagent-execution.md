@@ -46,6 +46,8 @@ when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the us
   task-N-brief.md       regenerated per call — the implementer's requirements
   task-N-report.md      written by the implementer (+ appended fix reports)
   task-N-review.diff    written by you: the review package
+  ui/task-N/*.png       written by you: the visual review's pairs (<view>--<state>--ref.png / --build.png)
+  task-N-ui-review.md   written by you: the visual reviewer's reply
 ```
 
 The local hook ignores this folder (no roadmap churn, no lint). **Resume rule:** a `- [x]` in
@@ -225,7 +227,9 @@ loop — ledger them as `minor (deferred)` for the final review.
 - **Rounds 4–5:** a fresh implementer one model tier up: "A prior implementer attempted this N times;
   you own it now — read the report file for what was tried."
 - Every round: the implementer fixes, re-runs the covering tests, appends a fix report (tests, command,
-  output). Then a **scoped** re-review: package `FIX_BASE..HEAD` (FIX_BASE = the head the last review
+  output). A round that answered the visual review is checked by that review — the pairs captured again and a fresh
+  `spec-ui-reviewer` (`references/ui-review.md` → 5) —, then the code review runs as usual. A round that answered the
+  code review gets a **scoped** re-review: package `FIX_BASE..HEAD` (FIX_BASE = the head the last review
   saw) and dispatch `dev-spec-driven:spec-reviewer` in **re-review** mode with the findings list. New breakage in the
   fix diff joins the list once its verify pass confirms it; out-of-scope observations become deferred minors.
 - **Gates a fix can undo run again.** A round's diff changes what a reviewed view renders → capture the pairs it
@@ -242,7 +246,7 @@ Clean review — no confirmed finding open (unconfirmed ones ledgered), or every
 with the evidence **from the implementer's report** — the task's `_Verify:_` command, its exit code and
 the output summary (`references/verification.md`) — + ledger `complete` line. A non-zero exit code is
 refused by the engine: that task is not done. Never tick a task with open Critical/Important findings, or with a
-visual Blocker or Major open.
+visual Blocker or Major open (not parked with a ruling).
 
 **Refactor candidates are filed, never done in the task.** The report's **Reuse** block lists them (a smell, a
 duplicate, a tangled file the implementer noticed), and so do the reviewer's out-of-scope refactor ideas: file each
@@ -319,8 +323,9 @@ human **only** for:
    a fix round, or a new task (`spec_append_tasks`, re-approved) through the same gates; a rule for every later task
    ("never a modal for a confirmation", "money always as integer cents") is a **learning** — propose it as a
    steering amendment (`constitution.md` for a non-negotiable, `structure.md` / `tech.md` / `ui.md` for a convention)
-   and write it on the user's OK, so every later brief carries it; ledger `Learning: <rule> → steering/<file>`. The
-   approved artifacts it touches then warn `steering-changed-since-approval`: review them with the user.
+   and write it on the user's OK, so every later brief carries it; ledger `Learning: <rule> → steering/<file>`. An
+   amendment to `constitution.md` or a track's file (`ui.md`…) makes the approved requirements / design warn
+   `steering-changed-since-approval`: review them with the user.
 2. **A spec change.** Any finding or blocker that requires changing an AC, a design decision, or a
    planned test's expectation. Go back to that phase (requirements, design or test plan) — never
    rule on it, never let an implementer "fix" a test to pass.
@@ -335,8 +340,10 @@ a conflict between two tasks' file plans — you decide, and ledger the ruling.
 
 **More autonomy, on the user's word only.** The user can let you run past checkpoints — "go through US3", "run
 the rest overnight": ledger `Autonomy: through checkpoint USn — granted by the user`, then write each checkpoint's
-summary to the ledger instead of waiting, and stop at the one they named. Nothing else loosens: every gate still
-runs, and items 2–5 above still stop you. You never grant it yourself, and a new session starts without it.
+summary to the ledger instead of waiting, and at the one they named present them all — each task's visual review
+with them: the user's own look at the screens, the fourth gate, is still owed. Nothing else loosens: every gate still
+runs, and items 2–5 above still stop you. You never grant it yourself. It holds across a compaction (the ledger keeps
+it); a grant in the ledger of an earlier session is asked again before you rely on it.
 
 ## Track specifics
 

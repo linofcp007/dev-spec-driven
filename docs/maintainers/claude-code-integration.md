@@ -14,7 +14,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   the exact strings of permission rules and hook matchers. spec-critic has no shell (read-only). spec-verifier reports no run,
   so the SubagentStop matcher leaves it out (`^(dev-spec-driven:)?spec-(implementer|simplifier)$`). Descriptions stay ≤ ~250
   characters — what the agent does and when, never "see the agent body" (the dispatcher sees only the description). The critic
-  runs on `model: inherit` (one judgment-heavy dispatch per gate), the agents dispatched in bulk on `sonnet`.
+  runs on `model: inherit` (one judgment-heavy dispatch per gate), the agents dispatched in bulk on `sonnet` — but the UI
+  reviewer (1.32), which inherits too: a judgment on images, one dispatch per UI task.
 - **Fresh reviewers: `omitClaudeMd: true` (1.31)** on spec-critic and spec-verifier (and, 1.32, spec-ui-reviewer: `tools: Read,
   Glob`, images in, no shell — the controller captures) — they start without the user / project /
   local CLAUDE.md files (Claude Code 2.1.271+; an older version ignores the key and they load them as before). A reviewer

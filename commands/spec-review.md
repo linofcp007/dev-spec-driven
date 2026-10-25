@@ -48,7 +48,8 @@ Never "behaviour unchanged" without the runs.
 
 **feedback `<comments>`** — read them all, verify each against the code and the spec: an AC violation → fix it, cite the
 AC · a spec change → take it to its phase · out of scope / YAGNI → push back citing the spec · quality → fix with a test ·
-a nit → if cheap · unclear → ask. One at a time, the covering tests after each, fresh evidence (`spec_complete_task`).
+a nit → if cheap · a rule for every later task → fix it here, then propose it as a steering amendment, written on
+the user's OK · unclear → ask (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/review-feedback.md`). One at a time, the covering tests after each, fresh evidence (`spec_complete_task`).
 Reply with the change or the evidence, never performative agreement.
 
 **prompt** (+ai) — a prompt change lands only with its eval delta (golden up, adversarial held, regression intact), its

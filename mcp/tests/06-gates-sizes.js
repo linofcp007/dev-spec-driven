@@ -103,7 +103,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     const f = S.createFeature(p, "Plain", ["core", "sec"], "", undefined, "en");
     const same = rd(f.dir, "design.md") === i18n.design({ name: "Plain", tracks: ["core", "sec"], label: "core +sec" }, "en") &&
       rd(f.dir, "requirements.md") === i18n.requirements({ name: "Plain", tracks: ["core", "sec"], summary: "" }, "en");
-    ok(got === "95264d747a0fd19d442b8da26d59ccb3f59fd66d" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
+    ok(got === "6c4fef30c7c41b92e29e33f18c5af7f78e6790a9" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
       has(f.dir, "classification.md") && same,
       "1.21 F5: no size = the 1.20 scaffolds byte for byte (but the bugfix tasks.md, the short form on purpose) — the pinned sha1 of every no-size builder output of every pre-1.21 track combination (EN / PT / ES), and a create without a size writes no size key and the builders' own text (got " +
       JSON.stringify({ got, n: keys.length, state: stateOf(f.dir).size, same }) + ")");

@@ -2343,7 +2343,7 @@ const msg = {
         api: ["+api: contract tests and the breaking-change diff against the published contract green on a fresh local run.",
           "+api: the contract file matches the shipped behaviour — every documented status code, error code and header is what the handlers return; anything removed is deprecated with its Sunset date."],
         ui: ["+ui: the automated accessibility check clean and the keyboard / screen-reader pass done on the final build; every state of the state matrix reachable and shown.",
-          "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed; each built state's visual review against its reference passed, or why it was not run."],
+          "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed; each built state passed its visual review against its reference, or the reason it was not run is on record."],
         obs: ["+obs: an alert fired in a staged failure and the rollback drill done on the final build; the dashboards and runbooks the alerts link exist.",
           "+obs: the metrics, logs and traces the design names seen emitting from the final build — no personal data in logs or traces."],
         data: ["+data: the data-quality checks, a partition re-run and a backfill rehearsal green on a fresh run against real-sized data — the same rows as one run, bad rows quarantined.",

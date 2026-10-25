@@ -1518,8 +1518,9 @@ function isPromptTask(block, mk, tracks) {
     (mk["affects evals"].length > 0 && /(?<![\p{L}])prompts?(?![\p{L}])/iu.test(block.text)));
 }
 // A +ui task whose rendered output the visual review compares with the design's reference: it proves a [UI] criterion,
-// sits in the track's template task block, or creates / changes a view file (markup, a component, a stylesheet).
-const RE_VIEW_FILE = /\.(?:tsx|jsx|vue|svelte|astro|html?|css|scss|sass|less|xib|storyboard)$/i;
+// sits in the track's template task block, or creates / changes a view file (markup, a component, a stylesheet, a server
+// template, an Android layout). A folder or a glob names no view file: such a task is one through its [UI] criterion.
+const RE_VIEW_FILE = /\.(?:tsx|jsx|vue|svelte|astro|html?|css|scss|sass|less|xib|storyboard|erb|cshtml|razor|twig|hbs|handlebars|mustache|ejs|pug)$|\.blade\.php$|(?:^|\/)res\/layout[^/]*\/[^/]+\.xml$/i;
 function uiTask(tracks, reqText, acIds, block, implementsFiles) {
   if (!tracks.includes("ui")) return false;
   const uiAcs = trackAcIds(reqText, "ui");
@@ -1822,7 +1823,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // 1.32: whether the controller runs the visual review of what this task renders against the design's reference
     // (references/ui-review.md): on a +ui feature, a task that proves a [UI] criterion, sits in the track's task block or
     // names a view file in _Implements:_.
-    uiReview: freshReviews && uiTask(tracks, reqText, acIds, block, mk.implements),
+    uiReview: freshReviews && !expectFail && uiTask(tracks, reqText, acIds, block, mk.implements), // a red task renders nothing yet
   };
   if (bug) res.bug = bug;
   if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });

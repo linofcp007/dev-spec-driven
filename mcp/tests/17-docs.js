@@ -346,11 +346,21 @@ exports.run = async ({
       imagesOnly: () => /Never the code, the diff, the brief or your view of it\./.test(uiRef) && /Don't open the images yourself/.test(uiRef) &&
         /\*\*INVALID\*\* \(the two images show different states\) → capture both again in the same state/.test(uiRef),
       rerun: () => /\*\*Gates a fix can undo run again\.\*\*/.test(subW) && /## 5\. After a fix — run it again/.test(docsRef("ui-review.md")) &&
-        /or with a visual Blocker or Major open\./.test(subW),
+        /or with a visual Blocker or Major open \(not parked with a ruling\)\./.test(subW),
       loop: () => /With `uiReview: true`, the visual review comes first/.test(subW) && /on `uiReview: true` the visual review \(`dev-spec-driven:spec-ui-reviewer`/.test(execCmd) &&
         /4\. \*\*A \+ui task that changes what renders\*\*/.test(execCmd) && /on `uiReview: true`, the visual review against the design's reference/.test(skillW) &&
         /`references\/ui-review\.md` — the visual review of a \+ui task/.test(docsRef("index.md")),
-      autonomy: () => /\*\*More autonomy, on the user's word only\.\*\*/.test(subW) && /You never grant it yourself, and a new session starts without it\./.test(subW),
+      autonomy: () => /\*\*More autonomy, on the user's word only\.\*\*/.test(subW) && /You never grant it yourself\. It holds across a compaction/.test(subW) &&
+        /a grant in the ledger of an earlier session is asked again before you rely on it\./.test(subW) && /at the one they named present them all/.test(subW),
+      // review 15: the reference is the approved design's (never edited to pass), a Major / a one-reviewer difference is
+      // confirmed before it costs a round, a visual round is re-checked by the visual review, the capture writes files.
+      reference: () => /The reference is part of the approved design: the implementer never edits it/.test(uiRef) &&
+        /a reference file in it is refused — revert it and send the round back/.test(uiRef) &&
+        /\*\*Never edit the design's visual reference\*\*/.test(docsWs(docsRead("agents", "spec-implementer.md"))),
+      confirmFirst: () => /\*\*Major\*\*, and at size l a difference only one of the two reviewers reported → confirm it first/.test(uiRef) &&
+        /A round that answered the visual review is checked by that review/.test(subW),
+      captureFiles: () => /A browser tool that only shows you the screen doesn't do/.test(uiRef) && /--screenshot=<file>/.test(uiRef),
+      feedbackRule: () => /a rule for every later task → fix it here, then propose it as a steering amendment/.test(docsWs(docsRead("commands", "spec-review.md"))),
       learnings: () => /is a \*\*learning\*\* — propose it as a steering amendment/.test(subW) && /\| \*\*Project rule\*\* \|/.test(docsRef("review-feedback.md")),
       skeleton: () => /Within a story, the skeleton first/.test(docsWs(docsRef("phase-guide.md"))) && /within a story the first task builds the skeleton/.test(critic),
       uiReference: () => /and a reference the visual review compares the build with/.test(critic) && /13\. \*\*References\*\*/.test(docsRef("ui-design-patterns.md")),

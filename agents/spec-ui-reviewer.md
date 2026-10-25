@@ -21,7 +21,7 @@ The controller gives you:
 - the **scope**: what this task built (a view, a region of it, a state) — judge only that;
 - `design.md` (read its `[UI]` sections only) and `.specs/steering/ui.md` when it exists.
 
-Read every image of every pair. Nothing else.
+Read every image of every pair, the `[UI]` sections and `ui.md` — nothing else.
 
 ## For each pair
 

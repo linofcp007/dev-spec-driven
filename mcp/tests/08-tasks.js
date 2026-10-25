@@ -764,14 +764,41 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
       .find((b) => S.taskBrief(pfRoot, uiS.slug, b.number).acceptanceCriteria.some((a) => uiSAcs.has(a.id)));
     const plain = S.createFeature(pfRoot, "Orders backend", ["core"], "", undefined, "en");
     fs.writeFileSync(path.join(plain.dir, "tasks.md"), tl("- [ ] 1. The page", "  - _Requirements: US-1.AC-1_", "  - _Implements: src/orders/OrdersPage.tsx_"));
+    // review 15: the track-block path alone (a UI-block task citing only a core criterion), a PT feature, a red task, the
+    // server templates and Android layouts the view-file rule reads, a backend file it doesn't.
+    const blockLine = uiTasks.split("\n").findIndex((l) => l.startsWith("- [ ] " + inUiBlock.number + ". "));
+    const headingOnly = uiTasks.split("\n").map((l, i) => (i > blockLine && i < blockLine + 4 && /^ {2}- _Requirements:/.test(l) ? "  - _Requirements: US-1.AC-1_" : l)).join("\n");
+    fs.writeFileSync(path.join(uiF.dir, "tasks.md"), headingOnly);
+    const byHeading = uiOf(uiF.slug, inUiBlock.number);
+    fs.writeFileSync(path.join(uiF.dir, "tasks.md"), uiTasks);
+    const uiPt = S.createFeature(pfRoot, "Ecra de encomendas", ["core", "ui"], "", undefined, "pt");
+    const ptBlock = S.taskBlocks(fs.readFileSync(path.join(uiPt.dir, "tasks.md"), "utf8")).find((b) => /Interface/.test(b.phase || ""));
+    const files = (f, extra = []) => {
+      fs.writeFileSync(path.join(plain.dir, "tasks.md"), tl("- [ ] 1. The page", "  - _Requirements: US-1.AC-1_", "  - _Implements: " + f + "_", ...extra));
+      return uiOf(plain.slug, 1);
+    };
+    const viewCases = {};
+    const uiPlain = S.createFeature(pfRoot, "Orders views", ["core", "ui"], "", undefined, "en");
+    for (const f of ["app/views/orders/index.html.erb", "Views/Orders/Index.cshtml", "resources/views/orders.blade.php", "app/src/main/res/layout/orders.xml", "src/orders/handler.ts", "src/components/"]) {
+      fs.writeFileSync(path.join(uiPlain.dir, "tasks.md"), tl("- [ ] 1. The page", "  - _Requirements: US-1.AC-1_", "  - _Implements: " + f + "_"));
+      viewCases[f] = uiOf(uiPlain.slug, 1);
+    }
+    fs.writeFileSync(path.join(uiPlain.dir, "tasks.md"), tl("- [ ] 1. The page test", "  - _Requirements: US-1.AC-1_", "  - _Implements: src/orders/Orders.test.tsx_", "  - _Expect: fail_"));
+    const red = uiOf(uiPlain.slug, 1);
     const got = { block: uiOf(uiF.slug, inUiBlock.number), blockW: uiOf(uiF.slug, inUiBlock.number, { write: true }), core: uiOf(uiF.slug, coreTask.number),
-      viewFile, backendFile, small: uiSBlock ? uiOf(uiS.slug, uiSBlock.number) : "no ui task at s", noUi: uiOf(plain.slug, 1) };
+      viewFile, backendFile, small: uiSBlock ? uiOf(uiS.slug, uiSBlock.number) : "no ui task at s", noUi: uiOf(plain.slug, 1),
+      byHeading, pt: ptBlock ? uiOf(uiPt.slug, ptBlock.number) : "no pt ui block", viewCases, red, noUiView: files("app/views/orders/index.html.erb") };
     all("1.32: spec_task_brief's uiReview is true for a +ui task (its track block / a [UI] criterion) or one naming a view file, false for a core task with no view file, at size s and without +ui — with write:true too (got " + js(got) + ")", {
       block: () => got.block === true && got.blockW === true,
       core: () => got.core === false && got.backendFile === false,
       viewFile: () => got.viewFile === true,
       small: () => got.small === false,
-      noUi: () => got.noUi === false,
+      noUi: () => got.noUi === false && got.noUiView === false,
+      byHeading: () => got.byHeading === true,
+      pt: () => got.pt === true,
+      serverTemplates: () => ["app/views/orders/index.html.erb", "Views/Orders/Index.cshtml", "resources/views/orders.blade.php", "app/src/main/res/layout/orders.xml"].every((f) => got.viewCases[f] === true),
+      notViews: () => got.viewCases["src/orders/handler.ts"] === false && got.viewCases["src/components/"] === false,
+      red: () => got.red === false,
     });
 
     // spec_append_tasks {depends}: existing tasks or tasks of the same call; a phantom, a self-dependency, a cycle, a non-number → nothing written.

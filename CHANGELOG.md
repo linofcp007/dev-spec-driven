@@ -14,11 +14,17 @@ can pass every test and still look nothing like its design. Until now no step co
   starts without your CLAUDE.md and lists every difference with a severity and a place on screen ("header, right: the
   Save button").
   - **When:** on a +ui feature at size m / l or no size, for a task that proves a `[UI]` criterion, sits in the track's
-    task block or names a view file. It runs after the task's `_Verify:_` is green and before the code review.
+    task block or names a view file (markup, a component, a stylesheet, a server template, an Android layout). It runs
+    after the task's `_Verify:_` is green and before the code review; never on a red `_Expect: fail_` task.
     `spec_task_brief` returns `uiReview` to say so.
   - **Two images in different states** (one still loading, a dialog open in only one) are **INVALID**: both are captured
     again instead of failing the review.
-  - **Blockers and Majors** are fix rounds, counted toward the task's 5. A task is never ticked with one open.
+  - **Blockers** are fix rounds, counted toward the task's 5. A **Major**, and at size l a difference only one of the
+    two reviewers saw, is confirmed by a fresh reviewer first. A task is never ticked with one open.
+  - **The reference is part of the approved design.** An implementer never edits it to make the review pass; a round
+    whose diff touches it is sent back, and a reference that looks wrong goes to the user.
+  - **Captures are files:** the project's own end-to-end setup or Storybook first, else headless Chrome or Edge. A
+    browser tool that only shows the screen doesn't count, since the reviewer needs the files.
   - **It runs again** after any later fix round that changes what a reviewed view renders, including a fix for a code
     review finding.
   - **Never "passed" by default.** No reference, or no way to capture the screen, means the review did not run, and the
@@ -28,8 +34,9 @@ can pass every test and still look nothing like its design. Until now no step co
 - **+ui's UI States section asks for the reference** each view is built against: a design export or an approved HTML
   prototype, and its path. It is a second line in the scaffold, so designs scaffolded before still read as template text.
 - **More autonomy, on the user's word only.** The user can let subagent execution run past checkpoints ("go through US3",
-  "run the rest overnight"). Every gate still runs, and a spec change still stops everything. The grant is a ledger
-  line; it is never assumed, and a new session starts without it.
+  "run the rest overnight"). Every gate still runs, and a spec change still stops everything. At the checkpoint where
+  it stops, every skipped checkpoint's summary is presented. The grant is a ledger line, never assumed; a grant from an
+  earlier session is asked again.
 - **Learnings go to the steering.** Checkpoint feedback that holds for every later task ("money always as integer
   cents") is proposed as a steering amendment, so every later brief carries it. `/spec-review feedback` has a new class
   for it, **Project rule**.
