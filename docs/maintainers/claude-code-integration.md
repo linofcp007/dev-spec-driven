@@ -17,10 +17,11 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   runs on `model: inherit` (one judgment-heavy dispatch per gate), the agents dispatched in bulk on `sonnet`.
 - **Fresh reviewers: `omitClaudeMd: true` (1.31)** on spec-critic and spec-verifier — they start without the user / project /
   local CLAUDE.md files (Claude Code 2.1.271+; an older version ignores the key and they load them as before). A reviewer
-  that judges an artifact or a finding must not inherit the author's context; a rule it needs is in the steering or quoted
-  from its file (the verifier's question 5, the critic's brief mode reading `CLAUDE.md` / `AGENTS.md` as files because the
-  implementer has them). The implementer, the simplifier and the reviewer keep CLAUDE.md: they write or judge code against
-  the project's conventions. mcp/tests/17-docs.js holds both sides.
+  that judges an artifact or a finding must not inherit the author's context; a rule it needs is in the steering or read
+  from its file — the verifier's question 5, and the critic's brief mode, which reads as files the CLAUDE.md files the
+  implementer loads (the root one with its `@` imports, those in the folders of the files the brief names). The
+  implementer, the simplifier and the reviewer keep CLAUDE.md: they write or judge code against the project's
+  conventions. mcp/tests/17-docs.js holds both sides.
 - **One dev-spec project rule — `mcp/lib/probe.js`.** Node core only, never the engine; every surface asks it — the hooks
   (lazily, past each one's pre-filter), hooks/hook-utils.js (it re-exports the readers), the CLI's engine-free paths
   (cli/completion.js `statusProbe` / `resolveProject`) and the engine: doctor.js `isDevSpecDir` IS `probe.isDevSpecProject`

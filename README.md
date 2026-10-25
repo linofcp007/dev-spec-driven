@@ -19,8 +19,8 @@ Spanish.
 ## Requirements
 
 - **Claude Code 2.1.139 or later** (`claude --version`) — the hooks run in exec form (`node` started directly, no shell
-  per call), which older versions don't run; 2.1.271 or later also starts the reviewers without your CLAUDE.md. Or
-  any MCP client: Claude Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI, Codex CLI…
+  per call), which older versions don't run; 2.1.271 or later also starts the spec critic and the verifier without
+  your CLAUDE.md. Or any MCP client: Claude Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI, Codex CLI…
   ([INTEGRATIONS.md](./INTEGRATIONS.md)).
 - **Node.js ≥ 18** on PATH (`node --version`). Node 18 and 20 are end-of-life: 22 or later is recommended (the suites pass
   on 18, 22, 24 and 26).
@@ -142,7 +142,7 @@ are yours to type, so their descriptions stay out of its context. As a plugin th
 | | `/clarify [--grill]` | The gaps in the requirements before design; `--grill` interrogates your understanding |
 | | `/spec-tour` | A guided 10-minute tour: one tiny real change through every gate |
 | approve | `/approve [phase \| --through p]` | Record your approval of a phase (`--role`, `--force`, `--revoke`) |
-| | `/spec-doctor [--deep]` | Ready to advance? `--deep` adds fresh reviewers: the spec critic and, at size m / l, a cold read |
+| | `/spec-doctor [--deep]` | Ready to advance? `--deep` adds fresh reviewers: the spec critic and, at size m / l or no size, a cold read |
 | | `/spec-change [impact \| decide \| track ±x]` | After an approval: what an edit touches, a decision-log entry, a track on or off |
 | execute | `/executeTask [--subagents] \| commit` | The next task (or task N) with evidence; `commit` drafts a commit citing the spec |
 | | `/eval [run \| baseline \| migrate]` | (+ai) The local eval harness with your own API key; a model migration gated on it |

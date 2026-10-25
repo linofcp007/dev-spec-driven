@@ -15,7 +15,8 @@ sign). Each check carries its own detail; every check id is listed in
 
 **`--deep`** — also review the MEANING of the artifact the next gate approves, with fresh read-only reviewers: the
 `dev-spec-driven:spec-critic` agent in gate mode (the feature folder, that artifact, the active tracks, this doctor
-result), plus a cold read (`mode: naive`) at size m / l or no size and a second gate critic at l — all in one message,
+result), plus — by this result's `size` (none: no size) — a cold read (`Mode: naive` on the prompt's first line; of
+requirements.md, design.md or bug.md only) at m / l or no size and a second gate critic at l — all in one message,
 never with your own reasoning. Triage and present their findings beside the doctor's verdict as
 `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/critic-review.md` says (fix · contest · ask; one re-audit).
 Without a subagent tool, run the gate checklist (`${CLAUDE_PLUGIN_ROOT}/agents/spec-critic.md`) yourself and say the

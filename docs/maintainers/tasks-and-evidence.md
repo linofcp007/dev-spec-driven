@@ -23,7 +23,7 @@ Phase 6, opt-in.
   once and only ever appended by the controller. The result keeps identifiers (`refs`, `loop`, `inlineOnly`, `verify`, gate,
   `dependsOn`, `preflight`), the quoted spec text only with `includeBrief`. The PostToolUse hook exits early on `/.execution/` paths.
 - **`preflight` (1.31)** — a boolean on every brief of a task: true at size m / l or no size (`featureSize()`), false for an
-  xs change (`isChangeDir()`), size s, an `inlineOnly` task and a done one. On true the controller dispatches the critic in
+  xs change (`isChangeDir()`), size s, a spike (its tasks exist to make the decision), an `inlineOnly` task and a done one. On true the controller dispatches the critic in
   brief mode over `paths.brief` before the implementer (`references/subagent-execution.md` → Pre-flight the brief): the
   decisions the brief leaves open are settled from the spec, ruled (ledger / `spec_decide`) or sent back to their phase. The
   engine only says when; the controller branches on the key, never on the brief's text.

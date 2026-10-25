@@ -103,22 +103,24 @@ A brief that leaves a design decision open costs a whole dispatch: the implement
 decides alone and doesn't say so. When the result says `preflight: true`, have a fresh reader check the brief first —
 the zero-decision rule of google/elephant-goldfish-model's Implementation Readiness review (Apache-2.0):
 
-- Dispatch **`dev-spec-driven:spec-critic`** with `mode: brief`, the brief path (`paths.brief`) and the project root —
-  never your own view of the task. Cheapest tier (`haiku`) for a brief that carries the code or values, standard
-  otherwise. A batch is pre-flighted once; a wave's briefs all in one message.
+- Dispatch **`dev-spec-driven:spec-critic`** with `Mode: brief` on the prompt's first line (a line of the prompt, never
+  a tool parameter), the brief path (`paths.brief`) and the project root — never your own view of the task. Cheapest
+  tier (`haiku`) for a brief that carries the code or values, standard otherwise. A batch is pre-flighted once; a
+  wave's briefs all in one message.
 - **Ready** → dispatch. **Decisions needed** → settle each one before the dispatch:
   - the spec settles it (an AC, a design section, a decision, a ruling) → the answer goes in the dispatch (item 4
     below), citing where it comes from;
   - a choice within the design that no artifact records → rule on it (a `Ruling:` ledger line, carried in the
-    dispatch); one that later tasks build on goes to `decisions.md` (`spec_decide`, citing the task's IDs), so every
-    later brief carries it;
+    dispatch); one that later tasks build on goes to `decisions.md` (`spec_decide {affects}` naming the AC / T-IDs of
+    every task that builds on it — a brief quotes only the decisions that cite its own task's IDs);
   - it changes an AC, the design or a planned test → stop: "Where autonomy stops";
-  - a `[Gap]` — a `_Verify:_` that can't run as written → a plan defect: fix the task with the user's OK (an edited
-    `tasks.md` is re-approved) before the dispatch.
+  - a `[Gap]` — a `_Verify:_` that can't run as written: check the claim yourself first (does the path, script or
+    test file exist; does the task create it?). Confirmed, it is a plan defect: fix the task with the user's OK (an
+    edited `tasks.md` is re-approved) before the dispatch; refuted, ledger it and dispatch.
 - Ledger: `Task N: pre-flight — ready` or `Task N: pre-flight — 2 decisions (1 from the design, 1 ruled)`.
 
-`preflight: false` (sizes xs / s, a +ai prompt task, a done task): no pre-flight — with one or two small tasks the
-implementer's own NEEDS_CONTEXT is the cheaper check.
+`preflight: false` (sizes xs / s, a spike, a +ai prompt task, a done task): no pre-flight — with one or two small
+tasks the implementer's own NEEDS_CONTEXT is the cheaper check, and a spike's tasks exist to make the decision.
 
 ### 2. Dispatch the implementer
 
@@ -311,6 +313,8 @@ human **only** for:
 3. An irreversible or destructive operation, a security-sensitive action, or a side effect outside the
    working tree that norms say to ask about (merge, push to a shared branch, publish, deploy).
 4. A plan so broken that every path forward is a guess.
+5. **A `_Verify:_` that can't run as written** — a pre-flight `[Gap]` you checked and confirmed: the task changes, and
+   an edited `tasks.md` is re-approved.
 
 Everything else — ambiguity inside the design, an implementer question you can answer from the spec,
 a conflict between two tasks' file plans — you decide, and ledger the ruling.
@@ -420,12 +424,15 @@ finished feature's files changed — the baseline only says THAT they changed; c
    reviewer as candidate findings, verified before they cost a task).
 2. **Dispatch `dev-spec-driven:spec-reviewer` in converge mode** (standard tier; most capable for a large or
    security-sensitive feature) with: the feature folder `.specs/<feature>/`, the active tracks, the
-   `trace_check` result (its gaps and `code` block, pasted) and the source roots to inspect. The reviewer is
+   `trace_check` result (its gaps and `code` block, pasted), the source roots to inspect and, after a drift, the
+   drifted files. The reviewer is
    read-only and works AC by AC: implemented? (file:line) · tested? (test name / T-ID) → ✅ / ❌ / ⚠️, then
    returns — in its reply — the missing work as **proposed tasks** shaped for `spec_append_tasks`.
 3. **Triage the proposals yourself.** A gap fixable within the approved ACs and design is a task. A gap that
    needs a different AC, design decision or test expectation is a **spec change** — back to its phase
-   (`spec_impact` after the edit), never a task.
+   (`spec_impact` after the edit), never a task. **After a drift** (a finished feature): an ❌ is code that no longer
+   delivers an AC that shipped — a regression: `/spec-bugfix` (root cause, red test), never a task appended to the
+   finished feature; every AC ✅ → the change is harmless: finish again for a fresh baseline.
 4. **Human approves** the list (edited as needed) → `spec_append_tasks {name, tasks: [{text, requirements,
    implements, verify, makesGreen, expectFail, size, story, parallel}]}`: appended under "Phase: Convergence",
    numbered after the highest task, existing tasks untouched, an unknown AC ID (or a `makesGreen` T-ID test-plan.md

@@ -300,14 +300,30 @@ exports.run = async ({
         "### Understood as", "### Pre-flight: Ready | Decisions needed", "| **Readiness** |", "google/elephant-goldfish-model (Apache-2.0)"].every((s) => critic.includes(s)),
       naiveCold: () => /Do not read the steering, `decisions\.md`, the other artifacts or anything else first/.test(critic) && /Check before flagging\./.test(critic),
       reuseSearch: () => /Each `New` row of the design's Reuse & Integration: search the code for it/.test(critic),
-      bySize: () => ["| s | the critic (`mode: gate`) |", "| m, or no size | the critic (`gate`) + a cold read (`mode: naive`) |",
-        "| l | two independent critics (`gate`, A and B) + a cold read |"].every((s) => review.includes(s)),
+      bySize: () => ["| s | the critic (gate) |", "| m, or no size | the critic (gate) + a cold read (naive) |",
+        "| l | two independent critics (gate, A and B) + a cold read (naive) |", "The size is `spec_doctor`'s `size` (no key: no size)."].every((s) => review.includes(s)) &&
+        /by this result's `size` \(none: no size\)/.test(doctorCmd),
+      // review 13 (M2, L1, L9): never offered at the classification gate; the cold read only for requirements / design /
+      // bug.md; the mode is a line of the dispatch prompt, never a tool parameter (the Agent tool may own a `mode`).
+      notClassification: () => /never at the classification gate/.test(review) && /never at the classification gate/.test(docsWs(docsRef("phase-guide.md"))) && /\(never at classification\)/.test(skillW),
+      coldReadScope: () => /The cold read is only for the artifacts a newcomer must understand — `requirements\.md`, `design\.md`, `bug\.md`/.test(review) &&
+        /of requirements\.md, design\.md or bug\.md only/.test(doctorCmd),
+      modeLine: () => /The dispatch prompt's first line names the mode \(`Mode: gate`, `Mode: naive` or `Mode: brief`\)/.test(critic) &&
+        /a line of the prompt, never a tool parameter/.test(review) && /a line of the prompt, never a tool parameter/.test(subW) && ![review, subW, doctorCmd, execCmd].some((t) => /`mode: (?:gate|naive|brief)`/.test(t)),
       triage: () => ["| **Fix** |", "| **Contest** |", "| **Ask** |", "a contest without evidence is a fix", "**One re-audit:**", "Never a second one."].every((s) => review.includes(s)),
       noReasoning: () => /Never in a dispatch: your reasoning, the conversation, why the artifact is right/.test(review) && /never with your own reasoning/.test(doctorCmd),
       indexed: () => /`references\/critic-review\.md` — the deep review before a gate/.test(docsRef("index.md")) && /references\/critic-review\.md/.test(doctorCmd) && /`references\/critic-review\.md`/.test(skillW),
       preflight: () => /#### Pre-flight the brief \(`preflight: true` — size m \/ l, or no size\)/.test(docsRef("subagent-execution.md")) &&
-        /Dispatch \*\*`dev-spec-driven:spec-critic`\*\* with `mode: brief`, the brief path \(`paths\.brief`\)/.test(subW) && /\| Pre-flight \(the critic, brief mode\) \|/.test(subW) &&
-        /on `preflight: true` its pre-flight \(`dev-spec-driven:spec-critic`, `mode: brief`/.test(execCmd) && /its pre-flight \(the critic, brief mode/.test(skillW),
+        /Dispatch \*\*`dev-spec-driven:spec-critic`\*\* with `Mode: brief` on the prompt's first line/.test(subW) && /the brief path \(`paths\.brief`\)/.test(subW) &&
+        /\| Pre-flight \(the critic, brief mode\) \|/.test(subW) && /`preflight: false` \(sizes xs \/ s, a spike,/.test(subW) &&
+        /on `preflight: true` its pre-flight \(`dev-spec-driven:spec-critic`, `Mode: brief`/.test(execCmd) && /its pre-flight \(the critic, brief mode/.test(skillW),
+      // review 13 (L4, L5, L8): a ruling later tasks build on cites THEIR IDs; a pre-flight [Gap] is checked first and is a stop;
+      // after a drift a converge ❌ is a regression (/spec-bugfix), never a task appended to the finished feature.
+      rulings: () => /`spec_decide \{affects\}` naming the AC \/ T-IDs of every task that builds on it/.test(subW) &&
+        /check the claim yourself first/.test(subW) && /5\. \*\*A `_Verify:_` that can't run as written\*\*/.test(subW),
+      driftRegression: () => /\*\*After a drift\*\* \(a finished feature\): an ❌ is code that no longer delivers an AC that shipped — a regression: `\/spec-bugfix`/.test(subW) &&
+        /After a drift, an ❌ is a regression of a shipped AC: `\/spec-bugfix`, not a task\./.test(docsWs(docsRead("commands", "spec-review.md"))),
+      briefInstructions: () => /the root `CLAUDE\.md` and the files it imports \(`@path`\), and a `CLAUDE\.md` in the folders of the files the brief names/.test(critic) && !/`AGENTS\.md`/.test(critic),
     });
   }
   // 1.26: the 55 commands folded into 22 — the phase commands into /spec, the rest into umbrella commands with subcommands

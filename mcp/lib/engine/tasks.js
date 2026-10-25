@@ -1805,8 +1805,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     paths,
     wrote: write,
     // 1.31: whether the controller pre-flights this brief before the dispatch (the critic's brief mode —
-    // references/subagent-execution.md): sizes m / l or none; never an xs change, size s, a +ai prompt task or a done task.
-    preflight: !block.done && !inlineOnly && !["xs", "s"].includes(featureSize(dir)) && !isChangeDir(dir),
+    // references/subagent-execution.md): sizes m / l or none; never an xs change, size s, a spike (its tasks exist to
+    // make the decision), a +ai prompt task or a done task.
+    preflight: !block.done && !inlineOnly && kind !== "spike" && !["xs", "s"].includes(featureSize(dir)) && !isChangeDir(dir),
   };
   if (bug) res.bug = bug;
   if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });

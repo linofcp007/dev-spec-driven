@@ -154,8 +154,9 @@ finding that changes an AC, the design or a planned test goes back to that phase
 ## Gates and approvals
 
 `spec_doctor` before a phase advances: one `readyToAdvance` verdict over every check (a track section counts only
-filled with your own text). At size m / l (or none), offer once per feature the deep review before you ask: fresh
-reviewers — the critic, a cold read — whose findings you triage, never apply unasked (`references/critic-review.md`).
+filled with your own text). At size m / l (or none), offer once per feature the deep review before the requirements
+approval (never at classification): fresh reviewers — the critic, a cold read — whose findings you triage, never apply
+unasked (`references/critic-review.md`).
 Present the artifact, the key decisions, the risks, the verdict, the next step; ask. On the
 user's yes for that phase, record it with `spec_approve {name, phase}` (`/approve` is the user's own command). A
 failing check refuses it; `force: true` only when the user explicitly accepts the failures. Phases go in order (one

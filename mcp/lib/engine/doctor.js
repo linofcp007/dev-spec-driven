@@ -1297,6 +1297,7 @@ function doctorRun(projectDir, name, opts = {}) {
     readyToAdvance: fails.length === 0,
     verdict: fails.length ? "fail" : warns.length ? "warn" : "pass",
   };
+  if (c.size) res.size = c.size; // 1.31: the deep review picks its reviewers by size (references/critic-review.md); absent = no size
   // only when the project has approval roles: {phase: {required, signed, missing, stale}} per pending phase that needs
   // roles, and {phase: [roles]} per approved phase lacking a role now required.
   if (g.rv.any) Object.assign(res, { pendingRoles: g.rv.pending, unsignedRoles: g.rv.unsigned });

@@ -19,7 +19,7 @@ dispatch argues for the artifact (why it is right, what the author meant), ignor
 
 ## Modes
 
-The dispatch names the mode; none named means **gate**.
+The dispatch prompt's first line names the mode (`Mode: gate`, `Mode: naive` or `Mode: brief`); none named means **gate**.
 
 - **gate** — the review an approver needs, with the context an approver has (below, up to Calibration).
 - **naive** — a cold read: the artifact as someone new to the project reads it (Naive mode).
@@ -80,8 +80,9 @@ Not this mode's job: the tracks, the trade-offs, test coverage, style, what the 
 ## Brief mode — the pre-flight
 
 Inputs: the brief path (`.specs/<feature>/.execution/task-N-brief.md`) and the project root. Read the brief, the
-files it names (its `_Implements:_` targets, its Reuse entries, where its tests live) and the project's instruction
-files (`CLAUDE.md`, `AGENTS.md` at the root, when present — the implementer has them). Nothing else.
+files it names (its `_Implements:_` targets, its Reuse entries, where its tests live) and the instructions the
+implementer loads: the root `CLAUDE.md` and the files it imports (`@path`), and a `CLAUDE.md` in the folders of the
+files the brief names. Nothing else.
 
 The question — the zero-decision rule: could an engineer new to this codebase implement the task on the first
 attempt from this brief alone, without making a design decision? List each decision the brief leaves open:
@@ -93,7 +94,7 @@ attempt from this brief alone, without making a design decision? List each decis
 - a `_Verify:_` that can't run as written: a script, path or test file that doesn't exist and the task doesn't
   create (Glob it).
 
-Not a decision: what the brief, the files it names, the instruction files or the code next door already settle —
+Not a decision: what the brief, the files it names, those instructions or the code next door already settle —
 following the existing pattern is not a choice.
 
 ```

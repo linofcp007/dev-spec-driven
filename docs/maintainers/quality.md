@@ -41,7 +41,9 @@ the TDD micro-cycle, the duplicate-code detector. The rules come first; how they
   what it links, steering / glossary only to check a term before flagging it; it opens with `### Understood as`, a
   restatement) and **brief** (the task brief's pre-flight — tasks-and-evidence.md → Subagent-driven execution).
   `references/critic-review.md` is the protocol `/spec-doctor --deep` and the gate offer (SKILL.md → Gates, phase-guide.md →
-  At every gate; m / l or no size) follow: reviewers by size (s the gate critic; m / none + a cold read; l two independent
+  At every gate; m / l or no size, before the requirements approval, never at classification) follow — the size from
+  `spec_doctor`'s `size` (doctor.js `doctorRun`; no key = no size), the mode on the dispatch prompt's first line (`Mode: naive`,
+  never a tool parameter): reviewers by size (s the gate critic; m / none + a cold read; l two independent
   gate critics + a cold read), dispatched in one message with none of the controller's reasoning, merged, each Blocking /
   Important finding triaged by the controller (Fix with the exact edit · Contest with evidence · Ask), ONE question to the
   user, one re-audit after fixes. The critic and the verifier declare `omitClaudeMd: true` (claude-code-integration.md →
@@ -217,6 +219,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.31** — the deep review, from google/elephant-goldfish-model: until then `--deep` dispatched one critic that read
   everything the approver reads, so it could not see what the artifact itself leaves undefined; the critic's findings
   reached the user untriaged, and a review loop had no cap.
+- **1.31 review 13** — the size rule needed a size no read tool returned (`spec_doctor` gained `size`); the first m / l
+  approval is classification's, which no reviewer covers (the offer moved to the requirements approval); `mode: brief` read
+  like an Agent-tool parameter (now the prompt's first line, `Mode: brief`); the brief pre-flight counted `AGENTS.md`, which
+  the implementer doesn't load, and skipped no spike; a converge ❌ after a drift had two routes (now `/spec-bugfix`).
 
 ### Design trade-offs and risks, the constraint nudge, the micro-cycle
 - **1.17 A** — package A: the `Alternatives & Trade-offs` / `Risks` sections and their doctor warnings (A1), the constraint
