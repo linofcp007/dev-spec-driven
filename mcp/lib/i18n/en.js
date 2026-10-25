@@ -79,7 +79,7 @@ const text = {
     ],
     ui: [
       ["Design System Usage", "- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours."],
-      ["UI States", "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept)."],
+      ["UI States", "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).\n- The reference each view is built against: a design export or an HTML prototype the user approved — one per state where they differ — and its path · the visual review compares what is built with it, state by state (references/ui-review.md)."],
       ["Accessibility", "- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass)."],
       ["Responsiveness & i18n", "- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue."],
       ["UI Performance Budget", "- Core Web Vitals at the 75th percentile: LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1 · the JS / image weight budget of this view · how it is measured (lab + real users)."],
@@ -2343,7 +2343,7 @@ const msg = {
         api: ["+api: contract tests and the breaking-change diff against the published contract green on a fresh local run.",
           "+api: the contract file matches the shipped behaviour — every documented status code, error code and header is what the handlers return; anything removed is deprecated with its Sunset date."],
         ui: ["+ui: the automated accessibility check clean and the keyboard / screen-reader pass done on the final build; every state of the state matrix reachable and shown.",
-          "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed."],
+          "+ui: the performance budget measured on the final build (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1) and the visual regression of the states reviewed; each built state passed its visual review against its reference, or the reason it was not run is on record."],
         obs: ["+obs: an alert fired in a staged failure and the rollback drill done on the final build; the dashboards and runbooks the alerts link exist.",
           "+obs: the metrics, logs and traces the design names seen emitting from the final build — no personal data in logs or traces."],
         data: ["+data: the data-quality checks, a partition re-run and a backfill rehearsal green on a fresh run against real-sized data — the same rows as one run, bad rows quarantined.",

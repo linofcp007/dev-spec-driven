@@ -6,7 +6,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, S, tmp, require, __dirname }) => {
+exports.run = async ({ ok, all, S, tmp, require, __dirname }) => {
   const E = require(path.join(__dirname, "lib", "engine", "index.js"));
   const js = (v) => JSON.stringify(v);
   const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
@@ -577,5 +577,25 @@ exports.run = async ({ ok, S, tmp, require, __dirname }) => {
         "1.25.1 (12): the matrix of 2,800 stories (8,400 rows) is linear — within max(1.5 s, 4 × the plain trace) (it took ~10× the trace: every row scanned every task and test entry); a row's tests, tasks and their citations are unchanged (got " +
         js({ trace: r.t, matrix: r.m, rows: r.mx.rows.length, row: row && [row.tests, row.tasks.map((x) => [x.number, x.cites]), row.status] }) + ")");
     }
+  }
+
+  { // 1.32: +ui's UI States block gained a second line (the reference per view). Appended, so a design scaffolded by 1.31
+    // (the one line, never filled) still reads as template text — never as filled — and so does the new two-line block,
+    // in every language; a reference the author wrote is their own text.
+    const I = require("./lib/i18n.js");
+    const UI = E.trackSectionTable("ui");
+    // the scaffold with its TODO lines deleted and the guidance left alone: template (with them: unfilled)
+    const uiStates = (lang) => E.sectionState(I.design({ name: "x", tracks: ["core", "ui"], label: "core +ui" }, lang).replace(/^> \*\*TODO\*\*.*\n/gm, ""),
+      UI, "[UI]", { lang }).find((s) => s.section === "UI States").status;
+    const oldBlock = "# Design: x\n\n## [UI] UI States\n- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).\n\n## Next\nx\n";
+    const written = oldBlock.replace("values kept).\n", "values kept).\n- Orders list: docs/design/orders-{loading,empty,error,list}.png (approved 2026-10-20).\n");
+    const st = (md) => E.sectionState(md, UI, "[UI]", { lang: "en" }).find((s) => s.section === "UI States").status;
+    all("1.32: +ui's UI States block names the reference per view on a second line; the 1.31 one-line block and the new block both read as template, a written reference as filled (got " +
+      js({ en: uiStates("en"), pt: uiStates("pt"), es: uiStates("es"), br: uiStates("pt-BR"), old: st(oldBlock), written: st(written) }) + ")", {
+      line: () => ["en", "pt", "es", "pt-BR"].every((l) => /\n- [^\n]*\(references\/ui-review\.md\)\.\n/.test(I.trackDesignBlock("ui", l))),
+      scaffold: () => ["en", "pt", "es", "pt-BR"].every((l) => uiStates(l) === "template"),
+      oldStill: () => st(oldBlock) === "template",
+      written: () => st(written) === "filled",
+    });
   }
 };

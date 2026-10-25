@@ -152,7 +152,7 @@ cli/main.js · cli/commands.js  main(argv, io) — parse, shared checks, dispatc
 cli/run.js · cli/git.js        done --run / finish --run's runs (process tree, verdict) · every git call (one gitRun)
 cli/completion.js              shell completion + the hidden __complete and the status line's pre-check (no engine)
 hooks/                         hooks.json (auto-loaded) + guard / approval / observe / spec / stop / plan hooks + pre-commit
-commands/ · agents/            the 22 slash commands (also the MCP prompts) · the 5 plugin subagents
+commands/ · agents/            the 22 slash commands (also the MCP prompts) · the 6 plugin subagents
 skills/dev-spec-driven/        SKILL.md (the workflow — its source of truth) + references/ (read on demand)
 evals/                         plugin evals for `claude plugin eval` (maintainer-side, local only)
 mcp/test.js · cli/test-cli.js  the suites' entry points — their files: mcp/tests/ · cli/tests/ (NN-<area>…, + harness.js)
@@ -164,7 +164,7 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 
 ## Tests
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
-(2240 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
+(2243 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
 `node cli/test-cli.js` adds 654 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its

@@ -1517,6 +1517,17 @@ function isPromptTask(block, mk, tracks) {
   return tracks.includes("ai") && (mk.implements.some((f) => /(^|[\\/])prompts[\\/]/.test(f)) ||
     (mk["affects evals"].length > 0 && /(?<![\p{L}])prompts?(?![\p{L}])/iu.test(block.text)));
 }
+// A +ui task whose rendered output the visual review compares with the design's reference: it proves a [UI] criterion,
+// sits in the track's template task block, or creates / changes a view file (markup, a component, a stylesheet, a server
+// template, an Android layout) — a glob of them too (`src/components/*.tsx`); a bare folder names no view file: such a
+// task is one through its [UI] criterion.
+const RE_VIEW_FILE = /\.(?:tsx|jsx|vue|svelte|astro|html?|css|scss|sass|less|xib|storyboard|erb|cshtml|razor|twig|hbs|handlebars|mustache|ejs|pug)$|\.blade\.php$|(?:^|\/)res\/layout[^/]*\/[^/]+\.xml$/i;
+function uiTask(tracks, reqText, acIds, block, implementsFiles) {
+  if (!tracks.includes("ui")) return false;
+  const uiAcs = trackAcIds(reqText, "ui");
+  return acIds.some((id) => uiAcs.has(id)) || trackTaskHeadings("ui").has(normTaskHeading(block.phase || "")) ||
+    implementsFiles.some((f) => RE_VIEW_FILE.test(String(implementsRel(f) || f)));
+}
 
 // AC ID → the full logical criterion (multi-line EARS folded by criterionBlocks). Exact-ID keys, so
 // US-1.AC-1 can never resolve to US-1.AC-10.
@@ -1779,6 +1790,9 @@ function taskBrief(projectDir, name, number, opts = {}) {
     writeFileAtomic(paths.brief, md);                     // derived artifact: regenerated on every call (through the write gate)
   }
   const includeBrief = opts.includeBrief != null ? !!opts.includeBrief : !write;
+  // The fresh reviews around a task (the brief's pre-flight, the visual review): sizes m / l or none; never an xs change,
+  // size s, a spike (its tasks exist to make the decision), a +ai prompt task or a done task.
+  const freshReviews = !block.done && !inlineOnly && kind !== "spike" && !["xs", "s"].includes(featureSize(dir)) && !isChangeDir(dir);
 
   const res = {
     ok: true,
@@ -1805,9 +1819,12 @@ function taskBrief(projectDir, name, number, opts = {}) {
     paths,
     wrote: write,
     // 1.31: whether the controller pre-flights this brief before the dispatch (the critic's brief mode —
-    // references/subagent-execution.md): sizes m / l or none; never an xs change, size s, a spike (its tasks exist to
-    // make the decision), a +ai prompt task or a done task.
-    preflight: !block.done && !inlineOnly && kind !== "spike" && !["xs", "s"].includes(featureSize(dir)) && !isChangeDir(dir),
+    // references/subagent-execution.md).
+    preflight: freshReviews,
+    // 1.32: whether the controller runs the visual review of what this task renders against the design's reference
+    // (references/ui-review.md): on a +ui feature, a task that proves a [UI] criterion, sits in the track's task block or
+    // names a view file in _Implements:_.
+    uiReview: freshReviews && !expectFail && uiTask(tracks, reqText, acIds, block, mk.implements), // a red task renders nothing yet
   };
   if (bug) res.bug = bug;
   if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });

@@ -3,6 +3,53 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.32.0] — 2026-10-25
+
+A visual review gate for +ui work, and three smaller ideas, after Shopify's Helix (shopify.engineering/helix). A screen
+can pass every test and still look nothing like its design. Until now no step compared the two.
+
+### Added
+- **The visual review of a +ui task.** Each state the task built is captured beside the view's reference, in the same
+  state, viewport, theme and locale. A new agent, `spec-ui-reviewer`, sees only the two images, never the code. It
+  starts without your CLAUDE.md and lists every difference with a severity and a place on screen ("header, right: the
+  Save button").
+  - **When:** on a +ui feature at size m / l or no size, for a task that proves a `[UI]` criterion, sits in the track's
+    task block or names a view file (markup, a component, a stylesheet, a server template, an Android layout). It runs
+    after the task's `_Verify:_` is green and before the code review; never on a red `_Expect: fail_` task.
+    `spec_task_brief` returns `uiReview` to say so.
+  - **Two images in different states** (one still loading, a dialog open in only one) are **INVALID**: both are captured
+    again instead of failing the review.
+  - **Blockers** are fix rounds, counted toward the task's 5. A **Major**, and at size l a difference only one of the
+    two reviewers saw, is confirmed by a fresh reviewer first. A task is never ticked with one open.
+  - **The reference is part of the approved design.** An implementer never edits it to make the review pass; a round
+    whose diff touches it is sent back, and a reference that looks wrong goes to the user.
+  - **Captures are files:** the project's own end-to-end setup or Storybook first, else headless Chrome or Edge. A
+    browser tool that only shows the screen doesn't count, since the reviewer needs the files.
+  - **It runs again** after any later fix round that changes what a reviewed view renders, including a fix for a code
+    review finding.
+  - **Never "passed" by default.** No reference, or no way to capture the screen, means the review did not run, and the
+    checkpoint says so.
+  - The protocol is the new `references/ui-review.md`. The +ui guide adds the reference to its design checklist, and
+    suggests an HTML prototype the user approves when there is no design.
+- **+ui's UI States section asks for the reference** each view is built against: a design export or an approved HTML
+  prototype, and its path. It is a second line in the scaffold, so designs scaffolded before still read as template text.
+- **More autonomy, on the user's word only.** The user can let subagent execution run past checkpoints ("go through US3",
+  "run the rest overnight"). Every gate still runs, and a spec change still stops everything. At the checkpoint where
+  it stops, every skipped checkpoint's summary is presented. The grant is a ledger line, never assumed; one found only in
+  the ledger, from an earlier session, is asked again.
+- **Learnings go to the steering.** Checkpoint feedback that holds for every later task ("money always as integer
+  cents") is proposed as a steering amendment, so every later brief carries it. `/spec-review feedback` has a new class
+  for it, **Project rule**.
+
+### Changed
+- **The skeleton first:** within a story, the first task builds the thinnest end-to-end path and each next task adds a
+  layer, so a wrong early decision is still cheap to change. The critic's Readiness category checks it.
+- **The critic's +ui check** asks for a reference per view. Without one, the visual review never runs.
+- **The +ui finish check** names the visual review of each built state: passed, or why it was not run.
+
+### Tests
+- `node mcp/test.js` 2243 assertions, `node cli/test-cli.js` 654 (was 2240 / 654).
+
 ## [1.31.0] — 2026-10-25
 
 Fresh reviewers, after google/elephant-goldfish-model (Apache-2.0). The session that wrote a spec knows why it says what it

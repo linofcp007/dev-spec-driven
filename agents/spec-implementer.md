@@ -114,6 +114,9 @@ run. The report's RED and GREEN runs of the target tests are the cycle's proof.
 - **Never edit a planned test's expectation, and never weaken an assertion to make it pass.** If a
   test looks wrong, stop and report BLOCKED with the evidence — a wrong test is a spec problem the
   human decides, not an implementation detail.
+- **Never edit the design's visual reference** (a design export or an approved HTML prototype — the files `design.md →
+  [UI] UI States` names) to make a visual review pass. A reference that looks wrong is a design problem: report BLOCKED
+  with the difference.
 - **No production code without a failing test first** (tdd tasks — a new behaviour's code). Code you wrote before its
   test is deleted and written again from the test — never kept as a reference. Guard and characterization tests pin
   code that already exists: they pass on their first run, and nothing is deleted.

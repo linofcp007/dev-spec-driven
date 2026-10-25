@@ -125,6 +125,9 @@ Break the design into tasks of ~30 min–2 h, organized by user story (P1 first)
 stories), one phase per story (`Story US-1 (P1)`, …) ending with a `**Checkpoint:**` line where it is independently
 testable, then `Polish`. Tag each task with its story (`[US1]`, or `[shared]`) and `[P]` when it can run in parallel
 (different files, no dependency) — `[US1][P]`. Numbers ARE the order; stories that aren't independent were mis-sliced.
+Within a story, the skeleton first — the thinnest end-to-end path (a screen's layout with fixed data, a handler that
+answers) — and each next task adds one layer of complexity on top: a wrong early decision is caught while it is still
+cheap to change.
 
 Markers: always `_Requirements: US-1.AC-1, US-1.AC-2_` and `_Verify: <command that proves it>_` (no pipe: a pipeline
 reports its LAST command's exit code) · `_Implements: src/a.js, src/b/_` on every task that writes code — the files it

@@ -14,8 +14,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   the exact strings of permission rules and hook matchers. spec-critic has no shell (read-only). spec-verifier reports no run,
   so the SubagentStop matcher leaves it out (`^(dev-spec-driven:)?spec-(implementer|simplifier)$`). Descriptions stay ≤ ~250
   characters — what the agent does and when, never "see the agent body" (the dispatcher sees only the description). The critic
-  runs on `model: inherit` (one judgment-heavy dispatch per gate), the agents dispatched in bulk on `sonnet`.
-- **Fresh reviewers: `omitClaudeMd: true` (1.31)** on spec-critic and spec-verifier — they start without the user / project /
+  runs on `model: inherit` (one judgment-heavy dispatch per gate), the agents dispatched in bulk on `sonnet` — but the UI
+  reviewer (1.32), which inherits too: a judgment on images, one dispatch per UI task.
+- **Fresh reviewers: `omitClaudeMd: true` (1.31)** on spec-critic and spec-verifier (and, 1.32, spec-ui-reviewer: `tools: Read,
+  Glob`, images in, no shell — the controller captures) — they start without the user / project /
   local CLAUDE.md files (Claude Code 2.1.271+; an older version ignores the key and they load them as before). A reviewer
   that judges an artifact or a finding must not inherit the author's context; a rule it needs is in the steering or read
   from its file — the verifier's question 5, and the critic's brief mode, which reads the project's CLAUDE.md files the
@@ -564,6 +566,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   against tools/list's `readOnlyHint`.
 - **1.31** — `omitClaudeMd: true` on spec-critic and spec-verifier (google/elephant-goldfish-model's reviewer isolation): a
   fresh subagent had no conversation, but every CLAUDE.md file still loaded — the author's context in the reviewer's.
+- **1.32** — a sixth agent, spec-ui-reviewer (Shopify's Helix UI gate): the visual review needs a reviewer that sees only the
+  images, so it is no mode of the code reviewer (which keeps CLAUDE.md and reads the diff).
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.

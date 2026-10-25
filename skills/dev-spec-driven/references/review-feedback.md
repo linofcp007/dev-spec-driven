@@ -21,6 +21,7 @@ Adapted from the `receiving-code-review` skill of [obra/superpowers](https://git
 | **Out of scope / YAGNI** | It adds what the spec's `Out of Scope` excludes, or a "proper" feature nothing uses | Push back with the reference: *"Out of Scope lists X; happy to spec it separately."* Check usage (`grep`) before building "professional" extras. |
 | **Quality** | Correctness/robustness/security within scope (error handling, tenant scoping, a race) | Fix it; add a test when behaviour changes. |
 | **Nit / style** | Naming, formatting, preference | Apply if cheap and consistent with the codebase; otherwise say why not. |
+| **Project rule** | It holds for every later task, not just this diff ("money always as integer cents", "no modal for a confirmation") | Fix this diff, then propose the rule as a steering amendment (`constitution.md` for a non-negotiable, `structure.md` / `tech.md` / `ui.md` for a convention); on the user's OK every later brief carries it. |
 | **Unclear** | You can't restate it | Ask. Never guess. |
 
 5. **Implement** one item at a time, in order: blocking (breaks things, security) → simple fixes →

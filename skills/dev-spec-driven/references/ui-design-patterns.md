@@ -33,7 +33,8 @@ in the UI), [security-track.md](security-track.md) (never trust the client; secr
      with a visible focus indicator.
   ```
 
-- **design.md** — the component inventory (reused, extended, new), a **state matrix** per view, the form rules,
+- **design.md** — the component inventory (reused, extended, new), a **state matrix** per view and the **reference**
+  each view is built against (a design export, or an HTML prototype the user approved — its path), the form rules,
   breakpoints, the accessibility plan, i18n decisions and the performance budget.
 - **Steering** — the design-system rules in a scoped `ui-components.md` (`dev-spec steering ui-components.md`,
   `inclusion: fileMatch` on the component folders), and the target level in `tech.md`'s Accessibility line
@@ -343,6 +344,13 @@ team's — write them in steering and enforce them with a size-check script as a
 - Don't snapshot everything: snapshots of whole pages with live data fail on every content change and hide real
   regressions in the noise.
 
+**Matching the design — the visual review.** A snapshot only says the screen didn't change since last time. Whether
+it is the screen the design asked for is the visual review's question ([ui-review.md](ui-review.md)): each state a
+task built is captured beside the view's reference, in the same state and settings, and a reviewer that sees only
+the two images lists every difference with its severity and place on screen. No design to compare with? An HTML
+prototype the user clicks through and approves before the UI is built is the cheapest reference — and the first
+place to settle what the screen should be.
+
 ---
 
 ## Design checklist
@@ -370,3 +378,5 @@ Before the design gate, the design names:
 11. **Analytics** — the events added (catalogue entries), no personal data, consent (with `+privacy`).
 12. **Tests** — component tests by role and name, a fixture per state, visual snapshots (themes, breakpoints, RTL)
     in a pinned environment, reviewed by a person.
+13. **References** — per view (and per state where it differs), the design export or the approved HTML prototype the
+    visual review compares the build with, and its path.
