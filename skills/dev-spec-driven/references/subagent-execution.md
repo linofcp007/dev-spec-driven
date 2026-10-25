@@ -423,10 +423,10 @@ finished feature's files changed — the baseline only says THAT they changed; c
    planned tests missing from the code) and `spec_scan {duplicates: true, name}` (its `existing` runs go to the
    reviewer as candidate findings, verified before they cost a task).
 2. **Dispatch `dev-spec-driven:spec-reviewer` in converge mode** (standard tier; most capable for a large or
-   security-sensitive feature) with: the feature folder `.specs/<feature>/`, the active tracks, the
-   `trace_check` result (its gaps and `code` block, pasted), the source roots to inspect and, after a drift, the
-   drifted files. The reviewer is read-only and works AC by AC: implemented? (file:line) · tested? (test name / T-ID) → ✅ / ❌ / ⚠️, then
-   returns — in its reply — the missing work as **proposed tasks** shaped for `spec_append_tasks`.
+   security-sensitive feature) with: the feature folder `.specs/<feature>/`, the active tracks, the `trace_check` result
+   (its gaps and `code` block, pasted), the source roots to inspect and, after a drift, the drifted files. The reviewer
+   is read-only and works AC by AC: implemented? (file:line) · tested? (test name / T-ID) → ✅ / ❌ / ⚠️, then returns —
+   in its reply — the missing work as **proposed tasks** shaped for `spec_append_tasks`.
 3. **Triage the proposals yourself.** A gap fixable within the approved ACs and design is a task. A gap that
    needs a different AC, design decision or test expectation is a **spec change** — back to its phase
    (`spec_impact` after the edit), never a task. **After a drift** (a finished feature), ask what the change meant: an ❌

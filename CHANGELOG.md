@@ -16,8 +16,9 @@ before a gate and before each subagent task, and asks the author to triage what 
   sentences two engineers would build differently. It checks the glossary and the steering before it flags a term.
 - **The deep review, by size** (`/spec-doctor --deep`, and offered once per feature before the requirements approval at
   size m / l or no size — never at the classification gate). The reviewers depend on the size: at s the gate critic
-  alone; at m or no size, the critic and a cold read; at l, two independent critics and a cold read. The cold read is only for `requirements.md`, `design.md` and `bug.md`. They are
-  dispatched in one message, with none of the author's reasoning.
+  alone; at m or no size, the critic and a cold read; at l, two independent critics and a cold read. The cold read is
+  only for `requirements.md`, `design.md` and `bug.md`. They are dispatched in one message, with none of the author's
+  reasoning.
   - **The author triages every Blocking and Important finding.** Each one gets a call: **Fix** (with the exact edit),
     **Contest** (with the evidence; without it, it is a fix) or **Ask** (only the user can settle it). The user then answers
     one question: apply the fixes, go one by one, or leave it.
