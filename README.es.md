@@ -19,7 +19,8 @@ sencilla — en inglés, portugués (PT-PT y PT-BR) y español.
 ## Requisitos
 
 - **Claude Code 2.1.139 o posterior** (`claude --version`) — los hooks se ejecutan en exec form (`node` arranca
-  directamente, sin shell en cada llamada), que las versiones anteriores no ejecutan. O cualquier cliente MCP: Claude
+  directamente, sin shell en cada llamada), que las versiones anteriores no ejecutan; la 2.1.271 o posterior además
+  arranca los revisores sin tu CLAUDE.md. O cualquier cliente MCP: Claude
   Desktop, Cursor, Windsurf, VS Code / Copilot, Gemini CLI, Codex CLI… ([INTEGRATIONS.md](./INTEGRATIONS.md)).
 - **Node.js ≥ 18** en el PATH (`node --version`). Node 18 y 20 ya llegaron al final de su vida útil: se recomienda la 22
   o posterior (las suites pasan en la 18, la 22, la 24 y la 26).
@@ -147,7 +148,7 @@ en otros clientes MCP son los prompts del servidor.
 | | `/clarify [--grill]` | Los huecos de los requisitos antes del diseño; `--grill` pone a prueba tu comprensión |
 | | `/spec-tour` | Una visita guiada de 10 minutos: un cambio pequeño y real por todos los gates |
 | aprobar | `/approve [fase \| --through f]` | Registra tu aprobación de una fase (`--role`, `--force`, `--revoke`) |
-| | `/spec-doctor [--deep]` | ¿Lista para avanzar? `--deep` añade la revisión semántica del crítico de la spec |
+| | `/spec-doctor [--deep]` | ¿Lista para avanzar? `--deep` añade revisores sin contexto: el crítico de la spec y, en los tamaños m / l, una lectura en frío |
 | | `/spec-change [impact \| decide \| track ±x]` | Después de una aprobación: lo que toca una edición, una entrada en el registro de decisiones, un track activado o desactivado |
 | ejecutar | `/executeTask [--subagents] \| commit` | La tarea siguiente (o la tarea N) con evidencia; `commit` redacta un commit que cita la spec |
 | | `/eval [run \| baseline \| migrate]` | (+ai) El harness de evals local con tu propia clave de API; una migración de modelo condicionada a él |

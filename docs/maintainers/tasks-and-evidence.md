@@ -21,7 +21,12 @@ Phase 6, opt-in.
   item is `projectChecks.briefDodRed` (only its new red tests may fail).
 - **`write: true`** writes `.specs/<f>/.execution/` (self-ignoring: `.gitignore` = `*`): the brief regenerated, `ledger.md` created
   once and only ever appended by the controller. The result keeps identifiers (`refs`, `loop`, `inlineOnly`, `verify`, gate,
-  `dependsOn`), the quoted spec text only with `includeBrief`. The PostToolUse hook exits early on `/.execution/` paths.
+  `dependsOn`, `preflight`), the quoted spec text only with `includeBrief`. The PostToolUse hook exits early on `/.execution/` paths.
+- **`preflight` (1.31)** — a boolean on every brief of a task: true at size m / l or no size (`featureSize()`), false for an
+  xs change (`isChangeDir()`), size s, an `inlineOnly` task and a done one. On true the controller dispatches the critic in
+  brief mode over `paths.brief` before the implementer (`references/subagent-execution.md` → Pre-flight the brief): the
+  decisions the brief leaves open are settled from the spec, ruled (ledger / `spec_decide`) or sent back to their phase. The
+  engine only says when; the controller branches on the key, never on the brief's text.
 - **The protocol is prose; the engine never dispatches anything** (it stays cross-tool): `references/subagent-execution.md` and the
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
@@ -582,6 +587,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   sections naming the task's own IDs now fill the budget first.
 - **1.28** — the review flow runs the duplicate detector first; until then duplication was found only by the reviewer's own
   searches (prose).
+- **1.31** — the brief's `preflight` key and the pre-flight (from google/elephant-goldfish-model's zero-decision rule): a
+  brief that left a design choice open was found only when the implementer came back NEEDS_CONTEXT — a dispatch spent — or
+  not at all when it chose alone.
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

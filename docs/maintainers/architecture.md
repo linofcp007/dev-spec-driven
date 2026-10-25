@@ -13,7 +13,8 @@ skills/.../references/          read on demand — index.md lists every file; to
                                hold what SKILL.md points to; tooling-reference.md every tool and doctor check id
 commands/*.md                  22 slash commands (only /spec and /spec-bugfix model-invocable) — also the MCP prompts
 agents/*.md                    5 subagents: `dev-spec-driven:spec-implementer` / `dev-spec-driven:spec-reviewer` (+ simplify
-                               mode) / `dev-spec-driven:spec-verifier` (one finding) / `dev-spec-driven:spec-critic` (--deep) /
+                               mode) / `dev-spec-driven:spec-verifier` (one finding) / `dev-spec-driven:spec-critic` (--deep:
+                               gate / naive modes; a brief's pre-flight) /
                                `dev-spec-driven:spec-simplifier`
 evals/                         plugin evals for `claude plugin eval` (maintainer-side): triggering / negative cases and behavioural
                                ones (<case>/case.yaml + fixture.sh, built from evals/fixtures/ with this plugin's CLI); evals/README.md

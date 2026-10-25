@@ -45,6 +45,8 @@ the whole library.
   tests, the micro-cycle, anti-patterns
 - `references/code-reuse-and-quality.md` — search before you write, reuse / extend / create, module boundaries, code
   smells, the simplification pass, the refactor backlog
+- `references/critic-review.md` — the deep review before a gate: who reviews by size (the critic, a cold read, two
+  critics at l), keeping reviewers fresh, the triage (fix · contest · ask), the one re-audit
 - `references/review-feedback.md` — handling review comments against the spec · `references/red-flags.md` — the
   rationalizations that precede skipping each phase
 

@@ -711,6 +711,26 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
     ok(js(hB.dependsOn) === '[{"number":1,"status":"done"},{"number":2,"status":"open"}]' && /## Depende de\n- #1 ✓ feita — Base\n- #2 ○ por fazer — Meio\n\n⚠ Algumas ainda não estão concluídas/.test(hB.brief) &&
       js(hW.dependsOn) === js(hB.dependsOn) && !("brief" in hW) && /## Depends on\n- #2 ○ open — B one\n- #3 ○ open — B two\n- #4 ○ open — Lib\n- #5 ○ open — Lib util\n\n⚠ Some of them are still open/.test(dB.brief),
       "feature F3: the brief lists the task's _Depends:_ with each one's status (done / open / missing) and a warning while one is open — PT too; `dependsOn` is kept with write:true (got " + js([hB.dependsOn, hW.dependsOn]) + ")");
+    // 1.31: `preflight` says whether the controller pre-flights the brief (the critic's brief mode) — sizes m / l or none,
+    // never an xs change, size s, a +ai prompt task or a done task; kept with write:true (an identifier, not spec text).
+    const pfRoot = path.join(fdRoot, "preflight");
+    S.initProject(pfRoot, ["core"], "en");
+    const pf = Object.fromEntries([null, "m", "l", "s", "xs"].map((size) => {
+      const f = S.createFeature(pfRoot, Object.assign({ name: "Preflight " + (size || "none"), lang: "en" }, size ? { size } : {}));
+      return [size || "none", f.ok ? S.taskBrief(pfRoot, f.slug, 1, { write: true }).preflight : "create failed: " + f.error];
+    }));
+    const pfDone = S.taskBrief(h.p, h.slug, 1);
+    const pfAi = S.createFeature(pfRoot, "Preflight prompt", ["core", "ai"], "", undefined, "en");
+    fs.writeFileSync(path.join(pfAi.dir, "tasks.md"), tl("- [ ] 1. Tune the prompt", "  - _Affects evals: E-1_"));
+    const pfAiBrief = S.taskBrief(pfRoot, pfAi.slug, 1);
+    all("1.31: spec_task_brief's preflight is true at sizes m / l or none and false at xs / s, on a +ai prompt task and on a done task — with write:true too (got " +
+      js({ pf, open: [hB.preflight, hW.preflight], done: pfDone.preflight, ai: [pfAiBrief.inlineOnly, pfAiBrief.preflight] }) + ")", {
+      sized: () => pf.m === true && pf.l === true && pf.none === true,
+      small: () => pf.s === false && pf.xs === false,
+      open: () => hB.preflight === true && hW.preflight === true,
+      done: () => pfDone.task.done === true && pfDone.preflight === false,
+      prompt: () => pfAiBrief.inlineOnly === true && pfAiBrief.preflight === false,
+    });
 
     // spec_append_tasks {depends}: existing tasks or tasks of the same call; a phantom, a self-dependency, a cycle, a non-number → nothing written.
     const ap = mkF("append");

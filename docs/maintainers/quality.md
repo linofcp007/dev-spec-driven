@@ -35,6 +35,19 @@ the TDD micro-cycle, the duplicate-code detector. The rules come first; how they
   warns with the count.
 - **Messages:** `i18n.msg(l).quality` (QUALITY_MSG). Phases (`DOCTOR_CHECKS`' `phase`): glossary 1, cross-feature-acs 1,
   steering-changed-since-approval 2.
+- **The deep review (1.31, prose only — the engine dispatches nothing).** `agents/spec-critic.md` has three modes: **gate**
+  (the checklist; at the plan gate its Readiness row — zero design decisions left to the implementer —, under YAGNI a code
+  search for each `New` row of Reuse & Integration and premature optimisation), **naive** (a cold read: the artifact and
+  what it links, steering / glossary only to check a term before flagging it; it opens with `### Understood as`, a
+  restatement) and **brief** (the task brief's pre-flight — tasks-and-evidence.md → Subagent-driven execution).
+  `references/critic-review.md` is the protocol `/spec-doctor --deep` and the gate offer (SKILL.md → Gates, phase-guide.md →
+  At every gate; m / l or no size) follow: reviewers by size (s the gate critic; m / none + a cold read; l two independent
+  gate critics + a cold read), dispatched in one message with none of the controller's reasoning, merged, each Blocking /
+  Important finding triaged by the controller (Fix with the exact edit · Contest with evidence · Ask), ONE question to the
+  user, one re-audit after fixes. The critic and the verifier declare `omitClaudeMd: true` (claude-code-integration.md →
+  Hooks and commands). From google/elephant-goldfish-model (Apache-2.0): its Comprehension and Implementation Readiness
+  reviewers, the resolve step, the convergence cap — its structural and style reviewers were left out (the first is
+  `spec_doctor`, the second noise).
 
 ## Design trade-offs and risks, the constraint nudge, the micro-cycle
 - **The sections** — the core design builder scaffolds `## Alternatives & Trade-offs` (after Architecture: the options per key
@@ -201,6 +214,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   paragraph after a blank line belongs to its entry.
 - **1.16 verify NEW-2** — a removed feature took a deleted pack's last ghost marker with it, so cached rows went stale: the rows
   and the table are keyed by the call's ghost-marker set, and features with `packMarkers` are never cached.
+- **1.31** — the deep review, from google/elephant-goldfish-model: until then `--deep` dispatched one critic that read
+  everything the approver reads, so it could not see what the artifact itself leaves undefined; the critic's findings
+  reached the user untriaged, and a review loop had no cap.
 
 ### Design trade-offs and risks, the constraint nudge, the micro-cycle
 - **1.17 A** — package A: the `Alternatives & Trade-offs` / `Risks` sections and their doctor warnings (A1), the constraint

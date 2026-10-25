@@ -58,6 +58,7 @@ Ledger lines (one per event, appended):
 ```
 Preflight: <table — see below>
 Ruling: <what you decided> — <why> — <what it costs if wrong>
+Task 3: pre-flight — 1 decision (ruled)
 Task 3: dispatched (base a1b2c3d, model sonnet)
 Task 3: minor (deferred): <one-liner>
 Task 3: verify — 2 confirmed, 1 unconfirmed, 1 refuted
@@ -95,6 +96,29 @@ targets (`refs.reuse`: how many entries, the files) — where the implementer's 
 (`references/code-reuse-and-quality.md`).
 If the result says `inlineOnly`, do this task yourself in the inline prompt-iteration loop instead.
 Record `BASE = git rev-parse HEAD`.
+
+#### Pre-flight the brief (`preflight: true` — size m / l, or no size)
+
+A brief that leaves a design decision open costs a whole dispatch: the implementer comes back NEEDS_CONTEXT, or worse,
+decides alone and doesn't say so. When the result says `preflight: true`, have a fresh reader check the brief first —
+the zero-decision rule of google/elephant-goldfish-model's Implementation Readiness review (Apache-2.0):
+
+- Dispatch **`dev-spec-driven:spec-critic`** with `mode: brief`, the brief path (`paths.brief`) and the project root —
+  never your own view of the task. Cheapest tier (`haiku`) for a brief that carries the code or values, standard
+  otherwise. A batch is pre-flighted once; a wave's briefs all in one message.
+- **Ready** → dispatch. **Decisions needed** → settle each one before the dispatch:
+  - the spec settles it (an AC, a design section, a decision, a ruling) → the answer goes in the dispatch (item 4
+    below), citing where it comes from;
+  - a choice within the design that no artifact records → rule on it (a `Ruling:` ledger line, carried in the
+    dispatch); one that later tasks build on goes to `decisions.md` (`spec_decide`, citing the task's IDs), so every
+    later brief carries it;
+  - it changes an AC, the design or a planned test → stop: "Where autonomy stops";
+  - a `[Gap]` — a `_Verify:_` that can't run as written → a plan defect: fix the task with the user's OK (an edited
+    `tasks.md` is re-approved) before the dispatch.
+- Ledger: `Task N: pre-flight — ready` or `Task N: pre-flight — 2 decisions (1 from the design, 1 ruled)`.
+
+`preflight: false` (sizes xs / s, a +ai prompt task, a done task): no pre-flight — with one or two small tasks the
+implementer's own NEEDS_CONTEXT is the cheaper check.
 
 ### 2. Dispatch the implementer
 
@@ -387,8 +411,9 @@ data subject rights), writes a merge summary built from the spec chain (with the
 
 The converge pass (the user's `/spec-review <feature> converge`) asks a different question from the task loop: not "is
 this diff right?" but "does the code, as it stands, deliver every AC?". Use it when implementation drifted from the plan, after a review found follow-up
-work, or before finishing when every task is ticked but you doubt the feature is complete. It works on any
-feature, inline-executed or not.
+work, before finishing when every task is ticked but you doubt the feature is complete, or when `spec_drift` says a
+finished feature's files changed — the baseline only says THAT they changed; converge says whether the ACs still hold
+(pass the drifted files: the reviewer starts from the ACs they implement). It works on any feature, inline-executed or not.
 
 1. **Gather.** `spec_status`, `trace_check {name, code: true}` (T-IDs and AC IDs named in the test files,
    planned tests missing from the code) and `spec_scan {duplicates: true, name}` (its `existing` runs go to the
@@ -416,12 +441,13 @@ tasks. Either way, never append a task the human hasn't approved.
 Pass `model` explicitly on every dispatch. The implementer, the reviewer, the verifier and the simplifier declare
 `model: sonnet` in their frontmatter, so an omitted `model` runs them on `sonnet` — right for most implementer and
 reviewer work, wrong for the cheap transcription tasks, most verify passes and the final review below. (The critic
-declares `model: inherit`: one semantic review per gate, on the session's own model.)
+declares `model: inherit`: one semantic review per gate, on the session's own model — pass `model` for a pre-flight.)
 
 | Role | Tier (Claude Code alias) |
 |---|---|
 | Implementer, brief contains the complete code/values (transcription + tests), or a one-file mechanical fix | cheapest (`haiku`) |
 | Implementer working from prose, multi-file integration | standard (`sonnet`) — the floor for prose tasks |
+| Pre-flight (the critic, brief mode) | cheapest (`haiku`) for a brief that carries the code or values; standard otherwise |
 | Task reviewer | standard (`sonnet`); scale up for subtle concurrency/security diffs |
 | Scoped re-review of a small fix | cheap-to-standard |
 | Verify pass (one finding) | cheapest (`haiku`); standard for a security, concurrency or data-loss finding |
@@ -436,6 +462,7 @@ Turn count beats token price: the cheapest models take 2–3× the turns on mult
 | Excuse | Reality |
 |---|---|
 | "Close enough on spec compliance" | An ❌ on an AC ID is not done. Fix it or hit the cap and adjudicate. |
+| "The brief looks complete — skip the pre-flight" | You wrote the spec, so you can't see what it leaves out. One cheap fresh read costs less than a NEEDS_CONTEXT round trip, or an implementer's silent guess. |
 | "I'll just fix it myself" | Controller fixes skip review and pollute your context. Resume the implementer. |
 | "The test is wrong, let the implementer adjust it" | That is a spec change — stop and go back to the test plan. |
 | "One more round will converge" | Past the cap the failure is structural. Adjudicate. |

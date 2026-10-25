@@ -161,7 +161,7 @@ ok(apT10.code === 0 && done3.code === 0 && /was finished on \d{4}-\d\d-\d\d, but
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "changed by another feature\n");
 const naSD10 = runIn(["next-action", "login-loop", "--project", w10f]);
 const drSD10 = runIn(["drift", "login-loop", "--project", w10f]);
-ok(/but 1 of 1 implementing file\(s\) changed since: src\/auth\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. Decide: /.test(naSD10.out) && /It also changed since that finish \(re-approved: tasks/.test(naSD10.out) &&
+ok(/but 1 of 1 implementing file\(s\) changed since: src\/auth\.js \(node "[^"]*dev-spec\.js" drift login-loop\)\. The baseline only says that they changed — \/spec-review login-loop converge reads the code AC by AC, from those files\. Then decide: /.test(naSD10.out) && /It also changed since that finish \(re-approved: tasks/.test(naSD10.out) &&
   drSD10.code === 1 && /⚠ login-loop: 1 of 1 implementing file\(s\) changed since finish/.test(drSD10.out) && /changed: src\/auth\.js/.test(drSD10.out) && /↻ login-loop: changed since finish/.test(drSD10.out),
   "a stale baseline whose recorded file changed: next-action → the drift decision + finish again; drift names the file and the stale baseline (got " + JSON.stringify([naSD10.out.slice(0, 120), drSD10.out.slice(0, 160)]) + ")");
 fs.writeFileSync(path.join(w10f, "src", "auth.js"), "two\n");

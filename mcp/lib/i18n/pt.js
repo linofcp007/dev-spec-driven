@@ -1200,7 +1200,7 @@ const msg = {
       implement: (n, text, slug) => `Implementa a tarefa #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `Todas as tarefas feitas — fecha a feature com /spec-finish ${slug} (spec_finish): relatório de prontidão + resumo do merge. Opcional, antes disso: /spec-review ${slug} simplify — uma limpeza do código da própria feature sem mudar o comportamento, provada pelos seus testes.`,
       breakIntoTasks: (slug) => `Divide o design em tarefas — /spec ${slug} tasks.`,
-      drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (${DEV_SPEC} drift ${slug}). Decide: a spec está agora errada → /spec-change ${slug} impact (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
+      drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (${DEV_SPEC} drift ${slug}). A baseline só diz que mudaram — /spec-review ${slug} converge lê o código critério a critério, a partir desses ficheiros. Depois decide: a spec está agora errada → /spec-change ${slug} impact (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
       finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` +
         (!signOff ? ` Nada mais a fazer aqui — /spec-report drift ${slug} verifica-a depois de alterações futuras.`
           : signOff.why ? ` A aprovação final (execution, ${signOff.at}) foi registada antes destas alterações: ${signOff.why} — volta a confirmá-la: /approve ${slug} execution${signOff.role ? " --role " + signOff.role : ""}.`
@@ -2080,7 +2080,7 @@ const msg = {
         reReview: (list, cmds) => `Revê o que mudou depois da aprovação: ${list}` + (cmds ? ` — vê primeiro a diferença: ${cmds}` : "") + "; depois volta a aprovar",
         reapprove: (list) => `Volta a aprovar para começar o histórico de alterações (o spec_impact ainda não consegue comparar estas): ${list}`,
         verify: (list, slug) => `Regista uma execução bem-sucedida das tarefas marcadas que não a têm: ${list} — ${DEV_SPEC} done ${slug} <n> --run`,
-        drift: (n, slug) => `Decide sobre a deriva: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — ${DEV_SPEC} drift ${slug}`,
+        drift: (n, slug) => `Decide sobre a deriva: ${n} ficheiro(s) de implementação alterado(s) desde o fecho — ${DEV_SPEC} drift ${slug}; /spec-review ${slug} converge verifica o código critério a critério`,
         stale: (slug) => `Mudou depois do fecho — volta a fechá-la: /spec-finish ${slug}`,
         packReserved: (list, slug, since) => `Muda o nome do(s) seu(s) track pack(s) anterior(es) à ${since || "1.17"} — ${list}: o nome é agora reservado, por isso o track está inativo (detalhes: ${DEV_SPEC} doctor ${slug}, verificação track-pack-missing)`,
         packMarkerReserved: (list, slug, since, tracks) => `Muda o marcador do(s) seu(s) track pack(s) anterior(es) à ${since || "1.19"} — ${list}: o marcador é agora o de um track incluído, por isso o pack está inativo; ou usa o track incluído: ${DEV_SPEC} add-track ${slug} ${tracks} (detalhes: ${DEV_SPEC} doctor ${slug}, verificação track-pack-missing)`,

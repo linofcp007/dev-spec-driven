@@ -284,6 +284,32 @@ exports.run = async ({
     Buffer.byteLength(fs.readFileSync(path.join(agentsDir, "spec-verifier.md"), "utf8")) <= 4000 && !/^## Verify mode$/m.test(fs.readFileSync(path.join(agentsDir, "spec-reviewer.md"), "utf8")),
     "5 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer and the verifier add a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool; every description ≤ 250 characters with no pointer to the body, the reviewer's says 'never edits code' (it has a shell), the verifier ≤ 4 KB and the reviewer has no verify mode left (1.26; got " +
     JSON.stringify(agentFiles.map((a) => a + " " + agentDesc(a).length)) + ")");
+  // 1.31 (from google/elephant-goldfish-model): the reviewers that judge an artifact or a finding start without CLAUDE.md
+  // (`omitClaudeMd: true`, Claude Code 2.1.271+; older versions ignore the key); the ones that write or review code keep
+  // the project's instructions. The critic has three modes — gate, a cold read (naive), a task brief's pre-flight (brief).
+  {
+    const front = (x) => fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "";
+    const critic = docsWs(docsRead("agents", "spec-critic.md")), review = docsWs(docsRef("critic-review.md"));
+    const subW = docsWs(docsRef("subagent-execution.md")), doctorCmd = docsWs(docsRead("commands", "spec-doctor.md"));
+    const skillW = docsWs(docsRead("skills", "dev-spec-driven", "SKILL.md")), execCmd = docsWs(docsRead("commands", "executeTask.md"));
+    all("1.31: the critic and the verifier start fresh (omitClaudeMd), the others keep CLAUDE.md; the critic's gate / naive / brief modes; the deep review by size with its triage and one re-audit (references/critic-review.md); the brief's pre-flight on `preflight: true` (subagent-execution.md, /executeTask, SKILL.md)", {
+      fresh: () => ["spec-critic.md", "spec-verifier.md"].every((a) => /^omitClaudeMd: true$/m.test(front(a))),
+      keep: () => ["spec-implementer.md", "spec-reviewer.md", "spec-simplifier.md"].every((a) => !/omitClaudeMd/.test(front(a))),
+      verifierRules: () => /no `CLAUDE\.md` is in your context — a rule the finding cites, you read from its file/.test(docsWs(docsRead("agents", "spec-verifier.md"))),
+      modes: () => ["- **gate** —", "- **naive** —", "- **brief** —", "## Naive mode — the cold read", "## Brief mode — the pre-flight",
+        "### Understood as", "### Pre-flight: Ready | Decisions needed", "| **Readiness** |", "google/elephant-goldfish-model (Apache-2.0)"].every((s) => critic.includes(s)),
+      naiveCold: () => /Do not read the steering, `decisions\.md`, the other artifacts or anything else first/.test(critic) && /Check before flagging\./.test(critic),
+      reuseSearch: () => /Each `New` row of the design's Reuse & Integration: search the code for it/.test(critic),
+      bySize: () => ["| s | the critic (`mode: gate`) |", "| m, or no size | the critic (`gate`) + a cold read (`mode: naive`) |",
+        "| l | two independent critics (`gate`, A and B) + a cold read |"].every((s) => review.includes(s)),
+      triage: () => ["| **Fix** |", "| **Contest** |", "| **Ask** |", "a contest without evidence is a fix", "**One re-audit:**", "Never a second one."].every((s) => review.includes(s)),
+      noReasoning: () => /Never in a dispatch: your reasoning, the conversation, why the artifact is right/.test(review) && /never with your own reasoning/.test(doctorCmd),
+      indexed: () => /`references\/critic-review\.md` — the deep review before a gate/.test(docsRef("index.md")) && /references\/critic-review\.md/.test(doctorCmd) && /`references\/critic-review\.md`/.test(skillW),
+      preflight: () => /#### Pre-flight the brief \(`preflight: true` — size m \/ l, or no size\)/.test(docsRef("subagent-execution.md")) &&
+        /Dispatch \*\*`dev-spec-driven:spec-critic`\*\* with `mode: brief`, the brief path \(`paths\.brief`\)/.test(subW) && /\| Pre-flight \(the critic, brief mode\) \|/.test(subW) &&
+        /on `preflight: true` its pre-flight \(`dev-spec-driven:spec-critic`, `mode: brief`/.test(execCmd) && /its pre-flight \(the critic, brief mode/.test(skillW),
+    });
+  }
   // 1.26: the 55 commands folded into 22 — the phase commands into /spec, the rest into umbrella commands with subcommands
   // (docs/maintainers/extending.md → The 1.26 command set has the old → new table); the exact set, nothing else.
   const cmdFiles = fs.readdirSync(path.join(root, "commands")).filter((x) => x.endsWith(".md")).sort();

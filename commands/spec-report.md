@@ -12,8 +12,9 @@ Args: $ARGUMENTS — everything is derived locally from `.specs/`; no model, not
   `_Supersedes: <feature>/US-n.AC-m_`.
 - **drift `[feature]`** — `spec_drift {name?}`, read-only (CLI `dev-spec drift`: exit 1 on drift or a stale baseline):
   each finished feature's implementing files changed, missing or now present since its finish; `unbaselined`,
-  `reopened` and `stale` apart. Decide each drift with the user: the spec is wrong → `/spec-change <feature> impact`;
-  the code is wrong → fix it (`/spec-bugfix`); harmless → finish again for a fresh baseline.
+  `reopened` and `stale` apart. The baseline only says that files changed: `/spec-review <feature> converge` (the drifted
+  files passed) reads the code AC by AC. Then decide each drift with the user: the spec is wrong →
+  `/spec-change <feature> impact`; the code is wrong → fix it (`/spec-bugfix`); harmless → finish again for a fresh baseline.
 - **metrics `[feature] [--write]`** — `spec_metrics {name?, write?}`: lead times, rework, forced and batch approvals,
   change requests, evidence pass rate, velocity. `write` (with a name) creates `retro.md`, never over an existing one; its
   steering amendments are proposals for the user.

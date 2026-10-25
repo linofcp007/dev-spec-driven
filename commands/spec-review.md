@@ -24,7 +24,8 @@ With a subagent tool, write the diff to `.specs/<feature>/.execution/review.diff
 in parallel; without one, check each yourself and say so. Report the findings rated 80 or more by severity, the rest one
 line each under "Unconfirmed (below 80)"; then `trace_check {name}` (`matrix: true` for the traceability matrix).
 
-**converge** — the feature AC by AC against the code: `spec_status` + `trace_check {name, code: true}`, then
+**converge** — the feature AC by AC against the code: `spec_status` + `trace_check {name, code: true}` (+ on a finished
+feature `spec_drift {name}`: its changed files go to the reviewer, the baseline only says that they changed), then
 `dev-spec-driven:spec-reviewer` in converge mode (inline without subagents): per AC implemented (file:line)? tested
 (T-ID)? → ✅ / ❌ / ⚠️, with proposed tasks (an ❌ checked by a `dev-spec-driven:spec-verifier` before it costs a task).
 A gap that needs another AC, design decision or test is no task:

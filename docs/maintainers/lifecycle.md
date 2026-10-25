@@ -24,6 +24,8 @@ first; how they came to be — the releases and review findings — is in Histor
 - **`spec_drift`** hashes only those files. Open tasks → `reopened`; changed since its finish (`staleFinish()`) → `stale` (CLI
   exit 1; the catalog says `complete`), yet still hashed: a drifted file gives verdict `drift` — a stale baseline never hides a
   change. An unreadable state is `error`. SessionStart: one line per drifted ACTIVE feature, bounded by `DRIFT_MAX_FILES`.
+  A hash says only THAT a file changed: next_action's `drift` step and the upgrade audit name the converge pass, which says
+  whether the ACs still hold (the reviewer's converge mode, given the drifted files).
 - **The catalog's `finished`** is finish's: ticks verified (`verificationStatus`), nothing changed BY CONTENT since approval
   (`changedSinceApproval` minus `byDate`), no new `_Implements:_` file (walked last; `baselineFiles(…, known)` skips the realpath
   check for known files — the whole cost). An ARCHIVED feature is never walked for new files: its stale line says restore →
@@ -235,6 +237,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   longer makes that state. `spec_create` of an archived twin says so (`archivedTwin`).
 - **1.24 r6** — an archive into a `.specs/_archive/` that was a link moved the whole feature there, and restore pulled any folder
   the link's target held into .specs/; both refused by the write gate since.
+- **1.31** — a drift asked the user to decide (spec wrong · code wrong · harmless) from hashes that only say a file changed:
+  next_action's `drift` step (`next.drifted`) and the upgrade audit's drift line (`upgrade.item.drift`) now name
+  `/spec-review <f> converge`, which reads the code AC by AC from the drifted files (from google/elephant-goldfish-model's
+  semantic drift report).
 
 ### A feature's own git branch
 - **1.25** — `create --branch` / `spec_create {branch}`: the record, the name rules, the engine reading the repository as files,
