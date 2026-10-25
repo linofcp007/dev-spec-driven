@@ -19,7 +19,11 @@ Use the **dev-spec-driven** skill, Phase 6 (Execute). Target: $ARGUMENTS
    concept and synonyms. Stay inside the task's `_Implements:_` files: a unit elsewhere is a plan change
    (`spec_append_tasks`; the scope guard asks), and a refactor you notice is filed, not done —
    `spec_roadmap_edit {kind: "backlog", action: "add", name: "refactor-<topic>", note: "refactor: <smell> in <files>"}`.
-4. **Evidence before claims** — run the task's `_Verify:_` fresh and tick with `spec_complete_task {name, number,
+4. **A +ui task that changes what renders** (size m / l or none): once its `_Verify:_` is green, the visual review — the
+   build captured beside the design's reference, state by state, judged by `dev-spec-driven:spec-ui-reviewer` from the
+   images alone (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/ui-review.md`); fix its Blockers and Majors
+   before the tick. No reference, no capture tool or no subagent tool: say it was not run — never that it passed.
+5. **Evidence before claims** — run the task's `_Verify:_` fresh and tick with `spec_complete_task {name, number,
    evidence: {command, exitCode, summary}}`: the `_Verify:_` command itself (several: all of them joined with ` && `). A
    non-zero exit refuses the tick (an `_Expect: fail_` task is proven by its red run); a note alone leaves a runnable
    `_Verify:_` unverified. Or `node "${CLAUDE_PLUGIN_ROOT}/cli/dev-spec.js" done <feature> <n> --run`.
@@ -31,7 +35,8 @@ reason}`.
 **`--subagents`** — `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/subagent-execution.md`: its preconditions
 (doctor ready, tasks approved, not on the default branch, `trace_check` passing, baseline green), then per task
 `spec_task_brief {write: true}` → on `preflight: true` its pre-flight (`dev-spec-driven:spec-critic`, `Mode: brief`; the
-decisions it finds settled before the dispatch) → `dev-spec-driven:spec-implementer` → `dev-spec-driven:spec-reviewer` (each Critical /
+decisions it finds settled before the dispatch) → `dev-spec-driven:spec-implementer` → on `uiReview: true` the visual review
+(`dev-spec-driven:spec-ui-reviewer`; its Blockers and Majors are fixed first) → `dev-spec-driven:spec-reviewer` (each Critical /
 Important finding and each ❌ checked first by one `dev-spec-driven:spec-verifier` per finding — 80 or more opens a fix round;
 a new unit that is a duplicate in the existing codebase is Important) → `spec_complete_task` after a clean review. Stop at every `**Checkpoint:**`;
 `inlineOnly` tasks run inline; `spec_next_task {waves: true}` plans parallel waves. The final review starts from

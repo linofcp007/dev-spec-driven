@@ -741,6 +741,39 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
         !("size" in S.specDoctor(pfRoot, pfSlugs.none)),
     });
 
+    // 1.32: `uiReview` — the visual review of what the task renders (references/ui-review.md): on a +ui feature at the
+    // pre-flight's sizes, a task proving a [UI] criterion, in the track's task block, or naming a view file; never without
+    // +ui, at size s, on a done task. Kept with write:true.
+    const uiF = S.createFeature(pfRoot, "Orders screen", ["core", "ui"], "", undefined, "en");
+    const uiTasks = fs.readFileSync(path.join(uiF.dir, "tasks.md"), "utf8");
+    const uiBlocks = S.taskBlocks(uiTasks);
+    const inUiBlock = uiBlocks.find((b) => /User Interface/.test(b.phase || "")), coreTask = uiBlocks.find((b) => /^Story US-1 \(P1/.test(b.phase || ""));
+    const uiOf = (slug, n, o) => S.taskBrief(pfRoot, slug, n, o).uiReview;
+    // a core task of the +ui feature that names a view file / a backend file
+    fs.writeFileSync(path.join(uiF.dir, "tasks.md"), uiTasks.replace("  - _Implements: [path of the code it creates or changes]_",
+      "  - _Implements: src/orders/OrdersPage.tsx_"));
+    const viewFile = uiOf(uiF.slug, coreTask.number);
+    fs.writeFileSync(path.join(uiF.dir, "tasks.md"), uiTasks.replace("  - _Implements: [path of the code it creates or changes]_",
+      "  - _Implements: src/orders/handler.ts_"));
+    const backendFile = uiOf(uiF.slug, coreTask.number);
+    fs.writeFileSync(path.join(uiF.dir, "tasks.md"), uiTasks);
+    const uiS = S.createFeature(pfRoot, { name: "Orders screen small", lang: "en", tracks: ["core", "ui"], size: "s" });
+    // size s keeps one template task per criterion: the one proving a [UI] criterion (trackAcIds is the engine's — no facade name)
+    const uiSAcs = require(path.join(__dirname, "lib", "engine", "index.js")).trackAcIds(fs.readFileSync(path.join(uiS.dir, "requirements.md"), "utf8"), "ui");
+    const uiSBlock = S.taskBlocks(fs.readFileSync(path.join(uiS.dir, "tasks.md"), "utf8"))
+      .find((b) => S.taskBrief(pfRoot, uiS.slug, b.number).acceptanceCriteria.some((a) => uiSAcs.has(a.id)));
+    const plain = S.createFeature(pfRoot, "Orders backend", ["core"], "", undefined, "en");
+    fs.writeFileSync(path.join(plain.dir, "tasks.md"), tl("- [ ] 1. The page", "  - _Requirements: US-1.AC-1_", "  - _Implements: src/orders/OrdersPage.tsx_"));
+    const got = { block: uiOf(uiF.slug, inUiBlock.number), blockW: uiOf(uiF.slug, inUiBlock.number, { write: true }), core: uiOf(uiF.slug, coreTask.number),
+      viewFile, backendFile, small: uiSBlock ? uiOf(uiS.slug, uiSBlock.number) : "no ui task at s", noUi: uiOf(plain.slug, 1) };
+    all("1.32: spec_task_brief's uiReview is true for a +ui task (its track block / a [UI] criterion) or one naming a view file, false for a core task with no view file, at size s and without +ui — with write:true too (got " + js(got) + ")", {
+      block: () => got.block === true && got.blockW === true,
+      core: () => got.core === false && got.backendFile === false,
+      viewFile: () => got.viewFile === true,
+      small: () => got.small === false,
+      noUi: () => got.noUi === false,
+    });
+
     // spec_append_tasks {depends}: existing tasks or tasks of the same call; a phantom, a self-dependency, a cycle, a non-number → nothing written.
     const ap = mkF("append");
     put(ap, "requirements.md", REQ);

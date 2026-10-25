@@ -58,7 +58,7 @@ inbox / saga, or an accepted risk) · Delivery & Idempotency · Concurrency · F
 **+api adds 5 mandatory `[API]` sections** — API Contract · Versioning & Compatibility · Error Model (RFC 9457
 problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. See `references/api-design-patterns.md`.
 
-**+ui adds 5 mandatory `[UI]` sections** — Design System Usage · UI States (a state matrix per view) · Accessibility
+**+ui adds 5 mandatory `[UI]` sections** — Design System Usage · UI States (a state matrix and a reference per view) · Accessibility
 (WCAG 2.2 AA) · Responsiveness & i18n · UI Performance Budget (Core Web Vitals). See `references/ui-design-patterns.md`.
 
 **+obs adds 5 mandatory `[OBS]` sections** — SLIs & SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health
@@ -102,7 +102,8 @@ own sections hold them. **Filled means your own text:** the template's guidance 
   "never / for every" rules like tenant isolation). The Coverage Check shows every AC in ≥ 1 test.
 - **+saas:** tenant-isolation, rate-limit, idempotency, authorization-matrix and audit-log tests. **+sec:** one
   abuse-case test per threat. **+privacy:** export / erasure / retention tests. **+dist:** failure injection. **+api:**
-  contract tests and the breaking-change diff. **+ui:** an accessibility check + visual regression of the states.
+  contract tests and the breaking-change diff. **+ui:** an accessibility check + visual regression of the states; at
+  size m / l (or none) each UI task's visual review against the view's reference (`references/ui-review.md`).
   **+obs:** an alert in a staged failure, a rollback drill, fault injection. **+data:** data-quality checks on fixture
   batches, an idempotent re-run / backfill of a partition, the freshness alert, the schema-change compatibility check.
   `references/test-patterns.md`, `references/data-pipeline-patterns.md`.
@@ -134,7 +135,8 @@ own sections hold them. **Filled means your own text:** the template's guidance 
 - **+privacy:** data subject rights verified end to end on the real stores, retention scheduled.
 - **+dist:** failure-injection tests green, no dual write left.
 - **+api:** contract tests and the breaking-change diff green.
-- **+ui:** the accessibility check, a keyboard / screen-reader pass and the performance budget.
+- **+ui:** the accessibility check, a keyboard / screen-reader pass, the performance budget, and each built state's
+  visual review against its reference — passed, or why it was not run.
 - **+obs:** an alert fired in a staged failure and a rollback drill.
 - **+data:** the data-quality checks, a partition re-run and a backfill rehearsal on real-sized data — the same rows as one run.
 

@@ -12,10 +12,10 @@ skills/dev-spec-driven/SKILL.md the workflow — the decision-time rules, ≤ 15
 skills/.../references/          read on demand — index.md lists every file; tool-catalog.md · track-checklists.md · workflows.md
                                hold what SKILL.md points to; tooling-reference.md every tool and doctor check id
 commands/*.md                  22 slash commands (only /spec and /spec-bugfix model-invocable) — also the MCP prompts
-agents/*.md                    5 subagents: `dev-spec-driven:spec-implementer` / `dev-spec-driven:spec-reviewer` (+ simplify
+agents/*.md                    6 subagents: `dev-spec-driven:spec-implementer` / `dev-spec-driven:spec-reviewer` (+ simplify
                                mode) / `dev-spec-driven:spec-verifier` (one finding) / `dev-spec-driven:spec-critic` (--deep:
                                gate / naive modes; a brief's pre-flight) /
-                               `dev-spec-driven:spec-simplifier`
+                               `dev-spec-driven:spec-simplifier` / `dev-spec-driven:spec-ui-reviewer` (a +ui task's visual review)
 evals/                         plugin evals for `claude plugin eval` (maintainer-side): triggering / negative cases and behavioural
                                ones (<case>/case.yaml + fixture.sh, built from evals/fixtures/ with this plugin's CLI); evals/README.md
 mcp/server.js                  MCP stdio (JSON-RPC 2.0, newline-delimited), argument validation, every tools/call through the

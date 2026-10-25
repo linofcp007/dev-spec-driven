@@ -67,6 +67,8 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     // "fichero" for a file (tasks.md's comment and parallel slot, the test plan's Fichero column, the integration plan's
     // heading); was 7b47ddfbbd0af1421ea315ecbdca5a1e65b5fadb. 1.30 review 8: the _Implements:_ slot on the core task and the
     // bugfix's fix (and the tasks comment that asks for it on every code task); was 352db345bb4e29784823bc13ccc166d02077172b.
+    // 1.32: +ui's UI States block gains a second line, the reference per view the visual review compares the build with
+    // (appended, so the 1.31 line still reads as template text in older designs); was bdf2541dbb91b0883e17f776c8a19f6a3818ee5e.
     const TR = ["tdd", "saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs"];
     const combos = [[], ...TR.map((t) => [t]), ...TR.flatMap((t, i) => TR.slice(i + 1).map((u) => [t, u])), TR].map((x) => ["core", ...x]);
     const label = (t) => t.map((x) => (x === "core" ? "core" : "+" + x)).join(" ");
@@ -101,7 +103,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, require, __dirname }
     const f = S.createFeature(p, "Plain", ["core", "sec"], "", undefined, "en");
     const same = rd(f.dir, "design.md") === i18n.design({ name: "Plain", tracks: ["core", "sec"], label: "core +sec" }, "en") &&
       rd(f.dir, "requirements.md") === i18n.requirements({ name: "Plain", tracks: ["core", "sec"], summary: "" }, "en");
-    ok(got === "bdf2541dbb91b0883e17f776c8a19f6a3818ee5e" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
+    ok(got === "95264d747a0fd19d442b8da26d59ccb3f59fd66d" && keys.length === 921 && f.ok && !("size" in stateOf(f.dir)) && f.size === undefined &&
       has(f.dir, "classification.md") && same,
       "1.21 F5: no size = the 1.20 scaffolds byte for byte (but the bugfix tasks.md, the short form on purpose) — the pinned sha1 of every no-size builder output of every pre-1.21 track combination (EN / PT / ES), and a create without a size writes no size key and the builders' own text (got " +
       JSON.stringify({ got, n: keys.length, state: stateOf(f.dir).size, same }) + ")");

@@ -34,7 +34,7 @@ marketplaces → add `linofcp007/dev-spec-driven` → install). Enable it when p
 
 **Check it.** `/help` lists the `/dev-spec-driven:*` commands and `/mcp` the **spec-driven** server with its tools —
 all but `spec_stop_check` and `spec_log` (the plugin's Stop hook and CLI do their job; both stay callable). The skill,
-the 5 agents and the hooks load with it. New here? `/dev-spec-driven:spec-tour` takes one tiny real change on your
+the 6 agents and the hooks load with it. New here? `/dev-spec-driven:spec-tour` takes one tiny real change on your
 repository through every gate.
 
 ## Your plugin folder (`$plugin`)

@@ -304,7 +304,7 @@ dev-spec-driven/                      ← raíz del plugin
 │   ├── SKILL.md                      ← el flujo por tracks (escrito en inglés; funciona en EN / PT / ES)
 │   └── references/                   ← la biblioteca en profundidad, leída cuando hace falta (EARS, fases, tracks, evals, seguridad, …)
 ├── commands/                         ← 22 comandos de barra (también los prompts MCP)
-├── agents/                           ← spec-implementer + spec-reviewer + spec-verifier + spec-critic + spec-simplifier
+├── agents/                           ← spec-implementer + spec-reviewer + spec-verifier + spec-critic + spec-simplifier + spec-ui-reviewer
 ├── evals/                            ← evals del plugin para `claude plugin eval` (activación EN/PT/ES + comportamiento, con fixtures)
 ├── cli/dev-spec.js                   ← CLI universal (funciona en cualquier herramienta / shell)
 ├── mcp/

@@ -273,8 +273,9 @@ exports.run = async ({
   // 1.26: the verifier (the reviewer's former verify mode) reads git and may run one focused test — a shell, no Write/Edit.
   // Every description is short (every session lists them) and never sends the dispatcher to the body, which it never sees.
   const agentDesc = (x) => ((fs.readFileSync(path.join(agentsDir, x), "utf8").split(/^---\r?$/m)[1] || "").match(/^description: (.*?)\r?$/m) || [])[1] || "";
-  ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md,spec-simplifier.md,spec-verifier.md" &&
-    agentTools("spec-critic.md").join() === "tools: Read, Grep, Glob" &&
+  ok(agentFiles.sort().join() === "spec-critic.md,spec-implementer.md,spec-reviewer.md,spec-simplifier.md,spec-ui-reviewer.md,spec-verifier.md" &&
+    agentTools("spec-critic.md").join() === "tools: Read, Grep, Glob" && agentTools("spec-ui-reviewer.md").join() === "tools: Read, Glob" &&
+    /never edits code/i.test(agentDesc("spec-ui-reviewer.md")) &&
     agentTools("spec-reviewer.md").join() === "tools: Read, Grep, Glob, Bash, PowerShell" &&
     agentTools("spec-verifier.md").join() === "tools: Read, Grep, Glob, Bash, PowerShell" &&
     agentTools("spec-implementer.md").join() === "tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell" &&
@@ -282,7 +283,7 @@ exports.run = async ({
     agentFiles.every((a) => agentDesc(a).length > 80 && agentDesc(a).length <= 250 && !/When to invoke|agent body/.test(agentDesc(a))) &&
     !/read-only/i.test(agentDesc("spec-reviewer.md")) && /never edits code/i.test(agentDesc("spec-reviewer.md")) && /never edits code/i.test(agentDesc("spec-verifier.md")) &&
     Buffer.byteLength(fs.readFileSync(path.join(agentsDir, "spec-verifier.md"), "utf8")) <= 4000 && !/^## Verify mode$/m.test(fs.readFileSync(path.join(agentsDir, "spec-reviewer.md"), "utf8")),
-    "5 plugin agents: the critic is read-only (Read, Grep, Glob), the reviewer and the verifier add a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool; every description ≤ 250 characters with no pointer to the body, the reviewer's says 'never edits code' (it has a shell), the verifier ≤ 4 KB and the reviewer has no verify mode left (1.26; got " +
+    "6 plugin agents: the critic is read-only (Read, Grep, Glob), the 1.32 UI reviewer reads images only (Read, Glob), the reviewer and the verifier add a shell, the implementer and the simplifier Write/Edit and a shell — Bash and (1.23 review 5) PowerShell: Claude Code on Windows without Git Bash has only the PowerShell tool, and a tools list with an unresolved entry still launches — none gets the Agent tool; every description ≤ 250 characters with no pointer to the body, the reviewer's says 'never edits code' (it has a shell), the verifier ≤ 4 KB and the reviewer has no verify mode left (1.26; got " +
     JSON.stringify(agentFiles.map((a) => a + " " + agentDesc(a).length)) + ")");
   // 1.31 (from google/elephant-goldfish-model): the reviewers that judge an artifact or a finding start without CLAUDE.md
   // (`omitClaudeMd: true`, Claude Code 2.1.271+; older versions ignore the key); the ones that write or review code keep
@@ -293,7 +294,7 @@ exports.run = async ({
     const subW = docsWs(docsRef("subagent-execution.md")), doctorCmd = docsWs(docsRead("commands", "spec-doctor.md"));
     const skillW = docsWs(docsRead("skills", "dev-spec-driven", "SKILL.md")), execCmd = docsWs(docsRead("commands", "executeTask.md"));
     all("1.31: the critic and the verifier start fresh (omitClaudeMd), the others keep CLAUDE.md; the critic's gate / naive / brief modes; the deep review by size with its triage and one re-audit (references/critic-review.md); the brief's pre-flight on `preflight: true` (subagent-execution.md, /executeTask, SKILL.md)", {
-      fresh: () => ["spec-critic.md", "spec-verifier.md"].every((a) => /^omitClaudeMd: true$/m.test(front(a))),
+      fresh: () => ["spec-critic.md", "spec-verifier.md", "spec-ui-reviewer.md"].every((a) => /^omitClaudeMd: true$/m.test(front(a))),
       keep: () => ["spec-implementer.md", "spec-reviewer.md", "spec-simplifier.md"].every((a) => !/omitClaudeMd/.test(front(a))),
       verifierRules: () => /no `CLAUDE\.md` is in your context — a rule the finding cites, you read from its file/.test(docsWs(docsRead("agents", "spec-verifier.md"))),
       modes: () => ["- **gate** —", "- **naive** —", "- **brief** —", "## Naive mode — the cold read", "## Brief mode — the pre-flight",
@@ -332,6 +333,27 @@ exports.run = async ({
         /After a drift, an ❌ the change didn't intend is a regression of a shipped AC \(`\/spec-bugfix`, not a task\); one it intended is a spec change\./.test(docsWs(docsRead("commands", "spec-review.md"))),
       briefInstructions: () => /the root `CLAUDE\.md` and the files it imports \(`@path`\), `\.claude\/CLAUDE\.md` and `CLAUDE\.local\.md` when present, and a `CLAUDE\.md` in the folders of the files the brief names/.test(critic) &&
         !/`AGENTS\.md`/.test(critic),
+    });
+    // 1.32 (from Shopify's Helix): the visual review of a +ui task — an image-only reviewer, INVALID on different states,
+    // never "passed" without a reference or a capture; it re-runs after a fix that changes a view; more autonomy only on
+    // the user's word; a checkpoint's general feedback becomes a steering amendment; the skeleton first.
+    const uiAgent = docsWs(docsRead("agents", "spec-ui-reviewer.md")), uiRef = docsWs(docsRef("ui-review.md"));
+    all("1.32: the visual review (agents/spec-ui-reviewer.md, references/ui-review.md) wired into the task loop, /executeTask and SKILL.md; the re-run after a fix, the autonomy grant, learnings → steering, the skeleton first", {
+      agent: () => /^model: inherit$/m.test(front("spec-ui-reviewer.md")) && ["never the code, the diff or the conversation", "the pair is **INVALID**",
+        "**Blocker**: a user would notice it and the code can fix it", "its **place**: the region and the element", "### UI review: Match | Differences | Invalid",
+        "Shopify's Helix"].every((s) => uiAgent.includes(s)),
+      neverPassed: () => /\*\*No reference → no review:\*\*[^.]*\. It is never "passed"\./.test(uiRef) && /skipped \(no capture tool\)` and say so at the checkpoint\. Never "passed"\./.test(uiRef),
+      imagesOnly: () => /Never the code, the diff, the brief or your view of it\./.test(uiRef) && /Don't open the images yourself/.test(uiRef) &&
+        /\*\*INVALID\*\* \(the two images show different states\) → capture both again in the same state/.test(uiRef),
+      rerun: () => /\*\*Gates a fix can undo run again\.\*\*/.test(subW) && /## 5\. After a fix — run it again/.test(docsRef("ui-review.md")) &&
+        /or with a visual Blocker or Major open\./.test(subW),
+      loop: () => /With `uiReview: true`, the visual review comes first/.test(subW) && /on `uiReview: true` the visual review \(`dev-spec-driven:spec-ui-reviewer`/.test(execCmd) &&
+        /4\. \*\*A \+ui task that changes what renders\*\*/.test(execCmd) && /on `uiReview: true`, the visual review against the design's reference/.test(skillW) &&
+        /`references\/ui-review\.md` — the visual review of a \+ui task/.test(docsRef("index.md")),
+      autonomy: () => /\*\*More autonomy, on the user's word only\.\*\*/.test(subW) && /You never grant it yourself, and a new session starts without it\./.test(subW),
+      learnings: () => /is a \*\*learning\*\* — propose it as a steering amendment/.test(subW) && /\| \*\*Project rule\*\* \|/.test(docsRef("review-feedback.md")),
+      skeleton: () => /Within a story, the skeleton first/.test(docsWs(docsRef("phase-guide.md"))) && /within a story the first task builds the skeleton/.test(critic),
+      uiReference: () => /and a reference the visual review compares the build with/.test(critic) && /13\. \*\*References\*\*/.test(docsRef("ui-design-patterns.md")),
     });
   }
   // 1.26: the 55 commands folded into 22 — the phase commands into /spec, the rest into umbrella commands with subcommands
@@ -453,8 +475,8 @@ exports.run = async ({
       }
     }
     const d4Report = require("./lib/prompts-resources.js").listPrompts().find((x) => x.name === "spec-report");
-    ok(d4Files.length === 28 && d4Bad.length === 0 && d4Report && /^Reports from the specs: the living catalog, drift since finish/.test(d4Report.description),
-      "full review D4: all 22 commands + 5 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-report's quoted description");
+    ok(d4Files.length === 29 && d4Bad.length === 0 && d4Report && /^Reports from the specs: the living catalog, drift since finish/.test(d4Report.description),
+      "full review D4: all 22 commands + 6 agents + SKILL.md front matter parse as strict key: value YAML (bad: " + d4Bad.join(", ") + "); the prompts reader still reads spec-report's quoted description");
     // D5: guard is a string enum on | off | scope — the docs told agents to pass guard: true / false.
     const d5Docs = [dRead("commands", "spec-setup.md"), dRef("tooling-reference.md")]; // 1.26: /spec-guard + /spec-init → /spec-setup guard | init
     const d5Schema = list.result.tools.find((t) => t.name === "spec_init").inputSchema.properties.guard;

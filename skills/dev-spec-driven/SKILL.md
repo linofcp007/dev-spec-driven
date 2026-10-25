@@ -144,7 +144,8 @@ discoveries go to `decisions.md` (`spec_decide`). In Claude Code a Stop hook ret
 evidence: run the check or say what is unverified.
 
 **Subagents (opt-in, ~6+ independent tasks, 2–3× the tokens):** per task `spec_task_brief {name, number, write: true}`,
-at size m / l (or none) its pre-flight (the critic, brief mode: the decisions it leaves open, settled before the dispatch),
+at size m / l (or none) its pre-flight (the critic, brief mode: the decisions it leaves open, settled before the dispatch)
+and, on `uiReview: true`, the visual review against the design's reference (`references/ui-review.md`),
 dispatch **`dev-spec-driven:spec-implementer`** with its path, send the diff to **`dev-spec-driven:spec-reviewer`**,
 verify each ❌ / Critical / Important finding (a `dev-spec-driven:spec-verifier` per finding; only 80+ opens a fix
 round), at most 5 rounds, then `spec_complete_task`. You never write feature code; stop at every `**Checkpoint:**`; a

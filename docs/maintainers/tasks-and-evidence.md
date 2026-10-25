@@ -29,6 +29,11 @@ Phase 6, opt-in.
   (`references/subagent-execution.md` → Pre-flight the brief): the decisions the brief leaves open are settled from the
   spec, ruled (ledger / `spec_decide`) or sent back to their phase. The engine only says when; the controller branches
   on the key, never on the brief's text.
+- **`uiReview` (1.32)** — the same base rule (`freshReviews`) and a UI task (`uiTask()`): a +ui feature's task that proves a
+  `[UI]` criterion (`trackAcIds`), sits in the track's template block (`trackTaskHeadings("ui")` on `block.phase`) or names a
+  view file in `_Implements:_` (`RE_VIEW_FILE`: markup, components, stylesheets — never `.ts` / `.swift` / `.kt`, which are
+  as often logic). On true the controller runs `references/ui-review.md` after the task's `_Verify:_` is green and before
+  the code review; its Blockers / Majors are fix rounds, and a later round that changes a reviewed view runs it again.
 - **The protocol is prose; the engine never dispatches anything** (it stays cross-tool): `references/subagent-execution.md` and the
   agents `spec-implementer.md` / `spec-reviewer.md` / `spec-simplifier.md` (from obra/superpowers, MIT, and Anthropic's
   `code-review` / `code-simplifier` plugins). The reviewer rates each Critical / Important finding 0–100; its **verify** mode judges
@@ -589,6 +594,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   sections naming the task's own IDs now fill the budget first.
 - **1.28** — the review flow runs the duplicate detector first; until then duplication was found only by the reviewer's own
   searches (prose).
+- **1.32** — the brief's `uiReview` key and the visual review (Shopify's Helix UI gate): a +ui task could pass its tests
+  and still look nothing like the design — no step ever looked at the screen against its reference.
 - **1.31** — the brief's `preflight` key and the pre-flight (from google/elephant-goldfish-model's zero-decision rule): a
   brief that left a design choice open was found only when the implementer came back NEEDS_CONTEXT — a dispatch spent — or
   not at all when it chose alone.
