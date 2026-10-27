@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, S, tmp, require }) => {
+exports.run = async ({ ok, S, tmp, require, remeasure }) => {
   { // 1.22 review 2 — the brownfield scan / coverage (each finding reproduced at 7cf3843, guarded here)
     const js = (v) => JSON.stringify(v);
     const put = (root, rel, s) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
@@ -44,9 +44,12 @@ exports.run = async ({ ok, S, tmp, require }) => {
       js([names("lib/\nlib64/\n!frontend/src/lib/\n"), vs, names("bin/\nobj/\n!b*/\n")]) + ")");
     // bounded: a hostile file (1,000 patterns, 150 wildcard negations) spends a fixed budget, then applies none of its patterns
     const hostile = Array.from({ length: 1000 }, (_, i) => "a".repeat(40) + i + "/").join("\n") + "\n" + Array.from({ length: 150 }, () => "!" + "*a".repeat(120)).join("\n");
-    const t0 = process.hrtime.bigint();
-    const hp = E.gitignoreDirPatterns(hostile);
-    const secs = Number(process.hrtime.bigint() - t0) / 1e9;
+    // (1.32.1: remeasured on a timing-only miss, as the suite's other bounds — testing.md)
+    const { hp, secs } = remeasure(() => {
+      const t0 = process.hrtime.bigint();
+      const hp = E.gitignoreDirPatterns(hostile);
+      return { hp, secs: Number(process.hrtime.bigint() - t0) / 1e9 };
+    }, (m) => m.secs < 5);
     ok(hp.length === 0 && secs < 5, "1.22 review 2: a hostile .gitignore (1,000 patterns × 150 wildcard negations) ends within its budget and applies none of its patterns (got " + js([hp.length, +secs.toFixed(3)]) + " s)");
 
     // F4. Nested manifests in docs / examples / samples folders are not the project's stack: a Node app's docs/requirements.txt
@@ -90,9 +93,12 @@ exports.run = async ({ ok, S, tmp, require }) => {
     put(hb, ".gitignore", Array.from({ length: 1000 }, (_, i) => "a".repeat(40) + i + "/").join("\n") + "\nlib/\n");
     for (let i = 0; i < 300; i++) put(hb, "m" + i + "/.gitignore", Array.from({ length: 150 }, () => "!" + "*a".repeat(120)).join("\n") + "\n");
     put(hb, "m299/lib/x.ts", "export const x = 1;\n");
-    const t0 = process.hrtime.bigint();
-    const covH = S.coverage(hb);
-    const secs = Number(process.hrtime.bigint() - t0) / 1e9;
+    // (1.32.1: remeasured on a timing-only miss — 11.3 s against the 10 s bound under a full parallel run, 1.4 s alone)
+    const { covH, secs } = remeasure(() => {
+      const t0 = process.hrtime.bigint();
+      const covH = S.coverage(hb);
+      return { covH, secs: Number(process.hrtime.bigint() - t0) / 1e9 };
+    }, (m) => m.secs < 10);
     ok(cov.codeFiles === 3 && cov.coveredFiles === 1 && js(cov.nonCodeImplements) === "[]" && !cov.uncoveredSample.includes("backend/lib/gen.py") &&
       (scan.byExtension || []).includes(".ts:1") && covH.codeFiles === 1 && secs < 10 && E.GITIGNORE_NESTED_MAX === 200,
       "1.22 review 3 (7): root `lib/` + frontend/.gitignore `!src/lib/` — the scan and coverage read frontend/src/lib/api.ts (3 code files, api.ts covered); backend/lib/ is still left out; 300 hostile nested negation files stay bounded and keep their code (got " +

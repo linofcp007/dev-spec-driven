@@ -99,7 +99,7 @@ const fs = require("fs");
 const ROW_CACHE = new Map();
 const ROW_CACHE_MAX = 500;
 const ROW_CALLS = { n: 0, hits: 0 }; // roadmapData calls in this process; rows served from the cache
-const ROW_OPTS = { racyMs: 3000 }; // the racy window (tests narrow it)
+const ROW_OPTS = { racyMs: 3000 }; // the racy window (tests set it)
 const ROW_SCRATCH = /^(?:\.execution|\.lock(?:\.reclaim)?|.*\.tmp)$/;
 function rowStatSig(dir, depth, now, acc) {
   let ents;

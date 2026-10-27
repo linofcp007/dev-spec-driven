@@ -117,11 +117,17 @@ const withTmpEnv = (env, dir) => ({ ...Object.fromEntries(Object.entries(env).fi
 // NODE_PRESERVE_SYMLINKS(_MAIN), NODE_NO_WARNINGS, NODE_PENDING_DEPRECATION and NODE_REDIRECT_WARNINGS — what a process loads, prints
 // or writes. A test that wants one sets it for the process it starts (02-mcp-server.js's NODE_OPTIONS). DEV_SPEC_TEST_KEEP_NODE_ENV=1
 // keeps them: a run that WANTS them in every chain (NODE_V8_COVERAGE for a coverage run, a profiler's preload).
+// 1.32.1: nor git's repository variables — RE_GIT_ENV, the list `git rev-parse --local-env-vars` prints (GIT_DIR, GIT_WORK_TREE,
+// GIT_INDEX_FILE, GIT_COMMON_DIR…; before git 2.40 also GIT_INTERNAL_SUPER_PREFIX, before 2.21 GIT_SUPER_PREFIX — Debian
+// bookworm's git 2.39 in the Docker matrix). git exports them to its hooks (a pre-push hook running the suites) and `git rebase
+// --exec` to its command: a test's `git init` / `git commit` in a temp repo of its own then acted on the repository the suite
+// was started from. A test that wants one sets it for the process it starts.
 const RE_HOST_ENV = /^(?:SPEC_PROJECT_DIR|SPEC_MCP_\w*|CLAUDE_PROJECT_DIR|CLAUDE_PLUGIN_\w*|CLAUDE_CONFIG_DIR|DEV_GUARDIAN_CLI|DEV_SPEC_(?!TEST_)\w*|COLUMNS)$/i;
 const RE_NODE_ENV = /^NODE_(?:OPTIONS|COMPILE_CACHE|DISABLE_COMPILE_CACHE|DEBUG|DEBUG_NATIVE|V8_COVERAGE|PATH|PRESERVE_SYMLINKS(?:_MAIN)?|NO_WARNINGS|PENDING_DEPRECATION|REDIRECT_WARNINGS)$/i;
+const RE_GIT_ENV = /^GIT_(?:ALTERNATE_OBJECT_DIRECTORIES|CONFIG|CONFIG_PARAMETERS|CONFIG_COUNT|OBJECT_DIRECTORY|DIR|WORK_TREE|IMPLICIT_WORK_TREE|GRAFT_FILE|INDEX_FILE|NO_REPLACE_OBJECTS|REPLACE_REF_BASE|PREFIX|SHALLOW_FILE|COMMON_DIR|(?:INTERNAL_)?SUPER_PREFIX)$/i;
 const KEEP_NODE_ENV = "DEV_SPEC_TEST_KEEP_NODE_ENV";
 const keepNodeEnv = () => /^(?:1|true|yes|on)$/i.test(String(process.env[KEEP_NODE_ENV] || "").trim());
-const hostEnvKey = (k) => RE_HOST_ENV.test(k) || (RE_NODE_ENV.test(k) && !keepNodeEnv());
+const hostEnvKey = (k) => RE_HOST_ENV.test(k) || RE_GIT_ENV.test(k) || (RE_NODE_ENV.test(k) && !keepNodeEnv());
 // env without the host's steering variables (a new object; `env` untouched).
 function hermeticEnv(env) {
   const out = {};
@@ -573,5 +579,5 @@ function main(opts) {
 }
 
 module.exports = { main, exitFlushed, rmTmpDir, sweepStaleTmp, loadFiles, selectFiles, buildChains, matchesToken, isolate, hermeticEnv,
-  assertHelpers, firstDiff, remeasure, neutralTmpBase, tmpBaseProblem, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_NODE_ENV, KEEP_NODE_ENV, RE_TEST_FILE, RE_TOTAL, CHAIN_TIMEOUT_MS,
+  assertHelpers, firstDiff, remeasure, neutralTmpBase, tmpBaseProblem, CHAIN_ENV, CWD_ENV, RE_HOST_ENV, RE_NODE_ENV, RE_GIT_ENV, KEEP_NODE_ENV, RE_TEST_FILE, RE_TOTAL, CHAIN_TIMEOUT_MS,
   timesFile };

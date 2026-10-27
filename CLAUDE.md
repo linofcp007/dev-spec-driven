@@ -166,7 +166,7 @@ AGENTS.md · GEMINI.md · .cursor/ · .windsurf/ · .github/copilot-instructions
 `node mcp/test.js` drives the full MCP handshake and exercises every tool, prompt and resource against a temp project
 (2243 assertions, incl. a PT and an ES end-to-end scaffold, per-feature lang override, the prose guards —
 README tool tables, rule files, no PR/CI steering — the behavioural eval fixtures, and a regression per review finding);
-`node cli/test-cli.js` adds 654 for the CLI. The harness fails (exit 1) if the server dies or stops
+`node cli/test-cli.js` adds 655 for the CLI. The harness fails (exit 1) if the server dies or stops
 answering — never let it drain to exit 0. Add an assertion when you add a tool or change behavior — in the file of its
 AREA: `mcp/tests/NN-<area>.js` / `cli/tests/NN-<area>-<topic>.js` (NN is the area, the same in both; `--list` says what
 each holds; `--only <file|area|NN>` runs a part, plus the files it needs — testing.md → The suites). Keep
@@ -179,6 +179,6 @@ engine/files.js — the write gate, conventions.md; no block of 8+ code lines re
 — the facades and all their modules (`libSources()` in mcp/tests/harness.js) — never a facade alone; never a built bundle
 (its registry comes from scripts/build.js, which they read). Both suites run on the modules (the harnesses drop
 `DEV_SPEC_BUNDLE`); the bundle's tests build one into tmp. Every chain is hermetic (1.26): a fresh empty temp folder (on a neutral temp base, 1.30) as its
-cwd, none of the shell's `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `DEV_SPEC_*` (but `DEV_SPEC_TEST_*`) / `NODE_OPTIONS`… — a test sets what it
+cwd, none of the shell's `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` / `DEV_SPEC_*` (but `DEV_SPEC_TEST_*`) / `NODE_OPTIONS` / `GIT_DIR`… — a test sets what it
 needs for the process it starts, and never reads a path from `process.cwd()` (testing.md → Hermetic chains).
 Linux containers (`npm run test:docker`), plugin evals and the cross-platform test rules: docs/maintainers/testing.md.

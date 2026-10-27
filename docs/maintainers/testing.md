@@ -98,14 +98,18 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   variables (`RE_NODE_ENV`) — `NODE_OPTIONS` (a `--require` preload: a VS Code JavaScript Debug Terminal's bootloader reached every
   chain, server, hook and CLI process), `NODE_COMPILE_CACHE` / `NODE_DISABLE_COMPILE_CACHE`, `NODE_DEBUG` / `NODE_DEBUG_NATIVE`,
   `NODE_V8_COVERAGE`, `NODE_PATH`, `NODE_PRESERVE_SYMLINKS(_MAIN)`, `NODE_NO_WARNINGS`, `NODE_PENDING_DEPRECATION`,
-  `NODE_REDIRECT_WARNINGS` — unless `DEV_SPEC_TEST_KEEP_NODE_ENV=1` (a coverage run's `NODE_V8_COVERAGE`, a profiler's preload). The
+  `NODE_REDIRECT_WARNINGS` — unless `DEV_SPEC_TEST_KEEP_NODE_ENV=1` (a coverage run's `NODE_V8_COVERAGE`, a profiler's preload); 1.32.1:
+  nor git's repository variables (`RE_GIT_ENV`: every name `git rev-parse --local-env-vars` prints — `GIT_DIR`, `GIT_WORK_TREE`,
+  `GIT_INDEX_FILE`, `GIT_COMMON_DIR`…). git exports them to its hooks and to `git rebase --exec`'s command, so a suite run from a
+  pre-push hook had every test's `git init` / `git commit` in a temp repo of its own act on the maintainer's repository. The
   child runs `isolate()` again before it loads a file, and both harnesses first thing (a no-op in the folder the runner gave
   it), so a chain started by hand (`DEV_SPEC_TEST_CHAIN=<file> node mcp/test.js`) is isolated too. Why: the main checkout
   keeps a git-ignored dogfood `.specs/` (meta.lang pt) at the repo root, and a test that started the CLI or a hook without
   naming a project picked it up — green in a worktree, red after the merge; a `DEV_SPEC_DEFAULT_LANG` or `SPEC_PROJECT_DIR`
   exported in the maintainer's shell did the same. A test that needs one of these variables sets it for the process it
   starts; a test never reads `process.cwd()` for a path (use `tmp`, `root`, `__dirname`). cli/tests/16-conventions-runner.js
-  proves it on the fake suite (a decoy `.specs/` and the variables exported — a `NODE_OPTIONS` preload too: none reaches a chain). The proof run: put a decoy
+  proves it on the fake suite (a decoy `.specs/` and the variables exported — a `NODE_OPTIONS` preload too: none reaches a chain; a
+  `GIT_DIR` / `GIT_WORK_TREE` naming another repository: the chain's own commit lands in its own temp repo). The proof run: put a decoy
   `.specs/` (`roadmap.json` `{"features":{},"meta":{"lang":"pt"}}` and a feature folder) at the repo root, export
   `SPEC_PROJECT_DIR` / `CLAUDE_PROJECT_DIR` at it and `DEV_SPEC_DEFAULT_LANG=es`, and run both suites — still green.
 - **The temp base (1.30).** No test depends on WHERE the temp folder is. The runner (and `isolate()` for a chain started by hand)
@@ -160,8 +164,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   ratios and the 1 MB "at once" bound of the run matcher (09-evidence.js, 09-evidence-matcher.js), the cross-call cache's
   cold / warm ratio (15-quality.js), the nested lock's wait (16-conventions.js) and the in-process "bounded time" checks of
   18-cross-area.js (S2, S4, S5/S6, R10), 04-tracks.js, 04-tracks-builtin.js, 03-languages.js, 05-markdown-trace.js, 08-tasks.js,
-  09-evidence.js, 10-guards.js, 10-guards-stop-gate.js, 13-imports.js and 15-quality.js (bounds unchanged); and on one non-timing
-  miss seen only under load — 16-conventions.js asks git `check-ignore` once more when it answers nothing.
+  09-evidence.js, 10-guards.js, 10-guards-stop-gate.js, 13-imports.js and 15-quality.js (bounds unchanged; 1.32.1: 13-imports-scan.js's
+  two budgets too); and on one non-timing miss seen only under load — 16-conventions.js asks git `check-ignore` once more when it
+  answers nothing.
 - **The source guards follow the layout:** the U+FEFF guard reads mcp/test.js, scripts/test-runner.js and every file of
   mcp/tests/. The engine guards (U+FEFF, backslash-stripped regex literals) also read scripts/build.js — a bundle's
   registry comes from it — and `libSources()` leaves a user-built `mcp/lib/spec.bundle.js` out (the sources verbatim: it
@@ -305,3 +310,13 @@ How the rules above came to be — grep a release here.
   independent children side by side. Measured (median of 3 interleaved rounds, `--jobs 4`, Windows 11, Node 26, a shared machine;
   1.30.0 → 1.30.1): wall 119.2 → 107.4 s, the files' summed time 446.7 → 401.6 s; an earlier set under a drifting load had the
   pairs at −14 % / +13 % (the 1.30.1 run first, in the heavier window) / −12 %.
+- **1.32.1** — the suites run from a local pre-push hook, so a load spike is no longer a rare annoyance: it blocks a push. Two
+  checks failed only in a full parallel run and passed alone. 13-imports-scan.js's two budgets take `remeasure()` like the
+  suite's other bounds (the one over 300 nested .gitignore files: 11.3 s against its 10, 1.4 s alone). 08-tasks.js's racy-window
+  check counted cache hits under the default 3 s window, and two renders ended past it (the stamp then rightly trusted). It now
+  freezes `Date.now` for the renders and puts the window's edge halfway between the edited tasks.md's stamp and every other
+  file's: exactly the two other rows are served per render (the per-file rule — the old check passed without it), none under a
+  window holding every stamp, none with the edge between a project template rewritten with the same bytes and every feature's
+  files (the project's rule, untested before), and the default window is over FAT's 2 s. Hermetic chains drop git's repository variables
+  (`RE_GIT_ENV`, with git < 2.40's `GIT_INTERNAL_SUPER_PREFIX`: bookworm's git 2.39 lists it): from the hook, `GIT_DIR` reached
+  every chain.
