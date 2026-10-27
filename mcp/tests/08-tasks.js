@@ -958,14 +958,48 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, libSources, lis
     } finally {
       E.ROW_OPTS.racyMs = racy;
     }
-    // …and with the default racy window, rows of files written just now are never served from the cache
-    const h0 = E.ROW_CALLS.hits;
-    fs.writeFileSync(path.join(fs3[0].dir, "tasks.md"), fs.readFileSync(path.join(fs3[0].dir, "tasks.md"), "utf8").replace("- [ ] 2.", "- [x] 2."));
-    const racyCached = render(); render();
-    const racyHits = E.ROW_CALLS.hits - h0;
-    ok(!wrong.length && racyCached === fresh() && racyHits <= 2 * (fs3.length - 1),
-      "1.22 review: the roadmap row cache — after a tick, a hand edit of the same size, a design / requirements edit, a dependency, an approval, the evidence mode, a project template, an undo, ROADMAP.md is byte for byte a fresh computation and the unchanged rows come from the cache; a file stamped within the racy window is never trusted (wrong: " +
-      js(wrong) + ", racy hits " + racyHits + ")");
+    // …and a row whose files were stamped within the racy window is never served from the cache. 1.32.1: by count, not by the
+    // clock — with the default 3 s, two renders under a loaded parallel run ended past the window and (rightly) trusted the
+    // stamp. The clock is frozen for the renders and the window's edge put halfway between the project's newest stamp and the
+    // hand-edited tasks.md's: only alpha's row is racy, so each render serves exactly the two others (the per-file rule); a
+    // window holding every stamp serves none. Then a project template rewritten with the same bytes, the edge between it and
+    // every feature's files: the project is racy and no row is served (the project's rule — roadmap.json, templates/).
+    const stampOf = (f) => { const s = fs.statSync(f); return Math.max(s.mtimeMs, s.ctimeMs); };
+    const newest = (dir, skip) => fs.readdirSync(dir, { withFileTypes: true }).reduce((m, e) => {
+      const f = path.join(dir, e.name);
+      return f === skip ? m : Math.max(m, stampOf(f), e.isDirectory() ? newest(f, skip) : 0);
+    }, 0);
+    const edited = path.join(fs3[0].dir, "tasks.md");
+    const old = newest(path.join(p, ".specs"), edited);
+    while (Date.now() < old + 50) { /* a later stamp than every other file's */ }
+    fs.writeFileSync(edited, fs.readFileSync(edited, "utf8").replace("- [ ] 2.", "- [x] 2."));
+    const at = stampOf(edited);
+    const clock = Date.now;
+    const frozen = (now, windowMs) => {
+      const h0 = E.ROW_CALLS.hits;
+      Date.now = () => now;
+      E.ROW_OPTS.racyMs = windowMs;
+      try {
+        const out = render();
+        render();
+        return { out, hits: E.ROW_CALLS.hits - h0 };
+      } finally {
+        Date.now = clock;
+        E.ROW_OPTS.racyMs = racy;
+      }
+    };
+    const edge = frozen(at + 1000, at + 1000 - (old + at) / 2);
+    const wide = frozen(at + 1000, 864e5);
+    const tpl = path.join(p, ".specs", "templates", "tasks.md");
+    const featOld = newest(path.join(p, ".specs"), tpl);
+    while (Date.now() < featOld + 50) { /* a later stamp than every feature file's */ }
+    fs.writeFileSync(tpl, fs.readFileSync(tpl));
+    const tplAt = stampOf(tpl);
+    const proj = frozen(tplAt + 1000, tplAt + 1000 - (featOld + tplAt) / 2);
+    ok(!wrong.length && at > old && edge.out === fresh() && edge.hits === 2 * (fs3.length - 1) && wide.hits === 0 && tplAt > featOld && proj.hits === 0 &&
+      racy > 2000,
+      "1.22 review: the roadmap row cache — after a tick, a hand edit of the same size, a design / requirements edit, a dependency, an approval, the evidence mode, a project template, an undo, ROADMAP.md is byte for byte a fresh computation and the unchanged rows come from the cache; a row whose file was stamped within the racy window is never served (only that row: each render serves the two others), none when the window holds every stamp or a project template's (rewritten, same bytes), and the default window is wider than a FAT clock's 2 s (wrong: " +
+      js(wrong) + ", stamps " + js([old, at, featOld, tplAt]) + ", racy hits at the edge / wide / project edge " + js([edge.hits, wide.hits, proj.hits]) + ", default window " + racy + " ms)");
   }
 
   // Review 5 (P3) — tasks.md written back as the bytes it holds: a tasks.md in Windows' ANSI code page (Windows PowerShell 5.1's

@@ -3,6 +3,31 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.32.1] — 2026-10-27
+
+The test suites, made safe and steady to run from a git hook. The plugin itself is unchanged.
+
+### Fixed
+- **A suite run from a git hook no longer acts on the repository.** git exports `GIT_DIR`, `GIT_WORK_TREE`,
+  `GIT_INDEX_FILE` and the like to its hooks and to `git rebase --exec`'s command. Every test chain inherited them, so a
+  test's `git init` / `git commit` in a temp repo of its own acted on the repository the suite was started from. The
+  runner now drops every name `git rev-parse --local-env-vars` lists, on the git versions the Docker matrix runs too
+  (git 2.39 adds `GIT_INTERNAL_SUPER_PREFIX`), as it already dropped the plugin's and Node's steering variables.
+- **Two checks that failed only under load.** Both passed alone and failed now and then in a full parallel run.
+  - The scan's budget over 300 nested `.gitignore` files took 11.3 s against its 10 s bound, and 1.4 s alone. It, and
+    the hostile-`.gitignore` budget beside it, are measured once more on a timing-only miss, like the suites' other
+    bounds.
+  - The roadmap row cache's racy-window check counted cache hits under the default 3 s window. When two renders ended
+    past the window, the file's stamp was rightly trusted and the check failed. It now freezes the clock and puts the
+    window's edge between the hand-edited file's stamp and every other file's. Each render must then serve exactly the
+    rows of the other two features, which also proves the per-file rule: the old check passed without it. A window
+    holding every stamp must serve none. A project template rewritten with the same bytes, with the edge between it and
+    every feature's files, must serve none either: the project-wide rule had no test before. The check also requires the
+    default window to be wider than FAT's 2 s clock.
+
+### Tests
+- `node mcp/test.js` 2243 assertions, `node cli/test-cli.js` 655 (was 2243 / 654).
+
 ## [1.32.0] — 2026-10-25
 
 A visual review gate for +ui work, and three smaller ideas, after Shopify's Helix (shopify.engineering/helix). A screen

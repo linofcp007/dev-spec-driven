@@ -277,4 +277,51 @@ exports.run = async ({ ok }) => {
         /\.specs/.test(R.tmpBaseProblem(path.join(root, "x")) || ""),
     });
   }
+
+  // 1.32.1: nor git's repository variables — git exports GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE… to its hooks (a pre-push hook
+  // running the suites) and `git rebase --exec` to its command, and a chain's `git init` / `git commit` in a temp repo of its
+  // own then acted on the repository the suite was started from. Every name `git rev-parse --local-env-vars` prints is dropped.
+  if (spawnSync("git", ["--version"], { encoding: "utf8" }).status !== 0) ok(true, "1.32.1: git's repository variables reach no chain — skipped: no git");
+  else {
+    const GIT_KEYS = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY"];
+    const id = ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"];
+    const outer = path.join(own, "outer");
+    fs.mkdirSync(outer, { recursive: true });
+    const g = (cwd, args) => spawnSync("git", args, { cwd, encoding: "utf8", env });
+    g(outer, ["init", "-q"]);
+    fs.writeFileSync(path.join(outer, "a.txt"), "a\n");
+    g(outer, ["add", "a.txt"]);
+    g(outer, [...id, "commit", "-q", "-m", "outer"]);
+    const outerState = () => [g(outer, ["log", "--all", "--format=%s"]).stdout.trim(), g(outer, ["status", "--porcelain"]).stdout.trim()];
+    const before = outerState();
+    w("tests/13-git-env.js", `// what a chain sees of git's repository variables, and where its own git init / commit land
+exports.run = async ({ ok }) => {
+  const { spawnSync } = require("child_process");
+  const env = Object.fromEntries(${js(GIT_KEYS)}.map((k) => [k, process.env[k] === undefined ? null : process.env[k]]));
+  const g = (args) => spawnSync("git", args, { encoding: "utf8" });
+  g(["init", "-q"]);
+  require("fs").writeFileSync("b.txt", "b");
+  g(["add", "b.txt"]);
+  g(${js(id)}.concat(["commit", "-q", "-m", "chain"]));
+  console.log("GITENV " + JSON.stringify({ env, log: g(["log", "--format=%s"]).stdout.trim() }));
+  ok(true, "git env seen");
+};
+`);
+    const gd = path.join(outer, ".git");
+    const host = { ...env, GIT_DIR: gd, GIT_WORK_TREE: outer, GIT_INDEX_FILE: path.join(gd, "index"), GIT_COMMON_DIR: gd, GIT_OBJECT_DIRECTORY: path.join(gd, "objects") };
+    const view = (r) => { const l = String(r.stdout || "").split(/\r?\n/).find((x) => x.startsWith("GITENV ")); try { return JSON.parse(l.slice(7)); } catch { return null; } };
+    const viaRunner = spawnSync(process.execPath, [path.join(root, "suite.js"), "--only", "13"], { encoding: "utf8", env: host, timeout: 60000 });
+    const byHand = spawnSync(process.execPath, [path.join(root, "suite.js")], { encoding: "utf8", env: { ...host, DEV_SPEC_TEST_CHAIN: "13-git-env" }, timeout: 60000 });
+    const [a, b] = [viaRunner, byHand].map(view);
+    const own13 = (v) => !!v && GIT_KEYS.every((k) => v.env[k] === null) && v.log === "chain";
+    const listed = String(g(own, ["rev-parse", "--local-env-vars"]).stdout || "").split(/\r?\n/).filter(Boolean);
+    all("1.32.1: GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE… exported in the shell (a git hook's environment) reach no chain — its git init / commit land in its own temp repo, never in the repository named (by hand too); the runner drops every name git rev-parse --local-env-vars lists, and no other GIT_ variable (got " +
+      js({ via: [viaRunner.status, lastLine(viaRunner.stdout || ""), a], hand: [byHand.status, b], before, after: outerState(), listed }) + ")", {
+      viaRunner: () => viaRunner.status === 0 && lastLine(viaRunner.stdout) === "1 passed, 0 failed" && own13(a),
+      byHand: () => byHand.status === 0 && own13(b),
+      outerUntouched: () => before[0] === "outer" && js(outerState()) === js(before),
+      regex: () => listed.length >= 10 && listed.every((k) => R.RE_GIT_ENV.test(k)) &&
+        ["GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_AUTHOR_NAME", "GIT_TERMINAL_PROMPT", "GIT_DIRX"].every((k) => !R.RE_GIT_ENV.test(k)),
+    });
+  }
 };
