@@ -387,7 +387,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require }
     const brM = I.msg("pt-BR"), all5 = { name: "X", tracks: ["core", "tdd", "saas", "ai", "sec", "privacy"], label: "x", summary: "" };
     const brDesign = I.design(all5, "pt-BR"), ptDesign = I.design(all5, "pt");
     const txt7 = [brM.evidence.badExit("x"), brM.appendTasks.badPath(1, "x"), brM.appendTasks.placeholderVerify(1, "x"), I.brief("pt-BR").evalsRule, brDesign].join("\n");
-    ok(/tem que ser um inteiro/.test(txt7) && /têm que ser relativos/.test(txt7) && /'x' é lido como um marcador/.test(txt7) && /o golden se mantém ou melhora, o adversarial se mantém/.test(txt7) &&
+    ok(/tem que ser um inteiro/.test(txt7) && /têm que ser relativos/.test(txt7) && /'x' é lido como um marcador/.test(txt7) && /a mediana do golden se mantém dentro da dispersão da baseline ou sobe além dela, o adversarial se mantém/.test(txt7) &&
       /quem pode acessá-lo\./.test(brDesign) && /## \[SaaS\] Modelo Multilocatário/.test(brDesign) && /## \[PRIVACY\] Retenção e Eliminação/.test(brDesign) &&
       /## \[PRIVACY\] Operadores e Transferências Internacionais/.test(brDesign) && /## \[PRIVACY\] RIPD \(quando obrigatório — LGPD art\. 38\)/.test(brDesign) &&
       !/tem de|têm de|lê-se|mantém-se|lhe pode|Subcontratantes|AIPD|Multi-inquilino|Conservação e Eliminação/.test(txt7) &&

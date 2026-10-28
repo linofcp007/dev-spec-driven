@@ -53,7 +53,8 @@ nit → if cheap · a rule for every later task → fix it here, then propose it
 user's OK · unclear → ask. One at a time, the covering tests after each, fresh evidence (`spec_complete_task`).
 Reply with the change or the evidence, never performative agreement.
 
-**prompt** (+ai) — a prompt change lands only with its eval delta (golden up, adversarial held, regression intact), its
-cost delta and a bumped `prompts/vN.md`; without eval results it waits for the harness (`/eval`).
+**prompt** (+ai) — a prompt change lands only with its eval delta (golden's median better or held against the
+baseline's spread, adversarial held, regression intact), its cost delta and a bumped `prompts/vN.md`; without eval
+results it waits for the harness (`/eval`).
 
 Respond in the user's language (EN / PT / ES).

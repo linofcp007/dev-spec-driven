@@ -115,7 +115,8 @@ own sections hold them. **Filled means your own text:** the template's guidance 
 - **+ai Phase 4:** deterministic tests (validation, schema, rate limiting, logging, fallback, cost circuit breaker) AND
   the eval harness (loads sets → runs through prompt + model → grades → scores per set → fails below threshold); the
   bundled local harness runs with `/eval` (the user's own API key; `--dry-run` offline). Record the baseline; commit
-  `test(feature): eval harness + baseline (golden 73%, adversarial 96%)`.
+  `test(feature): eval harness + baseline (golden 73% (71–75), adversarial 96% (95–97))` — the medians and spreads of the
+  eval plan's runs per score.
 
 ## Phase 5 — task markers per track
 

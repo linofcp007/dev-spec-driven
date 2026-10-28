@@ -160,13 +160,16 @@ only actionable if you can see which items regressed and read the bad outputs.
 - Run the eval harness locally before merging any change that touches prompts, model config, or
   features with AI calls (`/eval <feature>`, i.e. `node "${CLAUDE_PLUGIN_ROOT}/mcp/evals/run-evals.js" <feature>`
   from the project root)
-- Put the scores and the delta vs the baseline in the merge summary (`/spec-finish`) and the commit
-- Block the merge if: golden drops > 2%, adversarial drops at all, regression set fails any item
-- Cache eval results when inputs haven't changed (prompt + model + retrieved context
-  identical) to save cost
+- Put the scores and the delta vs the baseline in the merge summary (`/spec-finish`) and the commit — each score the
+  median of the eval plan's runs per score, with its spread (see "The new prompt scored 3 points higher" below)
+- Block the merge if: golden's median drops past the baseline's spread, adversarial drops at all, regression set
+  fails any item
+- Cache a measured result (its median and spread) when the inputs haven't changed (prompt + model + retrieved context
+  identical) to save cost — never the responses inside one measurement: a cached response repeats the first run and
+  hides the spread
 
-Budget eval cost per run, not per commit: a 150-item golden set × $0.02/call = $3/run. Run the 30-item
-sample while iterating and the full set once, before the merge.
+Budget eval cost per measurement, not per commit: a 150-item golden set × $0.02/call = $3/run, × the runs per score.
+Run the 30-item sample while iterating and the full set, the plan's number of times, before the merge.
 
 ---
 
@@ -175,6 +178,22 @@ sample while iterating and the full set once, before the merge.
 ### "The eval set is too small"
 Under 30 items and your aggregate scores are too noisy to trust. Minimum viable golden
 set is ~50. Aim for 100-200.
+
+### "The new prompt scored 3 points higher"
+The same prompt on the same set scores differently from run to run (sampling, the judge's own variance). One run
+against one baseline run can't tell a better prompt from a lucky draw.
+- **Write the decision before you run.** The eval plan's Baseline names the runs per score (3 is a good start) and the
+  decision delta: the smallest golden gain that counts as better.
+- **Measure the noise once.** Run the baseline that many times; its spread (lowest–highest) is the noise floor. A
+  spread wider than the decision delta means the measurement can't decide: add items or runs before you compare.
+- **Score every candidate the same way.** The median of the same number of runs, with the cache off — a cached
+  response repeats the first run and hides the spread.
+- **Read the median's change in three ways.** Better: it rose by at least the decision delta and past the baseline's
+  spread. Held: it stayed inside the spread, or rose by less than the decision delta — report it as held, never as a
+  win. Worse: it dropped past the spread — a regression. Don't re-run a borderline result until it crosses: the number
+  of runs is fixed before you run.
+- **Check every run did the work.** Errors, skipped items (`--max-items`), timeouts graded as failures and cached
+  answers all move the score without the prompt changing. Compare runs over the same items.
 
 ### "We tested it on the same examples we tuned it on"
 Classic leakage. Reserve 20% of golden set as "held-out" — only used for final
@@ -194,8 +213,8 @@ what a 0, 1, 2 looks like. Test the judge on a known-calibrated subset.
 
 ### "Evals are slow"
 - Parallelize: run items concurrently (respecting provider rate limits)
-- Cache: if input + model + prompt is identical, cache the response
-- Sample during iteration: run a 30-item sample while iterating, the full set once before merging
+- Cache: if input + model + prompt is identical, reuse the measured median — never cache responses inside one measurement
+- Sample during iteration: run a 30-item sample while iterating, the full set the plan's number of times before merging
 
 ### "We can't agree what 'good' means"
 Write the rubric first, before any implementation. If the team can't agree on what good
@@ -251,17 +270,19 @@ not a prompt engineering one.
 - Adversarial safety: 100% (hard)
 - Adversarial out-of-scope: ≥95%
 - Regression: 100%
-- Cost per eval run: ≤$5 (full local run before a merge)
+- Cost per measurement: ≤$10 (3 full local runs before a merge)
 
 ## Running
 - Local: `pnpm eval:all` (30-item sample, ~$0.50)
 - Full: `pnpm eval:full` (full suite, ~$3)
-- Before merging: full suite for any change touching prompts or feature code
+- Before merging: full suite, 3 runs (the median), for any change touching prompts or feature code
 - Periodically (e.g. weekly, locally): full suite on main to catch provider-side drift
 
 ## Baseline (v1 prompt + Sonnet 4.6)
 - Run date: 2026-04-20
-- Golden: 84% (126/150)
+- Runs per score: 3 (the median; spread lowest–highest)
+- Decision delta: 3 points — a smaller golden gain, or one inside the spread, is held, not better
+- Golden: 84% (126/150), spread 83–85%
 - Adversarial safety: 100%
 - Adversarial out-of-scope: 96%
 - Cost: $3.12

@@ -474,7 +474,7 @@ feat(billing): implement webhook signature verification
 
 Part of .specs/billing-webhooks/ task #3.
 Makes T-05, T-06 green.            # +tdd
-Eval delta: golden 82% → 87%.     # +ai
+Eval delta: golden 84% (83–85) → 88% (87–89).   # +ai: medians and spreads of the plan's runs
 Emits metric webhook_verify_duration_ms.   # +saas
 ```
 

@@ -425,6 +425,7 @@ in a tasks.md that has one) — is refused (nothing recorded, nothing ticked) un
 | Requirements met | each AC checked against the code/tests (by ID) | "tests pass" |
 | A subagent finished | the diff reviewed + its evidence present in the report | the subagent saying "DONE" |
 | The user says it works | their pasted output of the `_Verify:_` command (command + exit code) | "it works" with no run |
+| Better, faster, a higher score | the median of the plan's runs against a baseline measured the same way, the delta past the run-to-run spread, every run doing the work (no errors, skipped items or cached answers) | one run; a delta inside the spread; a number measured another way |
 
 ## Red flags — stop and run the command
 
