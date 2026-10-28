@@ -457,6 +457,12 @@ Justify anything that violates a constitution principle or adds non-obvious comp
 - **Coverage target:** []
 - **Critical paths requiring 100% branch coverage:** []
 
+<!-- Integration tests call the real route against a real, separate test database — never production — and mock only what
+     is external (the payment gateway, e-mail, third-party APIs). A critical flow (stock, a coupon, a balance or credits, a
+     booking, an invite, a quota, a payment, a webhook) gets rows for: the happy path · the expected errors · repetition (the
+     same request twice, and two at once) · the limits (zero stock, an expired plan, a zero or negative amount) · another
+     user's data. -->
+
 ## Traceability Matrix
 
 <!-- Kind — example: one concrete input → expected output; the default for event-driven criteria (WHEN …, IF … THEN).
@@ -2936,6 +2942,9 @@ const msg = {
       // the head line's tails (1.30): the report says there is no baseline · the launcher ran a DEV_GUARDIAN_CLI
       noBaseline: " — no baseline: every existing finding counts as new",
       override: (p) => ` (dev-guardian from DEV_GUARDIAN_CLI=${p})`,
+      // 1.33: the change since the feature's base, read for weakened tests (dev-guardian 3.8.0's test-integrity check)
+      diffBase: (ref) => ` · the change since ${ref} checked for weakened tests`,
+      diffBaseUncommitted: (ref) => ` · only the uncommitted work checked for weakened tests (${ref} already holds this branch's commits)`,
       // what never gates (1.30.2): the gaps the project accepted (accepted_gaps, counted by file — the head line, and a finish warning
       // on a pass) and dev-guardian's coverage notes (counted in the merge summary); finish --run prints their lines as dev-guardian wrote them
       accepted: (t, p, o) => [t ? `${t} file(s) not analysed (accepted in .guardian/scan.yml)` : "", p ? `${p} file(s) only partly parsed (accepted with --accept-partial-parse)` : "",
@@ -2953,7 +2962,7 @@ const msg = {
       // dev-guardian older than 3.2.1, a report with no tool_version (≤ 3.2.1), a package it could not load (3.2.0 from a plugin install)
       update: (v) => `update dev-guardian (Claude Code: /plugin) — ${v ? "this run used " + v + ", the gate needs 3.2.1 or later" : "this run named no version (3.3.0 and later do); the gate needs 3.2.1 or later"}`,
       updateHint: (slug) => `Update the dev-guardian plugin (3.2.1 or later — Claude Code: /plugin), then run the check again: ${DEV_SPEC} finish ${slug} --run.`,
-      finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [this feature]" : ""),
+      finding: (at, rule, severity, own, test) => `${at} ${test ? "weakened test: " : ""}${rule} (${severity})` + (own ? " [this feature]" : ""),
       blocker: (name, text) => `the project check '${name}' failed — ${text}.`,
       more: (n) => `+${n} more`,
       // review 8: never `baseline update` to accept ONE finding — it accepts every current finding, the feature's own included
@@ -2979,7 +2988,7 @@ const msg = {
       // tool's 2-minute default is too short); another MCP client reports the run, a pass with its report (--compact keeps it short)
       mcpRun: (name, cmd, slug) => `The '${name}' check runs dev-guardian's scan (minutes). In Claude Code run ${DEV_SPEC} finish ${slug} --run (Bash timeout 600000, or in the background): it runs the check and records its report itself. Elsewhere run \`${cmd}\` from the project root (dev-guardian 3.3+: add --compact for a short report) and report it with spec_finish {evidence: [{name: "${name}", command, exitCode, summary: its stderr's last lines, report: its JSON stdout}]} — a pass needs its report.`,
       // the launcher verified before a run and when one is recorded (1.30)
-      launcherChanged: `.specs/guardian.cjs is not the launcher dev-spec-driven writes (edited, replaced or a link), so the gate does not run it — ${DEV_SPEC} init --guardian writes it again`,
+      launcherChanged: `.specs/guardian.cjs is not the launcher dev-spec-driven writes (edited, replaced or a link), so the gate does not run it — ${DEV_SPEC} init --guardian writes it again (if a newer dev-spec wrote it, update dev-spec instead)`,
       launcherRefreshed: ".specs/guardian.cjs replaced by this version's launcher (it was an earlier version's).",
       notRun: (name, why) => `the project check '${name}' was not run — ${why}. Nothing was recorded.`,
       reportMismatch: (exit, reported, blocking) => `dev-guardian's report contradicts the exit code ${exit}` + (reported != null ? ` (the report says exit ${reported})` : "") + (blocking ? ` — it lists ${blocking} blocking finding(s)` : "") + `; report the run as it is (or let finish --run record it) — nothing was recorded`,
@@ -3471,6 +3480,21 @@ const designWeigh = {
     reuseGate: (d, size) => `${d} — a size ${size} design needs it before its approval`,
     reuseGateLegacy: (d, size) => `${d} — approved before 1.28: a size ${size} design needs it at its next approval`,
     clarifyConsistency: (words) => `The spec mentions ${words}, but neither the requirements nor the design say anything about consistency or idempotency (the answer goes in the design's Alternatives & Trade-offs / Risks, or in a requirement): what must succeed or fail together (atomicity, isolation level), who else writes the same data concurrently, strong or eventual consistency (how stale is acceptable), and the delivery guarantee and idempotency of anything asynchronous?`,
+    // 1.33: a critical flow — a limited resource or a money flow (stock, a coupon, a balance, a booking, an invite, a quota, a payment)
+    clarifyCriticalFlow: (words) => `The spec mentions ${words} — a critical flow: two identical requests in the same millisecond (a double click, a retried webhook) both read before either writes. What stops the double effect, in the database: a unique constraint, ONE conditional update that checks the affected rows (UPDATE … WHERE qty > 0), a row lock (SELECT … FOR UPDATE) for a complex rule; for payments, an idempotency key on every gateway call and a processed-events table for the webhooks? And does the server recompute the price, the discount and the permissions instead of trusting the client's? (The answer goes in the design — references/critical-flows.md.)`,
+    // spec_doctor's critical-flows (the design) and critical-flow-tests (the test plan) details
+    criticalFlows: {
+      open: (words) => `the spec names a critical flow (${words}) but neither the requirements nor the design say what two identical requests at once do — settle it in the database (a unique constraint, a conditional update that checks the affected rows, a row lock with SELECT … FOR UPDATE; for payments and webhooks an idempotency key and a processed-events table), or say in a Critical flows section why none is needed — a flow that only reads (a balance on a dashboard) answers it with one line under ## Critical flows: "None: this feature only reads the balance" (references/critical-flows.md)`,
+      answer: (words) => `critical flow (${words}) — the spec says what two identical requests at once do`,
+      section: (words) => `critical flow (${words}) — answered in the design's Critical flows section`,
+      rowsOk: (words) => `critical flow (${words}) — the test plan repeats the request (twice, and two at once) and covers another user's access where the spec needs it`,
+      rowsMissing: (words, gaps) => `critical flow (${words}) — the test plan lacks ${gaps}: integration tests on the real route against a separate test database, never production (references/critical-flows.md)`,
+      gap: {
+        repetition: "a repetition row (the same request twice, and two at once: one effect)",
+        "other-user": "a row for another user's data (refused, nothing changed)",
+      },
+      legacyPlan: (d, v = "1.33") => `test plan approved before ${v} — asked only from its next approval (${d})`,
+    },
   };
 
 // ===========================================================================

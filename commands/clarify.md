@@ -19,7 +19,9 @@ replace it, or amend the glossary.
   parked one is a `[NEEDS CLARIFICATION]`, never a guess).
 - **Constraints round** — before closing, one question at a time, skipping what an active track's design sections own
   (+dist, +saas, +api): **Atomicity** (what succeeds or fails together); **ACID and isolation** (a transaction? which
-  isolation level?); **Race conditions** (who else writes it concurrently, which write wins); **Consistency model** (strong
+  isolation level?); **Race conditions** (who else writes it concurrently, which write wins); **Critical flows** (stock, a
+  coupon, a balance, a booking, a payment: what two identical requests at once do, and the database rule that stops the
+  second — `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/critical-flows.md`); **Consistency model** (strong
   or eventual, how stale a read may be); **Delivery and idempotency** (at-least-once? what makes a duplicate harmless);
   **Dependency failure** (slow, down, garbage: fail closed, degrade or retry); **Volume and growth**; **Business outcome** —
   a measurable Success Criterion (`SC-00n`). The answers feed the design's **Alternatives & Trade-offs** and Risks.

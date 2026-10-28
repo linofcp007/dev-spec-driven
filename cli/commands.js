@@ -1210,7 +1210,8 @@ const COMMANDS = [
       };
       if (!on("run")) return report(undefined, undefined);
       const runStart = spec.runStartStamp(projectDir, pos[0]); // `at` and the code stamp BEFORE the checks run
-      return RUN.runChecks(pos[0], { projectDir, resolveShell: () => runShell(c), say: c.say, warn: err, gitState: () => GIT.gitState(projectDir), execOpts: () => c.execOpts() })
+      return RUN.runChecks(pos[0], { projectDir, resolveShell: () => runShell(c), say: c.say, warn: err, gitState: () => GIT.gitState(projectDir), execOpts: () => c.execOpts(),
+        diffBaseFacts: () => GIT.diffBaseFacts(projectDir) })
         .then((rc) => (rc.ok ? report(rc.evidence, runStart) : fail(rc, rc.hint)));
     },
   },

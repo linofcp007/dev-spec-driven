@@ -45,7 +45,8 @@ function shellName(sh, env) {
 // output pipes). A PowerShell shell (sh.args — resolveRunShell) runs `<shell> -NoProfile -NonInteractive -Command <cmd>`,
 // the command one argument; any other shell: Node runs `<shell> -c "<cmd>"` (cmd.exe: /d /s /c).
 // opts: cwd · timeoutS (seconds, none = no limit) · onSignal(sig) — given, a SIGINT / SIGTERM to this process kills the tree
-// first, then calls it (the CLI exits 130 / 143: a detached group no longer gets the terminal's Ctrl+C) · drainMs · maxOutput.
+// first, then calls it (the CLI exits 130 / 143: a detached group no longer gets the terminal's Ctrl+C) · drainMs · maxOutput ·
+// env (the command's whole environment — default: this process's; finish --run: dev-guardian's diff base, 1.33).
 function execCommand(command, sh, opts) {
   const o = opts || {};
   const timeoutS = o.timeoutS;
@@ -82,7 +83,7 @@ function execCommand(command, sh, opts) {
       resolve({ status, signal, error, heldOpen, stdout: Buffer.concat(chunks[0]).toString("utf8"), stderr: Buffer.concat(chunks[1]).toString("utf8") });
     };
     try {
-      const sopts = { cwd: o.cwd, windowsHide: true, detached: !win };
+      const sopts = { cwd: o.cwd, windowsHide: true, detached: !win, ...(o.env ? { env: o.env } : {}) };
       // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
       child = Array.isArray(sh.args) ? spawn(String(sh.shell), [...sh.args, command], sopts) : spawn(command, { shell: sh.shell, ...sopts });
     } catch (e) { error = e; return settle(null, null); }
@@ -175,7 +176,8 @@ function runSummaries(parts) {
 // (spec.isGuardianCheck) prints its verdict instead of the output's last lines, and its evidence carries the JSON report (stdout)
 // as `report` and stderr's last lines as the summary — what an agent reports over MCP.
 // deps: projectDir · resolveShell() (the CLI's: --shell / DEV_SPEC_SHELL, --timeout checked first) · say(line) (stdout, or stderr
-// under --json) · warn(line) (stderr) · gitState() · execOpts() (runCommand's opts — read once the shell is resolved).
+// under --json) · warn(line) (stderr) · gitState() · execOpts() (runCommand's opts — read once the shell is resolved) · diffBaseFacts()
+// (cli/git.js — 1.33: the feature's base dev-guardian's test-integrity check diffs against; absent: none).
 async function runChecks(feature, deps) {
   const spec = facade();
   const { projectDir } = deps;
@@ -206,14 +208,22 @@ async function runChecks(feature, deps) {
   if (pre.note) deps.say("  " + pre.note);
   const git = deps.gitState();
   const exec = deps.execOpts();
+  // dev-guardian's test-integrity check (1.33): the feature's base, in DEV_SPEC_DIFF_BASE for the launcher — which appends --diff-base
+  // <ref> only for a dev-guardian 3.8.0 or later. None decided: the variable is cleared for the run (finish --run alone sets it).
+  const KEY = spec.GUARDIAN_DIFF_BASE_ENV;
+  const base = checks.some((c) => spec.isGuardianCheck(c.name, c.command)) && deps.diffBaseFacts
+    ? spec.guardianDiffBase(spec.readState(projectDir, fx.slug), deps.diffBaseFacts()) : null;
+  const guardianEnv = () => { const e = { ...process.env }; delete e[KEY]; if (base) e[KEY] = base.ref; return e; };
+  // a base that still contains HEAD: dev-guardian reads only the uncommitted work — the verdict says so, never "the change since main"
+  const uncommitted = !!(base && base.uncommitted);
   const evidence = [];
   let cmdFailed = false;
   for (const c of checks) {
     deps.say("$ " + c.command + "   (" + c.name + ")");
-    const x = await runCommand(c.command, sh, M, exec);
     const guardian = spec.isGuardianCheck(c.name, c.command);
+    const x = await runCommand(c.command, sh, M, guardian ? { ...exec, env: guardianEnv() } : exec);
     const summary = guardian ? spec.summarizeRunOutput(x.stderr) : x.summary;
-    if (guardian && !x.cantRun) spec.guardianLines(spec.guardianRecord(projectDir, fx.dir, c.command, x.code, x.stdout, x.stderr), lang).forEach((l) => deps.say("  " + l));
+    if (guardian && !x.cantRun) spec.guardianLines(spec.guardianRecord(projectDir, fx.dir, c.command, x.code, x.stdout, x.stderr, uncommitted), lang).forEach((l) => deps.say("  " + l));
     else if (x.summary) deps.say(x.summary.replace(/^/gm, "  "));
     if (x.heldOpen && !x.cantRun) deps.say("  " + M.cliOutput.runHeldOpen(x.code)); // settled at its exit
     // a check that could not run is refused and NOTHING is recorded (all-or-nothing, like
@@ -221,7 +231,8 @@ async function runChecks(feature, deps) {
     if (x.cantRun) return { ok: false, couldNotRun: x.cantRun.code, check: c.name, error: M.runGate.checkRefused(c.name, c.command, x.cantRun.why) };
     if (x.code !== 0 && sh.cmd && spec.windowsShellFailure(x.output, x.code)) cmdFailed = true;
     // a guardian check: its JSON report (stdout) and its raw stderr (its own message, node's — the summary keeps only the last lines)
-    evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary, ...(guardian ? { report: x.stdout, stderr: x.stderr } : {}), ...git });
+    evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary,
+      ...(guardian ? { report: x.stdout, stderr: x.stderr, ...(uncommitted ? { diffBaseUncommitted: true } : {}) } : {}), ...git });
   }
   if (cmdFailed) deps.warn(M.taskDone.shellHint);
   return { ok: true, evidence };

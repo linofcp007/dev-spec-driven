@@ -972,4 +972,4 @@ module.exports = { PACK_LIMITS, RE_PACK_MARKER_RESERVED, RE_PACK_KEYWORD, packTa
   isPackTrack, isPackMarkerBracket, packMarkersFor, noteGhostPacks, ghostMarkers, savedPackName, legacyPackName,
   legacyPackMarkerTrack, packReservedSince, missingPackTracks, packTitle, packDesignBlock, packRequirementsBlock,
   insertPackRequirements, packTaskBlock, packTestRowsBlock, packChecklistBlock, trackSteeringStub, packCorpusSets,
-  trackPacks, __link };
+  trackPacks, packFragment, __link };

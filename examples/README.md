@@ -1,4 +1,4 @@
-# Example — a fully worked spec (1.32 shape)
+# Example — a fully worked spec (1.33 shape)
 
 `demo-project/` is a self-contained mini-project showing what a feature looks like with the current
 methodology: **prioritized user stories (P1/P2)**, **Success Criteria**, a design that weighs its choices

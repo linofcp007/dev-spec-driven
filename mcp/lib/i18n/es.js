@@ -461,6 +461,12 @@ Justifica todo lo que viole un principio de la constitución o añada complejida
 - **Objetivo de cobertura:** []
 - **Rutas críticas que exigen 100% de cobertura de ramas:** []
 
+<!-- Las pruebas de integración llaman a la ruta real contra una base de datos de pruebas real y separada — nunca la de
+     producción — y solo simulan lo externo (la pasarela de pago, el correo, APIs de terceros). Un flujo crítico (inventario, un
+     cupón, un saldo o créditos, una reserva, una invitación, una cuota, un pago, un webhook) tiene filas para: el camino feliz ·
+     los errores esperados · la repetición (la misma petición dos veces, y dos a la vez) · los límites (inventario a cero, un
+     plan caducado, un importe cero o negativo) · los datos de otro usuario. -->
+
 ## Matriz de Trazabilidad
 
 <!-- Tipo — example: una entrada concreta → resultado esperado; lo habitual para criterios por evento (CUANDO …, SI … ENTONCES).
@@ -2777,6 +2783,9 @@ const msg = {
       exited: (code) => `dev-guardian terminó con exit ${code == null ? "?" : code}`,
       noBaseline: " — sin baseline: todos los findings que ya existen cuentan como nuevos",
       override: (p) => ` (dev-guardian de DEV_GUARDIAN_CLI=${p})`,
+      // 1.33: el cambio desde la base de la funcionalidad, leído en busca de pruebas debilitadas (el test-integrity de dev-guardian 3.8.0)
+      diffBase: (ref) => ` · el cambio desde ${ref} revisado en busca de pruebas debilitadas`,
+      diffBaseUncommitted: (ref) => ` · solo el trabajo aún sin commit revisado en busca de pruebas debilitadas (${ref} ya contiene los commits de esta rama)`,
       accepted: (t, p, o) => [t ? `${t} fichero(s) sin analizar (aceptado(s) en .guardian/scan.yml)` : "", p ? `${p} fichero(s) leído(s) solo en parte (aceptado(s) con --accept-partial-parse)` : "",
         o ? `${o} otra(s) laguna(s) aceptada(s)` : ""].filter(Boolean).join(" · "),
       acceptedWarn: (what) => `el gate de dev-guardian pasó con ${what} — revisa a mano un cambio en esos ficheros: un finding donde ningún escáner miró pasa el gate.`,
@@ -2788,7 +2797,7 @@ const msg = {
       staleTimeouts: (n, files) => `${n} ${n === 1 ? "entrada obsoleta" : "entradas obsoletas"} de accept_timeouts en .guardian/scan.yml${files ? " (" + files + ")" : ""} — ${n === 1 ? "elimínala" : "elimínalas"}, o un timeout futuro en ${n === 1 ? "ese fichero" : "esos ficheros"} se acepta sin que nadie lo vea.`,
       update: (v) => `actualiza dev-guardian (Claude Code: /plugin) — ${v ? "esta ejecución usó la " + v + ", el gate necesita la 3.2.1 o posterior" : "esta ejecución no indicó versión (la 3.3.0 y posteriores la indican); el gate necesita la 3.2.1 o posterior"}`,
       updateHint: (slug) => `Actualiza el plugin dev-guardian (3.2.1 o posterior — Claude Code: /plugin) y vuelve a ejecutar la verificación: ${DEV_SPEC} finish ${slug} --run.`,
-      finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [esta funcionalidad]" : ""),
+      finding: (at, rule, severity, own, test) => `${at} ${test ? "prueba debilitada: " : ""}${rule} (${severity})` + (own ? " [esta funcionalidad]" : ""),
       blocker: (name, text) => `la verificación del proyecto '${name}' falló — ${text}.`,
       more: (n) => `+${n} más`,
       fixHint: (slug) => `Corrige el/los finding(s) y vuelve a ejecutar la verificación: ${DEV_SPEC} finish ${slug} --run. Para aceptar UN finding revisado, el usuario lo suprime en la propia línea con un motivo (nosemgrep: <regla> -- <motivo>, # nosec) — nunca con \`baseline update\`, que acepta todos los findings actuales, incluidos los de esta funcionalidad. Nunca fuerces el finish sin el usuario.`,
@@ -2807,7 +2816,7 @@ const msg = {
       },
       configHint: (slug) => `Corrígelo y vuelve a ejecutar la verificación: ${DEV_SPEC} finish ${slug} --run.`,
       mcpRun: (name, cmd, slug) => `La verificación '${name}' ejecuta el escaneo de dev-guardian (minutos). En Claude Code ejecuta ${DEV_SPEC} finish ${slug} --run (Bash con timeout 600000, o en segundo plano): ejecuta la verificación y registra su informe por sí solo. En otros clientes, ejecuta \`${cmd}\` desde la raíz del proyecto (dev-guardian 3.3+: añade --compact para un informe corto) y regístralo con spec_finish {evidence: [{name: "${name}", command, exitCode, summary: las últimas líneas de su stderr, report: el JSON de su stdout}]} — una ejecución que pasa necesita su informe.`,
-      launcherChanged: `.specs/guardian.cjs no es el lanzador que escribe dev-spec-driven (editado, sustituido o un enlace), así que el gate no lo ejecuta — ${DEV_SPEC} init --guardian lo vuelve a escribir`,
+      launcherChanged: `.specs/guardian.cjs no es el lanzador que escribe dev-spec-driven (editado, sustituido o un enlace), así que el gate no lo ejecuta — ${DEV_SPEC} init --guardian lo vuelve a escribir (si lo escribió un dev-spec más reciente, actualiza dev-spec en su lugar)`,
       launcherRefreshed: ".specs/guardian.cjs sustituido por el lanzador de esta versión (era el de una versión anterior).",
       notRun: (name, why) => `la verificación del proyecto '${name}' no se ejecutó — ${why}. No se registró nada.`,
       reportMismatch: (exit, reported, blocking) => `el informe de dev-guardian contradice el exit code ${exit}` + (reported != null ? ` (el informe dice exit ${reported})` : "") + (blocking ? ` — lista ${blocking} finding(s) que bloquean` : "") + `; registra la ejecución tal como fue (o deja que finish --run la registre) — no se registró nada`,
@@ -3264,6 +3273,22 @@ const designWeigh = {
     reuseGate: (d, size) => `${d} — un diseño de tamaño ${size} la necesita antes de su aprobación`,
     reuseGateLegacy: (d, size) => `${d} — aprobado antes de la 1.28: un diseño de tamaño ${size} la necesita en su próxima aprobación`,
     clarifyConsistency: (words) => `La spec menciona ${words}, pero ni los requisitos ni el diseño dicen nada de consistencia ni de idempotencia (la respuesta va en Alternativas y Compensaciones / Riesgos del diseño, o en un requisito): ¿qué debe tener éxito o fallar a la vez (atomicidad, nivel de aislamiento), quién más escribe los mismos datos a la vez, consistencia fuerte o eventual (qué desfase es aceptable), y cuál es la garantía de entrega y la idempotencia de todo lo asíncrono?`,
+    // 1.33: un flujo crítico — un recurso limitado o un flujo de dinero (inventario, un cupón, un saldo, una reserva, una invitación,
+    // una cuota, un pago)
+    clarifyCriticalFlow: (words) => `La spec menciona ${words} — un flujo crítico: dos peticiones idénticas en el mismo milisegundo (un doble clic, un webhook reenviado) leen ambas antes de que ninguna escriba. ¿Qué impide el efecto doble, en la base de datos: una restricción de unicidad, UNA actualización condicional que compruebe las filas afectadas (UPDATE … WHERE qty > 0), un bloqueo de fila (SELECT … FOR UPDATE) para una regla compleja; en los pagos, una clave de idempotencia en cada llamada a la pasarela y una tabla de eventos procesados para los webhooks? ¿Y el servidor recalcula el precio, el descuento y los permisos en lugar de fiarse de los del cliente? (La respuesta va en el diseño — references/critical-flows.md.)`,
+    // los detalles de spec_doctor: critical-flows (el diseño) y critical-flow-tests (el plan de pruebas)
+    criticalFlows: {
+      open: (words) => `la spec nombra un flujo crítico (${words}) pero ni los requisitos ni el diseño dicen qué hacen dos peticiones idénticas a la vez — resuélvelo en la base de datos (una restricción de unicidad, una actualización condicional que compruebe las filas afectadas, un bloqueo de fila con SELECT … FOR UPDATE; en los pagos y webhooks una clave de idempotencia y una tabla de eventos procesados), o explica en una sección Flujos críticos por qué no hace falta ninguno — un flujo que solo lee (un saldo en un panel) se responde con una línea en ## Flujos críticos: "Ninguno: esta función solo lee el saldo" (references/critical-flows.md)`,
+      answer: (words) => `flujo crítico (${words}) — la spec dice qué hacen dos peticiones idénticas a la vez`,
+      section: (words) => `flujo crítico (${words}) — respondido en la sección Flujos críticos del diseño`,
+      rowsOk: (words) => `flujo crítico (${words}) — el plan de pruebas repite la petición (dos veces, y dos a la vez) y cubre el acceso de otro usuario donde la spec lo exige`,
+      rowsMissing: (words, gaps) => `flujo crítico (${words}) — al plan de pruebas le falta ${gaps}: pruebas de integración en la ruta real, contra una base de datos de pruebas separada, nunca la de producción (references/critical-flows.md)`,
+      gap: {
+        repetition: "una fila de repetición (la misma petición dos veces, y dos a la vez: un solo efecto)",
+        "other-user": "una fila para los datos de otro usuario (rechazado, nada cambia)",
+      },
+      legacyPlan: (d, v = "1.33") => `plan de pruebas aprobado antes de la ${v} — solo se exige a partir de su próxima aprobación (${d})`,
+    },
   };
 
 // ===========================================================================
