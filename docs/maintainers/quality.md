@@ -102,10 +102,14 @@ the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules 
   designWeighState min 0 — "None: this feature only reads the balance" answers). Surfaces: clarify's `nudges` gets
   `{code: "critical-flow-unstated", signals}` (≤ 3, one per concept) AFTER `consistency-unstated` (unchanged — both may be
   returned; `clarifyCriticalFlow`); doctor's `critical-flows` (phase 2: a designed feature, not while design.md is a later
-  phase's template) and `critical-flow-tests` (phase 3, +tdd: test-plan.md's rows — the lines holding a T-ID, each WITHOUT the
-  scaffold's row descriptions, `planTemplatePhrases()`, so a template row never answers — need a repetition row (twice /
-  duplicate / again with the same / two at once / simultaneous / concurrent / in parallel… `RE_REPETITION_ROW`; never a bare
-  retry, which is retry-on-failure) and, when the user text is about own
+  phase's template) and `critical-flow-tests` (phase 3, +tdd: test-plan.md's rows — the lines holding a T-ID, each read as its cells
+  minus the ones that EQUAL a template row's cell, `planTemplateCells()`: the built-in plan of every track (EN + the feature's
+  language), the track packs' test-plan fragments and the project's test-plan templates, a `{{variable}}` matching a value
+  without clause punctuation; an edited cell is the user's, sectionOwnLines' rule — need a repetition row (twice / duplicate /
+  repeated / again with the same / two at once / the same time or millisecond / identical requests / simultaneous / concurrent
+  / in parallel / a redelivered, resubmitted, replayed or retried webhook or event; PT repetido(a) / reenviado / com a mesma
+  chave; ES repetida / reenviado / con la misma clave… `RE_REPETITION_ROW`; never a bare retry — a Retry button, a retry
+  after a failure) and, when the user text is about own
   data or permissions (`RE_OWN_DATA`), another user's access (`RE_OTHER_USER_ROW`)). Both only WARN — no gate, no
   `warnsOnly` —, share the context view `critical` (doctor.js `CHECK_VIEWS`) and follow the stamp scheme: `approvePhase`
   stamps `critical: true` on every design and test-plan approval (and its record); an approval without it passes with a note
@@ -301,12 +305,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   senses reuse the classifier's `near` cues (`cueRules` exported) and +tdd's credit / charge rules; the test plan's Strategy
   gained the guidance comment, the critic a Critical flows row, test-patterns.md the twice / two-at-once section, the
   implementer's hard rule "never skip, delete or weaken a test or an assertion" (one wording, test-patterns.md repeats it).
-- **1.33 review** — four findings: the +dist / +api skip held at size s, where their owning sections are not scaffolded (a
+- **1.33 review** — five findings: the +dist / +api skip held at size s, where their owning sections are not scaffolded (a
   `core +api` coupon feature was asked nothing — `criticalOwned()` by size); `withoutOutOfScope()` looked ahead from every
-  Out of Scope heading (80k of them: 7.7 s — one pass now, 05-markdown-trace's linear guard); the plan check read the
+  Out of Scope heading (80k of them: 7.7 s — one pass now, the linear guard in 15-quality-critical-flows.js); the plan check read the
   scaffold's own rows (+ui's "an error with Retry", +data's "twice … no duplicate" passed the full track combination on the
   template alone) and took a bare retry for a repetition; Shadow DOM slots and ES quotations (citas textuales / de los
-  autores) fired.
+  autores) fired; the approval stamps were only in gates-and-approvals.md's History.
+- **1.33 review 2** — the plan check stripped template descriptions as SUBSTRINGS, so a template row the user extended ("…
+  delivered twice … — for the coupon webhook") lost its answer: a cell is template text only when it equals one; the
+  narrowed repetition lost the tool's own example (a retried / redelivered webhook, PT reenviado / repetido, "com a mesma
+  chave"); track packs' and project templates' rows were never template text. A cell that is only a `{{variable}}` matched
+  every cell (found by the new pack test).
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the

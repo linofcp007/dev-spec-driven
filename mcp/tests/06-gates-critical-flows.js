@@ -185,5 +185,56 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, handR
       again: () => got.again === "another user's data", atOnce: () => got.atOnce === "pass",
       pt: () => got.pt === "pass", ptRetry: () => got.ptRetry === "linha de repetição+outro utilizador", es: () => got.es === "pass",
     });
+
+    // 1.33 review 2: a template row the user EDITED is the user's (a cell is template text only when it equals a template cell —
+    // sectionOwnLines' rule): +dist's "delivered twice" and +sec's "user B never reads user A's" rows, extended, answer; verbatim they
+    // don't. A retried / redelivered / replayed webhook or event IS the same request again (the clarify question's "a retried
+    // webhook"); a Retry button or a retry after a failure is not. EN / PT (both genders) / ES.
+    const ownMine = tpl("en") + row("T-90", "the same message delivered twice (or N times) has exactly one effect — for the coupon webhook") +
+      row("T-91", "abuse case: user B never reads user A's resource (403 + audit event) — the coupon endpoint");
+    const ownTpl = tpl("en") + I.testPlan("x", "en", ["core", "tdd", "dist"]).split("\n").filter((l) => /delivered twice/.test(l)).join("\n") + "\n";
+    const rep = (desc, lang = "en") => gaps(check(tpl(lang) + row("T-90", desc) + row("T-91", "user B cannot redeem user A's code"), lang)) === "pass";
+    const YES = [["the redemption request repeated: one discount"], ["two buyers press Pay at the same time"], ["two requests in the same millisecond"],
+      ["two identical requests: one charge"], ["the redelivered event has no second effect"], ["a resubmitted form: one order"], ["the replayed webhook is ignored"],
+      ["the webhook is retried by the gateway: one effect"], ["a retried webhook: one effect"], ["o pedido repetido não dá dois descontos", "pt"],
+      ["a mensagem repetida tem um só efeito", "pt"], ["o webhook reenviado é ignorado", "pt"], ["com a mesma chave: um só pagamento", "pt"],
+      ["dois pedidos no mesmo milissegundo", "pt"], ["la petición repetida no aplica dos descuentos", "es"], ["el webhook reenviado se ignora", "es"],
+      ["con la misma clave: un solo pago", "es"]];
+    const NO = [["the Retry button reloads the list"], ["retries after a gateway timeout"], ["the repeat password field must match"], ["nova tentativa após um timeout", "pt"]];
+    const yesBad = YES.filter(([d, l]) => !rep(d, l)).map(([d]) => d), noBad = NO.filter(([d, l]) => rep(d, l)).map(([d]) => d);
+    all("1.33 review 2: an edited template row is the user's (+dist's 'delivered twice … — for the coupon webhook', +sec's 'user B … — the coupon endpoint' answer; verbatim they don't); a repeated / redelivered / resubmitted / replayed / retried webhook, the same time / millisecond, identical requests, PT repetido(a) / reenviado / com a mesma chave, ES repetida / reenviado / con la misma clave count — a Retry button, a retry after a timeout, a repeat-password field don't (got " +
+      js({ edited: gaps(check(ownMine)), verbatim: gaps(check(ownTpl)), yesBad, noBad }) + ")", {
+      edited: () => gaps(check(ownMine)) === "pass", verbatim: () => gaps(check(ownTpl)) === "repetition row+another user's data",
+      yes: () => !yesBad.length, no: () => !noBad.length,
+    });
+  }
+
+  { // 1.33 review 2: a track pack's test-plan rows and the project's own test-plan template are template text too (as the design check
+    // reads glossProjectLines): verbatim they never answer, edited they do.
+    const p = project("cf-packs");
+    const pd = path.join(p, ".specs", "tracks", "hooks");
+    fs.mkdirSync(pd, { recursive: true });
+    fs.writeFileSync(path.join(pd, "track.json"), js({ name: "hooks", marker: "HOOKS", title: { en: "Webhooks" }, signals: { strong: ["webhook receiver"], weak: [] },
+      sections: [{ name: "Receivers", guidance: "Which events, which signature check." }] }));
+    fs.writeFileSync(path.join(pd, "test-plan.md"), "| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n" +
+      "| T-00 | integration | example | the same webhook delivered twice has one effect | {{ac1}} | `tests/hooks.test.js` |\n");
+    fs.mkdirSync(path.join(p, ".specs", "templates"), { recursive: true });
+    fs.writeFileSync(path.join(p, ".specs", "templates", "test-plan.md"), "# Test Plan: {{name}}\n\n| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n" +
+      "| T-01 | integration | example | the order is submitted twice: one order for {{name}} | {{acs}} | `tests/orders.test.js` |\n");
+    const f = designed(p, "Discounts", ["core", "tdd", "hooks"], { design: DESIGN("## Critical flows\nA unique constraint on (code, buyer_id).\n\n") });
+    const head = "# Test Plan: Discounts\n\n## Strategy\n- **Test runner:** node --test\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n";
+    const row = (id, desc) => `| ${id} | integration | example | ${desc} | US-1.AC-1 | \`tests/codes.test.js\` |\n`;
+    const other = row("T-09", "user B cannot redeem user A's code");
+    const plan = (r) => { wr(f, "test-plan.md", head + row("T-01", "a valid code applies the discount") + r + other); return view(S.specDoctor(p, f.slug), "critical-flow-tests"); };
+    const got = {
+      packVerbatim: plan(row("T-02", "the same webhook delivered twice has one effect")),
+      packEdited: plan(row("T-02", "the same webhook delivered twice has one effect — the coupon webhook")),
+      projectVerbatim: plan(row("T-02", "the order is submitted twice: one order for Discounts")),
+      projectEdited: plan(row("T-02", "the order is submitted twice: one order for Discounts, both at the same second")),
+    };
+    all("1.33 review 2: a track pack's test-plan row and the project's test-plan template row ({{name}} filled) are template text — verbatim the plan still lacks a repetition row; edited, they answer (got " + js(got) + ")", {
+      packVerbatim: () => /^warn: critical flow .* lacks a repetition row/.test(got.packVerbatim), packEdited: () => /^pass: /.test(got.packEdited),
+      projectVerbatim: () => /^warn: critical flow .* lacks a repetition row/.test(got.projectVerbatim), projectEdited: () => /^pass: /.test(got.projectEdited),
+    });
   }
 };
