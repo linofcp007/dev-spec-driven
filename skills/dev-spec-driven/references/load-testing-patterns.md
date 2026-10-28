@@ -82,6 +82,14 @@ Every load test must capture:
 Compare against the **performance budget** from `design.md`. If any metric is worse than
 budget, the test fails and the feature isn't done.
 
+**One run can pass by luck.** Run each scenario as many times as `load-test.md` says (3 is a good start): every run meets
+the budget, not only their average; write the spread next to the result. A before/after comparison holds only when
+both sides ran the same scenario the same number of times, and the change is larger than the spread.
+
+**Name the limit.** Ask why the throughput isn't twice as high: the resource that stops it (CPU, a lock, a connection
+pool, the database, the network, the load generator itself), read from the resource use above during a run — not
+guessed from the code. A load generator at 100% CPU means you measured the generator, not the system.
+
 ---
 
 ## k6 Template (Steady State)
@@ -357,7 +365,7 @@ spike ends.
 ## Results Log
 
 ### Run 2026-04-15 (before feature ship)
-- Steady: P95=980ms ✅, P99=2100ms ✅, errors 0.3% ✅
+- Steady (3 runs): P95 940–1010ms ✅, P99 1980–2100ms ✅, errors 0.3% ✅
 - Burst: Handled 1500 VUs spike with 2.1% errors (all 429s), recovered in 90s ✅
 - Soak: Stable over 4h, memory flat ✅
 - Breakpoint: Broke at ~1800 RPS (DB CPU 95%). Current expected peak ~300 RPS, so 6×

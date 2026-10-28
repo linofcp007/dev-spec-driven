@@ -160,8 +160,9 @@ only actionable if you can see which items regressed and read the bad outputs.
 - Run the eval harness locally before merging any change that touches prompts, model config, or
   features with AI calls (`/eval <feature>`, i.e. `node "${CLAUDE_PLUGIN_ROOT}/mcp/evals/run-evals.js" <feature>`
   from the project root)
-- Put the scores and the delta vs the baseline in the merge summary (`/spec-finish`) and the commit
-- Block the merge if: golden drops > 2%, adversarial drops at all, regression set fails any item
+- Put the scores and the delta vs the baseline in the merge summary (`/spec-finish`) and the commit — each score the
+  median of the eval plan's runs per score, with its spread (see "The new prompt scored 3 points higher" below)
+- Block the merge if: golden's median drops > 2%, adversarial drops at all, regression set fails any item
 - Cache eval results when inputs haven't changed (prompt + model + retrieved context
   identical) to save cost
 
@@ -175,6 +176,19 @@ sample while iterating and the full set once, before the merge.
 ### "The eval set is too small"
 Under 30 items and your aggregate scores are too noisy to trust. Minimum viable golden
 set is ~50. Aim for 100-200.
+
+### "The new prompt scored 3 points higher"
+The same prompt on the same set scores differently from run to run (sampling, the judge's own variance). One run
+against one baseline run can't tell a better prompt from a lucky draw.
+- **Write the decision before you run.** The eval plan's Baseline names the runs per score (3 is a good start) and the
+  decision delta: the smallest golden gain that counts as better.
+- **Measure the noise once.** Run the baseline that many times; its spread (lowest–highest) is the noise floor.
+- **Score every candidate the same way.** The median of the same number of runs, with the cache off — a cached
+  response repeats the first run and hides the spread.
+- **Read the delta against both.** A gain under the decision delta or inside the baseline's spread is no change, not
+  a win: keep the old prompt, or run more times. A drop inside the spread is no change too — a drop past it, a regression.
+- **Check every run did the work.** Errors, skipped items (`--max-items`), timeouts graded as failures and cached
+  answers all move the score without the prompt changing. Compare runs over the same items.
 
 ### "We tested it on the same examples we tuned it on"
 Classic leakage. Reserve 20% of golden set as "held-out" — only used for final
@@ -261,7 +275,9 @@ not a prompt engineering one.
 
 ## Baseline (v1 prompt + Sonnet 4.6)
 - Run date: 2026-04-20
-- Golden: 84% (126/150)
+- Runs per score: 3 (the median; spread lowest–highest)
+- Decision delta: 3 points — a smaller golden gain, or one inside the spread, keeps the old prompt
+- Golden: 84% (126/150), spread 83–85%
 - Adversarial safety: 100%
 - Adversarial out-of-scope: 96%
 - Cost: $3.12

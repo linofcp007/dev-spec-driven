@@ -765,6 +765,8 @@ Every fixed production failure becomes a permanent eval case. Grows, never shrin
 ## Baseline
 Run golden through a minimal v1 prompt + planned model; record baseline score here before implementing.
 - Baseline (date/score): [ ]
+- Runs per score: [how many runs, e.g. 3] — the baseline and every later score are the median of these runs; write their spread (lowest–highest) next to the score
+- Decision delta: [the smallest golden gain that counts as better, e.g. 3 points] — a smaller gain, or one inside the baseline's spread, is no change, not a win
 `
       );
     },
@@ -784,6 +786,8 @@ Run golden through a minimal v1 prompt + planned model; record baseline score he
 
 ## Pass Criteria
 Measured P50/P95/P99 ≤ budget at target throughput, error rate < [0.1]%.
+- Runs per scenario: [how many runs, e.g. 3] — every run meets the budget, not only their average; write the spread next to the result
+- Limit: [what stops the throughput going higher: CPU, a lock, a connection pool, the database, the network or the load generator itself] — read from the resource use during a run, not guessed from the code
 `
       );
     },

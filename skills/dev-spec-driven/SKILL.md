@@ -136,8 +136,9 @@ concept and synonyms — reuse, else extend, else create; a refactor outside the
   reason → minimum code → green → refactor on green; code written before its test is deleted and redone;
   guard / characterization tests and T-IDs an earlier task turned green pass at once → the full suite (targets green,
   the rest unchanged) → `spec_complete_task {evidence}` (`references/test-patterns.md`).
-- **+ai generation/prompt task:** a new `prompts/vN.md` → the full eval harness → keep it only if golden held or rose
-  and adversarial held → `spec_complete_task {evidence}` with the score delta.
+- **+ai generation/prompt task:** a new `prompts/vN.md` → the full eval harness, as many runs as the eval plan
+  says → keep it only if golden's median held or rose and adversarial held; a gain under the decision delta or inside
+  the baseline's spread is no change → `spec_complete_task {evidence}` with the delta and the spread.
 
 Blocked → pause and discuss; don't improvise outside the design. A gap a test or a measurement shows sends you back
 to that phase; a wrong "green" test is a plan change with approval — never edit a test to pass. Decisions and

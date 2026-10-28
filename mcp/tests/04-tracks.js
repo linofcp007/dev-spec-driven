@@ -1000,4 +1000,22 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       "review 5: +sec (authentication + password, OIDC + single sign-on, role-based access control EN / PT / ES), +ai (machine learning EN / PT / ES), +api (a REST endpoint we expose EN / PT / ES) turn on; 'SSO (single sign-on)' (one concept), a password reset, a third party's REST endpoint stay hints (got " +
       js([rec, hints]) + ")");
   }
+
+  { // 1.34: a number needs its noise — the +ai eval plan asks for the runs per score and the decision delta, the +saas load
+    // test for the runs per scenario and what limits the throughput; each a slot that reads 'placeholder' until written
+    const want = { en: [/^- Runs per score: \[/, /^- Decision delta: \[/, /^- Runs per scenario: \[/, /^- Limit: \[/],
+      pt: [/^- Execuções por pontuação: \[/, /^- Delta de decisão: \[/, /^- Execuções por cenário: \[/, /^- Limite: \[/],
+      es: [/^- Ejecuciones por puntuación: \[/, /^- Delta de decisión: \[/, /^- Ejecuciones por escenario: \[/, /^- Límite: \[/] };
+    const bad = [];
+    for (const l of ["en", "pt", "es"]) {
+      const f = S.createFeature(path.join(tmp, "proj-noise-" + l), "Ticket triage " + l, ["ai", "saas"], undefined, undefined, l);
+      const lines = ["eval-plan.md", "load-test.md"].flatMap((file) => fs.readFileSync(path.join(f.dir, file), "utf8").split(/\r?\n/));
+      for (const re of want[l]) {
+        const line = lines.find((x) => re.test(x));
+        if (!line || !S.placeholderReport(line).length || S.placeholderReport(line.replace(/\[[^\]]*\]/, "3")).length) bad.push(l + " " + re.source);
+      }
+    }
+    ok(!bad.length, "1.34: eval-plan.md (runs per score, decision delta) and load-test.md (runs per scenario, limit) ask for the noise in EN / PT / ES; " +
+      "each slot is a placeholder until written, and written it is not (bad: " + bad.join(" · ") + ")");
+  }
 };

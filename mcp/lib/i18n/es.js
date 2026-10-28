@@ -769,6 +769,8 @@ Cada fallo de producción corregido se convierte en un caso de evaluación perma
 ## Baseline
 Ejecuta el golden con un prompt v1 mínimo + modelo planeado; registra aquí la puntuación baseline antes de implementar.
 - Baseline (fecha/puntuación): [ ]
+- Ejecuciones por puntuación: [cuántas ejecuciones, p. ej. 3] — la baseline y cada puntuación posterior son la mediana de estas ejecuciones; escribe su dispersión (mínimo–máximo) junto a la puntuación
+- Delta de decisión: [la menor ganancia en el golden que cuenta como mejora, p. ej. 3 puntos] — una ganancia menor, o dentro de la dispersión de la baseline, es ausencia de cambio, no una victoria
 `
       );
     },
@@ -788,6 +790,8 @@ Ejecuta el golden con un prompt v1 mínimo + modelo planeado; registra aquí la 
 
 ## Criterios de Aprobación
 P50/P95/P99 medidos ≤ presupuesto al throughput objetivo, tasa de error < [0.1]%.
+- Ejecuciones por escenario: [cuántas ejecuciones, p. ej. 3] — cada ejecución cumple el presupuesto, no solo la media; escribe la dispersión junto al resultado
+- Límite: [lo que impide que el throughput suba: CPU, un lock, un pool de conexiones, la base de datos, la red o el propio generador de carga] — leído en el uso de recursos durante una ejecución, no adivinado a partir del código
 `
       );
     },

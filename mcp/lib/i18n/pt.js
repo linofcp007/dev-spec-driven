@@ -770,6 +770,8 @@ Cada falha de produção corrigida torna-se um caso de avaliação permanente. C
 ## Baseline
 Corre o golden com um prompt v1 mínimo + modelo planeado; regista aqui a pontuação baseline antes de implementar.
 - Baseline (data/pontuação): [ ]
+- Execuções por pontuação: [quantas execuções, p. ex. 3] — a baseline e cada pontuação seguinte são a mediana destas execuções; escreve a dispersão (mínimo–máximo) ao lado da pontuação
+- Delta de decisão: [o menor ganho no golden que conta como melhoria, p. ex. 3 pontos] — um ganho menor, ou dentro da dispersão da baseline, é ausência de mudança, não uma vitória
 `
       );
     },
@@ -789,6 +791,8 @@ Corre o golden com um prompt v1 mínimo + modelo planeado; regista aqui a pontua
 
 ## Critérios de Aprovação
 P50/P95/P99 medidos ≤ orçamento ao throughput alvo, taxa de erro < [0.1]%.
+- Execuções por cenário: [quantas execuções, p. ex. 3] — cada execução cumpre o orçamento, não só a média; escreve a dispersão ao lado do resultado
+- Limite: [o que impede o throughput de subir: CPU, um lock, um pool de ligações, a base de dados, a rede ou o próprio gerador de carga] — lido no uso de recursos durante uma execução, não adivinhado a partir do código
 `
       );
     },
