@@ -76,9 +76,10 @@ the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules 
   fires. Answered ANYWHERE in that text by a multi-word phrase (`RE_CONSISTENCY_ANSWER`: eventual consistency, idempotency,
   exactly-once, outbox…; `ACID` upper-case), never a bare "consistent" or "isolation". → `nudges` with the code
   `consistency-unstated` (≤ 3 signals); plain features only, never with +dist.
-- **Critical flows (1.33)** — `criticalFlowState()` (quality.js): a plain feature (never a bugfix, a spike, a change; never
-  with +dist or +api — one question bank, below) whose USER text (`userSpecText()` of requirements.md + design.md, each
-  without its Out of Scope section — `withoutOutOfScope()`) names a limited resource or a money flow: `CRITICAL_SIGNALS`
+- **Critical flows (1.33)** — `criticalFlowState()` (quality.js): a plain feature (never a bugfix, a spike, a change; not when a
+  track section that owns the question is scaffolded at the feature's size or present in its design — `criticalOwned()`, one
+  question bank, below) whose USER text (`userSpecText()` of requirements.md + design.md, each without its Out of Scope
+  section — `withoutOutOfScope()`, ONE linear pass over the headings) names a limited resource or a money flow: `CRITICAL_SIGNALS`
   {en, pt, es} by concept (stock · coupon · balance · wallet · credit · booking · reservation · appointment · seat · slot ·
   ticket · invite · quota · checkout · payment · charge · subscription), English in every spec + the feature language's, and
   the capitalised gateways (`RE_CRITICAL_PRODUCTS`: Stripe, Paddle). ONE signal fires (the user never writes
@@ -87,8 +88,8 @@ the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules 
   the `near` kind, keyed by concept over the lower-cased text): `CRITICAL_CUES` — stock photos / the stock market / an IT
   inventory, a bond's coupon and pt-BR's cupom fiscal, a load / work-life / white balance and the verb, an Apple Wallet,
   tax / end / photo / ECTS credits, DHCP / nature / capital reservations, the appointment of a director and PT marcação
-  (markup) / agendamento de tarefas / ES citas bibliográficas, a seat belt / car seat / vagas de emprego, UI / Vue / PCI
-  slots and slot machines, the bilhete de identidade, a calendar invite / "invites abuse", a sales quota, git checkout, the
+  (markup) / agendamento de tarefas / ES citas bibliográficas / textuales / de los autores, a seat belt / car seat / vagas de emprego, UI / Vue / Shadow DOM /
+  PCI slots and slot machines, the bilhete de identidade, a calendar invite / "invites abuse", a sales quota, git checkout, the
   balance of payments / withdrawal of consent, free of charge, a newsletter / GraphQL subscription and pt-BR assinatura
   digital — plus +tdd's own rules for `credit` and `charge` (`SIGNALS.tdd.cues`: one list of their everyday senses). A
   hard negative goes into the corpus of 15-quality-critical-flows.js with its positive twin.
@@ -101,18 +102,24 @@ the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules 
   designWeighState min 0 — "None: this feature only reads the balance" answers). Surfaces: clarify's `nudges` gets
   `{code: "critical-flow-unstated", signals}` (≤ 3, one per concept) AFTER `consistency-unstated` (unchanged — both may be
   returned; `clarifyCriticalFlow`); doctor's `critical-flows` (phase 2: a designed feature, not while design.md is a later
-  phase's template) and `critical-flow-tests` (phase 3, +tdd: test-plan.md's rows — the lines holding a T-ID — need a
-  repetition row (twice / two at once / concurrent / duplicate… `RE_REPETITION_ROW`) and, when the user text is about own
+  phase's template) and `critical-flow-tests` (phase 3, +tdd: test-plan.md's rows — the lines holding a T-ID, each WITHOUT the
+  scaffold's row descriptions, `planTemplatePhrases()`, so a template row never answers — need a repetition row (twice /
+  duplicate / again with the same / two at once / simultaneous / concurrent / in parallel… `RE_REPETITION_ROW`; never a bare
+  retry, which is retry-on-failure) and, when the user text is about own
   data or permissions (`RE_OWN_DATA`), another user's access (`RE_OTHER_USER_ROW`)). Both only WARN — no gate, no
   `warnsOnly` —, share the context view `critical` (doctor.js `CHECK_VIEWS`) and follow the stamp scheme: `approvePhase`
   stamps `critical: true` on every design and test-plan approval (and its record); an approval without it passes with a note
   ("approved before 1.33" — `legacyApproval` / `criticalFlows.legacyPlan`). spec_upgrade lists them, never as `attention`
   (`CRITICAL_FLOW_IDS`). The raw text is pre-checked with the signal regex: a spec naming no flow never builds the template
-  lines. The guide: `references/critical-flows.md`; the test plan template's Strategy carries the rows as a comment.
+  lines. A read-only flow (one word fires: "the account balance on the dashboard") is answered by one line under `## Critical
+  flows` — the warn's detail says so. The guide: `references/critical-flows.md`; the test plan template's Strategy carries the
+  rows as a comment.
 - **One question bank** — /clarify --grill's "Constraints round" skips a question an active track's design sections own
   (+dist: atomicity … dependency failure; +saas: volume; +api: idempotent creates, concurrent updates), and a sized design's
   Error Handling points at the IF…THEN criteria instead of asking again (prose only). The critical-flow nudge and checks
-  follow it: +dist (Concurrency, Delivery & Idempotency) and +api (Pagination, Idempotency & Concurrency) own the question.
+  follow it (`CRITICAL_OWNERS`): +dist's Concurrency and +api's Pagination, Idempotency & Concurrency own the question — both
+  tier "extended", so a size-s scaffold leaves them out (scaffold.js `sizedTrackSections`) and the detector runs there, unless
+  the design holds that section anyway.
 - **The merged section (size S)** — a sized-S design writes ONE `## Decisions, reuse & risks` section. `designWeighChecks`
   reads it (`WEIGH_MERGED_SYN`) for a check whose own section the design lacks, min 0 ("no material risk" answers); the brief's
   Reuse part reads it too. A design with its own section is judged on that section.
@@ -294,6 +301,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   senses reuse the classifier's `near` cues (`cueRules` exported) and +tdd's credit / charge rules; the test plan's Strategy
   gained the guidance comment, the critic a Critical flows row, test-patterns.md the twice / two-at-once section, the
   implementer's hard rule "never skip, delete or weaken a test or an assertion" (one wording, test-patterns.md repeats it).
+- **1.33 review** — four findings: the +dist / +api skip held at size s, where their owning sections are not scaffolded (a
+  `core +api` coupon feature was asked nothing — `criticalOwned()` by size); `withoutOutOfScope()` looked ahead from every
+  Out of Scope heading (80k of them: 7.7 s — one pass now, 05-markdown-trace's linear guard); the plan check read the
+  scaffold's own rows (+ui's "an error with Retry", +data's "twice … no duplicate" passed the full track combination on the
+  template alone) and took a bare retry for a repetition; Shadow DOM slots and ES quotations (citas textuales / de los
+  autores) fired.
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the

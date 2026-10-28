@@ -739,8 +739,8 @@ const CHECK_VIEWS = {
   testsTdd: { fn: (c) => c.tracks.includes("tdd") && c.exists("test-plan.md") },
   testsAi: { fn: (c) => c.tracks.includes("ai") && c.exists("eval-plan.md") },
   // 1.33: the critical flows the user's text names (stock, a coupon, a balance, a booking, a payment…) and whether it answers them —
-  // null when not asked (a bugfix, a change; +dist / +api own the question); { signals: [] } when it names none
-  critical: { fn: (c) => criticalFlowState(c.projectDir, c.tracks, c.kind, c.lang, { reqs: c.read("requirements.md") || "", design: c.read("design.md") || "" }) },
+  // null when not asked (a bugfix, a change; +dist / +api own it where their section is scaffolded); { signals: [] } when it names none
+  critical: { fn: (c) => criticalFlowState(c.projectDir, c.tracks, c.kind, c.lang, { reqs: c.read("requirements.md") || "", design: c.read("design.md") || "", size: c.size }) },
 };
 // a critical flow named (critical-flows / critical-flow-tests apply)
 const criticalNamed = (c) => !!c.critical && c.critical.signals.length > 0;

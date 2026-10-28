@@ -4,12 +4,13 @@
 const fs = require("fs");
 const path = require("path");
 
-exports.run = async ({ ok, all, rpc, payload, S, root, tmp, handRoadmap }) => {
+exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, handRoadmap }) => {
   const js = JSON.stringify;
   const E = require(path.join(root, "mcp", "lib", "engine", "index.js"));
   const call = (name, args) => rpc("tools/call", { name, arguments: args });
   // the detector over one requirements text (no design) — { signals, answered } or null when not asked
-  const state = (text, lang = "en", o = {}) => E.criticalFlowState(tmp, o.tracks || ["core"], o.kind || "feature", lang, { reqs: "# Requirements\n\n" + text + "\n", design: o.design || "" });
+  const state = (text, lang = "en", o = {}) => E.criticalFlowState(tmp, o.tracks || ["core"], o.kind || "feature", lang,
+    { reqs: "# Requirements\n\n" + text + "\n", design: o.design || "", size: o.size || null });
   const sig = (text, lang) => { const s = state(text, lang); return s ? s.signals : null; };
 
   { // The signals: ONE word is enough (the user never writes "concurrency") — every concept, EN / PT (pt-BR spellings too) / ES.
@@ -75,6 +76,9 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, handRoadmap }) => {
       ["pt", "Validar a assinatura digital do documento."], ["pt", "Créditos finais do filme."], ["pt", "Bilhete de identidade do cliente."],
       ["es", "Citas bibliográficas en el texto."], ["es", "App de citas para solteros."], ["es", "Rebajas y saldos de verano."],
       ["es", "Reservas naturales protegidas."], ["es", "Las plazas mayores del país."], ["es", "Créditos ECTS del curso."],
+      // 1.33 review: a Shadow DOM's slots; ES quotations (the twins "Book a time slot" / "Reservar una cita" stay positives)
+      ["en", "Style the Shadow DOM slots."], ["es", "Las citas de los autores en cursiva."], ["es", "Una cita textual del autor."],
+      ["es", "Citas textuales en cursiva."], ["es", "Añadir citas textuales y citas de autores célebres."],
     ];
     const posBad = POS.filter(([l, t, want]) => js(sig(t, l)) !== js(want)).map(([l, t]) => [l, t, sig(t, l)]);
     const negBad = NEG.filter(([l, t]) => js(sig(t, l)) !== "[]").map(([l, t]) => [l, t, sig(t, l)]);
@@ -115,7 +119,23 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, handRoadmap }) => {
       dist: () => of({ tracks: ["core", "dist"] }) === null, api: () => of({ tracks: ["core", "api"] }) === null,
       sec: () => js((of({ tracks: ["core", "tdd", "sec"] }) || {}).signals) === js(["redeem", "checkout"]),
       outOfScope: () => js((oos || {}).signals) === "[]",
+      // 1.33 review: the owning sections are tier "extended" — at size s they are not scaffolded, so the detector runs, unless the
+      // design holds the section anyway; size m keeps the skip
+      sizeS: () => js((of({ tracks: ["core", "api"], size: "s" }) || {}).signals) === js(["redeem", "checkout"]) && !!of({ tracks: ["core", "dist"], size: "s" }),
+      sizeM: () => of({ tracks: ["core", "api"], size: "m" }) === null && of({ tracks: ["core", "dist"], size: "m" }) === null,
+      sizeSKept: () => of({ tracks: ["core", "api"], size: "s", design: "# Design\n\n## [API] Pagination, Idempotency & Concurrency\nCursors.\n" }) === null &&
+        of({ tracks: ["core", "dist"], size: "s", design: "# Design\n\n## [DIST] Concurrency\nOne writer.\n" }) === null,
     });
+  }
+
+  { // 1.33 review: withoutOutOfScope is ONE pass over the headings — a requirements.md of 80,000 Out of Scope headings costs what as many
+    // ordinary headings do (the look-ahead from each one took 7.7 s against 0.1 s). Relative bound, measured once more on a miss.
+    const N = 80000;
+    const timed = (text) => { const t0 = Date.now(); state(text); return Date.now() - t0; };
+    const plain = "## Notes\nx\n".repeat(N), oos = "## Out of Scope\nx\n".repeat(N);
+    const s = remeasure(() => { const base = timed(plain); return { base, big: timed(oos) }; }, (x) => x.big < 5 * Math.max(x.base, 50) + 1500);
+    ok(s.big < 5 * Math.max(s.base, 50) + 1500,
+      "1.33 review: the Out of Scope reader is linear — 80,000 Out of Scope headings within 5 × as many ordinary headings' time + 1.5 s (got " + js({ base: s.base, big: s.big, tries: s.tries }) + ")");
   }
 
   { // spec_clarify (MCP and the engine): ONE question with its own stable code, after consistency-unstated (both may be returned);
@@ -185,6 +205,10 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, handRoadmap }) => {
     });
     all("1.33 critical flows — the guidance: references/critical-flows.md (database order, webhooks, idempotency keys, server-side prices, the twice / two-at-once tests) listed in index.md and pointed at by SKILL.md, /clarify --grill's round, the critic's Critical flows row and test-patterns.md; the implementer's hard rule names skip / delete / weaken (one wording, repeated by the references); the test plan's Strategy comment in EN / PT / ES / pt-BR, never read as a slot; no PR / CI steering (got " +
       js({ plans, criticRow: criticRow.length, section: section.length }) + ")", {
+      // 1.33 review: one word fires, so a read-only flow is asked too — the warn and the reference say one line under ## Critical flows answers it
+      readOnly: () => /a flow that only reads \(a balance on a dashboard\) answers it with one line under ## Critical flows/.test(S.msg("en").designWeigh.criticalFlows.open("x")) &&
+        /basta uma linha em ## Fluxos críticos/.test(S.msg("pt").designWeigh.criticalFlows.open("x")) && /una línea en ## Flujos críticos/.test(S.msg("es").designWeigh.criticalFlows.open("x")) &&
+        /flow that only READS \(an account balance on a dashboard\) is asked too: one line under `## Critical flows`/.test(ws(ref)) && /except at size \*\*s\*\*/.test(ws(ref)),
       reference: () => ["unique constraint", "UPDATE stock SET qty = qty - 1 WHERE sku = $1 AND qty > 0", "affected rows", "SELECT … FOR UPDATE", "disabled button is UX comfort",
         "RAW body", "processed-events table", "Never rely on arrival order", "Idempotency-Key", "Never personal data as the key", "recomputes the price", "Promise.all",
         "separate test database", "another user's data", "never skip, delete or weaken a test or an assertion"].every((w) => ws(ref).includes(w)),

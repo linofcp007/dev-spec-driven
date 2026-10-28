@@ -7,8 +7,11 @@ millisecond — a double click, a retried request, a webhook delivered twice —
 coupon is redeemed twice, the last seat sold twice, the balance spent twice.
 
 `spec_clarify` asks about it (`nudges` code `critical-flow-unstated`) and `spec_doctor` warns `critical-flows` (the design)
-and `critical-flow-tests` (the test plan) on a plain feature whose spec names one — never a gate. +dist and +api ask the same
-in their own design sections, so they are not asked twice.
+and `critical-flow-tests` (the test plan) on a plain feature whose spec names one — never a gate. One word is enough, so a
+flow that only READS (an account balance on a dashboard) is asked too: one line under `## Critical flows` in the design
+("None: this feature only reads the balance") answers it. +dist (its Concurrency section) and +api (its Pagination,
+Idempotency & Concurrency section) ask the same, so they are not asked twice — except at size **s**, whose scaffold leaves
+those sections out: then this asks, unless the design holds the section anyway.
 
 ## 1. Find every read-decide-write
 

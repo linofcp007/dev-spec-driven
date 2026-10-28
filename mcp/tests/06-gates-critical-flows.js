@@ -22,7 +22,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, handR
     "## Data Models\nCode {code, max_uses, used}.\n\n" + extra + "## Risks\n- Abuse — low — a rate limit.\n\n## Constitution Check\n- [x] Small functions — complies.\n";
   const project = (name) => { const p = path.join(tmp, name); S.initProject(p, ["core", "tdd"], "en"); handRoadmap(p); return p; };
   const designed = (p, name, tracks, o = {}) => {
-    const f = S.createFeature(p, name, tracks, "", undefined, o.lang || "en", o.kind);
+    const f = S.createFeature(p, name, tracks, "", undefined, o.lang || "en", o.kind, o.size ? { size: o.size } : undefined);
     wr(f, "requirements.md", o.req || REQ());
     approveBefore(p, f.slug, "design");
     wr(f, "design.md", o.design || DESIGN());
@@ -129,6 +129,61 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, handR
       pt: () => /^warn: a spec nomeia um fluxo crítico \('cupão'\) mas nem os requisitos nem o design dizem o que fazem dois pedidos idênticos em simultâneo — resolve-o na base de dados/.test(view(d(pt), "critical-flows")),
       ptBr: () => /^warn: a spec nomeia um fluxo crítico \('cupom'\) .* — resolva-o no banco de dados/.test(view(d(br), "critical-flows")),
       es: () => /^warn: la spec nombra un flujo crítico \('canjea'\) pero ni los requisitos ni el diseño dicen qué hacen dos peticiones idénticas a la vez/.test(view(d(es), "critical-flows")),
+    });
+  }
+
+  { // 1.33 review: one question bank BY SIZE — +api's Pagination, Idempotency & Concurrency and +dist's Concurrency are tier
+    // "extended": a size-s scaffold leaves them out, so nothing else asks the question there and the critical-flow checks (and the
+    // nudge) run; a size-s design that holds the section anyway, and a size-m / unsized feature, keep the skip.
+    const p = project("cf-sizes");
+    const sApi = designed(p, "Api s", ["core", "tdd", "api"], { size: "s" });
+    const sDist = designed(p, "Dist s", ["core", "tdd", "dist"], { size: "s" });
+    const mApi = designed(p, "Api m", ["core", "tdd", "api"], { size: "m" });
+    const mDist = designed(p, "Dist m", ["core", "tdd", "dist"], { size: "m" });
+    const kept = designed(p, "Api s kept", ["core", "tdd", "api"], { size: "s",
+      design: DESIGN("## [API] Pagination, Idempotency & Concurrency\nCursor pagination on the list of codes.\n\n") });
+    const keptDist = designed(p, "Dist s kept", ["core", "tdd", "dist"], { size: "s", design: DESIGN("## [DIST] Concurrency\nOne writer per code.\n\n") });
+    const scaffold = (size) => { const f = S.createFeature(p, "Scaffold " + size, ["core", "tdd", "api", "dist"], "", undefined, "en", undefined, { size }); return fs.readFileSync(path.join(f.dir, "design.md"), "utf8"); };
+    const sScaf = scaffold("s"), mScaf = scaffold("m");
+    const d = (f) => S.specDoctor(p, f.slug);
+    const has = (f) => ["critical-flows", "critical-flow-tests"].filter((id) => chk(d(f), id));
+    const nudge = (f) => (S.clarify(p, f.slug).nudges || []).some((n) => n.code === "critical-flow-unstated");
+    all("1.33 review (one question bank by size): a size-s core +api / +dist coupon feature — its scaffold has no Pagination, Idempotency & Concurrency / Concurrency section — is asked (critical-flows warns, clarify nudges); one whose design holds that section, and size m, are not (got " +
+      js({ sApi: [has(sApi), nudge(sApi)], sDist: [has(sDist), nudge(sDist)], mApi: [has(mApi), nudge(mApi)], mDist: [has(mDist), nudge(mDist)], kept: has(kept), keptDist: has(keptDist) }) + ")", {
+      scaffoldS: () => !/^## \[API\] Pagination, Idempotency & Concurrency$/m.test(sScaf) && !/^## \[DIST\] Concurrency$/m.test(sScaf),
+      scaffoldM: () => /^## \[API\] Pagination, Idempotency & Concurrency$/m.test(mScaf) && /^## \[DIST\] Concurrency$/m.test(mScaf),
+      apiS: () => has(sApi).includes("critical-flows") && /^warn: the spec names a critical flow/.test(view(d(sApi), "critical-flows")) && nudge(sApi),
+      distS: () => has(sDist).includes("critical-flows") && nudge(sDist),
+      apiM: () => !has(mApi).length && !nudge(mApi), distM: () => !has(mDist).length && !nudge(mDist),
+      keptSection: () => !has(kept).length && !nudge(kept) && !has(keptDist).length,
+    });
+  }
+
+  { // 1.33 review: critical-flow-tests reads the plan's OWN rows — the scaffold's (+ui's "an error with Retry", +data's "re-run … twice
+    // … no duplicate", +sec's "user B never reads user A's resource") never answer it, in EN / PT / ES / pt-BR; a bare retry is
+    // retry-on-failure, not the same request twice; twice / again with the same / two at once / duplicate (PT / ES too) are.
+    const I = require(path.join(root, "mcp", "lib", "i18n.js"));
+    const ALL = ["core", "tdd", "saas", "ai", "sec", "privacy", "ui", "obs", "data"]; // (+dist / +api: their sections ask it)
+    const st = { signals: ["coupon"], answered: false, user: "As a buyer I want a discount on my own orders." };
+    const check = (plan, lang = "en") => E.criticalFlowCheck("test-plan", st, lang, { plan });
+    const row = (id, desc) => `| ${id} | integration | example | ${desc} | US-1.AC-1 | \`tests/codes.test.js\` |\n`;
+    const tpl = (lang) => I.testPlan("x", lang, ALL);
+    const gaps = (r) => (r.status === "pass" ? "pass" : ["repetition row", "another user's data", "linha de repetição", "outro utilizador", "outro usuário", "fila de repetición", "otro usuario"].filter((w) => r.detail.includes(w)).join("+"));
+    const got = {
+      templates: ["en", "pt", "es", "pt-BR"].map((l) => [l, check(tpl(l), l).status, gaps(check(tpl(l), l))]),
+      twice: gaps(check(tpl("en") + row("T-90", "the same code redeemed twice"))),
+      retry: gaps(check(tpl("en") + row("T-90", "the redemption retries after a gateway timeout"))),
+      again: gaps(check(tpl("en") + row("T-90", "sent again with the same Idempotency-Key: one discount"))),
+      atOnce: gaps(check(tpl("en") + row("T-90", "two buyers at once on the last code") + row("T-91", "user B cannot redeem user A's code"))),
+      pt: gaps(check(tpl("pt") + row("T-90", "o mesmo cupão aplicado duas vezes") + row("T-91", "outro utilizador não usa o cupão"), "pt")),
+      ptRetry: gaps(check(tpl("pt") + row("T-90", "nova tentativa após um timeout"), "pt")),
+      es: gaps(check(tpl("es") + row("T-90", "el mismo cupón canjeado dos veces") + row("T-91", "otro usuario no lo canjea"), "es")),
+    };
+    all("1.33 review: critical-flow-tests never reads the scaffold's rows (a full track combination's template plan lacks both rows — EN / PT / ES / pt-BR); a bare retry is no repetition, twice / again with the same / two at once are (PT / ES too) (got " + js(got) + ")", {
+      templates: () => got.templates.every(([, s, g]) => s === "warn" && g.split("+").length === 2),
+      twice: () => got.twice === "another user's data", retry: () => got.retry === "repetition row+another user's data",
+      again: () => got.again === "another user's data", atOnce: () => got.atOnce === "pass",
+      pt: () => got.pt === "pass", ptRetry: () => got.ptRetry === "linha de repetição+outro utilizador", es: () => got.es === "pass",
     });
   }
 };

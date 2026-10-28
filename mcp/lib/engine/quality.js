@@ -22,7 +22,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS;
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -33,7 +33,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS } = E); }
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -1383,24 +1383,25 @@ const CRITICAL_CUES = [
     after: { words: ["about", ["of", "rights"], "naturais", "natural", "naturales", "legal", "legais", "legales", "fiscais", "fiscales", "bancárias", "federais", "federales",
       ["de", ["capital", "memória", "memoria", "caixa", "água", "agua", "emergência", "emergencia", "divisas", "ouro", "oro", "mercado"]]], chars: 24 } },
   // the appointment of a director; PT marcação = markup too (linguagem de marcação, marcação HTML), agendamento = job scheduling too;
-  // ES citas = quotations (citas bibliográficas) or dates (app de citas)
+  // ES citas = quotations (citas bibliográficas, una cita textual, las citas de los autores) or dates (app de citas)
   { kind: "near", on: ["appointment"], then: "none",
     before: { words: [["linguagens?", "de"], ["lenguajes?", "de"], ["apps?", "de"], ["aplicaci[óo]n", "de"], ["sitios?", "de"], ["web", "de"], ["p[áa]ginas?", "de"]], chars: 24, edge: "letter" },
     after: { words: [["of", { optional: ["a", "an", "the", "new"] }, ["directors?", "board", "ceos?", "officers?", "members?", "managers?", "judges?", "committees?",
       "trustees?", "ministers?", "auditors?", "executors?", "guardians?", "chairs?", "representatives?"]], "html", "markdown", "xml", ["no", "mapa"],
       ["de", ["texto", "html", "markdown", "xml", "código", "codigo", "dados", "imagens", "pontos", "tarefas", "trabalhos", "jobs", "processos", "backups", "cópias", "copias",
-        "scripts", "publicações", "posts", "e-?mails", "mensagens", "notificações", "relatórios", "execuções", "autor"]],
-      "bibliográficas?", "bibliograficas?", "textuales?", "célebres", "celebres", "literales?"], chars: 28 } },
+        "scripts", "publicações", "posts", "e-?mails", "mensagens", "notificações", "relatórios", "execuções"]],
+      ["de", { optional: ["los", "las", "el", "la", "un", "una"] }, ["autor(?:a|es|as)?", "escritor(?:a|es|as)?", "libros?", "textos?", "obras?", "fuentes?", "famosos?"]],
+      "bibliográficas?", "bibliograficas?", "textual(?:es)?", "c[ée]lebres?", "literal(?:es)?", "famosas?"], chars: 28 } },
   // a seat belt, a car / child / toilet seat, the seat of government; PT job vacancies and heat waves (vagas de emprego, de calor);
   // ES a town's plazas
   { kind: "near", on: ["seat"], then: "none",
     before: { words: ["car", "child", "booster", "toilet", "back", "rear", "front", "driver's", "bike", "bicycle"], chars: 16, edge: "letter" },
     after: { words: ["belts?", "cushions?", "covers?", "heights?", "posts?", ["of", { optional: ["the"] }, ["government", "power", "parliament", "council", "empire"]],
       ["de", ["emprego", "trabalho", "calor", "frio", "estágio", "estagio", "toros"]], "mayor", "mayores", "públicas?", "publicas?"], chars: 24 } },
-  // a UI / Vue / web component's slot, a PCI / SIM / memory slot, a slot machine
+  // a UI / Vue / web component's slot (a Shadow DOM's too), a PCI / SIM / memory slot, a slot machine
   { kind: "near", on: ["slot"], then: "none",
     before: { words: ["vue", "ui", "named", "default", "scoped", "components?", "template", "card", "sim", "pci", "pcie", "expansion", "memory", "ram", "dimm", "drive",
-      "shadow", "react", "svelte", "angular", "header", "footer", "sidebar", "layout", "toolbar", ["web", "components?"]], chars: 20, edge: "letter" },
+      "shadow", "dom", "react", "svelte", "angular", "header", "footer", "sidebar", "layout", "toolbar", ["web", "components?"], ["shadow", "dom"]], chars: 20, edge: "letter" },
     after: { words: ["machines?", "props?", "content", "elements?", "names?", "attributes?"], chars: 14 } },
   // PT's old ID card (bilhete de identidade)
   { kind: "near", on: ["ticket"], then: "none", after: { words: [["de", "identidade"]], chars: 16 } },
@@ -1498,22 +1499,36 @@ const CRITICAL_FLOWS_SYN = ["critical flows", "critical flow", "concurrency", "c
 // ("## Out of Scope — Refunds"). The headings are the ONE heading reader's (headingEntries: linear, never in a fence or a comment).
 function withoutOutOfScope(text) {
   const lines = String(text || "").split(/\r?\n/);
-  const index = headingEntries(lines);
   const drop = new Uint8Array(lines.length);
-  index.forEach((h, k) => {
-    if (!RE_OUT_OF_SCOPE.test(h.text.slice(0, 200))) return;
-    const end = index.slice(k + 1).find((x) => x.level <= h.level);
-    drop.fill(1, h.i, end ? end.i : lines.length);
-  });
+  // ONE pass over the headings: an open Out of Scope section closes at the next heading of its level or above (no two overlap)
+  let open = null; // { from, level } of the Out of Scope section being dropped
+  for (const h of headingEntries(lines)) {
+    if (open && h.level <= open.level) { drop.fill(1, open.from, h.i); open = null; }
+    if (!open && RE_OUT_OF_SCOPE.test(h.text.slice(0, 200))) open = { from: h.i, level: h.level };
+  }
+  if (open) drop.fill(1, open.from, lines.length);
   return lines.filter((l, i) => !drop[i]).join("\n");
 }
-// The critical flows of a feature → null when not asked (a bugfix, a spike, a change; +dist — its Concurrency and Delivery &
-// Idempotency sections ask it — or +api — its Pagination, Idempotency & Concurrency section: one question bank), else
-// { signals: [≤ 3 words] — none: no critical flow —, answered: "answer" (a RE_CRITICAL_ANSWER phrase anywhere in the user's text of
-// requirements.md / design.md) · "section" (a written Critical flows / Concurrency section in the design) · false, user — the
-// user's text the signals came from }. texts: { reqs, design } — the raw files (design: the ACTIVE design for the section).
+// The track sections that own the critical-flow question (one question bank): +dist's Concurrency, +api's Pagination,
+// Idempotency & Concurrency. Both are tier "extended" — a size S scaffold leaves them out (scaffold.js sizedTrackSections), and
+// then nothing asks the question: the detector runs, unless the design holds that section anyway. → is the question owned?
+const CRITICAL_OWNERS = [["dist", "Concurrency"], ["api", "Pagination, Idempotency & Concurrency"]];
+function criticalOwned(tracks, size, design) {
+  return CRITICAL_OWNERS.some(([tr, name]) => {
+    const sec = tracks.includes(tr) ? (trackSectionTable(tr) || []).find((s) => s.name === name) : null;
+    if (!sec) return false;
+    if (!(size === "s" && sec.tier === "extended")) return true; // scaffolded at this size
+    return extractSection(design || "", sec.syn, trackMarker(tr), sec.loose) != null;
+  });
+}
+// The critical flows of a feature → null when not asked (a bugfix, a spike, a change; a track section that owns the question —
+// +dist's Concurrency, +api's Pagination, Idempotency & Concurrency — scaffolded at the feature's size or present in its design:
+// one question bank, criticalOwned), else { signals: [≤ 3 words] — none: no critical flow —, answered: "answer" (a
+// RE_CRITICAL_ANSWER phrase anywhere in the user's text of requirements.md / design.md) · "section" (a written Critical flows /
+// Concurrency section in the design) · false, user — the user's text the signals came from }. texts: { reqs, design, size } — the
+// raw files (design: the ACTIVE design for the section) and the feature's size (featureSize: null when unsized).
 function criticalFlowState(projectDir, tracks, kind, lang, texts) {
-  if ((kind || "feature") !== "feature" || tracks.includes("dist") || tracks.includes("api")) return null;
+  if ((kind || "feature") !== "feature" || criticalOwned(tracks, texts.size, texts.design)) return null;
   const lng = normalizeLang(lang || "en");
   const reqs = withoutOutOfScope(texts.reqs), design = withoutOutOfScope(texts.design);
   // a cheap pre-check on the raw text: most features name no flow — the template lines are never built for them
@@ -1536,20 +1551,44 @@ function criticalFlowState(projectDir, tracks, kind, lang, texts) {
 }
 // clarify's nudge → { code: "critical-flow-unstated", signals } | null (stable).
 function criticalFlowNudge(projectDir, dir, reqs, tracks, kind, lang) {
-  const st = criticalFlowState(projectDir, tracks, kind, lang, { reqs, design: readIfExists(path.join(dir, "design.md")) || "" });
+  const st = criticalFlowState(projectDir, tracks, kind, lang, { reqs, design: readIfExists(path.join(dir, "design.md")) || "", size: featureSize(dir) });
   return st && st.signals.length && !st.answered ? { code: "critical-flow-unstated", signals: st.signals } : null;
 }
 // The test plan of a critical flow: a row (a line holding a T-ID) for the same request twice / at once, and — when the spec is about
-// users' own data or permissions — one for another user's access. EN / PT / ES.
+// users' own data or permissions — one for another user's access. EN / PT / ES. Only the USER's text of a row counts: the scaffold's
+// row descriptions (planTemplatePhrases — +ui's "an error with Retry", +data's "re-run … twice … no duplicate") are taken out first.
 const RE_PLAN_ROW = /(?<![\p{L}\p{N}_-])T-\d+(?!\d)/u;
+// The same request again — never a bare retry / retries (a retry after a failure is no second identical request).
 const RE_REPETITION_ROW = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
-  "twice", "two[\\s-]+times", "(?:two|both)[\\s-]+at[\\s-]+once", "double[\\s-]+(?:submit\\p{L}*|clicks?|requests?|charges?|bookings?|spend\\p{L}*|redemptions?|deliver\\p{L}*)",
-  "duplicat\\p{L}*", "repeated", "replay(?:s|ed|ing)?", "retr(?:y|ies|ied)", "simultaneous\\p{L}*", "concurrent\\p{L}*", "in[\\s-]+parallel", "parallel[\\s-]+requests?",
+  "twice", "two[\\s-]+times", "(?:two|both)(?:[\\s-]+[\\p{L}\\p{N}]+){0,2}?[\\s-]+at[\\s-]+once", "double[\\s-]+(?:submit\\p{L}*|clicks?|requests?|charges?|bookings?|spend\\p{L}*|redemptions?|deliver\\p{L}*)",
+  "duplicat\\p{L}*", "again[\\s-]+with[\\s-]+the[\\s-]+same", "replay(?:s|ed|ing)?", "simultaneous\\p{L}*", "concurrent\\p{L}*", "in[\\s-]+parallel", "parallel[\\s-]+requests?",
   "race[\\s-]+conditions?", "promise\\.all",
   "duas[\\s-]+vezes", "duplicad\\p{L}*", "em[\\s-]+simult[âa]neo", "simult[âa]ne\\p{L}*", "concorrent\\p{L}*", "em[\\s-]+paralelo", "ao[\\s-]+mesmo[\\s-]+tempo",
-  "repetid\\p{L}*", "reenvi\\p{L}*",
-  "dos[\\s-]+veces", "simult[áa]ne\\p{L}*", "concurrentes?", "en[\\s-]+paralelo", "a[\\s-]+la[\\s-]+vez", "al[\\s-]+mismo[\\s-]+tiempo", "reintent\\p{L}*",
+  "(?:de[\\s-]+novo|novamente|outra[\\s-]+vez)[\\s-]+com[\\s-]+o[\\s-]+mesmo",
+  "dos[\\s-]+veces", "simult[áa]ne\\p{L}*", "concurrentes?", "en[\\s-]+paralelo", "a[\\s-]+la[\\s-]+vez", "al[\\s-]+mismo[\\s-]+tiempo",
+  "(?:de[\\s-]+nuevo|otra[\\s-]+vez)[\\s-]+con[\\s-]+(?:el|la)[\\s-]+mism[oa]",
 ].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
+// A row's text folded for the template comparison: lower case, emphasis and code ticks out, blanks folded.
+const planFold = (s) => String(s).toLowerCase().replace(/[*`]/g, "").replace(/\s+/g, " ").trim();
+// The scaffold's test-plan row descriptions (the Description cell of every built-in track's template row) in English and the
+// feature's language (pt-BR: derived) — folded, longest first; built once per language.
+const PLAN_TEMPLATE_PHRASES = new Map();
+function planTemplatePhrases(lang) {
+  const l = normalizeLang(lang || "en");
+  if (!PLAN_TEMPLATE_PHRASES.has(l)) {
+    const out = new Set();
+    for (const lg of new Set(["en", l])) {
+      let t = "";
+      try { t = i18n.testPlan("x", lg, ["core", ...OPTIONAL_TRACKS]); } catch { /* a builder's trouble never breaks the check */ }
+      for (const line of String(t).split("\n")) {
+        const d = RE_PLAN_ROW.test(line) ? (line.split("|")[4] || "") : "";
+        if (/\p{L}{3}/u.test(d) && !/^\s*\[/.test(d)) out.add(planFold(d));
+      }
+    }
+    PLAN_TEMPLATE_PHRASES.set(l, [...out].sort((a, b) => b.length - a.length));
+  }
+  return PLAN_TEMPLATE_PHRASES.get(l);
+}
 const RE_OWN_DATA = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
   "(?:my|their|his|her|your)[\\s-]+own", "(?<!product[\\s-])owners?", "owned[\\s-]+by", "ownership", "another[\\s-]+user", "other[\\s-]+users", "someone[\\s-]+else'?s?",
   "tenants?", "permissions?", "access[\\s-]+control", "only[\\s-]+the[\\s-]+(?:user|customer|owner|author|creator|account[\\s-]+holder)",
@@ -1570,9 +1609,12 @@ const RE_OTHER_USER_ROW = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
   "otr[oa]s?[\\s-]+(?:usuari[oa]|cliente|cuenta|inquilino|miembro|organizaci[óo]n|equipo)\\p{L}*", "no[\\s-]+(?:es[\\s-]+)?(?:el[\\s-]+)?(?:due[ñn]o|propietario)",
   "(?:usuario|cliente|cuenta)[\\s-]+[b-z](?![\\p{L}\\p{N}])", "prohibid[oa]", "no[\\s-]+autorizad[oa]",
 ].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
-// The rows the test plan of a critical flow lacks → ["repetition"?, "other-user"?] (none: complete). plan: test-plan.md's text.
-function criticalPlanGaps(state, plan) {
-  const rows = stripFencedCode(stripHtmlComments(String(plan || ""))).split(/\r?\n/).filter((l) => RE_PLAN_ROW.test(l)).join("\n");
+// The rows the test plan of a critical flow lacks → ["repetition"?, "other-user"?] (none: complete). plan: test-plan.md's text;
+// each row read without the scaffold's descriptions (the user's words only).
+function criticalPlanGaps(state, plan, lang) {
+  const phrases = planTemplatePhrases(lang);
+  const rows = stripFencedCode(stripHtmlComments(String(plan || ""))).split(/\r?\n/).filter((l) => RE_PLAN_ROW.test(l))
+    .map((l) => phrases.reduce((s, p) => (s.includes(p) ? s.split(p).join(" ") : s), planFold(l.slice(0, 4000)))).join("\n");
   const gaps = [];
   if (!RE_REPETITION_ROW.test(rows)) gaps.push("repetition");
   if (RE_OWN_DATA.test(state.user) && !RE_OTHER_USER_ROW.test(rows)) gaps.push("other-user");
@@ -1593,7 +1635,7 @@ function criticalFlowCheck(which, state, lang, opts = {}) {
     return legacy ? { id, status: "pass", detail: i18n.msg(lang).designWeigh.legacyApproval(W.open(words), CRITICAL_FLOW_SINCE) } : { id, status: "warn", detail: W.open(words) };
   }
   const id = "critical-flow-tests";
-  const gaps = criticalPlanGaps(state, opts.plan);
+  const gaps = criticalPlanGaps(state, opts.plan, lang);
   if (!gaps.length) return { id, status: "pass", detail: W.rowsOk(words) };
   const detail = W.rowsMissing(words, gaps.map((g) => W.gap[g]).join("; "));
   return legacy ? { id, status: "pass", detail: W.legacyPlan(detail, CRITICAL_FLOW_SINCE) } : { id, status: "warn", detail };
