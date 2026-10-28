@@ -454,7 +454,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
     (DEV_SPEC_DIFF_BASE)`): the verdict keeps it (`diffBase`, the head line's `guardian.diffBase`), a configuration error's message
     never (`RE_LAUNCHER_DIFF_BASE`). Its findings gate like any finding: a `.only` (high) blocks at `--fail-on high`, a skip (medium)
     is a new finding below the bar; a finding of that tool is named a weakened test (`test: true`, `guardian.finding`). The three
-    functions are carried like `findDevGuardian` (toString, the same source rules) and exported for the tests.
+    functions are carried like `findDevGuardian` (toString, the same source rules); `plainRefOk` is exported (the test holds it to
+    `branchNameOk`), the other two are tested through the launcher itself.
   - *How it runs it:* it sets `argv[1]` to that CLI (dev-guardian runs `main()` only when argv[1] is itself — realpaths
     compared) and imports it by its file URL (`import("node:url")`: `require("url")` would be a Node core module CLAUDE.md
     doesn't list), so dev-guardian's own exit code is the run's. Nothing found, a subcommand not forwarded, a CLI that doesn't

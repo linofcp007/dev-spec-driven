@@ -794,6 +794,6 @@ function guardianGuardOn(meta) {
 const guardianGuardFilter = (actions, meta) => (guardianGuardOn(meta) ? actions : actions.filter((a) => !/^guardian-/.test(String(a.setting || ""))));
 
 module.exports = { GUARDIAN_COMMAND, isGuardianCheck, guardianChecks, setGuardianLauncher, guardianLauncherOn, guardianLauncherState,
-  guardianPreRun, guardianLauncherAudit, guardianCli, guardianOffer, guardianDiffBase, GUARDIAN_DIFF_BASE_ENV, plainRefOk, devGuardianVersion, guardianDiffBaseArgs, GUARDIAN_IGNORE, guardianOnNote, guardianRecord, guardianRefusal, guardianStored,
+  guardianPreRun, guardianLauncherAudit, guardianCli, guardianOffer, guardianDiffBase, GUARDIAN_DIFF_BASE_ENV, plainRefOk, GUARDIAN_IGNORE, guardianOnNote, guardianRecord, guardianRefusal, guardianStored,
   guardianCompact, guardianText, guardianLines, suiteGuardianHint, suiteBlocker, guardianWarnings,
   guardianShellActions, guardianGuardFilter, __link };
