@@ -157,6 +157,8 @@ const PTBR_PHRASES = {
   "é uma ligação ou uma pasta": "é um link ou uma pasta", "uma ligação para fora do projeto": "um link simbólico para fora do projeto",
   "repõe a ligação": "restaura o vínculo", "ligação ao harness": "integração com o harness",
   "um pool de ligações": "um pool de conexões",
+  // "para lá de" (beyond) is European; Brazil says "além de"
+  "para lá da": "além da", "para lá dela": "além dela",
   // a link is a "link" (a "ligação" is a phone call, "liga-o" reads "call him / turn it on")
   "uma ligação (link simbólico)": "um link simbólico", "apaga só a ligação": "apaga só o link", "remover a ligação": "remover o link",
   "liga-o em": "coloque o link em", "liga-o aqui": "coloque o link aqui",

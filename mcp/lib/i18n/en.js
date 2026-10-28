@@ -787,7 +787,7 @@ Run golden through a minimal v1 prompt + planned model; record baseline score he
 ## Pass Criteria
 Measured P50/P95/P99 ≤ budget at target throughput, error rate < [0.1]%.
 - Runs per scenario: [how many runs, e.g. 3] — every run meets the budget, not only their average; write the spread next to the result
-- Limit: [what stops the throughput going higher: CPU, a lock, a connection pool, the database, the network or the load generator itself] — read from the resource use during a run, not guessed from the code
+- Limit: [what stops the throughput going higher: CPU, a lock, a connection pool, the database, the network or the load generator itself] — read from the resource use during a run that saturates the system, not guessed from the code
 `
       );
     },
@@ -3562,8 +3562,8 @@ const brief = {
       "ai-prompt": [
         "Record the eval baseline before changing anything.",
         "Edit the prompt in a NEW versioned file (`prompts/vN.md`), never in place.",
-        "Run the full eval harness; accept only if golden improved or held and adversarial held — otherwise revert.",
-        "Commit with the eval delta (`Eval delta: golden 82% → 87%`).",
+        "Run the full eval harness as many times as eval-plan.md says and decide on the medians: accept only if golden rose by the decision delta past the baseline's spread or held inside it, and adversarial held — a drop past the spread: revert.",
+        "Commit with the eval delta, medians and spreads (`Eval delta: golden 84% (83–85) → 88% (87–89)`).",
       ],
     },
     metricsRule: "Every metric listed above is actually emitted — show the evidence in the report.",
@@ -3574,7 +3574,7 @@ const brief = {
       "Tests that passed before stay green: only this task's new test(s) may fail. Never edit an existing test.",
       "Commit the failing test citing the task and its T-IDs (`test(scope): T-01 red — task #N`).",
     ],
-    evalsRule: "This change touches an AI path: run the eval harness afterwards — golden holds or improves, adversarial holds — and put the scores in the report.",
+    evalsRule: "This change touches an AI path: run the eval harness afterwards, as many times as eval-plan.md says — golden's median holds inside the baseline's spread or rises past it, adversarial holds — and put the medians and spreads in the report.",
     checkpoint: "When this story's last task is done, the controller stops for human review at the checkpoint:",
     report: "## Report",
     reportTo: (p) => `Write your full report to \`${p}\`, then reply with only the status line (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), your commits, a one-line test summary, any concerns and the report path written out in full (\`${p}\`) — the evidence gate and the controller find your report through it.`,

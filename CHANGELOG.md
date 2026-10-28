@@ -20,17 +20,27 @@ so a lucky draw could promote a prompt. Nothing in the references spoke of varia
 - **`load-test.md` (+saas) asks for the runs and the limit.**
   - **Runs per scenario.** Every run meets the budget, not only their average.
   - **Limit.** What stops the throughput going higher (CPU, a lock, a connection pool, the database, the network, the
-    load generator itself), read from the resource use during a run, not guessed from the code.
+    load generator itself), read from the resource use during a run that saturates the system, not guessed from the
+    code. A steady run at a fixed rate is capped by that rate.
 
 ### Changed
-- **The +ai prompt task** (SKILL.md) runs the harness as many times as the eval plan says, keeps the prompt on the
-  medians, and records the delta with its spread as the task's evidence.
-- **`/eval`** reports the median and the spread over the plan's runs; the baseline is the run closest to the median;
-  a model migration compares medians of the same number of runs.
+- **One rule for an eval score, everywhere.** Compare golden's median over the plan's runs with the baseline's median.
+  Better: it rose by at least the decision delta and past the baseline's spread. Held: it stayed inside the spread,
+  or rose by less than the decision delta. Worse: it dropped past the spread. The number of runs is fixed before
+  running, never raised until a borderline result crosses.
+- **The +ai prompt task** (SKILL.md) and **the task brief** (`spec_task_brief`: the prompt loop's definition of done
+  and the eval rule of a task that touches an AI path, EN / PT / pt-BR / ES) run the harness as many times as the
+  eval plan says, keep the prompt when golden is better or held and adversarial held, and record the medians and the
+  spreads (`Eval delta: golden 84% (83–85) → 88% (87–89)`).
+- **`/eval`** reports each set's median and spread over the plan's runs. `--set-baseline` still stores one run, and
+  the harness prints its delta against it: the plan's Baseline holds the medians and spreads to judge on. A model
+  migration compares medians of the same number of runs. **`/spec-review prompt`** reads "golden's median better or
+  held", where it read "golden up".
 - **`references/eval-suite-patterns.md`** has a new pitfall, "The new prompt scored 3 points higher": measure the noise
-  once, score every candidate the same way with the cache off, check that every run did the work. The merge gate reads
-  medians. **`references/load-testing-patterns.md`** adds the runs and the limit, and `references/verification.md`'s
-  claims table a row for "better, faster, a higher score".
+  once, score every candidate the same way with the response cache off, check that every run did the work. The merge
+  gate blocks when golden's median drops past the baseline's spread (it read "drops > 2%"); a cache keeps a measured
+  median, never the responses inside one measurement. **`references/load-testing-patterns.md`** adds the runs and the
+  limit, and `references/verification.md`'s claims table a row for "better, faster, a higher score".
 
 ### Upgrade note
 - An eval plan or a load test written before 1.34 has no such lines and is never flagged. Add them by hand to use the

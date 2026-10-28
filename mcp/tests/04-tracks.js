@@ -1006,8 +1006,9 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     const want = { en: [/^- Runs per score: \[/, /^- Decision delta: \[/, /^- Runs per scenario: \[/, /^- Limit: \[/],
       pt: [/^- Execuções por pontuação: \[/, /^- Delta de decisão: \[/, /^- Execuções por cenário: \[/, /^- Limite: \[/],
       es: [/^- Ejecuciones por puntuación: \[/, /^- Delta de decisión: \[/, /^- Ejecuciones por escenario: \[/, /^- Límite: \[/] };
+    want["pt-BR"] = want.pt;
     const bad = [];
-    for (const l of ["en", "pt", "es"]) {
+    for (const l of ["en", "pt", "pt-BR", "es"]) {
       const f = S.createFeature(path.join(tmp, "proj-noise-" + l), "Ticket triage " + l, ["ai", "saas"], undefined, undefined, l);
       const lines = ["eval-plan.md", "load-test.md"].flatMap((file) => fs.readFileSync(path.join(f.dir, file), "utf8").split(/\r?\n/));
       for (const re of want[l]) {
@@ -1015,7 +1016,20 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
         if (!line || !S.placeholderReport(line).length || S.placeholderReport(line.replace(/\[[^\]]*\]/, "3")).length) bad.push(l + " " + re.source);
       }
     }
-    ok(!bad.length, "1.34: eval-plan.md (runs per score, decision delta) and load-test.md (runs per scenario, limit) ask for the noise in EN / PT / ES; " +
-      "each slot is a placeholder until written, and written it is not (bad: " + bad.join(" · ") + ")");
+    // the gate itself: an eval plan written but for its decision delta is refused on that line, then approved once written
+    const js = (x) => JSON.stringify(x);
+    const g = S.createFeature(path.join(tmp, "proj-noise-gate"), "Reply drafts", ["ai"]), ep = path.join(g.dir, "eval-plan.md");
+    for (const ph of ["classification", "requirements", "design"]) S.approvePhase(path.join(tmp, "proj-noise-gate"), g.slug, ph, "t", { force: true });
+    const fillBut = (keep) => fs.writeFileSync(ep, fs.readFileSync(ep, "utf8").split("\n").map((x) => keep.test(x) ? x : x.replace(/\[[^\]]*\]/g, "3")).join("\n"));
+    fillBut(/^- Decision delta: \[/);
+    const deltaLine = fs.readFileSync(ep, "utf8").split("\n").findIndex((x) => /^- Decision delta: \[/.test(x)) + 1;
+    const refused = S.approvePhase(path.join(tmp, "proj-noise-gate"), g.slug, "eval-plan", "t");
+    fillBut(/(?!)/);
+    const approved = S.approvePhase(path.join(tmp, "proj-noise-gate"), g.slug, "eval-plan", "t");
+    ok(!bad.length && deltaLine > 0 && refused.ok === false && refused.refused && js(refused.failing) === js(["placeholders"]) &&
+      String(refused.error).includes("eval-plan.md:" + deltaLine) && approved.ok === true,
+      "1.34: eval-plan.md (runs per score, decision delta) and load-test.md (runs per scenario, limit) ask for the noise in EN / PT / pt-BR / ES; " +
+      "each slot is a placeholder until written, and written it is not; the eval-plan approval refuses an unwritten decision delta on its line, then " +
+      "approves (bad: " + bad.join(" · ") + "; refused " + js([refused.failing, refused.error]) + "; approved " + js([approved.ok, approved.error]) + ")");
   }
 };

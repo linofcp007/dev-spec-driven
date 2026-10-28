@@ -791,7 +791,7 @@ Ejecuta el golden con un prompt v1 mínimo + modelo planeado; registra aquí la 
 ## Criterios de Aprobación
 P50/P95/P99 medidos ≤ presupuesto al throughput objetivo, tasa de error < [0.1]%.
 - Ejecuciones por escenario: [cuántas ejecuciones, p. ej. 3] — cada ejecución cumple el presupuesto, no solo la media; escribe la dispersión junto al resultado
-- Límite: [lo que impide que el throughput suba: CPU, un lock, un pool de conexiones, la base de datos, la red o el propio generador de carga] — leído en el uso de recursos durante una ejecución, no adivinado a partir del código
+- Límite: [lo que impide que el throughput suba: CPU, un lock, un pool de conexiones, la base de datos, la red o el propio generador de carga] — leído en el uso de recursos durante una ejecución que satura el sistema, no adivinado a partir del código
 `
       );
     },
@@ -3355,8 +3355,8 @@ const brief = {
       "ai-prompt": [
         "Registra la baseline de las evals antes de cambiar nada.",
         "Edita el prompt en un fichero versionado NUEVO (`prompts/vN.md`), nunca en el mismo.",
-        "Ejecuta el harness de evals completo; acepta solo si golden mejoró o se mantuvo y adversarial se mantuvo — si no, revierte.",
-        "Haz commit con el delta de evals (`Eval delta: golden 82% → 87%`).",
+        "Ejecuta el harness de evals completo tantas veces como dice eval-plan.md y decide por las medianas: acepta solo si golden subió el delta de decisión más allá de la dispersión de la baseline o se mantuvo dentro de ella, y adversarial se mantuvo — una bajada más allá de la dispersión: revierte.",
+        "Haz commit con el delta de evals, medianas y dispersiones (`Eval delta: golden 84% (83–85) → 88% (87–89)`).",
       ],
     },
     metricsRule: "Cada métrica listada arriba se emite de verdad — muestra la evidencia en el informe.",
@@ -3366,7 +3366,7 @@ const brief = {
       "Las pruebas que pasaban antes siguen en verde: solo pueden fallar las pruebas nuevas de esta tarea. Nunca modifiques una prueba existente.",
       "Haz commit de la prueba que falla citando la tarea y sus T-IDs (`test(ámbito): T-01 red — tarea #N`).",
     ],
-    evalsRule: "Este cambio toca una ruta de IA: ejecuta el harness de evals al final — golden se mantiene o mejora, adversarial se mantiene — y pon las puntuaciones en el informe.",
+    evalsRule: "Este cambio toca una ruta de IA: ejecuta el harness de evals al final, tantas veces como dice eval-plan.md — la mediana de golden se mantiene dentro de la dispersión de la baseline o sube más allá de ella, adversarial se mantiene — y pon las medianas y las dispersiones en el informe.",
     checkpoint: "Cuando la última tarea de esta historia esté hecha, el controlador se detiene para revisión humana en el checkpoint:",
     report: "## Informe",
     reportTo: (p) => `Escribe el informe completo en \`${p}\` y responde solo con la línea de estado (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED), tus commits, un resumen de una línea de las pruebas, cualquier duda y la ruta del informe escrita completa (\`${p}\`) — por ella el gate de evidencia y el controlador encuentran tu informe.`,

@@ -87,8 +87,9 @@ the budget, not only their average; write the spread next to the result. A befor
 both sides ran the same scenario the same number of times, and the change is larger than the spread.
 
 **Name the limit.** Ask why the throughput isn't twice as high: the resource that stops it (CPU, a lock, a connection
-pool, the database, the network, the load generator itself), read from the resource use above during a run — not
-guessed from the code. A load generator at 100% CPU means you measured the generator, not the system.
+pool, the database, the network, the load generator itself), read from the resource use above during the breakpoint
+run — not guessed from the code. A steady run at a fixed rate is capped by that rate, so only a run that saturates the
+system shows the limit. A load generator at 100% CPU means you measured the generator, not the system.
 
 ---
 
@@ -365,7 +366,7 @@ spike ends.
 ## Results Log
 
 ### Run 2026-04-15 (before feature ship)
-- Steady (3 runs): P95 940–1010ms ✅, P99 1980–2100ms ✅, errors 0.3% ✅
+- Steady (3 runs): P95 980ms (940–1010) ✅, P99 2050ms (1980–2100) ✅, errors 0.3% ✅
 - Burst: Handled 1500 VUs spike with 2.1% errors (all 429s), recovered in 90s ✅
 - Soak: Stable over 4h, memory flat ✅
 - Breakpoint: Broke at ~1800 RPS (DB CPU 95%). Current expected peak ~300 RPS, so 6×
@@ -373,8 +374,8 @@ spike ends.
 - **Decision:** Ship.
 
 ### Run 2026-05-20 (after cache layer changes)
-- Steady: P95 = 1150ms ⚠️  (regressed 17%)
+- Steady (3 runs): P95 1150ms (1120–1190) ⚠️ — regressed 17% against 980ms, past both spreads
 - Root cause: new query missing index on (event_id, status)
 - Fix: commit a1b2c3d adds the index
-- Rerun: P95 = 850ms ✅ Ship.
+- Rerun (3 runs): P95 850ms (830–880) ✅ Ship.
 ```
