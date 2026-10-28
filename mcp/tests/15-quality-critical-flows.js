@@ -81,7 +81,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, handRoadmap }) => {
     all("1.33 critical flows: one signal fires — stock, a coupon, a balance, credits, a booking / slot / seat / appointment / ticket, an invite, a quota, a checkout, a payment, a charge, a subscription, a capitalised gateway (EN / PT / pt-BR / ES, ≤ 3 words, one per concept); their everyday senses never do — stock photos, photo / end / ECTS credits, UI / Vue / memory slots, a load balancer, a work-life / white balance, a bare credit card field, free of charge, git checkout, a seat belt, a calendar invite, a newsletter / GraphQL subscription, a bond's coupon, cupom fiscal, linguagem de marcação, vagas de emprego, citas bibliográficas… (got " + js({ posBad, negBad }) + ")", {
       positives: () => POS.length >= 40 && !posBad.length,
       negatives: () => NEG.length >= 40 && !negBad.length,
-      atMostThree: () => sig("Redeem a coupon, spend the balance, book a seat and pay the invoice.", "en").length === 3,
+      atMostThree: () => (sig("Redeem a coupon, spend the balance, book a seat and pay the invoice.", "en") || []).length === 3,
     });
   }
 
@@ -113,8 +113,8 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, handRoadmap }) => {
       js([of({ kind: "bugfix" }), of({ kind: "spike" }), of({ kind: "change" }), of({ tracks: ["core", "dist"] }), of({ tracks: ["core", "api"] }), of({ tracks: ["core", "tdd", "sec"] }), oos]) + ")", {
       bugfix: () => of({ kind: "bugfix" }) === null, spike: () => of({ kind: "spike" }) === null, change: () => of({ kind: "change" }) === null,
       dist: () => of({ tracks: ["core", "dist"] }) === null, api: () => of({ tracks: ["core", "api"] }) === null,
-      sec: () => js(of({ tracks: ["core", "tdd", "sec"] }).signals) === js(["redeem", "checkout"]),
-      outOfScope: () => js(oos.signals) === "[]",
+      sec: () => js((of({ tracks: ["core", "tdd", "sec"] }) || {}).signals) === js(["redeem", "checkout"]),
+      outOfScope: () => js((oos || {}).signals) === "[]",
     });
   }
 
