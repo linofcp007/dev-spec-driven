@@ -905,6 +905,113 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
     });
   }
 
+  // 1.33: dev-guardian 3.8.0's test-integrity check reads the change since `scan --diff-base <ref>`. finish --run hands the launcher the
+  // feature's base in DEV_SPEC_DIFF_BASE; the launcher appends --diff-base <ref> only to a scan, only for a dev-guardian ≥ 3.8.0 (its
+  // version read from the install it resolved: .claude-plugin/plugin.json, else package.json, else mcp/package.json — never guessed),
+  // only when the arguments name no base (--diff-base / --baseline-ref / --rules-ref), never twice; an older dev-guardian runs exactly as
+  // before; a value that is no plain ref name refuses the scan (exit 3). The functions are the launcher's own (toString).
+  {
+    const p = path.join(tmp, "g-diffbase");
+    S.initProject(p, [], "en", { guardian: true });
+    // a fake dev-guardian install of version `ver` (its own home), its version where `where` says (null: nowhere)
+    const at = (ver, where = [".claude-plugin", "plugin.json"]) => {
+      const home = path.join(tmp, "g-db-home-" + ver.replace(/[^0-9a-z]/gi, "_") + (where ? where.join("_") : "none"));
+      const c = install(home, "dev-guardian", ver);
+      if (where) write(path.dirname(path.dirname(c)), path.join(...where), js({ name: "dev-guardian", version: ver }));
+      return { home, cli: c };
+    };
+    const SCAN = ["scan", "--project", ".", "--fail-on", "high", "--format", "json"];
+    const run = (inst, args, base) => launch(p, args, { DEV_GUARDIAN_CLI: null, CLAUDE_CONFIG_DIR: inst.home, DEV_SPEC_DIFF_BASE: base === undefined ? null : base });
+    const v371 = at("3.7.1"), v380 = at("3.8.0"), v3100 = at("3.10.0"), pkg = at("3.8.0", ["package.json"]), mcpPkg = at("3.8.0", ["mcp", "package.json"]), none = at("3.8.0", null);
+    const r = {
+      old: run(v371, SCAN, "main"), oldBad: run(v371, SCAN, "-x"), noEnv: run(v380, SCAN), added: run(v380, SCAN, "main"),
+      sha: run(v380, SCAN, "1df7dbf17a23f864afd4fc45a51cc99af05fc875"), newer: run(v3100, SCAN, "origin/main"),
+      fromPkg: run(pkg, SCAN, "main"), fromMcpPkg: run(mcpPkg, SCAN, "main"), unknown: run(none, SCAN, "main"),
+      own: run(v380, [...SCAN, "--diff-base", "dev"], "main"), ownEq: run(v380, [...SCAN, "--baseline-ref=dev"], "main"), rules: run(v380, [...SCAN, "--rules-ref", "dev"], "main"),
+      status: run(v380, ["status"], "main"), dash: run(v380, SCAN, "-x"), dots: run(v380, SCAN, "a..b"), space: run(v380, SCAN, "a b"), lock: run(v380, SCAN, "x.lock"),
+    };
+    const args = (x) => (x.out ? x.out.args : null);
+    const said = (x, ref) => x.stderr.includes("dev-guardian launcher: --diff-base " + ref + " (DEV_SPEC_DIFF_BASE)");
+    const refused = (x) => x.code === 3 && /dev-guardian launcher: DEV_SPEC_DIFF_BASE is no plain ref name/.test(x.stderr) && !x.out;
+    // the engine's own functions (the launcher carries their source): the rule is branchNameOk's; the version compare is numeric
+    const REFS = ["main", "origin/main", "feature/login", "v1.2.3", "a+b_c-d", "1df7dbf17a23f864afd4fc45a51cc99af05fc875", "-x", "/x", "x/", "x.", "a..b", "a//b", ".x", "x/.y",
+      "x.lock", "HEAD", "a b", "a~1", "a^", "a:b", "a\\b", "", "x".repeat(201)];
+    const ruleBad = REFS.filter((x) => E.plainRefOk(x) !== E.branchNameOk(x));
+    all("1.33: the launcher appends --diff-base <DEV_SPEC_DIFF_BASE> to a scan only for a dev-guardian ≥ 3.8.0 (3.8.0, 3.10.0 — its version read from plugin.json, package.json or mcp/package.json; none readable: nothing), never with a base already in the arguments (--diff-base, --baseline-ref=, --rules-ref), never to another subcommand, never twice; 3.7.1 runs exactly as before (an invalid value too); a value that is no plain ref name ('-x', 'a..b', 'a b', 'x.lock') refuses the scan with exit 3 (got " +
+      js(Object.fromEntries(Object.entries(r).map(([k, x]) => [k, [x.code, args(x) && args(x).slice(7), x.stderr.split("\n").filter(Boolean).slice(-1)[0] || ""]]))) + ")", {
+      old: js(args(r.old)) === js(SCAN) && !said(r.old, "main") && r.old.code === 0, oldBad: js(args(r.oldBad)) === js(SCAN) && r.oldBad.code === 0,
+      noEnv: js(args(r.noEnv)) === js(SCAN),
+      added: js(args(r.added)) === js([...SCAN, "--diff-base", "main"]) && said(r.added, "main") && fold(r.added.out.argv1) === fold(v380.cli),
+      sha: js(args(r.sha).slice(-2)) === js(["--diff-base", "1df7dbf17a23f864afd4fc45a51cc99af05fc875"]), newer: js(args(r.newer).slice(-2)) === js(["--diff-base", "origin/main"]),
+      versionFiles: js(args(r.fromPkg).slice(-2)) === js(["--diff-base", "main"]) && js(args(r.fromMcpPkg).slice(-2)) === js(["--diff-base", "main"]) && js(args(r.unknown)) === js(SCAN),
+      ownBase: js(args(r.own)) === js([...SCAN, "--diff-base", "dev"]) && js(args(r.ownEq)) === js([...SCAN, "--baseline-ref=dev"]) && js(args(r.rules)) === js([...SCAN, "--rules-ref", "dev"]),
+      otherSub: js(args(r.status)) === js(["status"]),
+      invalid: [r.dash, r.dots, r.space, r.lock].every(refused),
+      sameRule: !ruleBad.length && E.GUARDIAN_DIFF_BASE_ENV === "DEV_SPEC_DIFF_BASE",
+    });
+
+    // the base finish --run hands it (guardianDiffBase): the feature's branch as recorded — the branch it was created from, else the
+    // commit it started at —, else (no record) the repository's default branch while HEAD is on another one; each a plain ref name git
+    // resolves to a commit (verify); none → null (no diff base: the scan runs as before)
+    const SHA = "1df7dbf17a23f864afd4fc45a51cc99af05fc875";
+    const rec = (base, commit) => ({ branch: { name: "feature/login", base, commit, at: "2026-10-01T00:00:00.000Z" } });
+    const git = (known, current, defaultBranch) => ({ current, defaultBranch, verify: (ref) => known.includes(ref) });
+    const b = {
+      base: E.guardianDiffBase(rec("main", SHA), git(["main", SHA], "feature/login", "origin/main")),
+      gone: E.guardianDiffBase(rec("main", SHA), git([SHA], "feature/login", "origin/main")),
+      badBase: E.guardianDiffBase(rec("-x", SHA), git(["-x", SHA], "feature/login", "origin/main")),
+      detached: E.guardianDiffBase(rec(null, SHA), git([SHA], null, "origin/main")),
+      neither: E.guardianDiffBase(rec("main", SHA), git([], "feature/login", "origin/main")),
+      def: E.guardianDiffBase({}, git(["origin/main"], "feature/x", "origin/main")),
+      onDefault: E.guardianDiffBase({}, git(["origin/main"], "main", "origin/main")), onLocal: E.guardianDiffBase({}, git(["main"], "main", "main")),
+      noGit: E.guardianDiffBase(rec("main", SHA), null), headless: E.guardianDiffBase({}, git(["main"], null, "main")),
+    };
+    all("1.33: finish --run's diff base — the recorded base branch, else the recorded commit, else (no record) the default branch while HEAD is elsewhere; a ref git can't resolve or that is no plain ref name ('-x') is skipped; on the default branch, detached without a record, or without git: none (got " + js(b) + ")", {
+      base: js(b.base) === js({ ref: "main", from: "base" }), gone: js(b.gone) === js({ ref: SHA, from: "commit" }), badBase: js(b.badBase) === js({ ref: SHA, from: "commit" }),
+      detached: js(b.detached) === js({ ref: SHA, from: "commit" }), neither: b.neither === null, def: js(b.def) === js({ ref: "origin/main", from: "default" }),
+      none: b.onDefault === null && b.onLocal === null && b.noGit === null && b.headless === null,
+    });
+
+    // a launcher edit is a release item: the launcher 1.30–1.32.x wrote (mcp/tests/fixtures/guardian-launcher-1.32.cjs) reads "outdated"
+    // — never "changed" —, so finish --run replaces it first and spec_upgrade --apply writes this version's
+    const L132 = fs.readFileSync(path.join(__dirname, "tests", "fixtures", "guardian-launcher-1.32.cjs"), "utf8");
+    const lf = path.join(p, ".specs", "guardian.cjs");
+    fs.writeFileSync(lf, L132);
+    const state132 = E.guardianLauncherState(p);
+    const pre = S.guardianPreRun(p, [{ name: "guardian", command: CMD }], "en");
+    const rewritten = E.guardianLauncherState(p);
+    fs.writeFileSync(lf, L132.replace(/\n/g, "\r\n"));
+    const crlf = E.guardianLauncherState(p);
+    const up = S.specUpgrade(p, { apply: true });
+    all("1.33: the launcher 1.30–1.32.x wrote (its sha1 in GUARDIAN_LAUNCHER_PAST) reads 'outdated' — LF or CRLF —, never 'changed'; finish --run's pre-run rewrites it with a note; spec_upgrade --apply writes this version's (got " +
+      js([state132, pre, rewritten, crlf, E.guardianLauncherState(p)]) + ")", {
+      sha: crypto.createHash("sha1").update(L132.replace(/\r\n/g, "\n")).digest("hex") === SHA,
+      outdated: state132 === "outdated" && crlf === "outdated", pre: pre.ok === true && pre.note === S.msg("en").guardian.launcherRefreshed && rewritten === "ok",
+      upgrade: up.ok !== false && E.guardianLauncherState(p) === "ok",
+    });
+
+    // the verdict: a weakened test is a finding like any other — a focused .only (high) blocks at --fail-on high, named "weakened test" (EN /
+    // PT / ES); a skip (medium) is a new finding below the bar (a pass); the diff base the launcher announced is said, never part of a
+    // configuration error's message
+    const tf = (severity, rule, file, line) => ({ fingerprint: rule, tool: "guardian-test-integrity", severity, category: "quality", title: "a focused test (.only)", rule_id: rule, file_path: file, line_start: line });
+    const rep = (exit, blocking, fresh) => js({ exit_code: exit, tool_version: "3.8.0", baseline_status: "present", coverage: "full", new_findings: fresh, blocking_findings: blocking });
+    const DB = "dev-guardian launcher: --diff-base main (DEV_SPEC_DIFF_BASE)\n";
+    const focused = E.guardianRecord(p, null, CMD, 1, rep(1, [tf("high", "test-focused", "tests/a.test.js", 3)], [tf("high", "test-focused", "tests/a.test.js", 3)]), DB);
+    const skipped = E.guardianRecord(p, null, CMD, 0, rep(0, [], [tf("medium", "test-skipped", "tests/b.test.js", 9)]), DB);
+    const conf = E.guardianRecord(p, null, CMD, 3, "", DB + "error: Unknown flag: --diff-base\n");
+    const lines = (l) => E.guardianLines(focused, l);
+    all("1.33: a test-integrity finding — a focused .only (high) blocks at --fail-on high, its line names a weakened test (EN / PT / ES); a medium skip is a pass with its new finding counted; the diff base is in the verdict (stored) and its head line, never in a configuration error's message (got " +
+      js([focused.verdict, focused.top, skipped.verdict, skipped.newFindings, conf.message, lines("en").slice(0, 2), lines("pt")[1], lines("es")[1]]) + ")", {
+      blocks: focused.verdict === "blocked" && focused.blocking === 1 && focused.top[0].rule === "test-focused" && focused.top[0].test === true && focused.diffBase === "main",
+      stored: E.guardianStored(focused).diffBase === "main" && E.guardianStored(focused).top[0].test === true,
+      named: lines("en")[1] === "  tests/a.test.js:3 weakened test: test-focused (high)" && lines("pt")[1] === "  tests/a.test.js:3 teste enfraquecido: test-focused (high)" &&
+        lines("es")[1] === "  tests/a.test.js:3 prueba debilitada: test-focused (high)",
+      head: lines("en")[0].endsWith(S.msg("en").guardian.diffBase("main")),
+      skip: skipped.verdict === "pass" && skipped.newFindings === 1 && !skipped.top,
+      config: conf.verdict === "config" && conf.message === "error: Unknown flag: --diff-base" && conf.diffBase === "main",
+    });
+  }
+
   // the launcher's sha1 list: the 1.29 fixture is the launcher 1.29 wrote (its hash pinned in GUARDIAN_LAUNCHER_PAST)
   ok(crypto.createHash("sha1").update(LAUNCHER_129.replace(/\r\n/g, "\n")).digest("hex") === "7698ebe162c94bc3e55dd8357fd53c5947a89764",
     "1.30: mcp/tests/fixtures/guardian-launcher-1.29.cjs is the launcher dev-spec-driven 1.29 wrote, byte for byte (the hash guardian.js recognizes as an earlier version's)");

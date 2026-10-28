@@ -2784,6 +2784,8 @@ const msg = {
       exited: (code) => `o dev-guardian terminou com exit ${code == null ? "?" : code}`,
       noBaseline: " — sem baseline: todos os findings que já existem contam como novos",
       override: (p) => ` (dev-guardian do DEV_GUARDIAN_CLI=${p})`,
+      // 1.33: a alteração desde a base da feature, lida à procura de testes enfraquecidos (o test-integrity do dev-guardian 3.8.0)
+      diffBase: (ref) => ` · a alteração desde ${ref} verificada à procura de testes enfraquecidos`,
       accepted: (t, p, o) => [t ? `${t} ficheiro(s) não analisado(s) (aceite(s) no .guardian/scan.yml)` : "", p ? `${p} ficheiro(s) só lido(s) em parte (aceite(s) com --accept-partial-parse)` : "",
         o ? `${o} outra(s) aceitação(ões) (accepted_gaps)` : ""].filter(Boolean).join(" · "),
       acceptedWarn: (what) => `o gate do dev-guardian passou com ${what} — revê à mão uma alteração a esses ficheiros: um finding onde nenhum scanner olhou passa o gate.`,
@@ -2795,7 +2797,7 @@ const msg = {
       staleTimeouts: (n, files) => `${n} ${n === 1 ? "entrada obsoleta" : "entradas obsoletas"} em accept_timeouts no .guardian/scan.yml${files ? " (" + files + ")" : ""} — remove-${n === 1 ? "a" : "as"}, ou um timeout futuro ${n === 1 ? "nesse ficheiro" : "nesses ficheiros"} é aceite sem que ninguém o veja.`,
       update: (v) => `atualiza o dev-guardian (Claude Code: /plugin) — ${v ? "esta execução usou o " + v + ", o gate precisa do 3.2.1 ou posterior" : "esta execução não indicou versão (o 3.3.0 e posteriores indicam); o gate precisa do 3.2.1 ou posterior"}`,
       updateHint: (slug) => `Atualiza o plugin dev-guardian (3.2.1 ou posterior — Claude Code: /plugin) e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run.`,
-      finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [esta feature]" : ""),
+      finding: (at, rule, severity, own, test) => `${at} ${test ? "teste enfraquecido: " : ""}${rule} (${severity})` + (own ? " [esta feature]" : ""),
       blocker: (name, text) => `a verificação do projeto '${name}' falhou — ${text}.`,
       more: (n) => `+${n} mais`,
       fixHint: (slug) => `Corrige o(s) finding(s) e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run. Para aceitar UM finding revisto, o utilizador suprime-o na própria linha com um motivo (nosemgrep: <regra> -- <motivo>, # nosec) — nunca com \`baseline update\`, que aceita todos os findings atuais, incluindo os desta feature. Nunca forces o finish sem o utilizador.`,

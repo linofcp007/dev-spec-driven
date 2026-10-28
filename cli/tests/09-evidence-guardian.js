@@ -262,6 +262,63 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
     } else ok(true, "1.30 review 8 (C5): .guardian/reports/ and the dirty flag — skipped (git is not available)");
   }
 
+  // 1.33: finish --run hands the launcher the feature's base in DEV_SPEC_DIFF_BASE — the branch it was created from (create --branch's
+  // record), else, without a record, the default branch while HEAD is on another one. A dev-guardian ≥ 3.8.0 (its plugin.json) gets
+  // `--diff-base <ref>` (its test-integrity check) and the verdict says so; 3.7.1 runs exactly as before; on the default branch nothing is
+  // passed and a value inherited from the shell is cleared; the same under every shell the stored command runs in. git only.
+  {
+    const cfg = path.join(tmp, "dg-db-gitconfig");
+    fs.writeFileSync(cfg, "");
+    const genv = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: cfg, HOME: tmp, XDG_CONFIG_HOME: tmp,
+      GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
+    const git = (cwd, ...args) => spawnSync("git", args, { cwd, encoding: "utf8", env: genv });
+    const hasGit = (() => { const g = git(tmp, "--version"); return !g.error && g.status === 0; })();
+    if (hasGit) {
+      // the fake dev-guardian above, installed as version `ver` (its .claude-plugin/plugin.json — what the launcher reads)
+      const fakeAt = (ver) => {
+        const dir = path.join(tmp, "dg-fake-" + ver);
+        write(dir, "cli/dev-guardian.mjs", fs.readFileSync(fake, "utf8"));
+        write(dir, ".claude-plugin/plugin.json", js({ name: "dev-guardian", version: ver }));
+        return path.join(dir, "cli", "dev-guardian.mjs");
+      };
+      const f380 = fakeAt("3.8.0"), f371 = fakeAt("3.7.1");
+      const x = project("dg-diffbase", "en");
+      S.initProject(x.p, [], undefined, { guardian: true });
+      git(x.p, "-c", "init.defaultBranch=main", "init", "-q");
+      git(x.p, "add", "-A");
+      git(x.p, "commit", "-q", "-m", "init");
+      const sha = (git(x.p, "rev-parse", "HEAD").stdout || "").trim();
+      git(x.p, "switch", "-q", "-c", "feature/login");
+      const stf = path.join(x.p, ".specs", x.slug, ".state.json");
+      const setRecord = (on) => { const st = json(fs.readFileSync(stf, "utf8")); if (on) st.branch = { name: "feature/login", base: "main", commit: sha, at: st.createdAt }; else delete st.branch; fs.writeFileSync(stf, JSON.stringify(st, null, 2)); };
+      const mark = path.join(tmp, "dg-db-mark");
+      const runWith = async (cliPath, extraEnv, extra) => {
+        try { fs.rmSync(mark); } catch { /* none yet */ }
+        const r = await finishRun(x.p, x.slug, { ...genv, DEV_GUARDIAN_CLI: cliPath, FAKE_EXIT: "0", FAKE_MARK: mark, ...(extraEnv || {}) }, extra);
+        return { ...r, args: fs.existsSync(mark) ? fs.readFileSync(mark, "utf8") : null };
+      };
+      const LINE = MSG("en").guardian.diffBase("main");
+      setRecord(true);
+      const r38 = await runWith(f380), r37 = await runWith(f371, { DEV_SPEC_DIFF_BASE: "main" });
+      const shells = (process.platform === "win32" ? ["cmd", "bash", "powershell", "pwsh"] : ["sh", "bash"]).filter((sh) => spawnSync(sh === "cmd" ? "cmd.exe" : sh, sh === "cmd" ? ["/c", "exit 0"] : sh === "bash" || sh === "sh" ? ["-c", "exit 0"] : ["-NoProfile", "-Command", "exit 0"], { timeout: 20000 }).status === 0);
+      const bySh = [];
+      for (const sh of shells) { const r = await runWith(f380, {}, ["--shell", sh]); bySh.push([sh, r.args]); }
+      setRecord(false);
+      const rDef = await runWith(f380);
+      git(x.p, "switch", "-q", "main");
+      const rMain = await runWith(f380, { DEV_SPEC_DIFF_BASE: "evil" });
+      const ends = (a, ref) => typeof a === "string" && a.endsWith("--format json --diff-base " + ref);
+      all("1.33 finish --run: the feature's recorded base (main) reaches dev-guardian 3.8.0 as --diff-base main — the verdict says so — under " + shells.join(", ") + "; 3.7.1 gets the arguments as before (its value ignored); without a record the default branch while HEAD is elsewhere; on main nothing, an inherited DEV_SPEC_DIFF_BASE cleared (got " +
+        js({ r38: [r38.args, r38.out.split("\n")[1]], r37: r37.args, bySh, rDef: rDef.args, rMain: rMain.args }) + ")", {
+        recorded: ends(r38.args, "main") && r38.out.includes(LINE), // (finish itself refuses: the fixture's spec is still a template)
+        older: r37.args === "scan --project . --fail-on high --format json" && !r37.out.includes(LINE),
+        shells: shells.length >= 1 && bySh.every(([, a]) => ends(a, "main")),
+        byDefault: ends(rDef.args, "main"),
+        onDefault: rMain.args === "scan --project . --fail-on high --format json" && !rMain.out.includes("weakened"),
+      });
+    } else ok(true, "1.33 finish --run's diff base — skipped (git is not available)");
+  }
+
   // the offer (init, upgrade) and the duplication budget line (dupes) on the CLI
   {
     const home = path.join(tmp, "dg-home");

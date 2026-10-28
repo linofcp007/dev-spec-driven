@@ -67,7 +67,8 @@ first; how they came to be — the releases and review findings — is in Histor
 - **The readers:** `spec_status` / `spec_next_action` / `spec_finish` carry `branch` (`branchView()`: + `current`, `exists`).
   next_action appends `branch.notOn` while HEAD is elsewhere and the phase is open — the step never changes. finish adds
   `branch.summary` and, ready, the two local options (`finishBranchLine`; a base no shell takes unquoted is left out); a spike's
-  summary has no line. Drift and the hooks never read the record.
+  summary has no line. `finish --run` reads it for dev-guardian's diff base (1.33: `base`, else `commit` — tasks-and-evidence.md
+  → Project checks). Drift and the hooks never read the record.
 - **The log range:** `dev-spec log` reads `git log <commit>..HEAD` (an unknown commit → the whole log; `since`,
   `branch.logSince`); `taskCommits` cuts a handed-in log (`spec_log`, `log -`) at the recorded commit when `opts.since` is
   undefined (the CLI passes its range, or `null`), so every surface gives the same result.
@@ -249,6 +250,7 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   did not hold; `taskCommits` now cuts a handed-in log at the recorded commit.
 - **1.27** — the CLI became one command table (cli/main.js, cli/commands.js, cli/run.js) with one git runner, cli/git.js `gitRun`;
   the branch facts are its `branchFacts`. `createFeature` takes an options object (git's facts are `opts.git`).
+- **1.33** — a new reader: `finish --run` takes the recorded `base` (else `commit`) as dev-guardian's diff base.
 
 ### Upgrade
 - **1.12** — a bugfix's design approval recorded no `file`; the migrations skip it as `untracked`.

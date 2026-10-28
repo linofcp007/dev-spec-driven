@@ -441,6 +441,20 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   - *What it runs:* only `scan`, `baseline` (the user's `baseline update`), `status` and help (`GUARDIAN_FORWARDED`); anything
     else exits 3 ("not forwarded"). A `DEV_GUARDIAN_CLI` it ran is said on stderr (`dev-guardian launcher: DEV_GUARDIAN_CLI=…`)
     and lands in the verdict (`override`) and the merge summary.
+  - *The diff base (1.33):* dev-guardian 3.8.0's test-integrity check (`guardian-test-integrity`: a focused `.only` high; a skip, a
+    deleted test file, assertions removed, an always-passing test script medium) reads a change only when `scan` gets `--diff-base
+    <ref>` (or a `--baseline-ref` / `--rules-ref`) — the gate's command stays `GUARDIAN_COMMAND`. `finish --run` hands the launcher
+    the feature's base in `DEV_SPEC_DIFF_BASE` (`GUARDIAN_DIFF_BASE_ENV`; tasks-and-evidence.md → Project checks); the launcher
+    appends `--diff-base <ref>` (`guardianDiffBaseArgs`) only to a `scan`, only when the arguments name no base of their own
+    (either spelling), and only for a dev-guardian ≥ 3.8.0 — its version read from the install it resolved (`devGuardianVersion`:
+    `<root>/.claude-plugin/plugin.json`, else `package.json`, else `mcp/package.json`; none readable: nothing appended, never a
+    guess from a folder name). An older dev-guardian runs exactly as before. A value that is no plain ref name (`plainRefOk` =
+    `branchNameOk`'s rule: never `-…`, no `..`, no `.lock`…) refuses the scan (exit 3, "DEV_SPEC_DIFF_BASE is no plain ref name")
+    — only where it would be appended. The launcher says what it appended on stderr (`dev-guardian launcher: --diff-base <ref>
+    (DEV_SPEC_DIFF_BASE)`): the verdict keeps it (`diffBase`, the head line's `guardian.diffBase`), a configuration error's message
+    never (`RE_LAUNCHER_DIFF_BASE`). Its findings gate like any finding: a `.only` (high) blocks at `--fail-on high`, a skip (medium)
+    is a new finding below the bar; a finding of that tool is named a weakened test (`test: true`, `guardian.finding`). The three
+    functions are carried like `findDevGuardian` (toString, the same source rules) and exported for the tests.
   - *How it runs it:* it sets `argv[1]` to that CLI (dev-guardian runs `main()` only when argv[1] is itself — realpaths
     compared) and imports it by its file URL (`import("node:url")`: `require("url")` would be a Node core module CLAUDE.md
     doesn't list), so dev-guardian's own exit code is the run's. Nothing found, a subcommand not forwarded, a CLI that doesn't
@@ -449,7 +463,7 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
     flagged them (medium) in every project.
   - *It is verified, never trusted* (1.30, review 8 ds-security 1): the gate runs code from the project, so `guardianLauncherState()`
     compares `.specs/guardian.cjs` (lstat: a regular file, ≤ 256 KB, read raw, CRLF folded) with `GUARDIAN_LAUNCHER` → ok ·
-    outdated (an earlier version's, byte for byte: `GUARDIAN_LAUNCHER_PAST`, sha1 — 1.29's is mcp/tests/fixtures) · missing ·
+    outdated (an earlier version's, byte for byte: `GUARDIAN_LAUNCHER_PAST`, sha1 — 1.29's and 1.30–1.32.x's are mcp/tests/fixtures) · missing ·
     changed. `finish --run` checks it before running anything (`guardianPreRun`: outdated → rewritten first, with a note;
     missing → `no-launcher`, changed → `launcher-changed`, both refused with nothing run or recorded), `recordFinishChecks`
     refuses a reported run of a changed one (and a pass of a missing one), `spec_upgrade` flags it and `--apply` writes it;
@@ -677,6 +691,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   verified before every run and recorded run (`launcher-changed`), an earlier version's replaced (`GUARDIAN_LAUNCHER_PAST`).
 - **1.30 (review 8, ds-maint finding 5)** — the status line loaded the whole engine after every message in a project (+158 ms over
   `node -e 0`), its most frequent engine load: the render cache (Status line above).
+- **1.33** — the diff base: dev-guardian 3.8.0's test-integrity check reads a change only with `--diff-base`, so `finish --run`
+  passes the feature's base in `DEV_SPEC_DIFF_BASE` and the launcher appends the flag for a 3.8.0+ install (the command string
+  unchanged: the 1.29 contract). A launcher edit: the 1.30–1.32.x text's sha1 joined `GUARDIAN_LAUNCHER_PAST`
+  (`guardian-launcher-1.32.cjs`).
 - **1.30.1** — the cache's blind spot: for up to 10 s a change OUTSIDE `.specs/` the line reads didn't show (a Phase 4 test written —
   "write the tests" stayed; a `.specs/` made nearer the cwd; a worktree's mapping): the render reports its outside paths and the
   entry signs them, the probe's folder is compared at each read, a mapped render keeps 2 s.

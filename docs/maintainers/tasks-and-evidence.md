@@ -241,7 +241,13 @@ Engine: the `B5` block of `engine/evidence.js`.
   `before-last-tick` · `code-changed` · `unobserved` (each item carries `observed`). next_action's `finish` / `drift` steps name
   `dev-spec finish <f> --run` / `spec_finish {evidence}` while one is missing (`projectChecks.naFinish`). No meta.checks, no change.
 - **`finish <f> --run`** (`runChecks`): `done --run`'s shell rules and refusals and the pipe hint; a check that could not run records
-  nothing.
+  nothing. **The diff base (1.33):** a guardian check runs with `DEV_SPEC_DIFF_BASE` = `guardianDiffBase(state, git)` — the
+  feature's branch record (`create --branch`): the branch it was created from, else the commit it started at; without a record
+  the repository's default branch (origin/HEAD's, else a local main / master — cli/git.js `diffBaseFacts`) while HEAD is on
+  another branch; each a plain ref name git resolves to a commit (a ref git can't read would turn the gate into exit 3). None:
+  the variable is CLEARED for the run (finish --run alone sets it). The launcher passes it on as `--diff-base` to a dev-guardian
+  3.8.0+ (claude-code-integration.md → The dev-guardian launcher). Over MCP the agent runs the check itself: no diff base unless
+  it sets the variable.
 - **dev-guardian's gate — the check `guardian` (1.29; engine/guardian.js since 1.30).** `spec_init {guardian: true}` / `init
   --guardian [on|off]` (an optional-value CLI flag, bare = on) folds `{guardian: GUARDIAN_COMMAND | ""}` into the checks input
   (`guardianChecks()`) — the meta.checks rules unchanged (merged, validated, ≤ 20, the control-character refusal). On: the
@@ -713,6 +719,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `timeoutChanged` + dev-guardian's own remedy — read from its `cause: "accepted_file_changed"` once dev-guardian added that marker
   (with or without a ref; the file then in no accepted gap), the wording only for a report without it. (These notes first said
   "3.4.1" for dev-guardian's new keys; it ships them as 3.4.0.)
+- **1.33** — dev-guardian 3.8.0's test-integrity check (a test weakened to make it pass) reads only a change: `finish --run` hands the
+  launcher the feature's base (`DEV_SPEC_DIFF_BASE`), which it passes on as `--diff-base`; with none decided the variable is
+  cleared, so a value left in the shell never reaches the gate.
 
 ### Task dependencies and execution waves
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks

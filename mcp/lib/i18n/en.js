@@ -2942,6 +2942,8 @@ const msg = {
       // the head line's tails (1.30): the report says there is no baseline · the launcher ran a DEV_GUARDIAN_CLI
       noBaseline: " — no baseline: every existing finding counts as new",
       override: (p) => ` (dev-guardian from DEV_GUARDIAN_CLI=${p})`,
+      // 1.33: the change since the feature's base, read for weakened tests (dev-guardian 3.8.0's test-integrity check)
+      diffBase: (ref) => ` · the change since ${ref} checked for weakened tests`,
       // what never gates (1.30.2): the gaps the project accepted (accepted_gaps, counted by file — the head line, and a finish warning
       // on a pass) and dev-guardian's coverage notes (counted in the merge summary); finish --run prints their lines as dev-guardian wrote them
       accepted: (t, p, o) => [t ? `${t} file(s) not analysed (accepted in .guardian/scan.yml)` : "", p ? `${p} file(s) only partly parsed (accepted with --accept-partial-parse)` : "",
@@ -2959,7 +2961,7 @@ const msg = {
       // dev-guardian older than 3.2.1, a report with no tool_version (≤ 3.2.1), a package it could not load (3.2.0 from a plugin install)
       update: (v) => `update dev-guardian (Claude Code: /plugin) — ${v ? "this run used " + v + ", the gate needs 3.2.1 or later" : "this run named no version (3.3.0 and later do); the gate needs 3.2.1 or later"}`,
       updateHint: (slug) => `Update the dev-guardian plugin (3.2.1 or later — Claude Code: /plugin), then run the check again: ${DEV_SPEC} finish ${slug} --run.`,
-      finding: (at, rule, severity, own) => `${at} ${rule} (${severity})` + (own ? " [this feature]" : ""),
+      finding: (at, rule, severity, own, test) => `${at} ${test ? "weakened test: " : ""}${rule} (${severity})` + (own ? " [this feature]" : ""),
       blocker: (name, text) => `the project check '${name}' failed — ${text}.`,
       more: (n) => `+${n} more`,
       // review 8: never `baseline update` to accept ONE finding — it accepts every current finding, the feature's own included
