@@ -457,6 +457,12 @@ Justify anything that violates a constitution principle or adds non-obvious comp
 - **Coverage target:** []
 - **Critical paths requiring 100% branch coverage:** []
 
+<!-- Integration tests call the real route against a real, separate test database — never production — and mock only what
+     is external (the payment gateway, e-mail, third-party APIs). A critical flow (stock, a coupon, a balance or credits, a
+     booking, an invite, a quota, a payment, a webhook) gets rows for: the happy path · the expected errors · repetition (the
+     same request twice, and two at once) · the limits (zero stock, an expired plan, a zero or negative amount) · another
+     user's data. -->
+
 ## Traceability Matrix
 
 <!-- Kind — example: one concrete input → expected output; the default for event-driven criteria (WHEN …, IF … THEN).
@@ -3471,6 +3477,21 @@ const designWeigh = {
     reuseGate: (d, size) => `${d} — a size ${size} design needs it before its approval`,
     reuseGateLegacy: (d, size) => `${d} — approved before 1.28: a size ${size} design needs it at its next approval`,
     clarifyConsistency: (words) => `The spec mentions ${words}, but neither the requirements nor the design say anything about consistency or idempotency (the answer goes in the design's Alternatives & Trade-offs / Risks, or in a requirement): what must succeed or fail together (atomicity, isolation level), who else writes the same data concurrently, strong or eventual consistency (how stale is acceptable), and the delivery guarantee and idempotency of anything asynchronous?`,
+    // 1.33: a critical flow — a limited resource or a money flow (stock, a coupon, a balance, a booking, an invite, a quota, a payment)
+    clarifyCriticalFlow: (words) => `The spec mentions ${words} — a critical flow: two identical requests in the same millisecond (a double click, a retried webhook) both read before either writes. What stops the double effect, in the database: a unique constraint, ONE conditional update that checks the affected rows (UPDATE … WHERE qty > 0), a row lock (SELECT … FOR UPDATE) for a complex rule; for payments, an idempotency key on every gateway call and a processed-events table for the webhooks? And does the server recompute the price, the discount and the permissions instead of trusting the client's? (The answer goes in the design — references/critical-flows.md.)`,
+    // spec_doctor's critical-flows (the design) and critical-flow-tests (the test plan) details
+    criticalFlows: {
+      open: (words) => `the spec names a critical flow (${words}) but neither the requirements nor the design say what two identical requests at once do — settle it in the database (a unique constraint, a conditional update that checks the affected rows, a row lock with SELECT … FOR UPDATE; for payments and webhooks an idempotency key and a processed-events table), or say in a Critical flows section why none is needed (references/critical-flows.md)`,
+      answer: (words) => `critical flow (${words}) — the spec says what two identical requests at once do`,
+      section: (words) => `critical flow (${words}) — answered in the design's Critical flows section`,
+      rowsOk: (words) => `critical flow (${words}) — the test plan repeats the request (twice, and two at once) and covers another user's access where the spec needs it`,
+      rowsMissing: (words, gaps) => `critical flow (${words}) — the test plan lacks ${gaps}: integration tests on the real route against a separate test database, never production (references/critical-flows.md)`,
+      gap: {
+        repetition: "a repetition row (the same request twice, and two at once: one effect)",
+        "other-user": "a row for another user's data (refused, nothing changed)",
+      },
+      legacyPlan: (d, v = "1.33") => `test plan approved before ${v} — asked only from its next approval (${d})`,
+    },
   };
 
 // ===========================================================================

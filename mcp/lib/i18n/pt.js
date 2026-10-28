@@ -462,6 +462,12 @@ Justifica tudo o que viole um princípio da constituição ou acrescente complex
 - **Alvo de cobertura:** []
 - **Caminhos críticos que exigem 100% de cobertura de ramos:** []
 
+<!-- Os testes de integração chamam a rota real sobre uma instância de base de dados de teste, real e separada — nunca em
+     produção — e só simulam o que é externo (o gateway de pagamento, o e-mail, APIs de terceiros). Um fluxo crítico (stock, um cupão, um saldo
+     ou créditos, uma reserva, um convite, uma quota, um pagamento, um webhook) tem linhas para: o caminho feliz · os erros
+     esperados · a repetição (o mesmo pedido duas vezes, e dois em simultâneo) · os limites (stock a zero, um plano expirado,
+     um valor zero ou negativo) · os dados de outro utilizador. -->
+
 ## Matriz de Rastreabilidade
 
 <!-- Tipo — example: uma entrada concreta → resultado esperado; o padrão para critérios por evento (QUANDO …, SE … ENTÃO).
@@ -3264,6 +3270,22 @@ const designWeigh = {
     reuseGate: (d, size) => `${d} — um design de tamanho ${size} precisa dela antes da aprovação`,
     reuseGateLegacy: (d, size) => `${d} — aprovado antes da 1.28: um design de tamanho ${size} precisa dela na próxima aprovação`,
     clarifyConsistency: (words) => `A spec menciona ${words}, mas nem os requisitos nem o design dizem nada sobre consistência ou idempotência (a resposta vai para as secções Alternativas e Compromissos / Riscos do design, ou para um requisito): o que tem de ter sucesso ou falhar em conjunto (atomicidade, nível de isolamento), quem mais escreve os mesmos dados ao mesmo tempo, consistência forte ou eventual (que desatualização é aceitável), e a garantia de entrega e a idempotência de tudo o que for assíncrono?`,
+    // 1.33: um fluxo crítico — um recurso limitado ou um fluxo de dinheiro (stock, um cupão, um saldo, uma reserva, um convite, uma
+    // quota, um pagamento)
+    clarifyCriticalFlow: (words) => `A spec menciona ${words} — um fluxo crítico: dois pedidos idênticos no mesmo milissegundo (um duplo clique, um webhook reenviado) leem ambos antes de qualquer um escrever. O que impede o efeito duplo, na base de dados: uma restrição de unicidade, UMA atualização condicional que verifica as linhas afetadas (UPDATE … WHERE qty > 0), um bloqueio de linha (SELECT … FOR UPDATE) para uma regra complexa; nos pagamentos, uma chave de idempotência em cada chamada ao gateway e uma tabela de eventos processados para os webhooks? E o servidor recalcula o preço, o desconto e as permissões em vez de confiar nos do cliente? (A resposta vai para o design — references/critical-flows.md.)`,
+    // os detalhes do spec_doctor: critical-flows (o design) e critical-flow-tests (o plano de testes)
+    criticalFlows: {
+      open: (words) => `a spec nomeia um fluxo crítico (${words}) mas nem os requisitos nem o design dizem o que fazem dois pedidos idênticos em simultâneo — resolve-o na base de dados (uma restrição de unicidade, uma atualização condicional que verifica as linhas afetadas, um bloqueio de linha com SELECT … FOR UPDATE; nos pagamentos e webhooks uma chave de idempotência e uma tabela de eventos processados), ou explica numa secção Fluxos críticos a razão de nenhum ser preciso (references/critical-flows.md)`,
+      answer: (words) => `fluxo crítico (${words}) — a spec diz o que fazem dois pedidos idênticos em simultâneo`,
+      section: (words) => `fluxo crítico (${words}) — respondido na secção Fluxos críticos do design`,
+      rowsOk: (words) => `fluxo crítico (${words}) — o plano de testes repete o pedido (duas vezes, e dois em simultâneo) e cobre o acesso de outro utilizador onde a spec o exige`,
+      rowsMissing: (words, gaps) => `fluxo crítico (${words}) — falta ao plano de testes ${gaps}: testes de integração na rota real, sobre uma instância de base de dados de teste separada, nunca em produção (references/critical-flows.md)`,
+      gap: {
+        repetition: "uma linha de repetição (o mesmo pedido duas vezes, e dois em simultâneo: um só efeito)",
+        "other-user": "uma linha para os dados de outro utilizador (recusado, nada alterado)",
+      },
+      legacyPlan: (d, v = "1.33") => `plano de testes aprovado antes da ${v} — só é exigido a partir da próxima aprovação (${d})`,
+    },
   };
 
 // ===========================================================================

@@ -38,6 +38,7 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel; // branchView: 1.25 (create --branch); the last two: 1.25.1 (observed-unguarded)
 let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the tasks gate, the execution gate, its live views)
+let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
 function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
@@ -64,7 +65,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
-  branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers } = E); }
+  branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -737,7 +738,12 @@ const CHECK_VIEWS = {
   gateTrace: { fn: (c) => traceCheck(c.projectDir, c.slug) },
   testsTdd: { fn: (c) => c.tracks.includes("tdd") && c.exists("test-plan.md") },
   testsAi: { fn: (c) => c.tracks.includes("ai") && c.exists("eval-plan.md") },
+  // 1.33: the critical flows the user's text names (stock, a coupon, a balance, a booking, a payment…) and whether it answers them —
+  // null when not asked (a bugfix, a change; +dist / +api own the question); { signals: [] } when it names none
+  critical: { fn: (c) => criticalFlowState(c.projectDir, c.tracks, c.kind, c.lang, { reqs: c.read("requirements.md") || "", design: c.read("design.md") || "" }) },
 };
+// a critical flow named (critical-flows / critical-flow-tests apply)
+const criticalNamed = (c) => !!c.critical && c.critical.signals.length > 0;
 // Every context's methods and views (its memos are its own: c.memo).
 const CONTEXT_PROTO = {
   read(file) { const t = this.memo.texts; if (!t.has(file)) t.set(file, readIfExists(path.join(this.dir, file))); return t.get(file); },
@@ -991,6 +997,13 @@ const DOCTOR_CHECKS = [
       const r = designWeighChecks(c.designActive, c.lang, { integrationPlan: c.read("integration-plan.md"), gate: c.size })[2]; // the approval being made: never legacy
       return [[r.status === "pass", r.detail, "design-reuse"]];
     } } },
+  // 1.33 critical flows: the user's text names a limited resource or a money flow (stock, a coupon, a balance, a booking, an invite, a
+  // quota, a payment) and neither the requirements nor the design say what two identical requests at once do — a unique
+  // constraint, a conditional update checking the affected rows, a row lock, an idempotency key — nor a Critical flows section why
+  // none is needed. A WARN, never an approval check; a plain feature only (not with +dist / +api — their sections ask it), not while
+  // design.md is still a later phase's template; a design approved before 1.33 (no `critical` stamp) passes with a note.
+  { id: "critical-flows", phase: 2, applies: (c) => designed(c) && !c.laterFiles.includes("design.md") && criticalNamed(c),
+    run: (c) => criticalFlowCheck("design", c.critical, c.lang, { approval: c.approvals && c.approvals.design }) },
   // Mandatory sections — `<track>-sections` per active marker track (a track pack's too). The size's rules (tiers,
   // overlaps) and the stricter filled rule: a section holding nothing but the template's guidance lines fails — a WARN on a design
   // approved already (never a phase failed retroactively; its next approval asks — the approval holds every NEW one to it).
@@ -1028,6 +1041,12 @@ const DOCTOR_CHECKS = [
   } },
   // tdd / ai: the test plan / the eval plan present
   { id: "test-plan", phase: 3, applies: (c) => c.tracks.includes("tdd"), run: (c) => ({ status: fs.existsSync(path.join(c.dir, "test-plan.md")) ? "pass" : "warn", detail: "" }) },
+  // 1.33: the test plan of a critical flow — a row for the same request twice / two at once and, when the spec is about users' own
+  // data or permissions, one for another user's access. A WARN (never the test-plan gate); the same skips as critical-flows, not
+  // while test-plan.md is still a later phase's template; a plan approved before 1.33 (no `critical` stamp) passes with a note.
+  { id: "critical-flow-tests", phase: 3, applies: (c) => c.tracks.includes("tdd") && c.kind === "feature" && c.exists("test-plan.md") &&
+    !c.laterFiles.includes("test-plan.md") && criticalNamed(c),
+  run: (c) => criticalFlowCheck("test-plan", c.critical, c.lang, { approval: c.approvals && c.approvals["test-plan"], plan: c.read("test-plan.md") }) },
   { id: "eval-plan", phase: 4, applies: (c) => c.tracks.includes("ai"), run: (c) => ({ status: fs.existsSync(path.join(c.dir, "eval-plan.md")) ? "pass" : "warn", detail: "" }) },
   // Traceability — every failing kind named with its IDs. Scoped like the placeholders check: a LATER phase's artifact that is still its
   // template (tasks.md / test-plan.md at the requirements or design gate) is not traced yet — its template rows (_Requirements:

@@ -2,7 +2,7 @@
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 The spec-quality checks, the design's trade-offs / risks / reuse sections and their doctor warnings, the constraint nudge,
-the TDD micro-cycle, the duplicate-code detector. The rules come first; how they came to be — the releases and review findings — is in History at the end.
+the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules come first; how they came to be — the releases and review findings — is in History at the end.
 
 ## Spec quality
 - **Steering amendments** — a requirements / design approval (`STEERING_GOVERNED`) and its history record carry `steering`
@@ -76,9 +76,43 @@ the TDD micro-cycle, the duplicate-code detector. The rules come first; how they
   fires. Answered ANYWHERE in that text by a multi-word phrase (`RE_CONSISTENCY_ANSWER`: eventual consistency, idempotency,
   exactly-once, outbox…; `ACID` upper-case), never a bare "consistent" or "isolation". → `nudges` with the code
   `consistency-unstated` (≤ 3 signals); plain features only, never with +dist.
+- **Critical flows (1.33)** — `criticalFlowState()` (quality.js): a plain feature (never a bugfix, a spike, a change; never
+  with +dist or +api — one question bank, below) whose USER text (`userSpecText()` of requirements.md + design.md, each
+  without its Out of Scope section — `withoutOutOfScope()`) names a limited resource or a money flow: `CRITICAL_SIGNALS`
+  {en, pt, es} by concept (stock · coupon · balance · wallet · credit · booking · reservation · appointment · seat · slot ·
+  ticket · invite · quota · checkout · payment · charge · subscription), English in every spec + the feature language's, and
+  the capitalised gateways (`RE_CRITICAL_PRODUCTS`: Stripe, Paddle). ONE signal fires (the user never writes
+  "concurrency"); a "-" next to the word makes another word (zero-coupon, load-balance), a "/" doesn't (coupons/vouchers).
+  **The everyday senses** are cue rules in the classifier's data shape, run by its own machinery (classify.js `cueRules`,
+  the `near` kind, keyed by concept over the lower-cased text): `CRITICAL_CUES` — stock photos / the stock market / an IT
+  inventory, a bond's coupon and pt-BR's cupom fiscal, a load / work-life / white balance and the verb, an Apple Wallet,
+  tax / end / photo / ECTS credits, DHCP / nature / capital reservations, the appointment of a director and PT marcação
+  (markup) / agendamento de tarefas / ES citas bibliográficas, a seat belt / car seat / vagas de emprego, UI / Vue / PCI
+  slots and slot machines, the bilhete de identidade, a calendar invite / "invites abuse", a sales quota, git checkout, the
+  balance of payments / withdrawal of consent, free of charge, a newsletter / GraphQL subscription and pt-BR assinatura
+  digital — plus +tdd's own rules for `credit` and `charge` (`SIGNALS.tdd.cues`: one list of their everyday senses). A
+  hard negative goes into the corpus of 15-quality-critical-flows.js with its positive twin.
+  **Answered** anywhere in that text — read WITH its code spans and fenced code (`userSpecText(…, {code: true})`) — by
+  `RE_CRITICAL_ANSWER` (a unique constraint / index, ON CONFLICT, a conditional / atomic update, the affected rows,
+  `SELECT … FOR UPDATE`, an `UPDATE … SET … WHERE`, a row / advisory lock, a version column, If-Match, processed events, PT /
+  ES twins, + `LOCKING_ANSWERS`, the phrases it shares with `RE_CONSISTENCY_ANSWER`: idempotency, exactly-once, the isolation
+  level, optimistic locking, atomically…; never a bare "unique" / "lock", never eventual consistency or at-least-once alone),
+  or by a written design section named Critical flows / Concurrency / Race conditions (`CRITICAL_FLOWS_SYN`, weighSection +
+  designWeighState min 0 — "None: this feature only reads the balance" answers). Surfaces: clarify's `nudges` gets
+  `{code: "critical-flow-unstated", signals}` (≤ 3, one per concept) AFTER `consistency-unstated` (unchanged — both may be
+  returned; `clarifyCriticalFlow`); doctor's `critical-flows` (phase 2: a designed feature, not while design.md is a later
+  phase's template) and `critical-flow-tests` (phase 3, +tdd: test-plan.md's rows — the lines holding a T-ID — need a
+  repetition row (twice / two at once / concurrent / duplicate… `RE_REPETITION_ROW`) and, when the user text is about own
+  data or permissions (`RE_OWN_DATA`), another user's access (`RE_OTHER_USER_ROW`)). Both only WARN — no gate, no
+  `warnsOnly` —, share the context view `critical` (doctor.js `CHECK_VIEWS`) and follow the stamp scheme: `approvePhase`
+  stamps `critical: true` on every design and test-plan approval (and its record); an approval without it passes with a note
+  ("approved before 1.33" — `legacyApproval` / `criticalFlows.legacyPlan`). spec_upgrade lists them, never as `attention`
+  (`CRITICAL_FLOW_IDS`). The raw text is pre-checked with the signal regex: a spec naming no flow never builds the template
+  lines. The guide: `references/critical-flows.md`; the test plan template's Strategy carries the rows as a comment.
 - **One question bank** — /clarify --grill's "Constraints round" skips a question an active track's design sections own
   (+dist: atomicity … dependency failure; +saas: volume; +api: idempotent creates, concurrent updates), and a sized design's
-  Error Handling points at the IF…THEN criteria instead of asking again (prose only).
+  Error Handling points at the IF…THEN criteria instead of asking again (prose only). The critical-flow nudge and checks
+  follow it: +dist (Concurrency, Delivery & Idempotency) and +api (Pagination, Idempotency & Concurrency) own the question.
 - **The merged section (size S)** — a sized-S design writes ONE `## Decisions, reuse & risks` section. `designWeighChecks`
   reads it (`WEIGH_MERGED_SYN`) for a check whose own section the design lacks, min 0 ("no material risk" answers); the brief's
   Reuse part reads it too. A design with its own section is judged on that section.
@@ -253,6 +287,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   fence; setext and indented ATX count).
 - **1.24 review 6, F4** — `genericUnit` became markdown.js's `genericAnswer` (writtenContent's rule): "Pending.", "[TBD]",
   "**TBD**" are slot words too, beside a bare TODO / TBD.
+- **1.33** — critical flows: a plain feature ("users redeem a coupon at checkout", "book a slot") was never asked what two
+  identical requests at once do — the constraint nudge needs two concepts or a strong phrase, and only +dist / +api / +sec ask
+  it in their sections. One signal now fires a second nudge (`critical-flow-unstated`) and two doctor warns (`critical-flows`,
+  `critical-flow-tests`); `consistency-unstated` unchanged (`LOCKING_ANSWERS` only factored out of its answer). The everyday
+  senses reuse the classifier's `near` cues (`cueRules` exported) and +tdd's credit / charge rules; the test plan's Strategy
+  gained the guidance comment, the critic a Critical flows row, test-patterns.md the twice / two-at-once section, the
+  implementer's hard rule "never skip, delete or weaken a test or an assertion" (one wording, test-patterns.md repeats it).
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the

@@ -35,6 +35,9 @@ the whole library.
   the optional `glossary.md`), scoped steering (front matter inclusion modes), project templates in `.specs/templates/`
 - `references/example-spec.md` — end-to-end example, `core +tdd` auth · `references/example-spec-combined.md` —
   `core +tdd +saas +ai`
+- `references/critical-flows.md` — a critical flow (stock, coupons, balance / credits, bookings, invites, quotas,
+  payments, webhooks): each read-decide-write settled in the database (unique constraint → conditional update → row lock),
+  webhooks, idempotency keys, server-side prices, the "twice" and "two at once" integration tests
 
 **Executing and verifying**
 - `references/verification.md` — evidence before claims: the gate, `_Verify:_`, `_Expect: fail_`, reason codes, pipes,

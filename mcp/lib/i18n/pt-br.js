@@ -313,6 +313,7 @@ const PTBR_WORDS = {
   eletrónico: "eletrônico", eletrónica: "eletrônica", eletrónicos: "eletrônicos", eletrónicas: "eletrônicas", bebé: "bebê",
   treino: "treinamento", treinos: "treinamentos", afinar: "ajustar", afinado: "ajustado", afinada: "ajustada", guião: "roteiro",
   guiões: "roteiros", stock: "estoque", âmbito: "escopo", contigo: "com você", tu: "você",
+  cupão: "cupom", cupões: "cupons", quota: "cota", quotas: "cotas", // 1.33: the critical flows' words (same gender)
   num: "em um", numa: "em uma", nuns: "em uns", numas: "em umas", noutro: "em outro", noutra: "em outra", noutros: "em outros",
   noutras: "em outras", nalgum: "em algum", nalguma: "em alguma", nalguns: "em alguns", nalgumas: "em algumas", dum: "de um",
   duma: "de uma", duns: "de uns", dumas: "de umas", doutro: "de outro", doutra: "de outra", doutros: "de outros", doutras: "de outras",

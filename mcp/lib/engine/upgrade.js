@@ -10,7 +10,7 @@ const fs = require("fs");
 const path = require("path");
 const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, designReuseGated, detectTracks, ensureLockIgnore, errs, existsCached, featureSize,
+let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, CRITICAL_FLOW_IDS, designReuseGated, detectTracks, ensureLockIgnore, errs, existsCached, featureSize,
   featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir, isGeneratedOrAbsent, isObj,
   isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES, maybeRefreshRoadmap, missingPackTracks,
   nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile, positionPhase, projectLang, readIfExists,
@@ -18,7 +18,7 @@ let activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, cr
   staleFinish, stateFromFile, statePath, timeOf, trackLabel, unverifiedLabel, verificationStatus, withFeatureLock,
   withRoadmapLock, writeFileAtomic, writeRoadmap, writeSnapshot;
 let guardianOffer, guardianLauncherAudit; // guardian.js — 1.29 (1.30: the launcher's audit / rewrite): dev-guardian's gate offered (never set) when it is installed or the project has .guardian/
-function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
+function __link(E) { ({ activeTasks, baselineDrift, chainArtifacts, CHANGE_FILE, criteriaBareIds, criteriaText, cutText, DESIGN_WEIGH_IDS, CRITICAL_FLOW_IDS, designReuseGated, detectTracks, ensureLockIgnore, featureSize,
   errs, existsCached, featureBusyResult, featureDirs, fingerprintMatches, flowOfState, isApprovalRecord, isChangeDir,
   isGeneratedOrAbsent, isObj, isRecord, latestSnapshot, legacyPackName, legacyPackMarkerTrack, packReservedSince, legacyRecord, LOCK_IGNORE_LINES,
   maybeRefreshRoadmap, missingPackTracks, nextAction, normalizeLang, parseTasks, PHASE_FILE, phaseActive, phaseFile,
@@ -245,8 +245,9 @@ function upgradeFeature(projectDir, s, ctx) {
   const designReuseDue = warns.some((c) => c.id === "design-reuse") && designReuseGated(kind, featureSize(s.dir)) && isRecord(approvals.design) &&
     approvals.design.reuseGate !== true;
   if (designReuseDue) attention.push("design-reuse");
-  // the design weigh warns (design-tradeoffs / design-risks) are listed, never an upgrade to-do on their own.
-  if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id))) attention.push("warnings");
+  // the design weigh warns (design-tradeoffs / design-risks) and the critical-flow ones (1.33) are listed, never an upgrade to-do on
+  // their own.
+  if (warns.some((c) => !DESIGN_WEIGH_IDS.has(c.id) && !CRITICAL_FLOW_IDS.has(c.id))) attention.push("warnings");
   const res = {
     name: s.slug, kind, tracks: trackLabel(tracks), tracksSource: savedTracks(st) ? "state" : "inferred", tracksPending: !!plan.tracks,
     lang: normalizeLang(st.lang || projectLang(projectDir)), phase, status, tasks: { done, total: tasks.length },

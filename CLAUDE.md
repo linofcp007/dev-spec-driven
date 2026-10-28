@@ -51,9 +51,9 @@ file states the CURRENT rules first; its `## History` at the end keeps how they 
 - **`docs/maintainers/markdown-and-trace.md`** — before changing how spec markdown is read (EARS, AC / T-IDs, sections,
   fences, HTML comments), trace_check or the traceability matrix: Readers · Requirements traceability matrix.
 - **`docs/maintainers/quality.md`** — before changing steering amendments, cross-feature criteria, the glossary, the
-  design's trade-offs / risks / reuse checks (the m / l Reuse gate), the constraint nudge, the brief's Reuse section or the
-  duplicate-code detector: Spec quality · Design trade-offs and risks · Reuse & Integration and clean code · Duplicate-code
-  detector.
+  design's trade-offs / risks / reuse checks (the m / l Reuse gate), the constraint nudge, the critical flows (their nudge,
+  doctor warns and everyday-sense cues), the brief's Reuse section or the duplicate-code detector: Spec quality · Design
+  trade-offs and risks · Reuse & Integration and clean code · Duplicate-code detector.
 - **`docs/maintainers/claude-code-integration.md`** — before changing a hook, a command name, guard mode, the approval
   guard, the status line, user defaults, the dev-spec project probe or the plan-mode bridge: Hooks and commands · Guard
   mode · Human approval guard · Claude Code integration.

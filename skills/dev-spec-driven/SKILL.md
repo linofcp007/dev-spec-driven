@@ -110,7 +110,8 @@ and its constraints round), present.
 
 **Phase 2.** Every base section (the list: `references/phase-guide.md`), weighing **Reuse & Integration**,
 **Alternatives & Trade-offs** and **Risks**, plus each track's sections (doctor warns `design-tradeoffs` /
-`design-risks` / `design-reuse`; at size m / l the Reuse & Integration is a gate). For the Constitution Check
+`design-risks` / `design-reuse`; at size m / l the Reuse & Integration is a gate). A critical flow — stock, a coupon, a
+balance, a booking, a payment (`critical-flows`, `critical-flow-tests`): `references/critical-flows.md`. For the Constitution Check
 `spec_doctor` only checks that the section is there; the human judges it.
 `spec_create` always scaffolds `quickstart.md` and `checklist.md` — fill both.
 

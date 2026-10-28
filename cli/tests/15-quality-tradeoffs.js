@@ -35,7 +35,7 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
     js(ids) === js(["design-tradeoffs:warn", "design-risks:warn"]) && docJ.readyToAdvance === true &&
     apReq.code === 0 && apDes.code === 0 && !/forced|refused/i.test(apDes.out) &&
     cl.code === 0 && /The spec mentions 'message queue', but neither the requirements nor the design say anything about consistency or idempotency/.test(cl.out) &&
-    js(clJ.nudges) === js([{ code: "consistency-unstated", signals: ["message queue"] }]),
+    js((clJ.nudges || []).filter((n) => n.code === "consistency-unstated")) === js([{ code: "consistency-unstated", signals: ["message queue"] }]), // (+ critical-flow-unstated: "stock", 1.33 below)
     "1.17 A1 / A2 (CLI): doctor warns design-tradeoffs / design-risks (▲; --json ids, readyToAdvance), the design approval still goes through; clarify asks the consistency question (--json nudges) (got " +
     js([doc.code, ids, apReq.code, apDes.code, apDes.out.slice(0, 160), cl.out.slice(0, 200), clJ.nudges]) + ")");
 
@@ -81,4 +81,26 @@ exports.run = ({ ok, run, runIn, tmp, require, __dirname }) => {
     /  ✓ design-risks — design approved before 1\.17/.test(rLegacy.out),
     "1.17 A review 3 (CLI): a 1.17 design approval carries weigh: true and doctor warns (▲) on its missing sections; without the stamp (approved before 1.17) both read ✓ 'design approved before 1.17' (got " +
     js([rApp.code, rWeigh, rStamped.out.split("\n").filter((l) => /design-/.test(l)), rLegacy.out.split("\n").filter((l) => /design-/.test(l))]) + ")");
+
+  // 1.33 critical flows (CLI): EC-1's "stock" is a critical flow — doctor warns critical-flows (▲, exit 0; --json the same check), clarify
+  // --json carries critical-flow-unstated; a conditional update checking the affected rows (in a code span) answers both.
+  const cp = path.join(tmp, "p133-cf");
+  SA.initProject(cp, ["core"], "en");
+  const cf = SA.createFeature(cp, "Orders", ["core"]);
+  fs.writeFileSync(path.join(cf.dir, "requirements.md"), REQ);
+  runIn(["approve", "orders", "classification", "--force", "--project", cp]);
+  runIn(["approve", "orders", "requirements", "--force", "--project", cp]);
+  fs.writeFileSync(path.join(cf.dir, "design.md"), DESIGN);
+  const cDoc = runIn(["doctor", "orders", "--project", cp]);
+  const cDocJ = jsonOf(runIn(["doctor", "orders", "--json", "--project", cp]));
+  const cCl = jsonOf(runIn(["clarify", "orders", "--json", "--project", cp]));
+  fs.writeFileSync(path.join(cf.dir, "design.md"), DESIGN.replace("## Data Models", "## Critical flows\n`UPDATE stock SET qty = qty - 1 WHERE sku = $1 AND qty > 0` — 0 affected rows means sold out.\n\n## Data Models"));
+  const cDoc2 = runIn(["doctor", "orders", "--project", cp]);
+  const cCl2 = jsonOf(runIn(["clarify", "orders", "--json", "--project", cp]));
+  const cfNudge = (r) => (r.nudges || []).find((n) => n.code === "critical-flow-unstated");
+  ok(cDoc.code === 0 && /  ▲ critical-flows — the spec names a critical flow \('stock'\) but neither the requirements nor the design say what two identical requests at once do/.test(cDoc.out) &&
+    (cDocJ.checks || []).some((c) => c.id === "critical-flows" && c.status === "warn") && cDocJ.readyToAdvance === true && js((cfNudge(cCl) || {}).signals) === js(["stock"]) &&
+    /  ✓ critical-flows — critical flow \('stock'\) — the spec says what two identical requests at once do/.test(cDoc2.out) && !cfNudge(cCl2),
+    "1.33 critical flows (CLI): doctor warns critical-flows (▲, exit 0, readyToAdvance) and clarify --json carries critical-flow-unstated ['stock'] while nothing answers the race; an UPDATE … WHERE checking the affected rows answers both (✓) (got " +
+    js([cDoc.code, cDoc.out.split("\n").filter((l) => /critical/.test(l)), cCl.nudges, cDoc2.out.split("\n").filter((l) => /critical/.test(l)), cCl2.nudges]) + ")");
 };

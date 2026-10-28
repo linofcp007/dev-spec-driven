@@ -111,7 +111,7 @@ run. The report's RED and GREEN runs of the target tests are the cycle's proof.
 
 ## Hard rules
 
-- **Never edit a planned test's expectation, and never weaken an assertion to make it pass.** If a
+- **Never edit a planned test's expectation, and never skip, delete or weaken a test or an assertion to make it pass.** If a
   test looks wrong, stop and report BLOCKED with the evidence — a wrong test is a spec problem the
   human decides, not an implementation detail.
 - **Never edit the design's visual reference** (a design export or an approved HTML prototype — the files `design.md →

@@ -1877,4 +1877,4 @@ function signalOverrides(projectDir, op, opts = {}) {
 }
 
 module.exports = { SIGNAL_CONCEPTS, guessLang, configuredLang, classify, learnSignalOverrides, signalLearnNote,
-  signalOverrides, __link };
+  signalOverrides, cueRules, __link };

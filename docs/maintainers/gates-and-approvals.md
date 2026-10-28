@@ -429,6 +429,9 @@ here. "r5 review" is 1.23's fifth review.
 - **1.30 review 8 (ds-engine 7)** — a `[NEEDS CLARIFICATION]` in design.md: doctor said `clarifications: pass — none open` and
   `readyToAdvance: true` while `approve design` refused on `clarifications` (only `approval-gates` mentioned it) — the doctor
   check read requirements.md and bug.md alone; it reads design.md too now.
+- **1.33** — two registry entries with no probe (warns, never in `GATES`): `critical-flows` (phase 2) and
+  `critical-flow-tests` (phase 3), over one context view (`critical`); `approvePhase` stamps `critical: true` on the design
+  and test-plan approvals (and their records) so an approval made before 1.33 is never flagged (quality.md → Critical flows).
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12
