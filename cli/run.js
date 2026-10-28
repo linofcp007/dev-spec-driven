@@ -213,7 +213,9 @@ async function runChecks(feature, deps) {
   const KEY = spec.GUARDIAN_DIFF_BASE_ENV;
   const base = checks.some((c) => spec.isGuardianCheck(c.name, c.command)) && deps.diffBaseFacts
     ? spec.guardianDiffBase(spec.readState(projectDir, fx.slug), deps.diffBaseFacts()) : null;
-  const guardianEnv = () => { const e = { ...process.env }; delete e[KEY]; if (base) e[KEY] = base.ref; return e; };
+  // every candidate is HEAD's own commit: the change since it is empty — said, and nothing passed (never "checked" over nothing)
+  if (base && base.empty) deps.say("  " + M.guardian.diffBaseEmpty(spec.shortRef(base.ref)));
+  const guardianEnv = () => { const e = { ...process.env }; delete e[KEY]; if (base && !base.empty) e[KEY] = base.ref; return e; };
   const evidence = [];
   let cmdFailed = false;
   for (const c of checks) {

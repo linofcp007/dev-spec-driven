@@ -115,13 +115,16 @@ the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules 
   {{t1}}" would cut "with" out of real rows) matched by the LINEAR `glossSpans` — never a regex built from template text — and
   gives only those values (`planCellOwn`, glossUserParts' rule). `planFold` folds case, `**` / `_x_` / backticks, blanks and a
   final period. They need a repetition row (twice / duplicate / repeated — never a repeated password / e-mail / confirmation
-  field — / again with the same / two at once / "at the same time" after a number or an action a few words before it (two
-  sessions decrement …, redeemed by Alice and Bob …; never on its own: "the list and the badge render at the same time") / the
-  same millisecond / identical requests / simultaneous / concurrent / in parallel / resubmitted / a redelivered or replayed
-  anything, a retried webhook, event, message, callback or payment — after a failure too: the provider redelivers —; PT
-  repetido(a) — never a senha / e-mail / confirmação field —, reenviado, com a mesma chave, "ao mesmo tempo" after a number or
-  an action; ES the same — contraseña / correo / confirmación —, con la misma clave, "al mismo tiempo" / "a la vez"…
-  `RE_REPETITION_ROW`; never a bare retry — a Retry or Resubmit button, notifications retried after the provider fails) and,
+  / form field — / again with the same / two at once / "at the same time" (`AT_ONCE_EN`) after a number or "both" that
+  quantifies an actor or a request (two buyers, both tabs, 3 requests — never UI parts: "both the list and the badge", "the
+  header and 3 widgets"), after an action a few words before it (two sessions decrement …, redeemed by Alice and Bob …) or right
+  after a request noun — never on its own: "the list and the badge render at the same time" / the same millisecond / identical
+  requests / simultaneous / concurrent / in parallel / resubmitted / a redelivered or replayed anything, a retried webhook,
+  event, message, callback or payment — after a failure too: the provider redelivers —; PT repetido(a) — never a senha /
+  e-mail / confirmação / campo field —, reenviado, com a mesma chave, "ao mesmo tempo" by the same rule (`AT_ONCE_PT`); ES the
+  same — contraseña / correo / confirmación —, con la misma clave, "al mismo tiempo" / "a la vez" (`AT_ONCE_ES`). One at-once
+  rule per language, each with its own number words, actors, verbs and phrase: ES "dos" (two) is PT "of the", so it counts
+  only before ES's phrase… `RE_REPETITION_ROW`; never a bare retry — a Retry or Resubmit button, notifications retried after the provider fails) and,
   when the user text is about own data or permissions (`RE_OWN_DATA`), another user's access (`RE_OTHER_USER_ROW`)). Both only WARN — no gate, no
   `warnsOnly` —, share the context view `critical` (doctor.js `CHECK_VIEWS`) and follow the stamp scheme: `approvePhase`
   stamps `critical: true` on every design and test-plan approval (and its record); an approval without it passes with a note
@@ -341,6 +344,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   pattern with no literal at either end cut a word out of real rows. Repetition: a provider's retry of a webhook / payment after
   a failure, a repeated button press / link click, PT / ES repetido(a) beyond a password field, a wider window before "at the
   same time" (after a number or an action only) count.
+- **1.33 review 5** — one at-once subject list served every language, so ES's "dos" (two) read PT's "dos" (of the): "o
+  carregamento dos saldos e do histórico ao mesmo tempo" passed with no repetition row; "both the list and the badge" and "the
+  header and 3 widgets … at the same time" counted (a number before UI parts). Now one rule per language (`AT_ONCE_EN` / `_PT` /
+  `_ES`), its number quantifying actors or requests only; a repeated field / input / campo repetido never counts.
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the

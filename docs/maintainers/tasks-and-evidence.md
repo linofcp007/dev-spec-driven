@@ -242,9 +242,13 @@ Engine: the `B5` block of `engine/evidence.js`.
   `dev-spec finish <f> --run` / `spec_finish {evidence}` while one is missing (`projectChecks.naFinish`). No meta.checks, no change.
 - **`finish <f> --run`** (`runChecks`): `done --run`'s shell rules and refusals and the pipe hint; a check that could not run records
   nothing. **The diff base (1.33):** a guardian check runs with `DEV_SPEC_DIFF_BASE` = `guardianDiffBase(state, git)` — the
-  feature's branch record (`create --branch`): the branch it was created from, else the commit it started at; without a record
-  the repository's default branch (origin/HEAD's, else a local main / master — cli/git.js `diffBaseFacts`) while HEAD is on
-  another branch; each a plain ref name git resolves to a commit (a ref git can't read would turn the gate into exit 3). None:
+  feature's branch record (`create --branch`): the branch it was created from, as `refs/heads/<base>` (never a tag of that name:
+  rev-parse prefers refs/tags), else the commit it started at; without a record the repository's default branch (origin/HEAD's
+  when it resolves — a remote default renamed leaves it dangling —, else a local main / master: cli/git.js `diffBaseFacts`) while
+  HEAD is on another branch. Each a plain ref name git resolves to a commit (a ref git can't read would turn the gate into exit
+  3) that is NOT HEAD's commit: a base moved to HEAD (a local merge, `git branch -f main HEAD`, a switch that failed while the record
+  stayed) would be an empty diff "checked", so the start commit is tried next. Every candidate HEAD's (`{ empty: true }`, a branch
+  still at main's tip): the line `guardian.diffBaseEmpty` says there is no change to read and nothing is passed. None / empty:
   the variable is CLEARED for the run (finish --run alone sets it). The launcher passes it on as `--diff-base` to a dev-guardian
   3.8.0+ (claude-code-integration.md → The dev-guardian launcher). Over MCP the agent runs the check itself: no diff base unless
   it sets the variable.
@@ -722,6 +726,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.33** — dev-guardian 3.8.0's test-integrity check (a test weakened to make it pass) reads only a change: `finish --run` hands the
   launcher the feature's base (`DEV_SPEC_DIFF_BASE`), which it passes on as `--diff-base`; with none decided the variable is
   cleared, so a value left in the shell never reaches the gate.
+- **1.33 review 5** — the recorded base was used whenever it resolved, even to HEAD's commit (a local merge, `git branch -f main
+  HEAD`, a failed switch, a TAG named `main` — rev-parse prefers refs/tags): an empty diff the verdict called "checked". Now
+  `refs/heads/<base>`, the start commit when the base is HEAD's, an empty change said and never passed; a dangling origin/HEAD
+  (a remote default renamed) falls back to the local main / master.
 
 ### Task dependencies and execution waves
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks

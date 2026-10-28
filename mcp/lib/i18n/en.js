@@ -2944,6 +2944,7 @@ const msg = {
       override: (p) => ` (dev-guardian from DEV_GUARDIAN_CLI=${p})`,
       // 1.33: the change since the feature's base, read for weakened tests (dev-guardian 3.8.0's test-integrity check)
       diffBase: (ref) => ` · the change since ${ref} checked for weakened tests`,
+      diffBaseEmpty: (ref) => `dev-guardian: no weakened-test check — the feature's base (${ref}) is the current commit itself, so there is no change to read`,
       // what never gates (1.30.2): the gaps the project accepted (accepted_gaps, counted by file — the head line, and a finish warning
       // on a pass) and dev-guardian's coverage notes (counted in the merge summary); finish --run prints their lines as dev-guardian wrote them
       accepted: (t, p, o) => [t ? `${t} file(s) not analysed (accepted in .guardian/scan.yml)` : "", p ? `${p} file(s) only partly parsed (accepted with --accept-partial-parse)` : "",
@@ -2987,7 +2988,7 @@ const msg = {
       // tool's 2-minute default is too short); another MCP client reports the run, a pass with its report (--compact keeps it short)
       mcpRun: (name, cmd, slug) => `The '${name}' check runs dev-guardian's scan (minutes). In Claude Code run ${DEV_SPEC} finish ${slug} --run (Bash timeout 600000, or in the background): it runs the check and records its report itself. Elsewhere run \`${cmd}\` from the project root (dev-guardian 3.3+: add --compact for a short report) and report it with spec_finish {evidence: [{name: "${name}", command, exitCode, summary: its stderr's last lines, report: its JSON stdout}]} — a pass needs its report.`,
       // the launcher verified before a run and when one is recorded (1.30)
-      launcherChanged: `.specs/guardian.cjs is not the launcher dev-spec-driven writes (edited, replaced or a link), so the gate does not run it — ${DEV_SPEC} init --guardian writes it again`,
+      launcherChanged: `.specs/guardian.cjs is not the launcher dev-spec-driven writes (edited, replaced or a link), so the gate does not run it — ${DEV_SPEC} init --guardian writes it again (if a newer dev-spec wrote it, update dev-spec instead)`,
       launcherRefreshed: ".specs/guardian.cjs replaced by this version's launcher (it was an earlier version's).",
       notRun: (name, why) => `the project check '${name}' was not run — ${why}. Nothing was recorded.`,
       reportMismatch: (exit, reported, blocking) => `dev-guardian's report contradicts the exit code ${exit}` + (reported != null ? ` (the report says exit ${reported})` : "") + (blocking ? ` — it lists ${blocking} blocking finding(s)` : "") + `; report the run as it is (or let finish --run record it) — nothing was recorded`,

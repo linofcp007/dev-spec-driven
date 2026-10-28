@@ -1562,30 +1562,47 @@ function criticalFlowNudge(projectDir, dir, reqs, tracks, kind, lang) {
 const RE_PLAN_ROW = /(?<![\p{L}\p{N}_-])T-\d+(?!\d)/u;
 // The same request again — a retried / redelivered / replayed webhook, event, message, callback or payment (the thing received or
 // charged again), two requests or an action at the same time — never a bare retry (a Retry / Resubmit button, notifications retried
-// after a failure) nor a repeated password / e-mail / confirmation field. "At the same time" counts after a number (two, both, 2…)
-// or an action (redeem, pay, book, press…) a few words before it — never on its own ("the list and the badge render at the same time").
-const CF_AT_ONCE_SUBJECT = "(?:(?:two|both|several|multiple|\\p{N}+|dois|duas|ambos|ambas|v[áa]ri[oa]s|dos|varios|varias)" +
-  "|(?:redeem\\p{L}*|pay(?:s|ing)?|paid|submit\\p{L}*|book(?:s|ed|ing)?|buy(?:s|ing)?|bought|click(?:s|ed|ing)?|post(?:s|ed|ing)?|send(?:s|ing)?" +
-  "|decrement\\p{L}*|reserv\\p{L}*|charg(?:e|es|ed|ing)|press(?:es|ed|ing)?|resgat\\p{L}*|pag(?:a|am|ar|ou|aram)|submet\\p{L}*|compr(?:a|am|ar|ou)" +
-  "|envi(?:a|am|ar|ou)|clic\\p{L}*|canje\\p{L}*|pagan?|pagar|env[íi]an?|enviar|compran?|comprar)" +
-  "|(?:requests?|calls?|clicks?|submissions?|webhooks?|redemptions?|pedidos|peticiones|solicitudes)(?=(?:[\\s-]+[\\p{L}\\p{N}'’]+){0,2}[\\s-]+(?:at|ao|al|a)[\\s-]))" +
-  "(?:[\\s-]+[\\p{L}\\p{N}'’]+){0,6}?[\\s-]+";
+// after a failure) nor a repeated password / e-mail / confirmation field or a repeated (form) field. "At the same time" counts after a number that quantifies an
+// actor or a request (two buyers, both tabs, 2 requests — never "both the list and the badge", "3 widgets"), after an action (redeem,
+// pay, book, press…) or right after a request noun — never on its own ("the list and the badge render at the same time"). One rule
+// per language, each with its own phrase: PT "dos" is "of the", never ES's two.
+const W_ = "[\\s-]+[\\p{L}\\p{N}'’]+"; // one more word
+const atOnce = (quant, actors, verbs, nouns, phrase) => "(?:" + quant + "(?:" + W_ + ")?[\\s-]+" + actors + "(?:" + W_ + "){0,6}?" +
+  "|" + verbs + "(?:" + W_ + "){0,6}?" + "|" + nouns + "(?:" + W_ + "){0,2}?" + ")[\\s-]+" + phrase;
+const AT_ONCE_EN = atOnce("(?:two|both|several|multiple|\\p{N}+)",
+  "(?:requests?|calls?|clicks?|submissions?|orders?|payments?|bookings?|redemptions?|webhooks?|events?|buyers?|users?|customers?|clients?|people|persons|" +
+  "members?|accounts?|tabs?|sessions?|browsers?|devices?|threads?|workers?|processes|instances?|checkouts?|transactions?|jobs?|consumers?|carts?)",
+  "(?:redeem\\p{L}*|pay(?:s|ing)?|paid|submit\\p{L}*|book(?:s|ed|ing)?|buy(?:s|ing)?|bought|click(?:s|ed|ing)?|post(?:s|ed|ing)?|send(?:s|ing)?|" +
+  "decrement\\p{L}*|reserv\\p{L}*|charg(?:e|es|ed|ing)|press(?:es|ed|ing)?|withdraw\\p{L}*|transfer(?:s|red|ring)?|ordered|ordering)",
+  "(?:requests?|calls?|clicks?|submissions?|webhooks?|redemptions?)", "at[\\s-]+the[\\s-]+same[\\s-]+time");
+const AT_ONCE_PT = atOnce("(?:dois|duas|ambos|ambas|v[áa]ri[oa]s|\\p{N}+)",
+  "(?:pedidos|requisi[çc][õo]es|chamadas|cliques|encomendas|pagamentos|reservas|resgates|compradores|utilizadores|usu[áa]rios|clientes|pessoas|" +
+  "membros|contas|separadores|abas|sess[õo]es|dispositivos|processos|threads|webhooks|eventos|compras|transa[çc][õo]es)",
+  "(?:resgat\\p{L}*|pag(?:a|am|ar|ou|aram)|submet\\p{L}*|reserv(?:a|am|ar|ou|aram)|compr(?:a|am|ar|ou|aram)|envi(?:a|am|ar|ou|aram)|" +
+  "clic(?:a|am|ar|ou|aram)|debit\\p{L}*|decrement\\p{L}*)",
+  "(?:pedidos|requisi[çc][õo]es|chamadas|cliques|webhooks)", "ao[\\s-]+mesmo[\\s-]+tempo");
+const AT_ONCE_ES = atOnce("(?:dos|ambos|ambas|varios|varias|\\p{N}+)",
+  "(?:peticiones|solicitudes|llamadas|clics|pedidos|compras|pagos|reservas|canjes|compradores|usuarios|clientes|personas|miembros|cuentas|" +
+  "pestañas|sesiones|dispositivos|procesos|hilos|webhooks|eventos|transacciones)",
+  "(?:canje\\p{L}*|pag(?:a|an|ar|ó|aron)|envi(?:a|an|ar|ó|aron)|compr(?:a|an|ar|ó|aron)|reserv(?:a|an|ar|ó|aron)|clic\\p{L}*|descuent(?:a|an)|" +
+  "decrement\\p{L}*|cobr(?:a|an|ar|ó))",
+  "(?:peticiones|solicitudes|llamadas|clics|webhooks)", "(?:al[\\s-]+mismo[\\s-]+tiempo|a[\\s-]+la[\\s-]+vez)");
 const CF_RECEIVED = "(?:webhooks?|events?|messages?|callbacks?|payments?|eventos?|mensage(?:m|ns)|mensajes?|pagamentos?|pagos?)";
 const RE_REPETITION_ROW = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
   "twice", "two[\\s-]+times", "(?:two|both)(?:[\\s-]+[\\p{L}\\p{N}]+){0,2}?[\\s-]+at[\\s-]+once", "double[\\s-]+(?:submit\\p{L}*|clicks?|requests?|charges?|bookings?|spend\\p{L}*|redemptions?|deliver\\p{L}*)",
-  "duplicat\\p{L}*", "repeated(?![\\s-]+(?:password|e-?mail|confirmation)(?![\\p{L}]))", "again[\\s-]+with[\\s-]+the[\\s-]+same",
-  CF_AT_ONCE_SUBJECT + "at[\\s-]+the[\\s-]+same[\\s-]+time", "(?:in[\\s-]+)?the[\\s-]+same[\\s-]+millisecond",
+  "duplicat\\p{L}*", "repeated(?![\\s-]+(?:password|e-?mail|confirmation|fields?|inputs?)(?![\\p{L}]))", "again[\\s-]+with[\\s-]+the[\\s-]+same",
+  AT_ONCE_EN, "(?:in[\\s-]+)?the[\\s-]+same[\\s-]+millisecond",
   "identical[\\s-]+(?:requests?|calls?|events?|webhooks?|submissions?)", "replay\\p{L}*", "redeliver\\p{L}*", "resubmi(?:tted|tting|ts|ssions?)", "re-?sent",
   // a provider's retry of the thing we RECEIVE (or charge) is a redelivery, after a failure or not
   CF_RECEIVED + "[\\s-]+(?:(?:is|are|was|were|gets?|got|being)[\\s-]+)?retried", "retried[\\s-]+" + CF_RECEIVED,
   "simultaneous\\p{L}*", "concurrent\\p{L}*", "in[\\s-]+parallel", "parallel[\\s-]+requests?", "race[\\s-]+conditions?", "promise\\.all",
   // PT / ES repetido(a): a request again — never a password / e-mail / confirmation field (senha repetida, la contraseña repetida)
   "duas[\\s-]+vezes", "duplicad\\p{L}*", "reenviad\\p{L}*",
-  "(?<!(?:senha|palavra-passe|e-?mail|confirma[çc][ãa]o|contraseña|correo|confirmaci[óo]n)[\\s-]+)repetid\\p{L}*",
-  "em[\\s-]+simult[âa]neo", "simult[âa]ne\\p{L}*", "concorrent\\p{L}*", "em[\\s-]+paralelo", CF_AT_ONCE_SUBJECT + "ao[\\s-]+mesmo[\\s-]+tempo",
+  "(?<!(?:senha|palavra-passe|e-?mail|confirma[çc][ãa]o|campo|contraseña|correo|confirmaci[óo]n)[\\s-]+)repetid\\p{L}*",
+  "em[\\s-]+simult[âa]neo", "simult[âa]ne\\p{L}*", "concorrent\\p{L}*", "em[\\s-]+paralelo", AT_ONCE_PT,
   "no[\\s-]+mesmo[\\s-]+milissegundo", "pedidos[\\s-]+id[êe]nticos", "(?:de[\\s-]+novo|novamente|outra[\\s-]+vez)[\\s-]+com[\\s-]+(?:o[\\s-]+mesmo|a[\\s-]+mesma)",
   "com[\\s-]+(?:o[\\s-]+mesmo|a[\\s-]+mesma)[\\s-]+(?:chave|idempotency-key|pedido|evento|webhook|mensagem|requisi[çc][ãa]o)",
-  "dos[\\s-]+veces", "simult[áa]ne\\p{L}*", "concurrentes?", "en[\\s-]+paralelo", CF_AT_ONCE_SUBJECT + "(?:a[\\s-]+la[\\s-]+vez|al[\\s-]+mismo[\\s-]+tiempo)",
+  "dos[\\s-]+veces", "simult[áa]ne\\p{L}*", "concurrentes?", "en[\\s-]+paralelo", AT_ONCE_ES,
   "en[\\s-]+el[\\s-]+mismo[\\s-]+milisegundo",
   "peticiones[\\s-]+id[ée]nticas", "(?:de[\\s-]+nuevo|otra[\\s-]+vez)[\\s-]+con[\\s-]+(?:el|la)[\\s-]+mism[oa]",
   "con[\\s-]+(?:el[\\s-]+mismo|la[\\s-]+misma)[\\s-]+(?:clave|idempotency-key|petici[óo]n|evento|webhook|mensaje|solicitud)",

@@ -2785,6 +2785,7 @@ const msg = {
       override: (p) => ` (dev-guardian de DEV_GUARDIAN_CLI=${p})`,
       // 1.33: el cambio desde la base de la funcionalidad, leído en busca de pruebas debilitadas (el test-integrity de dev-guardian 3.8.0)
       diffBase: (ref) => ` · el cambio desde ${ref} revisado en busca de pruebas debilitadas`,
+      diffBaseEmpty: (ref) => `dev-guardian: sin comprobación de pruebas debilitadas — la base de la funcionalidad (${ref}) es el propio commit actual, así que no hay cambio que leer`,
       accepted: (t, p, o) => [t ? `${t} fichero(s) sin analizar (aceptado(s) en .guardian/scan.yml)` : "", p ? `${p} fichero(s) leído(s) solo en parte (aceptado(s) con --accept-partial-parse)` : "",
         o ? `${o} otra(s) laguna(s) aceptada(s)` : ""].filter(Boolean).join(" · "),
       acceptedWarn: (what) => `el gate de dev-guardian pasó con ${what} — revisa a mano un cambio en esos ficheros: un finding donde ningún escáner miró pasa el gate.`,
@@ -2815,7 +2816,7 @@ const msg = {
       },
       configHint: (slug) => `Corrígelo y vuelve a ejecutar la verificación: ${DEV_SPEC} finish ${slug} --run.`,
       mcpRun: (name, cmd, slug) => `La verificación '${name}' ejecuta el escaneo de dev-guardian (minutos). En Claude Code ejecuta ${DEV_SPEC} finish ${slug} --run (Bash con timeout 600000, o en segundo plano): ejecuta la verificación y registra su informe por sí solo. En otros clientes, ejecuta \`${cmd}\` desde la raíz del proyecto (dev-guardian 3.3+: añade --compact para un informe corto) y regístralo con spec_finish {evidence: [{name: "${name}", command, exitCode, summary: las últimas líneas de su stderr, report: el JSON de su stdout}]} — una ejecución que pasa necesita su informe.`,
-      launcherChanged: `.specs/guardian.cjs no es el lanzador que escribe dev-spec-driven (editado, sustituido o un enlace), así que el gate no lo ejecuta — ${DEV_SPEC} init --guardian lo vuelve a escribir`,
+      launcherChanged: `.specs/guardian.cjs no es el lanzador que escribe dev-spec-driven (editado, sustituido o un enlace), así que el gate no lo ejecuta — ${DEV_SPEC} init --guardian lo vuelve a escribir (si lo escribió un dev-spec más reciente, actualiza antes dev-spec)`,
       launcherRefreshed: ".specs/guardian.cjs sustituido por el lanzador de esta versión (era el de una versión anterior).",
       notRun: (name, why) => `la verificación del proyecto '${name}' no se ejecutó — ${why}. No se registró nada.`,
       reportMismatch: (exit, reported, blocking) => `el informe de dev-guardian contradice el exit code ${exit}` + (reported != null ? ` (el informe dice exit ${reported})` : "") + (blocking ? ` — lista ${blocking} finding(s) que bloquean` : "") + `; registra la ejecución tal como fue (o deja que finish --run la registre) — no se registró nada`,

@@ -449,7 +449,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
     (either spelling), and only for a dev-guardian ≥ 3.8.0 — its version read from the install it resolved (`devGuardianVersion`:
     `<root>/.claude-plugin/plugin.json`, else `package.json`, else `mcp/package.json`; none readable: nothing appended, never a
     guess from a folder name). An older dev-guardian runs exactly as before. A value that is no plain ref name (`plainRefOk` =
-    `branchNameOk`'s rule: never `-…`, no `..`, no `.lock`…) refuses the scan (exit 3, "DEV_SPEC_DIFF_BASE is no plain ref name")
+    `branchNameOk`'s rule: never `-…`, no `..`, no `.lock`… — plus no pseudo-ref in any case: `HEAD` / `head` (HEAD itself on a
+    case-insensitive file system), `ORIG_HEAD`, `FETCH_HEAD`, any `*_HEAD`, `AUTO_MERGE`) refuses the scan (exit 3, "DEV_SPEC_DIFF_BASE is no plain ref name")
     — only where it would be appended. The launcher says what it appended on stderr (`dev-guardian launcher: --diff-base <ref>
     (DEV_SPEC_DIFF_BASE)`): the verdict keeps it (`diffBase`, the head line's `guardian.diffBase`), a configuration error's message
     never (`RE_LAUNCHER_DIFF_BASE`). Its findings gate like any finding: a `.only` (high) blocks at `--fail-on high`, a skip (medium)
@@ -470,6 +471,11 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
     refuses a reported run of a changed one (and a pass of a missing one), `spec_upgrade` flags it and `--apply` writes it;
     `init --guardian` (no guard-down while the check is already set) writes it again. **A launcher edit is a release item:**
     add the old text's sha1 to `GUARDIAN_LAUNCHER_PAST`, or every project's gate refuses until `init --guardian`.
+    **Mixed versions on a team:** the launcher is committed, so an OLDER engine meets a NEWER launcher — a 1.32 dev-spec reads
+    1.33's as `changed` and refuses, and its "init --guardian writes it again" would put 1.32's back (the file then flips between
+    commits). PAST only ever helps the newer side; the older's text can't change. So: update dev-spec on every machine of a team
+    before finishing a feature after a launcher edit (the release note says so), and `launcherChanged` (1.33) ends "if a newer
+    dev-spec wrote it, update dev-spec instead" — what the NEXT launcher edit's older readers will see.
   - The command runs under cmd.exe, bash, PowerShell 5.1 and pwsh alike (cli/tests/09-evidence-guardian.js).
     mcp/tests/09-evidence-guardian.js runs the launcher and `guardianCli` on fake caches and installed_plugins.json files.
     **Hermetic tests:** the runner drops `DEV_GUARDIAN_CLI` and points `CLAUDE_CONFIG_DIR` at an absent folder of the chain's own
@@ -696,6 +702,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   passes the feature's base in `DEV_SPEC_DIFF_BASE` and the launcher appends the flag for a 3.8.0+ install (the command string
   unchanged: the 1.29 contract). A launcher edit: the 1.30–1.32.x text's sha1 joined `GUARDIAN_LAUNCHER_PAST`
   (`guardian-launcher-1.32.cjs`).
+- **1.33 review 5** — `plainRefOk` let `head` / `ORIG_HEAD` / `FETCH_HEAD` through (`head` is HEAD on Windows): every pseudo-ref
+  refused, any case. A 1.32 engine reads the 1.33 launcher as changed and its fix reinstalls 1.32's: the mixed-versions note above,
+  the release note, and `launcherChanged` names a newer dev-spec from now on.
 - **1.30.1** — the cache's blind spot: for up to 10 s a change OUTSIDE `.specs/` the line reads didn't show (a Phase 4 test written —
   "write the tests" stayed; a `.specs/` made nearer the cwd; a worktree's mapping): the render reports its outside paths and the
   entry signs them, the probe's folder is compared at each read, a mapped render keeps 2 s.

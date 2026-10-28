@@ -67,16 +67,23 @@ function branchFacts(cwd) {
 }
 
 // What finish --run needs to pick dev-guardian's diff base (1.33, engine guardianDiffBase) → null (git can't run here, or no work
-// tree) · { current — the branch HEAD names (null: detached) —, defaultBranch — origin/HEAD's (e.g. "origin/main"), else a local
-// main / master, else null —, verify(ref) → true (a commit) | false | null (git could not run) } — read only, no network.
+// tree) · { head — HEAD's commit —, current — the branch HEAD names (null: detached) —, defaultBranch / defaultRef — origin/HEAD's
+// ("origin/main", refs/remotes/origin/main) when it resolves to a commit (a remote default renamed leaves origin/HEAD dangling), else
+// a local main / master (refs/heads/…), else null —, resolve(ref) → its commit id | null } — read only, no network.
 function diffBaseFacts(cwd) {
   const inside = gitRun(["rev-parse", "--is-inside-work-tree"], { cwd });
   if (inside.error || inside.status !== 0 || inside.stdout.trim() !== "true") return null;
-  const verify = (ref) => { const r = gitRun(["rev-parse", "--verify", "--quiet", ref + "^{commit}"], { cwd }); return r.error ? null : r.status === 0; };
+  const resolve = (ref) => {
+    const r = gitRun(["rev-parse", "--verify", "--quiet", ref + "^{commit}"], { cwd });
+    const sha = r.ok ? r.stdout.trim() : "";
+    return /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(sha) ? sha : null;
+  };
   const sym = gitRun(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd });
   const origin = gitRun(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], { cwd });
-  const local = ["main", "master"].find((b) => verify("refs/heads/" + b) === true);
-  return { current: sym.ok ? sym.stdout.trim() || null : null, defaultBranch: (origin.ok && origin.stdout.trim()) || local || null, verify };
+  const o = origin.ok ? origin.stdout.trim() : "";
+  let def = o && resolve("refs/remotes/" + o) ? { name: o, ref: "refs/remotes/" + o } : null;
+  if (!def) { const b = ["main", "master"].find((x) => resolve("refs/heads/" + x)); if (b) def = { name: b, ref: "refs/heads/" + b }; }
+  return { head: resolve("HEAD"), current: sym.ok ? sym.stdout.trim() || null : null, defaultBranch: def ? def.name : null, defaultRef: def ? def.ref : null, resolve };
 }
 
 module.exports = { gitRun, gitText, gitEnv, gitState, branchFacts, diffBaseFacts, GIT_MAX_BUFFER, GIT_TIMEOUT_MS };

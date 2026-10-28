@@ -204,7 +204,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       // button press / link click is a double click; PT / ES repetido(a) beyond a password field; a wider window before "at the same time")
       ["the payment webhook is retried after a 500 and applies once"], ["the webhook is retried once more: one effect"], ["the webhook is retried after a timeout"],
       ["the repeated button press creates one order"], ["the repeated link click is idempotent"], ["o código repetido é rejeitado", "pt"], ["clave repetida: un solo pago", "es"],
-      ["two sessions decrement the stock at the same time"], ["the same coupon redeemed by Alice and Bob at the same time"]];
+      ["two sessions decrement the stock at the same time"], ["the same coupon redeemed by Alice and Bob at the same time"],
+      // (review 5: each language's own number word and phrase)
+      ["dos usuarios canjean el cupón a la vez", "es"], ["duas sessões debitam o saldo ao mesmo tempo", "pt"], ["both tabs submit the order at the same time"],
+      ["3 requests at the same time: one charge"]];
     // (1.33 review 3 / 4: a repeated / repetida password field, a Resubmit button, a render "at the same time", notifications retried after a
     // failure)
     const NO = [["the Retry button reloads the list"], ["retries after a gateway timeout"], ["the repeat password field must match"], ["nova tentativa após um timeout", "pt"],
@@ -212,7 +215,12 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       ["the list and the badge render at the same time"], ["a lista e o ícone aparecem ao mesmo tempo", "pt"], ["la lista y el icono se muestran a la vez", "es"],
       ["a Resubmit button shows after a validation error"], ["notifications are retried after the provider fails"],
       ["the toast and the redirect happen at the same time"], ["users see the list and the badge at the same time"], ["the order summary and the total show at the same time"],
-      ["payments page and the receipt load at the same time"], ["os clientes veem o total e o desconto ao mesmo tempo", "pt"]];
+      ["payments page and the receipt load at the same time"], ["os clientes veem o total e o desconto ao mesmo tempo", "pt"],
+      // (1.33 review 5: PT "dos" is "of the", never ES's two; "both" / a number quantifying UI parts, not requests or actors; a repeated
+      // form field)
+      ["o carregamento dos saldos e do histórico ao mesmo tempo", "pt"], ["a lista dos produtos e o contador atualizam ao mesmo tempo", "pt"],
+      ["both the list and the badge render at the same time"], ["the header and 3 widgets render at the same time"], ["a repeated field is highlighted"],
+      ["o campo repetido fica destacado", "pt"]];
     const yesBad = YES.filter(([d, l]) => !rep(d, l)).map(([d]) => d), noBad = NO.filter(([d, l]) => rep(d, l)).map(([d]) => d);
     all("1.33 review 2: an edited template row is the user's (+dist's 'delivered twice … — for the coupon webhook', +sec's 'user B … — the coupon endpoint' answer; verbatim they don't); a repeated / redelivered / resubmitted / replayed / retried webhook, the same time / millisecond, identical requests, PT repetido(a) / reenviado / com a mesma chave, ES repetida / reenviado / con la misma clave count — a Retry button, a retry after a timeout, a repeat-password field don't (got " +
       js({ edited: gaps(check(ownMine)), verbatim: gaps(check(ownTpl)), yesBad, noBad }) + ")", {
