@@ -17,9 +17,9 @@ const path = require("path");
 const i18n = require("../i18n.js");
 const { shortNameOf } = require("../probe.js"); // load time — an 8.3 alias of dev-guardian's CLI or the launcher (the approval guard's shell reader)
 // Owned by other engine modules — used at call time only; engine/index.js links them once every module has loaded.
-let activeTasks, baselineFiles, BOM_CHAR, detectTracks, FOLD_CASE, gateRefusal, isDirSafe, isObj, isRecord, oneLine, projectChecks,
+let activeTasks, baselineFiles, BOM_CHAR, detectTracks, featureBranchRecord, FOLD_CASE, gateRefusal, isDirSafe, isObj, isRecord, oneLine, projectChecks,
   readIfExists, removeSpecFile, sha1Hex, specsRoot, suiteLabel, toPosix, writeFileAtomic;
-function __link(E) { ({ activeTasks, baselineFiles, BOM_CHAR, detectTracks, FOLD_CASE, gateRefusal, isDirSafe, isObj, isRecord, oneLine,
+function __link(E) { ({ activeTasks, baselineFiles, BOM_CHAR, detectTracks, featureBranchRecord, FOLD_CASE, gateRefusal, isDirSafe, isObj, isRecord, oneLine,
   projectChecks, readIfExists, removeSpecFile, sha1Hex, specsRoot, suiteLabel, toPosix, writeFileAtomic } = E); }
 // ---------------------------------------------------------------------------
 // dev-guardian (1.29) — the sibling plugin's gate as a project check. `init --guardian` (spec_init {guardian: true}) sets
@@ -99,6 +99,57 @@ function findDevGuardian(env, cwd, fs, path, os) {
   }
   return best ? { cli: best.cli } : { error: "no dev-guardian plugin in " + cache + " — install it, or set DEV_GUARDIAN_CLI to the path of its cli/" + ENTRY };
 }
+// 1.33 — the change since the feature's base, for dev-guardian's test-integrity check (3.8.0: guardian-test-integrity — a focused
+// .only high, a skip / a deleted test file / assertions removed / an always-passing test script medium; read only when scan gets
+// --diff-base, or a --baseline-ref / --rules-ref). finish --run hands the base to the launcher in DEV_SPEC_DIFF_BASE; the launcher
+// appends --diff-base <ref> when the dev-guardian it found is 3.8.0 or later. Three more functions the launcher carries (toString,
+// the same source rules as findDevGuardian's), so the engine's tests run the launcher's own code.
+const GUARDIAN_DIFF_BASE_ENV = "DEV_SPEC_DIFF_BASE";
+const GUARDIAN_DIFF_BASE_MIN = "3.8.0";
+// A plain ref name — git check-ref-format's rules on the characters a feature branch's name may hold (branchNameOk: letters,
+// digits, . _ + - /): never starting with "-" or "/", no "..", no "//", no component starting with "." or ending in ".lock", no
+// trailing "/" or "." — at most 200 characters — and none of git's pseudo-refs as the WHOLE name, in any case ("head" is HEAD on a
+// case-insensitive file system; a branch fix/detached_head is a branch). A full commit id passes (hex). (The list lives inside: the
+// launcher carries this function's source alone.)
+function plainRefOk(ref) {
+  const s = typeof ref === "string" ? ref : "";
+  const pseudo = ["HEAD", "ORIG_HEAD", "FETCH_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_HEAD", "REBASE_HEAD", "AUTO_MERGE"];
+  if (!s || s.length > 200 || pseudo.indexOf(s.toUpperCase()) >= 0) return false;
+  const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-/";
+  for (let i = 0; i < s.length; i++) if (allowed.indexOf(s[i]) < 0) return false;
+  if (s[0] === "-" || s[0] === "/" || s[s.length - 1] === "/" || s[s.length - 1] === "." || s.indexOf("..") >= 0 || s.indexOf("//") >= 0) return false;
+  return s.split("/").every((p) => p !== "" && p[0] !== "." && p.toLowerCase().slice(-5) !== ".lock");
+}
+// The version of the dev-guardian a CLI belongs to, read from its install — <root>/cli/dev-guardian.mjs → <root>/.claude-plugin/
+// plugin.json, else <root>/package.json, else <root>/mcp/package.json (an x.y.z "version") — or null: never guessed from a folder name.
+function devGuardianVersion(cli, fs, path) {
+  const root = path.dirname(path.dirname(cli));
+  for (const rel of [[".claude-plugin", "plugin.json"], ["package.json"], ["mcp", "package.json"]]) {
+    let j = null;
+    // (the install the lookup resolved — Claude Code's own plugin folder, or the DEV_GUARDIAN_CLI the user named)
+    // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    try { j = JSON.parse(fs.readFileSync(path.join(root, ...rel), "utf8")); } catch (e) { j = null; }
+    const v = j && typeof j.version === "string" ? j.version.trim() : "";
+    if (/^[0-9]{1,6}[.][0-9]{1,6}[.][0-9]{1,6}/.test(v)) return v;
+  }
+  return null;
+}
+// What the launcher hands dev-guardian: argv (after the launcher's own name), + "--diff-base <ref>" when env.DEV_SPEC_DIFF_BASE is set,
+// the subcommand is scan, the version read is 3.8.0 or later (unknown: nothing added — an older dev-guardian runs exactly as before)
+// and argv names no base of its own (--diff-base / --baseline-ref / --rules-ref, "--x v" or "--x=v"). → { args, added? } | { error }
+// (a value that is no plain ref name — refused only where it would be appended).
+function guardianDiffBaseArgs(argv, env, version) {
+  const args = argv.slice();
+  const ref = String(env.DEV_SPEC_DIFF_BASE || "").trim();
+  if (!ref || args[0] !== "scan" || !version) return { args };
+  const v = String(version).split(".").map((x) => parseInt(x, 10)), min = [3, 8, 0];
+  let atLeast = true;
+  for (let i = 0; i < 3; i++) if (v[i] !== min[i]) { atLeast = v[i] > min[i]; break; }
+  if (!atLeast) return { args };
+  if (args.some((a) => ["--diff-base", "--baseline-ref", "--rules-ref"].some((f) => a === f || a.indexOf(f + "=") === 0))) return { args };
+  if (!plainRefOk(ref)) return { error: "DEV_SPEC_DIFF_BASE is no plain ref name (" + ref + ")" };
+  return { args: args.concat(["--diff-base", ref]), added: ref };
+}
 // The launcher's source (Node core only, no backslash). It never calls process.exit (a message to a pipe would be cut): exitCode 3
 // when nothing is found, the subcommand is not forwarded or the CLI does not load, else dev-guardian's own exit. A DEV_GUARDIAN_CLI
 // it ran is said on stderr ("dev-guardian launcher: DEV_GUARDIAN_CLI=<path>") — the verdict and the merge summary name it.
@@ -111,9 +162,14 @@ const GUARDIAN_LAUNCHER = `#!/usr/bin/env node
 // This file finds the installed dev-guardian at each run (findDevGuardian, below) and hands its CLI the arguments after its own
 // name, so the check keeps working after an update of either plugin. It forwards ${GUARDIAN_FORWARDED.join(", ")} and help — the
 // gate and its remedies; run any other subcommand with dev-guardian itself. Nothing found, another subcommand, or a CLI that does
-// not load: exit 3 — dev-guardian's own code for a usage or configuration error.
+// not load: exit 3 — dev-guardian's own code for a usage or configuration error. With ${GUARDIAN_DIFF_BASE_ENV} set (finish --run: the
+// feature's base) a scan by dev-guardian ${GUARDIAN_DIFF_BASE_MIN} or later also gets --diff-base <that ref> (its test-integrity check),
+// unless the arguments name a base already; an older dev-guardian runs as before.
 "use strict";
 ${findDevGuardian.toString().replace(/\r\n/g, "\n")}
+${plainRefOk.toString().replace(/\r\n/g, "\n")}
+${devGuardianVersion.toString().replace(/\r\n/g, "\n")}
+${guardianDiffBaseArgs.toString().replace(/\r\n/g, "\n")}
 
 const FORWARDED = ${JSON.stringify(GUARDIAN_FORWARDED.concat(["help", "--help", "-h"]))};
 const sub = process.argv[2];
@@ -127,19 +183,29 @@ if (!FORWARDED.includes(sub)) {
     process.exitCode = 3;
   } else {
     if (found.override) console.error("dev-guardian launcher: DEV_GUARDIAN_CLI=" + found.cli);
-    // dev-guardian runs as the entry point (it compares argv[1] with its own path) and reads its arguments from argv[2] on
-    process.argv[1] = found.cli;
-    import("node:url").then((u) => import(u.pathToFileURL(found.cli).href)).catch((e) => {
-      console.error("dev-guardian could not be loaded from " + found.cli + ": " + (e && e.message ? e.message : e));
+    const want = String(process.env.DEV_SPEC_DIFF_BASE || "").trim();
+    const base = guardianDiffBaseArgs(process.argv.slice(2), process.env, want ? devGuardianVersion(found.cli, require("fs"), require("path")) : null);
+    if (base.error) {
+      console.error("dev-guardian launcher: " + base.error);
       process.exitCode = 3;
-    });
+    } else {
+      if (base.added) console.error("dev-guardian launcher: --diff-base " + base.added + " (DEV_SPEC_DIFF_BASE)");
+      // dev-guardian runs as the entry point (it compares argv[1] with its own path) and reads its arguments from argv[2] on
+      process.argv.splice(2, process.argv.length - 2, ...base.args);
+      process.argv[1] = found.cli;
+      import("node:url").then((u) => import(u.pathToFileURL(found.cli).href)).catch((e) => {
+        console.error("dev-guardian could not be loaded from " + found.cli + ": " + (e && e.message ? e.message : e));
+        process.exitCode = 3;
+      });
+    }
   }
 }
 `;
 // The launchers earlier versions wrote (sha1 of the LF text): genuine, only older — finish --run writes this version's in their
 // place before it runs the check, spec_upgrade --apply too. 1.29.x: the newest version by numeric parts, any DEV_GUARDIAN_CLI file,
-// every subcommand.
-const GUARDIAN_LAUNCHER_PAST = ["7698ebe162c94bc3e55dd8357fd53c5947a89764"];
+// every subcommand (mcp/tests/fixtures/guardian-launcher-1.29.cjs). 1.30–1.32.x: no diff base for dev-guardian's test-integrity
+// check (mcp/tests/fixtures/guardian-launcher-1.32.cjs).
+const GUARDIAN_LAUNCHER_PAST = ["7698ebe162c94bc3e55dd8357fd53c5947a89764", "1df7dbf17a23f864afd4fc45a51cc99af05fc875"];
 const GUARDIAN_LAUNCHER_MAX = 256 * 1024; // a larger file is no launcher of ours (never read whole)
 // Does a project check run dev-guardian's gate? The check named "guardian", or a command naming dev-guardian (or the launcher)
 // followed by `scan`.
@@ -224,6 +290,40 @@ function guardianLauncherAudit(projectDir, lng, fix) {
   if (!fix) return i18n.msg(lng).guardian.upgradeLauncher(s);
   try { return setGuardianLauncher(projectDir, true); } catch (e) { if (gateRefusal(e, lng)) return null; throw e; }
 }
+// finish --run (1.33): the ref dev-guardian's test-integrity check diffs against when the gate runs with a feature in hand —
+// dev-guardian reads the change from that ref's merge base with HEAD to the WORKING TREE (uncommitted and untracked files too). In
+// order: the feature's branch as recorded (`create --branch`): the branch it was created from, read as refs/heads/<base> — never a
+// tag of that name ("base") —, else the commit it started at ("commit"); without a record, the repository's default branch
+// (origin/HEAD's when it resolves, else a local main / master — "default") while HEAD is on another branch. The first a plain ref
+// name (plainRefOk — never "-…") git resolves to a commit (one it can't read would turn the gate into exit 3) is passed — never
+// skipped as "empty": a branch still at main's commit with its work uncommitted is read through it. One exception: a candidate that
+// already CONTAINS HEAD (its merge base with HEAD is HEAD — main moved to HEAD, a --no-ff local merge of the feature) would hide the
+// feature's commits, so the recorded start commit goes instead when it is a proper ancestor of HEAD. When the ref passed still
+// contains HEAD (no record, no usable start commit, a branch with no commit of its own) only the uncommitted work is read:
+// `uncommitted: true`, and the verdict says so (guardian.diffBaseUncommitted — never "the change since main"). → { ref, from,
+// uncommitted? } | null. git: the CLI's { head, current, defaultBranch, defaultRef, resolve(ref) → a commit id | null, ancestor(a, b)
+// → true when commit a is b or an ancestor of it, false, null (can't tell) } (the engine never runs git).
+function guardianDiffBase(state, git) {
+  if (!git || typeof git.resolve !== "function" || !git.head) return null;
+  const rec = featureBranchRecord(state);
+  const def = git.defaultBranch, cur = git.current;
+  const tries = rec ? [[rec.base && plainRefOk(rec.base) ? "refs/heads/" + rec.base : null, "base"], [rec.commit, "commit"]]
+    : git.defaultRef && def && cur && cur !== def && "origin/" + cur !== def ? [[git.defaultRef, "default"]] : [];
+  const ancestor = (a, b) => typeof git.ancestor === "function" && git.ancestor(a, b) === true;
+  for (const [ref, from] of tries) {
+    const sha = ref && plainRefOk(ref) ? git.resolve(ref) : null;
+    if (!sha) continue;
+    if (!ancestor(git.head, sha)) return { ref, from };
+    if (from === "base") {
+      const start = plainRefOk(rec.commit) ? git.resolve(rec.commit) : null;
+      if (start && start !== git.head && ancestor(start, git.head)) return { ref: rec.commit, from: "commit" };
+    }
+    return { ref, from, uncommitted: true };
+  }
+  return null;
+}
+// A ref as a line names it: refs/heads/main → main, refs/remotes/origin/main → origin/main.
+const shortRef = (ref) => String(ref || "").replace(/^refs\/(?:heads|remotes)\//, "");
 // The dev-guardian CLI the launcher would run (findDevGuardian, the same function) — what init / spec_upgrade offer the gate
 // from: folder listings and installed_plugins.json, outside the project (the one engine read of the user's config folder).
 // env: the environment (default the process's); cwd: the project (an install scoped to it). → its path | null
@@ -317,11 +417,15 @@ function guardianJson(text) {
 // The lines of dev-guardian's own message (a usage or configuration error goes to stderr: "error: …", "dev-guardian: …" — never the
 // launcher's DEV_GUARDIAN_CLI line), else the output's last two lines — one line, at most 300 characters.
 function guardianMessage(text) {
-  const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !RE_LAUNCHER_OVERRIDE.test(l));
+  const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !RE_LAUNCHER_OVERRIDE.test(l) && !RE_LAUNCHER_DIFF_BASE.test(l));
   const own = lines.filter((l) => /^(?:error:|dev-guardian\b)/i.test(l));
   return cleanLine((own.length ? own : lines.slice(-2)).join(" · "), 300);
 }
 const RE_LAUNCHER_OVERRIDE = /^dev-guardian launcher: DEV_GUARDIAN_CLI=(.+)$/m;
+// 1.33: the diff base the launcher appended ("dev-guardian launcher: --diff-base <ref> (DEV_SPEC_DIFF_BASE)") — the verdict says it
+const RE_LAUNCHER_DIFF_BASE = /^dev-guardian launcher: --diff-base (\S{1,200}) \(DEV_SPEC_DIFF_BASE\)$/m;
+// the tool dev-guardian 3.8.0 reports a weakened test under (a focused .only, a skip, a deleted test file …) — named as such
+const GUARDIAN_TEST_INTEGRITY = "guardian-test-integrity";
 // "3.2.0" below "3.2.1"? (x.y.z — a suffix like -beta read as its x.y.z; unreadable → below: dev-spec can't tell, so it says so)
 function versionBelow(v, min) {
   const m = /^v?(\d{1,6})\.(\d{1,6})\.(\d{1,6})/.exec(String(v || "").trim());
@@ -406,12 +510,14 @@ const wholeLine = (v) => {
 // feature's own _Implements:_ files: {count, files ≤ GUARDIAN_SAID: [{file, kind}]}), notes? (the coverage_notes, each once),
 // staleTimeouts? (unused_timeout_acceptances: {count, files ≤ GUARDIAN_SAID}), message? (config: dev-guardian's own),
 // baseline? ("absent": every existing finding counted as new), tool? (the report's tool_version), update? (dev-guardian is older
-// than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran) }
+// than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran),
+// diffBase? (the --diff-base the launcher announced — 1.33), diffBaseUncommitted? (true: that base already contains HEAD, so only
+// the uncommitted work was read — finish --run's own word, `uncommitted`, never a report's) }
 // — and what recordFinishChecks refuses on (never stored): launcher ("changed" | "missing" — the launcher as the run is recorded),
 // mismatch (the report contradicts the exit code: reportExit = its exit_code), noReport (exit 0 with no readable report); and what
 // finish --run prints (never stored): acceptedLines / noteLines (≤ GUARDIAN_SAID of each, as dev-guardian wrote them), acceptedMore.
 // report: the JSON on stdout; output: the rest (stderr — over MCP the evidence's summary). dir: the feature folder (own), or null.
-function guardianRecord(projectDir, dir, command, exitCode, report, output) {
+function guardianRecord(projectDir, dir, command, exitCode, report, output, uncommitted) {
   const code = Number.isInteger(exitCode) ? exitCode : parseInt(exitCode, 10);
   const cmd = String(command || "");
   const fo = /--fail-on[=\s]+(info|low|medium|high|critical)\b/i.exec(cmd);
@@ -431,6 +537,9 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output) {
   if (/Cannot find package/.test(text)) g.update = true; // dev-guardian ≤ 3.2.0's CLI, run from a plugin install
   const ov = RE_LAUNCHER_OVERRIDE.exec(text);
   if (ov) g.override = cleanLine(ov[1], 300);
+  const db = RE_LAUNCHER_DIFF_BASE.exec(text);
+  if (db) g.diffBase = cleanLine(db[1], 200);
+  if (db && uncommitted === true) g.diffBaseUncommitted = true;
   if (!j) {
     if (code === 0 && /--format[=\s]+json\b/i.test(cmd) && RE_GUARDIAN_SCAN.test(cmd)) g.noReport = true;
     return g;
@@ -509,7 +618,8 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output) {
   const items = blocking.map((f) => {
     const file = typeof f.file_path === "string" && f.file_path.trim() ? rel(f.file_path.trim()) || null : null;
     return { severity: typeof f.severity === "string" ? cleanLine(f.severity.toLowerCase(), 20) || "?" : "?", rule: cleanLine(f.rule_id || f.title || f.tool || "?", 160) || "?",
-      file, line: Number.isSafeInteger(f.line_start) && f.line_start > 0 ? f.line_start : null, own: !!file && mine().has(fold(file)) };
+      file, line: Number.isSafeInteger(f.line_start) && f.line_start > 0 ? f.line_start : null, own: !!file && mine().has(fold(file)),
+      ...(f.tool === GUARDIAN_TEST_INTEGRITY ? { test: true } : {}) };
   });
   items.sort((a, b) => (b.own ? 1 : 0) - (a.own ? 1 : 0) || rank(b.severity) - rank(a.severity)); // stable: the report's order next
   g.own = items.filter((x) => x.own).length;
@@ -568,7 +678,8 @@ function guardianHead(g, lng) {
     case "no-launcher": head = G.noLauncher; break;
     default: head = G.exited(g.exit);
   }
-  return head + (g.baseline === "absent" ? G.noBaseline : "") + (g.override ? G.override(g.override) : "") + (accepted ? " · " + accepted : "");
+  return head + (g.baseline === "absent" ? G.noBaseline : "") + (g.override ? G.override(g.override) : "") + (g.diffBase ? (g.diffBaseUncommitted === true ? G.diffBaseUncommitted : G.diffBase)(shortRef(g.diffBase)) : "") +
+    (accepted ? " · " + accepted : "");
 }
 const guardianAt = (f) => (f.file ? f.file + (f.line ? ":" + f.line : "") : "?");
 // finish --run's lines: the head, one per finding kept, the rest counted, the accepted gaps' and the notes' own lines (dev-guardian's
@@ -576,7 +687,7 @@ const guardianAt = (f) => (f.file ? f.file + (f.line ? ":" + f.line : "") : "?")
 function guardianLines(g, lng) {
   const G = i18n.msg(lng).guardian;
   const top = Array.isArray(g.top) ? g.top : [];
-  const out = [guardianHead(g, lng), ...top.map((f) => "  " + G.finding(guardianAt(f), f.rule, f.severity, f.own))];
+  const out = [guardianHead(g, lng), ...top.map((f) => "  " + G.finding(guardianAt(f), f.rule, f.severity, f.own, f.test === true))];
   if (g.blocking > top.length && top.length) out.push("  " + G.more(g.blocking - top.length));
   const said = (lines, more, label) => {
     const list = Array.isArray(lines) ? lines : [];
@@ -708,6 +819,6 @@ function guardianGuardOn(meta) {
 const guardianGuardFilter = (actions, meta) => (guardianGuardOn(meta) ? actions : actions.filter((a) => !/^guardian-/.test(String(a.setting || ""))));
 
 module.exports = { GUARDIAN_COMMAND, isGuardianCheck, guardianChecks, setGuardianLauncher, guardianLauncherOn, guardianLauncherState,
-  guardianPreRun, guardianLauncherAudit, guardianCli, guardianOffer, GUARDIAN_IGNORE, guardianOnNote, guardianRecord, guardianRefusal, guardianStored,
+  guardianPreRun, guardianLauncherAudit, guardianCli, guardianOffer, guardianDiffBase, GUARDIAN_DIFF_BASE_ENV, plainRefOk, GUARDIAN_IGNORE, guardianOnNote, guardianRecord, guardianRefusal, guardianStored,
   guardianCompact, guardianText, guardianLines, suiteGuardianHint, suiteBlocker, guardianWarnings,
   guardianShellActions, guardianGuardFilter, __link };

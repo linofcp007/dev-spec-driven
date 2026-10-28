@@ -257,6 +257,9 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   // `reuseGate` (1.28) — a size m / l design approved from now on is held to its Reuse & Integration as a failing check (doctor fails
   // a forced one); one approved before keeps the warning.
   if (p === "design") { entry.weigh = true; entry.reuse = true; entry.reuseGate = true; }
+  // `critical` (1.33) — a design / test plan approved from now on is held to the critical-flow warns (critical-flows /
+  // critical-flow-tests); one approved before never is.
+  if (p === "design" || p === "test-plan") entry.critical = true;
   if (rc.role) entry.role = rc.role; // the role signing (informational on a phase no role is required for)
   if (opts.batch === true) entry.batch = true; // approved by a fast-forward (metrics count them apart)
   const conf = confirmationOf(opts.confirmation); // the user confirmed it in the MCP client (elicitation)
@@ -282,6 +285,7 @@ function approvePhase(projectDir, name, phase, by, opts = {}) {
   if (entry.weigh) record.weigh = true; // 1.17 A review 3
   if (entry.reuse) record.reuse = true; // 1.19 R1
   if (entry.reuseGate) record.reuseGate = true; // 1.28
+  if (entry.critical) record.critical = true; // 1.33
   if (entry.role) record.role = entry.role;
   if (entry.batch) record.batch = true;
   if (entry.confirmed) record.confirmed = entry.confirmed;

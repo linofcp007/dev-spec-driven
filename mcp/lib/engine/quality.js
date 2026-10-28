@@ -22,7 +22,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs;
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -33,7 +33,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs } = E); }
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -1186,19 +1186,26 @@ function constraintSignalRe(lang) {
 // The answer (A review 7): multi-word phrases that state a consistency model, a delivery guarantee, idempotency or a locking
 // strategy — EN / PT / ES, in any spec. Never a bare "consistent" / "eventually" / "atomic" / "isolation" ("consistent UI styling",
 // "we will eventually add caching", "atomic design", "tenant isolation" answer nothing). ACID is matched upper-case only.
+// The phrases that answer a race or a duplicate as well (idempotency, locking, atomic writes, the isolation level) — shared with
+// the critical-flow answer below (RE_CRITICAL_ANSWER); the rest state a consistency model or a delivery guarantee only.
+const LOCKING_ANSWERS = [
+  "idempoten\\p{L}*", "exactly[\\s-]+once", "isolation[\\s-]+levels?", "(?:serializable|snapshot)[\\s-]+isolation",
+  "(?:optimistic|pessimistic)[\\s-]+(?:locking|locks?|concurrency)", "dedup\\p{L}*", "atomicity", "atomically", "compare[\\s-]+and[\\s-]+(?:swap|set)",
+  "exatamente[\\s-]+uma[\\s-]+vez", "n[íi]vel[\\s-]+de[\\s-]+isolamento", "bloqueio[\\s-]+(?:otimista|pessimista)", "concorr[êe]ncia[\\s-]+(?:otimista|pessimista)",
+  "atomicidade", "atomicamente",
+  "exactamente[\\s-]+una[\\s-]+vez", "nivel[\\s-]+de[\\s-]+aislamiento", "bloqueo[\\s-]+(?:optimista|pesimista)", "concurrencia[\\s-]+(?:optimista|pesimista)",
+  "atomicidad", "at[óo]micamente",
+];
 const RE_CONSISTENCY_ANSWER = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
   "eventual(?:ly)?[\\s-]+consisten(?:t|cy)", "strong(?:ly)?[\\s-]+consisten(?:t|cy)", "consistency[\\s-]+(?:models?|levels?|guarantees?)",
-  "read[\\s-]+your[\\s-]+(?:own[\\s-]+)?writes", "idempoten\\p{L}*", "at[\\s-]+(?:least|most)[\\s-]+once", "exactly[\\s-]+once", "isolation[\\s-]+levels?",
-  "(?:serializable|snapshot)[\\s-]+isolation", "read[\\s-]+committed", "repeatable[\\s-]+read",
-  "(?:optimistic|pessimistic)[\\s-]+(?:locking|locks?|concurrency)", "outbox(?:es)?", "dedup\\p{L}*", "atomicity", "atomically", "two[\\s-]+phase[\\s-]+commit",
-  "compare[\\s-]+and[\\s-]+(?:swap|set)",
+  "read[\\s-]+your[\\s-]+(?:own[\\s-]+)?writes", "at[\\s-]+(?:least|most)[\\s-]+once", "read[\\s-]+committed", "repeatable[\\s-]+read",
+  "outbox(?:es)?", "two[\\s-]+phase[\\s-]+commit",
   "consist[êe]ncia[\\s-]+(?:eventual|forte|fraca)", "(?:eventualmente|fortemente)[\\s-]+consistentes?", "modelo[\\s-]+de[\\s-]+consist[êe]ncia",
-  "pelo[\\s-]+menos[\\s-]+uma[\\s-]+vez", "no[\\s-]+m[áa]ximo[\\s-]+uma[\\s-]+vez", "exatamente[\\s-]+uma[\\s-]+vez", "n[íi]vel[\\s-]+de[\\s-]+isolamento",
-  "bloqueio[\\s-]+(?:otimista|pessimista)", "concorr[êe]ncia[\\s-]+(?:otimista|pessimista)", "atomicidade", "atomicamente", "commit[\\s-]+em[\\s-]+duas[\\s-]+fases",
+  "pelo[\\s-]+menos[\\s-]+uma[\\s-]+vez", "no[\\s-]+m[áa]ximo[\\s-]+uma[\\s-]+vez", "commit[\\s-]+em[\\s-]+duas[\\s-]+fases",
   "consistencia[\\s-]+(?:eventual|fuerte|d[ée]bil)", "(?:eventualmente|fuertemente)[\\s-]+consistentes?", "modelo[\\s-]+de[\\s-]+consistencia",
-  "al[\\s-]+menos[\\s-]+una[\\s-]+vez", "(?:como[\\s-]+m[áa]ximo|a[\\s-]+lo[\\s-]+sumo)[\\s-]+una[\\s-]+vez", "exactamente[\\s-]+una[\\s-]+vez",
-  "nivel[\\s-]+de[\\s-]+aislamiento", "bloqueo[\\s-]+(?:optimista|pesimista)", "concurrencia[\\s-]+(?:optimista|pesimista)", "atomicidad", "at[óo]micamente",
+  "al[\\s-]+menos[\\s-]+una[\\s-]+vez", "(?:como[\\s-]+m[áa]ximo|a[\\s-]+lo[\\s-]+sumo)[\\s-]+una[\\s-]+vez",
   "confirmaci[óo]n[\\s-]+en[\\s-]+dos[\\s-]+fases",
+  ...LOCKING_ANSWERS,
 ].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
 const RE_ACID = /(?<![\p{L}\p{N}_])ACID(?![\p{L}\p{N}_])/u;
 const CONSTRAINT_MAX_WORDS = 3;
@@ -1207,7 +1214,8 @@ const CONSTRAINT_MAX_WORDS = 3;
 // glossary check builds — the built-in templates of every track combination in the feature's language, the track blocks, the
 // project's templates and track packs; a filled slot is the user's), minus a section still holding its `> **TODO**` sentinel
 // (a track section nobody wrote yet), with template [slots] and code spans blanked. → the parts, newline-joined.
-function userSpecText(text, tracks, sets) {
+// opts.code (the critical-flow answer, 1.33): code spans kept and fenced code read too — `SELECT … FOR UPDATE` is an answer.
+function userSpecText(text, tracks, sets, opts = {}) {
   const rows = scanTaskLines(activeDesign(String(text || ""), tracks));
   const skip = new Uint8Array(rows.length);
   let start = 0, todo = false;
@@ -1220,10 +1228,12 @@ function userSpecText(text, tracks, sets) {
   const out = [];
   let size = 0;
   for (let i = 0; i < rows.length && size < 200000; i++) {
+    if (rows[i].code && opts.code) { const v = rows[i].vis.slice(0, 4000); out.push(v); size += v.length; continue; }
     if (rows[i].code || skip[i] || !rows[i].vis.trim()) continue;
     for (const part of glossUserParts(rows[i].vis.slice(0, 4000), sets)) {
       const slots = part.includes("[") ? bracketPlaceholders(part, new Set()) : [];
-      const v = slots.reduce((a, p) => a.split(p).join(" "), part).replace(/`[^`\n]*`/g, " ");
+      const kept = slots.reduce((a, p) => a.split(p).join(" "), part);
+      const v = opts.code ? kept : kept.replace(/`[^`\n]*`/g, " ");
       out.push(v);
       size += v.length;
     }
@@ -1256,6 +1266,586 @@ function constraintNudge(projectDir, dir, reqs, tracks, kind, lang) {
   if (RE_CONSISTENCY_ANSWER.test(text) || RE_ACID.test(text)) return null;
   return { code: "consistency-unstated", signals };
 }
+
+// --- critical flows (1.33): a limited resource or a money flow, read-decide-write by nature ---
+// A plain feature that sells stock, redeems a coupon, spends a balance or credits, books a seat / slot / appointment, accepts an
+// invite, consumes a quota or takes a payment races itself: two identical requests in the same millisecond (a double click, a
+// retried webhook) both read "1 left" and both write. The user never writes "concurrency", so ONE signal fires (never the two
+// concepts the consistency nudge needs). By concept — the concept is also the cue key (h.kw) — English in every spec plus the
+// feature language's (PT stock / existências, pt-BR estoque, cupão / cupom; ES inventario, cupón, citas, plazas). Whole words: a
+// letter, digit, _ or - next to it is another word (zero-coupon, load-balance); a "/" is no boundary ("coupons/vouchers").
+const CRITICAL_KINDS = ["stock", "coupon", "balance", "wallet", "credit", "booking", "reservation", "appointment", "seat", "slot", "ticket",
+  "invite", "quota", "checkout", "payment", "charge", "subscription"];
+const CRITICAL_SIGNALS = {
+  en: {
+    stock: "stocks?|inventor(?:y|ies)|out[\\s-]+of[\\s-]+stock|sold[\\s-]+out|oversell(?:s|ing)?|oversold",
+    coupon: "coupons?|vouchers?|promo(?:tional)?[\\s-]+codes?|discount[\\s-]+codes?|gift[\\s-]+(?:cards?|certificates?|vouchers?)|redeem(?:s|ed|ing)?|redemptions?",
+    balance: "balances?",
+    wallet: "wallets?|top[\\s-]?ups?|(?:loyalty|reward|bonus)[\\s-]+points",
+    credit: "credits|(?:store|account|prepaid|in-app|wallet|customer)[\\s-]+credits?|credit[\\s-]+(?:balances?|points|top[\\s-]?ups?)",
+    booking: "bookings?|double[\\s-]+book(?:s|ed|ing|ings)?|waitlists?|waiting[\\s-]+lists?|first[\\s-]+come,?[\\s-]+first[\\s-]+served",
+    reservation: "reservations?",
+    appointment: "appointments?",
+    seat: "seats?",
+    slot: "slots?",
+    ticket: "(?:sell(?:s|ing)?|sold|buy(?:s|ing)?|bought|book(?:s|ed|ing)?|purchas(?:e|es|ed|ing))[\\s-]+(?:[\\p{L}\\p{N}]+[\\s-]+){0,2}?tickets?" +
+      "|ticket[\\s-]+(?:sales|inventory|allocations?)|(?:event|concert|show|match|flight|train|bus|movie|cinema|theat(?:re|er)|festival|lottery|raffle)[\\s-]+tickets?",
+    invite: "invit(?:e|es|ed|ing|ations?)",
+    quota: "quotas?|(?:plan|usage|account|seat|storage)[\\s-]+limits?",
+    checkout: "checkouts?",
+    payment: "payments?|payouts?|refund(?:s|ed|ing)?|chargebacks?|in-app[\\s-]+purchases?|(?:bank|wire|money|funds?)[\\s-]+transfers?|withdrawals?|deposits?" +
+      "|paypal|adyen|braintree|mollie|klarna|razorpay|redsys|bizum|multibanco|mb[\\s-]+way|pagseguro|mercado[\\s-]+pago|ifthenpay|easypay",
+    charge: "charges?|charged",
+    subscription: "subscriptions?|(?:plan|tier)[\\s-]+(?:activations?|upgrades?|downgrades?|changes?)|free[\\s-]+trials?" +
+      "|(?:upgrad(?:e|es|ed|ing)|downgrad(?:e|es|ed|ing)|activat(?:e|es|ed|ing)|cancel(?:s|led|ed|ling|ing)?)[\\s-]+(?:(?:the|their|a|your|his|her)[\\s-]+)?(?:plans?|subscriptions?|tiers?)",
+  },
+  pt: {
+    stock: "estoques?|exist[êe]ncias|invent[áa]rios?",
+    coupon: "cup[ãa]o|cup[õo]es|cupom|cupons|vales?[\\s-]+(?:de[\\s-]+)?(?:desconto|oferta|presente|compras?)|c[óo]digos?[\\s-]+(?:promocion(?:al|ais)|de[\\s-]+desconto)" +
+      "|cart(?:[ãa]o|[õo]es)[\\s-]+(?:oferta|presente)",
+    balance: "saldos?",
+    wallet: "carteiras?[\\s-]+(?:digita(?:l|is)|virtua(?:l|is)|eletr[óô]nicas?)|pontos[\\s-]+de[\\s-]+(?:fidelidade|fideliza[çc][ãa]o)",
+    credit: "cr[ée]ditos",
+    booking: "listas?[\\s-]+de[\\s-]+espera",
+    reservation: "reservas?",
+    appointment: "marca[çc](?:[ãa]o|[õo]es)|agendamentos?",
+    seat: "vagas|lugares[\\s-]+(?:dispon[íi]veis|livres|limitados|restantes|vagos|sentados|marcados)|lota[çc](?:[ãa]o|[õo]es)",
+    slot: "hor[áa]rios[\\s-]+(?:dispon[íi]veis|livres)",
+    ticket: "bilhetes?|ingressos",
+    invite: "convites?|convid(?:ar|a|am|ou)",
+    quota: "quotas?|cotas?|limites?[\\s-]+(?:do|de)[\\s-]+(?:plano|uso|utiliza[çc][ãa]o)",
+    checkout: "finaliza(?:r|[çc][ãa]o)[\\s-]+(?:d[ao][\\s-]+|a[\\s-]+)?compras?",
+    payment: "pagamentos?|reembols(?:os?|ar|a|ado|ados)|estornos?|transfer[êe]ncias?[\\s-]+(?:banc[áa]rias?|de[\\s-]+(?:dinheiro|fundos|saldo))|saques?",
+    charge: "cobran[çc]as?|cobrar|cobrad[oa]s?",
+    subscription: "subscri[çc](?:[ãa]o|[õo]es)|assinaturas?|ativa(?:r|[çc][ãa]o)[\\s-]+(?:d?o[\\s-]+)?plano|mudan[çc]as?[\\s-]+de[\\s-]+plano|planos?[\\s-]+pagos?|mensalidades?",
+  },
+  es: {
+    stock: "inventarios?|existencias",
+    coupon: "cup[óo]n|cupones|vales?[\\s-]+(?:de[\\s-]+)?(?:descuento|regalo|compras?)|c[óo]digos?[\\s-]+(?:promocional(?:es)?|de[\\s-]+descuento)" +
+      "|tarjetas?[\\s-]+(?:de[\\s-]+)?regalo|canjes?|canje(?:ar|a|an)",
+    balance: "saldos?",
+    wallet: "monederos?|billeteras?|puntos[\\s-]+de[\\s-]+fidelidad",
+    credit: "cr[ée]ditos",
+    booking: "listas?[\\s-]+de[\\s-]+espera",
+    reservation: "reservas?",
+    appointment: "citas?",
+    seat: "plazas|plaza[\\s-]+de[\\s-]+(?:aparcamiento|garaje|parking)|aforos?",
+    slot: "horarios[\\s-]+(?:disponibles|libres)|huecos[\\s-]+(?:disponibles|libres)",
+    ticket: "boletos|entradas[\\s-]+(?:para|del?)[\\s-]+(?:(?:el|la)[\\s-]+)?(?:concierto|evento|partido|espect[áa]culo|cine|teatro|festival)|(?:venta|compra)[\\s-]+de[\\s-]+entradas|vender[\\s-]+entradas",
+    invite: "invitaci[óo]n|invitaciones|invit(?:ar|a|an|ó)",
+    quota: "cuotas?|l[íi]mites?[\\s-]+(?:del?[\\s-]+)?(?:plan|uso)",
+    checkout: "finalizar[\\s-]+(?:la[\\s-]+)?compra|pasarelas?[\\s-]+de[\\s-]+pago",
+    payment: "pagos?|reembols(?:os?|ar|a|ado|ados)|devoluci[óo]n|devoluciones|transferencias?[\\s-]+bancarias?",
+    charge: "cobros?|cobrar|cobrad[oa]s?",
+    subscription: "suscripci[óo]n|suscripciones|activaci[óo]n[\\s-]+del?[\\s-]+plan|cambios?[\\s-]+de[\\s-]+plan|planes?[\\s-]+de[\\s-]+pago",
+  },
+};
+// The payment gateways whose name is an everyday word in lower case ("a stripe", "a paddle"): capitalised only.
+const RE_CRITICAL_PRODUCTS = /(?<![\p{L}\p{N}_-])(?:Stripe|STRIPE|Paddle)(?![\p{L}\p{N}_-])/gu;
+// The everyday senses — the classifier's cue rules (classify.js CUE_KINDS, the data shape of tracks.js SIGNALS[track].cues), keyed
+// by concept, over the LOWER-CASED text: "none" drops the hit. +tdd's own rules for "credit" (photo / film / course credits) and
+// "charge" (in charge of, a battery's charge) run first — the same words, one list (SIGNALS.tdd.cues).
+const CRITICAL_CUES = [
+  // stock photos, the stock market, a stock Android, chicken stock, taking stock; an IT / data / asset inventory, an inheritance's
+  // inventário (PT law)
+  { kind: "near", on: ["stock"], then: "none",
+    before: { words: ["chicken", "beef", "vegetable", "fish", "veal", "soup", "rolling", "laughing", "take", "takes", "taking", "took", "preferred", "penny",
+      "blue-chip", "dividend", "asset", "assets", "data", "ansible", "api", "endpoint", "dependency", "software", "hardware", "server", "infrastructure",
+      "cloud", "code", "service", "processing", ["fotos", "de"], ["imagens", "de"], ["imágenes", "de"], ["vídeos", "de"], ["bancos?", "de"], ["processo", "de"]],
+    chars: 24, edge: "letter" },
+    after: { words: ["photos?", "photography", "images?", "pictures?", "footage", "videos?", "music", "art", "artwork", "illustrations?", "icons?", "markets?",
+      "exchanges?", "prices?", "tickers?", "quotes?", "options?", "splits?", "symbols?", "portfolios?", "brokers?", "charts?", "trading", "shares?", "holders?",
+      "android", "firmware", "roms?", "kernels?", "characters?", "phrases?", "answers?", "certificates?", "cubes?", "judicial", "notarial", "orfanológico",
+      ["of", { optional: ["the", "our", "all"] }, ["assets?", "data", "endpoints?", "apis?", "dependenc(?:y|ies)", "servers?", "services?", "software", "hardware", "processing", "skills?", "risks?"]],
+      ["de", { optional: ["os", "as", "los", "las"] }, ["ativos", "activos", "dados", "datos", "tratamentos?", "tratamientos?", "dependências", "dependencias", "riscos", "riesgos",
+        "servidores", "serviços", "servicios", "apis?", "endpoints", "software", "hardware"]]], chars: 32 } },
+  // a bond's coupon (zero-coupon never matches: a "-" is part of the word); pt-BR's cupom fiscal is a sales receipt
+  { kind: "near", on: ["coupon"], then: "none", before: { words: ["bonds?"], chars: 10, edge: "letter" },
+    after: { words: ["rates?", "bonds?", "yields?", "fiscal", "fiscais"], chars: 12 } },
+  // a load / work-life / white / colour balance, a trial balance, a balance sheet, the verb ("must balance", "to balance"); PT / ES
+  // "saldos" are also a shop's sales (época de saldos, rebajas y saldos)
+  { kind: "near", on: ["balance"], then: "none",
+    before: { words: ["load", "work-?life", "life", "white", "colou?r", "tonal", "audio", "stereo", "sound", "trial", "class", "gender", "team", "power", "ecological",
+      "nutritional", "hormonal", "chemical", "body", "keep", "keeps", "kept", "keeping", "lose", "loses", "losing", "lost", "strike", "strikes", "delicate", "right", "fine",
+      "healthy", "perfect", "in", "off", "on", "to", "must", "should", "shall", "will", "would", "can", ["época", "de"], ["temporada", "de"], ["rebajas", "y"],
+      ["lojas?", "de"], ["tiendas?", "de"], "em", "en"], chars: 20, edge: "letter" },
+    after: { words: ["sheets?", "beams?", "boards?", "bikes?", "scales?", "tests?", "between", ["of", "power"],
+      ["of", { optional: ["the"] }, ["evidence", "probabilit(?:y|ies)", "nature", "trade", "payments"]], ["de", ["verão", "verao", "inverno", "verano", "invierno"]]], chars: 30 } },
+  // an Apple / Google Wallet pass
+  { kind: "near", on: ["wallet"], then: "none", before: { words: ["apple", "google", "samsung"], chars: 10, edge: "letter" } },
+  // tax credits; PT / ES end credits, photo credits, course (ECTS) credits, employment, tax and mortgage credits (loans)
+  { kind: "near", on: ["credit"], then: "none", before: { words: ["tax", ["unidades", "de"]], chars: 14, edge: "letter" },
+    after: { words: ["finais", "finales", "ects", "laborais", "laborales", "fiscais", "fiscales", "hipotecários", "hipotecarios",
+      ["de", ["fotos?", "fotografia", "fotografía", "imagens?", "imagen", "imágenes", "cinema", "cine", "habitação", "carbono"]], ["à", "habitação"], ["do", "curso"], ["del", "curso"]], chars: 28 } },
+  // a reservation about something, without reservation, a DHCP / IP / memory reservation, nature reserves, capital / legal reserves
+  { kind: "near", on: ["reservation"], then: "none",
+    before: { words: ["without", "dhcp", "ip", "memory", "address", "sem", "sin", ["fundos?", "de"], ["fondos?", "de"], "em"], chars: 16, edge: "letter" },
+    after: { words: ["about", ["of", "rights"], "naturais", "natural", "naturales", "legal", "legais", "legales", "fiscais", "fiscales", "bancárias", "federais", "federales",
+      ["de", ["capital", "memória", "memoria", "caixa", "água", "agua", "emergência", "emergencia", "divisas", "ouro", "oro", "mercado"]]], chars: 24 } },
+  // the appointment of a director; PT marcação = markup too (linguagem de marcação, marcação HTML), agendamento = job scheduling too;
+  // ES citas = quotations (citas bibliográficas, una cita textual, las citas de los autores) or dates (app de citas)
+  { kind: "near", on: ["appointment"], then: "none",
+    before: { words: [["linguagens?", "de"], ["lenguajes?", "de"], ["apps?", "de"], ["aplicaci[óo]n", "de"], ["sitios?", "de"], ["web", "de"], ["p[áa]ginas?", "de"]], chars: 24, edge: "letter" },
+    after: { words: [["of", { optional: ["a", "an", "the", "new"] }, ["directors?", "board", "ceos?", "officers?", "members?", "managers?", "judges?", "committees?",
+      "trustees?", "ministers?", "auditors?", "executors?", "guardians?", "chairs?", "representatives?"]], "html", "markdown", "xml", ["no", "mapa"],
+      ["de", ["texto", "html", "markdown", "xml", "código", "codigo", "dados", "imagens", "pontos", "tarefas", "trabalhos", "jobs", "processos", "backups", "cópias", "copias",
+        "scripts", "publicações", "posts", "e-?mails", "mensagens", "notificações", "relatórios", "execuções"]],
+      ["de", { optional: ["los", "las", "el", "la", "un", "una"] }, ["autor(?:a|es|as)?", "escritor(?:a|es|as)?", "libros?", "textos?", "obras?", "fuentes?", "famosos?"]],
+      "bibliográficas?", "bibliograficas?", "textual(?:es)?", "c[ée]lebres?", "literal(?:es)?", "famosas?"], chars: 28 } },
+  // a seat belt, a car / child / toilet seat, the seat of government; PT job vacancies and heat waves (vagas de emprego, de calor);
+  // ES a town's plazas
+  { kind: "near", on: ["seat"], then: "none",
+    before: { words: ["car", "child", "booster", "toilet", "back", "rear", "front", "driver's", "bike", "bicycle"], chars: 16, edge: "letter" },
+    after: { words: ["belts?", "cushions?", "covers?", "heights?", "posts?", ["of", { optional: ["the"] }, ["government", "power", "parliament", "council", "empire"]],
+      ["de", ["emprego", "trabalho", "calor", "frio", "estágio", "estagio", "toros"]], "mayor", "mayores", "públicas?", "publicas?"], chars: 24 } },
+  // a UI / Vue / web component's slot (a Shadow DOM's too), a PCI / SIM / memory slot, a slot machine
+  { kind: "near", on: ["slot"], then: "none",
+    before: { words: ["vue", "ui", "named", "default", "scoped", "components?", "template", "card", "sim", "pci", "pcie", "expansion", "memory", "ram", "dimm", "drive",
+      "shadow", "dom", "react", "svelte", "angular", "header", "footer", "sidebar", "layout", "toolbar", ["web", "components?"], ["shadow", "dom"]], chars: 20, edge: "letter" },
+    after: { words: ["machines?", "props?", "content", "elements?", "names?", "attributes?"], chars: 14 } },
+  // PT's old ID card (bilhete de identidade)
+  { kind: "near", on: ["ticket"], then: "none", after: { words: [["de", "identidade"]], chars: 16 } },
+  // a calendar / meeting invite; something that invites abuse; an invitation to tender
+  { kind: "near", on: ["invite"], then: "none", before: { words: ["calendar", "meeting", "zoom"], chars: 12, edge: "letter" },
+    after: { words: ["abuse", "trouble", "criticism", "comparisons?", "scrutiny", "attacks?", ["to", ["tender", "bid"]], ["for", "tenders?"],
+      ["à", ["reflexão", "reflexao"]], ["ao", "debate"], ["para", { optional: ["a", "uma"] }, ["reunião", "reuniao"]], ["de", ["reunião", "reuniao", "reunión", "reunion", "calendário", "calendario"]],
+      ["a", { optional: ["la"] }, ["reflexión", "reflexion"]]], chars: 28 } },
+  // a sales / fishing / immigration quota (an export or import quota is a limit of the product: it counts)
+  { kind: "near", on: ["quota"], then: "none", before: { words: ["sales", "fishing", "immigration"], chars: 14, edge: "letter" } },
+  // git checkout, actions/checkout, checking out a branch
+  { kind: "near", on: ["checkout"], then: "none", before: { words: ["git", "svn", "sparse", "actions/"], chars: 10, edge: "letter" },
+    after: { words: [[{ optional: ["the", "a", "this", "that", "your"] }, ["branch(?:es)?", "repo", "repos", "repository", "repositories", "commit", "tag", "main", "master", "develop"]]], chars: 24 } },
+  // the balance of payments; a withdrawal of consent (GDPR), withdrawal symptoms; mineral / fat deposits
+  { kind: "near", on: ["payment"], then: "none",
+    before: { words: [["balance", "of"], "mineral", "fat", "calcium", "oil", "gas", "gold", "sediment"], chars: 16, edge: "letter" },
+    after: { words: ["symptoms?", ["of", { optional: ["the", "their", "his", "her", "a", "your", "my"] }, ["consent", "applications?", "offers?", "requests?", "candidac(?:y|ies)", "support", "troops"]],
+      ["from", { optional: ["the"] }, ["eu", "market", "union", "race", "course", "study"]]], chars: 32 } },
+  // free of charge, at no charge, a positive / negative charge, taking charge
+  { kind: "near", on: ["charge"], then: "none",
+    before: { words: [["free", "of"], ["at", "no"], "no", "without", "positive", "negative", "take", "takes", "took", "taking"], chars: 16, edge: "letter" } },
+  // a newsletter / GraphQL / event / push subscription; pt-BR assinatura = a signature too (digital, a document's, a webhook's)
+  { kind: "near", on: ["subscription"], then: "none",
+    before: { words: ["newsletter", "e-?mail", "mailing", "graphql", "websocket", "rxjs", "observable", "events?", "topic", "push", "notifications?", "webhooks?",
+      "calendar", "rss", "feed", ["verificar", "a"], ["validar", "a"], ["verifica", "a"], ["valida", "a"]], chars: 20, edge: "letter" },
+    after: { words: [["to", { optional: ["the", "our", "a", "an"] }, ["newsletters?", "mailing", "topics?", "channels?", "events?", "feeds?", "updates", "notifications?", "alerts?", "blog"]],
+      "digita(?:l|is)", "eletr[óô]nicas?", "criptogr[áa]ficas?", "hmac", ["d[aeo]s?", ["documentos?", "contratos?", "e-?mails?", "webhooks?", "mensagens?", "pedidos?",
+        "ficheiros?", "arquivos?", "payloads?", "eventos?", "requisições", "newsletter"]], ["de", ["e-?mail", "email", "newsletter"]],
+      ["al?", { optional: ["la"] }, ["boletín", "boletin", "newsletter", "canal"]]], chars: 32 } },
+];
+// One regex per language, a capture group per concept (CRITICAL_KINDS order), built on first use.
+const CRITICAL_RE = new Map();
+function criticalSignalRe(lang) {
+  const l = lang === "pt" || lang === "es" ? lang : "en";
+  if (!CRITICAL_RE.has(l)) {
+    const alt = (k) => CRITICAL_SIGNALS.en[k] + (l === "en" || !CRITICAL_SIGNALS[l][k] ? "" : "|" + CRITICAL_SIGNALS[l][k]);
+    CRITICAL_RE.set(l, new RegExp("(?<![\\p{L}\\p{N}_-])(?:" + CRITICAL_KINDS.map((k) => "(" + alt(k) + ")").join("|") + ")(?![\\p{L}\\p{N}_-])", "gu"));
+  }
+  return CRITICAL_RE.get(l);
+}
+let CRITICAL_CUE_FN = null;
+const criticalCues = () => CRITICAL_CUE_FN ||
+  (CRITICAL_CUE_FN = cueRules([...SIGNALS.tdd.cues.filter((r) => (r.on || []).some((w) => w === "credit" || w === "charge")), ...CRITICAL_CUES], "critical-flow"));
+const CRITICAL_MAX_WORDS = 3;
+// The critical-flow signals of a text (the user's) → [≤ 3 words, in order of appearance, one per concept]. A hit whose cue says
+// "none" is an everyday sense. Linear: one pass of one regex, each cue a bounded window.
+function criticalSignals(text, lang) {
+  const cased = String(text || "");
+  const lower = cased.toLowerCase();
+  const hits = [];
+  const re = criticalSignalRe(i18n.baseLang(lang));
+  re.lastIndex = 0; // (matchAll starts at the regex's lastIndex)
+  for (const m of lower.matchAll(re)) {
+    hits.push({ start: m.index, end: m.index + m[0].length, kw: CRITICAL_KINDS[m.slice(1).findIndex((g) => g !== undefined)], word: m[0] });
+  }
+  RE_CRITICAL_PRODUCTS.lastIndex = 0;
+  for (const m of cased.matchAll(RE_CRITICAL_PRODUCTS)) hits.push({ start: m.index, end: m.index + m[0].length, kw: "payment", word: m[0].toLowerCase() });
+  hits.sort((a, b) => a.start - b.start);
+  const cue = criticalCues();
+  const seen = new Set(), out = [];
+  for (const h of hits) {
+    if (seen.has(h.kw) || cue(h, lower, cased, lang) === "none") continue;
+    seen.add(h.kw);
+    out.push(h.word.replace(/\s+/g, " "));
+    if (out.length >= CRITICAL_MAX_WORDS) break;
+  }
+  return out;
+}
+// The answer: the race settled where it happens, in the database — or a duplicate made harmless. Multi-word phrases only (never a
+// bare "unique" / "lock" / "atomic"), EN / PT / ES in any spec, read with code spans and fenced code kept (an `UPDATE … WHERE
+// qty > 0` is the answer): a unique constraint / index, a conditional or atomic update checking the affected rows, a row lock
+// (SELECT … FOR UPDATE), optimistic locking / a version column, a processed-events table keyed by the event id, an idempotency
+// key — plus LOCKING_ANSWERS (idempotency, exactly-once, the isolation level, atomically…). Eventual consistency or at-least-once
+// delivery alone settles no race.
+const RE_CRITICAL_ANSWER = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
+  "unique[\\s_-]+(?:constraints?|index(?:es)?|indices|keys?)", "uniqueness[\\s-]+constraints?", "on[\\s-]+conflict[\\s-]+do", "on[\\s-]+duplicate[\\s-]+key",
+  "(?:conditional|atomic|guarded)[\\s-]+(?:updates?|decrements?|increments?|writes?|inserts?|deletes?|operations?)", "affected[\\s_-]+rows?", "rows?[\\s_-]+affected", "rowcount",
+  "select\\b[^;\\n]{0,120}?\\bfor[\\s-]+(?:no[\\s-]+key[\\s-]+)?update", "update\\s+[\\p{L}\\p{N}_.\"`]+\\s+set\\b[^;\\n]{0,160}?\\bwhere",
+  "row[\\s-]+(?:level[\\s-]+)?lock(?:s|ing)?", "lock(?:s|ed|ing)?[\\s-]+(?:the|each|that)[\\s-]+rows?", "advisory[\\s-]+locks?",
+  "version[\\s_-]+(?:columns?|fields?|checks?)", "row[\\s_-]?version", "if-match", "processed[\\s_-]+(?:events?|webhooks?|messages?)",
+  "restri[çc][ãa]o[\\s-]+(?:de[\\s-]+)?unicidade", "restri[çc][ãa]o[\\s-]+[úu]nica", "[íi]ndices?[\\s-]+[úu]nicos?", "chaves?[\\s-]+[úu]nicas?",
+  "atualiza[çc][ãa]o[\\s-]+(?:at[óo]mica|condicional)", "(?:decremento|incremento|escrita|opera[çc][ãa]o)[\\s-]+at[óo]mic[oa]", "linhas[\\s-]+afetadas",
+  "bloqueio[\\s-]+(?:de[\\s-]+|da[\\s-]+)?linhas?", "trava[\\s-]+(?:otimista|pessimista)", "coluna[\\s-]+de[\\s-]+vers[ãa]o", "eventos[\\s-]+processados", "desduplic\\p{L}*",
+  "restricci[óo]n[\\s-]+(?:de[\\s-]+)?unicidad", "restricci[óo]n[\\s-]+[úu]nica", "claves?[\\s-]+[úu]nicas?",
+  "actualizaci[óo]n[\\s-]+(?:at[óo]mica|condicional)", "(?:decremento|incremento|escritura|operaci[óo]n)[\\s-]+at[óo]mic[oa]", "filas[\\s-]+afectadas",
+  "bloqueo[\\s-]+(?:de[\\s-]+|por[\\s-]+)?filas?", "columna[\\s-]+de[\\s-]+versi[óo]n", "eventos[\\s-]+procesados",
+  ...LOCKING_ANSWERS,
+].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
+// A design section that answers it in its own words — "None: this feature only reads the balance" counts (a filled section,
+// designWeighState with min 0); found by weighSection like the weigh sections.
+const CRITICAL_FLOWS_SYN = ["critical flows", "critical flow", "concurrency", "concurrency & idempotency", "concurrency and idempotency", "race conditions",
+  "fluxos críticos", "fluxos criticos", "fluxo crítico", "fluxo critico", "concorrência", "concorrencia", "condições de corrida", "condicoes de corrida",
+  "flujos críticos", "flujos criticos", "flujo crítico", "flujo critico", "concurrencia", "condiciones de carrera"];
+// A requirements / design text without its Out of Scope section(s): what the feature does NOT do names no flow of its own
+// ("## Out of Scope — Refunds"). The headings are the ONE heading reader's (headingEntries: linear, never in a fence or a comment).
+function withoutOutOfScope(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  const drop = new Uint8Array(lines.length);
+  // ONE pass over the headings: an open Out of Scope section closes at the next heading of its level or above (no two overlap)
+  let open = null; // { from, level } of the Out of Scope section being dropped
+  for (const h of headingEntries(lines)) {
+    if (open && h.level <= open.level) { drop.fill(1, open.from, h.i); open = null; }
+    if (!open && RE_OUT_OF_SCOPE.test(h.text.slice(0, 200))) open = { from: h.i, level: h.level };
+  }
+  if (open) drop.fill(1, open.from, lines.length);
+  return lines.filter((l, i) => !drop[i]).join("\n");
+}
+// The track sections that own the critical-flow question (one question bank): +dist's Concurrency, +api's Pagination,
+// Idempotency & Concurrency. Both are tier "extended" — a size S scaffold leaves them out (scaffold.js sizedTrackSections), and
+// then nothing asks the question: the detector runs, unless the design holds that section anyway. → is the question owned?
+const CRITICAL_OWNERS = [["dist", "Concurrency"], ["api", "Pagination, Idempotency & Concurrency"]];
+function criticalOwned(tracks, size, design) {
+  return CRITICAL_OWNERS.some(([tr, name]) => {
+    const sec = tracks.includes(tr) ? (trackSectionTable(tr) || []).find((s) => s.name === name) : null;
+    if (!sec) return false;
+    if (!(size === "s" && sec.tier === "extended")) return true; // scaffolded at this size
+    return extractSection(design || "", sec.syn, trackMarker(tr), sec.loose) != null;
+  });
+}
+// The critical flows of a feature → null when not asked (a bugfix, a spike, a change; a track section that owns the question —
+// +dist's Concurrency, +api's Pagination, Idempotency & Concurrency — scaffolded at the feature's size or present in its design:
+// one question bank, criticalOwned), else { signals: [≤ 3 words] — none: no critical flow —, answered: "answer" (a
+// RE_CRITICAL_ANSWER phrase anywhere in the user's text of requirements.md / design.md) · "section" (a written Critical flows /
+// Concurrency section in the design) · false, user — the user's text the signals came from }. texts: { reqs, design, size } — the
+// raw files (design: the ACTIVE design for the section) and the feature's size (featureSize: null when unsized).
+function criticalFlowState(projectDir, tracks, kind, lang, texts) {
+  if ((kind || "feature") !== "feature" || criticalOwned(tracks, texts.size, texts.design)) return null;
+  const lng = normalizeLang(lang || "en");
+  const reqs = withoutOutOfScope(texts.reqs), design = withoutOutOfScope(texts.design);
+  // a cheap pre-check on the raw text: most features name no flow — the template lines are never built for them
+  const re = criticalSignalRe(i18n.baseLang(lng));
+  const raw = reqs + "\n" + design;
+  re.lastIndex = 0;
+  const any = re.test(raw.toLowerCase());
+  re.lastIndex = 0;
+  RE_CRITICAL_PRODUCTS.lastIndex = 0;
+  if (!any && !RE_CRITICAL_PRODUCTS.test(raw)) return { signals: [], answered: false, user: "" };
+  RE_CRITICAL_PRODUCTS.lastIndex = 0;
+  const sets = [glossBuiltinLines(lng), glossProjectLines(projectDir, lng)].filter(Boolean);
+  const user = userSpecText(reqs, tracks, sets) + "\n" + userSpecText(design, tracks, sets);
+  const signals = criticalSignals(user, lng);
+  if (!signals.length) return { signals, answered: false, user };
+  const withCode = userSpecText(reqs, tracks, sets, { code: true }) + "\n" + userSpecText(design, tracks, sets, { code: true });
+  const answered = RE_CRITICAL_ANSWER.test(withCode) ? "answer"
+    : designWeighState(activeDesign(design, tracks), CRITICAL_FLOWS_SYN, 0).status === "filled" ? "section" : false;
+  return { signals, answered, user };
+}
+// clarify's nudge → { code: "critical-flow-unstated", signals } | null (stable).
+function criticalFlowNudge(projectDir, dir, reqs, tracks, kind, lang) {
+  const st = criticalFlowState(projectDir, tracks, kind, lang, { reqs, design: readIfExists(path.join(dir, "design.md")) || "", size: featureSize(dir) });
+  return st && st.signals.length && !st.answered ? { code: "critical-flow-unstated", signals: st.signals } : null;
+}
+// The test plan of a critical flow: a row (a line holding a T-ID) for the same request twice / at once, and — when the spec is about
+// users' own data or permissions — one for another user's access. EN / PT / ES. Only a row's DESCRIPTION is read (planCellsOf: its
+// column found by the table's header as the scaffold writes it — never the File, Covers, Layer, Kind or Test ID), and only the
+// user's words of it: a description that IS a template row's (planTemplateCells — the built-in plan, a track pack's rows, the
+// project's templates, filled with the values the scaffold filled in) is the template's; an edited one is the user's.
+const RE_PLAN_ROW = /(?<![\p{L}\p{N}_-])T-\d+(?!\d)/u;
+// The same request again — a retried / redelivered / replayed webhook, event, message, callback or payment (the thing received or
+// charged again), two requests or an action at the same time — never a bare retry (a Retry / Resubmit button, notifications retried
+// after a failure) nor a repeated password / e-mail / confirmation field or a repeated (form) field. "At the same time" counts:
+//   · after a QUANTITY — a number word, a digit, both / ambos / ambas — followed within three words by an action verb (two admins
+//     approve, 2 pods process, both tabs submit) or right away by an actor or a request (two buyers, 3 requests). Never a quantity
+//     of UI or structural parts or of a unit (2 columns, both forms, two filters, 3 steps, the 2 MB upload — the noun right after the
+//     number or one word later), never a step / phase / item number ("step 2 the user …"), never the digits of a time or a decimal
+//     (10:00, 1.5), never an ordinal (2nd);
+//   · after an action in an unambiguous verb form a few words before it (redeemed by Alice and Bob, envían el pago) — a form that is
+//     also a noun ("the click", "the reservation", "la compra", "o resgate") counts only after a quantity;
+//   · right after a plural request noun (requests / clicks … at the same time);
+//   · or first, then a quantity as above ("at the same time, two users redeem …").
+// Never on its own ("the list and the badge render at the same time"): the verbs are actions — never render / show / load / update
+// / see. One rule per language, each with its own words and phrase: PT "dos" is "of the", never ES's two.
+const W_ = "[\\s-]+[\\p{L}\\p{N}'’]+"; // one more word
+const UNITS = "[kmgt]i?b|bytes?|ms|s|secs?|seconds?|mins?|minutes?|h|hrs?|hours?|days?|weeks?|px|am|pm|%";
+// (the quantity is matched once per branch; the step lookbehind is bounded — an unbounded [\s-]* read backwards over a run of
+// hyphens made every position quadratic)
+const atOnce = ({ notCount, quant, parts, actors, acts, txActs, nouns, phrase }) => {
+  const counted = "(?<!(?:" + notCount + ")[\\s-]{0,3})(?<!\\p{N}[.,:])" + quant +
+    "(?!(?:" + W_ + ")?[\\s-]+(?:" + parts + "|" + UNITS + ")(?![\\p{L}\\p{N}]))" +
+    "(?:(?:" + W_ + "){0,3}?[\\s-]+(?:" + acts + "|" + txActs + ")|(?:" + W_ + ")?[\\s-]+" + actors + ")";
+  return "(?:(?:" + counted + "(?:" + W_ + "){0,6}?|" + txActs + "(?:" + W_ + "){0,6}?|" + nouns + "(?:" + W_ + "){0,2}?)[\\s-]+" + phrase +
+    "|" + phrase + "[\\s,;:–—-]+" + counted + ")";
+};
+const AT_ONCE_EN = atOnce({
+  notCount: "step|phase|stage|part|item|row|line|page|section|figure|table|version|level|round|#",
+  quant: "(?:two|three|both|several|multiple|\\p{N}+)",
+  parts: "columns?|rows?|forms?|fields?|filters?|panels?|panes?|buttons?|cards?|widgets?|sections?|pages?|screens?|views?|modals?|" +
+    "dialogs?|charts?|graphs?|tables?|lists?|menus?|links?|icons?|badges?|labels?|images?|banners?|toasts?|headers?|footers?|" +
+    "sidebars?|components?|elements?|layouts?|cells?|tiles?|animations?|spinners?|steps?|phases?|stages?|parts?|items?|lines?",
+  actors: "(?:requests?|calls?|clicks?|submissions?|orders?|payments?|bookings?|redemptions?|webhooks?|events?|buyers?|users?|customers?|" +
+    "clients?|people|persons|members?|accounts?|admins?|administrators?|operators?|agents?|drivers?|cashiers?|tabs?|sessions?|browsers?|" +
+    "devices?|threads?|workers?|processes|instances?|replicas?|pods?|nodes?|servers?|checkouts?|transactions?|jobs?|consumers?|carts?)",
+  acts: "(?:approv(?:e|es|ed|ing)|accept(?:s|ed|ing)?|consum(?:e|es|ed|ing)|process(?:es|ed|ing)?|handl(?:e|es|ed|ing)|claim(?:s|ed|ing)?|" +
+    "edit(?:s|ed|ing)?|writ(?:e|es|ing)|wrote|sav(?:e|es|ed|ing)|modif(?:y|ies|ied|ying)|delet(?:e|es|ed|ing)|cancel(?:s|led|ed|ling|ing)?|" +
+    "refund(?:s|ed|ing)?|appl(?:y|ies|ied|ying)|increment(?:s|ed|ing)?|debit(?:s|ed|ing)?|redeem\\p{L}*|submit\\p{L}*|buy(?:s|ing)?|" +
+    "book(?:s|ed|ing)?|click(?:s|ed|ing)?|press(?:es|ed|ing)?|post(?:s|ed|ing)?|send(?:s|ing)?|sent|charg(?:e|es|ed|ing)|reserv\\p{L}*|" +
+    "transfer(?:s|red|ring)?|withdr(?:aw|aws|awing|awn|ew)|order(?:s|ed|ing)?|decrement\\p{L}*)",
+  txActs: "(?:redeem(?:s|ed|ing)|pay(?:s|ing)?|paid|submit(?:s|ted|ting)|bought|buying|decrement(?:s|ed|ing)|reserv(?:es|ed|ing)|" +
+    "charged|charging|withdr(?:aws|awing|awn|ew)|transfer(?:red|ring)|ordered|ordering|booked|clicked|pressed)",
+  nouns: "(?:requests|calls|clicks|submissions|webhooks|redemptions)",
+  phrase: "at[\\s-]+the[\\s-]+same[\\s-]+time",
+});
+const AT_ONCE_PT = atOnce({
+  notCount: "passo|fase|etapa|parte|ponto|item|linha|p[áa]gina|sec[çc][ãa]o|se[çc][ãa]o|tabela|figura|vers[ãa]o|n[ií]vel|ronda|#",
+  quant: "(?:dois|duas|tr[êe]s|ambos|ambas|v[áa]ri[oa]s|\\p{N}+)",
+  parts: "colunas?|linhas?|formul[áa]rios?|campos?|filtros?|pain[ée]is|painel|bot[õo]es|bot[ãa]o|cart[õo]es|cart[ãa]o|widgets?|" +
+    "sec[çc][õo]es|se[çc][õo]es|p[áa]ginas?|ecr[ãa]s?|telas?|janelas?|modais|modal|di[áa]logos?|gr[áa]ficos?|tabelas?|listas?|menus?|" +
+    "liga[çc][õo]es|links?|[íi]cones?|etiquetas?|imagens?|componentes?|elementos?|c[ée]lulas?|passos?|fases?|etapas?|partes?|itens|" +
+    "item|segundos?|minutos?|horas?|dias?|semanas?",
+  actors: "(?:pedidos|requisi[çc][õo]es|chamadas|cliques|encomendas|pagamentos|reservas|resgates|compradores|utilizadores|usu[áa]rios|" +
+    "clientes|pessoas|membros|contas|administradores|operadores|agentes|motoristas|condutores|estafetas|separadores|abas|sess[õo]es|" +
+    "dispositivos|processos|threads|workers|inst[âa]ncias|r[ée]plicas|pods|servidores|webhooks|eventos|compras|transa[çc][õo]es)",
+  acts: "(?:aprov(?:a|am|ar|ou|aram)|aceit(?:a|am|ar|ou|aram)|consom(?:e|em)|consum(?:ir|iu|iram)|process(?:a|am|ar|ou|aram)|" +
+    "edit(?:a|am|ar|ou|aram)|grav(?:a|am|ar|ou|aram)|guard(?:a|am|ar|ou|aram)|apag(?:a|am|ar|ou|aram)|elimin(?:a|am|ar|ou|aram)|" +
+    "cancel(?:a|am|ar|ou|aram)|reembols\\p{L}*|aplic(?:a|am|ar|ou|aram)|levant(?:a|am|ar|ou|aram)|transfer(?:e|em|ir|iu|iram)|" +
+    "reclam(?:a|am|ar|ou|aram)|increment\\p{L}*|resgat\\p{L}*|submet\\p{L}*|reserv(?:a|am|ar|ou|aram)|compr(?:a|am|ar|ou|aram)|" +
+    "decrement\\p{L}*)",
+  txActs: "(?:resgat(?:a|am|ar|ou|aram|ad[oa]s?)|pag(?:a|am|ar|ou|aram)|submet(?:e|em|er|eu|eram|id[oa]s?)|reserv(?:am|ou|aram|ad[oa]s?)|" +
+    "compr(?:am|ou|aram|ad[oa]s?)|envi(?:a|am|ar|ou|aram)|clic(?:a|am|ar|ou|aram)|debit\\p{L}*|decrement(?:a|am|ar|ou|aram))",
+  nouns: "(?:pedidos|requisi[çc][õo]es|chamadas|cliques|webhooks)",
+  phrase: "ao[\\s-]+mesmo[\\s-]+tempo",
+});
+const AT_ONCE_ES = atOnce({
+  notCount: "paso|fase|etapa|parte|punto|[íi]tem|l[íi]nea|p[áa]gina|secci[óo]n|tabla|figura|versi[óo]n|nivel|ronda|#",
+  quant: "(?:dos|tres|ambos|ambas|varios|varias|\\p{N}+)",
+  parts: "columnas?|filas?|formularios?|campos?|filtros?|paneles|panel|botones|bot[óo]n|tarjetas?|widgets?|secciones|secci[óo]n|" +
+    "p[áa]ginas?|pantallas?|ventanas?|modales|modal|di[áa]logos?|gr[áa]ficos?|tablas?|listas?|men[úu]s?|enlaces?|[íi]conos?|" +
+    "etiquetas?|im[áa]genes|imagen|componentes?|elementos?|celdas?|pasos?|fases?|etapas?|partes?|[íi]tems?|segundos?|minutos?|" +
+    "horas?|d[íi]as?|semanas?",
+  actors: "(?:peticiones|solicitudes|llamadas|clics|pedidos|compras|pagos|reservas|canjes|compradores|usuarios|clientes|personas|miembros|" +
+    "cuentas|administradores|operadores|agentes|conductores|repartidores|cajeros|pestañas|sesiones|dispositivos|procesos|hilos|workers|" +
+    "instancias|r[ée]plicas|pods|nodos|servidores|webhooks|eventos|transacciones)",
+  acts: "(?:aprueb(?:a|an)|aprob(?:ar|ó|aron)|acept(?:a|an|ar|ó|aron)|consum(?:e|en|ir|ió|ieron)|proces(?:a|an|ar|ó|aron)|" +
+    "edit(?:a|an|ar|ó|aron)|guard(?:a|an|ar|ó|aron)|borr(?:a|an|ar|ó|aron)|elimin(?:a|an|ar|ó|aron)|cancel(?:a|an|ar|ó|aron)|" +
+    "reembols\\p{L}*|aplic(?:a|an|ar|ó|aron)|retir(?:a|an|ar|ó|aron)|transfier(?:e|en)|transfer(?:ir|ió|ieron)|reclam(?:a|an|ar|ó|aron)|" +
+    "increment\\p{L}*|canje\\p{L}*|compr(?:a|an|ar|ó|aron)|reserv(?:a|an|ar|ó|aron)|clic\\p{L}*|cliquea\\p{L}*|decrement\\p{L}*)",
+  txActs: "(?:canje(?:a|an|ó|aron|ad[oa]s?)|pag(?:a|an|ar|ó|aron)|env[ií](?:a|an|ar|ó|aron)|compr(?:an|ó|aron|ad[oa]s?)|" +
+    "reserv(?:an|ó|aron|ad[oa]s?)|descuent(?:a|an)|decrement(?:a|an|ó|aron)|cobr(?:a|an|ar|ó|aron))",
+  nouns: "(?:peticiones|solicitudes|llamadas|clics|webhooks)",
+  phrase: "(?:al[\\s-]+mismo[\\s-]+tiempo|a[\\s-]+la[\\s-]+vez)",
+});
+const CF_RECEIVED = "(?:webhooks?|events?|messages?|callbacks?|payments?|eventos?|mensage(?:m|ns)|mensajes?|pagamentos?|pagos?)";
+const RE_REPETITION_ROW = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
+  "twice", "two[\\s-]+times", "(?:two|both)(?:[\\s-]+[\\p{L}\\p{N}]+){0,2}?[\\s-]+at[\\s-]+once", "double[\\s-]+(?:submit\\p{L}*|clicks?|requests?|charges?|bookings?|spend\\p{L}*|redemptions?|deliver\\p{L}*)",
+  "duplicat\\p{L}*", "repeated(?![\\s-]+(?:password|e-?mail|confirmation|fields?|inputs?)(?![\\p{L}]))", "again[\\s-]+with[\\s-]+the[\\s-]+same",
+  AT_ONCE_EN, "(?:in[\\s-]+)?the[\\s-]+same[\\s-]+millisecond",
+  "identical[\\s-]+(?:requests?|calls?|events?|webhooks?|submissions?)", "replay\\p{L}*", "redeliver\\p{L}*", "resubmi(?:tted|tting|ts|ssions?)", "re-?sent",
+  // a provider's retry of the thing we RECEIVE (or charge) is a redelivery, after a failure or not
+  CF_RECEIVED + "[\\s-]+(?:(?:is|are|was|were|gets?|got|being)[\\s-]+)?retried", "retried[\\s-]+" + CF_RECEIVED,
+  "simultaneous\\p{L}*", "concurrent\\p{L}*", "in[\\s-]+parallel", "parallel[\\s-]+requests?", "race[\\s-]+conditions?", "promise\\.all",
+  // PT / ES repetido(a): a request again — never a password / e-mail / confirmation field (senha repetida, la contraseña repetida)
+  "duas[\\s-]+vezes", "duplicad\\p{L}*", "reenviad\\p{L}*",
+  "(?<!(?:senha|palavra-passe|e-?mail|confirma[çc][ãa]o|campo|contraseña|correo|confirmaci[óo]n)[\\s-]+)repetid\\p{L}*",
+  "em[\\s-]+simult[âa]neo", "simult[âa]ne\\p{L}*", "concorrent\\p{L}*", "em[\\s-]+paralelo", AT_ONCE_PT,
+  "no[\\s-]+mesmo[\\s-]+milissegundo", "pedidos[\\s-]+id[êe]nticos", "(?:de[\\s-]+novo|novamente|outra[\\s-]+vez)[\\s-]+com[\\s-]+(?:o[\\s-]+mesmo|a[\\s-]+mesma)",
+  "com[\\s-]+(?:o[\\s-]+mesmo|a[\\s-]+mesma)[\\s-]+(?:chave|idempotency-key|pedido|evento|webhook|mensagem|requisi[çc][ãa]o)",
+  "dos[\\s-]+veces", "simult[áa]ne\\p{L}*", "concurrentes?", "en[\\s-]+paralelo", AT_ONCE_ES,
+  "en[\\s-]+el[\\s-]+mismo[\\s-]+milisegundo",
+  "peticiones[\\s-]+id[ée]nticas", "(?:de[\\s-]+nuevo|otra[\\s-]+vez)[\\s-]+con[\\s-]+(?:el|la)[\\s-]+mism[oa]",
+  "con[\\s-]+(?:el[\\s-]+mismo|la[\\s-]+misma)[\\s-]+(?:clave|idempotency-key|petici[óo]n|evento|webhook|mensaje|solicitud)",
+].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
+// A description folded for the template comparison: lower case, emphasis (** __ _x_ `x`) out, blanks folded, a final period dropped.
+const planFold = (s) => String(s).toLowerCase().replace(/[*`]/g, "").replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, "")
+  .replace(/\s+/g, " ").trim().replace(/\.+$/, "");
+// A table row's cells as written (a "\|" is a pipe inside a cell); a separator row's cells are dashes (cell by cell: linear).
+const planRawCells = (line) => line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").split(/(?<!\\)\|/);
+const isPlanSep = (l) => /^\s*\|/.test(l) && l.includes("-") && planRawCells(l).every((c) => /^\s*:?-+:?\s*$/.test(c));
+// The Description column's header as the scaffold writes it, in every language (folded) — built once.
+let PLAN_DESC_HEADERS = null;
+function planDescHeaders() {
+  if (!PLAN_DESC_HEADERS) {
+    PLAN_DESC_HEADERS = new Set();
+    for (const lg of i18n.LANGS) {
+      let lines = [];
+      try { lines = i18n.testPlan("x", lg, ["core", "tdd"]).split("\n"); } catch { /* a builder's trouble never breaks the check */ }
+      const k = lines.findIndex((x, i) => /^\s*\|/.test(x) && isPlanSep(lines[i + 1] || ""));
+      if (k >= 0 && planRawCells(lines[k])[3]) PLAN_DESC_HEADERS.add(planFold(planRawCells(lines[k])[3]));
+    }
+  }
+  return PLAN_DESC_HEADERS;
+}
+// The ID cells a table without a recognised header never reads (a T-ID, an AC list).
+const RE_PLAN_ID_G = /(?<![\p{L}\p{N}_-])(?:T-\d+|(?:US-\d+\.)?AC-\d+|SC-\d+|EC-\d+|NFR-\d+)(?!\d)/giu;
+// A plan (or a template) → the cells that may answer, as written: each table row's Description cell — its column named by the
+// table's header (planDescHeaders) — else, in a table without that header, the row's cells but its IDs; a list row (- T-05 …)
+// whole. rowTest: which data rows count (a plan's: those holding a T-ID; a template's: every one — its IDs are {{t1}} …).
+function planCellsOf(text, rowTest = (l) => RE_PLAN_ROW.test(l)) {
+  const lines = stripFencedCode(stripHtmlComments(String(text || ""))).split(/\r?\n/);
+  const heads = planDescHeaders();
+  const out = [];
+  let col = null; // the current table's Description column (-1: none); null: not in a table
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].slice(0, 4000);
+    if (!/^\s*\|/.test(l)) {
+      col = null;
+      if (RE_PLAN_ROW.test(l)) out.push(l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, ""));
+      continue;
+    }
+    if (isPlanSep(l)) continue;
+    if (col === null) {
+      const header = isPlanSep(lines[i + 1] || "");
+      col = header ? planRawCells(l).findIndex((c) => heads.has(planFold(c))) : -1;
+      if (header) continue;
+    }
+    if (!rowTest(l)) continue;
+    const cells = planRawCells(l);
+    if (col >= 0) { if (cells[col] != null) out.push(cells[col]); continue; }
+    for (const c of cells) if (/\p{L}{3}/u.test(c.replace(RE_PLAN_ID_G, " "))) out.push(c);
+  }
+  return out;
+}
+// The values a scaffold filled in for this feature, as it rendered them — { name, slug, summary, tracks, lang, date } (the ones known).
+// The name is stored nowhere: it is the title of one of the feature's artifacts that slugifies to the feature's folder (the folder IS
+// the slug of the name the scaffold rendered), else the slug's words; the summary, requirements.md's Summary as written there.
+// f: { dir, slug, tracks, createdAt }.
+const PLAN_NAME_FILES = ["requirements.md", "design.md", "test-plan.md", "tasks.md"];
+function planFeatureValues(f, lang) {
+  if (!f || !f.slug) return {};
+  const vals = { slug: f.slug, tracks: trackLabel(f.tracks || ["core"]), lang: normalizeLang(lang || "en") };
+  if (f.createdAt) vals.date = dayOf(f.createdAt);
+  for (const file of PLAN_NAME_FILES) {
+    const h = /^#[ \t]+([^\n]{1,300})$/m.exec(readIfExists(path.join(f.dir, file)) || "");
+    if (!h) continue;
+    const t = h[1].trim(), at = t.indexOf(": ");
+    const named = [at >= 0 ? t.slice(at + 2).trim() : null, t].find((c) => c && slugify(c) === f.slug);
+    if (named) { vals.name = named; break; }
+  }
+  if (vals.name == null) vals.name = f.slug.replace(/-/g, " ");
+  const sum = extractSection(readIfExists(path.join(f.dir, "requirements.md")) || "", ["summary", "resumo", "resumen"]);
+  const first = String(sum || "").split(/\r?\n/).map((x) => x.trim()).find(Boolean);
+  if (first) vals.summary = first;
+  return vals;
+}
+// {{variables}} filled with the values the scaffold knew (vals: lower-case keys); the others — per row: {{acs}}, {{t1}} … — kept.
+const planFill = (s, vals) => String(s).replace(/\{\{\s*([A-Za-z_][\w-]*)\s*\}\}/g, (m, k) => (Object.prototype.hasOwnProperty.call(vals, k.toLowerCase()) ? vals[k.toLowerCase()] : m));
+// The template descriptions, folded → { exact: Set, wild: [{ segs, lit }] }: the built-in plan of every track in English and the
+// feature's language (pt-BR: derived — read once per language), every track pack's test-plan rows (their {{title}} / {{marker}}
+// and the feature's values filled in), the project's own test-plan templates (the feature's values filled in). A slot ("[…]",
+// tested on the cell as written) is no template text, nor a cell with fewer than three letters in a row outside its variables. A
+// cell still holding a per-row {{variable}} is a glossary pattern (glossPatternSegs, matched by the LINEAR glossSpans — never a
+// regex built from template text), kept only with ≥ 4 literal characters (the glossary's rule) and literal text at its start or
+// its end — "{{acs}} with {{t1}}" would cut any "with" out of a real row.
+const RE_PLAN_VAR_G = /\{\{[^{}\n]{1,40}\}\}/g;
+const PLAN_BUILTIN_CELLS = new Map();
+function planTemplateCells(projectDir, lang, feature) {
+  const l = normalizeLang(lang || "en");
+  const vals = planFeatureValues(feature, l);
+  const out = { exact: new Set(), wild: [] };
+  const add = (raw, v) => {
+    if (/^\s*\[/.test(raw)) return;
+    const cell = planFold(planFill(raw, v));
+    if (!/\p{L}{3}/u.test(cell.replace(RE_PLAN_VAR_G, " "))) return;
+    const pt = cell.includes("{{") ? glossPatternSegs(cell) : null;
+    if (!pt || pt.segs.length === 1) { out.exact.add(cell); return; }
+    const sg = pt.segs, lit = sg.join("").length;
+    if (lit >= 4 && (sg[0] || sg[sg.length - 1])) out.wild.push({ segs: sg, lit });
+  };
+  if (!PLAN_BUILTIN_CELLS.has(l)) {
+    const cells = new Set();
+    for (const lg of new Set(["en", l])) {
+      let t = "";
+      try { t = i18n.testPlan("x", lg, ["core", ...OPTIONAL_TRACKS]); } catch { /* a builder's trouble never breaks the check */ }
+      planCellsOf(t).forEach((c) => cells.add(c));
+    }
+    PLAN_BUILTIN_CELLS.set(l, [...cells]);
+  }
+  PLAN_BUILTIN_CELLS.get(l).forEach((c) => add(c, vals));
+  for (const tr of packTracks()) {
+    const p = packOf(tr), f = p ? packFragment(p, "test-plan.md", l) : null;
+    if (!f) continue;
+    const pv = Object.assign({}, vals, { title: packTitle(p, l), marker: p.marker }); // as packTestRowsBlock writes the rows
+    f.rows.forEach((r) => add(r.cells[3] || "", pv)); // (Test ID | Layer | Kind | Description | Covers | File — packTableRows)
+  }
+  for (const f of projectDir ? templateFileList(projectDir) : []) {
+    if (f.key === "test-plan") planCellsOf(readTemplateFile(f.abs, projectDir) || "", () => true).forEach((c) => add(c, vals));
+  }
+  return out;
+}
+const RE_OWN_DATA = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
+  "(?:my|their|his|her|your)[\\s-]+own", "(?<!product[\\s-])owners?", "owned[\\s-]+by", "ownership", "another[\\s-]+user", "other[\\s-]+users", "someone[\\s-]+else'?s?",
+  "tenants?", "permissions?", "access[\\s-]+control", "only[\\s-]+the[\\s-]+(?:user|customer|owner|author|creator|account[\\s-]+holder)",
+  "(?:sees?|views?|access(?:es)?|reads?|edits?|updates?|cancels?|deletes?|lists?|manages?|changes?)[\\s-]+(?:only[\\s-]+)?(?:their|his|her|your)",
+  "(?:seus?|suas?)[\\s-]+pr[óo]pri[oa]s?", "pr[óo]pri[oa]s?[\\s-]+(?:dados|contas?|reservas|encomendas|pedidos|saldo|carteira|perfil)", "donos?", "propriet[áa]ri[oa]s?",
+  "propietari[oa]s?",
+  "outros?[\\s-]+(?:utilizador(?:es)?|usu[áa]rios?)", "inquilinos?", "permiss[õo]es", "control[eo][\\s-]+de[\\s-]+acesso",
+  "(?:apenas|s[óo])[\\s-]+o[\\s-]+(?:utilizador|usu[áa]rio|cliente|dono|autor)",
+  "(?:sus?|tus?)[\\s-]+propi[oa]s?", "propi[oa]s?[\\s-]+(?:datos|cuentas?|reservas|pedidos|saldo|perfil)", "due[ñn]os?", "otros?[\\s-]+usuarios?", "permisos",
+  "control[\\s-]+de[\\s-]+acceso", "s[óo]lo[\\s-]+el[\\s-]+(?:usuario|cliente|due[ñn]o|autor)",
+].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
+const RE_OTHER_USER_ROW = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
+  "another[\\s-]+(?:user|customer|account|tenant|member|buyer|seller|organi[sz]ation|team)", "other[\\s-]+(?:users?|customers?|accounts?|tenants?|members?|organi[sz]ations?|teams?)",
+  "someone[\\s-]+else", "not[\\s-]+(?:the[\\s-]+)?owner", "non-?owners?", "(?:user|tenant|account|customer)[\\s-]+[b-z](?![\\p{L}\\p{N}])", "forbidden", "(?<!\\d)403",
+  "unauthori[sz]ed", "cross-?tenant",
+  "outr[oa]s?[\\s-]+(?:utilizador|usu[áa]rio|cliente|conta|inquilino|membro|organiza[çc][ãa]o|equipa|equipe)\\p{L}*", "de[\\s-]+outrem",
+  "n[ãa]o[\\s-]+(?:é[\\s-]+)?(?:o[\\s-]+)?(?:dono|propriet[áa]rio)", "(?:utilizador|usu[áa]rio|cliente|conta)[\\s-]+[b-z](?![\\p{L}\\p{N}])", "proibid[oa]", "n[ãa]o[\\s-]+autorizad[oa]",
+  "otr[oa]s?[\\s-]+(?:usuari[oa]|cliente|cuenta|inquilino|miembro|organizaci[óo]n|equipo)\\p{L}*", "no[\\s-]+(?:es[\\s-]+)?(?:el[\\s-]+)?(?:due[ñn]o|propietario)",
+  "(?:usuario|cliente|cuenta)[\\s-]+[b-z](?![\\p{L}\\p{N}])", "prohibid[oa]", "no[\\s-]+autorizad[oa]",
+].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
+// The rows the test plan of a critical flow lacks → ["repetition"?, "other-user"?] (none: complete). plan: test-plan.md's text;
+// each row read as its cells minus the ones that EQUAL a template row's cell (the user's words only — an edited cell is theirs).
+// A cell's own text: "" when it equals a template cell; a template pattern's filled-in values when one matches (the one with the
+// most literal text, glossUserParts' choice — "the order is submitted twice for {{name}}" leaves the name; "{{name}} for {{acs}}"
+// leaves both sides); else the cell.
+function planCellOwn(tpl, c) {
+  if (tpl.exact.has(c)) return "";
+  let best = null;
+  for (const p of tpl.wild) {
+    if (best && p.lit <= best.lit) continue;
+    const spans = glossSpans(p.segs, c);
+    if (spans) best = { lit: p.lit, spans };
+  }
+  return best ? best.spans.join(" ") : c;
+}
+function criticalPlanGaps(state, plan, lang, projectDir, feature) {
+  const tpl = planTemplateCells(projectDir, lang, feature);
+  const rows = planCellsOf(plan).map((c) => planCellOwn(tpl, planFold(c))).filter(Boolean).join("\n");
+  const gaps = [];
+  if (!RE_REPETITION_ROW.test(rows)) gaps.push("repetition");
+  if (RE_OWN_DATA.test(state.user) && !RE_OTHER_USER_ROW.test(rows)) gaps.push("other-user");
+  return gaps;
+}
+// The release the critical-flow checks came with: an approval made before (no `critical` stamp — gates.js stamps the design and
+// the test-plan approvals) is never flagged by them (the design weigh rule, A review 3).
+const CRITICAL_FLOW_SINCE = "1.33";
+// spec_doctor's two warns over a criticalFlowState with signals — never an approval check. which: "design" (critical-flows: the
+// requirements / design answer the race) or "test-plan" (critical-flow-tests: the plan has the rows). opts: { approval, plan,
+// projectDir — its track packs' and templates' rows are template text too, feature — { dir, slug, tracks, createdAt }: the values
+// its scaffold filled in }. → { id, status, detail }.
+function criticalFlowCheck(which, state, lang, opts = {}) {
+  const W = i18n.msg(lang).designWeigh.criticalFlows;
+  const words = state.signals.map((w) => `'${w}'`).join(", ");
+  const legacy = isRecord(opts.approval) && opts.approval.critical !== true;
+  if (which === "design") {
+    const id = "critical-flows";
+    if (state.answered) return { id, status: "pass", detail: W[state.answered](words) };
+    return legacy ? { id, status: "pass", detail: i18n.msg(lang).designWeigh.legacyApproval(W.open(words), CRITICAL_FLOW_SINCE) } : { id, status: "warn", detail: W.open(words) };
+  }
+  const id = "critical-flow-tests";
+  const gaps = criticalPlanGaps(state, opts.plan, lang, opts.projectDir, opts.feature);
+  if (!gaps.length) return { id, status: "pass", detail: W.rowsOk(words) };
+  const detail = W.rowsMissing(words, gaps.map((g) => W.gap[g]).join("; "));
+  return legacy ? { id, status: "pass", detail: W.legacyPlan(detail, CRITICAL_FLOW_SINCE) } : { id, status: "warn", detail };
+}
+const CRITICAL_FLOW_IDS = new Set(["critical-flows", "critical-flow-tests"]);
 // +dist: a criterion about duplicated / redelivered messages, and one about a dependency being down, EN/PT/ES.
 // (+ "arrives twice" / "duas vezes" / "dos veces", a redelivery; + "goes down", "unreachable", ES "está caído" — the
 // ES template's own word —, pt-BR "fora do ar", PT "em baixo" / "inacessível". Literal alternations: linear.)
@@ -1346,14 +1936,18 @@ function clarify(projectDir, name) {
   // a delivery guarantee or idempotency (A review 1 / 2 / 7).
   const nudge = constraintNudge(projectDir, dir, reqs, tracks, (readJson(statePath(dir)).data || {}).kind || "feature", featureLang(projectDir, name));
   if (nudge) add(fm.designWeigh.clarifyConsistency(nudge.signals.map((w) => `'${w}'`).join(", ")));
+  // 1.33: a critical flow (stock, a coupon, a balance, a booking, an invite, a quota, a payment) with no database-level answer to two
+  // identical requests at once — one question of its own, beside the consistency one (both may be asked)
+  const critical = criticalFlowNudge(projectDir, dir, reqs, tracks, kind, featureLang(projectDir, name));
+  if (critical) add(fm.designWeigh.clarifyCriticalFlow(critical.signals.map((w) => `'${w}'`).join(", ")));
   if (tracks.includes("dist") && !RE_DIST_DELIVERY.test(reqs)) add(QP.distDelivery); // 1.17 D
   if (tracks.includes("dist") && !RE_DIST_FAILURE.test(reqs)) add(QP.distFailure);
-  return clarifyResult(projectDir, f, tracks, fm, add, questions, nudge);
+  return clarifyResult(projectDir, f, tracks, fm, add, questions, [nudge, critical].filter(Boolean));
 }
 // The glossary questions and the result, for every kind. The glossary: every word it says to avoid that
 // requirements.md / design.md use (a change: change.md) — at most 10 questions, then one pointing at doctor. No glossary →
 // nothing asked.
-function clarifyResult(projectDir, f, tracks, fm, add, questions, nudge) {
+function clarifyResult(projectDir, f, tracks, fm, add, questions, nudges) {
   const gl = glossaryEntries(f.root);
   const gh = glossaryHits(f.dir, gl, { projectDir, lang: featureLang(projectDir, f.slug) });
   const Q = fm.quality;
@@ -1362,7 +1956,8 @@ function clarifyResult(projectDir, f, tracks, fm, add, questions, nudge) {
 
   const res = { ok: true, feature: f.slug, tracks: trackLabel(tracks), gapCount: questions.length, questions, verdict: questions.length ? "needs-clarification" : "clear" };
   if (gh.length) res.glossary = gh.map((h) => ({ word: h.word, term: h.term, count: h.count, locations: h.locations })); // 1.16 Q3 (stable)
-  if (nudge) res.nudges = [nudge]; // 1.17 A2 (stable): [{ code: "consistency-unstated", signals }]
+  // 1.17 A2 (stable): [{ code: "consistency-unstated", signals }]; 1.33: + { code: "critical-flow-unstated", signals }, after it
+  if (nudges && nudges.length) res.nudges = nudges;
   // Past GLOSSARY_MAX_ENTRIES entries the rest is never read: said (stable counts + the localized note), never silent.
   if (gl && gl.truncated) Object.assign(res, { glossaryTruncated: { read: gl.entries.length, total: gl.total }, glossaryNote: Q.glossaryTruncated(gl.entries.length, gl.total) });
   return res;
@@ -1380,9 +1975,9 @@ function clarifyChange(projectDir, f, c) {
   if (!written(CHANGE_APPROACH_SYN)) add(q.changeApproach);
   const sc = changeScope(f.dir, tracks, featureLang(projectDir, f.slug));
   if (!sc.ok && sc.acs > 0) add(q.changeScope(sc.detail));
-  return clarifyResult(projectDir, f, tracks, fm, add, questions, null);
+  return clarifyResult(projectDir, f, tracks, fm, add, questions, []);
 }
 
 module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
-  clarify, __link };
+  clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS, __link };

@@ -2,7 +2,7 @@
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 The spec-quality checks, the design's trade-offs / risks / reuse sections and their doctor warnings, the constraint nudge,
-the TDD micro-cycle, the duplicate-code detector. The rules come first; how they came to be — the releases and review findings — is in History at the end.
+the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules come first; how they came to be — the releases and review findings — is in History at the end.
 
 ## Spec quality
 - **Steering amendments** — a requirements / design approval (`STEERING_GOVERNED`) and its history record carry `steering`
@@ -76,9 +76,81 @@ the TDD micro-cycle, the duplicate-code detector. The rules come first; how they
   fires. Answered ANYWHERE in that text by a multi-word phrase (`RE_CONSISTENCY_ANSWER`: eventual consistency, idempotency,
   exactly-once, outbox…; `ACID` upper-case), never a bare "consistent" or "isolation". → `nudges` with the code
   `consistency-unstated` (≤ 3 signals); plain features only, never with +dist.
+- **Critical flows (1.33)** — `criticalFlowState()` (quality.js): a plain feature (never a bugfix, a spike, a change; not when a
+  track section that owns the question is scaffolded at the feature's size or present in its design — `criticalOwned()`, one
+  question bank, below) whose USER text (`userSpecText()` of requirements.md + design.md, each without its Out of Scope
+  section — `withoutOutOfScope()`, ONE linear pass over the headings) names a limited resource or a money flow: `CRITICAL_SIGNALS`
+  {en, pt, es} by concept (stock · coupon · balance · wallet · credit · booking · reservation · appointment · seat · slot ·
+  ticket · invite · quota · checkout · payment · charge · subscription), English in every spec + the feature language's, and
+  the capitalised gateways (`RE_CRITICAL_PRODUCTS`: Stripe, Paddle). ONE signal fires (the user never writes
+  "concurrency"); a "-" next to the word makes another word (zero-coupon, load-balance), a "/" doesn't (coupons/vouchers).
+  **The everyday senses** are cue rules in the classifier's data shape, run by its own machinery (classify.js `cueRules`,
+  the `near` kind, keyed by concept over the lower-cased text): `CRITICAL_CUES` — stock photos / the stock market / an IT
+  inventory, a bond's coupon and pt-BR's cupom fiscal, a load / work-life / white balance and the verb, an Apple Wallet,
+  tax / end / photo / ECTS credits, DHCP / nature / capital reservations, the appointment of a director and PT marcação
+  (markup) / agendamento de tarefas / ES citas bibliográficas / textuales / de los autores, a seat belt / car seat / vagas de emprego, UI / Vue / Shadow DOM /
+  PCI slots and slot machines, the bilhete de identidade, a calendar invite / "invites abuse", a sales quota, git checkout, the
+  balance of payments / withdrawal of consent, free of charge, a newsletter / GraphQL subscription and pt-BR assinatura
+  digital — plus +tdd's own rules for `credit` and `charge` (`SIGNALS.tdd.cues`: one list of their everyday senses). A
+  hard negative goes into the corpus of 15-quality-critical-flows.js with its positive twin.
+  **Answered** anywhere in that text — read WITH its code spans and fenced code (`userSpecText(…, {code: true})`) — by
+  `RE_CRITICAL_ANSWER` (a unique constraint / index, ON CONFLICT, a conditional / atomic update, the affected rows,
+  `SELECT … FOR UPDATE`, an `UPDATE … SET … WHERE`, a row / advisory lock, a version column, If-Match, processed events, PT /
+  ES twins, + `LOCKING_ANSWERS`, the phrases it shares with `RE_CONSISTENCY_ANSWER`: idempotency, exactly-once, the isolation
+  level, optimistic locking, atomically…; never a bare "unique" / "lock", never eventual consistency or at-least-once alone),
+  or by a written design section named Critical flows / Concurrency / Race conditions (`CRITICAL_FLOWS_SYN`, weighSection +
+  designWeighState min 0 — "None: this feature only reads the balance" answers). Surfaces: clarify's `nudges` gets
+  `{code: "critical-flow-unstated", signals}` (≤ 3, one per concept) AFTER `consistency-unstated` (unchanged — both may be
+  returned; `clarifyCriticalFlow`); doctor's `critical-flows` (phase 2: a designed feature, not while design.md is a later
+  phase's template) and `critical-flow-tests` (phase 3, +tdd: test-plan.md's rows — the lines holding a T-ID — read in their
+  DESCRIPTION cell only (`planCellsOf`: the column named by the table's header as the scaffold writes it, EN / PT / ES / pt-BR —
+  `planDescHeaders`; never the File, Covers, Layer, Kind or Test ID; a table without that header: its cells but the IDs; a list
+  row whole), minus a description that EQUALS a template one (`planTemplateCells`: the built-in plan of every track — EN + the
+  feature's language —, the track packs' test-plan rows, the project's test-plan templates; an edited one is the user's,
+  sectionOwnLines' rule). Before comparing, every value the scaffold filled in is FILLED (`planFeatureValues` — the name read
+  back from an artifact title that slugifies to the feature's folder, the slug, the Summary, tracks, lang, the creation date;
+  a pack's {{title}} / {{marker}}), so a feature named "Duplicate charge guard" keeps its scaffolded "{{name}} happy path"
+  row template; a slot is tested on the cell as written. Only per-row values ({{acs}}, {{t1}} …) stay variables: such a cell
+  is a glossary pattern (`glossPatternSegs`, ≥ 4 literal characters AND a literal at its start or its end — "{{acs}} with
+  {{t1}}" would cut "with" out of real rows) matched by the LINEAR `glossSpans` — never a regex built from template text — and
+  gives only those values (`planCellOwn`, glossUserParts' rule). `planFold` folds case, `**` / `_x_` / backticks, blanks and a
+  final period. They need a repetition row (twice / duplicate / repeated — never a repeated password / e-mail / confirmation
+  / form field — / again with the same / two at once / "at the same time" (`AT_ONCE_EN`) in four forms: (1) after a COUNTED
+  quantity — a number word, a digit, both — followed within three words by an action verb (`acts`: two admins approve, 2 pods
+  process, both tabs submit — any actor, no closed noun list decides) or right away (one word between at most) by an actor or a
+  request (`actors`: two buyers, 3 requests); (2) after an action in an UNAMBIGUOUS verb form (`txActs`: redeemed, paid, submitted,
+  booked, clicked — redeemed by Alice and Bob …, envían el pago) a few words before it — a form that is also a noun (click, press,
+  reservation, charge, PT compra / reserva / resgate, ES canje / compra / clic) counts only after a quantity; (3) right after a
+  PLURAL request noun (requests / clicks … at the same time); (4) the phrase first, then a counted quantity ("at the same time,
+  two users redeem …"). A quantity never counts when the noun right after it, or one word later, is a UI or structural part
+  (`parts`: columns, rows, forms, fields, filters, panels, buttons, cards, widgets, pages, screens, lists, badges, steps, phases,
+  items … — a browser tab is an actor, kept) or a unit (`UNITS`: MB / KB / GB, ms / s / min / h, days, px, am / pm, %), when a step
+  / phase / item number precedes it ("step 2 the user …": a lookbehind bounded to 3 separators — unbounded, a run of hyphens made
+  it quadratic) or when it is the digits of a time or a decimal (10:00, 1.5, 1,5: a digit and . , : before it); an ordinal (2nd)
+  never reads as one. Never on its own ("the list and the badge render at the same time"): the verbs are actions — never render /
+  show / load / update / see / the same millisecond / identical
+  requests / simultaneous / concurrent / in parallel / resubmitted / a redelivered or replayed anything, a retried webhook,
+  event, message, callback or payment — after a failure too: the provider redelivers —; PT repetido(a) — never a senha /
+  e-mail / confirmação / campo field —, reenviado, com a mesma chave, "ao mesmo tempo" by the same rule (`AT_ONCE_PT`); ES the
+  same — contraseña / correo / confirmación —, con la misma clave, "al mismo tiempo" / "a la vez" (`AT_ONCE_ES`). One at-once
+  rule per language (`atOnce({ notCount, quant, parts, actors, acts, txActs, nouns, phrase })`), each with its own words — PT / ES
+  verbs conjugated, accents included (envían, cajeros) — and phrase: ES "dos" (two) is PT "of the", so it counts only before ES's
+  phrase…
+  `RE_REPETITION_ROW`; never a bare retry — a Retry or Resubmit button, notifications retried after the provider fails) and,
+  when the user text is about own data or permissions (`RE_OWN_DATA`), another user's access (`RE_OTHER_USER_ROW`)). Both only WARN — no gate, no
+  `warnsOnly` —, share the context view `critical` (doctor.js `CHECK_VIEWS`) and follow the stamp scheme: `approvePhase`
+  stamps `critical: true` on every design and test-plan approval (and its record); an approval without it passes with a note
+  ("approved before 1.33" — `legacyApproval` / `criticalFlows.legacyPlan`). spec_upgrade lists them, never as `attention`
+  (`CRITICAL_FLOW_IDS`). The raw text is pre-checked with the signal regex: a spec naming no flow never builds the template
+  lines. A read-only flow (one word fires: "the account balance on the dashboard") is answered by one line under `## Critical
+  flows` — the warn's detail says so. The guide: `references/critical-flows.md`; the test plan template's Strategy carries the
+  rows as a comment.
 - **One question bank** — /clarify --grill's "Constraints round" skips a question an active track's design sections own
   (+dist: atomicity … dependency failure; +saas: volume; +api: idempotent creates, concurrent updates), and a sized design's
-  Error Handling points at the IF…THEN criteria instead of asking again (prose only).
+  Error Handling points at the IF…THEN criteria instead of asking again (prose only). The critical-flow nudge and checks
+  follow it (`CRITICAL_OWNERS`): +dist's Concurrency and +api's Pagination, Idempotency & Concurrency own the question — both
+  tier "extended", so a size-s scaffold leaves them out (scaffold.js `sizedTrackSections`) and the detector runs there, unless
+  the design holds that section anyway.
 - **The merged section (size S)** — a sized-S design writes ONE `## Decisions, reuse & risks` section. `designWeighChecks`
   reads it (`WEIGH_MERGED_SYN`) for a check whose own section the design lacks, min 0 ("no material risk" answers); the brief's
   Reuse part reads it too. A design with its own section is judged on that section.
@@ -253,6 +325,50 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   fence; setext and indented ATX count).
 - **1.24 review 6, F4** — `genericUnit` became markdown.js's `genericAnswer` (writtenContent's rule): "Pending.", "[TBD]",
   "**TBD**" are slot words too, beside a bare TODO / TBD.
+- **1.33** — critical flows: a plain feature ("users redeem a coupon at checkout", "book a slot") was never asked what two
+  identical requests at once do — the constraint nudge needs two concepts or a strong phrase, and only +dist / +api / +sec ask
+  it in their sections. One signal now fires a second nudge (`critical-flow-unstated`) and two doctor warns (`critical-flows`,
+  `critical-flow-tests`); `consistency-unstated` unchanged (`LOCKING_ANSWERS` only factored out of its answer). The everyday
+  senses reuse the classifier's `near` cues (`cueRules` exported) and +tdd's credit / charge rules; the test plan's Strategy
+  gained the guidance comment, the critic a Critical flows row, test-patterns.md the twice / two-at-once section, the
+  implementer's hard rule "never skip, delete or weaken a test or an assertion" (one wording, test-patterns.md repeats it).
+- **1.33 review** — five findings: the +dist / +api skip held at size s, where their owning sections are not scaffolded (a
+  `core +api` coupon feature was asked nothing — `criticalOwned()` by size); `withoutOutOfScope()` looked ahead from every
+  Out of Scope heading (80k of them: 7.7 s — one pass now, the linear guard in 15-quality-critical-flows.js); the plan check read the
+  scaffold's own rows (+ui's "an error with Retry", +data's "twice … no duplicate" passed the full track combination on the
+  template alone) and took a bare retry for a repetition; Shadow DOM slots and ES quotations (citas textuales / de los
+  autores) fired; the approval stamps were only in gates-and-approvals.md's History.
+- **1.33 review 2** — the plan check stripped template descriptions as SUBSTRINGS, so a template row the user extended ("…
+  delivered twice … — for the coupon webhook") lost its answer: a cell is template text only when it equals one; the
+  narrowed repetition lost the tool's own example (a retried / redelivered webhook, PT reenviado / repetido, "com a mesma
+  chave"); track packs' and project templates' rows were never template text. A cell that is only a `{{variable}}` matched
+  every cell (found by the new pack test).
+- **1.33 review 3** — the review-2 wildcards were regexes built from template text: a `[^,;:!?—–()]` class per variable made a
+  punctuated value never match (a verbatim pack row with two ACs or a "Webhooks (Stripe)" title passed on template text), a
+  variable beside a short word swallowed real rows ("{{name}} for {{acs}}", "Behavior of {{name}}"), and four lazy variables
+  over an 800-character cell took 1.7 s. They are the glossary's linear patterns now, a match giving only the values. The
+  repetition words caught a repeated password field, a Resubmit button, a render "at the same time" and "retried after the
+  provider fails"; `planFold` left `_italic_` and a final period.
+- **1.33 review 4** — simplified: only the Description column is read (a scaffold's `tests/{{slug}}.test.js` File cell beside a
+  verbatim description made it pass); the feature's own values are filled before the comparison (a feature named "Duplicate charge
+  guard" scaffolded from "{{name}} happy path" passed — the filled name was read as the user's repetition word; it warned at
+  b223e62); the slot test ran on the filled cell (a pack row opening with {{marker}} became "[hooks] …" and was dropped); a
+  pattern with no literal at either end cut a word out of real rows. Repetition: a provider's retry of a webhook / payment after
+  a failure, a repeated button press / link click, PT / ES repetido(a) beyond a password field, a wider window before "at the
+  same time" (after a number or an action only) count.
+- **1.33 review 5** — one at-once subject list served every language, so ES's "dos" (two) read PT's "dos" (of the): "o
+  carregamento dos saldos e do histórico ao mesmo tempo" passed with no repetition row; "both the list and the badge" and "the
+  header and 3 widgets … at the same time" counted (a number before UI parts). Now one rule per language (`AT_ONCE_EN` / `_PT` /
+  `_ES`), its number quantifying actors or requests only; a repeated field / input / campo repetido never counts.
+- **1.33 review 6** — the closed actor lists of review 5 lost rows the old rule caught ("both admins approve …", "two replicas
+  consume …", "2 pods process …", PT / ES alike) and ES `envi…` lacked "envían": a quantity followed within three words by an
+  action verb counts whatever the actor; a step number ("step 2 …") is no quantity — its lookbehind bounded, since an unbounded
+  one read backwards over 3,800 hyphens per position (30 rows: 5 s).
+- **1.33 review 7** — review 6's quantity counted rows that repeat nothing: UI / structural parts ("2 columns are edited", "both
+  forms save", "dos columnas procesan", "dois botões processam"), steps ("3 steps process"), units and a time's digits ("the 2 MB
+  upload", "at 10:00" read "00"), and a noun-like action alone ("2 panels handle the click" — the bare "click"). Now `parts` and
+  `UNITS` after a quantity, no digit after `\d[.,:]`, bare actions only in unambiguous verb forms, request nouns plural; the
+  phrase-first form and ES cajeros added. The timing guard is relative: `max(250 ms, 4 ×` a same-size plan of words`)`.
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the

@@ -109,6 +109,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   per sentence: a tu order after "só quando / só se …," (`RE_PTBR_INTRO`) or with "tu" after it, a "." that ends a chain only
   before a blank (".gitattributes"), `forces` in `PTBR_YOU_SUBJ`, the 3rd person's pronoun before it ("corre-a" → "a executa",
   `PTBR_WORDS`), "sítio(s)" and "porque é que" in `PTBR_PHRASES`; the lint's `EU_ONLY` checks each.
+- **1.33** — the critical-flow words: `cupão` / `cupões` → cupom / cupons and `quota` / `quotas` → cota / cotas in
+  `PTBR_WORDS` (same gender; +api's pt-BR heading reads "Limites de Taxa e Cotas", a synonym it already had). A PT sentence
+  never puts an adjective after "base de dados" (pt-BR "banco de dados" is masculine): "uma instância de base de dados … separada".
 
 ### Localization gotchas
 - **1.19** — the eval run showed agents relaying `dev-spec done <f> <n> --run` to users who had no `dev-spec` on PATH (only

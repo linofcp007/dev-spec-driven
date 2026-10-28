@@ -26,6 +26,9 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, requi
       "## Data Models\nOrder {id, total}.\n\n## Error Handling\nRetries with backoff.\n\n## Testing Strategy\nUnit and integration tests.\n\n" + risks +
       "## Constitution Check\n- [x] Idempotent writes — complies.\n\n## Complexity Tracking\nNone.\n";
     const cut = (t, from, to) => t.slice(t.indexOf(from), t.indexOf(to));
+    // 1.33: REQ's "WHEN stock runs out" is a critical flow too — clarify adds critical-flow-unstated after this nudge (both may be
+    // returned; 15-quality-critical-flows.js tests it): these assertions read the consistency nudge by its code
+    const cons = (n) => { const x = (n || []).filter((y) => y.code === "consistency-unstated"); return x.length ? x : undefined; };
 
     // A1 — a fresh scaffold, EN / PT / ES / pt-BR: both sections, after Architecture and before the Constitution Check, holding template
     // slots the placeholder lookup knows (the corpus renders them) — and the scaffold's own text never fires the clarify nudge.
@@ -168,7 +171,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, requi
     const lp = (lang, name, body) => {
       const f = S.createFeature(cp, name, ["core"], "", undefined, lang);
       fs.writeFileSync(path.join(f.dir, "requirements.md"), REQ.replace("hand the order to the warehouse queue", body));
-      return S.clarify(cp, f.slug).nudges;
+      return cons(S.clarify(cp, f.slug).nudges);
     };
     // (A review 7: one weak word never fires alone — each case pairs its queue word with an event.)
     const nPt = lp("pt", "Encomendas pt", "pôr a encomenda na fila do armazém e emitir um evento");
@@ -177,9 +180,10 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, requi
     const nBug = S.createFeature(cp, "Queue crash", ["tdd"], "", undefined, "en", "bugfix");
     fs.writeFileSync(path.join(nBug.dir, "requirements.md"), REQ);
     const nB = S.clarify(cp, nBug.slug);
-    ok(js(n1.nudges) === js([{ code: "consistency-unstated", signals: ["queue", "retries"] }]) &&
+    ok(js(cons(n1.nudges)) === js([{ code: "consistency-unstated", signals: ["queue", "retries"] }]) &&
       n1.questions.some((q) => /^The spec mentions 'queue', 'retries', but neither the requirements nor the design say anything about consistency or idempotency \(the answer goes in the design's Alternatives & Trade-offs \/ Risks, or in a requirement\)/.test(q)) &&
       js(n1Mcp.nudges) === js(n1.nudges) && n2.nudges === undefined && n3.nudges && n3.nudges[0].signals.length === 3 && js(n3.nudges[0].signals) === js(["queue", "events", "webhook"]) &&
+      n3.nudges[0].code === "consistency-unstated" &&
       js(nPt) === js([{ code: "consistency-unstated", signals: ["fila", "evento"] }]) && nEsRow === undefined && js(nEsQ) === js([{ code: "consistency-unstated", signals: ["cola", "evento"] }]) &&
       nB.nudges === undefined,
       "1.17 A2: spec_clarify asks ONE consistency question (nudges consistency-unstated, ≤ 3 signals) when the spec names a queue / events / a transaction and neither the requirements nor the design answer it; answered → none; PT 'fila' + 'evento' fires, ES 'fila' (a row) + 'evento' doesn't (one concept), ES 'cola' + 'evento' does; a bugfix is never asked (got " +
@@ -231,9 +235,9 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, requi
     const rv1Req = fs.readFileSync(path.join(rv1Sec.dir, "requirements.md"), "utf8");
     const rv1Block = rv1Req.slice(rv1Req.indexOf("#### [SEC]"), rv1Req.indexOf("\n\n", rv1Req.indexOf("**US-1.AC-12**")));
     fs.writeFileSync(path.join(rv1Sec.dir, "requirements.md"), REQ.replace("## Success Criteria", rv1Block + "\n\n## Success Criteria"));
-    const rv1Kept = S.clarify(rv1, rv1Sec.slug).nudges;
+    const rv1Kept = cons(S.clarify(rv1, rv1Sec.slug).nudges);
     fs.writeFileSync(path.join(rv1Sec.dir, "requirements.md"), REQ.replace("## Success Criteria", rv1Block.replace("record a security audit event", "write an audit event to the security log") + "\n\n## Success Criteria"));
-    const rv1Own = S.clarify(rv1, rv1Sec.slug).nudges;
+    const rv1Own = cons(S.clarify(rv1, rv1Sec.slug).nudges);
     const rv1Demo = S.clarify(dm, "usage-metering").nudges;
     ok(!rv1Fired.length && /record a security audit event/.test(rv1Block) && rv1Kept === undefined &&
       js(rv1Own) === js([{ code: "consistency-unstated", signals: ["queue", "event"] }]) && rv1Demo === undefined,
@@ -247,7 +251,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, requi
     const rv2F = S.createFeature(rv2, "Webhooks", ["core"]);
     const rv2Req = REQ.replace("hand the order to the warehouse queue", "send each order to the warehouse through a webhook");
     fs.writeFileSync(path.join(rv2F.dir, "requirements.md"), rv2Req);
-    const rv2Asked = S.clarify(rv2, rv2F.slug).nudges;
+    const rv2Asked = cons(S.clarify(rv2, rv2F.slug).nudges);
     fs.writeFileSync(path.join(rv2F.dir, "requirements.md"), rv2Req.replace("## Out of Scope", "- **NFR-2** — Webhook deliveries are at-least-once: THE SYSTEM SHALL process each order idempotently (the order id is the idempotency key).\n\n## Out of Scope"));
     const rv2InReq = S.clarify(rv2, rv2F.slug).nudges;
     const rv2InReqMcp = payload(await call("spec_clarify", { projectDir: rv2, name: rv2F.slug })).nudges;
@@ -346,7 +350,7 @@ exports.run = async ({ ok, all, rpc, payload, S, root, tmp, approveBefore, requi
       const f = S.createFeature(rv7, "N " + lang + " " + (rv7N.n = (rv7N.n || 0) + 1), ["core"], "", undefined, lang);
       fs.writeFileSync(path.join(f.dir, "requirements.md"), REQ.replace("hand the order to the warehouse queue", body));
       if (designText) wDesign(f, noIdem(design(designText, "")));
-      const n = S.clarify(rv7, f.slug).nudges;
+      const n = cons(S.clarify(rv7, f.slug).nudges);
       return n ? n[0].signals : null;
     };
     const rv7Got = {

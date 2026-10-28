@@ -241,7 +241,26 @@ Engine: the `B5` block of `engine/evidence.js`.
   `before-last-tick` · `code-changed` · `unobserved` (each item carries `observed`). next_action's `finish` / `drift` steps name
   `dev-spec finish <f> --run` / `spec_finish {evidence}` while one is missing (`projectChecks.naFinish`). No meta.checks, no change.
 - **`finish <f> --run`** (`runChecks`): `done --run`'s shell rules and refusals and the pipe hint; a check that could not run records
-  nothing.
+  nothing. **The diff base (1.33):** a guardian check runs with `DEV_SPEC_DIFF_BASE` = `guardianDiffBase(state, git)` — the
+  feature's branch record (`create --branch`): the branch it was created from, as `refs/heads/<base>` (never a tag of that name:
+  rev-parse prefers refs/tags), else the commit it started at; without a record the repository's default branch (origin/HEAD's
+  when it resolves — a remote default renamed leaves it dangling —, else a local main / master: cli/git.js `diffBaseFacts`) while
+  HEAD is on another branch. The first a plain ref name git resolves to a commit (a ref git can't read would turn the gate into
+  exit 3) is passed — NEVER skipped for being HEAD's commit: dev-guardian diffs from that ref's merge base with HEAD to the
+  WORKING TREE, untracked files included, so a branch still at main's tip with its work uncommitted (what an agent leaves) is read
+  through it. The one exception is chosen by merge base, not by commit equality: a base that already CONTAINS HEAD (`ancestor(head,
+  base)` — main moved to HEAD by `git branch -f`, a `--no-ff` local merge of the feature, where main ≠ HEAD) would hide the
+  feature's commits, so the recorded start commit goes instead when it differs from HEAD and is its ancestor; otherwise the base
+  still goes. (`diffBaseFacts.ancestor` = `git merge-base --is-ancestor`, commit ids only.) A ref passed that still contains HEAD
+  (no record, no usable start commit, a branch with no commit of its own) reads ONLY the uncommitted work: `uncommitted: true`, and
+  finish --run hands that word to the verdict (the evidence item's `diffBaseUncommitted`, CLI runs only — guardianRecord's last
+  argument; stored as `diffBaseUncommitted`), whose head line says `guardian.diffBaseUncommitted` ("only the uncommitted work
+  checked … (main already holds this branch's commits)") instead of "the change since main". **Known cost:** a feature rebased,
+  then merged, then finished again passes its recorded start commit — no longer on main's line —, so the read includes other
+  features' commits since then (more findings, never fewer); re-running finish after a merge is the rare path. None: the variable
+  is CLEARED for the run (finish --run alone sets it). The launcher passes it on as `--diff-base` to a dev-guardian
+  3.8.0+ (claude-code-integration.md → The dev-guardian launcher). Over MCP the agent runs the check itself: no diff base unless
+  it sets the variable.
 - **dev-guardian's gate — the check `guardian` (1.29; engine/guardian.js since 1.30).** `spec_init {guardian: true}` / `init
   --guardian [on|off]` (an optional-value CLI flag, bare = on) folds `{guardian: GUARDIAN_COMMAND | ""}` into the checks input
   (`guardianChecks()`) — the meta.checks rules unchanged (merged, validated, ≤ 20, the control-character refusal). On: the
@@ -713,6 +732,20 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `timeoutChanged` + dev-guardian's own remedy — read from its `cause: "accepted_file_changed"` once dev-guardian added that marker
   (with or without a ref; the file then in no accepted gap), the wording only for a report without it. (These notes first said
   "3.4.1" for dev-guardian's new keys; it ships them as 3.4.0.)
+- **1.33** — dev-guardian 3.8.0's test-integrity check (a test weakened to make it pass) reads only a change: `finish --run` hands the
+  launcher the feature's base (`DEV_SPEC_DIFF_BASE`), which it passes on as `--diff-base`; with none decided the variable is
+  cleared, so a value left in the shell never reaches the gate.
+- **1.33 review 5** — the recorded base was used whenever it resolved, even to HEAD's commit (a local merge, `git branch -f main
+  HEAD`, a failed switch, a TAG named `main` — rev-parse prefers refs/tags): an empty diff the verdict called "checked". Now
+  `refs/heads/<base>`, the start commit when the base is HEAD's, an empty change said and never passed; a dangling origin/HEAD
+  (a remote default renamed) falls back to the local main / master.
+- **1.33 review 6** — review 5's "empty" skip was wrong: dev-guardian reads the working tree, so a base at HEAD still reads the
+  uncommitted work — create --branch, work left uncommitted, a test turned into `test.only`: nothing was passed and the `.only` no
+  longer blocked. Never skipped now (`guardian.diffBaseEmpty` gone); the start commit replaces a base only when the base CONTAINS
+  HEAD (merge base, so a `--no-ff` local merge counts too), and only when it is HEAD's proper ancestor.
+- **1.33 review 7** — a base passed that still contains HEAD reads only the uncommitted work, yet the verdict said "the change since
+  main checked": `uncommitted` → `diffBaseUncommitted`, its own line in EN / PT / ES. The rebased-then-merged start commit's wider
+  read documented as a known cost.
 
 ### Task dependencies and execution waves
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks

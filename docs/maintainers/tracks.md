@@ -91,7 +91,9 @@ GDPR / RGPD / LGPD / CCPA / HIPAA are +privacy signals, not +saas).
   every sub-rule fires; kinds checked at load time). classify.js derives `SIGNAL_CUES[track](hit, text, cased, lang)` → a
   tier, "none" or null — built-in tracks only, after shadowing and before the context rule, each reading a bounded window
   (`CUE_SPAN`, 200 characters of the hit's clause / sentence) with linear regexes compiled on first use. A track pack has
-  strong / weak / context keywords only.
+  strong / weak / context keywords only. **One other reader (1.33):** quality.js's critical-flow detector runs its own rules
+  (`CRITICAL_CUES`) through the exported `cueRules`, beside +tdd's `credit` / `charge` rules — a change to those two reaches
+  it too (its corpus: 15-quality-critical-flows.js; quality.md → Critical flows).
 - **Matching** — WORDS, never substrings (Classifier gotchas). Built-in keywords only: a GAP keyword (`KW_GAP` " … ",
   `KW_GAP_RE`, linear) matches its parts, each via `keywordPattern()`, with ≤ 3 words between, never across `. ! ? ; : ,`;
   `IRREGULAR_FORMS` gives one signal per word (retry / retries / retried; an exact `2PC`; the noun only: request, form,
@@ -906,6 +908,8 @@ that changed; "the logged inputs" are the classify inputs both test suites log.
   "no more X" (`NO_MORE`) and the insufficiency predicate (`insufficientAfter()`). b7978f8 vs the fix: 16,125 literals, 76
   decisions changed, each a targeted phrasing; a 14-frame sweep (30,716 texts): 369 — +ai off only for the lower-case words,
   on only for the new keywords.
+- **1.33** — `cueRules` exported: the critical-flow detector (quality.js) runs its everyday-sense rules through the same
+  `near` machinery and reuses +tdd's credit / charge rules, rather than a second matcher.
 
 ### The classifier's signal rules, track by track
 - **1.21** — the list negation, +api's our-API + version rule and the public-API exception joined the reading.

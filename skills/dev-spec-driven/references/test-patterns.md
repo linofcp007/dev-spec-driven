@@ -293,6 +293,23 @@ This way:
 
 ---
 
+## Critical flows: twice, and two at once
+
+A feature that sells stock, redeems a coupon, spends a balance or credits, books a seat or slot, accepts an invite or takes
+a payment has a race in it (`spec_doctor` warns `critical-flow-tests` when its plan lacks these rows; the patterns:
+[critical-flows.md](critical-flows.md)). Its rows are **integration tests on the real route**:
+
+- against a real, **separate test database** — never production — so the unique constraint, the conditional update and the
+  row lock under test are the real ones; mock only what is external (the payment gateway, e-mail, third-party APIs);
+- **the same request twice** in a row → one effect; **two at once** (`Promise.all`, two threads) → exactly one effect;
+- the happy path, the expected errors, the limits (zero stock, an expired plan, a zero or negative amount) and **another
+  user's data** (refused, nothing changed).
+
+These tests are red until the database rule exists. Never skip, delete or weaken a test or an assertion to make it pass —
+a test that looks wrong is reported (BLOCKED), never edited.
+
+---
+
 ## Negative Tests Are First-Class
 
 Every `IF ... THEN` EARS requirement corresponds to at least one negative test. Negative tests

@@ -12,7 +12,8 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   13 imports · 14 templates and exports · 15 spec quality · 16 conventions and source guards · 17 docs and prose ·
   18 cross-area regressions (`18-cross-area*.js` — findings that span several areas). `--list` prints every file with its
   one-line summary (the file's first comment line). `mcp/tests/fixtures/` holds files a test reads byte for byte (1.30: the
-  launcher dev-spec-driven 1.29 wrote, `guardian-launcher-1.29.cjs` — never edited: its sha1 is pinned); the runner loads only
+  launcher dev-spec-driven 1.29 wrote, `guardian-launcher-1.29.cjs`; 1.33: the one 1.30–1.32.x wrote, `guardian-launcher-1.32.cjs` —
+  never edited: their sha1s are pinned); the runner loads only
   `NN-*.js` files. **A file is named after its topic** — `10-guards-shell-writes.js`,
   `12-lifecycle-branch.js` — never after a release or a review round: 1.27 renamed the 23 that were (`10-guards-review7.js`
   → `10-guards-shell-writes.js`, `13-imports-1-25.js` → `13-imports-steering.js`, `18-reviews.js` → `18-cross-area.js`…) and
