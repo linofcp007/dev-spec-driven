@@ -3,6 +3,53 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.33.0] — 2026-10-28
+
+Critical flows. A plain feature that redeems a coupon, books a slot or takes a payment never got asked what happens when
+two identical requests arrive in the same millisecond, or when the payment webhook arrives twice. Those are the classic
+failures of a vibe-coded app: a negative stock, a coupon used twice, a plan activated twice. Pair this release with
+dev-guardian 3.8.0, released alongside, which detects weakened tests and trusting the client in the code.
+
+### Added
+- **The critical-flow question.** When the requirements or the design describe a read-decide-write flow — stock,
+  coupons, a balance or credits, bookings, seats or slots, invites, quotas, checkout, payments, subscriptions — the
+  spec has to say how the database keeps it right. One such word is enough; everyday senses (stock photos, photo
+  credits, Vue slots, a credit-card field, a load balancer) are not. EN / PT / pt-BR / ES.
+  - **`/clarify`** returns a new nudge, `critical-flow-unstated`, next to `consistency-unstated`.
+  - **`spec_doctor` warns** `critical-flows` on the design until it answers. An answer is a database protection: a
+    unique constraint, one conditional `UPDATE … WHERE` that checks the affected rows, `SELECT … FOR UPDATE`, a
+    processed-events table keyed by the event id, an idempotency key. A read-only flow answers with one line under
+    `## Critical flows`.
+  - Skipped for a bugfix, a spike and a change, and with +dist or +api when their own concurrency section is in the
+    design (from size m; at size s it isn't, so the question is asked).
+- **A stricter test plan for critical flows.** `spec_doctor` warns `critical-flow-tests` until the plan has a row for
+  the same request twice or two at once, and — when the spec is about users' own data — a row for another user's
+  access. Rows the template wrote never count, and a bare "Retry" button is not repetition. The test plan's Strategy
+  now says how: integration tests on the real route with a separate test database, mocks only for what is external.
+- **`references/critical-flows.md`** — the recipes: the database first (constraint → conditional update → row lock;
+  no Redis or queue unless the database can't), webhooks (signature on the raw body, a processed-events table,
+  never rely on arrival order), idempotency keys on our gateway calls and our create endpoints, the server
+  recomputing every price, discount and permission, and the tests that prove each.
+- **The finish gate sees weakened tests.** With dev-guardian 3.8.0 or later, `finish --run` passes the feature's
+  base, and dev-guardian reports a focused `.only` (blocking), a skipped or deleted test, removed assertions or a test
+  script made to pass regardless. The merge summary names them ("weakened test"). An older dev-guardian runs exactly
+  as before.
+
+### Changed
+- `spec-critic` checks critical flows (a database answer in the design, the rows in the test plan); the implementer's
+  rule now reads "never skip, delete or weaken a test or an assertion to make it pass".
+- Design and test-plan approvals record a `critical` stamp. Approvals made before 1.33 are never flagged by the new
+  warns.
+- pt-BR writes "cupom" and "cota".
+
+### Upgrade note
+- **Update dev-spec on every machine of a team before finishing a feature.** The project's `.specs/guardian.cjs`
+  launcher changed: this version rewrites an older one by itself, but an older dev-spec reads the new launcher as
+  changed and refuses the gate — and its suggested `init --guardian` would put the old launcher back.
+
+### Tests
+- `node mcp/test.js` 2263 assertions, `node cli/test-cli.js` 657 (was 2243 / 655).
+
 ## [1.32.2] — 2026-10-28
 
 One more test that depended on where the repository is checked out. The plugin itself is unchanged.
