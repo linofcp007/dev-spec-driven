@@ -1562,62 +1562,84 @@ function criticalFlowNudge(projectDir, dir, reqs, tracks, kind, lang) {
 const RE_PLAN_ROW = /(?<![\p{L}\p{N}_-])T-\d+(?!\d)/u;
 // The same request again — a retried / redelivered / replayed webhook, event, message, callback or payment (the thing received or
 // charged again), two requests or an action at the same time — never a bare retry (a Retry / Resubmit button, notifications retried
-// after a failure) nor a repeated password / e-mail / confirmation field or a repeated (form) field. "At the same time" counts after
-// a QUANTITY — a number word, a digit, both / ambos / ambas — followed within three words by an action verb (two admins approve,
-// 2 pods process, both tabs submit) or right away by an actor or a request (two buyers, 3 requests); after a transactional action a
-// few words before it (redeemed by Alice and Bob, envían el pago); or right after a request noun. Never on its own ("the list and the
-// badge render at the same time"), never a quantity of UI parts (both the list and the badge, 3 widgets render: the verbs are
-// actions — never render / show / load / update / see), never a step / phase / item number or an ordinal ("step 2 the user and the
-// admin see …", 2nd). One rule per language, each with its own words and phrase: PT "dos" is "of the", never ES's two.
+// after a failure) nor a repeated password / e-mail / confirmation field or a repeated (form) field. "At the same time" counts:
+//   · after a QUANTITY — a number word, a digit, both / ambos / ambas — followed within three words by an action verb (two admins
+//     approve, 2 pods process, both tabs submit) or right away by an actor or a request (two buyers, 3 requests). Never a quantity
+//     of UI or structural parts or of a unit (2 columns, both forms, two filters, 3 steps, the 2 MB upload — the noun right after the
+//     number or one word later), never a step / phase / item number ("step 2 the user …"), never the digits of a time or a decimal
+//     (10:00, 1.5), never an ordinal (2nd);
+//   · after an action in an unambiguous verb form a few words before it (redeemed by Alice and Bob, envían el pago) — a form that is
+//     also a noun ("the click", "the reservation", "la compra", "o resgate") counts only after a quantity;
+//   · right after a plural request noun (requests / clicks … at the same time);
+//   · or first, then a quantity as above ("at the same time, two users redeem …").
+// Never on its own ("the list and the badge render at the same time"): the verbs are actions — never render / show / load / update
+// / see. One rule per language, each with its own words and phrase: PT "dos" is "of the", never ES's two.
 const W_ = "[\\s-]+[\\p{L}\\p{N}'’]+"; // one more word
-// (the quantity is matched once; the step lookbehind is bounded — an unbounded [\s-]* read backwards over a run of hyphens made
-// every position quadratic)
-const atOnce = ({ notCount, quant, actors, acts, txActs, nouns, phrase }) => "(?:" +
-  "(?<!(?:" + notCount + ")[\\s-]{0,3})" + quant +
-  "(?:(?:" + W_ + "){0,3}?[\\s-]+(?:" + acts + "|" + txActs + ")|(?:" + W_ + ")?[\\s-]+" + actors + ")(?:" + W_ + "){0,6}?" +
-  "|" + txActs + "(?:" + W_ + "){0,6}?" + "|" + nouns + "(?:" + W_ + "){0,2}?" + ")[\\s-]+" + phrase;
+const UNITS = "[kmgt]i?b|bytes?|ms|s|secs?|seconds?|mins?|minutes?|h|hrs?|hours?|days?|weeks?|px|am|pm|%";
+// (the quantity is matched once per branch; the step lookbehind is bounded — an unbounded [\s-]* read backwards over a run of
+// hyphens made every position quadratic)
+const atOnce = ({ notCount, quant, parts, actors, acts, txActs, nouns, phrase }) => {
+  const counted = "(?<!(?:" + notCount + ")[\\s-]{0,3})(?<!\\p{N}[.,:])" + quant +
+    "(?!(?:" + W_ + ")?[\\s-]+(?:" + parts + "|" + UNITS + ")(?![\\p{L}\\p{N}]))" +
+    "(?:(?:" + W_ + "){0,3}?[\\s-]+(?:" + acts + "|" + txActs + ")|(?:" + W_ + ")?[\\s-]+" + actors + ")";
+  return "(?:(?:" + counted + "(?:" + W_ + "){0,6}?|" + txActs + "(?:" + W_ + "){0,6}?|" + nouns + "(?:" + W_ + "){0,2}?)[\\s-]+" + phrase +
+    "|" + phrase + "[\\s,;:–—-]+" + counted + ")";
+};
 const AT_ONCE_EN = atOnce({
   notCount: "step|phase|stage|part|item|row|line|page|section|figure|table|version|level|round|#",
   quant: "(?:two|three|both|several|multiple|\\p{N}+)",
+  parts: "columns?|rows?|forms?|fields?|filters?|panels?|panes?|buttons?|cards?|widgets?|sections?|pages?|screens?|views?|modals?|" +
+    "dialogs?|charts?|graphs?|tables?|lists?|menus?|links?|icons?|badges?|labels?|images?|banners?|toasts?|headers?|footers?|" +
+    "sidebars?|components?|elements?|layouts?|cells?|tiles?|animations?|spinners?|steps?|phases?|stages?|parts?|items?|lines?",
   actors: "(?:requests?|calls?|clicks?|submissions?|orders?|payments?|bookings?|redemptions?|webhooks?|events?|buyers?|users?|customers?|" +
     "clients?|people|persons|members?|accounts?|admins?|administrators?|operators?|agents?|drivers?|cashiers?|tabs?|sessions?|browsers?|" +
     "devices?|threads?|workers?|processes|instances?|replicas?|pods?|nodes?|servers?|checkouts?|transactions?|jobs?|consumers?|carts?)",
   acts: "(?:approv(?:e|es|ed|ing)|accept(?:s|ed|ing)?|consum(?:e|es|ed|ing)|process(?:es|ed|ing)?|handl(?:e|es|ed|ing)|claim(?:s|ed|ing)?|" +
     "edit(?:s|ed|ing)?|writ(?:e|es|ing)|wrote|sav(?:e|es|ed|ing)|modif(?:y|ies|ied|ying)|delet(?:e|es|ed|ing)|cancel(?:s|led|ed|ling|ing)?|" +
-    "refund(?:s|ed|ing)?|appl(?:y|ies|ied|ying)|increment(?:s|ed|ing)?|debit(?:s|ed|ing)?)",
-  txActs: "(?:redeem\\p{L}*|pay(?:s|ing)?|paid|submit\\p{L}*|book(?:s|ed|ing)?|buy(?:s|ing)?|bought|click(?:s|ed|ing)?|post(?:s|ed|ing)?|" +
-    "send(?:s|ing)?|decrement\\p{L}*|reserv\\p{L}*|charg(?:e|es|ed|ing)|press(?:es|ed|ing)?|withdr(?:aw|aws|awing|awn|ew)|" +
-    "transfer(?:s|red|ring)?|ordered|ordering)",
-  nouns: "(?:requests?|calls?|clicks?|submissions?|webhooks?|redemptions?)",
+    "refund(?:s|ed|ing)?|appl(?:y|ies|ied|ying)|increment(?:s|ed|ing)?|debit(?:s|ed|ing)?|redeem\\p{L}*|submit\\p{L}*|buy(?:s|ing)?|" +
+    "book(?:s|ed|ing)?|click(?:s|ed|ing)?|press(?:es|ed|ing)?|post(?:s|ed|ing)?|send(?:s|ing)?|sent|charg(?:e|es|ed|ing)|reserv\\p{L}*|" +
+    "transfer(?:s|red|ring)?|withdr(?:aw|aws|awing|awn|ew)|order(?:s|ed|ing)?|decrement\\p{L}*)",
+  txActs: "(?:redeem(?:s|ed|ing)|pay(?:s|ing)?|paid|submit(?:s|ted|ting)|bought|buying|decrement(?:s|ed|ing)|reserv(?:es|ed|ing)|" +
+    "charged|charging|withdr(?:aws|awing|awn|ew)|transfer(?:red|ring)|ordered|ordering|booked|clicked|pressed)",
+  nouns: "(?:requests|calls|clicks|submissions|webhooks|redemptions)",
   phrase: "at[\\s-]+the[\\s-]+same[\\s-]+time",
 });
 const AT_ONCE_PT = atOnce({
   notCount: "passo|fase|etapa|parte|ponto|item|linha|p[áa]gina|sec[çc][ãa]o|se[çc][ãa]o|tabela|figura|vers[ãa]o|n[ií]vel|ronda|#",
   quant: "(?:dois|duas|tr[êe]s|ambos|ambas|v[áa]ri[oa]s|\\p{N}+)",
+  parts: "colunas?|linhas?|formul[áa]rios?|campos?|filtros?|pain[ée]is|painel|bot[õo]es|bot[ãa]o|cart[õo]es|cart[ãa]o|widgets?|" +
+    "sec[çc][õo]es|se[çc][õo]es|p[áa]ginas?|ecr[ãa]s?|telas?|janelas?|modais|modal|di[áa]logos?|gr[áa]ficos?|tabelas?|listas?|menus?|" +
+    "liga[çc][õo]es|links?|[íi]cones?|etiquetas?|imagens?|componentes?|elementos?|c[ée]lulas?|passos?|fases?|etapas?|partes?|itens|" +
+    "item|segundos?|minutos?|horas?|dias?|semanas?",
   actors: "(?:pedidos|requisi[çc][õo]es|chamadas|cliques|encomendas|pagamentos|reservas|resgates|compradores|utilizadores|usu[áa]rios|" +
     "clientes|pessoas|membros|contas|administradores|operadores|agentes|motoristas|condutores|estafetas|separadores|abas|sess[õo]es|" +
     "dispositivos|processos|threads|workers|inst[âa]ncias|r[ée]plicas|pods|servidores|webhooks|eventos|compras|transa[çc][õo]es)",
   acts: "(?:aprov(?:a|am|ar|ou|aram)|aceit(?:a|am|ar|ou|aram)|consom(?:e|em)|consum(?:ir|iu|iram)|process(?:a|am|ar|ou|aram)|" +
     "edit(?:a|am|ar|ou|aram)|grav(?:a|am|ar|ou|aram)|guard(?:a|am|ar|ou|aram)|apag(?:a|am|ar|ou|aram)|elimin(?:a|am|ar|ou|aram)|" +
     "cancel(?:a|am|ar|ou|aram)|reembols\\p{L}*|aplic(?:a|am|ar|ou|aram)|levant(?:a|am|ar|ou|aram)|transfer(?:e|em|ir|iu|iram)|" +
-    "reclam(?:a|am|ar|ou|aram)|increment\\p{L}*)",
-  txActs: "(?:resgat\\p{L}*|pag(?:a|am|ar|ou|aram)|submet\\p{L}*|reserv(?:a|am|ar|ou|aram)|compr(?:a|am|ar|ou|aram)|envi(?:a|am|ar|ou|aram)|" +
-    "clic(?:a|am|ar|ou|aram)|debit\\p{L}*|decrement\\p{L}*)",
+    "reclam(?:a|am|ar|ou|aram)|increment\\p{L}*|resgat\\p{L}*|submet\\p{L}*|reserv(?:a|am|ar|ou|aram)|compr(?:a|am|ar|ou|aram)|" +
+    "decrement\\p{L}*)",
+  txActs: "(?:resgat(?:a|am|ar|ou|aram|ad[oa]s?)|pag(?:a|am|ar|ou|aram)|submet(?:e|em|er|eu|eram|id[oa]s?)|reserv(?:am|ou|aram|ad[oa]s?)|" +
+    "compr(?:am|ou|aram|ad[oa]s?)|envi(?:a|am|ar|ou|aram)|clic(?:a|am|ar|ou|aram)|debit\\p{L}*|decrement(?:a|am|ar|ou|aram))",
   nouns: "(?:pedidos|requisi[çc][õo]es|chamadas|cliques|webhooks)",
   phrase: "ao[\\s-]+mesmo[\\s-]+tempo",
 });
 const AT_ONCE_ES = atOnce({
   notCount: "paso|fase|etapa|parte|punto|[íi]tem|l[íi]nea|p[áa]gina|secci[óo]n|tabla|figura|versi[óo]n|nivel|ronda|#",
   quant: "(?:dos|tres|ambos|ambas|varios|varias|\\p{N}+)",
+  parts: "columnas?|filas?|formularios?|campos?|filtros?|paneles|panel|botones|bot[óo]n|tarjetas?|widgets?|secciones|secci[óo]n|" +
+    "p[áa]ginas?|pantallas?|ventanas?|modales|modal|di[áa]logos?|gr[áa]ficos?|tablas?|listas?|men[úu]s?|enlaces?|[íi]conos?|" +
+    "etiquetas?|im[áa]genes|imagen|componentes?|elementos?|celdas?|pasos?|fases?|etapas?|partes?|[íi]tems?|segundos?|minutos?|" +
+    "horas?|d[íi]as?|semanas?",
   actors: "(?:peticiones|solicitudes|llamadas|clics|pedidos|compras|pagos|reservas|canjes|compradores|usuarios|clientes|personas|miembros|" +
-    "cuentas|administradores|operadores|agentes|conductores|repartidores|pestañas|sesiones|dispositivos|procesos|hilos|workers|" +
+    "cuentas|administradores|operadores|agentes|conductores|repartidores|cajeros|pestañas|sesiones|dispositivos|procesos|hilos|workers|" +
     "instancias|r[ée]plicas|pods|nodos|servidores|webhooks|eventos|transacciones)",
   acts: "(?:aprueb(?:a|an)|aprob(?:ar|ó|aron)|acept(?:a|an|ar|ó|aron)|consum(?:e|en|ir|ió|ieron)|proces(?:a|an|ar|ó|aron)|" +
     "edit(?:a|an|ar|ó|aron)|guard(?:a|an|ar|ó|aron)|borr(?:a|an|ar|ó|aron)|elimin(?:a|an|ar|ó|aron)|cancel(?:a|an|ar|ó|aron)|" +
     "reembols\\p{L}*|aplic(?:a|an|ar|ó|aron)|retir(?:a|an|ar|ó|aron)|transfier(?:e|en)|transfer(?:ir|ió|ieron)|reclam(?:a|an|ar|ó|aron)|" +
-    "increment\\p{L}*)",
-  txActs: "(?:canje\\p{L}*|pag(?:a|an|ar|ó|aron)|env[ií](?:a|an|ar|ó|aron)|compr(?:a|an|ar|ó|aron)|reserv(?:a|an|ar|ó|aron)|clic\\p{L}*|" +
-    "descuent(?:a|an)|decrement\\p{L}*|cobr(?:a|an|ar|ó|aron))",
+    "increment\\p{L}*|canje\\p{L}*|compr(?:a|an|ar|ó|aron)|reserv(?:a|an|ar|ó|aron)|clic\\p{L}*|cliquea\\p{L}*|decrement\\p{L}*)",
+  txActs: "(?:canje(?:a|an|ó|aron|ad[oa]s?)|pag(?:a|an|ar|ó|aron)|env[ií](?:a|an|ar|ó|aron)|compr(?:an|ó|aron|ad[oa]s?)|" +
+    "reserv(?:an|ó|aron|ad[oa]s?)|descuent(?:a|an)|decrement(?:a|an|ó|aron)|cobr(?:a|an|ar|ó|aron))",
   nouns: "(?:peticiones|solicitudes|llamadas|clics|webhooks)",
   phrase: "(?:al[\\s-]+mismo[\\s-]+tiempo|a[\\s-]+la[\\s-]+vez)",
 });

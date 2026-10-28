@@ -1772,7 +1772,8 @@ function recordFinishChecks(projectDir, slug, dir, evidence, lng, ranBy, runStar
     // report-mismatch · report-missing) — nothing is recorded.
     const output = ranBy === "cli" && typeof it.stderr === "string" ? it.stderr.slice(-GUARDIAN_STDERR_MAX) : typeof it.summary === "string" ? it.summary : "";
     const guardian = isGuardianCheck(it.name, byName.get(it.name))
-      ? guardianRecord(projectDir, dir, byName.get(it.name), run.exitCode, typeof it.report === "string" ? it.report : null, output) : null;
+      ? guardianRecord(projectDir, dir, byName.get(it.name), run.exitCode, typeof it.report === "string" ? it.report : null, output,
+        ranBy === "cli" && it.diffBaseUncommitted === true) : null; // (1.33: finish --run's own word — the base it passed contains HEAD)
     const refused = guardian ? guardianRefusal(guardian, lng) : null;
     if (refused) return { error: P.evidenceItem(i, refused.why), code: refused.code };
     // (a CLI run's `check` is the command it ran — meta.checks when it started; edited meanwhile, the run reads `changed`)

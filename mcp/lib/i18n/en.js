@@ -2944,6 +2944,7 @@ const msg = {
       override: (p) => ` (dev-guardian from DEV_GUARDIAN_CLI=${p})`,
       // 1.33: the change since the feature's base, read for weakened tests (dev-guardian 3.8.0's test-integrity check)
       diffBase: (ref) => ` · the change since ${ref} checked for weakened tests`,
+      diffBaseUncommitted: (ref) => ` · only the uncommitted work checked for weakened tests (${ref} already holds this branch's commits)`,
       // what never gates (1.30.2): the gaps the project accepted (accepted_gaps, counted by file — the head line, and a finish warning
       // on a pass) and dev-guardian's coverage notes (counted in the merge summary); finish --run prints their lines as dev-guardian wrote them
       accepted: (t, p, o) => [t ? `${t} file(s) not analysed (accepted in .guardian/scan.yml)` : "", p ? `${p} file(s) only partly parsed (accepted with --accept-partial-parse)` : "",

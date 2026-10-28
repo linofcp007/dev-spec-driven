@@ -983,15 +983,16 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
       onLocal: E.guardianDiffBase({}, git({ "refs/heads/main": MAIN }, "main", "main", "refs/heads/main")),
       noGit: E.guardianDiffBase(rec("main", SHA), null), headless: E.guardianDiffBase({}, git({ "refs/heads/main": MAIN }, null, "main", "refs/heads/main")),
     };
-    const BASE = { ref: "refs/heads/main", from: "base" }, START = { ref: SHA, from: "commit" };
-    all("1.33: finish --run's diff base — refs/heads/<recorded base> (never a tag); a base containing HEAD (moved to HEAD, a --no-ff merge) → the start commit when it is HEAD's proper ancestor, else the base still; never skipped as empty (a base and start at HEAD: the base); the recorded commit when the base is gone or invalid ('-x'); no record: the default branch (origin's or local) while HEAD is elsewhere, even at HEAD's commit; on the default branch, detached without a record, or without git: none (got " + js(b) + ")", {
+    // (review 7: a ref passed that still contains HEAD reads only the uncommitted work — `uncommitted: true`, the verdict says so)
+    const BASE = { ref: "refs/heads/main", from: "base" }, START = { ref: SHA, from: "commit" }, ONLY_WIP = { ...BASE, uncommitted: true };
+    all("1.33: finish --run's diff base — refs/heads/<recorded base> (never a tag); a base containing HEAD (moved to HEAD, a --no-ff merge) → the start commit when it is HEAD's proper ancestor, else the base still, marked uncommitted (only the uncommitted work is read); never skipped as empty (a base and start at HEAD: the base, uncommitted); the recorded commit when the base is gone or invalid ('-x'); no record: the default branch (origin's or local) while HEAD is elsewhere, even at HEAD's commit (uncommitted); facts that can't tell: no mark; on the default branch, detached without a record, or without git: none (got " + js(b) + ")", {
       base: js(b.base) === js(BASE), tagOnly: js(b.tagOnly) === js(START),
       movedToHead: js(b.movedToHead) === js(START), mergedNoFf: js(b.mergedNoFf) === js(START),
-      startOffHead: js(b.startOffHead) === js(BASE), noAncestorFacts: js(b.noAncestorFacts) === js(BASE), bothHead: js(b.bothHead) === js(BASE),
+      startOffHead: js(b.startOffHead) === js(ONLY_WIP), noAncestorFacts: js(b.noAncestorFacts) === js(BASE), bothHead: js(b.bothHead) === js(ONLY_WIP),
       gone: js(b.gone) === js(START), badBase: js(b.badBase) === js(START),
       detached: js(b.detached) === js(START), neither: b.neither === null,
       def: js(b.def) === js({ ref: "refs/remotes/origin/main", from: "default" }), defLocal: js(b.defLocal) === js({ ref: "refs/heads/main", from: "default" }),
-      defAtHead: js(b.defAtHead) === js({ ref: "refs/heads/main", from: "default" }),
+      defAtHead: js(b.defAtHead) === js({ ref: "refs/heads/main", from: "default", uncommitted: true }),
       none: b.onDefault === null && b.onLocal === null && b.noGit === null && b.headless === null,
     });
 
@@ -1032,6 +1033,16 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
       head: lines("en")[0].endsWith(S.msg("en").guardian.diffBase("main")),
       skip: skipped.verdict === "pass" && skipped.newFindings === 1 && !skipped.top,
       config: conf.verdict === "config" && conf.message === "error: Unknown flag: --diff-base" && conf.diffBase === "main",
+    });
+    // review 7: the base passed still contains HEAD (finish --run's `uncommitted`) — only the uncommitted work was read, and the head
+    // line says so (EN / PT / ES), never "the change since main"; the mark is stored; without a launcher line (no base passed) none
+    const wip = E.guardianRecord(p, null, CMD, 0, rep(0, [], []), DB, true), noBase = E.guardianRecord(p, null, CMD, 0, rep(0, [], []), "", true);
+    const wipHead = (l) => E.guardianLines(wip, l)[0];
+    all("1.33 review 7: a diff base that already contains HEAD — the verdict says only the uncommitted work was checked (EN / PT / ES), never 'the change since main'; stored; no base announced, no mark (got " +
+      js([wipHead("en"), wipHead("pt"), wipHead("es"), noBase.diffBaseUncommitted]) + ")", {
+      said: ["en", "pt", "es"].every((l) => wipHead(l).endsWith(S.msg(l).guardian.diffBaseUncommitted("main")) && !wipHead(l).includes(S.msg(l).guardian.diffBase("main"))),
+      stored: wip.diffBaseUncommitted === true && E.guardianStored(wip).diffBaseUncommitted === true,
+      noBase: noBase.diffBaseUncommitted === undefined && !E.guardianLines(noBase, "en")[0].includes("uncommitted"),
     });
   }
 

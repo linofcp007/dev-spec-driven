@@ -115,19 +115,27 @@ the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules 
   {{t1}}" would cut "with" out of real rows) matched by the LINEAR `glossSpans` — never a regex built from template text — and
   gives only those values (`planCellOwn`, glossUserParts' rule). `planFold` folds case, `**` / `_x_` / backticks, blanks and a
   final period. They need a repetition row (twice / duplicate / repeated — never a repeated password / e-mail / confirmation
-  / form field — / again with the same / two at once / "at the same time" (`AT_ONCE_EN`) after a QUANTITY — a number word, a
-  digit, both — followed within three words by an action verb (two admins approve, 2 pods process, both tabs submit: any actor,
-  so no closed noun list decides) or right away by an actor or a request (two buyers, 3 requests); after a transactional action
-  a few words before it (redeemed by Alice and Bob …); or right after a request noun. Never on its own ("the list and the badge
-  render at the same time"), never a quantity of UI parts ("both the list and the badge", "the header and 3 widgets render": the
-  verbs are actions — never render / show / load / update / see), never a step / phase / item number or an ordinal ("step 2 the
-  user and the admin see …": a lookbehind bounded to 3 separators — unbounded, a run of hyphens made it quadratic) / the same millisecond / identical
+  / form field — / again with the same / two at once / "at the same time" (`AT_ONCE_EN`) in four forms: (1) after a COUNTED
+  quantity — a number word, a digit, both — followed within three words by an action verb (`acts`: two admins approve, 2 pods
+  process, both tabs submit — any actor, no closed noun list decides) or right away (one word between at most) by an actor or a
+  request (`actors`: two buyers, 3 requests); (2) after an action in an UNAMBIGUOUS verb form (`txActs`: redeemed, paid, submitted,
+  booked, clicked — redeemed by Alice and Bob …, envían el pago) a few words before it — a form that is also a noun (click, press,
+  reservation, charge, PT compra / reserva / resgate, ES canje / compra / clic) counts only after a quantity; (3) right after a
+  PLURAL request noun (requests / clicks … at the same time); (4) the phrase first, then a counted quantity ("at the same time,
+  two users redeem …"). A quantity never counts when the noun right after it, or one word later, is a UI or structural part
+  (`parts`: columns, rows, forms, fields, filters, panels, buttons, cards, widgets, pages, screens, lists, badges, steps, phases,
+  items … — a browser tab is an actor, kept) or a unit (`UNITS`: MB / KB / GB, ms / s / min / h, days, px, am / pm, %), when a step
+  / phase / item number precedes it ("step 2 the user …": a lookbehind bounded to 3 separators — unbounded, a run of hyphens made
+  it quadratic) or when it is the digits of a time or a decimal (10:00, 1.5, 1,5: a digit and . , : before it); an ordinal (2nd)
+  never reads as one. Never on its own ("the list and the badge render at the same time"): the verbs are actions — never render /
+  show / load / update / see / the same millisecond / identical
   requests / simultaneous / concurrent / in parallel / resubmitted / a redelivered or replayed anything, a retried webhook,
   event, message, callback or payment — after a failure too: the provider redelivers —; PT repetido(a) — never a senha /
   e-mail / confirmação / campo field —, reenviado, com a mesma chave, "ao mesmo tempo" by the same rule (`AT_ONCE_PT`); ES the
   same — contraseña / correo / confirmación —, con la misma clave, "al mismo tiempo" / "a la vez" (`AT_ONCE_ES`). One at-once
-  rule per language (`atOnce({ notCount, quant, actors, acts, txActs, nouns, phrase })`), each with its own words — PT / ES verbs
-  conjugated, accents included (envían) — and phrase: ES "dos" (two) is PT "of the", so it counts only before ES's phrase…
+  rule per language (`atOnce({ notCount, quant, parts, actors, acts, txActs, nouns, phrase })`), each with its own words — PT / ES
+  verbs conjugated, accents included (envían, cajeros) — and phrase: ES "dos" (two) is PT "of the", so it counts only before ES's
+  phrase…
   `RE_REPETITION_ROW`; never a bare retry — a Retry or Resubmit button, notifications retried after the provider fails) and,
   when the user text is about own data or permissions (`RE_OWN_DATA`), another user's access (`RE_OTHER_USER_ROW`)). Both only WARN — no gate, no
   `warnsOnly` —, share the context view `critical` (doctor.js `CHECK_VIEWS`) and follow the stamp scheme: `approvePhase`
@@ -356,6 +364,11 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   consume …", "2 pods process …", PT / ES alike) and ES `envi…` lacked "envían": a quantity followed within three words by an
   action verb counts whatever the actor; a step number ("step 2 …") is no quantity — its lookbehind bounded, since an unbounded
   one read backwards over 3,800 hyphens per position (30 rows: 5 s).
+- **1.33 review 7** — review 6's quantity counted rows that repeat nothing: UI / structural parts ("2 columns are edited", "both
+  forms save", "dos columnas procesan", "dois botões processam"), steps ("3 steps process"), units and a time's digits ("the 2 MB
+  upload", "at 10:00" read "00"), and a noun-like action alone ("2 panels handle the click" — the bare "click"). Now `parts` and
+  `UNITS` after a quantity, no digit after `\d[.,:]`, bare actions only in unambiguous verb forms, request nouns plural; the
+  phrase-first form and ES cajeros added. The timing guard is relative: `max(250 ms, 4 ×` a same-size plan of words`)`.
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the

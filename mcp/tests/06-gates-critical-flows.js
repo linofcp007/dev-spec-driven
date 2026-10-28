@@ -211,7 +211,10 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       // (review 6: a quantity, then an action verb within three words — any actor —; ES envían with its accent)
       ["both admins approve the refund at the same time"], ["two drivers accept the same ride at the same time"], ["two replicas consume the message at the same time"],
       ["2 pods process the job at the same time"], ["dois administradores aprovam o reembolso ao mesmo tempo", "pt"],
-      ["dos administradores aprueban el reembolso al mismo tiempo", "es"], ["Ana y Luis envían el pago al mismo tiempo", "es"]];
+      ["dos administradores aprueban el reembolso al mismo tiempo", "es"], ["Ana y Luis envían el pago al mismo tiempo", "es"],
+      // (review 7: the phrase first, then the quantity; ES cajeros)
+      ["at the same time, two users redeem the same coupon"], ["ao mesmo tempo, dois clientes pagam a encomenda", "pt"],
+      ["al mismo tiempo, dos cajeros cobran la venta", "es"], ["dos cajeros al mismo tiempo: un solo cobro", "es"]];
     // (1.33 review 3 / 4: a repeated / repetida password field, a Resubmit button, a render "at the same time", notifications retried after a
     // failure)
     const NO = [["the Retry button reloads the list"], ["retries after a gateway timeout"], ["the repeat password field must match"], ["nova tentativa após um timeout", "pt"],
@@ -227,20 +230,26 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       ["o campo repetido fica destacado", "pt"],
       // (review 6: a step number is no quantity)
       ["step 2 the user and the admin see the badge at the same time"], ["passo 2 o cliente e o administrador veem o aviso ao mesmo tempo", "pt"],
-      ["paso 2 el cliente y el administrador ven el aviso al mismo tiempo", "es"]];
+      ["paso 2 el cliente y el administrador ven el aviso al mismo tiempo", "es"],
+      // (review 7: a quantity of UI / structural parts or of a unit, the digits of a time; a noun-like action alone — "the click")
+      ["2 columns are edited at the same time"], ["both forms save the draft at the same time"], ["two filters apply at the same time"],
+      ["2 panels handle the click at the same time"], ["3 steps process the data at the same time"], ["dos columnas procesan los datos al mismo tiempo", "es"],
+      ["dois botões processam o pedido ao mesmo tempo", "pt"], ["at 10:00 the scheduler processes the queue at the same time"],
+      ["the 2 MB upload is saved at the same time"], ["a reserva e o mapa carregam ao mesmo tempo", "pt"], ["el canje y el aviso aparecen a la vez", "es"]];
     const yesBad = YES.filter(([d, l]) => !rep(d, l)).map(([d]) => d), noBad = NO.filter(([d, l]) => rep(d, l)).map(([d]) => d);
-    // (review 6: the step lookbehind before a quantity is bounded — read backwards over a run of hyphens it was quadratic in the
-    // cell: 30 rows of 3,800 hyphens took 5 s)
-    const hyPlan = (n) => "# Test plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
-      Array.from({ length: n }, (_, i) => row("T-" + (100 + i), "a" + "-".repeat(3800) + " 2 x")).join("");
+    // (review 6 / 7: the step lookbehind before a quantity is bounded — read backwards over a run of hyphens it was quadratic in the
+    // cell, 30 rows of 3,800 hyphens took 5 s; measured against a plan of the same size in two-letter words — a linear read)
+    const hyPlan = (fill, n) => "# Test plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+      Array.from({ length: 30 }, (_, i) => row("T-" + (100 + i), "a" + fill.repeat(n) + " 2 x")).join("");
+    const hyFast = (x) => x.big < Math.max(250, 4 * x.base);
     const hy = remeasure(() => {
-      const t0 = Date.now(); check(hyPlan(30)); const big = Date.now() - t0;
-      const t1 = Date.now(); check(hyPlan(1)); return { big, base: Date.now() - t1 };
-    }, (x) => x.big < 5 * Math.max(x.base, 100) + 1500);
+      const t0 = Date.now(); check(hyPlan("-", 3800)); const big = Date.now() - t0;
+      const t1 = Date.now(); check(hyPlan("x ", 1900)); return { big, base: Date.now() - t1 };
+    }, hyFast);
     all("1.33 review 2: an edited template row is the user's (+dist's 'delivered twice … — for the coupon webhook', +sec's 'user B … — the coupon endpoint' answer; verbatim they don't); a repeated / redelivered / resubmitted / replayed / retried webhook, the same time / millisecond, identical requests, PT repetido(a) / reenviado / com a mesma chave, ES repetida / reenviado / con la misma clave count — a Retry button, a retry after a timeout, a repeat-password field don't; 30 rows of 3,800 hyphens stay linear (got " +
       js({ edited: gaps(check(ownMine)), verbatim: gaps(check(ownTpl)), yesBad, noBad, hyphens: { big: hy.big, base: hy.base, tries: hy.tries } }) + ")", {
       edited: () => gaps(check(ownMine)) === "pass", verbatim: () => gaps(check(ownTpl)) === "repetition row+another user's data",
-      yes: () => !yesBad.length, no: () => !noBad.length, linear: () => hy.big < 5 * Math.max(hy.base, 100) + 1500,
+      yes: () => !yesBad.length, no: () => !noBad.length, linear: () => hyFast(hy),
     });
   }
 

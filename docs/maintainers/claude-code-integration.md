@@ -454,7 +454,8 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
     `REVERT_HEAD`, `BISECT_HEAD`, `REBASE_HEAD`, `AUTO_MERGE` — a branch `fix/detached_head` is a branch; the list lives inside the
     carried function) refuses the scan (exit 3, "DEV_SPEC_DIFF_BASE is no plain ref name")
     — only where it would be appended. The launcher says what it appended on stderr (`dev-guardian launcher: --diff-base <ref>
-    (DEV_SPEC_DIFF_BASE)`): the verdict keeps it (`diffBase`, the head line's `guardian.diffBase`), a configuration error's message
+    (DEV_SPEC_DIFF_BASE)`): the verdict keeps it (`diffBase`, the head line's `guardian.diffBase` — `guardian.diffBaseUncommitted`
+    when finish --run said the base still contains HEAD: only the uncommitted work read), a configuration error's message
     never (`RE_LAUNCHER_DIFF_BASE`). Its findings gate like any finding: a `.only` (high) blocks at `--fail-on high`, a skip (medium)
     is a new finding below the bar; a finding of that tool is named a weakened test (`test: true`, `guardian.finding`). The three
     functions are carried like `findDevGuardian` (toString, the same source rules); `plainRefOk` is exported (the test holds it to

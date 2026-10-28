@@ -298,9 +298,11 @@ function guardianLauncherAudit(projectDir, lng, fix) {
 // name (plainRefOk — never "-…") git resolves to a commit (one it can't read would turn the gate into exit 3) is passed — never
 // skipped as "empty": a branch still at main's commit with its work uncommitted is read through it. One exception: a candidate that
 // already CONTAINS HEAD (its merge base with HEAD is HEAD — main moved to HEAD, a --no-ff local merge of the feature) would hide the
-// feature's commits, so the recorded start commit goes instead when it is a proper ancestor of HEAD. → { ref, from } | null. git:
-// the CLI's { head, current, defaultBranch, defaultRef, resolve(ref) → a commit id | null, ancestor(a, b) → true when commit a is b
-// or an ancestor of it, false, null (can't tell) } (the engine never runs git).
+// feature's commits, so the recorded start commit goes instead when it is a proper ancestor of HEAD. When the ref passed still
+// contains HEAD (no record, no usable start commit, a branch with no commit of its own) only the uncommitted work is read:
+// `uncommitted: true`, and the verdict says so (guardian.diffBaseUncommitted — never "the change since main"). → { ref, from,
+// uncommitted? } | null. git: the CLI's { head, current, defaultBranch, defaultRef, resolve(ref) → a commit id | null, ancestor(a, b)
+// → true when commit a is b or an ancestor of it, false, null (can't tell) } (the engine never runs git).
 function guardianDiffBase(state, git) {
   if (!git || typeof git.resolve !== "function" || !git.head) return null;
   const rec = featureBranchRecord(state);
@@ -311,11 +313,12 @@ function guardianDiffBase(state, git) {
   for (const [ref, from] of tries) {
     const sha = ref && plainRefOk(ref) ? git.resolve(ref) : null;
     if (!sha) continue;
-    if (from === "base" && ancestor(git.head, sha)) {
+    if (!ancestor(git.head, sha)) return { ref, from };
+    if (from === "base") {
       const start = plainRefOk(rec.commit) ? git.resolve(rec.commit) : null;
       if (start && start !== git.head && ancestor(start, git.head)) return { ref: rec.commit, from: "commit" };
     }
-    return { ref, from };
+    return { ref, from, uncommitted: true };
   }
   return null;
 }
@@ -507,12 +510,14 @@ const wholeLine = (v) => {
 // feature's own _Implements:_ files: {count, files ≤ GUARDIAN_SAID: [{file, kind}]}), notes? (the coverage_notes, each once),
 // staleTimeouts? (unused_timeout_acceptances: {count, files ≤ GUARDIAN_SAID}), message? (config: dev-guardian's own),
 // baseline? ("absent": every existing finding counted as new), tool? (the report's tool_version), update? (dev-guardian is older
-// than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran) }
+// than GUARDIAN_MIN_VERSION, reported no version, or could not load a package), override? (the DEV_GUARDIAN_CLI the launcher ran),
+// diffBase? (the --diff-base the launcher announced — 1.33), diffBaseUncommitted? (true: that base already contains HEAD, so only
+// the uncommitted work was read — finish --run's own word, `uncommitted`, never a report's) }
 // — and what recordFinishChecks refuses on (never stored): launcher ("changed" | "missing" — the launcher as the run is recorded),
 // mismatch (the report contradicts the exit code: reportExit = its exit_code), noReport (exit 0 with no readable report); and what
 // finish --run prints (never stored): acceptedLines / noteLines (≤ GUARDIAN_SAID of each, as dev-guardian wrote them), acceptedMore.
 // report: the JSON on stdout; output: the rest (stderr — over MCP the evidence's summary). dir: the feature folder (own), or null.
-function guardianRecord(projectDir, dir, command, exitCode, report, output) {
+function guardianRecord(projectDir, dir, command, exitCode, report, output, uncommitted) {
   const code = Number.isInteger(exitCode) ? exitCode : parseInt(exitCode, 10);
   const cmd = String(command || "");
   const fo = /--fail-on[=\s]+(info|low|medium|high|critical)\b/i.exec(cmd);
@@ -534,6 +539,7 @@ function guardianRecord(projectDir, dir, command, exitCode, report, output) {
   if (ov) g.override = cleanLine(ov[1], 300);
   const db = RE_LAUNCHER_DIFF_BASE.exec(text);
   if (db) g.diffBase = cleanLine(db[1], 200);
+  if (db && uncommitted === true) g.diffBaseUncommitted = true;
   if (!j) {
     if (code === 0 && /--format[=\s]+json\b/i.test(cmd) && RE_GUARDIAN_SCAN.test(cmd)) g.noReport = true;
     return g;
@@ -672,7 +678,7 @@ function guardianHead(g, lng) {
     case "no-launcher": head = G.noLauncher; break;
     default: head = G.exited(g.exit);
   }
-  return head + (g.baseline === "absent" ? G.noBaseline : "") + (g.override ? G.override(g.override) : "") + (g.diffBase ? G.diffBase(shortRef(g.diffBase)) : "") +
+  return head + (g.baseline === "absent" ? G.noBaseline : "") + (g.override ? G.override(g.override) : "") + (g.diffBase ? (g.diffBaseUncommitted === true ? G.diffBaseUncommitted : G.diffBase)(shortRef(g.diffBase)) : "") +
     (accepted ? " · " + accepted : "");
 }
 const guardianAt = (f) => (f.file ? f.file + (f.line ? ":" + f.line : "") : "?");

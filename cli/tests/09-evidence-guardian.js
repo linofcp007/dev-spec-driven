@@ -356,21 +356,24 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
       // a fresh branch still at main's commit, no record: main is passed all the same (its uncommitted work is the change)
       git(x.p, "switch", "-q", "-c", "feature/fresh", "main");
       const rFresh = await runWith(f380);
+      const freshCheck = stateOf(x).finishChecks.guardian;
       git(x.p, "switch", "-q", "main");
       const rMain = await runWith(f380, { DEV_SPEC_DIFF_BASE: "evil" });
       const PLAIN = "scan --project . --fail-on high --format json";
       const ends = (a, ref) => typeof a === "string" && a.endsWith("--format json --diff-base " + ref);
-      all("1.33 finish --run: the feature's recorded base reaches dev-guardian 3.8.0 as --diff-base refs/heads/main — the verdict says 'since main' — under " + shells.join(", ") + "; a tag named main never counts; main moved to HEAD or a --no-ff local merge of the feature → the start commit; base and start at HEAD with a test.only left uncommitted → the base is passed and the .only blocks; 3.7.1 gets the arguments as before (its value ignored); without a record the default branch while HEAD is elsewhere (the local one when origin/HEAD dangles), also at main's commit; on main nothing, an inherited DEV_SPEC_DIFF_BASE cleared (got " +
-        js({ r38: [r38.args, r38.out.split("\n")[1]], r37: r37.args, bySh, rTag: rTag.args, rMoved: rMoved.args, rNoFf: rNoFf.args, rDirty: [rDirty.args, dirtyCheck && dirtyCheck.exitCode], rDef: rDef.args, rDangling: rDangling.args, rFresh: rFresh.args, rMain: rMain.args }) + ")", {
-        recorded: ends(r38.args, "refs/heads/main") && r38.out.includes(LINE), // (finish itself refuses: the fixture's spec is still a template)
+      const UNC = MSG("en").guardian.diffBaseUncommitted("main"); // (review 7: the base passed still contains HEAD — only the uncommitted work read)
+      const wip = (r, chk) => r.out.includes(UNC) && !r.out.includes(LINE) && !!chk && !!chk.guardian && chk.guardian.diffBaseUncommitted === true;
+      all("1.33 finish --run: the feature's recorded base reaches dev-guardian 3.8.0 as --diff-base refs/heads/main — the verdict says 'since main' — under " + shells.join(", ") + "; a tag named main never counts; main moved to HEAD or a --no-ff local merge of the feature → the start commit; base and start at HEAD with a test.only left uncommitted → the base is passed, the .only blocks and the verdict says only the uncommitted work was checked (stored); 3.7.1 gets the arguments as before (its value ignored); without a record the default branch while HEAD is elsewhere (the local one when origin/HEAD dangles), also at main's commit (uncommitted, said); on main nothing, an inherited DEV_SPEC_DIFF_BASE cleared (got " +
+        js({ r38: [r38.args, r38.out.split("\n")[1]], r37: r37.args, bySh, rTag: rTag.args, rMoved: rMoved.args, rNoFf: rNoFf.args, rDirty: [rDirty.args, dirtyCheck && dirtyCheck.exitCode, rDirty.out.split("\n")[1]], rDef: rDef.args, rDangling: rDangling.args, rFresh: [rFresh.args, rFresh.out.split("\n")[1], freshCheck && freshCheck.guardian], rMain: rMain.args }) + ")", {
+        recorded: ends(r38.args, "refs/heads/main") && r38.out.includes(LINE) && !r38.out.includes(UNC), // (finish itself refuses: the fixture's spec is still a template)
         older: r37.args === PLAIN && !r37.out.includes(LINE),
         shells: shells.length >= 1 && bySh.every(([, a]) => ends(a, "refs/heads/main")),
         tag: ends(rTag.args, "refs/heads/main"),
         moved: ends(rMoved.args, sha) && rMoved.out.includes(MSG("en").guardian.diffBase(sha)),
         noFf: ends(rNoFf.args, sha),
-        dirtyOnlyBlocks: ends(rDirty.args, "refs/heads/main") && !!dirtyCheck && dirtyCheck.exitCode === 1,
+        dirtyOnlyBlocks: ends(rDirty.args, "refs/heads/main") && !!dirtyCheck && dirtyCheck.exitCode === 1 && wip(rDirty, dirtyCheck),
         byDefault: ends(rDef.args, "refs/heads/main"), dangling: ends(rDangling.args, "refs/heads/main"),
-        fresh: ends(rFresh.args, "refs/heads/main"),
+        fresh: ends(rFresh.args, "refs/heads/main") && wip(rFresh, freshCheck),
         onDefault: rMain.args === PLAIN && !rMain.out.includes("weakened"),
       });
     } else ok(true, "1.33 finish --run's diff base — skipped (git is not available)");

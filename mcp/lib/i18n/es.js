@@ -2785,6 +2785,7 @@ const msg = {
       override: (p) => ` (dev-guardian de DEV_GUARDIAN_CLI=${p})`,
       // 1.33: el cambio desde la base de la funcionalidad, leído en busca de pruebas debilitadas (el test-integrity de dev-guardian 3.8.0)
       diffBase: (ref) => ` · el cambio desde ${ref} revisado en busca de pruebas debilitadas`,
+      diffBaseUncommitted: (ref) => ` · solo el trabajo aún sin commit revisado en busca de pruebas debilitadas (${ref} ya contiene los commits de esta rama)`,
       accepted: (t, p, o) => [t ? `${t} fichero(s) sin analizar (aceptado(s) en .guardian/scan.yml)` : "", p ? `${p} fichero(s) leído(s) solo en parte (aceptado(s) con --accept-partial-parse)` : "",
         o ? `${o} otra(s) laguna(s) aceptada(s)` : ""].filter(Boolean).join(" · "),
       acceptedWarn: (what) => `el gate de dev-guardian pasó con ${what} — revisa a mano un cambio en esos ficheros: un finding donde ningún escáner miró pasa el gate.`,

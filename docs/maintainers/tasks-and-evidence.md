@@ -251,8 +251,14 @@ Engine: the `B5` block of `engine/evidence.js`.
   through it. The one exception is chosen by merge base, not by commit equality: a base that already CONTAINS HEAD (`ancestor(head,
   base)` — main moved to HEAD by `git branch -f`, a `--no-ff` local merge of the feature, where main ≠ HEAD) would hide the
   feature's commits, so the recorded start commit goes instead when it differs from HEAD and is its ancestor; otherwise the base
-  still goes. (`diffBaseFacts.ancestor` = `git merge-base --is-ancestor`, commit ids only.) None: the variable is CLEARED for the
-  run (finish --run alone sets it). The launcher passes it on as `--diff-base` to a dev-guardian
+  still goes. (`diffBaseFacts.ancestor` = `git merge-base --is-ancestor`, commit ids only.) A ref passed that still contains HEAD
+  (no record, no usable start commit, a branch with no commit of its own) reads ONLY the uncommitted work: `uncommitted: true`, and
+  finish --run hands that word to the verdict (the evidence item's `diffBaseUncommitted`, CLI runs only — guardianRecord's last
+  argument; stored as `diffBaseUncommitted`), whose head line says `guardian.diffBaseUncommitted` ("only the uncommitted work
+  checked … (main already holds this branch's commits)") instead of "the change since main". **Known cost:** a feature rebased,
+  then merged, then finished again passes its recorded start commit — no longer on main's line —, so the read includes other
+  features' commits since then (more findings, never fewer); re-running finish after a merge is the rare path. None: the variable
+  is CLEARED for the run (finish --run alone sets it). The launcher passes it on as `--diff-base` to a dev-guardian
   3.8.0+ (claude-code-integration.md → The dev-guardian launcher). Over MCP the agent runs the check itself: no diff base unless
   it sets the variable.
 - **dev-guardian's gate — the check `guardian` (1.29; engine/guardian.js since 1.30).** `spec_init {guardian: true}` / `init
@@ -737,6 +743,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   uncommitted work — create --branch, work left uncommitted, a test turned into `test.only`: nothing was passed and the `.only` no
   longer blocked. Never skipped now (`guardian.diffBaseEmpty` gone); the start commit replaces a base only when the base CONTAINS
   HEAD (merge base, so a `--no-ff` local merge counts too), and only when it is HEAD's proper ancestor.
+- **1.33 review 7** — a base passed that still contains HEAD reads only the uncommitted work, yet the verdict said "the change since
+  main checked": `uncommitted` → `diffBaseUncommitted`, its own line in EN / PT / ES. The rebased-then-merged start commit's wider
+  read documented as a known cost.
 
 ### Task dependencies and execution waves
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks

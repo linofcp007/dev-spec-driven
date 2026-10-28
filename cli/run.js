@@ -214,6 +214,8 @@ async function runChecks(feature, deps) {
   const base = checks.some((c) => spec.isGuardianCheck(c.name, c.command)) && deps.diffBaseFacts
     ? spec.guardianDiffBase(spec.readState(projectDir, fx.slug), deps.diffBaseFacts()) : null;
   const guardianEnv = () => { const e = { ...process.env }; delete e[KEY]; if (base) e[KEY] = base.ref; return e; };
+  // a base that still contains HEAD: dev-guardian reads only the uncommitted work — the verdict says so, never "the change since main"
+  const uncommitted = !!(base && base.uncommitted);
   const evidence = [];
   let cmdFailed = false;
   for (const c of checks) {
@@ -221,7 +223,7 @@ async function runChecks(feature, deps) {
     const guardian = spec.isGuardianCheck(c.name, c.command);
     const x = await runCommand(c.command, sh, M, guardian ? { ...exec, env: guardianEnv() } : exec);
     const summary = guardian ? spec.summarizeRunOutput(x.stderr) : x.summary;
-    if (guardian && !x.cantRun) spec.guardianLines(spec.guardianRecord(projectDir, fx.dir, c.command, x.code, x.stdout, x.stderr), lang).forEach((l) => deps.say("  " + l));
+    if (guardian && !x.cantRun) spec.guardianLines(spec.guardianRecord(projectDir, fx.dir, c.command, x.code, x.stdout, x.stderr, uncommitted), lang).forEach((l) => deps.say("  " + l));
     else if (x.summary) deps.say(x.summary.replace(/^/gm, "  "));
     if (x.heldOpen && !x.cantRun) deps.say("  " + M.cliOutput.runHeldOpen(x.code)); // settled at its exit
     // a check that could not run is refused and NOTHING is recorded (all-or-nothing, like
@@ -229,7 +231,8 @@ async function runChecks(feature, deps) {
     if (x.cantRun) return { ok: false, couldNotRun: x.cantRun.code, check: c.name, error: M.runGate.checkRefused(c.name, c.command, x.cantRun.why) };
     if (x.code !== 0 && sh.cmd && spec.windowsShellFailure(x.output, x.code)) cmdFailed = true;
     // a guardian check: its JSON report (stdout) and its raw stderr (its own message, node's — the summary keeps only the last lines)
-    evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary, ...(guardian ? { report: x.stdout, stderr: x.stderr } : {}), ...git });
+    evidence.push({ name: c.name, command: c.command, exitCode: x.code, summary,
+      ...(guardian ? { report: x.stdout, stderr: x.stderr, ...(uncommitted ? { diffBaseUncommitted: true } : {}) } : {}), ...git });
   }
   if (cmdFailed) deps.warn(M.taskDone.shellHint);
   return { ok: true, evidence };
