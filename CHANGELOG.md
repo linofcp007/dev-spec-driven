@@ -21,7 +21,8 @@ so a lucky draw could promote a prompt. Nothing in the references spoke of varia
   - **Runs per scenario.** Every run meets the budget, not only their average.
   - **Limit.** What stops the throughput going higher (CPU, a lock, a connection pool, the database, the network, the
     load generator itself), read from the resource use during a run that saturates the system, not guessed from the
-    code. A steady run at a fixed rate is capped by that rate.
+    code. A steady run at a fixed rate is capped by that rate, so the scenarios list gains **Breakpoint** (the run
+    that saturates the system).
 
 ### Changed
 - **One rule for an eval score, everywhere.** Compare golden's median over the plan's runs with the baseline's median.
@@ -33,14 +34,18 @@ so a lucky draw could promote a prompt. Nothing in the references spoke of varia
   eval plan says, keep the prompt when golden is better or held and adversarial held, and record the medians and the
   spreads (`Eval delta: golden 84% (83–85) → 88% (87–89)`).
 - **`/eval`** reports each set's median and spread over the plan's runs. `--set-baseline` still stores one run, and
-  the harness prints its delta against it: the plan's Baseline holds the medians and spreads to judge on. A model
+  the harness prints its delta against it: the plan's Baseline holds the medians and spreads to judge on (the
+  scaffolded `evals/README.md` says so too). A model
   migration compares medians of the same number of runs. **`/spec-review prompt`** reads "golden's median better or
   held", where it read "golden up".
 - **`references/eval-suite-patterns.md`** has a new pitfall, "The new prompt scored 3 points higher": measure the noise
   once, score every candidate the same way with the response cache off, check that every run did the work. The merge
   gate blocks when golden's median drops past the baseline's spread (it read "drops > 2%"); a cache keeps a measured
   median, never the responses inside one measurement. **`references/load-testing-patterns.md`** adds the runs and the
-  limit, and `references/verification.md`'s claims table a row for "better, faster, a higher score".
+  limit, and `references/verification.md`'s claims table a row for "better, faster, a higher score". The commit
+  examples (`references/tooling-reference.md`, `references/track-checklists.md`) carry medians and spreads, and the
+  demo project's load tests have the new lines.
+- pt-BR writes "além de" for "para lá de" and "pool de conexões".
 
 ### Upgrade note
 - An eval plan or a load test written before 1.34 has no such lines and is never flagged. Add them by hand to use the

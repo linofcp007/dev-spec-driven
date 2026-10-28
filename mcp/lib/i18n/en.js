@@ -776,7 +776,7 @@ Run golden through a minimal v1 prompt + planned model; record baseline score he
 `# Load Test: ${name}
 
 ## Scenarios
-- Steady state · Burst · Soak · Spike
+- Steady state · Burst · Soak · Spike · Breakpoint (the run that saturates the system)
 
 ## Budget (from design.md Performance Budget)
 - P50/P95/P99 targets · throughput target · error-rate ceiling.
@@ -924,7 +924,8 @@ const evalsReadme = "# Evals\n\n" +
     "```\nnode <plugin>/mcp/evals/run-evals.js <feature-slug>\n```\n\n" +
     "- Uses your own `ANTHROPIC_API_KEY` (env). No CI, no third party beyond your model provider.\n" +
     "- Without an API key (or with `--dry-run`) it validates the sets and prints the plan without calling a model.\n" +
-    "- `--set-baseline` records the current scores as the baseline to compare future runs against.\n\n" +
+    "- `--set-baseline` records the current scores as the baseline to compare future runs against. It stores one run:\n" +
+    "  judge on the medians and spreads of the eval plan's runs per score, written in eval-plan.md → Baseline.\n\n" +
     "Set files: `golden.json`, `adversarial.json`, optional `regression.json`.\n" +
     "Item shape: `{ id, input, expect: { type, value|rubric } }`. Grader types: contains | equals | regex | refuse | judge.\n" +
     "The system prompt is read from the latest `../prompts/vN.md` (its `## System` section).\n";
@@ -3562,7 +3563,7 @@ const brief = {
       "ai-prompt": [
         "Record the eval baseline before changing anything.",
         "Edit the prompt in a NEW versioned file (`prompts/vN.md`), never in place.",
-        "Run the full eval harness as many times as eval-plan.md says and decide on the medians: accept only if golden rose by the decision delta past the baseline's spread or held inside it, and adversarial held — a drop past the spread: revert.",
+        "Run the full eval harness as many times as eval-plan.md says and decide on the medians: accept only if golden's median rose by at least the decision delta and past the baseline's spread, or held (inside the spread, or a smaller gain), and adversarial held — a drop past the spread: revert.",
         "Commit with the eval delta, medians and spreads (`Eval delta: golden 84% (83–85) → 88% (87–89)`).",
       ],
     },

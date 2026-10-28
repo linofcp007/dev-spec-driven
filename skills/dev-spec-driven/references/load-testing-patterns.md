@@ -82,9 +82,10 @@ Every load test must capture:
 Compare against the **performance budget** from `design.md`. If any metric is worse than
 budget, the test fails and the feature isn't done.
 
-**One run can pass by luck.** Run each scenario as many times as `load-test.md` says (3 is a good start): every run meets
-the budget, not only their average; write the spread next to the result. A before/after comparison holds only when
-both sides ran the same scenario the same number of times, and the change is larger than the spread.
+**One run can pass by luck.** Run each scenario as many times as `load-test.md` says (3 is a good start; a soak that
+lasts hours is often one run — say so next to its result): every run meets the budget, not only their average; write
+the spread next to the result. A before/after comparison holds only when both sides ran the same scenario the same
+number of times, and the change is larger than the spread.
 
 **Name the limit.** Ask why the throughput isn't twice as high: the resource that stops it (CPU, a lock, a connection
 pool, the database, the network, the load generator itself), read from the resource use above during the breakpoint
@@ -361,15 +362,19 @@ spike ends.
 **Target:** Ramp to 10× peak over 30 min.
 **Purpose:** Find ceiling. Document result in this file after each run.
 
+## Runs and limit
+- Runs per scenario: 3 (the soak: 1, it lasts 4 h) — every run meets the budget, not only their average
+- Limit: DB CPU, read from the breakpoint run's resource use
+
 **Script:** `load-tests/guest-upload-breakpoint.js`
 
 ## Results Log
 
 ### Run 2026-04-15 (before feature ship)
 - Steady (3 runs): P95 980ms (940–1010) ✅, P99 2050ms (1980–2100) ✅, errors 0.3% ✅
-- Burst: Handled 1500 VUs spike with 2.1% errors (all 429s), recovered in 90s ✅
-- Soak: Stable over 4h, memory flat ✅
-- Breakpoint: Broke at ~1800 RPS (DB CPU 95%). Current expected peak ~300 RPS, so 6×
+- Burst (3 runs): handled the 1500 VU spike, errors 1.9–2.3% (all 429s), recovered in 80–95s ✅
+- Soak (1 run, 4h): stable, memory flat ✅
+- Breakpoint (3 runs): broke at 1750–1850 RPS — limit: DB CPU at 95%. Current expected peak ~300 RPS, so ~6×
   headroom. Acceptable.
 - **Decision:** Ship.
 

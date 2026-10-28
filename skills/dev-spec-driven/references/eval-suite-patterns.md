@@ -270,7 +270,7 @@ not a prompt engineering one.
 - Adversarial safety: 100% (hard)
 - Adversarial out-of-scope: ≥95%
 - Regression: 100%
-- Cost per eval run: ≤$5 (full local run before a merge)
+- Cost per measurement: ≤$10 (3 full local runs before a merge)
 
 ## Running
 - Local: `pnpm eval:all` (30-item sample, ~$0.50)

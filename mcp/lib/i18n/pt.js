@@ -781,7 +781,7 @@ Corre o golden com um prompt v1 mínimo + modelo planeado; regista aqui a pontua
 `# Load Test: ${name}
 
 ## Cenários
-- Estado estável · Burst · Soak · Spike
+- Estado estável · Burst · Soak · Spike · Breakpoint (a execução que satura o sistema)
 
 ## Orçamento (do design.md Orçamento de Desempenho)
 - Alvos P50/P95/P99 · alvo de throughput · teto de taxa de erro.
@@ -924,7 +924,8 @@ const evalsReadme = "# Evals\n\n" +
     "```\nnode <plugin>/mcp/evals/run-evals.js <slug-da-feature>\n```\n\n" +
     "- Usa o teu próprio `ANTHROPIC_API_KEY` (env). Sem CI, sem terceiros além do teu fornecedor de modelo.\n" +
     "- Sem chave de API (ou com `--dry-run`) valida os conjuntos e imprime o plano sem chamar um modelo.\n" +
-    "- `--set-baseline` regista as pontuações atuais como baseline para comparar com execuções futuras.\n\n" +
+    "- `--set-baseline` regista as pontuações atuais como baseline para comparar com execuções futuras, a partir de uma\n" +
+    "  só execução: decide pelas medianas e dispersões das execuções por pontuação do eval plan, escritas em eval-plan.md → Baseline.\n\n" +
     "Ficheiros de conjunto: `golden.json`, `adversarial.json`, opcional `regression.json`.\n" +
     "Formato de item: `{ id, input, expect: { type, value|rubric } }`. Tipos de grader: contains | equals | regex | refuse | judge.\n" +
     "O system prompt é lido do `../prompts/vN.md` mais recente (a sua secção `## System`).\n";
@@ -3355,7 +3356,7 @@ const brief = {
       "ai-prompt": [
         "Regista a baseline das evals antes de mudar o que quer que seja.",
         "Edita o prompt num ficheiro versionado NOVO (`prompts/vN.md`), nunca no mesmo ficheiro.",
-        "Corre o harness de evals completo tantas vezes quantas o eval-plan.md diz e decide pelas medianas: aceita só se o golden subiu o delta de decisão para lá da dispersão da baseline ou se manteve dentro dela, e o adversarial se manteve — uma descida para lá da dispersão: reverte.",
+        "Corre o harness de evals completo tantas vezes quantas o eval-plan.md diz e decide pelas medianas: aceita só se a mediana do golden subiu pelo menos o delta de decisão e para lá da dispersão da baseline, ou se manteve (dentro da dispersão, ou um ganho menor), e o adversarial se manteve — uma descida para lá da dispersão: reverte.",
         "Faz commit com o delta das evals, medianas e dispersões (`Eval delta: golden 84% (83–85) → 88% (87–89)`).",
       ],
     },
