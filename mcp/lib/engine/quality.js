@@ -22,7 +22,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment;
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -33,7 +33,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment } = E); }
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -1557,42 +1557,62 @@ function criticalFlowNudge(projectDir, dir, reqs, tracks, kind, lang) {
 // The test plan of a critical flow: a row (a line holding a T-ID) for the same request twice / at once, and — when the spec is about
 // users' own data or permissions — one for another user's access. EN / PT / ES. Only the USER's text of a row counts: a cell that
 // IS a template row's cell (planTemplateCells — +ui's "an error with Retry", +data's "re-run … twice … no duplicate", a track pack's
-// or the project's own template rows) is the template's; a cell the user edited is the user's (sectionOwnLines' rule).
+// or the project's own template rows) is the template's; a cell the user edited is the user's (sectionOwnLines' rule); a template
+// cell with {{variables}} gives only its filled-in values (planCellOwn — the glossary's rule: a filled slot is the user's).
 const RE_PLAN_ROW = /(?<![\p{L}\p{N}_-])T-\d+(?!\d)/u;
-// The same request again — a retried / redelivered / replayed webhook or event, two at once — never a bare retry (a Retry button,
-// a retry after a failure is no second identical request).
+// The same request again — a retried / redelivered / replayed webhook, event, message or callback (the thing received again), two
+// requests or buyers at the same time — never a bare retry (a Retry / Resubmit button, a retry after a failure) nor a repeated
+// password field. "At the same time" counts with a request or an action before it (two buyers press Pay at the same time),
+// never on its own (the list and the badge render at the same time).
+const CF_AT_ONCE_SUBJECT = "(?:two|both|several|multiple|\\p{N}+|requests?|buyers?|users?|customers?|clicks?|calls?|orders?|payments?|bookings?|redemptions?" +
+  "|submissions?|webhooks?|events?|redeem\\p{L}*|pay(?:s|ing)?|submit\\p{L}*|book(?:s|ing)?|buy(?:s|ing)?|order(?:s|ing)?|click\\p{L}*|post(?:s|ing)?|send(?:s|ing)?" +
+  "|dois|duas|ambos|ambas|v[áa]ri[oa]s|pedidos?|compradore?s?|utilizadore?s?|usu[áa]rios?|clientes?|cliques?|chamadas?|encomendas?|pagamentos?|reservas?" +
+  "|resgat\\p{L}*|pag(?:a|am|ar|am)|submet\\p{L}*|reserv(?:a|am|ar)|compr(?:a|am|ar)|envi(?:a|am|ar)" +
+  "|dos|varios|varias|peticiones?|solicitudes?|usuarios?|compras?|pagos?|canje\\p{L}*|pagan?|pagar|env[íi]an?|enviar|reservan?|reservar|compran?|comprar)" +
+  "(?:[\\s-]+[\\p{L}\\p{N}'’]+){0,3}?[\\s-]+";
+const CF_RECEIVED = "(?:webhooks?|events?|messages?|callbacks?|eventos?|mensage(?:m|ns)|mensajes?)";
 const RE_REPETITION_ROW = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
   "twice", "two[\\s-]+times", "(?:two|both)(?:[\\s-]+[\\p{L}\\p{N}]+){0,2}?[\\s-]+at[\\s-]+once", "double[\\s-]+(?:submit\\p{L}*|clicks?|requests?|charges?|bookings?|spend\\p{L}*|redemptions?|deliver\\p{L}*)",
-  "duplicat\\p{L}*", "repeated", "again[\\s-]+with[\\s-]+the[\\s-]+same", "at[\\s-]+the[\\s-]+same[\\s-]+time", "(?:in[\\s-]+)?the[\\s-]+same[\\s-]+millisecond",
-  "identical[\\s-]+(?:requests?|calls?|events?|webhooks?|submissions?)", "replay\\p{L}*", "redeliver\\p{L}*", "resubmi\\p{L}*", "re-?sent",
-  "(?:webhooks?|events?|messages?|callbacks?|notifications?)[\\s-]+(?:(?:is|are|was|were|gets?|got|being)[\\s-]+)?retried", "retried[\\s-]+(?:webhooks?|events?|messages?|callbacks?|notifications?)",
+  "duplicat\\p{L}*", "repeated(?![\\s-]+(?:password|e-?mail|field|input|entry|value|pin|button|link))", "again[\\s-]+with[\\s-]+the[\\s-]+same",
+  CF_AT_ONCE_SUBJECT + "at[\\s-]+the[\\s-]+same[\\s-]+time", "(?:in[\\s-]+)?the[\\s-]+same[\\s-]+millisecond",
+  "identical[\\s-]+(?:requests?|calls?|events?|webhooks?|submissions?)", "replay\\p{L}*", "redeliver\\p{L}*", "resubmi(?:tted|tting|ts|ssions?)", "re-?sent",
+  CF_RECEIVED + "[\\s-]+(?:(?:is|are|was|were|gets?|got|being)[\\s-]+)?retried(?![\\s-]+(?:after|on|upon|when|if|once)(?![\\p{L}]))",
+  "retried[\\s-]+" + CF_RECEIVED,
   "simultaneous\\p{L}*", "concurrent\\p{L}*", "in[\\s-]+parallel", "parallel[\\s-]+requests?", "race[\\s-]+conditions?", "promise\\.all",
-  "duas[\\s-]+vezes", "duplicad\\p{L}*", "repetid\\p{L}*", "reenviad\\p{L}*", "em[\\s-]+simult[âa]neo", "simult[âa]ne\\p{L}*", "concorrent\\p{L}*", "em[\\s-]+paralelo",
-  "ao[\\s-]+mesmo[\\s-]+tempo", "no[\\s-]+mesmo[\\s-]+milissegundo", "pedidos[\\s-]+id[êe]nticos", "(?:de[\\s-]+novo|novamente|outra[\\s-]+vez)[\\s-]+com[\\s-]+(?:o[\\s-]+mesmo|a[\\s-]+mesma)",
+  // PT / ES repetido(a): a request again — never a field or a button (senha repetida, la contraseña repetida, campo repetido)
+  "duas[\\s-]+vezes", "duplicad\\p{L}*", "reenviad\\p{L}*",
+  "(?<!(?:senha|palavra-passe|password|campo|bot[ãa]o|e-?mail|pin|c[óo]digo|contraseña|clave|bot[óo]n|correo)[\\s-]+)repetid\\p{L}*",
+  "em[\\s-]+simult[âa]neo", "simult[âa]ne\\p{L}*", "concorrent\\p{L}*", "em[\\s-]+paralelo", CF_AT_ONCE_SUBJECT + "ao[\\s-]+mesmo[\\s-]+tempo",
+  "no[\\s-]+mesmo[\\s-]+milissegundo", "pedidos[\\s-]+id[êe]nticos", "(?:de[\\s-]+novo|novamente|outra[\\s-]+vez)[\\s-]+com[\\s-]+(?:o[\\s-]+mesmo|a[\\s-]+mesma)",
   "com[\\s-]+(?:o[\\s-]+mesmo|a[\\s-]+mesma)[\\s-]+(?:chave|idempotency-key|pedido|evento|webhook|mensagem|requisi[çc][ãa]o)",
-  "dos[\\s-]+veces", "simult[áa]ne\\p{L}*", "concurrentes?", "en[\\s-]+paralelo", "a[\\s-]+la[\\s-]+vez", "al[\\s-]+mismo[\\s-]+tiempo", "en[\\s-]+el[\\s-]+mismo[\\s-]+milisegundo",
+  "dos[\\s-]+veces", "simult[áa]ne\\p{L}*", "concurrentes?", "en[\\s-]+paralelo", CF_AT_ONCE_SUBJECT + "(?:a[\\s-]+la[\\s-]+vez|al[\\s-]+mismo[\\s-]+tiempo)",
+  "en[\\s-]+el[\\s-]+mismo[\\s-]+milisegundo",
   "peticiones[\\s-]+id[ée]nticas", "(?:de[\\s-]+nuevo|otra[\\s-]+vez)[\\s-]+con[\\s-]+(?:el|la)[\\s-]+mism[oa]",
   "con[\\s-]+(?:el[\\s-]+mismo|la[\\s-]+misma)[\\s-]+(?:clave|idempotency-key|petici[óo]n|evento|webhook|mensaje|solicitud)",
 ].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
-// A row's text folded for the template comparison: lower case, emphasis and code ticks out, blanks folded.
-const planFold = (s) => String(s).toLowerCase().replace(/[*`]/g, "").replace(/\s+/g, " ").trim();
+// A row's text folded for the template comparison: lower case, emphasis (** __ _x_ `x`) out, blanks folded, a final period dropped.
+const planFold = (s) => String(s).toLowerCase().replace(/[*`]/g, "").replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, "")
+  .replace(/\s+/g, " ").trim().replace(/\.+$/, "");
 // A row line → its cells (a table row; a "\|" is a pipe inside a cell) or, for a list row, the line itself (its marker out).
 const planCells = (line) => (/^\s*\|/.test(line) ? line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").split(/(?<!\\)\|/) : [line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "")])
   .map(planFold).filter(Boolean);
-// The template rows' cells, folded → { exact: Set, wild: [RegExp] } (a cell holding a {{variable}} matches any text in its place):
-// the built-in plan of every track in English and the feature's language (pt-BR: derived — built once per language), every track
-// pack's test-plan.md fragment rows in that language, and the project's own test-plan templates (.specs/templates/…). Cells with
-// fewer than three letters in a row (a T-ID, an AC ID) and slots are never template text worth removing.
+// The template rows' cells, folded → { exact: Set, wild: [{ segs, lit }] }: the built-in plan of every track in English and the
+// feature's language (pt-BR: derived — built once per language), every track pack's test-plan.md fragment rows in that language
+// (its {{title}} / {{marker}} filled in), and the project's own test-plan templates (.specs/templates/…). A cell holding the
+// feature's {{variables}} is a glossary pattern (glossPatternSegs — its literal segments; matched by glossSpans, LINEAR — never a
+// regex built from template text), kept with ≥ 4 literal characters (the glossary's rule: fewer hide nothing). Cells with fewer
+// than three letters in a row outside their variables (a T-ID, an AC ID, "{{acs}}") and slots are never template text.
+const RE_PLAN_VAR_G = /\{\{[^{}\n]{1,40}\}\}/g;
 const PLAN_BUILTIN_CELLS = new Map();
 function planTemplateCells(projectDir, lang) {
   const l = normalizeLang(lang || "en");
   const out = { exact: new Set(), wild: [] };
   const add = (cell) => {
-    // (the letters outside its {{variables}}: a cell that is only "{{acs}}" would match every cell)
-    if (!/\p{L}{3}/u.test(cell.replace(/\{\{[^{}]{1,40}\}\}/g, " ")) || /^\[/.test(cell)) return;
-    if (!cell.includes("{{")) { out.exact.add(cell); return; }
-    // a variable stands for a value (a name, an AC list) — never a clause the user added after it: no , ; : ! ? — – ( ) in it
-    out.wild.push(new RegExp("^" + cell.split(/\{\{[^{}]{1,40}\}\}/).map(escRe).join("[^,;:!?—–()]*?") + "$", "u"));
+    if (!/\p{L}{3}/u.test(cell.replace(RE_PLAN_VAR_G, " ")) || /^\[/.test(cell)) return;
+    const pt = cell.includes("{{") ? glossPatternSegs(cell) : null;
+    if (!pt || pt.segs.length === 1) { out.exact.add(cell); return; }
+    const lit = pt.segs.join("").length;
+    if (lit >= 4) out.wild.push({ segs: pt.segs, lit });
   };
   if (!PLAN_BUILTIN_CELLS.has(l)) {
     const cells = new Set();
@@ -1606,7 +1626,10 @@ function planTemplateCells(projectDir, lang) {
   PLAN_BUILTIN_CELLS.get(l).forEach(add);
   for (const tr of packTracks()) {
     const p = packOf(tr), f = p ? packFragment(p, "test-plan.md", l) : null;
-    if (f) f.rows.forEach((r) => r.cells.forEach((c) => add(planFold(c))));
+    if (!f) continue;
+    // the pack's own values, as packTestRowsBlock writes them (a title holding "(" or "," is a value like any other)
+    const fill = (c) => String(c).split(/\{\{\s*title\s*\}\}/i).join(packTitle(p, l)).split(/\{\{\s*marker\s*\}\}/i).join(p.marker);
+    f.rows.forEach((r) => r.cells.forEach((c) => add(planFold(fill(c)))));
   }
   for (const f of projectDir ? templateFileList(projectDir) : []) {
     if (f.key !== "test-plan") continue;
@@ -1637,11 +1660,23 @@ const RE_OTHER_USER_ROW = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
 ].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
 // The rows the test plan of a critical flow lacks → ["repetition"?, "other-user"?] (none: complete). plan: test-plan.md's text;
 // each row read as its cells minus the ones that EQUAL a template row's cell (the user's words only — an edited cell is theirs).
+// A cell's own text: "" when it equals a template cell; a template pattern's filled-in values when one matches (the one with the
+// most literal text, glossUserParts' choice — "the order is submitted twice for {{name}}" leaves the name; "{{name}} for {{acs}}"
+// leaves both sides); else the cell.
+function planCellOwn(tpl, c) {
+  if (tpl.exact.has(c)) return "";
+  let best = null;
+  for (const p of tpl.wild) {
+    if (best && p.lit <= best.lit) continue;
+    const spans = glossSpans(p.segs, c);
+    if (spans) best = { lit: p.lit, spans };
+  }
+  return best ? best.spans.join(" ") : c;
+}
 function criticalPlanGaps(state, plan, lang, projectDir) {
   const tpl = planTemplateCells(projectDir, lang);
-  const own = (c) => !tpl.exact.has(c) && !tpl.wild.some((re) => re.test(c));
   const rows = stripFencedCode(stripHtmlComments(String(plan || ""))).split(/\r?\n/).filter((l) => RE_PLAN_ROW.test(l))
-    .map((l) => planCells(l.slice(0, 4000)).filter(own).join(" | ")).join("\n");
+    .map((l) => planCells(l.slice(0, 4000)).map((c) => planCellOwn(tpl, c)).filter(Boolean).join(" | ")).join("\n");
   const gaps = [];
   if (!RE_REPETITION_ROW.test(rows)) gaps.push("repetition");
   if (RE_OWN_DATA.test(state.user) && !RE_OTHER_USER_ROW.test(rows)) gaps.push("other-user");

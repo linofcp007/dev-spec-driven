@@ -104,12 +104,19 @@ the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules 
   returned; `clarifyCriticalFlow`); doctor's `critical-flows` (phase 2: a designed feature, not while design.md is a later
   phase's template) and `critical-flow-tests` (phase 3, +tdd: test-plan.md's rows — the lines holding a T-ID, each read as its cells
   minus the ones that EQUAL a template row's cell, `planTemplateCells()`: the built-in plan of every track (EN + the feature's
-  language), the track packs' test-plan fragments and the project's test-plan templates, a `{{variable}}` matching a value
-  without clause punctuation; an edited cell is the user's, sectionOwnLines' rule — need a repetition row (twice / duplicate /
-  repeated / again with the same / two at once / the same time or millisecond / identical requests / simultaneous / concurrent
-  / in parallel / a redelivered, resubmitted, replayed or retried webhook or event; PT repetido(a) / reenviado / com a mesma
-  chave; ES repetida / reenviado / con la misma clave… `RE_REPETITION_ROW`; never a bare retry — a Retry button, a retry
-  after a failure) and, when the user text is about own
+  language), the track packs' test-plan fragments (their {{title}} / {{marker}} filled in) and the project's test-plan
+  templates; an edited cell is the user's, sectionOwnLines' rule. A template cell holding the feature's `{{variables}}` is a
+  glossary pattern (`glossPatternSegs`, ≥ 4 literal characters) matched by the LINEAR `glossSpans` — never a regex built from
+  template text — and gives only its filled-in values (`planCellOwn`, glossUserParts' rule: a filled slot is the user's), so
+  "{{name}} for {{acs}}" swallows no row and a punctuated value (two ACs, "Webhooks (Stripe)") keeps a verbatim row template;
+  `planFold` folds case, `**` / `_x_` / backticks, blanks and a final period — need a repetition row (twice / duplicate /
+  repeated — never a repeated password field / button / again with the same / two at once / requests, buyers or an action
+  "at the same time" (never on its own: "the list and the badge render at the same time") / the same millisecond /
+  identical requests / simultaneous / concurrent / in parallel / resubmitted / a redelivered, replayed or retried webhook,
+  event, message or callback — never "retried after <failure>"; PT repetido(a) — never a senha / campo / botão repetido —,
+  reenviado, com a mesma chave, "ao mesmo tempo" with a subject; ES repetida / reenviado / con la misma clave, "al mismo
+  tiempo" / "a la vez" with a subject… `RE_REPETITION_ROW`; never a bare retry — a Retry or Resubmit button, a retry after
+  a failure) and, when the user text is about own
   data or permissions (`RE_OWN_DATA`), another user's access (`RE_OTHER_USER_ROW`)). Both only WARN — no gate, no
   `warnsOnly` —, share the context view `critical` (doctor.js `CHECK_VIEWS`) and follow the stamp scheme: `approvePhase`
   stamps `critical: true` on every design and test-plan approval (and its record); an approval without it passes with a note
@@ -316,6 +323,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   narrowed repetition lost the tool's own example (a retried / redelivered webhook, PT reenviado / repetido, "com a mesma
   chave"); track packs' and project templates' rows were never template text. A cell that is only a `{{variable}}` matched
   every cell (found by the new pack test).
+- **1.33 review 3** — the review-2 wildcards were regexes built from template text: a `[^,;:!?—–()]` class per variable made a
+  punctuated value never match (a verbatim pack row with two ACs or a "Webhooks (Stripe)" title passed on template text), a
+  variable beside a short word swallowed real rows ("{{name}} for {{acs}}", "Behavior of {{name}}"), and four lazy variables
+  over an 800-character cell took 1.7 s. They are the glossary's linear patterns now, a match giving only the values. The
+  repetition words caught a repeated password field, a Resubmit button, a render "at the same time" and "retried after the
+  provider fails"; `planFold` left `_italic_` and a final period.
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the
