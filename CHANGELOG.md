@@ -3,6 +3,20 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.32.2] — 2026-10-28
+
+One more test that depended on where the repository is checked out. The plugin itself is unchanged.
+
+### Fixed
+- **A tool-description check failed in some checkout folders.** It looks for two sentences run together (`end.NEXT`).
+  spec_complete_task's description carries the runnable CLI line with the plugin's own path, so a checkout in a folder
+  named like `a.DFT…` failed it. The pre-push gate's temp worktree (`dev-spec-pre-push.<random>`) hit this when the
+  random part began with three capitals. The check now reads the description without that quoted path. Both suites pass
+  from a checkout in a folder named `a.DFTcheck`.
+
+### Tests
+- `node mcp/test.js` 2243 assertions, `node cli/test-cli.js` 655 (was 2243 / 655).
+
 ## [1.32.1] — 2026-10-27
 
 The test suites, made safe and steady to run from a git hook. The plugin itself is unchanged.

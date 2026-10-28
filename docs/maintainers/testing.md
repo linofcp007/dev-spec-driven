@@ -121,7 +121,9 @@ The suites' exact counts and the source guards are in CLAUDE.md → Tests; this 
   cwd, and under a 160-character one (Windows, git without `core.longpaths`) the pre-commit, worktree and eval-fixture tests
   could not reach their repositories' files (a 99-character base passes). The proof run: `TMP` / `TEMP` set to
   `<a long folder>\dev-spec-tmp`, both suites green; 16-conventions-runner.js checks the choice on the fake suite. No new nesting:
-  a temp path's length is what git's MAX_PATH tests feel — keep a test's own paths short.
+  a temp path's length is what git's MAX_PATH tests feel — keep a test's own paths short. Nor on where the CHECKOUT is
+  (1.32.2): text that embeds the plugin's path (a tool description's runnable `node "<root>/cli/dev-spec.js"` line) is checked
+  with that path taken out — the proof run: both suites from a worktree in a folder named `a.DFTcheck`.
 - **Running a part.** `--only <x>[,…]` (repeatable) takes a file by its full name (`17-docs` — that file alone; the CLI's
   `06-gates`, no file of that exact name, means `06-gates-*`), an area by its number (`09`) or its name (`gates`; `tracks`
   → `04-tracks` and `04-tracks-builtin`), and pulls in — and names — the files they need: `node mcp/test.js --only
@@ -320,3 +322,6 @@ How the rules above came to be — grep a release here.
   files (the project's rule, untested before), and the default window is over FAT's 2 s. Hermetic chains drop git's repository variables
   (`RE_GIT_ENV`, with git < 2.40's `GIT_INTERNAL_SUPER_PREFIX`: bookworm's git 2.39 lists it): from the hook, `GIT_DIR` reached
   every chain.
+- **1.32.2** — the pre-push gate's first real run failed 17-docs.js's A8 check (no tool description runs two sentences
+  together): spec_complete_task's description carries the runnable CLI line with the plugin's path, and the gate's temp
+  worktree `dev-spec-pre-push.DFT…` read as "h.DFT". The check reads the prose with that quoted path taken out.

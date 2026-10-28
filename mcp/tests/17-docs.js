@@ -510,7 +510,10 @@ exports.run = async ({
     ok(!/\n/.test(d6Desc) && /REFUSES it while the phase's checks fail/.test(d6Desc) && /spec_finish's blockers[\s\S]{0,400}`suite-evidence`/.test(dWs(dRead("commands", "approve.md"))),
       "full review D6: spec_approve's description says the gate refuses while the phase's checks fail; /approve names the execution gate's suite-evidence");
     // 1.21 review A8: no tool description runs two sentences together (spec_approve read "…the user runs).WAIVERS:")
-    const runTogether = list.result.tools.map((t) => [t.name, (t.description.match(/[a-z)\]`'"]\.[A-Z]{3,}/g) || [])]).filter((x) => x[1].length);
+    // (1.32.2: read without the runnable CLI line's quoted path — it is the checkout's, and one in a folder named like `a.DFT…`,
+    // the pre-push gate's temp worktree `dev-spec-pre-push.DFT…`, read as two sentences run together)
+    const prose = (d) => d.replace(/node "[^"]*"/g, "node \"<cli>\"");
+    const runTogether = list.result.tools.map((t) => [t.name, (prose(t.description).match(/[a-z)\]`'"]\.[A-Z]{3,}/g) || [])]).filter((x) => x[1].length);
     ok(!runTogether.length && /[a-z)`]\. FAST-FORWARD:/.test(d6Desc),
       "1.21 review A8: every tool description leaves a space after a sentence before the next heading word (spec_approve's '… FAST-FORWARD:') (got " + JSON.stringify(runTogether) + ")");
     // D7: the demo is in the 1.14 shape (stamp, stored tracks, the .gitignore init writes) — no upgrade notice — and its
