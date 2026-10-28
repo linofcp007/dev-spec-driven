@@ -22,7 +22,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle;
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -33,7 +33,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle } = E); }
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -1555,33 +1555,33 @@ function criticalFlowNudge(projectDir, dir, reqs, tracks, kind, lang) {
   return st && st.signals.length && !st.answered ? { code: "critical-flow-unstated", signals: st.signals } : null;
 }
 // The test plan of a critical flow: a row (a line holding a T-ID) for the same request twice / at once, and — when the spec is about
-// users' own data or permissions — one for another user's access. EN / PT / ES. Only the USER's text of a row counts: a cell that
-// IS a template row's cell (planTemplateCells — +ui's "an error with Retry", +data's "re-run … twice … no duplicate", a track pack's
-// or the project's own template rows) is the template's; a cell the user edited is the user's (sectionOwnLines' rule); a template
-// cell with {{variables}} gives only its filled-in values (planCellOwn — the glossary's rule: a filled slot is the user's).
+// users' own data or permissions — one for another user's access. EN / PT / ES. Only a row's DESCRIPTION is read (planCellsOf: its
+// column found by the table's header as the scaffold writes it — never the File, Covers, Layer, Kind or Test ID), and only the
+// user's words of it: a description that IS a template row's (planTemplateCells — the built-in plan, a track pack's rows, the
+// project's templates, filled with the values the scaffold filled in) is the template's; an edited one is the user's.
 const RE_PLAN_ROW = /(?<![\p{L}\p{N}_-])T-\d+(?!\d)/u;
-// The same request again — a retried / redelivered / replayed webhook, event, message or callback (the thing received again), two
-// requests or buyers at the same time — never a bare retry (a Retry / Resubmit button, a retry after a failure) nor a repeated
-// password field. "At the same time" counts with a request or an action before it (two buyers press Pay at the same time),
-// never on its own (the list and the badge render at the same time).
-const CF_AT_ONCE_SUBJECT = "(?:two|both|several|multiple|\\p{N}+|requests?|buyers?|users?|customers?|clicks?|calls?|orders?|payments?|bookings?|redemptions?" +
-  "|submissions?|webhooks?|events?|redeem\\p{L}*|pay(?:s|ing)?|submit\\p{L}*|book(?:s|ing)?|buy(?:s|ing)?|order(?:s|ing)?|click\\p{L}*|post(?:s|ing)?|send(?:s|ing)?" +
-  "|dois|duas|ambos|ambas|v[áa]ri[oa]s|pedidos?|compradore?s?|utilizadore?s?|usu[áa]rios?|clientes?|cliques?|chamadas?|encomendas?|pagamentos?|reservas?" +
-  "|resgat\\p{L}*|pag(?:a|am|ar|am)|submet\\p{L}*|reserv(?:a|am|ar)|compr(?:a|am|ar)|envi(?:a|am|ar)" +
-  "|dos|varios|varias|peticiones?|solicitudes?|usuarios?|compras?|pagos?|canje\\p{L}*|pagan?|pagar|env[íi]an?|enviar|reservan?|reservar|compran?|comprar)" +
-  "(?:[\\s-]+[\\p{L}\\p{N}'’]+){0,3}?[\\s-]+";
-const CF_RECEIVED = "(?:webhooks?|events?|messages?|callbacks?|eventos?|mensage(?:m|ns)|mensajes?)";
+// The same request again — a retried / redelivered / replayed webhook, event, message, callback or payment (the thing received or
+// charged again), two requests or an action at the same time — never a bare retry (a Retry / Resubmit button, notifications retried
+// after a failure) nor a repeated password / e-mail / confirmation field. "At the same time" counts after a number (two, both, 2…)
+// or an action (redeem, pay, book, press…) a few words before it — never on its own ("the list and the badge render at the same time").
+const CF_AT_ONCE_SUBJECT = "(?:(?:two|both|several|multiple|\\p{N}+|dois|duas|ambos|ambas|v[áa]ri[oa]s|dos|varios|varias)" +
+  "|(?:redeem\\p{L}*|pay(?:s|ing)?|paid|submit\\p{L}*|book(?:s|ed|ing)?|buy(?:s|ing)?|bought|click(?:s|ed|ing)?|post(?:s|ed|ing)?|send(?:s|ing)?" +
+  "|decrement\\p{L}*|reserv\\p{L}*|charg(?:e|es|ed|ing)|press(?:es|ed|ing)?|resgat\\p{L}*|pag(?:a|am|ar|ou|aram)|submet\\p{L}*|compr(?:a|am|ar|ou)" +
+  "|envi(?:a|am|ar|ou)|clic\\p{L}*|canje\\p{L}*|pagan?|pagar|env[íi]an?|enviar|compran?|comprar)" +
+  "|(?:requests?|calls?|clicks?|submissions?|webhooks?|redemptions?|pedidos|peticiones|solicitudes)(?=(?:[\\s-]+[\\p{L}\\p{N}'’]+){0,2}[\\s-]+(?:at|ao|al|a)[\\s-]))" +
+  "(?:[\\s-]+[\\p{L}\\p{N}'’]+){0,6}?[\\s-]+";
+const CF_RECEIVED = "(?:webhooks?|events?|messages?|callbacks?|payments?|eventos?|mensage(?:m|ns)|mensajes?|pagamentos?|pagos?)";
 const RE_REPETITION_ROW = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
   "twice", "two[\\s-]+times", "(?:two|both)(?:[\\s-]+[\\p{L}\\p{N}]+){0,2}?[\\s-]+at[\\s-]+once", "double[\\s-]+(?:submit\\p{L}*|clicks?|requests?|charges?|bookings?|spend\\p{L}*|redemptions?|deliver\\p{L}*)",
-  "duplicat\\p{L}*", "repeated(?![\\s-]+(?:password|e-?mail|field|input|entry|value|pin|button|link))", "again[\\s-]+with[\\s-]+the[\\s-]+same",
+  "duplicat\\p{L}*", "repeated(?![\\s-]+(?:password|e-?mail|confirmation)(?![\\p{L}]))", "again[\\s-]+with[\\s-]+the[\\s-]+same",
   CF_AT_ONCE_SUBJECT + "at[\\s-]+the[\\s-]+same[\\s-]+time", "(?:in[\\s-]+)?the[\\s-]+same[\\s-]+millisecond",
   "identical[\\s-]+(?:requests?|calls?|events?|webhooks?|submissions?)", "replay\\p{L}*", "redeliver\\p{L}*", "resubmi(?:tted|tting|ts|ssions?)", "re-?sent",
-  CF_RECEIVED + "[\\s-]+(?:(?:is|are|was|were|gets?|got|being)[\\s-]+)?retried(?![\\s-]+(?:after|on|upon|when|if|once)(?![\\p{L}]))",
-  "retried[\\s-]+" + CF_RECEIVED,
+  // a provider's retry of the thing we RECEIVE (or charge) is a redelivery, after a failure or not
+  CF_RECEIVED + "[\\s-]+(?:(?:is|are|was|were|gets?|got|being)[\\s-]+)?retried", "retried[\\s-]+" + CF_RECEIVED,
   "simultaneous\\p{L}*", "concurrent\\p{L}*", "in[\\s-]+parallel", "parallel[\\s-]+requests?", "race[\\s-]+conditions?", "promise\\.all",
-  // PT / ES repetido(a): a request again — never a field or a button (senha repetida, la contraseña repetida, campo repetido)
+  // PT / ES repetido(a): a request again — never a password / e-mail / confirmation field (senha repetida, la contraseña repetida)
   "duas[\\s-]+vezes", "duplicad\\p{L}*", "reenviad\\p{L}*",
-  "(?<!(?:senha|palavra-passe|password|campo|bot[ãa]o|e-?mail|pin|c[óo]digo|contraseña|clave|bot[óo]n|correo)[\\s-]+)repetid\\p{L}*",
+  "(?<!(?:senha|palavra-passe|e-?mail|confirma[çc][ãa]o|contraseña|correo|confirmaci[óo]n)[\\s-]+)repetid\\p{L}*",
   "em[\\s-]+simult[âa]neo", "simult[âa]ne\\p{L}*", "concorrent\\p{L}*", "em[\\s-]+paralelo", CF_AT_ONCE_SUBJECT + "ao[\\s-]+mesmo[\\s-]+tempo",
   "no[\\s-]+mesmo[\\s-]+milissegundo", "pedidos[\\s-]+id[êe]nticos", "(?:de[\\s-]+novo|novamente|outra[\\s-]+vez)[\\s-]+com[\\s-]+(?:o[\\s-]+mesmo|a[\\s-]+mesma)",
   "com[\\s-]+(?:o[\\s-]+mesmo|a[\\s-]+mesma)[\\s-]+(?:chave|idempotency-key|pedido|evento|webhook|mensagem|requisi[çc][ãa]o)",
@@ -1590,51 +1590,120 @@ const RE_REPETITION_ROW = new RegExp("(?<![\\p{L}\\p{N}_])(?:" + [
   "peticiones[\\s-]+id[ée]nticas", "(?:de[\\s-]+nuevo|otra[\\s-]+vez)[\\s-]+con[\\s-]+(?:el|la)[\\s-]+mism[oa]",
   "con[\\s-]+(?:el[\\s-]+mismo|la[\\s-]+misma)[\\s-]+(?:clave|idempotency-key|petici[óo]n|evento|webhook|mensaje|solicitud)",
 ].join("|") + ")(?![\\p{L}\\p{N}_])", "iu");
-// A row's text folded for the template comparison: lower case, emphasis (** __ _x_ `x`) out, blanks folded, a final period dropped.
+// A description folded for the template comparison: lower case, emphasis (** __ _x_ `x`) out, blanks folded, a final period dropped.
 const planFold = (s) => String(s).toLowerCase().replace(/[*`]/g, "").replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, "")
   .replace(/\s+/g, " ").trim().replace(/\.+$/, "");
-// A row line → its cells (a table row; a "\|" is a pipe inside a cell) or, for a list row, the line itself (its marker out).
-const planCells = (line) => (/^\s*\|/.test(line) ? line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").split(/(?<!\\)\|/) : [line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "")])
-  .map(planFold).filter(Boolean);
-// The template rows' cells, folded → { exact: Set, wild: [{ segs, lit }] }: the built-in plan of every track in English and the
-// feature's language (pt-BR: derived — built once per language), every track pack's test-plan.md fragment rows in that language
-// (its {{title}} / {{marker}} filled in), and the project's own test-plan templates (.specs/templates/…). A cell holding the
-// feature's {{variables}} is a glossary pattern (glossPatternSegs — its literal segments; matched by glossSpans, LINEAR — never a
-// regex built from template text), kept with ≥ 4 literal characters (the glossary's rule: fewer hide nothing). Cells with fewer
-// than three letters in a row outside their variables (a T-ID, an AC ID, "{{acs}}") and slots are never template text.
+// A table row's cells as written (a "\|" is a pipe inside a cell); a separator row's cells are dashes (cell by cell: linear).
+const planRawCells = (line) => line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").split(/(?<!\\)\|/);
+const isPlanSep = (l) => /^\s*\|/.test(l) && l.includes("-") && planRawCells(l).every((c) => /^\s*:?-+:?\s*$/.test(c));
+// The Description column's header as the scaffold writes it, in every language (folded) — built once.
+let PLAN_DESC_HEADERS = null;
+function planDescHeaders() {
+  if (!PLAN_DESC_HEADERS) {
+    PLAN_DESC_HEADERS = new Set();
+    for (const lg of i18n.LANGS) {
+      let lines = [];
+      try { lines = i18n.testPlan("x", lg, ["core", "tdd"]).split("\n"); } catch { /* a builder's trouble never breaks the check */ }
+      const k = lines.findIndex((x, i) => /^\s*\|/.test(x) && isPlanSep(lines[i + 1] || ""));
+      if (k >= 0 && planRawCells(lines[k])[3]) PLAN_DESC_HEADERS.add(planFold(planRawCells(lines[k])[3]));
+    }
+  }
+  return PLAN_DESC_HEADERS;
+}
+// The ID cells a table without a recognised header never reads (a T-ID, an AC list).
+const RE_PLAN_ID_G = /(?<![\p{L}\p{N}_-])(?:T-\d+|(?:US-\d+\.)?AC-\d+|SC-\d+|EC-\d+|NFR-\d+)(?!\d)/giu;
+// A plan (or a template) → the cells that may answer, as written: each table row's Description cell — its column named by the
+// table's header (planDescHeaders) — else, in a table without that header, the row's cells but its IDs; a list row (- T-05 …)
+// whole. rowTest: which data rows count (a plan's: those holding a T-ID; a template's: every one — its IDs are {{t1}} …).
+function planCellsOf(text, rowTest = (l) => RE_PLAN_ROW.test(l)) {
+  const lines = stripFencedCode(stripHtmlComments(String(text || ""))).split(/\r?\n/);
+  const heads = planDescHeaders();
+  const out = [];
+  let col = null; // the current table's Description column (-1: none); null: not in a table
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].slice(0, 4000);
+    if (!/^\s*\|/.test(l)) {
+      col = null;
+      if (RE_PLAN_ROW.test(l)) out.push(l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, ""));
+      continue;
+    }
+    if (isPlanSep(l)) continue;
+    if (col === null) {
+      const header = isPlanSep(lines[i + 1] || "");
+      col = header ? planRawCells(l).findIndex((c) => heads.has(planFold(c))) : -1;
+      if (header) continue;
+    }
+    if (!rowTest(l)) continue;
+    const cells = planRawCells(l);
+    if (col >= 0) { if (cells[col] != null) out.push(cells[col]); continue; }
+    for (const c of cells) if (/\p{L}{3}/u.test(c.replace(RE_PLAN_ID_G, " "))) out.push(c);
+  }
+  return out;
+}
+// The values a scaffold filled in for this feature, as it rendered them — { name, slug, summary, tracks, lang, date } (the ones known).
+// The name is stored nowhere: it is the title of one of the feature's artifacts that slugifies to the feature's folder (the folder IS
+// the slug of the name the scaffold rendered), else the slug's words; the summary, requirements.md's Summary as written there.
+// f: { dir, slug, tracks, createdAt }.
+const PLAN_NAME_FILES = ["requirements.md", "design.md", "test-plan.md", "tasks.md"];
+function planFeatureValues(f, lang) {
+  if (!f || !f.slug) return {};
+  const vals = { slug: f.slug, tracks: trackLabel(f.tracks || ["core"]), lang: normalizeLang(lang || "en") };
+  if (f.createdAt) vals.date = dayOf(f.createdAt);
+  for (const file of PLAN_NAME_FILES) {
+    const h = /^#[ \t]+([^\n]{1,300})$/m.exec(readIfExists(path.join(f.dir, file)) || "");
+    if (!h) continue;
+    const t = h[1].trim(), at = t.indexOf(": ");
+    const named = [at >= 0 ? t.slice(at + 2).trim() : null, t].find((c) => c && slugify(c) === f.slug);
+    if (named) { vals.name = named; break; }
+  }
+  if (vals.name == null) vals.name = f.slug.replace(/-/g, " ");
+  const sum = extractSection(readIfExists(path.join(f.dir, "requirements.md")) || "", ["summary", "resumo", "resumen"]);
+  const first = String(sum || "").split(/\r?\n/).map((x) => x.trim()).find(Boolean);
+  if (first) vals.summary = first;
+  return vals;
+}
+// {{variables}} filled with the values the scaffold knew (vals: lower-case keys); the others — per row: {{acs}}, {{t1}} … — kept.
+const planFill = (s, vals) => String(s).replace(/\{\{\s*([A-Za-z_][\w-]*)\s*\}\}/g, (m, k) => (Object.prototype.hasOwnProperty.call(vals, k.toLowerCase()) ? vals[k.toLowerCase()] : m));
+// The template descriptions, folded → { exact: Set, wild: [{ segs, lit }] }: the built-in plan of every track in English and the
+// feature's language (pt-BR: derived — read once per language), every track pack's test-plan rows (their {{title}} / {{marker}}
+// and the feature's values filled in), the project's own test-plan templates (the feature's values filled in). A slot ("[…]",
+// tested on the cell as written) is no template text, nor a cell with fewer than three letters in a row outside its variables. A
+// cell still holding a per-row {{variable}} is a glossary pattern (glossPatternSegs, matched by the LINEAR glossSpans — never a
+// regex built from template text), kept only with ≥ 4 literal characters (the glossary's rule) and literal text at its start or
+// its end — "{{acs}} with {{t1}}" would cut any "with" out of a real row.
 const RE_PLAN_VAR_G = /\{\{[^{}\n]{1,40}\}\}/g;
 const PLAN_BUILTIN_CELLS = new Map();
-function planTemplateCells(projectDir, lang) {
+function planTemplateCells(projectDir, lang, feature) {
   const l = normalizeLang(lang || "en");
+  const vals = planFeatureValues(feature, l);
   const out = { exact: new Set(), wild: [] };
-  const add = (cell) => {
-    if (!/\p{L}{3}/u.test(cell.replace(RE_PLAN_VAR_G, " ")) || /^\[/.test(cell)) return;
+  const add = (raw, v) => {
+    if (/^\s*\[/.test(raw)) return;
+    const cell = planFold(planFill(raw, v));
+    if (!/\p{L}{3}/u.test(cell.replace(RE_PLAN_VAR_G, " "))) return;
     const pt = cell.includes("{{") ? glossPatternSegs(cell) : null;
     if (!pt || pt.segs.length === 1) { out.exact.add(cell); return; }
-    const lit = pt.segs.join("").length;
-    if (lit >= 4) out.wild.push({ segs: pt.segs, lit });
+    const sg = pt.segs, lit = sg.join("").length;
+    if (lit >= 4 && (sg[0] || sg[sg.length - 1])) out.wild.push({ segs: sg, lit });
   };
   if (!PLAN_BUILTIN_CELLS.has(l)) {
     const cells = new Set();
     for (const lg of new Set(["en", l])) {
       let t = "";
       try { t = i18n.testPlan("x", lg, ["core", ...OPTIONAL_TRACKS]); } catch { /* a builder's trouble never breaks the check */ }
-      for (const line of String(t).split("\n")) if (RE_PLAN_ROW.test(line)) planCells(line).forEach((c) => cells.add(c));
+      planCellsOf(t).forEach((c) => cells.add(c));
     }
     PLAN_BUILTIN_CELLS.set(l, [...cells]);
   }
-  PLAN_BUILTIN_CELLS.get(l).forEach(add);
+  PLAN_BUILTIN_CELLS.get(l).forEach((c) => add(c, vals));
   for (const tr of packTracks()) {
     const p = packOf(tr), f = p ? packFragment(p, "test-plan.md", l) : null;
     if (!f) continue;
-    // the pack's own values, as packTestRowsBlock writes them (a title holding "(" or "," is a value like any other)
-    const fill = (c) => String(c).split(/\{\{\s*title\s*\}\}/i).join(packTitle(p, l)).split(/\{\{\s*marker\s*\}\}/i).join(p.marker);
-    f.rows.forEach((r) => r.cells.forEach((c) => add(planFold(fill(c)))));
+    const pv = Object.assign({}, vals, { title: packTitle(p, l), marker: p.marker }); // as packTestRowsBlock writes the rows
+    f.rows.forEach((r) => add(r.cells[3] || "", pv)); // (Test ID | Layer | Kind | Description | Covers | File — packTableRows)
   }
   for (const f of projectDir ? templateFileList(projectDir) : []) {
-    if (f.key !== "test-plan") continue;
-    const t = readTemplateFile(f.abs, projectDir);
-    for (const line of String(t || "").split("\n")) if (RE_PLAN_ROW.test(line) || /\{\{\s*t(?:\d|ests)/i.test(line)) planCells(line).forEach(add);
+    if (f.key === "test-plan") planCellsOf(readTemplateFile(f.abs, projectDir) || "", () => true).forEach((c) => add(c, vals));
   }
   return out;
 }
@@ -1673,10 +1742,9 @@ function planCellOwn(tpl, c) {
   }
   return best ? best.spans.join(" ") : c;
 }
-function criticalPlanGaps(state, plan, lang, projectDir) {
-  const tpl = planTemplateCells(projectDir, lang);
-  const rows = stripFencedCode(stripHtmlComments(String(plan || ""))).split(/\r?\n/).filter((l) => RE_PLAN_ROW.test(l))
-    .map((l) => planCells(l.slice(0, 4000)).map((c) => planCellOwn(tpl, c)).filter(Boolean).join(" | ")).join("\n");
+function criticalPlanGaps(state, plan, lang, projectDir, feature) {
+  const tpl = planTemplateCells(projectDir, lang, feature);
+  const rows = planCellsOf(plan).map((c) => planCellOwn(tpl, planFold(c))).filter(Boolean).join("\n");
   const gaps = [];
   if (!RE_REPETITION_ROW.test(rows)) gaps.push("repetition");
   if (RE_OWN_DATA.test(state.user) && !RE_OTHER_USER_ROW.test(rows)) gaps.push("other-user");
@@ -1687,7 +1755,8 @@ function criticalPlanGaps(state, plan, lang, projectDir) {
 const CRITICAL_FLOW_SINCE = "1.33";
 // spec_doctor's two warns over a criticalFlowState with signals — never an approval check. which: "design" (critical-flows: the
 // requirements / design answer the race) or "test-plan" (critical-flow-tests: the plan has the rows). opts: { approval, plan,
-// projectDir — its track packs' and templates' rows are template text too }. → { id, status, detail }.
+// projectDir — its track packs' and templates' rows are template text too, feature — { dir, slug, tracks, createdAt }: the values
+// its scaffold filled in }. → { id, status, detail }.
 function criticalFlowCheck(which, state, lang, opts = {}) {
   const W = i18n.msg(lang).designWeigh.criticalFlows;
   const words = state.signals.map((w) => `'${w}'`).join(", ");
@@ -1698,7 +1767,7 @@ function criticalFlowCheck(which, state, lang, opts = {}) {
     return legacy ? { id, status: "pass", detail: i18n.msg(lang).designWeigh.legacyApproval(W.open(words), CRITICAL_FLOW_SINCE) } : { id, status: "warn", detail: W.open(words) };
   }
   const id = "critical-flow-tests";
-  const gaps = criticalPlanGaps(state, opts.plan, lang, opts.projectDir);
+  const gaps = criticalPlanGaps(state, opts.plan, lang, opts.projectDir, opts.feature);
   if (!gaps.length) return { id, status: "pass", detail: W.rowsOk(words) };
   const detail = W.rowsMissing(words, gaps.map((g) => W.gap[g]).join("; "));
   return legacy ? { id, status: "pass", detail: W.legacyPlan(detail, CRITICAL_FLOW_SINCE) } : { id, status: "warn", detail };

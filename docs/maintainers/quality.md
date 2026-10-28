@@ -102,22 +102,27 @@ the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules 
   designWeighState min 0 — "None: this feature only reads the balance" answers). Surfaces: clarify's `nudges` gets
   `{code: "critical-flow-unstated", signals}` (≤ 3, one per concept) AFTER `consistency-unstated` (unchanged — both may be
   returned; `clarifyCriticalFlow`); doctor's `critical-flows` (phase 2: a designed feature, not while design.md is a later
-  phase's template) and `critical-flow-tests` (phase 3, +tdd: test-plan.md's rows — the lines holding a T-ID, each read as its cells
-  minus the ones that EQUAL a template row's cell, `planTemplateCells()`: the built-in plan of every track (EN + the feature's
-  language), the track packs' test-plan fragments (their {{title}} / {{marker}} filled in) and the project's test-plan
-  templates; an edited cell is the user's, sectionOwnLines' rule. A template cell holding the feature's `{{variables}}` is a
-  glossary pattern (`glossPatternSegs`, ≥ 4 literal characters) matched by the LINEAR `glossSpans` — never a regex built from
-  template text — and gives only its filled-in values (`planCellOwn`, glossUserParts' rule: a filled slot is the user's), so
-  "{{name}} for {{acs}}" swallows no row and a punctuated value (two ACs, "Webhooks (Stripe)") keeps a verbatim row template;
-  `planFold` folds case, `**` / `_x_` / backticks, blanks and a final period — need a repetition row (twice / duplicate /
-  repeated — never a repeated password field / button / again with the same / two at once / requests, buyers or an action
-  "at the same time" (never on its own: "the list and the badge render at the same time") / the same millisecond /
-  identical requests / simultaneous / concurrent / in parallel / resubmitted / a redelivered, replayed or retried webhook,
-  event, message or callback — never "retried after <failure>"; PT repetido(a) — never a senha / campo / botão repetido —,
-  reenviado, com a mesma chave, "ao mesmo tempo" with a subject; ES repetida / reenviado / con la misma clave, "al mismo
-  tiempo" / "a la vez" with a subject… `RE_REPETITION_ROW`; never a bare retry — a Retry or Resubmit button, a retry after
-  a failure) and, when the user text is about own
-  data or permissions (`RE_OWN_DATA`), another user's access (`RE_OTHER_USER_ROW`)). Both only WARN — no gate, no
+  phase's template) and `critical-flow-tests` (phase 3, +tdd: test-plan.md's rows — the lines holding a T-ID — read in their
+  DESCRIPTION cell only (`planCellsOf`: the column named by the table's header as the scaffold writes it, EN / PT / ES / pt-BR —
+  `planDescHeaders`; never the File, Covers, Layer, Kind or Test ID; a table without that header: its cells but the IDs; a list
+  row whole), minus a description that EQUALS a template one (`planTemplateCells`: the built-in plan of every track — EN + the
+  feature's language —, the track packs' test-plan rows, the project's test-plan templates; an edited one is the user's,
+  sectionOwnLines' rule). Before comparing, every value the scaffold filled in is FILLED (`planFeatureValues` — the name read
+  back from an artifact title that slugifies to the feature's folder, the slug, the Summary, tracks, lang, the creation date;
+  a pack's {{title}} / {{marker}}), so a feature named "Duplicate charge guard" keeps its scaffolded "{{name}} happy path"
+  row template; a slot is tested on the cell as written. Only per-row values ({{acs}}, {{t1}} …) stay variables: such a cell
+  is a glossary pattern (`glossPatternSegs`, ≥ 4 literal characters AND a literal at its start or its end — "{{acs}} with
+  {{t1}}" would cut "with" out of real rows) matched by the LINEAR `glossSpans` — never a regex built from template text — and
+  gives only those values (`planCellOwn`, glossUserParts' rule). `planFold` folds case, `**` / `_x_` / backticks, blanks and a
+  final period. They need a repetition row (twice / duplicate / repeated — never a repeated password / e-mail / confirmation
+  field — / again with the same / two at once / "at the same time" after a number or an action a few words before it (two
+  sessions decrement …, redeemed by Alice and Bob …; never on its own: "the list and the badge render at the same time") / the
+  same millisecond / identical requests / simultaneous / concurrent / in parallel / resubmitted / a redelivered or replayed
+  anything, a retried webhook, event, message, callback or payment — after a failure too: the provider redelivers —; PT
+  repetido(a) — never a senha / e-mail / confirmação field —, reenviado, com a mesma chave, "ao mesmo tempo" after a number or
+  an action; ES the same — contraseña / correo / confirmación —, con la misma clave, "al mismo tiempo" / "a la vez"…
+  `RE_REPETITION_ROW`; never a bare retry — a Retry or Resubmit button, notifications retried after the provider fails) and,
+  when the user text is about own data or permissions (`RE_OWN_DATA`), another user's access (`RE_OTHER_USER_ROW`)). Both only WARN — no gate, no
   `warnsOnly` —, share the context view `critical` (doctor.js `CHECK_VIEWS`) and follow the stamp scheme: `approvePhase`
   stamps `critical: true` on every design and test-plan approval (and its record); an approval without it passes with a note
   ("approved before 1.33" — `legacyApproval` / `criticalFlows.legacyPlan`). spec_upgrade lists them, never as `attention`
@@ -329,6 +334,13 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   over an 800-character cell took 1.7 s. They are the glossary's linear patterns now, a match giving only the values. The
   repetition words caught a repeated password field, a Resubmit button, a render "at the same time" and "retried after the
   provider fails"; `planFold` left `_italic_` and a final period.
+- **1.33 review 4** — simplified: only the Description column is read (a scaffold's `tests/{{slug}}.test.js` File cell beside a
+  verbatim description made it pass); the feature's own values are filled before the comparison (a feature named "Duplicate charge
+  guard" scaffolded from "{{name}} happy path" passed — the filled name was read as the user's repetition word; it warned at
+  b223e62); the slot test ran on the filled cell (a pack row opening with {{marker}} became "[hooks] …" and was dropped); a
+  pattern with no literal at either end cut a word out of real rows. Repetition: a provider's retry of a webhook / payment after
+  a failure, a repeated button press / link click, PT / ES repetido(a) beyond a password field, a wider window before "at the
+  same time" (after a number or an action only) count.
 
 ### Reuse & Integration and clean code
 - **1.19 R** — package R: the Reuse & Integration section and doctor `design-reuse` (R1), the brief's Reuse part (R2), the

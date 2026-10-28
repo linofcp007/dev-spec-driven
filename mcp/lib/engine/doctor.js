@@ -1046,7 +1046,8 @@ const DOCTOR_CHECKS = [
   // while test-plan.md is still a later phase's template; a plan approved before 1.33 (no `critical` stamp) passes with a note.
   { id: "critical-flow-tests", phase: 3, applies: (c) => c.tracks.includes("tdd") && c.kind === "feature" && c.exists("test-plan.md") &&
     !c.laterFiles.includes("test-plan.md") && criticalNamed(c),
-  run: (c) => criticalFlowCheck("test-plan", c.critical, c.lang, { approval: c.approvals && c.approvals["test-plan"], plan: c.read("test-plan.md"), projectDir: c.projectDir }) },
+  run: (c) => criticalFlowCheck("test-plan", c.critical, c.lang, { approval: c.approvals && c.approvals["test-plan"], plan: c.read("test-plan.md"), projectDir: c.projectDir,
+    feature: { dir: c.dir, slug: c.slug, tracks: c.tracks, createdAt: c.state.createdAt } }) },
   { id: "eval-plan", phase: 4, applies: (c) => c.tracks.includes("ai"), run: (c) => ({ status: fs.existsSync(path.join(c.dir, "eval-plan.md")) ? "pass" : "warn", detail: "" }) },
   // Traceability — every failing kind named with its IDs. Scoped like the placeholders check: a LATER phase's artifact that is still its
   // template (tasks.md / test-plan.md at the requirements or design gate) is not traced yet — its template rows (_Requirements:

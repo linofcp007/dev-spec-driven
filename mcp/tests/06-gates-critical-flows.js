@@ -199,13 +199,20 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       ["the webhook is retried by the gateway: one effect"], ["a retried webhook: one effect"], ["o pedido repetido não dá dois descontos", "pt"],
       ["a mensagem repetida tem um só efeito", "pt"], ["o webhook reenviado é ignorado", "pt"], ["com a mesma chave: um só pagamento", "pt"],
       ["dois pedidos no mesmo milissegundo", "pt"], ["la petición repetida no aplica dos descuentos", "es"], ["el webhook reenviado se ignora", "es"],
-      ["con la misma clave: un solo pago", "es"], ["dois compradores pagam ao mesmo tempo", "pt"], ["dos compradores pagan al mismo tiempo", "es"]];
-    // (1.33 review 3: the reviewer's exact phrases — a repeated / repetida field, a Resubmit button, a render "at the same time", a retry
-    // after a failure)
+      ["con la misma clave: un solo pago", "es"], ["dois compradores pagam ao mesmo tempo", "pt"], ["dos compradores pagan al mismo tiempo", "es"],
+      // (1.33 review 4: a provider's retry of a received webhook / event / a payment is a redelivery, after a failure or not; a repeated
+      // button press / link click is a double click; PT / ES repetido(a) beyond a password field; a wider window before "at the same time")
+      ["the payment webhook is retried after a 500 and applies once"], ["the webhook is retried once more: one effect"], ["the webhook is retried after a timeout"],
+      ["the repeated button press creates one order"], ["the repeated link click is idempotent"], ["o código repetido é rejeitado", "pt"], ["clave repetida: un solo pago", "es"],
+      ["two sessions decrement the stock at the same time"], ["the same coupon redeemed by Alice and Bob at the same time"]];
+    // (1.33 review 3 / 4: a repeated / repetida password field, a Resubmit button, a render "at the same time", notifications retried after a
+    // failure)
     const NO = [["the Retry button reloads the list"], ["retries after a gateway timeout"], ["the repeat password field must match"], ["nova tentativa após um timeout", "pt"],
       ["the repeated password field must match"], ["senha repetida deve coincidir", "pt"], ["la contraseña repetida debe coincidir", "es"],
       ["the list and the badge render at the same time"], ["a lista e o ícone aparecem ao mesmo tempo", "pt"], ["la lista y el icono se muestran a la vez", "es"],
-      ["a Resubmit button shows after a validation error"], ["notifications are retried after the provider fails"], ["the webhook is retried after a timeout"]];
+      ["a Resubmit button shows after a validation error"], ["notifications are retried after the provider fails"],
+      ["the toast and the redirect happen at the same time"], ["users see the list and the badge at the same time"], ["the order summary and the total show at the same time"],
+      ["payments page and the receipt load at the same time"], ["os clientes veem o total e o desconto ao mesmo tempo", "pt"]];
     const yesBad = YES.filter(([d, l]) => !rep(d, l)).map(([d]) => d), noBad = NO.filter(([d, l]) => rep(d, l)).map(([d]) => d);
     all("1.33 review 2: an edited template row is the user's (+dist's 'delivered twice … — for the coupon webhook', +sec's 'user B … — the coupon endpoint' answer; verbatim they don't); a repeated / redelivered / resubmitted / replayed / retried webhook, the same time / millisecond, identical requests, PT repetido(a) / reenviado / com a mesma chave, ES repetida / reenviado / con la misma clave count — a Retry button, a retry after a timeout, a repeat-password field don't (got " +
       js({ edited: gaps(check(ownMine)), verbatim: gaps(check(ownTpl)), yesBad, noBad }) + ")", {
@@ -270,26 +277,80 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
     const plan = (...rows) => head + row("T-01", "a valid code applies the discount") + rows.join("") + other;
     const doc = (text) => { wr(f, "test-plan.md", text); return view(S.specDoctor(p, f.slug), "critical-flow-tests"); };
     const warn = (v) => /^warn: critical flow .* lacks a repetition row/.test(v), pass = (v) => /^pass: /.test(v);
+    // (1.33 review 4: the feature's values are FILLED before a template cell is compared — {{name}} is the feature's own; a feature
+    // named "Checkout (v2)" reads its punctuated name back from its artifacts' titles)
+    const g = designed(p, "Checkout (v2)", ["core", "tdd", "hooks"], { design: DESIGN("## Critical flows\nA unique constraint on (code, buyer_id).\n\n") });
+    const gDoc = (r) => { wr(g, "test-plan.md", head.replace("Discounts", "Checkout (v2)") + row("T-01", "a valid code applies the discount") + r + other); return view(S.specDoctor(p, g.slug), "critical-flow-tests"); };
     const got = {
       acs2: doc(plan(row("T-02", "US-1.AC-5, US-1.AC-6 the same webhook delivered twice has one effect"))),
       title: doc(plan(row("T-02", "Webhooks (Stripe): the event delivered twice has one effect"))),
-      nameParens: doc(plan(row("T-02", "the order is submitted twice: one order for Checkout (v2)"))),
+      nameParens: gDoc(row("T-02", "the order is submitted twice: one order for Checkout (v2)")),
+      otherName: doc(plan(row("T-02", "the order is submitted twice: one order for Checkout (v2)"))), // not this feature's name: edited — the user's
       folded: doc(plan(row("T-02", "the same callback delivered twice has one effect"))),
       forRow: doc(plan(row("T-02", "the same coupon redeemed twice for one buyer gives one discount"))),
       behaviorRow: doc(plan(row("T-02", "behavior of two buyers paying at the same time"))),
     };
-    // (3) linear: 4 variables, 20 rows of an 800-character cell — the per-variable lazy regex took 1.7 s a cell
-    tplRows("{{name}} x {{slug}} x {{date}} x {{name}} end");
-    const long = (i) => row("T-" + (20 + i), (" x").repeat(400));
+    // (3) linear — the cell reaches glossSpans' indexOf loop: a pattern whose start and end literals match, three per-row variables between
+    // literals the cell repeats 400 times (20 rows) — the per-variable lazy regex took 1.7 s a cell
+    tplRows("t: {{acs}} then {{t1}} then {{tests}} done");
+    const long = (i) => row("T-" + (20 + i), "t:" + " then".repeat(400) + " done");
     const s = remeasure(() => {
       const t0 = Date.now(); doc(plan()); const base = Date.now() - t0;
       const t1 = Date.now(); doc(plan(...Array.from({ length: 20 }, (_, i) => long(i)))); return { base, big: Date.now() - t1 };
     }, (x) => x.big < 5 * Math.max(x.base, 100) + 1500);
-    all("1.33 review 3: template cells with variables match through the glossary's linear wildcard and give only their filled-in values — a punctuated value (two ACs, 'Webhooks (Stripe)', 'Checkout (v2)') keeps a verbatim row template, '{{name}} for {{acs}}' / 'Behavior of {{name}}' swallow no real row, _italic_ and a final period fold, 4 variables over 20 × 800 characters stay linear (got " +
+    all("1.33 review 3 / 4: template cells match through the glossary's linear wildcard once the feature's values are filled in — a punctuated value (two ACs, 'Webhooks (Stripe)', the feature's own 'Checkout (v2)') keeps a verbatim row template, another name is the user's edit, '{{name}} for {{acs}}' / 'Behavior of {{name}}' swallow no real row, _italic_ and a final period fold, 3 variables over 20 × 2,000 characters stay linear (got " +
       js({ got, timing: { base: s.base, big: s.big, tries: s.tries } }) + ")", {
-      acs2: () => warn(got.acs2), title: () => warn(got.title), nameParens: () => warn(got.nameParens), folded: () => warn(got.folded),
+      acs2: () => warn(got.acs2), title: () => warn(got.title), nameParens: () => warn(got.nameParens), otherName: () => pass(got.otherName), folded: () => warn(got.folded),
       forRow: () => pass(got.forRow), behaviorRow: () => pass(got.behaviorRow),
       linear: () => s.big < 5 * Math.max(s.base, 100) + 1500,
+    });
+  }
+
+  { // 1.33 review 4: (A) only the Description column answers — its header found as the scaffold writes it (EN / PT / ES / pt-BR); the
+    // File / Covers / Layer / Kind cells never do (a template's `tests/{{slug}}.test.js` beside a verbatim description made it pass); a
+    // table without that header reads its cells but the IDs. (B) a feature NAMED after its race scaffolded from a project template row
+    // "{{name}} happy path" keeps it template — the filled name supplies no repetition word. (C) a pack row opening with {{marker}} is
+    // no slot. (D) a pattern with no literal at its start nor its end ("{{acs}} with {{t1}}") is dropped — it cut "with" out of real rows.
+    const p = project("cf-desc");
+    const pd = path.join(p, ".specs", "tracks", "hooks");
+    fs.mkdirSync(pd, { recursive: true });
+    fs.writeFileSync(path.join(pd, "track.json"), js({ name: "hooks", marker: "HOOKS", title: { en: "Webhooks" }, signals: { strong: ["webhook receiver"], weak: [] },
+      sections: [{ name: "Receivers", guidance: "Which events." }] }));
+    fs.writeFileSync(path.join(pd, "test-plan.md"), "| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n" +
+      "| T-00 | integration | example | {{marker}} the same webhook delivered twice has one effect | {{acs}} | `tests/hooks.test.js` |\n");
+    const tdir = path.join(p, ".specs", "templates");
+    fs.mkdirSync(tdir, { recursive: true });
+    fs.writeFileSync(path.join(tdir, "test-plan.md"), "# Test Plan: {{name}}\n\n| Test ID | Layer | Kind | Description | Covers | File |\n|---|---|---|---|---|---|\n" +
+      "| T-01 | integration | example | {{name}} happy path | {{acs}} | `tests/{{slug}}-twice.test.js` |\n| T-02 | unit | example | {{acs}} with {{t1}} | {{acs}} | `tests/{{slug}}.test.js` |\n");
+    // B: the scaffold writes the template's rows with the feature's name; the plan kept as scaffolded (+ an other-user row)
+    const named = ["Coupon codes", "Duplicate charge guard", "Double booking guard", "Concurrent seat booking"].map((n) => {
+      const f = designed(p, n, ["core", "tdd"], { design: DESIGN("## Critical flows\nA unique constraint on (code, buyer_id).\n\n") });
+      const scaffolded = fs.readFileSync(path.join(f.dir, "test-plan.md"), "utf8");
+      wr(f, "test-plan.md", scaffolded.replace(/\{\{acs\}\}|\{\{t1\}\}/g, "US-1.AC-1") + "\n| T-09 | integration | example | user B cannot redeem user A's code | US-1.AC-1 | `t.js` |\n");
+      return [n, /happy path/i.test(scaffolded), view(S.specDoctor(p, f.slug), "critical-flow-tests")];
+    });
+    const f = designed(p, "Discounts", ["core", "tdd", "hooks"], { design: DESIGN("## Critical flows\nA unique constraint on (code, buyer_id).\n\n") });
+    const other = "| T-09 | integration | example | user B cannot redeem user A's code | US-1.AC-1 | `t.js` |\n";
+    const doc = (text) => { wr(f, "test-plan.md", text + other); return view(S.specDoctor(p, f.slug), "critical-flow-tests"); };
+    const I = require(path.join(root, "mcp", "lib", "i18n.js"));
+    const H = (lang) => { const l = I.testPlan("x", lang, ["core", "tdd"]).split("\n"); const k = l.findIndex((x) => /^\|/.test(x)); return l[k] + "\n" + l[k + 1] + "\n"; };
+    const r6 = (desc, file) => `| T-02 | integration | example | ${desc} | US-1.AC-1 | \`${file}\` |\n`;
+    const got = {
+      fileOnly: doc(H("en") + r6("a valid code applies the discount", "tests/codes-twice-concurrent.test.js")),
+      descPt: doc(H("pt") + r6("o mesmo cupão aplicado duas vezes", "t.js")), descEs: doc(H("es") + r6("el mismo cupón canjeado dos veces", "t.js")),
+      descBr: doc(H("pt-BR") + r6("o mesmo cupom aplicado duas vezes", "t.js")),
+      noHeader: doc("| T-02 | the same code redeemed twice | US-1.AC-1 |\n"),
+      marker: doc(H("en") + r6("[HOOKS] the same webhook delivered twice has one effect", "t.js")),
+      withRow: doc(H("en") + r6("sent again with the same key: one charge", "t.js")),
+    };
+    all("1.33 review 4: the Description column alone answers (its header in EN / PT / ES / pt-BR; a File cell saying 'twice' never), a table without that header reads its non-ID cells; a feature named 'Duplicate charge guard' / 'Double booking guard' / 'Concurrent seat booking' keeps its scaffolded '{{name}} happy path' row template; a pack row opening with {{marker}} stays template; '{{acs}} with {{t1}}' cuts nothing out of a real row (got " +
+      js({ named, got }) + ")", {
+      named: () => named.every(([, scaffolded, v]) => scaffolded && /^warn: critical flow .* lacks a repetition row/.test(v)),
+      fileOnly: () => /^warn: critical flow .* lacks a repetition row/.test(got.fileOnly),
+      descLangs: () => [got.descPt, got.descEs, got.descBr].every((v) => /^pass: /.test(v)),
+      noHeader: () => /^pass: /.test(got.noHeader),
+      marker: () => /^warn: critical flow .* lacks a repetition row/.test(got.marker),
+      withRow: () => /^pass: /.test(got.withRow),
     });
   }
 };
