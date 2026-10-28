@@ -207,7 +207,11 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       ["two sessions decrement the stock at the same time"], ["the same coupon redeemed by Alice and Bob at the same time"],
       // (review 5: each language's own number word and phrase)
       ["dos usuarios canjean el cupón a la vez", "es"], ["duas sessões debitam o saldo ao mesmo tempo", "pt"], ["both tabs submit the order at the same time"],
-      ["3 requests at the same time: one charge"]];
+      ["3 requests at the same time: one charge"],
+      // (review 6: a quantity, then an action verb within three words — any actor —; ES envían with its accent)
+      ["both admins approve the refund at the same time"], ["two drivers accept the same ride at the same time"], ["two replicas consume the message at the same time"],
+      ["2 pods process the job at the same time"], ["dois administradores aprovam o reembolso ao mesmo tempo", "pt"],
+      ["dos administradores aprueban el reembolso al mismo tiempo", "es"], ["Ana y Luis envían el pago al mismo tiempo", "es"]];
     // (1.33 review 3 / 4: a repeated / repetida password field, a Resubmit button, a render "at the same time", notifications retried after a
     // failure)
     const NO = [["the Retry button reloads the list"], ["retries after a gateway timeout"], ["the repeat password field must match"], ["nova tentativa após um timeout", "pt"],
@@ -220,12 +224,23 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, approveBe
       // form field)
       ["o carregamento dos saldos e do histórico ao mesmo tempo", "pt"], ["a lista dos produtos e o contador atualizam ao mesmo tempo", "pt"],
       ["both the list and the badge render at the same time"], ["the header and 3 widgets render at the same time"], ["a repeated field is highlighted"],
-      ["o campo repetido fica destacado", "pt"]];
+      ["o campo repetido fica destacado", "pt"],
+      // (review 6: a step number is no quantity)
+      ["step 2 the user and the admin see the badge at the same time"], ["passo 2 o cliente e o administrador veem o aviso ao mesmo tempo", "pt"],
+      ["paso 2 el cliente y el administrador ven el aviso al mismo tiempo", "es"]];
     const yesBad = YES.filter(([d, l]) => !rep(d, l)).map(([d]) => d), noBad = NO.filter(([d, l]) => rep(d, l)).map(([d]) => d);
-    all("1.33 review 2: an edited template row is the user's (+dist's 'delivered twice … — for the coupon webhook', +sec's 'user B … — the coupon endpoint' answer; verbatim they don't); a repeated / redelivered / resubmitted / replayed / retried webhook, the same time / millisecond, identical requests, PT repetido(a) / reenviado / com a mesma chave, ES repetida / reenviado / con la misma clave count — a Retry button, a retry after a timeout, a repeat-password field don't (got " +
-      js({ edited: gaps(check(ownMine)), verbatim: gaps(check(ownTpl)), yesBad, noBad }) + ")", {
+    // (review 6: the step lookbehind before a quantity is bounded — read backwards over a run of hyphens it was quadratic in the
+    // cell: 30 rows of 3,800 hyphens took 5 s)
+    const hyPlan = (n) => "# Test plan\n\n| Test ID | Layer | Kind | Description | Covers (AC IDs) | File |\n|---|---|---|---|---|---|\n" +
+      Array.from({ length: n }, (_, i) => row("T-" + (100 + i), "a" + "-".repeat(3800) + " 2 x")).join("");
+    const hy = remeasure(() => {
+      const t0 = Date.now(); check(hyPlan(30)); const big = Date.now() - t0;
+      const t1 = Date.now(); check(hyPlan(1)); return { big, base: Date.now() - t1 };
+    }, (x) => x.big < 5 * Math.max(x.base, 100) + 1500);
+    all("1.33 review 2: an edited template row is the user's (+dist's 'delivered twice … — for the coupon webhook', +sec's 'user B … — the coupon endpoint' answer; verbatim they don't); a repeated / redelivered / resubmitted / replayed / retried webhook, the same time / millisecond, identical requests, PT repetido(a) / reenviado / com a mesma chave, ES repetida / reenviado / con la misma clave count — a Retry button, a retry after a timeout, a repeat-password field don't; 30 rows of 3,800 hyphens stay linear (got " +
+      js({ edited: gaps(check(ownMine)), verbatim: gaps(check(ownTpl)), yesBad, noBad, hyphens: { big: hy.big, base: hy.base, tries: hy.tries } }) + ")", {
       edited: () => gaps(check(ownMine)) === "pass", verbatim: () => gaps(check(ownTpl)) === "repetition row+another user's data",
-      yes: () => !yesBad.length, no: () => !noBad.length,
+      yes: () => !yesBad.length, no: () => !noBad.length, linear: () => hy.big < 5 * Math.max(hy.base, 100) + 1500,
     });
   }
 

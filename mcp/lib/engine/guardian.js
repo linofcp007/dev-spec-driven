@@ -108,12 +108,13 @@ const GUARDIAN_DIFF_BASE_ENV = "DEV_SPEC_DIFF_BASE";
 const GUARDIAN_DIFF_BASE_MIN = "3.8.0";
 // A plain ref name — git check-ref-format's rules on the characters a feature branch's name may hold (branchNameOk: letters,
 // digits, . _ + - /): never starting with "-" or "/", no "..", no "//", no component starting with "." or ending in ".lock", no
-// trailing "/" or "." — at most 200 characters — and no pseudo-ref in any case (HEAD, ORIG_HEAD, FETCH_HEAD, MERGE_HEAD… AUTO_MERGE:
-// "head" is HEAD on a case-insensitive file system). A full commit id passes (hex).
+// trailing "/" or "." — at most 200 characters — and none of git's pseudo-refs as the WHOLE name, in any case ("head" is HEAD on a
+// case-insensitive file system; a branch fix/detached_head is a branch). A full commit id passes (hex). (The list lives inside: the
+// launcher carries this function's source alone.)
 function plainRefOk(ref) {
   const s = typeof ref === "string" ? ref : "";
-  const up = s.toUpperCase();
-  if (!s || s.length > 200 || up === "HEAD" || up === "AUTO_MERGE" || up.slice(-5) === "_HEAD") return false;
+  const pseudo = ["HEAD", "ORIG_HEAD", "FETCH_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_HEAD", "REBASE_HEAD", "AUTO_MERGE"];
+  if (!s || s.length > 200 || pseudo.indexOf(s.toUpperCase()) >= 0) return false;
   const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-/";
   for (let i = 0; i < s.length; i++) if (allowed.indexOf(s[i]) < 0) return false;
   if (s[0] === "-" || s[0] === "/" || s[s.length - 1] === "/" || s[s.length - 1] === "." || s.indexOf("..") >= 0 || s.indexOf("//") >= 0) return false;
@@ -289,28 +290,34 @@ function guardianLauncherAudit(projectDir, lng, fix) {
   if (!fix) return i18n.msg(lng).guardian.upgradeLauncher(s);
   try { return setGuardianLauncher(projectDir, true); } catch (e) { if (gateRefusal(e, lng)) return null; throw e; }
 }
-// finish --run (1.33): the ref dev-guardian's test-integrity check diffs against when the gate runs with a feature in hand. In order:
-// the feature's branch as recorded (`create --branch`): the branch it was created from, read as refs/heads/<base> — never a tag of
-// that name ("base") —, else the commit it started at ("commit"); without a record, the repository's default branch (origin/HEAD's
-// when it resolves, else a local main / master — "default") while HEAD is on another branch. Each a plain ref name (plainRefOk —
-// never "-…") git resolves to a commit (one it can't read would turn the gate into exit 3) that is NOT HEAD's own: a base moved to
-// HEAD (a local merge, `git branch -f`, a switch that failed while the record stayed) gives an empty diff, so the next one is tried.
-// → { ref, from } · { empty: true, ref, from } (every candidate is HEAD's commit: nothing to read — finish says so, passes nothing) ·
-// null. git: the CLI's { head, current, defaultBranch, defaultRef, resolve(ref) → a commit id | null } (the engine never runs git).
+// finish --run (1.33): the ref dev-guardian's test-integrity check diffs against when the gate runs with a feature in hand —
+// dev-guardian reads the change from that ref's merge base with HEAD to the WORKING TREE (uncommitted and untracked files too). In
+// order: the feature's branch as recorded (`create --branch`): the branch it was created from, read as refs/heads/<base> — never a
+// tag of that name ("base") —, else the commit it started at ("commit"); without a record, the repository's default branch
+// (origin/HEAD's when it resolves, else a local main / master — "default") while HEAD is on another branch. The first a plain ref
+// name (plainRefOk — never "-…") git resolves to a commit (one it can't read would turn the gate into exit 3) is passed — never
+// skipped as "empty": a branch still at main's commit with its work uncommitted is read through it. One exception: a candidate that
+// already CONTAINS HEAD (its merge base with HEAD is HEAD — main moved to HEAD, a --no-ff local merge of the feature) would hide the
+// feature's commits, so the recorded start commit goes instead when it is a proper ancestor of HEAD. → { ref, from } | null. git:
+// the CLI's { head, current, defaultBranch, defaultRef, resolve(ref) → a commit id | null, ancestor(a, b) → true when commit a is b
+// or an ancestor of it, false, null (can't tell) } (the engine never runs git).
 function guardianDiffBase(state, git) {
   if (!git || typeof git.resolve !== "function" || !git.head) return null;
   const rec = featureBranchRecord(state);
   const def = git.defaultBranch, cur = git.current;
   const tries = rec ? [[rec.base && plainRefOk(rec.base) ? "refs/heads/" + rec.base : null, "base"], [rec.commit, "commit"]]
     : git.defaultRef && def && cur && cur !== def && "origin/" + cur !== def ? [[git.defaultRef, "default"]] : [];
-  let empty = null;
+  const ancestor = (a, b) => typeof git.ancestor === "function" && git.ancestor(a, b) === true;
   for (const [ref, from] of tries) {
     const sha = ref && plainRefOk(ref) ? git.resolve(ref) : null;
     if (!sha) continue;
-    if (sha !== git.head) return { ref, from };
-    if (!empty) empty = { empty: true, ref, from };
+    if (from === "base" && ancestor(git.head, sha)) {
+      const start = plainRefOk(rec.commit) ? git.resolve(rec.commit) : null;
+      if (start && start !== git.head && ancestor(start, git.head)) return { ref: rec.commit, from: "commit" };
+    }
+    return { ref, from };
   }
-  return empty;
+  return null;
 }
 // A ref as a line names it: refs/heads/main → main, refs/remotes/origin/main → origin/main.
 const shortRef = (ref) => String(ref || "").replace(/^refs\/(?:heads|remotes)\//, "");
@@ -806,6 +813,6 @@ function guardianGuardOn(meta) {
 const guardianGuardFilter = (actions, meta) => (guardianGuardOn(meta) ? actions : actions.filter((a) => !/^guardian-/.test(String(a.setting || ""))));
 
 module.exports = { GUARDIAN_COMMAND, isGuardianCheck, guardianChecks, setGuardianLauncher, guardianLauncherOn, guardianLauncherState,
-  guardianPreRun, guardianLauncherAudit, guardianCli, guardianOffer, guardianDiffBase, GUARDIAN_DIFF_BASE_ENV, plainRefOk, shortRef, GUARDIAN_IGNORE, guardianOnNote, guardianRecord, guardianRefusal, guardianStored,
+  guardianPreRun, guardianLauncherAudit, guardianCli, guardianOffer, guardianDiffBase, GUARDIAN_DIFF_BASE_ENV, plainRefOk, GUARDIAN_IGNORE, guardianOnNote, guardianRecord, guardianRefusal, guardianStored,
   guardianCompact, guardianText, guardianLines, suiteGuardianHint, suiteBlocker, guardianWarnings,
   guardianShellActions, guardianGuardFilter, __link };

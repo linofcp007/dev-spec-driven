@@ -2786,7 +2786,6 @@ const msg = {
       override: (p) => ` (dev-guardian do DEV_GUARDIAN_CLI=${p})`,
       // 1.33: a alteração desde a base da feature, lida à procura de testes enfraquecidos (o test-integrity do dev-guardian 3.8.0)
       diffBase: (ref) => ` · a alteração desde ${ref} verificada à procura de testes enfraquecidos`,
-      diffBaseEmpty: (ref) => `dev-guardian: sem verificação de testes enfraquecidos — a base da feature (${ref}) é o próprio commit atual, por isso a alteração desde ela está vazia`,
       accepted: (t, p, o) => [t ? `${t} ficheiro(s) não analisado(s) (aceite(s) no .guardian/scan.yml)` : "", p ? `${p} ficheiro(s) só lido(s) em parte (aceite(s) com --accept-partial-parse)` : "",
         o ? `${o} outra(s) aceitação(ões) (accepted_gaps)` : ""].filter(Boolean).join(" · "),
       acceptedWarn: (what) => `o gate do dev-guardian passou com ${what} — revê à mão uma alteração a esses ficheiros: um finding onde nenhum scanner olhou passa o gate.`,
@@ -2817,7 +2816,7 @@ const msg = {
       },
       configHint: (slug) => `Corrige isso e volta a correr a verificação: ${DEV_SPEC} finish ${slug} --run.`,
       mcpRun: (name, cmd, slug) => `A verificação '${name}' corre o scan do dev-guardian (minutos). No Claude Code, corre ${DEV_SPEC} finish ${slug} --run (Bash com timeout 600000, ou em segundo plano): corre a verificação e regista o relatório sozinho. Noutros clientes, corre \`${cmd}\` a partir da raiz do projeto (dev-guardian 3.3+: junta --compact para um relatório curto) e regista a execução com spec_finish {evidence: [{name: "${name}", command, exitCode, summary: as últimas linhas do stderr, report: o JSON do stdout}]} — uma execução que passa precisa do relatório.`,
-      launcherChanged: `o .specs/guardian.cjs não é o launcher que o dev-spec-driven escreve (editado, substituído ou um link), por isso o gate não o corre — ${DEV_SPEC} init --guardian volta a escrevê-lo (se foi um dev-spec mais recente a escrevê-lo, atualiza antes o dev-spec)`,
+      launcherChanged: `o .specs/guardian.cjs não é o launcher que o dev-spec-driven escreve (editado, substituído ou um link), por isso o gate não o corre — ${DEV_SPEC} init --guardian volta a escrevê-lo (se foi um dev-spec mais recente a escrevê-lo, atualiza o dev-spec em vez disso)`,
       launcherRefreshed: "O .specs/guardian.cjs foi substituído pelo launcher desta versão (era o de uma versão anterior).",
       notRun: (name, why) => `a verificação do projeto '${name}' não foi corrida — ${why}. Nada foi registado.`,
       reportMismatch: (exit, reported, blocking) => `o relatório do dev-guardian contradiz o exit code ${exit}` + (reported != null ? ` (o relatório diz exit ${reported})` : "") + (blocking ? ` — lista ${blocking} finding(s) que bloqueiam` : "") + `; regista a execução tal como foi (ou deixa o finish --run registá-la) — nada foi registado`,

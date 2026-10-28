@@ -449,8 +449,10 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
     (either spelling), and only for a dev-guardian ≥ 3.8.0 — its version read from the install it resolved (`devGuardianVersion`:
     `<root>/.claude-plugin/plugin.json`, else `package.json`, else `mcp/package.json`; none readable: nothing appended, never a
     guess from a folder name). An older dev-guardian runs exactly as before. A value that is no plain ref name (`plainRefOk` =
-    `branchNameOk`'s rule: never `-…`, no `..`, no `.lock`… — plus no pseudo-ref in any case: `HEAD` / `head` (HEAD itself on a
-    case-insensitive file system), `ORIG_HEAD`, `FETCH_HEAD`, any `*_HEAD`, `AUTO_MERGE`) refuses the scan (exit 3, "DEV_SPEC_DIFF_BASE is no plain ref name")
+    `branchNameOk`'s rule: never `-…`, no `..`, no `.lock`… — plus none of git's pseudo-refs as the WHOLE name, in any case: `HEAD`
+    / `head` (HEAD itself on a case-insensitive file system), `ORIG_HEAD`, `FETCH_HEAD`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`,
+    `REVERT_HEAD`, `BISECT_HEAD`, `REBASE_HEAD`, `AUTO_MERGE` — a branch `fix/detached_head` is a branch; the list lives inside the
+    carried function) refuses the scan (exit 3, "DEV_SPEC_DIFF_BASE is no plain ref name")
     — only where it would be appended. The launcher says what it appended on stderr (`dev-guardian launcher: --diff-base <ref>
     (DEV_SPEC_DIFF_BASE)`): the verdict keeps it (`diffBase`, the head line's `guardian.diffBase`), a configuration error's message
     never (`RE_LAUNCHER_DIFF_BASE`). Its findings gate like any finding: a `.only` (high) blocks at `--fail-on high`, a skip (medium)
@@ -705,6 +707,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.33 review 5** — `plainRefOk` let `head` / `ORIG_HEAD` / `FETCH_HEAD` through (`head` is HEAD on Windows): every pseudo-ref
   refused, any case. A 1.32 engine reads the 1.33 launcher as changed and its fix reinstalls 1.32's: the mixed-versions note above,
   the release note, and `launcherChanged` names a newer dev-spec from now on.
+- **1.33 review 6** — review 5's suffix rule refused any branch ending in `_HEAD` (`fix/detached_head`): only git's pseudo-refs as
+  whole names now. `launcherChanged`'s PT / ES aligned with EN's "instead" ("em vez disso", "en su lugar"). The diff base is never
+  skipped (tasks-and-evidence.md → History).
 - **1.30.1** — the cache's blind spot: for up to 10 s a change OUTSIDE `.specs/` the line reads didn't show (a Phase 4 test written —
   "write the tests" stayed; a `.specs/` made nearer the cwd; a worktree's mapping): the render reports its outside paths and the
   entry signs them, the probe's folder is compared at each read, a mapped render keeps 2 s.

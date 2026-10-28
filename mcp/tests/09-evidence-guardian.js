@@ -948,24 +948,29 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
       otherSub: js(args(r.status)) === js(["status"]),
       invalid: [r.dash, r.dots, r.space, r.lock].every(refused),
       sameRule: !ruleBad.length && E.GUARDIAN_DIFF_BASE_ENV === "DEV_SPEC_DIFF_BASE",
-      // (1.33 review 5: a pseudo-ref in any case — "head" is HEAD on a case-insensitive file system)
-      pseudo: ["head", "HEAD", "Head", "ORIG_HEAD", "orig_head", "FETCH_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "AUTO_MERGE"].every((x) => !E.plainRefOk(x)) &&
-        E.plainRefOk("feature/head") && E.plainRefOk("refs/heads/main"),
+      // (1.33 review 5 / 6: git's pseudo-refs as whole names, any case — "head" is HEAD on a case-insensitive file system —; a branch
+      // whose last segment ends in _head is a branch)
+      pseudo: ["head", "HEAD", "Head", "ORIG_HEAD", "orig_head", "FETCH_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_HEAD", "AUTO_MERGE"].every((x) => !E.plainRefOk(x)) &&
+        E.plainRefOk("feature/head") && E.plainRefOk("refs/heads/main") && E.plainRefOk("fix/detached_head") && E.plainRefOk("my_head"),
     });
 
     // the base finish --run hands it (guardianDiffBase): the feature's branch as recorded — the branch it was created from, read as
     // refs/heads/<base> (never a tag of that name), else the commit it started at —, else (no record) the repository's default branch
-    // while HEAD is on another one; each a plain ref name git resolves to a commit that is NOT HEAD's own (review 5: a base moved to HEAD —
-    // a local merge, `git branch -f main HEAD`, a failed switch — gave an empty diff "checked"); every candidate HEAD's → empty (said,
-    // nothing passed); none → null
-    const SHA = "1df7dbf17a23f864afd4fc45a51cc99af05fc875", HEAD = "9".repeat(40), MAIN = "a".repeat(40);
+    // while HEAD is on another one; the first a plain ref name git resolves to a commit — never skipped as "empty" (review 6: dev-guardian
+    // reads the working tree too, so a base at HEAD still reads the uncommitted work) —; a base that CONTAINS HEAD (moved to HEAD, a
+    // --no-ff merge of the feature) gives way to the start commit when that is a proper ancestor of HEAD; none → null
+    const SHA = "1df7dbf17a23f864afd4fc45a51cc99af05fc875", HEAD = "9".repeat(40), MAIN = "a".repeat(40), MERGE = "b".repeat(40);
     const rec = (base, commit) => ({ branch: { name: "feature/login", base, commit, at: "2026-10-01T00:00:00.000Z" } });
-    // the CLI's facts, faked: `refs` maps the refs git resolves to their commits; HEAD is at `head`
-    const git = (refs, current, defaultBranch, defaultRef, head = HEAD) => ({ head, current, defaultBranch, defaultRef, resolve: (ref) => refs[ref] || null });
+    // the CLI's facts, faked: `refs` maps the refs git resolves to their commits; HEAD is at `head`; `anc` lists "a>b" (a an ancestor of b)
+    const git = (refs, current, defaultBranch, defaultRef, anc = [], head = HEAD) => ({ head, current, defaultBranch, defaultRef,
+      resolve: (ref) => refs[ref] || null, ancestor: (a, b) => a === b || anc.includes(a + ">" + b) });
     const b = {
-      base: E.guardianDiffBase(rec("main", SHA), git({ "refs/heads/main": MAIN, [SHA]: SHA }, "feature/login")),
+      base: E.guardianDiffBase(rec("main", SHA), git({ "refs/heads/main": MAIN, [SHA]: SHA }, "feature/login", null, null, [SHA + ">" + HEAD, SHA + ">" + MAIN])),
       tagOnly: E.guardianDiffBase(rec("main", SHA), git({ main: HEAD, [SHA]: SHA }, "feature/login")), // a TAG main at HEAD is never read
-      movedToHead: E.guardianDiffBase(rec("main", SHA), git({ "refs/heads/main": HEAD, [SHA]: SHA }, "feature/login")),
+      movedToHead: E.guardianDiffBase(rec("main", SHA), git({ "refs/heads/main": HEAD, [SHA]: SHA }, "feature/login", null, null, [SHA + ">" + HEAD])),
+      mergedNoFf: E.guardianDiffBase(rec("main", SHA), git({ "refs/heads/main": MERGE, [SHA]: SHA }, "feature/login", null, null, [HEAD + ">" + MERGE, SHA + ">" + HEAD, SHA + ">" + MERGE])),
+      startOffHead: E.guardianDiffBase(rec("main", SHA), git({ "refs/heads/main": HEAD, [SHA]: SHA }, "feature/login")), // rebased: the start is no ancestor
+      noAncestorFacts: E.guardianDiffBase(rec("main", SHA), { ...git({ "refs/heads/main": HEAD, [SHA]: SHA }, "feature/login"), ancestor: undefined }),
       bothHead: E.guardianDiffBase(rec("main", HEAD), git({ "refs/heads/main": HEAD, [HEAD]: HEAD }, "feature/login")),
       gone: E.guardianDiffBase(rec("main", SHA), git({ [SHA]: SHA }, "feature/login")),
       badBase: E.guardianDiffBase(rec("-x", SHA), git({ "refs/heads/-x": MAIN, [SHA]: SHA }, "feature/login")),
@@ -978,15 +983,16 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, hookIn, require, __dirname
       onLocal: E.guardianDiffBase({}, git({ "refs/heads/main": MAIN }, "main", "main", "refs/heads/main")),
       noGit: E.guardianDiffBase(rec("main", SHA), null), headless: E.guardianDiffBase({}, git({ "refs/heads/main": MAIN }, null, "main", "refs/heads/main")),
     };
-    all("1.33: finish --run's diff base — refs/heads/<recorded base> (never a tag), else the recorded commit when the base is gone, invalid ('-x') or HEAD's own commit; both HEAD's → empty; no record: the default branch (origin's or local) while HEAD is elsewhere, empty when it is HEAD's commit; on the default branch, detached without a record, or without git: none (got " + js(b) + ")", {
-      base: js(b.base) === js({ ref: "refs/heads/main", from: "base" }), tagOnly: js(b.tagOnly) === js({ ref: SHA, from: "commit" }),
-      movedToHead: js(b.movedToHead) === js({ ref: SHA, from: "commit" }), bothHead: js(b.bothHead) === js({ empty: true, ref: "refs/heads/main", from: "base" }),
-      gone: js(b.gone) === js({ ref: SHA, from: "commit" }), badBase: js(b.badBase) === js({ ref: SHA, from: "commit" }),
-      detached: js(b.detached) === js({ ref: SHA, from: "commit" }), neither: b.neither === null,
+    const BASE = { ref: "refs/heads/main", from: "base" }, START = { ref: SHA, from: "commit" };
+    all("1.33: finish --run's diff base — refs/heads/<recorded base> (never a tag); a base containing HEAD (moved to HEAD, a --no-ff merge) → the start commit when it is HEAD's proper ancestor, else the base still; never skipped as empty (a base and start at HEAD: the base); the recorded commit when the base is gone or invalid ('-x'); no record: the default branch (origin's or local) while HEAD is elsewhere, even at HEAD's commit; on the default branch, detached without a record, or without git: none (got " + js(b) + ")", {
+      base: js(b.base) === js(BASE), tagOnly: js(b.tagOnly) === js(START),
+      movedToHead: js(b.movedToHead) === js(START), mergedNoFf: js(b.mergedNoFf) === js(START),
+      startOffHead: js(b.startOffHead) === js(BASE), noAncestorFacts: js(b.noAncestorFacts) === js(BASE), bothHead: js(b.bothHead) === js(BASE),
+      gone: js(b.gone) === js(START), badBase: js(b.badBase) === js(START),
+      detached: js(b.detached) === js(START), neither: b.neither === null,
       def: js(b.def) === js({ ref: "refs/remotes/origin/main", from: "default" }), defLocal: js(b.defLocal) === js({ ref: "refs/heads/main", from: "default" }),
-      defAtHead: js(b.defAtHead) === js({ empty: true, ref: "refs/heads/main", from: "default" }),
+      defAtHead: js(b.defAtHead) === js({ ref: "refs/heads/main", from: "default" }),
       none: b.onDefault === null && b.onLocal === null && b.noGit === null && b.headless === null,
-      shortRef: E.shortRef("refs/heads/main") === "main" && E.shortRef("refs/remotes/origin/main") === "origin/main" && E.shortRef(SHA) === SHA,
     });
 
     // a launcher edit is a release item: the launcher 1.30–1.32.x wrote (mcp/tests/fixtures/guardian-launcher-1.32.cjs) reads "outdated"

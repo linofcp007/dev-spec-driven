@@ -245,11 +245,14 @@ Engine: the `B5` block of `engine/evidence.js`.
   feature's branch record (`create --branch`): the branch it was created from, as `refs/heads/<base>` (never a tag of that name:
   rev-parse prefers refs/tags), else the commit it started at; without a record the repository's default branch (origin/HEAD's
   when it resolves — a remote default renamed leaves it dangling —, else a local main / master: cli/git.js `diffBaseFacts`) while
-  HEAD is on another branch. Each a plain ref name git resolves to a commit (a ref git can't read would turn the gate into exit
-  3) that is NOT HEAD's commit: a base moved to HEAD (a local merge, `git branch -f main HEAD`, a switch that failed while the record
-  stayed) would be an empty diff "checked", so the start commit is tried next. Every candidate HEAD's (`{ empty: true }`, a branch
-  still at main's tip): the line `guardian.diffBaseEmpty` says there is no change to read and nothing is passed. None / empty:
-  the variable is CLEARED for the run (finish --run alone sets it). The launcher passes it on as `--diff-base` to a dev-guardian
+  HEAD is on another branch. The first a plain ref name git resolves to a commit (a ref git can't read would turn the gate into
+  exit 3) is passed — NEVER skipped for being HEAD's commit: dev-guardian diffs from that ref's merge base with HEAD to the
+  WORKING TREE, untracked files included, so a branch still at main's tip with its work uncommitted (what an agent leaves) is read
+  through it. The one exception is chosen by merge base, not by commit equality: a base that already CONTAINS HEAD (`ancestor(head,
+  base)` — main moved to HEAD by `git branch -f`, a `--no-ff` local merge of the feature, where main ≠ HEAD) would hide the
+  feature's commits, so the recorded start commit goes instead when it differs from HEAD and is its ancestor; otherwise the base
+  still goes. (`diffBaseFacts.ancestor` = `git merge-base --is-ancestor`, commit ids only.) None: the variable is CLEARED for the
+  run (finish --run alone sets it). The launcher passes it on as `--diff-base` to a dev-guardian
   3.8.0+ (claude-code-integration.md → The dev-guardian launcher). Over MCP the agent runs the check itself: no diff base unless
   it sets the variable.
 - **dev-guardian's gate — the check `guardian` (1.29; engine/guardian.js since 1.30).** `spec_init {guardian: true}` / `init
@@ -730,6 +733,10 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   HEAD`, a failed switch, a TAG named `main` — rev-parse prefers refs/tags): an empty diff the verdict called "checked". Now
   `refs/heads/<base>`, the start commit when the base is HEAD's, an empty change said and never passed; a dangling origin/HEAD
   (a remote default renamed) falls back to the local main / master.
+- **1.33 review 6** — review 5's "empty" skip was wrong: dev-guardian reads the working tree, so a base at HEAD still reads the
+  uncommitted work — create --branch, work left uncommitted, a test turned into `test.only`: nothing was passed and the `.only` no
+  longer blocked. Never skipped now (`guardian.diffBaseEmpty` gone); the start commit replaces a base only when the base CONTAINS
+  HEAD (merge base, so a `--no-ff` local merge counts too), and only when it is HEAD's proper ancestor.
 
 ### Task dependencies and execution waves
 - **1.14 F3** — `_Depends:_`, `taskSchedule()` as the one next-task rule, `taskWaves()`, doctor `task-deps`, `spec_append_tasks

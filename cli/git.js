@@ -69,21 +69,28 @@ function branchFacts(cwd) {
 // What finish --run needs to pick dev-guardian's diff base (1.33, engine guardianDiffBase) → null (git can't run here, or no work
 // tree) · { head — HEAD's commit —, current — the branch HEAD names (null: detached) —, defaultBranch / defaultRef — origin/HEAD's
 // ("origin/main", refs/remotes/origin/main) when it resolves to a commit (a remote default renamed leaves origin/HEAD dangling), else
-// a local main / master (refs/heads/…), else null —, resolve(ref) → its commit id | null } — read only, no network.
+// a local main / master (refs/heads/…), else null —, resolve(ref) → its commit id | null, ancestor(a, b) → true (commit a is b or an
+// ancestor of it: `merge-base --is-ancestor`) | false | null (git could not tell; ids only) } — read only, no network.
 function diffBaseFacts(cwd) {
   const inside = gitRun(["rev-parse", "--is-inside-work-tree"], { cwd });
   if (inside.error || inside.status !== 0 || inside.stdout.trim() !== "true") return null;
+  const isId = (s) => /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(s);
   const resolve = (ref) => {
     const r = gitRun(["rev-parse", "--verify", "--quiet", ref + "^{commit}"], { cwd });
     const sha = r.ok ? r.stdout.trim() : "";
-    return /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(sha) ? sha : null;
+    return isId(sha) ? sha : null;
+  };
+  const ancestor = (a, b) => {
+    if (!isId(a) || !isId(b)) return null;
+    const r = gitRun(["merge-base", "--is-ancestor", a, b], { cwd });
+    return r.error ? null : r.status === 0 ? true : r.status === 1 ? false : null;
   };
   const sym = gitRun(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd });
   const origin = gitRun(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], { cwd });
   const o = origin.ok ? origin.stdout.trim() : "";
   let def = o && resolve("refs/remotes/" + o) ? { name: o, ref: "refs/remotes/" + o } : null;
   if (!def) { const b = ["main", "master"].find((x) => resolve("refs/heads/" + x)); if (b) def = { name: b, ref: "refs/heads/" + b }; }
-  return { head: resolve("HEAD"), current: sym.ok ? sym.stdout.trim() || null : null, defaultBranch: def ? def.name : null, defaultRef: def ? def.ref : null, resolve };
+  return { head: resolve("HEAD"), current: sym.ok ? sym.stdout.trim() || null : null, defaultBranch: def ? def.name : null, defaultRef: def ? def.ref : null, resolve, ancestor };
 }
 
 module.exports = { gitRun, gitText, gitEnv, gitState, branchFacts, diffBaseFacts, GIT_MAX_BUFFER, GIT_TIMEOUT_MS };

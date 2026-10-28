@@ -263,8 +263,9 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
   }
 
   // 1.33: finish --run hands the launcher the feature's base in DEV_SPEC_DIFF_BASE — the branch it was created from (create --branch's
-  // record, as refs/heads/<base>; its start commit when that branch is HEAD's commit), else, without a record, the default branch while
-  // HEAD is on another one (an empty change is said, never passed). A dev-guardian ≥ 3.8.0 (its plugin.json) gets
+  // record, as refs/heads/<base>; its start commit when that branch already contains HEAD), else, without a record, the default branch
+  // while HEAD is on another one — never skipped when it is HEAD's commit (review 6: dev-guardian reads the working tree, so the
+  // uncommitted work is the change). A dev-guardian ≥ 3.8.0 (its plugin.json) gets
   // `--diff-base <ref>` (its test-integrity check) and the verdict says so; 3.7.1 runs exactly as before; on the default branch nothing is
   // passed and a value inherited from the shell is cleared; the same under every shell the stored command runs in. git only.
   {
@@ -283,6 +284,22 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
         return path.join(dir, "cli", "dev-guardian.mjs");
       };
       const f380 = fakeAt("3.8.0"), f371 = fakeAt("3.7.1");
+      // dev-guardian 3.8.0's test-integrity check in miniature: with --diff-base <ref>, the files changed from <ref> to the WORKING
+      // TREE (`git diff`, untracked files too — what dev-guardian reads); a test file holding test.only( is a high finding → exit 1
+      const fTi = path.join(tmp, "dg-fake-ti", "cli", "dev-guardian.mjs");
+      write(path.join(tmp, "dg-fake-ti"), ".claude-plugin/plugin.json", js({ name: "dev-guardian", version: "3.8.0" }));
+      write(path.join(tmp, "dg-fake-ti"), "cli/dev-guardian.mjs", [
+        "import fs from \"node:fs\";",
+        "import { spawnSync } from \"node:child_process\";",
+        "const a = process.argv.slice(2), i = a.indexOf(\"--diff-base\");",
+        "if (process.env.FAKE_MARK) fs.writeFileSync(process.env.FAKE_MARK, a.join(\" \"));",
+        "const lines = (...x) => (spawnSync(\"git\", x, { encoding: \"utf8\" }).stdout || \"\").split(\"\\n\").map((l) => l.trim()).filter(Boolean);",
+        "const files = i < 0 ? [] : lines(\"diff\", \"--name-only\", a[i + 1]).concat(lines(\"ls-files\", \"--others\", \"--exclude-standard\"));",
+        "const only = files.filter((f) => f.endsWith(\".test.js\") && fs.existsSync(f) && fs.readFileSync(f, \"utf8\").includes(\"test.only(\"));",
+        "const blocking = only.map((f) => ({ fingerprint: f, tool: \"guardian-test-integrity\", severity: \"high\", category: \"quality\", title: \"focused test\", rule_id: \"test-only\", file_path: f, line_start: 1, fix_available: false }));",
+        "process.stdout.write(JSON.stringify({ exit_code: blocking.length ? 1 : 0, coverage: \"full\", coverage_gaps: [], new_findings: blocking, blocking_findings: blocking, baseline_absent: false, tool_version: \"3.8.0\", baseline_status: \"present\" }) + \"\\n\");",
+        "process.exitCode = blocking.length ? 1 : 0;",
+        ""].join("\n"));
       const x = project("dg-diffbase", "en");
       S.initProject(x.p, [], undefined, { guardian: true });
       git(x.p, "-c", "init.defaultBranch=main", "init", "-q");
@@ -311,32 +328,49 @@ exports.run = async ({ ok, all, runIn, spawnIn, spawnAsync, tmp, CLI, require, _
       git(x.p, "tag", "main");
       const rTag = await runWith(f380);
       git(x.p, "tag", "-d", "main");
-      // … and a base moved to HEAD (`git branch -f main HEAD`, a local merge) would be an empty diff: the start commit instead
+      // … and a base that already contains HEAD would hide the feature's commits: the start commit instead — main moved to HEAD
+      // (`git branch -f main HEAD`) …
       git(x.p, "branch", "-f", "main", "HEAD");
       const rMoved = await runWith(f380);
       git(x.p, "branch", "-f", "main", sha);
+      // … or the feature merged into main locally with --no-ff (main ≠ HEAD, but contains it)
+      git(x.p, "switch", "-q", "main");
+      git(x.p, "merge", "--no-ff", "-q", "-m", "merge feature/login", "feature/login");
+      git(x.p, "switch", "-q", "feature/login");
+      const rNoFf = await runWith(f380);
+      git(x.p, "branch", "-f", "main", sha);
+      // review 6: create --branch from main, the work left uncommitted, a test turned into test.only — base and start are HEAD's
+      // commit, yet the base is passed: dev-guardian reads the uncommitted change, and the .only blocks
+      git(x.p, "switch", "-q", "-c", "feature/dirty", "main");
+      write(x.p, "tests/login.test.js", "test.only(\"logs in\", () => {});\n");
+      const rDirty = await runWith(fTi);
+      const dirtyCheck = stateOf(x).finishChecks.guardian;
+      fs.rmSync(path.join(x.p, "tests"), { recursive: true, force: true });
+      git(x.p, "switch", "-q", "feature/login");
       setRecord(false);
       const rDef = await runWith(f380);
       // a remote default renamed (origin/HEAD → a missing origin/master): the local main, never the dangling name
       git(x.p, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master");
       const rDangling = await runWith(f380);
       git(x.p, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
-      // a fresh branch still at main's commit, no record: the change since main is empty — said, nothing passed
+      // a fresh branch still at main's commit, no record: main is passed all the same (its uncommitted work is the change)
       git(x.p, "switch", "-q", "-c", "feature/fresh", "main");
       const rFresh = await runWith(f380);
       git(x.p, "switch", "-q", "main");
       const rMain = await runWith(f380, { DEV_SPEC_DIFF_BASE: "evil" });
       const PLAIN = "scan --project . --fail-on high --format json";
       const ends = (a, ref) => typeof a === "string" && a.endsWith("--format json --diff-base " + ref);
-      all("1.33 finish --run: the feature's recorded base reaches dev-guardian 3.8.0 as --diff-base refs/heads/main — the verdict says 'since main' — under " + shells.join(", ") + "; a tag named main never counts; main moved to HEAD → the start commit; 3.7.1 gets the arguments as before (its value ignored); without a record the default branch while HEAD is elsewhere (the local one when origin/HEAD dangles); a branch still at main's commit: nothing passed and said so; on main nothing, an inherited DEV_SPEC_DIFF_BASE cleared (got " +
-        js({ r38: [r38.args, r38.out.split("\n")[1]], r37: r37.args, bySh, rTag: rTag.args, rMoved: rMoved.args, rDef: rDef.args, rDangling: rDangling.args, rFresh: [rFresh.args, rFresh.out.split("\n").slice(0, 3)], rMain: rMain.args }) + ")", {
+      all("1.33 finish --run: the feature's recorded base reaches dev-guardian 3.8.0 as --diff-base refs/heads/main — the verdict says 'since main' — under " + shells.join(", ") + "; a tag named main never counts; main moved to HEAD or a --no-ff local merge of the feature → the start commit; base and start at HEAD with a test.only left uncommitted → the base is passed and the .only blocks; 3.7.1 gets the arguments as before (its value ignored); without a record the default branch while HEAD is elsewhere (the local one when origin/HEAD dangles), also at main's commit; on main nothing, an inherited DEV_SPEC_DIFF_BASE cleared (got " +
+        js({ r38: [r38.args, r38.out.split("\n")[1]], r37: r37.args, bySh, rTag: rTag.args, rMoved: rMoved.args, rNoFf: rNoFf.args, rDirty: [rDirty.args, dirtyCheck && dirtyCheck.exitCode], rDef: rDef.args, rDangling: rDangling.args, rFresh: rFresh.args, rMain: rMain.args }) + ")", {
         recorded: ends(r38.args, "refs/heads/main") && r38.out.includes(LINE), // (finish itself refuses: the fixture's spec is still a template)
         older: r37.args === PLAIN && !r37.out.includes(LINE),
         shells: shells.length >= 1 && bySh.every(([, a]) => ends(a, "refs/heads/main")),
         tag: ends(rTag.args, "refs/heads/main"),
         moved: ends(rMoved.args, sha) && rMoved.out.includes(MSG("en").guardian.diffBase(sha)),
+        noFf: ends(rNoFf.args, sha),
+        dirtyOnlyBlocks: ends(rDirty.args, "refs/heads/main") && !!dirtyCheck && dirtyCheck.exitCode === 1,
         byDefault: ends(rDef.args, "refs/heads/main"), dangling: ends(rDangling.args, "refs/heads/main"),
-        fresh: rFresh.args === PLAIN && rFresh.out.includes(MSG("en").guardian.diffBaseEmpty("main")) && !rFresh.out.includes("weakened tests"),
+        fresh: ends(rFresh.args, "refs/heads/main"),
         onDefault: rMain.args === PLAIN && !rMain.out.includes("weakened"),
       });
     } else ok(true, "1.33 finish --run's diff base — skipped (git is not available)");
