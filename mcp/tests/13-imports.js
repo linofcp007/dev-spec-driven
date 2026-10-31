@@ -1250,6 +1250,17 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, require, handRo
       "test_*.sh / test_*.c / *Spec.hs and Julia / Nim / OCaml / R by their test folders — never inspect.lua, latest.sh, contest.py, dev-spec.js, notes.t, scripts/test_data.sh, " +
       "src/test_utils.c, lib/DevSpec.hs (1.21.1 review); isCodeFile: CODE_EXT, a .bats / t/*.t test, never a .psd1 or a document; a .sql / .ipynb in a test folder is a fixture unless named like a test (wrong: " +
       js([wrongT, wrongC, wrongF]) + ")");
+    // 1.34.1: the plugin's other languages name the test folder — teste/ · testes/ (Portuguese) and prueba/ · pruebas/
+    // (Spanish), any case, as a whole path segment only (testemunho.js, contestes/, pruebasDeCarga/ stay code).
+    const LOCAL_T = [
+      ["Testes/Testes.Core.ps1", true], ["testes/unit/codec.js", true], ["src/teste/codec.py", true], ["TESTES/A.PS1", true],
+      ["pruebas/Pruebas.Codec.ps1", true], ["src/prueba/codec_helpers.go", true], ["PRUEBAS/a.ts", true],
+      ["src/testemunho.js", false], ["src/testes.js", false], ["contestes/a.js", false], ["testemunhas/a.ps1", false],
+      ["pruebasDeCarga/a.js", false], ["src/prueba.ts", false],
+    ];
+    const wrongL = LOCAL_T.filter(([f, want]) => S.isTestFile(f) !== want).map(([f]) => f);
+    ok(!wrongL.length, "1.34.1 languages: isTestFile knows the Portuguese teste/ / testes/ and the Spanish prueba/ / pruebas/ test " +
+      "folders (any case), never a file or a folder that merely starts with them — testemunho.js, testes.js, contestes/, pruebasDeCarga/ (wrong: " + js(wrongL) + ")");
 
     // 2. A PowerShell project over MCP: spec_scan — stack powershell (a .psd1 module manifest / .ps1 / .psm1 files), test framework
     // pester, entrypoints (a top-level script, the manifest's RootModule), env names ($env:NAME, [Environment]::GetEnvironmentVariable);

@@ -207,6 +207,22 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, approveBefore, 
       gc9.testsInCode["T-03"].join() === "lib/codec_test.exs" && gc9.testsInCode["T-04"].join() === "pkg/codec_test.dart" && gc9.testsInCode["T-05"].join() === "src/CodecSpec.groovy" && !gc9.testsInCode["T-06"],
       "F# / Scala / Elixir / Dart / Groovy test files are scanned; a non-test .fs file is not (got " + JSON.stringify(gc9) + ")");
 
+    // 1.34.1: test folders named in the plugin's other languages are read — a Portuguese PowerShell runner under Testes\
+    // (its scripts named Testes.*.ps1, not Pester's *.Tests.ps1) scanned 0 files, so its tests gate could not pass.
+    const pt9 = fx9("langs-pt");
+    const ptf9 = S.createFeature(pt9, "Arranque", ["tdd"]);
+    w9f(ptf9.dir, "requirements.md", REQ9);
+    w9f(ptf9.dir, "test-plan.md", TPH9 + ["T-101", "T-102", "T-103"].map((t) => `| ${t} | unit | example | arranque | US-1.AC-1 | \`x\` |`).join("\n") + "\n");
+    w9f(pt9, "Testes/Testes.Arranque.ps1", "Test-Caso 'T-101 diagnóstico do caso real (US-1.AC-1)' {\n    Assert-Igual 1 1 'valor'\n}\n");
+    w9f(pt9, "Testes/Executar-Testes.ps1", "# o runner: carrega cada Testes.*.ps1\n");
+    w9f(pt9, "pruebas/Pruebas.Arranque.ps1", "Test-Caso 'T-102 diagnóstico' { }\n");
+    w9f(pt9, "src/teste/arranque.py", "# T-103 o plano\ndef test_plano(): pass\n");
+    w9f(pt9, "Arranque.Core.ps1", "# T-104 código de produção, não é um teste\n");
+    const ptc9 = S.traceCheck(pt9, "arranque", { code: true }).code;
+    ok(ptc9.plannedNotInCode.length === 0 && ptc9.scanned === 4 && ptc9.testsInCode["T-101"].join() === "Testes/Testes.Arranque.ps1" &&
+      ptc9.testsInCode["T-102"].join() === "pruebas/Pruebas.Arranque.ps1" && ptc9.testsInCode["T-103"].join() === "src/teste/arranque.py" && !ptc9.testsInCode["T-104"],
+      "1.34.1: the Portuguese Testes/ and teste/ and the Spanish pruebas/ test folders are scanned for T-IDs; a production .ps1 beside them is not (got " + JSON.stringify(ptc9) + ")");
+
     // +tdd removed: the inactive test plan no longer covers (or cites) EC / NFR / SC — only tasks and quickstart.md do.
     const o9 = fx9("offtdd");
     const of9b = S.createFeature(o9, "Probe", ["tdd"]);

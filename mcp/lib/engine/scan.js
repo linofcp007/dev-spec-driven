@@ -402,8 +402,10 @@ function projectFileInside(realRoot, full) {
 // Test code: under a test folder, or named like a test in its language. Reported apart by scan and coverage. ONE rule —
 // isTestFile — for the scan, coverage, the test-code scan (trace's isTestCodePath is this), the guard's tests-phase and
 // scope levels, the reuse check's neighbours and the status line's tests gate. Julia (test/runtests.jl), Nim (tests/),
-// OCaml (dune's test/), Rust (tests/) and R (tests/testthat/) keep their tests in these folders.
-const TEST_DIRS = new Set(["test", "tests", "__tests__", "__test__", "spec", "e2e"]);
+// OCaml (dune's test/), Rust (tests/) and R (tests/testthat/) keep their tests in these folders. The plugin's other
+// languages name the folder too (1.34.1): teste/ · testes/ (Portuguese) and prueba/ · pruebas/ (Spanish) — a Portuguese
+// PowerShell project's Testes\Testes.Core.ps1 runner was never read, so its tests gate could not pass without a waiver.
+const TEST_DIRS = new Set(["test", "tests", "__tests__", "__test__", "spec", "e2e", "teste", "testes", "prueba", "pruebas"]);
 // Perl's test folders — for a .t file only (t/basic.t, xt/pod.t): a t/ folder of another language is no test folder.
 const PERL_TEST_DIRS = new Set(["t", "xt"]);
 // Only the conventions — every alternative anchored, the names are one path segment (linear):

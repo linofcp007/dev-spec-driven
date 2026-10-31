@@ -3,6 +3,23 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.34.1] — 2026-10-31
+
+Test folders named in Portuguese or Spanish now hold tests.
+
+### Fixed
+- **A `testes/` or `pruebas/` folder is a test folder.** The plugin speaks Portuguese and Spanish, but its test-file rule
+  knew only the English folder names (`test/`, `tests/`, `__tests__/`, `spec/`, `e2e/`). A Portuguese PowerShell project
+  that keeps its runner in `Testes\Testes.*.ps1` (not Pester's `*.Tests.ps1`) had no test file at all:
+  `trace_check {code: true}` read 0 files, every planned T-ID was "not in code", and the `tests` gate could only be
+  forced. `teste/` and `testes/` (Portuguese) and `prueba/` and `pruebas/` (Spanish) now count, in any case, as a whole
+  folder name only: `testemunho.js`, `contestes/` and `pruebasDeCarga/` stay code. The rule is the one the scan,
+  coverage, the test-code scan, guard mode's tests phase and scope levels, the duplicate-code detector and the status
+  line's tests gate share, so all of them see the same tests.
+
+### Tests
+- `node mcp/test.js` 2266 assertions, `node cli/test-cli.js` 657 (was 2264 / 657).
+
 ## [1.34.0] — 2026-10-28
 
 A number needs its noise. The same prompt on the same eval set scores differently from run to run, and a load test can
