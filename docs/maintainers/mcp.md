@@ -71,7 +71,8 @@ takes). A mode's `required` (depend → `name`) are `missing-arguments`; the mod
   key given a value that picks no mode of its own (`coverage: false` beside `duplicates: true`, `duplicates: false`) is no
   other mode's argument; `coverage: true` beside `duplicates: true` is (`inapplicable` [coverage]).
 - **A third key (1.35).** `spec_scan {designSystem: true}` is another `alt` entry (`argModes()` keeps one per key); it takes
-  `name` only, and beside `duplicates: true` the first in the table's order runs — the other key is then `inapplicable`.
+  `name` only, and beside `duplicates: true` the first in the table's order is picked — the other key is then `inapplicable`
+  (nothing runs).
 
 ### Plugin mode's list
 With `SPEC_MCP_APPROVAL_HOOK=on` (mcp/servers.json — the Claude Code plugin) `tools/list` omits `PLUGIN_UNLISTED`:

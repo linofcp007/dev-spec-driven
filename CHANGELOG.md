@@ -18,19 +18,26 @@ components and tokens, and every +ui feature is checked against it.
   `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**:
   - the components: React, Vue, Svelte and Astro files, Angular `*.component.ts` and PascalCase `.js` files under
     `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper (`utils.tsx`, a
-    framework's `layout.tsx`, `config/index.tsx` — `Layout.tsx` is a component), a barrel (`packages/ui/src/index.tsx`)
-    or a file whose nearest such folder is a page folder (`components/pages/Home.tsx`);
+    framework's `layout.tsx`, `config/index.tsx` — `Layout.tsx` and `layout/index.tsx` are the component Layout), a
+    barrel (`packages/ui/src/index.tsx`) or a file whose nearest such folder is a page folder
+    (`components/pages/Home.tsx`);
   - the tokens of the token files: CSS custom properties, Sass variables, JSON tokens, a global stylesheet's
-    variables. A stylesheet named for its tokens and a `design-tokens.*` / `*.tokens.json` count anywhere; `theme.*` at
-    the project's root, right inside a source folder (`src/theme.ts`) or in a `styles/`, `theme/`, `design/`, `tokens/`
-    or `ui/` folder; a plain `tokens.*` at the root or in one of those folders (`src/auth/tokens.ts` holds access
-    tokens). A JS, TS or YAML token file (a Tailwind config, a `theme.ts`) is listed as a source, its values unread.
-    **A JSON file that holds credentials is never read**: a key such as `token`, `refresh_token`, `client_secret` or
-    `api_key` with a value that is no colour or length (an OAuth client's `token.json`) — nothing of it is listed or
-    written; nor is a plain `tokens.json` that shows no colour, length or `$value`;
+    variables. A stylesheet named for its tokens, a `design-tokens.*` / `*.tokens.json` and a `tailwind.config.*` count
+    anywhere; `theme.*` anywhere but in a folder that holds something else by that name (`src/store/theme.ts`,
+    `server/models/theme.js`); a plain `tokens.*` only at the project's root or in a `styles/`, `theme/`, `design/`,
+    `tokens/` or `ui/` folder (`src/auth/tokens.ts` and `src/tokens.ts` hold access tokens), the singular `token.json`
+    never. A JS, TS or YAML token file (a Tailwind config, a `theme.ts`) is listed as a source, its values unread.
+    **Only a design value is ever read out of a file**: a colour, a number with or without a unit, a keyword, a
+    `{reference}` or a function such as `rgb()`, `var()`, `calc()` — alone or as a list. A name is no proof of what a
+    file holds (a `deploy.tokens.json`, a `_variables.scss` with `$mapbox-token`): any other value — a font stack, free
+    text, and so any credential — is never printed or written; a stylesheet's token or a `$value` is then listed by
+    its name alone, any other JSON leaf not at all. A JSON file where a credential key (`…token`, `…secret`,
+    `…password`, `api_key`…) holds such a string, or a plain `tokens.json` that shows only a stray number, is no token
+    file;
   - the UI libraries of `package.json`.
 
-  The result says how many it found (`seeded`). A project template for the file is used as it is instead, and an
+  The result says how many it wrote (`seeded`: at most the 500 components and 1,000 tokens the registry is read
+  with). A project template for the file is used as it is instead, and an
   existing file is never overwritten. EN / PT / pt-BR / ES.
 - **`[UI] Design System Usage` is a table.** A new +ui design lists one row per component: `Kind | Component |
   Why / notes`, where Kind is Reuse (one the registry lists, used as is), Extend (a new variant of one it lists) or New
@@ -42,22 +49,24 @@ components and tokens, and every +ui feature is checked against it.
   its notes say why that component doesn't fit), a New without a reason, and a section with no row to check. It
   compares names: a new component under an unrelated name is the reviewer's to find. It is a warning; for a feature of
   **size m / l** it fails and **the design approval refuses it**, like Reuse & Integration (forceable with your
-  consent). A project without a registry gets a warning that says how to create one, never a refusal. Saving
-  design.md shows the disagreeing rows at once.
+  consent). A project without a registry gets a warning that says how to create one, never a refusal — and so does
+  one whose registry lists no component yet, unless the design cites a library it declares. Saving design.md shows the
+  disagreeing rows at once.
 - **The task brief has a Design system part.** A task that builds a view gets the registry's entry of each component
   its design names (path, variants, notes), the New ones marked to build through the system, the names the registry
   doesn't list, and where the tokens live.
 - **`spec_scan {designSystem: true}` / `dev-spec design-system [feature]`.** Read-only. Without a feature: the
   components and tokens the code holds and the registry doesn't (each as a row to paste; a component an unfinished
-  feature declares New is listed apart — its finish adds it), the rows that name a file of the project that is gone (a
-  path with a blank or behind a markdown link is read; a package such as `next/link`, an alias, prose or `n/a` is
-  never "gone"), and the token files and UI libraries the registry doesn't name. With a feature: its rows against the
+  feature declares New is listed apart — its finish adds it), the rows that name a code file of the project that is
+  gone (a path with a blank or behind a markdown link is read; never "gone": a package such as `next/link`, an alias,
+  prose or `n/a`, a path without a file extension, a root-level file, a path whose first folder no longer exists, a
+  row that also names a file that is there), and the token files and UI libraries the registry doesn't name. With a feature: its rows against the
   registry and the **raw values** in its view files, each with its `file:line` (the first 50, with the total): a hex
   or `rgb()` colour — with the registry token of that colour when there is one —, a `margin: 13px` in a stylesheet, a
   `<style>` block (a `.vue` / `.svelte` / `.astro` / `.html` file's, styled-jsx's) or a CSS-in-JS template, a Tailwind
-  `p-[13px]`. A size in a JSX `style={{…}}` object is not read. A report that reached one of its bounds (20 token
-  files, 1,000 tokens, the registry's first 500 rows, a feature's first 200 view files) names it in `limits` and never
-  says the registry and the code agree.
+  `p-[13px]`. A size in a JSX `style={{…}}` object is not read. A report that reached one of its bounds (the
+  20,000-file walk, 20 token files, a token file longer than 256K characters, 1,000 tokens, the registry's first 500
+  rows, a feature's first 200 view files) names it in `limits` and never says the registry and the code agree.
 - **`spec_finish` on a +ui feature of a project with a registry.** The raw values are a warning, never a blocker,
   when the registry holds tokens or names token files (otherwise there is nothing to replace them with). A READY
   written finish **adds the design's New components to the registry** — their path and `_From: <feature>_` —, so the
@@ -80,7 +89,7 @@ components and tokens, and every +ui feature is checked against it.
 - The registry is not part of an approval's fingerprint: adding a row never asks an approved feature to be re-reviewed.
 
 ### Tests
-- `node mcp/test.js` 2303 assertions, `node cli/test-cli.js` 661 (was 2266 / 657).
+- `node mcp/test.js` 2312 assertions, `node cli/test-cli.js` 661 (was 2266 / 657).
 
 ## [1.34.1] — 2026-10-31
 

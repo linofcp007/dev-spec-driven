@@ -95,6 +95,7 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     write(p, "src/components/Card.tsx", COMP);
     write(p, "src/components/Form Controls/DatePicker.tsx", COMP);
     write(p, "_shared/Badge.tsx", COMP);
+    write(p, "src/lib.old stuff/Button.tsx", COMP);
     write(p, "README.md", "# x\n");
     const rows = [
       // cells that name no file of the project: never stale
@@ -102,18 +103,21 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
       ["Hash", "#components/Button.vue"], ["Na", "N/A."], ["Na2", "n/a (custom, e.g. inline)"], ["Prose", "Built into the layout."], ["See", "see Storybook."],
       ["Gen", "generated at build time (v2.0)"], ["Site", "storybook.example.com/button.html"], ["Glob", "src/components/*.tsx"], ["NoExt", "src/components/Card"],
       ["Under", "_shared/Badge.tsx"], ["Node", "built with Node.js"],
-      // files that are there, whatever stands beside them
+      // files that are there, whatever stands beside them — a row that names ONE file that is there is not stale (review 4: "the
+      // first word decides" called a row stale whose note named the old path first)
       ["Card", "`src/components/Card.tsx` (see docs/Gone.md)"], ["Linked", "[Card docs](src/components/Card.tsx)"], ["Blank", "src/components/Form Controls/DatePicker.tsx"],
-      // files that are gone, whatever stands beside them
-      ["Gone1", "src/components/Gone.tsx (see README.md)"], ["Gone2", "src/components/Gone.tsx — replaced by src/components/Card.tsx"], ["Gone3", "[Gone](src/components/Gone.tsx)"],
+      ["Moved", "was src/old/Card.jsx, now src/components/Card.tsx"], ["Doc", "see docs/missing.md; src/components/Card.tsx"],
+      ["Replaced", "src/components/Gone.tsx — replaced by src/components/Card.tsx"], ["WholeCell", "src/lib.old stuff/Button.tsx"],
+      // files that are gone: no word of the cell names a code file that is there (a document beside the path is no such file)
+      ["Gone1", "src/components/Gone.tsx (see README.md)"], ["Gone3", "[Gone](src/components/Gone.tsx)"],
       ["Gone4", "src/components/No Such/Lost.tsx"], ["Gone5", "`src/components/Gone.tsx:12`"],
     ];
     write(p, REG, "# DS\n\n" + HEAD + rows.map((r) => "| " + r[0] + " | " + r[1] + " |  |  |").join("\n") + "\n");
     const rep = S.designSystemReport(p);
-    all("1.35 review 3: a registry row is stale only when its cell names a FILE OF THE PROJECT that is gone — a package (next/link, primereact/button), a framework alias (~/components/…), prose, a glob, a path without an extension and a site are never stale; a file that is there stays there beside a note or behind a link; a file that is gone is stale whatever the note beside it names (got " +
+    all("1.35 review 3: a registry row is stale only when its cell names a FILE OF THE PROJECT that is gone — a package (next/link, primereact/button), a framework alias (~/components/…), prose, a glob, a path without an extension and a site are never stale; a row naming a file that is there is not stale — beside a note, behind a link, after its old path, as a whole cell with a blank; a row whose only code file is gone is stale, whatever document the note beside it names (got " +
       js({ read: registry(p).components.length, stale: rep.stale.map((s) => s.name), total: rep.staleTotal }) + ")", {
       read: () => registry(p).components.length === rows.length,
-      stale: () => js(rep.stale.map((s) => s.name)) === js(["Gone1", "Gone2", "Gone3", "Gone4", "Gone5"]) && rep.staleTotal === 5,
+      stale: () => js(rep.stale.map((s) => s.name)) === js(["Gone1", "Gone3", "Gone4", "Gone5"]) && rep.staleTotal === 4,
     });
   }
   {
@@ -176,12 +180,12 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
       "gsap.to(\"#face\", { x: 1 }); window.scrollTo('#fed'); d3.select(\"#bad\"); $(el).find(\"#dad\");", ""].join("\n"));
     write(p, "src/shop/Legacy.jsx", ["export const Legacy = () => (", "  <div>", "    <style jsx>{`", "      .card { color: #fff; padding: 12px; }", "      p { margin: 13px; }", "    `}</style>",
       "    <i className=\"text-[#00ff00]\" />", "  </div>", ");", ""].join("\n"));
-    write(p, "src/shop/page.html", ["<html><head>", "<STYLE TYPE=\"text/css\">", ".x { margin: 9px; }", "</STYLE>", "</head></html>", ""].join("\n"));
+    write(p, "src/shop/page.html", ["<html><head>", "<STYLE TYPE=\"text/css\">", ".x { margin: 9px; }", "</STYLE>", "<b class=\"text-[#00ff00]\"></b>", "</head></html>", ""].join("\n"));
     const got = rawOf(p, f.slug, "src/shop/");
     all("1.35 review 3: raw values — a reference attribute under any prefix (data-bs-target, hx-target, data-href, xlink:href, JSX's xlinkHref / dataTarget) and a selection or tween target (gsap.to, scrollTo, d3.select, .find) is no colour while `gradientTo=\"#1d4ed8\"` and `invalid=\"#dc2626\"` are; a styled-jsx <style> block in a .jsx is read as a stylesheet (and the JSX after it as code); <STYLE> in HTML is one in any case (got " + js(got) + ")", {
       refs: () => js(got.filter((x) => x.startsWith("Modal"))) === js(["Modal.tsx:6 #1d4ed8", "Modal.tsx:6 #dc2626"]),
       styledJsx: () => js(got.filter((x) => x.startsWith("Legacy"))) === js(["Legacy.jsx:4 #fff", "Legacy.jsx:4 padding: 12px", "Legacy.jsx:5 margin: 13px", "Legacy.jsx:7 #00ff00"]),
-      upperCase: () => js(got.filter((x) => x.startsWith("page"))) === js(["page.html:3 margin: 9px"]),
+      upperCase: () => js(got.filter((x) => x.startsWith("page"))) === js(["page.html:3 margin: 9px", "page.html:5 #00ff00"]), // (</STYLE> closes it: the markup after is read)
     });
   }
 

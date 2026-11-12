@@ -645,8 +645,10 @@ _Libraries: @mui/material_
   needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds
   and the file doesn't. The whole loop: `references/ui-design-patterns.md` → The registry.
 - `_Libraries:_` names each library as the designs will cite it — its package (`@mui/material`) or its name
-  (`Material UI`); a parenthesis beside one is a note, and `none` / `none yet` names nothing. A component of a declared
-  library is not listed here: a design cites the same words — `TextField (@mui/material)`.
+  (`Material UI`); a parenthesis beside a library or a token source is a note, and `none` / `none yet` names nothing.
+  A component of a declared library is not listed here: a design cites the same words — `TextField (@mui/material)`.
+- The token values the seed writes are the design values it found — colours, lengths, numbers, references. A token
+  whose value is anything else (a font stack) is listed with an empty value: fill it in.
 
 ---
 

@@ -140,15 +140,18 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     write(lp, "src/components/Button.tsx", "export const Button = () => null;\n");
     for (let i = 0; i < 22; i++) write(lp, "src/styles/tokens.f" + String(i).padStart(2, "0") + ".css", ":root { --f" + i + ": 1px; }\n");
     write(lp, "token.json", js({ token: "ya29.FAKE-ACCESS-0000", refresh_token: "1//FAKE-REFRESH-1111", client_secret: "GOCSPX-FAKE-2222" }));
+    // a token file by its name, with a real token: read — its other value, under a key no credential list holds, is not
+    write(lp, "scripts/deploy.tokens.json", js({ github: "ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234", color: { brand: "#1d4ed8" } }));
     const seed = runIn(["steering", "design-system.md", "--project", lp]);
     const rep = runIn(["design-system", "--project", lp]);
     const asJson = jsonOf(runIn(["design-system", "--project", lp, "--json"]));
     const P = MSG("pt").cliOutput;
-    all("1.35 review 3 (CLI): with 22 token files the report says only the first 20 are read (the project's language) and never that the registry and the code agree; a root token.json of an OAuth client reaches neither the seeded registry nor the report (got " +
-      js([seed.code, rep.code, rep.out, asJson.limits, asJson.inSync]) + ")", {
+    all("1.35 review 3 / 4 (CLI): with more than 20 token files the report says only the first 20 are read (the project's language) and never that the registry and the code agree; a root token.json of an OAuth client is no token file, and of a `deploy.tokens.json` that IS one only the design value is seeded — its 40-character `github` value reaches neither the registry nor the report (got " +
+      js([seed.code, rep.code, rep.out, asJson.limits, asJson.inSync, asJson.found.sources.slice(0, 2)]) + ")", {
       limit: () => rep.code === 0 && rep.out.includes(P.dsLimit["token-files"](20)) && !rep.out.includes(P.dsInSync),
       json: () => js(asJson.limits) === js([{ code: "token-files", read: 20 }]) && asJson.truncated === true && asJson.inSync === false,
       noSecret: () => seed.code === 0 && !/FAKE/.test(rd(lp, REG) + rep.out + js(asJson)) && !asJson.found.sources.includes("token.json"),
+      valueOnly: () => asJson.found.sources[0] === "scripts/deploy.tokens.json" && rd(lp, REG).includes("| color.brand | #1d4ed8 |  |") && !/github/.test(rd(lp, REG)),
     });
   }
 };

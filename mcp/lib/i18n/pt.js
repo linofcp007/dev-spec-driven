@@ -1522,6 +1522,7 @@ const msg = {
       dsLimit: {
         files: (n) => `  (atingido o limite de ficheiros — ${n} percorridos: o resto não foi lido)`,
         "token-files": (n) => `  (só os primeiros ${n} ficheiros de tokens são lidos, por caminho: o resto não é comparado)`,
+        "file-size": (n) => `  (um ficheiro de tokens é maior do que os ${n} caracteres lidos de cada ficheiro: o resto dele não é comparado)`,
         tokens: (n) => `  (só os primeiros ${n} tokens do código são lidos: o resto não é comparado)`,
         "registry-rows": (n) => `  (só os primeiros ${n} componentes do registo são verificados quanto a um caminho que já não existe)`,
         "view-files": (n) => `  (só os primeiros ${n} ficheiros de vista da feature são lidos à procura de valores fixos)`,

@@ -1155,9 +1155,13 @@ const RE_DS_COL = {
 const RE_DS_MARKER = /^[ \t]*_(Token sources|Libraries):[ \t]*(.*)$/gim;
 const DS_MARKER_LINES = 100; // marker lines read (a registry has two)…
 const DS_MARKER_ENTRIES = 50; // …and the entries kept of each kind
-// An entry that names nothing, by its FIRST word (EN / PT / ES): "none", "none yet", "nenhuma ainda", "sin bibliotecas",
-// "n/a (custom only)", "TBD". The word must END there — `no-tokens/x.css` and `sem/tokens.css` are paths.
-const RE_DS_NONE = /^(?:none|no|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|sem|ningun[oa]?|ningún|sin)(?=$|[\s(.,:!])/iu;
+// A LIBRARY entry that names nothing, by its FIRST word (EN / PT / ES): "none", "none yet", "nenhuma ainda", "sin
+// bibliotecas", "n/a (custom only)", "TBD" — a nicety for what the brief and the report show, never what the check stands on
+// (no word list is complete: "por definir", "custom only" — designSystemCheck asks whether the DESIGN cites a library). A
+// token source is a path: one with a `/` or a `.` names nothing only when it IS such a word (`todo.css`, `No Name/tokens.css`
+// are files).
+const RE_DS_NONE = /^(?:none|no|not|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|sem|ningun[oa]?|ningún|sin)(?=$|[\s(,:!])/iu;
+const RE_DS_NONE_WHOLE = /^(?:none|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|ningun[oa]?|ningún)$/iu;
 // `_From: <feature>_` in a component's row: the feature whose finish added the row (a slug — spec_finish writes it, a rename
 // follows it). That feature's own `New` row for the component stays New: its design says what it built.
 const RE_DS_FROM = /_From:[ \t]*([a-z0-9][a-z0-9-]*)_/i;
@@ -1230,19 +1234,20 @@ function designSystemRegistry(root) {
   let markers = 0;
   for (const m of stripFencedCode(stripHtmlComments(body)).matchAll(RE_DS_MARKER)) {
     if (++markers > DS_MARKER_LINES) break;
-    const into = lists[m[1].toLowerCase()];
-    const value = m[2].slice(0, 4000).trim().replace(/_$/, "").trim();
+    const into = lists[m[1].toLowerCase()], library = into === lists.libraries;
+    // (the value's own emphasis dropped: `_Libraries: a_` closes after it, `_Libraries:_ a` — the label alone italic — before)
+    const value = m[2].slice(0, 4000).trim().replace(/^_[ \t]*/, "").replace(/_$/, "").trim();
     if (/^\[.*\]$/.test(value)) continue; // the stub's slot, never filled in
     for (const w0 of value.split(/[,;]/)) {
       if (into.length >= DS_MARKER_ENTRIES) break;
       if (w0.length > DS_CELL_MAX * 2) continue; // no name, no path
       let w = stripEnds(w0.trim(), unitIn("`'\""), unitIn("`'\".")).trim(); // linear: never a /^[`'"]+|[`'".]+$/g replace
-      // "none", "none yet", "nenhuma ainda", "sin bibliotecas", "n/a (custom only)": the entry names nothing
-      if (!w || w === "-" || w === "—" || RE_DS_NONE.test(w)) continue;
-      // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`); a parenthesis beside
-      // it is a note (`@mui/material (v6)`)
-      if (into === lists.libraries) { const note = w.indexOf(" ("); if (note > 0) w = w.slice(0, note).trim(); }
-      if (!w || w.length > DS_CELL_MAX || into.includes(w)) continue;
+      // a parenthesis beside a name or a path is a note: `@mui/material (v6)`, `src/styles/colors.scss (generated from Figma)`
+      const note = w.indexOf(" (");
+      if (note > 0) w = w.slice(0, note).trim();
+      // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`)
+      if (!w || w === "-" || w === "—" || (library || !/[/.]/.test(w) ? RE_DS_NONE : RE_DS_NONE_WHOLE).test(w)) continue;
+      if (w.length > DS_CELL_MAX || into.includes(w)) continue;
       into.push(w);
     }
   }
@@ -1353,9 +1358,15 @@ function designSystemCheck(design, lang, opts = {}) {
   if (st === "unfilled" || st === "template") return out("pass", Q.dsUnfilled, "unfilled");
   const reg = opts.registry;
   if (!reg) return out("warn", Q.dsNoRegistry, "no-registry");
-  if (!reg.keys.size && !reg.libraries.length) return out("warn", Q.dsEmptyRegistry, "empty-registry");
+  const usage = st === "na" ? null : designSystemUsage(design);
+  // A registry that lists no component has nothing to agree with — unless the design builds on a library it declares. A
+  // `_Libraries:_` line alone makes no row "unknown": it may say "not yet" in any words, in any language (review 4: such a
+  // line turned an empty registry's warning into a size m refusal).
+  if (!reg.keys.size) {
+    const libs = reg.libraries.map((l) => l.toLowerCase());
+    if (!usage || !usage.rows.some((r) => { const c = r.cell.toLowerCase(); return libs.some((l) => c.includes(l)); })) return out("warn", Q.dsEmptyRegistry, "empty-registry");
+  }
   if (st === "na") return out("pass", Q.dsNa, "na");
-  const usage = designSystemUsage(design);
   const bad = opts.gate ? "fail" : "warn";
   const gated = (d) => (opts.gate ? Q.dsGate(d, opts.gate) : d);
   if (!usage || !usage.rows.length) return out(bad, gated(Q.dsNoRows), "no-rows");

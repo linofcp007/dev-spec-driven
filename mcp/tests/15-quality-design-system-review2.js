@@ -117,8 +117,11 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     const names = E.designSystemRegistry(path.join(g.p, ".specs")).components.map((c) => c.name);
     // a hostile registry through a written finish: an 80,000-blank run that is NOT at the text's end (a `\s+$` replace rescans it
     // from every blank), then 80,000 empty lines, then the table the row joins
-    const h = ready("hostile-end", "s", "# Design System\n\n" + long(" ", 80000) + "x\n" + long("\n", 80000) + COMPONENTS);
-    const slow = timed(() => S.finishFeature(h.p, h.slug, { write: true }));
+    const HOSTILE = "# Design System\n\n" + long(" ", 80000) + "x\n" + long("\n", 80000) + COMPONENTS;
+    const h = ready("hostile-end", "s", HOSTILE);
+    // (every sample appends to the hostile text: the registry is put back first — a second sample on the file the first one
+    // wrote would register nothing, and measure nothing)
+    const slow = timed(() => { write(h.p, REG, HOSTILE); return S.finishFeature(h.p, h.slug, { write: true }); });
     all("1.35 review 2: a written finish reads the registry again under the lock, past the call's read cache — a row another process writes after the call's first read of the file (here: as the call takes the roadmap lock) is kept beside the one finish adds; a registry holding an 80,000-blank run and 80,000 empty lines before its table is appended to in bounded time (got " +
       js({ wroteAfter, registered: fin.designSystem && fin.designSystem.registered, names, slow: [slow.ms, slow.v.designSystem && slow.v.designSystem.registered] }) + ")", {
       injected: () => wroteAfter > 0,

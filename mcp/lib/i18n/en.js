@@ -1575,6 +1575,7 @@ const msg = {
       dsLimit: {
         files: (n) => `  (the file cap was reached — ${n} files walked: the rest was not read)`,
         "token-files": (n) => `  (only the first ${n} token files are read, by path: the rest is not compared)`,
+        "file-size": (n) => `  (a token file is longer than the ${n} characters read of a file: its rest is not compared)`,
         tokens: (n) => `  (only the first ${n} tokens of the code are read: the rest is not compared)`,
         "registry-rows": (n) => `  (only the registry's first ${n} components are checked for a path that is gone)`,
         "view-files": (n) => `  (only the feature's first ${n} view files are read for raw values)`,
