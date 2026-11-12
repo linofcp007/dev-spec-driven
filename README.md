@@ -117,9 +117,16 @@ webhook in a multi-tenant SaaS that summarizes invoices with an LLM is `core +td
 | **+privacy** | GDPR: personal-data inventory, lawful basis, retention and deletion, data-subject rights, DPIA |
 | **+dist** | Consistency model, dual writes → transactional outbox / saga, delivery and idempotency, failure modes |
 | **+api** | The contract file, versioning and compatibility, problem+json errors, pagination / idempotency, rate limits |
-| **+ui** | Design system, the UI states, accessibility (WCAG 2.2 AA), responsiveness and i18n, a performance budget |
+| **+ui** | The design system (components checked against the project's registry), the UI states, accessibility (WCAG 2.2 AA), responsiveness and i18n, a performance budget |
 | **+obs** | SLOs and error budgets, telemetry, alerting and runbooks, rollout and rollback |
 | **+data** | Data contracts, data quality, idempotent re-runs and backfills, lineage, retention |
+
+**One design system for every screen.** `dev-spec steering design-system.md` writes `.specs/steering/design-system.md` from
+your code — the components and tokens the project already has. From then on a +ui design lists each component as
+Reuse, Extend or New; `doctor` checks those rows against the registry (a second `Button` under another name is caught
+before it is built, and at size m / l the design approval refuses it), the task brief hands the implementer the
+components to build from, `finish` warns about hard-coded colours and sizes where a token exists and adds the feature's
+new components to the registry. `dev-spec design-system` shows where the registry and the code have drifted apart.
 
 A track can be added or turned off later (`/spec-change <feature> track +sec`). Your team's own tracks:
 `/spec-setup tracks` — an example pack to copy is `examples/track-packs/mobile`. A bug goes through `/spec-bugfix`
@@ -197,11 +204,11 @@ calls the same engine:
 | `spec_roadmap` | Progress, dependencies, ETAs from the velocity of ticked tasks, milestones, overlapping features; `write` → `.specs/ROADMAP.md` (+ `html`) |
 | `spec_roadmap_edit` | `kind`: `depend` (cycle-checked) · `backlog` (planned, not specced yet) · `milestone` (a target date for a set of features) |
 | `spec_export` | `format`: html / md for stakeholders, csv (traceability matrix), gherkin, jira / linear, adr, `catalog` (`.specs/SPECS.md`), `changelog` (release notes) |
-| `spec_scan` | Brownfield inventory — stack, routes, tests, entry points, env var names, migrations; `coverage: true` — the share of code the specs name; `duplicates: true` — code a feature repeats (`existing` / `within`) |
+| `spec_scan` | Brownfield inventory — stack, routes, tests, entry points, env var names, migrations; `coverage: true` — the share of code the specs name; `duplicates: true` — code a feature repeats (`existing` / `within`); `designSystem: true` — the design-system registry against the code, or a feature against it |
 | `spec_upgrade` | After a plugin update: audit `.specs/` against the current rules; `apply` the safe migrations (never edits a spec) |
 | `spec_templates` | The team's own scaffolds in `.specs/templates/`: list · init · check |
 | `spec_tracks` | The team's own tracks, packs in `.specs/tracks/<name>/`: list · init · check |
-| `steering_scaffold` | One steering file from its template (constitution, glossary, …) or a custom scoped one |
+| `steering_scaffold` | One steering file from its template (constitution, glossary, design-system — filled from the code, …) or a custom scoped one |
 
 In Claude Code, `/mcp` lists all but `spec_stop_check` and `spec_log` — the plugin's Stop hook and CLI do their job; both
 still answer by name. The server also serves one MCP prompt per command and the project's specs as read-only `specs://`
@@ -218,7 +225,7 @@ PowerShell, bash, zsh and fish is in [INSTALL.md](./INSTALL.md).
 plan      classify · signals · init · steering · templates · tracks · create · bugfix · spike · import · clarify · ears
 progress  list · status · next-action · next · brief · done · undone · append-tasks · approve · impact · decide · add-track · feature
 check     doctor · trace · finish · drift · stop-check · log · evals · upgrade
-report    roadmap · depend · backlog · milestone · catalog · export · changelog · metrics · scan · dupes · coverage
+report    roadmap · depend · backlog · milestone · catalog · export · changelog · metrics · scan · dupes · design-system · coverage
 setup     mcp-config · rules · prompts · statusline · merge-state · completion · bundle · version
 ```
 
@@ -301,7 +308,7 @@ dev-spec-driven/                      ← plugin root
 │   ├── server.js                     ← local stdio MCP server (32 tools + prompts + resources, zero-dependency)
 │   ├── servers.json                  ← plugin MCP registration (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← the spec engine's facade (the one object the server, CLI and hooks require)
-│   ├── lib/engine/                   ← the engine: 24 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
+│   ├── lib/engine/                   ← the engine: 25 modules, one per concern (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + one importer per source tool (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← localized content (en · pt · es) + the pt-BR derivation
 │   ├── lib/prompts-resources.js      ← MCP prompts (one per command) + specs:// resources
 │   ├── evals/run-evals.js            ← local eval harness (your API key; --dry-run offline)

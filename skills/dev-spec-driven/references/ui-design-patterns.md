@@ -36,7 +36,8 @@ in the UI), [security-track.md](security-track.md) (never trust the client; secr
 - **design.md** — the component inventory (reused, extended, new), a **state matrix** per view and the **reference**
   each view is built against (a design export, or an HTML prototype the user approved — its path), the form rules,
   breakpoints, the accessibility plan, i18n decisions and the performance budget.
-- **Steering** — the design-system rules in a scoped `ui-components.md` (`dev-spec steering ui-components.md`,
+- **Steering** — the **registry** `design-system.md` (the components and tokens every feature builds from — below),
+  the design-system rules in a scoped `ui-components.md` (`dev-spec steering ui-components.md`,
   `inclusion: fileMatch` on the component folders), and the target level in `tech.md`'s Accessibility line
   (`WCAG 2.2 AA`) — see [steering-templates.md](steering-templates.md).
 - **Tasks** — accessibility and visual checks are `_Verify:_` commands like any test; the manual keyboard and
@@ -80,6 +81,26 @@ existing components can't do it) → review by whoever owns the system → built
 screen-reader support, every state (below) and both themes → documented with an example of each state (a story or
 docs page) → visual and component tests → an owner. A component "detached" from the system and restyled in place
 is a fork: flag it in review.
+
+### The registry — `.specs/steering/design-system.md`
+
+The contract above only holds when every feature reads the **same** inventory. The registry is that inventory: one
+file, two tables — the **tokens** (name · value · use) and the **components** (name · path · variants · notes) —
+plus two markers kept in English: `_Token sources: tokens.json, src/styles/tokens.css_` (the files that define the
+tokens) and `_Libraries: @mui/material_` (third-party UI libraries whose components are not listed one by one).
+
+| Moment | What happens |
+|---|---|
+| **Create it** | `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**: the components it finds (view files under `components/`, `ui/`, `design-system/`…), the tokens of the token files (custom properties, Sass variables, JSON tokens) and the UI libraries of `package.json`. Review the rows, then add each component's variants and when to use it — that part is yours. |
+| **Design** | `[UI] Design System Usage` lists one row per component: `Kind \| Component \| Why / notes` — **Reuse** (one the registry lists, used as is), **Extend** (a new variant of one it lists), **New** (none it lists fits — say why). A library's component is written `TextField (@mui/material)`. No component at all: one line, `n/a — <why>`. |
+| **`spec_doctor`** | `ui-design-system` compares the rows with the registry: a Reuse / Extend the registry doesn't list (with a did-you-mean), a New that is already listed or is a listed one's near-copy (`ButtonV2`, `NewButton`, `CustomCard` — unless its notes say why that component doesn't fit), a New without a reason, a section with no row. A warning — and for a feature of size **m / l** a failing check the design approval refuses, like Reuse & Integration. No registry yet: a warning that says how to create it. |
+| **Task brief** | A task that builds a view gets a **Design system** part: the registry's entry of each component the design names (path, variants, notes), the New ones to build *through the system*, where the tokens live. |
+| **Review** | `spec_scan {designSystem: true, name}` / `dev-spec design-system <feature>`: the rows that disagree with the registry and the **raw values** in the feature's view files — a hex or `rgb()` colour, a `margin: 13px`, a Tailwind `p-[13px]` — each a candidate finding ("use the token"; a colour equal to a token's value names it). |
+| **Finish** | The raw values are a warning of `spec_finish`, never a blocker. A READY written finish **adds the feature's New components to the registry** (their path, the feature in the notes) — the next feature finds them there. |
+| **Later** | `spec_scan {designSystem: true}` / `dev-spec design-system` says what the code holds and the registry doesn't (each as a row to paste), which rows' path is gone, and token files or libraries it doesn't name. |
+
+The registry is steering the team owns: edit it by hand at any time (a variant added, a component deprecated in its
+notes). It is not part of an approval's fingerprint, so a new row never asks an approved feature to be re-reviewed.
 
 ---
 
@@ -357,8 +378,9 @@ place to settle what the screen should be.
 
 Before the design gate, the design names:
 
-1. **Components** — each one reused, extended (a new variant) or new, and why; a new system component's API and
-   owner; tokens only, no hard-coded values.
+1. **Components** — one row each in `[UI] Design System Usage` (Reuse · Extend · New), agreeing with the registry
+   (`.specs/steering/design-system.md`); a new system component's API and owner, and why no listed one fits; tokens
+   only, no hard-coded values.
 2. **The state matrix** — loading (and which technique), empty (first use and no results), error, partial,
    offline, permission denied, signed out, success, stale — per view.
 3. **Forms** — labels, validation timing, messages, the error summary and focus, input kept on every error,

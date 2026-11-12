@@ -652,7 +652,8 @@ const COMMANDS = [
     name: "steering",
     options: TABLE, max: 1,
     help: `  steering <file> [--lang]        Create one steering file from its template (constitution.md, tech.md, glossary.md — the terms to
-                                  use and the words to avoid (_Avoid:_), …) — any other
+                                  use and the words to avoid (_Avoid:_), design-system.md — the registry of components and
+                                  tokens, filled from the code, …) — any other
                                   name like api-rules.md → a custom scoped file (front matter inclusion: always|fileMatch|manual)`,
     run(c) {
       // dev-spec steering <file> [--lang] — one steering file from its template, or a custom scoped one with front
@@ -662,7 +663,10 @@ const COMMANDS = [
       const r = c.call("steering");
       if (!r.ok) return fail(r);
       const T = c.cliText(flags.lang || spec.projectLang(projectDir)); // the language the file was written in
-      return out(r, (r) => log(r.created ? T.steeringCreated(r.file) : T.steeringExists(r.file)));
+      return out(r, (r) => {
+        log(r.created ? T.steeringCreated(r.file) : T.steeringExists(r.file));
+        if (r.seeded) log(T.steeringSeeded(r.seeded.components, r.seeded.tokens)); // 1.35: design-system.md, filled from the code
+      });
     },
   },
   {
@@ -1199,6 +1203,7 @@ const COMMANDS = [
           (r.warnings || []).forEach((w) => log("  ▲ " + w)); // EC/NFR/SC and tests-in-code — never blockers
           log("\n" + r.checks.map((x) => "  [ ] " + x).join("\n"));
           if (r.wrote) log(T.mergeSummaryAt(r.paths.summary));
+          if (r.designSystem && r.designSystem.registered.length) log(T.dsRegistered(r.designSystem.registered.join(", "))); // 1.35: its New components
           if (r.baseline && r.baseline.recorded) {
             const D = spec.msg(spec.featureLang(projectDir, r.feature)).drift;
             log(D.baselineRecorded(r.baseline.files, r.baseline.missing));
@@ -1814,6 +1819,55 @@ const COMMANDS = [
         if (r.truncated) log(T.dupesTruncated(r.scanned.files));
         if (r.partial) log(T.dupesPartial(r.partial.unread, Math.round(r.partial.bytes / 1048576))); // 1.30: the byte budget stopped the reading
         if (r.budget) log((r.budget.over ? "  ⚠ " : "  ") + r.budget.note); // 1.29: dev-guardian's duplication budget (.guardian/budgets.yml)
+      });
+    },
+  },
+  {
+    name: "design-system",
+    options: TABLE, max: 1,
+    args: ["@feature"],
+    help: `  design-system [feature]         The design-system registry (.specs/steering/design-system.md) against the code: the components
+                                  and token files it lacks, the rows whose path is gone; a feature: its Design System Usage rows
+                                  against the registry and the raw colours / sizes in its view files`,
+    run(c) {
+      // dev-spec design-system [feature] (= spec_scan {designSystem: true, name}) — read-only, exit 0
+      const { out, fail, log } = c;
+      const r = c.call("design-system");
+      if (!r.ok) return fail(r);
+      const T = r.feature ? c.featureText(r.feature) : c.projectText();
+      const more = (total, shown) => { if (total > shown) log(T.dsMore(total - shown)); };
+      return out(r, (r) => {
+        if (!r.feature) log(r.registry.exists ? T.dsHead(r.registry.file, r.registry.components, r.registry.tokens) : T.dsHeadNone(r.registry.file));
+        else log(T.dsFeatureHead(r.feature, r.usage ? r.usage.reuse : 0, r.usage ? r.usage.extend : 0, r.usage ? r.usage.new : 0));
+        if (r.feature && !r.registry.exists) log("  " + T.dsHeadNone(r.registry.file));
+        if (!r.registry.exists) log(T.dsCreate);
+        if (r.feature) {
+          if (!r.usage) log(T.dsFeatureNoRows);
+          r.problems.forEach((p) => log("  ⚠ " + p.text));
+          if (!r.viewFiles) log(T.dsNoViewFiles);
+          else if (!r.total) log(T.dsRawNone(r.viewFiles));
+          else {
+            log(T.dsRawHead(r.total, r.viewFiles));
+            r.raw.forEach((x) => log(`    ${x.file}:${x.line}  ${x.value}` + (x.token ? `  → ${x.token}` : "")));
+            more(r.total, r.raw.length);
+          }
+        } else {
+          log(T.dsFound(r.found.components, r.found.tokens, r.found.sources.length));
+          if (r.registry.exists && r.missingTotal) {
+            log(T.dsMissingHead(r.missingTotal));
+            r.missing.forEach((m) => log("    | " + m.name + " | `" + m.path + "` |  |  |")); // a row to paste into the registry
+            more(r.missingTotal, r.missing.length);
+          }
+          if (r.staleTotal) {
+            log(T.dsStaleHead(r.staleTotal));
+            r.stale.forEach((m) => log("    " + m.name + " — " + m.path));
+            more(r.staleTotal, r.stale.length);
+          }
+          if (r.registry.exists && r.newSources.length) log(T.dsSourcesNew(r.newSources.join(", ")));
+          if (r.registry.exists && r.newLibraries.length) log(T.dsLibrariesNew(r.newLibraries.join(", ")));
+          if (r.inSync) log(T.dsInSync);
+        }
+        if (r.truncated) log(T.dsTruncated(r.scanned.files));
       });
     },
   },

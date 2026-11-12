@@ -26,7 +26,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   stripHashComment, stripHtmlComments, taskBlocks, taskMarkers, textFingerprint, toPosix, trackAcIds, trackLabel,
   trackMarker, trackRunRe, trackSteeringFiles, trackSteeringStub, trackTaskHeading, trackTokens, unknownSteeringStub,
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
-  writeFileAtomic, writeIfAbsent, writeRoadmap,
+  writeFileAtomic, writeIfAbsent, writeRoadmap, designSystemSeed, DESIGN_SYSTEM_FILE,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
@@ -46,7 +46,7 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   stripHashComment, stripHtmlComments, taskBlocks, taskMarkers, textFingerprint, toPosix, trackAcIds, trackLabel,
   trackMarker, trackRunRe, trackSteeringFiles, trackSteeringStub, trackTaskHeading, trackTokens, unknownSteeringStub,
   unknownTracksError, userDefaultsApplied, VALID_TRACKS, validateApprovalRoles, withRoadmapLock, writeChecks,
-  writeFileAtomic, writeIfAbsent, writeRoadmap,
+  writeFileAtomic, writeIfAbsent, writeRoadmap, designSystemSeed, DESIGN_SYSTEM_FILE,
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
@@ -228,9 +228,17 @@ function scaffoldSteeringFile(projectDir, fileName, lang) {
   const linked = linkedSpecsFolder(projectDir, [path.join(steering, fileName)]); // never through a linked steering/
   if (linked) return { ok: false, linked: true, error: i18n.msg(lng).err.specsLinked(linked) };
   // The project's template for this file (.specs/templates/[<lang>/]steering/<file>) when there is one.
-  const s = steeringScaffold(projectDir, fileName, lng, ["core"], () => stub);
+  // 1.35: the design-system registry is SEEDED from the code — the components and tokens it holds in place of the stub's slot
+  // rows (designSystemSeed, the lazy tier; nothing found: the plain stub) — only when the file isn't there yet.
+  let seed = null;
+  const builtIn = () => {
+    if (fileName === DESIGN_SYSTEM_FILE && !custom && readIfExists(path.join(steering, fileName)) == null) seed = designSystemSeed(projectDir, lng);
+    return seed ? seed.text : stub;
+  };
+  const s = steeringScaffold(projectDir, fileName, lng, ["core"], builtIn);
   const created = writeIfAbsent(path.join(steering, fileName), s.text);
   const res = { ok: true, file: path.join(steering, fileName), created };
+  if (created && seed && !s.template) res.seeded = { components: seed.components, tokens: seed.tokens }; // what the code gave it
   if (custom) res.custom = true;
   if (created && s.template) res.template = s.template;
   return res;

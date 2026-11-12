@@ -119,9 +119,17 @@ combinam-se — um webhook do Stripe num SaaS multi-inquilino que resume faturas
 | **+privacy** | RGPD: inventário de dados pessoais, fundamento de licitude, conservação e eliminação, direitos dos titulares, AIPD |
 | **+dist** | Modelo de consistência, escritas duplas → outbox transacional / saga, entrega e idempotência, modos de falha |
 | **+api** | O ficheiro do contrato, versionamento e compatibilidade, erros problem+json, paginação / idempotência, limites de taxa |
-| **+ui** | Design system, os estados da interface, acessibilidade (WCAG 2.2 AA), design responsivo e i18n, um orçamento de desempenho |
+| **+ui** | O design system (componentes verificados contra o registo do projeto), os estados da interface, acessibilidade (WCAG 2.2 AA), design responsivo e i18n, um orçamento de desempenho |
 | **+obs** | SLOs e orçamentos de erro, telemetria, alertas e runbooks, lançamento e reversão |
 | **+data** | Contratos de dados, qualidade de dados, reexecuções e backfills idempotentes, linhagem, retenção |
+
+**Um só design system para todos os ecrãs.** O `dev-spec steering design-system.md` escreve o
+`.specs/steering/design-system.md` a partir do teu código — os componentes e os tokens que o projeto já tem. A partir daí, o
+design de uma feature +ui lista cada componente como Reutilizar, Estender ou Novo; o `doctor` verifica essas linhas contra o
+registo (um segundo `Button` com outro nome é apanhado antes de ser construído e, nos tamanhos m / l, a aprovação do
+design recusa-o), o brief da tarefa entrega ao implementador os componentes a usar, e o `finish` avisa das cores e
+tamanhos fixos onde existe um token e acrescenta ao registo os componentes novos da feature. O `dev-spec design-system`
+mostra onde o registo e o código se afastaram.
 
 Um track pode ser acrescentado ou desligado mais tarde (`/spec-change <feature> track +sec`). Os tracks da tua equipa:
 `/spec-setup tracks` — um pack de exemplo para copiar é o `examples/track-packs/mobile`. Um bug segue pelo `/spec-bugfix`
@@ -201,11 +209,11 @@ cliente MCP — chamam o mesmo motor:
 | `spec_roadmap` | Progresso, dependências, ETAs a partir da velocidade das tarefas marcadas, marcos, funcionalidades que se sobrepõem; `write` → `.specs/ROADMAP.md` (+ `html`) |
 | `spec_roadmap_edit` | `kind`: `depend` (deteta ciclos) · `backlog` (planeadas, ainda sem spec) · `milestone` (uma data-alvo para um conjunto de funcionalidades) |
 | `spec_export` | `format`: html / md para stakeholders, csv (matriz de rastreabilidade), gherkin, jira / linear, adr, `catalog` (`.specs/SPECS.md`), `changelog` (notas de versão) |
-| `spec_scan` | Inventário brownfield — stack, rotas, testes, pontos de entrada, nomes de variáveis de ambiente, migrações; `coverage: true` — a parte do código que as specs indicam; `duplicates: true` — o código que uma feature repete (`existing` / `within`) |
+| `spec_scan` | Inventário brownfield — stack, rotas, testes, pontos de entrada, nomes de variáveis de ambiente, migrações; `coverage: true` — a parte do código que as specs indicam; `duplicates: true` — o código que uma feature repete (`existing` / `within`); `designSystem: true` — o registo do design system contra o código, ou uma feature contra ele |
 | `spec_upgrade` | Depois de atualizar o plugin: audita o `.specs/` face às regras atuais; `apply` aplica as migrações seguras (nunca edita uma spec) |
 | `spec_templates` | Os scaffolds da equipa em `.specs/templates/`: list · init · check |
 | `spec_tracks` | Os tracks da equipa, packs em `.specs/tracks/<nome>/`: list · init · check |
-| `steering_scaffold` | Um ficheiro de steering a partir do template (constitution, glossary, …) ou um personalizado com âmbito |
+| `steering_scaffold` | Um ficheiro de steering a partir do template (constitution, glossary, design-system — preenchido a partir do código, …) ou um personalizado com âmbito |
 
 No Claude Code, o `/mcp` lista todas menos `spec_stop_check` e `spec_log` — o hook Stop e a CLI do plugin fazem esse
 trabalho; ambas continuam a responder pelo nome. O servidor serve também um prompt MCP por comando e as specs do projeto
@@ -222,7 +230,7 @@ põe `dev-spec` no PATH, por isso cada mensagem que te pede para a correr mostra
 planear     classify · signals · init · steering · templates · tracks · create · bugfix · spike · import · clarify · ears
 progresso   list · status · next-action · next · brief · done · undone · append-tasks · approve · impact · decide · add-track · feature
 verificar   doctor · trace · finish · drift · stop-check · log · evals · upgrade
-relatórios  roadmap · depend · backlog · milestone · catalog · export · changelog · metrics · scan · dupes · coverage
+relatórios  roadmap · depend · backlog · milestone · catalog · export · changelog · metrics · scan · dupes · design-system · coverage
 configurar  mcp-config · rules · prompts · statusline · merge-state · completion · bundle · version
 ```
 
@@ -306,7 +314,7 @@ dev-spec-driven/                      ← raiz do plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 ferramentas + prompts + recursos, sem dependências)
 │   ├── servers.json                  ← registo MCP do plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← a fachada do motor (o único objeto que o servidor, a CLI e os hooks carregam)
-│   ├── lib/engine/                   ← o motor: 24 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
+│   ├── lib/engine/                   ← o motor: 25 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← conteúdo localizado (en · pt · es) + a derivação pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (um por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (a tua chave de API; --dry-run offline)

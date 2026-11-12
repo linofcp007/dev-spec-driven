@@ -1,8 +1,8 @@
-# Spec quality — steering amendments, cross-feature criteria, glossary, design weighing, reuse, duplicates
+# Spec quality — steering amendments, cross-feature criteria, glossary, design weighing, reuse, duplicates, the design system
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 The spec-quality checks, the design's trade-offs / risks / reuse sections and their doctor warnings, the constraint nudge,
-the critical flows, the TDD micro-cycle, the duplicate-code detector. The rules come first; how they came to be — the releases and review findings — is in History at the end.
+the critical flows, the TDD micro-cycle, the duplicate-code detector, the design-system registry. The rules come first; how they came to be — the releases and review findings — is in History at the end.
 
 ## Spec quality
 - **Steering amendments** — a requirements / design approval (`STEERING_GOVERNED`) and its history record carry `steering`
@@ -275,6 +275,77 @@ The mechanical half of reuse — the prose asks the implementer to search, this 
   over the index already built, only when the budget is set; its duplicate warning appends `guardian.finishBudget` only when
   the project is over it (never a warning of its own, never a blocker).
 
+## Design-system registry (1.35)
+ONE inventory every +ui feature builds from — the prose of `[UI] Design System Usage` made checkable. The registry and its
+readers are in quality.js (every doctor and brief reads them); what reads the CODE is engine/design-system.js, in the lazy tier.
+- **The file** — `.specs/steering/design-system.md` (`DESIGN_SYSTEM_FILE`), a steering STUB like glossary.md
+  (`steering_scaffold`; init never creates it) and deliberately NOT a track steering file (`TRACK_STEERING`): it grows with
+  every feature, and a file the approvals fingerprint would flag every approved +ui feature on each new row
+  (`steering-changed-since-approval`), and every brief would quote it whole. `designSystemRegistry(root)` reads EVERY table whose
+  first header cell is Component / Componente(s) or Token(s) (`RE_DS_COMPONENT_HEAD`; the other columns by their header —
+  `RE_DS_COL` — else by place) through `mdTables` (comments and fences aside): ≤ 500 components / 1,000 tokens (`truncated`), a
+  name once (`dsKey`: letters and digits, lower-cased, accents folded — DatePicker = date-picker), a slot or generic row none.
+  Two English-stable markers, each a line of its own: `_Token sources: a, b_` and `_Libraries: a, b_` (`RE_DS_MARKER` — the
+  value runs to the line's end: a path may hold an underscore; `none` and the stub's `[slot]` name nothing).
+- **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
+  table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
+  mcp/tests/06-gates-sizes.js changed on purpose). `designSystemUsage(design)` → the table rows whose first cell is a kind word
+  (`RE_DS_KINDS`: Reuse · Extend · New, EN / PT / ES and a few synonyms) and whose second names a component — several in one
+  cell are a row each, a parenthesis is dropped from the name and kept in `cell` (a library: "Button (@mui/material)"), a slot
+  row is none; ≤ 100 rows.
+- **The findings** — `designSystemFindings(usage, registry)`: `unknown` (a Reuse / Extend naming nothing the registry lists,
+  nor a declared library in its cell; `near`: the did-you-mean), `listed` (a New already there), `near` (a New that is a listed
+  name with a fork's affix — ButtonV2, NewButton, CustomCard — or an edit or two away, `dsNearComponent`; never when its notes
+  name that component), `no-why` (a New without a reason).
+- **Doctor `ui-design-system`** (`designSystemCheck`; one entry of `DOCTOR_CHECKS`, phase 2) — a plain feature with +ui whose
+  design.md is no later phase's template. States: no-section · unfilled (the scaffold's: `ui-sections` and the placeholder gate
+  own both) · no-registry / empty-registry (a WARN saying how to create it — never a fail: there is nothing to agree with) · na
+  (the section's ONE `n/a — <reason>` line, `sectionState`'s rule, at any size) · no-rows · mismatch · ok. A WARN — and an
+  approval check where `designSystemGated(kind, size)` holds (= `designReuseGated`: a plain feature of size m / l): no-rows and
+  mismatch FAIL there, and `GATES.design` refuses on `ui-design-system`. The stamp `designSystem` (gates.js, every design
+  approval and its record): a design approved before 1.35 passes with a note (`quality.dsLegacy`, `DS_SINCE`) — never flagged,
+  at any size. An approval's context has no `root`: the view reads `specsRoot(c.projectDir)`. `designSaveCheck` (the
+  design.md save hook) adds a ▲ note for mismatch / no-rows and carries `designSystem` (the state) — a note, never unclean,
+  and never for a missing registry (doctor says that once, not every save).
+- **The brief** — `briefDesignSystem(root, design)` for a task `uiTask()` says builds a view (the visual review's rule): each
+  component the design names with its registry entry (kind, path, variants, notes, the row's reason; ≤ 12 / 1,500 characters),
+  the names the registry doesn't list (`unknown`), the token count and sources, the libraries; null without a registry.
+  `renderBrief` writes it after Reuse; the result's `designSystem` holds identifiers (`write: true`: `refs.designSystem`, the
+  names).
+- **The code** (engine/design-system.js, LAZY — entries `designSystemReport`, `designSystemSeed`, `designSystemFinish`) —
+  `scanCode`: ONE walk (`walkProject` + `gitignoreRules`, 20,000 counted files). A component = a view file (.tsx / .jsx / .vue /
+  .svelte / .astro, an Angular `*.component.ts`) under a component folder (`COMPONENT_DIRS`: components, ui, design-system,
+  widgets, atoms…), named by its file (kebab-case → PascalCase) or its folder for an index — never a test, a story, a hook, a
+  helper or a page (`componentOf`). Tokens = a token file's (`isTokenFile`: a stylesheet named tokens / _variables / theme, design-tokens.* / *.tokens.json /
+  tailwind.config.* anywhere, a plain tokens.json / tokens.ts only under a styles / theme / design / tokens / ui folder —
+  `src/auth/tokens.ts` holds access tokens) custom properties and Sass variables (`styleTokens`), a JSON file's leaves (`jsonTokens`:
+  `$value` / `value` / plain), and a global stylesheet declaring ≥ 5 custom properties (`RE_GLOBAL_CSS`); ≤ 20 token files, 300
+  tokens. Libraries = `UI_LIBRARIES` ∩ package.json's dependencies.
+- **Surfaces** — `spec_scan {designSystem: true, name?}` (a mode on spec_scan's THIRD key — mcp.md → Arguments by mode) =
+  `dev-spec design-system [feature]` (one operation, `design-system`; the human report: `cliOutput.ds*`), read-only. No feature:
+  `registry` {file, exists, components, tokens}, `found`, `missing` (in the code, not in the registry — the CLI prints each as a
+  row to paste), `stale` (a row whose path names no file — the path decided on its TEXT first, `registryPath`), `newSources` /
+  `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`, `counts`,
+  `newComponents`.
+- **The seed** — `steering_scaffold design-system.md` (`scaffoldSteeringFile`) writes the stub with the code's rows in place of
+  its slot rows (`designSystemSeed` → `seeded` {components, tokens}); a table the code has no row for keeps its slot; nothing
+  found: the plain stub; a project template for the file wins; never over an existing file.
+- **Raw values** (`rawValuesOf`, the feature report) — the feature's view / style files (`featureFilesOf`, shared with dupes.js;
+  token files — the registry's `_Token sources:_` and `isTokenFile` — and tests aside; ≤ 200 files): a hex colour (6 / 8
+  digits anywhere; 3 / 4 only in a stylesheet declaration, a Tailwind `[#fff]` or a quoted literal), a functional colour with
+  literal arguments, a stylesheet's margin / padding / gap / font-size / radius in px / rem / em, a Tailwind arbitrary size.
+  Never an anchor (`href="#abcdef"`), an entity, a comment (`withoutComments`), a selector line, `rgb(var(--x))`, a 1px
+  hairline, a value built from a variable or `calc()`. A colour equal to a registry token's value carries `token` (`colorKey`).
+- **spec_finish** (`designSystemFinish`; +ui and a registry, never on the `gateOnly` path) — the raw values as a WARNING, never
+  a blocker (`finish.designSystemRaw`: the count, the first 3, the calls listing all); a READY written finish appends the
+  design's New components to the registry (`registerComponents`, under the roadmap lock, re-read there): into the component
+  table the file ENDS in — its columns —, else a new table (`appendSpecText`: BOM and line ends kept; best-effort — a registry the write gate refuses is left as it
+  is and the finish stands); the path = the feature's
+  file of that name, the note `quality.dsFromFeature`; a name that is no plain component name is never written
+  (`RE_SAFE_NAME`). Result: `designSystem` {raw, registered, unregistered, note?}.
+- **Prose** — spec-implementer builds from the brief's part; spec-reviewer takes the findings and the raw values as candidate
+  findings; `references/ui-design-patterns.md` → The registry.
+
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
 
@@ -411,3 +482,14 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   dev-guardian refuses (quoted values, unknown keys). ds-security 9: time and memory grew with the bytes read (every text kept
   until the match) — the byte budget + `partial`, and the index that drops each text. ds-prose 14: the heads said "1 files" /
   "place(s)".
+
+### Design-system registry
+- **1.35** — introduced. Until then the design system was prose only: one guidance line in `[UI] Design System Usage`, one
+  slot line in the `ui.md` stub, and nothing a feature could be checked against — two +ui features could each add "their"
+  Button. Now: the registry (`.specs/steering/design-system.md`, seeded from the code), the usage table and doctor's
+  `ui-design-system` (a gate at size m / l, the Reuse & Integration rule), the brief's part, spec_scan {designSystem} /
+  `dev-spec design-system`, the raw-value warning and the registration at finish. Decisions: a steering stub that is NOT a
+  track steering file (no approval fingerprint, never quoted whole); the write lives in `steering_scaffold` (create-only) and
+  `spec_finish {write}` — `spec_scan` stays read-only, so its report prints the rows to paste instead of writing them; a
+  missing registry only warns; the `featureFilesOf` helper left dupes.js's report so both scans resolve a feature's files the
+  same way (the duplication guard would have named a copy).

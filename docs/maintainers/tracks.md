@@ -237,6 +237,9 @@ The rules and their examples are in How `spec_classify` weighs a signal; the cod
   Performance Budget — every ordinary name `loose` (a core "## Accessibility" or "[SaaS] Performance Budget" never stands in);
   steering `ui.md`; US-1.AC-24..27; UI States' block has a SECOND line since 1.32 — the reference per view the visual review
   compares the build with (`references/ui-review.md`), appended so the 1.31 one-line block still reads as template text;
+  Design System Usage's block has a second line and a `Kind | Component | Why / notes` table since 1.35 — the rows doctor's
+  `ui-design-system` checks against the registry `.specs/steering/design-system.md` (a steering STUB, never in
+  `TRACK_STEERING`: quality.md → Design-system registry), appended the same way;
   reserved frontend / front-end / ux / gui / wcag — **never `a11y` / `accessibility`**: the
   canonical pack example is a team's `a11y` pack, which keeps its name (its signals and +ui's both fire).
 - **Tiers** (lists: the last section): a login screen is NOT a page type; `snackbar` is one word (a "snack bar" is a food

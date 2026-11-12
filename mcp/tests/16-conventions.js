@@ -740,7 +740,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
       "const fs = require(\"fs\"), path = require(\"path\");",
       "const [lib, hooks, proj] = process.argv.slice(2);",
       "const S = require(path.join(lib, \"spec.js\"));",
-      "const tier = () => Object.keys(require.cache).filter((k) => /[\\\\/]engine[\\\\/](?:import[\\\\/]|dupes\\.js$)/.test(k)).length;",
+      "const tier = () => Object.keys(require.cache).filter((k) => /[\\\\/]engine[\\\\/](?:import[\\\\/]|(?:dupes|design-system)\\.js$)/.test(k)).length;",
       "const out = { afterLoad: tier() };",
       "S.initProject(proj, [\"core\"], \"en\");",
       "const rmf = path.join(proj, \".specs\", \"roadmap.json\"), rm = JSON.parse(fs.readFileSync(rmf, \"utf8\"));",

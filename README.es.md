@@ -122,9 +122,17 @@ combinan — un webhook de Stripe en un SaaS multiinquilino que resume facturas 
 | **+privacy** | RGPD: inventario de datos personales, base de legitimación, conservación y supresión, derechos de los interesados, EIPD |
 | **+dist** | Modelo de consistencia, escrituras duales → outbox transaccional / saga, entrega e idempotencia, modos de fallo |
 | **+api** | El fichero del contrato, versionado y compatibilidad, errores problem+json, paginación / idempotencia, límites de tasa |
-| **+ui** | Design system, los estados de la interfaz, accesibilidad (WCAG 2.2 AA), diseño adaptable e i18n, un presupuesto de rendimiento |
+| **+ui** | El design system (componentes comprobados contra el registro del proyecto), los estados de la interfaz, accesibilidad (WCAG 2.2 AA), diseño adaptable e i18n, un presupuesto de rendimiento |
 | **+obs** | SLOs y presupuestos de errores, telemetría, alertas y runbooks, despliegue y reversión |
 | **+data** | Contratos de datos, calidad de datos, reejecuciones y backfills idempotentes, linaje, retención |
+
+**Un solo design system para todas las pantallas.** `dev-spec steering design-system.md` escribe
+`.specs/steering/design-system.md` a partir de tu código — los componentes y los tokens que el proyecto ya tiene. Desde
+entonces, el diseño de una funcionalidad +ui enumera cada componente como Reutilizar, Extender o Nuevo; `doctor` comprueba
+esas filas contra el registro (un segundo `Button` con otro nombre se detecta antes de construirlo y, en los tamaños
+m / l, la aprobación del diseño lo rechaza), el brief de la tarea entrega al implementador los componentes que usar, y
+`finish` avisa de los colores y tamaños fijos donde existe un token y añade al registro los componentes nuevos de la
+funcionalidad. `dev-spec design-system` muestra dónde se han separado el registro y el código.
 
 Un track se puede añadir o desactivar más adelante (`/spec-change <feature> track +sec`). Los tracks de tu equipo:
 `/spec-setup tracks` — un pack de ejemplo para copiar es `examples/track-packs/mobile`. Un bug pasa por `/spec-bugfix`
@@ -204,11 +212,11 @@ cliente MCP — llaman al mismo motor:
 | `spec_roadmap` | Progreso, dependencias, ETAs a partir de la velocidad de las tareas marcadas, hitos, funciones que se solapan; `write` → `.specs/ROADMAP.md` (+ `html`) |
 | `spec_roadmap_edit` | `kind`: `depend` (detecta ciclos) · `backlog` (planificadas, aún sin spec) · `milestone` (una fecha objetivo para un conjunto de funciones) |
 | `spec_export` | `format`: html / md para stakeholders, csv (matriz de trazabilidad), gherkin, jira / linear, adr, `catalog` (`.specs/SPECS.md`), `changelog` (notas de versión) |
-| `spec_scan` | Inventario brownfield — stack, rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones; `coverage: true` — la parte del código que nombran las specs; `duplicates: true` — el código que una funcionalidad repite (`existing` / `within`) |
+| `spec_scan` | Inventario brownfield — stack, rutas, pruebas, puntos de entrada, nombres de variables de entorno, migraciones; `coverage: true` — la parte del código que nombran las specs; `duplicates: true` — el código que una funcionalidad repite (`existing` / `within`); `designSystem: true` — el registro del design system contra el código, o una funcionalidad contra él |
 | `spec_upgrade` | Después de actualizar el plugin: audita `.specs/` frente a las reglas actuales; `apply` aplica las migraciones seguras (nunca edita una spec) |
 | `spec_templates` | Las plantillas propias del equipo en `.specs/templates/`: list · init · check |
 | `spec_tracks` | Los tracks propios del equipo, packs en `.specs/tracks/<nombre>/`: list · init · check |
-| `steering_scaffold` | Un fichero de steering a partir de su plantilla (constitution, glossary, …) o uno personalizado con ámbito |
+| `steering_scaffold` | Un fichero de steering a partir de su plantilla (constitution, glossary, design-system — rellenado a partir del código, …) o uno personalizado con ámbito |
 
 En Claude Code, `/mcp` lista todas menos `spec_stop_check` y `spec_log` — el hook Stop y la CLI del plugin hacen ese
 trabajo; ambas siguen respondiendo por su nombre. El servidor también sirve un prompt MCP por comando y las specs del
@@ -226,7 +234,7 @@ ejecutable, `node "<plugin>/cli/dev-spec.js" …`; el autocompletado para PowerS
 planificar  classify · signals · init · steering · templates · tracks · create · bugfix · spike · import · clarify · ears
 progreso    list · status · next-action · next · brief · done · undone · append-tasks · approve · impact · decide · add-track · feature
 comprobar   doctor · trace · finish · drift · stop-check · log · evals · upgrade
-informes    roadmap · depend · backlog · milestone · catalog · export · changelog · metrics · scan · dupes · coverage
+informes    roadmap · depend · backlog · milestone · catalog · export · changelog · metrics · scan · dupes · design-system · coverage
 configurar  mcp-config · rules · prompts · statusline · merge-state · completion · bundle · version
 ```
 
@@ -311,7 +319,7 @@ dev-spec-driven/                      ← raíz del plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 herramientas + prompts + recursos, sin dependencias)
 │   ├── servers.json                  ← registro MCP del plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← la fachada del motor (el único objeto que cargan el servidor, la CLI y los hooks)
-│   ├── lib/engine/                   ← el motor: 24 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
+│   ├── lib/engine/                   ← el motor: 25 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← contenido localizado (en · pt · es) + la derivación pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (uno por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (tu clave de API; --dry-run sin conexión)

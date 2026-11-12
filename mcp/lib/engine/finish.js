@@ -32,10 +32,11 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   withRoadmapLock, writeFileAtomic, writeIfAbsent, writeRoadmap, changeViews, removeLinkEntry, archivedCompletions,
   branchNameOk, branchView; // 1.25 (create --branch)
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
+let designSystemFinish; // design-system.js — raw values in a +ui feature's view files, its New components into the registry (1.35)
 let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian, accepted gaps
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
 let phaseFile; // state.js — the file a phase writes (tasks: an xs change's change.md)
-function __link(E) { ({ phaseFile, duplicationReport, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+function __link(E) { ({ phaseFile, duplicationReport, designSystemFinish, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   enumArg, errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
@@ -304,6 +305,12 @@ function finishFeature(projectDir, name, opts = {}) {
   const write = !!opts.write;
   const { mergeSummary, summaryPath } = mergeSummaryOf(dir, mergeTitle, body, write);
   const ready = blockers.length === 0;
+  // 1.35: a +ui feature of a project that keeps a design-system registry (.specs/steering/design-system.md) — the raw colours and
+  // sizes in its view files, where the registry has tokens: a warning, never a blocker (how many, the first 3 as `file:line
+  // value`, the call listing them all); and a READY written finish adds the design's New components to the registry, so the
+  // next feature finds them there. null for any other feature (nothing read).
+  const ds = tracks.includes("ui") ? designSystemFinish(projectDir, slug, { write, ready }) : null;
+  if (ds && ds.raw.total) warnings.push(F.designSystemRaw(ds.raw.total, ds.raw.top.map((x) => `${x.file}:${x.line} ${x.value}`).join("; "), slug));
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null;
   const res = {
@@ -329,6 +336,11 @@ function finishFeature(projectDir, name, opts = {}) {
   if (branch) res.branch = branch; // {name, base, commit, at, current, exists} — option 1 merges `name` into `base` locally
   if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
   if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats, partial? (1.30)} — spec_scan {duplicates: true} lists all
+  // 1.35: {raw: {total, counts: {color, size}, top}, registered (New components this call added to the registry), unregistered,
+  // note? (the localized line, when it added some)} — only when there is something to say; spec_scan {designSystem: true, name} lists all
+  if (ds && (ds.raw.total || ds.registered.length || ds.unregistered.length)) {
+    res.designSystem = Object.assign({}, ds, ds.registered.length ? { note: i18n.msg(lng).quality.dsRegistered(ds.registered.join(", ")) } : {});
+  }
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // the runs this call recorded
   if (doc.ok && doc.pendingRoles) res.pendingRoles = doc.pendingRoles; // the roles each pending phase waits for

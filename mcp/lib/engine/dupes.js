@@ -488,6 +488,22 @@ function featureFileOnDisk(root, realRoot, ref, want) {
   } catch { return null; }
   return rel;
 }
+// A feature's own files among `found` (a walk's [{rel, full}] of the files `want` accepts): the ones its tasks' _Implements:_
+// name — a folder or a glob names every one under it — plus a plain path the walk didn't reach (featureFileOnDisk; pushed onto
+// `found`). dir: the feature's folder. → a Set of project paths. (Shared with the design-system report — engine/design-system.js.)
+function featureFilesOf(root, realRoot, dir, found, want) {
+  const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
+  const code = new Map(found.map((x) => [fold(x.rel), x.rel]));
+  const keys = [...code.keys()].sort();
+  const mine = new Set();
+  for (const ref of implementsRefs(readIfExists(path.join(dir, "tasks.md")))) {
+    const hits = implementsTargets(root, ref, code, fold, keys);
+    if (hits.length) { for (const k of hits) mine.add(code.get(k)); continue; }
+    const extra = featureFileOnDisk(root, realRoot, ref, want);
+    if (extra && !code.has(fold(extra))) { code.set(fold(extra), extra); found.push({ rel: extra, full: path.join(root, extra) }); mine.add(extra); }
+  }
+  return mine;
+}
 
 // dev-guardian's duplication budget (1.29): .guardian/budgets.yml → quality.duplication_pct — jscpd's duplicated-lines percentage,
 // project-wide, which dev-guardian's quality_check holds the project to. A close measure, not the same one: this detector counts
@@ -588,19 +604,7 @@ function duplicationReport(projectDir, opts = {}) {
   const walk = walkProject(root, Number.isSafeInteger(opts.cap) && opts.cap >= 1 ? opts.cap : DUP_FILE_CAP, (rel, full) => {
     if (want(rel)) found.push({ rel, full });
   }, { counts: want, gitignore: gitignoreRules(root, realRoot) });
-  let mine = null;
-  if (f) {
-    const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
-    const code = new Map(found.map((x) => [fold(x.rel), x.rel]));
-    const keys = [...code.keys()].sort();
-    mine = new Set();
-    for (const ref of implementsRefs(readIfExists(path.join(f.dir, "tasks.md")))) {
-      const hits = implementsTargets(root, ref, code, fold, keys);
-      if (hits.length) { for (const k of hits) mine.add(code.get(k)); continue; }
-      const extra = featureFileOnDisk(root, realRoot, ref, want);
-      if (extra && !code.has(fold(extra))) { code.set(fold(extra), extra); found.push({ rel: extra, full: path.join(root, extra) }); mine.add(extra); }
-    }
-  }
+  const mine = f ? featureFilesOf(root, realRoot, f.dir, found, want) : null;
   const skipped = { large: 0, generated: 0 };
   const ix = lineIndex(false);
   const maxBytes = Number.isSafeInteger(opts.maxBytes) && opts.maxBytes >= 1 ? opts.maxBytes : DUP_TOTAL_BYTES;
@@ -630,4 +634,4 @@ function duplicationReport(projectDir, opts = {}) {
   }, unread ? { partial: { bytes: maxBytes, unread } } : {}, budget ? { budget } : {});
 }
 
-module.exports = { duplicateRuns, duplicationReport, __link };
+module.exports = { duplicateRuns, duplicationReport, featureFilesOf, __link };

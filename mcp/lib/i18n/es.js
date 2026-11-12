@@ -78,7 +78,7 @@ const text = {
       ["Límites de Tasa y Cuotas", "- Límites por cliente / clave / inquilino y sus ventanas · 429 con Retry-After y las cabeceras RateLimit · cuotas y cómo un cliente sabe cuánto le queda · qué queda exento."],
     ],
     ui: [
-      ["Uso del Design System", "- Los componentes del design system usados y los tokens (color, espaciado, tipografía) · cada componente nuevo: por qué no sirven los existentes y cómo entra en el sistema (documentado, revisado, en la biblioteca de componentes) · ningún estilo suelto ni color fijo en el código."],
+      ["Uso del Design System", "- Los componentes del design system usados y los tokens (color, espaciado, tipografía) · cada componente nuevo: por qué no sirven los existentes y cómo entra en el sistema (documentado, revisado, en la biblioteca de componentes) · ningún estilo suelto ni color fijo en el código.\n- Una fila por componente, comprobada contra el registro (.specs/steering/design-system.md — la comprobación ui-design-system de spec_doctor): Reutilizar = uno que el registro enumera, usado tal cual · Extender = una variante nueva de uno que enumera · Nuevo = ninguno de los enumerados sirve — con el motivo; entra en el registro cuando la funcionalidad se termina. Sin ningún componente: una sola línea en lugar de la tabla, n/a — el motivo.\n\n| Tipo | Componente | Por qué / notas |\n|---|---|---|\n| Reutilizar | [componente que el registro enumera] | [qué hace en esta vista] |\n| Nuevo | [componente nuevo] | [por qué no sirve ninguno de los enumerados] |"],
       ["Estados de la Interfaz", "- Por vista, una matriz de estados: cargando · vacío · error (con Reintentar) · parcial · sin conexión · sin permiso · éxito — qué ve y qué puede hacer el usuario en cada uno; validación de formularios (en el campo + un resumen, los valores conservados).\n- La referencia con la que se construye cada vista: una exportación del diseño o un prototipo HTML que el usuario aprobó — uno por estado cuando difieren — y su ruta · la revisión visual compara lo construido con ella, estado a estado (references/ui-review.md)."],
       ["Accesibilidad", "- WCAG 2.2 AA: operable con el teclado y orden de foco visible · nombre / etiqueta en cada control · contraste (4,5:1 en el texto, 3:1 en la interfaz) · tamaño de los objetivos (24×24 px) · movimiento reducido · errores identificados en texto · cómo se prueba (una comprobación automática + una pasada manual con teclado y lector de pantalla)."],
       ["Diseño Adaptable e i18n", "- Breakpoints y cómo se adapta el layout · expansión del texto (+30–40 %) · layouts de derecha a izquierda · formatos del locale (fechas, números, moneda) · todas las cadenas en el catálogo de traducciones."],
@@ -912,6 +912,9 @@ const steering = {
     // +data
     "data.md":
       "# Estándares de Pipelines de Datos\n\n## Contratos y Esquemas\n- Dónde están los esquemas: [YAML de dbt | un registro de esquemas | schemas/] · compatibilidad: solo cambios aditivos; un cambio incompatible sale en una versión nueva con [N semanas] de retirada.\n- Nombres: tablas y columnas en [snake_case] · fechas y horas en UTC · las capas: [raw → staging → marts].\n\n## Calidad de los Datos\n- Cada conjunto de datos: claves no nulas y únicas, valores y rangos aceptados, comprobaciones de anomalías en el recuento de filas · se ejecutan en la ingesta y antes de publicar · un fallo: [poner las filas en cuarentena | detener la carga] y avisar al responsable.\n- Herramienta: [pruebas dbt | Great Expectations | comprobaciones SQL] · comando: [comando].\n\n## Idempotencia y Backfills\n- Cada job reejecutable para una partición: sobrescribir la partición o MERGE sobre una clave — nunca un append a ciegas · datos que llegan tarde: una ventana de lookback de [N días].\n- Backfills: primero una ejecución de prueba · como máximo [N] particiones en paralelo · el coste estimado y aprobado por [rol].\n\n## Linaje y Responsables\n- Cada conjunto de datos tiene un responsable y un SLA de frescura · el linaje está en: [dbt docs | el catálogo de datos] · los consumidores conocen un cambio incompatible con [N días] de antelación.\n\n## Retención y Coste\n- Retención por capa: bruta [N días] · curada [N meses] — datos personales según privacy.md · particionado por [fecha], agrupado por [clave] · presupuesto de coste: [importe al mes], con una alerta al [N] %.\n",
+    // 1.35 el registro del design system (steering_scaffold design-system.md — rellenado a partir del código; init nunca lo crea).
+    "design-system.md":
+      "# Design System\n\n<!-- El inventario ÚNICO a partir del cual construyen todas las funcionalidades +ui: los componentes y los tokens. El diseño de\n     una funcionalidad enumera lo que usa en [UI] Uso del Design System (Tipo | Componente | Por qué); spec_doctor comprueba esas\n     filas contra este fichero (ui-design-system — una comprobación de la aprobación en los tamaños m / l), spec_task_brief cita\n     las entradas que necesita una tarea de UI y spec_finish añade aquí los componentes Nuevo de una funcionalidad.\n     spec_scan {designSystem: true} enumera lo que el código tiene y este fichero no.\n     Los dos marcadores se quedan en inglés: _Token sources:_ (los ficheros que definen los tokens) y _Libraries:_ (bibliotecas de\n     UI de terceros cuyos componentes no se enumeran uno a uno — un diseño escribe `Button (@mui/material)`). -->\n\n## Tokens\n_Token sources: [tokens.json, src/styles/tokens.css]_\n\n| Token | Valor | Uso |\n|---|---|---|\n| [--color-action-primary] | [#1d4ed8] | [botones principales, enlaces] |\n\n## Componentes\n_Libraries: none_\n\n| Componente | Ruta | Variantes | Notas |\n|---|---|---|---|\n| [Button] | [src/ui/Button.tsx] | [primary, secondary, ghost] | [cuándo usarlo — y cuándo no] |\n",
     "glossary.md":
       "# Glosario\n\n<!-- El lenguaje ubicuo del producto: una entrada por término del dominio — la palabra que usan las specs, lo que significa\n     aquí y las palabras que NO se usan para él. spec_clarify pregunta por cada palabra a evitar que encuentre en el\n     requirements.md / design.md de una función, spec_doctor avisa (comprobación `glossary`) y spec_task_brief cita las entradas\n     que usan los criterios de una tarea. Una entrada por línea (el marcador `_Avoid:_` se queda en inglés), por ejemplo:\n     - **Cliente** — una persona o empresa con un contrato firmado. _Avoid: comprador, consumidor_ -->\n\n- **[Término]** — [lo que significa en este producto]. _Avoid: [palabra], [palabra]_\n",
   };
@@ -998,6 +1001,8 @@ const msg = {
       duplicatesPartial: (unread) => `; solo se comparó una parte del proyecto — el límite de bytes del detector dejó ${unread === 1 ? "1 fichero de código" : `${unread} ficheros de código`} sin leer`,
       duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "bloque del código de la funcionalidad repite" : "bloques del código de la funcionalidad repiten"} otro lugar de sus propios ficheros — ${n === 1 ? "candidato" : "candidatos"} para la pasada de simplificación (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       // 1.30: ninguna tarea indica ficheros en _Implements:_ — lo que los lee no ve código de la funcionalidad
+      // 1.35: colores y tamaños fijos en los ficheros de vista de la funcionalidad, donde el registro del design system tiene tokens — un aviso, nunca un bloqueo
+      designSystemRaw: (n, top, slug) => `los ficheros de vista de la funcionalidad tienen ${n} ${n === 1 ? "valor fijo" : "valores fijos"} donde el design system tiene tokens — ${top}${n > 3 ? "; …" : ""}: usar el token, o explicar en el informe por qué un literal es deliberado (todos: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
       noImplements: (file) => `ninguna tarea indica sus ficheros en _Implements:_ — la línea base de deriva, la detección de duplicados y la atribución de dev-guardian no ven código de esta funcionalidad. Añade _Implements: <ruta>_ a cada tarea que escribió código (un ${file} editado se vuelve a aprobar), o ignóralo si ninguna lo hizo.`,
       untrackedApproval: (list, slug) => `aprobado antes del registro de cambios — no se registró nada del fichero aprobado, así que una edición no puede detectarse: ${list} — vuelve a aprobar para empezar a seguirlo (/approve ${slug} design)`,
     },
@@ -1460,6 +1465,7 @@ const msg = {
       nothingNew: "(nada nuevo)",
       steeringCreated: (f) => `Creado ${f}`,
       steeringExists: (f) => `Ya existe (no se ha modificado) ${f}`,
+      steeringSeeded: (comps, tokens) => `  rellenado a partir del código: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} — falta revisar las filas y añadir las variantes y las notas de cada componente`,
       feature: (slug, label, lang) => `Función '${slug}' [${label}] (${lang})`,
       noFeatures: (dir) => `No hay funciones en ${dir}`,
       listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tareas)`,
@@ -1502,6 +1508,24 @@ const msg = {
       dupesMore: (n) => `  … y ${n} más (se listan los más largos)`,
       dupesTruncated: (n) => `  (solo se leyeron los primeros ${n} ficheros de código — el límite: una repetición más allá no se ve)`,
       dupesPartial: (unread, mb) => `  (se alcanzó el límite de bytes — ${mb} MB de código: ${unread === 1 ? "1 fichero de código más quedó" : `${unread} ficheros de código más quedaron`} sin leer, una repetición en ellos no se ve)`,
+      // design-system (1.35): el registro contra el código, o una funcionalidad contra el registro — spec_scan {designSystem: true}
+      dsHead: (file, comps, tokens) => `Design system — ${file}: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"}`,
+      dsHeadNone: (file) => `Design system — todavía sin registro (${file})`,
+      dsCreate: `  créalo a partir del código: ${DEV_SPEC} steering design-system.md`,
+      dsFound: (comps, tokens, files) => `  en el código: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} en ${files} ${files === 1 ? "fichero de tokens" : "ficheros de tokens"}`,
+      dsMissingHead: (n) => `  en el código, fuera del registro (${n}) — una fila por cada uno:`,
+      dsStaleHead: (n) => `  en el registro, pero su ruta no indica ningún fichero (${n}):`,
+      dsSourcesNew: (list) => `  ficheros de tokens que el registro no indica (_Token sources:_): ${list}`,
+      dsLibrariesNew: (list) => `  bibliotecas de UI en package.json que el registro no indica (_Libraries:_): ${list}`,
+      dsInSync: "  el registro y el código coinciden",
+      dsMore: (n) => `    … y ${n} más`,
+      dsTruncated: (n) => `  (se alcanzó el límite de ficheros — ${n} recorridos: el resto no se leyó)`,
+      dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reutilizar: ${reuse} · Extender: ${extend} · Nuevo: ${news}`,
+      dsFeatureNoRows: "  el diseño no tiene ninguna fila de componente ([UI] Uso del Design System)",
+      dsRawHead: (n, files) => `  valores fijos en sus ficheros de vista (${n} en ${files} ${files === 1 ? "fichero" : "ficheros"}) — usar el token:`,
+      dsRawNone: (files) => `  ningún color ni tamaño fijos en ${files === 1 ? "su fichero de vista" : `sus ${files} ficheros de vista`}`,
+      dsNoViewFiles: "  ningún fichero de vista o de estilo entre sus ficheros de _Implements:_ — nada que leer",
+      dsRegistered: (list) => `  ✓ añadido al registro del design system: ${list}`,
       clarify: (f, tracks, verdict, n) => `Aclarar: ${f}  [${tracks}]  → ${verdict} (${n} pregunta(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Función: ${f}  [${tracks}]  fase: ${phase}  veredicto=${verdict}  gates aprobados: ${gatesOk}`,
       changed: (list) => `  ⚠ modificado desde la última aprobación: ${list}`,
@@ -3244,6 +3268,28 @@ const quality = {
     briefGlossaryIntro: "Usa estas palabras tal como están definidas (.specs/steering/glossary.md) — nunca las que hay que evitar:",
     briefGlossaryAvoid: (list) => `evitar: ${list}`,
     briefGlossaryOmitted: (list) => `Se aplican más entradas (tamaño) — léelas en .specs/steering/glossary.md: ${list}`,
+    // 1.35 el registro del design system (.specs/steering/design-system.md): la comprobación ui-design-system de spec_doctor (por estado),
+    // la nota de la fila que spec_finish añade por cada componente Nuevo y la tabla que agrega cuando el fichero no termina en una.
+    dsLegacy: (d, v) => `diseño aprobado antes de la ${v} — solo se exige a partir de su próxima aprobación (${d})`,
+    dsNoSection: "el diseño no tiene sección Uso del Design System — nada que comprobar contra el registro",
+    dsUnfilled: "la sección Uso del Design System aún no está escrita — se comprueba contra el registro cuando lo esté",
+    dsNoRegistry: `todavía no hay registro del design system (.specs/steering/design-system.md) — el inventario único de componentes y tokens a partir del cual construyen todas las funcionalidades +ui. Para crearlo a partir del código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
+    dsEmptyRegistry: `el registro del design system (.specs/steering/design-system.md) todavía no enumera ningún componente — falta añadir los que ya existen (spec_scan {designSystem: true} · ${DEV_SPEC} design-system muestra lo que tiene el código)`,
+    dsNa: "la sección Uso del Design System dice n/a — esta funcionalidad no usa ningún componente",
+    dsNoRows: "la sección Uso del Design System no tiene ninguna fila de componente — cada uno en una fila `| Tipo | Componente | Por qué / notas |` (Tipo: Reutilizar · Extender · Nuevo), para poder comprobarlo contra el registro; o una sola línea: n/a — por qué esta funcionalidad no usa ningún componente",
+    dsMismatch: (n, list) => `la sección Uso del Design System y el registro (.specs/steering/design-system.md) no coinciden en ${n} ${n === 1 ? "fila" : "filas"} — ${list}`,
+    dsProblem: {
+      unknown: (name, near) => `'${name}' no está en el registro${near ? ` (¿será ${near}?)` : ""}: reutilizar un componente enumerado, o usar una fila Nuevo`,
+      listed: (name, near) => `'${name}' está marcado como Nuevo, pero el registro ya enumera ${near}: pasa a ser una fila Reutilizar o Extender`,
+      near: (name, near) => `el Nuevo '${name}' se parece a ${near}, que el registro enumera: reutilizar o extender ${near}, o decir en las notas de la fila por qué ${near} no sirve`,
+      "no-why": (name) => `el Nuevo '${name}' no dice por qué no sirve ningún componente enumerado`,
+    },
+    dsGate: (d, size) => `${d} — un diseño de tamaño ${size} lo necesita antes de su aprobación`,
+    dsOk: (reuse, extend, news) => `la sección Uso del Design System coincide con el registro (Reutilizar: ${reuse} · Extender: ${extend} · Nuevo: ${news})`,
+    dsTruncated: (read, total) => `el registro tiene ${total} componentes — solo se leen los primeros ${read} (divídelo o recórtalo)`,
+    dsFromFeature: (slug) => `añadido por ${slug}`,
+    dsTable: { components: "| Componente | Ruta | Variantes | Notas |", tokens: "| Token | Valor | Uso |" },
+    dsRegistered: (list) => `añadido al registro del design system (.specs/steering/design-system.md): ${list}`,
   };
 
 // every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
@@ -3328,6 +3374,16 @@ const brief = {
     reuseFilesMore: (n, atLeast) => (!atLeast ? `…y ${n} más en la(s) misma(s) carpeta(s).`
       : n ? `…y al menos ${n} más en la(s) misma(s) carpeta(s) — una carpeta grande: solo se leyeron sus primeras entradas.`
         : "…y posiblemente más en la(s) misma(s) carpeta(s) — una carpeta grande: solo se leyeron sus primeras entradas."),
+    // 1.35: las entradas del registro del design system para los componentes que nombra el diseño de esta funcionalidad (una tarea que construye una vista)
+    designSystem: "## Design system — construir a partir de esto",
+    designSystemRule: (file) => `Cada vista se construye con los componentes y los tokens del design system (\`${file}\`). Usa el componente enumerado antes que cualquier marcado propio; una variante nueva entra EN el componente (una prop documentada), nunca como una copia al lado; nunca un color, un espaciado, un radio ni un tamaño de letra fijos — el token. El bloque **Reuse** de tu informe nombra cada componente que usaste.`,
+    designSystemKinds: { reuse: "reutilizar", extend: "extender — una variante nueva", new: "NUEVO — constrúyelo a través del sistema: solo tokens, todos los estados, soporte de teclado y de lector de pantalla" },
+    designSystemVariants: (v) => `variantes: ${v}`,
+    designSystemOmitted: (n) => `${n} componente(s) más — léelos en design.md ([UI] Uso del Design System).`,
+    designSystemUnknown: (list) => `Fuera del registro — pregunta antes de construirlos (NEEDS_CONTEXT): ${list}`,
+    designSystemNoRows: (file) => `El diseño no tiene ninguna fila de componente — lee \`${file}\` y reutiliza lo que enumera antes de crear nada.`,
+    designSystemTokens: (n, sources) => `Tokens: ${n} en el registro${sources ? ` — definidos en ${sources}` : ""}.`,
+    designSystemLibraries: (list) => `Bibliotecas de componentes sobre las que se apoya el proyecto: ${list}.`,
     design: "## Contexto de diseño",
     designToc: (p) => `Diseño completo: \`${p}\` — secciones:`,
     designOmitted: "Relevantes pero no incluidas (tamaño) — léelas en design.md:",

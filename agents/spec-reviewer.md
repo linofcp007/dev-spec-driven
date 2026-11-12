@@ -87,7 +87,12 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 - **+api:** the handlers return exactly what the contract file documents (status codes, problem+json errors with stable
   codes, headers); nothing breaking inside a version; Idempotency-Key and If-Match honoured where the design says.
 - **+ui:** design-system components and tokens (no one-off styles); every state of the design's state matrix handled; keyboard
-  operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean.
+  operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean. With a
+  registry (`.specs/steering/design-system.md`): the components the diff uses are the ones the design's `[UI] Design System
+  Usage` rows name — a component built beside a listed one is **Important** (reuse or extend the listed one) — and the raw
+  values the dispatch carries (`spec_scan {designSystem: true, name}` — `file:line value`, a hex colour or a pixel size where a
+  token exists) are candidates: one this work added is a finding ("use the token" — the report names it when a token has
+  that value), one the report lists as deliberate is not.
 - **+obs:** the metrics the task's `_Emits metrics:_` names, structured logs with the correlation ID and no personal data, the
   spans the design names; alerts linked to runbooks; liveness free of dependencies; the flag and the rollback path as designed.
 - **+data:** the dataset's schema matches its contract; the data-quality checks the task names run and quarantine bad rows;

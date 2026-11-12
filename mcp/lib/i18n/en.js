@@ -78,7 +78,9 @@ const text = {
       ["Rate Limits & Quotas", "- Limits per client / key / tenant and their windows · 429 with Retry-After and the RateLimit headers · quotas and how a client reads what it has left · what is exempt."],
     ],
     ui: [
-      ["Design System Usage", "- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours."],
+      // (1.35: the second line and the table — the rows spec_doctor's ui-design-system checks against the registry; appended, so
+      // a 1.34 one-line block still reads as template text)
+      ["Design System Usage", "- The design-system components used and the tokens (colour, spacing, type) · each new component: why the existing ones don't fit and how it enters the system (documented, reviewed, in the component library) · no one-off styles or hard-coded colours.\n- One row per component, checked against the registry (.specs/steering/design-system.md — spec_doctor's ui-design-system): Reuse = one it lists, used as is · Extend = a new variant of one it lists · New = none it lists fits — say why; it joins the registry when the feature is finished. No component at all: replace the table with one line, n/a — why.\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| Reuse | [component the registry lists] | [what it does in this view] |\n| New | [new component] | [why no listed component fits] |"],
       ["UI States", "- Per view, a state matrix: loading · empty · error (with a Retry) · partial · offline · permission denied · success — what the user sees and can do in each; form validation (inline + a summary, values kept).\n- The reference each view is built against: a design export or an HTML prototype the user approved — one per state where they differ — and its path · the visual review compares what is built with it, state by state (references/ui-review.md)."],
       ["Accessibility", "- WCAG 2.2 AA: keyboard operable with a visible focus order · a name / label for every control · contrast (4.5:1 text, 3:1 UI) · target size (24×24 px) · reduced motion · errors identified in text · how it is tested (an automated check + a manual keyboard and screen-reader pass)."],
       ["Responsiveness & i18n", "- Breakpoints and how the layout adapts · text expansion (+30–40 %) · right-to-left layouts · locale formats (dates, numbers, currency) · every string in the translation catalogue."],
@@ -912,6 +914,11 @@ const steering = {
     // +data: the team's defaults for data contracts, quality checks, idempotent loads and backfills, lineage, retention and cost.
     "data.md":
       "# Data Pipeline Standards\n\n## Contracts & Schemas\n- Where schemas live: [dbt YAML | a schema registry | schemas/] · compatibility: additive changes only; a breaking change ships as a new version with [N weeks] of deprecation.\n- Naming: [snake_case] tables and columns · timestamps in UTC · the layers: [raw → staging → marts].\n\n## Data Quality\n- Every dataset: not-null and unique keys, accepted values and ranges, row-count anomaly checks · they run at ingestion and before publishing · a failure: [quarantine the rows | stop the load] and alert the owner.\n- Tool: [dbt tests | Great Expectations | SQL checks] · command: [command].\n\n## Idempotency & Backfills\n- Every job re-runnable for a partition: overwrite the partition or MERGE on a key — never a blind append · late-arriving data: a lookback window of [N days].\n- Backfills: a dry run first · at most [N] partitions in parallel · the cost estimated and approved by [role].\n\n## Lineage & Ownership\n- Every dataset has an owner and a freshness SLA · lineage lives in: [dbt docs | the data catalog] · consumers hear of a breaking change [N days] ahead.\n\n## Retention & Cost\n- Retention per layer: raw [N days] · curated [N months] — personal data per privacy.md · partitioned by [date], clustered by [key] · cost budget: [$ per month], with an alert at [N] %.\n",
+    // 1.35 the design-system registry (steering_scaffold design-system.md — seeded from the code, engine/design-system.js; init never
+    // creates it). The `_Token sources:_` / `_Libraries:_` markers are English-stable in every language; the first header cell of
+    // each table (Token / Component) is what the reader finds it by.
+    "design-system.md":
+      "# Design System\n\n<!-- The ONE inventory every +ui feature builds from: the components and the tokens. A feature's design lists what it uses\n     in [UI] Design System Usage (Kind | Component | Why); spec_doctor checks those rows against this file (ui-design-system —\n     an approval check at size m / l), spec_task_brief quotes the entries a UI task needs, and spec_finish adds a feature's\n     New components here. spec_scan {designSystem: true} lists what the code holds and this file doesn't.\n     Keep the two markers in English: _Token sources:_ (the files that define the tokens) and _Libraries:_ (third-party UI\n     libraries whose components are not listed one by one — a design names them as `Button (@mui/material)`). -->\n\n## Tokens\n_Token sources: [tokens.json, src/styles/tokens.css]_\n\n| Token | Value | Use |\n|---|---|---|\n| [--color-action-primary] | [#1d4ed8] | [primary buttons, links] |\n\n## Components\n_Libraries: none_\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| [Button] | [src/ui/Button.tsx] | [primary, secondary, ghost] | [when to use it — and when not] |\n",
     // the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
     "glossary.md":
       "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
@@ -999,6 +1006,8 @@ const msg = {
       duplicates: (n, top, within, slug) => `the feature's code repeats existing code in ${n} ${n === 1 ? "place" : "places"} — ${top}${n > 3 ? "; …" : ""}: reuse or extend the existing code, or note in the report why a copy is deliberate${within ? `; ${within} more ${within === 1 ? "repeat" : "repeats"} inside the feature's own files` : ""} (all of them: spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       duplicatesPartial: (unread) => `; only part of the project was compared — the detector's byte budget left ${unread} source ${unread === 1 ? "file" : "files"} unread`,
       duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "block of the feature's code repeats" : "blocks of the feature's code repeat"} another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
+      // 1.35: raw colours and sizes in the feature's view files, where the design-system registry has tokens — a warning, never a blocker
+      designSystemRaw: (n, top, slug) => `the feature's view files hold ${n} raw ${n === 1 ? "value" : "values"} where the design system has tokens — ${top}${n > 3 ? "; …" : ""}: use the token, or note in the report why a literal is deliberate (all of them: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
       // 1.30: no task names a file in _Implements:_ — what reads them sees no code of the feature. file: the one holding the tasks
       // (tasks.md; an xs change's change.md — review 9)
       noImplements: (file) => `no task names its files in _Implements:_ — the drift baseline, the duplicate check and dev-guardian's attribution see no code of this feature. Add _Implements: <path>_ to each task that wrote code (an edited ${file} is re-approved), or ignore this if none did.`,
@@ -1508,6 +1517,7 @@ const msg = {
       nothingNew: "(nothing new)",
       steeringCreated: (f) => `Created ${f}`,
       steeringExists: (f) => `Exists (left untouched) ${f}`,
+      steeringSeeded: (comps, tokens) => `  filled from the code: ${comps} ${comps === 1 ? "component" : "components"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} — review the rows, then add each component's variants and notes`,
       feature: (slug, label, lang) => `Feature '${slug}' [${label}] (${lang})`,
       noFeatures: (dir) => `No features under ${dir}`,
       listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tasks)`,
@@ -1550,6 +1560,24 @@ const msg = {
       dupesMore: (n) => `  … and ${n} more (the longest are listed)`,
       dupesTruncated: (n) => `  (only the first ${n} source files were read — the cap: a repeat beyond them is not seen)`,
       dupesPartial: (unread, mb) => `  (the byte budget — ${mb} MB of source — was reached: ${unread} more source ${unread === 1 ? "file was" : "files were"} not read, a repeat in them is not seen)`,
+      // design-system (1.35): the registry against the code, or a feature against the registry — spec_scan {designSystem: true}
+      dsHead: (file, comps, tokens) => `Design system — ${file}: ${comps} ${comps === 1 ? "component" : "components"} · ${tokens} ${tokens === 1 ? "token" : "tokens"}`,
+      dsHeadNone: (file) => `Design system — no registry yet (${file})`,
+      dsCreate: `  create it from the code: ${DEV_SPEC} steering design-system.md`,
+      dsFound: (comps, tokens, files) => `  in the code: ${comps} ${comps === 1 ? "component" : "components"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} in ${files} token ${files === 1 ? "file" : "files"}`,
+      dsMissingHead: (n) => `  in the code, not in the registry (${n}) — a row each:`,
+      dsStaleHead: (n) => `  in the registry, but their path names no file (${n}):`,
+      dsSourcesNew: (list) => `  token files the registry doesn't name (_Token sources:_): ${list}`,
+      dsLibrariesNew: (list) => `  UI libraries in package.json the registry doesn't name (_Libraries:_): ${list}`,
+      dsInSync: "  the registry and the code agree",
+      dsMore: (n) => `    … +${n} more`,
+      dsTruncated: (n) => `  (the file cap was reached — ${n} files walked: the rest was not read)`,
+      dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reuse: ${reuse} · Extend: ${extend} · New: ${news}`,
+      dsFeatureNoRows: "  the design names no component row ([UI] Design System Usage)",
+      dsRawHead: (n, files) => `  raw values in its view files (${n} in ${files} ${files === 1 ? "file" : "files"}) — use the token:`,
+      dsRawNone: (files) => `  no raw colour or size in its ${files} view ${files === 1 ? "file" : "files"}`,
+      dsNoViewFiles: "  no view or style file among its _Implements:_ files — nothing to read",
+      dsRegistered: (list) => `  ✓ added to the design-system registry: ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  phase=${phase}  verdict=${verdict}  gatesOk=${gatesOk}`,
       changed: (list) => `  ⚠ changed since last approval: ${list}`,
@@ -3451,6 +3479,28 @@ const quality = {
     briefGlossaryIntro: "Use these words exactly as defined (.specs/steering/glossary.md) — never the avoided ones:",
     briefGlossaryAvoid: (list) => `avoid: ${list}`,
     briefGlossaryOmitted: (list) => `More entries apply (size) — read them in .specs/steering/glossary.md: ${list}`,
+    // 1.35 the design-system registry (.specs/steering/design-system.md): spec_doctor's ui-design-system (keyed by its state), the
+    // row spec_finish adds for a New component and the table it appends when the file ends in none.
+    dsLegacy: (d, v) => `design approved before ${v} — asked only from its next approval (${d})`,
+    dsNoSection: "no Design System Usage section in the design — nothing to check against the registry",
+    dsUnfilled: "Design System Usage is not written yet — checked against the registry once it is",
+    dsNoRegistry: `no design-system registry yet (.specs/steering/design-system.md) — the one inventory of components and tokens every +ui feature builds from. Create it from the code: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
+    dsEmptyRegistry: `the design-system registry (.specs/steering/design-system.md) lists no component yet — add the existing ones (spec_scan {designSystem: true} · ${DEV_SPEC} design-system lists what the code holds)`,
+    dsNa: "Design System Usage says n/a — this feature uses no component",
+    dsNoRows: "Design System Usage names no component row — list each one as `| Kind | Component | Why / notes |` (Kind: Reuse · Extend · New) so it can be checked against the registry, or write one line: n/a — why this feature uses no component",
+    dsMismatch: (n, list) => `Design System Usage and the registry (.specs/steering/design-system.md) disagree in ${n} ${n === 1 ? "row" : "rows"} — ${list}`,
+    dsProblem: {
+      unknown: (name, near) => `'${name}' is not in the registry${near ? ` (did you mean ${near}?)` : ""}: reuse a listed component, or make it a New row`,
+      listed: (name, near) => `'${name}' is marked New but the registry already lists ${near}: make it a Reuse or an Extend row`,
+      near: (name, near) => `New '${name}' is close to ${near}, which the registry lists: reuse or extend ${near}, or say in the row's notes why ${near} doesn't fit`,
+      "no-why": (name) => `New '${name}' doesn't say why no listed component fits`,
+    },
+    dsGate: (d, size) => `${d} — a size ${size} design needs it before its approval`,
+    dsOk: (reuse, extend, news) => `Design System Usage agrees with the registry (Reuse: ${reuse} · Extend: ${extend} · New: ${news})`,
+    dsTruncated: (read, total) => `the registry holds ${total} components — only the first ${read} are read (split or trim it)`,
+    dsFromFeature: (slug) => `added by ${slug}`,
+    dsTable: { components: "| Component | Path | Variants | Notes |", tokens: "| Token | Value | Use |" },
+    dsRegistered: (list) => `added to the design-system registry (.specs/steering/design-system.md): ${list}`,
   };
 
 // every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
@@ -3535,6 +3585,16 @@ const brief = {
     reuseFilesMore: (n, atLeast) => (!atLeast ? `…and ${n} more in the same folder(s).`
       : n ? `…and at least ${n} more in the same folder(s) — a large folder: only its first entries were read.`
         : "…and possibly more in the same folder(s) — a large folder: only its first entries were read."),
+    // 1.35: the design-system registry's entries for the components this feature's design names (a task that builds a view)
+    designSystem: "## Design system — build from these",
+    designSystemRule: (file) => `Every view is built from the design system's components and tokens (\`${file}\`). Use the listed component before any markup of your own; a new variant goes INTO the component (a documented prop), never a copy beside it; never a raw colour, spacing, radius or font size — the token. Your report's **Reuse** block names each component you used.`,
+    designSystemKinds: { reuse: "reuse", extend: "extend — a new variant", new: "NEW — build it through the system: tokens only, every state, keyboard and screen-reader support" },
+    designSystemVariants: (v) => `variants: ${v}`,
+    designSystemOmitted: (n) => `${n} more component(s) — read them in design.md ([UI] Design System Usage).`,
+    designSystemUnknown: (list) => `Not in the registry — ask before building them (NEEDS_CONTEXT): ${list}`,
+    designSystemNoRows: (file) => `The design names no component row — read \`${file}\` and reuse what it lists before creating anything.`,
+    designSystemTokens: (n, sources) => `Tokens: ${n} in the registry${sources ? ` — defined in ${sources}` : ""}.`,
+    designSystemLibraries: (list) => `Component libraries the project builds on: ${list}.`,
     design: "## Design context",
     designToc: (p) => `Full design: \`${p}\` — sections:`,
     designOmitted: "Relevant but not included (size) — read them in design.md:",

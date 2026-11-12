@@ -70,6 +70,8 @@ takes). A mode's `required` (depend → `name`) are `missing-arguments`; the mod
   first: given one of its values, its mode runs (`ARG_MODES[tool].alt` {key: {modes, required?}}, the primary's shape). A mode
   key given a value that picks no mode of its own (`coverage: false` beside `duplicates: true`, `duplicates: false`) is no
   other mode's argument; `coverage: true` beside `duplicates: true` is (`inapplicable` [coverage]).
+- **A third key (1.35).** `spec_scan {designSystem: true}` is another `alt` entry (`argModes()` keeps one per key); it takes
+  `name` only, and beside `duplicates: true` the first in the table's order runs — the other key is then `inapplicable`.
 
 ### Plugin mode's list
 With `SPEC_MCP_APPROVAL_HOOK=on` (mcp/servers.json — the Claude Code plugin) `tools/list` omits `PLUGIN_UNLISTED`:
@@ -243,6 +245,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   replies made `spec_export` leave the markdown out unless `includeBody`, and the aliases (whose old schema has no `includeBody`)
   translated without it — "the old names still work" held for the call, not the reply. They translate to `includeBody: write !==
   true` now.
+- **1.35** — `spec_scan {designSystem: true, name?}`, the 42nd operation (`design-system`), a mode on spec_scan's third key;
+  steering_scaffold names design-system.md. ~450 characters of tools/list, not paid back (about 44,050 of the 44,500 cap):
+  the next argument trims wording first.
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.

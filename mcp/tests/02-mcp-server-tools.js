@@ -275,7 +275,7 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list, cliI
     const direct = [...new Set(OPS.OPERATIONS.map((op) => op.engine))].filter((fn) => new RegExp("\\bspec\\." + fn + "\\(").test(src));
     all("1.27 operations: every tool runs an operation (" + OPS.OPERATIONS.length + " operations, " + tools.length + " tools) whose call is its facade function's; each operation argument is its tool's, of the type its kind reads; every tool argument is read; server.js calls no operation's engine function itself (got " +
       js({ bad, direct }) + ")", {
-      operations: () => OPS.OPERATIONS.length === 41, noBad: () => !bad.length, noDirectCall: () => !direct.length,
+      operations: () => OPS.OPERATIONS.length === 42 /* 1.35: + design-system */, noBad: () => !bad.length, noDirectCall: () => !direct.length,
     });
   }
 
@@ -283,9 +283,9 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list, cliI
     const DOC = ["name", "write", "includeBody"], FILE = ["name", "write"];
     eq(OPS.argModes(), {
       spec_roadmap_edit: { key: "kind", modes: { backlog: ["action", "name", "note"], depend: ["name", "dependsOn", "add", "remove", "order"], milestone: ["action", "name", "date", "features"] }, required: { depend: ["name"] } },
-      spec_scan: { key: "coverage", fallback: false, modes: { false: ["cap"], true: [] }, alt: { duplicates: { modes: { true: ["name", "minLines", "tests"] } } } },
+      spec_scan: { key: "coverage", fallback: false, modes: { false: ["cap"], true: [] }, alt: { duplicates: { modes: { true: ["name", "minLines", "tests"] } }, designSystem: { modes: { true: ["name"] } } } },
       spec_export: { key: "format", fallback: "html", modes: { html: DOC, md: DOC, csv: FILE, gherkin: FILE, jira: FILE, linear: FILE, adr: FILE, catalog: ["write", "includeBody"], changelog: ["since", "milestone", "write", "includeBody"] } },
-    }, "1.27 operations: ARG_MODES derives from the table — the 1.26 modes, each with its operation's arguments (export's includeBody in html / md only), depend's name required; 1.28: spec_scan's second key (duplicates) as `alt`");
+    }, "1.27 operations: ARG_MODES derives from the table — the 1.26 modes, each with its operation's arguments (export's includeBody in html / md only), depend's name required; 1.28: spec_scan's second key (duplicates) as `alt`; 1.35: its third (designSystem)");
     const pick = (tool, a) => (OPS.forTool(tool, a) || {}).id;
     eq([pick("spec_status", {}), pick("spec_status", { name: " " }), pick("spec_status", { name: "x" }), pick("ears_validate", { name: "x" }), pick("ears_validate", { name: "x", text: "t" }),
       pick("spec_tracks", {}), pick("spec_tracks", { action: "signals" }), pick("spec_scan", {}), pick("spec_scan", { coverage: true }), pick("spec_export", {}),
@@ -396,6 +396,8 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list, cliI
       ["coverage", "spec_scan", { coverage: true }, ["coverage"]],
       ["dupes", "spec_scan", { duplicates: true }, ["dupes"]],
       ["dupes", "spec_scan", { duplicates: true, name: "login", minLines: 4, tests: true }, ["dupes", "login", "--min-lines", "4", "--tests"]],
+      ["design-system", "spec_scan", { designSystem: true }, ["design-system"]], // 1.35: the registry against the code…
+      ["design-system", "spec_scan", { designSystem: true, name: "login" }, ["design-system", "login"]], // …and a feature against the registry
       ["import", "spec_import", { tool: "plan", text: PLAN, dryRun: true }, ["import", "plan", "--text", PLAN, "--dry-run"]],
       ["templates", "spec_templates", {}, ["templates"]],
       ["tracks", "spec_tracks", {}, ["tracks"]],

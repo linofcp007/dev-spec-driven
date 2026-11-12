@@ -180,7 +180,7 @@ const TOOLS = [
   },
   {
     name: "steering_scaffold",
-    description: "Create one steering file from its template (constitution, product, tech, structure, testing-standards, scale, observability, cost, ai-strategy, security, privacy, distributed, api, ui, data or glossary .md) or a custom scoped one (another lowercase name.md) with Kiro-compatible front matter (`inclusion: always | fileMatch | manual`, `fileMatchPattern`) — task briefs include the files that apply. glossary.md is the product's ubiquitous language (`- **Term** — definition. _Avoid: synonyms_`): clarify and doctor flag the avoided words. Idempotent — never overwrites.",
+    description: "Create one steering file from its template (constitution, product, tech, structure, testing-standards, scale, observability, cost, ai-strategy, security, privacy, distributed, api, ui, data, glossary or design-system .md) or a custom scoped one (another lowercase name.md) with Kiro-compatible front matter (`inclusion: always | fileMatch | manual`, `fileMatchPattern`) — task briefs include the files that apply. glossary.md is the product's ubiquitous language (`- **Term** — definition. _Avoid: synonyms_`): clarify and doctor flag the avoided words. design-system.md: the registry of components and tokens +ui features build from, seeded from the code. Idempotent — never overwrites.",
     inputSchema: { type: "object", properties: { file: { type: "string", description: "A template name, or a custom name like api-conventions.md." }, lang: { type: "string", enum: LANG_ENUM }, projectDir: PROJECT_DIR }, required: ["file"] },
   },
   {
@@ -211,7 +211,7 @@ const TOOLS = [
   },
   {
     name: "spec_scan",
-    description: "Brownfield, read-only, bounded, no model. Default: inventory an EXISTING codebase — files, modules, stack and frameworks, HTTP routes (method, path, file:line), tests, entrypoints, the env variable NAMES it reads (never values; .env is never read), migrations — to infer the steering and reverse-engineer specs. `coverage: true`: the share of code files any feature's _Implements:_ names, per top-level folder, and the entries naming nothing on disk. `duplicates: true`: repeated code — a feature's (`name`) _Implements:_ code repeating code elsewhere (`existing`: reuse it) or inside it (`within`), else the project's top duplicates; candidates to verify, never verdicts.",
+    description: "Brownfield, read-only, bounded, no model. Default: inventory an EXISTING codebase — files, modules, stack and frameworks, HTTP routes (method, path, file:line), tests, entrypoints, the env variable NAMES it reads (never values; .env is never read), migrations — to infer the steering and reverse-engineer specs. `coverage: true`: the share of code files any feature's _Implements:_ names, per top-level folder, and the entries naming nothing on disk. `duplicates: true`: repeated code — a feature's (`name`) _Implements:_ code repeating code elsewhere (`existing`: reuse it) or inside it (`within`), else the project's top duplicates; candidates to verify, never verdicts. `designSystem: true`: the design-system registry (.specs/steering/design-system.md) against the code — what it lacks, the rows whose path is gone; with `name`, a feature's usage rows against it and the raw colours / sizes in its view files.",
     inputSchema: {
       type: "object",
       properties: {
@@ -219,7 +219,8 @@ const TOOLS = [
         cap: { type: "integer", minimum: 1, description: "The inventory's max code / manifest files (default 5000)." },
         coverage: { type: "boolean", description: "Measure the specs' coverage of the code instead." },
         duplicates: { type: "boolean", description: "Find repeated code instead." },
-        name: { type: "string", description: "duplicates: the feature to check." },
+        designSystem: { type: "boolean", description: "Check the design-system registry instead." },
+        name: { type: "string", description: "duplicates / designSystem: the feature to check." },
         minLines: { type: "integer", minimum: 4, maximum: 100, description: "duplicates: code lines per match (default 6)." },
         tests: { type: "boolean", description: "duplicates: include test files." },
       },
@@ -507,7 +508,7 @@ function translateLegacy(legacy, args) {
 
 // --- Arguments by mode ----------------------------------------------------------------------------------------------
 // A tool that took over others takes some arguments in one of its modes only — `kind` (spec_roadmap_edit), `format` (spec_export),
-// `coverage` and `duplicates` (spec_scan). An argument the call's mode doesn't take is refused before anything runs (code
+// `coverage`, `duplicates` and `designSystem` (spec_scan). An argument the call's mode doesn't take is refused before anything runs (code
 // inapplicable-arguments, `inapplicable` [names] — before 1.26 it was another tool's argument, an unknown one), and a mode's
 // `required` ones are missing arguments. The mode key itself and projectDir go everywhere. fallback: the mode when the key is not
 // given. Derived from the operations table (mcp/lib/operations.js) — a mode's arguments are its operation's — { tool: { key,

@@ -23,7 +23,7 @@ let activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions, briefGloss
   ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
+  briefReuse, briefDesignSystem, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
   decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize;
 let dayOf; // core.js — the local calendar date (today / dayOf)
 function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines, briefDecisions,
@@ -36,7 +36,7 @@ function __link(E) { ({ dayOf, activeTasks, AI_SECTIONS, atxHeading, blockLines,
   REPRO_SYN, ROOT_CAUSE_SYN, SAAS_SECTIONS, secondaryDefinitions, SIZE_POINTS, statePath, storeEvidence, stripEnds,
   stripFencedCode, stripHtmlComments, stripSupersedes, taskSize, taskVerification, tKey, trackAcIds, trackLabel,
   trackMarker, trackTaskHeadings, verifyPipeMasked, verifyPipes, writeFileAtomic, writeIfAbsent,
-  briefReuse, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
+  briefReuse, briefDesignSystem, reuseQuotedSection, trackSectionTable, isChangeDir, CHANGE_FILE, runStartOf, runRootStamp,
   decodeText, existsRaw, changeAlias, taskStamp, unknownExpectValues, isWsUnit, vacuousRun, approvedContentSame, featureSize } = E); }
 
 // The line-only view (public through spec_status). It is a projection of taskBlocks() — the ONE task
@@ -1705,6 +1705,12 @@ function taskBrief(projectDir, name, number, opts = {}) {
   // … and the design section it quotes leaves "Design context" only when the Reuse section quotes ALL of it (R review 2 —
   // reuseQuotedSection): every other section, whatever its heading, keeps the 1.18 selection below.
   const reuseSection = reuseQuotedSection(sections, designText, reuse);
+  // 1.35: a task that builds what the user sees (uiTask — the visual review's rule) reads the design-system registry
+  // (.specs/steering/design-system.md): the entry of each component the design's [UI] Design System Usage names, bounded. null
+  // without a registry.
+  const uiWork = uiTask(tracks, reqText, acIds, block, mk.implements);
+  const ds = uiWork ? briefDesignSystem(root, designText) : null;
+  if (ds) ds.file = rel(ds.file);
   // A task emitting metrics reads the design's observability: a section named like [SaaS] Observability (any track, as in 1.18) and,
   // on an +obs feature, its [OBS] Telemetry section (T review 6 — a task citing a core AC reached no [OBS] section).
   const obsMarker = tracks.includes("obs") ? trackMarker("obs") : null;
@@ -1767,6 +1773,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     metrics: mk["emits metrics"],
     implements: mk.implements,
     reuse: reuseShown ? reuse : null,
+    designSystem: ds,
     unresolved,
     design: { path: rel(path.join(dir, "design.md")), toc: sections.map((s) => s.title), included, omitted },
     steering,
@@ -1824,7 +1831,7 @@ function taskBrief(projectDir, name, number, opts = {}) {
     // 1.32: whether the controller runs the visual review of what this task renders against the design's reference
     // (references/ui-review.md): on a +ui feature, a task that proves a [UI] criterion, sits in the track's task block or
     // names a view file in _Implements:_.
-    uiReview: freshReviews && !expectFail && uiTask(tracks, reqText, acIds, block, mk.implements), // a red task renders nothing yet
+    uiReview: freshReviews && !expectFail && uiWork, // a red task renders nothing yet
   };
   if (bug) res.bug = bug;
   if (gate) Object.assign(res, { gated: gate.gated, gateError: gate.error });
@@ -1837,6 +1844,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
   if (gloss.items.length) res.glossary = gloss.items.map((g) => ({ term: g.term, definition: g.definition, avoid: g.avoid })); // 1.16 Q3
   if (gloss.omitted.length) res.glossaryOmitted = gloss.omitted;
   if (reuseShown) res.reuse = reuse; // {state, total, entries, omitted, files, more}
+  // 1.35: {file, components: [{kind, name, path}], unknown, tokens} — the registry entries the brief quotes (identifiers only)
+  if (ds) res.designSystem = { file: ds.file, components: ds.components.map((c) => ({ kind: c.kind, name: c.name, path: c.path })), unknown: ds.unknown, tokens: ds.tokens };
   if (block.done) res.note = t.alreadyDone(block.number);
   if (includeBrief) res.brief = md;
   else if (write) {
@@ -1849,7 +1858,8 @@ function taskBrief(projectDir, name, number, opts = {}) {
     if (res.glossary) res.refs.glossary = res.glossary.map((g) => g.term); // the terms only (the entries are in the brief)
     // the nearby files (identifiers) and how many design entries the brief quotes — never the entries' text
     if (res.reuse) res.refs.reuse = { entries: res.reuse.entries.length, files: res.reuse.files };
-    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse"]) delete res[k];
+    if (res.designSystem) res.refs.designSystem = res.designSystem.components.map((c) => c.name); // the names only
+    for (const k of ["acceptanceCriteria", "tests", "designSections", "steering", "bug", "decisions", "glossary", "reuse", "designSystem"]) delete res[k];
   }
   return res;
 }

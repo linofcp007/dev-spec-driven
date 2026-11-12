@@ -22,7 +22,8 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf;
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
+  closestName, sectionState, tableCells;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -33,7 +34,8 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf } = E); }
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
+  closestName, sectionState, tableCells } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -1119,6 +1121,241 @@ function briefReuse(projectDir, design, implementsList, acIds) {
 }
 
 // ---------------------------------------------------------------------------
+// The design-system registry (1.35) — .specs/steering/design-system.md
+// ---------------------------------------------------------------------------
+// ONE inventory every +ui feature builds from: the components (name · path · variants · notes) and the tokens (name · value ·
+// use), plus two English-stable markers — `_Token sources: a, b_` (the files that define the tokens) and `_Libraries: a, b_`
+// (the third-party UI libraries the project builds on, whose components are not listed one by one). A steering stub like
+// glossary.md (steering_scaffold — seeded from the code by engine/design-system.js; init never creates it), deliberately NOT a
+// track steering file: it grows with every feature, and a file the approvals fingerprint would flag every approved +ui feature
+// on each new row. Its readers: doctor's `ui-design-system` (a feature's [UI] Design System Usage rows against it — a gate at
+// size m / l), the task brief's Design system part, spec_scan {designSystem: true} and spec_finish (the New components join it).
+const DESIGN_SYSTEM_FILE = "design-system.md";
+const DS_MAX_COMPONENTS = 500; // registry rows read (`truncated` past them — doctor says so)
+const DS_MAX_TOKENS = 1000;
+const DS_MAX_USAGE_ROWS = 100; // a feature's usage rows read
+const DS_CELL_MAX = 200; // a cell's characters kept
+const DS_SINCE = "1.35"; // the release the check came with: a design approved before (no `designSystem` stamp) is never flagged
+const DS_BRIEF_MAX = 12; // components the brief quotes…
+const DS_BRIEF_CHARS = 1500; // …and their size
+// A table's first header cell names what its rows are (EN / PT / ES); the other columns are found by their header, else by place.
+const RE_DS_COMPONENT_HEAD = /^component(?:e|es|s)?$/i;
+const RE_DS_TOKEN_HEAD = /^tokens?$/i;
+const RE_DS_COL = {
+  path: /^(?:path|where|file|location|caminho|onde|ficheiro|arquivo|localiza|ruta|d[oó]nde|archivo|ubicaci)/i,
+  variants: /^varia/i,
+  value: /^val/i,
+  use: /^(?:use|usage|uso|utiliza|para)/i,
+};
+// `_Token sources: a, b_` / `_Libraries: a, b_` — a line of its own, English-stable like the glossary's _Avoid:_; the value runs
+// to the line's end (a path may hold an underscore), its closing "_" dropped.
+const RE_DS_MARKER = /^[ \t]*_(Token sources|Libraries):[ \t]*(.*)$/gim;
+// A cell's own text: its code span, emphasis and JSX brackets dropped (`<Button />`, **Button**), trimmed, bounded.
+const dsCell = (c) => String(c == null ? "" : c).trim().replace(/^[`*<\s]+/, "").replace(/[`*>\s/]+$/, "").replace(/^_+(?=[\p{L}\p{N}])|(?<=[\p{L}\p{N}])_+$/gu, "").slice(0, DS_CELL_MAX);
+// A name as it is compared: letters and digits only, lower-cased, accents folded — DatePicker = date-picker = `Date Picker`,
+// Botão = botao.
+const dsKey = (s) => String(s).normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+// A cell that still holds a scaffold slot or says nothing: "[component]", "TBD", "—".
+const dsSlot = (c) => !/[\p{L}\p{N}]/u.test(c) || /^\[[^\]]*\]$/.test(c.trim()) || genericUnit(c);
+// The tables of a markdown text (comments and fenced code aside) → [{ header: [cells], rows: [[cells]] }]. A table is a line
+// starting with "|" followed by a separator row; its rows run to the first line that doesn't start with "|". Linear.
+function mdTables(text) {
+  const tables = [];
+  let cur = null, prev = null;
+  for (const l of stripFencedCode(stripHtmlComments(text || "")).split(/\r?\n/)) {
+    if (!/^\s*\|/.test(l)) { cur = null; prev = null; continue; }
+    const sep = /^[\s|:-]+$/.test(l) && l.includes("-");
+    if (cur) { if (!sep) cur.rows.push(tableCells(l)); continue; }
+    if (sep && prev != null) { cur = { header: tableCells(prev), rows: [] }; tables.push(cur); prev = null; } else prev = sep ? null : l;
+  }
+  return tables;
+}
+// → null (no registry file) | { file, components: [{ name, key, path, variants, notes }], tokens: [{ name, value, use }], sources,
+// libraries, total: { components, tokens } (the rows the file holds), truncated }. A row whose name is a slot ("[Button]"), blank
+// or generic is none; a name listed twice counts once (the first row). Every component / token table of the file is read (finish
+// appends a table when the file doesn't end in one).
+function designSystemRegistry(root) {
+  const file = path.join(root, "steering", DESIGN_SYSTEM_FILE);
+  const raw = readIfExists(file);
+  if (raw == null) return null;
+  const body = steeringFrontMatter(raw).body;
+  const components = [], tokens = [], seenC = new Set(), seenT = new Set();
+  const total = { components: 0, tokens: 0 };
+  for (const t of mdTables(body)) {
+    const head = dsCell(t.header[0] || "");
+    const isC = RE_DS_COMPONENT_HEAD.test(head), isT = !isC && RE_DS_TOKEN_HEAD.test(head);
+    if (!isC && !isT) continue;
+    const col = (re, fallback) => { const i = t.header.findIndex((h, k) => k > 0 && re.test(dsCell(h))); return i > 0 ? i : fallback; };
+    const cols = isC ? { a: col(RE_DS_COL.path, 1), b: col(RE_DS_COL.variants, 2) } : { a: col(RE_DS_COL.value, 1), b: col(RE_DS_COL.use, 2) };
+    for (const r of t.rows) {
+      const name = dsCell(r[0] || "");
+      if (!name || dsSlot(r[0] || "")) continue;
+      const cell = (i) => (r[i] != null && !dsSlot(r[i]) ? dsCell(r[i]) : "");
+      if (isC) {
+        const key = dsKey(name);
+        if (!key || seenC.has(key)) continue;
+        seenC.add(key);
+        total.components++;
+        if (components.length < DS_MAX_COMPONENTS) {
+          const rest = r.filter((x, i) => i > 0 && i !== cols.a && i !== cols.b && x != null && !dsSlot(x)).map(dsCell);
+          components.push({ name, key, path: cell(cols.a), variants: cell(cols.b), notes: rest.join(" · ").slice(0, DS_CELL_MAX) });
+        }
+      } else {
+        const key = name.toLowerCase();
+        if (seenT.has(key)) continue;
+        seenT.add(key);
+        total.tokens++;
+        if (tokens.length < DS_MAX_TOKENS) tokens.push({ name, value: cell(cols.a), use: cell(cols.b) });
+      }
+    }
+  }
+  const lists = { "token sources": [], libraries: [] };
+  for (const m of stripFencedCode(stripHtmlComments(body)).matchAll(RE_DS_MARKER)) {
+    const into = lists[m[1].toLowerCase()];
+    const value = m[2].trim().replace(/_$/, "").trim();
+    if (/^\[.*\]$/.test(value)) continue; // the stub's slot, never filled in
+    for (const w0 of value.split(/[,;]/)) {
+      const w = w0.trim().replace(/^[`'"]+|[`'".]+$/g, "").trim();
+      if (!w || /^(?:none|n\/a|-|—)$/i.test(w) || w.length > DS_CELL_MAX || /\s/.test(w) || into.includes(w) || into.length >= 50) continue;
+      into.push(w);
+    }
+  }
+  return { file, components, tokens, sources: lists["token sources"], libraries: lists.libraries, total,
+    truncated: total.components > components.length || total.tokens > tokens.length };
+}
+// A usage row's kind — the first cell's first word, EN / PT / ES: Reuse (used as is) · Extend (a new variant of a listed
+// component) · New (nothing listed fits).
+const RE_DS_KINDS = [
+  ["reuse", /^(?:re-?use[ds]?|reusing|reutiliz\p{L}*|reaproveit\p{L}*|reus[oa]r?|existing|existentes?)(?![\p{L}\p{N}])/iu],
+  ["extend", /^(?:extend(?:s|ed|ing)?|extension|estend\p{L}*|extens\p{L}*|extend\p{L}*|extiend\p{L}*|ampli\p{L}*|variant[es]?|variantes?)(?![\p{L}\p{N}])/iu],
+  ["new", /^(?:new|nov[oa]s?|nuev[oa]s?|creat(?:e|ed|es)|cria(?:r|do|da)?|crea(?:r|do|da)?)(?![\p{L}\p{N}])/iu],
+];
+const dsKind = (cell) => { const c = dsCell(cell); const k = RE_DS_KINDS.find(([, re]) => re.test(c)); return k ? k[0] : null; };
+// The [UI] Design System Usage section of a design → null (none) | { body, rows: [{ kind, name, key, cell, why }] }: every table
+// row whose first cell is a kind word and whose second names a component (several in one cell — "Button, Dialog" — are one row
+// each); a row still holding its slot ("[component in the registry]") is none. `cell` is the component cell as written (a
+// library is named there: "Button (@mui/material)"), `why` the cells after it.
+function designSystemUsage(design) {
+  const sec = (trackSectionTable("ui") || []).find((s) => s.name === "Design System Usage");
+  const body = sec && design != null ? extractSection(design, sec.syn, trackMarker("ui"), sec.loose) : null;
+  if (body == null) return null;
+  const rows = [];
+  for (const t of mdTables(body)) {
+    for (const r of t.rows) {
+      const kind = dsKind(r[0] || "");
+      if (!kind || r.length < 2 || dsSlot(r[1])) continue;
+      const why = r.slice(2).filter((c) => c != null && !dsSlot(c)).map(dsCell).join(" · ").slice(0, DS_CELL_MAX * 2);
+      for (const part of String(r[1]).split(/[,;·]/)) {
+        const name = dsCell(part.replace(/\([^)]*\)/g, " ")); // "Button (@mui/material)" is Button
+        const key = dsKey(name);
+        if (key && rows.length < DS_MAX_USAGE_ROWS) rows.push({ kind, name, key, cell: dsCell(part), why });
+      }
+    }
+  }
+  return { body, rows };
+}
+// A New component whose name is a listed one's with a fork's affix — ButtonV2, Button2, NewButton, CustomButton, MyButton,
+// ButtonCopy — or within an edit or two of it (Buton, DataTables): the listed component it is close to, else null.
+const RE_DS_FORK_PRE = /^(?:new|custom|my|app|alt|base|the)(?=.{3})/;
+const RE_DS_FORK_POST = /(?<=.{3})(?:v?\d+|new|custom|alt|copy|alternative)$/;
+const dsNearLimit = (c) => (c.length >= 9 ? 2 : c.length >= 5 ? 1 : 0);
+const dsHintLimit = (c) => Math.max(1, Math.floor(c.length / 3)); // closestName's own default
+// closestName over the listed keys an edit distance within `limit` could reach at all: two names differ by at least their
+// lengths' difference, so a 500-row registry costs a comparison only for the few names of about that length (and a name past
+// 60 characters is compared with none — no component is called that).
+const dsClosest = (key, keys, limit) => (key.length > 60 ? null : closestName(key, keys.filter((k) => Math.abs(k.length - key.length) <= limit(k)), limit));
+function dsNearComponent(key, registry) {
+  const stripped = [key.replace(RE_DS_FORK_PRE, ""), key.replace(RE_DS_FORK_POST, ""), key.replace(RE_DS_FORK_PRE, "").replace(RE_DS_FORK_POST, "")];
+  const fork = registry.components.find((c) => c.key !== key && stripped.includes(c.key));
+  if (fork) return fork;
+  const near = dsClosest(key, registry.components.map((c) => c.key), dsNearLimit);
+  return near ? registry.components.find((c) => c.key === near) : null;
+}
+// Is the design-system check an approval check for this feature? The Reuse & Integration rule: a plain feature of size m / l.
+const designSystemGated = (kind, size) => designReuseGated(kind, size);
+// What a feature's usage rows say against the registry → { reuse, extend, news (the rows by kind), problems: [{ code, name,
+// near? }] } — codes: unknown (a Reuse / Extend names a component the registry doesn't list, nor one of a declared library),
+// listed (a New is already in the registry), near (a New close to a listed one whose notes never mention it), no-why (a New
+// without a reason).
+function designSystemFindings(usage, registry) {
+  const keys = new Map(registry.components.map((c) => [c.key, c]));
+  const libs = registry.libraries.map((l) => l.toLowerCase());
+  const fromLibrary = (r) => { const c = r.cell.toLowerCase(); return libs.some((l) => c.includes(l)); };
+  const by = { reuse: [], extend: [], new: [] };
+  const problems = [];
+  for (const r of usage.rows) {
+    by[r.kind].push(r);
+    if (r.kind !== "new") {
+      if (keys.has(r.key) || fromLibrary(r)) continue;
+      const hint = dsClosest(r.key, [...keys.keys()], dsHintLimit);
+      problems.push(Object.assign({ code: "unknown", name: r.name }, hint ? { near: keys.get(hint).name } : {}));
+      continue;
+    }
+    if (keys.has(r.key)) { problems.push({ code: "listed", name: r.name, near: keys.get(r.key).name }); continue; }
+    const near = dsNearComponent(r.key, registry);
+    const mentions = (c) => new RegExp(RE_WORD_BEFORE + escRe(c.name) + RE_WORD_AFTER, "iu").test(r.why);
+    if (near && !mentions(near)) problems.push({ code: "near", name: r.name, near: near.name });
+    else if (!r.why) problems.push({ code: "no-why", name: r.name });
+  }
+  return { reuse: by.reuse, extend: by.extend, news: by.new, problems };
+}
+// doctor's `ui-design-system` over an (active) design of a +ui feature → { id, status, detail, state }. States: no-section (the
+// design has no Design System Usage section — an optional one at size s; `ui-sections` owns a missing one) · unfilled (still the
+// scaffold: `ui-sections` and the placeholder gate own it) · no-registry · empty-registry (the file lists no component) · na (the
+// section's ONE line "n/a — <reason>") · no-rows (written, but no `Kind | Component | Why` row to check) · mismatch · ok.
+// opts: { registry (designSystemRegistry's), approval (approvals.design — its `designSystem` stamp), gate (the feature's size
+// when the check is an approval check — designSystemGated: no-rows and mismatch FAIL there), lang }. A design approved before
+// the check existed passes with a note (the weigh rule); a missing registry only ever warns — there is nothing to agree with.
+function designSystemCheck(design, lang, opts = {}) {
+  const Q = i18n.msg(lang).quality, id = "ui-design-system";
+  const legacy = isRecord(opts.approval) && opts.approval.designSystem !== true;
+  const out = (status, detail, state) => (status !== "pass" && legacy ? { id, status: "pass", detail: Q.dsLegacy(detail, DS_SINCE), state, legacy: true } : { id, status, detail, state });
+  const sec = (trackSectionTable("ui") || []).find((s) => s.name === "Design System Usage");
+  const st = sec ? sectionState(design || "", [sec], trackMarker("ui"), { size: "m", lang })[0].status : "missing";
+  if (st === "missing") return out("pass", Q.dsNoSection, "no-section");
+  if (st === "unfilled" || st === "template") return out("pass", Q.dsUnfilled, "unfilled");
+  const reg = opts.registry;
+  if (!reg) return out("warn", Q.dsNoRegistry, "no-registry");
+  if (!reg.components.length && !reg.libraries.length) return out("warn", Q.dsEmptyRegistry, "empty-registry");
+  if (st === "na") return out("pass", Q.dsNa, "na");
+  const usage = designSystemUsage(design);
+  const bad = opts.gate ? "fail" : "warn";
+  const gated = (d) => (opts.gate ? Q.dsGate(d, opts.gate) : d);
+  if (!usage || !usage.rows.length) return out(bad, gated(Q.dsNoRows), "no-rows");
+  const f = designSystemFindings(usage, reg);
+  if (f.problems.length) {
+    const items = f.problems.slice(0, 6).map((p) => Q.dsProblem[p.code](p.name, p.near));
+    if (f.problems.length > 6) items.push(Q.xacMore(f.problems.length - 6));
+    return out(bad, gated(Q.dsMismatch(f.problems.length, items.join("; "))), "mismatch");
+  }
+  return out("pass", Q.dsOk(f.reuse.length, f.extend.length, f.news.length) + (reg.truncated ? "; " + Q.dsTruncated(reg.components.length, reg.total.components) : ""), "ok");
+}
+// The task brief's "Design system" part, for a task that builds what the user sees (tasks.js uiTask) → null (no registry, or it
+// lists nothing) | { file (the registry, as given), components: [{ kind, name, path, variants, notes, why }] (the design's rows
+// with their registry entry, bounded), omitted, unknown (names the registry doesn't list), sources, libraries, tokens (how
+// many the registry holds), rows (the design's usage rows — 0: the brief says to read the registry itself) }.
+function briefDesignSystem(root, design) {
+  const reg = designSystemRegistry(root);
+  if (!reg || (!reg.components.length && !reg.tokens.length && !reg.libraries.length)) return null;
+  const usage = design == null ? null : designSystemUsage(design);
+  const rows = usage ? usage.rows : [];
+  const keys = new Map(reg.components.map((c) => [c.key, c]));
+  const components = [], unknown = [], seen = new Set();
+  let omitted = 0, budget = DS_BRIEF_CHARS;
+  for (const r of rows) {
+    if (seen.has(r.kind + ":" + r.key)) continue;
+    seen.add(r.kind + ":" + r.key);
+    const c = keys.get(r.key);
+    if (!c && r.kind !== "new" && !reg.libraries.some((l) => r.cell.toLowerCase().includes(l.toLowerCase()))) unknown.push(r.name);
+    // (a library's component keeps its cell — "TextField (@mui/material)": where it comes from)
+    const e = { kind: r.kind, name: c ? c.name : r.kind === "new" ? r.name : r.cell || r.name, path: c ? c.path : "", variants: c ? c.variants : "", notes: c ? c.notes : "", why: r.why };
+    const size = e.name.length + e.path.length + e.variants.length + e.notes.length + e.why.length + 20;
+    if (components.length < DS_BRIEF_MAX && size <= budget) { components.push(e); budget -= size; } else omitted++;
+  }
+  return { file: reg.file, components, omitted, unknown, sources: reg.sources, libraries: reg.libraries, tokens: reg.total.tokens, rows: rows.length };
+}
+
+// ---------------------------------------------------------------------------
 // Clarify — surface ambiguities/gaps in requirements before designing
 // ---------------------------------------------------------------------------
 
@@ -1980,4 +2217,6 @@ function clarifyChange(projectDir, f, c) {
 
 module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
-  clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS, __link };
+  clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
+  DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
+  dsKey, RE_DS_COMPONENT_HEAD, RE_DS_COL, __link };

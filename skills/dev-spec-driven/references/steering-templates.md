@@ -29,6 +29,7 @@ steering files.
 | `ui.md` | `+ui` | when the UI track is used |
 | `data.md` | `+data` | when the data pipeline track is used |
 | `glossary.md` | any (optional) | when the product has domain terms people use loosely — `steering_scaffold` only, `spec_init` never creates it |
+| `design-system.md` | +ui (optional) | as soon as a second feature builds a screen — the registry of components and tokens; `steering_scaffold` only, which fills it from the code |
 
 At project start, create at least the four `core` files. Add the others the first time a
 feature pulls in that track. Fill them in once, revisit once a quarter. `spec_doctor`'s `steering` check warns,
@@ -603,6 +604,43 @@ problem details, cursor pagination, Idempotency-Key, ETag / If-Match): `referenc
 Per-feature decisions (the state matrix of one view, a new component, a view's own budget) belong in the feature's `[UI]`
 design sections. The reasoning behind each rule (the design system first, the states, WCAG 2.2 AA and how to test it,
 i18n, performance budgets, visual regression): `references/ui-design-patterns.md`.
+
+---
+
+## `design-system.md` (+ui, optional — the registry)
+
+`ui.md` holds the rules; this file holds the **inventory** those rules point at — the one list of components and tokens
+every +ui feature builds from. Scaffold it with `steering_scaffold {file: "design-system.md"}` (CLI
+`dev-spec steering design-system.md`): it is written **from the code** — the components and tokens the project already
+has in place of the slot rows below — and `spec_init` never creates it.
+
+```markdown
+# Design System
+
+## Tokens
+_Token sources: tokens.json, src/styles/tokens.css_
+
+| Token | Value | Use |
+|---|---|---|
+| --color-action-primary | #1d4ed8 | primary buttons, links |
+| --space-4 | 16px | the default gap |
+
+## Components
+_Libraries: @mui/material_
+
+| Component | Path | Variants | Notes |
+|---|---|---|---|
+| Button | `src/ui/Button.tsx` | primary, secondary, ghost | every action; never a styled link |
+| Dialog | `src/ui/Dialog.tsx` | modal, sheet | focus is trapped and returned |
+```
+
+- Keep the first header cell of each table (`Token`, `Component` — or their PT / ES forms) and the two markers in
+  English (`_Token sources:_`, `_Libraries:_`): they are what the engine reads. Everything else is yours.
+- A feature's design lists what it uses in `[UI] Design System Usage` (`Kind | Component | Why / notes`);
+  `spec_doctor`'s `ui-design-system` checks those rows against this file, the task brief quotes the entries a UI task
+  needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds
+  and the file doesn't. The whole loop: `references/ui-design-patterns.md` → The registry.
+- A component of a declared library is not listed here: a design writes `TextField (@mui/material)`.
 
 ---
 

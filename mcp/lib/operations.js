@@ -8,8 +8,8 @@
  *   id          its name — what a CLI handler runs (c.call("create", …))
  *   tool        the MCP tool that runs it; for a tool that runs several, which one:
  *     mode      { key, values, fallback } — a folded tool's mode (spec_roadmap_edit {kind}, spec_export {format}, spec_scan
- *               {coverage}): the call's args[key] (or the fallback when it leaves the key out) picks the entry. A tool may have a
- *               second key (spec_scan {duplicates: true}, 1.28): an entry of a key other than the PRIMARY one (the fallback
+ *               {coverage}): the call's args[key] (or the fallback when it leaves the key out) picks the entry. A tool may have
+ *               other keys (spec_scan {duplicates: true}, 1.28; {designSystem: true}, 1.35): an entry of a key other than the PRIMARY one (the fallback
  *               entry's, else the first entry's) runs when the call gives that key one of its values; the primary picks
  *               otherwise. The server's ARG_MODES — the arguments each mode takes — is DERIVED from these entries (argModes())
  *     when(a)   …or a test of the call's arguments (spec_status: a name or none; ears_validate: a feature or a text; spec_tracks:
@@ -216,6 +216,13 @@ const OPERATIONS = [
     id: "dupes", tool: "spec_scan", mode: { key: "duplicates", values: [true] }, cli: ["dupes"], engine: "duplicationReport",
     args: { name: NAME, minLines: { mcp: "minLines", cli: "--min-lines", type: "int" }, tests: SWITCH("tests", "--tests") },
     call: (S, dir, o) => S.duplicationReport(dir, { name: o.name, minLines: o.minLines, tests: o.tests }),
+  },
+  {
+    // 1.35: the design-system registry (.specs/steering/design-system.md) against the code — or a feature (name) against the
+    // registry, with the raw values in its view files; a mode of its own key (spec_scan {designSystem: true})
+    id: "design-system", tool: "spec_scan", mode: { key: "designSystem", values: [true] }, cli: ["design-system"], engine: "designSystemReport",
+    args: { name: NAME },
+    call: (S, dir, o) => S.designSystemReport(dir, { name: o.name }),
   },
   {
     id: "clarify", tool: "spec_clarify", cli: ["clarify"], engine: "clarify",

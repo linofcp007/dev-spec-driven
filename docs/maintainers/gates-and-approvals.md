@@ -32,7 +32,7 @@ review findings — is in History at the end.
   |---|---|
   | classification | placeholders |
   | requirements | ears, placeholders, clarifications, success-criteria, priorities, ac-uniqueness (+ reproduction: a bugfix) |
-  | design | placeholders, constitution-check, `design-weigh:reuse` (design-reuse — a size m / l plain feature's Reuse & Integration, 1.28; a bugfix signs off bug.md: root-cause, reproduction, placeholders), then `<track>-sections`, clarifications |
+  | design | placeholders, constitution-check, `design-weigh:reuse` (design-reuse — a size m / l plain feature's Reuse & Integration, 1.28; a bugfix signs off bug.md: root-cause, reproduction, placeholders), then `<track>-sections`, `ui-design-system` (1.35 — a size m / l +ui feature's Design System Usage rows against the registry), clarifications |
   | test-plan · eval-plan | placeholders, traceability · placeholders |
   | tests | `tests-in-code` (+tdd with test-plan.md: every planned T-ID named by a test file), `eval-sets` (+ai with eval-plan.md: evals/golden.json the feature's own, neither empty nor the sample) |
   | tasks | placeholders, `placeholders:realTasks` (a real task beyond the scaffold's), traceability, task-deps; a change's plan (change.md): ears, placeholders, clarifications, ac-uniqueness, realTasks, change-scope, traceability, task-deps |
@@ -45,10 +45,11 @@ review findings — is in History at the end.
   replaces it). Before the gate: an invalid `.state.json` or unreadable `roadmap.json` refuses; a spike approves only
   `execution`, a change only `tasks` / `execution` (`sizes.noGate`).
 - **Approval stamps — which later rules an approval is held to.** `approvePhase()` stamps every design approval `weigh`,
-  `reuse` and `reuseGate`, and every design AND test-plan approval `critical` (1.33), on `approvals[phase]` and its history
-  record. A warn whose stamp an approval lacks passes with an "approved before X" note — design-tradeoffs / design-risks
-  (`weigh`, 1.17), design-reuse (`reuse`, 1.19; `reuseGate`, 1.28: its m / l fail), `critical-flows` /
-  `critical-flow-tests` (`critical`, 1.33): a finished feature is never asked to reopen what it signed off (quality.md →
+  `reuse`, `reuseGate` and `designSystem` (1.35), and every design AND test-plan approval `critical` (1.33), on
+  `approvals[phase]` and its history record. A warn whose stamp an approval lacks passes with an "approved before X" note —
+  design-tradeoffs / design-risks (`weigh`, 1.17), design-reuse (`reuse`, 1.19; `reuseGate`, 1.28: its m / l fail),
+  `critical-flows` / `critical-flow-tests` (`critical`, 1.33), `ui-design-system` (`designSystem`, 1.35 — quality.md →
+  Design-system registry): a finished feature is never asked to reopen what it signed off (quality.md →
   The stamp scheme, Critical flows). A new warn on an approved artifact → a new stamp key here.
 - **Phase order.** An EARLIER phase in `pendingGateList()` (phases with an artifact — a missing file never blocks forever),
   or an earlier approved phase whose content changed (`changedApprovedPhases()`: by content — never `byDate` or whitespace;
