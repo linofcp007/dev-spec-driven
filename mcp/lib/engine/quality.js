@@ -1179,7 +1179,8 @@ function mdTables(text) {
   return tables;
 }
 // → null (no registry file) | { file, components: [{ name, key, path, variants, notes, from? }], keys (a Set: EVERY component
-// name the file lists, past the cap too — what "is it listed?" asks), tokens: [{ name, value, use }], sources, libraries, total:
+// name the file lists, past the cap too — what "is it listed?" asks), origins (a Map: name → the feature of its `_From:_`, past
+// the cap too), tokenNames (a Set: every token name, lower-cased, past the cap too), tokens: [{ name, value, use }], sources, libraries, total:
 // { components, tokens } (the rows the file holds), truncated }. A row whose name is a slot ("[Button]"), blank or generic is
 // none; a name listed twice counts once (the first row). Every component / token table of the file is read (finish appends a
 // table when the file doesn't end in one that can take its rows). `from`: the row's `_From: <feature>_` (left out of `notes`).
@@ -1188,7 +1189,7 @@ function designSystemRegistry(root) {
   const raw = readIfExists(file);
   if (raw == null) return null;
   const body = steeringFrontMatter(raw).body;
-  const components = [], tokens = [], keys = new Set(), seenT = new Set();
+  const components = [], tokens = [], keys = new Set(), origins = new Map(), seenT = new Set();
   const total = { components: 0, tokens: 0 };
   for (const t of mdTables(body)) {
     const head = dsCell(t.header[0] || "");
@@ -1205,9 +1206,10 @@ function designSystemRegistry(root) {
         if (!key || keys.has(key)) continue;
         keys.add(key);
         total.components++;
-        if (components.length >= DS_MAX_COMPONENTS) continue;
         const own = r.slice(1).map((x) => String(x == null ? "" : x).slice(0, DS_CELL_MAX * 2));
         const from = RE_DS_FROM.exec(own.join(" | "));
+        if (from) origins.set(key, from[1].toLowerCase()); // past the cap too: finish appends at the END of a long registry
+        if (components.length >= DS_MAX_COMPONENTS) continue;
         const rest = own.filter((x, i) => i + 1 !== cols.a && i + 1 !== cols.b).map((x) => x.replace(RE_DS_FROM, " ")).filter((x) => !dsSlot(x)).map(dsCell);
         components.push(Object.assign({ name, key, path: cell(cols.a), variants: cell(cols.b), notes: rest.join(" · ").slice(0, DS_CELL_MAX) }, from ? { from: from[1].toLowerCase() } : {}));
       } else {
@@ -1227,10 +1229,12 @@ function designSystemRegistry(root) {
     for (const w0 of value.split(/[,;]/)) {
       const w = w0.trim().replace(/^[`'"]+|[`'".]+$/g, "").trim();
       if (!w || /^(?:none|n\/a|-|—)$/i.test(w) || w.length > DS_CELL_MAX || into.includes(w) || into.length >= 50) continue;
+      // a library is one word (a package name): "none yet" / "none (custom components only)" names none — a path may hold a blank
+      if (into === lists.libraries && /\s/.test(w)) continue;
       into.push(w);
     }
   }
-  return { file, components, keys, tokens, sources: lists["token sources"], libraries: lists.libraries, total,
+  return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, total,
     truncated: total.components > components.length || total.tokens > tokens.length };
 }
 // A usage row's kind — the first cell's first word, EN / PT / ES: Reuse (used as is) · Extend (a new variant of a listed
@@ -1307,7 +1311,7 @@ function designSystemFindings(usage, registry, slug) {
       continue;
     }
     if (registry.keys.has(r.key)) {
-      const own = !!entry && !!slug && entry.from === slug;
+      const own = !!slug && registry.origins.get(r.key) === slug;
       if (!own) problems.push({ code: "listed", name: r.name, near: entry ? entry.name : r.name });
       else if (!r.why) problems.push({ code: "no-why", name: r.name });
       continue;

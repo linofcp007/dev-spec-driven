@@ -3279,10 +3279,11 @@ const quality = {
     dsNoRegistry: `ainda não há registo do design system (.specs/steering/design-system.md) — o inventário único de componentes e tokens a partir do qual todas as features +ui constroem. Cria-o a partir do código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `o registo do design system (.specs/steering/design-system.md) ainda não lista nenhum componente — falta acrescentar os que já existem (spec_scan {designSystem: true} · ${DEV_SPEC} design-system mostra o que o código tem)`,
     dsNa: "a secção Uso do Design System diz n/a — esta feature não usa nenhum componente",
+    // (the table header without a code span, on purpose: pt-BR derives "Por quê / notas" — its own scaffold's header — only outside one)
     dsNoRows: "a secção Uso do Design System não tem nenhuma linha de componente — cada um numa linha | Tipo | Componente | Porquê / notas | (Tipo: Reutilizar · Estender · Novo), para poder ser verificado contra o registo; ou uma só linha: n/a — a razão de esta feature não usar nenhum componente",
     dsMismatch: (n, list) => `a secção Uso do Design System e o registo (.specs/steering/design-system.md) não coincidem em ${n} ${n === 1 ? "linha" : "linhas"} — ${list}`,
     dsProblem: {
-      unknown: (name, near) => `'${name}' não está no registo${near ? ` (será ${near}?)` : ""}: reutilizar um componente listado, indicar a biblioteca (${name} (@biblioteca)), ou usar uma linha Novo`,
+      unknown: (name, near) => `'${name}' não está no registo${near ? ` (será ${near}?)` : ""}: reutilizar um componente listado, indicar uma biblioteca que o registo declara em _Libraries:_ (Componente (@biblioteca)), ou usar uma linha Novo`,
       listed: (name, near) => `'${name}' está marcado como Novo, mas o registo já lista ${near}: passa a ser uma linha Reutilizar ou Estender — ou, se foi esta feature que o construiu, a linha do registo leva _From: <o slug dela>_`,
       near: (name, near) => `o Novo '${name}' é próximo de ${near}, que o registo lista: reutilizar ou estender ${near}, ou dizer nas notas da linha a razão de ${near} não servir`,
       "no-why": (name) => `o Novo '${name}' não diz a razão de nenhum componente listado servir`,
@@ -3378,7 +3379,7 @@ const brief = {
         : "…e possivelmente mais na(s) mesma(s) pasta(s) — uma pasta grande: só as primeiras entradas foram lidas."),
     // 1.35: as entradas do registo do design system para os componentes que o design desta feature indica (uma tarefa que constrói uma vista)
     designSystem: "## Design system — construir a partir disto",
-    designSystemRule: (file) => `Todas as vistas são construídas com os componentes e os tokens do design system (\`${file}\`). O componente listado vem antes de qualquer markup próprio; uma variante nova entra NO componente (uma prop documentada), nunca numa cópia ao lado; nunca uma cor, um espaçamento, um raio ou um tamanho de letra fixos — o token. O bloco **Reuse** do teu relatório indica cada componente usado.`,
+    designSystemRule: (file) => `Todas as vistas são construídas com os componentes e os tokens do design system (\`${file}\`). O componente listado vem antes de qualquer markup próprio; uma variante nova entra NO componente (uma prop documentada), nunca numa cópia ao lado; onde existe um token, nunca uma cor, um espaçamento, um raio ou um tamanho de letra fixos — o token. O bloco **Reuse** do teu relatório indica cada componente usado.`,
     designSystemKinds: { reuse: "reutilizar", extend: "estender — uma variante nova", new: "NOVO — construído através do sistema: só tokens, todos os estados, suporte de teclado e de leitor de ecrã" },
     designSystemVariants: (v) => `variantes: ${v}`,
     designSystemOmitted: (n) => `Mais ${n} componente(s) — lê-os no design.md ([UI] Uso do Design System).`,

@@ -456,8 +456,9 @@ finished feature's files changed — the baseline only says THAT they changed; c
 (pass the drifted files: the reviewer starts from the ACs they implement). It works on any feature, inline-executed or not.
 
 1. **Gather.** `spec_status`, `trace_check {name, code: true}` (T-IDs and AC IDs named in the test files,
-   planned tests missing from the code) and `spec_scan {duplicates: true, name}` (its `existing` runs go to the
-   reviewer as candidate findings, verified before they cost a task).
+   planned tests missing from the code), `spec_scan {duplicates: true, name}` (its `existing` runs go to the
+   reviewer as candidate findings, verified before they cost a task) and, on a +ui feature of a project with a
+   design-system registry, `spec_scan {designSystem: true, name}` (its `problems` and `raw` values: candidates too).
 2. **Dispatch `dev-spec-driven:spec-reviewer` in converge mode** (standard tier; most capable for a large or
    security-sensitive feature) with: the feature folder `.specs/<feature>/`, the active tracks, the `trace_check` result
    (its gaps and `code` block, pasted), the source roots to inspect and, after a drift, the drifted files. The reviewer

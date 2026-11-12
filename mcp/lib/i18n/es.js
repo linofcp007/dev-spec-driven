@@ -3282,7 +3282,7 @@ const quality = {
     dsNoRows: "la sección Uso del Design System no tiene ninguna fila de componente — cada uno en una fila `| Tipo | Componente | Por qué / notas |` (Tipo: Reutilizar · Extender · Nuevo), para poder comprobarlo contra el registro; o una sola línea: n/a — por qué esta funcionalidad no usa ningún componente",
     dsMismatch: (n, list) => `la sección Uso del Design System y el registro (.specs/steering/design-system.md) no coinciden en ${n} ${n === 1 ? "fila" : "filas"} — ${list}`,
     dsProblem: {
-      unknown: (name, near) => `'${name}' no está en el registro${near ? ` (¿será ${near}?)` : ""}: reutilizar un componente enumerado, indicar su biblioteca (${name} (@biblioteca)), o usar una fila Nuevo`,
+      unknown: (name, near) => `'${name}' no está en el registro${near ? ` (¿será ${near}?)` : ""}: reutilizar un componente enumerado, indicar una biblioteca que el registro declara en _Libraries:_ (Componente (@biblioteca)), o usar una fila Nuevo`,
       listed: (name, near) => `'${name}' está marcado como Nuevo, pero el registro ya enumera ${near}: pasa a ser una fila Reutilizar o Extender — o, si lo construyó esta funcionalidad, la fila del registro lleva _From: <su slug>_`,
       near: (name, near) => `el Nuevo '${name}' se parece a ${near}, que el registro enumera: reutilizar o extender ${near}, o decir en las notas de la fila por qué ${near} no sirve`,
       "no-why": (name) => `el Nuevo '${name}' no dice por qué no sirve ningún componente enumerado`,
@@ -3378,7 +3378,7 @@ const brief = {
         : "…y posiblemente más en la(s) misma(s) carpeta(s) — una carpeta grande: solo se leyeron sus primeras entradas."),
     // 1.35: las entradas del registro del design system para los componentes que nombra el diseño de esta funcionalidad (una tarea que construye una vista)
     designSystem: "## Design system — construir a partir de esto",
-    designSystemRule: (file) => `Cada vista se construye con los componentes y los tokens del design system (\`${file}\`). Usa el componente enumerado antes que cualquier marcado propio; una variante nueva entra EN el componente (una prop documentada), nunca como una copia al lado; nunca un color, un espaciado, un radio ni un tamaño de letra fijos — el token. El bloque **Reuse** de tu informe nombra cada componente que usaste.`,
+    designSystemRule: (file) => `Cada vista se construye con los componentes y los tokens del design system (\`${file}\`). Usa el componente enumerado antes que cualquier marcado propio; una variante nueva entra EN el componente (una prop documentada), nunca como una copia al lado; donde existe un token, nunca un color, un espaciado, un radio ni un tamaño de letra fijos — el token. El bloque **Reuse** de tu informe nombra cada componente que usaste.`,
     designSystemKinds: { reuse: "reutilizar", extend: "extender — una variante nueva", new: "NUEVO — constrúyelo a través del sistema: solo tokens, todos los estados, soporte de teclado y de lector de pantalla" },
     designSystemVariants: (v) => `variantes: ${v}`,
     designSystemOmitted: (n) => `${n} componente(s) más — léelos en design.md ([UI] Uso del Design System).`,

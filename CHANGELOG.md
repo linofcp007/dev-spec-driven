@@ -11,14 +11,18 @@ components and tokens, and every +ui feature is checked against it.
 
 ### Added
 - **The design-system registry, `.specs/steering/design-system.md`.** One file with two tables — the tokens (name,
-  value, use) and the components (name, path, variants, notes) — and two markers, `_Token sources:_` (the files that
-  define the tokens) and `_Libraries:_` (third-party UI libraries whose components are not listed one by one).
+  value, use) and the components (name, path, variants, notes) — and three markers: `_Token sources:_` (the files that
+  define the tokens), `_Libraries:_` (third-party UI libraries whose components are not listed one by one) and, in a
+  component's row, `_From: <feature>_` (the feature that built it).
   `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**:
   - the components: React, Vue, Svelte and Astro files, Angular `*.component.ts` and PascalCase `.js` files under
-    `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper or a file under
-    a page folder;
+    `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper (`utils.ts`, a framework's
+    `layout.tsx` — `Layout.tsx` is a component), a barrel (`src/index.tsx`) or a file whose nearest such folder is a
+    page folder (`components/pages/Home.tsx`);
   - the tokens of the token files: CSS custom properties, Sass variables, JSON tokens, a global stylesheet's
-    variables. A JS, TS or YAML token file (a Tailwind config, a `theme.ts`) is listed as a source, its values unread;
+    variables. A plain `tokens.json` counts at the project's root or right inside a `styles/`, `theme/`, `design/`,
+    `tokens/` or `ui/` folder (`src/auth/tokens.ts` holds access tokens). A JS, TS or YAML token file (a Tailwind config, a
+    `theme.ts`) is listed as a source, its values unread;
   - the UI libraries of `package.json`.
 
   The result says how many it found (`seeded`). A project template for the file is used as it is instead, and an
@@ -40,11 +44,11 @@ components and tokens, and every +ui feature is checked against it.
   doesn't list, and where the tokens live.
 - **`spec_scan {designSystem: true}` / `dev-spec design-system [feature]`.** Read-only. Without a feature: the
   components and tokens the code holds and the registry doesn't (each as a row to paste; a component an unfinished
-  feature declares New is listed apart — its finish adds it), the rows whose path is gone, and the token files and UI
-  libraries the registry doesn't name. With a feature: its rows against the registry and the **raw values** in its view
+  feature declares New is listed apart — its finish adds it), the rows whose path is gone (a path with a blank or behind a
+  markdown link is read; a package or `n/a` is no path), and the token files and UI libraries the registry doesn't name. With a feature: its rows against the registry and the **raw values** in its view
   files, each with its `file:line` (the first 50, with the total): a hex or `rgb()` colour — with the registry token
-  of that colour when there is one —, a `margin: 13px` in a stylesheet, a `<style>` block or a CSS-in-JS template, a
-  Tailwind `p-[13px]`. A size in a JSX `style={{…}}` object is not read.
+  of that colour when there is one —, a `margin: 13px` in a stylesheet, a `.vue` / `.svelte` / `.astro` / `.html` file's `<style>` block or
+  a CSS-in-JS template, a Tailwind `p-[13px]`. A size in a JSX `style={{…}}` object is not read.
 - **`spec_finish` on a +ui feature of a project with a registry.** The raw values are a warning, never a blocker,
   when the registry holds tokens or names token files (otherwise there is nothing to replace them with). A READY
   written finish **adds the design's New components to the registry** — their path and `_From: <feature>_` —, so the
@@ -67,7 +71,7 @@ components and tokens, and every +ui feature is checked against it.
 - The registry is not part of an approval's fingerprint: adding a row never asks an approved feature to be re-reviewed.
 
 ### Tests
-- `node mcp/test.js` 2287 assertions, `node cli/test-cli.js` 660 (was 2266 / 657).
+- `node mcp/test.js` 2296 assertions, `node cli/test-cli.js` 660 (was 2266 / 657).
 
 ## [1.34.1] — 2026-10-31
 

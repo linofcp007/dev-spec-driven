@@ -3493,7 +3493,7 @@ const quality = {
     dsNoRows: "Design System Usage names no component row — list each one as `| Kind | Component | Why / notes |` (Kind: Reuse · Extend · New) so it can be checked against the registry, or write one line: n/a — why this feature uses no component",
     dsMismatch: (n, list) => `Design System Usage and the registry (.specs/steering/design-system.md) disagree in ${n} ${n === 1 ? "row" : "rows"} — ${list}`,
     dsProblem: {
-      unknown: (name, near) => `'${name}' is not in the registry${near ? ` (did you mean ${near}?)` : ""}: reuse a listed component, name its library (${name} (@library)), or make it a New row`,
+      unknown: (name, near) => `'${name}' is not in the registry${near ? ` (did you mean ${near}?)` : ""}: reuse a listed component, name a library the registry declares in _Libraries:_ (Component (@library)), or make it a New row`,
       listed: (name, near) => `'${name}' is marked New but the registry already lists ${near}: make it a Reuse or an Extend row — or, when this feature is the one that built it, add _From: <its slug>_ to that registry row`,
       near: (name, near) => `New '${name}' is close to ${near}, which the registry lists: reuse or extend ${near}, or say in the row's notes why ${near} doesn't fit`,
       "no-why": (name) => `New '${name}' doesn't say why no listed component fits`,
@@ -3589,7 +3589,7 @@ const brief = {
         : "…and possibly more in the same folder(s) — a large folder: only its first entries were read."),
     // 1.35: the design-system registry's entries for the components this feature's design names (a task that builds a view)
     designSystem: "## Design system — build from these",
-    designSystemRule: (file) => `Every view is built from the design system's components and tokens (\`${file}\`). Use the listed component before any markup of your own; a new variant goes INTO the component (a documented prop), never a copy beside it; never a raw colour, spacing, radius or font size — the token. Your report's **Reuse** block names each component you used.`,
+    designSystemRule: (file) => `Every view is built from the design system's components and tokens (\`${file}\`). Use the listed component before any markup of your own; a new variant goes INTO the component (a documented prop), never a copy beside it; where a token exists, never a raw colour, spacing, radius or font size — the token. Your report's **Reuse** block names each component you used.`,
     designSystemKinds: { reuse: "reuse", extend: "extend — a new variant", new: "NEW — build it through the system: tokens only, every state, keyboard and screen-reader support" },
     designSystemVariants: (v) => `variants: ${v}`,
     designSystemOmitted: (n) => `${n} more component(s) — read them in design.md ([UI] Design System Usage).`,

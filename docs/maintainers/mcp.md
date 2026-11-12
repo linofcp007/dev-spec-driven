@@ -21,8 +21,8 @@ count; a `tools/list` handshake lists them).
 purpose, when vs a neighbour, the key arguments, the rules an agent must act on (evidence before claims, approvals are the
 user's, never force without consent, what a refusal means): ≤ 2,500 characters, one line, English; never a catalogue the
 result carries (check ids, keys, reason codes), version history or a long example (`references/tooling-reference.md` holds
-those). `mcp/tests/02-mcp-server.js` caps the whole list at `TOOLS_LIST_CAP` (44,500 — today's size + ~3%, the CLI path
-counted as `dev-spec`); `mcp/tests/harness.js` and 17-docs pin some sentences (spec_complete_task's, spec_finish's,
+those). `mcp/tests/02-mcp-server.js` caps the whole list at `TOOLS_LIST_CAP` (44,500 — the 1.26 size + ~3%; about 44,100 since 1.35 —
+History —, the CLI path counted as `dev-spec`); `mcp/tests/harness.js` and 17-docs pin some sentences (spec_complete_task's, spec_finish's,
 spec_approve's). Every tool shares `PROJECT_DIR` but `spec_init` (`PROJECT_DIR_INIT`: how the folder is chosen); track
 names share `TRACK_ITEM`.
 

@@ -53,37 +53,46 @@ const RE_PLATFORM_INFIX = /\.(?:client|server|native|web|ios|android)$/i;
 const COMPONENT_DIRS = new Set(["components", "component", "ui", "design-system", "designsystem", "ds", "widgets", "atoms", "molecules", "organisms",
   "primitives", "elements"]);
 const PAGE_DIRS = new Set(["pages", "routes", "views", "screens"]);
+// A lower-case file name that is a helper or a framework's special file, never a component (`Layout.tsx`, `Loading.tsx` and
+// `Error.tsx` ARE components: the names are matched as written).
 const NOT_COMPONENT = new Set(["index", "utils", "util", "helpers", "helper", "types", "constants", "styles", "style", "hooks", "context", "config", "theme",
   "tokens", "stories", "mocks", "i18n", "page", "layout", "route", "template", "loading", "error", "not-found", "main", "app", "provider", "providers", "store"]);
+// A folder whose index file is a barrel, never a component named after it (packages/ui/src/index.tsx, icons/index.tsx).
+const GENERIC_DIRS = new Set(["src", "lib", "libs", "app", "apps", "common", "shared", "core", "base", "utils", "helpers", "hooks", "styles", "assets", "icons",
+  "images", "types", "internal", "generated", "dist", "build", "test", "tests", "stories"]);
+const dirName = (d) => d.toLowerCase().replace(/^_+/, ""); // Next's private `_components/` is a component folder
 function componentOf(rel) {
   const segs = rel.split("/");
   const file = segs[segs.length - 1];
   const ng = RE_NG_COMPONENT.test(file), js = !ng && RE_JS_COMPONENT.test(file);
   if (!(ng || js || RE_COMPONENT_EXT.test(file)) || RE_NOT_COMPONENT_FILE.test(file)) return null;
   let kind = null;
-  for (let i = segs.length - 2; i >= 0 && !kind; i--) { const d = segs[i].toLowerCase(); kind = COMPONENT_DIRS.has(d) ? "component" : PAGE_DIRS.has(d) ? "page" : null; }
+  for (let i = segs.length - 2; i >= 0 && !kind; i--) { const d = dirName(segs[i]); kind = COMPONENT_DIRS.has(d) ? "component" : PAGE_DIRS.has(d) ? "page" : null; }
   if (kind !== "component") return null;
   let stem = (ng ? file.replace(RE_NG_COMPONENT, "") : file.replace(/\.[^.]+$/, "")).replace(RE_PLATFORM_INFIX, "");
   const index = stem.toLowerCase() === "index";
   if (index) stem = segs[segs.length - 2] || "";
   const low = stem.toLowerCase();
-  if (!/^[A-Za-z][A-Za-z0-9._-]{0,79}$/.test(stem) || NOT_COMPONENT.has(low) || COMPONENT_DIRS.has(low) || /^use(?:[A-Z]|[-_.])/.test(stem)) return null;
+  if (index ? GENERIC_DIRS.has(low) || COMPONENT_DIRS.has(dirName(stem)) : NOT_COMPONENT.has(stem) || (stem === low && COMPONENT_DIRS.has(low))) return null;
+  if (!/^[A-Za-z][A-Za-z0-9._-]{0,79}$/.test(stem) || /^use(?:[A-Z]|[-_.])/.test(stem)) return null;
   if (js && !/^[A-Z][A-Za-z0-9]*$/.test(stem)) return null; // a .js file is a component only by a PascalCase name (Button.js)
   const name = stem.split(/[-_.]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("");
   return { name, key: dsKey(name), path: rel, index };
 }
 // A token file by its name: a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss,
-// theme.css), a name that can only mean design tokens in any format (design-tokens.json, colors.tokens.json,
-// tailwind.config.ts) — and a plain `tokens.json` / `tokens.ts` / `theme.json` only under a folder that says so (isTokenFile):
-// `src/auth/tokens.ts` holds access tokens, not colours. (A name's further parts are letters and digits only: with the
-// separator inside the part's class, `tokens-a-a-a-…` backtracked exponentially.)
+// theme.css), a name that can only mean design tokens or the UI theme in any format (design-tokens.json, colors.tokens.json,
+// theme.json, theme.ts, tailwind.config.ts) — and a plain `tokens.json` / `tokens.ts` only at the project's root or RIGHT
+// inside a folder that says what it holds (isTokenFile): `src/auth/tokens.ts` and `src/ui/auth/tokens.ts` hold access tokens,
+// not colours. (A name's further parts are letters and digits only: with the separator inside the part's class,
+// `tokens-a-a-a-…` backtracked exponentially.)
 const RE_TOKEN_STYLE = /^(?:_?(?:design[-_.]?)?tokens(?:[-_.][A-Za-z0-9]+)*|_?variables|theme)\.(?:css|scss|sass|less)$/i;
-const RE_TOKEN_NAMED = /^(?:design[-_.]?tokens?(?:[-_.][A-Za-z0-9]+)*\.(?:json|ya?ml|js|cjs|mjs|ts)|[A-Za-z0-9_-]+\.tokens\.(?:json|ya?ml)|tailwind\.config\.(?:js|cjs|mjs|ts))$/i;
-const RE_TOKEN_PLAIN = /^(?:tokens?|theme)\.(?:json|ya?ml|js|cjs|mjs|ts)$/i;
+const RE_TOKEN_NAMED = /^(?:design[-_.]?tokens?(?:[-_.][A-Za-z0-9]+)*\.(?:json|ya?ml|js|cjs|mjs|ts)|[A-Za-z0-9_-]+\.tokens\.(?:json|ya?ml)|theme\.(?:json|ya?ml|js|cjs|mjs|ts)|tailwind\.config\.(?:js|cjs|mjs|ts))$/i;
+const RE_TOKEN_PLAIN = /^tokens?\.(?:json|ya?ml|js|cjs|mjs|ts)$/i;
 const TOKEN_DIRS = new Set(["styles", "style", "theme", "themes", "design", "design-system", "designsystem", "design-tokens", "tokens", "ui"]);
 const isTokenFile = (rel) => {
   const segs = rel.split("/"), name = segs[segs.length - 1];
-  return RE_TOKEN_STYLE.test(name) || RE_TOKEN_NAMED.test(name) || (RE_TOKEN_PLAIN.test(name) && segs.slice(0, -1).some((d) => TOKEN_DIRS.has(d.toLowerCase())));
+  if (RE_TOKEN_STYLE.test(name) || RE_TOKEN_NAMED.test(name)) return true;
+  return RE_TOKEN_PLAIN.test(name) && (segs.length === 1 || TOKEN_DIRS.has(segs[segs.length - 2].toLowerCase()));
 };
 // …and a global stylesheet that declares the custom properties itself (the shadcn / Tailwind 4 habit): a token file once it
 // holds at least this many.
@@ -222,26 +231,36 @@ function scanCode(root) {
 // --- raw values: what a feature's view files hard-code ------------------------------------------------------------------------
 // A colour: a hex literal, or a functional one with literal arguments (rgb(…), hsl(…), oklch(…) — never rgb(var(--x))).
 // Where a hex is read:
-//   - a stylesheet (a .css / .scss… file, a <style> block, a declaration-shaped line of a CSS-in-JS template): in a declaration's
-//     VALUE only — never a selector (`.page:hover #fab {`, `#fab,`) nor an at-rule's prelude;
+//   - a stylesheet (a .css / .scss… file, a <style> block of a markup file, a declaration-shaped line of a CSS-in-JS template):
+//     in a declaration's VALUE only — never a selector (`.page:hover #fab {`, `#fab,`) nor an at-rule's prelude;
 //   - markup and code: 6 / 8 digits right after a quote or one of `[ ( : = ,` (a string, a Tailwind arbitrary value, an
 //     attribute) — "Ticket #204518" is prose; 3 / 4 digits only as a Tailwind arbitrary value `[#fff]` or a quoted "#fff".
 // Never an anchor or a reference (href="#abcdef", url(#clip), querySelector("#add")) nor an HTML entity (&#123;).
 const RE_HEX = /(?<![&\w#])#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9a-zA-Z_-])/g;
-const RE_HEX_REF_BEFORE = /(?:(?:href|src|url|id|for|to|path|hash|target)\s*[=:(]\s*["'`(]?|(?:querySelector(?:All)?|getElementById|closest|matches|jQuery|\$)\s*\(\s*["'`])$/i;
+// What stands right before a hex that is no colour: an attribute that takes an anchor (`href="#abc"`, `to="#add"`), an
+// `href:` / `id:` / `hash:` key, `url(#clip)`, a DOM lookup. A WHOLE word (the look-behind): `invalid: '#dc2626'`,
+// `solid: "#1d4ed8"` and a gradient's `to: "#fff"` are colours.
+const RE_HEX_REF_BEFORE = /(?<![\w-])(?:(?:href|src|id|for|htmlFor|to|path|hash|target)\s*=\s*\{?\s*["'`]?|(?:href|id|hash)\s*:\s*["'`]|url\(\s*["'`]?|(?:querySelector(?:All)?|getElementById|closest|matches|jQuery|\$)\s*\(\s*["'`])$/i;
 const RE_COLOR_FN = /(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(\s*[\d.+-][^()]{0,60}\)/gi;
 // A size, where a spacing / type / radius token belongs: a stylesheet declaration of margin, padding, gap, font-size or
 // border-radius with a px / rem / em literal (never 0 or a 1px hairline — any of its literals counts: `padding: 1px 16px` —,
 // never a value built from a variable or calc()), and a Tailwind arbitrary value on those utilities (p-[13px], text-[15px]).
+// Each pattern is linear on a line of DS_LINE_MAX characters: a number is `\d+(\.\d+)?` (never `\d*\.?\d+` — two ways to
+// split a digit run), the blank run after a colon ends at a non-blank, the Tailwind variants are counted.
 const RE_DECL = /^\s*(--[\w-]+|\$[\w-]+|[A-Za-z-]+)\s*:\s*(\S.*)$/;
-const RE_DECL_LINE = /^\s*(?:--[\w-]+|[a-z][a-z-]*)\s*:\s*[^;{}]+;\s*$/i;
+const RE_DECL_LINE = /^\s*(?:--[\w-]+|[a-z][a-z-]*)\s*:\s*[^;{}\s][^;{}]*;\s*$/i;
+const RE_DECL_GOES_ON = /^\s*[\w$-]+\s*:\s/; // `prop: value,` — a blank after the colon: no selector (`a:hover,`)
 const RE_SIZE_PROP = /^(?:(?:margin|padding)(?:-(?:top|right|bottom|left|inline|block)(?:-(?:start|end))?)?|gap|row-gap|column-gap|font-size|border-radius|border-(?:top|bottom)-(?:left|right)-radius)$/i;
-const RE_SIZE_LITERAL = /(?<![\w.-])(\d*\.?\d+)(px|rem|em)(?![\w-])/g;
+const RE_SIZE_LITERAL = /(?<![\w.-])(\d+(?:\.\d+)?|\.\d+)(px|rem|em)(?![\w-])/g;
 const RE_SIZE_BUILT = /var\(|calc\(|theme\(|[$@]|#\{/;
-const RE_TW_SIZE = /(?<![\w-])(?:[a-z0-9-]+:)*(?:p[trblxyse]?|m[trblxyse]?|gap(?:-[xy])?|space-[xy]|text|rounded(?:-[a-z]{1,2})?|leading|tracking)-\[(\d*\.?\d+(?:px|rem|em))\]/g;
+const RE_TW_SIZE = /(?<![\w-])(?:[a-z0-9-]{1,24}:){0,4}(?:p[trblxyse]?|m[trblxyse]?|gap(?:-[xy])?|space-[xy]|text|rounded(?:-[a-z]{1,2})?|leading|tracking)-\[(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em)\]/g;
+// The files whose text may hold a <style> block — markup. Never a .tsx / .jsx / .js: `useState<Style>(null)` is a type there
+// (read as a block's start, the rest of the file was a stylesheet).
+const RE_STYLE_BLOCK_EXT = /\.(?:vue|svelte|astro|html?|erb|cshtml|razor|twig|hbs|handlebars|mustache|ejs|pug)$|\.blade\.php$/i;
+const isQuote = (c) => c === "\"" || c === "'" || c === "`";
 function rawValuesOf(text, rel) {
   const out = [], seen = new Set();
-  const sheet = RE_STYLE_EXT.test(rel), plainCss = /\.css$/i.test(rel);
+  const sheet = RE_STYLE_EXT.test(rel), plainCss = /\.css$/i.test(rel), markup = !sheet && RE_STYLE_BLOCK_EXT.test(rel);
   const st = { block: false, html: false };
   let inStyle = false; // inside a <style> block of a Vue / Svelte / Astro / HTML file
   const add = (line, kind, value) => {
@@ -250,19 +269,22 @@ function rawValuesOf(text, rel) {
     seen.add(k);
     out.push({ line, kind, value });
   };
+  // (what stands before a match is read from a bounded tail: one slice per match, never the whole line again)
   const colours = (s, line, strict) => {
     for (const m of s.matchAll(RE_HEX)) {
-      const before = s.slice(0, m.index);
-      if (RE_HEX_REF_BEFORE.test(before.slice(-40))) continue;
+      const at = m.index, tail = s.slice(Math.max(0, at - 40), at);
+      if (RE_HEX_REF_BEFORE.test(tail)) continue;
       if (strict) {
-        const quoted = /["'`]/.test(before.slice(-1));
-        if (m[1].length < 6 ? !(before.endsWith("[") || (quoted && /["'`]/.test(s[m.index + m[0].length] || ""))) : !/["'`[(:=,]/.test(before.trimEnd().slice(-1))) continue;
+        const prev = at > 0 ? s[at - 1] : "";
+        if (m[1].length < 6 ? !(prev === "[" || (isQuote(prev) && isQuote(s[at + m[0].length] || ""))) : !/["'`[(:=,]/.test(tail.trimEnd().slice(-1))) continue;
       }
       add(line, "color", m[0]);
     }
     for (const m of s.matchAll(RE_COLOR_FN)) add(line, "color", m[0].replace(/\s+/g, " "));
   };
-  // a stylesheet's line, piece by piece: what a `{` follows is a selector or an at-rule's prelude, and so is a line ending in `,`
+  // a stylesheet's line, piece by piece: what a `{` follows is a selector or an at-rule's prelude, and so is a line ending in
+  // `,` (a selector list going on: `#fab,`) — unless it reads `prop: value,` (a multi-value declaration going on:
+  // `box-shadow: 0 0 0 1px #1d4ed8,`)
   const styleLine = (l, line) => {
     let start = 0;
     for (let i = 0; i <= l.length; i++) {
@@ -270,7 +292,7 @@ function rawValuesOf(text, rel) {
       if (ch !== "" && ch !== ";" && ch !== "{" && ch !== "}") continue;
       const piece = l.slice(start, i);
       start = i + 1;
-      if (ch === "{" || (ch === "" && /,\s*$/.test(piece))) continue;
+      if (ch === "{" || (ch === "" && /,\s*$/.test(piece) && !RE_DECL_GOES_ON.test(piece))) continue;
       const d = RE_DECL.exec(piece);
       if (!d) continue;
       colours(d[2], line, false);
@@ -284,9 +306,9 @@ function rawValuesOf(text, rel) {
   for (let n = 0; n < lines.length && out.length < DS_RAW_PER_FILE; n++) {
     const src = lines[n].length > DS_LINE_MAX ? lines[n].slice(0, DS_LINE_MAX) : lines[n];
     let block = inStyle;
-    if (!sheet) {
-      if (/<style[\s>]/i.test(src)) inStyle = block = true;
-      if (/<\/style>/i.test(src)) inStyle = false;
+    if (markup) {
+      if (/<style[\s>]/.test(src)) inStyle = block = true;
+      if (/<\/style>/.test(src)) inStyle = false;
     }
     const l = withoutComments(src, st, { slashSlash: !plainCss, sheet: sheet || block });
     if (!l.trim()) continue;
@@ -304,18 +326,14 @@ function colorKey(v) {
 }
 
 // --- the registry against the code ---------------------------------------------------------------------------------------------
-// A registry row's path as a project path — decided on its TEXT before any fs call (the Reuse section's rule: a network path, an
-// absolute path elsewhere or a `..` out of the project names nothing) — or null when the cell holds no path of the project: a
-// package (`@mui/x-data-grid`), `n/a`, a URL. A `:12` / `#L12` anchor is dropped (implementsPath).
-function registryPath(root, cell) {
-  for (const w0 of String(cell || "").slice(0, 400).split(/[\s,;]+/)) {
-    const w = implementsPath(w0.replace(/^`+|`+$/g, ""));
-    if (!w || w.startsWith("@") || /^https?:/i.test(w) || /^n\/a$/i.test(w) || !/[/.]/.test(w)) continue;
-    if (isNetworkPath(w)) return null;
-    const abs = path.resolve(root, w);
-    return abs !== root && isInsideDir(root, abs) ? toPosix(path.relative(root, abs)) : null;
-  }
-  return null;
+// A word of a registry row's path cell as a project path — decided on its TEXT before any fs call (the Reuse section's rule: a
+// network path, an absolute path elsewhere or a `..` out of the project names nothing) — or null when it is no path of the
+// project: a package (`@mui/x-data-grid`), `n/a`, a URL, prose. A `:12` / `#L12` anchor is dropped (implementsPath).
+function projectPath(root, word) {
+  const w = implementsPath(word);
+  if (!w || w.startsWith("@") || /^https?:/i.test(w) || /^n\/a$/i.test(w) || !/[/.]/.test(w) || /[<>"|?*]/.test(w) || isNetworkPath(w)) return null;
+  const abs = path.resolve(root, w);
+  return abs !== root && isInsideDir(root, abs) ? toPosix(path.relative(root, abs)) : null;
 }
 // Does the project path name something on disk — reached WITHOUT following a link: a symlink or a junction on the way (it may
 // lead out of the project, or to a share) is where the walk stops, and counts as there.
@@ -328,6 +346,21 @@ function onDisk(root, rel) {
     if (st.isSymbolicLink()) return true;
   }
   return true;
+}
+// Is a registry row's path gone? The cell names a project path and none of its readings is on disk: the whole cell first (a
+// path may hold a blank — `src/components/Form Controls/DatePicker.tsx`), then each word (a markdown link's target, a
+// parenthesis or a backtick aside). A cell that names no project path is never stale.
+function stalePath(root, cell) {
+  const text = String(cell || "").slice(0, 400).trim();
+  const words = text.split(/[\s,;]+/).map((w) => w.replace(/^.*\]\(/, "").replace(/^[([`]+|[)\]`]+$/g, ""));
+  let named = false;
+  for (const w of [text.replace(/^`+|`+$/g, ""), ...words]) {
+    const rel = projectPath(root, w);
+    if (rel == null) continue;
+    if (onDisk(root, rel)) return false;
+    named = true;
+  }
+  return named;
 }
 // The registry as a report names it: its project path, whether it exists, the rows it holds.
 const registryView = (root, reg) => ({ file: toPosix(path.relative(root, reg ? reg.file : path.join(specsRoot(root), "steering", DESIGN_SYSTEM_FILE))),
@@ -349,7 +382,7 @@ function pendingNew(projectDir) {
 // spec_scan {designSystem: true} / `dev-spec design-system [feature]`. Without a feature: the registry against the code →
 // { ok, registry: {file, exists, components, tokens}, found: {components, tokens (counts), sources, libraries}, missing (the
 // code's components the registry doesn't list, the first DS_LIST: [{name, path}]), missingTotal, pending (components in the code
-// that an unfinished feature's design declares New — its finish adds them: [{name, path, feature}]), stale (the registry rows
+// that an unfinished feature's design declares New — its finish adds them: [{name, path, feature}]), pendingTotal, stale (the registry rows
 // whose path names no file: [{name, path}]), staleTotal, newTokens (the code's tokens the registry doesn't list, the first
 // DS_LIST: [{name, value}]), newTokensTotal, newSources / newLibraries (token files / UI libraries the registry doesn't name),
 // inSync, scanned: {files}, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} | null:
@@ -374,22 +407,18 @@ function designSystemReport(projectDir, opts = {}) {
     if (building.has(c.key)) pending.push({ name: c.name, path: c.path, feature: building.get(c.key) });
     else missing.push({ name: c.name, path: c.path });
   }
-  const stale = [];
-  for (const c of reg ? reg.components : []) {
-    const rel = registryPath(root, c.path);
-    if (rel && !onDisk(root, rel)) stale.push({ name: c.name, path: c.path });
-  }
+  const stale = (reg ? reg.components : []).filter((c) => stalePath(root, c.path)).map((c) => ({ name: c.name, path: c.path }));
   const fold = FOLD_CASE ? (s) => s.toLowerCase() : (s) => s;
   const named1 = new Set((reg ? reg.sources : []).map((s) => fold(s.replace(/^(?:\.\/)+/, ""))));
   const newSources = scan.sources.filter((s) => !named1.has(fold(s)));
   const libs = new Set((reg ? reg.libraries : []).map((l) => l.toLowerCase()));
   const newLibraries = scan.libraries.filter((l) => !libs.has(l.toLowerCase()));
-  const tokenNames = new Set((reg ? reg.tokens : []).map((t) => t.name.toLowerCase()));
-  // (a registry past its token cap is not compared: the names it lists beyond it are unread)
-  const newTokens = reg && reg.total.tokens > reg.tokens.length ? [] : scan.tokens.filter((t) => !tokenNames.has(t.name.toLowerCase())).map((t) => ({ name: t.name, value: t.value }));
+  const tokenNames = reg ? reg.tokenNames : new Set(); // every token the file lists, past the reader's cap too
+  const newTokens = scan.tokens.filter((t) => !tokenNames.has(t.name.toLowerCase())).map((t) => ({ name: t.name, value: t.value }));
   return { ok: true, registry: registryView(root, reg),
     found: { components: scan.components.length, tokens: scan.tokens.length, sources: scan.sources, libraries: scan.libraries },
-    missing: missing.slice(0, DS_LIST), missingTotal: missing.length, pending: pending.slice(0, DS_LIST), stale: stale.slice(0, DS_LIST), staleTotal: stale.length,
+    missing: missing.slice(0, DS_LIST), missingTotal: missing.length, pending: pending.slice(0, DS_LIST), pendingTotal: pending.length,
+    stale: stale.slice(0, DS_LIST), staleTotal: stale.length,
     newTokens: newTokens.slice(0, DS_LIST), newTokensTotal: newTokens.length, newSources, newLibraries,
     inSync: !!reg && !missing.length && !stale.length && !newTokens.length && !newSources.length && !newLibraries.length,
     scanned: { files: scan.files }, truncated: scan.truncated };

@@ -1829,8 +1829,8 @@ const COMMANDS = [
     name: "design-system",
     options: TABLE, max: 1,
     args: ["@feature"],
-    help: `  design-system [feature]         The design-system registry (.specs/steering/design-system.md) against the code: the components
-                                  and token files it lacks, the rows whose path is gone; a feature: its Design System Usage rows
+    help: `  design-system [feature]         The design-system registry (.specs/steering/design-system.md) against the code: the components,
+                                  tokens, token files and UI libraries it lacks, the rows whose path is gone; a feature: its Design System Usage rows
                                   against the registry and the raw colours / sizes in its view files`,
     run(c) {
       // dev-spec design-system [feature] (= spec_scan {designSystem: true, name}) — read-only, exit 0
@@ -1861,7 +1861,7 @@ const COMMANDS = [
             r.missing.forEach((m) => log("    | " + m.name + " | `" + m.path + "` |  |  |")); // a row to paste into the registry
             more(r.missingTotal, r.missing.length);
           }
-          if (r.pending.length) log(T.dsPending(r.pending.map((m) => m.name + " (" + m.feature + ")").join(", ")));
+          if (r.pending.length) log(T.dsPending(r.pending.map((m) => m.name + " (" + m.feature + ")").join(", ") + (r.pendingTotal > r.pending.length ? " … +" + (r.pendingTotal - r.pending.length) : "")));
           if (r.staleTotal) {
             log(T.dsStaleHead(r.staleTotal));
             r.stale.forEach((m) => log("    " + m.name + " — " + m.path));
