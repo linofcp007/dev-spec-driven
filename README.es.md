@@ -129,10 +129,10 @@ combinan — un webhook de Stripe en un SaaS multiinquilino que resume facturas 
 **Un solo design system para todas las pantallas.** `dev-spec steering design-system.md` escribe
 `.specs/steering/design-system.md` a partir de tu código — los componentes y los tokens que el proyecto ya tiene. Desde
 entonces, el diseño de una funcionalidad +ui enumera cada componente como Reutilizar, Extender o Nuevo; `doctor` comprueba
-esas filas contra el registro (un segundo `Button` con otro nombre se detecta antes de construirlo y, en los tamaños
-m / l, la aprobación del diseño lo rechaza), el brief de la tarea entrega al implementador los componentes que usar, y
-`finish` avisa de los colores y tamaños fijos donde existe un token y añade al registro los componentes nuevos de la
-funcionalidad. `dev-spec design-system` muestra dónde se han separado el registro y el código.
+esas filas contra el registro (un componente que el registro no enumera, o un `ButtonV2` junto a un `Button` que ya
+existe, se detecta antes de construirlo y, en los tamaños m / l, la aprobación del diseño lo rechaza), el brief de la
+tarea entrega al implementador los componentes que debe usar, y `finish` avisa de los colores y tamaños fijos en las
+pantallas de la funcionalidad y añade al registro sus componentes nuevos. `dev-spec design-system` muestra dónde se han separado el registro y el código.
 
 Un track se puede añadir o desactivar más adelante (`/spec-change <feature> track +sec`). Los tracks de tu equipo:
 `/spec-setup tracks` — un pack de ejemplo para copiar es `examples/track-packs/mobile`. Un bug pasa por `/spec-bugfix`

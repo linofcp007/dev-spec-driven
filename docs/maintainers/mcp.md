@@ -246,8 +246,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   translated without it — "the old names still work" held for the call, not the reply. They translate to `includeBody: write !==
   true` now.
 - **1.35** — `spec_scan {designSystem: true, name?}`, the 42nd operation (`design-system`), a mode on spec_scan's third key;
-  steering_scaffold names design-system.md. ~450 characters of tools/list, not paid back (about 44,050 of the 44,500 cap):
-  the next argument trims wording first.
+  steering_scaffold names design-system.md and spec_finish says it writes the registry. ~520 characters of tools/list, not
+  paid back (about 44,100 of the 44,500 cap): the next argument trims wording first.
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.

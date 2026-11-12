@@ -87,12 +87,10 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 - **+api:** the handlers return exactly what the contract file documents (status codes, problem+json errors with stable
   codes, headers); nothing breaking inside a version; Idempotency-Key and If-Match honoured where the design says.
 - **+ui:** design-system components and tokens (no one-off styles); every state of the design's state matrix handled; keyboard
-  operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean. With a
-  registry (`.specs/steering/design-system.md`): the components the diff uses are the ones the design's `[UI] Design System
-  Usage` rows name — a component built beside a listed one is **Important** (reuse or extend the listed one) — and the raw
-  values the dispatch carries (`spec_scan {designSystem: true, name}` — `file:line value`, a hex colour or a pixel size where a
-  token exists) are candidates: one this work added is a finding ("use the token" — the report names it when a token has
-  that value), one the report lists as deliberate is not.
+  operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean. When
+  the brief has a **Design system** part: the components the diff uses are the ones it lists — a component built beside a
+  listed one is **Important** (reuse or extend the listed one), and so is a hard-coded colour, spacing or font size the diff
+  adds where the registry has a token (one the implementer's report lists under "Raw values kept on purpose" is not).
 - **+obs:** the metrics the task's `_Emits metrics:_` names, structured logs with the correlation ID and no personal data, the
   spans the design names; alerts linked to runbooks; liveness free of dependencies; the flag and the rollback path as designed.
 - **+data:** the dataset's schema matches its contract; the data-quality checks the task names run and quarantine bad rows;
@@ -195,7 +193,11 @@ and the rollback path (+obs), the data contracts, quality checks and idempotent 
 duplication — the units the branch adds against the existing codebase and against each other (two tasks that each
 wrote the same helper). Decisions in `decisions.md` that the code contradicts are
 findings, and so is a written rule the branch breaks or a fix its rewritten lines undo (§5, over the whole branch:
-MERGE_BASE is its BASE). Rate each Critical / Important finding. Triage the ledger's deferred minors, unconfirmed
+MERGE_BASE is its BASE). On a +ui feature the dispatch may carry the design-system scan (`spec_scan {designSystem: true,
+name}` — the controller runs it): its `problems` (a design row that disagrees with the registry) and its `raw` values
+(`file:line value` — at most the first 50 of `total`; a colour names the registry token of that value) are **candidates** —
+one this branch added is a finding, one a task report lists under "Raw values kept on purpose" is not. Rate each Critical /
+Important finding. Triage the ledger's deferred minors, unconfirmed
 findings and parked findings: which must be fixed before merge, which can ship.
 
 ## Converge mode

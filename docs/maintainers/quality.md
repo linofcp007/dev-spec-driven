@@ -2,7 +2,8 @@
 
 Maintainer notes, one topic of the map in [CLAUDE.md](../../CLAUDE.md) — the index and the hard constraints.
 The spec-quality checks, the design's trade-offs / risks / reuse sections and their doctor warnings, the constraint nudge,
-the critical flows, the TDD micro-cycle, the duplicate-code detector, the design-system registry. The rules come first; how they came to be — the releases and review findings — is in History at the end.
+the critical flows, the TDD micro-cycle, the duplicate-code detector, the design-system registry. The rules come first; how
+they came to be — the releases and review findings — is in History at the end.
 
 ## Spec quality
 - **Steering amendments** — a requirements / design approval (`STEERING_GOVERNED`) and its history record carry `steering`
@@ -281,70 +282,95 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
 - **The file** — `.specs/steering/design-system.md` (`DESIGN_SYSTEM_FILE`), a steering STUB like glossary.md
   (`steering_scaffold`; init never creates it) and deliberately NOT a track steering file (`TRACK_STEERING`): it grows with
   every feature, and a file the approvals fingerprint would flag every approved +ui feature on each new row
-  (`steering-changed-since-approval`), and every brief would quote it whole. `designSystemRegistry(root)` reads EVERY table whose
-  first header cell is Component / Componente(s) or Token(s) (`RE_DS_COMPONENT_HEAD`; the other columns by their header —
-  `RE_DS_COL` — else by place) through `mdTables` (comments and fences aside): ≤ 500 components / 1,000 tokens (`truncated`), a
-  name once (`dsKey`: letters and digits, lower-cased, accents folded — DatePicker = date-picker), a slot or generic row none.
-  Two English-stable markers, each a line of its own: `_Token sources: a, b_` and `_Libraries: a, b_` (`RE_DS_MARKER` — the
-  value runs to the line's end: a path may hold an underscore; `none` and the stub's `[slot]` name nothing).
+  (`steering-changed-since-approval`), and every brief would quote it whole. `designSystemRegistry(root)` reads EVERY table
+  whose first header cell is Component / Componente(s) or Token(s) (`RE_DS_COMPONENT_HEAD`; the other columns by their header —
+  `RE_DS_COL` — else by place) through `mdTables` (comments and fences aside). `keys`: EVERY component name the file lists —
+  what "is it listed?" asks; `components`: the first 500 with their details, `tokens`: the first 1,000 (`truncated`). A name
+  once (`dsKey`: letters and digits, lower-cased, accents folded — DatePicker = date-picker), a slot or generic row none.
+  English-stable markers: `_Token sources: a, b_` and `_Libraries: a, b_`, each a line of its own (`RE_DS_MARKER` — the value
+  runs to the line's end: a path may hold an underscore or a blank; `none` and the stub's `[slot]` name nothing), and in a
+  component's row `_From: <feature>_` (`RE_DS_FROM` → the entry's `from`, left out of its `notes`).
 - **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
   mcp/tests/06-gates-sizes.js changed on purpose). `designSystemUsage(design)` → the table rows whose first cell is a kind word
   (`RE_DS_KINDS`: Reuse · Extend · New, EN / PT / ES and a few synonyms) and whose second names a component — several in one
   cell are a row each, a parenthesis is dropped from the name and kept in `cell` (a library: "Button (@mui/material)"), a slot
   row is none; ≤ 100 rows.
-- **The findings** — `designSystemFindings(usage, registry)`: `unknown` (a Reuse / Extend naming nothing the registry lists,
-  nor a declared library in its cell; `near`: the did-you-mean), `listed` (a New already there), `near` (a New that is a listed
-  name with a fork's affix — ButtonV2, NewButton, CustomCard — or an edit or two away, `dsNearComponent`; never when its notes
-  name that component), `no-why` (a New without a reason).
+- **The findings** — `designSystemFindings(usage, registry, slug)`: `unknown` (a Reuse / Extend naming nothing the registry
+  lists, nor a declared library in its cell; `near`: the did-you-mean), `listed` (a New already there — unless its registry
+  row says `_From: <slug>_`: the feature's OWN component, added by its finish), `near` (a New that is a listed name with a
+  fork's affix — ButtonV2, NewButton, CustomCard — or an edit or two away, `dsNearComponent`; never when its notes name that
+  component), `no-why` (a New without a reason). It compares NAMES: a new component under an unrelated name passes (the
+  reviewer's search). Only the first `DS_NEAR_ROWS` rows that need one pay a name comparison, a name past `DS_NAME_MAX` none.
 - **Doctor `ui-design-system`** (`designSystemCheck`; one entry of `DOCTOR_CHECKS`, phase 2) — a plain feature with +ui whose
   design.md is no later phase's template. States: no-section · unfilled (the scaffold's: `ui-sections` and the placeholder gate
   own both) · no-registry / empty-registry (a WARN saying how to create it — never a fail: there is nothing to agree with) · na
   (the section's ONE `n/a — <reason>` line, `sectionState`'s rule, at any size) · no-rows · mismatch · ok. A WARN — and an
   approval check where `designSystemGated(kind, size)` holds (= `designReuseGated`: a plain feature of size m / l): no-rows and
-  mismatch FAIL there, and `GATES.design` refuses on `ui-design-system`. The stamp `designSystem` (gates.js, every design
-  approval and its record): a design approved before 1.35 passes with a note (`quality.dsLegacy`, `DS_SINCE`) — never flagged,
-  at any size. An approval's context has no `root`: the view reads `specsRoot(c.projectDir)`. `designSaveCheck` (the
-  design.md save hook) adds a ▲ note for mismatch / no-rows and carries `designSystem` (the state) — a note, never unclean,
-  and never for a missing registry (doctor says that once, not every save).
+  mismatch FAIL there, and `GATES.design` refuses on `ui-design-system`.
+- **An approved design is never failed by the registry moving on.** The check reads a file that changes after an approval —
+  a finish adds rows, a team renames a component, the registry is created later. So doctor passes `gate` only while the design
+  is not SETTLED (`designSystemSettled`, doctor.js): approved under the check (its `designSystem` stamp), the id not among a
+  forced approval's `failing`, design.md unchanged since (`changedArts`). Settled → a WARN at most; the approval gate itself
+  stays strict (an edited design is re-approved against the registry of the day), and a forced approval keeps failing. The
+  stamp `designSystem` (gates.js, every design approval and its record): a design approved before 1.35 passes with a note
+  (`quality.dsLegacy`, `DS_SINCE`) — never flagged, at any size. An approval's context has no `root`: the view reads
+  `specsRoot(c.projectDir)`. `designSaveCheck` (the design.md save hook) adds a ▲ note for mismatch / no-rows and carries
+  `designSystem` (the state) — a note, never unclean, and never for a missing registry (doctor says that once, not every save).
 - **The brief** — `briefDesignSystem(root, design)` for a task `uiTask()` says builds a view (the visual review's rule): each
   component the design names with its registry entry (kind, path, variants, notes, the row's reason; ≤ 12 / 1,500 characters),
   the names the registry doesn't list (`unknown`), the token count and sources, the libraries; null without a registry.
   `renderBrief` writes it after Reuse; the result's `designSystem` holds identifiers (`write: true`: `refs.designSystem`, the
   names).
 - **The code** (engine/design-system.js, LAZY — entries `designSystemReport`, `designSystemSeed`, `designSystemFinish`) —
-  `scanCode`: ONE walk (`walkProject` + `gitignoreRules`, 20,000 counted files). A component = a view file (.tsx / .jsx / .vue /
-  .svelte / .astro, an Angular `*.component.ts`) under a component folder (`COMPONENT_DIRS`: components, ui, design-system,
-  widgets, atoms…), named by its file (kebab-case → PascalCase) or its folder for an index — never a test, a story, a hook, a
-  helper or a page (`componentOf`). Tokens = a token file's (`isTokenFile`: a stylesheet named tokens / _variables / theme, design-tokens.* / *.tokens.json /
-  tailwind.config.* anywhere, a plain tokens.json / tokens.ts only under a styles / theme / design / tokens / ui folder —
-  `src/auth/tokens.ts` holds access tokens) custom properties and Sass variables (`styleTokens`), a JSON file's leaves (`jsonTokens`:
-  `$value` / `value` / plain), and a global stylesheet declaring ≥ 5 custom properties (`RE_GLOBAL_CSS`); ≤ 20 token files, 300
-  tokens. Libraries = `UI_LIBRARIES` ∩ package.json's dependencies.
+  `scanCode`: ONE walk (`walkProject` + `gitignoreRules`, 20,000 counted files; a file read up to 256K characters, a line up
+  to 2,000). A component (`componentOf`) = a view file (.tsx / .jsx / .vue / .svelte / .astro, an Angular `*.component.ts`, a
+  PascalCase .js) whose NEAREST telling folder is a component folder (`COMPONENT_DIRS`: components, ui, design-system,
+  widgets, atoms…) — never a page folder below it (`PAGE_DIRS`) —, named by its file (kebab-case → PascalCase) or its folder
+  for an index; never a test, a story, a hook (`useX`, `use-x`) or a helper. Tokens = a token file's (`isTokenFile`: a
+  stylesheet named tokens / _variables / theme, design-tokens.* / *.tokens.json / tailwind.config.* anywhere, a plain
+  tokens.json / tokens.ts only under a styles / theme / design / tokens / ui folder — `src/auth/tokens.ts` holds access
+  tokens) custom properties and Sass variables (`styleTokens`), a JSON file's leaves (`jsonTokens`: `$value` / `value` /
+  plain), and a global stylesheet declaring ≥ 5 custom properties (`RE_GLOBAL_CSS`); ≤ 20 token files, 300 tokens. A JS / TS /
+  YAML token file is listed as a source, its values unread. Libraries = `UI_LIBRARIES` ∩ package.json's dependencies.
 - **Surfaces** — `spec_scan {designSystem: true, name?}` (a mode on spec_scan's THIRD key — mcp.md → Arguments by mode) =
   `dev-spec design-system [feature]` (one operation, `design-system`; the human report: `cliOutput.ds*`), read-only. No feature:
-  `registry` {file, exists, components, tokens}, `found`, `missing` (in the code, not in the registry — the CLI prints each as a
-  row to paste), `stale` (a row whose path names no file — the path decided on its TEXT first, `registryPath`), `newSources` /
-  `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`, `counts`,
-  `newComponents`.
+  `registry` {file, exists, components, tokens}, `found` (counts + the sources and libraries), `missing` (in the code, not in
+  the registry — the CLI prints each as a row to paste), `pending` (in the code and declared New by an unfinished feature's
+  design — `pendingNew`: its finish adds it; a row pasted for it would read as already listed), `stale` (a row whose path
+  names no file — `registryPath` decides on its TEXT first and skips a package, `n/a`, a URL; `onDisk` follows no link),
+  `newTokens`, `newSources` / `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text`
+  each), `raw`, `counts`, `newComponents`. Every list holds its first 50 (`DS_LIST`), with a total beside it.
 - **The seed** — `steering_scaffold design-system.md` (`scaffoldSteeringFile`) writes the stub with the code's rows in place of
   its slot rows (`designSystemSeed` → `seeded` {components, tokens}); a table the code has no row for keeps its slot; nothing
   found: the plain stub; a project template for the file wins; never over an existing file.
 - **Raw values** (`rawValuesOf`, the feature report) — the feature's view / style files (`featureFilesOf`, shared with dupes.js;
-  token files — the registry's `_Token sources:_` and `isTokenFile` — and tests aside; ≤ 200 files): a hex colour (6 / 8
-  digits anywhere; 3 / 4 only in a stylesheet declaration, a Tailwind `[#fff]` or a quoted literal), a functional colour with
-  literal arguments, a stylesheet's margin / padding / gap / font-size / radius in px / rem / em, a Tailwind arbitrary size.
-  Never an anchor (`href="#abcdef"`), an entity, a comment (`withoutComments`), a selector line, `rgb(var(--x))`, a 1px
-  hairline, a value built from a variable or `calc()`. A colour equal to a registry token's value carries `token` (`colorKey`).
+  token files — the registry's `_Token sources:_` and `isTokenFile` — and tests aside; ≤ 200 files). A line is read as a
+  STYLESHEET's in a .css / .scss… file, inside a `<style>` block, or when it is declaration-shaped (`RE_DECL_LINE`: a CSS-in-JS
+  template): piece by piece, a hex or functional colour in a declaration's VALUE only (never a selector, a prelude before `{`,
+  a line ending in `,`), and margin / padding / gap / font-size / radius in px / rem / em (any literal of the value; never 0,
+  a 1px hairline, a value built from a variable or `calc()`). Elsewhere (markup, code): a 6 / 8-digit hex right after a quote
+  or one of `[ ( : = ,`, a 3 / 4-digit one only as `[#fff]` or a quoted literal, a functional colour, a Tailwind arbitrary
+  size — "Ticket #204518" is prose. Never an anchor or a reference (`href="#abcdef"`, `querySelector("#add")`), an entity, a
+  comment (`withoutComments`: outside a stylesheet a `/*` opens one only at a line's start, after a blank or `{ ( ; ,` —
+  `accept="image/*"` holds none). A colour equal to a registry token's value carries `token` (`colorKey`). Not read: a size
+  in a JSX `style={{…}}` object.
 - **spec_finish** (`designSystemFinish`; +ui and a registry, never on the `gateOnly` path) — the raw values as a WARNING, never
-  a blocker (`finish.designSystemRaw`: the count, the first 3, the calls listing all); a READY written finish appends the
-  design's New components to the registry (`registerComponents`, under the roadmap lock, re-read there): into the component
-  table the file ENDS in — its columns —, else a new table (`appendSpecText`: BOM and line ends kept; best-effort — a registry the write gate refuses is left as it
-  is and the finish stands); the path = the feature's
-  file of that name, the note `quality.dsFromFeature`; a name that is no plain component name is never written
-  (`RE_SAFE_NAME`). Result: `designSystem` {raw, registered, unregistered, note?}.
-- **Prose** — spec-implementer builds from the brief's part; spec-reviewer takes the findings and the raw values as candidate
-  findings; `references/ui-design-patterns.md` → The registry.
+  a blocker, and only when the registry holds tokens or names token files (`tokens`: else there is nothing to replace them
+  with) — `finish.designSystemRaw`: the count, the first 3, the call that lists them. A READY written finish appends the
+  design's New components to the registry (`registerComponents`): under the roadmap lock, the registry read AGAIN past the
+  call's read cache (`forgetCached` — doctor read it before the lock) and judged by `keys` (past the reader's cap too: no row
+  twice); into the component table the file ENDS in when it has a column for the origin (neither the path's nor the
+  variants'), else as a new table (`appendSpecText`: BOM and line ends kept); the path = the feature's file of that name, the
+  origin `_From: <slug>_`; a name that is no plain component name is never written (`RE_SAFE_NAME`); best-effort — a registry
+  the write gate refuses is left as it is and the finish stands. Result: `designSystem` {raw, registered, unregistered,
+  note?}. A rename follows: `renameRegistryOrigin` (finish.js) rewrites `_From: <old>_` (`designSystemUpdated`).
+- **Linear, bounded** (review 1): a cell is cut BEFORE its replaces (`dsCell`, `dsSlot`), a token file's name parts are
+  letters and digits only (`(?:[-_.][\w-]+)*` backtracked exponentially on `tokens-a-a-a-…`), `raw.trimEnd()` never a
+  `\s+$` replace, every line capped (`DS_LINE_MAX`).
+- **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
+  purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
+  `references/ui-design-patterns.md` → The registry.
 
 ## History
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
@@ -493,3 +519,18 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   `spec_finish {write}` — `spec_scan` stays read-only, so its report prints the rows to paste instead of writing them; a
   missing registry only warns; the `featureFilesOf` helper left dupes.js's report so both scans resolve a feature's files the
   same way (the duplication guard would have named a copy).
+- **1.35 review 1** (three fresh reviewers, before the release) — HIGH, found by all three: a READY finish registered the
+  feature's New component, its own approved design still said `New | PriceTag`, so `listed` fired — at size m / l doctor
+  FAILED, the execution sign-off was refused and a second finish was not ready (the tests used size s and asserted only
+  that a status existed). Two rules came of it: the origin (`_From: <slug>_`, written by finish, followed by a rename) and
+  SETTLED (a cleanly approved, unchanged design only warns — also for a row renamed or a registry created later). MEDIUM:
+  `(?:[-_.][\w-]+)*` in the token-file names was exponential (24 segments 233 ms, doubling); four quadratic replaces on
+  unbounded input (a cell of 80,000 `>` 13 s on every doctor, `!default` 39 s, `\s+$` 5.6 s); the re-read under the roadmap
+  lock came from the call's read cache (a row another process appended was lost); past 500 components every finish appended
+  the row again (the cap hid the name — hence `keys`); `/*` inside `accept="image/*"` blinded the rest of a file. LOW: the
+  origin overwrote a last-column path; `@mui/x-data-grid`, `n/a` and `Button.tsx:12` read as stale paths; a token path with a
+  blank was seeded but never read back; `token-form.css` a token file; "Ticket #204518" and `querySelector("#add")` colours;
+  `.page:hover #fab {` a colour; `padding: 1px 16px` missed. From the docs review: a kebab-case hook and a page under
+  `components/pages/` were components, a PascalCase .js was not; sizes in a `<style>` block went unread; the project report
+  never compared tokens ("in sync" with none listed); the finish warning fired with no token to replace a value with; the
+  reviewer agent's dispatch text sat under Task mode, where no dispatch carries the scan.

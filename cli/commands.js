@@ -1181,7 +1181,8 @@ const COMMANDS = [
     bounds: { timeout: TIMEOUT_MAX_S },
     args: ["@feature"],
     help: `  finish <feature> [--write] [--include-body] [--run]   Readiness report + merge summary from the spec chain (exit 1 if not ready);
-                                  --write → .execution/merge-summary.md, --include-body also prints/returns the summary;
+                                  --write → .execution/merge-summary.md (when ready: + the drift baseline, a +ui feature's New
+                                  components into steering/design-system.md), --include-body also prints/returns the summary;
                                   --run [--shell bash|pwsh|<path>] runs the project checks (meta.checks) and records them — with meta.checks
                                   set, finish needs a passing run of each since the last task activity`,
     run(c) { // synchronous but for --run's checks
@@ -1204,6 +1205,8 @@ const COMMANDS = [
           log("\n" + r.checks.map((x) => "  [ ] " + x).join("\n"));
           if (r.wrote) log(T.mergeSummaryAt(r.paths.summary));
           if (r.designSystem && r.designSystem.registered.length) log(T.dsRegistered(r.designSystem.registered.join(", "))); // 1.35: its New components
+          // …and the ones a READY written finish could not add (no plain component name, a registry it can't write)
+          if (r.designSystem && r.wrote && r.readyToFinish && r.designSystem.unregistered.length) log(T.dsUnregistered(r.designSystem.unregistered.join(", ")));
           if (r.baseline && r.baseline.recorded) {
             const D = spec.msg(spec.featureLang(projectDir, r.feature)).drift;
             log(D.baselineRecorded(r.baseline.files, r.baseline.missing));
@@ -1858,10 +1861,16 @@ const COMMANDS = [
             r.missing.forEach((m) => log("    | " + m.name + " | `" + m.path + "` |  |  |")); // a row to paste into the registry
             more(r.missingTotal, r.missing.length);
           }
+          if (r.pending.length) log(T.dsPending(r.pending.map((m) => m.name + " (" + m.feature + ")").join(", ")));
           if (r.staleTotal) {
             log(T.dsStaleHead(r.staleTotal));
             r.stale.forEach((m) => log("    " + m.name + " — " + m.path));
             more(r.staleTotal, r.stale.length);
+          }
+          if (r.registry.exists && r.newTokensTotal) {
+            log(T.dsTokensNew(r.newTokensTotal));
+            r.newTokens.forEach((t) => log("    | " + t.name + " | " + t.value + " |  |")); // a row to paste into the registry
+            more(r.newTokensTotal, r.newTokens.length);
           }
           if (r.registry.exists && r.newSources.length) log(T.dsSourcesNew(r.newSources.join(", ")));
           if (r.registry.exists && r.newLibraries.length) log(T.dsLibrariesNew(r.newLibraries.join(", ")));

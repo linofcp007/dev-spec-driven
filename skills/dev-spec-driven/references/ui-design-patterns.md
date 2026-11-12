@@ -86,21 +86,36 @@ is a fork: flag it in review.
 
 The contract above only holds when every feature reads the **same** inventory. The registry is that inventory: one
 file, two tables — the **tokens** (name · value · use) and the **components** (name · path · variants · notes) —
-plus two markers kept in English: `_Token sources: tokens.json, src/styles/tokens.css_` (the files that define the
-tokens) and `_Libraries: @mui/material_` (third-party UI libraries whose components are not listed one by one).
+plus markers kept in English: `_Token sources: tokens.json, src/styles/tokens.css_` (the files that define the
+tokens), `_Libraries: @mui/material_` (third-party UI libraries whose components are not listed one by one) and, in a
+component's row, `_From: checkout_` (the feature that built it).
 
 | Moment | What happens |
 |---|---|
-| **Create it** | `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**: the components it finds (view files under `components/`, `ui/`, `design-system/`…), the tokens of the token files (custom properties, Sass variables, JSON tokens) and the UI libraries of `package.json`. Review the rows, then add each component's variants and when to use it — that part is yours. |
-| **Design** | `[UI] Design System Usage` lists one row per component: `Kind \| Component \| Why / notes` — **Reuse** (one the registry lists, used as is), **Extend** (a new variant of one it lists), **New** (none it lists fits — say why). A library's component is written `TextField (@mui/material)`. No component at all: one line, `n/a — <why>`. |
-| **`spec_doctor`** | `ui-design-system` compares the rows with the registry: a Reuse / Extend the registry doesn't list (with a did-you-mean), a New that is already listed or is a listed one's near-copy (`ButtonV2`, `NewButton`, `CustomCard` — unless its notes say why that component doesn't fit), a New without a reason, a section with no row. A warning — and for a feature of size **m / l** a failing check the design approval refuses, like Reuse & Integration. No registry yet: a warning that says how to create it. |
-| **Task brief** | A task that builds a view gets a **Design system** part: the registry's entry of each component the design names (path, variants, notes), the New ones to build *through the system*, where the tokens live. |
-| **Review** | `spec_scan {designSystem: true, name}` / `dev-spec design-system <feature>`: the rows that disagree with the registry and the **raw values** in the feature's view files — a hex or `rgb()` colour, a `margin: 13px`, a Tailwind `p-[13px]` — each a candidate finding ("use the token"; a colour equal to a token's value names it). |
-| **Finish** | The raw values are a warning of `spec_finish`, never a blocker. A READY written finish **adds the feature's New components to the registry** (their path, the feature in the notes) — the next feature finds them there. |
-| **Later** | `spec_scan {designSystem: true}` / `dev-spec design-system` says what the code holds and the registry doesn't (each as a row to paste), which rows' path is gone, and token files or libraries it doesn't name. |
+| **Create it** | `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**: the components it finds, the tokens of the token files and the UI libraries of `package.json` (what it reads, and what it doesn't: below). Review the rows, then add each component's variants and when to use it — that part is yours. A project template for the file is used as it is instead. Do it before the first +ui feature; on an existing codebase, at adoption. |
+| **Design** | `[UI] Design System Usage` lists one row per component: `Kind \| Component \| Why / notes` — **Reuse** (one the registry lists, used as is), **Extend** (a new variant of one it lists), **New** (none it lists fits — say why). A library's component is written `TextField (@mui/material)`. No component at all: one line, `n/a — <why, in four words or more>`. |
+| **`spec_doctor`** | `ui-design-system` compares the rows with the registry: a Reuse / Extend the registry doesn't list (with a did-you-mean), a New that is already listed, a New whose name is a listed one's with an affix or an edit away (`ButtonV2`, `NewButton`, `CustomCard`, `Buton` — unless its notes say why that component doesn't fit), a New without a reason, a section with no row. A warning — and for a feature of size **m / l** a failing check the design approval refuses, like Reuse & Integration. No registry yet: a warning that says how to create it, never a refusal. Saving design.md shows the disagreeing rows at once. |
+| **Task brief** | A task that builds a view gets a **Design system** part: the registry's entry of each component the design names (path, variants, notes), the New ones to build *through the system*, the names the registry doesn't list, where the tokens live. |
+| **Review** | `spec_scan {designSystem: true, name}` / `dev-spec design-system <feature>`: the rows that disagree with the registry and the **raw values** in the feature's view files (the first 50, with the total) — a hex or `rgb()` colour, a `margin: 13px`, a Tailwind `p-[13px]` — each a candidate finding ("use the token"; a colour equal to a token's value names that token). |
+| **Finish** | In a project with a registry: the raw values are a warning of `spec_finish`, never a blocker — when the registry holds tokens or names token files. A READY written finish **adds the feature's New components to the registry** (their path and `_From: <feature>_`) — the next feature finds them there, and the feature's own design keeps saying New. |
+| **Later** | `spec_scan {designSystem: true}` / `dev-spec design-system` says what the code holds and the registry doesn't (components and tokens, each as a row to paste; a component an unfinished feature declares New is listed apart — its finish adds it), which rows' path is gone, and token files or libraries it doesn't name. |
+
+**What the check does not do.** It compares names. A new component under an unrelated name (`PrimaryAction` beside
+`Button`) passes — finding that one is the reviewer's search ([code-reuse-and-quality.md](code-reuse-and-quality.md)).
+
+**What the code scan reads — and what it doesn't.**
+
+| | Read | Not read |
+|---|---|---|
+| Components | `.tsx` `.jsx` `.vue` `.svelte` `.astro`, Angular `*.component.ts`, a PascalCase `.js` — under `components/`, `ui/`, `design-system/`, `widgets/`, `atoms/`… (its file's name, or its folder's for an `index`) | a test, a story, a hook (`useToggle`, `use-mobile`), a helper, a file under a `pages/` `routes/` `views/` `screens/` folder, a lower-case `.js` |
+| Tokens | CSS custom properties and Sass variables of `tokens.css`, `_variables.scss`, `theme.css`…; the leaves of `tokens.json` / `*.tokens.json`; a global stylesheet that declares five or more custom properties | values kept in a JS / TS / YAML file (`tailwind.config.ts`, `theme.ts`): the file is listed as a source, its values are not |
+| Raw values | a hex or functional colour in a string, an attribute or a Tailwind `[#…]`; `margin` / `padding` / `gap` / `font-size` / `border-radius` in px / rem / em in a stylesheet, a `<style>` block or a CSS-in-JS declaration line; a Tailwind arbitrary size | a size in a JSX `style={{…}}` object; an anchor (`href="#abcdef"`), a comment, a selector, `rgb(var(--x))`, a 1px hairline, a value built from a variable or `calc()` |
 
 The registry is steering the team owns: edit it by hand at any time (a variant added, a component deprecated in its
-notes). It is not part of an approval's fingerprint, so a new row never asks an approved feature to be re-reviewed.
+notes, a row for a component a feature is still building — with `_From: <feature>_`). It is not part of an approval's
+fingerprint, so a new row never asks an approved feature to be re-reviewed; and a design approved under the check is
+never *failed* later because the registry moved on (a row renamed, another feature's finish) — doctor warns, until the
+design itself is edited and approved again.
 
 ---
 

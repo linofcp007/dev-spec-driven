@@ -255,7 +255,7 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, require, __dirn
       loc[l] = [good.status, good.detail, dsCheck(g).detail];
     }
     all("1.35 doctor: PT / ES / pt-BR usage rows (Tipo | Componente — Reutilizar · Estender / Extender · Novo / Nuevo) are read, and the details are in the feature's language (got " + js(loc) + ")", {
-      pt: () => loc.pt[0] === "pass" && /coincide com o registo \(Reutilizar: 1 · Estender: 1 · Novo: 1\)/.test(loc.pt[1]) && /'Buton' não está no registo \(seria Button\?\).*um design de tamanho m precisa disto antes da aprovação$/.test(loc.pt[2]),
+      pt: () => loc.pt[0] === "pass" && /coincide com o registo \(Reutilizar: 1 · Estender: 1 · Novo: 1\)/.test(loc.pt[1]) && /'Buton' não está no registo \(será Button\?\).*um design de tamanho m precisa disto antes da aprovação$/.test(loc.pt[2]),
       es: () => loc.es[0] === "pass" && /coincide con el registro \(Reutilizar: 1 · Extender: 1 · Nuevo: 1\)/.test(loc.es[1]) && /'Buton' no está en el registro \(¿será Button\?\)/.test(loc.es[2]),
       ptBR: () => loc["pt-BR"][0] === "pass" && /coincide com o registro/.test(loc["pt-BR"][1]) && /não está no registro/.test(loc["pt-BR"][2]),
     });
@@ -446,16 +446,16 @@ exports.run = async ({ all, rpc, payload, S, tmp, approveBefore, require, __dirn
     fs.writeFileSync(path.join(cf.dir, "design.md"), "# Design: Etiqueta\n\n## [UI] Uso do Design System\n" + rows(["| Novo | Etiqueta | nenhum componente listado mostra um preço |"], "pt") + "\n");
     const cr = names(crlf, cf.slug, { write: true, ready: true });
     const crText = rd(crlf, REG);
-    all("1.35 finish: a READY written finish adds the design's New components to the registry — a row each in the component table the file ends in (its path found among the feature's files, the feature in the notes), once (a second finish adds nothing), never a name that is not a plain component name; a finish without write registers nothing; a registry ending in prose gets a new table, its line ends kept, the note in the project's language (got " +
+    all("1.35 finish: a READY written finish adds the design's New components to the registry — a row each in the component table the file ends in (its path found among the feature's files, `_From: <feature>_` in its last column — read back as the row's `from`, never as its notes), once (a second finish is still ready and adds nothing), never a name that is not a plain component name; a finish without write registers nothing; a registry ending in prose gets a new table, its line ends kept (got " +
       js({ approvals, dry: [dry.readyToFinish, dry.designSystem], fin: [fin.readyToFinish, fin.blockers, fin.designSystem], added: after.slice(before.length), again: again.designSystem, total: reg.total.components, cr, crTail: crText.slice(-170) }) + ")", {
       approved: () => approvals.every((a) => a === true),
       dry: () => dry.readyToFinish === true && js(dry.designSystem.registered) === js([]) && js(dry.designSystem.unregistered) === js(["PriceTag", "Sale Badge", "Bad<!--Name"]) && before === REGISTRY,
       registered: () => fin.readyToFinish === true && js(fin.designSystem.registered) === js(["PriceTag", "Sale Badge"]) && js(fin.designSystem.unregistered) === js(["Bad<!--Name"]) &&
         fin.designSystem.note === "added to the design-system registry (.specs/steering/design-system.md): PriceTag, Sale Badge",
-      rows: () => after === before + "| PriceTag | `src/components/PriceTag.tsx` |  | added by price-tag |\n| Sale Badge | — |  | added by price-tag |\n",
-      once: () => again.designSystem && js(again.designSystem.registered) === js([]) && rd(p, REG) === after && reg.total.components === 6,
-      known: () => (S.specDoctor(p, f.slug).checks.find((c) => c.id === "ui-design-system") || {}).status !== undefined,
-      crlf: () => js(cr.registered) === js(["Etiqueta"]) && crText.endsWith("Notas finais.\r\n\r\n| Componente | Caminho | Variantes | Notas |\r\n|---|---|---|---|\r\n| Etiqueta | — |  | acrescentado por etiqueta |\r\n") &&
+      rows: () => after === before + "| PriceTag | `src/components/PriceTag.tsx` |  | _From: price-tag_ |\n| Sale Badge | — |  | _From: price-tag_ |\n",
+      once: () => again.readyToFinish === true && again.designSystem && js(again.designSystem.registered) === js([]) && rd(p, REG) === after && reg.total.components === 6,
+      origin: () => reg.components.find((c) => c.name === "PriceTag").from === "price-tag" && reg.components.find((c) => c.name === "PriceTag").notes === "" && reg.components[0].from === undefined,
+      crlf: () => js(cr.registered) === js(["Etiqueta"]) && crText.endsWith("Notas finais.\r\n\r\n| Componente | Caminho | Variantes | Notas |\r\n|---|---|---|---|\r\n| Etiqueta | — |  | _From: etiqueta_ |\r\n") &&
         E.designSystemRegistry(path.join(crlf, ".specs")).components.some((c) => c.name === "Etiqueta"),
     });
   }

@@ -49,7 +49,8 @@ review findings — is in History at the end.
   `approvals[phase]` and its history record. A warn whose stamp an approval lacks passes with an "approved before X" note —
   design-tradeoffs / design-risks (`weigh`, 1.17), design-reuse (`reuse`, 1.19; `reuseGate`, 1.28: its m / l fail),
   `critical-flows` / `critical-flow-tests` (`critical`, 1.33), `ui-design-system` (`designSystem`, 1.35 — quality.md →
-  Design-system registry): a finished feature is never asked to reopen what it signed off (quality.md →
+  Design-system registry; this check reads a file OUTSIDE the feature, so a design approved cleanly under it and unchanged
+  since only warns when the registry moves on — `designSystemSettled`): a finished feature is never asked to reopen what it signed off (quality.md →
   The stamp scheme, Critical flows). A new warn on an approved artifact → a new stamp key here.
 - **Phase order.** An EARLIER phase in `pendingGateList()` (phases with an artifact — a missing file never blocks forever),
   or an earlier approved phase whose content changed (`changedApprovedPhases()`: by content — never `byDate` or whitespace;

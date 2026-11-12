@@ -107,7 +107,7 @@ function designSaveCheck(projectDir, name) {
     // 1.35: a +ui design's usage rows against the design-system registry — the rows that disagree (or none to check) as a ▲
     // note, right where the file was saved; a missing registry is doctor's to say, not every save's.
     if (kind === "feature" && tracks.includes("ui")) {
-      const ds = designSystemCheck(active, lng, { registry: designSystemRegistry(f.root) });
+      const ds = designSystemCheck(active, lng, { registry: designSystemRegistry(f.root), slug: f.slug });
       designSystem = ds.state;
       if (ds.status === "warn" && (ds.state === "mismatch" || ds.state === "no-rows")) notes.push("  ▲ " + ds.detail);
     }
@@ -839,6 +839,12 @@ function constitutionState(designActive) {
 const hasReqs = (c) => c.reqs != null;
 const isBugfix = (c) => c.kind === "bugfix";
 const designed = (c) => c.read("design.md") != null && c.kind !== "bugfix";
+// 1.35: the design was approved cleanly under ui-design-system — its `designSystem` stamp, the check not among a forced
+// approval's failing ones — and design.md is as approved: what it says was judged against the registry of that day.
+const designSystemSettled = (c) => {
+  const a = c.approvals && c.approvals.design;
+  return isRecord(a) && a.designSystem === true && !(Array.isArray(a.failing) && a.failing.includes("ui-design-system")) && !c.changedArts.includes("design.md");
+};
 const reproFilled = (c) => bugSectionFilled(c.read("bug.md"), REPRO_SYN);
 const rootCauseFilled = (c) => bugSectionFilled(c.read("bug.md"), ROOT_CAUSE_SYN);
 const sectionLabel = (c, s) => `${c.fm.sectionNames[s.section] || s.section}:${c.fm.sectionStatus[s.status] || s.status}`;
@@ -1043,13 +1049,16 @@ const DOCTOR_CHECKS = [
   // a declared library), a New is not listed already, is not a listed one's near-copy and says why none fits. A WARN — and an
   // approval check of a plain feature of size m / l (designSystemGated, the Reuse & Integration rule): doctor fails there and
   // the design gate refuses. No registry yet: a warn naming how to create it, never a fail. A design approved before 1.35 (no
-  // `designSystem` stamp) passes with a note; not while design.md is still a later phase's template.
+  // `designSystem` stamp) passes with a note; not while design.md is still a later phase's template. The registry moves on after
+  // an approval — a finish adds rows, a team renames a component —, so a design cleanly approved under the check and unchanged
+  // since (designSystemSettled) only WARNS: a phase signed off is never failed by another feature's finish. The gate stays
+  // strict: an edited design is re-approved against the registry of the day.
   { id: "ui-design-system", phase: 2, applies: (c) => designed(c) && c.kind === "feature" && c.tracks.includes("ui") && !c.laterFiles.includes("design.md"),
-    run: (c) => designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, approval: c.approvals && c.approvals.design,
-      gate: designSystemGated(c.kind, c.size) ? c.size : null }),
+    run: (c) => designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, approval: c.approvals && c.approvals.design, slug: c.slug,
+      gate: designSystemGated(c.kind, c.size) && !designSystemSettled(c) ? c.size : null }),
     gate: { design: (c) => {
       if (!c.tracks.includes("ui") || !designSystemGated(c.kind, c.size)) return [];
-      const r = designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, gate: c.size }); // the approval being made: never legacy
+      const r = designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, gate: c.size, slug: c.slug }); // the approval being made: never legacy
       return [[r.status !== "fail", r.detail]];
     } } },
   // a saved track pack the project no longer has (its folder deleted, or the pack now invalid) — the track is inactive.

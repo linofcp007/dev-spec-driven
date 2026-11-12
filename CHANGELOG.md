@@ -13,48 +13,61 @@ components and tokens, and every +ui feature is checked against it.
 - **The design-system registry, `.specs/steering/design-system.md`.** One file with two tables — the tokens (name,
   value, use) and the components (name, path, variants, notes) — and two markers, `_Token sources:_` (the files that
   define the tokens) and `_Libraries:_` (third-party UI libraries whose components are not listed one by one).
-  `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**: the
-  components it finds (React, Vue, Svelte and Astro files and Angular `*.component.ts` under `components/`, `ui/`,
-  `design-system/`…, never a test, a story, a hook or a page), the tokens of the token files (CSS custom properties,
-  Sass variables, JSON tokens, a global stylesheet's variables) and the UI libraries of `package.json`. The result
-  says how many it found (`seeded`). A project template for the file still wins, and an existing file is never
-  overwritten. EN / PT / pt-BR / ES.
+  `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**:
+  - the components: React, Vue, Svelte and Astro files, Angular `*.component.ts` and PascalCase `.js` files under
+    `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper or a file under
+    a page folder;
+  - the tokens of the token files: CSS custom properties, Sass variables, JSON tokens, a global stylesheet's
+    variables. A JS, TS or YAML token file (a Tailwind config, a `theme.ts`) is listed as a source, its values unread;
+  - the UI libraries of `package.json`.
+
+  The result says how many it found (`seeded`). A project template for the file is used as it is instead, and an
+  existing file is never overwritten. EN / PT / pt-BR / ES.
 - **`[UI] Design System Usage` is a table.** A new +ui design lists one row per component: `Kind | Component |
   Why / notes`, where Kind is Reuse (one the registry lists, used as is), Extend (a new variant of one it lists) or New
   (none it lists fits, and why). A library's component is written `TextField (@mui/material)`. A feature that uses no
-  component writes one line, `n/a — <why>`.
+  component writes one line, `n/a — <why, in four words or more>`.
 - **`spec_doctor` check `ui-design-system`.** It compares those rows with the registry and names each one that
   disagrees: a Reuse or Extend the registry doesn't list (with a "did you mean"), a New that is already listed, a New
-  that is a listed component's near-copy (`ButtonV2`, `NewButton`, `CustomCard`, or a name an edit away — unless its
-  notes say why that component doesn't fit), a New without a reason, and a section with no row to check. It is a
-  warning; for a feature of **size m / l** it fails and **the design approval refuses it**, like Reuse & Integration
-  (forceable with your consent). A project without a registry gets a warning that says how to create one, never a
-  refusal.
+  whose name is a listed one's with an affix or an edit away (`ButtonV2`, `NewButton`, `CustomCard`, `Buton` — unless
+  its notes say why that component doesn't fit), a New without a reason, and a section with no row to check. It
+  compares names: a new component under an unrelated name is the reviewer's to find. It is a warning; for a feature of
+  **size m / l** it fails and **the design approval refuses it**, like Reuse & Integration (forceable with your
+  consent). A project without a registry gets a warning that says how to create one, never a refusal. Saving
+  design.md shows the disagreeing rows at once.
 - **The task brief has a Design system part.** A task that builds a view gets the registry's entry of each component
   its design names (path, variants, notes), the New ones marked to build through the system, the names the registry
   doesn't list, and where the tokens live.
-- **`spec_scan {designSystem: true}` / `dev-spec design-system [feature]`.** Without a feature: what the code holds
-  and the registry doesn't (each component as a row to paste), the rows whose path is gone, and the token files and UI
+- **`spec_scan {designSystem: true}` / `dev-spec design-system [feature]`.** Read-only. Without a feature: the
+  components and tokens the code holds and the registry doesn't (each as a row to paste; a component an unfinished
+  feature declares New is listed apart — its finish adds it), the rows whose path is gone, and the token files and UI
   libraries the registry doesn't name. With a feature: its rows against the registry and the **raw values** in its view
-  files — a hex or `rgb()` colour, a `margin: 13px`, a Tailwind `p-[13px]` — each with its `file:line`, and the
-  registry token of the same value when there is one. Read-only.
-- **`spec_finish` on a +ui feature.** The raw values are a warning, never a blocker. A READY written finish **adds the
-  design's New components to the registry** (their path, the feature in the notes), so the next feature finds them
-  there.
-- **The reviewers use it.** The implementer builds from the brief's part and reports a literal it keeps on purpose; the
-  reviewer takes the disagreeing rows and the raw values as candidate findings. `references/ui-design-patterns.md` has
-  the whole loop under "The registry".
+  files, each with its `file:line` (the first 50, with the total): a hex or `rgb()` colour — with the registry token
+  of that colour when there is one —, a `margin: 13px` in a stylesheet, a `<style>` block or a CSS-in-JS template, a
+  Tailwind `p-[13px]`. A size in a JSX `style={{…}}` object is not read.
+- **`spec_finish` on a +ui feature of a project with a registry.** The raw values are a warning, never a blocker,
+  when the registry holds tokens or names token files (otherwise there is nothing to replace them with). A READY
+  written finish **adds the design's New components to the registry** — their path and `_From: <feature>_` —, so the
+  next feature finds them there; that origin is what lets the feature's own design keep saying New, and a rename of
+  the feature follows it.
+- **The reviewers use it.** The implementer builds from the brief's part and reports a literal it keeps on purpose
+  ("Raw values kept on purpose"); the final and converge reviews take the disagreeing rows and the raw values as
+  candidate findings. `references/ui-design-patterns.md` has the whole loop under "The registry", with what the code
+  scan reads and what it doesn't.
 
 ### Upgrade notes
 - **Nothing is asked of work already approved.** A design approved before 1.35 is never flagged by `ui-design-system`,
-  at any size; the check applies from a design's next approval.
-- **A +ui design not yet approved** gets a warning until the project has a registry
-  (`dev-spec steering design-system.md`) and the section lists its components as rows. An unapproved design scaffolded
-  by 1.34 holds the one-line section: add the table (`| Kind | Component | Why / notes |`).
+  at any size; the check applies from a design's next approval. And a design approved under the check is never
+  *failed* later because the registry moved on (a row renamed, another feature's finish): doctor warns, until the
+  design itself is edited and approved again.
+- **A +ui design not yet approved** gets a warning while the project has no registry
+  (`dev-spec steering design-system.md` creates it). With one, the section must list its components as rows: a
+  warning, and at size m / l the design approval refuses until it does. A design scaffolded by 1.34 holds the
+  one-line section: add the table (`| Kind | Component | Why / notes |`).
 - The registry is not part of an approval's fingerprint: adding a row never asks an approved feature to be re-reviewed.
 
 ### Tests
-- `node mcp/test.js` 2278 assertions, `node cli/test-cli.js` 660 (was 2266 / 657).
+- `node mcp/test.js` 2287 assertions, `node cli/test-cli.js` 660 (was 2266 / 657).
 
 ## [1.34.1] — 2026-10-31
 

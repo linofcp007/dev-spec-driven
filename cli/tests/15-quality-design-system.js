@@ -45,6 +45,7 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     missing: () => drift.out.includes(T.dsMissingHead(1)) && drift.out.includes("    | Badge | `src/components/Badge.tsx` |  |  |"),
     stale: () => drift.out.includes(T.dsStaleHead(1)) && drift.out.includes("    DatePicker — src/components/date-picker.tsx"),
     lists: () => drift.out.includes(T.dsSourcesNew("src/styles/theme.css")) && drift.out.includes(T.dsLibrariesNew("antd")) && !drift.out.includes(T.dsInSync) && drift.code === 0,
+    tokens: () => drift.out.includes(T.dsTokensNew(1)) && drift.out.includes("    | --radius | 8px |  |"),
     json: () => asJson.code === 0 && js(jsonOf(asJson)) === js(SR.designSystemReport(p)),
   });
 
@@ -62,6 +63,7 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
   const slug = feature(p, "en");
   const fr = runIn(["design-system", slug, "--project", p]);
   const frJson = runIn(["design-system", slug, "--project", p, "--json"]);
+  const frEngine = SR.designSystemReport(p, { name: slug }); // (now: the project gains a file below)
   const nope = runIn(["design-system", "nope", "--project", p]);
   const extra = runIn(["design-system", slug, "more", "--project", p]);
   const flag = runIn(["design-system", "--min-lines", "5", "--project", p]);
@@ -74,17 +76,26 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
   const pt = runIn(["design-system", pslug, "--project", pp]);
   const ptProject = runIn(["design-system", "--project", pp]);
   const help = runIn(["design-system", "--help"]);
+  // a feature of a project with no registry: said, with how to create one; a component an unfinished feature declares New: pending
+  const np = path.join(tmp, "p135-ds-noreg");
+  SR.initProject(np, ["ui"], "en");
+  const nslug = feature(np, "en");
+  const noReg = runIn(["design-system", nslug, "--project", np]);
+  write(p, "src/components/PriceTag.tsx", "export const PriceTag = () => null;\n");
+  const pendingOut = runIn(["design-system", "--project", p]);
   const P = MSG("pt").cliOutput, Q = MSG("en").quality;
   all("1.35 design-system <feature> (CLI): the feature's rows by kind, each disagreement with the registry (⚠), the raw values of its view files as file:line value (→ the token of that value), a file that is no view file unread; a feature with nothing raw says so; an unknown feature, an extra word and another command's flag exit 1; the feature's language (PT); help shows the command (got " +
     js([fr.code, fr.out, cleanOut.out, nope.code, extra.code, flag.code, pt.out, ptProject.out.split("\n")[0], help.out.split("\n").slice(0, 2)]) + ")", {
     head: () => fr.code === 0 && fr.out.split("\n")[0] === T.dsFeatureHead("checkout", 2, 0, 1),
     problem: () => fr.out.includes("  ⚠ " + Q.dsProblem.unknown("Buton", "Button")),
     raw: () => fr.out.includes(T.dsRawHead(2, 1)) && fr.out.includes("    src/checkout/Checkout.tsx:1  #1D4ED8  → --color-action-primary") && fr.out.includes("    src/checkout/Checkout.tsx:1  p-[13px]") && !fr.out.includes("plain.ts"),
-    json: () => frJson.code === 0 && js(jsonOf(frJson)) === js(SR.designSystemReport(p, { name: slug })),
+    json: () => frJson.code === 0 && js(jsonOf(frJson)) === js(frEngine),
     clean: () => cleanOut.code === 0 && cleanOut.out.includes(T.dsFeatureNoRows) && cleanOut.out.includes(T.dsRawNone(1)),
     refusals: () => nope.code === 1 && extra.code === 1 && flag.code === 1,
-    pt: () => pt.code === 0 && pt.out.split("\n")[0] === P.dsFeatureHead("checkout", 2, 0, 1) && pt.out.includes("'Buton' não está no registo (seria Button?)") && pt.out.includes(P.dsRawHead(2, 1)),
+    pt: () => pt.code === 0 && pt.out.split("\n")[0] === P.dsFeatureHead("checkout", 2, 0, 1) && pt.out.includes("'Buton' não está no registo (será Button?)") && pt.out.includes(P.dsRawHead(2, 1)),
     ptProject: () => ptProject.out.split("\n")[0] === P.dsHead(REG, 2, 2),
+    noRegistry: () => noReg.code === 0 && noReg.out.includes("  " + T.dsHeadNone(REG)) && noReg.out.includes(T.dsCreate) && noReg.out.includes(T.dsRawHead(2, 1)),
+    pending: () => pendingOut.out.includes(T.dsPending("PriceTag (checkout)")) && !pendingOut.out.includes("| PriceTag |"),
     help: () => help.code === 0 && /^ {2}design-system \[feature\] {9}The design-system registry/m.test(help.out),
   });
 
@@ -100,7 +111,7 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     fs.writeFileSync(path.join(f.dir, "design.md"), "# Design: Price Tag\n\n## Overview\nA price with its currency.\n\n## Architecture\n```mermaid\ngraph TD\n  P[PriceTag] --> F[format]\n```\n\n" +
       "## Decisions, reuse & risks\nReuses the money formatter (`src/lib/money.ts`); one component rather than a helper, so the markup is shared; no material risk: it only renders.\n\n" +
       "## Error Handling\nSee the IF…THEN criteria.\n\n## Constitution Check\n- [x] Small components — complies.\n\n## Complexity Tracking\nNone.\n\n" +
-      "## [UI] Design System Usage\nBuilt from the system.\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| Reuse | Button | the retry action |\n| New | PriceTag | no listed component shows a price with its currency |\n\n" +
+      "## [UI] Design System Usage\nBuilt from the system.\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| Reuse | Button | the retry action |\n| New | PriceTag | no listed component shows a price with its currency |\n| New | Bad<!--Name | not a name a row can hold |\n\n" +
       "## [UI] UI States\nLoading: a skeleton. Error: a dash. Reference: design/price.png.\n\n## [UI] Accessibility\nWCAG 2.2 AA; axe in the component tests.\n");
     fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build the price tag\n  - _Requirements: US-1.AC-1, US-1.AC-2_\n  - _Implements: src/components/PriceTag.tsx_\n  - _Verify: npm test_\n");
     write(fp, "src/components/PriceTag.tsx", "export const PriceTag = () => <b style={{ color: \"#123456\" }} />;\n");
@@ -110,13 +121,15 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     const fin = runIn(["finish", f.slug, "--write", "--project", fp]);
     const after = rd(fp, REG);
     const finJson = jsonOf(runIn(["finish", f.slug, "--write", "--project", fp, "--json"]));
-    all("1.35 finish --write (CLI): a READY feature's New components are added to the registry (✓ the line, the row with its path), its raw values are a ▲ warning — never a blocker (exit 0); a second finish adds nothing (got " +
-      js([approvals, done.code, fin.code, fin.out, after.slice(before.length), finJson.designSystem]) + ")", {
+    const doctor = runIn(["doctor", f.slug, "--project", fp, "--json"]);
+    all("1.35 finish --write (CLI): a READY feature's New components are added to the registry (✓ the line, the row with its path and `_From: <feature>_`), a name no row can hold is said (▲ not added), its raw values are a ▲ warning — never a blocker (exit 0); a second finish adds nothing and stays ready; doctor still passes ui-design-system (got " +
+      js([approvals, done.code, fin.code, fin.out, after.slice(before.length), finJson.designSystem, finJson.readyToFinish]) + ")", {
       ready: () => approvals.every((c) => c === 0) && done.code === 0 && fin.code === 0,
-      line: () => fin.out.includes(T.dsRegistered("PriceTag")),
+      line: () => fin.out.includes(T.dsRegistered("PriceTag")) && fin.out.includes(T.dsUnregistered("Bad<!--Name")),
       warning: () => /^ {2}▲ the feature's view files hold 1 raw value where the design system has tokens — src\/components\/PriceTag\.tsx:1 #123456: use the token/m.test(fin.out),
-      row: () => after === before + "| PriceTag | `src/components/PriceTag.tsx` |  | added by price-tag |\n",
-      once: () => js(finJson.designSystem.registered) === js([]) && js(finJson.designSystem.unregistered) === js([]) && rd(fp, REG) === after,
+      row: () => after === before + "| PriceTag | `src/components/PriceTag.tsx` |  | _From: price-tag_ |\n",
+      once: () => finJson.readyToFinish === true && js(finJson.designSystem.registered) === js([]) && js(finJson.designSystem.unregistered) === js(["Bad<!--Name"]) && rd(fp, REG) === after,
+      doctor: () => ((jsonOf(doctor).checks || []).find((c) => c.id === "ui-design-system") || {}).status === "pass",
     });
   }
 };

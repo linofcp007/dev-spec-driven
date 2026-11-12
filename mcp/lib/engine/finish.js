@@ -33,10 +33,11 @@ let acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalo
   branchNameOk, branchView; // 1.25 (create --branch)
 let duplicationReport; // dupes.js — the duplicate-code detector (1.28: finish's warning)
 let designSystemFinish; // design-system.js — raw values in a +ui feature's view files, its New components into the registry (1.35)
+let DESIGN_SYSTEM_FILE; // quality.js — the registry's file name (a rename follows its `_From:_` rows)
 let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian, accepted gaps
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
 let phaseFile; // state.js — the file a phase writes (tasks: an xs change's change.md)
-function __link(E) { ({ phaseFile, duplicationReport, designSystemFinish, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+function __link(E) { ({ phaseFile, duplicationReport, designSystemFinish, DESIGN_SYSTEM_FILE, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   enumArg, errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
@@ -306,11 +307,12 @@ function finishFeature(projectDir, name, opts = {}) {
   const { mergeSummary, summaryPath } = mergeSummaryOf(dir, mergeTitle, body, write);
   const ready = blockers.length === 0;
   // 1.35: a +ui feature of a project that keeps a design-system registry (.specs/steering/design-system.md) — the raw colours and
-  // sizes in its view files, where the registry has tokens: a warning, never a blocker (how many, the first 3 as `file:line
-  // value`, the call listing them all); and a READY written finish adds the design's New components to the registry, so the
-  // next feature finds them there. null for any other feature (nothing read).
+  // sizes in its view files, when the registry holds tokens (or names token files — else there is nothing to replace them
+  // with): a warning, never a blocker (how many, the first 3 as `file:line value`, the call that lists them); and a READY
+  // written finish adds the design's New components to the registry, so the next feature finds them there. null for any other
+  // feature (nothing read).
   const ds = tracks.includes("ui") ? designSystemFinish(projectDir, slug, { write, ready }) : null;
-  if (ds && ds.raw.total) warnings.push(F.designSystemRaw(ds.raw.total, ds.raw.top.map((x) => `${x.file}:${x.line} ${x.value}`).join("; "), slug));
+  if (ds && ds.tokens && ds.raw.total) warnings.push(F.designSystemRaw(ds.raw.total, ds.raw.top.map((x) => `${x.file}:${x.line} ${x.value}`).join("; "), slug));
   // A written finish of a READY feature is the drift baseline: a hash of every _Implements:_ file (spec_drift).
   const baseline = write && ready ? recordFinishBaseline(projectDir, slug, dir, tasksText, opts.globCap) : null;
   const res = {
@@ -337,9 +339,11 @@ function finishFeature(projectDir, name, opts = {}) {
   if (forcedList.length) res.waivers = waiverResult(forcedList); // [{phase, failing, reason?, expires?, expired}]
   if (duplicates) res.duplicates = duplicates; // 1.28: {existing, within, top: the 3 longest existing repeats, partial? (1.30)} — spec_scan {duplicates: true} lists all
   // 1.35: {raw: {total, counts: {color, size}, top}, registered (New components this call added to the registry), unregistered,
-  // note? (the localized line, when it added some)} — only when there is something to say; spec_scan {designSystem: true, name} lists all
+  // note? (the localized line, when it added some)} — only when there is something to say; spec_scan {designSystem: true, name}
+  // lists the raw values
   if (ds && (ds.raw.total || ds.registered.length || ds.unregistered.length)) {
-    res.designSystem = Object.assign({}, ds, ds.registered.length ? { note: i18n.msg(lng).quality.dsRegistered(ds.registered.join(", ")) } : {});
+    res.designSystem = Object.assign({ raw: ds.raw, registered: ds.registered, unregistered: ds.unregistered },
+      ds.registered.length ? { note: i18n.msg(lng).quality.dsRegistered(ds.registered.join(", ")) } : {});
   }
   if (suite.items.length) res.suiteChecks = suite.items; // [{name, command, status, exitCode?, at?, …}] — status is a stable code
   if (recordedChecks) res.recordedChecks = recordedChecks; // the runs this call recorded
@@ -803,11 +807,13 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   const ms = pruneRoadmapRefs(projectDir, oldSlug, newSlug);
   for (const s of plan.supersedes) writeFileAtomic(s.file, s.text);
   for (const r of plan.records) writeFileAtomic(r.file, JSON.stringify(r.state, null, 2));
+  const origins = renameRegistryOrigin(to.root, oldSlug, newSlug); // 1.35: the design-system registry's `_From: <old>_` rows
   // the feature has a folder under the new name — a backlog item of that name is no longer planned-but-unspecced
   // (create and restore drop it the same way; it was listed twice in ROADMAP.md, under Features and under Backlog)
   const fromBacklog = pruneBacklog(projectDir, newSlug);
   const res = { ok: true, action: "rename", from: oldSlug, to: newSlug };
   if (fromBacklog.length) res.removedFromBacklog = fromBacklog;
+  if (origins) res.designSystemUpdated = origins; // how many registry rows follow the feature
   Object.assign(res, milestoneResult(ms)); // 1.16 E3
   const where = (x) => (x.archived ? "_archive/" : "") + x.feature;
   const fm = i18n.msg(featureLang(projectDir, newSlug));
@@ -822,6 +828,21 @@ function renameFeatureLocked(projectDir, name, newName, moved) {
   }
   if (notes.length) res.note = notes.join(" · ");
   return res;
+}
+
+// 1.35 — a renamed feature keeps the components its finish added to the design-system registry: `_From: <old>_` in the rows of
+// .specs/steering/design-system.md → the new slug (the marker is what keeps the feature's own `New` row New — quality.js
+// designSystemFindings). Slugs are [a-z0-9-], so the pattern needs no escaping. Best-effort: a registry the write gate refuses
+// is left as it is. → how many markers were rewritten.
+function renameRegistryOrigin(root, oldSlug, newSlug) {
+  const file = path.join(root, "steering", DESIGN_SYSTEM_FILE);
+  const raw = readIfExists(file);
+  if (raw == null || !/_From:/i.test(raw) || !/^[a-z0-9][a-z0-9-]*$/.test(oldSlug)) return 0;
+  let n = 0;
+  const text = raw.replace(new RegExp("_From:([ \\t]*)" + oldSlug + "_", "gi"), (m, sp) => { n++; return "_From:" + sp + newSlug + "_"; });
+  if (!n) return 0;
+  try { writeFileAtomic(file, text); } catch { return 0; }
+  return n;
 }
 
 // What a rename rewrites besides roadmap.json, computed BEFORE the folder moves (the old slug must still resolve):

@@ -918,7 +918,7 @@ const steering = {
     // creates it). The `_Token sources:_` / `_Libraries:_` markers are English-stable in every language; the first header cell of
     // each table (Token / Component) is what the reader finds it by.
     "design-system.md":
-      "# Design System\n\n<!-- The ONE inventory every +ui feature builds from: the components and the tokens. A feature's design lists what it uses\n     in [UI] Design System Usage (Kind | Component | Why); spec_doctor checks those rows against this file (ui-design-system —\n     an approval check at size m / l), spec_task_brief quotes the entries a UI task needs, and spec_finish adds a feature's\n     New components here. spec_scan {designSystem: true} lists what the code holds and this file doesn't.\n     Keep the two markers in English: _Token sources:_ (the files that define the tokens) and _Libraries:_ (third-party UI\n     libraries whose components are not listed one by one — a design names them as `Button (@mui/material)`). -->\n\n## Tokens\n_Token sources: [tokens.json, src/styles/tokens.css]_\n\n| Token | Value | Use |\n|---|---|---|\n| [--color-action-primary] | [#1d4ed8] | [primary buttons, links] |\n\n## Components\n_Libraries: none_\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| [Button] | [src/ui/Button.tsx] | [primary, secondary, ghost] | [when to use it — and when not] |\n",
+      "# Design System\n\n<!-- The ONE inventory every +ui feature builds from: the components and the tokens. A feature's design lists what it uses\n     in [UI] Design System Usage (Kind | Component | Why); spec_doctor checks those rows against this file (ui-design-system —\n     an approval check at size m / l), spec_task_brief quotes the entries a UI task needs, and spec_finish adds a feature's\n     New components here. spec_scan {designSystem: true} lists what the code holds and this file doesn't.\n     Keep the markers in English: _Token sources:_ (the files that define the tokens), _Libraries:_ (third-party UI libraries\n     whose components are not listed one by one — a design names them as `Button (@mui/material)`) and, in a row a finish\n     added, _From:_ (the feature that built the component). -->\n\n## Tokens\n_Token sources: [tokens.json, src/styles/tokens.css]_\n\n| Token | Value | Use |\n|---|---|---|\n| [--color-action-primary] | [#1d4ed8] | [primary buttons, links] |\n\n## Components\n_Libraries: none_\n\n| Component | Path | Variants | Notes |\n|---|---|---|---|\n| [Button] | [src/ui/Button.tsx] | [primary, secondary, ghost] | [when to use it — and when not] |\n",
     // the glossary (steering_scaffold glossary.md; init never creates it). `_Avoid:_` is English-stable in every language.
     "glossary.md":
       "# Glossary\n\n<!-- The product's ubiquitous language: one entry per domain term — the word the specs use, what it means here, and the\n     words NOT to use for it. spec_clarify asks about every avoided word found in a feature's requirements.md / design.md,\n     spec_doctor warns (check `glossary`) and spec_task_brief quotes the entries a task's criteria use.\n     One entry per line (keep the `_Avoid:_` marker in English), e.g.:\n     - **Customer** — a person or company with a signed contract. _Avoid: client, user_ -->\n\n- **[Term]** — [what it means in this product]. _Avoid: [word], [word]_\n",
@@ -1007,7 +1007,7 @@ const msg = {
       duplicatesPartial: (unread) => `; only part of the project was compared — the detector's byte budget left ${unread} source ${unread === 1 ? "file" : "files"} unread`,
       duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "block of the feature's code repeats" : "blocks of the feature's code repeat"} another place in its own files — a candidate for the simplification pass (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       // 1.35: raw colours and sizes in the feature's view files, where the design-system registry has tokens — a warning, never a blocker
-      designSystemRaw: (n, top, slug) => `the feature's view files hold ${n} raw ${n === 1 ? "value" : "values"} where the design system has tokens — ${top}${n > 3 ? "; …" : ""}: use the token, or note in the report why a literal is deliberate (all of them: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
+      designSystemRaw: (n, top, slug) => `the feature's view files hold ${n} raw ${n === 1 ? "value" : "values"} where the design system has tokens — ${top}${n > 3 ? "; …" : ""}: use the token, or note in the report why a literal is deliberate (the list: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
       // 1.30: no task names a file in _Implements:_ — what reads them sees no code of the feature. file: the one holding the tasks
       // (tasks.md; an xs change's change.md — review 9)
       noImplements: (file) => `no task names its files in _Implements:_ — the drift baseline, the duplicate check and dev-guardian's attribution see no code of this feature. Add _Implements: <path>_ to each task that wrote code (an edited ${file} is re-approved), or ignore this if none did.`,
@@ -1578,6 +1578,9 @@ const msg = {
       dsRawNone: (files) => `  no raw colour or size in its ${files} view ${files === 1 ? "file" : "files"}`,
       dsNoViewFiles: "  no view or style file among its _Implements:_ files — nothing to read",
       dsRegistered: (list) => `  ✓ added to the design-system registry: ${list}`,
+      dsUnregistered: (list) => `  ▲ not added to the design-system registry (no plain component name, or the file could not be written): ${list}`,
+      dsTokensNew: (n) => `  tokens in the code, not in the registry (${n}) — a row each:`,
+      dsPending: (list) => `  in the code, built by an unfinished feature (its finish adds them): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarify: ${f}  [${tracks}]  → ${verdict} (${n} question(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  phase=${phase}  verdict=${verdict}  gatesOk=${gatesOk}`,
       changed: (list) => `  ⚠ changed since last approval: ${list}`,
@@ -3490,15 +3493,14 @@ const quality = {
     dsNoRows: "Design System Usage names no component row — list each one as `| Kind | Component | Why / notes |` (Kind: Reuse · Extend · New) so it can be checked against the registry, or write one line: n/a — why this feature uses no component",
     dsMismatch: (n, list) => `Design System Usage and the registry (.specs/steering/design-system.md) disagree in ${n} ${n === 1 ? "row" : "rows"} — ${list}`,
     dsProblem: {
-      unknown: (name, near) => `'${name}' is not in the registry${near ? ` (did you mean ${near}?)` : ""}: reuse a listed component, or make it a New row`,
-      listed: (name, near) => `'${name}' is marked New but the registry already lists ${near}: make it a Reuse or an Extend row`,
+      unknown: (name, near) => `'${name}' is not in the registry${near ? ` (did you mean ${near}?)` : ""}: reuse a listed component, name its library (${name} (@library)), or make it a New row`,
+      listed: (name, near) => `'${name}' is marked New but the registry already lists ${near}: make it a Reuse or an Extend row — or, when this feature is the one that built it, add _From: <its slug>_ to that registry row`,
       near: (name, near) => `New '${name}' is close to ${near}, which the registry lists: reuse or extend ${near}, or say in the row's notes why ${near} doesn't fit`,
       "no-why": (name) => `New '${name}' doesn't say why no listed component fits`,
     },
     dsGate: (d, size) => `${d} — a size ${size} design needs it before its approval`,
     dsOk: (reuse, extend, news) => `Design System Usage agrees with the registry (Reuse: ${reuse} · Extend: ${extend} · New: ${news})`,
-    dsTruncated: (read, total) => `the registry holds ${total} components — only the first ${read} are read (split or trim it)`,
-    dsFromFeature: (slug) => `added by ${slug}`,
+    dsTruncated: (read, total) => `the registry holds ${total} components — only the first ${read} are read with their details (trim it: only this one file is read)`,
     dsTable: { components: "| Component | Path | Variants | Notes |", tokens: "| Token | Value | Use |" },
     dsRegistered: (list) => `added to the design-system registry (.specs/steering/design-system.md): ${list}`,
   };

@@ -386,7 +386,8 @@ After the last task: run the duplicate detector — `spec_scan {duplicates: true
 the detector's `existing` runs as **candidate findings** (each `file:from-to` and the places it repeats — a duplicate the
 spec asks for, or one a report lists under "Duplicated on purpose", is no finding), on a +ui feature of a project with a
 design-system registry the `problems` and `raw` values of `spec_scan {designSystem: true, name}` (candidates too: a
-component the registry doesn't list, a hard-coded colour or size where a token exists), the ledger, the active tracks, the
+design row that disagrees with the registry, a hard-coded colour or size in the feature's view files — a report's "Raw
+values kept on purpose" is none), the ledger, the active tracks, the
 references folder path and, on +tdd, the `spec_log {name, gitLog}` output (you run
 `git log --name-only --relative` and pass its text — the server never runs git; the reviewer can't call MCP tools) — it
 runs the branch-review checklist

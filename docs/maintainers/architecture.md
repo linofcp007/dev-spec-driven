@@ -150,9 +150,9 @@ The engine is plain CommonJS modules, one per concern, behind two facades: `spec
   the facade). The two the engine requires are its helpers: the bundle holds them (`ENGINE_HELPERS` in scripts/build.js —
   a new one goes there); operations.js, which no engine module requires, it doesn't.
 - **Few, cohesive files.** Every hook and CLI call is a fresh process that loads the whole engine, and on Windows each file
-  costs ~0.65 ms before any compile (the open is the expensive part): 23 modules loaded with the engine (+ dupes.js, design-system.js and 9
-  in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to the module of the concept; a new file must earn its load cost. The facade's
-  first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
+  costs ~0.65 ms before any compile (the open is the expensive part): 23 modules loaded with the engine (+ dupes.js,
+  design-system.js and 9 in import/, the lazy tier) of a few hundred to a few thousand lines, never one per helper. Add to
+  the module of the concept; a new file must earn its load cost. The facade's first line enables Node's compile cache (`module.enableCompileCache()`, Node ≥ 22.8; `NODE_COMPILE_CACHE`,
   `NODE_DISABLE_COMPILE_CACHE=1`): it saves the compile of large modules but costs a cache-file read per module — a tiny module
   loads SLOWER with it. Measure by interleaving the variants in fresh processes, p50 + spread — never one run. On a slow file
   system the answer is the bundle (The build), never fewer, larger modules.
