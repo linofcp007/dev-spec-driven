@@ -128,9 +128,9 @@ combinam-se — um webhook do Stripe num SaaS multi-inquilino que resume faturas
 design de uma feature +ui lista cada componente como Reutilizar, Estender ou Novo; o `doctor` verifica essas linhas contra o
 registo (um componente que o registo não lista, ou um `ButtonV2` ao lado de um `Button` que já existe, é apanhado antes de
 ser construído e, nos tamanhos m / l, a aprovação do design recusa-o), o brief da tarefa entrega ao implementador os
-componentes a usar, e o `finish` avisa das cores e tamanhos fixos nos ecrãs da feature e acrescenta ao registo os
-componentes novos dela. O `dev-spec design-system`
-mostra onde o registo e o código se afastaram.
+componentes a usar, e o `finish` avisa das cores e tamanhos fixos nos ecrãs da feature (onde o registo tem tokens) e
+acrescenta ao registo os componentes novos dela. O `dev-spec design-system` mostra onde o registo e o código se
+afastaram.
 
 Um track pode ser acrescentado ou desligado mais tarde (`/spec-change <feature> track +sec`). Os tracks da tua equipa:
 `/spec-setup tracks` — um pack de exemplo para copiar é o `examples/track-packs/mobile`. Um bug segue pelo `/spec-bugfix`

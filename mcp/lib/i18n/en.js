@@ -1571,7 +1571,14 @@ const msg = {
       dsLibrariesNew: (list) => `  UI libraries in package.json the registry doesn't name (_Libraries:_): ${list}`,
       dsInSync: "  the registry and the code agree",
       dsMore: (n) => `    … +${n} more`,
-      dsTruncated: (n) => `  (the file cap was reached — ${n} files walked: the rest was not read)`,
+      // a bound that cut what the scan read (the report's `limits` codes) — never "the registry and the code agree" beside one
+      dsLimit: {
+        files: (n) => `  (the file cap was reached — ${n} files walked: the rest was not read)`,
+        "token-files": (n) => `  (only the first ${n} token files are read, by path: the rest is not compared)`,
+        tokens: (n) => `  (only the first ${n} tokens of the code are read: the rest is not compared)`,
+        "registry-rows": (n) => `  (only the registry's first ${n} components are checked for a path that is gone)`,
+        "view-files": (n) => `  (only the feature's first ${n} view files are read for raw values)`,
+      },
       dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reuse: ${reuse} · Extend: ${extend} · New: ${news}`,
       dsFeatureNoRows: "  the design names no component row ([UI] Design System Usage)",
       dsRawHead: (n, files) => `  raw values in its view files (${n} in ${files} ${files === 1 ? "file" : "files"}) — use the token:`,
@@ -3501,7 +3508,7 @@ const quality = {
     dsGate: (d, size) => `${d} — a size ${size} design needs it before its approval`,
     dsOk: (reuse, extend, news) => `Design System Usage agrees with the registry (Reuse: ${reuse} · Extend: ${extend} · New: ${news})`,
     dsTruncated: (read, total) => `the registry holds ${total} components — only the first ${read} are read with their details (trim it: only this one file is read)`,
-    dsTable: { components: "| Component | Path | Variants | Notes |", tokens: "| Token | Value | Use |" },
+    dsTable: { components: "| Component | Path | Variants | Notes |" },
     dsRegistered: (list) => `added to the design-system registry (.specs/steering/design-system.md): ${list}`,
   };
 

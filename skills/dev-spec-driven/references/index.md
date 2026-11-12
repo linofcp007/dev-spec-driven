@@ -31,8 +31,8 @@ the whole library.
 
 **Writing the spec**
 - `references/ears-guide.md` — full EARS syntax, all 5 patterns
-- `references/steering-templates.md` — all 16 steering-file templates (incl. `distributed.md`, `api.md`, `ui.md`, `data.md` and
-  the optional `glossary.md`), scoped steering (front matter inclusion modes), project templates in `.specs/templates/`
+- `references/steering-templates.md` — all 17 steering-file templates (incl. `distributed.md`, `api.md`, `ui.md`, `data.md`,
+  the optional `glossary.md` and the design-system registry `design-system.md`), scoped steering (front matter inclusion modes), project templates in `.specs/templates/`
 - `references/example-spec.md` — end-to-end example, `core +tdd` auth · `references/example-spec-combined.md` —
   `core +tdd +saas +ai`
 - `references/critical-flows.md` — a critical flow (stock, coupons, balance / credits, bookings, invites, quotas,

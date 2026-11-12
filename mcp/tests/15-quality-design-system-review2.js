@@ -95,20 +95,34 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     });
   }
   {
-    // the registry is read AGAIN under the lock: a row another process added after this call first read the file is kept
+    // the registry is read AGAIN under the lock: a row another process wrote after this call's own first read of the file is
+    // kept. (A written finish drops its whole read cache when it takes the feature's lock, so a write made before the call
+    // proves nothing — review 3: this test passed without the fix. The other process writes here at the moment the call takes
+    // the roadmap lock, once the call has read the registry: the window the fix closes.)
     const g = ready("cache", "s", REGISTRY);
-    const fin = E.withReadCache(() => {
-      const before = E.designSystemRegistry(path.join(g.p, ".specs")).total.components; // this call's cached read
-      fs.appendFileSync(path.join(g.p, REG), "| Badge | `src/components/Badge.tsx` |  |  |\n"); // …then another process writes
-      return { before, fin: S.finishFeature(g.p, g.slug, { write: true }) };
-    });
+    const regFile = path.resolve(g.p, REG);
+    const real = { readFileSync: fs.readFileSync, linkSync: fs.linkSync, openSync: fs.openSync };
+    let reads = 0, wroteAfter = 0;
+    const same = (f) => typeof f === "string" && path.resolve(f).toLowerCase() === regFile.toLowerCase();
+    const onLock = (f) => {
+      if (!reads || wroteAfter || typeof f !== "string" || path.basename(f) !== ".roadmap.lock") return;
+      wroteAfter = reads;
+      fs.appendFileSync(regFile, "| Badge | `src/components/Badge.tsx` |  |  |\n");
+    };
+    fs.readFileSync = function (f) { if (same(f)) reads++; return real.readFileSync.apply(this, arguments); };
+    fs.linkSync = function (a, b) { onLock(b); return real.linkSync.apply(this, arguments); }; // the lock: a hard link to its note…
+    fs.openSync = function (f) { onLock(f); return real.openSync.apply(this, arguments); }; // …or an exclusive create
+    let fin;
+    try { fin = S.finishFeature(g.p, g.slug, { write: true }); } finally { Object.assign(fs, real); }
     const names = E.designSystemRegistry(path.join(g.p, ".specs")).components.map((c) => c.name);
-    // a registry ending in 80,000 blank lines: the written finish reads its end in bounded time
-    const h = ready("hostile-end", "s", REGISTRY + long("\n", 80000) + long(" ", 80000) + "\n");
+    // a hostile registry through a written finish: an 80,000-blank run that is NOT at the text's end (a `\s+$` replace rescans it
+    // from every blank), then 80,000 empty lines, then the table the row joins
+    const h = ready("hostile-end", "s", "# Design System\n\n" + long(" ", 80000) + "x\n" + long("\n", 80000) + COMPONENTS);
     const slow = timed(() => S.finishFeature(h.p, h.slug, { write: true }));
-    all("1.35 review 2: a written finish reads the registry again under the lock, past the call's read cache — a row written by another process after the call's first read is kept beside the one finish adds; a registry ending in 80,000 blank lines and an 80,000-blank line is appended to in bounded time (got " +
-      js({ before: fin.before, registered: fin.fin.designSystem && fin.fin.designSystem.registered, names, slow: [slow.ms, slow.v.designSystem && slow.v.designSystem.registered] }) + ")", {
-      both: () => fin.before === 2 && js(fin.fin.designSystem.registered) === js(["PriceTag"]) && js(names) === js(["Button", "Card", "Badge", "PriceTag"]),
+    all("1.35 review 2: a written finish reads the registry again under the lock, past the call's read cache — a row another process writes after the call's first read of the file (here: as the call takes the roadmap lock) is kept beside the one finish adds; a registry holding an 80,000-blank run and 80,000 empty lines before its table is appended to in bounded time (got " +
+      js({ wroteAfter, registered: fin.designSystem && fin.designSystem.registered, names, slow: [slow.ms, slow.v.designSystem && slow.v.designSystem.registered] }) + ")", {
+      injected: () => wroteAfter > 0,
+      both: () => js(fin.designSystem.registered) === js(["PriceTag"]) && js(names) === js(["Button", "Card", "Badge", "PriceTag"]),
       bounded: () => slow.ms < 4000 && js(slow.v.designSystem.registered) === js(["PriceTag"]) && E.designSystemRegistry(path.join(h.p, ".specs")).keys.has("pricetag"),
     });
   }
@@ -188,37 +202,17 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     write(p, REG, REGISTRY);
     const f = S.createFeature(p, { name: "Shop", tracks: ["ui"], summary: "x" });
     fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/shop/_\n");
-    write(p, "src/shop/card.css", [".card {", "  box-shadow: 0 0 0 1px #1d4ed8,", "    0 1px 2px rgb(0 0 0 / 0.2);", "  background: linear-gradient(#111111,", "    #222222);", "}", "#fab,", ".card:hover,", "a:hover {", "  color: #333333;", "}", ""].join("\n"));
+    write(p, "src/shop/card.css", [".card {", "  box-shadow: 0 0 0 1px #1d4ed8,", "    0 1px 2px rgb(0 0 0 / 0.2);", "  background: linear-gradient(#111111,", "    #222222);", "}", "#fab,", ".card:hover,", "a:not(#fab),", "a:hover {", "  color: #333333;", "}", ""].join("\n"));
     write(p, "src/shop/State.tsx", ["type style = { tone: string };", "export const State = () => {", "  const [s] = useState<style>(null);", "  return (", "    <form>", "      <input accept=\"image/*\" />", "      <b className=\"text-[#00ff00]\" />", "    </form>", "  );", "};", ""].join("\n"));
     write(p, "src/shop/Tones.tsx", ["export const tones = {", "  invalid: '#dc2626',", "  solid: \"#1d4ed8\",", "  gradient: { from: \"#000000\", to: \"#ffffff\" },", "  href: \"#abcdef\",", "  id: '#aabbcc',", "};",
       "export const Link = () => <a href=\"#fedcba\" id=\"#112233\" style={{ color: \"#445566\" }} />;", "const el = document.getElementById(\"#665544\");", ""].join("\n"));
     const r = S.designSystemReport(p, { name: f.slug });
     const got = r.raw.map((x) => x.file.replace("src/shop/", "") + ":" + x.line + " " + x.value + (x.token ? " =" + x.token : ""));
-    all("1.35 review 2: raw values — a declaration going on over lines (`box-shadow: …,`, `linear-gradient(#111111,`) is read by its first line while a selector list (`#fab,`, `a:hover,`) is none; a TSX generic `useState<style>` opens no <style> block (the file is still read as code); `invalid: '#dc2626'`, `solid:` and a gradient's `to:` are colours — an `href:` / `id:` key, an href / id attribute and getElementById(\"#…\") are not; a colour the registry holds names its token (got " + js(got) + ")", {
-      css: () => js(got.filter((x) => x.startsWith("card"))) === js(["card.css:2 #1d4ed8 =--color-action-primary", "card.css:4 #111111", "card.css:10 #333333"]),
+    all("1.35 review 2: raw values — a declaration going on over lines (`box-shadow: …,`, `linear-gradient(#111111,`) is read by its first line while a selector list (`#fab,`, `.card:hover,`, `a:not(#fab),` — no blank after its colon) is none; a TSX generic `useState<style>` opens no <style> block (the file is still read as code); `invalid: '#dc2626'`, `solid:` and a gradient's `to:` are colours — an `href:` / `id:` key, an href / id attribute and getElementById(\"#…\") are not; a colour the registry holds names its token (got " + js(got) + ")", {
+      css: () => js(got.filter((x) => x.startsWith("card"))) === js(["card.css:2 #1d4ed8 =--color-action-primary", "card.css:4 #111111", "card.css:11 #333333"]),
       generic: () => js(got.filter((x) => x.startsWith("State"))) === js(["State.tsx:7 #00ff00"]),
       keys: () => js(got.filter((x) => x.startsWith("Tones"))) === js(["Tones.tsx:2 #dc2626", "Tones.tsx:3 #1d4ed8 =--color-action-primary", "Tones.tsx:4 #000000", "Tones.tsx:4 #ffffff", "Tones.tsx:8 #445566"]),
     });
   }
-  {
-    // bounded time: lines built to make a pattern try every split — each is read once, up to the line cap
-    const p = path.join(tmp, "proj-ds2-slow");
-    S.initProject(p, ["ui"], "en");
-    write(p, REG, REGISTRY);
-    const f = S.createFeature(p, { name: "Shop", tracks: ["ui"], summary: "x" });
-    fs.writeFileSync(path.join(f.dir, "tasks.md"), "# Tasks\n\n- [ ] 1. [US1] Build it\n  - _Requirements: US-1.AC-1_\n  - _Implements: src/shop/_\n");
-    const block = (line) => Array.from({ length: 120 }, () => line).join("\n") + "\n";
-    const each = (name, ext, text) => { for (let i = 0; i < 10; i++) write(p, "src/shop/" + name + i + "." + ext, text); };
-    each("blanks", "css", block("a:" + long(" ", 1990) + "b"));
-    each("digits", "css", block("margin: " + long("9", 1980)));
-    each("colons", "tsx", block(long("a:", 990)));
-    each("variants", "tsx", block("<b className=\"" + long("a:", 980) + "p-[13px]\" />"));
-    write(p, "src/shop/Real.tsx", "export const Real = () => <b className=\"p-[13px]\" />;\n");
-    const rep = timed(() => S.designSystemReport(p, { name: f.slug }));
-    all("1.35 review 2: bounded time — a feature's 40 view files of 120 lines each — `a:` + 1,990 blanks, 1,980 digits, 990 `a:`, a class of 980 variant prefixes — are read in well under 4 s (they took 9 s), and the real value beside them is still found (got " +
-      js([rep.ms, rep.v.ok, rep.v.viewFiles, rep.v.raw.filter((x) => x.file === "src/shop/Real.tsx").map((x) => x.value)]) + ")", {
-      fast: () => rep.ms < 4000 && rep.v.ok === true && rep.v.viewFiles === 41,
-      real: () => js(rep.v.raw.filter((x) => x.file === "src/shop/Real.tsx").map((x) => x.value)) === js(["p-[13px]"]),
-    });
-  }
+  // (the patterns' bounded time — each on its own: 15-quality-design-system-review3.js)
 };

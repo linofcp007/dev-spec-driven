@@ -132,4 +132,23 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       doctor: () => ((jsonOf(doctor).checks || []).find((c) => c.id === "ui-design-system") || {}).status === "pass",
     });
   }
+
+  // --- review 3: a bound the scan reached is said, and "the registry and the code agree" never beside it; credentials stay unread -----
+  {
+    const lp = path.join(tmp, "p135-ds-limits");
+    SR.initProject(lp, ["ui"], "pt");
+    write(lp, "src/components/Button.tsx", "export const Button = () => null;\n");
+    for (let i = 0; i < 22; i++) write(lp, "src/styles/tokens.f" + String(i).padStart(2, "0") + ".css", ":root { --f" + i + ": 1px; }\n");
+    write(lp, "token.json", js({ token: "ya29.FAKE-ACCESS-0000", refresh_token: "1//FAKE-REFRESH-1111", client_secret: "GOCSPX-FAKE-2222" }));
+    const seed = runIn(["steering", "design-system.md", "--project", lp]);
+    const rep = runIn(["design-system", "--project", lp]);
+    const asJson = jsonOf(runIn(["design-system", "--project", lp, "--json"]));
+    const P = MSG("pt").cliOutput;
+    all("1.35 review 3 (CLI): with 22 token files the report says only the first 20 are read (the project's language) and never that the registry and the code agree; a root token.json of an OAuth client reaches neither the seeded registry nor the report (got " +
+      js([seed.code, rep.code, rep.out, asJson.limits, asJson.inSync]) + ")", {
+      limit: () => rep.code === 0 && rep.out.includes(P.dsLimit["token-files"](20)) && !rep.out.includes(P.dsInSync),
+      json: () => js(asJson.limits) === js([{ code: "token-files", read: 20 }]) && asJson.truncated === true && asJson.inSync === false,
+      noSecret: () => seed.code === 0 && !/FAKE/.test(rd(lp, REG) + rep.out + js(asJson)) && !asJson.found.sources.includes("token.json"),
+    });
+  }
 };

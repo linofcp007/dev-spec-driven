@@ -23,18 +23,19 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
-  isNetworkPath, isTestFile, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, toPosix, walkProject, withRoadmapLock,
-  writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL;
+  isNetworkPath, isTestFile, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix, unitIn, walkProject,
+  withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
-  isDirSafe, isInsideDir, isNetworkPath, isTestFile, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, toPosix, walkProject,
-  withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL } = E); }
+  isDirSafe, isInsideDir, isNetworkPath, isTestFile, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix,
+  unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
 const DS_LINE_MAX = 2000; // a line's characters read (a longer one — minified — is read up to there)
-const DS_TOKEN_FILES = 20; // token files read
-const DS_FOUND_MAX = 300; // components / tokens kept from the code
+const DS_TOKEN_FILES = 20; // token files read (by path; past them: the report's `limits` says so)
+const DS_TOKENS_MAX = 1000; // tokens kept from the code — what the registry's reader reads with their values (DS_MAX_TOKENS)
+const DS_SEED_COMPONENTS = 500; // components the seed writes — what the registry's reader reads with their details
 const DS_LIST = 50; // rows a report lists (`missingTotal`, `staleTotal`, `newTokensTotal`, `total` count them all)
 const DS_VIEW_FILES = 200; // a feature's view files read
 const DS_RAW_PER_FILE = 200; // raw values kept per file
@@ -73,27 +74,42 @@ function componentOf(rel) {
   const index = stem.toLowerCase() === "index";
   if (index) stem = segs[segs.length - 2] || "";
   const low = stem.toLowerCase();
-  if (index ? GENERIC_DIRS.has(low) || COMPONENT_DIRS.has(dirName(stem)) : NOT_COMPONENT.has(stem) || (stem === low && COMPONENT_DIRS.has(low))) return null;
+  // (a helper's name as written — lower-case — is none, as a file or as an index's folder: config/index.tsx, context/index.tsx)
+  if (NOT_COMPONENT.has(stem) || (index ? GENERIC_DIRS.has(low) || COMPONENT_DIRS.has(dirName(stem)) : stem === low && COMPONENT_DIRS.has(low))) return null;
   if (!/^[A-Za-z][A-Za-z0-9._-]{0,79}$/.test(stem) || /^use(?:[A-Z]|[-_.])/.test(stem)) return null;
   if (js && !/^[A-Z][A-Za-z0-9]*$/.test(stem)) return null; // a .js file is a component only by a PascalCase name (Button.js)
   const name = stem.split(/[-_.]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("");
   return { name, key: dsKey(name), path: rel, index };
 }
-// A token file by its name: a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss,
-// theme.css), a name that can only mean design tokens or the UI theme in any format (design-tokens.json, colors.tokens.json,
-// theme.json, theme.ts, tailwind.config.ts) — and a plain `tokens.json` / `tokens.ts` only at the project's root or RIGHT
-// inside a folder that says what it holds (isTokenFile): `src/auth/tokens.ts` and `src/ui/auth/tokens.ts` hold access tokens,
-// not colours. (A name's further parts are letters and digits only: with the separator inside the part's class,
-// `tokens-a-a-a-…` backtracked exponentially.)
+// A token file by its name AND its place (tokenFileKind):
+//   style — a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss, theme.css): anywhere;
+//   named — a name that can only mean design tokens, in any format (design-tokens.json, colors.tokens.json,
+//           tailwind.config.ts): anywhere;
+//   theme — theme.json / theme.ts where a project keeps its UI theme: its root, RIGHT inside a source folder (src/theme.ts,
+//           apps/web/src/theme.ts) or in a telling folder — `src/store/theme.ts` is a state slice, `server/models/theme.js` a model;
+//   plain — tokens.json / tokens.ts only at the project's root or in a telling folder: `src/auth/tokens.ts` and
+//           `src/ui/auth/tokens.ts` hold access tokens, not colours. Never the singular `token.json` (an OAuth client's file).
+// "In a folder": source folders aside — packages/ui/src/tokens.ts lives in `ui` (homeDir). And a JSON one is read only when
+// its CONTENT is a design file's (jsonTokens): a name is no proof. (A name's further parts are letters and digits only: with
+// the separator inside the part's class, `tokens-a-a-a-…` backtracked exponentially.)
 const RE_TOKEN_STYLE = /^(?:_?(?:design[-_.]?)?tokens(?:[-_.][A-Za-z0-9]+)*|_?variables|theme)\.(?:css|scss|sass|less)$/i;
-const RE_TOKEN_NAMED = /^(?:design[-_.]?tokens?(?:[-_.][A-Za-z0-9]+)*\.(?:json|ya?ml|js|cjs|mjs|ts)|[A-Za-z0-9_-]+\.tokens\.(?:json|ya?ml)|theme\.(?:json|ya?ml|js|cjs|mjs|ts)|tailwind\.config\.(?:js|cjs|mjs|ts))$/i;
-const RE_TOKEN_PLAIN = /^tokens?\.(?:json|ya?ml|js|cjs|mjs|ts)$/i;
+const RE_TOKEN_NAMED = /^(?:design[-_.]?tokens?(?:[-_.][A-Za-z0-9]+)*\.(?:json|ya?ml|js|cjs|mjs|ts)|[A-Za-z0-9_-]+\.tokens\.(?:json|ya?ml)|tailwind\.config\.(?:js|cjs|mjs|ts))$/i;
+const RE_TOKEN_THEME = /^theme\.(?:json|ya?ml|js|cjs|mjs|ts)$/i;
+const RE_TOKEN_PLAIN = /^tokens\.(?:json|ya?ml|js|cjs|mjs|ts)$/i;
 const TOKEN_DIRS = new Set(["styles", "style", "theme", "themes", "design", "design-system", "designsystem", "design-tokens", "tokens", "ui"]);
-const isTokenFile = (rel) => {
+const SOURCE_DIRS = new Set(["src", "lib", "source", "app"]);
+// The folder a file lives in, source folders aside (packages/ui/src/tokens.ts → "ui"); "" at the project's root or source root.
+const homeDir = (segs) => { let i = segs.length - 2; while (i >= 0 && SOURCE_DIRS.has(segs[i].toLowerCase())) i--; return i < 0 ? "" : segs[i].toLowerCase(); };
+function tokenFileKind(rel) {
   const segs = rel.split("/"), name = segs[segs.length - 1];
-  if (RE_TOKEN_STYLE.test(name) || RE_TOKEN_NAMED.test(name)) return true;
-  return RE_TOKEN_PLAIN.test(name) && (segs.length === 1 || TOKEN_DIRS.has(segs[segs.length - 2].toLowerCase()));
-};
+  if (RE_TOKEN_STYLE.test(name)) return "style";
+  if (RE_TOKEN_NAMED.test(name)) return "named";
+  const theme = RE_TOKEN_THEME.test(name);
+  if (!theme && !RE_TOKEN_PLAIN.test(name)) return null;
+  if (segs.length === 1 || TOKEN_DIRS.has(homeDir(segs))) return theme ? "theme" : "plain";
+  return theme && SOURCE_DIRS.has(segs[segs.length - 2].toLowerCase()) ? "theme" : null;
+}
+const isTokenFile = (rel) => tokenFileKind(rel) != null;
 // …and a global stylesheet that declares the custom properties itself (the shadcn / Tailwind 4 habit): a token file once it
 // holds at least this many.
 const RE_GLOBAL_CSS = /^(?:globals?|index|app|main|styles?|base|root)\.(?:css|scss)$/i;
@@ -127,7 +143,7 @@ function packageLibraries(root) {
 // opens a comment anywhere; in markup and code only where one can start (the line's start, after a blank or one of `{ ( ; ,` —
 // JSX's `{/* … */}`): `accept="image/*"` and `path="/app/*"` hold none (read as one, the rest of the file went unseen). Linear.
 function withoutComments(line, st, o) {
-  let out = "", i = 0;
+  let out = "", i = 0, h = -2; // h: the next `<!--` at or after i (-2: not looked for yet, -1: none left — looked for once)
   while (i < line.length) {
     if (st.block || st.html) {
       const close = st.block ? "*/" : "-->";
@@ -139,7 +155,7 @@ function withoutComments(line, st, o) {
     }
     let b = line.indexOf("/*", i);
     while (b > i && !o.sheet && !/[\s{(;,]/.test(line[b - 1])) b = line.indexOf("/*", b + 2);
-    const h = line.indexOf("<!--", i);
+    if (h !== -1 && h < i) h = line.indexOf("<!--", i);
     const next = b === -1 ? h : h === -1 ? b : Math.min(b, h);
     const seg = next === -1 ? line.slice(i) : line.slice(i, next);
     if (o.slashSlash) {
@@ -169,25 +185,45 @@ function styleTokens(text, plainCss) {
   return out;
 }
 // A JSON token file's leaves: `{color: {primary: {$value: "#1d4ed8"}}}` (the design-tokens format, or `value`) and plain
-// nested values → color.primary. Iterative, depth and count bounded.
+// nested values → color.primary. Iterative, depth and count bounded. → { list, secret, design, more }:
+//   secret — a key that names a CREDENTIAL holds a string that is no design value (Google's OAuth token.json, a saved
+//            tokens.json: token, refresh_token, client_secret, api_key…). The file is no design file: the caller reads,
+//            lists and writes NOTHING of it — its values would land in tool output and in a steering file a team commits;
+//   design — it shows what it is: a `$value` / `$type` key, or a leaf that is a colour or a length (never a bare number —
+//            `expires_in: 3599`). A plain tokens.json is read only with it;
+//   more   — leaves were left past the cap.
+// And no leaf is kept whose value is one long opaque run (a key, a hash, a signed URL): no design value looks like that.
+const RE_SECRET_KEY = /^(?:token|bearer|(?:access|refresh|id|auth|session|bearer|api)[-_ ]?token|client[-_ ]?(?:secret|id)|api[-_ ]?key|secret(?:[-_ ]?key)?|private[-_ ]?key|passw(?:or)?d|credentials?|token[-_ ]?(?:uri|url|type))$/i;
+const RE_DESIGN_VALUE = /^(?:#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|var|calc|clamp)\(|-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|ms|s|pt|vh|vw|deg)$)/i;
+const opaqueValue = (v) => v.length > 40 && !/[\s(),]/.test(v);
 function jsonTokens(text) {
+  const res = { list: [], secret: false, design: false, more: false };
   let doc;
-  try { doc = JSON.parse(text); } catch { return []; }
-  const out = [];
+  try { doc = JSON.parse(text); } catch { return res; }
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const leaf = (at, v0) => {
+    const v = String(v0);
+    const shown = RE_DESIGN_VALUE.test(v.slice(0, 80));
+    if (shown && typeof v0 === "string") res.design = true;
+    if (!shown && typeof v0 === "string" && RE_SECRET_KEY.test(at[at.length - 1])) { res.secret = true; return; }
+    if (!opaqueValue(v)) res.list.push({ name: at.join("."), value: v.slice(0, 80) });
+  };
   const stack = [[doc, [], 0]];
-  while (stack.length && out.length < DS_FOUND_MAX) {
+  while (stack.length) {
+    if (res.list.length >= DS_TOKENS_MAX) { res.more = true; break; }
     const [node, at, depth] = stack.pop();
     if (node == null || typeof node !== "object" || Array.isArray(node)) {
-      if (at.length && (typeof node === "string" || typeof node === "number")) out.push({ name: at.join("."), value: String(node).slice(0, 80) });
+      if (at.length && (typeof node === "string" || typeof node === "number")) leaf(at, node);
       continue;
     }
-    const v = Object.prototype.hasOwnProperty.call(node, "$value") ? node.$value : Object.prototype.hasOwnProperty.call(node, "value") ? node.value : undefined;
-    if (at.length && (typeof v === "string" || typeof v === "number")) { out.push({ name: at.join("."), value: String(v).slice(0, 80) }); continue; }
+    if (own(node, "$value") || own(node, "$type")) res.design = true;
+    const v = own(node, "$value") ? node.$value : own(node, "value") ? node.value : undefined;
+    if (at.length && (typeof v === "string" || typeof v === "number")) { leaf(at, v); continue; }
     if (depth >= 8) continue;
     const keys = Object.keys(node).filter((k) => !k.startsWith("$"));
     for (let i = keys.length - 1; i >= 0; i--) stack.push([node[keys[i]], at.concat(keys[i]), depth + 1]);
   }
-  return out;
+  return res;
 }
 // ONE walk of the project → { components (by name), tokens, sources (the token files), libraries, views (every view / style
 // file — a feature's are picked among them), files, truncated }. The scan's corpus: no node_modules / .git / .specs / dist /
@@ -197,7 +233,8 @@ function scanCode(root) {
   const byKey = new Map(), views = [], tokenFiles = [], globals = [];
   const counts = (rel) => isViewFile(rel) || isTokenFile(rel);
   const walk = walkProject(root, DS_FILE_CAP, (rel, full, name) => {
-    if (isTokenFile(rel)) tokenFiles.push({ rel, full });
+    const kind = tokenFileKind(rel);
+    if (kind) tokenFiles.push({ rel, full, kind });
     else if (RE_GLOBAL_CSS.test(name)) globals.push({ rel, full });
     if (!isViewFile(rel)) return;
     views.push({ rel, full });
@@ -209,23 +246,41 @@ function scanCode(root) {
     if (!had || (had.index && !c.index) || (had.index === c.index && c.path.length < had.path.length)) byKey.set(c.key, c);
   }, { counts, gitignore: gitignoreRules(root, realRoot) });
   const tokens = [], sources = [], seen = new Set();
+  const capped = { tokenFiles: false, tokens: false }; // a bound that cut what is read: the reports say so, never "in sync"
   const take = (file, list) => {
     sources.push(file.rel);
-    for (const t of list) { if (!seen.has(t.name) && tokens.length < DS_FOUND_MAX) { seen.add(t.name); tokens.push({ name: t.name, value: t.value, source: file.rel }); } }
+    for (const t of list) {
+      if (seen.has(t.name)) continue;
+      if (tokens.length >= DS_TOKENS_MAX) { capped.tokens = true; break; }
+      seen.add(t.name);
+      tokens.push({ name: t.name, value: t.value, source: file.rel });
+    }
   };
   const order = (a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
-  for (const f of tokenFiles.sort(order).slice(0, DS_TOKEN_FILES)) {
-    const text = /\.(?:json|css|scss|sass|less)$/i.test(f.rel) ? readFileHead(f.full, DS_READ_CHARS) : null;
-    take(f, text == null ? [] : /\.json$/i.test(f.rel) ? jsonTokens(text) : styleTokens(text, /\.css$/i.test(f.rel)));
+  let read = 0;
+  for (const f of tokenFiles.sort(order)) {
+    if (read >= DS_TOKEN_FILES) { capped.tokenFiles = true; break; }
+    read++;
+    const json = /\.json$/i.test(f.rel);
+    const text = json || RE_STYLE_EXT.test(f.rel) ? readFileHead(f.full, DS_READ_CHARS) : null; // (a JS / TS / YAML one: a source, its values unread)
+    if (!json) { take(f, text == null ? [] : styleTokens(text, /\.css$/i.test(f.rel))); continue; }
+    const j = text == null ? null : jsonTokens(text);
+    // a JSON file whose content is no design file's — a credential in it, or a plain tokens.json that shows no design value
+    // (unreadable or unparsable included): not a source, nothing of it read
+    if (j ? j.secret || (f.kind === "plain" && !j.design) : f.kind === "plain") continue;
+    if (j && j.more) capped.tokens = true;
+    take(f, j ? j.list : []);
   }
-  for (const f of globals.sort(order).slice(0, DS_TOKEN_FILES)) {
-    if (sources.length >= DS_TOKEN_FILES) break;
+  read = 0;
+  for (const f of globals.sort(order)) {
+    if (sources.length >= DS_TOKEN_FILES || read >= DS_TOKEN_FILES) { capped.tokenFiles = true; break; }
+    read++;
     const text = readFileHead(f.full, DS_READ_CHARS);
     const list = text == null ? [] : styleTokens(text, /\.css$/i.test(f.rel)).filter((t) => t.name.startsWith("--"));
     if (list.length >= GLOBAL_CSS_MIN) take(f, list);
   }
   const components = [...byKey.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  return { components, tokens, sources, libraries: packageLibraries(root), views, files: walk.files, truncated: walk.truncated, realRoot };
+  return { components, tokens, sources, libraries: packageLibraries(root), views, files: walk.files, truncated: walk.truncated, capped, realRoot };
 }
 
 // --- raw values: what a feature's view files hard-code ------------------------------------------------------------------------
@@ -237,10 +292,16 @@ function scanCode(root) {
 //     attribute) — "Ticket #204518" is prose; 3 / 4 digits only as a Tailwind arbitrary value `[#fff]` or a quoted "#fff".
 // Never an anchor or a reference (href="#abcdef", url(#clip), querySelector("#add")) nor an HTML entity (&#123;).
 const RE_HEX = /(?<![&\w#])#([0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9a-zA-Z_-])/g;
-// What stands right before a hex that is no colour: an attribute that takes an anchor (`href="#abc"`, `to="#add"`), an
-// `href:` / `id:` / `hash:` key, `url(#clip)`, a DOM lookup. A WHOLE word (the look-behind): `invalid: '#dc2626'`,
-// `solid: "#1d4ed8"` and a gradient's `to: "#fff"` are colours.
-const RE_HEX_REF_BEFORE = /(?<![\w-])(?:(?:href|src|id|for|htmlFor|to|path|hash|target)\s*=\s*\{?\s*["'`]?|(?:href|id|hash)\s*:\s*["'`]|url\(\s*["'`]?|(?:querySelector(?:All)?|getElementById|closest|matches|jQuery|\$)\s*\(\s*["'`])$/i;
+// What stands right before a hex that is no colour (read on a 40-character tail):
+//   - an attribute that takes an anchor or an id, under any prefix: href="#abc", to="#add", data-bs-target="#add",
+//     hx-target="#feed", xlink:href="#fade" — and JSX's xlinkHref / dataTarget (RE_HEX_REF_CAMEL: only Href and Target,
+//     `gradientTo="#1d4ed8"` is a colour);
+//   - an `href:` / `id:` / `hash:` key — a WHOLE word: `invalid: '#dc2626'`, `solid: "#1d4ed8"` and a gradient's
+//     `to: "#fff"` are colours;
+//   - `url(#clip)`, a DOM lookup, a selection or a scroll / tween target: querySelector("#add"), $("#add"), .find("#add"),
+//     d3.select("#fade"), gsap.to("#face"), scrollTo('#fed').
+const RE_HEX_REF_BEFORE = /(?<![\w-])(?:(?:[\w:-]*[-:])?(?:href|src|id|for|htmlFor|to|path|hash|target)\s*=\s*\{?\s*["'`]?|(?:href|id|hash)\s*:\s*["'`]|url\(\s*["'`]?|(?:querySelector(?:All)?|getElementById|closest|matches|jQuery|\$|find|select(?:All)?|scrollTo|to|fromTo)\s*\(\s*["'`])$/i;
+const RE_HEX_REF_CAMEL = /(?<![\w-])[a-z][A-Za-z0-9]*(?:Href|Target)\s*=\s*\{?\s*["'`]?$/;
 const RE_COLOR_FN = /(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(\s*[\d.+-][^()]{0,60}\)/gi;
 // A size, where a spacing / type / radius token belongs: a stylesheet declaration of margin, padding, gap, font-size or
 // border-radius with a px / rem / em literal (never 0 or a 1px hairline — any of its literals counts: `padding: 1px 16px` —,
@@ -254,15 +315,20 @@ const RE_SIZE_PROP = /^(?:(?:margin|padding)(?:-(?:top|right|bottom|left|inline|
 const RE_SIZE_LITERAL = /(?<![\w.-])(\d+(?:\.\d+)?|\.\d+)(px|rem|em)(?![\w-])/g;
 const RE_SIZE_BUILT = /var\(|calc\(|theme\(|[$@]|#\{/;
 const RE_TW_SIZE = /(?<![\w-])(?:[a-z0-9-]{1,24}:){0,4}(?:p[trblxyse]?|m[trblxyse]?|gap(?:-[xy])?|space-[xy]|text|rounded(?:-[a-z]{1,2})?|leading|tracking)-\[(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em)\]/g;
-// The files whose text may hold a <style> block — markup. Never a .tsx / .jsx / .js: `useState<Style>(null)` is a type there
-// (read as a block's start, the rest of the file was a stylesheet).
+// A <style> block: in a markup file (Vue / Svelte / Astro / HTML…, any case) and in JSX (styled-jsx's `<style jsx>{`…`}`) —
+// there never right after an identifier: `useState<style>(null)` is a type (read as a block's start, the rest of the file
+// was a stylesheet).
 const RE_STYLE_BLOCK_EXT = /\.(?:vue|svelte|astro|html?|erb|cshtml|razor|twig|hbs|handlebars|mustache|ejs|pug)$|\.blade\.php$/i;
+const RE_STYLE_OPEN = /<style[\s>]/i;
+const RE_STYLE_OPEN_JSX = /(?<![\w$.)\]])<style[\s>]/;
+const RE_STYLE_CLOSE = /<\/style\s*>/i;
 const isQuote = (c) => c === "\"" || c === "'" || c === "`";
 function rawValuesOf(text, rel) {
   const out = [], seen = new Set();
-  const sheet = RE_STYLE_EXT.test(rel), plainCss = /\.css$/i.test(rel), markup = !sheet && RE_STYLE_BLOCK_EXT.test(rel);
+  const sheet = RE_STYLE_EXT.test(rel), plainCss = /\.css$/i.test(rel);
+  const open = sheet ? null : RE_STYLE_BLOCK_EXT.test(rel) ? RE_STYLE_OPEN : RE_STYLE_OPEN_JSX;
   const st = { block: false, html: false };
-  let inStyle = false; // inside a <style> block of a Vue / Svelte / Astro / HTML file
+  let inStyle = false; // inside a <style> block of a markup or JSX file
   const add = (line, kind, value) => {
     const k = line + ":" + value;
     if (seen.has(k) || out.length >= DS_RAW_PER_FILE) return;
@@ -273,7 +339,7 @@ function rawValuesOf(text, rel) {
   const colours = (s, line, strict) => {
     for (const m of s.matchAll(RE_HEX)) {
       const at = m.index, tail = s.slice(Math.max(0, at - 40), at);
-      if (RE_HEX_REF_BEFORE.test(tail)) continue;
+      if (RE_HEX_REF_BEFORE.test(tail) || RE_HEX_REF_CAMEL.test(tail)) continue;
       if (strict) {
         const prev = at > 0 ? s[at - 1] : "";
         if (m[1].length < 6 ? !(prev === "[" || (isQuote(prev) && isQuote(s[at + m[0].length] || ""))) : !/["'`[(:=,]/.test(tail.trimEnd().slice(-1))) continue;
@@ -306,9 +372,9 @@ function rawValuesOf(text, rel) {
   for (let n = 0; n < lines.length && out.length < DS_RAW_PER_FILE; n++) {
     const src = lines[n].length > DS_LINE_MAX ? lines[n].slice(0, DS_LINE_MAX) : lines[n];
     let block = inStyle;
-    if (markup) {
-      if (/<style[\s>]/.test(src)) inStyle = block = true;
-      if (/<\/style>/.test(src)) inStyle = false;
+    if (open) {
+      if (open.test(src)) inStyle = block = true;
+      if (RE_STYLE_CLOSE.test(src)) inStyle = false;
     }
     const l = withoutComments(src, st, { slashSlash: !plainCss, sheet: sheet || block });
     if (!l.trim()) continue;
@@ -347,20 +413,32 @@ function onDisk(root, rel) {
   }
   return true;
 }
-// Is a registry row's path gone? The cell names a project path and none of its readings is on disk: the whole cell first (a
-// path may hold a blank — `src/components/Form Controls/DatePicker.tsx`), then each word (a markdown link's target, a
-// parenthesis or a backtick aside). A cell that names no project path is never stale.
+// Is a registry row's path gone? Only a cell that NAMES A FILE OF THE PROJECT can be — a reading counts when its last
+// segment has a file extension (`src/components/Card` may be Card.tsx or a folder: not judged) and its FIRST segment is on
+// disk: `next/link`, `primereact/button`, `~/components/Button.vue`, `storybook.example.com/button.html`, "Built into the
+// layout." and "n/a (custom)" start nowhere in the project, so they are never stale. The readings, in order:
+//   1. the whole cell on disk → there (a path may hold a blank: `src/components/Form Controls/DatePicker.tsx`);
+//   2. the FIRST word that names a file decides — a markdown link's target, a path beside a note: `Gone.tsx (see README.md)`
+//      and `Gone.tsx — replaced by Card.tsx` are gone, whatever the note names;
+//   3. no such word → the whole cell, when it names a file (a path with a blank that is gone).
+const RE_FILE_EXT = /\.[A-Za-z][A-Za-z0-9]{0,9}$/;
+const DS_PATH_WORDS = 20; // words of a path cell read
 function stalePath(root, cell) {
-  const text = String(cell || "").slice(0, 400).trim();
-  const words = text.split(/[\s,;]+/).map((w) => w.replace(/^.*\]\(/, "").replace(/^[([`]+|[)\]`]+$/g, ""));
-  let named = false;
-  for (const w of [text.replace(/^`+|`+$/g, ""), ...words]) {
+  const text = stripEnds(String(cell || "").slice(0, 400).trim(), unitIn("`")).trim();
+  if (!text) return false;
+  // a reading → null (it names no file of the project) | true (the file is there) | false (it is gone)
+  const there = (w) => {
     const rel = projectPath(root, w);
-    if (rel == null) continue;
-    if (onDisk(root, rel)) return false;
-    named = true;
+    if (rel == null || !RE_FILE_EXT.test(rel) || !onDisk(root, rel.split("/")[0])) return null;
+    return onDisk(root, rel);
+  };
+  const whole = projectPath(root, text);
+  if (whole != null && onDisk(root, whole)) return false;
+  for (const w of text.split(/[\s,;]+/).slice(0, DS_PATH_WORDS)) {
+    const t = there(stripEnds(w.replace(/^.*\]\(/, ""), unitIn("([`"), unitIn(")]`")));
+    if (t != null) return !t;
   }
-  return named;
+  return there(text) === false;
 }
 // The registry as a report names it: its project path, whether it exists, the rows it holds.
 const registryView = (root, reg) => ({ file: toPosix(path.relative(root, reg ? reg.file : path.join(specsRoot(root), "steering", DESIGN_SYSTEM_FILE))),
@@ -385,10 +463,16 @@ function pendingNew(projectDir) {
 // that an unfinished feature's design declares New — its finish adds them: [{name, path, feature}]), pendingTotal, stale (the registry rows
 // whose path names no file: [{name, path}]), staleTotal, newTokens (the code's tokens the registry doesn't list, the first
 // DS_LIST: [{name, value}]), newTokensTotal, newSources / newLibraries (token files / UI libraries the registry doesn't name),
-// inSync, scanned: {files}, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} | null:
-// its design names no row), problems ([{code, name, near?, text}] — doctor's ui-design-system findings), viewFiles, raw (the
-// first DS_LIST: [{file, line, kind: color | size, value, token? (a registry token of that colour)}]), counts: {color, size},
-// total, newComponents ([{name, path, registered}]), scanned, truncated }. Stable keys, English; the CLI renders it.
+// inSync, scanned: {files}, limits, truncated }. opts.name: a feature → { ok, feature, registry, usage ({reuse, extend, new} |
+// null: its design names no row), problems ([{code, name, near?, text}] — doctor's ui-design-system findings), viewFiles, raw
+// (the first DS_LIST: [{file, line, kind: color | size, value, token? (a registry token of that colour)}]), counts: {color,
+// size}, total, newComponents ([{name, path, registered}]), scanned, limits, truncated }. Stable keys, English; the CLI
+// renders it.
+// `limits`: the bounds that cut what was read — [{code, read}], code: files (the walk's file cap) · token-files · tokens ·
+// registry-rows (rows past the reader's cap are not checked for a gone path) · view-files (a feature's). `truncated`: one was
+// reached — and then the report is never `inSync`: what it did not read it cannot vouch for.
+const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files } : null, scan.capped.tokenFiles ? { code: "token-files", read: DS_TOKEN_FILES } : null,
+  scan.capped.tokens ? { code: "tokens", read: DS_TOKENS_MAX } : null].filter(Boolean);
 function designSystemReport(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
   const lang = projectLang(projectDir);
@@ -415,13 +499,15 @@ function designSystemReport(projectDir, opts = {}) {
   const newLibraries = scan.libraries.filter((l) => !libs.has(l.toLowerCase()));
   const tokenNames = reg ? reg.tokenNames : new Set(); // every token the file lists, past the reader's cap too
   const newTokens = scan.tokens.filter((t) => !tokenNames.has(t.name.toLowerCase())).map((t) => ({ name: t.name, value: t.value }));
+  const limits = scanLimits(scan);
+  if (reg && reg.total.components > reg.components.length) limits.push({ code: "registry-rows", read: reg.components.length });
   return { ok: true, registry: registryView(root, reg),
     found: { components: scan.components.length, tokens: scan.tokens.length, sources: scan.sources, libraries: scan.libraries },
     missing: missing.slice(0, DS_LIST), missingTotal: missing.length, pending: pending.slice(0, DS_LIST), pendingTotal: pending.length,
     stale: stale.slice(0, DS_LIST), staleTotal: stale.length,
     newTokens: newTokens.slice(0, DS_LIST), newTokensTotal: newTokens.length, newSources, newLibraries,
-    inSync: !!reg && !missing.length && !stale.length && !newTokens.length && !newSources.length && !newLibraries.length,
-    scanned: { files: scan.files }, truncated: scan.truncated };
+    inSync: !!reg && !limits.length && !missing.length && !stale.length && !newTokens.length && !newSources.length && !newLibraries.length,
+    scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
 }
 // The feature's part: its usage rows against the registry, the raw values in its view files (its _Implements:_ view / style
 // files, token files and tests aside), its New components and where each lives.
@@ -441,10 +527,11 @@ function featureReport(projectDir, root, f, reg, scan) {
   const tokenOf = new Map();
   for (const t of reg ? reg.tokens : []) { const k = colorKey(t.value); if (k && !tokenOf.has(k)) tokenOf.set(k, t.name); }
   const raw = [], counts = { color: 0, size: 0 };
+  const limits = scanLimits(scan).filter((l) => l.code === "files"); // (the token caps cut nothing a feature's report reads)
   let viewFiles = 0;
   for (const rel of mine) {
     if (tokenFiles.has(fold(rel)) || isTokenFile(rel)) continue;
-    if (viewFiles >= DS_VIEW_FILES) break;
+    if (viewFiles >= DS_VIEW_FILES) { limits.push({ code: "view-files", read: DS_VIEW_FILES }); break; }
     const text = readFileHead(byRel.get(rel) || path.join(root, rel), DS_READ_CHARS);
     if (text == null) continue;
     viewFiles++;
@@ -466,7 +553,7 @@ function featureReport(projectDir, root, f, reg, scan) {
   return { ok: true, feature: f.slug, registry: registryView(root, reg),
     usage: usage && usage.rows.length ? { reuse: usage.rows.filter((r) => r.kind === "reuse").length, extend: usage.rows.filter((r) => r.kind === "extend").length, new: newComponents.length } : null,
     problems: find ? find.problems.map((p) => Object.assign({}, p, { text: Q.dsProblem[p.code](p.name, p.near) })) : [],
-    viewFiles, raw, counts, total: counts.color + counts.size, newComponents, scanned: { files: scan.files }, truncated: scan.truncated };
+    viewFiles, raw, counts, total: counts.color + counts.size, newComponents, scanned: { files: scan.files }, limits, truncated: limits.length > 0 };
 }
 
 // --- the seed: steering_scaffold design-system.md ------------------------------------------------------------------------------
@@ -482,7 +569,7 @@ function designSystemSeed(projectDir, lang) {
   if (!scan.components.length && !scan.tokens.length && !scan.sources.length && !scan.libraries.length) return null;
   const stub = i18n.steeringStub(DESIGN_SYSTEM_FILE, lang);
   const rows = {
-    component: scan.components.slice(0, DS_FOUND_MAX).map((c) => `| ${cell(c.name)} | ${"`" + cell(c.path) + "`"} |  |  |`),
+    component: scan.components.slice(0, DS_SEED_COMPONENTS).map((c) => `| ${cell(c.name)} | ${"`" + cell(c.path) + "`"} |  |  |`),
     token: scan.tokens.map((t) => `| ${cell(t.name)} | ${cell(t.value)} |  |`),
   };
   const out = [];
@@ -502,7 +589,7 @@ function designSystemSeed(projectDir, lang) {
     }
     if (!kind) out.push(l); // a slot row of a table the code filled is dropped
   }
-  return { text: out.join("\n"), components: Math.min(scan.components.length, DS_FOUND_MAX), tokens: scan.tokens.length };
+  return { text: out.join("\n"), components: Math.min(scan.components.length, DS_SEED_COMPONENTS), tokens: scan.tokens.length };
 }
 
 // --- finish ---------------------------------------------------------------------------------------------------------------------

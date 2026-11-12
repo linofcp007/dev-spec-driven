@@ -196,7 +196,7 @@ findings, and so is a written rule the branch breaks or a fix its rewritten line
 MERGE_BASE is its BASE). On a +ui feature the dispatch may carry the design-system scan (`spec_scan {designSystem: true,
 name}` — the controller runs it): its `problems` (a design row that disagrees with the registry) and its `raw` values
 (`file:line value` — at most the first 50 of `total`; a colour names the registry token of that value) are **candidates** —
-one this branch added is a finding, one a task report lists under "Raw values kept on purpose" is not. Rate each Critical /
+one this branch added where the registry has a token is a finding, one a task report lists under "Raw values kept on purpose" is not. Rate each Critical /
 Important finding. Triage the ledger's deferred minors, unconfirmed
 findings and parked findings: which must be fixed before merge, which can ship.
 

@@ -1519,7 +1519,13 @@ const msg = {
       dsLibrariesNew: (list) => `  bibliotecas de UI no package.json que o registo não indica (_Libraries:_): ${list}`,
       dsInSync: "  o registo e o código coincidem",
       dsMore: (n) => `    … e mais ${n}`,
-      dsTruncated: (n) => `  (atingido o limite de ficheiros — ${n} percorridos: o resto não foi lido)`,
+      dsLimit: {
+        files: (n) => `  (atingido o limite de ficheiros — ${n} percorridos: o resto não foi lido)`,
+        "token-files": (n) => `  (só os primeiros ${n} ficheiros de tokens são lidos, por caminho: o resto não é comparado)`,
+        tokens: (n) => `  (só os primeiros ${n} tokens do código são lidos: o resto não é comparado)`,
+        "registry-rows": (n) => `  (só os primeiros ${n} componentes do registo são verificados quanto a um caminho que já não existe)`,
+        "view-files": (n) => `  (só os primeiros ${n} ficheiros de vista da feature são lidos à procura de valores fixos)`,
+      },
       dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reutilizar: ${reuse} · Estender: ${extend} · Novo: ${news}`,
       dsFeatureNoRows: "  o design não tem nenhuma linha de componente ([UI] Uso do Design System)",
       dsRawHead: (n, files) => `  valores fixos nos ficheiros de vista (${n} em ${files} ${files === 1 ? "ficheiro" : "ficheiros"}) — usar o token:`,
@@ -3291,7 +3297,7 @@ const quality = {
     dsGate: (d, size) => `${d} — um design de tamanho ${size} precisa disto antes da aprovação`,
     dsOk: (reuse, extend, news) => `a secção Uso do Design System coincide com o registo (Reutilizar: ${reuse} · Estender: ${extend} · Novo: ${news})`,
     dsTruncated: (read, total) => `o registo tem ${total} componentes — só os primeiros ${read} são lidos com os detalhes (reduz o número de linhas: só este ficheiro é lido)`,
-    dsTable: { components: "| Componente | Caminho | Variantes | Notas |", tokens: "| Token | Valor | Uso |" },
+    dsTable: { components: "| Componente | Caminho | Variantes | Notas |" },
     dsRegistered: (list) => `acrescentado ao registo do design system (.specs/steering/design-system.md): ${list}`,
   };
 

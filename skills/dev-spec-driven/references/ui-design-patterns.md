@@ -58,8 +58,8 @@ behaviour). A feature that bypasses it creates a fork every later change has to 
 | Semantic | `--color-action-primary: var(--blue-600)`, `--space-inline-md: var(--space-4)` | components and pages |
 | Component (optional) | `--button-primary-bg: var(--color-action-primary)` | one component |
 
-- **Never a hard-coded colour, spacing, radius, font size, shadow or duration** in feature code. `#1d4ed8` or
-  `margin: 13px` in a diff is a finding. A lint rule that rejects raw hex values and pixel literals outside the
+- **Never a hard-coded colour, spacing, radius, font size, shadow or duration** in feature code where a token exists.
+  `#1d4ed8` or `margin: 13px` in a diff is then a finding. A lint rule that rejects raw hex values and pixel literals outside the
   token files makes this mechanical.
 - Pages and components use **semantic** tokens — that is what makes dark mode, theming and a rebrand a token
   change instead of a code search.
@@ -87,8 +87,9 @@ is a fork: flag it in review.
 The contract above only holds when every feature reads the **same** inventory. The registry is that inventory: one
 file, two tables — the **tokens** (name · value · use) and the **components** (name · path · variants · notes) —
 plus markers kept in English: `_Token sources: tokens.json, src/styles/tokens.css_` (the files that define the
-tokens), `_Libraries: @mui/material_` (third-party UI libraries whose components are not listed one by one) and, in a
-component's row, `_From: checkout_` (the feature that built it).
+tokens), `_Libraries: @mui/material_` (third-party UI libraries whose components are not listed one by one — each
+named as the designs will cite it: its package or its name, `Material UI`) and, in a component's row,
+`_From: checkout_` (the feature that built it).
 
 | Moment | What happens |
 |---|---|
@@ -98,7 +99,7 @@ component's row, `_From: checkout_` (the feature that built it).
 | **Task brief** | A task that builds a view gets a **Design system** part: the registry's entry of each component the design names (path, variants, notes), the New ones to build *through the system*, the names the registry doesn't list, where the tokens live. |
 | **Review** | `spec_scan {designSystem: true, name}` / `dev-spec design-system <feature>`: the rows that disagree with the registry and the **raw values** in the feature's view files (the first 50, with the total) — a hex or `rgb()` colour, a `margin: 13px`, a Tailwind `p-[13px]` — each a candidate finding ("use the token"; a colour equal to a token's value names that token). |
 | **Finish** | In a project with a registry: the raw values are a warning of `spec_finish`, never a blocker — when the registry holds tokens or names token files. A READY written finish **adds the feature's New components to the registry** (their path and `_From: <feature>_`) — the next feature finds them there, and the feature's own design keeps saying New. |
-| **Later** | `spec_scan {designSystem: true}` / `dev-spec design-system` says what the code holds and the registry doesn't (components and tokens, each as a row to paste; a component an unfinished feature declares New is listed apart — its finish adds it), which rows' path is gone, and token files or libraries it doesn't name. |
+| **Later** | `spec_scan {designSystem: true}` / `dev-spec design-system` says what the code holds and the registry doesn't (components and tokens, each as a row to paste; a component an unfinished feature declares New is listed apart — its finish adds it), which rows name a file of the project that is gone (a package such as `next/link`, an alias, prose or `n/a` in the path cell is never "gone"), and token files or libraries it doesn't name. |
 
 **What the check does not do.** It compares names. A new component under an unrelated name (`PrimaryAction` beside
 `Button`) passes — finding that one is the reviewer's search ([code-reuse-and-quality.md](code-reuse-and-quality.md)).
@@ -107,9 +108,9 @@ component's row, `_From: checkout_` (the feature that built it).
 
 | | Read | Not read |
 |---|---|---|
-| Components | `.tsx` `.jsx` `.vue` `.svelte` `.astro`, Angular `*.component.ts`, a PascalCase `.js` — under `components/`, `ui/`, `design-system/`, `widgets/`, `atoms/`… (its file's name, or its folder's for an `index`; Next's `_components/` too) | a test, a story, a hook (`useToggle`, `use-mobile`), a helper or a framework's special file (`utils.ts`, `layout.tsx`, `loading.tsx` — `Layout.tsx` is a component), a barrel (`src/index.tsx`, `icons/index.tsx`), a file whose nearest such folder is a page folder (`components/pages/Home.tsx` — `pages/` `routes/` `views/` `screens/`), a lower-case `.js` |
-| Tokens | CSS custom properties and Sass variables of `tokens.css`, `_variables.scss`, `theme.css`…; the leaves of `design-tokens.json` / `*.tokens.json` / `theme.json` anywhere, and of a plain `tokens.json` at the project's root or right inside a `styles/` `theme/` `design/` `tokens/` `ui/` folder; a global stylesheet that declares five or more custom properties | values kept in a JS / TS / YAML file (`tailwind.config.ts`, `theme.ts`, a `tokens.ts` in those places): the file is listed as a source, its values are not. A plain `tokens.*` anywhere else (`src/auth/tokens.ts`, `src/ui/auth/tokens.ts`) is no token file |
-| Raw values | a hex or functional colour in a string, an attribute or a Tailwind `[#…]`; `margin` / `padding` / `gap` / `font-size` / `border-radius` in px / rem / em in a stylesheet, a `<style>` block of a `.vue` / `.svelte` / `.astro` / `.html` file or a CSS-in-JS declaration line; a Tailwind arbitrary size | a size in a JSX `style={{…}}` object; the further lines of a value written over several (`box-shadow: …,` is read by its first line); an anchor (`href="#abcdef"`), a comment, a selector, `rgb(var(--x))`, a 1px hairline, a value built from a variable or `calc()` |
+| Components | `.tsx` `.jsx` `.vue` `.svelte` `.astro`, Angular `*.component.ts`, a PascalCase `.js` — under `components/`, `ui/`, `design-system/`, `widgets/`, `atoms/`… (its file's name, or its folder's for an `index`; Next's `_components/` too) | a test, a story, a hook (`useToggle`, `use-mobile`), a helper or a framework's special file (`utils.tsx`, `layout.tsx`, `loading.tsx`, `config/index.tsx` — `Layout.tsx` is a component), a barrel (`packages/ui/src/index.tsx`, `icons/index.tsx`), a file whose nearest such folder is a page folder (`components/pages/Home.tsx` — `pages/` `routes/` `views/` `screens/`), a lower-case `.js` |
+| Tokens | CSS custom properties and Sass variables of `tokens.css`, `_variables.scss`, `theme.css`…; the leaves of `design-tokens.json` / `*.tokens.json` anywhere, of `theme.json` at the project's root, right inside a source folder (`src/theme.json`) or in a `styles/` `theme/` `design/` `tokens/` `ui/` folder, and of a plain `tokens.json` at the root or in one of those folders (source folders aside: `packages/ui/src/tokens.json`); a global stylesheet that declares five or more custom properties | values kept in a JS / TS / YAML file (`tailwind.config.ts`, `theme.ts`, a `tokens.ts` in those places): the file is listed as a source, its values are not. A `theme.*` / `tokens.*` anywhere else (`src/store/theme.ts`, `src/auth/tokens.ts`) is no token file — a stylesheet named for its tokens (`tokens.css`) counts anywhere. **A JSON file that holds credentials** (a key such as `token`, `refresh_token`, `client_secret`, `api_key` with a value that is no colour or length — an OAuth client's `token.json`), or a plain `tokens.json` that shows no colour, length or `$value`: nothing of it is read or listed. Token files past the first 20 (by path) and tokens past the first 1,000: the report names the limit it reached and never says the registry and the code agree |
+| Raw values | a hex or functional colour in a string, an attribute or a Tailwind `[#…]`; `margin` / `padding` / `gap` / `font-size` / `border-radius` in px / rem / em in a stylesheet, a `<style>` block (a `.vue` / `.svelte` / `.astro` / `.html` file's, styled-jsx's in a `.jsx` / `.tsx`) or a CSS-in-JS declaration line; a Tailwind arbitrary size | a size in a JSX `style={{…}}` object; the further lines of a value written over several (`box-shadow: …,` is read by its first line); an anchor or a selector target (`href="#abcdef"`, `data-bs-target="#add"`, `querySelector("#add")`), a comment, a selector, `rgb(var(--x))`, a 1px hairline, a value built from a variable or `calc()` |
 
 The registry is steering the team owns: edit it by hand at any time (a variant added, a component deprecated in its
 notes, a row for a component a feature is still building — with `_From: <feature>_`). It is not part of an approval's

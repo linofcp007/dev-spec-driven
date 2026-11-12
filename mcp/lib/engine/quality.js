@@ -1153,6 +1153,11 @@ const RE_DS_COL = {
 // `_Token sources: a, b_` / `_Libraries: a, b_` — a line of its own, English-stable like the glossary's _Avoid:_; the value runs
 // to the line's end (a path may hold an underscore or a blank), its closing "_" dropped.
 const RE_DS_MARKER = /^[ \t]*_(Token sources|Libraries):[ \t]*(.*)$/gim;
+const DS_MARKER_LINES = 100; // marker lines read (a registry has two)…
+const DS_MARKER_ENTRIES = 50; // …and the entries kept of each kind
+// An entry that names nothing, by its FIRST word (EN / PT / ES): "none", "none yet", "nenhuma ainda", "sin bibliotecas",
+// "n/a (custom only)", "TBD". The word must END there — `no-tokens/x.css` and `sem/tokens.css` are paths.
+const RE_DS_NONE = /^(?:none|no|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|sem|ningun[oa]?|ningún|sin)(?=$|[\s(.,:!])/iu;
 // `_From: <feature>_` in a component's row: the feature whose finish added the row (a slug — spec_finish writes it, a rename
 // follows it). That feature's own `New` row for the component stays New: its design says what it built.
 const RE_DS_FROM = /_From:[ \t]*([a-z0-9][a-z0-9-]*)_/i;
@@ -1222,15 +1227,22 @@ function designSystemRegistry(root) {
     }
   }
   const lists = { "token sources": [], libraries: [] };
+  let markers = 0;
   for (const m of stripFencedCode(stripHtmlComments(body)).matchAll(RE_DS_MARKER)) {
+    if (++markers > DS_MARKER_LINES) break;
     const into = lists[m[1].toLowerCase()];
     const value = m[2].slice(0, 4000).trim().replace(/_$/, "").trim();
     if (/^\[.*\]$/.test(value)) continue; // the stub's slot, never filled in
     for (const w0 of value.split(/[,;]/)) {
-      const w = w0.trim().replace(/^[`'"]+|[`'".]+$/g, "").trim();
-      if (!w || /^(?:none|n\/a|-|—)$/i.test(w) || w.length > DS_CELL_MAX || into.includes(w) || into.length >= 50) continue;
-      // a library is one word (a package name): "none yet" / "none (custom components only)" names none — a path may hold a blank
-      if (into === lists.libraries && /\s/.test(w)) continue;
+      if (into.length >= DS_MARKER_ENTRIES) break;
+      if (w0.length > DS_CELL_MAX * 2) continue; // no name, no path
+      let w = stripEnds(w0.trim(), unitIn("`'\""), unitIn("`'\".")).trim(); // linear: never a /^[`'"]+|[`'".]+$/g replace
+      // "none", "none yet", "nenhuma ainda", "sin bibliotecas", "n/a (custom only)": the entry names nothing
+      if (!w || w === "-" || w === "—" || RE_DS_NONE.test(w)) continue;
+      // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`); a parenthesis beside
+      // it is a note (`@mui/material (v6)`)
+      if (into === lists.libraries) { const note = w.indexOf(" ("); if (note > 0) w = w.slice(0, note).trim(); }
+      if (!w || w.length > DS_CELL_MAX || into.includes(w)) continue;
       into.push(w);
     }
   }
@@ -1353,7 +1365,8 @@ function designSystemCheck(design, lang, opts = {}) {
     if (f.problems.length > 6) items.push(Q.xacMore(f.problems.length - 6));
     return out(bad, gated(Q.dsMismatch(f.problems.length, items.join("; "))), "mismatch");
   }
-  return out("pass", Q.dsOk(f.reuse.length, f.extend.length, f.news.length) + (reg.truncated ? "; " + Q.dsTruncated(reg.components.length, reg.total.components) : ""), "ok");
+  // (the note is about the COMPONENT rows this check reads — a token table past its cap changes nothing here)
+  return out("pass", Q.dsOk(f.reuse.length, f.extend.length, f.news.length) + (reg.total.components > reg.components.length ? "; " + Q.dsTruncated(reg.components.length, reg.total.components) : ""), "ok");
 }
 // The task brief's "Design system" part, for a task that builds what the user sees (tasks.js uiTask) → null (no registry, or it
 // lists nothing) | { file (the registry, as given), components: [{ kind, name, path, variants, notes, why }] (the design's rows

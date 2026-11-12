@@ -28,7 +28,7 @@ names share `TRACK_ITEM`.
 
 ### The operations
 `OPERATIONS` (`mcp/lib/operations.js` — Node core only, requiring nothing: each surface hands it the facade) is ONE table
-both surfaces run through, so a tool and its CLI command are the SAME call: one entry per engine operation (41, asserted by
+both surfaces run through, so a tool and its CLI command are the SAME call: one entry per engine operation (42, asserted by
 `mcp/tests/02-mcp-server-tools.js`). The file's header documents the fields — `id`, `tool` (several operations of one tool
 told apart by a `mode` or a `when(args)` test), `legacy`, `cli`, `engine`, `args` (`mcp`, `cli` / `pos`, `type`, `join`,
 `cmd`, `parsed`, `modes`, `required`), `internal`, `cliOnly`, `call(S, dir, o)`: THE engine call, written once.

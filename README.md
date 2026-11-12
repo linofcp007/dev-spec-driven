@@ -126,7 +126,8 @@ your code — the components and tokens the project already has. From then on a 
 Reuse, Extend or New; `doctor` checks those rows against the registry (a component the registry doesn't list, or a `ButtonV2`
 beside an existing `Button`, is caught before it is built, and at size m / l the design approval refuses it), the task
 brief hands the implementer the components to build from, `finish` warns about hard-coded colours and sizes in the
-feature's screens and adds its new components to the registry. `dev-spec design-system` shows where the registry and the code have drifted apart.
+feature's screens (where the registry has tokens) and adds its new components to the registry.
+`dev-spec design-system` shows where the registry and the code have drifted apart.
 
 A track can be added or turned off later (`/spec-change <feature> track +sec`). Your team's own tracks:
 `/spec-setup tracks` — an example pack to copy is `examples/track-packs/mobile`. A bug goes through `/spec-bugfix`

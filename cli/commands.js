@@ -1876,7 +1876,7 @@ const COMMANDS = [
           if (r.registry.exists && r.newLibraries.length) log(T.dsLibrariesNew(r.newLibraries.join(", ")));
           if (r.inSync) log(T.dsInSync);
         }
-        if (r.truncated) log(T.dsTruncated(r.scanned.files));
+        r.limits.forEach((l) => log(T.dsLimit[l.code](l.read)));
       });
     },
   },

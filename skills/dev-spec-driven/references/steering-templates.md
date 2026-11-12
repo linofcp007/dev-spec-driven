@@ -644,7 +644,9 @@ _Libraries: @mui/material_
   `spec_doctor`'s `ui-design-system` checks those rows against this file, the task brief quotes the entries a UI task
   needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds
   and the file doesn't. The whole loop: `references/ui-design-patterns.md` → The registry.
-- A component of a declared library is not listed here: a design writes `TextField (@mui/material)`.
+- `_Libraries:_` names each library as the designs will cite it — its package (`@mui/material`) or its name
+  (`Material UI`); a parenthesis beside one is a note, and `none` / `none yet` names nothing. A component of a declared
+  library is not listed here: a design cites the same words — `TextField (@mui/material)`.
 
 ---
 

@@ -290,8 +290,12 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   first 500 with their details, `tokens`: the first 1,000 (`truncated`). A name
   once (`dsKey`: letters and digits, lower-cased, accents folded — DatePicker = date-picker), a slot or generic row none.
   English-stable markers: `_Token sources: a, b_` and `_Libraries: a, b_`, each a line of its own (`RE_DS_MARKER` — the value
-  runs to the line's end: a path may hold an underscore or a blank; `none` and the stub's `[slot]` name nothing, and a LIBRARY is one word — `none
-  yet` / `none (custom only)` name none, where a path with a blank is a source), and in a
+  runs to the line's end: a path may hold an underscore or a blank; the stub's `[slot]` names nothing, nor does
+  an entry whose FIRST word says none — `RE_DS_NONE`, EN / PT / ES: `none yet`, `nenhuma ainda`, `sin bibliotecas`, `TBD`,
+  `n/a (custom only)`; the word must end there, `no-tokens/x.css` is a path. A library is named as the designs cite it, a
+  package or its NAME (`Material UI` — review 2's "one word" rule refused a size m design that cited it); a parenthesis
+  beside one is a note. ≤ `DS_MARKER_LINES` lines, `DS_MARKER_ENTRIES` entries, each cut before it is cleaned, `stripEnds`
+  never a trailing-run replace), and in a
   component's row `_From: <feature>_` (`RE_DS_FROM` → the entry's `from`, left out of its `notes`).
 - **The feature's rows** — the +ui block's Design System Usage has a SECOND guidance line and a `Kind | Component | Why / notes`
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
@@ -302,7 +306,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
 - **The findings** — `designSystemFindings(usage, registry, slug)`: `unknown` (a Reuse / Extend naming nothing the registry
   lists, nor a declared library in its cell; `near`: the did-you-mean), `listed` (a New already there — unless its registry
   row says `_From: <slug>_`: the feature's OWN component, added by its finish; EVERY caller passes the slug — doctor's run
-  and its `GATES.design` probe, the save check, the feature report —, or the gate refuses what doctor passes), `near` (a New that is a listed name with a
+  and its `GATES.design` probe, the save check, the feature report —, or the gate refuses what doctor passes), `near` (a
+  New that is a listed name with a
   fork's affix — ButtonV2, NewButton, CustomCard — or an edit or two away, `dsNearComponent`; never when its notes name that
   component), `no-why` (a New without a reason). It compares NAMES: a new component under an unrelated name passes (the
   reviewer's search). Only the first `DS_NEAR_ROWS` rows that need one pay a name comparison, a name past `DS_NAME_MAX` none.
@@ -333,38 +338,63 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   widgets, atoms…) — never a page folder below it (`PAGE_DIRS`) —, named by its file (kebab-case → PascalCase) or its folder
   for an index; never a test, a story, a hook (`useX`, `use-x`) or a helper. The helper names (`NOT_COMPONENT`: layout,
   loading, error, page…) are matched AS WRITTEN — a framework's special file is lower-case, `Layout.tsx` is a component; a
-  barrel's index is none (`GENERIC_DIRS`: packages/ui/src/index.tsx is no "Src", icons/index.tsx no "Icons"); a folder's
-  leading `_` is dropped (`dirName`: Next's `_components/`). Tokens = a token file's (`isTokenFile`: a
-  stylesheet named tokens / _variables / theme, design-tokens.* / *.tokens.json / theme.* / tailwind.config.* anywhere, a
-  plain tokens.json / tokens.ts only at the project's root or RIGHT inside a styles / theme / design / tokens / ui folder —
-  `src/auth/tokens.ts` and `src/ui/auth/tokens.ts` hold access tokens) custom properties and Sass variables (`styleTokens`), a JSON file's leaves (`jsonTokens`: `$value` / `value` /
-  plain), and a global stylesheet declaring ≥ 5 custom properties (`RE_GLOBAL_CSS`); ≤ 20 token files, 300 tokens. A JS / TS /
-  YAML token file is listed as a source, its values unread. Libraries = `UI_LIBRARIES` ∩ package.json's dependencies.
+  barrel's index is none (`GENERIC_DIRS`: packages/ui/src/index.tsx is no "Src", icons/index.tsx no "Icons"), nor a helper
+  folder's (config/index.tsx — the same lower-case names); a folder's leading `_` is dropped (`dirName`: Next's
+  `_components/`).
+- **Token files** (`tokenFileKind` → style · named · theme · plain; `isTokenFile`) — by name AND place: a stylesheet named
+  tokens / _variables / theme and a design-tokens.* / *.tokens.json / tailwind.config.* anywhere; `theme.*` at the root,
+  RIGHT inside a source folder (`SOURCE_DIRS`: src/theme.ts, apps/web/src/theme.ts) or in a telling folder (`TOKEN_DIRS`) —
+  never `src/store/theme.ts`; a plain `tokens.*` at the root or in a telling folder, source folders aside (`homeDir`:
+  packages/ui/src/tokens.ts lives in `ui`) — never `src/auth/tokens.ts`, `apps/web/src/tokens.ts`, nor the singular
+  `token.json`. Read: custom properties and Sass variables (`styleTokens`), a JSON file's leaves (`jsonTokens`: `$value` /
+  `value` / plain), a global stylesheet declaring ≥ 5 custom properties (`RE_GLOBAL_CSS`); a JS / TS / YAML one is listed as
+  a source, its values unread. **A name is no proof for a JSON file** — its values are printed by the report and WRITTEN
+  into a steering file a team commits: `jsonTokens` → `secret` (a key naming a credential — `RE_SECRET_KEY`: token,
+  refresh_token, client_secret, api_key… — holding a string that is no design value: the file is not a source and nothing
+  of it is read; Google's OAuth `token.json`, a saved `tokens.json`, an `auth.tokens.json`), `design` (a `$value` / `$type`
+  key, a colour or a length — never a bare number: a PLAIN tokens.json is read only with it), and no leaf whose value is
+  one opaque run past 40 characters. Bounds: `DS_TOKEN_FILES` (20, by path), `DS_TOKENS_MAX` (1,000 — what the registry's
+  reader reads, as `DS_SEED_COMPONENTS` is 500) → `capped`. Libraries = `UI_LIBRARIES` ∩ package.json's dependencies.
 - **Surfaces** — `spec_scan {designSystem: true, name?}` (a mode on spec_scan's THIRD key — mcp.md → Arguments by mode) =
   `dev-spec design-system [feature]` (one operation, `design-system`; the human report: `cliOutput.ds*`), read-only. No feature:
   `registry` {file, exists, components, tokens}, `found` (counts + the sources and libraries), `missing` (in the code, not in
   the registry — the CLI prints each as a row to paste), `pending` (in the code and declared New by an unfinished feature's
-  design — `pendingNew`: its finish adds it; a row pasted for it would read as already listed), `stale` (a row whose path
-  names no file — `stalePath`: the WHOLE cell first (a path may hold a blank), then each word (a markdown link's target, a
-  note beside the path); `projectPath` decides on the TEXT first and skips a package, `n/a`, a URL; `onDisk` follows no
-  link; a cell naming no project path is never stale), `newTokens` (against `tokenNames` — every token the file lists),
+  design — `pendingNew`: its finish adds it; a row pasted for it would read as already listed), `stale` (`stalePath` —
+  below), `newTokens` (against `tokenNames` — every token the file lists),
   `newSources` / `newLibraries`, `inSync`. A feature: `usage`, `problems` (the findings, a localized `text` each), `raw`,
   `counts`, `newComponents`. `missing`, `pending`, `stale`, `newTokens` and `raw` hold their first 50 (`DS_LIST`) with a
   total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `total`).
+- **`limits`** — the bounds that cut what a report read, `[{code, read}]`: files (the walk's cap) · token-files · tokens ·
+  registry-rows (rows past 500 are not checked for a gone path) · view-files (a feature's 200); `truncated` = one was
+  reached, and then the report is NEVER `inSync` — what it did not read it cannot vouch for (the CLI prints
+  `cliOutput.dsLimit[code]`, never "the registry and the code agree" beside one). A new bound gets a code and its line.
+- **A stale row** (`stalePath`) names a FILE OF THE PROJECT that is gone. A reading counts only when its last segment has a
+  file extension (`src/components/Card` may be Card.tsx or a folder) and its FIRST segment is on disk — `next/link`,
+  `primereact/button`, `~/components/Button.vue`, a site, prose and `n/a (custom)` start nowhere in the project. In order:
+  the whole cell on disk → there (a path may hold a blank); else the FIRST word naming a file decides (a markdown link's
+  target, a path beside a note: `Gone.tsx (see README.md)` is gone whatever the note names); no such word → the whole
+  cell. `projectPath` decides on the TEXT before any fs call (a network path, `..` out, an absolute path elsewhere, a
+  glob: null); `onDisk` stops at a link. False negatives are the price (a root-level file, `_shared/` — `dsCell` drops the
+  underscore): a wrong "gone" sends a team to fix a registry that is right.
 - **The seed** — `steering_scaffold design-system.md` (`scaffoldSteeringFile`) writes the stub with the code's rows in place of
   its slot rows (`designSystemSeed` → `seeded` {components, tokens}); a table the code has no row for keeps its slot; nothing
   found: the plain stub; a project template for the file wins; never over an existing file.
 - **Raw values** (`rawValuesOf`, the feature report) — the feature's view / style files (`featureFilesOf`, shared with dupes.js;
   token files — the registry's `_Token sources:_` and `isTokenFile` — and tests aside; ≤ 200 files). A line is read as a
-  STYLESHEET's in a .css / .scss… file, inside a `<style>` block of a MARKUP file (`RE_STYLE_BLOCK_EXT`: .vue / .svelte /
-  .astro / .html… — never a .tsx / .jsx / .js, where `useState<style>` is a type), or when it is declaration-shaped
+  STYLESHEET's in a .css / .scss… file, inside a `<style>` block — a markup file's (`RE_STYLE_BLOCK_EXT`: .vue / .svelte /
+  .astro / .html…, any case) or JSX's (styled-jsx; `RE_STYLE_OPEN_JSX`: never right after an identifier, where
+  `useState<style>` is a type) —, or when it is declaration-shaped
   (`RE_DECL_LINE`: a CSS-in-JS template): piece by piece, a hex or functional colour in a declaration's VALUE only (never a
   selector, a prelude before `{`, a line ending in `,` — unless it reads `prop: value,` with a blank after the colon,
-  `RE_DECL_GOES_ON`: a multi-value declaration going on, read by its first line; its further lines are not), and margin / padding / gap / font-size / radius in px / rem / em (any literal of the value; never 0,
+  `RE_DECL_GOES_ON`: a multi-value declaration going on, read by its first line; its further lines are not), and margin /
+  padding / gap / font-size / radius in px / rem / em (any literal of the value; never 0,
   a 1px hairline, a value built from a variable or `calc()`). Elsewhere (markup, code): a 6 / 8-digit hex right after a quote
   or one of `[ ( : = ,`, a 3 / 4-digit one only as `[#fff]` or a quoted literal, a functional colour, a Tailwind arbitrary
   size — "Ticket #204518" is prose. Never an anchor or a reference (`href="#abcdef"`, `querySelector("#add")` —
-  `RE_HEX_REF_BEFORE` matches a WHOLE word: `invalid: '#dc2626'` and a gradient's `to: "#fff"` are colours), an entity, a
+  `RE_HEX_REF_BEFORE`: an attribute under any prefix, `data-bs-target`, `hx-target`, `xlink:href`; a WHOLE word for a
+  key — `invalid: '#dc2626'` and a gradient's `to: "#fff"` are colours; a selection or tween target, `.find`, `d3.select`,
+  `gsap.to`, `scrollTo`; `RE_HEX_REF_CAMEL`: JSX's `xlinkHref` / `dataTarget` — only Href and Target, `gradientTo` is a
+  colour), an entity, a
   comment (`withoutComments`: outside a stylesheet a `/*` opens one only at a line's start, after a blank or `{ ( ; ,` —
   `accept="image/*"` holds none). A colour equal to a registry token's value carries `token` (`colorKey`). Not read: a size
   in a JSX `style={{…}}` object.
@@ -383,7 +413,14 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `\s+$` replace, every line capped (`DS_LINE_MAX`). Review 2, inside the cap (2,000² per line × 128 lines × 200 files is
   still minutes): a number is `\d+(?:\.\d+)?|\.\d+` (never `\d*\.?\d+` — two ways to split a digit run), the blank run after
   a colon ends at a non-blank, Tailwind's variant prefixes are counted (`{0,4}` of ≤ 24 characters), and what stands before a
-  match is read from a 40-character tail — one slice per match, never the whole line again.
+  match is read from a 40-character tail — one slice per match, never the whole line again. Review 3: the registry's marker
+  entries (`stripEnds`, cut first), a path cell's backticks, `withoutComments` (the next `<!--` looked for once per line).
+- **A fix is proven by a test that fails without it** (review 3 found five that did not: the lock test wrote before the
+  call, whose feature lock drops the whole read cache; the "hostile registry" ended in its blank run, where `\s+$` matches
+  at once; one timing test covered three patterns under one bound). Review 3 checked each fix by a mutation — undo it,
+  the named assertion must fail: 35 of them, one not detectable by design (`isNetworkPath` in `projectPath`: `isInsideDir`
+  refuses the same paths) — and each linear pattern has its own fixture and bound
+  (mcp/tests/15-quality-design-system-review3.js). Do the same for the next fix here: run the test with the fix undone.
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
@@ -553,7 +590,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.35 review 2** (two fresh reviewers on review 1's commit) — no HIGH. Review 1's fixes had left their own edges: the
   origin was read from the 500 detailed rows only, so a feature whose row landed as row 506 was "already listed" again
   (hence `origins`); tokens past the 1,000 cap were simply not compared (hence `tokenNames`); `_Libraries: none yet_` named
-  two libraries, "none" and "yet"; a path cell with a blank or a markdown link was stale; the first `prop: value,` line of
+  a library called "none yet" (the registry was no longer empty: every Reuse row became unknown); a path cell with a blank
+  or a markdown link was stale; the first `prop: value,` line of
   a multi-value declaration was skipped as a selector list; `<style` was looked for in .tsx too, where `useState<style>`
   turned the rest of the file into a stylesheet; `invalid: '#dc2626'` was an `id:` reference; `Layout.tsx` a helper,
   `packages/ui/src/index.tsx` a component "Src", `src/ui/auth/tokens.ts` a token file. Three patterns were quadratic INSIDE
@@ -562,3 +600,19 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   checked by running the new file on review 1's commit, or by a mutation): nothing covered the gate probe's `slug` — drop it
   and a feature's edited design is refused after its own finish —, `forgetCached` under the lock, the hostile registry
   through a written finish, a slug that is another's prefix in a rename. `pendingTotal` joined the other totals.
+- **1.35 review 3** (two fresh reviewers on review 2's commit) — two HIGH, both REGRESSIONS of review 2's own fixes. "A
+  plain tokens.json counts at the project's root" read Google's OAuth `token.json` (and any saved `tokens.json`) as design
+  tokens: `refresh_token` and `client_secret` in the report and in the seeded steering file — hence the content rule
+  (`jsonTokens`: `secret`, `design`), the singular name dropped. And "a library is one word" refused a size m design citing
+  `TextField (Material UI)` with a hint the user had already followed — hence the first-word none rule. MEDIUM: a stale row
+  for `next/link`, `~/components/Button.vue`, prose and `n/a (…)` (as before), and a gone path beside an existing one no
+  longer stale (new) — `stalePath` rewritten; a trailing-run replace on a marker value (250 lines: 4.6 s on every doctor);
+  "the registry and the code agree" printed when the scan had stopped at 300 tokens or 20 token files — `limits`, the token
+  bound raised to the reader's 1,000; doctor's "only the first N components" said of a TOKEN table past its cap. LOW:
+  config/index.tsx a component "Config"; `theme.*` anywhere made `src/store/theme.ts` a token file while
+  packages/ui/src/tokens.ts was lost; `data-bs-target="#add"`, `xlinkHref="#fade"` and `gsap.to("#face")` colours;
+  styled-jsx and `<STYLE>` unread. Five tests passed with their fix removed (25 of 38 mutations caught): rewritten, and
+  every fix of the round now has its mutation. Docs: counts gone stale (16 steering templates, 41 operations), the
+  unconditional "never a hard-coded colour" beside "where a token exists", the finish flow silent on the registry it
+  edits. Lesson, the second round in a row: a fix that WIDENS what is read (the root, any name) needs the question "what
+  else has that name?" before it ships — the reviewers asked it, the fix had not.
