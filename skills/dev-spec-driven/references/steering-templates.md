@@ -647,10 +647,10 @@ _Libraries: @mui/material_
 - `_Libraries:_` names each library as the designs will cite it — its package (`@mui/material`) or its name
   (`Material UI`); a parenthesis that ends a library or a token source is a note (`antd (being replaced)`) — a
   library's note that is its package or its acronym names it too: `Material UI (@mui/material)`, `Material UI (MUI)`
-  (a scoped package always; an acronym or a dependency the name does not spell, `Lightning Design System (SLDS)`,
-  where a row cites it: `Button (SLDS)`) —, a version written as one or a markdown link is dropped (`antd v5`,
-  `[antd](https://ant.design)` are antd; `Carbon 11` keeps its number and is cited as `Button (Carbon)` too), and
-  `none` / `none yet` names nothing. A registry that lists no component is checked against a design only when a
+  (a package or a short name of it wherever a row names it; an acronym the name does not spell — SLDS for Lightning
+  Design System — or a framework, where a row cites it: `Button (SLDS)`, `Button — SLDS`) —, a version written as
+  one or a markdown link is dropped (`antd v5`, `[antd](https://ant.design)` are antd; `antd 5` keeps its number
+  and is cited as `antd Table` too), and `none` / `none yet` names nothing. A registry that lists no component is checked against a design only when a
   library it declares is a real one — a `package.json` dependency or a scoped package: name it by its package.
   A component of a declared library is not listed here: a design cites the same words — `TextField (@mui/material)`.
 - The token values the seed writes are the design values it found — colours, lengths, numbers, references. A

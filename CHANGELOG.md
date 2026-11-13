@@ -14,17 +14,20 @@ components and tokens, and every +ui feature is checked against it.
   value, use) and the components (name, path, variants, notes) — and three markers: `_Token sources:_` (the files that
   define the tokens), `_Libraries:_` (third-party UI libraries whose components are not listed one by one — each named
   as the designs will cite it: `@mui/material` or `Material UI`; a note in parentheses that is its package or its
-  acronym names it too, `Material UI (@mui/material)`, `Material UI (MUI)` — a scoped package always, wherever a row
-  names it; an acronym or a dependency that is not derived from the name (`Lightning Design System (SLDS)`) where a
-  row cites it, `Button (SLDS)` —; a version written as one or a markdown link is dropped, `antd v5`,
-  `[antd](https://ant.design)`) and, in a component's row, `_From: <feature>_` (the feature that built it).
+  acronym names it too, `Material UI (@mui/material)`, `Material UI (MUI)` — a package or a short name of it
+  wherever a row names it; an acronym the name does not spell (`Lightning Design System (SLDS)`) and a framework
+  (`Headless UI (react)`) where a row cites it: `Button (SLDS)`, `Button [SLDS]`, `Button — SLDS` —; a version
+  written as one or a markdown link is dropped, `antd v5`, `[antd](https://ant.design)`; a name with a bare number
+  is cited without it too, `antd Table` for `antd 5`) and, in a component's row, `_From: <feature>_` (the feature
+  that built it).
   `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**:
   - the components: React, Vue, Svelte and Astro files, Angular `*.component.ts` and PascalCase `.js` files under
     `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper or an entry
     file (`utils.tsx`, `main.tsx`, `config/index.tsx`), a barrel (`packages/ui/src/index.tsx`) or a file whose nearest
     such folder is a page folder (`components/pages/Home.tsx`). Under a component folder a name a framework uses
     elsewhere is a component's: `components/loading.tsx`, `layout/index.tsx` and Angular's `loading.component.ts` are
-    Loading and Layout — except in a route segment of Next's app router (the project depends on `next`): a folder
+    Loading and Layout — except in a route segment of Next's app router (the project depends on `next` or holds a
+    `next.config.*`): a folder
     between the `app/` that holds the root layout — also under a route group or a dynamic segment,
     `app/[locale]/layout.tsx` — and a `page.*` / `route.*` at or below it (`app/components/page.tsx` and the
     `loading.tsx` beside it are pages). `main` / `app` are entry files only right inside the component folder,
@@ -35,9 +38,11 @@ components and tokens, and every +ui feature is checked against it.
     one named `index`, `main`, `app`, `styles` / `style`, `base`, `root`, `site`, `application`,
     `tailwind`, `custom` or `input` — names a component's own sheet has too — those it declares for the whole
     page: on `:root`, `html`, `body`, in Tailwind's `@theme` or a theme plugin's `@plugin`, and in a block that
-    overrides one of them (`.dark`). A component's own sheet declares on its own selector or on `:host` and is
-    none, nor a twin that brings no name of its own (`main.min.css`); a global sheet under another name is not
-    read — name it in `_Token sources:_`.
+    overrides one of them (`.dark`). A block is such a theme when at least half of what it declares overrides them: a
+    component rule that re-points one token beside its own variables is not. A component's own sheet declares on its
+    own selector or on `:host` and is none; a twin that brings no name of its own (`main.min.css`, a second app's
+    identical `globals.css`) is no further source; a global sheet under another name is not read — name it in
+    `_Token sources:_`.
     A stylesheet named for its tokens, a `design-tokens.*` / `*.tokens.json` and a `tailwind.config.*` count anywhere;
     `theme.*` anywhere but under a folder — at any depth — that holds something else by that name (`store/`,
     `models/`, `server/`, `types/`, `hooks/`, `scripts/`…); a plain `tokens.*` only at the project's root or in a
@@ -70,7 +75,8 @@ components and tokens, and every +ui feature is checked against it.
   existing file is never overwritten. EN / PT / pt-BR / ES.
 - **`[UI] Design System Usage` is a table.** A new +ui design lists one row per component: `Kind | Component |
   Why / notes`, where Kind is Reuse (one the registry lists, used as is), Extend (a new variant of one it lists) or New
-  (none it lists fits, and why). A library's component is written `TextField (@mui/material)`. A feature that uses no
+  (none it lists fits, and why). A library's component is written `TextField (@mui/material)`; several components may
+  share a cell, separated outside the parentheses (`Button, Dialog (@mui/material)`). A feature that uses no
   component writes one line, `n/a — <why, in four words or more>`.
 - **`spec_doctor` check `ui-design-system`.** It compares those rows with the registry and names each one that
   disagrees: a Reuse or Extend the registry doesn't list (with a "did you mean"), a New that is already listed, a New
@@ -124,7 +130,7 @@ components and tokens, and every +ui feature is checked against it.
 - The registry is not part of an approval's fingerprint: adding a row never asks an approved feature to be re-reviewed.
 
 ### Tests
-- `node mcp/test.js` 2339 assertions, `node cli/test-cli.js` 663 (was 2266 / 657).
+- `node mcp/test.js` 2344 assertions, `node cli/test-cli.js` 663 (was 2266 / 657).
 
 ## [1.34.1] — 2026-10-31
 

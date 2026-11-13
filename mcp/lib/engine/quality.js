@@ -1256,39 +1256,50 @@ function designSystemRegistry(root) {
       let w = stripEnds(w0.trim(), unitIn("`'\""), unitIn("`'\".")).trim(); // linear: never a /^[`'"]+|[`'".]+$/g replace
       // a library's markdown link is its text — unwrapped BEFORE the note is read: `[Material UI (MUI)](https://mui.com)`,
       // `[MUI](https://mui.com) (@mui/material)`
-      if (library) w = w.replace(RE_DS_LINK, "$1").trim();
+      if (library) w = stripEnds(w.replace(RE_DS_LINK, "$1").trim(), unitIn("`'\""), unitIn("`'\".")).trim();
       // a parenthesis that ENDS an entry is a note — `@mui/material (v6)`, `src/styles/colors.scss (generated from Figma)` —,
       // never one inside a path (`src/styles (legacy)/tokens.css`)
       let note = "";
       const at = w.endsWith(")") ? w.lastIndexOf(" (") : -1;
       if (at > 0) { note = w.slice(at + 2, -1).trim(); w = w.slice(0, at).trim(); }
+      // (a library's note is read as its entry is: the part before a comma, no version written as one — `(MUI, v6)`,
+      // `(@mui/material@6)`)
+      if (library && note) note = note.split(",")[0].trim().replace(RE_DS_VERSION, "").trim();
       // …and a library is named without a version WRITTEN as one (`antd v5`, `antd@5`: they named no package, and the gate
       // of a library-only registry was off — review 7). Never a bare number: `Material 3` is a name (review 8)
       if (library) w = w.replace(RE_DS_VERSION, "").trim();
       if (!w || w === "-" || w === "—" || (library || !/[/.]/.test(w) ? RE_DS_NONE : RE_DS_NONE_WHOLE).test(w)) continue;
       add(w); // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`)
-      // (…and a name that ends in a bare number is cited without it too, where a row cites: `Button (Carbon)` for `Carbon 11`)
+      // (an entry written on its own names its library SURELY, whatever a note or a shorter name said before: `Carbon 11, Carbon`)
+      if (library) weak.delete(w.toLowerCase());
+      // …and a name that ends in a bare number is cited without it too — SURELY when the shorter name is one a row would
+      // write anywhere (dsNamed: an acronym, two words or more, a package of the project — `antd` of `antd 5`, `Ant Design`,
+      // `MUI`), only where a row cites for one plain word no package backs: `Material` of `Material 3` must not make
+      // "Material Picker" the library's (review 8) — and review 9: weak for ALL of them, `Reuse | antd Table` was refused
       const bare = library ? w.replace(RE_DS_BARE_VERSION, "").trim() : w;
-      if (bare && bare !== w && !into.includes(bare)) { add(bare); if (into.includes(bare)) weak.add(bare.toLowerCase()); }
+      if (bare && bare !== w && !into.includes(bare)) { add(bare); if (into.includes(bare) && !dsNamed(bare, dependencies)) weak.add(bare.toLowerCase()); }
       // …and a library's note that is a package or an acronym names it too — surely or only where a row cites one (dsAlias)
       const alias = library && note && !into.includes(note) ? dsAlias(w, note, dependencies) : null;
       if (alias) { add(note); if (alias === "weak" && into.includes(note)) weak.add(note.toLowerCase()); }
     }
   }
   // Does a registry with no component row build on a library that IS one — see dsPackaged (asked only then)
-  const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(lists.libraries, dependencies);
+  // (never through a WEAK alias: it may not cite outside a parenthesis, so it cannot be what switches the gate on —
+  // review 9: `Design System (acme-ui)` with no row refused `Reuse | acme-ui Button`)
+  const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(lists.libraries.filter((l) => !weak.has(l.toLowerCase())), dependencies);
   return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, weakLibraries: weak,
     packaged, total, truncated: total.components > components.length || total.tokens > tokens.length };
 }
 // A marker line's entries: cut at `,` / `;` outside parentheses (`@mui/material (Material UI, v6)` is one). Linear.
-function dsEntries(value) {
+// dot: a usage cell's components — `·` separates them too.
+function dsEntries(value, dot) {
   const out = [];
   let start = 0, depth = 0;
   for (let i = 0; i <= value.length; i++) {
     const ch = i < value.length ? value[i] : ",";
     if (ch === "(") depth++;
     else if (ch === ")") depth = Math.max(0, depth - 1);
-    else if ((ch === "," || ch === ";") && (depth === 0 || i === value.length)) { out.push(value.slice(start, i)); start = i + 1; }
+    else if ((ch === "," || ch === ";" || (dot && ch === "·")) && (depth === 0 || i === value.length)) { out.push(value.slice(start, i)); start = i + 1; }
   }
   return out;
 }
@@ -1308,6 +1319,16 @@ function dsPackaged(libraries, dependencies) {
   const names = dependencies();
   return libraries.some((l) => { const n = l.toLowerCase(); return names.has(n) || (RE_DS_SCOPE.test(n) && [...names].some((d) => d.startsWith(n + "/"))); });
 }
+// Is a library's shorter name — its entry without a bare number — one a row would write ANYWHERE in its cell? An acronym,
+// two words or more, a scoped package, or a package of the project: a dependency of that name, or one under its scope or
+// with its prefix (`Carbon` of `@carbon/react`, `Mantine` of `@mantine/core`). One plain word no package backs is not.
+function dsNamed(name, dependencies) {
+  if (RE_DS_ACRONYM.test(name) || /\s/.test(name) || RE_DS_SCOPED.test(name)) return true;
+  const n = name.toLowerCase().replace(/^@/, "");
+  // (…a package that BEGINS with the name, four letters or more: `Fluent` of `@fluentui/react-components`, `Prime` of primereact)
+  for (const d of dependencies()) { const p = d.replace(/^@/, ""); if (p === n || (n.length >= 4 && p.startsWith(n))) return true; }
+  return false;
+}
 // Does a library entry's note name the library too — and how surely?
 //   "strong" — wherever a usage row names it: a SCOPED package (`(@acme/ui)` is never a remark, whatever the entry is
 //              called — review 8: asked to be "derived from the entry", `Design System (@acme/ui)` named nothing, a row
@@ -1317,10 +1338,14 @@ function dsPackaged(libraries, dependencies) {
 //   "weak"   — any other acronym or dependency: `Lightning Design System (SLDS)`, `Design System (acme-ui)` — and also
 //              `antd (PRO)`, `Headless UI (react)`, which no shape tells apart. It names the library only where a row
 //              CITES one, in the cell's parenthesis: `Button (SLDS)` — never `Pro Table`, `React Select` (review 7);
-//              And a note made of the entry's own words, its short name: `Radix UI (Radix)`;
+//              (So is a note made of the entry's own words — the short name its author gave it: `Radix UI (Radix)` —,
+//              and a dependency that is not a framework's: `Design System (acme-ui)`.)
 //   null     — a remark: `antd (deprecated)` (review 6: any one word made "deprecated" a library).
 function dsAlias(entry, note, dependencies) {
-  if (RE_DS_SCOPED.test(note) || RE_DS_SCOPE.test(note)) return "strong";
+  if (RE_DS_SCOPED.test(note)) return "strong";
+  // (a scope alone when the project has a package under it — `(@radix-ui)`, never `(@jane)`; a version is a remark: `(V5)`)
+  if (RE_DS_SCOPE.test(note)) return [...dependencies()].some((d) => d.startsWith(note.toLowerCase() + "/")) ? "strong" : null;
+  if (/^v?\d/i.test(note)) return null;
   if (RE_DS_ACRONYM.test(note)) {
     const letters = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const name = letters(entry), n = letters(note);
@@ -1329,9 +1354,13 @@ function dsAlias(entry, note, dependencies) {
     return n[0] === name[0] && j === n.length ? "strong" : "weak";
   }
   const own = entry.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean), said = note.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  if (!dependencies().has(note.toLowerCase())) return said.length > 0 && said.every((w) => own.includes(w)) ? "weak" : null;
-  return own.some((w) => w.length >= 3 && note.toLowerCase().includes(w)) ? "strong" : "weak";
+  if (!dependencies().has(note.toLowerCase())) return said.length > 0 && said.every((w) => own.includes(w)) ? "strong" : null;
+  // a dependency in a note is the library's package — `Design System (acme-ui)` —, but for the frameworks a library is
+  // FOR, which a note names as a remark (`Headless UI (react)`: "React Select" is no component of it)
+  return DS_FRAMEWORKS.has(note.toLowerCase()) ? "weak" : "strong";
 }
+const DS_FRAMEWORKS = new Set(["react", "react-dom", "react-native", "preact", "vue", "svelte", "solid-js", "lit", "angular", "next", "nuxt", "astro", "remix", "qwik",
+  "ember-source", "alpinejs", "jquery", "tailwindcss", "typescript"]);
 // The dependency names of the project's package.json (dependencies, devDependencies, peerDependencies), lower-cased → a Set
 // (empty: none readable). Read as the scan reads a root manifest: a regular file, or a link that stays inside the project
 // (never `package.json -> ~/.npmrc`); its first DS_PACKAGE_CHARS characters (a manifest is never longer — a 32 MB one cost
@@ -1350,11 +1379,22 @@ function packageDependencies(projectRoot) {
 // → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole word: `own` is not in "Dropdown".
 // A `-` / `/` / `@` beside the name is a word's end: `@radix-ui/react-dialog` and `radix-ui` cite Radix, `react-bootstrap`
 // Bootstrap, `MUI-X` and `@mui/material` MUI (review 8: a `-` taken for "another package" refused all of them — so
-// `antd-mobile` cites antd, knowingly). A WEAK alias (dsAlias) only inside the cell's parenthesis, where a row cites.
+// `antd-mobile` cites antd, knowingly). A WEAK alias (dsAlias) only where a row CITES — dsCited.
+// The parts of a usage cell that cite a library, apart from the component's own name: what a closed `(…)` or `[…]` holds,
+// what follows a dash set off by blanks, what precedes a colon — `Button (SLDS)`, `Button [SLDS]`, `Button — SLDS`,
+// `SLDS: Button`; never `SLDS Button`, which no shape tells from `Pro Table`. The cell is bounded (DS_CELL_MAX).
+const RE_DS_BRACKETED = /[([]([^()[\]]*)[)\]]/g, RE_DS_DASH = /\s[—–-]\s/;
+function dsCited(cell) {
+  const out = [];
+  for (const m of cell.matchAll(RE_DS_BRACKETED)) out.push(m[1]);
+  const dash = cell.search(RE_DS_DASH), colon = cell.indexOf(": ");
+  if (dash !== -1) out.push(cell.slice(dash + 3));
+  if (colon !== -1) out.push(cell.slice(0, colon));
+  return out.join(" | ");
+}
 function dsCites(registry) {
   const res = registry.libraries.map((l) => ({ re: new RegExp(RE_WORD_BEFORE + escRe(l) + RE_WORD_AFTER, "iu"), weak: registry.weakLibraries.has(l.toLowerCase()) }));
-  const cited = (cell) => { const a = cell.indexOf("("), b = cell.lastIndexOf(")"); return a !== -1 && b > a ? cell.slice(a, b + 1) : ""; };
-  return (cell) => res.some((x) => x.re.test(x.weak ? cited(cell) : cell));
+  return (cell) => { let where = null; return res.some((x) => x.re.test(x.weak ? where == null ? (where = dsCited(cell)) : where : cell)); };
 }
 // A usage row's kind — the first cell's first word, EN / PT / ES: Reuse (used as is) · Extend (a new variant of a listed
 // component) · New (nothing listed fits).
@@ -1378,7 +1418,9 @@ function designSystemUsage(design) {
       const kind = dsKind(r[0] || "");
       if (!kind || r.length < 2 || dsNameSlot(r[1])) continue;
       const why = r.slice(2).filter((c) => c != null && !dsSlot(c)).map(dsCell).join(" · ").slice(0, DS_CELL_MAX * 2);
-      for (const part of String(r[1]).slice(0, DS_CELL_MAX * 2).split(/[,;·]/)) { // (bounded before the parenthesis replace)
+      // (several components in one cell are a row each — cut OUTSIDE parentheses: `TextField (@mui/material, outlined)` is one;
+      // review 9: cut anywhere, it was refused as "outlined)", on every commit since the first)
+      for (const part of dsEntries(String(r[1]).slice(0, DS_CELL_MAX * 2), true)) { // (bounded before the parenthesis replace)
         const name = dsCell(part.replace(/\([^)]*\)/g, " ")); // "Button (@mui/material)" is Button
         const key = dsKey(name);
         if (key && rows.length < DS_MAX_USAGE_ROWS) rows.push({ kind, name, key, cell: dsCell(part), why });
