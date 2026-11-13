@@ -1517,7 +1517,7 @@ const msg = {
       dsStaleHead: (n) => `  no registo, mas o caminho não indica nenhum ficheiro (${n}):`,
       dsSourcesNew: (list) => `  ficheiros de tokens que o registo não indica (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  bibliotecas de UI no package.json que o registo não indica (_Libraries:_): ${list}`,
-      dsInSync: "  o registo e o código coincidem",
+      dsInSync: "  o registo lista todos os componentes, tokens, ficheiros de tokens e bibliotecas de UI que a leitura encontrou (a comparação é por nomes, não pelo valor de um token)",
       dsMore: (n) => `    … e mais ${n}`,
       dsLimit: {
         files: (n) => `  (atingido o limite de ficheiros — ${n} percorridos: o resto não foi lido)`,

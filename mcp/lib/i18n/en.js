@@ -1569,7 +1569,8 @@ const msg = {
       dsStaleHead: (n) => `  in the registry, but their path names no file (${n}):`,
       dsSourcesNew: (list) => `  token files the registry doesn't name (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  UI libraries in package.json the registry doesn't name (_Libraries:_): ${list}`,
-      dsInSync: "  the registry and the code agree",
+      // (what was compared, no more: a token's VALUE is not, nor a token the code no longer declares — review 7)
+      dsInSync: "  the registry lists every component, token, token file and UI library the scan found (names are compared, not a token's value)",
       dsMore: (n) => `    … +${n} more`,
       // a bound that cut what the scan read (the report's `limits` codes) — never "the registry and the code agree" beside one
       dsLimit: {

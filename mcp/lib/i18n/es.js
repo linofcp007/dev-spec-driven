@@ -1517,7 +1517,7 @@ const msg = {
       dsStaleHead: (n) => `  en el registro, pero su ruta no indica ningún fichero (${n}):`,
       dsSourcesNew: (list) => `  ficheros de tokens que el registro no indica (_Token sources:_): ${list}`,
       dsLibrariesNew: (list) => `  bibliotecas de UI en package.json que el registro no indica (_Libraries:_): ${list}`,
-      dsInSync: "  el registro y el código coinciden",
+      dsInSync: "  el registro enumera todos los componentes, tokens, ficheros de tokens y bibliotecas de UI que la lectura encontró (la comparación es por nombres, no por el valor de un token)",
       dsMore: (n) => `    … y ${n} más`,
       dsLimit: {
         files: (n) => `  (se alcanzó el límite de ficheros — ${n} recorridos: el resto no se leyó)`,

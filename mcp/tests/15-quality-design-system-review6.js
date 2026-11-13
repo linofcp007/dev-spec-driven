@@ -55,7 +55,7 @@ exports.run = async ({ all, S, tmp, approveBefore, require, __dirname }) => {
     // …but never a component's, a page's or a feature's OWN sheet (one that lies below such a folder without being right in it)
     const own = ["src/components/Button/index.css", "src/features/cart/styles.scss", "src/pages/home/index.css", "packages/kit/src/widgets/Chart/styles.css", "src/app/_components/Card/index.css"];
     const p = project("global-own");
-    for (const rel of own) write(p, rel, PROPS(6));
+    for (const rel of own) write(p, rel, PROPS(6).replace(":root", ".card"));
     const none = S.designSystemReport(p);
     // a monorepo: 101 folders with their own index.css beside the one `styles/globals.css`, at the same depth — the likeliest
     // name is read first, and the search ends at its bound without a word
@@ -75,7 +75,7 @@ exports.run = async ({ all, S, tmp, approveBefore, require, __dirname }) => {
   // --- components: a route folder named like a component folder; an entry file's name deeper down ------------------------------------------
   {
     const p = project("routes");
-    for (const f of ["app/design-system/page.tsx", "app/design-system/layout.tsx", "app/components/page.tsx", "app/components/loading.tsx", "app/components/error.tsx", "app/ui/route.ts", "app/ui/template.tsx"]) write(p, f, COMP);
+    for (const f of ["app/layout.tsx", "app/page.tsx", "app/design-system/page.tsx", "app/design-system/layout.tsx", "app/components/page.tsx", "app/components/loading.tsx", "app/components/error.tsx", "app/ui/route.ts", "app/ui/template.tsx"]) write(p, f, COMP);
     for (const f of ["components/ui/button.tsx", "components/loading.tsx", "components/layout/main.tsx", "components/shell/app.tsx", "components/main.tsx", "src/ui/main.tsx", "src/ui/app.tsx"]) write(p, f, COMP);
     for (const f of ["components/tokens/index.tsx", "components/style/index.tsx"]) write(p, f, COMP); // a helper folder's barrel: no component Tokens / Style
     const seeded = S.scaffoldSteeringFile(p, "design-system.md");
@@ -105,7 +105,7 @@ exports.run = async ({ all, S, tmp, approveBefore, require, __dirname }) => {
     const LONG = "background interactive primary hover disabled"; // 45 characters, with blanks
     write(g, "src/design-tokens.json", js({ color: { brand: "#1d4ed8" }, content: { icon: { "map-pin": "'\\f041'" } }, input: { otp: { $value: "Roboto Mono", $type: "fontFamily" } },
       a: { pin: 1111 }, b: { otp: 2222 }, c: { passcode: 3333 }, secrets: { x: 4444 }, passwords: { x: 5555 }, api_keys: { x: 6666 }, credentials: { x: 7777 }, password: { hint: "free text here" },
-      api_key: "{AB12CD34-FAKE-11D3-9A0C-0305E82C3301}", build: { id: "{3F2504E0-FAKE-11D3-9A0C-0305E82C3301}" }, [LONG]: "#0f0f0f",
+      f: { passcode: "{AB12CD34-FAKE-11D3-9A0C-0305E82C3301}" }, build: { id: "{3F2504E0-FAKE-11D3-9A0C-0305E82C3301}" }, [LONG]: "#0f0f0f",
       // a token of a format AT a credential key refuses no file either (free text is what a font family holds) — and is not listed, nor a composite beneath a guard word
       text: { token: { $value: "Inter Display", $type: "fontFamily" } }, e: { pin: { $value: { color: "#00000040", blur: "2px" }, $type: "shadow" } } }));
     const guard = S.designSystemReport(g);

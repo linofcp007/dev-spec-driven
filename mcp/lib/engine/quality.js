@@ -1165,6 +1165,7 @@ const RE_DS_NONE_WHOLE = /^(?:none|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|
 // `_From: <feature>_` in a component's row: the feature whose finish added the row (a slug — spec_finish writes it, a rename
 // follows it). That feature's own `New` row for the component stays New: its design says what it built.
 const RE_DS_FROM = /_From:[ \t]*([a-z0-9][a-z0-9-]*)_/i;
+const DS_PIPE = String.fromCharCode(92) + "|"; // a `|` as a table cell holds it, escaped
 // A cell's own text: its code span, emphasis and JSX brackets dropped (`<Button />`, **Button**), trimmed, bounded — bounded
 // BEFORE the replaces: a trailing-run replace is quadratic on a cell of 80,000 `>`.
 const dsCell = (c) => String(c == null ? "" : c).slice(0, DS_CELL_MAX * 2).trim().replace(/^[`*<\s]+/, "").replace(/[`*>\s/]+$/, "")
@@ -1223,11 +1224,13 @@ function designSystemRegistry(root) {
         const rest = own.filter((x, i) => i + 1 !== cols.a && i + 1 !== cols.b).map((x) => x.replace(RE_DS_FROM, " ")).filter((x) => !dsSlot(x)).map(dsCell);
         components.push(Object.assign({ name, key, path: cell(cols.a), variants: cell(cols.b), notes: rest.join(" · ").slice(0, DS_CELL_MAX) }, from ? { from: from[1].toLowerCase() } : {}));
       } else {
-        const key = name.toLowerCase();
+        // (a `|` the report's pasted row escaped is the name's own again — else that row never read as listed)
+        const token = name.split(DS_PIPE).join("|");
+        const key = token.toLowerCase();
         if (seenT.has(key)) continue;
         seenT.add(key);
         total.tokens++;
-        if (tokens.length < DS_MAX_TOKENS) tokens.push({ name, value: cell(cols.a), use: cell(cols.b) });
+        if (tokens.length < DS_MAX_TOKENS) tokens.push({ name: token, value: cell(cols.a), use: cell(cols.b) });
       }
     }
   }
@@ -1252,12 +1255,13 @@ function designSystemRegistry(root) {
       let note = "";
       const at = w.endsWith(")") ? w.lastIndexOf(" (") : -1;
       if (at > 0) { note = w.slice(at + 2, -1).trim(); w = w.slice(0, at).trim(); }
+      // a library as it is NAMED: a markdown link's text, no trailing version — `[antd](https://…)`, `antd v5`, `antd@5`
+      // named no package, and the gate of a library-only registry was off (review 7)
+      if (library) { const link = RE_DS_LINK.exec(w); w = (link ? link[1] : w).trim().replace(RE_DS_VERSION, "").trim(); }
       if (!w || w === "-" || w === "—" || (library || !/[/.]/.test(w) ? RE_DS_NONE : RE_DS_NONE_WHOLE).test(w)) continue;
       add(w); // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`)
-      // …and a library's note that IS its package or its acronym names it too: `Material UI (@mui/material)`, `(MUI)`,
-      // `Ant Design (antd)` with antd a dependency — never any one word: `antd (deprecated)` made "deprecated" a library,
-      // and `Reuse | OldTable (deprecated)` passed as one of its components (review 6)
-      if (library && note && (RE_DS_SCOPED.test(note) || RE_DS_ACRONYM.test(note) || dependencies().has(note.toLowerCase()))) add(note);
+      // …and a library's note names it too when it is DERIVED from it — its acronym or its package (dsAlias)
+      if (library && note && dsAlias(w, note, dependencies)) add(note);
     }
   }
   // Does a registry with no component row build on a library that IS one — see dsPackaged (asked only then)
@@ -1285,11 +1289,28 @@ function dsEntries(value) {
 const RE_DS_SCOPED = /^@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*$/i;
 const RE_DS_SCOPE = /^@[a-z0-9][\w.-]*$/i; // a scope alone — what the seed writes for a family of packages: `@radix-ui`
 const RE_DS_ACRONYM = /^[A-Z]{2,6}$/;
+const RE_DS_LINK = /^\[([^\]]+)\]\([^)]*\)$/;
+const RE_DS_VERSION = /(?:[ \t]+v?\d[\w.]*|@[\^~]?\d[\w.]*)$/i;
 function dsPackaged(libraries, dependencies) {
   if (libraries.some((l) => RE_DS_SCOPED.test(l))) return true;
   const names = dependencies();
-  if (!names.size) return false;
   return libraries.some((l) => { const n = l.toLowerCase(); return names.has(n) || (RE_DS_SCOPE.test(n) && [...names].some((d) => d.startsWith(n + "/"))); });
+}
+// Does a library entry's note name the library too? Only one DERIVED from the entry:
+//   its acronym — 2 – 6 capitals that are letters of the entry's name, in order, from its first: `Material UI (MUI)`;
+//   its package — a scoped one or a dependency of the project — that holds a word of the entry's name (`Material UI
+//   (@mui/material)`, `Chakra (@chakra-ui/react)`) or is letters of it, in order, from its first (`Ant Design (antd)`).
+// Never any acronym, never any dependency: `antd (PRO)` made "PRO" a library and `Reuse | Pro Table` one of its
+// components, `Headless UI (react)` did it for every "React …" row (review 7; review 6: any one word, `antd (deprecated)`).
+function dsAlias(entry, note, dependencies) {
+  const letters = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const name = letters(entry), n = letters(note);
+  let j = 0;
+  for (let i = 0; i < name.length && j < n.length; i++) if (name[i] === n[j]) j++;
+  const inOrder = n !== "" && n[0] === name[0] && j === n.length;
+  if (RE_DS_ACRONYM.test(note)) return inOrder;
+  if (!RE_DS_SCOPED.test(note) && !dependencies().has(note.toLowerCase())) return false;
+  return inOrder || entry.toLowerCase().split(/[^a-z0-9]+/).some((w) => w.length >= 3 && note.toLowerCase().includes(w));
 }
 // The dependency names of the project's package.json (dependencies, devDependencies, peerDependencies), lower-cased → a Set
 // (empty: none readable). Read as the scan reads a root manifest: a regular file, or a link that stays inside the project
@@ -1306,9 +1327,12 @@ function packageDependencies(projectRoot) {
   for (const k of ["dependencies", "devDependencies", "peerDependencies"]) if (isRecord(pkg[k])) for (const n of Object.keys(pkg[k])) names.add(n.toLowerCase());
   return names;
 }
-// → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole word: `own` is not in "Dropdown".
+// → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole NAME: `own` is not in "Dropdown",
+// nor `antd` in `antd-mobile` or `@scope/antd` (another package: a `-` joins a package's words, a `/` leads to it) —
+// `antd/es/table` and `antd@5` are antd, and a scope named like the library is the library's (`@mui/material` cites MUI).
+const RE_NAME_BEFORE = "(?<![\\p{L}\\p{N}_/-])", RE_NAME_AFTER = "(?![\\p{L}\\p{N}_-])";
 function dsCites(registry) {
-  const res = registry.libraries.map((l) => new RegExp(RE_WORD_BEFORE + escRe(l) + RE_WORD_AFTER, "iu"));
+  const res = registry.libraries.map((l) => new RegExp(RE_NAME_BEFORE + escRe(l) + RE_NAME_AFTER, "iu"));
   return (cell) => res.some((re) => re.test(cell));
 }
 // A usage row's kind — the first cell's first word, EN / PT / ES: Reuse (used as is) · Extend (a new variant of a listed
@@ -2324,4 +2348,4 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  dsKey, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, __link };
+  dsKey, dsCell, dsSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, __link };
