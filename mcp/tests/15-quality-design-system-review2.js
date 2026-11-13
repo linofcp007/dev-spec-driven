@@ -190,7 +190,7 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     all("1.35 review 2: the scan — Layout.tsx / Loading.tsx are components (a name is matched as written), a barrel's index (packages/ui/src, icons/) is none, Next's `_components/` is a component folder; tokens.json / theme.json at the root, theme.ts anywhere and tokens.ts right inside styles/ are token files, `src/auth/tokens.ts` and `src/ui/auth/tokens.ts` are not; a registry path with a blank, behind a markdown link or beside a note is not stale, one that is gone is (got " +
       js({ seeded: seeded.seeded, names, sources: reg.sources, tokens: reg.tokens.map((t) => t.name), stale: rep.stale, missing: rep.missing }) + ")", {
       components: () => js(names.filter((n) => n !== "Layout")) === js(["Avatar", "Card", "DatePicker", "Hero", "Loading"]) && names.includes("Layout") && !names.includes("Src") && !names.includes("Icons"),
-      sources: () => js(reg.sources) === js(["src/styles/tokens.ts", "src/theme.ts", "theme.json", "tokens.json"]),
+      sources: () => js(reg.sources) === js(["theme.json", "tokens.json", "src/styles/tokens.ts", "src/theme.ts"]), // (the files whose values are read first)
       tokens: () => js(reg.tokens.map((t) => t.name)) === js(["radius.md", "space.sm"]),
       seededPath: () => rd(p, REG).includes("| DatePicker | `src/components/Form Controls/DatePicker.tsx` |  |  |"),
       stale: () => js(rep.stale) === js([{ name: "Gone", path: "[Gone](src/components/Gone.tsx)" }, { name: "Lost", path: "src/components/No Such/Lost.tsx" }]) && rep.staleTotal === 2,

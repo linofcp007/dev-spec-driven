@@ -42,7 +42,9 @@ how they came to be — the releases and review findings — is in History at th
 - **TRANSLATED, but matched by synonyms**, so PT / ES specs pass doctor and clarify: EARS keywords (QUANDO / CUANDO, O SISTEMA
   DEVE / EL SISTEMA DEBE… — `earsValidate`), section headings (`TRACK_SECTIONS`, the `RE_*` matchers), `DECISION_LABELS`,
   spike.md's headings, the Kind column header, the converge heading (`Phase: Convergence` / `Fase: Convergência` /
-  `Fase: Convergencia`). **A new or renamed translated heading needs its synonym**, or doctor reports the section missing.
+  `Fase: Convergencia`), and since 1.35 the design-system registry's first header cell (Component / Componente(s), Token(s) —
+  `RE_DS_COMPONENT_HEAD`) and a usage row's kind word (Reuse / Reutilizar, Extend / Estender / Extender, New / Novo / Nuevo —
+  `RE_DS_KINDS`). **A new or renamed translated heading needs its synonym**, or doctor reports the section missing.
 - **Terminology** mirrors `ROADMAP_I18N`: PT keeps the "Feature / Tasks / Tracks" anglicisms, ES translates them (Función /
   Tareas). Eval sample JSON is data, as-is; its prose is localized.
 - **The README, one file per language.** `README.md` (the reference), `README.pt.md` (European, no Brazilianisms) and

@@ -1839,6 +1839,7 @@ const COMMANDS = [
       if (!r.ok) return fail(r);
       const T = r.feature ? c.featureText(r.feature) : c.projectText();
       const more = (total, shown) => { if (total > shown) log(T.dsMore(total - shown)); };
+      const cell = (s) => String(s).split("|").join(String.fromCharCode(92) + "|"); // a pasted row's cell: its `|` escaped
       return out(r, (r) => {
         if (!r.feature) log(r.registry.exists ? T.dsHead(r.registry.file, r.registry.components, r.registry.tokens) : T.dsHeadNone(r.registry.file));
         else log(T.dsFeatureHead(r.feature, r.usage ? r.usage.reuse : 0, r.usage ? r.usage.extend : 0, r.usage ? r.usage.new : 0));
@@ -1858,7 +1859,7 @@ const COMMANDS = [
           log(T.dsFound(r.found.components, r.found.tokens, r.found.sources.length));
           if (r.registry.exists && r.missingTotal) {
             log(T.dsMissingHead(r.missingTotal));
-            r.missing.forEach((m) => log("    | " + m.name + " | `" + m.path + "` |  |  |")); // a row to paste into the registry
+            r.missing.forEach((m) => log("    | " + cell(m.name) + " | `" + cell(m.path) + "` |  |  |")); // a row to paste into the registry
             more(r.missingTotal, r.missing.length);
           }
           if (r.pending.length) log(T.dsPending(r.pending.map((m) => m.name + " (" + m.feature + ")").join(", ") + (r.pendingTotal > r.pending.length ? " … +" + (r.pendingTotal - r.pending.length) : "")));
@@ -1869,14 +1870,14 @@ const COMMANDS = [
           }
           if (r.registry.exists && r.newTokensTotal) {
             log(T.dsTokensNew(r.newTokensTotal));
-            r.newTokens.forEach((t) => log("    | " + t.name + " | " + t.value + " |  |")); // a row to paste into the registry
+            r.newTokens.forEach((t) => log("    | " + cell(t.name) + " | " + cell(t.value) + " |  |")); // a row to paste into the registry
             more(r.newTokensTotal, r.newTokens.length);
           }
           if (r.registry.exists && r.newSources.length) log(T.dsSourcesNew(r.newSources.join(", ")));
           if (r.registry.exists && r.newLibraries.length) log(T.dsLibrariesNew(r.newLibraries.join(", ")));
           if (r.inSync) log(T.dsInSync);
         }
-        r.limits.forEach((l) => log(T.dsLimit[l.code](l.read)));
+        r.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.file)));
       });
     },
   },

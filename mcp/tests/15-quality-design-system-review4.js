@@ -93,17 +93,22 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     const p = project("values");
     const shown = { "--c1": "#fff", "--c2": "#1D4ED8cc", "--s1": "16px", "--s2": "-0.5rem", "--n1": "600", "--n2": "1.5", "--sh": "0 1px 2px rgba(0,0,0,.2), 0 0 0 1px #0001",
       "--b": "1px solid var(--line)", "--r": "calc(var(--radius) - 2px)", "--e": "cubic-bezier(.4,0,.2,1)", "--hsl": "222.2 84% 4.9%", "--t": "all .2s ease-in-out",
-      "--a": "hsl(var(--h) 80% 50% / .5)", "--g": "linear-gradient(to right, #000 0%, #fff 100%)", "--k": "none", "--ref": "$brand", "--f": "clamp(1rem, 2vw + 1rem, 3rem)" };
-    const blank = { "--font": "\"Inter\", system-ui, sans-serif", "--img": "url(\"/img/x.png\")", "--arrow": "\"→\"", "--key": "pk.FAKE.abc123", "--x": "expression(alert(1))",
+      "--a": "hsl(var(--h) 80% 50% / .5)", "--g": "linear-gradient(to right, #000 0%, #fff 100%)", "--k": "none", "--ref": "$brand", "--f": "clamp(1rem, 2vw + 1rem, 3rem)",
+      // review 5: what a SCSS variable file is made of — arithmetic, an interpolation, any function, a property beside its time, newer units
+      "--ar": "$spacer * .5", "--neg": "-$gutter", "--int": "calc(100vh - #{$header})", "--ip": "#{$prefix}", "--m": "map-get($spacers, 3)", "--md": "math.div($a, 2)",
+      "--grid": "repeat(2, minmax(0, 1fr))", "--tr": "opacity .15s linear", "--bd": "1px solid tomato", "--dvh": "100dvh", "--cq": "50cqw", "--grp": "($a + $b) / 2" };
+    const blank = { "--font": "\"Inter\", system-ui, sans-serif", "--img": "url(\"/img/x.png\")", "--arrow": "\"→\"", "--key": "pk.FAKE.abc123", "--x": "theme('colors.blue.500')", "--y": "var(--a)FAKEsecret", "--odd": "x\"y(1px)", "--z": "hunter two",
+      "--z2": "wait please 5",
       "--u": "rgb(0, 0, 0", "--u2": "1px solid rgb(0, 0", "--q": "var(--x, \"secret\")", "--w": "anything goes here", "--l": long("9", 200) + "px", "--p": "rgb(0 0 0))" };
-    write(p, "src/styles/tokens.scss", ":root {\n" + Object.entries(Object.assign({}, shown, blank)).map(([k, v]) => "  " + k + ": " + v + ";").join("\n") + "\n}\n");
+    write(p, "src/styles/tokens.scss", ":root {\n" + Object.entries(Object.assign({}, shown, blank)).map(([k, v]) => "  " + k + ": " + v + ";").join("\n") + "\n  --flag: 8px !important;\n}\n$flagged: 2px !default;\n");
     const rep = S.designSystemReport(p);
     S.scaffoldSteeringFile(p, "design-system.md");
     const read = Object.fromEntries(registry(p).tokens.map((t) => [t.name, t.value]));
     const wrong = Object.keys(shown).filter((k) => read[k] !== shown[k]).concat(Object.keys(blank).filter((k) => read[k] !== ""));
-    all("1.35 review 4: a design value is a colour, a number with or without a unit, a keyword, a variable or a listed function — alone or as a list (a shadow, a border, an HSL triplet, a gradient); a font stack, a url(), a quoted string, free text, an unknown function, unbalanced parentheses and a 200-digit run are none: the token is listed by its name with no value (got " +
+    if (read["--flag"] !== "8px" || read.$flagged !== "2px") wrong.push("--flag / $flagged"); // a Sass flag is no part of the value
+    all("1.35 review 4 / 5: a design value is a colour, a number with or without a unit, a keyword, a variable, a function by its arguments — alone or as a list (a shadow, a border, an HSL triplet, a gradient), Sass arithmetic, an interpolation, a property beside its time; a font stack, a url(), a quoted string or argument, free words, text after a function's `)`, unbalanced parentheses and a 200-digit run are none: the token is listed by its name with no value (got " +
       js({ found: rep.found.tokens, wrong: wrong.map((k) => k + "=" + js(read[k])) }) + ")", {
-      all: () => rep.found.tokens === Object.keys(shown).length + Object.keys(blank).length,
+      all: () => rep.found.tokens === Object.keys(shown).length + Object.keys(blank).length + 2,
       values: () => js(wrong) === js([]),
     });
   }
@@ -118,10 +123,10 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     write(p, "src/tokens/tokens.json", js({ space: { sm: { value: "8", type: "spacing" }, md: { value: "16", type: "spacing" } } })); // unitless strings
     const rep = S.designSystemReport(p);
     const got = rep.newTokens.map((t) => t.name + "=" + t.value);
-    all("1.35 review 4: real token files are read whole — an alias past 40 characters (Tokens Studio), a `password` leaf holding a reference, a docs-style `token: \"$color-primary\"` beside its hex (the file is no credentials file), a plain tokens.json of numbers only, of bare HSL triplets, of unitless strings (got " + js({ sources: rep.found.sources, got }) + ")", {
-      sources: () => js(rep.found.sources) === js(["src/design/design-tokens.json", "src/styles/tokens.json", "src/theme/tokens.json", "src/tokens/tokens.json", "tokens.json"]),
-      tokens: () => js(got) === js(["color.primary=#1d4ed8", "input.password={color.primary}", "primary.hex=#1d4ed8", "spacing.sm=4", "spacing.md=8", "background=222.2 84% 4.9%",
-        "foreground=210 40% 98%", "space.sm=8", "space.md=16", "global.blue=#1d4ed8", "button.bg=" + alias, "button.fg={global.blue}"]),
+    all("1.35 review 4: real token files are read whole — an alias past 40 characters (Tokens Studio), a `password` leaf holding a reference, a docs-style `token: \"$color-primary\"` beside its hex (the file is no credentials file), unitless strings in the `value` + `type` format; a JSON file of bare numbers or of percentages only shows nothing that says design and is not read — review 5, the price of never printing a secret used as a KEY (got " + js({ sources: rep.found.sources, got }) + ")", {
+      sources: () => js(rep.found.sources) === js(["src/design/design-tokens.json", "src/tokens/tokens.json", "tokens.json"]),
+      tokens: () => js(got) === js(["color.primary=#1d4ed8", "input.password={color.primary}", "primary.hex=#1d4ed8", "space.sm=8", "space.md=16", "global.blue=#1d4ed8", "button.bg=" + alias,
+        "button.fg={global.blue}"]),
     });
   }
 
@@ -177,7 +182,7 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     const rep = S.designSystemReport(p);
     all("1.35 review 4: theme.* counts anywhere but in a folder that holds something else by that name — a WordPress theme inside a site (wp-content/themes/acme/theme.json: its values read), Expo's constants/theme.ts, src/config/theme.ts, apps/web/theme.ts; never src/store/theme.ts, server/models/theme.js, a redux slice; a plain tokens.ts stays narrow (never ui/lib/tokens.ts, apps/web/src/tokens.ts) (got " +
       js({ sources: rep.found.sources, tokens: rep.newTokens.map((t) => t.name + "=" + t.value) }) + ")", {
-      sources: () => js(rep.found.sources) === js(["apps/web/theme.ts", "constants/theme.ts", "frontend/theme.js", "src/config/theme.ts", "src/constants/theme.ts", "src/shared/theme.ts", "wp-content/themes/acme/theme.json"]),
+      sources: () => js(rep.found.sources) === js(["wp-content/themes/acme/theme.json", "apps/web/theme.ts", "constants/theme.ts", "frontend/theme.js", "src/config/theme.ts", "src/constants/theme.ts", "src/shared/theme.ts"]),
       values: () => js(rep.newTokens.map((t) => t.name + "=" + t.value)) === js(["version=3", "settings.layout.contentSize=650px", "settings.layout.wideSize=1200px", "settings.spacing.blockGap=1.5rem"]),
     });
   }
@@ -208,10 +213,21 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
 
   // --- a bound is said when something was cut — and only then ----------------------------------------------------------------------------------
   {
+    const PROPS = (n, prefix) => ":root {\n" + Array.from({ length: n }, (_, i) => "  --" + (prefix || "c") + i + ": " + i + "px;").join("\n") + "\n}\n";
+    // candidates that turn out to be no token file take no source's place: 24 app stylesheets with no custom property are read
+    // before the one that holds the tokens (it lies deeper)
     const p = project("bounds");
-    for (let i = 0; i < 24; i++) write(p, "src/components/Widget" + i + "/index.css", ".w { display: block; }\n"); // candidates that hold no token
-    write(p, "src/index.css", ":root {\n" + Array.from({ length: 8 }, (_, i) => "  --c" + i + ": " + i + "px;").join("\n") + "\n}\n");
+    for (let i = 0; i < 24; i++) write(p, "apps/a" + String(i).padStart(2, "0") + "/src/index.css", ".w { display: block; }\n");
+    write(p, "packages/web/src/styles/globals.css", PROPS(8));
     const globals = S.designSystemReport(p);
+    // a component's own stylesheet is no candidate at all (review 5: 120 of them made "only the first 20 token files are read"
+    // of a project with ONE, never in sync) — nor does a built stylesheet past a file's read, holding no custom property, say a bound
+    const c = project("bounds-components");
+    for (let i = 0; i < 120; i++) { const d = "src/components/Comp" + String(i).padStart(3, "0"); write(c, d + "/index.tsx", COMP); write(c, d + "/styles.scss", ".c { display: block; }\n"); }
+    write(c, "src/styles/tokens.css", PROPS(3));
+    write(c, "src/assets/css/main.css", ".x { color: red }\n" + long("a", 330000) + "\n");
+    S.scaffoldSteeringFile(c, "design-system.md");
+    const comps = S.designSystemReport(c);
     const q = project("bounds-exact");
     write(q, "src/x.tokens.json", js(Object.assign(Object.fromEntries(Array.from({ length: 1000 }, (_, i) => ["t" + i, i + "px"])), { flag: true })));
     const exact = S.designSystemReport(q);
@@ -222,25 +238,33 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     write(r, "src/styles/tokens.css", ":root {\n" + Array.from({ length: 9000 }, (_, i) => "  --a-long-custom-property-name-" + i + ": #" + String(100000 + i) + ";").join("\n") + "\n}\n");
     write(r, REG, "# DS\n\n_Token sources: src/big.tokens.json, src/styles/tokens.css_\n");
     const big = S.designSystemReport(r);
+    // the candidates READ have their own bound: 105 files named like a token file that are none, before the real one
     const many = project("bounds-reads");
-    for (let i = 0; i < 105; i++) write(many, "src/components/W" + String(i).padStart(3, "0") + "/index.css", ".w { display: block; }\n");
-    write(many, "src/index.css", ":root {\n" + Array.from({ length: 8 }, (_, i) => "  --c" + i + ": " + i + "px;").join("\n") + "\n}\n"); // root-most: read first
+    for (let i = 0; i < 105; i++) write(many, "src/data/a" + String(i).padStart(3, "0") + ".tokens.json", js({ n: i }));
+    write(many, "src/z.tokens.json", js({ color: { brand: "#1d4ed8" } }));
     const reads = S.designSystemReport(many);
+    // …and the SOURCES theirs: 22 global stylesheets that all hold tokens — the root-most is read first
+    const full = project("bounds-sources");
+    for (let i = 0; i < 21; i++) write(full, "packages/p" + String(i).padStart(2, "0") + "/src/index.css", PROPS(5, "p" + i + "-"));
+    write(full, "styles.css", PROPS(5, "root-"));
+    const sources = S.designSystemReport(full);
     // a feature's report says the token-file bound too: a stylesheet left out of the sources is read for raw values
     const t = project("bounds-feature");
     for (let i = 0; i < 21; i++) write(t, "src/styles/tokens.f" + String(i).padStart(2, "0") + ".css", ":root { --f" + i + ": 1px; }\n");
     const f = feature(t, "Shop", "src/zz/");
     write(t, "src/zz/Shop.tsx", "export const Shop = () => <b className=\"text-[#123456]\" />;\n");
     const feat = S.designSystemReport(t, { name: f.slug });
-    const strings = ["en", "pt", "pt-BR", "es"].map((l) => { const fn = MSG(l).cliOutput.dsLimit["file-size"]; return typeof fn === "function" && fn(7).includes("7"); });
-    all("1.35 review 4: a bound is said when something was cut, and only then — 24 `Widget/index.css` that hold no token keep neither `src/index.css` unread nor a limit in the report (a candidate that is no source takes no source's place); exactly 1,000 tokens are no limit, 1,001 are; a token file longer than a file's read says `file-size` (a cut JSON file is no source, a cut stylesheet is read to there) and the report is never in sync; past 100 candidates read, `token-files` — the root-most stylesheet among them read first; a feature's report carries the token-file bound; EN / PT / pt-BR / ES have the line (got " +
-      js({ globals: [globals.found.tokens, globals.found.sources, globals.limits], exact: [exact.found.tokens, exact.limits], over: [over.found.tokens, over.limits],
-        big: [big.found.sources, big.limits, big.inSync, big.found.tokens > 0], reads: [reads.limits, reads.found.tokens], feat: [feat.limits, feat.truncated], strings }) + ")", {
-      globals: () => globals.found.tokens === 8 && js(globals.found.sources) === js(["src/index.css"]) && js(globals.limits) === js([]),
+    const strings = ["en", "pt", "pt-BR", "es"].map((l) => { const L = MSG(l).cliOutput.dsLimit; return typeof L["token-candidates"] === "function" && L["token-candidates"](7).includes("7") && /7.*a\.css|a\.css.*7/.test(L["file-size"](7, "a.css")); });
+    all("1.35 review 4 / 5: a bound is said when something was cut, and only then — 24 app stylesheets that hold no token keep neither the one that does unread nor a limit in the report; 120 components' own `styles.scss` and a 330K stylesheet with no custom property are no token files and say no bound (in sync after the seed); exactly 1,000 tokens are no limit, 1,001 are; a token file longer than a file's read says `file-size` with its path (a cut JSON file is no source) and the report is never in sync; 105 files named like a token file that are none: `token-candidates`, its own code; 22 stylesheets that all hold tokens: `token-files`, the root-most read first; a feature's report carries the token-file bound; EN / PT / pt-BR / ES have the lines (got " +
+      js({ globals: [globals.found.tokens, globals.found.sources, globals.limits], comps: [comps.found.sources, comps.limits, comps.inSync], exact: [exact.found.tokens, exact.limits], over: [over.found.tokens, over.limits],
+        big: [big.found.sources, big.limits, big.inSync], reads: [reads.limits, reads.found.tokens], sources: [sources.limits, sources.found.sources.length, sources.found.sources[0]], feat: [feat.limits, feat.truncated], strings }) + ")", {
+      globals: () => globals.found.tokens === 8 && js(globals.found.sources) === js(["packages/web/src/styles/globals.css"]) && js(globals.limits) === js([]),
+      components: () => js(comps.found.sources) === js(["src/styles/tokens.css"]) && js(comps.limits) === js([]) && comps.inSync === true,
       exact: () => exact.found.tokens === 1000 && js(exact.limits) === js([]),
       over: () => over.found.tokens === 1000 && js(over.limits) === js([{ code: "tokens", read: 1000 }]),
-      fileSize: () => js(big.found.sources) === js(["src/styles/tokens.css"]) && js(big.limits.map((l) => l.code)) === js(["file-size", "tokens"]) && big.inSync === false,
-      reads: () => js(reads.limits) === js([{ code: "token-files", read: 20 }]) && reads.found.tokens === 8,
+      fileSize: () => js(big.found.sources) === js(["src/styles/tokens.css"]) && js(big.limits) === js([{ code: "file-size", read: 262144, file: "src/big.tokens.json" }, { code: "tokens", read: 1000 }]) && big.inSync === false,
+      reads: () => js(reads.limits) === js([{ code: "token-candidates", read: 100 }]) && reads.found.tokens === 0,
+      sources: () => js(sources.limits) === js([{ code: "token-files", read: 20 }]) && sources.found.sources.length === 20 && sources.found.sources[0] === "styles.css",
       feature: () => js(feat.limits) === js([{ code: "token-files", read: 20 }]) && feat.truncated === true,
       strings: () => strings.every(Boolean),
     });

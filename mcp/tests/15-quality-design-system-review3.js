@@ -163,9 +163,9 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     write(p, "src/components/Avatar/index.tsx", COMP);
     write(p, "src/components/Layout.tsx", COMP);
     const rep = S.designSystemReport(p);
-    all("1.35 review 3: theme.ts counts at the root, right inside a source folder (src/theme.ts, apps/web/src/theme.ts) or in a telling folder — never `src/store/theme.ts` or `server/models/theme.js`; a plain tokens.* counts in a telling folder, source folders aside (packages/ui/src/tokens.ts, packages/design-tokens/src/tokens.json) — never `apps/web/src/tokens.ts`; the index of a helper folder (config/, context/, store/…) is no component, `Theme/index.tsx` is (got " +
+    all("1.35 review 3: theme.ts counts where a project keeps its theme (src/theme.ts, apps/web/src/theme.ts) — never `src/store/theme.ts` or `server/models/theme.js`; a plain tokens.* counts in a telling folder, source folders aside (packages/ui/src/tokens.ts, packages/design-tokens/src/tokens.json) — never `apps/web/src/tokens.ts`; the index of a helper folder (config/, context/, store/…) is no component, `Theme/index.tsx` is (got " +
       js({ sources: rep.found.sources, components: rep.missing.map((m) => m.name).concat(rep.pending.map((m) => m.name)) }) + ")", {
-      sources: () => js(rep.found.sources) === js(["apps/web/src/theme.ts", "packages/design-tokens/src/tokens.json", "packages/ui/src/tokens.ts", "src/theme.ts"]),
+      sources: () => js(rep.found.sources) === js(["packages/design-tokens/src/tokens.json", "apps/web/src/theme.ts", "packages/ui/src/tokens.ts", "src/theme.ts"]),
       components: () => js(rep.missing.map((m) => m.name)) === js(["Avatar", "Layout", "Theme"]),
     });
   }

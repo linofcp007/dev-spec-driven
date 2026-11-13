@@ -1189,8 +1189,9 @@ function mdTables(text) {
 }
 // → null (no registry file) | { file, components: [{ name, key, path, variants, notes, from? }], keys (a Set: EVERY component
 // name the file lists, past the cap too — what "is it listed?" asks), origins (a Map: name → the feature of its `_From:_`, past
-// the cap too), tokenNames (a Set: every token name, lower-cased, past the cap too), tokens: [{ name, value, use }], sources, libraries, total:
-// { components, tokens } (the rows the file holds), truncated }. A row whose name is a slot ("[Button]"), blank or generic is
+// the cap too), tokenNames (a Set: every token name, lower-cased, past the cap too), tokens: [{ name, value, use }], sources,
+// libraries, packaged (it lists no component and declares a library that IS one — dsPackaged), total: { components, tokens }
+// (the rows the file holds), truncated }. A row whose name is a slot ("[Button]"), blank or generic is
 // none; a name listed twice counts once (the first row). Every component / token table of the file is read (finish appends a
 // table when the file doesn't end in one that can take its rows). `from`: the row's `_From: <feature>_` (left out of `notes`).
 function designSystemRegistry(root) {
@@ -1235,24 +1236,63 @@ function designSystemRegistry(root) {
   for (const m of stripFencedCode(stripHtmlComments(body)).matchAll(RE_DS_MARKER)) {
     if (++markers > DS_MARKER_LINES) break;
     const into = lists[m[1].toLowerCase()], library = into === lists.libraries;
-    // (the value's own emphasis dropped: `_Libraries: a_` closes after it, `_Libraries:_ a` — the label alone italic — before)
-    const value = m[2].slice(0, 4000).trim().replace(/^_[ \t]*/, "").replace(/_$/, "").trim();
+    // (the value's own emphasis dropped: `_Libraries: a_` closes after it; `_Libraries:_ a` — the label alone italic — before:
+    // a BLANK follows that `_`, where `_sass/_variables.scss` is a path — review 5, the seed's own line was misread)
+    const value = m[2].slice(0, 4000).trim().replace(/^_[ \t]+/, "").replace(/_$/, "").trim();
     if (/^\[.*\]$/.test(value)) continue; // the stub's slot, never filled in
-    for (const w0 of value.split(/[,;]/)) {
+    const add = (w) => { if (w && w.length <= DS_CELL_MAX && !into.includes(w) && into.length < DS_MARKER_ENTRIES) into.push(w); };
+    for (const w0 of dsEntries(value)) {
       if (into.length >= DS_MARKER_ENTRIES) break;
       if (w0.length > DS_CELL_MAX * 2) continue; // no name, no path
       let w = stripEnds(w0.trim(), unitIn("`'\""), unitIn("`'\".")).trim(); // linear: never a /^[`'"]+|[`'".]+$/g replace
-      // a parenthesis beside a name or a path is a note: `@mui/material (v6)`, `src/styles/colors.scss (generated from Figma)`
-      const note = w.indexOf(" (");
-      if (note > 0) w = w.slice(0, note).trim();
-      // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`)
+      // a parenthesis that ENDS an entry is a note — `@mui/material (v6)`, `src/styles/colors.scss (generated from Figma)` —,
+      // never one inside a path (`src/styles (legacy)/tokens.css`)
+      let note = "";
+      const at = w.endsWith(")") ? w.lastIndexOf(" (") : -1;
+      if (at > 0) { note = w.slice(at + 2, -1).trim(); w = w.slice(0, at).trim(); }
       if (!w || w === "-" || w === "—" || (library || !/[/.]/.test(w) ? RE_DS_NONE : RE_DS_NONE_WHOLE).test(w)) continue;
-      if (w.length > DS_CELL_MAX || into.includes(w)) continue;
-      into.push(w);
+      add(w); // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`)
+      // …and a library's note that is its package or its short name names it too: `Material UI (@mui/material)`, `(MUI)`
+      if (library && RE_DS_ALIAS.test(note) && !/^v?\d/i.test(note)) add(note);
     }
   }
-  return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, total,
+  // Does a registry with no component row build on a library that IS one — see dsPackaged (asked only then)
+  const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(root, lists.libraries);
+  return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, packaged, total,
     truncated: total.components > components.length || total.tokens > tokens.length };
+}
+// A marker line's entries: cut at `,` / `;` outside parentheses (`@mui/material (Material UI, v6)` is one). Linear.
+function dsEntries(value) {
+  const out = [];
+  let start = 0, depth = 0;
+  for (let i = 0; i <= value.length; i++) {
+    const ch = i < value.length ? value[i] : ",";
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if ((ch === "," || ch === ";") && (depth === 0 || i === value.length)) { out.push(value.slice(start, i)); start = i + 1; }
+  }
+  return out;
+}
+// Is one of the declared libraries a real one — a dependency of the project's package.json, or a scoped package by its very
+// name (`@mui/material`)? THE property the empty-registry rule stands on. A `_Libraries:_` line is free text: "not yet",
+// "por definir", "custom components only" declare nothing, in any words — a word list never held them all (review 4: one
+// that slipped through turned an empty registry's warning into a size m refusal), and "does the design cite it" switched
+// the gate off for a registry that is library-only on purpose (review 5: `Reuse | Buton` approved).
+const RE_DS_SCOPED = /^@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*$/i;
+const RE_DS_ALIAS = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i;
+function dsPackaged(root, libraries) {
+  if (libraries.some((l) => RE_DS_SCOPED.test(l))) return true;
+  let pkg = null;
+  try { pkg = JSON.parse(readIfExists(path.join(path.dirname(root), "package.json")) || "null"); } catch { /* no readable package.json */ }
+  if (!isRecord(pkg)) return false;
+  const names = new Set();
+  for (const k of ["dependencies", "devDependencies", "peerDependencies"]) if (isRecord(pkg[k])) for (const n of Object.keys(pkg[k])) names.add(n.toLowerCase());
+  return libraries.some((l) => names.has(l.toLowerCase()));
+}
+// → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole word: `own` is not in "Dropdown".
+function dsCites(registry) {
+  const res = registry.libraries.map((l) => new RegExp(RE_WORD_BEFORE + escRe(l) + RE_WORD_AFTER, "iu"));
+  return (cell) => res.some((re) => re.test(cell));
 }
 // A usage row's kind — the first cell's first word, EN / PT / ES: Reuse (used as is) · Extend (a new variant of a listed
 // component) · New (nothing listed fits).
@@ -1313,8 +1353,8 @@ const designSystemGated = (kind, size) => designReuseGated(kind, size);
 function designSystemFindings(usage, registry, slug) {
   const byKey = new Map(registry.components.map((c) => [c.key, c]));
   const listed = [...byKey.keys()];
-  const libs = registry.libraries.map((l) => l.toLowerCase());
-  const fromLibrary = (r) => { const c = r.cell.toLowerCase(); return libs.some((l) => c.includes(l)); };
+  const cites = dsCites(registry);
+  const fromLibrary = (r) => cites(r.cell);
   const by = { reuse: [], extend: [], new: [] };
   const problems = [];
   let compare = DS_NEAR_ROWS;
@@ -1358,15 +1398,12 @@ function designSystemCheck(design, lang, opts = {}) {
   if (st === "unfilled" || st === "template") return out("pass", Q.dsUnfilled, "unfilled");
   const reg = opts.registry;
   if (!reg) return out("warn", Q.dsNoRegistry, "no-registry");
-  const usage = st === "na" ? null : designSystemUsage(design);
-  // A registry that lists no component has nothing to agree with — unless the design builds on a library it declares. A
-  // `_Libraries:_` line alone makes no row "unknown": it may say "not yet" in any words, in any language (review 4: such a
-  // line turned an empty registry's warning into a size m refusal).
-  if (!reg.keys.size) {
-    const libs = reg.libraries.map((l) => l.toLowerCase());
-    if (!usage || !usage.rows.some((r) => { const c = r.cell.toLowerCase(); return libs.some((l) => c.includes(l)); })) return out("warn", Q.dsEmptyRegistry, "empty-registry");
-  }
+  // A registry that lists no component has nothing to agree with — unless it builds on a library that IS one (`packaged`:
+  // a dependency of package.json, a scoped package). Then it is library-only on purpose and every row is checked, as with
+  // components. A `_Libraries:_` line of free text ("not yet", in any words and any language) declares none.
+  if (!reg.keys.size && !reg.packaged) return out("warn", Q.dsEmptyRegistry, "empty-registry");
   if (st === "na") return out("pass", Q.dsNa, "na");
+  const usage = designSystemUsage(design);
   const bad = opts.gate ? "fail" : "warn";
   const gated = (d) => (opts.gate ? Q.dsGate(d, opts.gate) : d);
   if (!usage || !usage.rows.length) return out(bad, gated(Q.dsNoRows), "no-rows");
@@ -1390,12 +1427,13 @@ function briefDesignSystem(root, design) {
   const rows = usage ? usage.rows : [];
   const byKey = new Map(reg.components.map((c) => [c.key, c]));
   const components = [], unknown = [], seen = new Set();
+  const cites = dsCites(reg);
   let omitted = 0, budget = DS_BRIEF_CHARS;
   for (const r of rows) {
     if (seen.has(r.kind + ":" + r.key)) continue;
     seen.add(r.kind + ":" + r.key);
     const c = byKey.get(r.key);
-    if (!reg.keys.has(r.key) && r.kind !== "new" && !reg.libraries.some((l) => r.cell.toLowerCase().includes(l.toLowerCase()))) unknown.push(r.name);
+    if (!reg.keys.has(r.key) && r.kind !== "new" && !cites(r.cell)) unknown.push(r.name);
     // (a library's component keeps its cell — "TextField (@mui/material)": where it comes from)
     const e = { kind: r.kind, name: c ? c.name : r.kind === "new" ? r.name : r.cell || r.name, path: c ? c.path : "", variants: c ? c.variants : "", notes: c ? c.notes : "", why: r.why };
     const size = e.name.length + e.path.length + e.variants.length + e.notes.length + e.why.length + 20;
