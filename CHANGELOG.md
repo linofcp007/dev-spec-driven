@@ -16,10 +16,14 @@ components and tokens, and every +ui feature is checked against it.
   as the designs will cite it: `@mui/material` or `Material UI`; a note in parentheses that is its package or its
   acronym names it too, `Material UI (@mui/material)`, `Material UI (MUI)` — a package or a short name of it
   wherever a row names it; an acronym the name does not spell (`Lightning Design System (SLDS)`) and a framework
-  (`Headless UI (react)`) where a row cites it: `Button (SLDS)`, `Button [SLDS]`, `Button — SLDS` —; a version
-  written as one or a markdown link is dropped, `antd v5`, `[antd](https://ant.design)`; a name with a bare number
-  is cited without it too, `antd Table` for `antd 5`) and, in a component's row, `_From: <feature>_` (the feature
-  that built it).
+  (`Headless UI (react)`) only where a row cites it — in parentheses or brackets, after a dash, before a colon:
+  `Button (SLDS)`, `Button [SLDS]`, `Button — SLDS`, `SLDS: Button` —; a version written as one, a range too, or a
+  markdown link is dropped, `antd v5`, `antd ^5.21`, `[antd](https://ant.design)`; a name with a bare number is
+  cited without it too — anywhere in a cell when the shorter name is two words, an acronym or a package of the root
+  `package.json` (`antd Table` for `antd 5`, `Flowbite Modal` with `flowbite-react`), else, and for a framework's
+  own name (`React 19`), only where a row cites it: `Modal (Bootstrap)` for `Bootstrap 5` in a project whose root
+  manifest does not hold the package — or say the short name yourself, `Bootstrap 5 (Bootstrap)`) and, in a
+  component's row, `_From: <feature>_` (the feature that built it).
   `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**:
   - the components: React, Vue, Svelte and Astro files, Angular `*.component.ts` and PascalCase `.js` files under
     `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper or an entry
@@ -31,7 +35,9 @@ components and tokens, and every +ui feature is checked against it.
     between the `app/` that holds the root layout — also under a route group or a dynamic segment,
     `app/[locale]/layout.tsx` — and a `page.*` / `route.*` at or below it (`app/components/page.tsx` and the
     `loading.tsx` beside it are pages). `main` / `app` are entry files only right inside the component folder,
-    `src/` looked through: `components/layout/main.tsx` is Main;
+    `src/` looked through: `components/layout/main.tsx` is Main. One component per file, by the file's name: a
+    further component a file exports (`CardHeader` of `card.tsx`) is not seeded — add its row by hand, or cite it
+    as `Card (CardHeader)`;
   - the tokens of the token files: CSS custom properties, Sass and Less variables, JSON tokens, and the custom
     properties of a global stylesheet, five or more of them, wherever it lies (`app/globals.css`, `src/index.css`, a
     Django `static/` folder, a WordPress theme's `style.css`): every one in a sheet named `globals` / `global`; in
@@ -39,10 +45,14 @@ components and tokens, and every +ui feature is checked against it.
     `tailwind`, `custom` or `input` — names a component's own sheet has too — those it declares for the whole
     page: on `:root`, `html`, `body`, in Tailwind's `@theme` or a theme plugin's `@plugin`, and in a block that
     overrides one of them (`.dark`). A block is such a theme when at least half of what it declares overrides them: a
-    component rule that re-points one token beside its own variables is not. A component's own sheet declares on its
+    component rule that re-points one token beside its own variables is not (the threshold has two edges: a theme
+    that adds more names of its own than it overrides is not read either — add those rows by hand —, and a rule of
+    two variables that re-points one is). A component's own sheet declares on its
     own selector or on `:host` and is none; a twin that brings no name of its own (`main.min.css`, a second app's
-    identical `globals.css`) is no further source; a global sheet under another name is not read — name it in
-    `_Token sources:_`.
+    identical `globals.css`) is no further source — of identical sheets the likeliest name, then the root-most, then
+    the first by path is the one, which may be a built copy (`public/css/app.css` beside `resources/css/app.css`):
+    `_Token sources:_` is in sync when it names that one —; a global sheet under another name is not read — name
+    it in `_Token sources:_`.
     A stylesheet named for its tokens, a `design-tokens.*` / `*.tokens.json` and a `tailwind.config.*` count anywhere;
     `theme.*` anywhere but under a folder — at any depth — that holds something else by that name (`store/`,
     `models/`, `server/`, `types/`, `hooks/`, `scripts/`…); a plain `tokens.*` only at the project's root or in a
@@ -76,8 +86,10 @@ components and tokens, and every +ui feature is checked against it.
 - **`[UI] Design System Usage` is a table.** A new +ui design lists one row per component: `Kind | Component |
   Why / notes`, where Kind is Reuse (one the registry lists, used as is), Extend (a new variant of one it lists) or New
   (none it lists fits, and why). A library's component is written `TextField (@mui/material)`; several components may
-  share a cell, separated outside the parentheses (`Button, Dialog (@mui/material)`). A feature that uses no
-  component writes one line, `n/a — <why, in four words or more>`.
+  share a cell, separated outside the parentheses, each naming its library (`TextField (@mui/material, outlined),
+  Dialog (@mui/material)`) — a component's name is what stands outside its parentheses. A row whose first cell is
+  none of the three kinds (in EN, PT or ES) is no usage row: it is neither checked nor counted. A feature that uses
+  no component writes one line, `n/a — <why, in four words or more>`.
 - **`spec_doctor` check `ui-design-system`.** It compares those rows with the registry and names each one that
   disagrees: a Reuse or Extend the registry doesn't list (with a "did you mean"), a New that is already listed, a New
   whose name is a listed one's with an affix or an edit away (`ButtonV2`, `NewButton`, `CustomCard`, `Buton` — unless
@@ -102,7 +114,9 @@ components and tokens, and every +ui feature is checked against it.
   feature: its rows against the registry and the **raw values** in its view files, each with its `file:line` (the
   first 50, with the total): a hex or `rgb()` colour — with the registry token of that colour when there is one —, a
   `margin: 13px` in a stylesheet, a `<style>` block (a `.vue` / `.svelte` / `.astro` / `.html` file's, styled-jsx's)
-  or a CSS-in-JS template, a Tailwind `p-[13px]`. A size in a JSX `style={{…}}` object is not read. A report that one
+  or a CSS-in-JS template, a Tailwind `p-[13px]`. A size in a JSX `style={{…}}` object is not read, nor a token
+  file — a source or its twin —, whole: a rule with a raw value written in the sheet that holds the tokens is not
+  reported. A report that one
   of its bounds cut short (the 20,000-file walk, 20 token files, 100 files named like one, a token file longer than
   256K characters — named —, 1,000 tokens, the registry's first 500 rows, a feature's first 200 view files) names it
   in `limits` and never says the two are in sync; a bound that cut nothing is not said. In sync is said of NAMES — the
@@ -130,7 +144,7 @@ components and tokens, and every +ui feature is checked against it.
 - The registry is not part of an approval's fingerprint: adding a row never asks an approved feature to be re-reviewed.
 
 ### Tests
-- `node mcp/test.js` 2344 assertions, `node cli/test-cli.js` 663 (was 2266 / 657).
+- `node mcp/test.js` 2348 assertions, `node cli/test-cli.js` 663 (was 2266 / 657).
 
 ## [1.34.1] — 2026-10-31
 

@@ -3292,7 +3292,7 @@ const quality = {
     dsNoRows: "a secção Uso do Design System não tem nenhuma linha de componente — cada um numa linha | Tipo | Componente | Porquê / notas | (Tipo: Reutilizar · Estender · Novo), para poder ser verificado contra o registo; ou uma só linha: n/a — a razão de esta feature não usar nenhum componente",
     dsMismatch: (n, list) => `a secção Uso do Design System e o registo (.specs/steering/design-system.md) não coincidem em ${n} ${n === 1 ? "linha" : "linhas"} — ${list}`,
     dsProblem: {
-      unknown: (name, near) => `'${name}' não está no registo${near ? ` (será ${near}?)` : ""}: reutilizar um componente listado, indicar uma biblioteca que o registo declara em _Libraries:_ (Componente (@biblioteca)), ou usar uma linha Novo`,
+      unknown: (name, near) => `'${name}' não está no registo${near ? ` (será ${near}?)` : ""}: reutilizar um componente listado, acrescentar a linha dele ao registo quando o código já o tem (outra exportação de um ficheiro), indicar uma biblioteca que o registo declara em _Libraries:_ (Componente (@biblioteca)), ou usar uma linha Novo`,
       listed: (name, near) => `'${name}' está marcado como Novo, mas o registo já lista ${near}: passa a ser uma linha Reutilizar ou Estender — ou, se foi esta feature que o construiu, a linha do registo leva _From: <o slug dela>_`,
       near: (name, near) => `o Novo '${name}' é próximo de ${near}, que o registo lista: reutilizar ou estender ${near}, ou dizer nas notas da linha a razão de ${near} não servir`,
       "no-why": (name) => `o Novo '${name}' não diz a razão de nenhum componente listado servir`,

@@ -48,7 +48,7 @@ exports.run = async ({ all, S, tmp, approveBefore, require, __dirname }) => {
   // --- a library with a bare version number; how surely a shorter name cites ------------------------------------------------------------
   {
     const p = project("versions");
-    write(p, "package.json", js({ dependencies: { antd: "^5.0.0", bootstrap: "^5.3.0", vuetify: "^3.0.0", "@mantine/core": "^7.0.0", "@carbon/react": "^1.0.0", "fluent-ui": "^9.0.0", react: "^19.0.0", "acme-ui": "^1.0.0", ark: "^1.0.0" } }));
+    write(p, "package.json", js({ dependencies: { antd: "^5.0.0", bootstrap: "^5.3.0", vuetify: "^3.0.0", "@mantine/core": "^7.0.0", "@carbon/react": "^1.0.0", "@fluentui/react-components": "^9.0.0", react: "^19.0.0", "acme-ui": "^1.0.0", ark: "^1.0.0" } }));
     const f = sized(p);
     // [the _Libraries:_ line, a row] — with a Card row in the registry
     const cases = [["antd 5", "antd Table"], ["Bootstrap 5", "Bootstrap Modal"], ["Bootstrap 5", "Modal — Bootstrap"], ["Bootstrap 5", "Bootstrap: Modal"], ["Bootstrap 5", "Modal [Bootstrap]"],

@@ -486,9 +486,12 @@ function styleTokens(text, rel) {
   // `$border: $background,` shadowed the real `$border: 1px solid #ccc` below it (the first of a name is kept). Counted
   // outside quoted strings, and closed by its `)`, by a `{` / `}` — and a STRAY `(` is undone where it stands: a line
   // that opens more than it closes and ends in neither `,` nor `(` goes on nowhere (`// spacing (in px` in a .css,
-  // `$typo: fn(1px;`). Never the count a line found open: review 8 closed it at the end of ANY line that did not go on,
-  // and the last argument of a call nested in a parameter list (`cubic-bezier(` … `1`) re-opened the parameters after it
-  // as declarations (review 9). In an indented file, where no brace closes anything, a line at the margin is a statement
+  // `$typo: fn(1px;`) — but in Less, where a mixin's parameters are separated by `;`: there a line that ends in one goes
+  // on, unless it holds a declaration of its own (`.button-variant(@color; @background;` then its defaults — review 10).
+  // Undone to the count the line FOUND, never to none (a stray `(` inside an open list leaves the list open) — and never
+  // the count a line found open: review 8 closed it at the end of ANY line that did not go on, and the last argument of
+  // a call nested in a parameter list (`cubic-bezier(` … `1`) re-opened the parameters after it as declarations
+  // (review 9). In an indented file, where no brace closes anything, a line at the margin is a statement
   // of its own. The exception: `@use … with (…)` / `@forward … with (…)`, whose parentheses hold the module's real
   // overrides (`config`).
   let paren = 0, config = false;
@@ -518,7 +521,7 @@ function styleTokens(text, rel) {
     const last1 = trimmed[trimmed.length - 1];
     if (indented && line[0] !== " " && line[0] !== "\t") paren = 0;
     const paren0 = paren;
-    let inside = paren > 0;
+    let inside = paren > 0, declared = false; // declared: the line holds a declaration of its own
     for (let i = 0; i <= masked.length; i++) {
       const ch = i < masked.length ? masked[i] : "";
       // (a quoted string holds no delimiter: `--q: "{"`, `content: ";"` — it ends with its line)
@@ -531,7 +534,7 @@ function styleTokens(text, rel) {
       const within = inside && !config;
       if (prelude === "" && !inside) config = /^\s*@(?:use|forward)(?![\w-])/.test(piece);
       if (ch === "{" || ch === "}") paren = 0;
-      else if (ch === "" && paren > paren0 && !(last1 === "," || last1 === "(")) paren = paren0;
+      else if (ch === "" && paren > paren0 && !(last1 === "," || last1 === "(" || (less && last1 === ";" && !declared))) paren = paren0;
       inside = paren > 0;
       const top = blocks.length ? blocks[blocks.length - 1] : null;
       if (ch === "{") {
@@ -543,6 +546,7 @@ function styleTokens(text, rel) {
         continue;
       }
       const entry = within ? null : declare(piece, ch !== "");
+      if (entry) declared = true;
       // (a mixin a page-wide block includes declares for the page: `:root { @include light-theme; }`)
       const include = !entry && top != null && top.global ? RE_INCLUDE.exec(piece) : null;
       if (include && mixins.has(include[1])) themes.add(mixins.get(include[1]));

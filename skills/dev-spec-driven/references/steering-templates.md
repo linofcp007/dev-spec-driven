@@ -648,9 +648,14 @@ _Libraries: @mui/material_
   (`Material UI`); a parenthesis that ends a library or a token source is a note (`antd (being replaced)`) — a
   library's note that is its package or its acronym names it too: `Material UI (@mui/material)`, `Material UI (MUI)`
   (a package or a short name of it wherever a row names it; an acronym the name does not spell — SLDS for Lightning
-  Design System — or a framework, where a row cites it: `Button (SLDS)`, `Button — SLDS`) —, a version written as
-  one or a markdown link is dropped (`antd v5`, `[antd](https://ant.design)` are antd; `antd 5` keeps its number
-  and is cited as `antd Table` too), and `none` / `none yet` names nothing. A registry that lists no component is checked against a design only when a
+  Design System — or a framework, only where a row cites it: in parentheses or brackets, after a dash, before a
+  colon — `Button (SLDS)`, `Button — SLDS`, `SLDS: Button`) —, a version written as one, a range too, or a markdown
+  link is dropped (`antd v5`, `antd ^5.21`, `[antd](https://ant.design)` are antd), and `none` / `none yet` names
+  nothing. A name with a bare number keeps it and is cited without it too (`antd 5`: `antd Table`) — anywhere in a
+  cell when the shorter name is two words, an acronym or a package of the root `package.json`; one plain word no
+  such package backs (`Bootstrap 5` in a monorepo whose library sits in `apps/web/package.json`, `Material 3`) and a
+  framework's own name (`React 19`) only where a row cites it, `Modal (Bootstrap)` — say the short name yourself
+  for more: `Bootstrap 5 (Bootstrap)`. A registry that lists no component is checked against a design only when a
   library it declares is a real one — a `package.json` dependency or a scoped package: name it by its package.
   A component of a declared library is not listed here: a design cites the same words — `TextField (@mui/material)`.
 - The token values the seed writes are the design values it found — colours, lengths, numbers, references. A
