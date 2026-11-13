@@ -75,6 +75,7 @@ exports.run = async ({ all, S, tmp, approveBefore, require, __dirname }) => {
   // --- components: a route folder named like a component folder; an entry file's name deeper down ------------------------------------------
   {
     const p = project("routes");
+    write(p, "package.json", js({ dependencies: { next: "15.0.0" } })); // (review 8: the router is Next's — the project depends on it)
     for (const f of ["app/layout.tsx", "app/page.tsx", "app/design-system/page.tsx", "app/design-system/layout.tsx", "app/components/page.tsx", "app/components/loading.tsx", "app/components/error.tsx", "app/ui/route.ts", "app/ui/template.tsx"]) write(p, f, COMP);
     for (const f of ["components/ui/button.tsx", "components/loading.tsx", "components/layout/main.tsx", "components/shell/app.tsx", "components/main.tsx", "src/ui/main.tsx", "src/ui/app.tsx"]) write(p, f, COMP);
     for (const f of ["components/tokens/index.tsx", "components/style/index.tsx"]) write(p, f, COMP); // a helper folder's barrel: no component Tokens / Style

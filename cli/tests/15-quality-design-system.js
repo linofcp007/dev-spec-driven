@@ -175,4 +175,23 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       fileSize: () => rep.out.includes(T.dsLimit["file-size"](262144, "src/styles/tokens.big.css")) && rep.out.includes("src/styles/tokens.big.css") && !rep.out.includes(T.dsInSync),
     });
   }
+
+  // --- review 8: "in sync" is never printed beside a component an unfinished feature is building --------------------------------------
+  {
+    const sp = path.join(tmp, "p135-ds-pending");
+    SR.initProject(sp, ["ui"], "en");
+    write(sp, "src/components/Button.tsx", "export const Button = () => null;\n");
+    runIn(["steering", "design-system.md", "--project", sp]);
+    const clean = runIn(["design-system", "--project", sp]);
+    const f = SR.createFeature(sp, { name: "Chips", tracks: ["ui"], summary: "x" });
+    fs.writeFileSync(path.join(f.dir, "design.md"), "# Design: Chips\n\n## [UI] Design System Usage\nThe page uses the system.\n\n| Kind | Component | Why / notes |\n|---|---|---|\n| New | Chip | no listed one is a small label |\n");
+    write(sp, "src/components/Chip.tsx", "export const Chip = () => null;\n");
+    const out = runIn(["design-system", "--project", sp]);
+    const asJson = jsonOf(runIn(["design-system", "--project", sp, "--json"]));
+    all("1.35 review 8 (CLI): the in-sync line says the registry lists every component the scan found — so it is printed for a registry that does, and never beside a component an unfinished feature is building (the JSON's `inSync` stays true: that component is the feature's to add) (got " +
+      js([clean.out, out.out, asJson.inSync, asJson.pendingTotal]) + ")", {
+      clean: () => clean.code === 0 && clean.out.includes(T.dsInSync),
+      pending: () => out.out.includes(T.dsPending("Chip (chips)")) && !out.out.includes(T.dsInSync) && asJson.inSync === true && asJson.pendingTotal === 1,
+    });
+  }
 };

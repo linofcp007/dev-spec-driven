@@ -1175,6 +1175,9 @@ const dsCell = (c) => String(c == null ? "" : c).slice(0, DS_CELL_MAX * 2).trim(
 const dsKey = (s) => String(s).normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 // A cell that still holds a scaffold slot or says nothing: "[component]", "TBD", "—".
 const dsSlot = (c0) => { const c = String(c0 == null ? "" : c0).slice(0, DS_CELL_MAX * 2); return !/[\p{L}\p{N}]/u.test(c) || /^\[[^\]]*\]$/.test(c.trim()) || genericUnit(c); };
+// …and a NAME cell that does: a word that only says "pending" IS a name — a component called Pending (review 8: its seeded
+// row never read back, and a design reusing it was refused).
+const dsNameSlot = (c0) => { const c = String(c0 == null ? "" : c0).slice(0, DS_CELL_MAX * 2); return !/[\p{L}\p{N}]/u.test(c) || /^\[[^\]]*\]$/.test(c.trim()) || isGenericSlot(dsCell(c)); };
 // The tables of a markdown text (comments and fenced code aside) → [{ header: [cells], rows: [[cells]] }]. A table is a line
 // starting with "|" followed by a separator row; its rows run to the first line that doesn't start with "|". Linear.
 function mdTables(text) {
@@ -1210,7 +1213,7 @@ function designSystemRegistry(root) {
     const cols = isC ? { a: col(RE_DS_COL.path, 1), b: col(RE_DS_COL.variants, 2) } : { a: col(RE_DS_COL.value, 1), b: col(RE_DS_COL.use, 2) };
     for (const r of t.rows) {
       const name = dsCell(r[0] || "");
-      if (!name || dsSlot(r[0] || "")) continue;
+      if (!name || dsNameSlot(r[0] || "")) continue;
       const cell = (i) => (r[i] != null && !dsSlot(r[i]) ? dsCell(r[i]) : "");
       if (isC) {
         const key = dsKey(name);
@@ -1235,6 +1238,7 @@ function designSystemRegistry(root) {
     }
   }
   const lists = { "token sources": [], libraries: [] };
+  const weak = new Set(); // the libraries' WEAK aliases, lower-cased (dsAlias): cited only in a row's parenthesis
   let deps = null; // the project's package.json dependencies — read once, and only when a marker asks
   const dependencies = () => deps || (deps = packageDependencies(path.dirname(root)));
   let markers = 0;
@@ -1250,24 +1254,31 @@ function designSystemRegistry(root) {
       if (into.length >= DS_MARKER_ENTRIES) break;
       if (w0.length > DS_CELL_MAX * 2) continue; // no name, no path
       let w = stripEnds(w0.trim(), unitIn("`'\""), unitIn("`'\".")).trim(); // linear: never a /^[`'"]+|[`'".]+$/g replace
+      // a library's markdown link is its text — unwrapped BEFORE the note is read: `[Material UI (MUI)](https://mui.com)`,
+      // `[MUI](https://mui.com) (@mui/material)`
+      if (library) w = w.replace(RE_DS_LINK, "$1").trim();
       // a parenthesis that ENDS an entry is a note — `@mui/material (v6)`, `src/styles/colors.scss (generated from Figma)` —,
       // never one inside a path (`src/styles (legacy)/tokens.css`)
       let note = "";
       const at = w.endsWith(")") ? w.lastIndexOf(" (") : -1;
       if (at > 0) { note = w.slice(at + 2, -1).trim(); w = w.slice(0, at).trim(); }
-      // a library as it is NAMED: a markdown link's text, no trailing version — `[antd](https://…)`, `antd v5`, `antd@5`
-      // named no package, and the gate of a library-only registry was off (review 7)
-      if (library) { const link = RE_DS_LINK.exec(w); w = (link ? link[1] : w).trim().replace(RE_DS_VERSION, "").trim(); }
+      // …and a library is named without a version WRITTEN as one (`antd v5`, `antd@5`: they named no package, and the gate
+      // of a library-only registry was off — review 7). Never a bare number: `Material 3` is a name (review 8)
+      if (library) w = w.replace(RE_DS_VERSION, "").trim();
       if (!w || w === "-" || w === "—" || (library || !/[/.]/.test(w) ? RE_DS_NONE : RE_DS_NONE_WHOLE).test(w)) continue;
       add(w); // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`)
-      // …and a library's note names it too when it is DERIVED from it — its acronym or its package (dsAlias)
-      if (library && note && dsAlias(w, note, dependencies)) add(note);
+      // (…and a name that ends in a bare number is cited without it too, where a row cites: `Button (Carbon)` for `Carbon 11`)
+      const bare = library ? w.replace(RE_DS_BARE_VERSION, "").trim() : w;
+      if (bare && bare !== w && !into.includes(bare)) { add(bare); if (into.includes(bare)) weak.add(bare.toLowerCase()); }
+      // …and a library's note that is a package or an acronym names it too — surely or only where a row cites one (dsAlias)
+      const alias = library && note && !into.includes(note) ? dsAlias(w, note, dependencies) : null;
+      if (alias) { add(note); if (alias === "weak" && into.includes(note)) weak.add(note.toLowerCase()); }
     }
   }
   // Does a registry with no component row build on a library that IS one — see dsPackaged (asked only then)
   const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(lists.libraries, dependencies);
-  return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, packaged, total,
-    truncated: total.components > components.length || total.tokens > tokens.length };
+  return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, weakLibraries: weak,
+    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length };
 }
 // A marker line's entries: cut at `,` / `;` outside parentheses (`@mui/material (Material UI, v6)` is one). Linear.
 function dsEntries(value) {
@@ -1288,29 +1299,38 @@ function dsEntries(value) {
 // the gate off for a registry that is library-only on purpose (review 5: `Reuse | Buton` approved).
 const RE_DS_SCOPED = /^@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*$/i;
 const RE_DS_SCOPE = /^@[a-z0-9][\w.-]*$/i; // a scope alone — what the seed writes for a family of packages: `@radix-ui`
-const RE_DS_ACRONYM = /^[A-Z]{2,6}$/;
-const RE_DS_LINK = /^\[([^\]]+)\]\([^)]*\)$/;
-const RE_DS_VERSION = /(?:[ \t]+v?\d[\w.]*|@[\^~]?\d[\w.]*)$/i;
+const RE_DS_ACRONYM = /^[A-Z][A-Z0-9]{1,5}$/; // MUI, SLDS, M3, UI5
+const RE_DS_LINK = /^\[([^\]]+)\]\([^)\s]*\)/;
+const RE_DS_VERSION = /(?:[ \t]+v\d[\w.+]*|@[\^~]?\d[\w.+]*)$/i;
+const RE_DS_BARE_VERSION = /[ \t]+\d[\w.]*$/;
 function dsPackaged(libraries, dependencies) {
   if (libraries.some((l) => RE_DS_SCOPED.test(l))) return true;
   const names = dependencies();
   return libraries.some((l) => { const n = l.toLowerCase(); return names.has(n) || (RE_DS_SCOPE.test(n) && [...names].some((d) => d.startsWith(n + "/"))); });
 }
-// Does a library entry's note name the library too? Only one DERIVED from the entry:
-//   its acronym — 2 – 6 capitals that are letters of the entry's name, in order, from its first: `Material UI (MUI)`;
-//   its package — a scoped one or a dependency of the project — that holds a word of the entry's name (`Material UI
-//   (@mui/material)`, `Chakra (@chakra-ui/react)`) or is letters of it, in order, from its first (`Ant Design (antd)`).
-// Never any acronym, never any dependency: `antd (PRO)` made "PRO" a library and `Reuse | Pro Table` one of its
-// components, `Headless UI (react)` did it for every "React …" row (review 7; review 6: any one word, `antd (deprecated)`).
+// Does a library entry's note name the library too — and how surely?
+//   "strong" — wherever a usage row names it: a SCOPED package (`(@acme/ui)` is never a remark, whatever the entry is
+//              called — review 8: asked to be "derived from the entry", `Design System (@acme/ui)` named nothing, a row
+//              citing `@acme/ui` was refused and a library-only registry's gate went off), or a note DERIVED from the
+//              entry: its acronym — 2 – 6 capitals that are its letters, in order, from the first (`Material UI (MUI)`) —
+//              or a dependency of the project that holds one of its words (`Ant Design (antd)`);
+//   "weak"   — any other acronym or dependency: `Lightning Design System (SLDS)`, `Design System (acme-ui)` — and also
+//              `antd (PRO)`, `Headless UI (react)`, which no shape tells apart. It names the library only where a row
+//              CITES one, in the cell's parenthesis: `Button (SLDS)` — never `Pro Table`, `React Select` (review 7);
+//              And a note made of the entry's own words, its short name: `Radix UI (Radix)`;
+//   null     — a remark: `antd (deprecated)` (review 6: any one word made "deprecated" a library).
 function dsAlias(entry, note, dependencies) {
-  const letters = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
-  const name = letters(entry), n = letters(note);
-  let j = 0;
-  for (let i = 0; i < name.length && j < n.length; i++) if (name[i] === n[j]) j++;
-  const inOrder = n !== "" && n[0] === name[0] && j === n.length;
-  if (RE_DS_ACRONYM.test(note)) return inOrder;
-  if (!RE_DS_SCOPED.test(note) && !dependencies().has(note.toLowerCase())) return false;
-  return inOrder || entry.toLowerCase().split(/[^a-z0-9]+/).some((w) => w.length >= 3 && note.toLowerCase().includes(w));
+  if (RE_DS_SCOPED.test(note) || RE_DS_SCOPE.test(note)) return "strong";
+  if (RE_DS_ACRONYM.test(note)) {
+    const letters = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const name = letters(entry), n = letters(note);
+    let j = 0;
+    for (let i = 0; i < name.length && j < n.length; i++) if (name[i] === n[j]) j++;
+    return n[0] === name[0] && j === n.length ? "strong" : "weak";
+  }
+  const own = entry.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean), said = note.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (!dependencies().has(note.toLowerCase())) return said.length > 0 && said.every((w) => own.includes(w)) ? "weak" : null;
+  return own.some((w) => w.length >= 3 && note.toLowerCase().includes(w)) ? "strong" : "weak";
 }
 // The dependency names of the project's package.json (dependencies, devDependencies, peerDependencies), lower-cased → a Set
 // (empty: none readable). Read as the scan reads a root manifest: a regular file, or a link that stays inside the project
@@ -1327,13 +1347,14 @@ function packageDependencies(projectRoot) {
   for (const k of ["dependencies", "devDependencies", "peerDependencies"]) if (isRecord(pkg[k])) for (const n of Object.keys(pkg[k])) names.add(n.toLowerCase());
   return names;
 }
-// → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole NAME: `own` is not in "Dropdown",
-// nor `antd` in `antd-mobile` or `@scope/antd` (another package: a `-` joins a package's words, a `/` leads to it) —
-// `antd/es/table` and `antd@5` are antd, and a scope named like the library is the library's (`@mui/material` cites MUI).
-const RE_NAME_BEFORE = "(?<![\\p{L}\\p{N}_/-])", RE_NAME_AFTER = "(?![\\p{L}\\p{N}_-])";
+// → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole word: `own` is not in "Dropdown".
+// A `-` / `/` / `@` beside the name is a word's end: `@radix-ui/react-dialog` and `radix-ui` cite Radix, `react-bootstrap`
+// Bootstrap, `MUI-X` and `@mui/material` MUI (review 8: a `-` taken for "another package" refused all of them — so
+// `antd-mobile` cites antd, knowingly). A WEAK alias (dsAlias) only inside the cell's parenthesis, where a row cites.
 function dsCites(registry) {
-  const res = registry.libraries.map((l) => new RegExp(RE_NAME_BEFORE + escRe(l) + RE_NAME_AFTER, "iu"));
-  return (cell) => res.some((re) => re.test(cell));
+  const res = registry.libraries.map((l) => ({ re: new RegExp(RE_WORD_BEFORE + escRe(l) + RE_WORD_AFTER, "iu"), weak: registry.weakLibraries.has(l.toLowerCase()) }));
+  const cited = (cell) => { const a = cell.indexOf("("), b = cell.lastIndexOf(")"); return a !== -1 && b > a ? cell.slice(a, b + 1) : ""; };
+  return (cell) => res.some((x) => x.re.test(x.weak ? cited(cell) : cell));
 }
 // A usage row's kind — the first cell's first word, EN / PT / ES: Reuse (used as is) · Extend (a new variant of a listed
 // component) · New (nothing listed fits).
@@ -1355,7 +1376,7 @@ function designSystemUsage(design) {
   for (const t of mdTables(body)) {
     for (const r of t.rows) {
       const kind = dsKind(r[0] || "");
-      if (!kind || r.length < 2 || dsSlot(r[1])) continue;
+      if (!kind || r.length < 2 || dsNameSlot(r[1])) continue;
       const why = r.slice(2).filter((c) => c != null && !dsSlot(c)).map(dsCell).join(" · ").slice(0, DS_CELL_MAX * 2);
       for (const part of String(r[1]).slice(0, DS_CELL_MAX * 2).split(/[,;·]/)) { // (bounded before the parenthesis replace)
         const name = dsCell(part.replace(/\([^)]*\)/g, " ")); // "Button (@mui/material)" is Button
@@ -2348,4 +2369,4 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  dsKey, dsCell, dsSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, __link };
+  dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, __link };

@@ -1575,7 +1575,7 @@ const msg = {
       // a bound that cut what the scan read (the report's `limits` codes) — never "the registry and the code agree" beside one
       dsLimit: {
         files: (n) => `  (the file cap was reached — ${n} files walked: the rest was not read)`,
-        "token-files": (n) => `  (only the first ${n} token files are read, by path: the rest is not compared)`,
+        "token-files": (n) => `  (only the first ${n} token files are read: the rest is not compared)`,
         "token-candidates": (n) => `  (only the first ${n} files named like a token file are read, by path: the rest is not compared)`,
         "file-size": (n, file) => `  (${file} is longer than the ${n} characters read of a file: a stylesheet's rest is not compared, a JSON file that long is not read at all)`,
         tokens: (n) => `  (only the first ${n} tokens of the code are read: the rest is not compared)`,

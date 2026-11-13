@@ -1521,7 +1521,7 @@ const msg = {
       dsMore: (n) => `    … e mais ${n}`,
       dsLimit: {
         files: (n) => `  (atingido o limite de ficheiros — ${n} percorridos: o resto não foi lido)`,
-        "token-files": (n) => `  (só os primeiros ${n} ficheiros de tokens são lidos, por caminho: o resto não é comparado)`,
+        "token-files": (n) => `  (só os primeiros ${n} ficheiros de tokens são lidos: o resto não é comparado)`,
         "token-candidates": (n) => `  (só os primeiros ${n} ficheiros com nome de ficheiro de tokens são lidos, por caminho: o resto não é comparado)`,
         "file-size": (n, file) => `  (${file} é maior do que os ${n} caracteres lidos de cada ficheiro: o resto de uma folha de estilos não é comparado, um ficheiro JSON desse tamanho não é lido)`,
         tokens: (n) => `  (só os primeiros ${n} tokens do código são lidos: o resto não é comparado)`,

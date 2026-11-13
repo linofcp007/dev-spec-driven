@@ -26,11 +26,11 @@ const i18n = require("../i18n.js");
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
   isNetworkPath, isTestFile, packageDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix, unitIn, walkProject,
-  withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsSlot;
+  withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
   isDirSafe, isInsideDir, isNetworkPath, isTestFile, packageDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix,
-  unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsSlot } = E); }
+  unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
@@ -78,10 +78,26 @@ const RE_SRC_DIR = /^(?:src|source)$/i;
 // folder with its own `page.tsx` (`src/components/{page,loading,error}.tsx`, Remix's `app/components/`) lost Loading and
 // Error — a design reusing them refused, one declaring them New approved (review 7). scanCode knows the segments once the
 // walk is over (routeSegments); componentOf says `route`.
+// The router is Next's, and so is the project's (dependsOnNext): a single-page app that keeps `src/app/layout.tsx` beside
+// `src/app/components/{page,loading}.tsx` has no route segment (review 8). Its root is the `app/` that holds the top-most
+// `layout.*` — through route groups and dynamic segments: next-intl's `app/[locale]/layout.tsx`, `app/(app)/layout.tsx`.
 const ROUTE_FILES = new Set(["page", "layout", "loading", "error", "not-found", "template", "default", "global-error"]);
 const RE_ROUTE_MARK = /^(?:page|route)\.(?:tsx|jsx|ts|js|mdx)$/;
 const RE_ROOT_LAYOUT = /^layout\.(?:tsx|jsx|ts|js)$/;
-const RE_ROUTER_ROOT = /(?:^|\/)app$/;
+const RE_ROUTE_PASS = /^(?:\(.*\)|\[.*\])$/;
+// → the `app/` a layout file's folder is the root layout of (its own folder, or one above it through groups / segments), or null
+function routerRootOf(dir) {
+  const segs = dir.split("/");
+  let n = segs.length;
+  while (n > 0 && RE_ROUTE_PASS.test(segs[n - 1])) n--;
+  return n > 0 && segs[n - 1] === "app" ? segs.slice(0, n).join("/") : null;
+}
+// Does a package.json at or above the folder, inside the project, depend on `next`? (a monorepo's `apps/web/package.json`)
+function dependsOnNext(root, dir) {
+  const segs = dir.split("/");
+  for (let n = segs.length; n >= 0; n--) if (packageDependencies(path.join(root, ...segs.slice(0, n))).has("next")) return true;
+  return false;
+}
 // The route segments: every folder from a router root down to a page — never through a private folder (`_components/`:
 // out of routing, with all it holds).
 function routeSegments(roots, marks) {
@@ -162,24 +178,27 @@ function tokenFileKind(rel) {
 const isTokenFile = (rel) => tokenFileKind(rel) != null;
 // A token's name as the registry's reader gives it back (its cell cleaned, lower-cased; "" for a slot word or a cell with no
 // letter): what a token of the code is compared by — `_palette.red` is listed once seeded, though its row reads `palette.red`.
-const registryName = (n) => (dsSlot(n) ? "" : dsCell(n).toLowerCase());
+const registryName = (n) => (dsNameSlot(n) ? "" : dsCell(n).toLowerCase());
 // …and a global stylesheet that declares the custom properties itself (the shadcn / Tailwind 4 habit): a token file once it
-// declares at least this many FOR THE WHOLE PAGE — on `:root`, `html`, `body`, `:host` or in Tailwind 4's `@theme`
-// (globalScope). What a sheet DECLARES decides, never where it lies: review 5 listed the folders a global sheet may be in
-// and lost six ordinary ones, review 6 listed the folders a component's own sheet is in and failed both ways — `ui/Card/
-// index.css` read as global (its `.card { --card-* }` seeded as tokens, the feature's raw values in it unread), a real
-// `modules/web/src/styles/globals.css` not read (review 7). A component's own sheet declares on its own selector, wherever
-// it is. So every .css / .scss is a CANDIDATE (a CSS module aside: local by its name), the likeliest names first (isGlobalName
-// — a priority, never a gate). One that turns out to be none costs one read, takes no source's place and says no bound —
-// and the search simply ends at DS_TOKEN_READS.
+// declares at least this many FOR THE WHOLE PAGE. Two things say so, and neither is the folder it lies in (review 5 listed
+// the folders a global sheet may be in and lost six ordinary ones; review 6 listed the folders a component's own sheet is
+// in and failed both ways — `ui/Card/index.css` read as global, `modules/web/src/styles/globals.css` not read):
+//   - its NAME, when it can only be the page's: `globals.css` / `global.css` — every custom property of it counts,
+//     whatever its selector (a theme on `[data-theme]` or `.light` / `.dark` alone, a mixin's);
+//   - what it DECLARES, for a name a component's own sheet has too (index, styles, main, app, base, root, site,
+//     application, tailwind, custom, input): the custom properties of a page-wide block — styleTokens' `global`.
+// A CANDIDATE by its name, never every stylesheet: review 7 read them all, and an Angular component's `:host { --x }`, a
+// vendored Bootstrap's 16 dist files and 25 theme files each became a source, filling the 20 for good (review 8). The price,
+// said in the user docs: a global sheet under another name is not read — name it in `_Token sources:_` by hand. One that
+// turns out to be none costs one read, takes no source's place and says no bound; the search ends at DS_TOKEN_READS.
 const RE_SHEET = /\.(?:css|scss)$/i;
 const RE_CSS_MODULE = /\.module\.[a-z]+$/i;
 const RE_GLOBAL_NAME = /^globals?\./i;
-const RE_COMMON_NAME = /^(?:app|application|main|styles?|base|root|site|theme|tailwind|custom|input)\./i;
+const RE_COMMON_NAME = /^(?:app|application|main|styles?|base|root|site|tailwind|custom|input)\./i;
 const RE_INDEX_NAME = /^index\./i;
-// (0: globals.css · 1: a name an app gives its one stylesheet · 2: index.css — a component folder's too · 3: any other)
+// (0: globals.css · 1: a name an app gives its one stylesheet · 2: index.css — a component folder's too · 3: no candidate)
 const sheetRank = (name) => (RE_GLOBAL_NAME.test(name) ? 0 : RE_COMMON_NAME.test(name) ? 1 : RE_INDEX_NAME.test(name) ? 2 : 3);
-const isSheetCandidate = (name) => RE_SHEET.test(name) && !RE_CSS_MODULE.test(name);
+const isSheetCandidate = (name) => RE_SHEET.test(name) && !RE_CSS_MODULE.test(name) && sheetRank(name) < 3;
 const GLOBAL_CSS_MIN = 5;
 const RE_STYLE_EXT = /\.(?:css|scss|sass|less|styl)$/i;
 // A view or style file — what a feature's raw values are read in (tasks.js RE_VIEW_FILE's text formats, and a component's .js).
@@ -306,24 +325,36 @@ const DV_KEYWORDS = new Set(["none", "auto", "inherit", "initial", "unset", "tra
   "infinite", "center", "left", "right", "top", "bottom", "thin", "medium", "thick", "hidden", "visible", "nowrap", "black", "white", "red", "green", "blue",
   "yellow", "orange", "purple", "pink", "gray", "grey", "silver", "gold", "navy", "teal", "cyan", "magenta",
   "display-p3", "rec2020", "a98-rgb", "prophoto-rgb"]); // (…and the colour spaces whose name holds a digit: `color(display-p3 1 0 0)`)
-// WORDS — the shape of a name that is printed: a token's key, a variable's, a function's. Cut at whatever is no letter or
-// digit, each part is letters, digits, or the two with at most two switches between them (gray900, 2xl, a11y, 8dp), and
-// no blank-separated word reaches `max` characters. A NAME is printed as a value is, and nothing else gates one: a
-// secret used as a key or wrapped in an identifier — a GUID (`3f2504e0-…`), an API key (`sk_live_4eC39Hq…`), a hash, a JWT —
-// is letters and digits interleaved, or one long run (reviews 5 – 7: `{"ghp_…": 1700000000}`, a Json.NET map keyed by
-// GUIDs, `{"Bearer eyJ…": {…}}` — a length bound with a blank exemption held none of the last two). Linear.
+// WORDS — the shape of a JSON key that is printed as a token's name (and of a reference's path, which names such keys). Cut
+// at whatever is no letter or digit, each part is letters, digits, or the two with at most two switches between them
+// (gray900, 2xl, a11y, 8dp) — or a colour's own hex of 6 digits: a palette keyed by its values, `0d6efd`, `F5F5F5` —, and
+// no blank-separated word reaches `max` characters. A NAME is printed as a value is, and nothing else gates one: a secret
+// used as a key — a GUID (`3f2504e0-…`), an API key (`sk_live_4eC39Hq…`), a hash, a JWT — is letters and digits
+// interleaved, or one long run (reviews 5 – 7: `{"ghp_…": 1700000000}`, a Json.NET map keyed by GUIDs, `{"Bearer eyJ…":
+// {…}}` — a length bound with a blank exemption held none of the last two). A SECOND layer, and a statistical one: of the
+// keys shaped like an API key under 40 characters one in five to ten still passes (review 8) — what stands first is that a
+// file must show it is a design file (jsonSource). Never asked of a stylesheet's own identifiers: `$color-f5f5f5` and
+// `--w1280h720` are names their author chose, and review 7 dropped them with every value that referenced one. Linear.
 const DS_KEY_MAX = 40; // a word of that many characters is no KEY's (a 40-character token, a JWT, a hash)…
-const DS_IDENT_MAX = 80; // …an identifier of a stylesheet or a reference's path may be longer (`--mdc-outlined-text-field-disabled-outline-color`)
+const DS_REF_MAX = 80; // …a reference's whole path may be longer (`{semantic.color.background.interactive.primary.hover}`)
 const DS_NAME_SWITCHES = 2;
 function wordShaped(s, max) {
-  let word = 0, switches = 0, kind = 0; // kind — of the last character: 1 a letter · 2 a digit · 0 neither
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c <= 32) { word = switches = kind = 0; continue; }
-    if (++word >= max) return false;
+  let word = 0, start = -1, switches = 0, kind = 0, hex = true; // kind — of the last character: 1 a letter · 2 a digit
+  for (let i = 0; i <= s.length; i++) {
+    const c = i < s.length ? s.charCodeAt(i) : 32;
+    if (c <= 32) word = 0; else if (++word >= max) return false;
     const k = c >= 48 && c <= 57 ? 2 : (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c > 127 ? 1 : 0;
-    if (k === 0) { switches = kind = 0; continue; }
-    if (kind !== 0 && k !== kind && ++switches > DS_NAME_SWITCHES) return false;
+    if (k === 0) {
+      // a part ends: too many switches — unless it is a hex colour's digits
+      if (start !== -1 && switches > DS_NAME_SWITCHES && !(hex && i - start === 6)) return false;
+      start = -1;
+      switches = kind = 0;
+      hex = true;
+      continue;
+    }
+    if (start === -1) start = i;
+    if (kind !== 0 && k !== kind) switches++;
+    if (k === 1 && !((c >= 65 && c <= 70) || (c >= 97 && c <= 102))) hex = false;
     kind = k;
   }
   return true;
@@ -347,7 +378,7 @@ function dvScan(v, sass, inner, level) {
       // a function is no url(), and its arguments are design values in turn — one that does not END at its `)`
       // (`var(--a)FAKE`) leaves that `)` unmatched among them: none
       const name = part.slice(0, open);
-      if (!RE_DV_FUNCTION.test(name) || !wordShaped(name, DS_IDENT_MAX) || /^url$/i.test(name) || level >= DV_DEPTH) return null;
+      if (!RE_DV_FUNCTION.test(name) || /^url$/i.test(name) || level >= DV_DEPTH) return null;
       const args = dvScan(part.slice(open + 1, -1), sass, true, level + 1);
       const known = RE_DV_DESIGN_FUNCTION.test(name) || RE_DV_CSS_FUNCTION.test(name);
       // (…and a NAMED function holds something: `FAKEsecretValue123()` is a name alone)
@@ -361,17 +392,15 @@ function dvScan(v, sass, inner, level) {
       if (part.length !== 5) strong = true;
     } else if (RE_DV_LENGTH.test(part)) strong = anchored = true;
     else if (RE_DV_REF.test(part)) {
-      // a reference by its dotted path says design (`{color.primary}`); `{name}` alone is a template's placeholder too
-      // (never `free`: it names a token of the file, and is words)
-      if (!wordShaped(part, DS_IDENT_MAX)) return null;
+      // a reference by its dotted path says design (`{color.primary}`); `{name}` alone is a template's placeholder too.
+      // (Never `free`: it names a token of the file — and so it is words, as a key is: a braced GUID is none)
+      if (!wordShaped(part, DS_REF_MAX)) return null;
       anchored = true;
       if (part.includes(".")) strong = true;
-    } else if ((sass && RE_DV_VARIABLE.test(part)) || (inner && RE_DV_PROPERTY.test(part))) {
-      if (!wordShaped(part, DS_IDENT_MAX)) return null;
-      strong = anchored = free = true;
-    } else if (RE_DV_MEASURE.test(part)) anchored = true;
+    } else if ((sass && RE_DV_VARIABLE.test(part)) || (inner && RE_DV_PROPERTY.test(part))) strong = anchored = free = true;
+    else if (RE_DV_MEASURE.test(part)) anchored = true;
     else if (RE_DV_NUMBER.test(part) || part === "*" || part === "+" || part === "-" || DV_KEYWORDS.has(part.toLowerCase())) continue;
-    else if (((sass || inner) && RE_DV_WORD.test(part)) || (sass && inner && RE_DV_PATH.test(part) && wordShaped(part, DS_IDENT_MAX))) words = free = true;
+    else if (((sass || inner) && RE_DV_WORD.test(part)) || (sass && inner && RE_DV_PATH.test(part))) words = free = true;
     else return null;
   }
   return depth !== 0 ? null : { strong, anchored, words, free, parts };
@@ -384,9 +413,9 @@ function designValue(value, sass, literal) {
   return r.strong ? "strong" : "weak";
 }
 // The tokens a stylesheet declares: custom properties (`--name: value`), Sass variables (`$name: value`) and, in a .less
-// file, Less variables (`@name: value`), in file order — every one by its NAME (when it is words: a build's `--a1b2c3d4` is
-// no token), its value only when it is a design value (`$mapbox-token: "pk.…"` is listed with none) → [{ name, value,
-// global }]. global: the token is declared for the whole page (globalScope) — what makes a stylesheet a GLOBAL one.
+// file, Less variables (`@name: value`), in file order — every one by its NAME, its value only when it is a design value
+// (`$mapbox-token: "pk.…"` is listed with none) → [{ name, value, global }]. global: the token is declared for the whole
+// page (pageWide) — what makes a stylesheet with a component's name a GLOBAL one.
 // (A Sass interpolation's braces are set aside while a line is cut at `{ } ;` — `calc(100vh - #{$header})` is one value.)
 const INTERPOLATION = [String.fromCharCode(1), String.fromCharCode(2)];
 function maskInterpolation(l) {
@@ -403,49 +432,58 @@ const SASS_FLAGS = ["!default", "!important", "!global"];
 const RE_INDENTED_EXT = /\.sass$/i; // the indented syntax: a line's end ends a declaration, no `;`
 // A token's name and its colon — the NAME alone is matched, the value is what follows it: `\s*:\s*(.*)$` over a whole line
 // was quadratic (review 7: a tail `.` cannot cross — U+2028, a stray CR — after a run of blanks; 56 s for one 256K file).
+// (Less: the colon right after the name — `@page :first` is an at-rule.)
 const RE_TOKEN_DECL = /^\s*(--[A-Za-z0-9_-]+|\$[A-Za-z0-9_-]+)\s*:/;
-const RE_TOKEN_DECL_LESS = /^\s*(--[A-Za-z0-9_-]+|@[A-Za-z_][A-Za-z0-9_-]*)\s*:/;
-// A block that declares for the WHOLE PAGE: its selector is `:root`, `html`, `body` or `:host` — alone or qualified
-// (`:root[data-theme=dark]`, `html.dark`, inside `:where()` / `:is()`), never with a descendant (`body .card`) —, in any
-// selector of its list (`:root, .light`); or it is Tailwind 4's `@theme`. An at-rule around it is looked through
-// (`@layer base { :root { … } }`, `@media (prefers-color-scheme: dark) { :root { … } }`).
-const DS_PRELUDE = 240; // a block prelude's characters kept — its END, the selector nearest the `{`
-const RE_ROOT_SELECTOR = /^(?::(?:where|is)\(\s*)?(?::root|:host|html|body)(?![\w-])[^\s>+~]*$/i;
-const RE_THEME_RULE = /^@theme(?![\w-])/i;
-function globalScope(blocks) {
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    const p = blocks[i];
-    if (p[0] !== "@") return p.split(",").some((s) => RE_ROOT_SELECTOR.test(s.trim()));
-    if (RE_THEME_RULE.test(p)) return true;
-  }
-  return false;
+const RE_TOKEN_DECL_LESS = /^\s*(--[A-Za-z0-9_-]+(?=\s*:)|@[A-Za-z_][A-Za-z0-9_-]*(?=:))\s*:/;
+// A block that declares for the WHOLE PAGE — decided ONCE, when it opens (pageWide), from its prelude and its parent:
+//   a rule whose selector is `:root`, `html` or `body` — alone or qualified (`:root[data-theme=dark]`, `html.dark`, inside
+//   `:where()` / `:is()`), never with a descendant (`body .card`) —, in any selector of its list (`:root, :host`, `:root,
+//   .light`); a rule nested in one that begins with `&` (`:root { &.dark { … } }`); Tailwind 4's `@theme` and a theme
+//   plugin's `@plugin "daisyui/theme" { … }`; any other at-rule takes its parent's answer (`@layer base { :root { … } }`,
+//   `@media (prefers-color-scheme: dark) { :root { … } }`).
+// Never `:host` alone: a web component's own scope (review 8: every Angular component's `:host { --card-padding: … }` was
+// a token source). And never asked per declaration: walking the open blocks outward for each one was quadratic on nested
+// at-rules (review 8: 16 s for one file).
+const DS_PRELUDE = 2000; // a block prelude's characters kept — its END, the selectors nearest the `{`
+const RE_ROOT_SELECTOR = /^(?::(?:where|is)\(\s*)?(?::root|html|body)(?![\w-])[^\s>+~]*$/i;
+const RE_THEME_RULE = /^@(?:theme|plugin)(?![\w-])/i;
+const RE_MIXIN = /^@mixin\s+([\w-]+)/, RE_INCLUDE = /^\s*@include\s+([\w-]+)/;
+function pageWide(prelude, parent) {
+  if (prelude[0] === "@") return RE_THEME_RULE.test(prelude) || (parent != null && parent.global);
+  if (prelude[0] === "&") return parent != null && parent.global;
+  return prelude.split(",").some((s) => RE_ROOT_SELECTOR.test(s.trim()));
 }
 function styleTokens(text, rel) {
-  const plainCss = /\.css$/i.test(rel), indented = RE_INDENTED_EXT.test(rel);
-  const decl = /\.less$/i.test(rel) ? RE_TOKEN_DECL_LESS : RE_TOKEN_DECL;
+  const plainCss = /\.css$/i.test(rel), indented = RE_INDENTED_EXT.test(rel), less = /\.less$/i.test(rel);
+  const decl = less ? RE_TOKEN_DECL_LESS : RE_TOKEN_DECL;
   const out = [];
   const st = { block: false, html: false };
-  const blocks = []; // the open blocks' preludes, innermost last
-  let prelude = ""; // …and the one being read: it may start on the lines above its `{` (`:root,` then `.light {`)
+  const blocks = []; // the open blocks, innermost last: { id, global }
+  let opened = 0; // (a block's id: its place among the blocks the file opens)
+  let prelude = ""; // a block's prelude being read: it may start on the lines above its `{` (`:root,` then `.light {`)
   // A declaration no `;` / `}` ends on its line goes on below (a multi-line shadow, a Sass map): listed by its NAME — its
   // first line alone is no value. Two things end one without a `;`: the line's end in an indented file, and the block's end —
   // a block's last declaration needs none (`--gap: 8px` then `}` — or a lone `;` — on the next line with text, or the file's
   // end). Never a value that is none yet or stops at a `,`.
   let last = null; // the declaration the last line with text left open: { entry, value }
   // A `name:` INSIDE the parentheses a statement has opened is a parameter or a map's key, never a declaration — a mixin's
-  // `$border: $background,` shadowed the real `$border: 1px solid #ccc` below it (the first of a name is kept). Counted within
-  // a statement only: a `;` / `{` / `}` ends it (an unmatched `(` in a string costs one statement, never the file).
-  let paren = 0;
-  const settle = (ended) => { if (last && ended && designValue(last.value, true)) last.entry.value = last.value; last = null; };
+  // `$border: $background,` shadowed the real `$border: 1px solid #ccc` below it (the first of a name is kept). Counted
+  // outside quoted strings; a `{` / `}` closes the count, and so does the end of a line that does not go on — one that
+  // ends in neither `,` nor `(` (nor, in Less, the `;` its mixins separate their parameters with): a stray `(` costs its
+  // own line, never the next (`// spacing (in px` in a .css). The exception: `@use … with (…)` / `@forward … with (…)`,
+  // whose parentheses hold the module's real overrides (`config`).
+  let paren = 0, config = false;
+  const mixins = new Map(), themes = new Set(); // a mixin's block by its name · the blocks that turn out to be a theme's
+  const settle =(ended) => { if (last && ended && designValue(last.value, true)) last.entry.value = last.value; last = null; };
   // a piece that declares a token → its entry (closed: a `;` / `}` ended it on its line), else null
   const declare = (piece, closed) => {
     const m = decl.exec(piece);
-    if (!m || !wordShaped(m[1], DS_IDENT_MAX)) return null;
-    // (a tail longer than any value is none: never trimmed, never matched)
-    let value = piece.length - m[0].length > DV_MAX * 2 ? "" : piece.slice(m[0].length).split(INTERPOLATION[0]).join("{").split(INTERPOLATION[1]).join("}").trim();
+    if (!m) return null;
+    let value = piece.slice(m[0].length).split(INTERPOLATION[0]).join("{").split(INTERPOLATION[1]).join("}").trim();
     for (const flag of SASS_FLAGS) if (value.endsWith(flag)) value = value.slice(0, -flag.length).trim();
     const whole = value !== "" && !value.endsWith(","); // (of an open declaration: what its line holds may be all of it)
-    const entry = { name: m[1], value: (closed || (indented && whole)) && designValue(value, true) ? value : "", global: globalScope(blocks) };
+    const block = blocks.length ? blocks[blocks.length - 1] : null;
+    const entry = { name: m[1], value: (closed || (indented && whole)) && designValue(value, true) ? value : "", global: block != null && block.global, block: block ? block.id : 0 };
     out.push(entry);
     if (!closed && whole) last = { entry, value };
     return entry;
@@ -457,26 +495,47 @@ function styleTokens(text, rel) {
     if (!trimmed) continue;
     settle(trimmed[0] === "}" || trimmed[0] === ";");
     const masked = maskInterpolation(line);
-    let from = 0;
-    if (indented) paren = 0;
+    let from = 0, quote = "";
+    const last1 = trimmed[trimmed.length - 1];
     let inside = paren > 0;
     for (let i = 0; i <= masked.length; i++) {
       const ch = i < masked.length ? masked[i] : "";
+      // (a quoted string holds no delimiter: `--q: "{"`, `content: ";"` — it ends with its line)
+      if (quote !== "" && ch !== "") { if (ch === BS && i + 1 < masked.length) i++; else if (ch === quote) quote = ""; continue; }
+      if (ch === "\"" || ch === "'") { quote = ch; continue; }
       if (ch === "(") paren++; else if (ch === ")" && paren > 0) paren--;
       if (ch !== "" && ch !== ";" && ch !== "{" && ch !== "}") continue;
       const piece = masked.slice(from, i);
       from = i + 1;
-      const within = inside;
-      if (ch !== "") paren = 0;
+      const within = inside && !config;
+      if (prelude === "" && !inside) config = /^\s*@(?:use|forward)(?![\w-])/.test(piece);
+      if (ch === "{" || ch === "}" || (ch === "" && !(last1 === "," || last1 === "(" || (less && last1 === ";")))) paren = 0;
       inside = paren > 0;
-      if (ch === "{") { blocks.push((prelude + " " + piece).trim().slice(-DS_PRELUDE)); prelude = ""; continue; }
+      const top = blocks.length ? blocks[blocks.length - 1] : null;
+      if (ch === "{") {
+        const text0 = (prelude + " " + piece).trim().slice(-DS_PRELUDE);
+        blocks.push({ id: ++opened, global: pageWide(text0, top) });
+        const mixin = RE_MIXIN.exec(text0);
+        if (mixin) mixins.set(mixin[1], opened);
+        prelude = "";
+        continue;
+      }
       const entry = within ? null : declare(piece, ch !== "");
+      // (a mixin a page-wide block includes declares for the page: `:root { @include light-theme; }`)
+      const include = !entry && top != null && top.global ? RE_INCLUDE.exec(piece) : null;
+      if (include && mixins.has(include[1])) themes.add(mixins.get(include[1]));
       if (ch === "}") blocks.pop();
       // (a line that ends on neither is a selector going on — or a value's further line: a `;` / `}` drops it)
-      prelude = ch === "" && !entry ? (prelude + " " + piece).slice(-DS_PRELUDE) : "";
+      prelude = ch === "" && !entry ? (prelude + " " + piece).trim().slice(-DS_PRELUDE) : "";
     }
   }
   settle(true);
+  // A block that OVERRIDES a page-wide token of the file is a theme of the page — `.dark { --background: …; --sidebar: … }`
+  // beside `:root { --background: … }`: what else it declares is a token too (shadcn's dark-only `--sidebar-primary`).
+  const wide = new Set();
+  for (const t of out) if (t.global) wide.add(t.name);
+  for (const t of out) if (!t.global && wide.has(t.name)) themes.add(t.block);
+  if (themes.size) for (const t of out) if (themes.has(t.block)) t.global = true;
   return out;
 }
 // A key whose LAST word names a credential — token · secret(s) · password(s) · passphrase · credential(s) · api key ·
@@ -494,10 +553,13 @@ const credentialKey = (k) => RE_CREDENTIAL_WORD.test(keyWords(k));
 const guardKey = (k) => { const w = keyWords(k); return RE_CREDENTIAL_WORD.test(w) || RE_GUARD_WORD.test(w); };
 // A `type` that IS a design token's (DTCG, Tokens Studio, Style Dictionary). `value` and `type` are the two most generic
 // JSON keys — beside `type: "hash"` / `"string"` they are a database dump's (review 6) —, and `$type` / `$value` are
-// Json.NET's too (`{"$type": "System.Byte[], mscorlib", "$value": "…"}`): a `$type` that is no token type is another
-// format's (review 7: a serialized dictionary keyed by GUIDs was seeded as tokens through its `$type` alone).
+// Json.NET's too (`{"$type": "System.Byte[], mscorlib", "$value": "…"}`): a `$type` that is a QUALIFIED name — a dot, a
+// comma, a blank — is a serializer's (review 7: a serialized dictionary keyed by GUIDs was seeded as tokens through its
+// `$type` alone), while a token tool's is ONE word, whichever it is (RE_TYPE_WORD: Tokens Studio's `other` / `text`, a
+// `float` — review 8: asked to be a type of the list, `{$value: 4, $type: "float"}` was dropped with its value).
 const RE_TOKEN_TYPE = /^(?:color|dimension|number|spacing|sizing|size|space|radius|border(?:Radius|Width)?|opacity|font(?:Famil(?:y|ies)|Weights?|Sizes?|Style)|lineHeights?|letterSpacing|paragraph(?:Spacing|Indent)|text(?:Case|Decoration)|typography|boxShadow|shadow|composition|asset|duration|time|easing|cubicBezier|strokeStyle|transition|gradient|z-?index|breakpoint)$/i;
 const tokenType = (t) => typeof t === "string" && RE_TOKEN_TYPE.test(t);
+const RE_TYPE_WORD = /^[A-Za-z][A-Za-z0-9-]{0,31}$/;
 // (…of them, the words any data holds: `value` beside one is a token — and says nothing of what the FILE is)
 const RE_GENERIC_TYPE = /^(?:number|size|space|asset|duration|time)$/i;
 // A JSON token file's leaves: `{color: {primary: {$value: "#1d4ed8"}}}` (the design-tokens format; Tokens Studio's and Style
@@ -547,7 +609,7 @@ function jsonTokens(text) {
       if (at.length && (typeof node === "string" || typeof node === "number")) leaf(at, node, false, guarded);
       continue;
     }
-    const dtcg = own(node, "$value") && (!own(node, "$type") || tokenType(node.$type));
+    const dtcg = own(node, "$value") && (!own(node, "$type") || (typeof node.$type === "string" && RE_TYPE_WORD.test(node.$type)));
     const v = dtcg ? node.$value : own(node, "value") ? node.value : undefined;
     const format = dtcg || (v !== undefined && tokenType(node.type));
     if (dtcg || (format && !RE_GENERIC_TYPE.test(node.type))) res.format = true;
@@ -578,7 +640,8 @@ function scanCode(root) {
   const walk = walkProject(root, DS_FILE_CAP, (rel, full, name) => {
     // an app router's root and its pages: what lies between them is a route segment (routeSegments)
     if (RE_ROUTE_MARK.test(name)) pageDirs.add(dirOf(rel));
-    if (RE_ROOT_LAYOUT.test(name) && RE_ROUTER_ROOT.test(dirOf(rel))) routerRoots.add(dirOf(rel));
+    const routed = RE_ROOT_LAYOUT.test(name) ? routerRootOf(dirOf(rel)) : null;
+    if (routed != null) routerRoots.add(routed);
     const kind = tokenFileKind(rel);
     if (kind) tokenFiles.push({ rel, full, kind });
     else if (isSheetCandidate(name)) sheets.push({ rel, full, rank: sheetRank(name), depth: rel.split("/").length });
@@ -589,9 +652,18 @@ function scanCode(root) {
     if (c) found.push(c);
   }, { counts, gitignore: gitignoreRules(root, realRoot) });
   // (known only once the walk is over: a folder's files come in any order)
-  const segments = routeSegments(routerRoots, pageDirs);
+  const segments = routeSegments(new Set([...routerRoots].filter((d) => dependsOnNext(root, d))), pageDirs);
+  // (…and a parallel slot, a group or a dynamic folder right under a segment is routing too, with no page of its own:
+  // `app/ui/@modal/default.tsx`)
+  const routed = (dir) => {
+    for (let d = dir; ; d = dirOf(d)) {
+      if (segments.has(d)) return true;
+      const name = d.slice(d.lastIndexOf("/") + 1);
+      if (d === "" || !(name[0] === "@" || RE_ROUTE_PASS.test(name))) return false;
+    }
+  };
   for (const c of found) {
-    if (c.route && segments.has(dirOf(c.path))) continue;
+    if (c.route && routed(dirOf(c.path))) continue;
     const had = byKey.get(c.key);
     // one component per name: its own file before a folder's index, then the shorter path
     if (!had || (had.index && !c.index) || (had.index === c.index && c.path.length < had.path.length)) byKey.set(c.key, c);
@@ -645,16 +717,18 @@ function scanCode(root) {
     if (j.more) capped.tokens = true;
     source(f, j.list);
   }
-  // The other stylesheets, the likeliest first: by its name (`globals.css`, then a name an app gives its one stylesheet,
-  // then `index.css`, then any other), then root-most — a monorepo's 100 `Widget/index.css` never stand before the one
-  // `styles/globals.css`. One is a source by what it DECLARES: its custom properties of the whole page (styleTokens'
-  // `global`), GLOBAL_CSS_MIN of them. The search ENDS at the read bound without a word: these are candidates, not "files
-  // named like a token file" — saying a bound of them made a project that had lost nothing "not in sync" for good (review 5).
+  // The global stylesheets, the likeliest first: by its name (`globals.css`, then a name an app gives its one stylesheet,
+  // then `index.css`), then root-most — a monorepo's 100 `Widget/index.css` never stand before the one
+  // `styles/globals.css`. One is a source by its custom properties of the whole page — all of them in a `globals.css`,
+  // styleTokens' `global` ones in a sheet whose name a component's has too —, GLOBAL_CSS_MIN of them, and only when it
+  // brings a NAME no earlier source holds: a twin (`main.min.css` beside `main.css`) or one sheet per theme takes no place
+  // and says no bound (review 8). The search ENDS at the read bound without a word: these are candidates, not "files named
+  // like a token file" — saying a bound of them made a project that had lost nothing "not in sync" for good (review 5).
   for (const f of sheets.sort((a, b) => a.rank - b.rank || a.depth - b.depth || order(a, b))) {
     if (capped.tokenFiles || read >= DS_TOKEN_READS) break;
     const { text, over } = head(f);
-    const list = text == null ? [] : styleTokens(text, f.rel).filter((t) => t.global && t.name.startsWith("--"));
-    if (list.length < GLOBAL_CSS_MIN) continue; // no token file: it takes no place and says no bound
+    const list = text == null ? [] : styleTokens(text, f.rel).filter((t) => t.name.startsWith("--") && (f.rank === 0 || t.global));
+    if (list.length < GLOBAL_CSS_MIN || !list.some((t) => !seen.has(t.name))) continue; // no token file: it takes no place and says no bound
     cut(f, over);
     source(f, list);
   }

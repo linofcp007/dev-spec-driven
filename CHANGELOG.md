@@ -14,24 +14,30 @@ components and tokens, and every +ui feature is checked against it.
   value, use) and the components (name, path, variants, notes) — and three markers: `_Token sources:_` (the files that
   define the tokens), `_Libraries:_` (third-party UI libraries whose components are not listed one by one — each named
   as the designs will cite it: `@mui/material` or `Material UI`; a note in parentheses that is its package or its
-  acronym names it too, `Material UI (@mui/material)`, `Material UI (MUI)`; a trailing version or a markdown link is
-  dropped, `antd v5`, `[antd](https://ant.design)`) and, in a component's row, `_From: <feature>_` (the feature that
-  built it).
+  acronym names it too, `Material UI (@mui/material)`, `Material UI (MUI)` — a scoped package always, wherever a row
+  names it; an acronym or a dependency that is not derived from the name (`Lightning Design System (SLDS)`) where a
+  row cites it, `Button (SLDS)` —; a version written as one or a markdown link is dropped, `antd v5`,
+  `[antd](https://ant.design)`) and, in a component's row, `_From: <feature>_` (the feature that built it).
   `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**:
   - the components: React, Vue, Svelte and Astro files, Angular `*.component.ts` and PascalCase `.js` files under
     `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper or an entry
     file (`utils.tsx`, `main.tsx`, `config/index.tsx`), a barrel (`packages/ui/src/index.tsx`) or a file whose nearest
     such folder is a page folder (`components/pages/Home.tsx`). Under a component folder a name a framework uses
     elsewhere is a component's: `components/loading.tsx`, `layout/index.tsx` and Angular's `loading.component.ts` are
-    Loading and Layout — except in a route segment of an app router: a folder between an `app/` that holds a root
-    layout and a `page.*` / `route.*` at or below it (a Next app's `app/components/page.tsx` and the `loading.tsx`
-    beside it are pages). `main` / `app` are entry files only right inside the component folder, `src/` looked
-    through: `components/layout/main.tsx` is Main;
+    Loading and Layout — except in a route segment of Next's app router (the project depends on `next`): a folder
+    between the `app/` that holds the root layout — also under a route group or a dynamic segment,
+    `app/[locale]/layout.tsx` — and a `page.*` / `route.*` at or below it (`app/components/page.tsx` and the
+    `loading.tsx` beside it are pages). `main` / `app` are entry files only right inside the component folder,
+    `src/` looked through: `components/layout/main.tsx` is Main;
   - the tokens of the token files: CSS custom properties, Sass and Less variables, JSON tokens, and the custom
-    properties a global stylesheet declares for the whole page — on `:root`, `html`, `body`, `:host` or in Tailwind's
-    `@theme` —, five or more of them, wherever the sheet lies and whatever its name (`app/globals.css`,
-    `src/index.css`, a Django `static/` folder, a WordPress theme's `style.css`): a component's own sheet declares on
-    its own selector and is none.
+    properties of a global stylesheet, five or more of them, wherever it lies (`app/globals.css`, `src/index.css`, a
+    Django `static/` folder, a WordPress theme's `style.css`): every one in a sheet named `globals` / `global`; in
+    one named `index`, `main`, `app`, `styles` / `style`, `base`, `root`, `site`, `application`,
+    `tailwind`, `custom` or `input` — names a component's own sheet has too — those it declares for the whole
+    page: on `:root`, `html`, `body`, in Tailwind's `@theme` or a theme plugin's `@plugin`, and in a block that
+    overrides one of them (`.dark`). A component's own sheet declares on its own selector or on `:host` and is
+    none, nor a twin that brings no name of its own (`main.min.css`); a global sheet under another name is not
+    read — name it in `_Token sources:_`.
     A stylesheet named for its tokens, a `design-tokens.*` / `*.tokens.json` and a `tailwind.config.*` count anywhere;
     `theme.*` anywhere but under a folder — at any depth — that holds something else by that name (`store/`,
     `models/`, `server/`, `types/`, `hooks/`, `scripts/`…); a plain `tokens.*` only at the project's root or in a
@@ -46,12 +52,14 @@ components and tokens, and every +ui feature is checked against it.
     design-tokens format is then listed by its name alone (so is a composite token — a shadow, a typography, a
     font-family list — and a declaration that goes on below its line), any other JSON leaf not at all. And a JSON file
     is read only when it SHOWS it is a design file — the design-tokens format (`$value`, with a `$type` — if it has
-    one — that is a token type; or `value` beside a `type` that is one and no word any data holds, such as `time`) or
+    one — of one word; or `value` beside a `type` that is a token type and no word any data holds, such as `time`) or
     a value that says design (a 3 / 6 / 8-digit hex or a functional colour, a length, a `{reference.path}`): a map of
     numbers keyed by something else is not read (nor a plain `{"spacing": {"sm": 4}}`: add its rows by hand).
-    **A name is printed too, so it must be words**: letters, digits, or the two with at most two switches between them
-    (`gray900`, `2xl`, `a11y`), no word of 40 characters in a JSON key — a GUID, an API key, a hash or a JWT used as a
-    key is left out with everything under it, and so is a build's hashed `--a1b2c3d4`. Beneath a credential key
+    **A JSON key is printed too, so it is asked to be words**: letters, digits, or the two with at most two switches
+    between them (`gray900`, `2xl`, `a11y`; a colour's own 6-digit hex is a name too), no word of 40 characters — a
+    key shaped like a GUID, an API key, a hash or a JWT is left out with everything under it. A second layer, and not
+    a guarantee: of keys shaped like an API key some still pass — keep credentials out of files named for tokens. A
+    stylesheet's own identifiers are listed as written. Beneath a credential key
     (`…token`, `…secret`, `…password`, `api_key`…, and `pin` / `otp` / `passcode`) nothing but a literal that says
     design or a `{reference.path}` is listed, and a free string right under one (those last three aside, and never a
     token of the format) makes the whole file no token file;
@@ -116,7 +124,7 @@ components and tokens, and every +ui feature is checked against it.
 - The registry is not part of an approval's fingerprint: adding a row never asks an approved feature to be re-reviewed.
 
 ### Tests
-- `node mcp/test.js` 2332 assertions, `node cli/test-cli.js` 662 (was 2266 / 657).
+- `node mcp/test.js` 2339 assertions, `node cli/test-cli.js` 663 (was 2266 / 657).
 
 ## [1.34.1] — 2026-10-31
 

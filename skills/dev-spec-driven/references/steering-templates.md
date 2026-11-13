@@ -646,17 +646,19 @@ _Libraries: @mui/material_
   and the file doesn't. The whole loop: `references/ui-design-patterns.md` → The registry.
 - `_Libraries:_` names each library as the designs will cite it — its package (`@mui/material`) or its name
   (`Material UI`); a parenthesis that ends a library or a token source is a note (`antd (being replaced)`) — a
-  library's note that is its package or its acronym names it too: `Material UI (@mui/material)`, `Material UI (MUI)` —,
-  a trailing version or a markdown link is dropped (`antd v5`, `[antd](https://ant.design)` are antd), and `none` /
-  `none yet` names nothing. A registry that lists no component is checked against a design only when a
+  library's note that is its package or its acronym names it too: `Material UI (@mui/material)`, `Material UI (MUI)`
+  (a scoped package always; an acronym or a dependency the name does not spell, `Lightning Design System (SLDS)`,
+  where a row cites it: `Button (SLDS)`) —, a version written as one or a markdown link is dropped (`antd v5`,
+  `[antd](https://ant.design)` are antd; `Carbon 11` keeps its number and is cited as `Button (Carbon)` too), and
+  `none` / `none yet` names nothing. A registry that lists no component is checked against a design only when a
   library it declares is a real one — a `package.json` dependency or a scoped package: name it by its package.
   A component of a declared library is not listed here: a design cites the same words — `TextField (@mui/material)`.
 - The token values the seed writes are the design values it found — colours, lengths, numbers, references. A
   stylesheet's token, a JSON `$value` or a `value` beside a token `type` whose value is anything else (a font stack, a
   shadow, a declaration written over several lines) is listed with an empty value: fill it in. Any other JSON leaf with
   such a value is not listed, nor a plain JSON file — not in the design-tokens format — that shows no hex or functional
-  colour, length or reference (a map of numbers) — add those rows by hand. A name that is not words (a hashed
-  `--a1b2c3d4`, a JSON key that is a GUID or an API key) is never seeded.
+  colour, length or reference (a map of numbers) — add those rows by hand. A JSON key that is not words (a GUID, an API
+  key, `w1280h720`) is not seeded.
 
 ---
 

@@ -1875,7 +1875,8 @@ const COMMANDS = [
           }
           if (r.registry.exists && r.newSources.length) log(T.dsSourcesNew(r.newSources.join(", ")));
           if (r.registry.exists && r.newLibraries.length) log(T.dsLibrariesNew(r.newLibraries.join(", ")));
-          if (r.inSync) log(T.dsInSync);
+          // (never beside a component an unfinished feature is building: the registry does not list THAT one yet)
+          if (r.inSync && !r.pendingTotal) log(T.dsInSync);
         }
         r.limits.forEach((l) => log(T.dsLimit[l.code](l.read, l.file)));
       });
