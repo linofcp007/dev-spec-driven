@@ -384,7 +384,10 @@ After the last task: run the duplicate detector — `spec_scan {duplicates: true
 --json`) — then package `MERGE_BASE..HEAD` (`git merge-base <default-branch> HEAD`) and dispatch
 `dev-spec-driven:spec-reviewer` in **final** mode on the most capable model, with the package path, the feature folder,
 the detector's `existing` runs as **candidate findings** (each `file:from-to` and the places it repeats — a duplicate the
-spec asks for, or one a report lists under "Duplicated on purpose", is no finding), the ledger, the active tracks, the
+spec asks for, or one a report lists under "Duplicated on purpose", is no finding), on a +ui feature of a project with a
+design-system registry the `problems` and `raw` values of `spec_scan {designSystem: true, name}` (candidates too: a
+design row that disagrees with the registry, a hard-coded colour or size in the feature's view files — a report's "Raw
+values kept on purpose" is none), the ledger, the active tracks, the
 references folder path and, on +tdd, the `spec_log {name, gitLog}` output (you run
 `git log --name-only --relative` and pass its text — the server never runs git; the reviewer can't call MCP tools) — it
 runs the branch-review checklist
@@ -453,8 +456,9 @@ finished feature's files changed — the baseline only says THAT they changed; c
 (pass the drifted files: the reviewer starts from the ACs they implement). It works on any feature, inline-executed or not.
 
 1. **Gather.** `spec_status`, `trace_check {name, code: true}` (T-IDs and AC IDs named in the test files,
-   planned tests missing from the code) and `spec_scan {duplicates: true, name}` (its `existing` runs go to the
-   reviewer as candidate findings, verified before they cost a task).
+   planned tests missing from the code), `spec_scan {duplicates: true, name}` (its `existing` runs go to the
+   reviewer as candidate findings, verified before they cost a task) and, on a +ui feature of a project with a
+   design-system registry, `spec_scan {designSystem: true, name}` (its `problems` and `raw` values: candidates too).
 2. **Dispatch `dev-spec-driven:spec-reviewer` in converge mode** (standard tier; most capable for a large or
    security-sensitive feature) with: the feature folder `.specs/<feature>/`, the active tracks, the `trace_check` result
    (its gaps and `code` block, pasted), the source roots to inspect and, after a drift, the drifted files. The reviewer

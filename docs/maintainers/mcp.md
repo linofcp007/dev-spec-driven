@@ -21,14 +21,14 @@ count; a `tools/list` handshake lists them).
 purpose, when vs a neighbour, the key arguments, the rules an agent must act on (evidence before claims, approvals are the
 user's, never force without consent, what a refusal means): ≤ 2,500 characters, one line, English; never a catalogue the
 result carries (check ids, keys, reason codes), version history or a long example (`references/tooling-reference.md` holds
-those). `mcp/tests/02-mcp-server.js` caps the whole list at `TOOLS_LIST_CAP` (44,500 — today's size + ~3%, the CLI path
-counted as `dev-spec`); `mcp/tests/harness.js` and 17-docs pin some sentences (spec_complete_task's, spec_finish's,
+those). `mcp/tests/02-mcp-server.js` caps the whole list at `TOOLS_LIST_CAP` (44,500 — the 1.26 size + ~3%; about 44,100 since 1.35 —
+History —, the CLI path counted as `dev-spec`); `mcp/tests/harness.js` and 17-docs pin some sentences (spec_complete_task's, spec_finish's,
 spec_approve's). Every tool shares `PROJECT_DIR` but `spec_init` (`PROJECT_DIR_INIT`: how the folder is chosen); track
 names share `TRACK_ITEM`.
 
 ### The operations
 `OPERATIONS` (`mcp/lib/operations.js` — Node core only, requiring nothing: each surface hands it the facade) is ONE table
-both surfaces run through, so a tool and its CLI command are the SAME call: one entry per engine operation (41, asserted by
+both surfaces run through, so a tool and its CLI command are the SAME call: one entry per engine operation (42, asserted by
 `mcp/tests/02-mcp-server-tools.js`). The file's header documents the fields — `id`, `tool` (several operations of one tool
 told apart by a `mode` or a `when(args)` test), `legacy`, `cli`, `engine`, `args` (`mcp`, `cli` / `pos`, `type`, `join`,
 `cmd`, `parsed`, `modes`, `required`), `internal`, `cliOnly`, `call(S, dir, o)`: THE engine call, written once.
@@ -70,6 +70,9 @@ takes). A mode's `required` (depend → `name`) are `missing-arguments`; the mod
   first: given one of its values, its mode runs (`ARG_MODES[tool].alt` {key: {modes, required?}}, the primary's shape). A mode
   key given a value that picks no mode of its own (`coverage: false` beside `duplicates: true`, `duplicates: false`) is no
   other mode's argument; `coverage: true` beside `duplicates: true` is (`inapplicable` [coverage]).
+- **A third key (1.35).** `spec_scan {designSystem: true}` is another `alt` entry (`argModes()` keeps one per key); it takes
+  `name` only, and beside `duplicates: true` the first in the table's order is picked — the other key is then `inapplicable`
+  (nothing runs).
 
 ### Plugin mode's list
 With `SPEC_MCP_APPROVAL_HOOK=on` (mcp/servers.json — the Claude Code plugin) `tools/list` omits `PLUGIN_UNLISTED`:
@@ -243,6 +246,9 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   replies made `spec_export` leave the markdown out unless `includeBody`, and the aliases (whose old schema has no `includeBody`)
   translated without it — "the old names still work" held for the call, not the reply. They translate to `includeBody: write !==
   true` now.
+- **1.35** — `spec_scan {designSystem: true, name?}`, the 42nd operation (`design-system`), a mode on spec_scan's third key;
+  steering_scaffold names design-system.md and spec_finish says it writes the registry. ~520 characters of tools/list, not
+  paid back (about 44,100 of the 44,500 cap): the next argument trims wording first.
 
 ### Capabilities
 - **1.14** — no longer tools-only: prompts (`commands/*.md`) and the `specs://` resources.

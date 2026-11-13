@@ -11,7 +11,9 @@ Args: $ARGUMENTS — the brownfield flow: `${CLAUDE_PLUGIN_ROOT}/skills/dev-spec
   another folder goes as `projectDir`, an absolute path. Then read the files it points to and summarize the architecture.
 - **reverse `[module]`** — from the scan: draft steering and `constitution.md` that acknowledge the existing patterns
   (approval first), pick a strategy, then per module `spec_create` and requirements / design describing what the code
-  does today, with `_Implements: path_` on its tasks. Specs already written in another tool → `import` instead.
+  does today, with `_Implements: path_` on its tasks. Specs already written in another tool → `import` instead. A
+  codebase with screens: `steering_scaffold {file: "design-system.md"}` writes the registry of its components and tokens
+  from the code — the inventory every later +ui feature is checked against.
 - **coverage** — `spec_scan {coverage: true}`: the share of code files some task's `_Implements:_` names
   (`coveragePercent`, `byFolder`, `undocumented`) and the markers naming nothing (`unmatchedImplements` — fix them).
   Document the riskiest uncovered folders next.

@@ -124,6 +124,12 @@ run. The report's RED and GREEN runs of the target tests are the cycle's proof.
   job and is already scheduled; a reviewer you spawn duplicates it and counts for nothing.
 - **No new helper, component or client without the search** (Before you begin, step 3) — and none that duplicates an
   existing one: the reviewer searches the codebase too, and a duplicate is an Important finding.
+- **A view is built from the design system.** When the brief has a **Design system** part, its components are the ones you
+  use (their path, variants and notes are there): a new variant goes into the component, never a copy beside it — and when
+  that component's file is outside your `_Implements:_` files, NEEDS_CONTEXT first (Before you begin, step 3); a
+  component it marks NEW is built through the system (tokens only, every state, keyboard and screen-reader support); one it
+  lists as not in the registry is NEEDS_CONTEXT before you build it. Never a raw colour, spacing, radius or font size where
+  a token exists — a literal you keep on purpose goes into the Reuse block ("Raw values kept on purpose"), with why.
 - Don't restructure code outside your task. A small **preparatory** refactor the task itself needs — in its own files
   (the ones `_Implements:_` names; a unit outside them is NEEDS_CONTEXT, step 3), behaviour-preserving, on green, in its
   own commit — is fine; anything else you notice (a smell, a duplicate, a
@@ -176,6 +182,7 @@ Write the full report to the report path, in the brief's language:
   - Created: `src/features/checkout/tax-rounding.ts` because no helper rounds per line
     (searched: "round", "rounding", "banker", "toFixed" in src/; nearest: `lib/money.ts#round` — whole amounts only).
   - Duplicated on purpose: none.
+  - Raw values kept on purpose: none. (a view task: `file:line value — why no token fits`)
   - Refactor candidates: Repeated Switches — the price type switched on in 4 files (pricing.ts, invoice.ts, quote.ts, cart.ts).
   ```
 - Files changed; commits (short SHA + subject)

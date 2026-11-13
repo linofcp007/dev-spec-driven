@@ -22,7 +22,8 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex, templateFileList,
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf;
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -33,7 +34,8 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   stripEnds, stripFencedCode, stripHtmlComments, stripStart, stripSupersedes, supersededByIndex,
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
-  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf } = E); }
+  featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -1119,6 +1121,510 @@ function briefReuse(projectDir, design, implementsList, acIds) {
 }
 
 // ---------------------------------------------------------------------------
+// The design-system registry (1.35) — .specs/steering/design-system.md
+// ---------------------------------------------------------------------------
+// ONE inventory every +ui feature builds from: the components (name · path · variants · notes) and the tokens (name · value ·
+// use), plus English-stable markers — `_Token sources: a, b_` (the files that define the tokens), `_Libraries: a, b_` (the
+// third-party UI libraries the project builds on, whose components are not listed one by one) and, in a component's row,
+// `_From: <feature>_` (the feature whose finish added it). A steering stub like glossary.md (steering_scaffold — seeded from the
+// code by engine/design-system.js; init never creates it), deliberately NOT a track steering file: it grows with every feature,
+// and a file the approvals fingerprint would flag every approved +ui feature on each new row. Its readers: doctor's
+// `ui-design-system` (a feature's [UI] Design System Usage rows against it — an approval check at size m / l), the task brief's
+// Design system part, spec_scan {designSystem: true} and spec_finish (the New components join it).
+const DESIGN_SYSTEM_FILE = "design-system.md";
+const DS_MAX_COMPONENTS = 500; // registry rows read in full (`truncated` past them — doctor says so; every name is still known)
+const DS_MAX_TOKENS = 1000;
+const DS_MAX_USAGE_ROWS = 100; // a feature's usage rows read
+const DS_CELL_MAX = 200; // a cell's characters kept
+const DS_USAGE_CELL = 4000; // a usage row's component cell read: several components may share one, each bounded by DS_CELL_MAX
+const DS_SINCE = "1.35"; // the release the check came with: a design approved before (no `designSystem` stamp) is never flagged
+const DS_BRIEF_MAX = 12; // components the brief quotes…
+const DS_BRIEF_CHARS = 1500; // …and their size
+const DS_NAME_MAX = 40; // a longer name is compared with none (no component is called that)
+const DS_NEAR_ROWS = 30; // usage rows that pay a name comparison against the registry (past them: the exact name only)
+// A table's first header cell names what its rows are (EN / PT / ES); the other columns are found by their header, else by place.
+const RE_DS_COMPONENT_HEAD = /^component(?:e|es|s)?$/i;
+const RE_DS_TOKEN_HEAD = /^tokens?$/i;
+const RE_DS_COL = {
+  path: /^(?:path|where|file|location|caminho|onde|ficheiro|arquivo|localiza|ruta|d[oó]nde|archivo|ubicaci)/i,
+  variants: /^varia/i,
+  value: /^val/i,
+  use: /^(?:use|usage|uso|utiliza|para)/i,
+};
+// `_Token sources: a, b_` / `_Libraries: a, b_` — a line of its own, English-stable like the glossary's _Avoid:_; the value runs
+// to the line's end (a path may hold an underscore or a blank), its closing "_" dropped.
+const RE_DS_MARKER = /^[ \t]*_(Token sources|Libraries):[ \t]*(.*)$/gim;
+const DS_MARKER_LINES = 100; // marker lines read (a registry has two)…
+const DS_MARKER_ENTRIES = 50; // …and the entries kept of each kind
+// A LIBRARY entry that names nothing, by its FIRST word (EN / PT / ES): "none", "none yet", "nenhuma ainda", "sin
+// bibliotecas", "n/a (custom only)", "TBD" — a nicety for what the brief and the report show, never what the check stands on
+// (no word list is complete: "por definir", "custom only" — designSystemCheck stands on `packaged`: a declared library that
+// IS one, dsPackaged). A token source is a path: one with a `/` or a `.` names nothing only when it IS such a word (`todo.css`, `No Name/tokens.css`
+// are files).
+const RE_DS_NONE = /^(?:none|no|not|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|sem|ningun[oa]?|ningún|sin)(?=$|[\s(,:!])/iu;
+const RE_DS_NONE_WHOLE = /^(?:none|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|ningun[oa]?|ningún)$/iu;
+// `_From: <feature>_` in a component's row: the feature whose finish added the row (a slug — spec_finish writes it, a rename
+// follows it). That feature's own `New` row for the component stays New: its design says what it built.
+const RE_DS_FROM = /_From:[ \t]*([a-z0-9][a-z0-9-]*)_/i;
+const DS_PIPE = String.fromCharCode(92) + "|"; // a `|` as a table cell holds it, escaped
+// A cell's own text: its code span, emphasis and JSX brackets dropped (`<Button />`, **Button**), trimmed, bounded — bounded
+// BEFORE the replaces: a trailing-run replace is quadratic on a cell of 80,000 `>`.
+const dsCell = (c) => String(c == null ? "" : c).slice(0, DS_CELL_MAX * 2).trim().replace(/^[`*<\s]+/, "").replace(/[`*>\s/]+$/, "")
+  .replace(/^_+(?=[\p{L}\p{N}])|(?<=[\p{L}\p{N}])_+$/gu, "").slice(0, DS_CELL_MAX);
+// A name as it is compared: letters and digits only, lower-cased, accents folded — DatePicker = date-picker = `Date Picker`,
+// Botão = botao.
+const dsKey = (s) => String(s).normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+// A cell that still holds a scaffold slot or says nothing: "[component]", "TBD", "—".
+const dsSlot = (c0) => { const c = String(c0 == null ? "" : c0).slice(0, DS_CELL_MAX * 2); return !/[\p{L}\p{N}]/u.test(c) || /^\[[^\]]*\]$/.test(c.trim()) || genericUnit(c); };
+// …and a NAME cell that does: a word that only says "pending" IS a name — a component called Pending (review 8: its seeded
+// row never read back, and a design reusing it was refused).
+const dsNameSlot = (c0) => { const c = String(c0 == null ? "" : c0).slice(0, DS_CELL_MAX * 2); return !/[\p{L}\p{N}]/u.test(c) || /^\[[^\]]*\]$/.test(c.trim()) || isGenericSlot(dsCell(c)); };
+// The tables of a markdown text (comments and fenced code aside) → [{ header: [cells], rows: [[cells]] }]. A table is a line
+// starting with "|" followed by a separator row; its rows run to the first line that doesn't start with "|". Linear.
+function mdTables(text) {
+  const tables = [];
+  let cur = null, prev = null;
+  for (const l of stripFencedCode(stripHtmlComments(text || "")).split(/\r?\n/)) {
+    if (!/^\s*\|/.test(l)) { cur = null; prev = null; continue; }
+    const sep = /^[\s|:-]+$/.test(l) && l.includes("-");
+    if (cur) { if (!sep) cur.rows.push(tableCells(l)); continue; }
+    if (sep && prev != null) { cur = { header: tableCells(prev), rows: [] }; tables.push(cur); prev = null; } else prev = sep ? null : l;
+  }
+  return tables;
+}
+// → null (no registry file) | { file, components: [{ name, key, path, variants, notes, from? }], keys (a Set: EVERY component
+// name the file lists, past the cap too — what "is it listed?" asks), origins (a Map: name → the feature of its `_From:_`, past
+// the cap too), tokenNames (a Set: every token name, lower-cased, past the cap too), tokens: [{ name, value, use }], sources,
+// libraries, packaged (it lists no component and declares a library that IS one — dsPackaged), total: { components, tokens }
+// (the rows the file holds), truncated }. A row whose name is a slot ("[Button]"), blank or generic is
+// none; a name listed twice counts once (the first row). Every component / token table of the file is read (finish appends a
+// table when the file doesn't end in one that can take its rows). `from`: the row's `_From: <feature>_` (left out of `notes`).
+function designSystemRegistry(root) {
+  const file = path.join(root, "steering", DESIGN_SYSTEM_FILE);
+  const raw = readIfExists(file);
+  if (raw == null) return null;
+  const body = steeringFrontMatter(raw).body;
+  const components = [], tokens = [], keys = new Set(), origins = new Map(), seenT = new Set();
+  const total = { components: 0, tokens: 0 };
+  for (const t of mdTables(body)) {
+    const head = dsCell(t.header[0] || "");
+    const isC = RE_DS_COMPONENT_HEAD.test(head), isT = !isC && RE_DS_TOKEN_HEAD.test(head);
+    if (!isC && !isT) continue;
+    const col = (re, fallback) => { const i = t.header.findIndex((h, k) => k > 0 && re.test(dsCell(h))); return i > 0 ? i : fallback; };
+    const cols = isC ? { a: col(RE_DS_COL.path, 1), b: col(RE_DS_COL.variants, 2) } : { a: col(RE_DS_COL.value, 1), b: col(RE_DS_COL.use, 2) };
+    for (const r of t.rows) {
+      const name = dsCell(r[0] || "");
+      if (!name || dsNameSlot(r[0] || "")) continue;
+      const cell = (i) => (r[i] != null && !dsSlot(r[i]) ? dsCell(r[i]) : "");
+      if (isC) {
+        const key = dsKey(name);
+        if (!key || keys.has(key)) continue;
+        keys.add(key);
+        total.components++;
+        const own = r.slice(1).map((x) => String(x == null ? "" : x).slice(0, DS_CELL_MAX * 2));
+        const from = RE_DS_FROM.exec(own.join(" | "));
+        if (from) origins.set(key, from[1].toLowerCase()); // past the cap too: finish appends at the END of a long registry
+        if (components.length >= DS_MAX_COMPONENTS) continue;
+        const rest = own.filter((x, i) => i + 1 !== cols.a && i + 1 !== cols.b).map((x) => x.replace(RE_DS_FROM, " ")).filter((x) => !dsSlot(x)).map(dsCell);
+        components.push(Object.assign({ name, key, path: cell(cols.a), variants: cell(cols.b), notes: rest.join(" · ").slice(0, DS_CELL_MAX) }, from ? { from: from[1].toLowerCase() } : {}));
+      } else {
+        // (a `|` the report's pasted row escaped is the name's own again — else that row never read as listed)
+        const token = name.split(DS_PIPE).join("|");
+        const key = token.toLowerCase();
+        if (seenT.has(key)) continue;
+        seenT.add(key);
+        total.tokens++;
+        if (tokens.length < DS_MAX_TOKENS) tokens.push({ name: token, value: cell(cols.a), use: cell(cols.b) });
+      }
+    }
+  }
+  const lists = { "token sources": [], libraries: [] };
+  const weak = new Set(); // the libraries' WEAK aliases, lower-cased (dsAlias): cited only in a row's parenthesis
+  let deps = null; // the project's package.json dependencies — read once, and only when a marker asks
+  const dependencies = () => deps || (deps = packageDependencies(path.dirname(root)));
+  let markers = 0;
+  for (const m of stripFencedCode(stripHtmlComments(body)).matchAll(RE_DS_MARKER)) {
+    if (++markers > DS_MARKER_LINES) break;
+    const into = lists[m[1].toLowerCase()], library = into === lists.libraries;
+    // (the value's own emphasis dropped: `_Libraries: a_` closes after it; `_Libraries:_ a` — the label alone italic — before:
+    // a BLANK follows that `_`, where `_sass/_variables.scss` is a path — review 5, the seed's own line was misread)
+    const value = m[2].slice(0, 4000).trim().replace(/^_[ \t]+/, "").replace(/_$/, "").trim();
+    if (/^\[.*\]$/.test(value)) continue; // the stub's slot, never filled in
+    const add = (w) => { if (w && w.length <= DS_CELL_MAX && !into.includes(w) && into.length < DS_MARKER_ENTRIES) into.push(w); };
+    for (const w0 of dsEntries(value)) {
+      if (into.length >= DS_MARKER_ENTRIES) break;
+      if (w0.length > DS_CELL_MAX * 2) continue; // no name, no path
+      let w = stripEnds(w0.trim(), unitIn("`'\""), unitIn("`'\".")).trim(); // linear: never a /^[`'"]+|[`'".]+$/g replace
+      // a library's markdown link is its text — unwrapped BEFORE the note is read: `[Material UI (MUI)](https://mui.com)`,
+      // `[MUI](https://mui.com) (@mui/material)`
+      if (library) w = stripEnds(w.replace(RE_DS_LINK, "$1").trim(), unitIn("`'\""), unitIn("`'\".")).trim();
+      // a parenthesis that ENDS an entry is a note — `@mui/material (v6)`, `src/styles/colors.scss (generated from Figma)` —,
+      // never one inside a path (`src/styles (legacy)/tokens.css`)
+      let note = "";
+      const at = w.endsWith(")") ? w.lastIndexOf(" (") : -1;
+      if (at > 0) { note = w.slice(at + 2, -1).trim(); w = w.slice(0, at).trim(); }
+      // (a library's note is read as its entry is: the part before a comma, no version written as one — `(MUI, v6)`,
+      // `(@mui/material@6)` — nor a bare number, which a note has no use for: `Ant Design (antd 5)`, `Material UI (MUI 6)`)
+      if (library && note) note = dsUnversioned(note.split(",")[0].trim()).replace(RE_DS_BARE_VERSION, "").trim();
+      // …and a library is named without a version WRITTEN as one (`antd v5`, `antd@5`: they named no package, and the gate
+      // of a library-only registry was off — review 7). Never a bare number: `Material 3` is a name (review 8)
+      if (library) w = dsUnversioned(w);
+      if (!w || w === "-" || w === "—" || (library || !/[/.]/.test(w) ? RE_DS_NONE : RE_DS_NONE_WHOLE).test(w)) continue;
+      add(w); // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`)
+      // (an entry written on its own names its library SURELY, whatever a note or a shorter name said before: `Carbon 11, Carbon`)
+      if (library) weak.delete(w.toLowerCase());
+      // …and a name that ends in a bare number is cited without it too — SURELY when the shorter name is one a row would
+      // write anywhere (dsNamed: an acronym, two words or more, a package of the project — `antd` of `antd 5`, `Ant Design`,
+      // `MUI`), only where a row cites for one plain word no package backs: `Material` of `Material 3` must not make
+      // "Material Picker" the library's (review 8) — and review 9: weak for ALL of them, `Reuse | antd Table` was refused
+      const bare = library ? w.replace(RE_DS_BARE_VERSION, "").trim() : w;
+      if (bare && bare !== w) {
+        // (a name has ONE strength, whatever its case and its place on the line — the strongest any writing of it earned:
+        // `vuetify, Vuetify 3` keeps the entry sure, `Lightning Design System (SLDS), SLDS 2` makes the acronym sure;
+        // review 11: compared with its case, the derived name weakened the entry written before it)
+        const low = bare.toLowerCase(), sure = dsNamed(bare, dependencies);
+        if (into.some((x) => x.toLowerCase() === low)) { if (sure) weak.delete(low); }
+        else { add(bare); if (into.includes(bare) && !sure) weak.add(low); }
+      }
+      // …and a library's note that is a package or an acronym names it too — surely or only where a row cites one (dsAlias)
+      const alias = library && note ? dsAlias(w, note, dependencies) : null;
+      if (alias) {
+        // (a name the registry holds already: named SURELY here, it is weak no more — `Bootstrap 5 (Bootstrap)`, what its
+        // author wrote; named weakly, it stays what it was — `react, Headless UI (react)`)
+        const had = into.some((x) => x.toLowerCase() === note.toLowerCase());
+        if (!had) add(note);
+        if (alias === "strong") weak.delete(note.toLowerCase());
+        else if (!had && into.includes(note)) weak.add(note.toLowerCase());
+      }
+    }
+  }
+  // Does a registry with no component row build on a library that IS one — see dsPackaged (asked only then)
+  // (never through a WEAK alias: it may not cite outside a parenthesis, so it cannot be what switches the gate on —
+  // review 9: `Design System (acme-ui)` with no row refused `Reuse | acme-ui Button`)
+  const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(lists.libraries.filter((l) => !weak.has(l.toLowerCase())), dependencies);
+  return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, weakLibraries: weak,
+    packaged, total, truncated: total.components > components.length || total.tokens > tokens.length };
+}
+// A text outside its parentheses, nested ones too (an unclosed one hides what follows it; a `)` nothing opened stays) —
+// and what its CLOSED parentheses and square brackets hold, nested ones with them (an unclosed one holds nothing:
+// `Button (SLDS` cites no library).
+function dsOutside(s) {
+  let out = "", depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "(") { if (depth++ === 0) out += " "; } else if (c === ")" && depth > 0) depth--; else if (depth === 0) out += c;
+  }
+  return out;
+}
+function dsInside(s) {
+  let out = "", held = "", depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "(" || c === "[") { if (depth++ > 0) held += c; }
+    else if ((c === ")" || c === "]") && depth > 0) { if (--depth > 0) held += c; else { out += " " + held; held = ""; } }
+    else if (depth > 0) held += c;
+  }
+  return out;
+}
+// A usage cell's components: cut at `,` `;` `·` OUTSIDE parentheses — `TextField (@mui/material, outlined)` is one —, and
+// from the part a `(` is never closed in, at EVERY one: an unclosed parenthesis must not swallow the components after it
+// (review 10: `Card ( ; Buton` passed) nor tear the entries that closed before it (review 11: asked of the whole cell,
+// `TextField (@mui/material, outlined), Card :)` was refused as "outlined)"). A `)` nothing opened counts for nothing.
+const dsSeparates = (c) => c === "," || c === ";" || c === "·";
+function dsCellParts(text) {
+  const out = [];
+  let start = 0, depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === "(") depth++;
+    else if (c === ")") { if (depth > 0) depth--; } else if (depth === 0 && dsSeparates(c)) { out.push(text.slice(start, i)); start = i + 1; }
+  }
+  if (depth > 0) for (let i = start; i < text.length; i++) if (dsSeparates(text[i])) { out.push(text.slice(start, i)); start = i + 1; }
+  out.push(text.slice(start));
+  return out;
+}
+// A marker line's entries: cut at `,` / `;` outside parentheses (`@mui/material (Material UI, v6)` is one). Linear.
+function dsEntries(value) {
+  const out = [];
+  let start = 0, depth = 0;
+  for (let i = 0; i <= value.length; i++) {
+    const ch = i < value.length ? value[i] : ",";
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if ((ch === "," || ch === ";") && (depth === 0 || i === value.length)) { out.push(value.slice(start, i)); start = i + 1; }
+  }
+  return out;
+}
+// Is one of the declared libraries a real one — a dependency of the project's package.json, or a scoped package by its very
+// name (`@mui/material`)? THE property the empty-registry rule stands on. A `_Libraries:_` line is free text: "not yet",
+// "por definir", "custom components only" declare nothing, in any words — a word list never held them all (review 4: one
+// that slipped through turned an empty registry's warning into a size m refusal), and "does the design cite it" switched
+// the gate off for a registry that is library-only on purpose (review 5: `Reuse | Buton` approved).
+const RE_DS_SCOPED = /^@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*$/i;
+const RE_DS_SCOPE = /^@[a-z0-9][\w.-]*$/i; // a scope alone — what the seed writes for a family of packages: `@radix-ui`
+const RE_DS_ACRONYM = /^[A-Z][A-Z0-9]{1,5}$/; // MUI, SLDS, M3, UI5
+const RE_DS_LINK = /^\[([^\]]+)\]\([^)\s]*\)/;
+const RE_DS_VERSION = /(?:[ \t]+(?:v|[\^~]|[<>]=?[ \t]*)\d[\w.+]*|@[\^~]?\d[\w.+]*)$/i; // v5 · ^5.21 · ~5 · >= 5 · @5
+const RE_DS_BARE_VERSION = /[ \t]+\d[\w.+]*$/; // 5 · 5.3 · 5+
+const RE_DS_OR = /[ \t]*\|\|$/;
+// A library's name without its version WRITTEN as one — a range of several parts too: `antd >=5 <6`, `antd ^5 || ^6`
+// (review 11: the last part alone was dropped, and "antd >=5" was a library no row can cite). Bounded: four parts.
+function dsUnversioned(s) {
+  for (let i = 0; i < 4; i++) {
+    const t = s.replace(RE_DS_VERSION, "").replace(RE_DS_OR, "").trim();
+    if (t === s) break;
+    s = t;
+  }
+  return s;
+}
+function dsPackaged(libraries, dependencies) {
+  if (libraries.some((l) => RE_DS_SCOPED.test(l))) return true;
+  const names = dependencies();
+  return libraries.some((l) => { const n = l.toLowerCase(); return names.has(n) || (RE_DS_SCOPE.test(n) && [...names].some((d) => d.startsWith(n + "/"))); });
+}
+// Is a library's shorter name — its entry without a bare number — one a row would write ANYWHERE in its cell? An acronym,
+// two words or more, a scoped package, or a package of the project: a dependency of that name, or one under a SCOPE that
+// begins with it (`Carbon` of `@carbon/react`, `Fluent` of `@fluentui/react-components`), or the library's OWN package by
+// its name — the word joined to what says "the UI package of it": a framework's name, `ui`, `components` (`Flowbite` of
+// `flowbite-react`, `Bootstrap` of `react-bootstrap`, `Prime` of `primevue`, `Evergreen` of `evergreen-ui`, `Carbon` of
+// `carbon-components-svelte`). One plain word no package backs is not — nor a framework's name or its stem (`React 19`:
+// "React Select" is no component of it; `Tailwind` of tailwindcss, `Solid` of solid-js), nor a word another package
+// merely begins with (`base64-js` backs no `Base`, `material-icons` no `Material` — review 10: any package that began
+// with the word did; review 11: "the name joined to ONE framework's" then lost `carbon-components-svelte`). The ROOT
+// package.json answers: in a monorepo whose library sits in `apps/web/package.json` the name stays weak — the docs
+// say to write it on its own.
+function dsNamed(name, dependencies) {
+  if (RE_DS_ACRONYM.test(name) || /\s/.test(name) || RE_DS_SCOPED.test(name)) return true;
+  const n = name.toLowerCase();
+  const long = n.length >= 4;
+  if ([...DS_FRAMEWORKS].some((f) => f.startsWith(n))) return false; // a framework's name, or its stem
+  for (const d of dependencies()) {
+    if (d === n || (long && d.startsWith("@" + n))) return true;
+    if (!long || d.length <= n.length || !(d.startsWith(n) || d.endsWith(n))) continue;
+    const rest = (d.startsWith(n) ? d.slice(n.length) : d.slice(0, -n.length)).replace(/^-|-$/, "");
+    if (DS_FRAMEWORKS.has(rest) || rest.split("-").every((t) => DS_FRAMEWORKS.has(t) || DS_UI_WORDS.has(t))) return true;
+  }
+  return false;
+}
+const DS_UI_WORDS = new Set(["ui", "components"]); // what a package's name adds to a library's to say "its UI package"
+// Does a library entry's note name the library too — and how surely?
+//   "strong" — wherever a usage row names it: a SCOPED package (`(@acme/ui)` is never a remark, whatever the entry is
+//              called — review 8: asked to be "derived from the entry", `Design System (@acme/ui)` named nothing), a scope
+//              a dependency lives under, the entry's acronym — 2 – 6 capitals or digits that are its letters, in order,
+//              from the first (`Material UI (MUI)`) —, a short name made of the entry's own words (`Radix UI (Radix)`: its
+//              author wrote it) and a dependency of the project (`Design System (acme-ui)`);
+//   "weak"   — any other acronym (`Lightning Design System (SLDS)` — and `antd (PRO)`, which no shape tells apart) and a
+//              FRAMEWORK's name, a dependency or a word of the entry alike (`Headless UI (react)`, `React Aria (react)`:
+//              "React Select" is no component of either — review 10: asked of dependencies only). It names the library
+//              only where a row CITES one (dsCited): `Button (SLDS)` — never `Pro Table`, `React Select`;
+//   null     — a remark: `antd (deprecated)`, a version (review 6: any one word made "deprecated" a library).
+function dsAlias(entry, note, dependencies) {
+  if (RE_DS_SCOPED.test(note)) return "strong";
+  // (a scope alone when the project has a package under it — `(@radix-ui)`, never `(@jane)`; a version is a remark: `(V5)`)
+  if (RE_DS_SCOPE.test(note)) return [...dependencies()].some((d) => d.startsWith(note.toLowerCase() + "/")) ? "strong" : null;
+  if (/^v?\d/i.test(note) || !/[a-z]/i.test(note)) return null; // (a version, a range — `antd 5 (>= 5)`: no name at all)
+  if (RE_DS_ACRONYM.test(note)) {
+    const letters = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const name = letters(entry), n = letters(note);
+    let j = 0;
+    for (let i = 0; i < name.length && j < n.length; i++) if (name[i] === n[j]) j++;
+    // (a framework's name in capitals is a framework's: `React 19 (REACT)` — review 11)
+    return n[0] === name[0] && j === n.length && !DS_FRAMEWORKS.has(note.toLowerCase()) ? "strong" : "weak";
+  }
+  const own = entry.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean), said = note.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (!dependencies().has(note.toLowerCase()) && !(said.length > 0 && said.every((w) => own.includes(w)))) return null;
+  return DS_FRAMEWORKS.has(note.toLowerCase()) ? "weak" : "strong";
+}
+const DS_FRAMEWORKS = new Set(["react", "react-dom", "react-native", "preact", "vue", "svelte", "solid-js", "lit", "angular", "next", "nuxt", "astro", "remix", "qwik",
+  "ember-source", "alpinejs", "jquery", "tailwindcss", "typescript"]);
+// The dependency names of the project's package.json (dependencies, devDependencies, peerDependencies), lower-cased → a Set
+// (empty: none readable). Read as the scan reads a root manifest: a regular file, or a link that stays inside the project
+// (never `package.json -> ~/.npmrc`); its first DS_PACKAGE_CHARS characters (a manifest is never longer — a 32 MB one cost
+// 2 s on every registry read); a BOM dropped.
+const DS_PACKAGE_CHARS = 256 * 1024;
+function packageDependencies(projectRoot) {
+  const names = new Set();
+  const file = path.join(projectRoot, "package.json");
+  const text = projectFileInside(realRootOf(projectRoot), file) ? readFileHead(file, DS_PACKAGE_CHARS) : null;
+  let pkg = null;
+  try { pkg = text == null ? null : JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { /* no readable manifest */ }
+  if (!isRecord(pkg)) return names;
+  for (const k of ["dependencies", "devDependencies", "peerDependencies"]) if (isRecord(pkg[k])) for (const n of Object.keys(pkg[k])) names.add(n.toLowerCase());
+  return names;
+}
+// → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole word: `own` is not in "Dropdown".
+// A `-` / `/` / `@` beside the name is a word's end: `@radix-ui/react-dialog` and `radix-ui` cite Radix, `react-bootstrap`
+// Bootstrap, `MUI-X` and `@mui/material` MUI (review 8: a `-` taken for "another package" refused all of them — so
+// `antd-mobile` cites antd, knowingly). A WEAK alias (dsAlias) only where a row CITES — dsCited.
+// The parts of a usage cell that cite a library, apart from the component's own name: what a closed `(…)` or `[…]` holds —
+// nested ones too (dsInside; review 11: only the innermost was read, `Modal (Bootstrap, large (lg))` cited nothing) —,
+// what follows a dash set off by blanks, what precedes a colon — `Button (SLDS)`, `Button [SLDS]`, `Button — SLDS`,
+// `SLDS: Button`; never `SLDS Button`, which no shape tells from `Pro Table`. The cell is bounded (DS_CELL_MAX).
+const RE_DS_DASH = /\s[—–-]\s/;
+function dsCited(cell) {
+  const out = [dsInside(cell)];
+  const dash = cell.search(RE_DS_DASH), colon = cell.indexOf(": ");
+  if (dash !== -1) out.push(cell.slice(dash + 3));
+  if (colon !== -1) out.push(cell.slice(0, colon));
+  return out.join(" | ");
+}
+function dsCites(registry) {
+  const res = registry.libraries.map((l) => ({ re: new RegExp(RE_WORD_BEFORE + escRe(l) + RE_WORD_AFTER, "iu"), weak: registry.weakLibraries.has(l.toLowerCase()) }));
+  return (cell) => { let where = null; return res.some((x) => x.re.test(x.weak ? where == null ? (where = dsCited(cell)) : where : cell)); };
+}
+// A usage row's kind — the first cell's first word, EN / PT / ES: Reuse (used as is) · Extend (a new variant of a listed
+// component) · New (nothing listed fits).
+const RE_DS_KINDS = [
+  ["reuse", /^(?:re-?use[ds]?|reusing|reutiliz\p{L}*|reaproveit\p{L}*|reus[oa]r?|existing|existentes?)(?![\p{L}\p{N}])/iu],
+  ["extend", /^(?:extend(?:s|ed|ing)?|extension|estend\p{L}*|extens\p{L}*|extend\p{L}*|extiend\p{L}*|ampli\p{L}*|variant[es]?|variantes?)(?![\p{L}\p{N}])/iu],
+  ["new", /^(?:new|nov[oa]s?|nuev[oa]s?|creat(?:e|ed|es)|cria(?:r|do|da)?|crea(?:r|do|da)?)(?![\p{L}\p{N}])/iu],
+];
+const dsKind = (cell) => { const c = dsCell(cell); const k = RE_DS_KINDS.find(([, re]) => re.test(c)); return k ? k[0] : null; };
+// The [UI] Design System Usage section of a design → null (none) | { body, rows: [{ kind, name, key, cell, why }] }: every table
+// row whose first cell is a kind word and whose second names a component (several in one cell — "Button, Dialog" — are one row
+// each); a row still holding its slot ("[component in the registry]") is none. `cell` is the component cell as written (a
+// library is named there: "Button (@mui/material)"), `why` the cells after it.
+function designSystemUsage(design) {
+  const sec = (trackSectionTable("ui") || []).find((s) => s.name === "Design System Usage");
+  const body = sec && design != null ? extractSection(design, sec.syn, trackMarker("ui"), sec.loose) : null;
+  if (body == null) return null;
+  const rows = [];
+  for (const t of mdTables(body)) {
+    for (const r of t.rows) {
+      const kind = dsKind(r[0] || "");
+      if (!kind || r.length < 2 || dsNameSlot(r[1])) continue;
+      const why = r.slice(2).filter((c) => c != null && !dsSlot(c)).map(dsCell).join(" · ").slice(0, DS_CELL_MAX * 2);
+      // (several components in one cell are a row each — cut OUTSIDE parentheses, dsCellParts: `TextField (@mui/material,
+      // outlined)` is one; review 9: cut anywhere, it was refused as "outlined)", on every commit since the first. Read
+      // up to DS_USAGE_CELL characters — review 11: at 400, a component past a long cell's bound was never checked)
+      for (const part of dsCellParts(String(r[1]).slice(0, DS_USAGE_CELL))) {
+        const name = dsCell(dsOutside(part)); // "Button (@mui/material)" is Button, `Card (wide (2 cols), dense)` is Card
+        const key = dsKey(name);
+        if (key && rows.length < DS_MAX_USAGE_ROWS) rows.push({ kind, name, key, cell: dsCell(part), why });
+      }
+    }
+  }
+  return { body, rows };
+}
+// A New component whose name is a listed one's with a fork's affix — ButtonV2, Button2, NewButton, CustomButton, MyButton,
+// ButtonCopy — or within an edit or two of it (Buton, DataTables): the listed component it is close to, else null.
+const RE_DS_FORK_PRE = /^(?:new|custom|my|app|alt|base|the)(?=.{3})/;
+const RE_DS_FORK_POST = /(?<=.{3})(?:v?\d+|new|custom|alt|copy|alternative)$/;
+const dsNearLimit = (c) => (c.length >= 9 ? 2 : c.length >= 5 ? 1 : 0);
+const dsHintLimit = (c) => Math.max(1, Math.floor(c.length / 3)); // closestName's own default
+// closestName over the listed keys an edit distance within `limit` could reach at all: two names differ by at least their
+// lengths' difference, so a 500-row registry costs a comparison only for the few names of about that length (and a name past
+// DS_NAME_MAX is compared with none).
+const dsClosest = (key, keys, limit) => (key.length > DS_NAME_MAX ? null
+  : closestName(key, keys.filter((k) => k !== key && k.length <= DS_NAME_MAX && Math.abs(k.length - key.length) <= limit(k)), limit));
+function dsNearComponent(key, registry, listed) {
+  const stripped = [key.replace(RE_DS_FORK_PRE, ""), key.replace(RE_DS_FORK_POST, ""), key.replace(RE_DS_FORK_PRE, "").replace(RE_DS_FORK_POST, "")];
+  const fork = registry.components.find((c) => c.key !== key && stripped.includes(c.key));
+  if (fork) return fork;
+  const near = dsClosest(key, listed, dsNearLimit);
+  return near ? registry.components.find((c) => c.key === near) : null;
+}
+// Is the design-system check an approval check for this feature? The Reuse & Integration rule: a plain feature of size m / l.
+const designSystemGated = (kind, size) => designReuseGated(kind, size);
+// What a feature's usage rows say against the registry → { reuse, extend, news (the rows by kind), problems: [{ code, name,
+// near? }] } — codes: unknown (a Reuse / Extend names a component the registry doesn't list, nor one of a declared library),
+// listed (a New is already in the registry — unless its row there says `_From: <slug>_`: this feature's own component, added
+// by its finish), near (a New close to a listed one whose notes never mention it), no-why (a New without a reason). slug: the
+// feature. Only the first DS_NEAR_ROWS rows that need one pay a name comparison (the did-you-mean, the near test).
+function designSystemFindings(usage, registry, slug) {
+  const byKey = new Map(registry.components.map((c) => [c.key, c]));
+  const listed = [...byKey.keys()];
+  const cites = dsCites(registry);
+  const fromLibrary = (r) => cites(r.cell);
+  const by = { reuse: [], extend: [], new: [] };
+  const problems = [];
+  let compare = DS_NEAR_ROWS;
+  for (const r of usage.rows) {
+    by[r.kind].push(r);
+    const entry = byKey.get(r.key);
+    if (r.kind !== "new") {
+      if (registry.keys.has(r.key) || fromLibrary(r)) continue;
+      const hint = compare-- > 0 ? dsClosest(r.key, listed, dsHintLimit) : null;
+      problems.push(Object.assign({ code: "unknown", name: r.name }, hint ? { near: byKey.get(hint).name } : {}));
+      continue;
+    }
+    if (registry.keys.has(r.key)) {
+      const own = !!slug && registry.origins.get(r.key) === slug;
+      if (!own) problems.push({ code: "listed", name: r.name, near: entry ? entry.name : r.name });
+      else if (!r.why) problems.push({ code: "no-why", name: r.name });
+      continue;
+    }
+    const near = compare-- > 0 ? dsNearComponent(r.key, registry, listed) : null;
+    const mentions = (c) => new RegExp(RE_WORD_BEFORE + escRe(c.name) + RE_WORD_AFTER, "iu").test(r.why);
+    if (near && !mentions(near)) problems.push({ code: "near", name: r.name, near: near.name });
+    else if (!r.why) problems.push({ code: "no-why", name: r.name });
+  }
+  return { reuse: by.reuse, extend: by.extend, news: by.new, problems };
+}
+// doctor's `ui-design-system` over an (active) design of a +ui feature → { id, status, detail, state }. States: no-section (the
+// design has no Design System Usage section — an optional one at size s; `ui-sections` owns a missing one) · unfilled (still the
+// scaffold: `ui-sections` and the placeholder gate own it) · no-registry · empty-registry (the file lists no component and
+// declares no library that is one — `packaged`) · na (the
+// section's ONE line "n/a — <reason>") · no-rows (written, but no `Kind | Component | Why` row to check) · mismatch · ok.
+// opts: { registry (designSystemRegistry's), approval (approvals.design — its `designSystem` stamp), gate (the feature's size
+// when the check may FAIL — an approval being made, or a design not cleanly approved yet: doctor.js designSystemSettled —
+// no-rows and mismatch fail there), slug (the feature: its own registered components), lang }. A design approved before the
+// check existed passes with a note (the weigh rule); a missing registry only ever warns — there is nothing to agree with.
+function designSystemCheck(design, lang, opts = {}) {
+  const Q = i18n.msg(lang).quality, id = "ui-design-system";
+  const legacy = isRecord(opts.approval) && opts.approval.designSystem !== true;
+  const out = (status, detail, state) => (status !== "pass" && legacy ? { id, status: "pass", detail: Q.dsLegacy(detail, DS_SINCE), state, legacy: true } : { id, status, detail, state });
+  const sec = (trackSectionTable("ui") || []).find((s) => s.name === "Design System Usage");
+  const st = sec ? sectionState(design || "", [sec], trackMarker("ui"), { size: "m", lang })[0].status : "missing";
+  if (st === "missing") return out("pass", Q.dsNoSection, "no-section");
+  if (st === "unfilled" || st === "template") return out("pass", Q.dsUnfilled, "unfilled");
+  const reg = opts.registry;
+  if (!reg) return out("warn", Q.dsNoRegistry, "no-registry");
+  // A registry that lists no component has nothing to agree with — unless it builds on a library that IS one (`packaged`:
+  // a dependency of package.json, a scoped package). Then it is library-only on purpose and every row is checked, as with
+  // components. A `_Libraries:_` line of free text ("not yet", in any words and any language) declares none.
+  if (!reg.keys.size && !reg.packaged) return out("warn", reg.libraries.length ? Q.dsEmptyRegistryLibraries(reg.libraries.slice(0, 3).join(", ")) : Q.dsEmptyRegistry, "empty-registry");
+  if (st === "na") return out("pass", Q.dsNa, "na");
+  const usage = designSystemUsage(design);
+  const bad = opts.gate ? "fail" : "warn";
+  const gated = (d) => (opts.gate ? Q.dsGate(d, opts.gate) : d);
+  if (!usage || !usage.rows.length) return out(bad, gated(Q.dsNoRows), "no-rows");
+  const f = designSystemFindings(usage, reg, opts.slug);
+  if (f.problems.length) {
+    const items = f.problems.slice(0, 6).map((p) => Q.dsProblem[p.code](p.name, p.near));
+    if (f.problems.length > 6) items.push(Q.xacMore(f.problems.length - 6));
+    return out(bad, gated(Q.dsMismatch(f.problems.length, items.join("; "))), "mismatch");
+  }
+  // (the note is about the COMPONENT rows this check reads — a token table past its cap changes nothing here)
+  return out("pass", Q.dsOk(f.reuse.length, f.extend.length, f.news.length) + (reg.total.components > reg.components.length ? "; " + Q.dsTruncated(reg.components.length, reg.total.components) : ""), "ok");
+}
+// The task brief's "Design system" part, for a task that builds what the user sees (tasks.js uiTask) → null (no registry, or it
+// lists nothing) | { file (the registry, as given), components: [{ kind, name, path, variants, notes, why }] (the design's rows
+// with their registry entry, bounded), omitted, unknown (names the registry doesn't list), sources, libraries, tokens (how
+// many the registry holds), rows (the design's usage rows — 0: the brief says to read the registry itself) }.
+function briefDesignSystem(root, design) {
+  const reg = designSystemRegistry(root);
+  if (!reg || (!reg.keys.size && !reg.tokens.length && !reg.libraries.length)) return null;
+  const usage = design == null ? null : designSystemUsage(design);
+  const rows = usage ? usage.rows : [];
+  const byKey = new Map(reg.components.map((c) => [c.key, c]));
+  const components = [], unknown = [], seen = new Set();
+  const cites = dsCites(reg);
+  let omitted = 0, budget = DS_BRIEF_CHARS;
+  for (const r of rows) {
+    if (seen.has(r.kind + ":" + r.key)) continue;
+    seen.add(r.kind + ":" + r.key);
+    const c = byKey.get(r.key);
+    if (!reg.keys.has(r.key) && r.kind !== "new" && !cites(r.cell)) unknown.push(r.name);
+    // (a library's component keeps its cell — "TextField (@mui/material)": where it comes from)
+    const e = { kind: r.kind, name: c ? c.name : r.kind === "new" ? r.name : r.cell || r.name, path: c ? c.path : "", variants: c ? c.variants : "", notes: c ? c.notes : "", why: r.why };
+    const size = e.name.length + e.path.length + e.variants.length + e.notes.length + e.why.length + 20;
+    if (components.length < DS_BRIEF_MAX && size <= budget) { components.push(e); budget -= size; } else omitted++;
+  }
+  return { file: reg.file, components, omitted, unknown, sources: reg.sources, libraries: reg.libraries, tokens: reg.total.tokens, rows: rows.length };
+}
+
+// ---------------------------------------------------------------------------
 // Clarify — surface ambiguities/gaps in requirements before designing
 // ---------------------------------------------------------------------------
 
@@ -1980,4 +2486,6 @@ function clarifyChange(projectDir, f, c) {
 
 module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
-  clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS, __link };
+  clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
+  DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
+  dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, __link };

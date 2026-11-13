@@ -151,6 +151,21 @@ function renderBrief(d, lang) {
     // R review 4: a folder read up to its cap (`truncated`) makes the count a lower bound — "at least N more", or "possibly more"
     if (r.files.length && (r.more || r.truncated)) push(t.reuseFilesMore(r.more, !!r.truncated));
   }
+  // 1.35: a task that builds a view — the design-system registry's entry for each component the design names ([UI] Design
+  // System Usage: its kind, path, variants, notes and the row's reason), the names the registry doesn't list, where the tokens live
+  if (d.designSystem) {
+    const s = d.designSystem;
+    push("", t.designSystem, t.designSystemRule(s.file));
+    if (s.components.length) {
+      push("", ...s.components.map((c) => `- **${c.name}** (${t.designSystemKinds[c.kind]})` + (c.path ? " — `" + c.path + "`" : "") +
+        [c.variants ? t.designSystemVariants(c.variants) : "", c.notes, c.why].filter(Boolean).map((x) => " · " + x).join("")));
+    }
+    if (s.omitted) push(t.designSystemOmitted(s.omitted));
+    if (!s.rows) push("", t.designSystemNoRows(s.file));
+    if (s.unknown.length) push("", t.designSystemUnknown(s.unknown.join(", ")));
+    if (s.tokens || s.sources.length) push("", t.designSystemTokens(s.tokens, s.sources.map((p) => "`" + p + "`").join(", ")));
+    if (s.libraries.length) push(t.designSystemLibraries(s.libraries.join(", ")));
+  }
   const verify = d.verify || [];
   if (verify.length) push("", t.verification, ...verify.map((c) => "- `" + c + "`"));
   if ((d.verifyPipes || []).length) push("", MSG[normalizeLang(lang)].verifyPipe.brief(d.verifyPipes));

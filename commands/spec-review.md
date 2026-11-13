@@ -9,7 +9,8 @@ Use the **dev-spec-driven** skill, review loops. Args: $ARGUMENTS (default mode:
 
 **Duplicates first** (branch · converge · simplify): `spec_scan {duplicates: true, name}` — its `existing` runs go to the
 reviewer as candidate findings, its `within` runs to the simplifier; each is verified like any finding (a repeat the spec
-asks for, or one a report lists under "Duplicated on purpose", is none).
+asks for, or one a report lists under "Duplicated on purpose", is none). A +ui feature of a project with a design-system
+registry: `spec_scan {designSystem: true, name}` too — its `problems` and `raw` values go to the reviewer the same way.
 
 **branch** — a local pre-merge review of `git diff <merge-base>..HEAD` (`git merge-base <base-branch> HEAD`) against the
 whole chain: spec compliance (the design, every AC); the **Constitution** — `.specs/steering/constitution.md`, a break

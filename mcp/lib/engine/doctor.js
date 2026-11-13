@@ -39,6 +39,7 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
   branchView, evidenceMode, approvalGuardLevel; // branchView: 1.25 (create --branch); the last two: 1.25.1 (observed-unguarded)
 let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the tasks gate, the execution gate, its live views)
 let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
+let designSystemRegistry, designSystemCheck, designSystemGated; // quality.js — the design-system registry's check (1.35)
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
 function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
@@ -65,7 +66,8 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   featureSize, trackSectionReport, sectionVerdict,
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
-  branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck } = E); }
+  branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
+  designSystemRegistry, designSystemCheck, designSystemGated } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -92,6 +94,7 @@ function designSaveCheck(projectDir, name) {
   let constitution = null; // null = not checked (bugfix)
   let weigh = null; // {tradeoffs, risks} = designWeighState's status codes (null for a bugfix) — notes, never unclean
   let reuse = null; // the Reuse & Integration section's state (null for a bugfix) — a note, never unclean
+  let designSystem = null; // a +ui feature's ui-design-system state (null: not one) — a note, never unclean (1.35)
   const notes = [];
   if (kind !== "bugfix") {
     const active = activeDesign(design, tracks);
@@ -101,6 +104,13 @@ function designSaveCheck(projectDir, name) {
     reuse = wc[2].state;
     // A section still holding its template slots is the placeholders line's; missing / empty / too few options get a ▲ note.
     for (const c of wc) if (c.status === "warn" && c.state !== "template") notes.push("  ▲ " + c.detail);
+    // 1.35: a +ui design's usage rows against the design-system registry — the rows that disagree (or none to check) as a ▲
+    // note, right where the file was saved; a missing registry is doctor's to say, not every save's.
+    if (kind === "feature" && tracks.includes("ui")) {
+      const ds = designSystemCheck(active, lng, { registry: designSystemRegistry(f.root), slug: f.slug });
+      designSystem = ds.state;
+      if (ds.status === "warn" && (ds.state === "mismatch" || ds.state === "no-rows")) notes.push("  ▲ " + ds.detail);
+    }
   }
   const placeholders = artifactReport(f.dir, "design.md", tracks, design).items;
   const clean = !sections.length && constitution !== "missing" && constitution !== "unfilled" && !placeholders.length;
@@ -113,7 +123,7 @@ function designSaveCheck(projectDir, name) {
       (placeholders.length > 3 ? ", " + fm.gates.more(placeholders.length - 3) : "")));
   }
   const text = clean ? [D.clean(trackLabel(tracks), constitution != null), ...notes].join("\n") : [D.head(f.slug, trackLabel(tracks)), ...lines, ...notes, D.hint(f.slug)].join("\n");
-  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), kind, sections, constitution, weigh, reuse, placeholders, clean, text };
+  return { ok: true, feature: f.slug, tracks: trackLabel(tracks), kind, sections, constitution, weigh, reuse, ...(designSystem ? { designSystem } : {}), placeholders, clean, text };
 }
 
 // the user's defaults, the environment variables DEV_SPEC_<KEY>, read as FALLBACKS only: a project's own roadmap.json
@@ -693,6 +703,8 @@ const CHECK_VIEWS = {
   sections: { fn: (c) => trackSectionReport(c.read("design.md"), c.tracks, { size: c.size, lang: c.lang }) },
   missingPacks: { fn: (c) => missingPackTracks(c.dir) },
   glossary: { fn: (c) => glossaryEntries(c.root) },
+  // .specs/steering/design-system.md (null: none) — an approval's context carries no root
+  designSystem: { fn: (c) => designSystemRegistry(c.root || specsRoot(c.projectDir)) },
   // the active tasks (a removed track's are inactive) and their blocks; every task block, active or not
   tasksActive: { live: true, fn: (c) => activeTasks(c.read("tasks.md") || "", c.tracks) || "" },
   blocks: { live: true, fn: (c) => taskBlocks(c.tasksActive) },
@@ -827,6 +839,12 @@ function constitutionState(designActive) {
 const hasReqs = (c) => c.reqs != null;
 const isBugfix = (c) => c.kind === "bugfix";
 const designed = (c) => c.read("design.md") != null && c.kind !== "bugfix";
+// 1.35: the design was approved cleanly under ui-design-system — its `designSystem` stamp, the check not among a forced
+// approval's failing ones — and design.md is as approved: what it says was judged against the registry of that day.
+const designSystemSettled = (c) => {
+  const a = c.approvals && c.approvals.design;
+  return isRecord(a) && a.designSystem === true && !(Array.isArray(a.failing) && a.failing.includes("ui-design-system")) && !c.changedArts.includes("design.md");
+};
 const reproFilled = (c) => bugSectionFilled(c.read("bug.md"), REPRO_SYN);
 const rootCauseFilled = (c) => bugSectionFilled(c.read("bug.md"), ROOT_CAUSE_SYN);
 const sectionLabel = (c, s) => `${c.fm.sectionNames[s.section] || s.section}:${c.fm.sectionStatus[s.status] || s.status}`;
@@ -1026,6 +1044,23 @@ const DOCTOR_CHECKS = [
       return [!bad.length, bad.map((s) => sectionLabel(c, s)).join("; "), tr + "-sections"];
     })),
   } },
+  // 1.35 the design-system registry (.specs/steering/design-system.md): a +ui feature's [UI] Design System Usage rows — Kind |
+  // Component | Why — against the ONE inventory every feature builds from: a Reuse / Extend names a component it lists (or one of
+  // a declared library), a New is not listed already, is not a listed one's near-copy and says why none fits. A WARN — and an
+  // approval check of a plain feature of size m / l (designSystemGated, the Reuse & Integration rule): doctor fails there and
+  // the design gate refuses. No registry yet: a warn naming how to create it, never a fail. A design approved before 1.35 (no
+  // `designSystem` stamp) passes with a note; not while design.md is still a later phase's template. The registry moves on after
+  // an approval — a finish adds rows, a team renames a component —, so a design cleanly approved under the check and unchanged
+  // since (designSystemSettled) only WARNS: a phase signed off is never failed by another feature's finish. The gate stays
+  // strict: an edited design is re-approved against the registry of the day.
+  { id: "ui-design-system", phase: 2, applies: (c) => designed(c) && c.kind === "feature" && c.tracks.includes("ui") && !c.laterFiles.includes("design.md"),
+    run: (c) => designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, approval: c.approvals && c.approvals.design, slug: c.slug,
+      gate: designSystemGated(c.kind, c.size) && !designSystemSettled(c) ? c.size : null }),
+    gate: { design: (c) => {
+      if (!c.tracks.includes("ui") || !designSystemGated(c.kind, c.size)) return [];
+      const r = designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, gate: c.size, slug: c.slug }); // the approval being made: never legacy
+      return [[r.status !== "fail", r.detail]];
+    } } },
   // a saved track pack the project no longer has (its folder deleted, or the pack now invalid) — the track is inactive.
   { id: "track-pack-missing", applies: (c) => c.missingPacks.length > 0, run: (c) => {
     const reg = packRegistry(), st = readJson(statePath(c.dir)).data, K = c.fm.trackPacks;
@@ -1240,7 +1275,7 @@ const GATES = {
   // there too: its Reproduction and its placeholders (bugPlaceholders: the report's own slots, `> **TODO**`; quoted
   // evidence such as [object Object] stays content). design.md, while it holds active track sections, keeps its sections' rule.
   design: { artifact: (c) => (c.kind === "bugfix" ? { file: "bug.md", missing: !c.exists("bug.md") } : { file: "design.md", missing: c.read("design.md") == null }),
-    probes: (c) => (c.kind === "bugfix" ? ["root-cause", "reproduction", "placeholders"] : ["placeholders", "constitution-check", "design-weigh:reuse"]).concat("<track>-sections", "clarifications") },
+    probes: (c) => (c.kind === "bugfix" ? ["root-cause", "reproduction", "placeholders"] : ["placeholders", "constitution-check", "design-weigh:reuse"]).concat("<track>-sections", "ui-design-system", "clarifications") },
   "test-plan": { artifact: (c) => ({ file: "test-plan.md", missing: !phaseActive("test-plan", c.tracks) || !c.exists("test-plan.md") }), probes: () => ["placeholders", "traceability"] },
   "eval-plan": { artifact: (c) => ({ file: "eval-plan.md", missing: !phaseActive("eval-plan", c.tracks) || !c.exists("eval-plan.md") }), probes: () => ["placeholders"] },
   // the plan of a change: ONE file holds its criteria and its tasks, one gate checks both

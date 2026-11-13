@@ -16,8 +16,8 @@ The dispatch names the mode. A finding you report is checked again by the `spec-
 
 - **Task mode** — one task's diff. Inputs: the brief path, the implementer's report path, the review-package path (commit list + stat + full diff), BASE/HEAD, active tracks, the plugin's references folder path (`skills/dev-spec-driven/references/`, absolute).
 - **Re-review mode** — one fix round. Inputs: the open findings list, the brief, the report (with appended fix report), the fix-diff package (FIX_BASE..HEAD). Verdict each finding; flag new breakage in the fix diff only.
-- **Final mode** — the whole branch before merge (also a local branch review, `/spec-review branch`). Inputs: the MERGE_BASE..HEAD package, the feature's `.specs/<feature>/` folder, the ledger (deferred minors, parked findings, rulings), active tracks, the references folder path, the duplicate detector's `existing` runs, and on +tdd the `spec_log` output (the controller runs both).
-- **Converge mode** — the whole feature as the code stands now, AC by AC (`/spec-review converge`). Inputs: the feature folder `.specs/<feature>/`, active tracks, the `trace_check {code: true}` result, the duplicate detector's `existing` runs, the source roots to inspect — and, after a drift since the finish, the files `spec_drift` reports (start from the ACs they implement). No diff: you read the code. Output: a per-AC verdict and proposed tasks for `spec_append_tasks`.
+- **Final mode** — the whole branch before merge (also a local branch review, `/spec-review branch`). Inputs: the MERGE_BASE..HEAD package, the feature's `.specs/<feature>/` folder, the ledger (deferred minors, parked findings, rulings), active tracks, the references folder path, the duplicate detector's `existing` runs, on +ui the design-system scan (`spec_scan {designSystem: true, name}`), and on +tdd the `spec_log` output (the controller runs them).
+- **Converge mode** — the whole feature as the code stands now, AC by AC (`/spec-review converge`). Inputs: the feature folder `.specs/<feature>/`, active tracks, the `trace_check {code: true}` result, the duplicate detector's `existing` runs, on +ui the design-system scan's `problems` and `raw` values (candidates — Final mode's rule), the source roots to inspect — and, after a drift since the finish, the files `spec_drift` reports (start from the ACs they implement). No diff: you read the code. Output: a per-AC verdict and proposed tasks for `spec_append_tasks`.
 - **Simplify mode** — the diff of a simplification pass (`/spec-review simplify`). Inputs: the package `SIMPLIFY_BASE..HEAD`, MERGE_BASE (the feature's lines are `MERGE_BASE..SIMPLIFY_BASE`), the simplifier's report path, the feature folder. One question: is the behaviour unchanged, and is the code simpler?
 
 ## Ground rules
@@ -87,7 +87,10 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
 - **+api:** the handlers return exactly what the contract file documents (status codes, problem+json errors with stable
   codes, headers); nothing breaking inside a version; Idempotency-Key and If-Match honoured where the design says.
 - **+ui:** design-system components and tokens (no one-off styles); every state of the design's state matrix handled; keyboard
-  operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean.
+  operable with a visible focus, labelled controls, errors named in text; the accessibility check the task names clean. When
+  the brief has a **Design system** part: the components the diff uses are the ones it lists — a component built beside a
+  listed one is **Important** (reuse or extend the listed one), and so is a hard-coded colour, spacing or font size the diff
+  adds where the registry has a token (one the implementer's report lists under "Raw values kept on purpose" is not).
 - **+obs:** the metrics the task's `_Emits metrics:_` names, structured logs with the correlation ID and no personal data, the
   spans the design names; alerts linked to runbooks; liveness free of dependencies; the flag and the rollback path as designed.
 - **+data:** the dataset's schema matches its contract; the data-quality checks the task names run and quarantine bad rows;
@@ -190,7 +193,11 @@ and the rollback path (+obs), the data contracts, quality checks and idempotent 
 duplication — the units the branch adds against the existing codebase and against each other (two tasks that each
 wrote the same helper). Decisions in `decisions.md` that the code contradicts are
 findings, and so is a written rule the branch breaks or a fix its rewritten lines undo (§5, over the whole branch:
-MERGE_BASE is its BASE). Rate each Critical / Important finding. Triage the ledger's deferred minors, unconfirmed
+MERGE_BASE is its BASE). On a +ui feature the dispatch may carry the design-system scan (`spec_scan {designSystem: true,
+name}` — the controller runs it): its `problems` (a design row that disagrees with the registry) and its `raw` values
+(`file:line value` — at most the first 50 of `total`; a colour names the registry token of that value) are **candidates** —
+one this branch added where the registry has a token is a finding, one a task report lists under "Raw values kept on purpose" is not. Rate each Critical /
+Important finding. Triage the ledger's deferred minors, unconfirmed
 findings and parked findings: which must be fixed before merge, which can ship.
 
 ## Converge mode

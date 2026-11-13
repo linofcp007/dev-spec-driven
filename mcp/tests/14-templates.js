@@ -159,7 +159,7 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, hookIn })
     const lsEn = S.templates(pp, "list");
     const lreq = (l) => l.templates.find((e) => e.artifact === "requirements");
     ok(lsPt.ok && lsPt.action === "list" && lreq(lsPt).source === "override" && lreq(lsPt).override === ".specs/templates/pt/requirements.md" && lreq(lsPt).overrides.length === 2 &&
-      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 33 /* 1.21: + steering/data.md (F4), + change (F5) */ && /^Templates para features em 'pt'/.test(S.templatesLines(lsPt)[0]) &&
+      lsPt.templates.find((e) => e.artifact === "design").source === "built-in" && lsPt.templates.length === 34 /* 1.21: + steering/data.md (F4), + change (F5); 1.35: + steering/design-system.md */ && /^Templates para features em 'pt'/.test(S.templatesLines(lsPt)[0]) &&
       lsEn.lang === "pt" && lreq(S.templates(pp, "list", { lang: "en" })).override === ".specs/templates/requirements.md" &&
       S.templates(ps, "list").templates.some((e) => e.artifact === "steering/api-rules.md" && e.source === "override"),
       "B1: spec_templates list — built-in vs project template per artifact for a language (the <lang>/ one wins; default: the project language), in that language, custom steering templates included");
@@ -169,11 +169,11 @@ exports.run = async ({ ok, all, rpc, payload, S, tmp, list, __dirname, hookIn })
     const i2 = S.templates(pi, "init", { artifact: "Requirements" });
     const i3 = S.templates(pi, "init", { lang: "es" });
     const tplDir = path.join(pi, ".specs", "templates");
-    all("B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 33 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md, ui.md; 1.21: + change.md, steering/data.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean", [
+    all("B1: spec_templates init copies the built-in template(s) with the variables in place — one artifact or all 34 (1.16: + steering/glossary.md; 1.17: + steering/distributed.md; 1.19: + steering/api.md, ui.md; 1.21: + change.md, steering/data.md; 1.35: + steering/design-system.md), --lang into <lang>/ (in that language) — never over an edited file; the copies check clean", [
       () => i1.ok, () => i1.created.join() === ".specs/templates/requirements.md",
       () => rd(tplDir, "requirements.md").startsWith("# Feature: {{name}}\n\n## Summary\n{{summary}}\n"), () => i2.ok, () => !i2.created.length,
       () => i2.kept.join() === ".specs/templates/requirements.md", () => /Nothing copied/.test(S.templatesLines(i2)[0]),
-      () => rd(tplDir, "requirements.md").includes("<!-- team edit -->"), () => i3.created.length === 33,
+      () => rd(tplDir, "requirements.md").includes("<!-- team edit -->"), () => i3.created.length === 34,
       () => i3.created.every((c) => c.startsWith(".specs/templates/es/")),
       () => rd(path.join(tplDir, "es"), "design.md").startsWith("# Diseño: {{name}}"),
       () => fs.existsSync(path.join(tplDir, "es", "steering", "constitution.md")), () => /copiada\(s\) en \.specs\/templates\//.test(S.templatesLines(i3)[0]),

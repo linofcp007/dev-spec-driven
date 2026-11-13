@@ -33,7 +33,11 @@ From the scan + code, draft the `steering/` files and especially **`constitution
 rule: **acknowledge the existing patterns, don't impose new ones.** The constitution should capture
 the principles the code *already* follows (e.g. "all DB access goes through the repository layer",
 "errors return RFC-7807 problem+json"). Present for approval. Conventions that apply to one area only
-(API handlers, UI components) fit a scoped steering file (`references/steering-templates.md`).
+(API handlers, UI components) fit a scoped steering file (`references/steering-templates.md`). A codebase with
+screens also gets its **design-system registry**: `steering_scaffold {file: "design-system.md"}` (CLI
+`dev-spec steering design-system.md`) writes `.specs/steering/design-system.md` from the code — the components and
+tokens it already has — so every later +ui feature is checked against what exists
+(`references/ui-design-patterns.md` → The registry). Review its rows with the user before the first feature relies on it.
 
 ### 3. Choose a documentation strategy (match effort to need)
 - **A — Constitution only:** quick bootstrap; spec only *new* work going forward.

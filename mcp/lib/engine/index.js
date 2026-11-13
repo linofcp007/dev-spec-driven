@@ -13,7 +13,8 @@
  * below; a new name must not exist in another module (checked here). mcp/test.js ("1.18 module rule", "1.27 module
  * boundaries", "1.30.1 lazy tier") checks the rest.
  *
- * THE LAZY TIER (1.30.1). LAZY lists modules no hook and no frequent call needs — the importers, the duplicate-code detector:
+ * THE LAZY TIER (1.30.1). LAZY lists modules no hook and no frequent call needs — the importers, the duplicate-code detector, the
+ * design-system code scan (1.35):
  * ~15 ms of every engine load until then. They load on the first call of one of LAZY_ENTRIES, the tier's functions the rest
  * of the engine links and the facade takes: until then E holds a stub of each, which loads the tier and calls the real one.
  * The tier's modules follow the rule above among themselves and toward the eager modules (they require eager modules at load
@@ -26,9 +27,9 @@ const MODULES = ["./core.js", "./files.js", "./state.js", "./markdown.js", "./tr
   "./templates.js", "./scaffold.js", "./tasks.js", "./evidence.js", "./guardian.js", "./trace.js", "./gates.js", "./doctor.js",
   "./quality.js", "./finish.js", "./roadmap-md.js", "./decisions.js", "./export.js", "./guards.js", "./upgrade.js",
   "./scan.js"];
-const LAZY = ["./dupes.js", "./import/common.js", "./import/kiro.js", "./import/speckit.js", "./import/openspec.js",
+const LAZY = ["./dupes.js", "./design-system.js", "./import/common.js", "./import/kiro.js", "./import/speckit.js", "./import/openspec.js",
   "./import/plan.js", "./import/bmad.js", "./import/fluidplan.js", "./import/steering.js", "./import/index.js"];
-const LAZY_ENTRIES = ["duplicateRuns", "duplicationReport", "importSpec", "planPaths"];
+const LAZY_ENTRIES = ["duplicateRuns", "duplicationReport", "designSystemReport", "designSystemSeed", "designSystemFinish", "importSpec", "planPaths"];
 
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 function merge(into, m, file, stubs) {

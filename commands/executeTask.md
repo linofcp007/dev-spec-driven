@@ -43,7 +43,8 @@ review (`dev-spec-driven:spec-ui-reviewer`; its Blockers, and the Majors a fresh
 duplicate in the existing codebase is Important) → `spec_complete_task` after a clean review. Stop at every
 `**Checkpoint:**` (past it only on the user's word); `inlineOnly` tasks run inline; `spec_next_task {waves: true}`
 plans parallel waves. The final review starts from `spec_scan {duplicates: true, name}`: its `existing` runs are the
-reviewer's candidate findings, verified like any other.
+reviewer's candidate findings, verified like any other — and, on a +ui feature of a project with a design-system registry,
+from `spec_scan {designSystem: true, name}`: its `problems` and `raw` values are candidates too.
 
 **`commit [note]`** — draft a conventional commit (`type(scope): summary`) whose body cites the chain: `Part of
 .specs/<feature>/ task #N.`, `Makes T-xx green` (+tdd), the eval delta (+ai); Phase 4 tests and a red regression test in

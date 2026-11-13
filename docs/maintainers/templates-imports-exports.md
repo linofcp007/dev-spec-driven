@@ -52,6 +52,10 @@ is in History at the end.
   expansion — never a backtracking regex.
 - **Custom names** (`steering_scaffold`): `^[a-z0-9][a-z0-9-]{0,62}\.md$`, never a Windows device name or a prototype key.
   Doctor's `steering` check warns about files still templates.
+- **A seeded stub (1.35)** — `design-system.md` is the one known stub whose built-in text depends on the project:
+  `scaffoldSteeringFile` writes it with the code's components and tokens in place of its slot rows (`designSystemSeed`, the
+  lazy tier; `seeded` {components, tokens}) — a project template for the file still wins, and the scan runs only when the
+  file isn't there yet (quality.md → Design-system registry).
 - **Imported steering** (Import sources → Steering sources) is real content, read like any file here — never a template.
 
 ## Import sources and the brownfield scan

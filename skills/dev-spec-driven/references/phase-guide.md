@@ -151,7 +151,9 @@ Keep task numbers unique and replace every scaffold placeholder task (the tasks 
 - Before finishing, optionally a simplification pass: behaviour-preserving cleanups proven by the tests
   (`references/code-reuse-and-quality.md`).
 - Finish warns when the feature's code (its `_Implements:_` files) repeats code the project already has — reuse it or say
-  why the copy is deliberate (`spec_scan {duplicates: true, name}` lists them); with the project check `guardian` on
+  why the copy is deliberate (`spec_scan {duplicates: true, name}` lists them); on a +ui feature of a project with a
+  design-system registry it also warns about raw colours / sizes where a token exists (`spec_scan {designSystem: true, name}`)
+  and, written and ready, adds the design's New components to the registry; with the project check `guardian` on
   (opt-in), finish also runs dev-guardian's gate (`references/verification.md`).
 - A +tdd task's evidence: its target tests' command and exit code, "T-xx green" and the suite tally; the full suite
   leaves the targets green, the earlier green still green and the later tasks' tests still red.

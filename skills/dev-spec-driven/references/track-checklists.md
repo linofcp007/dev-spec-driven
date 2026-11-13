@@ -58,7 +58,9 @@ inbox / saga, or an accepted risk) · Delivery & Idempotency · Concurrency · F
 **+api adds 5 mandatory `[API]` sections** — API Contract · Versioning & Compatibility · Error Model (RFC 9457
 problem+json) · Pagination, Idempotency & Concurrency · Rate Limits & Quotas. See `references/api-design-patterns.md`.
 
-**+ui adds 5 mandatory `[UI]` sections** — Design System Usage · UI States (a state matrix and a reference per view) · Accessibility
+**+ui adds 5 mandatory `[UI]` sections** — Design System Usage (one row per component — Reuse · Extend · New — checked
+against the registry `.specs/steering/design-system.md`: doctor's `ui-design-system`, a gate at size m / l) · UI States (a
+state matrix and a reference per view) · Accessibility
 (WCAG 2.2 AA) · Responsiveness & i18n · UI Performance Budget (Core Web Vitals). See `references/ui-design-patterns.md`.
 
 **+obs adds 5 mandatory `[OBS]` sections** — SLIs & SLOs · Telemetry · Alerting & Runbooks · Rollout & Rollback · Health

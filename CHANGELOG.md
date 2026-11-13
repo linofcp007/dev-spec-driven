@@ -3,6 +3,152 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.35.0] — 2026-11-13
+
+One design system for every screen. Until now the +ui track asked each design to "use the design system" in prose, and
+nothing checked it: two features could each build their own `Button`. The project now keeps one registry of its
+components and tokens, and every +ui feature is checked against it.
+
+### Added
+- **The design-system registry, `.specs/steering/design-system.md`.** One file with two tables — the tokens (name,
+  value, use) and the components (name, path, variants, notes) — and three markers: `_Token sources:_` (the files that
+  define the tokens), `_Libraries:_` (third-party UI libraries whose components are not listed one by one — each named
+  as the designs will cite it: `@mui/material` or `Material UI`; a note in parentheses that is its package or its
+  acronym names it too, `Material UI (@mui/material)`, `Material UI (MUI)` — a package or a short name of it
+  wherever a row names it; an acronym the name does not spell (`Lightning Design System (SLDS)`) and a framework
+  (`Headless UI (react)`) only where a row cites it — in parentheses or brackets, after a dash, before a colon:
+  `Button (SLDS)`, `Button [SLDS]`, `Button — SLDS`, `SLDS: Button` —; a version written as one, a range too, or a
+  markdown link is dropped, `antd v5`, `antd ^5.21`, `[antd](https://ant.design)`; a name with a bare number is
+  cited without it too — anywhere in a cell when the shorter name is two words, an acronym or the library's own
+  package in the root `package.json`: a dependency of that name, one under a scope that begins with it, or the name
+  joined to a framework's name, `ui` or `components` (`antd Table` for `antd 5`; `flowbite-react`, `evergreen-ui`,
+  `carbon-components-svelte`). Else only where a row cites it: `Modal (Bootstrap)` for `Bootstrap 5` in a project
+  whose root manifest does not hold the package — or say the short name yourself, `Bootstrap 5 (Bootstrap)`. The
+  name of a framework taken from a bare number or a note (`React 19`, `Headless UI (react)`) cites only there too)
+  and, in a component's row, `_From: <feature>_` (the feature that built it).
+  `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**:
+  - the components: React, Vue, Svelte and Astro files, Angular `*.component.ts` and PascalCase `.js` files under
+    `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper or an entry
+    file (`utils.tsx`, `main.tsx`, `config/index.tsx`), a barrel (`packages/ui/src/index.tsx`) or a file whose nearest
+    such folder is a page folder (`components/pages/Home.tsx`). Under a component folder a name a framework uses
+    elsewhere is a component's: `components/loading.tsx`, `layout/index.tsx` and Angular's `loading.component.ts` are
+    Loading and Layout — except in a route segment of Next's app router (the project depends on `next` or holds a
+    `next.config.*`): a folder
+    between the `app/` that holds the root layout — also under a route group or a dynamic segment,
+    `app/[locale]/layout.tsx` — and a `page.*` / `route.*` at or below it (`app/components/page.tsx` and the
+    `loading.tsx` beside it are pages). `main` / `app` are entry files only right inside the component folder,
+    `src/` looked through: `components/layout/main.tsx` is Main. One component per file, by the file's name: a
+    further component a file exports (`CardHeader` of `card.tsx`) is not seeded — add its row by hand, or cite it
+    as `Card (CardHeader)`;
+  - the tokens of the token files: CSS custom properties, Sass and Less variables, JSON tokens, and the custom
+    properties of a global stylesheet, five or more of them, wherever it lies (`app/globals.css`, `src/index.css`, a
+    Django `static/` folder, a WordPress theme's `style.css`): every one in a sheet named `globals` / `global`; in
+    one named `index`, `main`, `app`, `styles` / `style`, `base`, `root`, `site`, `application`,
+    `tailwind`, `custom` or `input` — names a component's own sheet has too — those it declares for the whole
+    page: on `:root`, `html`, `body`, in Tailwind's `@theme` or a theme plugin's `@plugin`, and in a block that
+    overrides one of them (`.dark`). A block is such a theme when at least half of what it declares overrides them: a
+    component rule that re-points one token beside its own variables is not (the threshold has two edges: a theme
+    that adds more names of its own than it overrides is not read either — add those rows by hand —, and a rule of
+    two variables that re-points one is). A component's own sheet declares on its
+    own selector or on `:host` and is none; a twin that brings no name of its own (`main.min.css`, a second app's
+    identical `globals.css`) is no further source — of identical sheets the likeliest name, then the root-most, then
+    the first by path is the one, which may be a built copy (`public/css/app.css` beside `resources/css/app.css`):
+    `_Token sources:_` is in sync when it names that one —; a global sheet under another name is not read — name
+    it in `_Token sources:_`.
+    A stylesheet named for its tokens, a `design-tokens.*` / `*.tokens.json` and a `tailwind.config.*` count anywhere;
+    `theme.*` anywhere but under a folder — at any depth — that holds something else by that name (`store/`,
+    `models/`, `server/`, `types/`, `hooks/`, `scripts/`…); a plain `tokens.*` only at the project's root or in a
+    `styles/`, `theme/`, `design/`, `tokens/` or `ui/` folder (`src/auth/tokens.ts` and `src/tokens.ts` hold access
+    tokens), the singular `token.json` never. A JS, TS or YAML token file (a Tailwind config, a `theme.ts`) is listed
+    as a source, its values unread.
+    **Only a design value is ever read out of a file**: a colour, a number with or without a unit, a keyword, a
+    `{reference}`, a function whose arguments are design values themselves (`rgb()`, `var()`, `calc()`, `map-get()` —
+    never `url()`), Sass arithmetic — alone or as a list. A name is no proof of what a file holds (a
+    `deploy.tokens.json`, a `_variables.scss` with `$mapbox-token`): any other value — a font stack, a quoted string,
+    free text, and so any credential that is one — is never printed or written; a stylesheet's token or a token of the
+    design-tokens format is then listed by its name alone (so is a composite token — a shadow, a typography, a
+    font-family list — and a declaration that goes on below its line), any other JSON leaf not at all. And a JSON file
+    is read only when it SHOWS it is a design file — the design-tokens format (`$value`, with a `$type` — if it has
+    one — of one word; or `value` beside a `type` that is a token type and no word any data holds, such as `time`) or
+    a value that says design (a 3 / 6 / 8-digit hex or a functional colour, a length, a `{reference.path}`): a map of
+    numbers keyed by something else is not read (nor a plain `{"spacing": {"sm": 4}}`: add its rows by hand).
+    **A JSON key is printed too, so it is asked to be words**: letters, digits, or the two with at most two switches
+    between them (`gray900`, `2xl`, `a11y`; a colour's own 6-digit hex is a name too), no word of 40 characters — a
+    key shaped like a GUID, an API key, a hash or a JWT is left out with everything under it. A second layer, and not
+    a guarantee: of keys shaped like an API key some still pass — keep credentials out of files named for tokens. A
+    stylesheet's own identifiers are listed as written. Beneath a credential key
+    (`…token`, `…secret`, `…password`, `api_key`…, and `pin` / `otp` / `passcode`) nothing but a literal that says
+    design or a `{reference.path}` is listed, and a free string right under one (those last three aside, and never a
+    token of the format) makes the whole file no token file;
+  - the UI libraries of `package.json`.
+
+  The result says how many it wrote (`seeded`: at most the 500 components and 1,000 tokens the registry is read
+  with). A project template for the file is used as it is instead, and an
+  existing file is never overwritten. EN / PT / pt-BR / ES.
+- **`[UI] Design System Usage` is a table.** A new +ui design lists one row per component: `Kind | Component |
+  Why / notes`, where Kind is Reuse (one the registry lists, used as is), Extend (a new variant of one it lists) or New
+  (none it lists fits, and why). A library's component is written `TextField (@mui/material)`; several components may
+  share a cell, separated outside the parentheses, each naming its library (`TextField (@mui/material, outlined),
+  Dialog (@mui/material)`) — a component's name is what stands outside its parentheses. A row whose first cell is
+  none of the three kinds (in EN, PT or ES) is no usage row: it is neither checked nor counted. The first 100 rows
+  are read, and 4,000 characters of a cell. A feature that uses no component writes one line, `n/a — <why, in four
+  words or more>`.
+- **`spec_doctor` check `ui-design-system`.** It compares those rows with the registry and names each one that
+  disagrees: a Reuse or Extend the registry doesn't list (with a "did you mean"), a New that is already listed, a New
+  whose name is a listed one's with an affix or an edit away (`ButtonV2`, `NewButton`, `CustomCard`, `Buton` — unless
+  its notes say why that component doesn't fit), a New without a reason, and a section with no row to check. It
+  compares names: a new component under an unrelated name is the reviewer's to find. It is a warning; for a feature of
+  **size m / l** it fails and **the design approval refuses it**, like Reuse & Integration (forceable with your
+  consent). A project without a registry gets a warning that says how to create one, never a refusal — and so does
+  one whose registry lists no component and declares no library that is one (a dependency of `package.json`, or a
+  scoped package such as `@mui/material`): a registry that is library-only on purpose is checked like any other —
+  name the library by its package for that (`@mui/material`, or `Material UI (@mui/material)`); a display name alone
+  only warns, and the warning says which libraries it did not recognise.
+  Saving design.md shows the disagreeing rows at once.
+- **The task brief has a Design system part.** A task that builds a view gets the registry's entry of each component
+  its design names (path, variants, notes), the New ones marked to build through the system, the names the registry
+  doesn't list, and where the tokens live.
+- **`spec_scan {designSystem: true}` / `dev-spec design-system [feature]`.** Read-only. Without a feature: the
+  components and tokens the code holds and the registry doesn't (each as a row to paste; a component an unfinished
+  feature declares New is listed apart — its finish adds it), the rows that name a code file of the project that is
+  gone (a path with a blank or behind a markdown link is read; never "gone": a package such as `next/link`, an alias,
+  prose or `n/a`, a path without a file extension, a root-level file, a path whose first folder no longer exists, a
+  row that also names a file that is there), and the token files and UI libraries the registry doesn't name. With a
+  feature: its rows against the registry and the **raw values** in its view files, each with its `file:line` (the
+  first 50, with the total): a hex or `rgb()` colour — with the registry token of that colour when there is one —, a
+  `margin: 13px` in a stylesheet, a `<style>` block (a `.vue` / `.svelte` / `.astro` / `.html` file's, styled-jsx's)
+  or a CSS-in-JS template, a Tailwind `p-[13px]`. A size in a JSX `style={{…}}` object is not read, nor a token
+  file — a source or its twin —, whole: a rule with a raw value written in the sheet that holds the tokens is not
+  reported. A report that one
+  of its bounds cut short (the 20,000-file walk, 20 token files, 100 files named like one, a token file longer than
+  256K characters — named —, 1,000 tokens, the registry's first 500 rows, a feature's first 200 view files) names it
+  in `limits` and never says the two are in sync; a bound that cut nothing is not said. In sync is said of NAMES — the
+  registry lists every component, token, token file and UI library the scan found: a token whose value changed in the
+  code, a token the code no longer declares and a token file that is gone are not reported.
+- **`spec_finish` on a +ui feature of a project with a registry.** The raw values are a warning, never a blocker,
+  when the registry holds tokens or names token files (otherwise there is nothing to replace them with). A READY
+  written finish **adds the design's New components to the registry** — their path and `_From: <feature>_` —, so the
+  next feature finds them there; that origin is what lets the feature's own design keep saying New, and a rename of
+  the feature follows it.
+- **The reviewers use it.** The implementer builds from the brief's part and reports a literal it keeps on purpose
+  ("Raw values kept on purpose"); the final and converge reviews take the disagreeing rows and the raw values as
+  candidate findings. `references/ui-design-patterns.md` has the whole loop under "The registry", with what the code
+  scan reads and what it doesn't.
+
+### Upgrade notes
+- **Nothing is asked of work already approved.** A design approved before 1.35 is never flagged by `ui-design-system`,
+  at any size; the check applies from a design's next approval. And a design approved under the check is never
+  *failed* later because the registry moved on (a row renamed, another feature's finish): doctor warns, until the
+  design itself is edited and approved again.
+- **A +ui design not yet approved** gets a warning while the project has no registry
+  (`dev-spec steering design-system.md` creates it). With one, the section must list its components as rows: a
+  warning, and at size m / l the design approval refuses until it does. A design scaffolded by 1.34 holds the
+  one-line section: add the table (`| Kind | Component | Why / notes |`).
+- The registry is not part of an approval's fingerprint: adding a row never asks an approved feature to be re-reviewed.
+
+### Tests
+- `node mcp/test.js` 2351 assertions, `node cli/test-cli.js` 663 (was 2266 / 657).
+
 ## [1.34.1] — 2026-10-31
 
 Test folders named in Portuguese or Spanish now hold tests.

@@ -149,7 +149,7 @@ const TOOLS = [
   {
     name: "spec_finish",
     description:
-      "Close a feature: a readiness report plus a merge title + summary generated from the spec chain. `readyToFinish` only without `blockers` (doctor fails, edits since an approval, placeholders, open or unverified tasks, a project check without a passing recorded run since the last task activity, phases awaiting approval); `warnings` never block. `evidence` [{name, command, exitCode, summary}] records the project checks' runs YOU made (meta.checks names; the server never runs them) before readiness is computed. `write: true` writes .specs/<feature>/.execution/merge-summary.md and, when ready, records the drift baseline. Integration is LOCAL — the human merges or keeps the branch; it never merges, pushes or approves by itself. A green run is EVIDENCE, not the sign-off: ask the user for an explicit yes on the `execution` phase before calling spec_approve.",
+      "Close a feature: a readiness report plus a merge title + summary generated from the spec chain. `readyToFinish` only without `blockers` (doctor fails, edits since an approval, placeholders, open or unverified tasks, a project check without a passing recorded run since the last task activity, phases awaiting approval); `warnings` never block. `evidence` [{name, command, exitCode, summary}] records the project checks' runs YOU made (meta.checks names; the server never runs them) before readiness is computed. `write: true` writes .specs/<feature>/.execution/merge-summary.md and, when ready, records the drift baseline and adds a +ui feature's New components to steering/design-system.md. Integration is LOCAL — the human merges or keeps the branch; it never merges, pushes or approves by itself. A green run is EVIDENCE, not the sign-off: ask the user for an explicit yes on the `execution` phase before calling spec_approve.",
     inputSchema: { type: "object", properties: { name: { type: "string" }, write: { type: "boolean", description: "Write the merge summary file (+ the drift baseline when ready)." }, includeBody: { type: "boolean", description: "Include the merge summary (default: true unless writing)." }, evidence: { type: "array", description: "The project checks' runs you made (needs meta.checks; all-or-nothing).", items: { type: "object", properties: { name: { type: "string", description: "A meta.checks name." }, command: { type: "string" }, exitCode: { type: "integer" }, summary: { type: "string", description: "e.g. '212 passing'." }, report: { type: "string", description: "The guardian check: its JSON stdout." }, commit: { type: "string", description: "Optional: the git commit it ran on." }, dirty: { type: "boolean", description: "Optional: uncommitted changes outside .specs/." } }, required: ["name", "command", "exitCode"] } }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
@@ -170,7 +170,7 @@ const TOOLS = [
   },
   {
     name: "spec_doctor",
-    description: "One health check that decides whether a feature can advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. It fails on what blocks the next approval — missing artifacts, EARS problems, open clarifications, duplicate ACs, template placeholders in the current phase, the active tracks' mandatory design sections (<track>-sections), a size m / l design's Reuse & Integration, traceability gaps, task dependencies — and warns on the rest (unverified tasks, edits since an approval, steering changes, cross-feature overlaps…). Also returns the phase, approvals, pending and forced gates, and what the next approval would refuse (`nextGate`).",
+    description: "One health check that decides whether a feature can advance a phase: per-check pass / warn / fail with stable ids, `readyToAdvance` (no fail) and `verdict`. It fails on what blocks the next approval — missing artifacts, EARS problems, open clarifications, duplicate ACs, template placeholders in the current phase, the active tracks' mandatory design sections (<track>-sections), a size m / l design's Reuse & Integration and +ui Design System Usage rows, traceability gaps, task dependencies — and warns on the rest (unverified tasks, edits since an approval, steering changes, cross-feature overlaps…). Also returns the phase, approvals, pending and forced gates, and what the next approval would refuse (`nextGate`).",
     inputSchema: { type: "object", properties: { name: { type: "string" }, projectDir: PROJECT_DIR }, required: ["name"] },
   },
   {
@@ -180,7 +180,7 @@ const TOOLS = [
   },
   {
     name: "steering_scaffold",
-    description: "Create one steering file from its template (constitution, product, tech, structure, testing-standards, scale, observability, cost, ai-strategy, security, privacy, distributed, api, ui, data or glossary .md) or a custom scoped one (another lowercase name.md) with Kiro-compatible front matter (`inclusion: always | fileMatch | manual`, `fileMatchPattern`) — task briefs include the files that apply. glossary.md is the product's ubiquitous language (`- **Term** — definition. _Avoid: synonyms_`): clarify and doctor flag the avoided words. Idempotent — never overwrites.",
+    description: "Create one steering file from its template (constitution, product, tech, structure, testing-standards, scale, observability, cost, ai-strategy, security, privacy, distributed, api, ui, data, glossary or design-system .md) or a custom scoped one (another lowercase name.md) with Kiro-compatible front matter (`inclusion: always | fileMatch | manual`, `fileMatchPattern`) — task briefs include the files that apply. glossary.md is the product's ubiquitous language (`- **Term** — definition. _Avoid: synonyms_`): clarify and doctor flag the avoided words. design-system.md: the registry of components and tokens +ui features build from, seeded from the code. Idempotent — never overwrites.",
     inputSchema: { type: "object", properties: { file: { type: "string", description: "A template name, or a custom name like api-conventions.md." }, lang: { type: "string", enum: LANG_ENUM }, projectDir: PROJECT_DIR }, required: ["file"] },
   },
   {
@@ -211,7 +211,7 @@ const TOOLS = [
   },
   {
     name: "spec_scan",
-    description: "Brownfield, read-only, bounded, no model. Default: inventory an EXISTING codebase — files, modules, stack and frameworks, HTTP routes (method, path, file:line), tests, entrypoints, the env variable NAMES it reads (never values; .env is never read), migrations — to infer the steering and reverse-engineer specs. `coverage: true`: the share of code files any feature's _Implements:_ names, per top-level folder, and the entries naming nothing on disk. `duplicates: true`: repeated code — a feature's (`name`) _Implements:_ code repeating code elsewhere (`existing`: reuse it) or inside it (`within`), else the project's top duplicates; candidates to verify, never verdicts.",
+    description: "Brownfield, read-only, bounded, no model. Default: inventory an EXISTING codebase — files, modules, stack and frameworks, HTTP routes (method, path, file:line), tests, entrypoints, the env variable NAMES it reads (never values; .env is never read), migrations — to infer the steering and reverse-engineer specs. `coverage: true`: the share of code files any feature's _Implements:_ names, per top-level folder, and the entries naming nothing on disk. `duplicates: true`: repeated code — a feature's (`name`) _Implements:_ code repeating code elsewhere (`existing`: reuse it) or inside it (`within`), else the project's top duplicates; candidates to verify, never verdicts. `designSystem: true`: the design-system registry against the code — what it lacks, the rows whose path is gone; with `name`, a feature's usage rows against it and the raw colours / sizes in its view files.",
     inputSchema: {
       type: "object",
       properties: {
@@ -219,7 +219,8 @@ const TOOLS = [
         cap: { type: "integer", minimum: 1, description: "The inventory's max code / manifest files (default 5000)." },
         coverage: { type: "boolean", description: "Measure the specs' coverage of the code instead." },
         duplicates: { type: "boolean", description: "Find repeated code instead." },
-        name: { type: "string", description: "duplicates: the feature to check." },
+        designSystem: { type: "boolean", description: "Check the design-system registry instead." },
+        name: { type: "string", description: "duplicates / designSystem: the feature to check." },
         minLines: { type: "integer", minimum: 4, maximum: 100, description: "duplicates: code lines per match (default 6)." },
         tests: { type: "boolean", description: "duplicates: include test files." },
       },
@@ -507,7 +508,7 @@ function translateLegacy(legacy, args) {
 
 // --- Arguments by mode ----------------------------------------------------------------------------------------------
 // A tool that took over others takes some arguments in one of its modes only — `kind` (spec_roadmap_edit), `format` (spec_export),
-// `coverage` and `duplicates` (spec_scan). An argument the call's mode doesn't take is refused before anything runs (code
+// `coverage`, `duplicates` and `designSystem` (spec_scan). An argument the call's mode doesn't take is refused before anything runs (code
 // inapplicable-arguments, `inapplicable` [names] — before 1.26 it was another tool's argument, an unknown one), and a mode's
 // `required` ones are missing arguments. The mode key itself and projectDir go everywhere. fallback: the mode when the key is not
 // given. Derived from the operations table (mcp/lib/operations.js) — a mode's arguments are its operation's — { tool: { key,

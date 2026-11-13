@@ -29,6 +29,7 @@ steering files.
 | `ui.md` | `+ui` | when the UI track is used |
 | `data.md` | `+data` | when the data pipeline track is used |
 | `glossary.md` | any (optional) | when the product has domain terms people use loosely — `steering_scaffold` only, `spec_init` never creates it |
+| `design-system.md` | +ui (optional) | before the first +ui feature — at adoption on an existing codebase: the registry of components and tokens; `steering_scaffold` only, which fills it from the code |
 
 At project start, create at least the four `core` files. Add the others the first time a
 feature pulls in that track. Fill them in once, revisit once a quarter. `spec_doctor`'s `steering` check warns,
@@ -603,6 +604,68 @@ problem details, cursor pagination, Idempotency-Key, ETag / If-Match): `referenc
 Per-feature decisions (the state matrix of one view, a new component, a view's own budget) belong in the feature's `[UI]`
 design sections. The reasoning behind each rule (the design system first, the states, WCAG 2.2 AA and how to test it,
 i18n, performance budgets, visual regression): `references/ui-design-patterns.md`.
+
+---
+
+## `design-system.md` (+ui, optional — the registry)
+
+`ui.md` holds the rules; this file holds the **inventory** those rules point at — the one list of components and tokens
+every +ui feature builds from. Scaffold it with `steering_scaffold {file: "design-system.md"}` (CLI
+`dev-spec steering design-system.md`): it is written **from the code** — the components and tokens the project already
+has in place of the slot rows below — and `spec_init` never creates it. A project template
+(`.specs/templates/steering/design-system.md`) is used as it is instead: it is not filled from the code.
+
+```markdown
+# Design System
+
+## Tokens
+_Token sources: tokens.json, src/styles/tokens.css_
+
+| Token | Value | Use |
+|---|---|---|
+| --color-action-primary | #1d4ed8 | primary buttons, links |
+| --space-4 | 16px | the default gap |
+
+## Components
+_Libraries: @mui/material_
+
+| Component | Path | Variants | Notes |
+|---|---|---|---|
+| Button | `src/ui/Button.tsx` | primary, secondary, ghost | every action; never a styled link |
+| Dialog | `src/ui/Dialog.tsx` | modal, sheet | focus is trapped and returned |
+| PriceTag | `src/ui/PriceTag.tsx` |  | _From: checkout_ |
+```
+
+- Keep the first header cell of each table (`Token`, `Component` — or their PT / ES forms) and the markers in
+  English (`_Token sources:_`, `_Libraries:_`, `_From:_`): they are what the engine reads. Everything else is yours.
+- `_From: <feature>_` is written by `spec_finish` on the rows it adds: the feature that built the component, whose own
+  design keeps saying New. Add it by hand when you list a component a feature is still building.
+- A feature's design lists what it uses in `[UI] Design System Usage` (`Kind | Component | Why / notes`);
+  `spec_doctor`'s `ui-design-system` checks those rows against this file, the task brief quotes the entries a UI task
+  needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds
+  and the file doesn't. The whole loop: `references/ui-design-patterns.md` → The registry.
+- `_Libraries:_` names each library as the designs will cite it — its package (`@mui/material`) or its name
+  (`Material UI`); a parenthesis that ends a library or a token source is a note (`antd (being replaced)`) — a
+  library's note that is its package or its acronym names it too: `Material UI (@mui/material)`, `Material UI (MUI)`
+  (a package or a short name of it wherever a row names it; an acronym the name does not spell — SLDS for Lightning
+  Design System — or a framework, only where a row cites it: in parentheses or brackets, after a dash, before a
+  colon — `Button (SLDS)`, `Button — SLDS`, `SLDS: Button`) —, a version written as one, a range too, or a markdown
+  link is dropped (`antd v5`, `antd ^5.21`, `[antd](https://ant.design)` are antd), and `none` / `none yet` names
+  nothing. A name with a bare number keeps it and is cited without it too (`antd 5`: `antd Table`) — anywhere in a
+  cell when the shorter name is two words, an acronym or the library's own package in the root `package.json` (a
+  dependency of that name, one under a scope that begins with it, or the name joined to a framework's name, `ui` or
+  `components`: `flowbite-react`, `evergreen-ui`); one plain word no such package backs (`Bootstrap 5` in a monorepo
+  whose library sits in `apps/web/package.json`, `Material 3`) only where a row cites it, `Modal (Bootstrap)` — or
+  say the short name yourself, `Bootstrap 5 (Bootstrap)`. The name of a framework taken from a bare number or a
+  note (`React 19`) cites only there, whatever a note says. A registry that lists no component is checked against a design only when a
+  library it declares is a real one — a `package.json` dependency or a scoped package: name it by its package.
+  A component of a declared library is not listed here: a design cites the same words — `TextField (@mui/material)`.
+- The token values the seed writes are the design values it found — colours, lengths, numbers, references. A
+  stylesheet's token, a JSON `$value` or a `value` beside a token `type` whose value is anything else (a font stack, a
+  shadow, a declaration written over several lines) is listed with an empty value: fill it in. Any other JSON leaf with
+  such a value is not listed, nor a plain JSON file — not in the design-tokens format — that shows no hex or functional
+  colour, length or reference (a map of numbers) — add those rows by hand. A JSON key that is not words (a GUID, an API
+  key, `w1280h720`) is not seeded.
 
 ---
 

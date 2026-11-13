@@ -31,8 +31,8 @@ the whole library.
 
 **Writing the spec**
 - `references/ears-guide.md` — full EARS syntax, all 5 patterns
-- `references/steering-templates.md` — all 16 steering-file templates (incl. `distributed.md`, `api.md`, `ui.md`, `data.md` and
-  the optional `glossary.md`), scoped steering (front matter inclusion modes), project templates in `.specs/templates/`
+- `references/steering-templates.md` — all 17 steering-file templates (incl. `distributed.md`, `api.md`, `ui.md`, `data.md`,
+  the optional `glossary.md` and the design-system registry `design-system.md`), scoped steering (front matter inclusion modes), project templates in `.specs/templates/`
 - `references/example-spec.md` — end-to-end example, `core +tdd` auth · `references/example-spec-combined.md` —
   `core +tdd +saas +ai`
 - `references/critical-flows.md` — a critical flow (stock, coupons, balance / credits, bookings, invites, quotas,
@@ -67,8 +67,8 @@ the whole library.
   levels, locking, CAP / PACELC)
 - +api: `references/api-design-patterns.md` (versioning, breaking changes, problem+json, pagination, idempotency, ETag,
   rate limits, contract tests)
-- +ui: `references/ui-design-patterns.md` (design system first, UI states, WCAG 2.2 AA and how to test it, i18n,
-  performance budgets)
+- +ui: `references/ui-design-patterns.md` (design system first and its registry `.specs/steering/design-system.md`, UI
+  states, WCAG 2.2 AA and how to test it, i18n, performance budgets)
 - +obs: `references/observability-patterns.md` (SLOs and burn-rate alerts, telemetry, runbooks, feature flags,
   progressive delivery, operability tests)
 - +data: `references/data-pipeline-patterns.md` (data contracts and schema evolution, quality checks and quarantine,

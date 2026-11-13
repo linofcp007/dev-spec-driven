@@ -67,7 +67,7 @@ function loadEngine() {
 const { addTrack, affectsWarnings, appendTasks, APPROVAL_GUARD_LEVELS, approvalGuardDecision, approvalGuardLevel,
   approvalRolesOf, approvePhase, archiveFeature, artifactState, backlog, BACKLOG_ACTIONS, catalog, changelog,
   clarify, classify, CLI_SWITCHES, compareSemver, completeTask, couldNotRunOutput, vacuousRun, coverage, crashExit, createFeature,
-  crossFeatureAcs, csvCell, decide, decisionLog, duplicateRuns, duplicationReport, designSaveCheck, detectPhase, detectTracks, drift, earsFeature,
+  crossFeatureAcs, csvCell, decide, decisionLog, duplicateRuns, duplicationReport, designSaveCheck, designSystemReport, detectPhase, detectTracks, drift, earsFeature,
   earsSteps, earsValidate, engineVersion, etaText, evidenceMode, existingFeature, expectsFail, EXPORT_FORMATS,
   exportSpecs, extractSection, featureLang, featureLocked, featureOverlaps, featurePercent,
   featurePlaceholders, finishFeature, FLOWS, forecastData, gateRefusal, globFiles, glossaryEntries, guardCheck,
@@ -153,6 +153,7 @@ module.exports = {
   coverage,
   duplicationReport, // spec_scan {duplicates: true} / `dev-spec dupes` — the code a feature (or the project) repeats
   duplicateRuns, // the detector over texts already read ([{file, text}]) — the plugin's own sources in mcp/tests
+  designSystemReport, // spec_scan {designSystem: true} / `dev-spec design-system` — the design-system registry against the code, or a feature against it
   clarify,
   // language resolution (used by the server, CLI and hooks)
   LANGS: i18n.LANGS, // en · pt · es · pt-BR — the MCP `lang` enum and the CLI --lang values

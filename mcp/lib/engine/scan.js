@@ -1233,4 +1233,4 @@ function coverage(projectDir, opts = {}) {
 module.exports = { SCAN_IGNORE, CODE_EXT, TEST_EXTRA_EXT, GUARD_CODE_EXT, SCAN_TEXT_EXT, SCAN_READ_BYTES, COVERAGE_CAP,
   WALK_STOP, walkProject, gitignoreNegationTokens, gitignoreNegationReincludes, gitignoreDirPatterns, gitignoreRules,
   GITIGNORE_NESTED_MAX, isTestFile, testNamed, isTestFixture, isCodeFile, folderHoldsCode, NESTED_MANIFEST_CAP, MANIFEST_FIXTURE_DIRS,
-  scanCodebase, coverage, __link };
+  scanCodebase, coverage, projectFileInside, __link };

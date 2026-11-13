@@ -79,7 +79,7 @@ const text = {
       ["Limites de Taxa e Quotas", "- Limites por cliente / chave / inquilino e as suas janelas · 429 com Retry-After e os cabeçalhos RateLimit · quotas e como um cliente sabe quanto ainda lhe resta · o que fica isento."],
     ],
     ui: [
-      ["Uso do Design System", "- Os componentes do design system usados e os tokens (cor, espaçamento, tipografia) · cada componente novo: porque os existentes não servem e como entra no sistema (documentado, revisto, na biblioteca de componentes) · nenhum estilo avulso nem cor fixa no código."],
+      ["Uso do Design System", "- Os componentes do design system usados e os tokens (cor, espaçamento, tipografia) · cada componente novo: porque os existentes não servem e como entra no sistema (documentado, revisto, na biblioteca de componentes) · nenhum estilo avulso nem cor fixa no código.\n- Uma linha por componente, verificada contra o registo (.specs/steering/design-system.md — a verificação ui-design-system do spec_doctor): Reutilizar = um que o registo lista, usado tal como está · Estender = uma variante nova de um que ele lista · Novo = nenhum dos listados serve — com a razão; entra no registo quando a feature é concluída. Sem nenhum componente: uma só linha em vez da tabela, n/a — a razão.\n\n| Tipo | Componente | Porquê / notas |\n|---|---|---|\n| Reutilizar | [componente que o registo lista] | [o que faz nesta vista] |\n| Novo | [componente novo] | [a razão de nenhum dos listados servir] |"],
       ["Estados da Interface", "- Por vista, uma matriz de estados: a carregar · vazio · erro (com Tentar de novo) · parcial · offline · sem permissão · sucesso — o que o utilizador vê e pode fazer em cada um; validação de formulários (no campo + um resumo, os valores mantidos).\n- A referência com que cada vista é construída: uma exportação do design ou um protótipo HTML que o utilizador aprovou — um por estado quando diferem — e o seu caminho · a revisão visual compara o que foi construído com ela, estado a estado (references/ui-review.md)."],
       ["Acessibilidade", "- WCAG 2.2 AA: operável com o teclado e ordem de foco visível · nome / etiqueta em cada controlo · contraste (4,5:1 no texto, 3:1 na interface) · tamanho dos alvos (24×24 px) · movimento reduzido · erros identificados em texto · como é testado (uma verificação automática + uma passagem manual com teclado e leitor de ecrã)."],
       ["Design Responsivo e i18n", "- Breakpoints e como o layout se adapta · expansão do texto (+30–40 %) · layouts da direita para a esquerda · formatos do locale (datas, números, moeda) · todas as strings no catálogo de traduções."],
@@ -913,6 +913,9 @@ const steering = {
     // +data
     "data.md":
       "# Padrões de Pipelines de Dados\n\n## Contratos e Esquemas\n- Onde estão os esquemas: [YAML do dbt | um registo de esquemas | schemas/] · compatibilidade: só alterações aditivas; uma alteração incompatível sai numa nova versão com [N semanas] de descontinuação.\n- Nomes: tabelas e colunas em [snake_case] · datas e horas em UTC · as camadas: [raw → staging → marts].\n\n## Qualidade dos Dados\n- Cada conjunto de dados: chaves não nulas e únicas, valores e intervalos admitidos, verificações de anomalias na contagem de linhas · executadas na ingestão e antes de publicar · uma falha: [pôr as linhas em quarentena | parar a carga] e alertar o responsável.\n- Ferramenta: [testes dbt | Great Expectations | verificações SQL] · comando: [comando].\n\n## Idempotência e Backfills\n- Cada job reexecutável para uma partição: sobrescrever a partição ou MERGE numa chave — nunca um append às cegas · dados que chegam atrasados: uma janela de lookback de [N dias].\n- Backfills: primeiro uma execução de ensaio · no máximo [N] partições em paralelo · o custo estimado e aprovado por [papel].\n\n## Linhagem e Responsáveis\n- Cada conjunto de dados tem um responsável e um SLA de atualidade · a linhagem está em: [dbt docs | o catálogo de dados] · os consumidores sabem de uma alteração incompatível com [N dias] de antecedência.\n\n## Retenção e Custo\n- Retenção por camada: bruta [N dias] · curada [N meses] — dados pessoais segundo o privacy.md · particionado por [data], agrupado por [chave] · orçamento de custo: [valor por mês], com um alerta a [N] %.\n",
+    // 1.35 o registo do design system (steering_scaffold design-system.md — preenchido a partir do código; o init nunca o cria).
+    "design-system.md":
+      "# Design System\n\n<!-- O inventário ÚNICO a partir do qual todas as features +ui constroem: os componentes e os tokens. O design de uma\n     feature lista o que usa em [UI] Uso do Design System (Tipo | Componente | Porquê); o spec_doctor verifica essas linhas\n     contra este ficheiro (ui-design-system — uma verificação da aprovação nos tamanhos m / l), o spec_task_brief cita as\n     entradas de que uma tarefa de UI precisa e o spec_finish acrescenta aqui os componentes Novo de uma feature.\n     O que o código tem e este ficheiro não: spec_scan {designSystem: true}.\n     Os marcadores ficam em inglês: _Token sources:_ (os ficheiros que definem os tokens), _Libraries:_ (bibliotecas de UI de\n     terceiros cujos componentes não são listados um a um — um design escreve `Button (@mui/material)`) e, numa linha que um\n     finish acrescentou, _From:_ (a feature que construiu o componente). -->\n\n## Tokens\n_Token sources: [tokens.json, src/styles/tokens.css]_\n\n| Token | Valor | Uso |\n|---|---|---|\n| [--color-action-primary] | [#1d4ed8] | [botões principais, links] |\n\n## Componentes\n_Libraries: none_\n\n| Componente | Caminho | Variantes | Notas |\n|---|---|---|---|\n| [Button] | [src/ui/Button.tsx] | [primary, secondary, ghost] | [quando usar — e quando não] |\n",
     "glossary.md":
       "# Glossário\n\n<!-- A linguagem ubíqua do produto: uma entrada por termo do domínio — a palavra que as specs usam, o que significa aqui e\n     as palavras que NÃO se usam para ele. O spec_clarify pergunta por cada palavra a evitar encontrada no requirements.md /\n     design.md de uma feature, o spec_doctor avisa (verificação `glossary`) e o spec_task_brief cita as entradas que os\n     critérios de uma task usam. Uma entrada por linha (o marcador `_Avoid:_` fica em inglês), por exemplo:\n     - **Cliente** — uma pessoa ou empresa com contrato assinado. _Avoid: comprador, consumidor_ -->\n\n- **[Termo]** — [o que significa neste produto]. _Avoid: [palavra], [palavra]_\n",
   };
@@ -998,6 +1001,8 @@ const msg = {
       duplicatesPartial: (unread) => `; só parte do projeto foi comparada — o limite de bytes do detetor deixou ${unread === 1 ? "1 ficheiro de código" : `${unread} ficheiros de código`} por ler`,
       duplicatesWithin: (n, slug) => `${n} ${n === 1 ? "bloco do código da feature repete" : "blocos do código da feature repetem"} outro sítio dos seus próprios ficheiros — ${n === 1 ? "candidato" : "candidatos"} para a passagem de simplificação (spec_scan {duplicates: true, name: "${slug}"} · ${DEV_SPEC} dupes ${slug})`,
       // 1.30: nenhuma tarefa indica ficheiros em _Implements:_ — quem os lê não vê código da feature
+      // 1.35: cores e tamanhos fixos nos ficheiros de vista da feature, onde o registo do design system tem tokens — um aviso, nunca um bloqueio
+      designSystemRaw: (n, top, slug) => `os ficheiros de vista da feature têm ${n} ${n === 1 ? "valor fixo" : "valores fixos"} onde o design system tem tokens — ${top}${n > 3 ? "; …" : ""}: usar o token, ou explicar no relatório a razão de um literal ser deliberado (a lista: spec_scan {designSystem: true, name: "${slug}"} · ${DEV_SPEC} design-system ${slug})`,
       noImplements: (file) => `nenhuma tarefa indica os seus ficheiros em _Implements:_ — a baseline de deriva, a deteção de duplicados e a atribuição do dev-guardian não veem código desta feature. Acrescenta _Implements: <caminho>_ a cada tarefa que escreveu código (um ${file} editado volta a ser aprovado), ou ignora isto se nenhuma o fez.`,
       untrackedApproval: (list, slug) => `aprovado antes do registo de alterações — nada do ficheiro aprovado ficou registado, por isso uma edição não pode ser detetada: ${list} — volta a aprovar para o começar a seguir (/approve ${slug} design)`,
     },
@@ -1460,6 +1465,7 @@ const msg = {
       nothingNew: "(nada de novo)",
       steeringCreated: (f) => `Criado ${f}`,
       steeringExists: (f) => `Já existe (não foi alterado) ${f}`,
+      steeringSeeded: (comps, tokens) => `  preenchido a partir do código: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} — falta rever as linhas e acrescentar as variantes e as notas de cada componente`,
       feature: (slug, label, lang) => `Feature '${slug}' [${label}] (${lang})`,
       noFeatures: (dir) => `Não há features em ${dir}`,
       listLine: (name, tracks, phase, done, total) => `  ${name.padEnd(28)} [${tracks}]  ${phase}  (${done}/${total} tarefas)`,
@@ -1502,6 +1508,35 @@ const msg = {
       dupesMore: (n) => `  … e mais ${n} (listam-se os mais longos)`,
       dupesTruncated: (n) => `  (só os primeiros ${n} ficheiros de código foram lidos — o limite: uma repetição para lá deles não se vê)`,
       dupesPartial: (unread, mb) => `  (atingido o limite de bytes — ${mb} MB de código: ${unread === 1 ? "mais 1 ficheiro de código ficou" : `mais ${unread} ficheiros de código ficaram`} por ler, uma repetição neles não se vê)`,
+      // design-system (1.35): o registo contra o código, ou uma feature contra o registo — spec_scan {designSystem: true}
+      dsHead: (file, comps, tokens) => `Design system — ${file}: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"}`,
+      dsHeadNone: (file) => `Design system — ainda sem registo (${file})`,
+      dsCreate: `  cria-o a partir do código: ${DEV_SPEC} steering design-system.md`,
+      dsFound: (comps, tokens, files) => `  no código: ${comps} ${comps === 1 ? "componente" : "componentes"} · ${tokens} ${tokens === 1 ? "token" : "tokens"} em ${files} ${files === 1 ? "ficheiro de tokens" : "ficheiros de tokens"}`,
+      dsMissingHead: (n) => `  no código, fora do registo (${n}) — uma linha por cada:`,
+      dsStaleHead: (n) => `  no registo, mas o caminho não indica nenhum ficheiro (${n}):`,
+      dsSourcesNew: (list) => `  ficheiros de tokens que o registo não indica (_Token sources:_): ${list}`,
+      dsLibrariesNew: (list) => `  bibliotecas de UI no package.json que o registo não indica (_Libraries:_): ${list}`,
+      dsInSync: "  o registo lista todos os componentes, tokens, ficheiros de tokens e bibliotecas de UI que a leitura encontrou (a comparação é por nomes, não pelo valor de um token)",
+      dsMore: (n) => `    … e mais ${n}`,
+      dsLimit: {
+        files: (n) => `  (atingido o limite de ficheiros — ${n} percorridos: o resto não foi lido)`,
+        "token-files": (n) => `  (só os primeiros ${n} ficheiros de tokens são lidos: o resto não é comparado)`,
+        "token-candidates": (n) => `  (só os primeiros ${n} ficheiros com nome de ficheiro de tokens são lidos, por caminho: o resto não é comparado)`,
+        "file-size": (n, file) => `  (${file} é maior do que os ${n} caracteres lidos de cada ficheiro: o resto de uma folha de estilos não é comparado, um ficheiro JSON desse tamanho não é lido)`,
+        tokens: (n) => `  (só os primeiros ${n} tokens do código são lidos: o resto não é comparado)`,
+        "registry-rows": (n) => `  (só os primeiros ${n} componentes do registo são verificados quanto a um caminho que já não existe)`,
+        "view-files": (n) => `  (só os primeiros ${n} ficheiros de vista da feature são lidos à procura de valores fixos)`,
+      },
+      dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reutilizar: ${reuse} · Estender: ${extend} · Novo: ${news}`,
+      dsFeatureNoRows: "  o design não tem nenhuma linha de componente ([UI] Uso do Design System)",
+      dsRawHead: (n, files) => `  valores fixos nos ficheiros de vista (${n} em ${files} ${files === 1 ? "ficheiro" : "ficheiros"}) — candidatos a um token:`,
+      dsRawNone: (files) => `  nenhuma cor nem tamanho fixos ${files === 1 ? "no ficheiro de vista" : `nos ${files} ficheiros de vista`}`,
+      dsNoViewFiles: "  nenhum ficheiro de vista ou de estilo entre os ficheiros de _Implements:_ — nada a ler",
+      dsRegistered: (list) => `  ✓ acrescentado ao registo do design system: ${list}`,
+      dsUnregistered: (list) => `  ▲ não acrescentado ao registo do design system (não é um nome simples de componente, ou o ficheiro não pôde ser escrito): ${list}`,
+      dsTokensNew: (n) => `  tokens no código, fora do registo (${n}) — uma linha por cada:`,
+      dsPending: (list) => `  no código, construídos por uma feature ainda não concluída (entram no registo no finish dela): ${list}`,
       clarify: (f, tracks, verdict, n) => `Clarificar: ${f}  [${tracks}]  → ${verdict} (${n} pergunta(s))`,
       naHead: (f, tracks, phase, verdict, gatesOk) => `Feature: ${f}  [${tracks}]  fase: ${phase}  veredicto=${verdict}  gates aprovados: ${gatesOk}`,
       changed: (list) => `  ⚠ alterado desde a última aprovação: ${list}`,
@@ -3244,6 +3279,29 @@ const quality = {
     briefGlossaryIntro: "Usa estas palavras exatamente como estão definidas (.specs/steering/glossary.md) — nunca as que são para evitar:",
     briefGlossaryAvoid: (list) => `evitar: ${list}`,
     briefGlossaryOmitted: (list) => `Aplicam-se mais entradas (tamanho) — lê-as no .specs/steering/glossary.md: ${list}`,
+    // 1.35 o registo do design system (.specs/steering/design-system.md): a verificação ui-design-system do spec_doctor (por estado),
+    // a nota da linha que o spec_finish acrescenta por cada componente Novo e a tabela que junta quando o ficheiro não termina numa.
+    dsLegacy: (d, v) => `design aprovado antes da ${v} — só é exigido a partir da próxima aprovação (${d})`,
+    dsNoSection: "o design não tem secção Uso do Design System — nada a verificar contra o registo",
+    dsUnfilled: "a secção Uso do Design System ainda não está escrita — é verificada contra o registo quando estiver",
+    dsNoRegistry: `ainda não há registo do design system (.specs/steering/design-system.md) — o inventário único de componentes e tokens a partir do qual todas as features +ui constroem. Cria-o a partir do código: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
+    dsEmptyRegistry: `o registo do design system (.specs/steering/design-system.md) ainda não lista nenhum componente — falta acrescentar os que já existem (spec_scan {designSystem: true} · ${DEV_SPEC} design-system mostra o que o código tem)`,
+    dsEmptyRegistryLibraries: (libs) => `o registo do design system (.specs/steering/design-system.md) ainda não lista nenhum componente, e nenhuma biblioteca que declara (${libs}) é um pacote de que o projeto depende — falta acrescentar os componentes que já existem (spec_scan {designSystem: true} · ${DEV_SPEC} design-system mostra o que o código tem), ou indicar a biblioteca pelo nome do pacote em _Libraries:_ (@scope/nome, ou uma dependência do package.json)`,
+    dsNa: "a secção Uso do Design System diz n/a — esta feature não usa nenhum componente",
+    // (the table header without a code span, on purpose: pt-BR derives "Por quê / notas" — its own scaffold's header — only outside one)
+    dsNoRows: "a secção Uso do Design System não tem nenhuma linha de componente — cada um numa linha | Tipo | Componente | Porquê / notas | (Tipo: Reutilizar · Estender · Novo), para poder ser verificado contra o registo; ou uma só linha: n/a — a razão de esta feature não usar nenhum componente",
+    dsMismatch: (n, list) => `a secção Uso do Design System e o registo (.specs/steering/design-system.md) não coincidem em ${n} ${n === 1 ? "linha" : "linhas"} — ${list}`,
+    dsProblem: {
+      unknown: (name, near) => `'${name}' não está no registo${near ? ` (será ${near}?)` : ""}: reutilizar um componente listado, acrescentar a linha dele quando o código já o tem, indicar uma biblioteca que o registo declara em _Libraries:_ (Componente (@biblioteca)), ou usar uma linha Novo`,
+      listed: (name, near) => `'${name}' está marcado como Novo, mas o registo já lista ${near}: passa a ser uma linha Reutilizar ou Estender — ou, se foi esta feature que o construiu, a linha do registo leva _From: <o slug dela>_`,
+      near: (name, near) => `o Novo '${name}' é próximo de ${near}, que o registo lista: reutilizar ou estender ${near}, ou dizer nas notas da linha a razão de ${near} não servir`,
+      "no-why": (name) => `o Novo '${name}' não diz a razão de nenhum componente listado servir`,
+    },
+    dsGate: (d, size) => `${d} — um design de tamanho ${size} precisa disto antes da aprovação`,
+    dsOk: (reuse, extend, news) => `a secção Uso do Design System coincide com o registo (Reutilizar: ${reuse} · Estender: ${extend} · Novo: ${news})`,
+    dsTruncated: (read, total) => `o registo tem ${total} componentes — só os primeiros ${read} são lidos com os detalhes (reduz o número de linhas: só este ficheiro é lido)`,
+    dsTable: { components: "| Componente | Caminho | Variantes | Notas |" },
+    dsRegistered: (list) => `acrescentado ao registo do design system (.specs/steering/design-system.md): ${list}`,
   };
 
 // every design weighs its choices: doctor's design-tradeoffs / design-risks details (keyed by check id, then by the
@@ -3328,6 +3386,16 @@ const brief = {
     reuseFilesMore: (n, atLeast) => (!atLeast ? `…e mais ${n} na(s) mesma(s) pasta(s).`
       : n ? `…e pelo menos mais ${n} na(s) mesma(s) pasta(s) — uma pasta grande: só as primeiras entradas foram lidas.`
         : "…e possivelmente mais na(s) mesma(s) pasta(s) — uma pasta grande: só as primeiras entradas foram lidas."),
+    // 1.35: as entradas do registo do design system para os componentes que o design desta feature indica (uma tarefa que constrói uma vista)
+    designSystem: "## Design system — construir a partir disto",
+    designSystemRule: (file) => `Todas as vistas são construídas com os componentes e os tokens do design system (\`${file}\`). O componente listado vem antes de qualquer markup próprio; uma variante nova entra NO componente (uma prop documentada), nunca numa cópia ao lado; onde existe um token, nunca uma cor, um espaçamento, um raio ou um tamanho de letra fixos — o token. O bloco **Reuse** do teu relatório indica cada componente usado.`,
+    designSystemKinds: { reuse: "reutilizar", extend: "estender — uma variante nova", new: "NOVO — construído através do sistema: só tokens, todos os estados, suporte de teclado e de leitor de ecrã" },
+    designSystemVariants: (v) => `variantes: ${v}`,
+    designSystemOmitted: (n) => `Mais ${n} componente(s) — lê-os no design.md ([UI] Uso do Design System).`,
+    designSystemUnknown: (list) => `Fora do registo — pede contexto antes de construir qualquer um (NEEDS_CONTEXT): ${list}`,
+    designSystemNoRows: (file) => `O design não tem nenhuma linha de componente — o que \`${file}\` lista é para reutilizar antes de criar algo novo.`,
+    designSystemTokens: (n, sources) => `Tokens: ${n} no registo${sources ? ` — definidos em ${sources}` : ""}.`,
+    designSystemLibraries: (list) => `Bibliotecas de componentes em que o projeto assenta: ${list}.`,
     design: "## Contexto de design",
     designToc: (p) => `Design completo: \`${p}\` — secções:`,
     designOmitted: "Relevantes mas não incluídas (tamanho) — lê-as no design.md:",

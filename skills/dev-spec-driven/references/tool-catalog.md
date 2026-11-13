@@ -25,7 +25,8 @@ with real content from the `references/` templates. No MCP connection (e.g. clau
   `spec_drift` · `spec_metrics` · `spec_export {format: "catalog"}` · `spec_export` · `spec_export {format: "changelog"}`.
 - **Project:** `spec_status` (no `name`: every feature) · `spec_roadmap` / `spec_roadmap_edit {kind: "depend"}` / `spec_roadmap_edit {kind: "backlog"}` / `spec_roadmap_edit {kind: "milestone"}` ·
   `spec_add_track` / `spec_feature` · `spec_scan` / `spec_scan {coverage: true}` (brownfield) / `spec_scan {duplicates: true}`
-  (repeated code) · `steering_scaffold` · `spec_upgrade`
+  (repeated code) / `spec_scan {designSystem: true}` (the design-system registry against the code, or a feature against
+  it) · `steering_scaffold` · `spec_upgrade`
   (after a plugin update).
 
 **The CLI** runs the same engine (`dev-spec <command>` in these docs — its name). A plugin install puts no `dev-spec` on

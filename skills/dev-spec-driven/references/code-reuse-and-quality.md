@@ -329,6 +329,7 @@ report) — also when nothing was reused, because the search itself is the evide
 - Created: `src/features/checkout/tax-rounding.ts` because no rounding helper handles per-line rounding
   (searched: "round", "rounding", "banker", "toFixed" in src/; nearest: `lib/money.ts#round` — whole-amount only).
 - Duplicated on purpose: none.
+- Raw values kept on purpose: none. (a view task: `file:line value — why no token fits`)
 - Refactor candidates: Repeated Switches — the price type switched on in 4 files (pricing.ts, invoice.ts, quote.ts, cart.ts).
 ```
 
