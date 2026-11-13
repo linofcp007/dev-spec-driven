@@ -645,14 +645,16 @@ _Libraries: @mui/material_
   needs, `spec_finish` adds a feature's New components, and `spec_scan {designSystem: true}` says what the code holds
   and the file doesn't. The whole loop: `references/ui-design-patterns.md` → The registry.
 - `_Libraries:_` names each library as the designs will cite it — its package (`@mui/material`) or its name
-  (`Material UI`); a parenthesis that ends a library or a token source is a note (a package in it names the library too:
-  `Material UI (@mui/material)`), and `none` / `none yet` names nothing. A registry that lists no component is checked
-  against a design only when a library it declares is a real one — a `package.json` dependency or a scoped package.
+  (`Material UI`); a parenthesis that ends a library or a token source is a note (`antd (being replaced)`) — a
+  library's note that is its package or its acronym names it too: `Material UI (@mui/material)`, `Material UI (MUI)` —,
+  and `none` / `none yet` names nothing. A registry that lists no component is checked against a design only when a
+  library it declares is a real one — a `package.json` dependency or a scoped package: name it by its package.
   A component of a declared library is not listed here: a design cites the same words — `TextField (@mui/material)`.
 - The token values the seed writes are the design values it found — colours, lengths, numbers, references. A
-  stylesheet's token, a JSON `$value` or a `value` beside a `type` whose value is anything else (a font stack) is listed
-  with an empty value: fill it in. Any other JSON leaf with such a value is not listed, nor a JSON file that shows no
-  colour, length or reference (a plain map of numbers) — add those rows by hand.
+  stylesheet's token, a JSON `$value` or a `value` beside a token `type` whose value is anything else (a font stack, a
+  shadow, a declaration written over several lines) is listed with an empty value: fill it in. Any other JSON leaf with
+  such a value is not listed, nor a plain JSON file — not in the design-tokens format — that shows no hex or functional
+  colour, length or reference (a map of numbers) — add those rows by hand.
 
 ---
 

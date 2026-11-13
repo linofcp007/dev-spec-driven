@@ -154,4 +154,25 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
       valueOnly: () => asJson.found.sources[0] === "scripts/deploy.tokens.json" && rd(lp, REG).includes("| color.brand | #1d4ed8 |  |") && !/github/.test(rd(lp, REG)),
     });
   }
+
+  // --- review 6: a row to paste keeps its table — a `|` in a name or a path is escaped; the file-size line names its file ------------
+  {
+    const ep = path.join(tmp, "p135-ds-escape");
+    SR.initProject(ep, ["ui"], "en");
+    write(ep, "src/components/Button.tsx", "export const Button = () => null;\n");
+    runIn(["steering", "design-system.md", "--project", ep]);
+    write(ep, "src/x.tokens.json", js({ "a|b": "#1d4ed8" }));
+    const body = ":root { --big: 4px; }\n";
+    write(ep, "src/styles/tokens.big.css", body + "/*" + "x".repeat(262145 - body.length - 4) + "*/");
+    let piped = false; // (a `|` in a folder's name: Linux / macOS only)
+    try { write(ep, "src/components/a|b/Card.tsx", "export const Card = () => null;\n"); piped = true; } catch { /* no such name here */ }
+    const rep = runIn(["design-system", "--project", ep]);
+    const BS = String.fromCharCode(92);
+    all("1.35 review 6 (CLI): a token whose name holds a `|` is printed as a row that still has its three cells (the `|` escaped), a component's path too; the file-size line names the token file that is longer than a file's read, and the report never says the registry and the code agree beside it (got " +
+      js([rep.code, rep.out, piped]) + ")", {
+      token: () => rep.code === 0 && rep.out.includes("    | a" + BS + "|b | #1d4ed8 |  |"),
+      path: () => !piped || rep.out.includes("    | Card | `src/components/a" + BS + "|b/Card.tsx` |  |  |"),
+      fileSize: () => rep.out.includes(T.dsLimit["file-size"](262144, "src/styles/tokens.big.css")) && rep.out.includes("src/styles/tokens.big.css") && !rep.out.includes(T.dsInSync),
+    });
+  }
 };

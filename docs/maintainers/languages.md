@@ -43,7 +43,7 @@ how they came to be — the releases and review findings — is in History at th
   DEVE / EL SISTEMA DEBE… — `earsValidate`), section headings (`TRACK_SECTIONS`, the `RE_*` matchers), `DECISION_LABELS`,
   spike.md's headings, the Kind column header, the converge heading (`Phase: Convergence` / `Fase: Convergência` /
   `Fase: Convergencia`), and since 1.35 the design-system registry's first header cell (Component / Componente(s), Token(s) —
-  `RE_DS_COMPONENT_HEAD`) and a usage row's kind word (Reuse / Reutilizar, Extend / Estender / Extender, New / Novo / Nuevo —
+  `RE_DS_COMPONENT_HEAD`, `RE_DS_TOKEN_HEAD`) and a usage row's kind word (Reuse / Reutilizar, Extend / Estender / Extender, New / Novo / Nuevo —
   `RE_DS_KINDS`). **A new or renamed translated heading needs its synonym**, or doctor reports the section missing.
 - **Terminology** mirrors `ROADMAP_I18N`: PT keeps the "Feature / Tasks / Tracks" anglicisms, ES translates them (Función /
   Tareas). Eval sample JSON is data, as-is; its prose is localized.

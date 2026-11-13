@@ -3498,6 +3498,8 @@ const quality = {
     dsUnfilled: "Design System Usage is not written yet — checked against the registry once it is",
     dsNoRegistry: `no design-system registry yet (.specs/steering/design-system.md) — the one inventory of components and tokens every +ui feature builds from. Create it from the code: steering_scaffold {file: "design-system.md"} · ${DEV_SPEC} steering design-system.md`,
     dsEmptyRegistry: `the design-system registry (.specs/steering/design-system.md) lists no component yet — add the existing ones (spec_scan {designSystem: true} · ${DEV_SPEC} design-system lists what the code holds)`,
+    // …and it declares libraries, none of them a package of the project (dsPackaged): the same warning, saying how to name one
+    dsEmptyRegistryLibraries: (libs) => `the design-system registry (.specs/steering/design-system.md) lists no component yet, and no library it declares (${libs}) is a package this project depends on — add the existing components (spec_scan {designSystem: true} · ${DEV_SPEC} design-system lists what the code holds), or name the library by its package in _Libraries:_ (@scope/name, or a dependency of package.json)`,
     dsNa: "Design System Usage says n/a — this feature uses no component",
     dsNoRows: "Design System Usage names no component row — list each one as `| Kind | Component | Why / notes |` (Kind: Reuse · Extend · New) so it can be checked against the registry, or write one line: n/a — why this feature uses no component",
     dsMismatch: (n, list) => `Design System Usage and the registry (.specs/steering/design-system.md) disagree in ${n} ${n === 1 ? "row" : "rows"} — ${list}`,

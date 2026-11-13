@@ -25,16 +25,16 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
-  isNetworkPath, isTestFile, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix, unitIn, walkProject,
+  isNetworkPath, isTestFile, packageDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix, unitIn, walkProject,
   withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
-  isDirSafe, isInsideDir, isNetworkPath, isTestFile, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix,
+  isDirSafe, isInsideDir, isNetworkPath, isTestFile, packageDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix,
   unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
-const DS_LINE_MAX = 2000; // a line's characters read (a longer one — minified — is read up to there)
+const DS_LINE_MAX = 2000; // a view file's line read for raw values (a longer one — minified — up to there; a token file's line is read whole)
 const DS_TOKEN_FILES = 20; // token files kept as sources (by path; past them: the report's `limits` says so)…
 const DS_TOKEN_READS = 100; // …and the candidates read to find them
 const DS_TOKENS_MAX = 1000; // tokens kept from the code — what the registry's reader reads with their values (DS_MAX_TOKENS)
@@ -64,6 +64,15 @@ const PAGE_DIRS = new Set(["pages", "routes", "views", "screens"]);
 // (review 5: left out of the seed, the report "in sync", a size m design reusing Loading refused).
 const NOT_COMPONENT = new Set(["index", "utils", "util", "helpers", "helper", "types", "constants", "styles", "style", "hooks", "context", "config", "theme",
   "tokens", "stories", "mocks", "i18n", "main", "app", "store"]);
+// …of them, an ENTRY file is one only RIGHT inside the telling folder (`src/ui/main.tsx`, where `ui/` is the app): deeper,
+// `components/layout/main.tsx` is the component Main (shadcn-admin's — review 6: left out, a design reusing it refused).
+const ENTRY_NAMES = new Set(["main", "app"]);
+// A framework's special files — components under a component folder (above), EXCEPT in a folder that is a route segment
+// itself: one holding a `page.*` / `route.*` (ROUTE_MARK). A Next app with a route called components / ui / design-system
+// (a style-guide page) keeps `app/components/{page,loading,error}.tsx` there — pages, not Page / Loading / Error (review
+// 6: seeded as components, `New | Layout` then "already listed"). scanCode knows the folders; componentOf says `route`.
+const ROUTE_FILES = new Set(["page", "layout", "loading", "error", "not-found", "template", "default", "global-error"]);
+const RE_ROUTE_MARK = /^(?:page|route)\.(?:tsx|jsx|ts|js|mdx)$/;
 // A folder whose index file is a barrel, never a component named after it (packages/ui/src/index.tsx, icons/index.tsx) — in
 // any case — …
 const GENERIC_DIRS = new Set(["src", "lib", "libs", "app", "apps", "common", "shared", "core", "base", "utils", "helpers", "hooks", "styles", "assets", "icons",
@@ -78,19 +87,21 @@ function componentOf(rel) {
   const file = segs[segs.length - 1];
   const ng = RE_NG_COMPONENT.test(file), js = !ng && RE_JS_COMPONENT.test(file);
   if (!(ng || js || RE_COMPONENT_EXT.test(file)) || RE_NOT_COMPONENT_FILE.test(file)) return null;
-  let kind = null;
-  for (let i = segs.length - 2; i >= 0 && !kind; i--) { const d = dirName(segs[i]); kind = COMPONENT_DIRS.has(d) ? "component" : PAGE_DIRS.has(d) ? "page" : null; }
+  let kind = null, at = segs.length - 1; // at: the telling folder's place in the path
+  while (--at >= 0 && !kind) { const d = dirName(segs[at]); kind = COMPONENT_DIRS.has(d) ? "component" : PAGE_DIRS.has(d) ? "page" : null; }
   if (kind !== "component") return null;
   let stem = (ng ? file.replace(RE_NG_COMPONENT, "") : file.replace(/\.[^.]+$/, "")).replace(RE_PLATFORM_INFIX, "");
   const index = stem.toLowerCase() === "index";
+  const route = !index && !ng && ROUTE_FILES.has(stem);
   if (index) stem = segs[segs.length - 2] || "";
   const low = stem.toLowerCase();
-  // (an Angular `x.component.ts` is a component whatever x is — the suffix says so)
-  if (index ? GENERIC_DIRS.has(low) || HELPER_DIRS.has(stem) || COMPONENT_DIRS.has(dirName(stem)) : (!ng && NOT_COMPONENT.has(stem)) || (stem === low && COMPONENT_DIRS.has(low))) return null;
+  // (an Angular `x.component.ts` is a component whatever x is — the suffix says so; `at + 1`: the loop stepped once past it)
+  const helper = !ng && NOT_COMPONENT.has(stem) && (!ENTRY_NAMES.has(stem) || at + 1 === segs.length - 2);
+  if (index ? GENERIC_DIRS.has(low) || HELPER_DIRS.has(stem) || COMPONENT_DIRS.has(dirName(stem)) : helper || (stem === low && COMPONENT_DIRS.has(low))) return null;
   if (!/^[A-Za-z][A-Za-z0-9._-]{0,79}$/.test(stem) || /^use(?:[A-Z]|[-_.])/.test(stem)) return null;
   if (js && !/^[A-Z][A-Za-z0-9]*$/.test(stem)) return null; // a .js file is a component only by a PascalCase name (Button.js)
   const name = stem.split(/[-_.]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("");
-  return { name, key: dsKey(name), path: rel, index };
+  return { name, key: dsKey(name), path: rel, index, route };
 }
 // A token file by its name AND its place (tokenFileKind):
 //   style — a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss, theme.css): anywhere;
@@ -113,7 +124,7 @@ const RE_TOKEN_PLAIN = /^tokens\.(?:json|ya?ml|js|cjs|mjs|ts)$/i;
 const TOKEN_DIRS = new Set(["styles", "style", "theme", "themes", "design", "design-system", "designsystem", "design-tokens", "tokens", "ui"]);
 const NOT_UI_DIRS = new Set(["store", "stores", "state", "redux", "slices", "reducers", "models", "model", "entities", "schemas", "schema", "db", "database",
   "migrations", "services", "controllers", "api", "server", "backend", "fixtures", "mocks", "__mocks__", "tests", "test", "__tests__", "e2e", "types", "hooks",
-  "context", "contexts", "utils", "helpers", "scripts", "docs", "public"]);
+  "context", "contexts", "scripts"]);
 // The folder a file lives in, `src/` aside (packages/ui/src/tokens.ts → "ui"); "" at the project's root or source root.
 const homeDir = (segs) => { let i = segs.length - 2; while (i >= 0 && /^(?:src|source)$/i.test(segs[i])) i--; return i < 0 ? "" : segs[i].toLowerCase(); };
 function tokenFileKind(rel) {
@@ -126,17 +137,17 @@ function tokenFileKind(rel) {
 }
 const isTokenFile = (rel) => tokenFileKind(rel) != null;
 // …and a global stylesheet that declares the custom properties itself (the shadcn / Tailwind 4 habit): a token file once it
-// holds at least this many. A candidate by its name AND its place — where an app keeps its OWN styles: the project's root, a
-// source folder or a styles folder. Never beside a component: `components/Button/index.css` and `features/cart/styles.scss`
-// are theirs (review 5: 120 of them used up the candidates read, the report said "only the first 20 token files are read"
-// of a project with one, and could never be in sync).
+// holds at least this many. A CANDIDATE by its name, wherever an app keeps its own styles — `app/globals.css`,
+// `src/app/(frontend)/globals.css`, `src/index.css`, `styles/`, Django's `polls/static/polls/style.css`, a WordPress
+// theme's `style.css`, SvelteKit's `src/routes/styles.css` — but never a component's, a page's or a feature's OWN sheet:
+// one that lies BELOW such a container without being right inside it (`components/Button/index.css`,
+// `features/cart/styles.scss`, `pages/home/index.css`). Review 5 listed the places it may be in and lost six ordinary ones
+// (review 6); it is the exclusion that is short. A candidate that turns out to hold no token costs one read, takes no
+// source's place and says no bound — and the search simply ends at DS_TOKEN_READS, root-most and `globals.css` first.
 const RE_GLOBAL_CSS = /^(?:globals?|index|app|main|styles?|base|root)\.(?:css|scss)$/i;
-const GLOBAL_CSS_DIRS = new Set(["src", "source", "app", "styles", "style", "css", "scss", "sass", "less", "assets", "theme", "themes", "design", "tokens"]);
-const isGlobalSheet = (rel, name) => {
-  if (!RE_GLOBAL_CSS.test(name)) return false;
-  const segs = rel.split("/");
-  return segs.length === 1 || GLOBAL_CSS_DIRS.has(segs[segs.length - 2].toLowerCase());
-};
+const OWN_SHEET_DIRS = new Set(["components", "component", "widgets", "atoms", "molecules", "organisms", "pages", "routes", "views", "screens", "features",
+  "feature", "modules"]);
+const isGlobalSheet = (rel, name) => RE_GLOBAL_CSS.test(name) && !rel.split("/").slice(0, -2).some((d) => OWN_SHEET_DIRS.has(dirName(d)));
 const GLOBAL_CSS_MIN = 5;
 const RE_STYLE_EXT = /\.(?:css|scss|sass|less|styl)$/i;
 // A view or style file — what a feature's raw values are read in (tasks.js RE_VIEW_FILE's text formats, and a component's .js).
@@ -149,15 +160,7 @@ const UI_LIBRARIES = ["@mui/material", "@mui/joy", "antd", "@chakra-ui/react", "
   "react-aria-components", "@ark-ui/react", "bootstrap-vue", "semantic-ui-react", "grommet", "evergreen-ui", "@blueprintjs/core", "@shopify/polaris",
   "@radix-ui/themes", "@skeletonlabs/skeleton", "@nuxt/ui", "bits-ui", "@kobalte/core"];
 function packageLibraries(root) {
-  const text = readFileHead(path.join(root, "package.json"), DS_READ_CHARS);
-  if (text == null) return [];
-  let pkg;
-  try { pkg = JSON.parse(text); } catch { return []; }
-  const names = new Set();
-  for (const k of ["dependencies", "devDependencies", "peerDependencies"]) {
-    const d = pkg && pkg[k];
-    if (d && typeof d === "object" && !Array.isArray(d)) for (const n of Object.keys(d)) names.add(n);
-  }
+  const names = packageDependencies(root); // (quality.js: the root manifest read as the scan reads one — contained, bounded)
   const out = UI_LIBRARIES.filter((l) => names.has(l));
   if ([...names].some((n) => n.startsWith("@radix-ui/react-")) && !out.includes("@radix-ui/themes")) out.push("@radix-ui");
   return out;
@@ -210,34 +213,40 @@ function withoutComments(line, st, o) {
 // ever complete (review 4: 14 of 19 credential shapes passed one). So nothing is shown by exclusion: a value is shown only
 // when it IS a design value by its shape — a secret is a free string, and a free string has no design shape.
 // A design value (≤ DV_MAX characters): parts separated by blanks, commas or slashes, each one of
-//   a hex colour · a number with an optional unit · a {reference} · a CSS keyword of the list · an arithmetic sign alone
-//   (`{spacing.sm} * 2`) · a function — rgb(…), var(…), calc(…), map-get(…), any name: what guards it is its ARGUMENTS,
-//   nothing but word characters, blanks, . , % / # + * - $ @ { } and nested parentheses (never a quote);
+//   a hex colour · a number with an optional unit · a {reference.path} · a CSS keyword of the list · an arithmetic sign
+//   alone (`{spacing.sm} * 2`) · a function — rgb(…), var(…), calc(…), map-get(…), any name or none (a group) — whose
+//   ARGUMENTS are design values themselves, read the same way: what guards a function is what it holds, never its name
+//   (review 6: "any characters of a set" let `ENC(Xk29…)`, `url(//host/v1/KEY/x)` and `(SecretValue1)` through). Never
+//   `url(…)`. Inside the arguments a custom property's name (`var(--x)`) is one too, and plain lower-case words beside a
+//   part that is more than a bare number, or in a function CSS knows (`linear-gradient(to right, …)`, `env(safe-area-…)`);
 //   in a stylesheet (sass) also a variable's name ($brand, -$gutter, @brand, --brand), an interpolation (#{$x}) and, beside
-//   a part that is no bare number or word, a plain lower-case word (`opacity .15s linear`, `1px solid tomato`).
-// → null (none: a font stack, a quoted string, a url("…"), any free text) | "weak" (it shows nothing that says DESIGN —
-//   bare numbers, keywords, a time, a percentage: `3599`, `none`, `3600s`) | "strong" (a colour, a length, a function or a
-//   reference among its parts). Linear: one pass, anchored tests on each part.
+//   a part that is more than a bare number or a word, a plain lower-case word (`opacity .15s linear`, `1px solid tomato`).
+// → null (none: a font stack, a quoted string, a url, any free text) | "weak" (it shows nothing that says DESIGN — bare
+//   numbers, keywords, a time, a percentage: `3599`, `none`, `3600s`) | "strong" (a colour, a length, a reference, a design
+//   function — rgb, var, calc… — or a function holding one of them). Linear: one pass a level, DV_DEPTH levels.
 const DV_MAX = 120;
+const DV_DEPTH = 6; // nested functions read
 const RE_DV_HEX = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 const RE_DV_NUMBER = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const RE_DV_LENGTH = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|pt|pc|cm|mm|in|q|ch|ex|lh|rlh|vh|vw|vi|vb|vmin|vmax|[dsl]v[hw]|cq[whib])$/i;
 const RE_DV_MEASURE = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:%|ms|s|deg|rad|turn|fr|dpi|dppx|x)$/i; // a unit a config holds too (ttl: "3600s")
-const RE_DV_REF = /^\{[\w.$-]+\}$/;
+const RE_DV_REF = /^\{[A-Za-z_$][\w$-]*(?:\.[\w$-]+)*\}$/; // {color.primary}, {fontSize.0} — never a braced GUID that starts with a digit
 const RE_DV_VARIABLE = /^(?:-?\$[A-Za-z][\w.-]*|@[A-Za-z][\w-]*|--[\w-]+|#\{[\w.$-]+\})$/;
+const RE_DV_PROPERTY = /^--[\w-]+$/; // a custom property's name: an argument of var(), in any file
 const RE_DV_FUNCTION = /^(?:[A-Za-z_-][\w.-]*)?$/; // a function's name — or none: a parenthesised group, `($a + $b) / 2`
-// (the functions that SAY design — the strength of a value, never whether it is shown: `rate(5 minutes)` is a schedule)
+// (the functions that SAY design — the strength of a value: `rate(5 minutes)` is a schedule, and is no value at all)
 const RE_DV_DESIGN_FUNCTION = /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark|var|calc|clamp|cubic-bezier|(?:repeating-)?(?:linear|radial|conic)-gradient|darken|lighten|tint|shade|mix)$/i;
-const RE_DV_ARGUMENTS = /^[\w\s.,%/#+*$@{}()-]*$/;
+// (…and the ones CSS knows, whose arguments may be plain words alone: `env(safe-area-inset-top)`, `steps(4, end)`)
+const RE_DV_CSS_FUNCTION = /^(?:env|min|max|minmax|repeat|fit-content|steps|translate(?:[xyz]|3d)?|scale(?:[xyz]|3d)?|rotate(?:[xyz]|3d)?|skew[xy]?|blur|brightness|contrast|saturate|drop-shadow)$/i;
 const RE_DV_WORD = /^[a-z][a-z-]*$/;
 const DV_KEYWORDS = new Set(["none", "auto", "inherit", "initial", "unset", "transparent", "currentcolor", "solid", "dashed", "dotted", "double", "inset",
   "normal", "bold", "bolder", "lighter", "italic", "uppercase", "lowercase", "capitalize", "ease", "ease-in", "ease-out", "ease-in-out", "linear", "all",
   "infinite", "center", "left", "right", "top", "bottom", "thin", "medium", "thick", "hidden", "visible", "nowrap", "black", "white", "red", "green", "blue",
-  "yellow", "orange", "purple", "pink", "gray", "grey", "silver", "gold", "navy", "teal", "cyan", "magenta"]);
-function designValue(value, sass) {
-  const v = String(value == null ? "" : value).trim();
-  if (!v || v.length > DV_MAX) return null;
-  // strong: a part that says design · anchored: a part that is more than a bare number or a word · words: plain words seen
+  "yellow", "orange", "purple", "pink", "gray", "grey", "silver", "gold", "navy", "teal", "cyan", "magenta",
+  "display-p3", "rec2020", "a98-rgb", "prophoto-rgb"]); // (…and the colour spaces whose name holds a digit: `color(display-p3 1 0 0)`)
+// One level of a value → null (a part is none) | { strong (a part that says design), anchored (a part that is more than a
+// bare number or a word), words (plain words seen), parts }. inner: these are a function's arguments.
+function dvScan(v, sass, inner, level) {
   let strong = false, anchored = false, words = false, start = 0, depth = 0, parts = 0;
   for (let i = 0; i <= v.length; i++) {
     const ch = i < v.length ? v[i] : " ";
@@ -250,18 +259,28 @@ function designValue(value, sass) {
     parts++;
     const open = part.indexOf("(");
     if (open !== -1) {
-      // (a function ends at its `)` — `var(--a)FAKE` is none — and its arguments hold no quote)
-      if (!part.endsWith(")") || !RE_DV_FUNCTION.test(part.slice(0, open)) || !RE_DV_ARGUMENTS.test(part.slice(open))) return null;
+      // a function is no url(), and its arguments are design values in turn — one that does not END at its `)`
+      // (`var(--a)FAKE`) leaves that `)` unmatched among them: none
+      const name = part.slice(0, open);
+      if (!RE_DV_FUNCTION.test(name) || /^url$/i.test(name) || level >= DV_DEPTH) return null;
+      const args = dvScan(part.slice(open + 1, -1), sass, true, level + 1);
+      if (!args || (args.words && !args.anchored && !RE_DV_DESIGN_FUNCTION.test(name) && !RE_DV_CSS_FUNCTION.test(name))) return null;
       anchored = true;
-      if (RE_DV_DESIGN_FUNCTION.test(part.slice(0, open))) strong = true;
-    } else if (RE_DV_HEX.test(part) || RE_DV_LENGTH.test(part) || RE_DV_REF.test(part) || (sass && RE_DV_VARIABLE.test(part))) strong = anchored = true;
+      if (args.strong || RE_DV_DESIGN_FUNCTION.test(name)) strong = true;
+    } else if (RE_DV_HEX.test(part) || RE_DV_LENGTH.test(part) || RE_DV_REF.test(part) || (sass && RE_DV_VARIABLE.test(part)) || (inner && RE_DV_PROPERTY.test(part))) strong = anchored = true;
     else if (RE_DV_MEASURE.test(part)) anchored = true;
     else if (RE_DV_NUMBER.test(part) || part === "*" || part === "+" || part === "-" || DV_KEYWORDS.has(part.toLowerCase())) continue;
-    else if (sass && RE_DV_WORD.test(part)) words = true;
+    else if ((sass || inner) && RE_DV_WORD.test(part)) words = true;
     else return null;
   }
-  if (depth !== 0 || !parts || (words && !anchored)) return null;
-  return strong ? "strong" : "weak";
+  return depth !== 0 ? null : { strong, anchored, words, parts };
+}
+function designValue(value, sass) {
+  const v = String(value == null ? "" : value).trim();
+  if (!v || v.length > DV_MAX) return null;
+  const r = dvScan(v, !!sass, false, 0);
+  if (!r || !r.parts || (r.words && !r.anchored)) return null;
+  return r.strong ? "strong" : "weak";
 }
 // The tokens a stylesheet declares: custom properties (`--name: value`) and Sass variables (`$name: value`), in file order —
 // every one by its NAME, its value only when it is a design value (`$mapbox-token: "pk.…"` is listed with none).
@@ -278,30 +297,58 @@ function maskInterpolation(l) {
   }
 }
 const SASS_FLAGS = ["!default", "!important", "!global"];
-function styleTokens(text, plainCss) {
+const RE_INDENTED_EXT = /\.(?:sass|styl)$/i; // the indented syntaxes: a line's end ends a declaration, no `;`
+const RE_VALUE_GOES_ON = /[,(]$/;
+function styleTokens(text, rel) {
+  const plainCss = /\.css$/i.test(rel), indented = RE_INDENTED_EXT.test(rel);
   const out = [];
   const st = { block: false, html: false };
+  // A declaration no `;` / `}` ends on its line goes on below (a multi-line shadow, a Sass map): listed by its NAME — its
+  // first line alone is no value. Two things end one without a `;`: the line's end in an indented file, and the block's end —
+  // a block's last declaration needs none (`--gap: 8px` then `}` on the next line with text, or the file's end). Never a value
+  // that is none yet or stops at a `,` / `(`.
+  let last = null; // the declaration the last line with text left open: { entry, value }
+  const settle = (ended) => { if (last && ended && designValue(last.value, true)) last.entry.value = last.value; last = null; };
   for (const raw of text.split(/\r?\n/)) {
-    const line = withoutComments(raw.length > DS_LINE_MAX ? raw.slice(0, DS_LINE_MAX) : raw, st, { slashSlash: !plainCss, sheet: true });
-    for (const piece of maskInterpolation(line).split(/[;{}]/)) {
-      const m = /^\s*(--[A-Za-z0-9_-]+|\$[A-Za-z0-9_-]+)\s*:\s*(\S.*)$/.exec(piece);
+    // (the WHOLE line: a minified token file is one line — its length is the file's read, and every step here is linear)
+    const line = withoutComments(raw, st, { slashSlash: !plainCss, sheet: true });
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    settle(trimmed[0] === "}");
+    const pieces = maskInterpolation(line).split(/[;{}]/);
+    const end = trimmed.slice(-1);
+    const open = pieces.length - (end === ";" || end === "}" || end === "{" ? 0 : 1);
+    for (let k = 0; k < pieces.length; k++) {
+      const m = /^\s*(--[A-Za-z0-9_-]+|\$[A-Za-z0-9_-]+)\s*:\s*(.*)$/.exec(pieces[k]);
       if (!m) continue;
       let value = m[2].split(INTERPOLATION[0]).join("{").split(INTERPOLATION[1]).join("}").trim();
       for (const flag of SASS_FLAGS) if (value.endsWith(flag)) value = value.slice(0, -flag.length).trim();
-      out.push({ name: m[1], value: designValue(value, true) ? value : "" });
+      const whole = value !== "" && !RE_VALUE_GOES_ON.test(value); // (of an open declaration: what its line holds may be all of it)
+      const entry = { name: m[1], value: (k < open || (indented && whole)) && designValue(value, true) ? value : "" };
+      out.push(entry);
+      if (k >= open && whole && !indented) last = { entry, value };
     }
   }
+  settle(true);
   return out;
 }
-// A key whose LAST word names a credential — token · secret(s) · password(s) · passphrase · passcode · pin · otp ·
-// credential(s) · api key · secret key · private key · access key · bearer · authorization · jwt: github_token,
-// clientSecret, SECRET_KEY, aws_secret_access_key, db_password, _authToken. A second layer under the value gate, never the
-// gate itself: AT such a key, and anywhere beneath it (`password: {admin: 1234}`), not even a number, a keyword or a
-// variable's name is listed, and a string AT one with no design shape at all makes the whole file a credentials file.
-// (Never the plural `tokens`: a design file's own wrapper.)
-const RE_CREDENTIAL_WORD = /(?:^|[-_.\s])(?:token|secrets?|passw(?:or)?ds?|passphrase|passcode|pin|otp|credentials?|api[-_]?keys?|apikeys?|secret[-_]?key|private[-_]?key|access[-_]?key|bearer|authorization|jwt)$/i;
-const credentialKey = (k) => RE_CREDENTIAL_WORD.test(String(k).slice(0, 80).replace(/([a-z0-9])([A-Z])/g, "$1_$2"));
+// A key whose LAST word names a credential — token · secret(s) · password(s) · passphrase · credential(s) · api key ·
+// secret key · private key · access key · bearer · authorization · jwt: github_token, clientSecret, SECRET_KEY,
+// aws_secret_access_key, db_password, _authToken. A second layer under the value gate, never the gate itself: AT such a
+// key, and anywhere beneath it (`password: {admin: 1234}`), only a value that could not be a credential is listed — never a
+// number, a keyword, a variable's name —, and a free string AT one makes the whole file a credentials file. (Never the
+// plural `tokens`: a design file's own wrapper.) pin · otp · passcode GUARD the same way and never refuse a file: `map-pin`
+// is an icon's name (review 6: with them among the credential words an icon token dropped its whole file).
+const RE_CREDENTIAL_WORD = /(?:^|[-_.\s])(?:token|secrets?|passw(?:or)?ds?|passphrase|credentials?|api[-_]?keys?|apikeys?|secret[-_]?key|private[-_]?key|access[-_]?key|bearer|authorization|jwt)$/i;
+const RE_GUARD_WORD = /(?:^|[-_.\s])(?:pin|otp|passcode)$/i;
+const keyWords = (k) => String(k).slice(0, 80).replace(/([a-z0-9])([A-Z])/g, "$1_$2");
+const credentialKey = (k) => RE_CREDENTIAL_WORD.test(keyWords(k));
+const guardKey = (k) => { const w = keyWords(k); return RE_CREDENTIAL_WORD.test(w) || RE_GUARD_WORD.test(w); };
 const DS_KEY_MAX = 40; // a key of that many characters with no blank is no token's name (a 40-character token, a UUID chain, a JWT)
+// A `type` that IS a design token's (Tokens Studio, Style Dictionary): `value` beside one is a token of a format. `value`
+// and `type` are the two most generic JSON keys — beside `type: "hash"` / `"string"` they are a database dump's, and a map
+// keyed by a secret must not become a design file through them (review 6).
+const RE_TOKEN_TYPE = /^(?:color|dimension|spacing|sizing|size|space|radius|border(?:Radius|Width)?|opacity|font(?:Famil(?:y|ies)|Weights?|Sizes?|Style)|lineHeights?|letterSpacing|paragraph(?:Spacing|Indent)|text(?:Case|Decoration)|typography|boxShadow|shadow|composition|asset|duration|time|easing|cubicBezier|strokeStyle|transition|gradient|z-?index|breakpoint)$/i;
 // A JSON token file's leaves: `{color: {primary: {$value: "#1d4ed8"}}}` (the design-tokens format; Tokens Studio's and Style
 // Dictionary's `value` beside a `type`) and plain nested values → color.primary. Iterative, depth bounded; the whole document
 // is walked (a file is read up to DS_READ_CHARS) → { list, secret, format, strong, more }:
@@ -309,7 +356,7 @@ const DS_KEY_MAX = 40; // a key of that many characters with no blank is no toke
 //            text (a font stack) by its name alone. Nothing else leaves this function: a leaf's NAME is printed too, so a
 //            leaf under a key no token is ever called (DS_KEY_MAX) is left out;
 //   secret — a credential key holds a string with no design shape: a credentials file. The caller reads nothing of it;
-//   format — a `$value` / `$type` key, or a `value` beside a string `type`: a design-tokens format;
+//   format — a `$value` / `$type` key, or a `value` beside a `type` that is a token type (RE_TOKEN_TYPE): a design-tokens format;
 //   strong — a leaf that SAYS design: a colour, a length, a design function, a reference (never `3599`, `3600s`, `50%`);
 //   more   — a leaf was left past the cap.
 function jsonTokens(text) {
@@ -318,17 +365,27 @@ function jsonTokens(text) {
   try { doc = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { return res; }
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   const push = (at, value) => { if (res.list.length >= DS_TOKENS_MAX) res.more = true; else res.list.push({ name: at.join(".").slice(0, 200), value }); };
-  // guarded: a credential key is this leaf's own or above it
+  // guarded: a credential (or guard) key is this leaf's own or above it
   const leaf = (at, v0, format, guarded) => {
     const v = String(v0).trim();
     const kind = designValue(v, false);
-    if (kind === "strong") res.strong = true;
     if (guarded) {
-      if (kind === "strong") push(at, v);
-      else if (typeof v0 === "string" && credentialKey(at[at.length - 1]) && !designValue(v, true)) res.secret = true;
+      // only a value that could not be a credential: a colour, a length, a function — a reference by its dotted path
+      // (`{color.primary}`; a braced GUID has none)
+      if (kind === "strong" && !(RE_DV_REF.test(v) && !v.includes("."))) { res.strong = true; push(at, v); }
+      // a free string AT a credential key: a credentials file — unless it is a token of a format (`otp: {$value: "Roboto Mono"}`)
+      else if (!format && typeof v0 === "string" && credentialKey(at[at.length - 1]) && !designValue(v, true)) res.secret = true;
       return;
     }
+    if (kind === "strong") res.strong = true;
     if (kind) push(at, v); else if (format) push(at, "");
+  };
+  // a COMPOSITE token of a format — a shadow, a typography, a font-family list, DTCG's colour and dimension objects: by its
+  // name alone (it was not listed at all: a file made of them was no source), or by its `hex` / its `{value, unit}`
+  const composite = (at, v, guarded) => {
+    if (guarded) return;
+    const shown = typeof v.hex === "string" ? v.hex.trim() : typeof v.value === "number" && typeof v.unit === "string" ? v.value + v.unit : "";
+    push(at, shown && designValue(shown, false) ? shown : ""); // (a token of a format: the file shows what it is already)
   };
   const stack = [[doc, [], 0, false]];
   while (stack.length) {
@@ -339,12 +396,13 @@ function jsonTokens(text) {
     }
     const dtcg = own(node, "$value");
     const v = dtcg ? node.$value : own(node, "value") ? node.value : undefined;
-    const format = dtcg || (v !== undefined && typeof node.type === "string" && node.type.length <= 40);
+    const format = dtcg || (v !== undefined && typeof node.type === "string" && RE_TOKEN_TYPE.test(node.type));
     if (format || own(node, "$type")) res.format = true;
     if (at.length && (typeof v === "string" || typeof v === "number")) { leaf(at, v, format, guarded); continue; }
+    if (at.length && format && v !== null && typeof v === "object") { composite(at, v, guarded); continue; }
     if (depth >= 8) continue;
     const keys = Object.keys(node).filter((k) => !k.startsWith("$") && !(k.length >= DS_KEY_MAX && !/\s/.test(k)));
-    for (let i = keys.length - 1; i >= 0; i--) stack.push([node[keys[i]], at.concat(keys[i]), depth + 1, guarded || credentialKey(keys[i])]);
+    for (let i = keys.length - 1; i >= 0; i--) stack.push([node[keys[i]], at.concat(keys[i]), depth + 1, guarded || guardKey(keys[i])]);
   }
   return res;
 }
@@ -360,9 +418,11 @@ const jsonSource = (j) => !j.secret && j.list.length > 0 && (j.format || j.stron
 // hidden folder, nor one the root .gitignore names.
 function scanCode(root) {
   const realRoot = realRootOf(root);
-  const byKey = new Map(), views = [], tokenFiles = [], globals = [];
+  const byKey = new Map(), views = [], tokenFiles = [], globals = [], found = [], routeDirs = new Set();
   const counts = (rel) => isViewFile(rel) || isTokenFile(rel);
+  const dirOf = (rel) => rel.slice(0, Math.max(0, rel.lastIndexOf("/")));
   const walk = walkProject(root, DS_FILE_CAP, (rel, full, name) => {
+    if (RE_ROUTE_MARK.test(name)) routeDirs.add(dirOf(rel)); // a route segment: its special files are pages (ROUTE_FILES)
     const kind = tokenFileKind(rel);
     if (kind) tokenFiles.push({ rel, full, kind });
     else if (isGlobalSheet(rel, name)) globals.push({ rel, full });
@@ -370,11 +430,14 @@ function scanCode(root) {
     views.push({ rel, full });
     if (isTestFile(rel)) return;
     const c = componentOf(rel);
-    if (!c) return;
+    if (c) found.push(c);
+  }, { counts, gitignore: gitignoreRules(root, realRoot) });
+  for (const c of found) {
+    if (c.route && routeDirs.has(dirOf(c.path))) continue; // (known only once the walk is over: a folder's files come in any order)
     const had = byKey.get(c.key);
     // one component per name: its own file before a folder's index, then the shorter path
     if (!had || (had.index && !c.index) || (had.index === c.index && c.path.length < had.path.length)) byKey.set(c.key, c);
-  }, { counts, gitignore: gitignoreRules(root, realRoot) });
+  }
   const tokens = [], sources = [], seen = new Set();
   // A bound that cut what is read — the reports say so (`limits`), never "in sync". Each is set only when something WAS cut:
   //   tokenFiles — a file that IS a source found the sources full;   candidates — files named like one were left unread;
@@ -392,9 +455,16 @@ function scanCode(root) {
   // DS_TOKEN_FILES SOURCES at most, DS_TOKEN_READS candidates read to find them: a candidate that turns out to be none (a
   // JSON file of something else, a stylesheet that declares no custom property) takes no source's place.
   let read = 0;
-  const head = (f) => { read++; return readFileHead(f.full, DS_READ_CHARS); };
+  // → { text (a file's first DS_READ_CHARS characters), over (it holds more: one character further is asked for, so a file
+  //   of exactly that length is not "longer") }
+  const head = (f) => {
+    read++;
+    const t = readFileHead(f.full, DS_READ_CHARS + 1);
+    const over = t != null && t.length > DS_READ_CHARS;
+    return { text: over ? t.slice(0, DS_READ_CHARS) : t, over };
+  };
   // (cut: the rest of a stylesheet is unread, and a cut JSON file does not parse — said of a file that IS a token file)
-  const cut = (f, text) => { if (text != null && text.length >= DS_READ_CHARS && !capped.fileSize) capped.fileSize = f.rel; };
+  const cut = (f, over) => { if (over && !capped.fileSize) capped.fileSize = f.rel; };
   // a file known to BE a source joins them — unless they are full: said, and the walk of the candidates ends
   const source = (f, list) => {
     if (sources.length >= DS_TOKEN_FILES) { capped.tokenFiles = true; return; }
@@ -407,22 +477,26 @@ function scanCode(root) {
     if (capped.tokenFiles) break;
     if (unread(f)) { source(f, []); continue; } // a JS / TS / YAML one: a source, its values unread
     if (read >= DS_TOKEN_READS) { capped.candidates = true; break; }
-    const text = head(f);
-    cut(f, text); // a token file by its NAME
-    if (!/\.json$/i.test(f.rel)) { source(f, text == null ? [] : styleTokens(text, /\.css$/i.test(f.rel))); continue; }
+    const { text, over } = head(f);
+    cut(f, over); // a token file by its NAME
+    if (!/\.json$/i.test(f.rel)) { source(f, text == null ? [] : styleTokens(text, f.rel)); continue; }
     const j = text == null ? null : jsonTokens(text);
     if (!j || !jsonSource(j)) continue; // no design file after all (unreadable, unparsable, credentials, nothing that says design)
     if (j.more) capped.tokens = true;
     source(f, j.list);
   }
+  // The global stylesheets, the likeliest first: root-most, then `globals.css` before `index.css` (a monorepo's 100
+  // `Widget/index.css` beside the one `styles/globals.css` at the same depth). The search ENDS at the read bound without a
+  // word: these are candidates by a common name, not "files named like a token file" — saying a bound of them made a project
+  // that had lost nothing "not in sync" for good (review 5).
   const depth = (f) => f.rel.split("/").length;
-  for (const f of globals.sort((a, b) => depth(a) - depth(b) || order(a, b))) { // root-most first
-    if (capped.tokenFiles) break;
-    if (read >= DS_TOKEN_READS) { capped.candidates = true; break; }
-    const text = head(f);
-    const list = text == null ? [] : styleTokens(text, /\.css$/i.test(f.rel)).filter((t) => t.name.startsWith("--"));
+  const rank = (f) => (/(?:^|\/)globals?\.[a-z]+$/i.test(f.rel) ? 0 : /(?:^|\/)index\.[a-z]+$/i.test(f.rel) ? 2 : 1);
+  for (const f of globals.sort((a, b) => depth(a) - depth(b) || rank(a) - rank(b) || order(a, b))) {
+    if (capped.tokenFiles || read >= DS_TOKEN_READS) break;
+    const { text, over } = head(f);
+    const list = text == null ? [] : styleTokens(text, f.rel).filter((t) => t.name.startsWith("--"));
     if (list.length < GLOBAL_CSS_MIN) continue; // no token file: it takes no place and says no bound
-    cut(f, text);
+    cut(f, over);
     source(f, list);
   }
   const components = [...byKey.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));

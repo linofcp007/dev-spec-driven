@@ -13,33 +13,42 @@ components and tokens, and every +ui feature is checked against it.
 - **The design-system registry, `.specs/steering/design-system.md`.** One file with two tables — the tokens (name,
   value, use) and the components (name, path, variants, notes) — and three markers: `_Token sources:_` (the files that
   define the tokens), `_Libraries:_` (third-party UI libraries whose components are not listed one by one — each named
-  as the designs will cite it: `@mui/material` or `Material UI`) and, in a component's row, `_From: <feature>_` (the
-  feature that built it).
+  as the designs will cite it: `@mui/material` or `Material UI`; a note in parentheses that is its package or its
+  acronym names it too, `Material UI (@mui/material)`, `Material UI (MUI)`) and, in a component's row,
+  `_From: <feature>_` (the feature that built it).
   `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**:
   - the components: React, Vue, Svelte and Astro files, Angular `*.component.ts` and PascalCase `.js` files under
     `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper or an entry
     file (`utils.tsx`, `main.tsx`, `config/index.tsx`), a barrel (`packages/ui/src/index.tsx`) or a file whose nearest
     such folder is a page folder (`components/pages/Home.tsx`). Under a component folder a name a framework uses
     elsewhere is a component's: `components/loading.tsx`, `layout/index.tsx` and Angular's `loading.component.ts` are
-    Loading and Layout;
-  - the tokens of the token files: CSS custom properties, Sass variables, JSON tokens, and the variables of a global
-    stylesheet (`globals.css`, `index.css`… at the project's root, in a source folder or a styles folder — never a
-    component's own `Button/index.css`). A stylesheet named for its tokens, a `design-tokens.*` / `*.tokens.json` and
-    a `tailwind.config.*` count anywhere; `theme.*` anywhere but in a folder that holds something else by that name
-    (`src/store/theme.ts`, `server/models/theme.js`); a plain `tokens.*` only at the project's root or in a `styles/`,
-    `theme/`, `design/`, `tokens/` or `ui/` folder (`src/auth/tokens.ts` and `src/tokens.ts` hold access tokens), the
-    singular `token.json` never. A JS, TS or YAML token file (a Tailwind config, a `theme.ts`) is listed as a source,
-    its values unread.
+    Loading and Layout — except in a folder that is a route segment itself (it holds a `page.*` / `route.*`: a Next
+    app's `app/components/page.tsx` and the `loading.tsx` beside it are pages). `main` / `app` are entry files only
+    right inside the component folder: `components/layout/main.tsx` is Main;
+  - the tokens of the token files: CSS custom properties, Sass variables, JSON tokens, and the custom properties of a
+    global stylesheet that declares five or more (`globals.css`, `index.css`, `style.css`… wherever an app keeps its
+    own styles — `app/globals.css`, `src/app/(frontend)/globals.css`, a Django `static/` folder, a WordPress theme —,
+    never a component's, a page's or a feature's own sheet: `components/Button/index.css`, `features/cart/styles.scss`).
+    A stylesheet named for its tokens, a `design-tokens.*` / `*.tokens.json` and a `tailwind.config.*` count anywhere;
+    `theme.*` anywhere but under a folder — at any depth — that holds something else by that name (`store/`,
+    `models/`, `server/`, `types/`, `hooks/`, `scripts/`…); a plain `tokens.*` only at the project's root or in a
+    `styles/`, `theme/`, `design/`, `tokens/` or `ui/` folder (`src/auth/tokens.ts` and `src/tokens.ts` hold access
+    tokens), the singular `token.json` never. A JS, TS or YAML token file (a Tailwind config, a `theme.ts`) is listed
+    as a source, its values unread.
     **Only a design value is ever read out of a file**: a colour, a number with or without a unit, a keyword, a
-    `{reference}`, a function (`rgb()`, `var()`, `calc()`, `map-get()`), Sass arithmetic — alone or as a list. A name
-    is no proof of what a file holds (a `deploy.tokens.json`, a `_variables.scss` with `$mapbox-token`): any other
-    value — a font stack, a quoted string, free text, and so any credential that is one — is never printed or
-    written; a stylesheet's token or a token of the design-tokens format is then listed by its name alone, any other
-    JSON leaf not at all. And a JSON file is read only when it SHOWS it is a design file — the design-tokens format
-    (`$value`, or `value` beside `type`) or a value that says design (a colour, a length, a reference): its key names
-    are printed too, so a map of numbers keyed by something else is not read (nor a plain `{"spacing": {"sm": 4}}`:
-    add its rows by hand). Beneath a credential key (`…token`, `…secret`, `…password`, `api_key`…) nothing but such
-    a value is listed, and a free string right under one makes the whole file no token file;
+    `{reference}`, a function whose arguments are design values themselves (`rgb()`, `var()`, `calc()`, `map-get()` —
+    never `url()`), Sass arithmetic — alone or as a list. A name is no proof of what a file holds (a
+    `deploy.tokens.json`, a `_variables.scss` with `$mapbox-token`): any other value — a font stack, a quoted string,
+    free text, and so any credential that is one — is never printed or written; a stylesheet's token or a token of the
+    design-tokens format is then listed by its name alone (so is a composite token — a shadow, a typography, a
+    font-family list — and a declaration that goes on below its line), any other JSON leaf not at all. And a JSON file
+    is read only when it SHOWS it is a design file — the design-tokens format (`$value`, or `value` beside a `type`
+    that is a token type) or a value that says design (a hex or functional colour, a length, a reference): its key
+    names are printed too, so a map of numbers keyed by something else is not read (nor a plain
+    `{"spacing": {"sm": 4}}`: add its rows by hand), and a key of 40 characters or more with no blank is no token's
+    name — it is left out with everything under it. Beneath a credential key (`…token`, `…secret`, `…password`,
+    `api_key`…, and `pin` / `otp` / `passcode`) nothing but such a value is listed, and a free string right under one
+    (those last three aside, and never a token of the format) makes the whole file no token file;
   - the UI libraries of `package.json`.
 
   The result says how many it wrote (`seeded`: at most the 500 components and 1,000 tokens the registry is read
@@ -57,7 +66,9 @@ components and tokens, and every +ui feature is checked against it.
   **size m / l** it fails and **the design approval refuses it**, like Reuse & Integration (forceable with your
   consent). A project without a registry gets a warning that says how to create one, never a refusal — and so does
   one whose registry lists no component and declares no library that is one (a dependency of `package.json`, or a
-  scoped package such as `@mui/material`): a registry that is library-only on purpose is checked like any other.
+  scoped package such as `@mui/material`): a registry that is library-only on purpose is checked like any other —
+  name the library by its package for that (`@mui/material`, or `Material UI (@mui/material)`); a display name alone
+  only warns, and the warning says which libraries it did not recognise.
   Saving design.md shows the disagreeing rows at once.
 - **The task brief has a Design system part.** A task that builds a view gets the registry's entry of each component
   its design names (path, variants, notes), the New ones marked to build through the system, the names the registry
@@ -97,7 +108,7 @@ components and tokens, and every +ui feature is checked against it.
 - The registry is not part of an approval's fingerprint: adding a row never asks an approved feature to be re-reviewed.
 
 ### Tests
-- `node mcp/test.js` 2318 assertions, `node cli/test-cli.js` 661 (was 2266 / 657).
+- `node mcp/test.js` 2325 assertions, `node cli/test-cli.js` 662 (was 2266 / 657).
 
 ## [1.34.1] — 2026-10-31
 

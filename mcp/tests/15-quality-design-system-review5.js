@@ -162,13 +162,13 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
   {
     // (a project of its own: beside 21 other sources the bound would hide a theme.ts wrongly listed)
     const th = project("themes");
-    for (const f of ["src/store/modules/theme.ts", "src/types/theme.ts", "src/hooks/theme.ts", "src/context/theme.ts", "e2e/theme.ts", "docs/theme.js", "src/ui/theme.ts"]) write(th, f, "export default {};\n");
+    for (const f of ["src/store/modules/theme.ts", "src/types/theme.ts", "src/hooks/theme.ts", "src/context/theme.ts", "e2e/theme.ts", "scripts/theme.js", "src/ui/theme.ts"]) write(th, f, "export default {};\n");
     const themes = S.designSystemReport(th).found.sources;
     const p = project("order");
     for (let i = 0; i < 21; i++) write(p, "apps/a" + String(i).padStart(2, "0") + "/tailwind.config.ts", "export default {};\n"); // listed, their values unread
     write(p, "src/styles/tokens.css", ":root { --brand: #1d4ed8; }\n");
     const rep = S.designSystemReport(p);
-    all("1.35 review 5: theme.ts is no token file under a folder that is not the UI's, at any depth (store/modules/, types/, hooks/, context/, e2e/, docs/) — src/ui/theme.ts is one; the token files whose values ARE read come first — 21 `tailwind.config.ts` (listed, unread) do not take tokens.css's place, and the bound they reach is said (got " +
+    all("1.35 review 5: theme.ts is no token file under a folder that is not the UI's, at any depth (store/modules/, types/, hooks/, context/, e2e/, scripts/) — src/ui/theme.ts is one; the token files whose values ARE read come first — 21 `tailwind.config.ts` (listed, unread) do not take tokens.css's place, and the bound they reach is said (got " +
       js({ themes, first: rep.found.sources[0], n: rep.found.sources.length, tokens: rep.found.tokens, limits: rep.limits }) + ")", {
       themes: () => js(themes) === js(["src/ui/theme.ts"]),
       readFirst: () => rep.found.sources[0] === "src/styles/tokens.css" && rep.found.tokens === 1 && rep.found.sources.length === 20,

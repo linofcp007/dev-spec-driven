@@ -292,9 +292,12 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   English-stable markers: `_Token sources: a, b_` and `_Libraries: a, b_`, each a line of its own (`RE_DS_MARKER` — the value
   runs to the line's end: a path may hold an underscore or a blank; the stub's `[slot]` names nothing; the label alone may be
   italic, `_Libraries:_ a` — a BLANK follows that `_`, where `_sass/_variables.scss` is a path). Entries are cut at `,` / `;`
-  outside parentheses (`dsEntries`); a parenthesis that ENDS one is a note, and a library's note that is its package or
-  short name names it too (`Material UI (@mui/material)` → both; never a version). A library is named as the designs cite
-  it, a package or its NAME, and is cited as a whole word (`dsCites`: `own` is not in "Dropdown"). A LIBRARY entry whose
+  outside parentheses (`dsEntries`); a parenthesis that ENDS one is a note, and a library's note names it too ONLY when
+  it IS its package or its acronym — a scoped package (`RE_DS_SCOPED`), 2–6 capitals (`RE_DS_ACRONYM`: MUI) or a
+  dependency of the project's package.json (`Ant Design (antd)`) —, never any one word: `antd (deprecated)` made
+  "deprecated" a library, and `Reuse | OldTable (deprecated)` passed as one of its components (review 6). A library is
+  named as the designs cite it, a package or its NAME, and is cited as a whole word (`dsCites`: `own` is not in
+  "Dropdown", `antd` not in "antdx"). A LIBRARY entry whose
   FIRST word says none names nothing (`RE_DS_NONE`, EN / PT / ES: `none yet`, `nenhuma ainda`, `sin bibliotecas`, `TBD`) —
   a nicety for what the brief and the report show, NEVER what the check stands on (below: `packaged`). A token SOURCE is
   a path: one with a `/` or a `.` names nothing only when it IS such a word (`RE_DS_NONE_WHOLE` — `todo.css`, `No
@@ -319,7 +322,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   design.md is no later phase's template. States: no-section · unfilled (the scaffold's: `ui-sections` and the placeholder gate
   own both) · no-registry / empty-registry (a WARN saying how to create it — never a fail: there is nothing to agree with.
   EMPTY = it lists no component and declares no library that IS one — `packaged` (`dsPackaged`): a dependency of the
-  project's package.json, or a scoped package by its very name. A `_Libraries:_` line is free text: no word list holds
+  project's package.json (`packageDependencies`: dependencies, dev and peer, any case; the root manifest read as the scan
+  reads one — a regular file or a link that stays inside the project, its first 256K characters, a BOM dropped), a scoped
+  package by its very name, or a scope alone whose packages are dependencies (`@radix-ui` — what the seed writes; never
+  `@radix`). When it declares libraries and none is one the warning says so and how to name one
+  (`quality.dsEmptyRegistryLibraries`). A `_Libraries:_` line is free text: no word list holds
   every "not yet" (review 4: one that slipped through turned the warning into a size m refusal), and "does the design cite
   it" switched the gate off for a registry that is library-only on purpose (review 5: `Reuse | Buton` approved). A
   packaged library-only registry is checked like any other: no-rows and unknown rows fail at m / l) · na
@@ -347,26 +354,40 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   widgets, atoms…) — never a page folder below it (`PAGE_DIRS`) —, named by its file (kebab-case → PascalCase) or its folder
   for an index; never a test, a story, a hook (`useX`, `use-x`), a helper or an entry file (`NOT_COMPONENT`, as written:
   utils, types, constants, main, app, store…; never applied to an Angular `*.component.ts` — the suffix says what it is).
+  Of them `main` / `app` (`ENTRY_NAMES`) are entry files only RIGHT inside the telling folder (`src/ui/main.tsx`):
+  deeper, `components/layout/main.tsx` is the component Main (review 6).
   NOT a framework's special-file names (page, layout, loading, error, not-found, template): those files live in ROUTE
   folders, and a file is read here only under a component folder — `components/loading.tsx`, Nuxt's `components/error.vue`
   and `loading/loading.component.ts` are components (review 5: left out of the seed, "in sync", a size m design reusing
-  Loading refused). A
-  barrel's index is none (`GENERIC_DIRS`, any case: packages/ui/src/index.tsx is no "Src", icons/index.tsx no "Icons"), nor
-  a helper folder's (`HELPER_DIRS`, as written: config/, context/, store/, constants/, i18n/) — but NOT the special-file
+  Loading refused) — EXCEPT in a folder that is a route segment itself: one holding a `page.*` / `route.*`
+  (`RE_ROUTE_MARK`). A Next app with a route called components / ui / design-system keeps
+  `app/components/{page,loading,error}.tsx` there: pages (`ROUTE_FILES`; `componentOf` says `route`, `scanCode` knows the
+  folders only once the walk is over — review 6: seeded as Page / Loading / Error, `New | Layout` then "already listed").
+  A barrel's index is none (`GENERIC_DIRS`, any case: packages/ui/src/index.tsx is no "Src", icons/index.tsx no "Icons"), nor
+  a helper folder's (`HELPER_DIRS`, as written: config/, context/, store/, constants/, i18n/, mocks/, util/, helper/,
+  tokens/, style/) — but NOT the special-file
   names: `layout/index.tsx`, `loading/`, `error/`, `theme/`, `page/` under components/ ARE the components of those names
   (review 4: with `NOT_COMPONENT` applied to an index's folder, a design reusing Layout was refused); a folder's leading `_`
   is dropped (`dirName`: Next's `_components/`).
 - **Token files** (`tokenFileKind` → style · named · theme · plain; `isTokenFile`) — by name AND place: a stylesheet named
   tokens / _variables / theme and a design-tokens.* / *.tokens.json / tailwind.config.* anywhere; `theme.*` ANYWHERE but
   under a folder that holds something else by that name, at any depth (`NOT_UI_DIRS`: store, models, redux, server, types,
-  hooks, context, e2e, docs…) — wide on purpose: listing one too many costs a path in a list, missing one loses the
+  hooks, context, e2e, scripts… — never utils / helpers / docs / public, review 6: a theme kept beside the helpers or in
+  a docs site IS the project's) — wide on purpose: listing one too many costs a path in a list, missing one loses the
   project's tokens (a WordPress theme's wp-content/themes/acme/theme.json, Expo's constants/theme.ts); a plain `tokens.*`
   only at the root or in a telling folder (`TOKEN_DIRS`), `src/` looked through (`homeDir`: packages/ui/src/tokens.ts lives
   in `ui`) — narrow on purpose, the name is everyone's: never `src/auth/tokens.ts`, `src/tokens.ts`, `ui/lib/tokens.ts`,
   nor the singular `token.json`. A GLOBAL stylesheet declaring ≥ 5 custom properties counts too (`isGlobalSheet`: globals /
-  index / app / main / styles / base / root .css / .scss) — by its place: the root, a source folder or a styles folder
-  (`GLOBAL_CSS_DIRS`), never a component's own `Button/index.css`. Read: custom properties and Sass variables
-  (`styleTokens`), a JSON file's leaves (`jsonTokens`); a JS / TS / YAML one is listed as a source, its values unread — the
+  index / app / main / styles / base / root .css / .scss) — WHEREVER an app keeps its own styles, and it is the EXCLUSION
+  that is short: never a component's, a page's or a feature's own sheet, one that lies below such a container without
+  being right inside it (`OWN_SHEET_DIRS`: `components/Button/index.css`, `features/cart/styles.scss`,
+  `pages/home/index.css` — `src/routes/styles.css` is SvelteKit's global one). Review 5 had listed the places a global
+  sheet may be in and lost six ordinary ones (a Next route group or `[locale]` segment, Django's / Flask's `static/`, a
+  WordPress theme's `style.css` — review 6). Read: custom properties and Sass variables (`styleTokens` — the WHOLE line:
+  a minified token file is one line; a declaration no `;` / `}` ends on its line goes on below and is listed by its NAME,
+  unless its block or its file ends right there, or the file is an indented one, .sass / .styl, where a line's end ends
+  it — never a value that stops at a `,` / `(`), a JSON file's leaves (`jsonTokens`); a JS / TS / YAML one is listed as a
+  source, its values unread — the
   files whose values ARE read come first (21 `tailwind.config.ts` must not take tokens.css's place). Libraries =
   `UI_LIBRARIES` ∩ package.json's dependencies.
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
@@ -374,31 +395,46 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),
   so NOTHING is shown by exclusion: a value is shown only when it has the SHAPE of a design value — parts separated by
   blanks, commas or slashes, each a hex colour, a number with or without a unit, a `{reference}`, a keyword of the list
-  (`DV_KEYWORDS`), an arithmetic sign alone, or a function of ANY name whose ARGUMENTS hold only word characters and
-  `. , % / # + * - $ @ { } ( )` — the arguments are the guard, never the name (`var(FAKE)` always passed; a list of names
-  only hid `map-get()` and `math.div()`); in a stylesheet also a variable's name (`$brand`, `-$gutter`, `--brand`), an
+  (`DV_KEYWORDS`), an arithmetic sign alone, or a function of ANY name — or none, a group — whose ARGUMENTS are design
+  values themselves, read the same way (`dvScan`, recursive, `DV_DEPTH` levels): what guards a function is what it
+  holds, never its name (`var(FAKE)` always passed a name list, which only hid `map-get()` and `math.div()`; review 6:
+  "any characters of a set" let `ENC(Xk29…)`, `url(//host/v1/KEY/x)` and `(SecretValue1)` through). Never `url(…)`.
+  Inside the arguments a custom property's name (`var(--x)`) is a value, and plain lower-case words beside a part that is
+  more than a bare number, or alone in a function CSS knows (`RE_DV_DESIGN_FUNCTION`, `RE_DV_CSS_FUNCTION`:
+  `linear-gradient(to right, …)`, `env(safe-area-inset-top)`, `steps(4, end)` — never `rate(5 minutes)`, `unquote(hello
+  world)`); in a stylesheet also a variable's name (`$brand`, `-$gutter`, `--brand`), an
   interpolation (`#{$x}` — `maskInterpolation` keeps its braces while a line is cut at `{ }`) and, beside a part that is
-  more than a bare number or a word, plain lower-case words (`opacity .15s linear`; never `hunter two`). A secret is a
-  free string, and a free string has no such shape; a quote is never accepted. **Adding a value form? It must be one no
-  secret can take** — a `$word` is accepted in a stylesheet, never in JSON. STRONG = a part that SAYS design: a colour, a
-  length, a design function (`RE_DV_DESIGN_FUNCTION`), a reference; a time, a percentage, a bare number, `rate(5 minutes)`
-  are weak — shown, but no evidence of what a file is.
+  more than a bare number or a word, plain lower-case words (`opacity .15s linear`; never `hunter two`, `Hunter 5px`). A
+  secret is a free string, and a free string has no such shape; a quote is never accepted. **Adding a value form? It must
+  be one no secret can take** — a `$word` is accepted in a stylesheet, never in JSON. STRONG = a part that SAYS design: a
+  colour, a length, a design function (`RE_DV_DESIGN_FUNCTION`), a reference (`RE_DV_REF`: it starts with a letter — a
+  braced GUID is none), a function holding one of them; a time, a percentage, a bare number are weak — shown, but no
+  evidence of what a file is.
 - **A NAME is printed too** (review 5: a map keyed by the secret — `{"ghp_…": 1700000000}`, `{"sk-…": {"rate": 100}}` — put
   the secret in the report as a token's name). Nothing gates a name, so `jsonSource` decides on the FILE: a JSON file is
   read only when it holds no credential and SHOWS it is a design file — a design-tokens format (`$value` / `$type`, or
-  `value` beside a string `type`: Tokens Studio, Style Dictionary) or a STRONG value. The price, said in the user docs: a
-  plain file of bare numbers (`{spacing: {sm: 4}}`) is not read. Under it: a key of `DS_KEY_MAX` characters with no blank
-  is no token's name (its subtree is left out); `credentialKey` — a key whose LAST word names a credential (…token,
-  …secret(s), …password(s), pin, otp, api_key, secret_key, jwt; camelCase split; never the plural `tokens`, a design file's
-  wrapper) — guards everything AT and BENEATH it: only a strong value is listed there (never a numeric password under
-  `password: {admin}`), and a string AT one with no design shape makes the file a credentials file (`secret`). A
-  stylesheet's token is listed by its NAME always (an identifier of a file named for tokens), its value only when it is
-  one; a token of a format whose value is free text (a font stack, `Semi Bold`) by its name alone. The whole document
+  `value` beside a `type` that IS a token type, `RE_TOKEN_TYPE`: Tokens Studio, Style Dictionary — `value` and `type` are
+  the two most generic JSON keys, and beside `type: "hash"` they are a database dump's, review 6) or a STRONG value. The
+  price, said in the user docs: a plain file of bare numbers (`{spacing: {sm: 4}}`) is not read. Under it: a key of
+  `DS_KEY_MAX` characters with no blank is no token's name (its subtree is left out); `credentialKey` — a key whose LAST
+  word names a credential (…token, …secret(s), …password(s), api_key(s), secret_key, credential(s), jwt; camelCase split;
+  never the plural `tokens`, a design file's wrapper) — guards everything AT and BENEATH it: only a strong value is listed
+  there (never a numeric password under `password: {admin}`, nor a `{reference}` without a dotted path: a braced GUID),
+  and a FREE string AT one — its own key, never a token of a format — makes the file a credentials file (`secret`).
+  pin · otp · passcode guard the same way (`guardKey`) and NEVER refuse a file: `map-pin` is an icon's name, and with
+  them among the credential words an icon token dropped its whole file (review 6). A stylesheet's token is listed by its
+  NAME always (an identifier of a file named for tokens), its value only when it is one; a token of a format whose value
+  is free text (a font stack, `Semi Bold`) by its name alone, and so a COMPOSITE one — `$value` an object or a list: a
+  shadow, a typography, a font-family list, a cubic-bezier (`composite`; DTCG's colour and dimension objects by their
+  `hex` / `value + unit`) — it was not listed at all, and a file made of them was no source (review 6). The whole document
   is walked (a credential past the 1,000th leaf still counts); a BOM is dropped.
 - **Bounds of the token read** — `DS_TOKEN_FILES` (20 SOURCES) of at most `DS_TOKEN_READS` (100) candidates read: a
-  candidate that turns out to be no source takes no source's place, global stylesheets are read root-most first;
-  `DS_TOKENS_MAX` (1,000 — what the registry's reader reads, as `DS_SEED_COMPONENTS` is 500); a file read up to
-  `DS_READ_CHARS` (a cut JSON file does not parse: no source). `capped` → a `limits` code, each set ONLY when something
+  candidate that turns out to be no source takes no source's place, global stylesheets are read root-most first, then
+  `globals.css` before `index.css` (a monorepo's 100 `Widget/index.css` beside the one `styles/globals.css`), and their
+  search ENDS at the read bound without a word — they are candidates by a common name, not "files named like a token
+  file"; `DS_TOKENS_MAX` (1,000 — what the registry's reader reads, as `DS_SEED_COMPONENTS` is 500); a file read up to
+  `DS_READ_CHARS` (one character further is asked for: a file of exactly that length is not "longer"; a cut JSON file
+  does not parse: no source). `capped` → a `limits` code, each set ONLY when something
   was cut: `tokenFiles` when a file that IS a source finds them full, `candidates` when files named like one are left
   unread, `fileSize` (the file's path) for a token file by its name or a stylesheet that qualified — never for a
   candidate that is none (review 5: a 330K built stylesheet, 120 components' `styles.scss` said a bound of a project
@@ -489,7 +525,12 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   list cut to one name, the opaque bound moved, a regex's `i` flag) — fixtures added, 69 mutations checked, each caught. Do the same
   for the next fix here: run the test with the fix undone, and ask what ELSE the fixture would let through. Review 5's
   reviewer: 42 more, 6 survived (a fixture whose `<style` line never matched the pattern it claimed to test; the camelCase
-  split of `credentialKey`) — and the bound tests gained one fixture per code.
+  split of `credentialKey`) — and the bound tests gained one fixture per code. Review 6's reviewer: 92, 32 survived
+  (each credential word alone, the "no blank" half of `DS_KEY_MAX`, a bound at exactly its value, dev / peer
+  dependencies, the word boundary AFTER a library's name, a NOT_UI_DIRS name) — fixtures added; 88 mutations checked
+  here, each caught. Three that survived were EQUIVALENT — the code they removed did nothing (a branch for an array
+  that has no `hex`, a `strong` set on a file that is a format's already, a `)` check the recursion makes redundant):
+  a mutation no fixture can catch is a line to delete, so they were deleted.
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
@@ -723,3 +764,26 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   depends on the INPUT being judged ("the design cites it") makes the gate inconsistent — stand on a property of the
   PROJECT (a package.json dependency); (3) a bound that is said makes the report "not in sync" for good: say it only
   when something was cut.
+- **1.35 review 6** (two fresh reviewers on review 5's commit) — the first round with no HIGH. MEDIUM, regressions of
+  review 5's own fixes: the list of places a global stylesheet may be in lost six ordinary ones (a Next route group or
+  `[locale]` segment, Django's and Flask's `static/`, `public/style.css`, a WordPress theme's `style.css`) — inverted,
+  the exclusion is now the short list (`OWN_SHEET_DIRS`); the special-file names taken out of `NOT_COMPONENT` seeded
+  Page / Layout / Loading / Error from a route folder called components / ui / design-system (`ROUTE_FILES`, the
+  walk's `routeDirs`). MEDIUM, older: `components/layout/main.tsx` no component (`ENTRY_NAMES`); DTCG's composite
+  tokens not listed, a file made of them no source (`composite`). LOW: `pin` / `otp` among the credential words refused
+  a whole file for an icon token `map-pin` (`RE_GUARD_WORD`: a guard, never a veto); `value` beside ANY string `type` a
+  format — a database dump keyed by secrets printed its keys (`RE_TOKEN_TYPE`); a function's arguments guarded by a
+  character set let `ENC(…)`, `url(//host/v1/KEY/x)` and `(Secret1)` through (`dvScan`, recursive); any one-word note a
+  library (`antd (deprecated)`); the project's package.json read through a link, unbounded, a BOM unparsed
+  (`packageDependencies`); the seed's own `@radix-ui` no package; `theme.*` refused under utils / helpers / docs /
+  public; `file-size` said of a file of exactly a read's length; a minified token file cut at the line cap; a
+  multi-line declaration shown by its first line — and, found while testing that last fix before it shipped, every
+  line of an indented `.sass` file and a block's last declaration (no `;`) shown blank (`styleTokens`: `settle`). Left
+  as they are, knowingly: a `|` in a token's name is escaped in the pasted row and not read back; JSON nested deeper
+  than 8; a WordPress `theme.json` palette (an array of objects); a monorepo workspace's own package.json; a mixin's
+  parameters listed as tokens by name. Docs: six imprecisions, one stale code comment. Lessons: (1) a list of PLACES
+  is a name list too — review 4's lesson was applied to credentials and broken the next round for stylesheets; when a
+  list is unavoidable, list the SHORT side (what is excluded) and leave the other open; (2) a fix that narrows a rule
+  needs the fixture of what the rule was FOR (a route folder), not only of the case that complained; (3) a fix made
+  between two reviews gets the same scrutiny as a finding — the `.sass` regression lived one hour, because the new
+  fixture was written against real syntaxes rather than against the finding's example.

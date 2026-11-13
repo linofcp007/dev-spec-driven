@@ -23,7 +23,7 @@ let acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders, clari
   templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
-  closestName, sectionState, tableCells;
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf;
 function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracketPlaceholders,
   clarificationMarkers, criterionBlocks, detectTracks, dirKey, earsValidate, errs, existingFeature, featureDirs,
   featureLang, ghostMarkers, headingEntries, headingLeadRe, inactiveMarkerLines, isGenericSlot, genericAnswer, isObj, isRecord,
@@ -35,7 +35,7 @@ function __link(E) { ({ acIndex, acOneLine, activeDesign, artifactReport, bracke
   templateFileList, templateOverride, trackLabel, trackMarker, unitIn, VALID_TRACKS,
   FOLD_CASE, GUARD_CODE_EXT, implementsKey, implementsRel, isImplementsGlob, isInsideDir, isNetworkPath, isTestCodePath, SCAN_IGNORE, toPosix, changeViews,
   featureSize, CHANGE_FILE, isChangeDir, extractSection, changeScope, builtinTemplateReqs, cueRules, SIGNALS, trackSectionTable, packFragment, packTitle, slugify, dayOf,
-  closestName, sectionState, tableCells } = E); }
+  closestName, sectionState, tableCells, projectFileInside, readFileHead, realRootOf } = E); }
 
 // ---------------------------------------------------------------------------
 // spec quality: steering amendments · cross-feature acceptance criteria · the glossary
@@ -1157,8 +1157,8 @@ const DS_MARKER_LINES = 100; // marker lines read (a registry has two)…
 const DS_MARKER_ENTRIES = 50; // …and the entries kept of each kind
 // A LIBRARY entry that names nothing, by its FIRST word (EN / PT / ES): "none", "none yet", "nenhuma ainda", "sin
 // bibliotecas", "n/a (custom only)", "TBD" — a nicety for what the brief and the report show, never what the check stands on
-// (no word list is complete: "por definir", "custom only" — designSystemCheck asks whether the DESIGN cites a library). A
-// token source is a path: one with a `/` or a `.` names nothing only when it IS such a word (`todo.css`, `No Name/tokens.css`
+// (no word list is complete: "por definir", "custom only" — designSystemCheck stands on `packaged`: a declared library that
+// IS one, dsPackaged). A token source is a path: one with a `/` or a `.` names nothing only when it IS such a word (`todo.css`, `No Name/tokens.css`
 // are files).
 const RE_DS_NONE = /^(?:none|no|not|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|sem|ningun[oa]?|ningún|sin)(?=$|[\s(,:!])/iu;
 const RE_DS_NONE_WHOLE = /^(?:none|n\/a|na|nil|nothing|tbd|todo|nenhum[a]?|nada|ningun[oa]?|ningún)$/iu;
@@ -1232,6 +1232,8 @@ function designSystemRegistry(root) {
     }
   }
   const lists = { "token sources": [], libraries: [] };
+  let deps = null; // the project's package.json dependencies — read once, and only when a marker asks
+  const dependencies = () => deps || (deps = packageDependencies(path.dirname(root)));
   let markers = 0;
   for (const m of stripFencedCode(stripHtmlComments(body)).matchAll(RE_DS_MARKER)) {
     if (++markers > DS_MARKER_LINES) break;
@@ -1252,12 +1254,14 @@ function designSystemRegistry(root) {
       if (at > 0) { note = w.slice(at + 2, -1).trim(); w = w.slice(0, at).trim(); }
       if (!w || w === "-" || w === "—" || (library || !/[/.]/.test(w) ? RE_DS_NONE : RE_DS_NONE_WHOLE).test(w)) continue;
       add(w); // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`)
-      // …and a library's note that is its package or its short name names it too: `Material UI (@mui/material)`, `(MUI)`
-      if (library && RE_DS_ALIAS.test(note) && !/^v?\d/i.test(note)) add(note);
+      // …and a library's note that IS its package or its acronym names it too: `Material UI (@mui/material)`, `(MUI)`,
+      // `Ant Design (antd)` with antd a dependency — never any one word: `antd (deprecated)` made "deprecated" a library,
+      // and `Reuse | OldTable (deprecated)` passed as one of its components (review 6)
+      if (library && note && (RE_DS_SCOPED.test(note) || RE_DS_ACRONYM.test(note) || dependencies().has(note.toLowerCase()))) add(note);
     }
   }
   // Does a registry with no component row build on a library that IS one — see dsPackaged (asked only then)
-  const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(root, lists.libraries);
+  const packaged = !keys.size && lists.libraries.length > 0 && dsPackaged(lists.libraries, dependencies);
   return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, packaged, total,
     truncated: total.components > components.length || total.tokens > tokens.length };
 }
@@ -1279,15 +1283,28 @@ function dsEntries(value) {
 // that slipped through turned an empty registry's warning into a size m refusal), and "does the design cite it" switched
 // the gate off for a registry that is library-only on purpose (review 5: `Reuse | Buton` approved).
 const RE_DS_SCOPED = /^@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*$/i;
-const RE_DS_ALIAS = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i;
-function dsPackaged(root, libraries) {
+const RE_DS_SCOPE = /^@[a-z0-9][\w.-]*$/i; // a scope alone — what the seed writes for a family of packages: `@radix-ui`
+const RE_DS_ACRONYM = /^[A-Z]{2,6}$/;
+function dsPackaged(libraries, dependencies) {
   if (libraries.some((l) => RE_DS_SCOPED.test(l))) return true;
-  let pkg = null;
-  try { pkg = JSON.parse(readIfExists(path.join(path.dirname(root), "package.json")) || "null"); } catch { /* no readable package.json */ }
-  if (!isRecord(pkg)) return false;
+  const names = dependencies();
+  if (!names.size) return false;
+  return libraries.some((l) => { const n = l.toLowerCase(); return names.has(n) || (RE_DS_SCOPE.test(n) && [...names].some((d) => d.startsWith(n + "/"))); });
+}
+// The dependency names of the project's package.json (dependencies, devDependencies, peerDependencies), lower-cased → a Set
+// (empty: none readable). Read as the scan reads a root manifest: a regular file, or a link that stays inside the project
+// (never `package.json -> ~/.npmrc`); its first DS_PACKAGE_CHARS characters (a manifest is never longer — a 32 MB one cost
+// 2 s on every registry read); a BOM dropped.
+const DS_PACKAGE_CHARS = 256 * 1024;
+function packageDependencies(projectRoot) {
   const names = new Set();
+  const file = path.join(projectRoot, "package.json");
+  const text = projectFileInside(realRootOf(projectRoot), file) ? readFileHead(file, DS_PACKAGE_CHARS) : null;
+  let pkg = null;
+  try { pkg = text == null ? null : JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { /* no readable manifest */ }
+  if (!isRecord(pkg)) return names;
   for (const k of ["dependencies", "devDependencies", "peerDependencies"]) if (isRecord(pkg[k])) for (const n of Object.keys(pkg[k])) names.add(n.toLowerCase());
-  return libraries.some((l) => names.has(l.toLowerCase()));
+  return names;
 }
 // → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole word: `own` is not in "Dropdown".
 function dsCites(registry) {
@@ -1382,7 +1399,8 @@ function designSystemFindings(usage, registry, slug) {
 }
 // doctor's `ui-design-system` over an (active) design of a +ui feature → { id, status, detail, state }. States: no-section (the
 // design has no Design System Usage section — an optional one at size s; `ui-sections` owns a missing one) · unfilled (still the
-// scaffold: `ui-sections` and the placeholder gate own it) · no-registry · empty-registry (the file lists no component) · na (the
+// scaffold: `ui-sections` and the placeholder gate own it) · no-registry · empty-registry (the file lists no component and
+// declares no library that is one — `packaged`) · na (the
 // section's ONE line "n/a — <reason>") · no-rows (written, but no `Kind | Component | Why` row to check) · mismatch · ok.
 // opts: { registry (designSystemRegistry's), approval (approvals.design — its `designSystem` stamp), gate (the feature's size
 // when the check may FAIL — an approval being made, or a design not cleanly approved yet: doctor.js designSystemSettled —
@@ -1401,7 +1419,7 @@ function designSystemCheck(design, lang, opts = {}) {
   // A registry that lists no component has nothing to agree with — unless it builds on a library that IS one (`packaged`:
   // a dependency of package.json, a scoped package). Then it is library-only on purpose and every row is checked, as with
   // components. A `_Libraries:_` line of free text ("not yet", in any words and any language) declares none.
-  if (!reg.keys.size && !reg.packaged) return out("warn", Q.dsEmptyRegistry, "empty-registry");
+  if (!reg.keys.size && !reg.packaged) return out("warn", reg.libraries.length ? Q.dsEmptyRegistryLibraries(reg.libraries.slice(0, 3).join(", ")) : Q.dsEmptyRegistry, "empty-registry");
   if (st === "na") return out("pass", Q.dsNa, "na");
   const usage = designSystemUsage(design);
   const bad = opts.gate ? "fail" : "warn";
@@ -2306,4 +2324,4 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  dsKey, RE_DS_COMPONENT_HEAD, RE_DS_COL, __link };
+  dsKey, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, __link };
