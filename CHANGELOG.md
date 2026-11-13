@@ -19,11 +19,13 @@ components and tokens, and every +ui feature is checked against it.
   (`Headless UI (react)`) only where a row cites it — in parentheses or brackets, after a dash, before a colon:
   `Button (SLDS)`, `Button [SLDS]`, `Button — SLDS`, `SLDS: Button` —; a version written as one, a range too, or a
   markdown link is dropped, `antd v5`, `antd ^5.21`, `[antd](https://ant.design)`; a name with a bare number is
-  cited without it too — anywhere in a cell when the shorter name is two words, an acronym or a package of the root
-  `package.json` (`antd Table` for `antd 5`, `Flowbite Modal` with `flowbite-react`), else, and for a framework's
-  own name (`React 19`), only where a row cites it: `Modal (Bootstrap)` for `Bootstrap 5` in a project whose root
-  manifest does not hold the package — or say the short name yourself, `Bootstrap 5 (Bootstrap)`) and, in a
-  component's row, `_From: <feature>_` (the feature that built it).
+  cited without it too — anywhere in a cell when the shorter name is two words, an acronym or the library's own
+  package in the root `package.json`: a dependency of that name, one under a scope that begins with it, or the name
+  joined to a framework's name, `ui` or `components` (`antd Table` for `antd 5`; `flowbite-react`, `evergreen-ui`,
+  `carbon-components-svelte`). Else only where a row cites it: `Modal (Bootstrap)` for `Bootstrap 5` in a project
+  whose root manifest does not hold the package — or say the short name yourself, `Bootstrap 5 (Bootstrap)`. The
+  name of a framework taken from a bare number or a note (`React 19`, `Headless UI (react)`) cites only there too)
+  and, in a component's row, `_From: <feature>_` (the feature that built it).
   `steering_scaffold {file: "design-system.md"}` / `dev-spec steering design-system.md` writes it **from the code**:
   - the components: React, Vue, Svelte and Astro files, Angular `*.component.ts` and PascalCase `.js` files under
     `components/`, `ui/`, `design-system/`…, never a test, a story, a `useX` / `use-x` hook, a helper or an entry
@@ -88,8 +90,9 @@ components and tokens, and every +ui feature is checked against it.
   (none it lists fits, and why). A library's component is written `TextField (@mui/material)`; several components may
   share a cell, separated outside the parentheses, each naming its library (`TextField (@mui/material, outlined),
   Dialog (@mui/material)`) — a component's name is what stands outside its parentheses. A row whose first cell is
-  none of the three kinds (in EN, PT or ES) is no usage row: it is neither checked nor counted. A feature that uses
-  no component writes one line, `n/a — <why, in four words or more>`.
+  none of the three kinds (in EN, PT or ES) is no usage row: it is neither checked nor counted. The first 100 rows
+  are read, and 4,000 characters of a cell. A feature that uses no component writes one line, `n/a — <why, in four
+  words or more>`.
 - **`spec_doctor` check `ui-design-system`.** It compares those rows with the registry and names each one that
   disagrees: a Reuse or Extend the registry doesn't list (with a "did you mean"), a New that is already listed, a New
   whose name is a listed one's with an affix or an edit away (`ButtonV2`, `NewButton`, `CustomCard`, `Buton` — unless
@@ -144,7 +147,7 @@ components and tokens, and every +ui feature is checked against it.
 - The registry is not part of an approval's fingerprint: adding a row never asks an approved feature to be re-reviewed.
 
 ### Tests
-- `node mcp/test.js` 2348 assertions, `node cli/test-cli.js` 663 (was 2266 / 657).
+- `node mcp/test.js` 2351 assertions, `node cli/test-cli.js` 663 (was 2266 / 657).
 
 ## [1.34.1] — 2026-10-31
 

@@ -293,12 +293,17 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   runs to the line's end: a path may hold an underscore or a blank; the stub's `[slot]` names nothing; the label alone may be
   italic, `_Libraries:_ a` — a BLANK follows that `_`, where `_sass/_variables.scss` is a path). Entries are cut at `,` / `;`
   outside parentheses (`dsEntries`); a parenthesis that ENDS one is a note — read as an entry is: the part before a
-  comma, no version written as one (`(MUI, v6)`, `(@mui/material@6)`) —, and a library's note may name it too
+  comma, no version written as one (`(MUI, v6)`, `(@mui/material@6)`), nor a bare number, which a note has no use
+  for (`(antd 5)`, `(MUI 6)` — review 11: they named nothing); a note with no letter is none (`antd 5 (>= 5)` made
+  ">= 5" a library) —, and a library's note may name it too
   (`dsAlias`): SURELY ("strong": cited wherever a row names it) when it is a scoped package, a scope a dependency
   lives under (`(@radix-ui)`, never `(@jane)`), its acronym in order from the first letter (`RE_DS_ACRONYM`:
-  `Material UI (MUI)`, `Material 3 (M3)`), a short name made of the entry's own words (`Radix UI (Radix)`: its
+  `Material UI (MUI)`, `Material 3 (M3)` — unless the capitals spell a framework's name, `React 19 (REACT)`), a
+  short name made of the entry's own words (`Radix UI (Radix)`: its
   author wrote it) or a dependency of the project (`Design System (acme-ui)`); WEAKLY (`weakLibraries`: cited only
-  where a row CITES — `dsCited`: inside `(…)` or `[…]`, after a dash, before a colon; `Button (SLDS)`, never
+  where a row CITES — `dsCited`: inside a closed `(…)` or `[…]`, nested ones with it (`dsInside`: `Modal (Bootstrap,
+  large (lg))` — review 11: only the innermost group was read, while the name was already read outside all of
+  them), after a dash, before a colon; `Button (SLDS)`, never
   `SLDS Button`, which no shape tells from `Pro Table`) for any other acronym (`Lightning Design System (SLDS)`,
   `antd (PRO)`) and for a framework's name, which a note gives as a remark (`DS_FRAMEWORKS`: `Headless UI (react)`) —
   a dependency or a word of the entry alike (`React Aria (react)`; review 10: the entry's own words were asked
@@ -312,21 +317,34 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   entry is read as it is NAMED: a markdown link is its text, unwrapped BEFORE the note is read and cleaned again
   (`RE_DS_LINK`), and a version WRITTEN as one is dropped (`RE_DS_VERSION`: `antd v5`, `antd@^5.2.0`, and a range
   with no `@` — `antd ^5.21`, `antd >= 5`: review 10, it named nothing a row can cite and `@mui/material ^6` was not
-  `packaged`); a bare
+  `packaged` —, of several parts too: `dsUnversioned`, `antd >=5 <6`, `antd ^5 || ^6`); a bare
   number stays, and the name without it is an alias too (`RE_DS_BARE_VERSION`) — strong when it is a name a row
-  would write anywhere (`dsNamed`: an acronym, two words or more, a scoped package, or a package of the project — a
-  dependency of that name, one under a SCOPE that begins with it, four letters or more (`Carbon` of `@carbon/react`),
-  or the library's package FOR a framework, the name joined to a `DS_FRAMEWORKS` one: `Flowbite` of
-  `flowbite-react`, `Bootstrap` of `react-bootstrap`, `Prime` of `primevue`), weak for one plain word no package
+  would write anywhere (`dsNamed`: an acronym, two words or more, a scoped package, or the library's own package in
+  the project — a dependency of that name, one under a SCOPE that begins with it, four letters or more (`Carbon` of
+  `@carbon/react`), or the word joined, before or after, with a dash or none, to what says "its UI package": a
+  framework's name, `ui`, `components` — every part of what is joined (`DS_FRAMEWORKS`, `DS_UI_WORDS`: `Flowbite`
+  of `flowbite-react`, `Bootstrap` of `react-bootstrap`, `Prime` of `primevue`, `Evergreen` of `evergreen-ui`,
+  `Carbon` of `carbon-components-svelte`)), weak for one plain word no package
   backs — `Material` of `Material 3` must not make "Material Picker" the library's (review 8) —, for a framework's
-  own name (`React 19`, `Next 15`: "Next Button" is a wizard's) and for a word another package merely begins with
+  own name or its stem (`React 19`, `Next 15`: "Next Button" is a wizard's; `Tailwind` of tailwindcss, `Solid` of
+  solid-js) and for a word another package merely begins with
   or contains (`base64-js`, `material-icons`, `@mui/material`). Review 9 made ALL of them weak (`Reuse | antd Table`
-  refused); review 10 found the repair too wide — any package that BEGAN with the word backed it. The ROOT
+  refused); review 10 found the repair too wide — any package that BEGAN with the word backed it; review 11 found
+  review 10's "joined to ONE framework's name" too narrow (`carbon-components-svelte`, `evergreen-ui`). The two
+  joined words are a list, knowingly: no shape tells `antd-mobile` (the library's) from `material-icons` (a font).
+  And a SCOPE that merely begins with the word still backs it — `Material 3` beside an icon font's
+  `@material-symbols/…` —: asking more of the scope lost real libraries whose scope adds a word. The ROOT
   package.json answers (`packageDependencies`; workspace manifests are not read, knowingly — review 6): in a
   monorepo whose library sits in `apps/web/package.json` the short name stays weak. So what the author WRITES as a
   name is strong, whatever was derived before it: an entry of its own (`Carbon 11, Carbon`) and a note that names
   the library surely (`Bootstrap 5 (Bootstrap)` — review 10: a note equal to the derived name was skipped as "held
   already"; a note that names it weakly leaves a name the registry holds as it was, `react, Headless UI (react)`).
+  A name has ONE strength, whatever its case and its place on the line — the strongest any writing of it earned
+  (review 11: compared with its case, the derived name weakened the entry written before it, `vuetify, Vuetify 3`;
+  `Lightning Design System (SLDS), SLDS 2` left the acronym weak). A framework's name written as an ENTRY —
+  `react`, `React v19`, `React ^19` — is what the author declared and stays strong (a React Native project's
+  `react-native` must stay `packaged`); only the name derived from a bare number or given in a note is weak, so
+  `React 19` and `React ^19` differ, knowingly.
   A weak alias never makes a registry with no
   component row `packaged`: what may not cite outside a parenthesis cannot switch the gate on. A library is cited as
   a whole WORD (`dsCites`: `own` is not in "Dropdown"), and a `-` / `/` / `@` beside it is a word's end —
@@ -343,10 +361,14 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   table since 1.35 (appended: a 1.34 one-line block still reads as template text; the no-size pin in
   mcp/tests/06-gates-sizes.js changed on purpose). `designSystemUsage(design)` → the table rows whose first cell is a kind word
   (`RE_DS_KINDS`: Reuse · Extend · New, EN / PT / ES and a few synonyms) and whose second names a component — several in one
-  cell are a row each, cut OUTSIDE parentheses (`dsEntries`) when they balance (`dsBalanced`) and at every separator when
-  they do not: an unclosed `(` must not swallow the components after it (review 10: `Card ( ; Buton` passed). The name is
+  cell are a row each, cut OUTSIDE parentheses and, from the part a `(` is never closed in, at EVERY separator
+  (`dsCellParts`): an unclosed `(` must not swallow the components after it (review 10: `Card ( ; Buton` passed) nor
+  tear the entries that closed before it (review 11: review 10 asked the balance of the WHOLE cell, and `TextField
+  (@mui/material, outlined), Card :)` was refused as "outlined)"); a `)` nothing opened counts for nothing. The name is
   what stands outside the parentheses, nested ones too (`dsOutside`: `Card (wide (2 cols), dense)` is Card), and `cell`
-  keeps them (a library: "Button (@mui/material)"); a slot row is none; ≤ 100 rows. A row whose first cell is no kind word
+  keeps them (a library: "Button (@mui/material)"); a slot row is none; ≤ 100 rows, `DS_USAGE_CELL` characters of a cell
+  (review 11: at 400, twelve library components in one cell were torn and an unlisted one past the bound was never
+  read — both bounds are in the user docs). A row whose first cell is no kind word
   (`| Modify | Buton |`) is no usage row — neither checked nor counted, said in the user docs.
 - **The findings** — `designSystemFindings(usage, registry, slug)`: `unknown` (a Reuse / Extend naming nothing the registry
   lists, nor a declared library in its cell; `near`: the did-you-mean), `listed` (a New already there — unless its registry
@@ -465,17 +487,25 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   minified token file is one line), so NO regex runs over a value: the name and its colon are matched, and the value
   is the piece's tail — `\s*:\s*(.*)$` was quadratic on a tail a `.` cannot cross, review 7. A statement is cut at
   `; { }` OUTSIDE quoted strings (`--q: "}"` closed its block; review 8) and comments (`quotedPlaces`: a `/*` in a
-  string opens none). A declaration no `;` / `}` ends on its line goes on below and is listed by its NAME, unless its
+  string opens none — nor the one inside a `//* …` line comment of a .less / .scss file: `withoutComments` took
+  Bootstrap 3's `//** doc` above each variable, or a `//*****` banner, for a block comment's opening that never
+  closed, and every variable below the first such line was lost — 2 of 42 on a real variables.less, the report "in
+  sync", on every commit since the first; review 11's one MEDIUM, found by building the file the Less repair was
+  FOR). A declaration no `;` / `}` ends on its line goes on below and is listed by its NAME, unless its
   block or its file ends right there — a lone `;` too —, or the file is an indented .sass, where a line's end ends
   it — never a value that stops at a `,`. A `name:` INSIDE the parentheses a statement opened is a parameter or a
   map's key, never a declaration (a mixin's `$border: $background,` shadowed the real `$border`, review 7); the count
   is closed by its `)` and by a `{` / `}`, and a STRAY `(` is undone where it stands — a line that opens more than
   it closes and ends in neither `,` nor `(` goes on nowhere (`// spacing (in px` in a .css) — but in Less, where a
-  mixin's parameters are separated by `;`: there a line that ends in one goes on, unless the line holds a declaration
-  of its own (`.button-variant(@color; @background;` then its defaults; `@open: fade(#000;` is still undone —
-  review 10: review 9 had dropped the Less case, and `@hover-background: darken(…)` shadowed the real variable).
+  mixin's parameters are separated by `;`: there a line that ends in one goes on when the STATEMENT that opened the
+  parenthesis is a mixin's — it begins with `.` or `#` (`RE_LESS_MIXIN`: `.button-variant(@color; @background;` then
+  its defaults, a call after a declaration on its line; `@open: fade(#000;` and a value's `calc(100% - 2px;` are
+  undone — review 10: review 9 had dropped the Less case, and `@hover-background: darken(…)` shadowed the real
+  variable; review 11: review 10 asked it of the LINE, "it holds no declaration", so a value's stray `(` in a rule
+  swallowed down to the next brace and a call after a declaration was undone).
   It is undone to the count the line FOUND, not to none: a stray `(` inside an open list leaves the list open. And
-  the count a line found open is never closed by a line's end: review 8 closed it at the end of any line that did not go on, and the last argument of a call nested
+  the count a line found open is never closed by a line's end: review 8 closed it at the end of any line that did
+  not go on, and the last argument of a call nested
   in a parameter list re-opened the parameters after it as declarations (review 9). In an indented file a line at the
   margin is a statement of its own. The exception: `@use … with (…)` / `@forward … with (…)`, whose parentheses hold
   the module's real overrides — listed by name (review 8: dropped). Then a JSON file's leaves (`jsonTokens`); a
@@ -672,7 +702,14 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   the rest is a list); 52 mutations checked on review 10's fixes and on those rules
   (mcp/tests/15-quality-design-system-review10.js — its last assertion pins rules that did not change, so it passes
   on the previous commit by design), each caught, one only after a fixture was added (`& .card`: a regex that let a
-  blank through was caught by nothing in that file).
+  blank through was caught by nothing in that file). Review 11's reviewer: 57 of its own, 8 survived — the case of
+  `had`, a weak note clearing a weakness, the length guard of the framework join, `<` in a range, a `)` nothing
+  opened, the separators of the unbalanced cut: fixtures added; 48 mutations checked on review 11's fixes
+  (mcp/tests/15-quality-design-system-review11.js), 47 caught — three only after a fixture was added (a parameter
+  line must END in `;` to be read as a declaration at all), one after a redundant condition was deleted (a
+  framework's stem needs no length guard: the exact name is its own stem), and one mutant of mine was a syntax
+  error, not a result: read WHY a mutant fails. Not reachable by a fixture, and left: appending the comment's
+  slash only when a `/*` follows — a line that merely ends in ` /` loses nothing a token reader sees.
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
@@ -1029,3 +1066,23 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   state the cases a repair must NOT change before writing it, and run the previous reviewers' rows against the old
   commit; (3) a rule that cannot be right for every project (which manifest, which twin, a threshold) is finished
   when the docs say where it stops and how to say it by hand — not when it guesses better.
+- **1.35 review 11** (a SHORT round, one fresh reviewer on review 10's diff alone; 743 gate rows, 21 real-shaped
+  projects and the Less shapes on three commits) — no HIGH; ONE MEDIUM, older and outside the diff: a `//* …` line
+  comment opened a block comment that never closed (above). LOW, four regressions of review 10: the library's own
+  package was backed only as "name + ONE framework" (`carbon-components-svelte`, `evergreen-ui`, `radix-ui`); a
+  cell whose parentheses did not balance was torn whole (`TextField (@mui/material, outlined), Card :)`, a cell
+  cut at its 400th character inside a parenthesis); in Less a value's stray `(` on a line ending in `;` swallowed
+  down to the next brace; a framework's name written with a RANGE became an entry's (`React ^19` — kept: it is what
+  `React v19` always was, and said above). LOW, older: a scope that merely begins with the word (`Tailwind` beside
+  `@tailwindcss/vite` — a framework's stem now; an icon font's scope left, said above); a name's strength by its
+  case and order; a framework's name in capitals; a weak alias in nested parentheses; an unlisted component past a
+  long cell's bound; ranges of several parts and a note's bare number. Cosmetic: the `unknown` hint, repeated per
+  row, was shortened. The round's own differential — the reviewer's 743 rows and 21 projects on the working tree
+  against review 10's commit — shows 55 rows changed, each one named above, and no project. Lessons: (1) the
+  MEDIUM was found by building the REAL file a repair was written for (Bootstrap 3's own variables.less) instead of
+  the three lines that show the repair works — the cheapest way to meet the bugs beside it; (2) "name + a
+  framework" was a property of ONE example (`flowbite-react`): before settling a rule, list ten real packages it
+  must hold, not the one that prompted it; (3) a repair that asks its question of a LINE or of a WHOLE cell when
+  the fact belongs to a statement or to one entry will be right on the fixture and wrong beside it — twice in this
+  round; (4) a short round on the last diff alone, with the previous rounds' rows as its oracle, cost a fraction
+  of a full one and found as much.

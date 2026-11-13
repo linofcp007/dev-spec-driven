@@ -652,10 +652,12 @@ _Libraries: @mui/material_
   colon — `Button (SLDS)`, `Button — SLDS`, `SLDS: Button`) —, a version written as one, a range too, or a markdown
   link is dropped (`antd v5`, `antd ^5.21`, `[antd](https://ant.design)` are antd), and `none` / `none yet` names
   nothing. A name with a bare number keeps it and is cited without it too (`antd 5`: `antd Table`) — anywhere in a
-  cell when the shorter name is two words, an acronym or a package of the root `package.json`; one plain word no
-  such package backs (`Bootstrap 5` in a monorepo whose library sits in `apps/web/package.json`, `Material 3`) and a
-  framework's own name (`React 19`) only where a row cites it, `Modal (Bootstrap)` — say the short name yourself
-  for more: `Bootstrap 5 (Bootstrap)`. A registry that lists no component is checked against a design only when a
+  cell when the shorter name is two words, an acronym or the library's own package in the root `package.json` (a
+  dependency of that name, one under a scope that begins with it, or the name joined to a framework's name, `ui` or
+  `components`: `flowbite-react`, `evergreen-ui`); one plain word no such package backs (`Bootstrap 5` in a monorepo
+  whose library sits in `apps/web/package.json`, `Material 3`) only where a row cites it, `Modal (Bootstrap)` — or
+  say the short name yourself, `Bootstrap 5 (Bootstrap)`. The name of a framework taken from a bare number or a
+  note (`React 19`) cites only there, whatever a note says. A registry that lists no component is checked against a design only when a
   library it declares is a real one — a `package.json` dependency or a scoped package: name it by its package.
   A component of a declared library is not listed here: a design cites the same words — `TextField (@mui/material)`.
 - The token values the seed writes are the design values it found — colours, lengths, numbers, references. A

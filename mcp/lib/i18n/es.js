@@ -3291,7 +3291,7 @@ const quality = {
     dsNoRows: "la sección Uso del Design System no tiene ninguna fila de componente — cada uno en una fila `| Tipo | Componente | Por qué / notas |` (Tipo: Reutilizar · Extender · Nuevo), para poder comprobarlo contra el registro; o una sola línea: n/a — por qué esta funcionalidad no usa ningún componente",
     dsMismatch: (n, list) => `la sección Uso del Design System y el registro (.specs/steering/design-system.md) no coinciden en ${n} ${n === 1 ? "fila" : "filas"} — ${list}`,
     dsProblem: {
-      unknown: (name, near) => `'${name}' no está en el registro${near ? ` (¿será ${near}?)` : ""}: reutilizar un componente enumerado, añadir su fila al registro cuando el código ya lo tiene (otra exportación de un fichero), indicar una biblioteca que el registro declara en _Libraries:_ (Componente (@biblioteca)), o usar una fila Nuevo`,
+      unknown: (name, near) => `'${name}' no está en el registro${near ? ` (¿será ${near}?)` : ""}: reutilizar un componente enumerado, añadir su fila cuando el código ya lo tiene, indicar una biblioteca que el registro declara en _Libraries:_ (Componente (@biblioteca)), o usar una fila Nuevo`,
       listed: (name, near) => `'${name}' está marcado como Nuevo, pero el registro ya enumera ${near}: pasa a ser una fila Reutilizar o Extender — o, si lo construyó esta funcionalidad, la fila del registro lleva _From: <su slug>_`,
       near: (name, near) => `el Nuevo '${name}' se parece a ${near}, que el registro enumera: reutilizar o extender ${near}, o decir en las notas de la fila por qué ${near} no sirve`,
       "no-why": (name) => `el Nuevo '${name}' no dice por qué no sirve ningún componente enumerado`,

@@ -280,7 +280,9 @@ function withoutComments(line, st, o) {
     const next = b === -1 ? h : h === -1 ? b : Math.min(b, h);
     const seg = next === -1 ? line.slice(i) : line.slice(i, next);
     if (o.slashSlash) {
-      const m = /(?:^|\s)\/\//.exec(seg);
+      // (the `/*` of a `//* …` line comment opens nothing — Bootstrap 3's `//** doc`, a `//*****` banner: the `/` before it
+      // is the comment's own; review 11: read as a block comment's opening, every variable below such a line was lost)
+      const m = /(?:^|\s)\/\//.exec(next !== -1 && next === b ? seg + "/" : seg);
       if (m) return out + seg.slice(0, m.index);
     }
     out += seg;
@@ -464,6 +466,7 @@ const RE_ROOT_SELECTOR = /^(?::(?:where|is)\(\s*)?(?::root|html|body)(?![\w-])[^
 const RE_THEME_RULE = /^@(?:theme|plugin)(?![\w-])/i;
 const RE_SELF_RULE = /^&[^\s>+~]*$/; // `&.dark`, `&[data-theme=dark]` — never `& .card`, a descendant
 const RE_MIXIN = /^@mixin\s+([\w-]+)/, RE_INCLUDE = /^\s*@include\s+([\w-]+)/;
+const RE_LESS_MIXIN = /^\s*[.#]/; // a Less statement that is a mixin's definition or call: `.button-variant(`, `#ns > .mixin(`
 function pageWide(prelude, parent) {
   if (prelude[0] === "@") return RE_THEME_RULE.test(prelude) || (parent != null && parent.global);
   if (prelude[0] === "&") return parent != null && parent.global && prelude.split(",").some((x) => RE_SELF_RULE.test(x.trim()));
@@ -487,7 +490,9 @@ function styleTokens(text, rel) {
   // outside quoted strings, and closed by its `)`, by a `{` / `}` — and a STRAY `(` is undone where it stands: a line
   // that opens more than it closes and ends in neither `,` nor `(` goes on nowhere (`// spacing (in px` in a .css,
   // `$typo: fn(1px;`) — but in Less, where a mixin's parameters are separated by `;`: there a line that ends in one goes
-  // on, unless it holds a declaration of its own (`.button-variant(@color; @background;` then its defaults — review 10).
+  // on when the statement that opened the parenthesis is a mixin's — it begins with `.` or `#`
+  // (`.button-variant(@color; @background;` then its defaults — review 10; review 11: asked of the LINE, "it holds no
+  // declaration", a value's stray `(` swallowed down to the next brace and a call after a declaration was undone).
   // Undone to the count the line FOUND, never to none (a stray `(` inside an open list leaves the list open) — and never
   // the count a line found open: review 8 closed it at the end of ANY line that did not go on, and the last argument of
   // a call nested in a parameter list (`cubic-bezier(` … `1`) re-opened the parameters after it as declarations
@@ -521,20 +526,20 @@ function styleTokens(text, rel) {
     const last1 = trimmed[trimmed.length - 1];
     if (indented && line[0] !== " " && line[0] !== "\t") paren = 0;
     const paren0 = paren;
-    let inside = paren > 0, declared = false; // declared: the line holds a declaration of its own
+    let inside = paren > 0, mixin = false; // mixin: the statement that opened the line's parenthesis is a Less mixin's
     for (let i = 0; i <= masked.length; i++) {
       const ch = i < masked.length ? masked[i] : "";
       // (a quoted string holds no delimiter: `--q: "{"`, `content: ";"` — it ends with its line)
       if (quote !== "" && ch !== "") { if (ch === BS && i + 1 < masked.length) i++; else if (ch === quote) quote = ""; continue; }
       if (ch === "\"" || ch === "'") { quote = ch; continue; }
-      if (ch === "(") paren++; else if (ch === ")" && paren > 0) paren--;
+      if (ch === "(") { if (less && paren <= paren0) mixin = RE_LESS_MIXIN.test(masked.slice(from, i)); paren++; } else if (ch === ")" && paren > 0) paren--;
       if (ch !== "" && ch !== ";" && ch !== "{" && ch !== "}") continue;
       const piece = masked.slice(from, i);
       from = i + 1;
       const within = inside && !config;
       if (prelude === "" && !inside) config = /^\s*@(?:use|forward)(?![\w-])/.test(piece);
       if (ch === "{" || ch === "}") paren = 0;
-      else if (ch === "" && paren > paren0 && !(last1 === "," || last1 === "(" || (less && last1 === ";" && !declared))) paren = paren0;
+      else if (ch === "" && paren > paren0 && !(last1 === "," || last1 === "(" || (last1 === ";" && mixin))) paren = paren0;
       inside = paren > 0;
       const top = blocks.length ? blocks[blocks.length - 1] : null;
       if (ch === "{") {
@@ -546,7 +551,6 @@ function styleTokens(text, rel) {
         continue;
       }
       const entry = within ? null : declare(piece, ch !== "");
-      if (entry) declared = true;
       // (a mixin a page-wide block includes declares for the page: `:root { @include light-theme; }`)
       const include = !entry && top != null && top.global ? RE_INCLUDE.exec(piece) : null;
       if (include && mixins.has(include[1])) themes.add(mixins.get(include[1]));

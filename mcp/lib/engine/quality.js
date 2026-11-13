@@ -1136,6 +1136,7 @@ const DS_MAX_COMPONENTS = 500; // registry rows read in full (`truncated` past t
 const DS_MAX_TOKENS = 1000;
 const DS_MAX_USAGE_ROWS = 100; // a feature's usage rows read
 const DS_CELL_MAX = 200; // a cell's characters kept
+const DS_USAGE_CELL = 4000; // a usage row's component cell read: several components may share one, each bounded by DS_CELL_MAX
 const DS_SINCE = "1.35"; // the release the check came with: a design approved before (no `designSystem` stamp) is never flagged
 const DS_BRIEF_MAX = 12; // components the brief quotes…
 const DS_BRIEF_CHARS = 1500; // …and their size
@@ -1263,11 +1264,11 @@ function designSystemRegistry(root) {
       const at = w.endsWith(")") ? w.lastIndexOf(" (") : -1;
       if (at > 0) { note = w.slice(at + 2, -1).trim(); w = w.slice(0, at).trim(); }
       // (a library's note is read as its entry is: the part before a comma, no version written as one — `(MUI, v6)`,
-      // `(@mui/material@6)`)
-      if (library && note) note = note.split(",")[0].trim().replace(RE_DS_VERSION, "").trim();
+      // `(@mui/material@6)` — nor a bare number, which a note has no use for: `Ant Design (antd 5)`, `Material UI (MUI 6)`)
+      if (library && note) note = dsUnversioned(note.split(",")[0].trim()).replace(RE_DS_BARE_VERSION, "").trim();
       // …and a library is named without a version WRITTEN as one (`antd v5`, `antd@5`: they named no package, and the gate
       // of a library-only registry was off — review 7). Never a bare number: `Material 3` is a name (review 8)
-      if (library) w = w.replace(RE_DS_VERSION, "").trim();
+      if (library) w = dsUnversioned(w);
       if (!w || w === "-" || w === "—" || (library || !/[/.]/.test(w) ? RE_DS_NONE : RE_DS_NONE_WHOLE).test(w)) continue;
       add(w); // a library as the designs will cite it — a package (`@mui/material`) or its name (`Material UI`)
       // (an entry written on its own names its library SURELY, whatever a note or a shorter name said before: `Carbon 11, Carbon`)
@@ -1277,7 +1278,14 @@ function designSystemRegistry(root) {
       // `MUI`), only where a row cites for one plain word no package backs: `Material` of `Material 3` must not make
       // "Material Picker" the library's (review 8) — and review 9: weak for ALL of them, `Reuse | antd Table` was refused
       const bare = library ? w.replace(RE_DS_BARE_VERSION, "").trim() : w;
-      if (bare && bare !== w && !into.includes(bare)) { add(bare); if (into.includes(bare) && !dsNamed(bare, dependencies)) weak.add(bare.toLowerCase()); }
+      if (bare && bare !== w) {
+        // (a name has ONE strength, whatever its case and its place on the line — the strongest any writing of it earned:
+        // `vuetify, Vuetify 3` keeps the entry sure, `Lightning Design System (SLDS), SLDS 2` makes the acronym sure;
+        // review 11: compared with its case, the derived name weakened the entry written before it)
+        const low = bare.toLowerCase(), sure = dsNamed(bare, dependencies);
+        if (into.some((x) => x.toLowerCase() === low)) { if (sure) weak.delete(low); }
+        else { add(bare); if (into.includes(bare) && !sure) weak.add(low); }
+      }
       // …and a library's note that is a package or an acronym names it too — surely or only where a row cites one (dsAlias)
       const alias = library && note ? dsAlias(w, note, dependencies) : null;
       if (alias) {
@@ -1297,12 +1305,9 @@ function designSystemRegistry(root) {
   return { file, components, keys, origins, tokens, tokenNames: seenT, sources: lists["token sources"], libraries: lists.libraries, weakLibraries: weak,
     packaged, total, truncated: total.components > components.length || total.tokens > tokens.length };
 }
-// Do a text's parentheses balance? · Its text outside them, nested ones too (an unclosed one hides what follows it).
-function dsBalanced(s) {
-  let depth = 0;
-  for (let i = 0; i < s.length; i++) { if (s[i] === "(") depth++; else if (s[i] === ")" && --depth < 0) return false; }
-  return depth === 0;
-}
+// A text outside its parentheses, nested ones too (an unclosed one hides what follows it; a `)` nothing opened stays) —
+// and what its CLOSED parentheses and square brackets hold, nested ones with them (an unclosed one holds nothing:
+// `Button (SLDS` cites no library).
 function dsOutside(s) {
   let out = "", depth = 0;
   for (let i = 0; i < s.length; i++) {
@@ -1311,16 +1316,42 @@ function dsOutside(s) {
   }
   return out;
 }
+function dsInside(s) {
+  let out = "", held = "", depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "(" || c === "[") { if (depth++ > 0) held += c; }
+    else if ((c === ")" || c === "]") && depth > 0) { if (--depth > 0) held += c; else { out += " " + held; held = ""; } }
+    else if (depth > 0) held += c;
+  }
+  return out;
+}
+// A usage cell's components: cut at `,` `;` `·` OUTSIDE parentheses — `TextField (@mui/material, outlined)` is one —, and
+// from the part a `(` is never closed in, at EVERY one: an unclosed parenthesis must not swallow the components after it
+// (review 10: `Card ( ; Buton` passed) nor tear the entries that closed before it (review 11: asked of the whole cell,
+// `TextField (@mui/material, outlined), Card :)` was refused as "outlined)"). A `)` nothing opened counts for nothing.
+const dsSeparates = (c) => c === "," || c === ";" || c === "·";
+function dsCellParts(text) {
+  const out = [];
+  let start = 0, depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === "(") depth++;
+    else if (c === ")") { if (depth > 0) depth--; } else if (depth === 0 && dsSeparates(c)) { out.push(text.slice(start, i)); start = i + 1; }
+  }
+  if (depth > 0) for (let i = start; i < text.length; i++) if (dsSeparates(text[i])) { out.push(text.slice(start, i)); start = i + 1; }
+  out.push(text.slice(start));
+  return out;
+}
 // A marker line's entries: cut at `,` / `;` outside parentheses (`@mui/material (Material UI, v6)` is one). Linear.
-// dot: a usage cell's components — `·` separates them too.
-function dsEntries(value, dot) {
+function dsEntries(value) {
   const out = [];
   let start = 0, depth = 0;
   for (let i = 0; i <= value.length; i++) {
     const ch = i < value.length ? value[i] : ",";
     if (ch === "(") depth++;
     else if (ch === ")") depth = Math.max(0, depth - 1);
-    else if ((ch === "," || ch === ";" || (dot && ch === "·")) && (depth === 0 || i === value.length)) { out.push(value.slice(start, i)); start = i + 1; }
+    else if ((ch === "," || ch === ";") && (depth === 0 || i === value.length)) { out.push(value.slice(start, i)); start = i + 1; }
   }
   return out;
 }
@@ -1335,6 +1366,17 @@ const RE_DS_ACRONYM = /^[A-Z][A-Z0-9]{1,5}$/; // MUI, SLDS, M3, UI5
 const RE_DS_LINK = /^\[([^\]]+)\]\([^)\s]*\)/;
 const RE_DS_VERSION = /(?:[ \t]+(?:v|[\^~]|[<>]=?[ \t]*)\d[\w.+]*|@[\^~]?\d[\w.+]*)$/i; // v5 · ^5.21 · ~5 · >= 5 · @5
 const RE_DS_BARE_VERSION = /[ \t]+\d[\w.+]*$/; // 5 · 5.3 · 5+
+const RE_DS_OR = /[ \t]*\|\|$/;
+// A library's name without its version WRITTEN as one — a range of several parts too: `antd >=5 <6`, `antd ^5 || ^6`
+// (review 11: the last part alone was dropped, and "antd >=5" was a library no row can cite). Bounded: four parts.
+function dsUnversioned(s) {
+  for (let i = 0; i < 4; i++) {
+    const t = s.replace(RE_DS_VERSION, "").replace(RE_DS_OR, "").trim();
+    if (t === s) break;
+    s = t;
+  }
+  return s;
+}
 function dsPackaged(libraries, dependencies) {
   if (libraries.some((l) => RE_DS_SCOPED.test(l))) return true;
   const names = dependencies();
@@ -1342,25 +1384,29 @@ function dsPackaged(libraries, dependencies) {
 }
 // Is a library's shorter name — its entry without a bare number — one a row would write ANYWHERE in its cell? An acronym,
 // two words or more, a scoped package, or a package of the project: a dependency of that name, or one under a SCOPE that
-// begins with it (`Carbon` of `@carbon/react`, `Fluent` of `@fluentui/react-components`), or the library's package FOR a
-// framework — the name joined to a framework's (`Flowbite` of `flowbite-react`, `Bootstrap` of `react-bootstrap`, `Prime` of
-// `primevue`). One plain word no package backs is not — nor a framework's name (`React 19`: "React Select" is no component
-// of it), nor a word another package merely begins with (`base64-js` backs no `Base`, `material-icons` no `Material` —
-// review 10: any package that began with the word did). The ROOT package.json answers: in a monorepo whose library sits
-// in `apps/web/package.json` the name stays weak — the docs say to write it on its own.
+// begins with it (`Carbon` of `@carbon/react`, `Fluent` of `@fluentui/react-components`), or the library's OWN package by
+// its name — the word joined to what says "the UI package of it": a framework's name, `ui`, `components` (`Flowbite` of
+// `flowbite-react`, `Bootstrap` of `react-bootstrap`, `Prime` of `primevue`, `Evergreen` of `evergreen-ui`, `Carbon` of
+// `carbon-components-svelte`). One plain word no package backs is not — nor a framework's name or its stem (`React 19`:
+// "React Select" is no component of it; `Tailwind` of tailwindcss, `Solid` of solid-js), nor a word another package
+// merely begins with (`base64-js` backs no `Base`, `material-icons` no `Material` — review 10: any package that began
+// with the word did; review 11: "the name joined to ONE framework's" then lost `carbon-components-svelte`). The ROOT
+// package.json answers: in a monorepo whose library sits in `apps/web/package.json` the name stays weak — the docs
+// say to write it on its own.
 function dsNamed(name, dependencies) {
   if (RE_DS_ACRONYM.test(name) || /\s/.test(name) || RE_DS_SCOPED.test(name)) return true;
   const n = name.toLowerCase();
-  if (DS_FRAMEWORKS.has(n)) return false;
   const long = n.length >= 4;
+  if ([...DS_FRAMEWORKS].some((f) => f.startsWith(n))) return false; // a framework's name, or its stem
   for (const d of dependencies()) {
     if (d === n || (long && d.startsWith("@" + n))) return true;
     if (!long || d.length <= n.length || !(d.startsWith(n) || d.endsWith(n))) continue;
-    const rest = d.startsWith(n) ? d.slice(n.length) : d.slice(0, -n.length);
-    if (DS_FRAMEWORKS.has(rest.replace(/^-|-$/, ""))) return true;
+    const rest = (d.startsWith(n) ? d.slice(n.length) : d.slice(0, -n.length)).replace(/^-|-$/, "");
+    if (DS_FRAMEWORKS.has(rest) || rest.split("-").every((t) => DS_FRAMEWORKS.has(t) || DS_UI_WORDS.has(t))) return true;
   }
   return false;
 }
+const DS_UI_WORDS = new Set(["ui", "components"]); // what a package's name adds to a library's to say "its UI package"
 // Does a library entry's note name the library too — and how surely?
 //   "strong" — wherever a usage row names it: a SCOPED package (`(@acme/ui)` is never a remark, whatever the entry is
 //              called — review 8: asked to be "derived from the entry", `Design System (@acme/ui)` named nothing), a scope
@@ -1376,13 +1422,14 @@ function dsAlias(entry, note, dependencies) {
   if (RE_DS_SCOPED.test(note)) return "strong";
   // (a scope alone when the project has a package under it — `(@radix-ui)`, never `(@jane)`; a version is a remark: `(V5)`)
   if (RE_DS_SCOPE.test(note)) return [...dependencies()].some((d) => d.startsWith(note.toLowerCase() + "/")) ? "strong" : null;
-  if (/^v?\d/i.test(note)) return null;
+  if (/^v?\d/i.test(note) || !/[a-z]/i.test(note)) return null; // (a version, a range — `antd 5 (>= 5)`: no name at all)
   if (RE_DS_ACRONYM.test(note)) {
     const letters = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const name = letters(entry), n = letters(note);
     let j = 0;
     for (let i = 0; i < name.length && j < n.length; i++) if (name[i] === n[j]) j++;
-    return n[0] === name[0] && j === n.length ? "strong" : "weak";
+    // (a framework's name in capitals is a framework's: `React 19 (REACT)` — review 11)
+    return n[0] === name[0] && j === n.length && !DS_FRAMEWORKS.has(note.toLowerCase()) ? "strong" : "weak";
   }
   const own = entry.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean), said = note.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   if (!dependencies().has(note.toLowerCase()) && !(said.length > 0 && said.every((w) => own.includes(w)))) return null;
@@ -1409,13 +1456,13 @@ function packageDependencies(projectRoot) {
 // A `-` / `/` / `@` beside the name is a word's end: `@radix-ui/react-dialog` and `radix-ui` cite Radix, `react-bootstrap`
 // Bootstrap, `MUI-X` and `@mui/material` MUI (review 8: a `-` taken for "another package" refused all of them — so
 // `antd-mobile` cites antd, knowingly). A WEAK alias (dsAlias) only where a row CITES — dsCited.
-// The parts of a usage cell that cite a library, apart from the component's own name: what a closed `(…)` or `[…]` holds,
+// The parts of a usage cell that cite a library, apart from the component's own name: what a closed `(…)` or `[…]` holds —
+// nested ones too (dsInside; review 11: only the innermost was read, `Modal (Bootstrap, large (lg))` cited nothing) —,
 // what follows a dash set off by blanks, what precedes a colon — `Button (SLDS)`, `Button [SLDS]`, `Button — SLDS`,
 // `SLDS: Button`; never `SLDS Button`, which no shape tells from `Pro Table`. The cell is bounded (DS_CELL_MAX).
-const RE_DS_BRACKETED = /[([]([^()[\]]*)[)\]]/g, RE_DS_DASH = /\s[—–-]\s/;
+const RE_DS_DASH = /\s[—–-]\s/;
 function dsCited(cell) {
-  const out = [];
-  for (const m of cell.matchAll(RE_DS_BRACKETED)) out.push(m[1]);
+  const out = [dsInside(cell)];
   const dash = cell.search(RE_DS_DASH), colon = cell.indexOf(": ");
   if (dash !== -1) out.push(cell.slice(dash + 3));
   if (colon !== -1) out.push(cell.slice(0, colon));
@@ -1447,12 +1494,10 @@ function designSystemUsage(design) {
       const kind = dsKind(r[0] || "");
       if (!kind || r.length < 2 || dsNameSlot(r[1])) continue;
       const why = r.slice(2).filter((c) => c != null && !dsSlot(c)).map(dsCell).join(" · ").slice(0, DS_CELL_MAX * 2);
-      // (several components in one cell are a row each — cut OUTSIDE parentheses: `TextField (@mui/material, outlined)` is one;
-      // review 9: cut anywhere, it was refused as "outlined)", on every commit since the first)
-      // — when they BALANCE: an unclosed `(` must not swallow the components after it, so such a cell is cut at every
-      // separator, as it always was (review 10: `Card ( ; Card`).
-      const text = String(r[1]).slice(0, DS_CELL_MAX * 2);
-      for (const part of dsBalanced(text) ? dsEntries(text, true) : text.split(/[,;·]/)) {
+      // (several components in one cell are a row each — cut OUTSIDE parentheses, dsCellParts: `TextField (@mui/material,
+      // outlined)` is one; review 9: cut anywhere, it was refused as "outlined)", on every commit since the first. Read
+      // up to DS_USAGE_CELL characters — review 11: at 400, a component past a long cell's bound was never checked)
+      for (const part of dsCellParts(String(r[1]).slice(0, DS_USAGE_CELL))) {
         const name = dsCell(dsOutside(part)); // "Button (@mui/material)" is Button, `Card (wide (2 cols), dense)` is Card
         const key = dsKey(name);
         if (key && rows.length < DS_MAX_USAGE_ROWS) rows.push({ kind, name, key, cell: dsCell(part), why });

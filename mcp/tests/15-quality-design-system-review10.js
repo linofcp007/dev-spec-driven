@@ -91,7 +91,7 @@ exports.run = async ({ all, S, tmp, approveBefore, require, __dirname }) => {
       js({ yes, no, hint: hint.slice(0, 260) }) + ")", {
       outside: () => js(yes) === js(rows.map(() => "approved")),
       refused: () => js(no) === js(bad.map(() => REFUSED)),
-      hint: () => /'CardHeader' is not in the registry/.test(hint) && /add its row to the registry when the code already has it \(a file's further export\)/.test(hint),
+      hint: () => /'CardHeader' is not in the registry/.test(hint) && /add its row when the code already has it/.test(hint),
     });
   }
 
