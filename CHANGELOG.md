@@ -19,24 +19,27 @@ of one file's text cannot know, and it is said below.
   not read is still said (`limits`: `workspace-manifests`): a list of one (`{apps}/*`), a brace that never closes, a
   `rush.json` that is no JSON, a third level of nesting.
 - **A component wrapped by another function is read when it shows what it wraps.** `observer(…)`, a HOC,
-  `dynamic(…)`: a PascalCase const whose value is a call is a component when a FUNCTION it is given renders — JSX in
-  its statement: `observer(() => <div />)`, under another wrapper (`inject("store")(observer(() => …))`,
-  `observer(forwardRef(…))`), as any of its arguments, on its line or below — or loads on demand
-  (`dynamic(() => import("./chart"))`); when it is given a `render` that is defined and JSX
+  `dynamic(…)`: a PascalCase const whose value is a call is a component when the call renders — its statement holds
+  JSX: `observer(() => <div />)`, under another wrapper (`inject("store")(observer(() => …))`,
+  `observer(forwardRef<HTMLInputElement, Props>(…))`), after another argument, on its line or below — or loads on
+  demand (`dynamic(() => import("./chart"))`); when it is given a `render` that is defined and JSX
   (`createReactClass({ render: function () { … } })`); or when it is applied to a component: its last argument list
   is one name the file declares (`withRouter(Nav)`, `connect(mapState)(List)`, on a line of its own or with a cast
-  after it too) — or, when the application is curried, imports (`withStyles(styles)(TableCell)`). `memoize(() => 1)`, `z.object({ … })`, `createContext(DefaultTheme)`,
-  `observer(() => null)` and a call given an object or a list that merely holds JSX (a table's columns, a router's
-  routes) show none of it and stay out.
+  after it too) — or, when the application is curried, imports (`withStyles(styles)(TableCell)`). `memoize(() => 1)`,
+  `z.object({ … })`, `createContext(DefaultTheme)` and `observer(() => null)` show none of it and stay out — and so
+  does a call whose last argument list BEGINS with an object, a list or an element, whatever JSX it holds: a
+  configuration (a table's columns, a router's routes) or an element handed over (`renderToString(<p />)`).
 - **A class is a component by what it does.** Whatever it extends — an imported base class, a mixin —, a class with
-  a `render` that is defined (a method, its brace below or its list over lines too; a field) and JSX in its body is
-  one. And a decorator no longer hides it: on the class's own
+  a `render` that is defined (a method, its brace below or its list over lines too; a field: `render = () => …`,
+  `render = memoize(…)`) and JSX in its body is one. And a decorator no longer hides it: on the class's own
   line (`@observer export class X`, with arguments), after `export` / `export default`, or over the lines above.
 - **A component's parts.** `Card.Header = CardHeader`, `Card.Body = (props) => …` and the capitalised keys of
-  `Object.assign(Card, { Header, Body: CardBody })` — as a value, a statement or the default export — are rows named
-  `Card.Header`, under the name the component is exported by — an alias of it too (`export const Card = CardRoot;`).
+  `Object.assign(Card, { Header, Body: CardBody })` — as a value, a statement or the default export; of every
+  literal it is given after its first argument — are rows named `Card.Header`, under the name the component is
+  exported by — an alias of it too (`export const Card = CardRoot;`: the parts hung on either).
   A design cites `Card.Header` (or `CardHeader`: the same key). An `Object.assign` with no such key
-  (`Object.assign(ButtonRoot, { displayName: "Button" })`) is the component it is given, when the file declares it.
+  (`Object.assign(ButtonRoot, { displayName: "Button" })`) is the component it is given, when the file declares it;
+  one around a call (`Object.assign(contextConnect(Menu, "Menu"), { Item })`) is a component when a part of it is.
 - **An indented `export` of a declaration is read** (a namespace's too), **React under another name**
   (`import * as R from "react"`: `R.forwardRef(…)`; a wrapper in parentheses that is cast), **and an alias of a name
   the file borrows or casts** (`const { Root } = DialogPrimitive; export const Dialog = Root;`, a `require`'s,
@@ -50,21 +53,26 @@ of one file's text cannot know, and it is said below.
   row it seeded for a helper is yours to delete — the report does not flag it.
 
 Still a row to add by hand: a component made by a call that shows nothing — `createComponent(config)`, a single call
-around a name the file only imports (`motion(Box)`) or around a cast (`withRouter(View as any)`), a call given an
-object (`createIcon({ … })`, `chakra(Box, { … })`) —, a class that renders only through its imported base, parts hung
-on a component the file imports, two parts on one line, `export const { Header, Content } = Layout;`, a component
-exported with `exports.X`, re-exported from a package under a new name, or kept in a barrel or a `.ts` file. And a
+around a name the file only imports (`motion(Box)`) or around a cast (`withRouter(View as any)`), a call around a
+component AND another argument that holds no JSX itself (`contextConnect(Menu, "Menu")`, `chakra(Box, { … })`), a
+call given an object first — even one that holds JSX (`createIcon({ path: <path /> })`) —, a class that renders only
+through its imported base, parts hung on a component the file imports, two parts on one line, `export const {
+Header, Content } = Layout;`, a component exported with `exports.X`, re-exported from a package under a new name,
+kept in a barrel or a `.ts` file, or whose element holds text at the margin that begins with a letter (the lines of
+a `<pre>`: the text ends its statement). And a
 real component the rules take for a helper: one with three parameters, one whose first parameter is a capitalised
 name, one the file calls as a function that holds no JSX of its own (a portal, a `createElement` one). Still listed,
 knowingly: a PascalCase helper nothing tells apart (exported, with one or two lower-case parameters, and never called
 in its own file — or called where the reader does not see a call: with type arguments, after a comparison or another
 operator, after `throw` / `yield` / `export default`, inside a template); an alias or a part that stands on an
 imported name that is no component (`Button.Sizes = Sizes`, an enum's member); a call that only looks like a
-component's — given a function that returns JSX (`memoize((name) => <Icon />)`, a factory of columns), given an
-object with a `render` method and JSX, around a component of the file (`createContext(Button)`), curried around an
-import (`configureStore(options)(Reducers)`); a class that is no React component and has a `render` that returns
-JSX. A file's template literals are told by its backticks: two stray ones — in two regular expressions, in an
-element's text — hide what stands between them, and a template inside another's `${ … }` over lines is read as code. Still not read among workspaces: a
+component's — its statement holds JSX and it is given no object first (`memoize((name) => <Icon />)`, a factory of
+columns, `mount(root, <App />)`), given an object with a `render` method and JSX, around a component of the file
+(`createContext(Button)`), curried around an import (`configureStore(options)(Reducers)`), an `Object.assign`
+around a call with a capitalised key that stands on a component; a class that is no React component and has a
+`render` that returns JSX. A file's template literals are told by its backticks: two stray ones — in two regular expressions, in an
+element's text — hide what stands between them, and a template inside another's `${ … }` over lines is read as code; in minified
+code a string right after a word (`return'…'`) is read from its closing quote. Still not read among workspaces: a
 manifest two levels below a root that declares none, a folder beside the declared ones, a sub-folder of a root that is
 an app itself; a `!negation` removes nothing.
 
