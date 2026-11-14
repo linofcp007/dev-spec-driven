@@ -12,15 +12,17 @@ component). Both are read now, and two cosmetics are gone.
 ### Changed
 - **A monorepo's libraries are read.** The project's dependencies are its root `package.json` and its workspace
   packages': the folders it declares — `workspaces` in package.json (npm, Yarn, Bun), `packages` in
-  `pnpm-workspace.yaml` or `lerna.json` (Lerna's default `packages/*` when it names none); a name, a `*` within one,
-  `**` two levels deep: `apps/*`, `packages/ui-*`, `packages/**`, `tools/cli` — or, when it declares none and its root
-  is no package of its own, the folders one level down (`frontend/package.json` beside a Django app, `client/`
-  beside a root that only holds tooling). So `steering_scaffold {file: "design-system.md"}` writes `_Libraries:_` in
+  `pnpm-workspace.yaml` or `lerna.json` (Lerna's default `packages/*` only when nothing declares a workspace); a
+  name, a `*` within one, `**` two levels deep — never inside a folder that is a package itself: `apps/*`,
+  `packages/ui-*`, `packages/**`, `tools/cli` — or, when it declares none and its root is no package of its own (its
+  `package.json` has no `dependencies`), the folders one level down (`frontend/package.json` beside a Django app,
+  `client/` beside a root that only holds tooling). So `steering_scaffold {file: "design-system.md"}` writes `_Libraries:_` in
   a monorepo, a library-only registry there is checked, and a size m design may write `antd Table` for `antd 5`
   when `apps/web` depends on antd. A `*` never matches a link, a dot folder or `node_modules`, and no pattern leaves
   the project. Bounded by what is read: 100 workspace manifests (a folder that is no package costs none), 50 patterns
-  of 200 characters and 12 segments, 200 folders listed, 2,000 asked — the report says a bound that cut
-  (`limits`: `workspace-manifests`). Still not read: a manifest two levels below a root that declares no workspace,
+  of 200 characters and 12 segments, 200 folders listed, 2,000 asked — the report says a bound that cut, and a
+  declared pattern it does not follow (`limits`: `workspace-manifests`, with the manifests it did read). Still not
+  read: a manifest two levels below a root that declares no workspace,
   a folder beside the declared ones, a sub-folder of a root that is an app itself (its `docs/` site), a brace list
   (`{apps,libs}/*`), `rush.json`, a workspace a workspace package declares; a `!negation` removes nothing.
 - **A component file gives every component it exports.** A kit's `card.tsx` is Card, CardHeader, CardTitle,
@@ -28,14 +30,17 @@ component). Both are read now, and two cosmetics are gone.
   reuses `CardHeader` agrees with the registry. A `.tsx` / `.jsx` / `.js` / `.mjs` file is read for it (the first
   1,000 component files and 4 MB, the shorter path first, 500 names a file; the report says so past them —
   `limits`: `component-files`), and what tells a component is its declaration, never its name: an exported function,
-  a class that extends React's `Component` / `PureComponent`, or an exported const whose value is a function (an
-  arrow, typed or generic, on its line or below it), one of React's wrappers (`forwardRef`, `memo`, `lazy`), a
-  `styled` one, a context's `Provider`, or another component under a new name — a name the file imports or declares
-  (`= DialogPrimitive.Root`) — on its declaration, in an `export { … }` list or as the default. Not a type, a
-  context, an object, a schema, `cva(…)`, any other call, a hook, a re-export (`export { X } from`, `export *`).
-  Still a row to add by hand: a component wrapped by any other function (`observer(…)`, a HOC, `dynamic(…)`),
-  declared indented or as a compound part (`Card.Header = …`), exported with `exports.X`, re-exported from a package
-  under a new name, or kept in a barrel (`components/index.tsx`) or a `.ts` file. A PascalCase helper function is
+  a class that extends React's `Component` / `PureComponent` (or a component class the file declares above it), or
+  an exported const whose value is a function (an arrow, typed or generic, on its line or below it), one of React's
+  wrappers (`forwardRef`, `memo`, `lazy`), a `styled` one, a context's `Provider` / `Consumer`, or another component
+  under a new name — a name the file imports or declares, above or below (`= DialogPrimitive.Root`) — on its
+  declaration, in an `export { … }` list or as the default. Not a type, a context, an object, a schema, `cva(…)`,
+  any other call, a hook, a re-export (`export { X } from`, `export *`). Still a row to add by hand: a component
+  wrapped by any other function (`observer(…)`, a HOC, `dynamic(…)`) or by React's under another name
+  (`R.forwardRef`, a wrapper in parentheses that is cast), a class whose base class is imported or that has a
+  decorator on its line, an alias of a name the file got by destructuring or `require`, one declared indented or as
+  a compound part (`Card.Header = …`), exported with `exports.X`, re-exported from a package under a new name, or
+  kept in a barrel (`components/index.tsx`) or a `.ts` file. A PascalCase helper function is
   taken for a component. A component with a file of its own keeps that file's path.
   **A registry seeded by 1.35.0 will list the further components as missing**: paste the rows the report prints. A
   feature's New component that its file exports beside the file's own is registered with its path at the finish.
@@ -49,7 +54,7 @@ component). Both are read now, and two cosmetics are gone.
   with no registry in the project; it was warned "no design-system registry yet".
 
 ### Tests
-- `node mcp/test.js` 2356 assertions, `node cli/test-cli.js` 663 (was 2351 / 663).
+- `node mcp/test.js` 2357 assertions, `node cli/test-cli.js` 663 (was 2351 / 663).
 - The fixtures shaped like a GitHub token (`ghp_…`) are plain fakes now, as the Stripe-shaped ones became before
   1.35.0 was pushed: a test fixture never imitates a real provider's key.
 

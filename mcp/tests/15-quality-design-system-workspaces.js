@@ -385,4 +385,108 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
       rows: () => /^warn:no design-system registry yet/.test(none.rows) && /^warn:/.test(stub.rows),
     });
   }
+
+  // --- review 2 of 1.35.1: what the first fix round broke or left unsaid ---------------------------------------------------------------------
+  {
+    const ws = (patterns, files) => Object.assign({ "package.json": js({ private: true, workspaces: patterns }) }, files);
+    const ANTD = deps(["antd"]);
+    const WEB = { "apps/web/package.json": ANTD };
+    const limitsOf = (p) => js(S.designSystemReport(p).limits);
+    const both = (tag, files) => { const p = project(tag, files); return [backed(p), limitsOf(p)]; };
+    const CUT0 = js([{ code: "workspace-manifests", read: 0 }]);
+    // `packages/**/*` over 40 packages that each hold four folders of their own: looked into, they spent the folders listed
+    const tree = (n) => { const files = {}; for (let i = 0; i < n; i++) for (const d of ["package.json", "src/a.ts", "dist/a.js", "test/a.ts", "docs/a.md"]) files["packages/pkg-" + String(i).padStart(2, "0") + "/" + d] = d === "package.json" ? deps(["left-pad"]) : "x\n"; return files; };
+    const within = [both("r2-inside", ws(["packages/**/*", "apps/*"], Object.assign(tree(40), WEB))), both("r2-inside-rev", ws(["apps/*", "packages/**/*"], Object.assign(tree(40), WEB)))];
+    // a declared pattern that is not followed is SAID: the 51st, one past 200 characters or 12 segments, a brace list, three `*`
+    const fillers = (n) => Array.from({ length: n }, (_, i) => "none-" + i + "/*");
+    const patsP = project("r2-pats", ws(fillers(50).concat(["apps/*"]), WEB));
+    const dropped = {
+      patterns: [backed(patsP), limitsOf(patsP)],
+      pnpm: both("r2-pnpm", Object.assign({ "package.json": js({ private: true }), "pnpm-workspace.yaml": "packages:\n" + fillers(50).concat(["apps/*"]).map((x) => "  - '" + x + "'\n").join("") }, WEB)),
+      tooLong: both("r2-long", ws(["./".repeat(150) + "apps/*"], WEB)),
+      tooDeep: both("r2-deep", ws([Array(13).fill("**").join("/")], WEB)),
+      braces: both("r2-braces", ws(["{apps,libs}/*"], WEB)),
+      threeStars: both("r2-stars", ws(["apps/*w*e*"], WEB)),
+    };
+    // …a pattern that names nothing by what it IS (a negation, a path out of the project) is not: nothing went unread
+    const silent = [both("r2-negation", ws(["!apps/web"], WEB)), both("r2-outside", ws(["../proj-dsw-outside/*"], WEB))];
+    // (the walk's own bounds reach the report too — the second block's projects —, and a feature's report says none of it)
+    const walked = [limitsOf(path.join(tmp, "proj-dsw-pat-dirs-out")), limitsOf(path.join(tmp, "proj-dsw-pat-asked-out"))];
+    const featureLimits = js(S.designSystemReport(patsP, { name: S.createFeature(patsP, { name: "Price Tag", tracks: ["ui"], summary: "x" }).slug }).limits);
+    // a manifest that cannot be read costs none of the hundred: 100 packages after one whose package.json is no JSON
+    const broken = { "packages/a-broken/package.json": "{ not json" };
+    for (let i = 0; i < 100; i++) broken["packages/p" + String(i).padStart(3, "0") + "/package.json"] = i === 99 ? ANTD : deps(["left-pad"]);
+    const unread = both("r2-broken", ws(["packages/*"], broken));
+    // Lerna's default is for a project that declares no workspace at all; a flow list ends at the `]` that ends its line
+    const lerna = both("r2-lerna", ws(["apps/*"], { "lerna.json": js({ version: "1.0.0" }), "packages/legacy/package.json": ANTD }));
+    const flow = both("r2-flow", Object.assign({ "package.json": js({ private: true }), "pnpm-workspace.yaml": "packages: ['tools/[x]', 'apps/*']\n" }, WEB));
+    const said = ["en", "pt", "es"].map((l) => { const T = i18n.msg(l).cliOutput.dsLimit; return [T["workspace-manifests"](0), T["component-files"](3)]; });
+
+    // what a component file exports — the shapes the first fix round lost, and the lines it read as code
+    const BT = String.fromCharCode(96), BS = String.fromCharCode(92);
+    const e = project("r2-exports", { "package.json": deps(["react"]) });
+    write(e, "src/components/ui/shapes.tsx", ["import * as React from \"react\";",
+      // a line that starts with `import` and holds no quote took the lines below it for its clause
+      "import Dialog = Radix.Dialog;", "export function AfterImportAlias() { return null; }", "import.meta.env.MODE", "export function AfterImportMeta() { return null; }", "importantSetup()", "export function AfterCall() { return null; }",
+      "import {", "  Base as Renamed,// don't rename", "  Other,// it's fine", "  Third,", "} from './base';", "export const FromClause = Third;",
+      // a class header: its type parameters over lines, a `>` inside them, `extends` on the next line, a base class of the file
+      "export class Table<", "  Row extends { id: string },", "> extends React.Component<Props<Row>> {}", "export class Grid<T extends Array<number>> extends React.PureComponent<T> {}", "export class Broken", "  extends React.Component {}",
+      "class BaseModal extends React.Component {}", "export class ConfirmModal extends BaseModal {}", "export class Arrowed<F extends () => void> extends React.Component<F> {}",
+      "export class LoginError extends Error {}", "export class Mixed extends mixin(Component) {}", "export class Called extends Component(Base) {}", "export class Fetcher extends ComponentBase {}", "export class Imported extends Other {}",
+      "function AppError() {}", "export class ValidationError extends AppError {}",
+      // a parenthesis in a default's string, `styled<Props>(…)`, a generic arrow whose parameter has a default
+      "export const Smiley = ({ label = \":)\" }) => null;", "export const Box = styled<BoxProps>(\"div\")({});", "export const Defaulted = <T = unknown,>(props: P<T>) => null;",
+      // an alias of a function declared below it, of an import that follows it; a context's consumer
+      "export const Modal = LaterDialog;", "function LaterDialog() { return null; }", "export const Late = LateImport;", "import LateImport from \"./late\";", "export const ThemeConsumer = ThemeContext.Consumer;",
+      "export const Outer = Middle;", "const Middle = Innermost;", "function Innermost() { return null; }", // (a chain declared bottom-up)
+      // the value of the SECOND name is not the first's; an `=` inside an annotation's string is not the declaration's
+      "let First, Second = () => null;", "export { First };", "export const Typed: Handler<() => void, \"a=b\"> = (props) => null;", ""].join("\n"));
+    // an apostrophe (JSX text, a template's text) or a regex's quote before a comment that goes on over lines
+    write(e, "src/components/ui/quotes.tsx", ["export function Text() { return <p>Don't</p>; } /*", "export function FakeA() { return null; }", "*/", "const tpl = " + BT + "it's" + BT + "; /*", "export function FakeB() { return null; }", "*/",
+      "const re = /\"/; /*", "export function FakeC() { return null; }", "*/",
+      // …and a `/*` that IS inside a string — a template's, one after a `/*` no comment can open at, one after an escaped quote — opens none
+      "const glob = " + BT + "src /* all" + BT + ";", "const frac = a/*b, label = \"a /* b\";", "const esc = 'a" + BS + "' /* b';", "export function AfterQuotes() { return null; }", ""].join("\n"));
+    const exported = S.designSystemReport(e);
+    const names = exported.missing.map((c) => c.name).sort();
+    // a file of declarations whose annotation never closes, of classes whose header never opens: each read the sixty lines below
+    // it — the file's length in all, said
+    const spent = (tag, lines) => { const r = S.designSystemReport(project(tag, { "package.json": deps(["react"]), "src/components/ui/open.tsx": "export function Kept() { return null; }\n" + lines.repeat(300) + "export const Tail = () => null;\n" })); return [r.missing.map((c) => c.name).sort(), r.limits]; };
+    const budget = [spent("r2-budget", "const A: X<\n"), spent("r2-budget-class", "class B\n")];
+
+    // a registry's end, by position: a hidden copy of the table that ends in the visible one's last row; a row joined by a comment
+    const HEAD = "# Design System\n\n## Components\n\n", TH = "| Component | Path | Variants | Notes |\n|---|---|---|---|\n", BTN = "| Button | `src/components/Button.tsx` | primary |  |";
+    const endings = {
+      twin: HEAD + TH + BTN + "\n\n<!-- old table\n" + TH + BTN + " <!-- x -->\n",
+      fenceTwin: HEAD + TH + BTN + "\n\n" + BT.repeat(3) + "\n" + TH + BTN + "\n",
+      fenceNote: HEAD + TH + BTN + "\n\n" + BT.repeat(3) + "\n" + TH + BTN + " <!-- x -->\n",
+      joined: HEAD + TH + "| Card | `src/components/Card.tsx` |  | <!-- old\n" + BTN + " --> |\n",
+      sepNote: HEAD + "| Component | Path | Variants | Notes |\n|---|---|---|---| <!-- none yet -->\n",
+    };
+    const got = {};
+    for (const [k, text] of Object.entries(endings)) {
+      const p = project("r2-end-" + k, { "package.json": deps(["react"]) });
+      write(p, REG, text);
+      const feat = ready(p, ["| New | PriceTag | no listed component shows a price with its currency |"], "src/components/PriceTag.tsx", { "src/components/PriceTag.tsx": "export const PriceTag = () => null;\n" });
+      const first = S.finishFeature(p, feat.slug, { write: true }).designSystem;
+      const fins = [first ? first.registered : null].concat([1, 2].map(() => E.designSystemFinish(p, feat.slug, { write: true, ready: true }).registered));
+      const after = rd(p, REG);
+      got[k] = { fins, rows: after.split("\n").filter((l) => /\| PriceTag \|/.test(l)).length, read: registry(p).keys.has("pricetag"), tables: (after.match(/^\| Component \|/gm) || []).length };
+    }
+    all("1.35.1 review 2: `**` does not look inside a folder that is a package (`packages/**/*` over 40 packages with four folders each spent the folders listed, told a project that had lost nothing it was cut and, with the patterns the other way round, left `apps/web` unread); a declared pattern the reader does not follow is SAID — the 51st, in package.json or pnpm-workspace.yaml, one past 200 characters or 12 segments, a brace list, a segment of three `*` — with the manifests it did read (0, never \"only 1\"), a negation and a path out of the project are not, the walk's own bounds are, and a feature's report says none of it; an unreadable manifest costs none of the hundred; Lerna's default `packages/*` is for a project that declares no workspace; a flow list ends at the `]` that ends its line. A component file: a line that starts with `import` and is no import statement (`import Dialog = Radix.Dialog;`, `import.meta…`, `importantSetup();`) takes no line below it, a `//` comment glued to a name ends no clause; a class is read by its header — type parameters over lines or holding a `>`, `extends` on the next line, a component class of the file as its base — never `extends Error`, `extends mixin(Component)`, `extends ComponentBase` or an imported base; a `)` in a default's string, `styled<Props>(…)`, `<T = unknown,>`; an alias of a function declared below it or of an import that follows; `let First, Second = …` gives First no value; an apostrophe of JSX text or of a template, or a regex's quote, before a comment that goes on over lines hides no `/*`; declarations whose annotation never closes read the file's length below them in all, and the report says so. And a registry's end is read by POSITION: a hidden copy of its table that ends in the visible one's last row (in a comment, in a code block left open) takes no row — they were added, unread, on every finish —, a last row joined by a comment and a separator row with a note still take them in their table (got " +
+      js({ within, dropped, silent, walked, featureLimits, unread, lerna, flow, names, exportLimits: exported.limits, budget, got }) + ")", {
+      inside: () => js(within) === js([[yes, "[]"], [yes, "[]"]]),
+      dropped: () => Object.values(dropped).every((v) => js(v) === js([no, CUT0])),
+      silent: () => js(silent) === js([[no, "[]"], [no, "[]"]]),
+      walked: () => js(walked) === js([CUT0, CUT0]) && featureLimits === "[]",
+      unread: () => js(unread) === js([yes, "[]"]),
+      declared: () => js(lerna) === js([no, "[]"]) && js(flow) === js([yes, "[]"]),
+      // (the manifests READ, 0 too — never "only 1" —, and a bound of the component files that may be a file's names: no "first N")
+      said: () => said.every(([w, c]) => / 0 /.test(w) && !/ 1 |only|só |solo /i.test(w) && / ?3 /.test(c) && !/first|primeiros|primeros/i.test(c)) && new Set(said.map((s) => s.join("|"))).size === 3,
+      exports: () => js(names) === js(["AfterCall", "AfterImportAlias", "AfterImportMeta", "AfterQuotes", "Arrowed", "Box", "Broken", "ConfirmModal", "Defaulted", "FromClause", "Grid", "Late", "Modal", "Outer", "Quotes", "Shapes", "Smiley",
+        "Table", "Text", "ThemeConsumer", "Typed"]) && exported.limits.length === 0,
+      budget: () => budget.every((b) => js(b) === js([["Kept", "Open", "Tail"], [{ code: "component-files", read: 1 }]])),
+      once: () => Object.keys(endings).every((k) => js(got[k].fins) === js([["PriceTag"], [], []]) && got[k].rows === 1 && got[k].read === true),
+      tables: () => got.twin.tables === 3 && got.fenceTwin.tables === 3 && got.fenceNote.tables === 3 && got.joined.tables === 1 && got.sepNote.tables === 1,
+    });
+  }
 };
