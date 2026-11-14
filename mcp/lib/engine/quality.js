@@ -1484,21 +1484,29 @@ function packageDependencies(folder) {
 // DS_WORKSPACE_PATTERNS counts the patterns that hold a wildcard — what a walk costs; a folder named in full costs
 // one question, and DS_WORKSPACE_EXACT of them are followed (a rush.json names every project so: 1.35.2).
 const DS_WORKSPACE_PATTERNS = 50, DS_WORKSPACE_CHARS = 200, DS_WORKSPACE_SEGMENTS = 12, DS_WORKSPACE_DIRS = 200, DS_WORKSPACE_ENTRIES = 1000,
-  DS_WORKSPACE_ASKED = 2000, DS_WORKSPACE_MANIFESTS = 100, DS_WORKSPACE_LINES = 500, DS_WORKSPACE_EXACT = 1000, DS_WORKSPACE_BRACES = 20,
+  DS_WORKSPACE_ASKED = 2000, DS_WORKSPACE_MANIFESTS = 100, DS_WORKSPACE_EXACT = 1000, DS_WORKSPACE_BRACES = 20,
   DS_WORKSPACE_NESTED = 2;
 const RE_WORKSPACE_WILD = /\*/; // a pattern that is walked — never a folder named in full (a brace list of names is a few of them)
-// A brace list: `{apps,libs}/*` → `apps/*`, `libs/*` — the innermost list first, so a nested one too
-// (`packages/{ui,{web,docs}-kit}`). → the patterns, or null: a list of one (`{a}`, a range `{1..3}`), a brace that
-// never closes or was never opened, more than DS_WORKSPACE_BRACES patterns. Linear in what it gives.
+// A brace list: `{apps,libs}/*` → `apps/*`, `libs/*` — the first list of the pattern and the `}` that closes it, cut at
+// the commas of its own depth, each alternative read again (a nested one: `{libs,{apps,tools}}` is three names).
+// → the patterns, or null: a list of one (`{a}`, a range `{1..3}`), a brace that never closes or was never opened,
+// more than DS_WORKSPACE_BRACES patterns. Each step takes one list out of every pattern it gives: linear in them.
 function braceExpand(pattern) {
   const todo = [pattern], out = [];
   while (todo.length) {
     const s = todo.pop();
-    const close = s.indexOf("}");
-    if (close === -1) { if (s.includes("{")) return null; out.push(s); continue; }
-    const open = s.lastIndexOf("{", close);
-    const items = open === -1 ? [] : s.slice(open + 1, close).split(",");
-    if (items.length < 2 || todo.length + out.length + items.length > DS_WORKSPACE_BRACES) return null;
+    const open = s.indexOf("{");
+    if (open === -1) { if (s.includes("}") || out.length >= DS_WORKSPACE_BRACES) return null; out.push(s); continue; }
+    const items = [];
+    let depth = 0, start = open + 1, close = -1;
+    for (let k = open + 1; k < s.length && close === -1; k++) {
+      const c = s[k];
+      if (c === "{") depth++;
+      else if (c === "}") { if (depth === 0) close = k; else depth--; } else if (c === "," && depth === 0) { items.push(s.slice(start, k)); start = k + 1; }
+    }
+    if (close === -1) return null;
+    items.push(s.slice(start, close));
+    if (items.length < 2) return null;
     for (const item of items) todo.push(s.slice(0, open) + item + s.slice(close + 1));
   }
   return out;
@@ -1552,7 +1560,8 @@ function rushFolders(realRoot, projectRoot) {
 const manifestWorkspaces = (pkg) => { const w = isRecord(pkg.workspaces) ? pkg.workspaces.packages : pkg.workspaces; return Array.isArray(w) ? w.filter((p) => typeof p === "string") : []; };
 // pnpm-workspace.yaml's `packages` — the key at the margin, quoted or not: a block list (`  - "apps/*"`) or a flow one
 // (`packages: [apps/*, packages/*]`, on its line or over the next ones, to the `]` that ends a line). EVERY item of
-// the list's first DS_WORKSPACE_LINES lines: the caller counts them against its bound, and says when it drops one.
+// the list: the caller counts them against its bounds, and says when it drops one (review 1 of 1.35.2: read to its 500th
+// line, a longer list of folders named in full was cut without a word).
 // A BOM dropped; no YAML parser.
 const RE_PNPM_KEY = /^(["']?)packages\1[ \t]*:/;
 function pnpmPackages(text) {
@@ -1566,10 +1575,12 @@ function pnpmPackages(text) {
     let rest = bare(lines[i].slice(key[0].length));
     if (rest.startsWith("[")) {
       // (to the `]` that ENDS the list — the last character of its line: a name may hold one, `'apps/[w]eb'`)
-      for (let j = i + 1; !rest.endsWith("]") && j < lines.length && j <= i + DS_WORKSPACE_LINES; j++) { const l = lines[j].trim(); if (l[0] !== "#") rest += bare(l); }
+      const more = [];
+      for (let j = i + 1; !(more.length ? more[more.length - 1] : rest).endsWith("]") && j < lines.length; j++) { const l = lines[j].trim(); if (l[0] !== "#" && bare(l) !== "") more.push(bare(l)); }
+      rest += more.join("");
       return rest.endsWith("]") ? rest.slice(1, -1).split(",").map(item).filter(Boolean) : out;
     }
-    for (let j = i + 1; j < lines.length && j <= i + DS_WORKSPACE_LINES; j++) {
+    for (let j = i + 1; j < lines.length; j++) {
       const l = lines[j].trim();
       if (l === "" || l[0] === "#") continue;
       if (l[0] !== "-") break;
@@ -1638,7 +1649,9 @@ function workspaceDirs(projectRoot, patterns, visit) {
   };
   // The patterns still to follow: [pattern, how deep it was declared] — the project's own (0), then the ones a
   // workspace package's manifest declares for its own folder (`visit` gives them back: Yarn's nested worktrees),
-  // DS_WORKSPACE_NESTED deep and DS_WORKSPACE_PATTERNS more at most; past either they are declared and unread: said.
+  // DS_WORKSPACE_NESTED deep and as many as can be asked (each costs a question — review 1 of 1.35.2: counted to fifty,
+  // sixty packages that each repeat the root's `workspaces` were "cut" with everything read); past either they are
+  // declared and unread: said.
   const todo = patterns.map((p) => [p, 0]);
   let depth = 0, nested = 0;
   const give = (rel) => {
@@ -1648,8 +1661,8 @@ function workspaceDirs(projectRoot, patterns, visit) {
     if (more === false) { stop = true; return; }
     for (const p0 of Array.isArray(more) ? more : []) {
       const p = p0.trim();
-      if (p[0] === "/" || p[0] === String.fromCharCode(92)) continue; // (a path from a root names none of the package's own folders)
-      if (depth >= DS_WORKSPACE_NESTED || nested >= DS_WORKSPACE_PATTERNS) { cut = true; break; }
+      if (p === "" || p[0] === "!" || p[0] === "/" || p[0] === String.fromCharCode(92)) continue; // (a negation, a path from a root: names none of the package's own folders)
+      if (depth >= DS_WORKSPACE_NESTED || nested >= DS_WORKSPACE_ASKED) { cut = true; break; }
       nested++;
       todo.push([rel + "/" + p, depth + 1]);
     }

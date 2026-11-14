@@ -160,7 +160,8 @@ function componentOf(rel) {
 // not in the registry). → { names: the PascalCase names the file EXPORTS and declares as a component, in the file's
 // order; more: it holds more than DS_EXPORT_NAMES }:
 //   - a function: `export function CardHeader(`, `function CardHeader(` listed in `export { … }` — unless it shows it
-//     is no component (isHelper: the file calls it, it takes a component, it takes three parameters);
+//     is no component (isHelper: it takes a component, it takes three parameters, or the file calls it and it renders
+//     nothing itself);
 //   - a class that extends React's `Component` / `PureComponent` or a component class the file declares above it
 //     (classHeader: its type parameters aside, over lines — never `class LoginError extends Error`) — or, whatever it
 //     extends (an imported base, a mixin), one that RENDERS: a `render` and JSX in its body (1.35.2);
@@ -169,24 +170,30 @@ function componentOf(rel) {
 //     React by: `R.forwardRef(` —, never `z.lazy(`, `cache.memo(`; in parentheses that are cast too), a `styled` one
 //     (`styled.div`, `styled(Button)`, `styled<Props>(…)`), a context's `X.Provider` / `X.Consumer`, another component
 //     under a new name: a capitalised name the file imports, declares — above or below — or borrows (destructured from
-//     an import, a `require`'s), or a member of one (`= DialogPrimitive.Root`, `= FormProvider` — never `= Infinity`,
-//     `= Number.MAX_SAFE_INTEGER`, a local enum's member), or — 1.35.2 — a call of ANY other function that shows what
-//     it wraps: its statement holds JSX (`observer(() => <div />)`), a dynamic `import(` (`dynamic(() => import(…))`),
-//     or its last argument list is one such name (`withRouter(Nav)`, `connect(…)(List)`);
+//     an import, a `require`'s), or a member of one, a cast after it aside (`= DialogPrimitive.Root`, `= FormProvider`,
+//     `= Origin as Compound` — never `= Infinity`, `= Number.MAX_SAFE_INTEGER`, a local enum's member), or — 1.35.2 —
+//     a call of ANY other function that shows what it wraps: the FUNCTION it is given renders (JSX in its statement:
+//     `observer(() => <div />)`, `observer(forwardRef(…))`) or loads on demand (`dynamic(() => import(…))`); it is
+//     given a `render` and JSX (`createReactClass({ … })`); or it is applied to a component — its last argument list
+//     is one name the file declares (`withRouter(Nav)`), or, curried, imports (`withStyles(styles)(TableCell)`);
 //   - a part hung on a component the file exports, under that component's exported name (1.35.2): `Card.Header = …`,
 //     the capitalised keys of `Object.assign(Card, { Header, Body: CardBody })` — `Card.Header`.
 // Never a type (`export type`, `export { type X }`), a re-export (`export { X } from`, `export *` — a barrel's), a constant
-// of any other value (`createContext(…)`, an object, `cva(…)`, `z.object(…)`, `memoize(() => 1)`), a hook, a lower-case
-// name (`FAQ`, `CTA` are components: a constant in capitals is none by its VALUE, never by its letters), a name with a
-// `_`. A name is read WHOLE, accents too (`Botão` — review 1 of 1.35.1: an ASCII class gave "Bot"). What tells is the
-// DECLARATION — and, since 1.35.2, what its statement HOLDS —, never the name: no suffix list ("Context", "Props") is
-// ever complete. Statements at the margin and indented `export`s (scriptView), a decorator on the line aside, comments
-// aside (a `/*` inside a quoted string opens none, and `<!--` is no comment in a script), a template literal's lines
-// aside, a BOM dropped; a line is read up to DS_LINE_MAX. What it still misses is a row to add by hand, as the docs
-// say: a component made by a call that shows nothing (`createComponent(config)`, `observer(Imported)` of a name the
-// file never imports), a class with an imported base that renders through it, CommonJS `exports.X`, a re-export
-// from a package under a new name. What it still reads too much, knowingly: a PascalCase helper nothing tells apart
-// (exported, never called in its file, one or two lower-case parameters), an imported enum's member.
+// of any other value (`createContext(…)`, an object, `cva(…)`, `z.object(…)`, `memoize(() => 1)`, a call given an object
+// or a list that merely holds JSX), a hook, a lower-case name (`FAQ`, `CTA` are components: a constant in capitals is
+// none by its VALUE, never by its letters), a name with a `_`. A name is read WHOLE, accents too (`Botão` — review 1 of
+// 1.35.1: an ASCII class gave "Bot"). What tells is the DECLARATION — and, since 1.35.2, what its statement HOLDS —,
+// never the name: no suffix list ("Context", "Props") is ever complete. Statements at the margin and indented `export`s
+// of a declaration (scriptView), a decorator on the line aside, comments aside (a `/*` or a `//` inside a quoted string
+// opens none, and `<!--` is no comment in a script), a template literal's lines aside, a BOM dropped; a line is read
+// up to DS_LINE_MAX. What it still misses is a row to add by hand, as the docs say: a component made by a call that
+// shows nothing (`createComponent(config)`, a single call around a name the file only imports — `motion(Box)` —, a
+// call given an object — `createIcon({ … })`), a class with an imported base that renders through it, parts hung on
+// an imported component, CommonJS `exports.X`, a re-export from a package under a new name. What it still reads too
+// much, knowingly: a PascalCase helper nothing tells apart (exported, one or two lower-case parameters, never called
+// in its file), an alias or a part that stands on an imported name that is no component (an enum's member,
+// `Button.Sizes = Sizes`), a class that is no React component and has a `render` that returns JSX. And two stray
+// backticks (in two regular expressions, in an element's text) hide what stands between them.
 const DS_EXPORT_FILES = 1000; // component files read for what else they export…
 const DS_EXPORT_CHARS = 4 * 1024 * 1024; // …and the characters read of them: past either, the report's `limits` says so
 const DS_EXPORT_NAMES = 500; // components kept of one file (what the registry's reader reads with their details)
@@ -298,24 +305,31 @@ function classHeader(code, i, from, budget) {
 // --- the file as the export reader reads it (1.35.2) ------------------------------------------------------------------------------
 // Until 1.35.2 the reader read one LINE of a declaration. What 1.35.1 left to add by hand needs what a statement HOLDS — does
 // the function a HOC wraps render, does a class with an imported base — so the file is read once into a view:
-//   code   its lines, comments out (withoutComments, a script's rules);
+//   code   its lines, comments out (withoutComments, a script's rules) — of a line that starts inside a template literal,
+//          what follows the backtick that closes it: a template's text is no code, and no comment opens in it (review 1
+//          of 1.35.2: with the comments taken out first, a template that held ` // ` lost its closing backtick — and the
+//          file the components below it);
 //   tpl    the lines that START inside a template literal: text, never a statement (a code sample in a docs component read
-//          as the file's own declarations) — a backtick that never closes is a stray one, and then no line is one;
-//   next   for a line, where the next STATEMENT starts: a line at the margin that begins a name or a decorator, or an
-//          indented `export` (an export is a module's own wherever it is indented). A statement's EXTENT runs to there:
-//          its closing `}` / `)` lines at the margin are its own — the formatting every formatter gives, and the reason no
-//          bracket is ever matched across lines here (a `(` in JSX text, a regex's, would derail one);
-//   jsx    the lines that hold JSX: a closing tag (a fragment's too) or a self-closing one — every element has one, and none is
-//          anything else in a script (`<Name` alone is a type argument's shape too), strings aside;
+//          as the file's own declarations) — a backtick that never closes is a stray one, and then the file is read again
+//          with no template at all, as 1.35.1 read it;
+//   next   for a line, where the next STATEMENT starts: a line at the margin that begins one — not a closer's (`}`, `)`),
+//          not a `{` (a brace on its own line is the statement's above), not an operator's — or an indented `export` of a
+//          declaration (an export is a module's own wherever it is indented). A statement's EXTENT runs to there: its
+//          closing lines at the margin are its own — the formatting every formatter gives, and the reason no bracket is
+//          ever matched across lines here (a `(` in JSX text, a regex's, would derail one);
+//   jsx    the lines that hold JSX: a closing tag or a self-closing one — every element has one, and neither is anything
+//          else in a script (`<Name` alone is a type argument's shape too), strings aside;
 //   called the capitalised names the file CALLS as a function (`Total(a, b)`) — what a component never is.
-const RE_JSX = /<\/[\p{L}][\p{L}\p{N}.:-]*\s*>|\/>/u; // (a fragment's `</>` holds the second)
-const RE_STATEMENT_START = /^[\p{L}_$@]/u;
-const RE_INDENTED_EXPORT = /^[ \t]+export(?![\p{L}\p{N}_$])/u;
+const RE_JSX = /<\/[\p{L}][\p{L}\p{N}_$.:-]*\s*>|\/>/u; // (a fragment's `</>` holds the second)
+const RE_STATEMENT_START = /^[^\s{})\]>.,?:&|=+\-*\/%<]/;
+const RE_INDENTED_EXPORT = /^[ \t]+export(?:\s*\{|\s+(?:const|let|var|function|class|default|async|abstract)(?![\p{L}\p{N}_$]))/u;
 const RE_CALLED = /(?<![\p{L}\p{N}_$.])(\p{Lu}[\p{L}\p{N}_$]*)\(/gu;
 const RE_CALL_KEYWORD = /(?:^|[^\p{L}\p{N}_$])(?:return|await|new)$/u; // the words a call follows: any other word before a name is a declaration's, or a sentence's
 const RE_WORD_CHAR = /[\p{L}\p{N}_$]/u;
+const RE_TYPED_PARAM = /^\s*[\p{L}_$][\p{L}\p{N}_$]*\??\s*:/u; // (of what a `(` holds) a parameter with its type: a declaration's list, never a call's
+const DS_CALL_PEEK = 80; // characters read after a `(` / a `)` to tell what the name before it is
 const RE_DYNAMIC_IMPORT = /(?<![\p{L}\p{N}_$.])import\s*\(/u;
-const RE_RENDER = /^\s+(?:[a-z]+\s+)*render\s*[(=]/; // a class's `render()` / `render = () =>`
+const RE_RENDER = /^\s+(?:[a-z]+\s+)*render\s*(?:=|:\s*function(?![\p{L}\p{N}_$])|\([^()]*\)\s*[:{])/u; // `render() {` / `render(): Node {` / `render = () =>`, createReactClass's `render: function () {` — never a call of one, never a column's `render: (v) => …`
 // a line without what its strings hold — the ones that close on it (quoteEnd): `"</div>"` is no JSX, `"Total(x)"` no call
 function withoutStrings(l) {
   if (!(l.includes("\"") || l.includes("'") || l.includes("`"))) return l;
@@ -328,32 +342,53 @@ function withoutStrings(l) {
   }
   return out + l.slice(from);
 }
-function scriptView(text) {
-  const st = { block: false, html: false };
-  const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-  const code = body.split(/\r?\n/).map((l) => withoutComments(l.length > DS_LINE_MAX ? l.slice(0, DS_LINE_MAX) : l, st, { slashSlash: true, script: true, html: false }));
-  const n = code.length;
-  const tpl = new Uint8Array(n);
-  const closes = new Int32Array(n).fill(-1); // where the template a line starts in closes on it (-1: it goes on)
-  let inside = false;
-  for (let i = 0; i < n; i++) {
-    tpl[i] = inside ? 1 : 0;
-    const l = code[i];
-    if (!l.includes("`")) continue;
-    const none = {};
-    for (let k = 0; k < l.length; k++) {
-      const c = l[k];
-      if (inside) { if (c === BS) k++; else if (c === "`") { inside = false; if (tpl[i] && closes[i] === -1) closes[i] = k + 1; } continue; }
-      if (c === "`") inside = true;
-      else if (c === "\"" || c === "'") { const e = quoteEnd(l, k, none); if (e !== -1) k = e; }
-    }
+// → is a template literal open at the end of `s` (inside: at its start)? A quoted string that closes on the line holds none.
+function templateOpen(s, inside) {
+  if (!s.includes("`")) return inside;
+  const none = {};
+  for (let k = 0; k < s.length; k++) {
+    const c = s[k];
+    if (inside) { if (c === BS) k++; else if (c === "`") inside = false; continue; }
+    if (c === "`") inside = true;
+    else if (c === "\"" || c === "'") { const e = quoteEnd(s, k, none); if (e !== -1) k = e; }
   }
-  if (inside) tpl.fill(0);
-  // the lines as code alone: strings emptied; of a line a template starts or ends on, what stands outside it
-  const plain = code.map((l0, i) => {
-    const l = tpl[i] ? (closes[i] === -1 ? "" : l0.slice(closes[i])) : l0;
-    return withoutStrings(i + 1 < n && tpl[i + 1] ? l.slice(0, l.lastIndexOf("`") + 1) : l);
-  });
+  return inside;
+}
+// The file's lines, comments out, a template's text out → { code, tpl, open (a template is still open at the file's end) }.
+// templates: false reads them as 1.35.1 did — no line is a template's.
+function scriptLines(body, templates) {
+  const st = { block: false, html: false }, opts = { slashSlash: true, script: true, html: false };
+  const raw = body.split(/\r?\n/);
+  const code = new Array(raw.length), tpl = new Uint8Array(raw.length);
+  let inside = false;
+  for (let i = 0; i < raw.length; i++) {
+    const l = raw[i];
+    let from = 0;
+    tpl[i] = inside ? 1 : 0;
+    if (inside) {
+      while (from < l.length && l[from] !== "`") from += l[from] === BS ? 2 : 1;
+      if (from >= l.length) { code[i] = ""; continue; }
+      inside = false;
+      from++;
+    }
+    // (a line is read up to DS_LINE_MAX; whether a template opens on it is asked of ALL of it — a long line's closing
+    // backtick stands past the cut)
+    const long = l.length - from > DS_LINE_MAX;
+    code[i] = withoutComments(long ? l.slice(from, from + DS_LINE_MAX) : from ? l.slice(from) : l, st, opts);
+    if (!templates) continue;
+    inside = templateOpen(code[i], false);
+    if (long) inside = templateOpen(l.slice(from + DS_LINE_MAX), inside);
+  }
+  return { code, tpl, open: inside };
+}
+function scriptView(text) {
+  const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  let lines = scriptLines(body, true);
+  if (lines.open) lines = scriptLines(body, false);
+  const { code, tpl } = lines;
+  const n = code.length;
+  // the lines as code alone: strings emptied, a template's first line cut where the template opens
+  const plain = code.map((l, i) => withoutStrings(i + 1 < n && tpl[i + 1] ? l.slice(0, l.lastIndexOf("`") + 1) : l));
   const jsx = new Uint8Array(n);
   const next = new Int32Array(n);
   for (let i = n - 1, at = n; i >= 0; i--) {
@@ -363,30 +398,37 @@ function scriptView(text) {
     if ((plain[i].includes("<") || plain[i].includes("/>")) && RE_JSX.test(plain[i])) jsx[i] = 1;
   }
   const called = new Set();
-  // A call that stands FIRST on its line is told by what follows its `)`: a `{` is a method's header (`Render() {`), a `:`
-  // a signature's (`Item(props: P): Element;`), a word a line of text (`Total(USD) of the order`) — and a line that
-  // follows a tag's `>` is an element's text. A list that goes on below is a call's.
-  const firstCall = (i, open) => {
-    for (let k = i - 1; k >= 0; k--) { const b = plain[k].trimEnd(); if (b !== "") { if (b.endsWith(">") && !b.endsWith("=>")) return false; break; } }
-    const p = plain[i];
-    for (let k = open, depth = 1; k < p.length; k++) {
-      if (p[k] === "(") depth++;
-      else if (p[k] === ")" && --depth === 0) { const c = p.slice(k + 1).trimStart()[0]; return !(c === "{" || c === ":" || (c !== undefined && RE_WORD_CHAR.test(c))); }
-    }
-    return true;
+  // where each `(` of a line closes on it (-1: below) — asked once a line, so a line of calls stays linear
+  const closers = (p) => {
+    const close = new Int32Array(p.length).fill(-1), stack = [];
+    for (let k = 0; k < p.length; k++) { if (p[k] === "(") stack.push(k); else if (p[k] === ")" && stack.length) close[stack.pop()] = k; }
+    return close;
   };
+  // does the line above (the first with text) end a tag — is this one an element's text? (an arrow's `=>` ends none)
+  const underTag = (i) => { for (let k = i - 1; k >= 0; k--) { const t = plain[k].trimEnd(); if (t !== "") return t.endsWith(">") && !t.endsWith("=>"); } return false; };
   for (let i = 0; i < n; i++) {
     const p = plain[i];
     if (!p.includes("(")) continue;
+    let close = null;
     RE_CALLED.lastIndex = 0;
     for (let m = RE_CALLED.exec(p); m; m = RE_CALLED.exec(p)) {
       const open = m.index + m[0].length;
-      if (p.startsWith("s)", open) || p.startsWith("es)", open)) continue; // (`File(s)`, `Box(es)`: text)
+      // A name before a `(` that is no call — by what it IS: a plural (`File(s)`, `Box(es)`), a regex's (`/Total(\d+)/`), a
+      // declaration's (its first parameter is typed: `Item(props: P)`; a `{` follows its `)` — a method's header; a `:`
+      // does — a signature's return type, a ternary's after a `?`) …
+      if (p.startsWith("s)", open) || p.startsWith("es)", open) || p[m.index - 1] === "/" || RE_TYPED_PARAM.test(p.slice(open, open + DS_CALL_PEEK))) continue;
       let j = m.index - 1;
       while (j >= 0 && (p[j] === " " || p[j] === "\t")) j--;
-      // right after a tag's `>` a name is text (an arrow's `=>` is code); after a word it is called only after
-      // `return` / `await` / `new` — never `function Total(`, `get Total(`, a sentence
-      if (j < 0) { if (!firstCall(i, open)) continue; } else if (p[j] === ">") { if (p[j - 1] !== "=") continue; } else if (RE_WORD_CHAR.test(p[j]) && !RE_CALL_KEYWORD.test(p.slice(Math.max(0, j - 6), j + 1))) continue;
+      if (close == null) close = closers(p);
+      const end = close[open - 1];
+      const after = end === -1 ? undefined : p.slice(end + 1, end + 1 + DS_CALL_PEEK).trimStart()[0];
+      if (after === "{" || (after === ":" && p[j] !== "?")) continue;
+      // … and by where it STANDS: first on its line it is a statement's — unless the line above ends a tag, a word
+      // follows its `)` (a sentence: `Total(USD) of the order`) or a `,` and more (`Button(primary), never a link`);
+      // after a tag's `>` or an expression's `}` it is an element's text (an arrow's `=>` is code); after a word it is
+      // a call only after `return` / `await` / `new` — never `function Total(`, `get Total(`, a sentence
+      if (j < 0) { if ((after !== undefined && (RE_WORD_CHAR.test(after) || (after === "," && p.slice(end + 1).trim() !== ","))) || underTag(i)) continue; } else if (p[j] === ">") { if (p[j - 1] !== "=") continue; } else if (p[j] === "}") continue;
+      else if (RE_WORD_CHAR.test(p[j]) && !RE_CALL_KEYWORD.test(p.slice(Math.max(0, j - 6), j + 1))) continue;
       called.add(m[1]);
     }
   }
@@ -399,6 +441,7 @@ function scriptView(text) {
 }
 // The parameters a function names, read from `from` on ONE line: `(a, b)`, `<T,>(props: P<T>)`, `function Name(a)`,
 // `props => …` → { count (null: the list goes on below), first (its first parameter, as written) } | null (no list).
+// A `<` is a type argument's only right after a name (`P<A, B>`): `{ wide = width > 600, a }` holds a comparison.
 function paramList(s, from) {
   let k = from, angle = 0;
   for (; k < s.length; k++) {
@@ -410,26 +453,32 @@ function paramList(s, from) {
   if (k >= s.length) return null;
   const none = {};
   let depth = 0, count = 0, first = null, text = false;
+  angle = 0;
   for (let j = k; j < s.length; j++) {
     const c = s[j];
     if (isQuote(c)) { const e = quoteEnd(s, j, none); if (e !== -1) j = e; text = true; continue; }
     if (c === "=" && s[j + 1] === ">") { j++; text = true; continue; }
-    if (c === "(" || c === "[" || c === "{" || c === "<") { if (depth > 0) text = true; depth++; continue; }
-    if (c === ")" || c === "]" || c === "}" || c === ">") {
+    if (c === "<") { if (angle > 0 || RE_WORD_CHAR.test(s[j - 1])) angle++; text = true; continue; }
+    if (c === ">") { if (angle > 0) angle--; text = true; continue; }
+    if (c === "(" || c === "[" || c === "{") { if (depth > 0) text = true; depth++; continue; }
+    if (c === ")" || c === "]" || c === "}") {
       if (--depth === 0) return { count: count + (text ? 1 : 0), first: (first == null ? s.slice(k + 1, j) : first).trim() };
       continue;
     }
-    if (c === "," && depth === 1) { if (first == null) first = s.slice(k + 1, j); count++; text = false; } else if (c !== " " && c !== "\t") text = true;
+    if (c === "," && depth === 1 && angle === 0) { if (first == null) first = s.slice(k + 1, j); count++; text = false; } else if (c !== " " && c !== "\t") text = true;
   }
   return { count: null, first: (first == null ? s.slice(k + 1) : first).trim() };
 }
-// A PascalCase function that shows it is no component — by a PROPERTY, never its name: the file CALLS it as a function
-// (a component is rendered, `<Total />`, or handed over — never called), it takes a component (its first parameter is
-// a capitalised name: `function WithTheme(Component)`, a HOC), or three parameters and more (a component takes its
-// props, and a ref). 1.35.1 listed every PascalCase function, knowingly; what is still listed is the helper nothing
+// A PascalCase function that shows it is no component — by a PROPERTY, never its name: it takes a component (its first
+// parameter is a capitalised name: `function WithTheme(Component)`, a HOC), or three parameters and more (a component
+// takes its props, and a ref), or the file CALLS it as a function (a component is rendered, `<Total />`, or handed
+// over — never called) AND it renders nothing itself — no JSX in its own statement: a name before a `(` is not always
+// a call (JSX text, a method's name, a regex), and a function that returns JSX is a component whoever calls it
+// (review 1 of 1.35.2). 1.35.1 listed every PascalCase function, knowingly; what is still listed is the helper nothing
 // tells apart — exported, never called in its file, with one or two lower-case parameters.
 const RE_COMPONENT_PARAM = /^\p{Lu}/u;
-const isHelper = (name, called, params) => called.has(name) || (params != null && ((params.count != null && params.count >= 3) || RE_COMPONENT_PARAM.test(params.first)));
+const isHelper = (name, view, i, params) => (view.called.has(name) && !view.holds(i, view.jsx)) ||
+  (params != null && ((params.count != null && params.count >= 3) || RE_COMPONENT_PARAM.test(params.first)));
 // The statement of a line without the decorators before it: `@observer export class X …`, `@Component({ … }) class Y …`
 // → "" when a decorator stands alone or its arguments go on below (the statement is not on this line: the line ends). Linear.
 const RE_DECORATOR_CHAR = /[\p{L}\p{N}_$.]/u;
@@ -450,27 +499,55 @@ function undecorated(s) {
     }
   }
 }
-// The entries of a `{ … }` list read from one text — an object literal's, a destructuring's: cut at the `,` of its own
-// depth → [[key, value | null (a shorthand)]] (a value holding a `:` of its own — a ternary, a type — is kept whole).
-function braceEntries(list) {
+// The entries of a `{ … }` list read from one text, from `from` to the `}` that closes it (or the text's end) — an object
+// literal's, a destructuring's: cut at the `,` of its own depth → [[key, value | null (a shorthand)]] (a value holding a
+// `:` of its own — a ternary, a type — is kept whole).
+function braceEntries(list, from) {
   const out = [], none = {};
-  let depth = 0, start = 0;
+  let depth = 0, start = from, k = from;
   const push = (to) => {
     const entry = list.slice(start, to).trim();
     if (entry === "") return;
     const colon = entry.indexOf(":");
     out.push(colon === -1 ? [entry, null] : [entry.slice(0, colon).trim(), entry.slice(colon + 1).trim()]);
   };
-  for (let k = 0; k < list.length; k++) {
+  for (; k < list.length; k++) {
     const c = list[k];
     if (isQuote(c)) { const e = quoteEnd(list, k, none); if (e !== -1) k = e; continue; }
     if (c === "(" || c === "[" || c === "{") depth++;
-    else if (c === ")" || c === "]" || c === "}") { if (depth > 0) depth--; } else if (c === "," && depth === 0) { push(k); start = k + 1; }
+    else if (c === ")" || c === "]" || c === "}") { if (depth === 0) break; depth--; } else if (c === "," && depth === 0) { push(k); start = k + 1; }
   }
-  push(list.length);
+  push(k);
   return out;
 }
+// A value without the cast after it: `forwardRefWithAs(TabFn) as unknown as Tab`, `Origin as Compound` — cut at the first
+// ` as ` / ` satisfies ` that stands in no bracket and no string.
+function uncast(v) {
+  if (!v.includes(" as ") && !v.includes(" satisfies ")) return v;
+  const none = {};
+  let depth = 0;
+  for (let k = 0; k < v.length; k++) {
+    const c = v[k];
+    if (isQuote(c)) { const e = quoteEnd(v, k, none); if (e !== -1) k = e; continue; }
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") { if (depth > 0) depth--; } else if (c === " " && depth === 0 && (v.startsWith(" as ", k) || v.startsWith(" satisfies ", k))) return v.slice(0, k);
+  }
+  return v;
+}
+// What a call is given first, on its line: what follows the `(` of its LAST argument list (`connect(a)(` …), type
+// arguments aside → the text, "" when the list goes on below, null when the value holds no call.
+function givenTo(value) {
+  const curried = value.lastIndexOf(")(");
+  if (curried !== -1) return value.slice(curried + 2).trimStart();
+  for (let k = 0, angle = 0; k < value.length; k++) {
+    const c = value[k];
+    if (c === "<") angle++;
+    else if (c === ">") { if (angle > 0) angle--; } else if (c === "(" && angle === 0) return value.slice(k + 1).trimStart();
+  }
+  return null;
+}
 const RE_COMPOUND_NAME = /^\p{Lu}[\p{L}\p{N}]*(?:\.\p{Lu}[\p{L}\p{N}]*)?$/u; // a component's name — or a part's: `Card.Header`
+const RE_PART_KEY = /^\p{Lu}[\p{L}\p{N}_$]*$/u; // a part's key is a component's name: `Header` — never `displayName`, `defaultProps`
 const RE_PART = /^(\p{Lu}[\p{L}\p{N}_$]*)\.(\p{Lu}[\p{L}\p{N}_$]*)\s*=/u; // `Card.Header = …`
 const RE_OBJECT_ASSIGN = /^Object\.assign\s*\(/;
 const RE_EXPORT_ASSIGN = /^export\s+default\s+Object\.assign\s*\(/;
@@ -488,7 +565,8 @@ function exportedComponents(text) {
   const classes = new Set(); // …those declared as a component CLASS: what a class below them may extend
   const imported = new Set(); // the names an `import` clause holds (a superset: its every word), a `require`'s
   const react = new Set(); // …the ones that name React itself, `React` aside: `import * as R from "react"`
-  const aliases = []; // [name, the name it stands on] — settled once the whole file is read
+  const aliases = []; // [name, the name it stands on — one the file imports or declares] — settled once the whole file is read
+  const applies = []; // [name, the name a function is applied to, curried?]: `withRouter(Nav)`, `withStyles(styles)(Cell)`
   const borrowed = []; // [name, the name it was destructured from] — imported once that one is
   const spaced = []; // [name, the name its wrapper is asked of]: `R.forwardRef(…)`
   const parts = new Map(); // a component → the parts the file hangs on it: `Card.Header = …`, `Object.assign(Card, { Header })`
@@ -496,7 +574,7 @@ function exportedComponents(text) {
   const view = scriptView(text);
   const code = view.code;
   const budget = { ahead: view.body.length }; // (declaredValue)
-  const part = (owner, key) => { if (!parts.has(owner)) parts.set(owner, []); parts.get(owner).push(key); };
+  const part = (owner, key) => { if (!parts.has(owner)) parts.set(owner, new Set()); parts.get(owner).add(key); };
   // a `{ … }` list that opens on a line and may go on below → { list, rest (what follows its `}`), at (its last line) } | null
   const braces = (i, line) => {
     let list = line.slice(line.indexOf("{") + 1), end = list.indexOf("}"), at = i;
@@ -509,57 +587,83 @@ function exportedComponents(text) {
     return end === -1 ? null : { list: list.slice(0, end), rest: list.slice(end + 1), at };
   };
   // What a declared value is → true (a component) | false. What only the whole file can tell waits in `aliases` /
-  // `spaced`: another component under a new name, a function applied to one, React's wrapper under an import's name.
-  const kindOf = (name, value, i) => {
+  // `applies` / `spaced`: another component under a new name, a function applied to one, React's wrapper under an
+  // import's name. own: the value is an ENTRY of a list read as one text (an `Object.assign` literal's) and is asked of
+  // its own text — never of the statement it stands in (review 1 of 1.35.2: each entry walked the whole statement
+  // again — 12 s for a 256K file — and a nested `Object.assign(` read the statement it stood in, forever).
+  const kindOf = (name, value, i, own) => {
     if (value == null || value === "") return false;
-    const last = view.last(i);
+    const entry = own != null;
+    const last = entry ? i : view.last(i);
     if (value[0] === "(") {
       const inner = value.slice(1).trimStart();
-      // an ELEMENT in parentheses (`= (` then `<svg …`), React's wrapper in parentheses (`(forwardRef(…)) as X`), a
-      // function called at once (`(function () {` … `})();`): by what the statement holds, not by its `(`
-      if (inner === "") { const below = view.after(i); if (below != null && below[0] === "<") return false; }
+      // an ELEMENT in parentheses (`= (` then `<svg …` — never `<T extends Row>(props) =>`, a generic arrow), React's
+      // wrapper in parentheses (`(forwardRef(…)) as X`), a function called at once (`(function () {` … `})();`): by
+      // what the statement holds, not by its `(`
+      if (!entry && inner === "") { const below = view.after(i); if (below != null && below[0] === "<" && !RE_VALUE_GENERIC.test(below)) return false; }
       if (RE_WRAPPED_CALL.test(inner)) {
         if (RE_VALUE_WRAPPER.test(inner)) return true;
         const ns = RE_VALUE_SPACED.exec(inner);
         if (ns) { spaced.push([name, ns[1]]); return false; }
       }
-      if (last !== i && RE_IIFE_END.test(code[last])) return false;
+      if (last !== i && inner !== "" && functionValue(inner, true) && RE_IIFE_END.test(code[last])) return false;
     }
-    if (functionValue(value)) return !isHelper(name, view.called, paramList(value, 0));
+    if (functionValue(value)) return !isHelper(name, view, i, paramList(value, 0));
     if (RE_VALUE_WRAPPER.test(value)) return true;
     const ns = RE_VALUE_SPACED.exec(value);
     if (ns) { spaced.push([name, ns[1]]); return false; }
-    const alias = RE_VALUE_ALIAS.exec(value);
-    if (alias && RE_VALUE_ALIAS_LAST.test(value)) { aliases.push([name, alias[1]]); return false; }
-    if (RE_OBJECT_ASSIGN.test(value)) { assigned(name, i); return false; }
+    const bare = uncast(value);
+    const alias = RE_VALUE_ALIAS.exec(bare);
+    if (alias && RE_VALUE_ALIAS_LAST.test(bare)) { aliases.push([name, alias[1]]); return false; }
+    if (RE_OBJECT_ASSIGN.test(value)) {
+      // (an entry that is one itself — `Item: Object.assign(MenuItem, { Icon })` — is the component it is given)
+      if (!entry) assigned(name, i);
+      else { const first = RE_NAME_HEAD.exec(value.slice(value.indexOf("(") + 1).trimStart()); if (first) aliases.push([name, first[0]]); }
+      return false;
+    }
     if (!RE_VALUE_CALL.test(value)) return false;
-    // Wrapped by any other function — `observer(…)`, a HOC, `dynamic(…)`: a component when what it wraps RENDERS (its
-    // statement holds JSX), is loaded on demand (a dynamic `import(`), or is a component itself (`withRouter(Nav)`: its
-    // last argument list is one capitalised name the file imports or declares). `memoize(() => 1)`, `z.object({ … })`,
-    // `createContext(null)` hold none of them.
-    if (view.holds(i, view.jsx) || view.matches(i, RE_DYNAMIC_IMPORT)) return true;
-    const applied = RE_HOC_ARG.exec(value.trimEnd()) || (last !== i ? RE_HOC_ARG.exec(code[last].trimEnd()) : null);
-    if (applied) aliases.push([name, applied[1]]);
+    // Wrapped by any other function — `observer(…)`, a HOC, `dynamic(…)`: a component when the FUNCTION it is given
+    // (or React's wrapper of one) renders — its statement holds JSX — or loads on demand (a dynamic `import(`):
+    // `observer(() => <div />)`, `dynamic(() => import("./chart"))`. A call given an object or a list is a
+    // configuration, whatever JSX it holds (`columnHelper.display({ cell: () => <b /> })`, a router's routes — review
+    // 1 of 1.35.2); `memoize(() => 1)` renders nothing.
+    let given = givenTo(value);
+    if (given === "" && !entry) given = view.after(i);
+    if (given != null && given !== "" && (functionValue(given, true) || RE_VALUE_WRAPPER.test(given))) {
+      const text = entry ? withoutStrings(own) : null;
+      if (entry ? RE_JSX.test(text) || RE_DYNAMIC_IMPORT.test(text) : view.holds(i, view.jsx) || view.matches(i, RE_DYNAMIC_IMPORT)) return true;
+    }
+    // …or what it is given renders as a class does — a `render` and JSX: `createReactClass({ render() { … } })`
+    if (!entry && view.matches(i, RE_RENDER) && view.holds(i, view.jsx)) return true;
+    // …or it is applied to a component: its last argument list is that one name, a cast after it aside — one the file
+    // DECLARES (`withRouter(Nav)`), or, when the application is CURRIED (`withStyles(styles)(TableCell)`, `connect(…)(List)`
+    // — the shape of a HOC), one it imports. Of a name the file only imports a single call says nothing:
+    // `Object.freeze(IconSizes)`, `createStore(RootReducer)`, `z.nativeEnum(Status)` were listed (review 1 of 1.35.2).
+    const hoc = (t) => { const m = RE_HOC_ARG.exec(t); return m ? [name, m[1], m.index > 0 && t[m.index - 1] === ")"] : null; };
+    const applied = hoc(bare.trimEnd()) || (!entry && last !== i ? hoc(uncast(code[last]).trimEnd()) : null);
+    if (applied) applies.push(applied);
     return false;
   };
-  const declare = (name, value, i) => { if (kindOf(name, value, i)) declared.add(name); };
-  // `Object.assign(Card, { Header: CardHeader, Body })` — Card under the name it is assigned to (owner; none: Card
-  // itself), and its capitalised keys as its parts
+  // `Object.assign(Card, { Header: CardHeader, Body })` — a component's parts given at once: the capitalised keys of its
+  // literal, each asked of its own text. owner: the name it is assigned to (none: Card itself). → the component's name
+  // | null: no name first, no literal, no capitalised key — an `Object.assign` of anything else (`(Base, overrides)`,
+  // `({}, defaults)`, `(Card, { displayName: "Card" })`).
   function assigned(owner, i) {
-    let text = "";
-    for (let k = i, to = Math.min(view.next[i], i + DS_DECL_LINES); k < to; k++) text += " " + code[k];
-    const open = text.indexOf("Object.assign");
-    const args = text.slice(text.indexOf("(", open) + 1);
+    const lines = [];
+    for (let k = i; k < view.next[i]; k++) lines.push(code[k]);
+    const text = lines.join(" ");
+    const args = text.slice(text.indexOf("(", text.indexOf("Object.assign")) + 1);
     const first = RE_NAME_HEAD.exec(args.trimStart());
-    if (!first) return null;
+    const from = args.indexOf("{");
+    if (!first || from === -1) return null;
+    const entries = braceEntries(args, from + 1).filter((e) => RE_PART_KEY.test(e[0]));
+    if (!entries.length) return null;
     const to = owner == null ? first[0] : owner;
     if (owner != null) aliases.push([owner, first[0]]);
-    const from = args.indexOf("{"), end = args.lastIndexOf("}");
-    if (from === -1 || end < from) return first[0];
-    for (const [key, value] of braceEntries(args.slice(from + 1, end))) {
+    for (const [key, value] of entries) {
       part(to, key);
       if (value == null) aliases.push([to + "." + key, key]);
-      else declare(to + "." + key, value, i);
+      else if (kindOf(to + "." + key, value, i, value)) declared.add(to + "." + key);
     }
     return first[0];
   }
@@ -581,7 +685,7 @@ function exportedComponents(text) {
         let value = line.slice(hung[0].length).trim();
         for (let m = i + 1; value === "" && m < view.next[i]; m++) value = code[m].trim();
         part(hung[1], hung[2]);
-        declare(hung[1] + "." + hung[2], value, i);
+        if (kindOf(hung[1] + "." + hung[2], value, i)) declared.add(hung[1] + "." + hung[2]);
       } else if (RE_OBJECT_ASSIGN.test(line)) assigned(null, i);
       continue;
     }
@@ -607,7 +711,7 @@ function exportedComponents(text) {
     }
     const fn = RE_DECL_FN.exec(line);
     if (fn) {
-      if (fn[2] === "function") { if (!isHelper(fn[3], view.called, paramList(line, fn[0].length))) declared.add(fn[3]); } else {
+      if (fn[2] === "function") { if (!isHelper(fn[3], view, i, paramList(line, fn[0].length))) declared.add(fn[3]); } else {
         // a class is a component by what it EXTENDS — React's own, or a component class declared above it (a base class
         // of the file: a class is declared before the one that extends it) — or, whatever it extends (an imported
         // base, a mixin), by what it DOES: it has a `render` and its body holds JSX
@@ -622,22 +726,22 @@ function exportedComponents(text) {
       const value = declaredValue(code, i, cn[0].length, budget);
       const required = value == null ? null : RE_REQUIRE.exec(value);
       // (`const Radix = require(…)` is an import by another word)
-      if (required) { imported.add(cn[2]); if (required[1] === "react") react.add(cn[2]); } else declare(cn[2], value, i);
+      if (required) { imported.add(cn[2]); if (required[1] === "react") react.add(cn[2]); } else if (kindOf(cn[2], value, i)) declared.add(cn[2]);
       if (cn[1]) exported.push([cn[2], cn[2]]);
       continue;
     }
     if (RE_DESTRUCTURED.test(line)) {
       // `const { Root, Trigger: Open } = DialogPrimitive;`, `= require(…)` — names the file BORROWS: what an alias may
-      // stand on, as an import's (`export const Close = Root;`)
+      // stand on, as an import's (`export const Close = Root;`). One that never closes is given up as an export list is.
       const b = braces(i, line);
-      if (!b) continue;
+      if (!b) { i = Math.min(code.length - 1, i + DS_EXPORT_LIST_LINES); continue; }
       i = b.at;
       const rest = b.rest.trimStart();
       if (rest[0] !== "=") continue;
       const source = rest.slice(1).trimStart();
       const from = RE_REQUIRE.test(source) ? null : (RE_NAME_HEAD.exec(source) || [""])[0];
       if (from === "") continue;
-      for (const [key, value] of braceEntries(b.list)) {
+      for (const [key, value] of braceEntries(b.list, 0)) {
         const local = RE_NAME_HEAD.exec(value == null ? key : value); // (`A`, `A: B`, `A = dflt`: the name it gives)
         if (local) borrowed.push([local[0], from]);
       }
@@ -661,19 +765,31 @@ function exportedComponents(text) {
   }
   // What only the whole file tells — a function declared BELOW is hoisted, an import may follow its use (review 2 of
   // 1.35.1: asked at the declaration, `export const Modal = Dialog;` above `function Dialog()` was no component):
-  // React's wrapper under an import's name; a name borrowed from an import's; another component under a new name, or
-  // a function applied to one — a capitalised name the file imports or declares, or a member of one.
+  // React's wrapper under an import's name; a name borrowed from an import's; another component under a new name — a
+  // capitalised name the file imports or declares, or a member of one; a function applied to one it declares — or,
+  // curried, imports.
   for (const [name, ns] of spaced) if (react.has(ns)) declared.add(name);
-  for (let pass = 0, found = aliases.length + borrowed.length > 0; found && pass < DS_ALIAS_PASSES; pass++) {
+  for (let pass = 0, found = aliases.length + applies.length + borrowed.length > 0; found && pass < DS_ALIAS_PASSES; pass++) {
     found = false;
     for (const b of borrowed) if (!imported.has(b[0]) && (b[1] == null || imported.has(b[1]) || declared.has(b[1]))) { imported.add(b[0]); found = true; }
     for (const a of aliases) if (!declared.has(a[0]) && (imported.has(a[1]) || declared.has(a[1]))) { declared.add(a[0]); found = true; }
+    for (const a of applies) if (!declared.has(a[0]) && (declared.has(a[1]) || (a[2] && imported.has(a[1])))) { declared.add(a[0]); found = true; }
   }
-  // a component's parts are exported with it, under its exported name: `Card.Header`
-  for (let k = 0, n = exported.length; k < n; k++) {
+  // A component's parts are exported with it, under each name it is exported by: `Card.Header`. Each name once, each
+  // component's parts settled once, DS_EXPORT_NAMES of them in all — the names of a file are kept that far, and a
+  // file of 7,000 parts exported under 7,000 names is 49 million names no one reads (review 1 of 1.35.2: the process
+  // died of it).
+  let room = DS_EXPORT_NAMES;
+  const settled = new Map(), expanded = new Set();
+  for (let k = 0, n = exported.length; k < n && room >= 0; k++) {
     const [name, local] = exported[k];
-    if (!declared.has(local) || !parts.has(local)) continue;
-    for (const key of parts.get(local)) if (declared.has(local + "." + key)) exported.push([name + "." + key, local + "." + key]);
+    if (expanded.has(name) || !declared.has(local) || !parts.has(local)) continue;
+    expanded.add(name);
+    if (!settled.has(local)) settled.set(local, [...parts.get(local)].filter((key) => declared.has(local + "." + key)));
+    for (const key of settled.get(local)) {
+      if (room-- === 0) break; // (the names past the cap are said where the names are kept, below)
+      exported.push([name + "." + key, local + "." + key]);
+    }
   }
   const names = [], seen = new Set();
   let more = budget.ahead < 0; // (a declaration went unread: said, as names past the cap are)
@@ -773,7 +889,7 @@ function packageLibraries(root) {
 //   nothing — the comment's lines were read as code.
 const RE_COMMENT_PLACE = /[\s{(;,]/;
 function quotedPlaces(line, block, script) {
-  if (!line.includes("/*") || !(line.includes("\"") || line.includes("'") || (script && line.includes("`")))) return null;
+  if (!(line.includes("/*") || (script && line.includes("//"))) || !(line.includes("\"") || line.includes("'") || (script && line.includes("`")))) return null;
   const mask = new Uint8Array(line.length);
   const none = {};
   let quote = "", comment = block, start = true; // start: the line's start, or right where a comment ended
@@ -794,6 +910,7 @@ function quotedPlaces(line, block, script) {
   }
   return mask;
 }
+const RE_LINE_COMMENT = /(?:^|\s)\/\//g;
 function withoutComments(line, st, o) {
   // (o.script: a script's line — a `/*` inside a quoted string opens none there either; o.html === false: `<!--` is no
   // comment in a script — 1.35.1: `const OPEN = "<!--[if mso]>"` hid the rest of a component file from the export reader)
@@ -826,8 +943,14 @@ function withoutComments(line, st, o) {
     if (o.slashSlash) {
       // (the `/*` of a `//* …` line comment opens nothing — Bootstrap 3's `//** doc`, a `//*****` banner: the `/` before it
       // is the comment's own; review 11: read as a block comment's opening, every variable below such a line was lost)
-      const m = /(?:^|\s)\/\//.exec(next !== -1 && next === b ? seg + "/" : seg);
-      if (m) return out + seg.slice(0, m.index);
+      // (a script's `//` inside a string that closes on its line is none — `code={\`pnpm add x // or npm i\`}`: review 1 of
+      // 1.35.2 — the mask is the one a `/*` is asked of; a stylesheet's line is read as it always was)
+      const text = next !== -1 && next === b ? seg + "/" : seg;
+      RE_LINE_COMMENT.lastIndex = 0;
+      for (let m = RE_LINE_COMMENT.exec(text); m; m = RE_LINE_COMMENT.exec(text)) {
+        if (o.script && quoted != null && quoted[i + m.index + m[0].length - 2] === 1) continue;
+        return out + seg.slice(0, m.index);
+      }
     }
     out += seg;
     if (next === -1) break;
