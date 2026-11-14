@@ -1464,27 +1464,42 @@ function packageDependencies(folder) {
 // its UI library in `apps/web/package.json`, and the registry is the whole project's (1.35.1 — 1.35 review 10: with the
 // root manifest alone, `antd 5` + `antd Table` passed in one layout and was refused in another, and the seed of a monorepo
 // declared no library). The workspace folders are the ones the project DECLARES — package.json `workspaces` (npm, Yarn,
-// Bun), pnpm-workspace.yaml `packages`, lerna.json `packages` —, each pattern followed folder by folder: a name, a `*`
-// within one (`apps/*`, `packages/ui-*`), `**` (that folder and two levels below it); a `!negation`, a brace list and a
-// path that leaves the project name none. A project that declares none is looked through ONE level down (`frontend/`
-// beside a Django app, `client/` + `server/`). Never through a link, a dot folder or node_modules; bounded:
-// DS_WORKSPACE_PATTERNS patterns, DS_WORKSPACE_DIRS folders listed (DS_WORKSPACE_ENTRIES entries each),
-// DS_WORKSPACE_MANIFESTS manifests read — past a bound the names read so far stand.
-const DS_WORKSPACE_PATTERNS = 50, DS_WORKSPACE_DIRS = 200, DS_WORKSPACE_ENTRIES = 1000, DS_WORKSPACE_MANIFESTS = 100;
-// pnpm-workspace.yaml's `packages:` — a block list (`  - "apps/*"`) or a flow one (`packages: [apps/*, packages/*]`)
+// Bun), pnpm-workspace.yaml `packages`, lerna.json `packages` (Lerna's own default, `packages/*`, when it names none) —,
+// each pattern followed folder by folder: a name, a `*` within one (`apps/*`, `packages/ui-*`), `**` (that folder and
+// two levels below it); a `!negation`, a brace list and a path that leaves the project name none. A project that
+// declares none is looked through ONE level down (`frontend/` beside a Django app, `client/` + `server/`) — unless its
+// root is a package of its own, with dependencies: an app whose `docs/` or `storybook/` site keeps another kit is not
+// that kit's project (review 1 of 1.35.1: the union made the report ask for libraries the app does not use). A `*`
+// never matches a link, a dot folder or node_modules, and a NAMED folder that is a link names nothing. Bounded, and
+// what a manifest holds never throws out of the registry's read: DS_WORKSPACE_PATTERNS patterns of DS_WORKSPACE_CHARS
+// characters and DS_WORKSPACE_SEGMENTS segments at most, DS_WORKSPACE_DIRS folders listed (DS_WORKSPACE_ENTRIES
+// entries each), DS_WORKSPACE_ASKED folders asked, DS_WORKSPACE_MANIFESTS manifests READ — a folder that is no
+// package costs none of them (review 1: counted by folders named, `packages/**` spent the hundred on each package's
+// `src/` and `dist/`). Past a bound the names read so far stand, and the Set says so: `cut`, the manifests read.
+const DS_WORKSPACE_PATTERNS = 50, DS_WORKSPACE_CHARS = 200, DS_WORKSPACE_SEGMENTS = 12, DS_WORKSPACE_DIRS = 200, DS_WORKSPACE_ENTRIES = 1000,
+  DS_WORKSPACE_ASKED = 2000, DS_WORKSPACE_MANIFESTS = 100;
+// pnpm-workspace.yaml's `packages` — the key at the margin, quoted or not: a block list (`  - "apps/*"`) or a flow one
+// (`packages: [apps/*, packages/*]`, on its line or over the next ones, to its `]`). A BOM dropped; no YAML parser.
+const RE_PNPM_KEY = /^(["']?)packages\1[ \t]*:/;
 function pnpmPackages(text) {
   const out = [];
-  const clean = (s) => { const c = s.search(/\s#/); return stripEnds((c === -1 ? s : s.slice(0, c)).trim(), unitIn("'\""), unitIn("'\"")).trim(); };
-  const lines = text.split(/\r?\n/);
+  const bare = (s) => { const c = s.search(/\s#/); return (c === -1 ? s : s.slice(0, c)).trim(); }; // a line without its comment
+  const item = (s) => stripEnds(s.trim(), unitIn("'\""), unitIn("'\"")).trim();
+  const lines = (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    if (!lines[i].startsWith("packages:")) continue;
-    const rest = clean(lines[i].slice("packages:".length));
-    if (rest.startsWith("[")) return rest.endsWith("]") ? rest.slice(1, -1).split(",").map(clean).filter(Boolean) : out;
+    const key = RE_PNPM_KEY.exec(lines[i]);
+    if (!key) continue;
+    let rest = bare(lines[i].slice(key[0].length));
+    if (rest.startsWith("[")) {
+      for (let j = i + 1; !rest.includes("]") && j < lines.length && j <= i + DS_WORKSPACE_PATTERNS; j++) { const l = lines[j].trim(); if (l[0] !== "#") rest += bare(l); }
+      const end = rest.indexOf("]");
+      return end === -1 ? out : rest.slice(1, end).split(",").map(item).filter(Boolean);
+    }
     for (let j = i + 1; j < lines.length && out.length < DS_WORKSPACE_PATTERNS; j++) {
       const l = lines[j].trim();
       if (l === "" || l[0] === "#") continue;
       if (l[0] !== "-") break;
-      const v = clean(l.slice(1));
+      const v = item(bare(l.slice(1)));
       if (v) out.push(v);
     }
     return out;
@@ -1496,27 +1511,34 @@ function workspacePatterns(realRoot, projectRoot, pkg) {
   const take = (list) => { if (Array.isArray(list)) for (const p of list) if (typeof p === "string" && out.length < DS_WORKSPACE_PATTERNS) out.push(p); };
   if (pkg) take(isRecord(pkg.workspaces) ? pkg.workspaces.packages : pkg.workspaces);
   const lerna = projectJson(realRoot, path.join(projectRoot, "lerna.json"));
-  if (lerna) take(lerna.packages);
+  if (lerna) take(Array.isArray(lerna.packages) ? lerna.packages : ["packages/*"]);
   const pnpm = path.join(projectRoot, "pnpm-workspace.yaml");
   const yaml = projectFileInside(realRoot, pnpm) ? readFileHead(pnpm, DS_PACKAGE_CHARS) : null;
   if (yaml != null) take(pnpmPackages(yaml));
   return out;
 }
-// → the folders (relative, `/`-separated) the patterns name
-function workspaceDirs(projectRoot, patterns) {
-  const out = new Set();
-  let listed = 0;
+// Follows the patterns folder by folder and gives each folder they name (relative, `/`-separated, once) to
+// `visit(rel)` — false stops the walk. → did a bound leave a folder unasked?
+function workspaceDirs(projectRoot, patterns, visit) {
+  const given = new Set(), lists = new Map(); // (a folder is listed once, however many patterns go through it)
+  let listed = 0, asked = 0, cut = false, stop = false;
+  const ask = () => { if (asked >= DS_WORKSPACE_ASKED) { cut = true; return false; } asked++; return true; };
   // a folder's real sub-folders, by name: no link (a Dirent of one is no directory), no dot folder, no node_modules
   const list = (rel) => {
-    if (listed >= DS_WORKSPACE_DIRS) return [];
+    if (lists.has(rel)) return lists.get(rel);
+    if (listed >= DS_WORKSPACE_DIRS) { cut = true; return []; }
     listed++;
     const r = readDirBounded(path.join(projectRoot, rel), DS_WORKSPACE_ENTRIES);
-    return r == null ? [] : r.entries.filter((e) => e.isDirectory() && e.name[0] !== "." && e.name !== "node_modules").map((e) => e.name).sort();
+    if (r != null && r.truncated) cut = true;
+    const names = r == null ? [] : r.entries.filter((e) => e.isDirectory() && e.name[0] !== "." && e.name !== "node_modules").map((e) => e.name).sort();
+    lists.set(rel, names);
+    return names;
   };
-  const real = (rel) => { try { return fs.lstatSync(path.join(projectRoot, rel)).isDirectory(); } catch { return false; } };
+  const real = (rel) => { if (!ask()) return false; try { return fs.lstatSync(path.join(projectRoot, rel)).isDirectory(); } catch { return false; } };
+  const give = (rel) => { if (rel === "" || given.has(rel) || !ask()) return; given.add(rel); if (visit(rel) === false) stop = true; };
   const walk = (rel, segs, i) => {
-    if (out.size >= DS_WORKSPACE_MANIFESTS) return;
-    if (i === segs.length) { if (rel !== "") out.add(rel); return; }
+    if (stop) return;
+    if (i === segs.length) { give(rel); return; }
     const s = segs[i], under = (name) => (rel === "" ? name : rel + "/" + name);
     if (s === "**") {
       walk(rel, segs, i + 1);
@@ -1529,19 +1551,34 @@ function workspaceDirs(projectRoot, patterns) {
     }
   };
   for (const p0 of patterns) {
-    const segs = toPosix(p0).trim().split("/");
+    if (stop) break;
+    if (p0.length > DS_WORKSPACE_CHARS) continue;
+    // (a `\` is a separator on every platform: a manifest written on Windows is read the same on Linux)
+    const segs = p0.split(String.fromCharCode(92)).join("/").trim().split("/").filter((x) => x !== "" && x !== ".");
     // (never upward; a segment takes two `*` at most — `ui-*`, `*-app`, `*-ui-*`: more would make its match polynomial in
     // a folder's name. Anything else a pattern may hold — a `!`, a brace list, a drive — is a folder's name no project has.)
-    if (segs.some((x) => x === ".." || (x !== "**" && x.split("*").length > 3))) continue;
+    if (segs.length > DS_WORKSPACE_SEGMENTS || segs.some((x) => x === ".." || (x !== "**" && x.split("*").length > 3))) continue;
     walk("", segs, 0);
   }
-  return [...out];
+  return cut;
 }
 function projectDependencies(projectRoot) {
   const names = new Set();
-  const realRoot = realRootOf(projectRoot);
-  const declared = workspacePatterns(realRoot, projectRoot, manifestInto(realRoot, path.join(projectRoot, "package.json"), names));
-  for (const rel of workspaceDirs(projectRoot, declared.length ? declared : ["*"])) manifestInto(realRoot, path.join(projectRoot, rel, "package.json"), names);
+  let read = 0, cut = false; // read: the workspace manifests read (the root's aside)
+  try {
+    const realRoot = realRootOf(projectRoot);
+    const pkg = manifestInto(realRoot, path.join(projectRoot, "package.json"), names);
+    const declared = workspacePatterns(realRoot, projectRoot, pkg);
+    const own = pkg != null && isRecord(pkg.dependencies) && Object.keys(pkg.dependencies).length > 0; // the root is a package of its own
+    cut = workspaceDirs(projectRoot, declared.length ? declared : own ? [] : ["*"], (rel) => {
+      const file = path.join(projectRoot, rel, "package.json");
+      if (!projectFileInside(realRoot, file)) return true; // a folder that is no package
+      if (read >= DS_WORKSPACE_MANIFESTS) { cut = true; return false; } // one more exists: said
+      if (manifestInto(realRoot, file, names)) read++;
+      return true;
+    }) || cut;
+  } catch { /* whatever a manifest holds, the registry is read with the names found so far */ }
+  if (cut) names.cut = Math.max(1, read);
   return names;
 }
 // → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole word: `own` is not in "Dropdown".

@@ -1528,6 +1528,7 @@ const msg = {
         "registry-rows": (n) => `  (solo se comprueba en los primeros ${n} componentes del registro si su ruta ya no existe)`,
         "view-files": (n) => `  (solo se leen los primeros ${n} ficheros de vista de la funcionalidad en busca de valores fijos)`,
         "component-files": (n) => `  (solo se leen los primeros ${n} ficheros de componentes en busca de los demás componentes que exportan: el resto no se compara)`,
+        "workspace-manifests": (n) => `  (solo se leyeron ${n} de los ficheros package.json de los paquetes del workspace — se alcanzó un límite de los patrones de workspace: las bibliotecas de los demás no se comparan)`,
       },
       dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reutilizar: ${reuse} · Extender: ${extend} · Nuevo: ${news}`,
       dsFeatureNoRows: "  el diseño no tiene ninguna fila de componente ([UI] Uso del Design System)",

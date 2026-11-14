@@ -1582,6 +1582,7 @@ const msg = {
         "registry-rows": (n) => `  (only the registry's first ${n} components are checked for a path that is gone)`,
         "view-files": (n) => `  (only the feature's first ${n} view files are read for raw values)`,
         "component-files": (n) => `  (only the first ${n} component files are read for the further components they export: the rest is not compared)`,
+        "workspace-manifests": (n) => `  (only ${n} of the workspace packages' package.json files were read — a bound of the workspace patterns was reached: the libraries of the rest are not compared)`,
       },
       dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reuse: ${reuse} · Extend: ${extend} · New: ${news}`,
       dsFeatureNoRows: "  the design names no component row ([UI] Design System Usage)",

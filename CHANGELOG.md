@@ -12,29 +12,39 @@ component). Both are read now, and two cosmetics are gone.
 ### Changed
 - **A monorepo's libraries are read.** The project's dependencies are its root `package.json` and its workspace
   packages': the folders it declares — `workspaces` in package.json (npm, Yarn, Bun), `packages` in
-  `pnpm-workspace.yaml` or `lerna.json`; a name, a `*` within one, `**` two levels deep: `apps/*`, `packages/ui-*`,
-  `packages/**`, `tools/cli` — or, when it declares none, the folders one level down (`frontend/package.json` beside
-  a Django app). So `steering_scaffold {file: "design-system.md"}` writes `_Libraries:_` in a monorepo, a
-  library-only registry there is checked, and a size m design may write `antd Table` for `antd 5` when `apps/web`
-  depends on antd. Never through a link, a dot folder or `node_modules`; at most 100 manifests, 50 patterns and 200
-  folders listed. Still not read: a manifest two levels below a root that declares no workspace, a folder beside the
-  declared ones, a brace list (`{apps,libs}/*`); a `!negation` removes nothing.
+  `pnpm-workspace.yaml` or `lerna.json` (Lerna's default `packages/*` when it names none); a name, a `*` within one,
+  `**` two levels deep: `apps/*`, `packages/ui-*`, `packages/**`, `tools/cli` — or, when it declares none and its root
+  is no package of its own, the folders one level down (`frontend/package.json` beside a Django app, `client/`
+  beside a root that only holds tooling). So `steering_scaffold {file: "design-system.md"}` writes `_Libraries:_` in
+  a monorepo, a library-only registry there is checked, and a size m design may write `antd Table` for `antd 5`
+  when `apps/web` depends on antd. A `*` never matches a link, a dot folder or `node_modules`, and no pattern leaves
+  the project. Bounded by what is read: 100 workspace manifests (a folder that is no package costs none), 50 patterns
+  of 200 characters and 12 segments, 200 folders listed, 2,000 asked — the report says a bound that cut
+  (`limits`: `workspace-manifests`). Still not read: a manifest two levels below a root that declares no workspace,
+  a folder beside the declared ones, a sub-folder of a root that is an app itself (its `docs/` site), a brace list
+  (`{apps,libs}/*`), `rush.json`, a workspace a workspace package declares; a `!negation` removes nothing.
 - **A component file gives every component it exports.** A kit's `card.tsx` is Card, CardHeader, CardTitle,
   CardContent — each a row of the seed and of `spec_scan {designSystem: true}`, with the file's path, so a design that
-  reuses `CardHeader` agrees with the registry. A `.tsx` / `.jsx` / `.js` file is read for it (the first 500 component
-  files, the shorter path first; the report says so past them), and what tells a component is its declaration, never
-  its name: an exported function or class, or an exported const whose value is a function, one of React's wrappers
-  (`forwardRef`, `memo`, `lazy`), a `styled` one or another component under a new name (`= DialogPrimitive.Root`) —
-  on its declaration, in an `export { … }` list or as the default. Not a type, a context, an object, a schema, `cva(…)`,
-  a hook, a re-export (`export { X } from`, `export *`). Still a row to add by hand: a component wrapped by another
-  function (`observer(…)`, a HOC) or declared indented. A component with a file of its own keeps that file's path.
+  reuses `CardHeader` agrees with the registry. A `.tsx` / `.jsx` / `.js` / `.mjs` file is read for it (the first
+  1,000 component files and 4 MB, the shorter path first, 500 names a file; the report says so past them —
+  `limits`: `component-files`), and what tells a component is its declaration, never its name: an exported function,
+  a class that extends React's `Component` / `PureComponent`, or an exported const whose value is a function (an
+  arrow, typed or generic, on its line or below it), one of React's wrappers (`forwardRef`, `memo`, `lazy`), a
+  `styled` one, a context's `Provider`, or another component under a new name — a name the file imports or declares
+  (`= DialogPrimitive.Root`) — on its declaration, in an `export { … }` list or as the default. Not a type, a
+  context, an object, a schema, `cva(…)`, any other call, a hook, a re-export (`export { X } from`, `export *`).
+  Still a row to add by hand: a component wrapped by any other function (`observer(…)`, a HOC, `dynamic(…)`),
+  declared indented or as a compound part (`Card.Header = …`), exported with `exports.X`, re-exported from a package
+  under a new name, or kept in a barrel (`components/index.tsx`) or a `.ts` file. A PascalCase helper function is
+  taken for a component. A component with a file of its own keeps that file's path.
   **A registry seeded by 1.35.0 will list the further components as missing**: paste the rows the report prints. A
   feature's New component that its file exports beside the file's own is registered with its path at the finish.
 
 ### Fixed
 - **A registry that ends in a commented-out table takes a finish's rows where they are read.** With `| … | -->` as
-  the file's last line — or a table inside a code block — the New components were appended to the hidden table: the
-  finish said "added", nothing read them, and every later finish added them again. They go into a new table after it.
+  the file's last line — or a table inside a code block left open — the New components were appended to the hidden
+  table: the finish said "added", nothing read them, and every later finish added them again. They go into a new
+  table after it; a comment of the visible table's own last row (`| Button | … | <!-- reviewed -->`) hides nothing.
 - **A design that uses no component is not told to create a registry.** `n/a — <why>` in Design System Usage passes
   with no registry in the project; it was warned "no design-system registry yet".
 

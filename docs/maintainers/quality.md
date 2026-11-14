@@ -422,22 +422,35 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   for an index — and, since 1.35.1, every further component a .tsx / .jsx / .js file EXPORTS (`exportedComponents`;
   1.35 review 10 found the limit on real file contents: shadcn's `card.tsx` was Card alone, and a design reusing
   `CardHeader` "not in the registry"). What tells a component is its DECLARATION, never its name — no suffix list
-  ("Context", "Props") is ever complete: an exported function or class, or an exported const whose value is a
-  function (`RE_VALUE_FN`: an arrow, a generic one, `function`), one of React's own wrappers or a `styled` one
-  (`RE_VALUE_WRAPPER`: `forwardRef`, `memo`, `lazy` — a framework's API, a closed list — and `styled`), or another
-  component under a new name (`RE_VALUE_ALIAS`: `= DialogPrimitive.Root`); exported on its declaration, in an
-  `export { … }` list (over lines, `X as Y`) or as the default. Never a type, a context, an object, a schema,
-  `cva(…)`, any other call, a re-export (`export { X } from`, `export *`: a barrel's). Top-level statements only
-  (column 0), comments aside (`withoutComments`); the reader keeps no string state, so a template literal's line at
-  the margin reads as a statement — knowingly. Every pattern is anchored and unambiguous (a value is SLICED off the
+  ("Context", "Props") is ever complete: an exported function, a class that extends React's `Component` /
+  `PureComponent` (`RE_CLASS_COMPONENT` — never `class LoginError extends Error`), or an exported const whose value
+  is a function (`functionValue`: an arrow, `async`, a generic one — its `<` alone at the line's end too, shadcn's
+  FormField —, `function`; a `(` is a parameter list's when its `)` is followed by `=>` or `:` or does not close on
+  its line, so `(1 + 2) * 3` is a value), one of React's own wrappers, a `styled` one or a context's provider
+  (`RE_VALUE_WRAPPER`: `forwardRef`, `memo`, `lazy` — with `React.` or bare: a framework's API, a closed list;
+  never `z.lazy(`, `cache.memo(` —, `styled.x` / `styled(X)`, `X.Provider`), or another component under a new name
+  (`RE_VALUE_ALIAS`: `= DialogPrimitive.Root`, `= FormProvider` — a capitalised name the file IMPORTS or declares,
+  or a member of one: never `= Infinity`, `= Number.MAX_SAFE_INTEGER`, a local enum's member). The value is what
+  follows the `=` that ENDS the declaration's annotation (`declaredValue`): at no bracket's depth, never an arrow's
+  — `React.FC<{ onDone: () => void }> = …` —, on a later line while a bracket is open (`DS_DECL_LINES`), and the
+  next line with text when the `=` ends its own. Exported on its declaration, in an `export { … }` list (over
+  lines, `X as Y`) or as the default. Never a type, a context, an object, a schema, `cva(…)`, any other call, a
+  re-export (`export { X } from`, `export *`: a barrel's). A name is read WHOLE, accents too. Top-level statements
+  only (column 0), comments aside (`withoutComments` with `quotes` — a `/*` in a quoted string opens none — and
+  `html: false`: `<!--` is no comment in a script), a BOM dropped; the reader keeps no template state, so a
+  template literal's line at the margin reads as a statement — knowingly, as a PascalCase helper function and an
+  imported enum's member read as components. Every pattern is anchored and unambiguous (a value is SLICED off the
   line, never captured by `(.*)$`; no `\s*;?\s*$`) — each has its hostile fixture. Bounds: `DS_EXPORT_FILES`
-  component files read, the shorter path first (past them `limits` says `component-files` and the report is never
-  in sync), `DS_EXPORT_NAMES` names a file, `DS_EXPORT_LIST_LINES` lines an unclosed `export {` may take. A
-  component with a file of its own keeps that file (read after every file's own name is known); a route segment's
-  special file is a page and is not read. What it misses — a component wrapped by another function (`observer(…)`,
-  a HOC), one declared indented — is a row to add by hand: the `unknown` hint still says so. A feature's own files
-  are read the same way for its New components' paths (`featureReport`: the finish wrote `—` for one its file
-  exports beside the file's own) —; never a test, a story, a hook (`useX`, `use-x`), a helper or an entry file (`NOT_COMPONENT`, as written:
+  component files and `DS_EXPORT_CHARS` characters read, the shorter path first, `DS_EXPORT_NAMES` names a file
+  (past any of them `limits` says `component-files` and the report is never in sync), `DS_EXPORT_LIST_LINES`
+  lines an unclosed `export {` or `import {` may take. A component with a file of its own keeps that file (read
+  after every file's own name is known); a route segment's special file is a page and is not read. What it misses
+  is a row to add by hand, and the `unknown` hint still says so: a component wrapped by any other function
+  (`observer(…)`, a HOC, `dynamic(…)`), declared indented or as a compound part (`Card.Header = …`), CommonJS
+  `exports.X`, a re-export from a package under a new name, a barrel that declares. A feature's own files are read
+  the same way for its New components' paths (`featureReport`: the finish wrote `—` for one its file exports
+  beside the file's own — a component file's alone, its own file first). Review 1 of 1.35.1 measured the first
+  draft on six real kits: 197 of 218 found, 7 non-components listed; this one finds 204 and lists none —; never a test, a story, a hook (`useX`, `use-x`), a helper or an entry file (`NOT_COMPONENT`, as written:
   utils, types, constants, main, app, store…; never applied to an Angular `*.component.ts` — the suffix says what it is).
   Of them `main` / `app` (`ENTRY_NAMES`) are entry files only RIGHT inside the telling folder, `src/` looked through as
   `homeDir` does (`src/ui/main.tsx`, `packages/ui/src/main.tsx`): deeper, `components/layout/main.tsx` is the component
@@ -538,19 +551,29 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   packages'. Until 1.35.1 the root one alone (left knowingly in review 6; 1.35 review 10's MEDIUM: `antd 5` + `antd
   Table` passed in one layout and was refused in a monorepo, whose seed declared no library). The folders are the
   ones the project DECLARES (`workspacePatterns`): package.json `workspaces` (an array, or Yarn's `{packages}`),
-  pnpm-workspace.yaml `packages` (`pnpmPackages`: a block list or a flow one — the one key, at the margin; no YAML
-  parser, zero dependencies), lerna.json `packages`. Each pattern is followed folder by folder (`workspaceDirs`): a
-  name, a `*` within one (two at most: its match must stay linear in a folder's name), `**` (that folder and two
-  levels below it). A project that declares NONE is looked through one level down (`frontend/package.json` beside a
-  Django app, `client/` + `server/`) — one level only: every further level is a listing per folder on every registry
-  read. What a pattern never reaches: upward (`..`), a link (a `*` match is a Dirent that is no directory; a NAMED
-  folder is asked itself, `lstat`), a dot folder, node_modules. A `!negation` removes nothing and a brace list names
-  nothing — each is a folder's name no project has; said in the user docs. Bounded: `DS_WORKSPACE_PATTERNS`
-  patterns, `DS_WORKSPACE_DIRS` folders listed (`readDirBounded`, `DS_WORKSPACE_ENTRIES` entries each, sorted by
-  name), `DS_WORKSPACE_MANIFESTS` manifests — past a bound the names read so far stand. The cost is paid only when a
-  marker ASKS (a bare-number name, a note, a registry with no component row) and once per scan; a single-package
-  project pays one listing of its root. `packageDependencies` stays ONE folder's manifest (`dependsOnNext` asks it
-  of a router's folders).
+  pnpm-workspace.yaml `packages` (`pnpmPackages`: a block list or a flow one, on its line or over several — the one
+  key, at the margin, quoted or not, a BOM dropped; no YAML parser, zero dependencies), lerna.json `packages` (or
+  Lerna's default, `packages/*`). Each pattern is followed folder by folder (`workspaceDirs`): a name, a `*` within
+  one (two at most: its match must stay linear in a folder's name), `**` (that folder and two levels below it); a
+  `\` is a separator on every platform. A project that declares NONE is looked through one level down
+  (`frontend/package.json` beside a Django app, `client/` + `server/`) — one level only: every further level is a
+  listing per folder on every registry read — and only when its root is no package of its own, with `dependencies`:
+  an app whose `docs/` or `storybook/` site keeps another kit is not that kit's project (review 1 of 1.35.1: the
+  union made the report ask, for good, for libraries the app does not use). What a pattern never reaches: upward
+  (`..`), a link (a `*` match is a Dirent that is no directory; a NAMED folder is asked itself, `lstat`; a manifest
+  that is a link out of the project is not read), and a `*` never matches a dot folder or node_modules — a NAMED
+  one is the project's own word. A `!negation` removes nothing and a brace list names nothing — each is a folder's
+  name no project has; said in the user docs. Bounded, and nothing a manifest holds throws out of the registry's
+  read (review 1: an 8 KB pattern overflowed the stack; 50 long ones cost 11 s): `DS_WORKSPACE_PATTERNS` patterns
+  of `DS_WORKSPACE_CHARS` characters and `DS_WORKSPACE_SEGMENTS` segments, `DS_WORKSPACE_DIRS` folders listed once
+  each (`readDirBounded`, `DS_WORKSPACE_ENTRIES` entries, sorted by name), `DS_WORKSPACE_ASKED` folders asked,
+  `DS_WORKSPACE_MANIFESTS` manifests READ — a folder that is no package costs none of them (review 1: counted by
+  folders NAMED, `packages/**` spent the hundred on each package's `src/` and `dist/` and left the library unread,
+  silently). Past a bound the names read so far stand and the Set says so (`cut`): the scan reports it
+  (`limits`: workspace-manifests). The cost is paid only when a marker ASKS (a bare-number name, a note, a registry
+  with no component row) and once per scan; a single-package project pays nothing but its root manifest.
+  `packageDependencies` stays ONE folder's manifest (`dependsOnNext` asks it of a router's folders). Not read, said
+  in the user docs: `rush.json`, a workspace a workspace package declares, a UTF-16 YAML file.
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),
@@ -634,7 +657,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `total`).
 - **`limits`** — the bounds that CUT what a report read, `[{code, read, file?}]`: files (the walk's cap) · token-files ·
   token-candidates · file-size (`file`) · tokens · registry-rows (rows past 500 are not checked for a gone path) ·
-  component-files (`DS_EXPORT_FILES` read for what else they export, 1.35.1 — the project report's alone) ·
+  component-files (a bound of the export read: `DS_EXPORT_FILES`, `DS_EXPORT_CHARS`, `DS_EXPORT_NAMES` — `read`: the
+  files read) · workspace-manifests (a bound of the workspace patterns — `read`: the manifests read) — 1.35.1, the
+  project report's alone ·
   view-files (a feature's 200; its report carries every code but tokens and registry-rows — a stylesheet left out of the
   sources is read for raw values); `truncated` = one of them, and then the report is NEVER `inSync` (said of NAMES: a
   token's value is not compared, nor a token the code no longer declares — `cliOutput.dsInSync` says so, review 7) — what it
@@ -688,10 +713,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   design's New components to the registry (`registerComponents`): under the roadmap lock, the registry read AGAIN past the
   call's read cache (`forgetCached` — doctor read it before the lock) and judged by `keys` (past the reader's cap too: no row
   twice); into the component table the file ENDS in when it has a column for the origin (neither the path's nor the
-  variants') AND the registry's reader ends in it too — the file's last line is the last line of the text with its
-  comments and code blocks stripped: a table that is commented out (`| … | -->` as the last line) or inside a fence
-  took the rows where nothing reads them, the finish said "added" and every later one added them again (1.35.1;
-  1.35 review 10) —, else as a new table (`appendSpecText`: BOM and line ends kept); the path = the feature's file
+  variants') AND the registry's reader ends in it too — the last line of the text with its comments and code blocks
+  stripped is the file's last row, that row's OWN comments aside (`| Button | … | <!-- reviewed -->` hides nothing —
+  review 1 of 1.35.1: compared as written, it started a second table): a table that is commented out (`| … | -->`
+  as the last line) or inside a fence left open took the rows where nothing reads them, the finish said "added"
+  and every later one added them again (1.35.1; 1.35 review 10) —, else as a new table (`appendSpecText`: BOM and line ends kept); the path = the feature's file
   of that name, or the one that exports it beside its own (1.35.1), the
   origin `_From: <slug>_`; a name that is no plain component name is never written (`RE_SAFE_NAME`); best-effort — a registry
   the write gate refuses is left as it is and the finish stands. Result: `designSystem` {raw, registered, unregistered,
@@ -759,7 +785,14 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   a condition to delete (all-caps names: `FAQ` is a component, and a constant is none by its value), and one is
   the second of two layers (the column-0 rule: the first-letter test and the pattern's anchor) — mutated together,
   caught. Not reachable deterministically, and left: `DS_WORKSPACE_ENTRIES` (which thousand entries a listing gives
-  first is the file system's order).
+  first is the file system's order). Review 1 of 1.35.1's reviewer: 98 of its own, 27 survived — nearly all
+  missing fixtures (a flow list over lines, a pattern written with `\`, a manifest that is a file link, `.jsx` /
+  `.mjs`, `async function` / `let` / `var` at the margin, a value three and four lines down, a comment inside a
+  list, a `_` in a name, the shorter path met LATER by the walk, the feature's own file against an export); 99
+  mutations checked on the fix round, 94 caught at first — four wanted a fixture or showed a condition to delete
+  (an arrow at no bracket's depth of an annotation; a name that only begins with `styled`; the feature's own file
+  sorted BEFORE the exporter; `async`'s word end), and one is told apart on Linux alone (a `\` in a pattern is a
+  separator on Windows whatever the code does: the Linux run is its test).
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
@@ -1150,3 +1183,27 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   1.5 s bound is no fixture — it now costs a mutant 2.6 s against 1 s; (3) the guards a pattern "obviously needs"
   (a `!`, a brace list, a drive letter) were all equivalent to "that folder does not exist": deleted, the one that
   is not (`..`) kept.
+- **1.35.1 review 1** (one fresh reviewer on the commit above; real kits and real monorepo layouts, the earlier
+  rounds' 743 rows and 21 projects on both versions) — no HIGH, nothing read outside the project, no pattern that
+  backtracks. MEDIUM, both in the new readers: a `**` pattern spent the "100 manifests" on folders that are no
+  packages, silently (the bound counts manifests READ now, and a bound that cut is reported); an arrow component
+  was found only when its `=` was the first of its line and its value began there (shadcn's FormField, a typed
+  `React.FC<{ onDone: () => void }>`, one Prettier broke over lines — `declaredValue`). LOW: the report of a
+  project with 520 component files could never be in sync again, and 500 large ones cost seconds (a budget in
+  characters; in sync whenever everything was read); the union of every first-level manifest took a docs site's
+  kit for the app's (one level down only when the root is no package of its own); a hostile pattern threw out of
+  every registry read or cost 11 s (bounded in characters, segments and folders asked); a BOM, a flow list over
+  lines and a quoted key in pnpm-workspace.yaml; seven non-components listed on six kits — `z.lazy(…)`,
+  `cache.memo(…)`, `Infinity`, an enum's member, `(1 + 2) * 3`, `class LoginError extends Error`, and `Botão` cut to
+  "Bot" (a wrapper is React's own, an alias is of a name the file imports, a `(` is a parameter list's by what
+  follows its `)`, a class extends React's, a name is read whole); the 50 names a file was cut at, silently; a
+  string holding `<!--` or ` /*`, or a BOM, hid the rest of a file. Cosmetic: a note on the registry's last row
+  started a second table. The fix round's own differential on the reviewer's kits: 204 of 218 found (197), no
+  non-component listed (7), the 14 missed all of the kinds the docs name — and two shapes the tighter rules had
+  dropped, found by that run before the commit (an arrow in parentheses that is cast, a context's `Provider`).
+  Lessons: (1) "100 manifests" was written as "100 folders named" — a bound must count the thing its name says, and
+  its fixture must hold what a real tree holds (a package has `src/` and `dist/`); (2) every first draft of a
+  reader took the FIRST `=`, the FIRST `(`, any dotted prefix: the precision came from asking what each token IS —
+  the same lesson as the registry's reader, relearned in a new file; (3) a list of what a reader misses belongs in
+  the user docs in the reader's own words, complete — "wrapped by another function or declared indented" hid five
+  more kinds.
