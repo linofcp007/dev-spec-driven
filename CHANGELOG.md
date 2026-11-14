@@ -3,6 +3,55 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.35.2] — 2026-11-14
+
+The limits 1.35.1 shipped saying, read. Its code scan named what it left for a row added by hand — a brace list,
+`rush.json` and a nested workspace; a component wrapped by another function, a class with an imported base, a decorator,
+an indented export, a compound part — and what it listed too much. Most of it is read now; what is left is what a reader
+of one file's text cannot know, and it is said below.
+
+### Changed
+- **Workspaces: brace lists, `rush.json`, nested workspaces.** A brace list is expanded (`{apps,libs}/*`,
+  `packages/{ui,core}-*`, a nested one; 20 patterns a list). `rush.json`'s `projects` are read, each `projectFolder` a
+  folder named in full — with the comments and trailing commas Rush allows. A workspace package's own `workspaces`
+  (Yarn's nested worktrees) are followed for its folder, two levels deep. A folder named in full no longer counts
+  among the 50 patterns — those are the ones that are walked — and 1,000 of them are followed. What is declared and
+  not read is still said (`limits`: `workspace-manifests`): a list of one (`{apps}/*`), a brace that never closes, a
+  `rush.json` that is no JSON, a third level of nesting.
+- **A component wrapped by another function is read when it shows what it wraps.** `observer(…)`, a HOC,
+  `dynamic(…)`: a PascalCase const whose value is a call is a component when its statement holds JSX
+  (`observer(() => <div />)`, on its line or below), a dynamic `import(` (`dynamic(() => import("./chart"))`), or
+  when its last argument list is one capitalised name the file imports or declares (`withRouter(Nav)`,
+  `connect(mapState)(List)`, `inject("store")(observer(Base))`). `memoize(() => 1)`, `z.object({ … })`,
+  `createContext(null)` and `observer(() => null)` show none of them and stay out.
+- **A class is a component by what it does.** Whatever it extends — an imported base class, a mixin —, a class with
+  a `render` (a method or a field) and JSX in its body is one. And a decorator no longer hides it: on the class's own
+  line (`@observer export class X`, with arguments), after `export` / `export default`, or over the lines above.
+- **A component's parts.** `Card.Header = CardHeader`, `Card.Body = (props) => …` and the capitalised keys of
+  `Object.assign(Card, { Header, Body: CardBody })` — as a value, a statement or the default export — are rows named
+  `Card.Header`, under the name the component is exported by. A design cites `Card.Header` (or `CardHeader`: the
+  same key).
+- **An indented `export` is read** (a namespace's too), **React under another name** (`import * as R from "react"`:
+  `R.forwardRef(…)`; a wrapper in parentheses that is cast), **and an alias of a name the file borrows**
+  (`const { Root } = DialogPrimitive; export const Dialog = Root;`, a `require`'s).
+- **Fewer non-components listed.** A PascalCase function is not a component when the file shows it: it is CALLED as
+  a function there (`FormatPrice(value)` — a component is rendered, never called), it takes a component (a HOC:
+  `function WithTheme(Component)`), or it takes three parameters. An element in parentheses over lines
+  (`const Logo = (` then `<svg />`), a function called at once (`(function () { … })()`) and the lines of a template
+  literal (a code sample in a docs component) are none either.
+  **A registry seeded by 1.35.1 will list the newly read components as missing**: paste the rows the report prints. A
+  row it seeded for a helper is yours to delete — the report does not flag it.
+
+Still a row to add by hand: a component made by a call that shows nothing (`createComponent(config)`, a wrapper
+around a name the file never imports), a class that renders only through its imported base, a component exported
+with `exports.X`, re-exported from a package under a new name, or kept in a barrel or a `.ts` file. Still listed,
+knowingly: a PascalCase helper nothing tells apart — exported, never called in its own file, with one or two
+lower-case parameters. Still not read among workspaces: a manifest two levels below a root that declares none, a
+folder beside the declared ones, a sub-folder of a root that is an app itself; a `!negation` removes nothing.
+
+### Tests
+- `node mcp/test.js` 2361 assertions, `node cli/test-cli.js` 663 (was 2357 / 663).
+
 ## [1.35.1] — 2026-11-14
 
 The design-system registry without its two known limits. 1.35.0 shipped saying what it did not read: a monorepo's

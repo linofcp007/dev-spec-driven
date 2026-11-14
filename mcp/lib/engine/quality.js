@@ -1464,9 +1464,12 @@ function packageDependencies(folder) {
 // its UI library in `apps/web/package.json`, and the registry is the whole project's (1.35.1 — 1.35 review 10: with the
 // root manifest alone, `antd 5` + `antd Table` passed in one layout and was refused in another, and the seed of a monorepo
 // declared no library). The workspace folders are the ones the project DECLARES — package.json `workspaces` (npm, Yarn,
-// Bun), pnpm-workspace.yaml `packages`, lerna.json `packages` (Lerna's own default, `packages/*`, when it names none) —,
+// Bun), pnpm-workspace.yaml `packages`, lerna.json `packages` (Lerna's own default, `packages/*`, when it names none),
+// rush.json's `projects` (each a `projectFolder` — 1.35.2), and the `workspaces` of a workspace package itself (Yarn's
+// nested worktrees, DS_WORKSPACE_NESTED deep — 1.35.2) —,
 // each pattern followed folder by folder: a name, a `*` within one (`apps/*`, `packages/ui-*`), `**` (that folder and
-// two levels below it); a `!negation`, a brace list and a path that leaves the project name none. A project that
+// two levels below it), a brace list expanded first (`{apps,libs}/*` — braceExpand, 1.35.2); a `!negation` and a path
+// that leaves the project name none. A project that
 // declares none is looked through ONE level down (`frontend/` beside a Django app, `client/` + `server/`) — unless its
 // root is a package of its own, with dependencies: an app whose `docs/` or `storybook/` site keeps another kit is not
 // that kit's project (review 1 of 1.35.1: the union made the report ask for libraries the app does not use). A `*`
@@ -1477,9 +1480,76 @@ function packageDependencies(folder) {
 // DS_WORKSPACE_MANIFESTS manifests READ — a folder that is no package costs none of them (review 1: counted by folders
 // named, `packages/**` spent the hundred on each package's `src/` and `dist/`). Past a bound the names read so far
 // stand, and the Set says so: `cut`, with `read` — the manifests read. A declared pattern the reader does not follow
-// (past a bound, a brace list) is cut too: the project named folders that went unread.
+// (past a bound, a brace list it cannot expand) is cut too: the project named folders that went unread.
+// DS_WORKSPACE_PATTERNS counts the patterns that hold a wildcard — what a walk costs; a folder named in full costs
+// one question, and DS_WORKSPACE_EXACT of them are followed (a rush.json names every project so: 1.35.2).
 const DS_WORKSPACE_PATTERNS = 50, DS_WORKSPACE_CHARS = 200, DS_WORKSPACE_SEGMENTS = 12, DS_WORKSPACE_DIRS = 200, DS_WORKSPACE_ENTRIES = 1000,
-  DS_WORKSPACE_ASKED = 2000, DS_WORKSPACE_MANIFESTS = 100, DS_WORKSPACE_LINES = 500;
+  DS_WORKSPACE_ASKED = 2000, DS_WORKSPACE_MANIFESTS = 100, DS_WORKSPACE_LINES = 500, DS_WORKSPACE_EXACT = 1000, DS_WORKSPACE_BRACES = 20,
+  DS_WORKSPACE_NESTED = 2;
+const RE_WORKSPACE_WILD = /\*/; // a pattern that is walked — never a folder named in full (a brace list of names is a few of them)
+// A brace list: `{apps,libs}/*` → `apps/*`, `libs/*` — the innermost list first, so a nested one too
+// (`packages/{ui,{web,docs}-kit}`). → the patterns, or null: a list of one (`{a}`, a range `{1..3}`), a brace that
+// never closes or was never opened, more than DS_WORKSPACE_BRACES patterns. Linear in what it gives.
+function braceExpand(pattern) {
+  const todo = [pattern], out = [];
+  while (todo.length) {
+    const s = todo.pop();
+    const close = s.indexOf("}");
+    if (close === -1) { if (s.includes("{")) return null; out.push(s); continue; }
+    const open = s.lastIndexOf("{", close);
+    const items = open === -1 ? [] : s.slice(open + 1, close).split(",");
+    if (items.length < 2 || todo.length + out.length + items.length > DS_WORKSPACE_BRACES) return null;
+    for (const item of items) todo.push(s.slice(0, open) + item + s.slice(close + 1));
+  }
+  return out;
+}
+// A JSON text with comments and trailing commas — what Rush's own reader accepts of rush.json — as plain JSON: `//` and
+// `/* */` comments out, a `,` before a `}` / `]` dropped, strings kept as written, a BOM dropped. Linear.
+function jsonPlain(text) {
+  const BSL = String.fromCharCode(92);
+  const parts = [];
+  let i = text.charCodeAt(0) === 0xfeff ? 1 : 0, from = i;
+  const cutAt = (to) => { parts.push(text.slice(from, i)); i = from = to; };
+  while (i < text.length) {
+    const c = text[i];
+    if (c === "\"") { i++; while (i < text.length && text[i] !== "\"") i += text[i] === BSL ? 2 : 1; i++; continue; }
+    if (c === "/" && text[i + 1] === "/") { const e = text.indexOf("\n", i); cutAt(e === -1 ? text.length : e); continue; }
+    if (c === "/" && text[i + 1] === "*") { const e = text.indexOf("*/", i + 2); cutAt(e === -1 ? text.length : e + 2); continue; }
+    i++;
+  }
+  parts.push(text.slice(from));
+  const plain = parts.join("");
+  const out = [];
+  let j = 0, start = 0;
+  while (j < plain.length) {
+    const c = plain[j];
+    if (c === "\"") { j++; while (j < plain.length && plain[j] !== "\"") j += plain[j] === BSL ? 2 : 1; j++; continue; }
+    if (c === ",") {
+      let k = j + 1;
+      while (k < plain.length && (plain[k] === " " || plain[k] === "\t" || plain[k] === "\n" || plain[k] === "\r")) k++;
+      if (plain[k] === "}" || plain[k] === "]") { out.push(plain.slice(start, j)); start = j + 1; }
+      j = k;
+      continue;
+    }
+    j++;
+  }
+  out.push(plain.slice(start));
+  return out.join("");
+}
+// rush.json's projects — each a folder named in full (`projectFolder`). → { folders, unread: the file is there and
+// gave none it can read: no JSON even with its comments out (one cut at a manifest's read is none) }
+function rushFolders(realRoot, projectRoot) {
+  const file = path.join(projectRoot, "rush.json");
+  const text = projectFileInside(realRoot, file) ? readFileHead(file, DS_PACKAGE_CHARS) : null;
+  if (text == null) return { folders: [], unread: false };
+  let json = null;
+  try { json = JSON.parse(jsonPlain(text)); } catch { /* no JSON — or one cut at a manifest's read */ }
+  if (!isRecord(json)) return { folders: [], unread: true };
+  const folders = (Array.isArray(json.projects) ? json.projects : []).map((p) => (isRecord(p) ? p.projectFolder : null)); // (what is no string is no pattern: workspacePatterns)
+  return { folders, unread: false };
+}
+// the patterns a manifest's `workspaces` holds: an array, or Yarn's `{ packages }`
+const manifestWorkspaces = (pkg) => { const w = isRecord(pkg.workspaces) ? pkg.workspaces.packages : pkg.workspaces; return Array.isArray(w) ? w.filter((p) => typeof p === "string") : []; };
 // pnpm-workspace.yaml's `packages` — the key at the margin, quoted or not: a block list (`  - "apps/*"`) or a flow one
 // (`packages: [apps/*, packages/*]`, on its line or over the next ones, to the `]` that ends a line). EVERY item of
 // the list's first DS_WORKSPACE_LINES lines: the caller counts them against its bound, and says when it drops one.
@@ -1510,15 +1580,25 @@ function pnpmPackages(text) {
   }
   return out;
 }
-// → { patterns: the first DS_WORKSPACE_PATTERNS the project declares, more: it declares more — they are not followed }
+// → { patterns: the ones the project declares — the first DS_WORKSPACE_PATTERNS that hold a wildcard, the first
+//   DS_WORKSPACE_EXACT folders named in full —, more: it declares more, or a rush.json it cannot read: not followed }
 function workspacePatterns(realRoot, projectRoot, pkg) {
   const patterns = [];
-  let more = false;
-  const take = (list) => { if (Array.isArray(list)) for (const p of list) if (typeof p === "string") { if (patterns.length < DS_WORKSPACE_PATTERNS) patterns.push(p); else more = true; } };
-  if (pkg) take(isRecord(pkg.workspaces) ? pkg.workspaces.packages : pkg.workspaces);
+  let more = false, wild = 0, exact = 0;
+  const take = (list) => {
+    if (Array.isArray(list)) for (const p of list) {
+      if (typeof p !== "string") continue;
+      const walked = RE_WORKSPACE_WILD.test(p);
+      if (walked ? wild < DS_WORKSPACE_PATTERNS : exact < DS_WORKSPACE_EXACT) { patterns.push(p); if (walked) wild++; else exact++; } else more = true;
+    }
+  };
+  if (pkg) take(manifestWorkspaces(pkg));
   const pnpm = path.join(projectRoot, "pnpm-workspace.yaml");
   const yaml = projectFileInside(realRoot, pnpm) ? readFileHead(pnpm, DS_PACKAGE_CHARS) : null;
   if (yaml != null) take(pnpmPackages(yaml));
+  const rush = rushFolders(realRoot, projectRoot);
+  take(rush.folders);
+  if (rush.unread) more = true;
   // (lerna.json's `packages` — or Lerna's own default, `packages/*`, when nothing at all declares a workspace: beside
   // declared ones it would read a folder the project did not declare — review 2 of 1.35.1)
   const lerna = projectJson(realRoot, path.join(projectRoot, "lerna.json"));
@@ -1546,8 +1626,34 @@ function workspaceDirs(projectRoot, patterns, visit) {
     lists.set(rel, names);
     return names;
   };
-  const real = (rel) => { if (!ask()) return false; try { return fs.lstatSync(path.join(projectRoot, rel)).isDirectory(); } catch { return false; } };
-  const give = (rel) => { if (rel === "" || given.has(rel) || !ask()) return; given.add(rel); if (visit(rel) === false) stop = true; };
+  // (a NAMED folder is asked once: a rush.json's hundred `apps/<name>` ask `apps` one time)
+  const reals = new Map();
+  const real = (rel) => {
+    if (reals.has(rel)) return reals.get(rel);
+    if (!ask()) return false;
+    let is = false;
+    try { is = fs.lstatSync(path.join(projectRoot, rel)).isDirectory(); } catch { /* no such folder */ }
+    reals.set(rel, is);
+    return is;
+  };
+  // The patterns still to follow: [pattern, how deep it was declared] — the project's own (0), then the ones a
+  // workspace package's manifest declares for its own folder (`visit` gives them back: Yarn's nested worktrees),
+  // DS_WORKSPACE_NESTED deep and DS_WORKSPACE_PATTERNS more at most; past either they are declared and unread: said.
+  const todo = patterns.map((p) => [p, 0]);
+  let depth = 0, nested = 0;
+  const give = (rel) => {
+    if (rel === "" || given.has(rel) || !ask()) return;
+    given.add(rel);
+    const more = visit(rel);
+    if (more === false) { stop = true; return; }
+    for (const p0 of Array.isArray(more) ? more : []) {
+      const p = p0.trim();
+      if (p[0] === "/" || p[0] === String.fromCharCode(92)) continue; // (a path from a root names none of the package's own folders)
+      if (depth >= DS_WORKSPACE_NESTED || nested >= DS_WORKSPACE_PATTERNS) { cut = true; break; }
+      nested++;
+      todo.push([rel + "/" + p, depth + 1]);
+    }
+  };
   const walk = (rel, segs, i) => {
     if (stop) return;
     if (i === segs.length) { give(rel); return; }
@@ -1565,17 +1671,26 @@ function workspaceDirs(projectRoot, patterns, visit) {
       for (const name of list(rel)) if (re.test(name)) walk(under(name), segs, i + 1);
     }
   };
-  for (const p0 of patterns) {
-    if (stop) break;
-    // (a `\` is a separator on every platform: a manifest written on Windows is read the same on Linux)
-    const segs = p0.split(String.fromCharCode(92)).join("/").trim().split("/").filter((x) => x !== "" && x !== ".");
-    // Never upward, and a `!negation` removes nothing: such a pattern names none. A pattern the reader does not FOLLOW is
-    // SAID (cut) — the project declared folders that went unread: one past DS_WORKSPACE_CHARS or DS_WORKSPACE_SEGMENTS,
-    // a segment of more than two `*` (`ui-*`, `*-app`, `*-ui-*` are followed: more would make its match polynomial in
-    // a folder's name), a brace list. Review 2 of 1.35.1: they were dropped without a word, and the report said in sync.
-    if (segs.some((x) => x === "..") || p0.trim()[0] === "!") continue;
-    if (p0.length > DS_WORKSPACE_CHARS || segs.length > DS_WORKSPACE_SEGMENTS || /[{}]/.test(p0) || segs.some((x) => x !== "**" && x.split("*").length > 3)) { cut = true; continue; }
-    walk("", segs, 0);
+  for (let q = 0; q < todo.length && !stop; q++) {
+    const p0 = todo[q][0];
+    depth = todo[q][1];
+    // Never upward, and a `!negation` removes nothing: such a pattern names none. A pattern the reader does not FOLLOW
+    // is SAID (cut) — the project declared folders that went unread: one past DS_WORKSPACE_CHARS or
+    // DS_WORKSPACE_SEGMENTS, a segment of more than two `*` (`ui-*`, `*-app`, `*-ui-*` are followed: more would make
+    // its match polynomial in a folder's name), a brace list that cannot be expanded. Review 2 of 1.35.1: they were
+    // dropped without a word, and the report said in sync.
+    if (p0.trim()[0] === "!") continue;
+    if (p0.length > DS_WORKSPACE_CHARS) { cut = true; continue; }
+    const expanded = p0.includes("{") || p0.includes("}") ? braceExpand(p0) : [p0];
+    if (!expanded) { cut = true; continue; }
+    for (const p1 of expanded) {
+      if (stop) break;
+      // (a `\` is a separator on every platform: a manifest written on Windows is read the same on Linux)
+      const segs = p1.split(String.fromCharCode(92)).join("/").trim().split("/").filter((x) => x !== "" && x !== ".");
+      if (segs.some((x) => x === "..")) continue;
+      if (segs.length > DS_WORKSPACE_SEGMENTS || segs.some((x) => x !== "**" && x.split("*").length > 3)) { cut = true; continue; }
+      walk("", segs, 0);
+    }
   }
   return cut;
 }
@@ -1594,8 +1709,10 @@ function projectDependencies(projectRoot) {
       const file = path.join(projectRoot, rel, "package.json");
       if (!projectFileInside(realRoot, file)) return true; // a folder that is no package
       if (read >= DS_WORKSPACE_MANIFESTS) { cut = true; return false; } // one more exists: said
-      if (manifestInto(realRoot, file, names)) read++;
-      return true;
+      const sub = manifestInto(realRoot, file, names);
+      if (!sub) return true;
+      read++;
+      return manifestWorkspaces(sub); // (the workspaces a workspace package declares itself, for its own folder)
     }) || cut;
   } catch { /* whatever a manifest holds, the registry is read with the names found so far */ }
   if (cut) { names.cut = true; names.read = read; }

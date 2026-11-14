@@ -426,7 +426,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `PureComponent` or a component class the file declares above it (`classHeader` reads the header to its `{`, what
   its brackets hold aside — type parameters over lines or holding a `>`, `extends` on the next line —, then
   `RE_CLASS_EXTENDS` / `RE_REACT_CLASS`: never `class LoginError extends Error`, `extends mixin(Component)`, a base
-  that is imported), or an exported const whose value
+  that is imported — or, 1.35.2, whatever it extends, a class that RENDERS: a `render` (`RE_RENDER`) and JSX in its
+  statement), or an exported const whose value
   is a function (`functionValue`: an arrow, `async`, a generic one — its `<` alone at the line's end too, shadcn's
   FormField —, `function`; a `(` is a parameter list's when its `)` is followed by `=>` or `:` or does not close on
   its line, so `(1 + 2) * 3` is a value; a parenthesis inside a quoted string is none — `quoteEnd`), one of React's
@@ -446,10 +447,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   re-export (`export { X } from`, `export *`: a barrel's). A name is read WHOLE, accents too. Top-level statements
   only (column 0), comments aside (`withoutComments` with `script` — a `/*` in a string opens none, and a script's
   strings are the ones that CLOSE on their line, backticks too (`quotedPlaces`): the apostrophe of `<p>Don't</p>`
-  quotes nothing — and `html: false`: `<!--` is no comment in a script), a BOM dropped; the reader keeps no
-  template state, so a
-  template literal's line at the margin reads as a statement — knowingly, as a PascalCase helper function and an
-  imported enum's member read as components. An `import` clause is an import STATEMENT's (`RE_IMPORT`: never
+  quotes nothing — and `html: false`: `<!--` is no comment in a script), a BOM dropped; a template literal's lines are text, never a statement (`scriptView`, 1.35.2 — until then a code
+  sample at the margin read as the file's own declarations); an imported enum's member still reads as a component,
+  knowingly. An `import` clause is an import STATEMENT's (`RE_IMPORT`: never
   `import.meta…`, `import(…)`, `importantSetup()`) and ends where one ends (`RE_IMPORT_END`: the module's quote, a
   `;`, the `=` of `import X = Y.Z`). Every pattern is anchored and unambiguous (a value is SLICED off the
   line, never captured by `(.*)$`; no `\s*;?\s*$`) — each has its hostile fixture. Bounds: `DS_EXPORT_FILES`
@@ -459,11 +459,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   read BELOW their line (a real file's never overlap; a file of `const A: X<` lines read sixty lines for each —
   spent, a declaration has no value and the file says `more`). A component with a file of its own keeps that file (read
   after every file's own name is known); a route segment's special file is a page and is not read. What it misses
-  is a row to add by hand, and the `unknown` hint still says so: a component wrapped by any other function
-  (`observer(…)`, a HOC, `dynamic(…)`) or by React's under another name (`R.forwardRef`, a wrapper in parentheses
-  that is cast), a class whose base is imported or that carries a decorator on its line, an alias of a destructured
-  or `require`d name, one declared indented or as a compound part (`Card.Header = …`), CommonJS
-  `exports.X`, a re-export from a package under a new name, a barrel that declares. A feature's own files are read
+  is a row to add by hand, and the `unknown` hint still says so (1.35.2 read most of what 1.35.1 listed here — The
+  export reader's view, below): a component made by a call that shows nothing (`createComponent(config)`,
+  `observer(() => null)`, a wrapper around a name the file never imports), a class that renders only through its
+  imported base, CommonJS `exports.X`, a re-export from a package under a new name, a barrel that declares. A feature's own files are read
   the same way for its New components' paths (`featureReport`: the finish wrote `—` for one its file exports
   beside the file's own — a component file's alone, its own file first). Review 1 of 1.35.1 measured the first
   draft on six real kits: 197 of 218 found, 7 non-components listed; its fix round found 204 and listed two, both
@@ -583,8 +582,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   union made the report ask, for good, for libraries the app does not use). What a pattern never reaches: upward
   (`..`), a link (a `*` match is a Dirent that is no directory; a NAMED folder is asked itself, `lstat`; a manifest
   that is a link out of the project is not read), and a `*` never matches a dot folder or node_modules — a NAMED
-  one is the project's own word. A `!negation` removes nothing and a brace list names nothing; said in the user
-  docs. A declared pattern the reader does not FOLLOW — past a bound, a brace list, a segment of three `*` — is
+  one is the project's own word. A `!negation` removes nothing; said in the user docs. A brace list is expanded
+  first (`braceExpand`, 1.35.2: the innermost list first, `DS_WORKSPACE_BRACES` patterns a list). A declared
+  pattern the reader does not FOLLOW — past a bound, a brace list it cannot expand (of one, never closed), a
+  segment of three `*` — is
   SAID (`cut`): the project named folders that went unread (review 2: dropped without a word, the report said in
   sync); a negation and a path out of the project are not — nothing went unread. Bounded, and nothing a manifest
   holds throws out of the registry's
@@ -597,8 +598,37 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   manifests read — 0 when the first pattern was the one not followed, never "at least 1"): the scan reports it
   (`limits`: workspace-manifests). The cost is paid only when a marker ASKS (a bare-number name, a note, a registry
   with no component row) and once per scan; a single-package project pays nothing but its root manifest.
-  `packageDependencies` stays ONE folder's manifest (`dependsOnNext` asks it of a router's folders). Not read, said
-  in the user docs: `rush.json`, a workspace a workspace package declares.
+  `packageDependencies` stays ONE folder's manifest (`dependsOnNext` asks it of a router's folders). 1.35.2 reads
+  what 1.35.1 said it did not: rush.json's `projects` (`rushFolders`: each `projectFolder`, a folder named in full —
+  `jsonPlain` takes the comments and trailing commas Rush allows out, strings kept; a rush.json that is no JSON is
+  declared and unread: said) and the `workspaces` a workspace package declares for its own folder (`manifestWorkspaces`,
+  given back by the visit and queued: `DS_WORKSPACE_NESTED` deep, `DS_WORKSPACE_PATTERNS` more at most — past either,
+  said; a path from a root names none). And the fifty are the patterns that are WALKED (`RE_WORKSPACE_WILD`): a
+  folder named in full costs one question (asked once, however many patterns share it), `DS_WORKSPACE_EXACT` of
+  them are followed — a rush.json names every project so.
+- **The export reader's view** (`scriptView`, design-system.js — 1.35.2) — until 1.35.2 the reader read one LINE of a
+  declaration; what 1.35.1 left to add by hand needs what a STATEMENT holds. The file is read once into: `code` (its
+  lines, comments out), `tpl` (the lines that start inside a template literal — text; a backtick that never closes
+  is a stray one, and then no line is one: the file is read as before), `next` (where the next statement starts: a
+  line at the margin that begins a name or a decorator, or an indented `export` — an export is the module's own
+  wherever it stands), `jsx` (the lines that hold JSX: a closing tag or a self-closing one, `RE_JSX` — every element
+  has one, and neither is anything else in a script; `<Name` alone is a type argument's shape too; strings emptied
+  first, `withoutStrings`) and `called` (the capitalised names the file calls as a function). A statement's EXTENT
+  is `[i, next[i])`: its closing lines at the margin are its own — the formatting every formatter gives —, and NO
+  bracket is matched across lines (a `(` in JSX text or in a regex would derail one). On it stand: a call of any
+  function is a component when its extent holds JSX or a dynamic `import(` (`RE_DYNAMIC_IMPORT`), or its last
+  argument list is one capitalised name (`RE_HOC_ARG`: settled with the aliases — a name the file imports or
+  declares); a class is one when it renders (`RE_RENDER` and JSX); an element in parentheses and a function called
+  at once (`RE_IIFE_END`) are no function's value. A PascalCase function is a helper by a PROPERTY (`isHelper`):
+  the file calls it (`RE_CALLED` — after `return` / `await` / `new`, after punctuation; first on its line only
+  when what follows its `)` is no `{`, `:` or word and the line above ends no tag; never `File(s)`), its first
+  parameter is a capitalised name, or it has three (`paramList`, on the declaration's line: the commas of its own
+  depth, type parameters skipped). A part (`RE_PART`, `Object.assign` — `assigned`) is declared as `Owner.Part`
+  and exported under each name its owner is exported by; `RE_COMPOUND_NAME` lets one dot through, and `dsKey`
+  gives `Card.Header` the key of `CardHeader` — a design may cite either. Decorators are taken off the line
+  (`undecorated`); React's wrappers are asked of the names an import of `react` gives (`RE_VALUE_SPACED`); a
+  destructuring from an import, or a `require`, gives names an alias may stand on (`borrowed`). Linear: every
+  pattern has its hostile line in the tests, and an extent has no cap because extents never overlap.
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),
@@ -826,6 +856,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   annotation's string), and listing what each new line would do if deleted named seven more before any ran (a
   second-layer guard needs a line with no `;`; a `/*` inside a template, after a `/*` no comment can open at,
   after an escaped quote; a chain of aliases; a base that is a function; an arrow in a class's type parameters).
+  1.35.2: 118 mutations of the new rules listed BEFORE the tests ran — listing them deleted six conditions that
+  no input could reach (a filter the caller repeats, a guard on an unclosed decorator, a keyword list of fourteen
+  where three are ever met) and named a dozen fixtures; 111 caught at first, two more pieces deleted (a fragment's
+  `</>` holds `/>`; the order a brace list expands in), five fixtures were under a rule that answered first (a
+  plural and a line of text both under a tag: each rule needs the input ONLY it answers).
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
@@ -1267,3 +1302,18 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   bound that drops an input in silence is the defect of a bound that cuts in silence: whatever the project
   DECLARED and went unread is said; (4) a rule borrowed from another language's reader (a stylesheet's quotes for a
   script) brings that language's assumptions: an option that switches a reader on must say whose rules it reads by.
+- **1.35.2** (2026-11-14) — the owner, on 1.35.1's report of what it still did not read: "can you resolve these
+  limits?". Six of nine went entirely — a brace list, rush.json, a workspace package's own workspaces, a decorator
+  on the class's line, a part hung on a component, an indented export — and three could only be narrowed, because
+  the reader reads one file's text with no parser and no types: a component wrapped by another function is told
+  by what the wrapped function SHOWS (JSX, a dynamic import, a known component as its argument), a class with an
+  imported base by what it does (`render` and JSX), a PascalCase helper by what the file does with it (calls it)
+  or what it takes (a component; three parameters). The step that made them possible was not a rule but a view:
+  the reader went from a declaration's LINE to a statement's EXTENT, and the extent is taken from the formatting
+  (the next line at the margin that starts a statement), never by matching brackets — the one robust property a
+  text reader has. What the build taught: (1) the first line-start rule for a call ("its line ends with `)` or
+  `;`") was four alternatives and still took `Total(USD)` for one; asking what FOLLOWS the `)` — and what the line
+  above ends with — is one question each; (2) a template literal needs state, and state can break (one stray
+  backtick): the fallback is the old behaviour for the whole file, decided at its end, not a guess per line; (3)
+  a fixture named after a helper file (`helpers.tsx`) was never read at all — the first run passed with every
+  helper rule untested: a fixture's own file must be one the scan reads, and the mutation pass is what said so.
