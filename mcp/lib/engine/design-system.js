@@ -25,12 +25,12 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
-  isNetworkPath, isTestFile, packageDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix, unitIn, walkProject,
-  withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot;
+  isNetworkPath, isTestFile, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn,
+  walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
-  isDirSafe, isInsideDir, isNetworkPath, isTestFile, packageDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix,
-  unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot } = E); }
+  isDirSafe, isInsideDir, isNetworkPath, isTestFile, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
+  stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
@@ -154,6 +154,229 @@ function componentOf(rel) {
   const name = stem.split(/[-_.]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("");
   return { name, key: dsKey(name), path: rel, index, route };
 }
+// --- what else a component file exports ---------------------------------------------------------------------------------------
+// A file names ONE component, by its file — and a .tsx / .jsx / .js one may export more: a kit's `card.tsx` exports Card,
+// CardHeader, CardContent… (1.35.1 — 1.35 review 10, on real file contents: a design reusing CardHeader was told it is
+// not in the registry). → { names: the PascalCase names the file EXPORTS and declares as a component, in the file's
+// order; more: it holds more than DS_EXPORT_NAMES }:
+//   - a function: `export function CardHeader(`, `function CardHeader(` listed in `export { … }`;
+//   - a class that extends React's `Component` / `PureComponent`, or a component class the file declares above it
+//     (classHeader: its type parameters aside, over lines — never `class LoginError extends Error`, nor a class whose
+//     base is imported: what that one extends is not in the file);
+//   - a const whose value is one: a function (functionValue: `= (props) =>`, `= function`, `= <T,>(props) =>`), one of
+//     React's own wrappers (`forwardRef(`, `memo(`, `lazy(` — with `React.` or bare, never `z.lazy(`, `cache.memo(`),
+//     a `styled` one (`styled.div`, `styled(Button)`, `styled<Props>(…)`), a context's `X.Provider` / `X.Consumer`, or
+//     another component under a new name: a capitalised name the file imports or declares — above or below —, or a
+//     member of one (`= DialogPrimitive.Root`, `= FormProvider` — never `= Infinity`, `= Number.MAX_SAFE_INTEGER`, a
+//     local enum's member, a name the file got by destructuring or `require`).
+// Never a type (`export type`, `export { type X }`), a re-export (`export { X } from`, `export *` — a barrel's), a constant
+// of any other value (`createContext(…)`, an object, `cva(…)`, `z.object(…)`), a hook, a lower-case name (`FAQ`, `CTA`
+// are components: a constant in capitals is none by its VALUE, never by its letters), a name with a `_`. A name is read
+// WHOLE, accents too (`Botão` — review 1 of 1.35.1: an ASCII class gave "Bot"). What tells is the DECLARATION, never
+// the name: no suffix list ("Context", "Props") is ever complete. Top-level statements only (column 0), comments aside
+// (a `/*` inside a quoted string opens none, and `<!--` is no comment in a script), a BOM dropped; a line is read up
+// to DS_LINE_MAX. What it misses is a row to add by hand, as the docs say: a component wrapped by any other function
+// (`observer(…)`, a HOC, `dynamic(…)`), one declared indented or as a compound part (`Card.Header = …`), CommonJS
+// `exports.X`, a re-export from a package under a new name. What it reads too much, knowingly: a PascalCase function
+// that is a helper, an imported enum's member, and — the reader keeps no template state — a line of a template
+// literal that starts at the margin.
+const DS_EXPORT_FILES = 1000; // component files read for what else they export…
+const DS_EXPORT_CHARS = 4 * 1024 * 1024; // …and the characters read of them: past either, the report's `limits` says so
+const DS_EXPORT_NAMES = 500; // components kept of one file (what the registry's reader reads with their details)
+const DS_EXPORT_LIST_LINES = 200; // lines an `export { … }` list or an `import` clause may go on over
+const DS_DECL_LINES = 60; // lines a declaration's annotation may go on over before its `=`
+const RE_EXPORTS_EXT = /\.(?:tsx|jsx|js|mjs)$/i;
+const RE_COMPONENT_NAME = /^\p{Lu}[\p{L}\p{N}]*$/u;
+const RE_IDENTIFIERS = /[\p{L}_$][\p{L}\p{N}_$]*/gu;
+const RE_DECL_FN = /^(export\s+)?(?:default\s+)?(?:async\s+)?(function|class)\s+([\p{L}_$][\p{L}\p{N}_$]*)/u;
+const RE_DECL_CONST = /^(export\s+)?(?:const|let|var)\s+([\p{L}_$][\p{L}\p{N}_$]*)/u;
+const RE_CLASS_EXTENDS = /^\s*extends\s+((?:[\p{L}_$][\p{L}\p{N}_$]*\.)*[\p{L}_$][\p{L}\p{N}_$]*)(?![\p{L}\p{N}_$.(])/u; // (of classHeader's text) → what it extends
+const RE_REACT_CLASS = /^(?:React\.)?(?:Pure)?Component$/;
+const RE_IMPORT = /^import(?![\p{L}\p{N}_$.(])/u; // an import STATEMENT: never `import.meta…`, `import(…)`, `importantSetup()`
+const RE_IMPORT_END = /["'`;=]/; // where its clause ends: the module's quote — or the statement's own end (`import Dialog = Radix.Dialog;`)
+const DS_ALIAS_PASSES = 8; // a chain of aliases declared bottom-up is followed that deep
+const RE_EXPORT_DEFAULT_NAME = /^export\s+default\s+([\p{L}_$][\p{L}\p{N}_$]*)\s*;?$/u; // (of a line trimmed at its end)
+const RE_VALUE_ASYNC = /^async\s*/u;
+const RE_VALUE_FUNCTION = /^function(?![\p{L}\p{N}_$])/u;
+const RE_VALUE_GENERIC = /^<(?:const\s+)?[\p{L}_$][\p{L}\p{N}_$]*\s*(?:,|=(?!>)|extends(?![\p{L}\p{N}_$]))/u; // (`<T,>`, `<T = unknown,>`, `<T extends X>`)
+const RE_VALUE_ARROW = /^[\p{L}_$][\p{L}\p{N}_$]*\s*=>/u;
+const RE_VALUE_WRAPPER = /^(?:(?:React\.)?(?:forwardRef|memo|lazy)(?![\p{L}\p{N}_$])|styled(?=[.(<])|[\p{L}_$][\p{L}\p{N}_$]*\.(?:Provider|Consumer)\s*;?$)/u; // (…and a context's `X.Provider`)
+const RE_VALUE_ALIAS = /^([\p{L}_$][\p{L}\p{N}_$]*)(?:\.[\p{L}_$][\p{L}\p{N}_$]*)*\s*;?$/u; // (of a trimmed value) → its first name
+const RE_VALUE_ALIAS_LAST = /(?:^|\.)\p{Lu}[\p{L}\p{N}_$]*\s*;?$/u; // …whose last name is capitalised
+// A script's quoted string closes on its line: → where the quote that opens at s[i] closes (-1: it does not — an
+// apostrophe of JSX text, a template's first line). none: the quote characters known not to close further on — each
+// is looked for once past a place, so a line of them stays linear. (isQuote: the raw values' reader's, below.)
+function quoteEnd(s, i, none) {
+  const q = s[i];
+  if (none[q]) return -1;
+  for (let j = i + 1; j < s.length; j++) {
+    if (s[j] === BS) j++;
+    else if (s[j] === q) return j;
+  }
+  none[q] = true;
+  return -1;
+}
+// Is a value a function's? `(props) => …`, `async (props) => …`, `function`, a generic arrow (`<T,>(…) =>` — its `<`
+// alone at the line's end when the type parameters follow below: shadcn's FormField), `props => …`. A `(` is a
+// parameter list's when its `)` is followed by `=>` or `:` — or does not close on its line (the parameters go on
+// below): `(1 + 2) * 3` and `(a ? B : C)` are values (review 1 of 1.35.1: any `(` made `Total` a component).
+// — unless what it holds is a function itself that is not called: `((props) => …) as React.FC` (inner: one level).
+// A parenthesis inside a quoted string is none (`({ label = ":)" }) => …` — review 2 of 1.35.1).
+function functionValue(value, inner) {
+  const v = value.replace(RE_VALUE_ASYNC, "");
+  if (v === "<" || RE_VALUE_FUNCTION.test(v) || RE_VALUE_GENERIC.test(v) || RE_VALUE_ARROW.test(v)) return true;
+  if (v[0] !== "(") return false;
+  const none = {};
+  let depth = 0;
+  for (let i = 0; i < v.length; i++) {
+    if (isQuote(v[i])) { const e = quoteEnd(v, i, none); if (e !== -1) i = e; continue; }
+    if (v[i] === "(") depth++;
+    else if (v[i] === ")" && --depth === 0) {
+      const rest = v.slice(i + 1).trimStart();
+      return rest.startsWith("=>") || rest[0] === ":" || (!inner && rest[0] !== "(" && functionValue(v.slice(1), true));
+    }
+  }
+  return true;
+}
+// A declaration's value — what follows the `=` that ENDS its annotation: at no bracket's depth, never an arrow's
+// (`const X: React.FC<{ onDone: () => void }> = (…) =>` — review 1 of 1.35.1: the first `=` of the line was taken),
+// on the declaration's line or, while a bracket of the annotation is open, on a later one (Prettier breaks
+// `React.FC<{` … `}> = (…) =>` so; DS_DECL_LINES). → the value's first line, trimmed — the next line with text when the
+// `=` ends its own (`const Card =` then `React.forwardRef(…)`, a comment line between them or none; 3 lines) — or
+// null: the declaration has no value. code: the file's lines, comments out; from: where the declared name ends.
+// budget.ahead: the characters the file's declarations may still read BELOW their own line — the file's length in all:
+// what a real file's declarations read below them never overlaps, and a file of `const A: X<` lines made each one
+// read the sixty lines under it (review 2 of 1.35.1: 2 s for 4 MB of them). Spent, a declaration has no value.
+function declaredValue(code, i, from, budget) {
+  let depth = 0;
+  for (let j = i, last = Math.min(code.length - 1, i + DS_DECL_LINES); j <= last; j++) {
+    const l = code[j];
+    if (j > i && (budget.ahead -= l.length + 1) < 0) return null;
+    for (let k = j === i ? from : 0; k < l.length; k++) {
+      const c = l[k];
+      if (c === "=") {
+        if (l[k + 1] === ">") { k++; continue; }
+        if (depth > 0) continue; // (a default inside a bracket: `<T = unknown>`)
+        let value = l.slice(k + 1).trim();
+        for (let m = j + 1; value === "" && m < code.length && m <= j + 3; m++) value = code[m].trim();
+        return value;
+      }
+      if (c === "(" || c === "[" || c === "{" || c === "<") depth++;
+      else if ((c === ")" || c === "]" || c === "}" || c === ">") && depth > 0) depth--;
+      else if (c === "," && depth === 0) return null; // (`let First, Second = () => …`: the value is the NEXT name's)
+    }
+    if (depth === 0) return null;
+  }
+  return null;
+}
+// A class's header — what follows its name, to the `{` that opens its body — without what its brackets hold: the type
+// parameters and arguments (`class Table<Row extends { id: string }> extends React.Component<Props<Row>>`), over the
+// next lines too (Prettier breaks a long one before `extends`). A `(` stays, as a mark: `extends mixin(Component)` is
+// no `extends Component`. Review 2 of 1.35.1: read on the class's own line with one `<…>` at most, the three were missed.
+function classHeader(code, i, from, budget) {
+  let depth = 0, out = "";
+  for (let j = i, last = Math.min(code.length - 1, i + DS_DECL_LINES); j <= last; j++) {
+    const l = code[j];
+    if (j > i && (budget.ahead -= l.length + 1) < 0) return out;
+    for (let k = j === i ? from : 0; k < l.length; k++) {
+      const c = l[k];
+      if (c === "=" && l[k + 1] === ">") { k++; continue; } // (an arrow's `>` closes nothing)
+      if (c === "{" && depth === 0) return out;
+      if (c === "<" || c === "(" || c === "[" || c === "{") { if (c === "(" && depth === 0) out += c; depth++; } else if (c === ">" || c === ")" || c === "]" || c === "}") { if (depth > 0) depth--; } else if (depth === 0) out += c;
+    }
+    out += " ";
+  }
+  return out;
+}
+function exportedComponents(text) {
+  const declared = new Set(); // the names declared as a component
+  const classes = new Set(); // …those declared as a component CLASS: what a class below them may extend
+  const imported = new Set(); // the names an `import` clause holds (a superset: its every word)
+  const aliases = []; // [name, the first name of its value] — settled once the whole file is read
+  const exported = []; // [exported name, local name], as the file exports them
+  const st = { block: false, html: false };
+  const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  // the file's lines, comments out — every reader below reads these
+  const code = body.split(/\r?\n/).map((l) => withoutComments(l.length > DS_LINE_MAX ? l.slice(0, DS_LINE_MAX) : l, st, { slashSlash: true, script: true, html: false }));
+  const budget = { ahead: body.length }; // (declaredValue)
+  for (let i = 0; i < code.length; i++) {
+    const line = code[i];
+    const c = line[0];
+    if (c !== "e" && c !== "f" && c !== "c" && c !== "a" && c !== "l" && c !== "v" && c !== "i") continue; // export, function, class / const, async, let, var, import
+    if (c === "i") {
+      // `import X, { a, b as c } from "…"` — its clause may go on over lines, to the module's quote. An import STATEMENT
+      // only, and to where one ends: review 2 of 1.35.1 — `import Dialog = Radix.Dialog;`, `import.meta.env.X;` and
+      // `importantSetup();` hold no quote, and each took the lines below it for its clause (the declarations there unseen).
+      if (!RE_IMPORT.test(line)) continue;
+      // (a `//` comment right after a name — `B,// it's fine` — is no part of the clause: its apostrophe ended it)
+      const part = (l) => { const k = l.indexOf("//"), e = l.search(RE_IMPORT_END); return k !== -1 && (e === -1 || k < e) ? l.slice(0, k) : l; };
+      let clause = part(line), end = clause.search(RE_IMPORT_END);
+      for (let last = i + DS_EXPORT_LIST_LINES; end === -1 && i + 1 < code.length && i < last;) {
+        const more = part(code[++i]);
+        const at = more.search(RE_IMPORT_END);
+        if (at !== -1) end = clause.length + 1 + at;
+        clause += " " + more;
+      }
+      for (const w of clause.slice(0, end === -1 ? clause.length : end).match(RE_IDENTIFIERS) || []) imported.add(w);
+      continue;
+    }
+    const fn = RE_DECL_FN.exec(line);
+    if (fn) {
+      if (fn[2] === "function") declared.add(fn[3]);
+      else {
+        // a class is a component by what it EXTENDS: React's own, or a component class declared above it (a base class
+        // of the file — a class is declared before the one that extends it)
+        const sup = RE_CLASS_EXTENDS.exec(classHeader(code, i, fn[0].length, budget));
+        if (sup && (RE_REACT_CLASS.test(sup[1]) || classes.has(sup[1]))) { declared.add(fn[3]); classes.add(fn[3]); }
+      }
+      if (fn[1]) exported.push([fn[3], fn[3]]);
+      continue;
+    }
+    const cn = RE_DECL_CONST.exec(line);
+    if (cn) {
+      const value = declaredValue(code, i, cn[0].length, budget);
+      if (value != null) {
+        if (functionValue(value) || RE_VALUE_WRAPPER.test(value)) declared.add(cn[2]);
+        else { const m = RE_VALUE_ALIAS.exec(value); if (m && RE_VALUE_ALIAS_LAST.test(value)) aliases.push([cn[2], m[1]]); }
+      }
+      if (cn[1]) exported.push([cn[2], cn[2]]);
+      continue;
+    }
+    const byName = RE_EXPORT_DEFAULT_NAME.exec(line.trimEnd());
+    if (byName) { exported.push([byName[1], byName[1]]); continue; }
+    if (!line.startsWith("export") || !/^export\s*\{/.test(line)) continue;
+    // `export { A, B as C, type D }` — it may go on over lines; followed by `from`, it re-exports another file's
+    let list = line.slice(line.indexOf("{") + 1), end = list.indexOf("}");
+    for (let last = i + DS_EXPORT_LIST_LINES; end === -1 && i + 1 < code.length && i < last;) {
+      const more = code[++i];
+      const at = more.indexOf("}");
+      if (at !== -1) end = list.length + 1 + at;
+      list += "," + more;
+    }
+    if (end === -1 || list.slice(end + 1).trimStart().startsWith("from")) continue;
+    for (const entry of list.slice(0, end).split(",")) {
+      const words = entry.trim().split(/\s+/);
+      if (!words[0]) continue; // (`type X`: its "name" is the lower-case word — no component)
+      const as = words[1] === "as" && words[2] ? words[2] : words[0];
+      exported.push([as === "default" ? words[0] : as, words[0]]);
+    }
+  }
+  // Another component under a new name: a capitalised name the file imports or declares, or a member of one — asked
+  // once the file is read: a function declared BELOW is hoisted, an import may follow its use (review 2 of 1.35.1:
+  // asked at the declaration, `export const Modal = Dialog;` above `function Dialog()` was no component).
+  for (let pass = 0, found = aliases.length > 0; found && pass < DS_ALIAS_PASSES; pass++) {
+    found = false;
+    for (const a of aliases) if (!declared.has(a[0]) && (imported.has(a[1]) || declared.has(a[1]))) { declared.add(a[0]); found = true; }
+  }
+  const names = [];
+  let more = budget.ahead < 0; // (a declaration went unread: said, as names past the cap are)
+  for (const [name, local] of exported) {
+    if (!declared.has(local) || !RE_COMPONENT_NAME.test(name) || names.includes(name)) continue;
+    if (names.length >= DS_EXPORT_NAMES) { more = true; break; }
+    names.push(name);
+  }
+  return { names, more };
+}
 // A token file by its name AND its place (tokenFileKind):
 //   style — a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss, theme.css): anywhere;
 //   named — a name that can only mean design tokens, in any format (design-tokens.json, colors.tokens.json,
@@ -221,11 +444,12 @@ const UI_LIBRARIES = ["@mui/material", "@mui/joy", "antd", "@chakra-ui/react", "
   "@fluentui/react", "@fluentui/react-components", "@nextui-org/react", "@heroui/react", "flowbite-react", "daisyui", "@carbon/react", "@adobe/react-spectrum",
   "react-aria-components", "@ark-ui/react", "bootstrap-vue", "semantic-ui-react", "grommet", "evergreen-ui", "@blueprintjs/core", "@shopify/polaris",
   "@radix-ui/themes", "@skeletonlabs/skeleton", "@nuxt/ui", "bits-ui", "@kobalte/core"];
+// → { libraries, cut (a bound of the workspace patterns left a declared folder unread), read (the workspace manifests read) }
 function packageLibraries(root) {
-  const names = packageDependencies(root); // (quality.js: the root manifest read as the scan reads one — contained, bounded)
+  const names = projectDependencies(root); // (quality.js: the root manifest and the workspaces' — contained, bounded)
   const out = UI_LIBRARIES.filter((l) => names.has(l));
   if ([...names].some((n) => n.startsWith("@radix-ui/react-")) && !out.includes("@radix-ui/themes")) out.push("@radix-ui");
-  return out;
+  return { libraries: out, cut: names.cut === true, read: names.read || 0 };
 }
 // Comments out of one line of a stylesheet or a view file — `/* … */` (it may span lines: st.block), `<!-- … -->` (st.html) and,
 // with o.slashSlash, a `//` comment at the line's start or after a blank. o.sheet: the line is a stylesheet's — there a `/*`
@@ -235,30 +459,42 @@ function packageLibraries(root) {
 // sass-glob's `@import "mixins/*";` opened one that never closed — a globals.css read as holding no token (review 7). Linear.
 // → the places of a stylesheet's line that lie inside a quoted string (1), comments followed as withoutComments follows them
 //   (block: the line starts inside one); null when the line holds no quote or no `/*` — nothing to tell apart.
-function quotedPlaces(line, block) {
-  if (!line.includes("/*") || !(line.includes("\"") || line.includes("'"))) return null;
+//   script: the line is a script's — its strings are `"…"`, `'…'` and `` `…` `` that CLOSE on the line (quoteEnd), and a
+//   `/*` opens a comment where withoutComments lets one open. Review 2 of 1.35.1: read by the stylesheet's rule, the
+//   apostrophe of `<p>Don't</p>` or of a template's text quoted the rest of its line, and a real `/*` after it opened
+//   nothing — the comment's lines were read as code.
+const RE_COMMENT_PLACE = /[\s{(;,]/;
+function quotedPlaces(line, block, script) {
+  if (!line.includes("/*") || !(line.includes("\"") || line.includes("'") || (script && line.includes("`")))) return null;
   const mask = new Uint8Array(line.length);
-  let quote = "", comment = block;
+  const none = {};
+  let quote = "", comment = block, start = true; // start: the line's start, or right where a comment ended
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
-    if (comment) { if (c === "*" && line[i + 1] === "/") { comment = false; i++; } continue; }
+    if (comment) { if (c === "*" && line[i + 1] === "/") { comment = false; i++; start = true; } continue; }
     if (quote) {
       mask[i] = 1;
       if (c === BS) { if (++i < line.length) mask[i] = 1; } else if (c === quote) quote = "";
       continue;
     }
-    if (c === "/" && line[i + 1] === "*") { comment = true; i++; continue; }
-    if (c === "\"" || c === "'") { quote = c; mask[i] = 1; }
+    const opens = !script || start || RE_COMMENT_PLACE.test(line[i - 1]);
+    start = false;
+    if (c === "/" && line[i + 1] === "*" && opens) { comment = true; i++; continue; }
+    if (script) {
+      if (isQuote(c)) { const e = quoteEnd(line, i, none); if (e !== -1) { mask.fill(1, i, e + 1); i = e; } }
+    } else if (c === "\"" || c === "'") { quote = c; mask[i] = 1; }
   }
   return mask;
 }
 function withoutComments(line, st, o) {
-  const quoted = o.sheet ? quotedPlaces(line, st.block) : null;
+  // (o.script: a script's line — a `/*` inside a quoted string opens none there either; o.html === false: `<!--` is no
+  // comment in a script — 1.35.1: `const OPEN = "<!--[if mso]>"` hid the rest of a component file from the export reader)
+  const quoted = o.sheet || o.script ? quotedPlaces(line, st.block, !!o.script) : null;
   // nb, h: the next `/*` that opens a comment past where one can only open by its place, and the next `<!--`, at or after i
   // (-2: not looked for yet, -1: none left). Each is looked for ONCE past a position and its "none left" is KEPT — re-scanned
   // from i after every comment, a line of `<!---->` and `a/*` runs was quadratic (review 3: h; review 4: the `/*`; review
   // 5: a `/*` right at i overwrote the cached -1, and `<!---->/**/` runs rescanned the rest of the line each time).
-  let out = "", i = 0, nb = -2, h = -2;
+  let out = "", i = 0, nb = -2, h = o.html === false ? -1 : -2;
   while (i < line.length) {
     if (st.block || st.html) {
       const close = st.block ? "*/" : "-->";
@@ -272,7 +508,7 @@ function withoutComments(line, st, o) {
     if (!line.startsWith("/*", i)) {
       if (nb !== -1 && nb <= i) {
         nb = line.indexOf("/*", i + 1);
-        while (nb !== -1 && (o.sheet ? quoted != null && quoted[nb] === 1 : !/[\s{(;,]/.test(line[nb - 1]))) nb = line.indexOf("/*", nb + 2);
+        while (nb !== -1 && ((quoted != null && quoted[nb] === 1) || (!o.sheet && !/[\s{(;,]/.test(line[nb - 1])))) nb = line.indexOf("/*", nb + 2);
       }
       b = nb;
     }
@@ -673,6 +909,7 @@ const jsonSource = (j) => !j.secret && j.list.length > 0 && (j.format || j.stron
 function scanCode(root) {
   const realRoot = realRootOf(root);
   const byKey = new Map(), views = [], tokenFiles = [], sheets = [], found = [], routerRoots = new Set(), pageDirs = new Set(), nextConfigs = new Set();
+  const fullOf = new Map(); // a component file's full path, by its relative one
   const counts = (rel) => isViewFile(rel) || isTokenFile(rel);
   const dirOf = (rel) => rel.slice(0, Math.max(0, rel.lastIndexOf("/")));
   const walk = walkProject(root, DS_FILE_CAP, (rel, full, name) => {
@@ -688,7 +925,7 @@ function scanCode(root) {
     views.push({ rel, full });
     if (isTestFile(rel)) return;
     const c = componentOf(rel);
-    if (c) found.push(c);
+    if (c) { found.push(c); fullOf.set(rel, full); }
   }, { counts, gitignore: gitignoreRules(root, realRoot) });
   // (known only once the walk is over: a folder's files come in any order)
   // (asked only of the router roots above a component named like a special file: the others change nothing)
@@ -705,8 +942,10 @@ function scanCode(root) {
       if (d === "" || !(name[0] === "@" || RE_ROUTE_PASS.test(name))) return false;
     }
   };
+  const files = []; // the component files, a route segment's special files aside
   for (const c of found) {
     if (c.route && routed(dirOf(c.path))) continue;
+    files.push(c);
     const had = byKey.get(c.key);
     // one component per name: its own file before a folder's index, then the shorter path
     if (!had || (had.index && !c.index) || (had.index === c.index && c.path.length < had.path.length)) byKey.set(c.key, c);
@@ -715,7 +954,30 @@ function scanCode(root) {
   // A bound that cut what is read — the reports say so (`limits`), never "in sync". Each is set only when something WAS cut:
   //   tokenFiles — a file that IS a source found the sources full;   candidates — files named like one were left unread;
   //   tokens — a token was left past the cap;   fileSize — the first token file longer than a file's read (its path).
-  const capped = { tokenFiles: false, candidates: false, tokens: false, fileSize: null };
+  //   exports — component files were left unread for what else they export, or one held more names than are kept (how
+  //   many files were read; 0: nothing cut);   workspaces — a bound of the workspace patterns left a declared folder
+  //   unread (manifests: how many workspace manifests WERE read — none, when the first pattern was the one not followed).
+  const capped = { tokenFiles: false, candidates: false, tokens: false, fileSize: null, exports: 0, workspaces: false, manifests: 0 };
+  // What else a component file exports (exportedComponents) — a name no file of its own holds; the shorter path first, as
+  // above. Read after every file's own name is known: `card.tsx`'s CardHeader never takes `card-header.tsx`'s place.
+  // Bounded in files AND in characters read (DS_EXPORT_FILES, DS_EXPORT_CHARS — review 1 of 1.35.1: 500 files of 256K
+  // cost seconds on every scan, and a project of 520 small ones could never be in sync again).
+  const readable = files.filter((c) => RE_EXPORTS_EXT.test(c.path)).sort((a, b) => a.path.length - b.path.length || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  let filesRead = 0, charsRead = 0, cutNames = false;
+  for (const c of readable) {
+    if (filesRead >= DS_EXPORT_FILES || charsRead >= DS_EXPORT_CHARS) { capped.exports = filesRead; break; }
+    const text = readFileHead(fullOf.get(c.path), DS_READ_CHARS);
+    filesRead++;
+    if (text == null) continue;
+    charsRead += text.length;
+    const found1 = exportedComponents(text);
+    if (found1.more) cutNames = true;
+    for (const name of found1.names) {
+      const key = dsKey(name);
+      if (key && !byKey.has(key)) byKey.set(key, { name, key, path: c.path, index: false, route: false });
+    }
+  }
+  if (cutNames && !capped.exports) capped.exports = filesRead;
   const take = (file, list) => {
     sources.push(file.rel);
     for (const t of list) {
@@ -779,7 +1041,10 @@ function scanCode(root) {
     source(f, list);
   }
   const components = [...byKey.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  return { components, tokens, sources, twins, libraries: packageLibraries(root), views, files: walk.files, truncated: walk.truncated, capped, realRoot };
+  const packages = packageLibraries(root);
+  capped.workspaces = packages.cut;
+  capped.manifests = packages.read;
+  return { components, tokens, sources, twins, libraries: packages.libraries, views, files: walk.files, truncated: walk.truncated, capped, realRoot };
 }
 
 // --- raw values: what a feature's view files hard-code ------------------------------------------------------------------------
@@ -997,14 +1262,19 @@ function pendingNew(projectDir) {
 // renders it.
 // `limits`: the bounds that CUT what was read — [{code, read, file?}], code: files (the walk's file cap) · token-files (a
 // token file found the DS_TOKEN_FILES sources full) · token-candidates (files named like a token file left unread past
-// DS_TOKEN_READS) · file-size (a token file longer than a file's read: `file`, the first) · tokens · registry-rows (rows
+// DS_TOKEN_READS) · file-size (a token file longer than a file's read: `file`, the first) · tokens · component-files (a
+// bound of what else the component files export: the files or characters read, the names kept of one — `read`: the
+// files read) · workspace-manifests (a bound of the workspace patterns left a declared folder unread — `read`: the
+// workspace manifests read, 0 too) · registry-rows (rows
 // past the reader's cap are not checked for a gone path) · view-files (a feature's). `truncated`: one of them — and then the
 // report is never `inSync`: what it did not read it cannot vouch for. A bound that cut nothing is not said (a report that
 // names one can never be in sync: said of a project that lost nothing, it would be a false alarm for good).
 const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files } : null, scan.capped.tokenFiles ? { code: "token-files", read: DS_TOKEN_FILES } : null,
   scan.capped.candidates ? { code: "token-candidates", read: DS_TOKEN_READS } : null,
   scan.capped.fileSize ? { code: "file-size", read: DS_READ_CHARS, file: scan.capped.fileSize } : null,
-  scan.capped.tokens ? { code: "tokens", read: DS_TOKENS_MAX } : null].filter(Boolean);
+  scan.capped.tokens ? { code: "tokens", read: DS_TOKENS_MAX } : null,
+  scan.capped.exports ? { code: "component-files", read: scan.capped.exports } : null,
+  scan.capped.workspaces ? { code: "workspace-manifests", read: scan.capped.manifests } : null].filter(Boolean);
 function designSystemReport(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
   const lang = projectLang(projectDir);
@@ -1060,8 +1330,10 @@ function featureReport(projectDir, root, f, reg, scan) {
   const tokenOf = new Map();
   for (const t of reg ? reg.tokens : []) { const k = colorKey(t.value); if (k && !tokenOf.has(k)) tokenOf.set(k, t.name); }
   const raw = [], counts = { color: 0, size: 0 };
+  const exportsOf = []; // [a component file of the feature, what else it exports] — a New component's path below
   // (the token-FILE bounds reach a feature's report too: a stylesheet left out of the sources is read for raw values)
-  const limits = scanLimits(scan).filter((l) => l.code !== "tokens");
+  // (…and never the bounds of what the PROJECT report lists: the tokens read, the component files read for their exports)
+  const limits = scanLimits(scan).filter((l) => l.code !== "tokens" && l.code !== "component-files" && l.code !== "workspace-manifests");
   let viewFiles = 0;
   for (const rel of mine) {
     if (tokenFiles.has(fold(rel)) || isTokenFile(rel)) continue;
@@ -1069,6 +1341,7 @@ function featureReport(projectDir, root, f, reg, scan) {
     const text = readFileHead(byRel.get(rel) || path.join(root, rel), DS_READ_CHARS);
     if (text == null) continue;
     viewFiles++;
+    if (RE_EXPORTS_EXT.test(rel) && componentOf(rel)) exportsOf.push([rel, exportedComponents(text).names]);
     for (const v of rawValuesOf(text, rel)) {
       counts[v.kind]++;
       const token = v.kind === "color" ? tokenOf.get(colorKey(v.value)) : undefined;
@@ -1077,6 +1350,7 @@ function featureReport(projectDir, root, f, reg, scan) {
   }
   const own = new Map();
   for (const rel of mine) { const c = componentOf(rel); if (c && !own.has(c.key)) own.set(c.key, rel); }
+  for (const [rel, names] of exportsOf) for (const n of names) { const k = dsKey(n); if (k && !own.has(k)) own.set(k, rel); }
   const seenNew = new Set();
   const newComponents = [];
   for (const r of usage ? usage.rows : []) {
@@ -1153,11 +1427,18 @@ function registerComponents(projectDir, list) {
       add.push(c);
     }
     if (!add.length) return [];
-    // the table the file ends in: its header (the line above its separator row), when its first cell names components
-    const lines = raw.trimEnd().split(/\r?\n/);
-    let top = lines.length - 1;
-    while (top >= 0 && /^\s*\|/.test(lines[top])) top--;
-    const head = lines.length - 1 - top >= 2 && RE_SEP_ROW.test(lines[top + 2]) ? lines[top + 1].trim().replace(/^\|/, "").replace(/\|\s*$/, "").split("|").map((x) => x.trim()) : null;
+    // The table the file ends in: its header (the line above its separator row), when its first cell names components —
+    // read in the lines the registry's READER reads (mdTables': comments and fenced code out, line for line), whose
+    // last one IS the file's last line. A table inside a comment or a code block — `| Old | … | -->` as the file's last
+    // line — would take the rows where nothing reads them, the finish would say "added", and every later finish would
+    // add them again (1.35 review 10): then a new table takes them, after it. A note on the last row
+    // (`| Button | … | <!-- reviewed -->`) hides nothing (review 1 of 1.35.1). By POSITION, never by text: review 2 of
+    // 1.35.1 — the reader's text trimmed and its last line compared with the file's, a hidden copy of the table that
+    // ended in the visible one's last row passed for it, and its rows were added, unread, on every finish.
+    const seen = stripFencedCode(stripHtmlComments(raw.trimEnd().split(/\r?\n/).join("\n"))).split("\n");
+    let top = seen.length - 1;
+    while (top >= 0 && /^\s*\|/.test(seen[top])) top--;
+    const head = seen.length - 1 - top >= 2 && RE_SEP_ROW.test(seen[top + 2]) && seen[top + 2].includes("-") ? seen[top + 1].trim().replace(/^\|/, "").replace(/\|\s*$/, "").split("|").map((x) => x.trim()) : null;
     const isTable = !!head && RE_DS_COMPONENT_HEAD.test(head[0].replace(/[`*_]/g, ""));
     // the columns as the registry's reader finds them: by their header, else by place (the path second, the variants third)
     const colOf = (re, place) => { const i = isTable ? head.findIndex((h, k) => k > 0 && re.test(h.replace(/[`*_]/g, ""))) : -1; return i > 0 ? i : place; };

@@ -50,7 +50,7 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
   // --- HIGH: only a value that IS a design value is read out of a token file ------------------------------------------------------------
   {
     const p = project("gate");
-    const S40 = "ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234"; // 40 characters: the length of a classic token
+    const S40 = "xhp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234"; // 40 characters: the length of a classic token
     const SECRETS = [S40, "wJalrFAKEnFEMI/K7MDENG/bPxRfiCYFAKEKEY00", "FAKE-hunter2", "FAKE-OAUTH1-SECRET", "FAKE-KEY-0001", "FAKE-PAT-0002", "Bearer FAKE-0003", "eyJFAKE.0004.sig",
       "FAKE-GH-0005", "FAKE-NESTED-0006", "FAKE-PARENT-0007", "FAKE-VALUE-0008", "FAKE-FONT-0009", "123456789", "987654321", "$uperFAKE0010", "@dminFAKE0011", "FAKE-LATE-0012",
       "FAKE-DEEP-0014", "pk.FAKE-MAPBOX-0015", "FAKEBAREWORD0016"];

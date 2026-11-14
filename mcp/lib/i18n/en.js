@@ -1581,6 +1581,8 @@ const msg = {
         tokens: (n) => `  (only the first ${n} tokens of the code are read: the rest is not compared)`,
         "registry-rows": (n) => `  (only the registry's first ${n} components are checked for a path that is gone)`,
         "view-files": (n) => `  (only the feature's first ${n} view files are read for raw values)`,
+        "component-files": (n) => `  (${n} component files were read for the further components they export, and a bound was reached — the files or characters read, or the names kept of one file: the rest is not compared)`,
+        "workspace-manifests": (n) => `  (a bound of the workspace patterns was reached — ${n} of the workspace packages' package.json files read: the libraries of the rest are not compared)`,
       },
       dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reuse: ${reuse} · Extend: ${extend} · New: ${news}`,
       dsFeatureNoRows: "  the design names no component row ([UI] Design System Usage)",

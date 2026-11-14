@@ -1241,7 +1241,7 @@ function designSystemRegistry(root) {
   const lists = { "token sources": [], libraries: [] };
   const weak = new Set(); // the libraries' WEAK aliases, lower-cased (dsAlias): cited only in a row's parenthesis
   let deps = null; // the project's package.json dependencies — read once, and only when a marker asks
-  const dependencies = () => deps || (deps = packageDependencies(path.dirname(root)));
+  const dependencies = () => deps || (deps = projectDependencies(path.dirname(root)));
   let markers = 0;
   for (const m of stripFencedCode(stripHtmlComments(body)).matchAll(RE_DS_MARKER)) {
     if (++markers > DS_MARKER_LINES) break;
@@ -1390,9 +1390,9 @@ function dsPackaged(libraries, dependencies) {
 // `carbon-components-svelte`). One plain word no package backs is not — nor a framework's name or its stem (`React 19`:
 // "React Select" is no component of it; `Tailwind` of tailwindcss, `Solid` of solid-js), nor a word another package
 // merely begins with (`base64-js` backs no `Base`, `material-icons` no `Material` — review 10: any package that began
-// with the word did; review 11: "the name joined to ONE framework's" then lost `carbon-components-svelte`). The ROOT
-// package.json answers: in a monorepo whose library sits in `apps/web/package.json` the name stays weak — the docs
-// say to write it on its own.
+// with the word did; review 11: "the name joined to ONE framework's" then lost `carbon-components-svelte`). The
+// project's manifests answer (projectDependencies: the root package.json and its workspace packages', 1.35.1); where
+// none holds the package the name stays weak — the docs say to write it on its own.
 function dsNamed(name, dependencies) {
   if (RE_DS_ACRONYM.test(name) || /\s/.test(name) || RE_DS_SCOPED.test(name)) return true;
   const n = name.toLowerCase();
@@ -1437,19 +1437,168 @@ function dsAlias(entry, note, dependencies) {
 }
 const DS_FRAMEWORKS = new Set(["react", "react-dom", "react-native", "preact", "vue", "svelte", "solid-js", "lit", "angular", "next", "nuxt", "astro", "remix", "qwik",
   "ember-source", "alpinejs", "jquery", "tailwindcss", "typescript"]);
-// The dependency names of the project's package.json (dependencies, devDependencies, peerDependencies), lower-cased → a Set
+// The dependency names of ONE folder's package.json (dependencies, devDependencies, peerDependencies), lower-cased → a Set
 // (empty: none readable). Read as the scan reads a root manifest: a regular file, or a link that stays inside the project
 // (never `package.json -> ~/.npmrc`); its first DS_PACKAGE_CHARS characters (a manifest is never longer — a 32 MB one cost
 // 2 s on every registry read); a BOM dropped.
 const DS_PACKAGE_CHARS = 256 * 1024;
-function packageDependencies(projectRoot) {
+// → a JSON file of the project, parsed (null: none readable, or no object). realRoot: the project's real path.
+function projectJson(realRoot, file) {
+  const text = projectFileInside(realRoot, file) ? readFileHead(file, DS_PACKAGE_CHARS) : null;
+  let json = null;
+  try { json = text == null ? null : JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { /* no readable file */ }
+  return isRecord(json) ? json : null;
+}
+// one manifest's dependency names into `names` → the manifest (null: none readable)
+function manifestInto(realRoot, file, names) {
+  const pkg = projectJson(realRoot, file);
+  if (pkg) for (const k of ["dependencies", "devDependencies", "peerDependencies"]) if (isRecord(pkg[k])) for (const n of Object.keys(pkg[k])) names.add(n.toLowerCase());
+  return pkg;
+}
+function packageDependencies(folder) {
   const names = new Set();
-  const file = path.join(projectRoot, "package.json");
-  const text = projectFileInside(realRootOf(projectRoot), file) ? readFileHead(file, DS_PACKAGE_CHARS) : null;
-  let pkg = null;
-  try { pkg = text == null ? null : JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { /* no readable manifest */ }
-  if (!isRecord(pkg)) return names;
-  for (const k of ["dependencies", "devDependencies", "peerDependencies"]) if (isRecord(pkg[k])) for (const n of Object.keys(pkg[k])) names.add(n.toLowerCase());
+  manifestInto(realRootOf(folder), path.join(folder, "package.json"), names);
+  return names;
+}
+// The dependency names of the PROJECT — its root package.json and the manifests of its workspace packages: a monorepo keeps
+// its UI library in `apps/web/package.json`, and the registry is the whole project's (1.35.1 — 1.35 review 10: with the
+// root manifest alone, `antd 5` + `antd Table` passed in one layout and was refused in another, and the seed of a monorepo
+// declared no library). The workspace folders are the ones the project DECLARES — package.json `workspaces` (npm, Yarn,
+// Bun), pnpm-workspace.yaml `packages`, lerna.json `packages` (Lerna's own default, `packages/*`, when it names none) —,
+// each pattern followed folder by folder: a name, a `*` within one (`apps/*`, `packages/ui-*`), `**` (that folder and
+// two levels below it); a `!negation`, a brace list and a path that leaves the project name none. A project that
+// declares none is looked through ONE level down (`frontend/` beside a Django app, `client/` + `server/`) — unless its
+// root is a package of its own, with dependencies: an app whose `docs/` or `storybook/` site keeps another kit is not
+// that kit's project (review 1 of 1.35.1: the union made the report ask for libraries the app does not use). A `*`
+// never matches a link, a dot folder or node_modules, a NAMED folder that is a link names nothing, and `**` does not
+// look inside a folder that is a package. Bounded, and what a manifest holds never throws out of the registry's read:
+// DS_WORKSPACE_PATTERNS patterns of DS_WORKSPACE_CHARS characters and DS_WORKSPACE_SEGMENTS segments at most,
+// DS_WORKSPACE_DIRS folders listed (DS_WORKSPACE_ENTRIES entries each), DS_WORKSPACE_ASKED folders asked,
+// DS_WORKSPACE_MANIFESTS manifests READ — a folder that is no package costs none of them (review 1: counted by folders
+// named, `packages/**` spent the hundred on each package's `src/` and `dist/`). Past a bound the names read so far
+// stand, and the Set says so: `cut`, with `read` — the manifests read. A declared pattern the reader does not follow
+// (past a bound, a brace list) is cut too: the project named folders that went unread.
+const DS_WORKSPACE_PATTERNS = 50, DS_WORKSPACE_CHARS = 200, DS_WORKSPACE_SEGMENTS = 12, DS_WORKSPACE_DIRS = 200, DS_WORKSPACE_ENTRIES = 1000,
+  DS_WORKSPACE_ASKED = 2000, DS_WORKSPACE_MANIFESTS = 100, DS_WORKSPACE_LINES = 500;
+// pnpm-workspace.yaml's `packages` — the key at the margin, quoted or not: a block list (`  - "apps/*"`) or a flow one
+// (`packages: [apps/*, packages/*]`, on its line or over the next ones, to the `]` that ends a line). EVERY item of
+// the list's first DS_WORKSPACE_LINES lines: the caller counts them against its bound, and says when it drops one.
+// A BOM dropped; no YAML parser.
+const RE_PNPM_KEY = /^(["']?)packages\1[ \t]*:/;
+function pnpmPackages(text) {
+  const out = [];
+  const bare = (s) => { const c = s.search(/\s#/); return (c === -1 ? s : s.slice(0, c)).trim(); }; // a line without its comment
+  const item = (s) => stripEnds(s.trim(), unitIn("'\""), unitIn("'\"")).trim();
+  const lines = (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const key = RE_PNPM_KEY.exec(lines[i]);
+    if (!key) continue;
+    let rest = bare(lines[i].slice(key[0].length));
+    if (rest.startsWith("[")) {
+      // (to the `]` that ENDS the list — the last character of its line: a name may hold one, `'apps/[w]eb'`)
+      for (let j = i + 1; !rest.endsWith("]") && j < lines.length && j <= i + DS_WORKSPACE_LINES; j++) { const l = lines[j].trim(); if (l[0] !== "#") rest += bare(l); }
+      return rest.endsWith("]") ? rest.slice(1, -1).split(",").map(item).filter(Boolean) : out;
+    }
+    for (let j = i + 1; j < lines.length && j <= i + DS_WORKSPACE_LINES; j++) {
+      const l = lines[j].trim();
+      if (l === "" || l[0] === "#") continue;
+      if (l[0] !== "-") break;
+      const v = item(bare(l.slice(1)));
+      if (v) out.push(v);
+    }
+    return out;
+  }
+  return out;
+}
+// → { patterns: the first DS_WORKSPACE_PATTERNS the project declares, more: it declares more — they are not followed }
+function workspacePatterns(realRoot, projectRoot, pkg) {
+  const patterns = [];
+  let more = false;
+  const take = (list) => { if (Array.isArray(list)) for (const p of list) if (typeof p === "string") { if (patterns.length < DS_WORKSPACE_PATTERNS) patterns.push(p); else more = true; } };
+  if (pkg) take(isRecord(pkg.workspaces) ? pkg.workspaces.packages : pkg.workspaces);
+  const pnpm = path.join(projectRoot, "pnpm-workspace.yaml");
+  const yaml = projectFileInside(realRoot, pnpm) ? readFileHead(pnpm, DS_PACKAGE_CHARS) : null;
+  if (yaml != null) take(pnpmPackages(yaml));
+  // (lerna.json's `packages` — or Lerna's own default, `packages/*`, when nothing at all declares a workspace: beside
+  // declared ones it would read a folder the project did not declare — review 2 of 1.35.1)
+  const lerna = projectJson(realRoot, path.join(projectRoot, "lerna.json"));
+  if (lerna) take(Array.isArray(lerna.packages) ? lerna.packages : patterns.length ? [] : ["packages/*"]);
+  return { patterns, more };
+}
+// Follows the patterns folder by folder and gives each folder they name (relative, `/`-separated, once) to
+// `visit(rel)` — false stops the walk. → was a declared pattern, or a folder of one, left unread by a bound?
+function workspaceDirs(projectRoot, patterns, visit) {
+  const given = new Set(), lists = new Map(); // (a folder is listed once, however many patterns go through it)
+  let listed = 0, asked = 0, cut = false, stop = false;
+  const ask = () => { if (asked >= DS_WORKSPACE_ASKED) { cut = true; return false; } asked++; return true; };
+  // does a folder hold a package.json? `**` does not look INSIDE a package — its `src/`, `dist/`, `test/` are its own
+  // (review 2 of 1.35.1: `packages/**/*` over 40 packages spent the folders listed on them, said "cut" of a project
+  // that had lost nothing and, with the patterns the other way round, left `apps/web` unread)
+  const packageAt = (rel) => { if (!ask()) return false; try { fs.lstatSync(path.join(projectRoot, rel, "package.json")); return true; } catch { return false; } };
+  // a folder's real sub-folders, by name: no link (a Dirent of one is no directory), no dot folder, no node_modules
+  const list = (rel) => {
+    if (lists.has(rel)) return lists.get(rel);
+    if (listed >= DS_WORKSPACE_DIRS) { cut = true; return []; }
+    listed++;
+    const r = readDirBounded(path.join(projectRoot, rel), DS_WORKSPACE_ENTRIES);
+    if (r != null && r.truncated) cut = true;
+    const names = r == null ? [] : r.entries.filter((e) => e.isDirectory() && e.name[0] !== "." && e.name !== "node_modules").map((e) => e.name).sort();
+    lists.set(rel, names);
+    return names;
+  };
+  const real = (rel) => { if (!ask()) return false; try { return fs.lstatSync(path.join(projectRoot, rel)).isDirectory(); } catch { return false; } };
+  const give = (rel) => { if (rel === "" || given.has(rel) || !ask()) return; given.add(rel); if (visit(rel) === false) stop = true; };
+  const walk = (rel, segs, i) => {
+    if (stop) return;
+    if (i === segs.length) { give(rel); return; }
+    const s = segs[i], under = (name) => (rel === "" ? name : rel + "/" + name);
+    if (s === "**") {
+      walk(rel, segs, i + 1);
+      for (const a of list(rel)) {
+        walk(under(a), segs, i + 1);
+        if (!packageAt(under(a))) for (const b of list(under(a))) walk(under(a) + "/" + b, segs, i + 1);
+      }
+    } else if (!s.includes("*")) {
+      if (real(under(s))) walk(under(s), segs, i + 1); // (a NAMED folder is asked itself: a link to one names nothing)
+    } else {
+      const re = new RegExp("^" + s.split("*").map(escRe).join(".*") + "$");
+      for (const name of list(rel)) if (re.test(name)) walk(under(name), segs, i + 1);
+    }
+  };
+  for (const p0 of patterns) {
+    if (stop) break;
+    // (a `\` is a separator on every platform: a manifest written on Windows is read the same on Linux)
+    const segs = p0.split(String.fromCharCode(92)).join("/").trim().split("/").filter((x) => x !== "" && x !== ".");
+    // Never upward, and a `!negation` removes nothing: such a pattern names none. A pattern the reader does not FOLLOW is
+    // SAID (cut) — the project declared folders that went unread: one past DS_WORKSPACE_CHARS or DS_WORKSPACE_SEGMENTS,
+    // a segment of more than two `*` (`ui-*`, `*-app`, `*-ui-*` are followed: more would make its match polynomial in
+    // a folder's name), a brace list. Review 2 of 1.35.1: they were dropped without a word, and the report said in sync.
+    if (segs.some((x) => x === "..") || p0.trim()[0] === "!") continue;
+    if (p0.length > DS_WORKSPACE_CHARS || segs.length > DS_WORKSPACE_SEGMENTS || /[{}]/.test(p0) || segs.some((x) => x !== "**" && x.split("*").length > 3)) { cut = true; continue; }
+    walk("", segs, 0);
+  }
+  return cut;
+}
+// (the Set carries what a bound did: `cut` — a declared pattern, or a folder of one, was left unread — and `read`,
+// the workspace manifests read, the root's aside)
+function projectDependencies(projectRoot) {
+  const names = new Set();
+  let read = 0, cut = false;
+  try {
+    const realRoot = realRootOf(projectRoot);
+    const pkg = manifestInto(realRoot, path.join(projectRoot, "package.json"), names);
+    const declared = workspacePatterns(realRoot, projectRoot, pkg);
+    cut = declared.more;
+    const own = pkg != null && isRecord(pkg.dependencies) && Object.keys(pkg.dependencies).length > 0; // the root is a package of its own
+    cut = workspaceDirs(projectRoot, declared.patterns.length ? declared.patterns : own ? [] : ["*"], (rel) => {
+      const file = path.join(projectRoot, rel, "package.json");
+      if (!projectFileInside(realRoot, file)) return true; // a folder that is no package
+      if (read >= DS_WORKSPACE_MANIFESTS) { cut = true; return false; } // one more exists: said
+      if (manifestInto(realRoot, file, names)) read++;
+      return true;
+    }) || cut;
+  } catch { /* whatever a manifest holds, the registry is read with the names found so far */ }
+  if (cut) { names.cut = true; names.read = read; }
   return names;
 }
 // → (cell) => does a usage row's cell cite one of the registry's libraries — as a whole word: `own` is not in "Dropdown".
@@ -1578,13 +1727,15 @@ function designSystemCheck(design, lang, opts = {}) {
   const st = sec ? sectionState(design || "", [sec], trackMarker("ui"), { size: "m", lang })[0].status : "missing";
   if (st === "missing") return out("pass", Q.dsNoSection, "no-section");
   if (st === "unfilled" || st === "template") return out("pass", Q.dsUnfilled, "unfilled");
+  // (a design that uses no component has nothing to agree with, registry or none — asked FIRST: with no registry yet it
+  // was told to create one — 1.35 review 10)
+  if (st === "na") return out("pass", Q.dsNa, "na");
   const reg = opts.registry;
   if (!reg) return out("warn", Q.dsNoRegistry, "no-registry");
   // A registry that lists no component has nothing to agree with — unless it builds on a library that IS one (`packaged`:
   // a dependency of package.json, a scoped package). Then it is library-only on purpose and every row is checked, as with
   // components. A `_Libraries:_` line of free text ("not yet", in any words and any language) declares none.
   if (!reg.keys.size && !reg.packaged) return out("warn", reg.libraries.length ? Q.dsEmptyRegistryLibraries(reg.libraries.slice(0, 3).join(", ")) : Q.dsEmptyRegistry, "empty-registry");
-  if (st === "na") return out("pass", Q.dsNa, "na");
   const usage = designSystemUsage(design);
   const bad = opts.gate ? "fail" : "warn";
   const gated = (d) => (opts.gate ? Q.dsGate(d, opts.gate) : d);
@@ -2488,4 +2639,4 @@ module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, gloss
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
-  dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, __link };
+  dsKey, dsCell, dsNameSlot, RE_DS_COMPONENT_HEAD, RE_DS_COL, packageDependencies, projectDependencies, __link };

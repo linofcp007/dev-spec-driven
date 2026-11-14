@@ -141,7 +141,7 @@ exports.run = ({ all, runIn, tmp, require, __dirname }) => {
     for (let i = 0; i < 22; i++) write(lp, "src/styles/tokens.f" + String(i).padStart(2, "0") + ".css", ":root { --f" + i + ": 1px; }\n");
     write(lp, "token.json", js({ token: "ya29.FAKE-ACCESS-0000", refresh_token: "1//FAKE-REFRESH-1111", client_secret: "GOCSPX-FAKE-2222" }));
     // a token file by its name, with a real token: read — its other value, under a key no credential list holds, is not
-    write(lp, "scripts/deploy.tokens.json", js({ github: "ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234", color: { brand: "#1d4ed8" } }));
+    write(lp, "scripts/deploy.tokens.json", js({ github: "xhp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234", color: { brand: "#1d4ed8" } }));
     const seed = runIn(["steering", "design-system.md", "--project", lp]);
     const rep = runIn(["design-system", "--project", lp]);
     const asJson = jsonOf(runIn(["design-system", "--project", lp, "--json"]));
