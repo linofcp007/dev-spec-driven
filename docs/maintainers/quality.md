@@ -333,9 +333,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   review 10's "joined to ONE framework's name" too narrow (`carbon-components-svelte`, `evergreen-ui`). The two
   joined words are a list, knowingly: no shape tells `antd-mobile` (the library's) from `material-icons` (a font).
   And a SCOPE that merely begins with the word still backs it — `Material 3` beside an icon font's
-  `@material-symbols/…` —: asking more of the scope lost real libraries whose scope adds a word. The ROOT
-  package.json answers (`packageDependencies`; workspace manifests are not read, knowingly — review 6): in a
-  monorepo whose library sits in `apps/web/package.json` the short name stays weak. So what the author WRITES as a
+  `@material-symbols/…` —: asking more of the scope lost real libraries whose scope adds a word. The
+  project's manifests answer (`projectDependencies`, 1.35.1: the root package.json and its workspace packages' —
+  The project's manifests, below; until then the root one alone, and a monorepo's short name stayed weak): where
+  none it reads holds the package — a CDN, an undeclared folder two levels down — the short name is weak. So what the author WRITES as a
   name is strong, whatever was derived before it: an entry of its own (`Carbon 11, Carbon`) and a note that names
   the library surely (`Bootstrap 5 (Bootstrap)` — review 10: a note equal to the derived name was skipped as "held
   already"; a note that names it weakly leaves a name the registry holds as it was, `react, Headless UI (react)`).
@@ -378,21 +379,24 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   fork's affix — ButtonV2, NewButton, CustomCard — or an edit or two away, `dsNearComponent`; never when its notes name that
   component), `no-why` (a New without a reason). It compares NAMES: a new component under an unrelated name passes (the
   reviewer's search). The `unknown` hint offers, before "make it a New row", to add the row when the code already has the
-  component: the scan names ONE component per file (below), so a kit's further exports are unknown until someone lists
-  them (review 10). Only the first `DS_NEAR_ROWS` rows that need one pay a name comparison, a name past `DS_NAME_MAX` none.
+  component: what the scan cannot tell — a component wrapped by another function, 1.35.1; until then every further
+  export of a file (review 10) — is unknown until someone lists it. Only the first `DS_NEAR_ROWS` rows that need one pay a name comparison, a name past `DS_NAME_MAX` none.
 - **Doctor `ui-design-system`** (`designSystemCheck`; one entry of `DOCTOR_CHECKS`, phase 2) — a plain feature with +ui whose
   design.md is no later phase's template. States: no-section · unfilled (the scaffold's: `ui-sections` and the placeholder gate
   own both) · no-registry / empty-registry (a WARN saying how to create it — never a fail: there is nothing to agree with.
   EMPTY = it lists no component and declares no library that IS one — `packaged` (`dsPackaged`): a dependency of the
-  project's package.json (`packageDependencies`: dependencies, dev and peer, any case; the root manifest read as the scan
-  reads one — a regular file or a link that stays inside the project, its first 256K characters, a BOM dropped), a scoped
+  project (`projectDependencies`: the root package.json and its workspace packages' — The project's manifests, below;
+  dependencies, dev and peer, any case; each manifest read as the scan reads one — a regular file or a link that
+  stays inside the project, its first 256K characters, a BOM dropped), a scoped
   package by its very name, or a scope alone whose packages are dependencies (`@radix-ui` — what the seed writes; never
   `@radix`). When it declares libraries and none is one the warning says so and how to name one
   (`quality.dsEmptyRegistryLibraries`). A `_Libraries:_` line is free text: no word list holds
   every "not yet" (review 4: one that slipped through turned the warning into a size m refusal), and "does the design cite
   it" switched the gate off for a registry that is library-only on purpose (review 5: `Reuse | Buton` approved). A
   packaged library-only registry is checked like any other: no-rows and unknown rows fail at m / l) · na
-  (the section's ONE `n/a — <reason>` line, `sectionState`'s rule, at any size) · no-rows · mismatch · ok. A WARN — and an
+  (the section's ONE `n/a — <reason>` line, `sectionState`'s rule, at any size — asked BEFORE the registry since
+  1.35.1: a design that uses no component has nothing to agree with, and with no registry yet it was told to create
+  one) · no-rows · mismatch · ok. A WARN — and an
   approval check where `designSystemGated(kind, size)` holds (= `designReuseGated`: a plain feature of size m / l): no-rows and
   mismatch FAIL there, and `GATES.design` refuses on `ui-design-system`.
 - **An approved design is never failed by the registry moving on.** The check reads a file that changes after an approval —
@@ -415,9 +419,25 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   .jsx / .vue / .svelte / .astro, an Angular `*.component.ts`, a
   PascalCase .js) whose NEAREST telling folder is a component folder (`COMPONENT_DIRS`: components, ui, design-system,
   widgets, atoms…) — never a page folder below it (`PAGE_DIRS`) —, named by its file (kebab-case → PascalCase) or its folder
-  for an index — ONE component per file, no file is read for its exports: shadcn's `card.tsx` is Card, and its
-  `CardHeader` and its other exports are rows to add by hand or cite as `Card (CardHeader)` (review 10, on real file contents:
-  every earlier fixture was a one-line stub; reading exports would be new machinery) —; never a test, a story, a hook (`useX`, `use-x`), a helper or an entry file (`NOT_COMPONENT`, as written:
+  for an index — and, since 1.35.1, every further component a .tsx / .jsx / .js file EXPORTS (`exportedComponents`;
+  1.35 review 10 found the limit on real file contents: shadcn's `card.tsx` was Card alone, and a design reusing
+  `CardHeader` "not in the registry"). What tells a component is its DECLARATION, never its name — no suffix list
+  ("Context", "Props") is ever complete: an exported function or class, or an exported const whose value is a
+  function (`RE_VALUE_FN`: an arrow, a generic one, `function`), one of React's own wrappers or a `styled` one
+  (`RE_VALUE_WRAPPER`: `forwardRef`, `memo`, `lazy` — a framework's API, a closed list — and `styled`), or another
+  component under a new name (`RE_VALUE_ALIAS`: `= DialogPrimitive.Root`); exported on its declaration, in an
+  `export { … }` list (over lines, `X as Y`) or as the default. Never a type, a context, an object, a schema,
+  `cva(…)`, any other call, a re-export (`export { X } from`, `export *`: a barrel's). Top-level statements only
+  (column 0), comments aside (`withoutComments`); the reader keeps no string state, so a template literal's line at
+  the margin reads as a statement — knowingly. Every pattern is anchored and unambiguous (a value is SLICED off the
+  line, never captured by `(.*)$`; no `\s*;?\s*$`) — each has its hostile fixture. Bounds: `DS_EXPORT_FILES`
+  component files read, the shorter path first (past them `limits` says `component-files` and the report is never
+  in sync), `DS_EXPORT_NAMES` names a file, `DS_EXPORT_LIST_LINES` lines an unclosed `export {` may take. A
+  component with a file of its own keeps that file (read after every file's own name is known); a route segment's
+  special file is a page and is not read. What it misses — a component wrapped by another function (`observer(…)`,
+  a HOC), one declared indented — is a row to add by hand: the `unknown` hint still says so. A feature's own files
+  are read the same way for its New components' paths (`featureReport`: the finish wrote `—` for one its file
+  exports beside the file's own) —; never a test, a story, a hook (`useX`, `use-x`), a helper or an entry file (`NOT_COMPONENT`, as written:
   utils, types, constants, main, app, store…; never applied to an Angular `*.component.ts` — the suffix says what it is).
   Of them `main` / `app` (`ENTRY_NAMES`) are entry files only RIGHT inside the telling folder, `src/` looked through as
   `homeDir` does (`src/ui/main.tsx`, `packages/ui/src/main.tsx`): deeper, `components/layout/main.tsx` is the component
@@ -512,7 +532,25 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   JS / TS / YAML one is listed as a source, its
   values unread — the
   files whose values ARE read come first (21 `tailwind.config.ts` must not take tokens.css's place). Libraries =
-  `UI_LIBRARIES` ∩ package.json's dependencies.
+  `UI_LIBRARIES` ∩ the project's dependencies (`projectDependencies`).
+- **The project's manifests** (`projectDependencies`, quality.js — 1.35.1) — the dependency names the registry's reader
+  (`dsNamed`, `dsAlias`, `packaged`) and the seed's `_Libraries:_` stand on: the root package.json AND its workspace
+  packages'. Until 1.35.1 the root one alone (left knowingly in review 6; 1.35 review 10's MEDIUM: `antd 5` + `antd
+  Table` passed in one layout and was refused in a monorepo, whose seed declared no library). The folders are the
+  ones the project DECLARES (`workspacePatterns`): package.json `workspaces` (an array, or Yarn's `{packages}`),
+  pnpm-workspace.yaml `packages` (`pnpmPackages`: a block list or a flow one — the one key, at the margin; no YAML
+  parser, zero dependencies), lerna.json `packages`. Each pattern is followed folder by folder (`workspaceDirs`): a
+  name, a `*` within one (two at most: its match must stay linear in a folder's name), `**` (that folder and two
+  levels below it). A project that declares NONE is looked through one level down (`frontend/package.json` beside a
+  Django app, `client/` + `server/`) — one level only: every further level is a listing per folder on every registry
+  read. What a pattern never reaches: upward (`..`), a link (a `*` match is a Dirent that is no directory; a NAMED
+  folder is asked itself, `lstat`), a dot folder, node_modules. A `!negation` removes nothing and a brace list names
+  nothing — each is a folder's name no project has; said in the user docs. Bounded: `DS_WORKSPACE_PATTERNS`
+  patterns, `DS_WORKSPACE_DIRS` folders listed (`readDirBounded`, `DS_WORKSPACE_ENTRIES` entries each, sorted by
+  name), `DS_WORKSPACE_MANIFESTS` manifests — past a bound the names read so far stand. The cost is paid only when a
+  marker ASKS (a bare-number name, a note, a registry with no component row) and once per scan; a single-package
+  project pays one listing of its root. `packageDependencies` stays ONE folder's manifest (`dependsOnNext` asks it
+  of a router's folders).
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),
@@ -596,6 +634,7 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   total beside each (`missingTotal`, `pendingTotal`, `staleTotal`, `newTokensTotal`, `total`).
 - **`limits`** — the bounds that CUT what a report read, `[{code, read, file?}]`: files (the walk's cap) · token-files ·
   token-candidates · file-size (`file`) · tokens · registry-rows (rows past 500 are not checked for a gone path) ·
+  component-files (`DS_EXPORT_FILES` read for what else they export, 1.35.1 — the project report's alone) ·
   view-files (a feature's 200; its report carries every code but tokens and registry-rows — a stylesheet left out of the
   sources is read for raw values); `truncated` = one of them, and then the report is NEVER `inSync` (said of NAMES: a
   token's value is not compared, nor a token the code no longer declares — `cliOutput.dsInSync` says so, review 7) — what it
@@ -649,7 +688,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   design's New components to the registry (`registerComponents`): under the roadmap lock, the registry read AGAIN past the
   call's read cache (`forgetCached` — doctor read it before the lock) and judged by `keys` (past the reader's cap too: no row
   twice); into the component table the file ENDS in when it has a column for the origin (neither the path's nor the
-  variants'), else as a new table (`appendSpecText`: BOM and line ends kept); the path = the feature's file of that name, the
+  variants') AND the registry's reader ends in it too — the file's last line is the last line of the text with its
+  comments and code blocks stripped: a table that is commented out (`| … | -->` as the last line) or inside a fence
+  took the rows where nothing reads them, the finish said "added" and every later one added them again (1.35.1;
+  1.35 review 10) —, else as a new table (`appendSpecText`: BOM and line ends kept); the path = the feature's file
+  of that name, or the one that exports it beside its own (1.35.1), the
   origin `_From: <slug>_`; a name that is no plain component name is never written (`RE_SAFE_NAME`); best-effort — a registry
   the write gate refuses is left as it is and the finish stands. Result: `designSystem` {raw, registered, unregistered,
   note?}. A rename follows: `renameRegistryOrigin` (finish.js) rewrites `_From: <old>_` (`designSystemUpdated`).
@@ -709,7 +752,14 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   line must END in `;` to be read as a declaration at all), one after a redundant condition was deleted (a
   framework's stem needs no length guard: the exact name is its own stem), and one mutant of mine was a syntax
   error, not a result: read WHY a mutant fails. Not reachable by a fixture, and left: appending the comment's
-  slash only when a `/*` follows — a line that merely ends in ` /` loses nothing a token reader sees.
+  slash only when a `/*` follows — a line that merely ends in ` /` loses nothing a token reader sees. 1.35.1: 93
+  mutations of the new readers (mcp/tests/15-quality-design-system-workspaces.js), 83 caught at first; of the ten,
+  six wanted a fixture (a nested YAML key, a blank line in its list, two `*` in a segment, a comment right before a
+  declaration, a name exported twice, a code block left open), two a timing fixture with a real margin, one showed
+  a condition to delete (all-caps names: `FAQ` is a component, and a constant is none by its value), and one is
+  the second of two layers (the column-0 rule: the first-letter test and the pattern's anchor) — mutated together,
+  caught. Not reachable deterministically, and left: `DS_WORKSPACE_ENTRIES` (which thousand entries a listing gives
+  first is the file system's order).
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
@@ -1086,3 +1136,17 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   the fact belongs to a statement or to one entry will be right on the fixture and wrong beside it — twice in this
   round; (4) a short round on the last diff alone, with the previous rounds' rows as its oracle, cost a fraction
   of a full one and found as much.
+- **1.35.1** (2026-11-14) — the two limits 1.35.0 shipped with, and its two cosmetics, at the owner's request
+  ("resolve all of it"): the project's dependencies are the root manifest's AND its workspace packages'
+  (`projectDependencies` — review 6 had left it knowingly, review 10 measured what it cost); a component file gives
+  every component it exports (`exportedComponents` — "new machinery" in review 10's words: built on what a
+  DECLARATION is, so no suffix list); a registry that ends in a table its reader does not see takes a finish's rows
+  in a new one; an `n/a` design is asked before the registry. And the fixtures shaped like a provider's key became
+  plain fakes (GitHub's push protection had refused 1.35.0's first push for two Stripe-shaped ones — the word FAKE
+  in them counted for nothing). What the build taught before any reviewer saw it: (1) the patterns' first drafts
+  held three ambiguous tails (`\s*;?\s*$`, a `(.*)$` after a `\s*`, `function\s*\*?` before a `\s+`) — the classes
+  reviews 3 and 7 had named; reading one's own new regexes AGAINST that list found them, and the line cap alone
+  would not have saved a scan of 500 files (0.7 s a file); (2) a timing fixture one mutant passed at 1.7 s against a
+  1.5 s bound is no fixture — it now costs a mutant 2.6 s against 1 s; (3) the guards a pattern "obviously needs"
+  (a `!`, a brace list, a drive letter) were all equivalent to "that folder does not exist": deleted, the one that
+  is not (`..`) kept.

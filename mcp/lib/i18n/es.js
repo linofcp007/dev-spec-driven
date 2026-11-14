@@ -1527,6 +1527,7 @@ const msg = {
         tokens: (n) => `  (solo se leen los primeros ${n} tokens del código: el resto no se compara)`,
         "registry-rows": (n) => `  (solo se comprueba en los primeros ${n} componentes del registro si su ruta ya no existe)`,
         "view-files": (n) => `  (solo se leen los primeros ${n} ficheros de vista de la funcionalidad en busca de valores fijos)`,
+        "component-files": (n) => `  (solo se leen los primeros ${n} ficheros de componentes en busca de los demás componentes que exportan: el resto no se compara)`,
       },
       dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reutilizar: ${reuse} · Extender: ${extend} · Nuevo: ${news}`,
       dsFeatureNoRows: "  el diseño no tiene ninguna fila de componente ([UI] Uso del Design System)",

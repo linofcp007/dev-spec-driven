@@ -49,7 +49,7 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
   // --- HIGH: a secret used as a KEY — a name is printed too -------------------------------------------------------------------------------
   {
     const p = project("keys");
-    const K40 = "ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234", K40B = "ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE5678";
+    const K40 = "xhp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234", K40B = "xhp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE5678";
     const SECRETS = [K40, K40B, "sk-FAKE-live-0004", "FAKE-SESSION-0005", "sk-FAKE-0006", "sk-FAKE-0007", "123456789", "4242", "987654321", "555666", "11223344", "55667788", "99887766"];
     // maps keyed by the secret (a token store, a rate counter, a session store): nothing in them says design
     write(p, "tokens.json", js({ [K40]: 1700000000, [K40B]: 1700000500 }));

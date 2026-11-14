@@ -25,12 +25,12 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
-  isNetworkPath, isTestFile, packageDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix, unitIn, walkProject,
-  withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot;
+  isNetworkPath, isTestFile, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn,
+  walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
-  isDirSafe, isInsideDir, isNetworkPath, isTestFile, packageDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, toPosix,
-  unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot } = E); }
+  isDirSafe, isInsideDir, isNetworkPath, isTestFile, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
+  stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
@@ -154,6 +154,82 @@ function componentOf(rel) {
   const name = stem.split(/[-_.]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("");
   return { name, key: dsKey(name), path: rel, index, route };
 }
+// --- what else a component file exports ---------------------------------------------------------------------------------------
+// A file names ONE component, by its file — and a .tsx / .jsx / .js one may export more: a kit's `card.tsx` exports Card,
+// CardHeader, CardContent… (1.35.1 — 1.35 review 10, on real file contents: a design reusing CardHeader was told it is
+// not in the registry). → the PascalCase names the file EXPORTS and declares as a component, in the file's order:
+//   - a function or a class: `export function CardHeader(`, `function CardHeader(` listed in `export { … }`;
+//   - a const whose value is one: a function (`= (props) =>`, `= function`, `= <T,>(props) =>`), one of React's own
+//     wrappers (`forwardRef(`, `memo(`, `lazy(` — with `React.` or without), a `styled` one (`styled.div`,
+//     `styled(Button)`), or another component under a new name (`= DialogPrimitive.Root`, `= FormProvider`).
+// Never a type (`export type`, `export { type X }`), a re-export (`export { X } from`, `export *` — a barrel's), a constant
+// of any other value (`createContext(…)`, an object, `cva(…)`, `z.object(…)`), a hook, a lower-case name (`FAQ`, `CTA`
+// are components: a constant in capitals is none by its VALUE, never by its letters). What tells is
+// the DECLARATION, never the name: no suffix list ("Context", "Props") is ever complete. Top-level statements only
+// (column 0), comments aside; a line is read up to DS_LINE_MAX, a file gives DS_EXPORT_NAMES names at most. What it
+// misses — a component wrapped by another function (`observer(…)`, a HOC), one declared indented — is a row to add by
+// hand, as the docs say. What it reads too much, knowingly: the reader keeps no string state, so a line of a template
+// literal that starts at the margin reads as a statement.
+const DS_EXPORT_FILES = 500; // component files read for what else they export (past them the report's `limits` says so)
+const DS_EXPORT_NAMES = 50; // components kept of one file
+const DS_EXPORT_LIST_LINES = 200; // lines an `export { … }` list may go on over
+const RE_EXPORTS_EXT = /\.(?:tsx|jsx|js|mjs)$/i;
+const RE_COMPONENT_NAME = /^[A-Z][A-Za-z0-9]*$/;
+const RE_DECL_FN = /^(export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)/;
+// (the value is the line's tail, sliced: a `(.*)$` after a `\s*` is quadratic on a line a `.` cannot cross — 1.35 review 7)
+const RE_DECL_CONST = /^(export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]*)?=/;
+const RE_EXPORT_DEFAULT_NAME = /^export\s+default\s+([A-Za-z_$][\w$]*)\s*;?$/; // (of a line trimmed at its end)
+const RE_VALUE_FN = /^(?:async(?![\w$])|function(?![\w$])|\(|<[A-Za-z_$][\w$]*\s*(?:,|extends(?![\w$]))|[A-Za-z_$][\w$]*\s*=>)/;
+const RE_VALUE_WRAPPER = /^(?:[A-Za-z_$][\w$]*\.)*(?:forwardRef|memo|lazy|styled)(?![\w$])/;
+const RE_VALUE_ALIAS = /^(?:[A-Za-z_$][\w$]*\.)*[A-Z][\w$]*\s*;?$/; // (of a trimmed value)
+const componentValue = (v) => RE_VALUE_FN.test(v) || RE_VALUE_WRAPPER.test(v) || RE_VALUE_ALIAS.test(v);
+function exportedComponents(text) {
+  const declared = new Set(); // the names declared as a component
+  const exported = []; // [exported name, local name], as the file exports them
+  const st = { block: false, html: false };
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i].length > DS_LINE_MAX ? lines[i].slice(0, DS_LINE_MAX) : lines[i];
+    const line = withoutComments(raw, st, { slashSlash: true });
+    const c = line[0];
+    if (c !== "e" && c !== "f" && c !== "c" && c !== "a" && c !== "l" && c !== "v") continue; // export, function, class / const, async, let, var
+    const fn = RE_DECL_FN.exec(line);
+    if (fn) { declared.add(fn[2]); if (fn[1]) exported.push([fn[2], fn[2]]); continue; }
+    const cn = RE_DECL_CONST.exec(line);
+    if (cn) {
+      // (a value that starts on the next line: `const Card =` then `React.forwardRef(…)`)
+      let value = line.slice(cn[0].length).trim();
+      for (let j = i + 1; value === "" && j < lines.length && j <= i + 3; j++) value = lines[j].slice(0, DS_LINE_MAX).trim();
+      if (componentValue(value)) { declared.add(cn[2]); if (cn[1]) exported.push([cn[2], cn[2]]); }
+      continue;
+    }
+    const byName = RE_EXPORT_DEFAULT_NAME.exec(line.trimEnd());
+    if (byName) { exported.push([byName[1], byName[1]]); continue; }
+    if (!line.startsWith("export") || !/^export\s*\{/.test(line)) continue;
+    // `export { A, B as C, type D }` — it may go on over lines; followed by `from`, it re-exports another file's
+    let list = line.slice(line.indexOf("{") + 1), end = list.indexOf("}");
+    for (let j = i + 1, last = i + DS_EXPORT_LIST_LINES; end === -1 && j < lines.length && j <= last; j++) {
+      const more = withoutComments(lines[j].slice(0, DS_LINE_MAX), st, { slashSlash: true });
+      const at = more.indexOf("}");
+      if (at !== -1) end = list.length + 1 + at;
+      list += "," + more;
+      i = j;
+    }
+    if (end === -1 || /^\s*from(?![\w$])/.test(list.slice(end + 1))) continue;
+    for (const entry of list.slice(0, end).split(",")) {
+      const words = entry.trim().split(/\s+/);
+      if (!words[0]) continue; // (`type X`: its "name" is the lower-case word — no component)
+      const as = words[1] === "as" && words[2] ? words[2] : words[0];
+      exported.push([as === "default" ? words[0] : as, words[0]]);
+    }
+  }
+  const out = [];
+  for (const [name, local] of exported) {
+    if (out.length >= DS_EXPORT_NAMES) break;
+    if (declared.has(local) && RE_COMPONENT_NAME.test(name) && !out.includes(name)) out.push(name);
+  }
+  return out;
+}
 // A token file by its name AND its place (tokenFileKind):
 //   style — a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss, theme.css): anywhere;
 //   named — a name that can only mean design tokens, in any format (design-tokens.json, colors.tokens.json,
@@ -222,7 +298,7 @@ const UI_LIBRARIES = ["@mui/material", "@mui/joy", "antd", "@chakra-ui/react", "
   "react-aria-components", "@ark-ui/react", "bootstrap-vue", "semantic-ui-react", "grommet", "evergreen-ui", "@blueprintjs/core", "@shopify/polaris",
   "@radix-ui/themes", "@skeletonlabs/skeleton", "@nuxt/ui", "bits-ui", "@kobalte/core"];
 function packageLibraries(root) {
-  const names = packageDependencies(root); // (quality.js: the root manifest read as the scan reads one — contained, bounded)
+  const names = projectDependencies(root); // (quality.js: the root manifest and the workspaces' — contained, bounded)
   const out = UI_LIBRARIES.filter((l) => names.has(l));
   if ([...names].some((n) => n.startsWith("@radix-ui/react-")) && !out.includes("@radix-ui/themes")) out.push("@radix-ui");
   return out;
@@ -673,6 +749,7 @@ const jsonSource = (j) => !j.secret && j.list.length > 0 && (j.format || j.stron
 function scanCode(root) {
   const realRoot = realRootOf(root);
   const byKey = new Map(), views = [], tokenFiles = [], sheets = [], found = [], routerRoots = new Set(), pageDirs = new Set(), nextConfigs = new Set();
+  const fullOf = new Map(); // a component file's full path, by its relative one
   const counts = (rel) => isViewFile(rel) || isTokenFile(rel);
   const dirOf = (rel) => rel.slice(0, Math.max(0, rel.lastIndexOf("/")));
   const walk = walkProject(root, DS_FILE_CAP, (rel, full, name) => {
@@ -688,7 +765,7 @@ function scanCode(root) {
     views.push({ rel, full });
     if (isTestFile(rel)) return;
     const c = componentOf(rel);
-    if (c) found.push(c);
+    if (c) { found.push(c); fullOf.set(rel, full); }
   }, { counts, gitignore: gitignoreRules(root, realRoot) });
   // (known only once the walk is over: a folder's files come in any order)
   // (asked only of the router roots above a component named like a special file: the others change nothing)
@@ -705,8 +782,10 @@ function scanCode(root) {
       if (d === "" || !(name[0] === "@" || RE_ROUTE_PASS.test(name))) return false;
     }
   };
+  const files = []; // the component files, a route segment's special files aside
   for (const c of found) {
     if (c.route && routed(dirOf(c.path))) continue;
+    files.push(c);
     const had = byKey.get(c.key);
     // one component per name: its own file before a folder's index, then the shorter path
     if (!had || (had.index && !c.index) || (had.index === c.index && c.path.length < had.path.length)) byKey.set(c.key, c);
@@ -715,7 +794,20 @@ function scanCode(root) {
   // A bound that cut what is read — the reports say so (`limits`), never "in sync". Each is set only when something WAS cut:
   //   tokenFiles — a file that IS a source found the sources full;   candidates — files named like one were left unread;
   //   tokens — a token was left past the cap;   fileSize — the first token file longer than a file's read (its path).
-  const capped = { tokenFiles: false, candidates: false, tokens: false, fileSize: null };
+  //   exports — component files were left unread for what else they export (DS_EXPORT_FILES).
+  const capped = { tokenFiles: false, candidates: false, tokens: false, fileSize: null, exports: false };
+  // What else a component file exports (exportedComponents) — a name no file of its own holds; the shorter path first, as
+  // above. Read after every file's own name is known: `card.tsx`'s CardHeader never takes `card-header.tsx`'s place.
+  const readable = files.filter((c) => RE_EXPORTS_EXT.test(c.path)).sort((a, b) => a.path.length - b.path.length || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  for (let i = 0; i < readable.length; i++) {
+    if (i >= DS_EXPORT_FILES) { capped.exports = true; break; }
+    const text = readFileHead(fullOf.get(readable[i].path), DS_READ_CHARS);
+    if (text == null) continue;
+    for (const name of exportedComponents(text)) {
+      const key = dsKey(name);
+      if (key && !byKey.has(key)) byKey.set(key, { name, key, path: readable[i].path, index: false, route: false });
+    }
+  }
   const take = (file, list) => {
     sources.push(file.rel);
     for (const t of list) {
@@ -1004,7 +1096,8 @@ function pendingNew(projectDir) {
 const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files } : null, scan.capped.tokenFiles ? { code: "token-files", read: DS_TOKEN_FILES } : null,
   scan.capped.candidates ? { code: "token-candidates", read: DS_TOKEN_READS } : null,
   scan.capped.fileSize ? { code: "file-size", read: DS_READ_CHARS, file: scan.capped.fileSize } : null,
-  scan.capped.tokens ? { code: "tokens", read: DS_TOKENS_MAX } : null].filter(Boolean);
+  scan.capped.tokens ? { code: "tokens", read: DS_TOKENS_MAX } : null,
+  scan.capped.exports ? { code: "component-files", read: DS_EXPORT_FILES } : null].filter(Boolean);
 function designSystemReport(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
   const lang = projectLang(projectDir);
@@ -1060,8 +1153,10 @@ function featureReport(projectDir, root, f, reg, scan) {
   const tokenOf = new Map();
   for (const t of reg ? reg.tokens : []) { const k = colorKey(t.value); if (k && !tokenOf.has(k)) tokenOf.set(k, t.name); }
   const raw = [], counts = { color: 0, size: 0 };
+  const exportsOf = []; // [a component file of the feature, what else it exports] — a New component's path below
   // (the token-FILE bounds reach a feature's report too: a stylesheet left out of the sources is read for raw values)
-  const limits = scanLimits(scan).filter((l) => l.code !== "tokens");
+  // (…and never the bounds of what the PROJECT report lists: the tokens read, the component files read for their exports)
+  const limits = scanLimits(scan).filter((l) => l.code !== "tokens" && l.code !== "component-files");
   let viewFiles = 0;
   for (const rel of mine) {
     if (tokenFiles.has(fold(rel)) || isTokenFile(rel)) continue;
@@ -1069,6 +1164,7 @@ function featureReport(projectDir, root, f, reg, scan) {
     const text = readFileHead(byRel.get(rel) || path.join(root, rel), DS_READ_CHARS);
     if (text == null) continue;
     viewFiles++;
+    if (RE_EXPORTS_EXT.test(rel) && componentOf(rel)) exportsOf.push([rel, exportedComponents(text)]);
     for (const v of rawValuesOf(text, rel)) {
       counts[v.kind]++;
       const token = v.kind === "color" ? tokenOf.get(colorKey(v.value)) : undefined;
@@ -1077,6 +1173,7 @@ function featureReport(projectDir, root, f, reg, scan) {
   }
   const own = new Map();
   for (const rel of mine) { const c = componentOf(rel); if (c && !own.has(c.key)) own.set(c.key, rel); }
+  for (const [rel, names] of exportsOf) for (const n of names) { const k = dsKey(n); if (k && !own.has(k)) own.set(k, rel); }
   const seenNew = new Set();
   const newComponents = [];
   for (const r of usage ? usage.rows : []) {
@@ -1157,7 +1254,12 @@ function registerComponents(projectDir, list) {
     const lines = raw.trimEnd().split(/\r?\n/);
     let top = lines.length - 1;
     while (top >= 0 && /^\s*\|/.test(lines[top])) top--;
-    const head = lines.length - 1 - top >= 2 && RE_SEP_ROW.test(lines[top + 2]) ? lines[top + 1].trim().replace(/^\|/, "").replace(/\|\s*$/, "").split("|").map((x) => x.trim()) : null;
+    // …and only a table the registry's READER ends in too: one inside a comment or a code block — `| Old | … | -->` as the
+    // file's last line — would take the rows where nothing reads them, the finish would say "added", and every later finish
+    // would add them again (1.35 review 10). Then a new table takes them, after it.
+    const seen = stripFencedCode(stripHtmlComments(raw)).trimEnd().split(/\r?\n/);
+    const visible = seen[seen.length - 1] === lines[lines.length - 1];
+    const head = visible && lines.length - 1 - top >= 2 && RE_SEP_ROW.test(lines[top + 2]) ? lines[top + 1].trim().replace(/^\|/, "").replace(/\|\s*$/, "").split("|").map((x) => x.trim()) : null;
     const isTable = !!head && RE_DS_COMPONENT_HEAD.test(head[0].replace(/[`*_]/g, ""));
     // the columns as the registry's reader finds them: by their header, else by place (the path second, the variants third)
     const colOf = (re, place) => { const i = isTable ? head.findIndex((h, k) => k > 0 && re.test(h.replace(/[`*_]/g, ""))) : -1; return i > 0 ? i : place; };
