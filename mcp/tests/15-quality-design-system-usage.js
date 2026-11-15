@@ -327,10 +327,13 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     write(p, "src/app/chain.tsx", L(["import { S2 } from \"@/components/ui/chain\";", "import { Kbd } from \"@/components/ui/kit\";", "export const C = () => <S2.Part />;"]));
     write(p, "apps/rr/app/components/ui/rr-kit.tsx", L(["export const RrGlow = motion(Base);"]));
     write(p, "apps/rr/app/routes/r.tsx", L(["import { RrGlow } from \"~/components/ui/rr-kit\";", "export const R = () => <RrGlow />;"]));
-    // (`app/` is a `~/` alias's alone: `@/…` from a root whose file sits in its `app/` settles nothing — review 3)
+    // (`@/…` into a root's `app/` too — shadcn's React Router monorepo, `@/*` → `./app/*`: narrowed to `~/` in review 3, it
+    // was lost — and a bare path of two segments the same way — review 4)
     write(p, "apps/at/package.json", js({ name: "at", private: true }));
     write(p, "apps/at/app/components/ui/at-kit.tsx", L(["export const AppGlow = motion(Base);"]));
     write(p, "apps/at/app/routes/r.tsx", L(["import { AppGlow } from \"@/components/ui/at-kit\";", "export const R = () => <AppGlow />;"]));
+    write(p, "apps/at/app/components/ui/bare-kit.tsx", L(["export const BareGlow = motion(Base);"]));
+    write(p, "apps/at/app/routes/b.tsx", L(["import { BareGlow } from \"components/ui/bare-kit\";", "export const B = () => <BareGlow />;"]));
     // (a folder that is no root guesses nothing: a kit beside the page, under `src/app/components/`, is not what
     // `@/components/…` names — review 3)
     write(p, "src/app/components/ui/near-kit.tsx", L(["export const NearGlow = motion(Base);"]));
@@ -365,18 +368,30 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     // 520 manifests before the workspace package (alphabetical): its name is still found
     const crowd = project("review2-crowd", { "package.json": js({ private: true, workspaces: ["examples/*", "packages/*"] }) });
     for (let i = 0; i < 520; i++) write(crowd, "examples/e" + String(i).padStart(3, "0") + "/package.json", js({ name: "example-" + i }));
-    write(crowd, "packages/ui/package.json", js({ name: "@acme/ui" }));
-    write(crowd, "packages/ui/src/components/fx.tsx", L(["export const CrowdGlow = motion(Base);"]));
+    // (its folder written in capitals: the folders' index is case-blind — review 4)
+    write(crowd, "packages/UI/package.json", js({ name: "@acme/ui" }));
+    write(crowd, "packages/UI/src/components/fx.tsx", L(["export const CrowdGlow = motion(Base);"]));
     // (a miss asked first — `next/link` — spends the walk's budget, not the folder-named reads': review 3)
     write(crowd, "zapp/page.tsx", L(["import Link from \"next/link\";", "import { CrowdGlow } from \"@acme/ui\";", "export const P = () => <Link><CrowdGlow /></Link>;"]));
     const crowdGot = seeded(crowd);
-    // (a name keeps the folder it was first found in: a miss asked between two imports of `@acme/ui` reads an example of
-    // the same name, and the second import still reaches packages/ui — review 3)
+    // (an example named like a package never takes its place, whichever import asks first: a miss between two imports of
+    // `@acme/ui`, review 3, or BEFORE the first — `<Link><RevGlow /></Link>` bound it to examples/a, review 4; and every
+    // folder named like a package is one of its: two templates' `packages/ui` both named `@workspace/ui`, review 4)
     const dup = project("review3-dup", { "package.json": js({ private: true, workspaces: ["examples/*", "packages/*"] }) });
     write(dup, "examples/a/package.json", js({ name: "@acme/ui" }));
     write(dup, "packages/ui/package.json", js({ name: "@acme/ui" }));
-    write(dup, "packages/ui/src/components/fx.tsx", L(["export const DupGlow = motion(Base);"]));
+    write(dup, "packages/ui/src/components/fx.tsx", L(["export const DupGlow = motion(Base);", "export const RevGlow = motion(Base);"]));
     write(dup, "zapp/page.tsx", L(["import { Other } from \"@acme/ui\";", "import Z from \"@zzz/missing\";", "import { DupGlow } from \"@acme/ui/components/fx\";", "export const P = () => <><Other /><Z /><DupGlow /></>;"]));
+    write(dup, "zapp/rev.tsx", L(["import Link from \"next/link\";", "import { RevGlow } from \"@acme/ui/components/fx\";", "export const R = () => <Link><RevGlow /></Link>;"]));
+    // (…nor stays one of its folders beside it: read first — the page that sorts first, apps/ex.tsx, asks a miss before
+    // any `ui` —, the example's own `components/fx` is no file of `@acme/ui`'s)
+    write(dup, "examples/a/src/components/fx.tsx", L(["export const ExGlow = motion(Base);"]));
+    write(dup, "apps/ex.tsx", L(["import Link from \"next/link\";", "import { ExGlow } from \"@acme/ui/components/fx\";", "export const X = () => <Link><ExGlow /></Link>;"]));
+    for (const t of ["a", "b"]) {
+      write(dup, "templates/" + t + "/packages/ui/package.json", js({ name: "@workspace/ui" }));
+      write(dup, "templates/" + t + "/packages/ui/src/components/tile.tsx", L(["export const " + t.toUpperCase() + "Glow = motion(Base);"]));
+      write(dup, "templates/" + t + "/apps/web/app/page.tsx", L(["import { " + t.toUpperCase() + "Glow } from \"@workspace/ui/components/tile\";", "export default function P() { return <" + t.toUpperCase() + "Glow />; }"]));
+    }
     const dupGot = seeded(dup);
     // (a tsconfig.json beside each of 300 manifests is no manifest: it spends none of the 500 names read, and a package
     // named otherwise than its folder is still reached; the project's own folder is a root with no manifest of its own)
@@ -423,11 +438,11 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const bars = project("review2-barrels", { "package.json": deps(["react"]) });
     for (let i = 0; i < 1001; i++) write(bars, UI + "b" + String(i).padStart(4, "0") + "/index.ts", "export { X" + i + " } from \"@acme/x\";\n");
     const barLimits = S.designSystemReport(bars).limits;
-    all("1.35.3 review 2 / 3: `~/…` into a nested app's `app/` (from its root: a tsconfig.json — whose `paths` are not read —, a package.json; `@/…` never into `app/`; both into a root's own folder and its `src/` — the project's own folder a root without a manifest, a folder that is no root none), a `#…` import — an alias spelled like a scope (`@components/…`) and a bare name of one segment settle nothing —, the root package and an unscoped workspace package by their names; `React.use(X)` reads a context, a comparison before a `>` is no tag; a provider's tag that names a candidate part, or a part hung on the root's local name in its own file, is that part; an instance (`new QueryClient()`) is never a name; a workspace name behind 520 manifests is found, and keeps the folder it was first found in; a tsconfig.json beside 300 manifests spends none of the names read. Workspaces: a root that looks like a library (`npm init`'s `name` + `main`, a named root, a `main`) keeps the first guessed level — never the second; a private root (named, or with a script's `main`) keeps both; a pnpm negation narrows the patterns written after it; a negation of `**` and two-`*` names is matched in linear time; 1,001 barrels say the files read (got " + js({ got, crowdGot, dupGot, tscGot, bareGot, ws, nms, barLimits }) + ")", {
+    all("1.35.3 review 2 / 3: `~/…` into a nested app's `app/` (from its root: a tsconfig.json — whose `paths` are not read —, a package.json; `@/…` and a bare path into a root's `app/` too; both aliases into a root's own folder and its `src/` — the project's own folder a root without a manifest, a folder that is no root none), a `#…` import — an alias spelled like a scope (`@components/…`) and a bare name of one segment settle nothing —, the root package and an unscoped workspace package by their names; `React.use(X)` reads a context, a comparison before a `>` is no tag; a provider's tag that names a candidate part, or a part hung on the root's local name in its own file, is that part; an instance (`new QueryClient()`) is never a name; a workspace name behind 520 manifests is found (its folder in capitals), an example of the same name never takes a package's place whichever import asks first, every folder named like it is one of its; a tsconfig.json beside 300 manifests spends none of the names read. Workspaces: a root that looks like a library (`npm init`'s `name` + `main`, a named root, a `main`) keeps the first guessed level — never the second; a private root (named, or with a script's `main`) keeps both; a pnpm negation narrows the patterns written after it; a negation of `**` and two-`*` names is matched in linear time; 1,001 barrels say the files read (got " + js({ got, crowdGot, dupGot, tscGot, bareGot, ws, nms, barLimits }) + ")", {
       names: () => js(got) === js(["Core", "CoreGlow", "HashGlow", "Kit", "Popover", "Popover.Provider", "RemixGlow", "RemixKit", "RootGlow", "Tip", "Tip.Provider", "TipGroup",
-        "RrGlow", "RrKit", "ExactKit", "JsGlow", "JsKit", "AtKit", "NearKit", "NextGlow", "NextKit", "T3Glow", "T3Kit", "Chain", "S2", "S2.Part", "Shadow", "Theme", "Shell"].sort()),
+        "RrGlow", "RrKit", "ExactKit", "JsGlow", "JsKit", "AppGlow", "AtKit", "BareGlow", "BareKit", "NearKit", "NextGlow", "NextKit", "T3Glow", "T3Kit", "Chain", "S2", "S2.Part", "Shadow", "Theme", "Shell"].sort()),
       crowd: () => crowdGot.includes("CrowdGlow"),
-      dup: () => dupGot.includes("DupGlow"),
+      dup: () => ["DupGlow", "RevGlow", "AGlow", "BGlow"].every((n) => dupGot.includes(n)) && !dupGot.includes("ExGlow"),
       tsconfigs: () => tscGot.includes("DesignGlow"),
       bare: () => bareGot.includes("TopGlow"),
       ws: () => js(ws) === js({ npmInit: ["@mui/material"], namedDev: ["antd"], privateMain: ["antd"], privateMainTwo: ["antd"], mainTwo: [], namedPrivateTwo: ["antd"], pnpmFirst: ["@mui/material"],

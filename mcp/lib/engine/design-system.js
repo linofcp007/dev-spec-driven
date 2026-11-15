@@ -1821,14 +1821,15 @@ const moduleKey = (rel) => rel.toLowerCase().replace(RE_MODULE_EXT, "").replace(
 // ANYWHERE in the project (`@wordpress/components` was every `components/` folder, `@other/ui` any `ui/`), so another
 // package's name settled the project's. Now:
 //   - a relative path: the path;
-//   - a workspace package by its manifest's `name` (`@acme/ui`, `@repo/ui/components/kit`: its folder, then the path
-//     below it and below its `src/`);
+//   - a workspace package by its manifest's `name` (`@acme/ui`, `@repo/ui/components/kit`: its folders, then the path
+//     below each and below its `src/`);
 //   - `@/…`, `~/…`, `#…` from each project root above the file (a folder holding a package.json / tsconfig.json /
-//     jsconfig.json, the project's own included) and its `src/` / `app/` (`~/*` → `./app/*`: React Router's); a bare
-//     path of two segments or more the same way (`components/ui/kit`). Another package names no file of the project.
+//     jsconfig.json, the project's own included) and its `src/` / `app/` (`~/*` → `./app/*`: React Router's; `@/*` →
+//     `./app/*`: shadcn's React Router monorepo — review 4 of 1.35.3, `app/` for `~/` alone lost it); a bare path of
+//     two segments or more the same way (`components/ui/kit`). Another package names no file of the project.
 // A tsconfig's `paths` are not read (review 3 of 1.35.3: read, they took a `..` target as text, ran past every bound
-// and fell short of TypeScript's own rules three ways — the guess that lost nothing stands; an alias spelled like a
-// scope, `@components/*`, or pointing elsewhere is a row to add by hand).
+// and fell short of TypeScript's own rules three ways — the guess, which lost nothing on the corpus, stands; an alias
+// spelled like a scope, `@components/*`, or pointing elsewhere — Laravel's `./resources/js/*` — is a row to add by hand).
 // project: { roots (a Set of folders), packageOf(name) }.
 const RE_ALIAS_SPEC = /^(?:[@~]\/|#)/;
 function placeOf(spec, fromRel, project) {
@@ -1850,17 +1851,18 @@ function placeOf(spec, fromRel, project) {
   const low = spec.toLowerCase();
   const segs = clean(low.split("/"));
   for (let n = Math.min(segs.length, 2); n >= 1; n--) {
-    const folder = project.packageOf(segs.slice(0, n).join("/"));
-    if (folder == null) continue;
+    const folders = project.packageOf(segs.slice(0, n).join("/"));
+    if (folders == null) continue;
     const sub = segs.slice(n).join("/");
-    if (sub === "") keys.add(moduleKey(folder));
-    else { keys.add(join(folder, sub)); keys.add(join(folder, "src/" + sub)); }
+    for (const folder of folders) {
+      if (sub === "") keys.add(moduleKey(folder));
+      else { keys.add(join(folder, sub)); keys.add(join(folder, "src/" + sub)); }
+    }
     return { keys };
   }
-  // (`app/` for a `~/` alias alone — React Router's `~/*` → `./app/*`: tried for every one, it took a file a `@/*` →
-  // `./src/*` config never points to — review 3 of 1.35.3)
-  const subs = low.startsWith("~/") ? ["", "src/", "app/"] : ["", "src/"];
-  const guess = (rest) => { for (const d of dirs) if (d === "" || project.roots.has(d)) for (const sub of subs) keys.add(join(d, sub + rest)); };
+  // (`app/` for every alias: narrowed to `~/` in review 3 of 1.35.3, it lost shadcn's `@/*` → `./app/*` to spare a match
+  // that needs the same file under `app/` and `src/` — review 4)
+  const guess = (rest) => { for (const d of dirs) if (d === "" || project.roots.has(d)) for (const sub of ["", "src/", "app/"]) keys.add(join(d, sub + rest)); };
   if (RE_ALIAS_SPEC.test(low)) { const rest = clean(low.replace(/^[@~]\//, "").replace(/^#/, "").split("/")).join("/"); if (rest !== "") guess(rest); } else if (segs.length >= 2) guess(segs.join("/"));
   return keys.size ? { keys } : null;
 }
@@ -1872,13 +1874,20 @@ const pointsTo = (key, at) => {
   return false;
 };
 // The project's roots and its workspace packages' names — from the walk's manifests, read on first use. A name is asked
-// lazily: the manifests whose folder bears its last segment first (`@acme/ui` in `packages/ui/`, an index built once),
-// then the others in the walk's order, each with a budget of its own (DS_PACKAGE_NAMES — review 3 of 1.35.3: one budget,
-// a miss asked first — `next/link` — spent it, and `@acme/ui` behind 520 examples was lost again; and every miss scanned
-// every manifest's folder name, ×7.8 on 1,500 packages: the index).
+// lazily: first the manifests whose folder bears its last segment (`@acme/ui` in `packages/ui/`: an index built once,
+// each folder name's group read once), then the others in the walk's order from where the last ask stopped — one pass
+// over them in all —, each with a budget of its own (DS_PACKAGE_NAMES — review 3 of 1.35.3: one budget, a miss asked
+// first — `next/link` — spent it, and `@acme/ui` behind 520 examples was lost again; and every miss scanned every
+// manifest's folder name, ×7.8 on 1,500 packages: the index; review 4: each miss walked the manifests again and read its
+// folder name's group again, ×4 to ×8 — the cursor, a group once). A name's folders are the ones named like its last
+// segment, all of them (shadcn's templates each hold a `packages/ui` named `@workspace/ui`: the first alone lost the
+// others' — review 4), else the first other folder read under it; so whichever import asks first, the folder named like
+// the package wins over an example of the same name the walk met before it (review 4: `next/link` asked first bound
+// `@acme/ui` to `examples/a`).
 function projectPlaces(manifests, roots) {
-  const names = new Map(), read = new Set(), spent = { own: 0, walk: 0 };
-  let bySegment = null;
+  const found = new Map(), read = new Set(), grouped = new Set(), spent = { own: 0, walk: 0 };
+  let bySegment = null, walked = 0;
+  const lastOf = (s) => s.slice(s.lastIndexOf("/") + 1).toLowerCase();
   const readOne = (m, budget) => {
     if (read.has(m) || spent[budget] >= DS_PACKAGE_NAMES) return;
     read.add(m);
@@ -1886,17 +1895,20 @@ function projectPlaces(manifests, roots) {
     const text = readFileHead(m.full, DS_READ_CHARS);
     let j = null;
     try { j = text == null ? null : JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { /* no manifest */ }
-    if (j && typeof j.name === "string" && j.name !== "" && !names.has(j.name.toLowerCase())) names.set(j.name.toLowerCase(), m.dir);
+    if (!j || typeof j.name !== "string" || j.name === "") return;
+    const name = j.name.toLowerCase(), named = lastOf(m.dir) === lastOf(name), e = found.get(name);
+    if (!e || (named && !e.named)) found.set(name, { dirs: [m.dir], named });
+    else if (named) e.dirs.push(m.dir);
   };
   const packageOf = (name) => {
-    if (names.has(name)) return names.get(name);
     if (!bySegment) {
       bySegment = new Map();
-      for (const m of manifests) { const s = m.dir.slice(m.dir.lastIndexOf("/") + 1).toLowerCase(); if (!bySegment.has(s)) bySegment.set(s, []); bySegment.get(s).push(m); }
+      for (const m of manifests) { const s = lastOf(m.dir); if (!bySegment.has(s)) bySegment.set(s, []); bySegment.get(s).push(m); }
     }
-    for (const m of bySegment.get(name.slice(name.lastIndexOf("/") + 1)) || []) { if (names.has(name)) break; readOne(m, "own"); }
-    for (let k = 0; k < manifests.length && !names.has(name) && spent.walk < DS_PACKAGE_NAMES; k++) readOne(manifests[k], "walk");
-    return names.has(name) ? names.get(name) : null;
+    const seg = lastOf(name);
+    if (!grouped.has(seg)) { grouped.add(seg); for (const m of bySegment.get(seg) || []) readOne(m, "own"); }
+    for (; walked < manifests.length && !found.has(name) && spent.walk < DS_PACKAGE_NAMES; walked++) readOne(manifests[walked], "walk");
+    return found.has(name) ? found.get(name).dirs : null;
   };
   return { roots, packageOf };
 }

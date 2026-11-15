@@ -733,15 +733,21 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `projectPlaces` (the folders holding a package.json / tsconfig.json / jsconfig.json, DS_PROJECT_ROOTS; the manifests'
   `name`s asked lazily by `packageOf` — the folders that bear the name's last segment first, from an index built once,
   then the walk's order, each with a budget of DS_PACKAGE_NAMES: review 2, the walk's first 500 lost `@acme/ui` behind
-  520 examples; review 3, one shared budget let a miss asked first spend it): a relative path; a bare or scoped module
-  as a workspace package's (its folder, its subpath and the subpath below its `src/`; the root's own: no leading `/`,
-  review 2); `RE_ALIAS_SPEC` (`@/`, `~/`, `#`) and a path of two segments or more from each root above the file and its
-  `src/` — and its `app/` for a `~/` alias alone (review 2: `~/*` → `./app/*`, React Router's; review 3's oracle run:
-  tried for every alias, `app/` took a file a `@/*` → `./src/*` config never points to). A tsconfig's `paths` are NOT read: review 2 had them
-  read, and review 3 found them taking a `..` target as text, read past every bound (20,000 `tsconfig.<x>.json` in a
-  folder: 13.6 s) and short of TypeScript's own rules three ways (a `*` catch-all, two configs in a folder, the longest
-  prefix) — the guess that lost nothing stands, and an alias spelled like a scope or pointing elsewhere is a row to add
-  by hand — another package names no file of the project, and is none (review 1: the module's
+  520 examples; review 3, one shared budget let a miss asked first spend it; review 4, each folder name's group is read
+  once and the walk goes on from where the last ask stopped — each miss walked the manifests again, ×4 to ×8. A name's
+  folders are EVERY one named like its last segment — shadcn's templates each hold a `packages/ui` named
+  `@workspace/ui`, the first alone lost the others' —, else the first other folder read under it, so whichever import
+  asks first, an example of the same name never takes the package's place — `next/link` asked first had bound `@acme/ui`
+  to `examples/a`, review 4): a relative path; a bare or scoped module as a workspace package's (each of its folders, its
+  subpath and the subpath below its `src/`; the root's own: no leading `/`, review 2); `RE_ALIAS_SPEC` (`@/`, `~/`, `#`)
+  and a path of two segments or more from each root above the file — the project's own folder always — and its `src/` /
+  `app/` (review 2: `~/*` → `./app/*`, React Router's; review 3 narrowed `app/` to `~/`, review 4 restored it: shadcn's
+  React Router monorepo writes `@/*` → `./app/*`, and the match narrowing spared needs the same file under `app/` and
+  `src/`). A tsconfig's `paths` are NOT read: review 2 had them read, and review 3 found them taking a `..` target as
+  text, read past every bound (20,000 `tsconfig.<x>.json` in a folder: 13.6 s) and short of TypeScript's own rules three
+  ways (a `*` catch-all, two configs in a folder, the longest prefix) — the guess, which lost nothing on the corpus,
+  stands, and an alias spelled like a scope or pointing elsewhere (Laravel's `./resources/js/*`) is a row to add by
+  hand — another package names no file of the project, and is none (review 1: the module's
   segments matched ANYWHERE, `@wordpress/components` was every `components/` folder) —; `pointsTo` takes a file or a
   folder (its index, a barrel's file under it) of a key (`moduleKey`: lower case, no extension, no platform infix),
   asked of the file's own prefixes against a Set of the keys (review 2: a page thirty roots deep had ninety keys, each
@@ -1632,13 +1638,28 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   key and a name that can take one are one-segment names (`RE_NAME_SEGMENT`) before anything is asked. MEDIUM: the
   tsconfig `paths` reading review 2 added took a `..` target as text (chakra's own `apps/www` configs) and read every
   `tsconfig*.json` with no bound — together with three LOWs on its semantics (a `*` catch-all, two configs in a folder;
-  and, noted, the longest prefix), the reading was taken out, not refined: the guess from the roots, `src/` and (for `~/`) `app/`
+  and, noted, the longest prefix), the reading was taken out, not refined: the guess from the roots, `src/` and `app/`
   covers React Router's `~/*` → `./app/*`, and what it cannot see is said. LOW: `packageOf` scanned every manifest's
   folder for each miss and shared one budget with the walk's reads (an index, two budgets); a provider root matched by
   an exported name could be another binding (the local one only); pnpm's negations moved last let Lerna's default in;
   15 of the reviewer's 50 mutants survived — fixtures for the reachable ones (a `**` across two folders, a `*` name that
   must not match, `module` / `exports`, two aliases away, a jsconfig.json root). Found replaying the reviewer's probes
-  on the fix: `app/`, guessed for every alias, took a file a `@/*` → `./src/*` config never points to — a `~/` alias's
-  alone now. Lesson, the series' own: a LOW of review
+  on the fix: `app/`, guessed for every alias, took a file a `@/*` → `./src/*` config never points to — narrowed to a
+  `~/` alias's (review 4 restored it). Lesson, the series' own: a LOW of review
   2 answered with a new mechanism (the configs) brought review 3's two MEDIUMs — a fix's reach must stay the finding's;
   when the cheap answer (`app/` in the guess) covers the case found, the larger one waits for a release of its own.
+- **1.35.3 review 4** (the fourth short round: one fresh reviewer on 7ab042a; the corpus identical to b86a52f's, report
+  time ×0.76 to ×1.08; the HIGH's file 1,634 → 16 ms) — no HIGH, no MEDIUM; 4 LOW, 1 cosmetic, fixed without a round of
+  their own, as agreed. LOW: a package name's folder hung on which import asked first — a miss (`next/link`) walked to
+  `examples/a`, named `@acme/ui` too, before `packages/ui` was asked, and only the first of shadcn's seven
+  `@workspace/ui` templates was a package: every folder named like the name's last segment is one of its, and wins over
+  any other (already so in review 2's tree); each miss walked the manifests again and read its folder name's group again
+  (×4 to ×8 isolated, tens of ms on the corpus's largest): a cursor, a group once; review 3's narrowing of `app/` to `~/`
+  lost shadcn's React Router monorepo (`@/*` → `./app/*`, a layout its CLI writes) to spare a match that needs the same
+  file under `app/` and `src/` — restored, and "the guess that lost nothing" said of the corpus alone; test gaps — a bare
+  path into `app/`, a folder in capitals. Cosmetic: the project's own folder is a root with no manifest. Survivors kept,
+  each a bound of reads linear in what the walk already met: the folder-name group's own budget (with the roots kept
+  bounded: a group of 5,000 costs ×1.5 to ×1.8, no fixture tells it from load) and the walk's restart and the group read
+  at each ask (tens of ms at the corpus's scale). Lesson: a narrowing is a change of rule like any other — review 3's
+  was checked against the probe that prompted it and the fixtures, never against the layouts the wider rule served;
+  ask "who writes this alias?" of the starters (shadcn's, Laravel's, T3's) before taking a shape out.

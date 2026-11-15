@@ -13,11 +13,11 @@ the code scan now asks the project's other files. A component is what the projec
   component when a file of the project RENDERS it — `<MotionBox />`, `<Card.Header>`, `<UI.Content />` through a
   namespace, `Press <Kbd /> to save` —, followed through the file's imports to the files the module may be: a relative
   path (the file, its folder's index, a file under a barrel's folder); a workspace package by its manifest's `name`
-  (`@acme/design` in `packages/kit-internal/`, the root's own, a subpath below its `src/`: `@repo/ui/components/kit`);
-  `@/…`, `~/…`, `#…` and a path of two segments or more from each project root above the file (a folder with a
-  `package.json`, `tsconfig.json` or `jsconfig.json`) and its `src/` — and its `app/` for `~/…` (`~/*` → `./app/*`,
-  React Router's); a
-  default import (`export default X`, `export { X as default }`, `export default function`, `module.exports = X`), a
+  (`@acme/design` in `packages/kit-internal/`, the root's own, a subpath below its `src/`: `@repo/ui/components/kit`;
+  every folder named like it that bears the name — each of shadcn's templates holds a `@workspace/ui` —, never an
+  example of the same name); `@/…`, `~/…`, `#…` and a path of two segments or more from each project root above the
+  file (a folder with a `package.json`, `tsconfig.json` or `jsconfig.json`, and the project's own folder) and its
+  `src/` / `app/` (`~/*` → `./app/*`, React Router's; `@/*` → `./app/*`, shadcn's React Router monorepo); a default import (`export default X`, `export { X as default }`, `export default function`, `module.exports = X`), a
   `require`. Any other module — another package, even one whose last segment is the project's folder
   (`@wordpress/components`, `@other/ui`) — settles nothing. So `motion(Box)`, `createComponent(config)`, `createSvgIcon(<path />, "Home")`, `createIcon({ … })`,
   `createField({ type }, fn)`, `contextConnect(Menu, "Menu")`, a class that renders through its imported base, `export
@@ -67,8 +67,8 @@ Still a row to add by hand: a component no file of the project renders where the
 in another repository; a name rendered only past the bound, or by a default import under another local name in a file
 that writes none of the names asked; one rendered through a re-export outside a component folder's `index.ts`
 (`export * as Tooltip from "./namespace"`, a `namespace.ts` of renamed re-exports), through a tsconfig `paths` alias
-spelled like a scope (`@components/*`) or pointing elsewhere than a root's own folder or its `src/` (its `app/` for a
-`~/…` alone) — a tsconfig's `paths` are not read — or a package's `exports` map, or only in `.mdx` / `.vue` /
+spelled like a scope (`@components/*`) or pointing elsewhere than a root's own folder, its `src/` or its `app/`
+(Laravel's `./resources/js/*`) — a tsconfig's `paths` are not read — or a package's `exports` map, or only in `.mdx` / `.vue` /
 `.svelte` files or with `React.createElement(X)`; one in a lower-case `.js` file or in a `.ts` file that is no
 component folder's barrel, and a real component the project only calls. Still listed, knowingly: a helper, a part on
 an imported name that is none, or a call whose function renders (`memoize((n) => <Icon />)`), while the project never
