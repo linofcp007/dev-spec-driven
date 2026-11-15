@@ -458,11 +458,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   lines an unclosed `export {` or `import {` may take, and the file's own length for all that its declarations
   read BELOW their line (a real file's never overlap; a file of `const A: X<` lines read sixty lines for each —
   spent, a declaration has no value and the file says `more`). A component with a file of its own keeps that file (read
-  after every file's own name is known); a route segment's special file is a page and is not read. What it misses
-  is a row to add by hand, and the `unknown` hint still says so (1.35.2 read most of what 1.35.1 listed here — The
-  export reader's view, below): a component made by a call that shows nothing (`createComponent(config)`,
-  `observer(() => null)`, a wrapper around a name the file never imports), a class that renders only through its
-  imported base, CommonJS `exports.X`, a re-export from a package under a new name, a barrel that declares. A feature's own files are read
+  after every file's own name is known); a route segment's special file is a page and is not read. What one file
+  cannot settle the project's other files may (What the project's files settle, below — 1.35.3: a component made by a
+  call that shows nothing, a class that renders only through its imported base, CommonJS, a re-export under a new name
+  in a component folder's barrel); what NO file renders where the reader sees it is still a row to add by hand, and
+  the `unknown` hint still says so. A feature's own files are read
   the same way for its New components' paths (`featureReport`: the finish wrote `—` for one its file exports
   beside the file's own — a component file's alone, its own file first). Review 1 of 1.35.1 measured the first
   draft on six real kits: 197 of 218 found, 7 non-components listed; its fix round found 204 and listed two, both
@@ -576,13 +576,28 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   never inside a folder that is a package: its `src/` and `dist/` are its own, and looked into they spent the
   folders listed; review 2); a
   `\` is a separator on every platform. A project that declares NONE is looked through one level down
-  (`frontend/package.json` beside a Django app, `client/` + `server/`) — one level only: every further level is a
-  listing per folder on every registry read — and only when its root is no package of its own, with `dependencies`:
+  (`frontend/package.json` beside a Django app, `client/` + `server/`) and — 1.35.3 — when that level holds no
+  package at all, the next (`apps/web/`; review 1 of 1.35.3: looked through as `**`, a `web/` app's `fixtures/x/`
+  was read too), a bound of that guess never said (no declared folder went unread: `guessed`, which keeps the `cut`
+  it found); "declares" is a workspace FILE being there (`declares`:
+  package.json's `workspaces` key, pnpm-workspace.yaml, rush.json, lerna.json) — one that names nothing it can read is
+  looked through one level as before — and only when its root is no app of its own, with `dependencies` (`own`); a root
+  that looks like a library (`library`: not `private` — a private one is never published, its `main` is a script's —
+  with a `name`, `peerDependencies` / `main` / `module` / `exports`) keeps the first level and never the second (review 1: the second read a library's `examples/with-mui/`;
+  review 2: blocking both lost an `npm init` root's `client/` — `npm init` writes a `name` and a `main`):
   an app whose `docs/` or `storybook/` site keeps another kit is not that kit's project (review 1 of 1.35.1: the
   union made the report ask, for good, for libraries the app does not use). What a pattern never reaches: upward
   (`..`), a link (a `*` match is a Dirent that is no directory; a NAMED folder is asked itself, `lstat`; a manifest
   that is a link out of the project is not read), and a `*` never matches a dot folder or node_modules — a NAMED
-  one is the project's own word. A `!negation` removes nothing; said in the user docs. A brace list is expanded
+  one is the project's own word. A `!negation` takes its folders out (1.35.3 — it removed nothing until then):
+  `negation` reads its pattern as `braceExpand` and the walk do (a `*` within a name, two at most; `**` any folders,
+  none too; out of the project, too long or too deep: none), each alternative's segments compiled ONCE (review 1: a
+  matcher built for every folder against 6,000 negations of ten packages took 103 s) and matched by `globMatch`, a
+  dynamic program over segments × names — never one RegExp over the path (review 2: `**` and two-`*` names in one
+  backtracked, 13.8 s a line). A folder it matches is never given — by the patterns BEFORE it, npm's order (a later
+  pattern gives it back), the project's own and a workspace package's for its folder (its place: where its next pattern
+  is queued); pnpm-workspace.yaml's are put LAST (`workspacePatterns`), where they narrow every pattern, as pnpm reads them
+  (review 2). `DS_WORKSPACE_NEGATIONS` alternatives, asked before one is compiled — past them said (`cut`). A brace list is expanded
   first (`braceExpand`, 1.35.2: the first list and the `}` that closes it, cut at the commas of its own depth — a nested
   list adds its names, it does not multiply them; `DS_WORKSPACE_BRACES` patterns a list). A declared
   pattern the reader does not FOLLOW — past a bound, a brace list it cannot expand (of one, never closed), a
@@ -624,7 +639,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   capitalised names the file calls as a function). A statement's EXTENT is `[i, next[i])`: its closing lines at the
   margin are its own — the formatting every formatter gives —, and NO bracket is matched across lines (a `(` in JSX
   text or in a regex would derail one). On it stand: a call of any function is a component when its extent
-  holds JSX or loads (`RE_DYNAMIC_IMPORT`) — UNLESS what its LAST argument list holds first is an object, a list or
+  holds JSX or loads (`RE_DYNAMIC_IMPORT`) AND it is given a function (1.35.3, `RE_GIVES_FUNCTION`: an arrow, the
+  word `function` or a method's shorthand in its extent — with none, its JSX is an element handed over, `mount(root,
+  <App />)`, `createRoot(el).render(<App />)`, and a value that IS `import("./x")` a promise, `RE_PLAIN_VALUE`) or a
+  component's name or a string first (`RE_HOC_FIRST`, below) — UNLESS what its LAST argument list holds first is an object, a list or
   an element (`givenFirst` over `lastList`: the list at the call's own depth, never a `)(` inside an argument, the
   callee's type arguments aside; on its line, or the first line below when the list opens and the line ends — or
   the list a LATER line opens at the statement's own margin, `})((props) => …`: `curriedFirst`, review 4): a
@@ -668,16 +686,96 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   asked of the names an import of `react` gives (`RE_VALUE_SPACED`); a destructuring from an import, or a `require`,
   gives names an alias may stand on (`borrowed`). Linear: every pattern has its hostile line in the tests, and an
   extent has no cap because extents never overlap — the main loop asks statement STARTS only: a line that starts
-  inside a template is none (asked, its extent was the file's — review 4 of 1.35.2). Known, and said in the user docs: an even number of stray
-  backticks hides what stands between them, a template inside another's `${ … }` over lines is read as code; an
-  alias or a part that stands on an imported name is taken for a component (the name's own file would say), and so
-  is a call that only looks like one's (its extent holds JSX and it is given no object first — `mount(root,
-  <App />)` —, an object with a `render`, a component of the file — `createContext(Button)` —, curried around an
-  import); text at the margin that begins a NAME ends the statement it stands in (a `<pre>`'s lines), a quote right
-  after a word opens no string (minified `return'…'`), and a HOC given a component AND another argument shows
-  nothing (`contextConnect(Root, "Name")` — 41 components of one kit); a class that is no React component and
-  renders JSX is listed; and a REAL component with three parameters, a capitalised first one, or called in its
-  file with no JSX of its own is taken for a helper.
+  inside a template is none (asked, its extent was the file's — review 4 of 1.35.2). A regular expression's literal
+  holds no template (1.35.3, `regexEnd` in `templateOpen`: a `/` where a value starts — after `( , = : [ ! & | ? ; {`,
+  an arrow's `=>`, `return` / `typeof` / `case`… — to the `/` that closes it outside a `[…]`, on its line; once one
+  does not close no further one is looked for on the line: linear), and a quote right after `return` / `case` /
+  `typeof`… opens a string (`RE_QUOTE_KEYWORD` in `opensString`: minified `return'</b>'`). Known, and said in the
+  user docs: a stray backtick in an element's text hides what stands up to the next one, a template inside another's
+  `${ … }` over lines is read as code; text at the margin that begins a NAME ends the statement it stands in (a
+  `<pre>`'s lines); a REAL component with three parameters, a capitalised first one, or called in its file with no
+  JSX of its own is taken for a helper — each settled since 1.35.3 when the project renders it (next).
+- **What the project's files settle** (`usesOf`, `settle`, design-system.js — 1.35.3) — what one file cannot know,
+  the others show: a component is RENDERED, a helper is CALLED. `kindOf` tells STRONG (a function whose extent — an
+  entry's own text — holds JSX, React's wrapper, `styled`, a context's provider, a class that extends React's or the
+  file's own, another name of a strong one: `strong`, passed down the alias passes) from WEAK (a function with no JSX,
+  any call the rules take, a class by `renders` alone, a HOC applied: `applies` — and a part that stands on an import;
+  a TOP-LEVEL alias of an import is never asked, `own` or a part's `.` only: the project nearly always renders one, and
+  asking each read a big project's files for nothing, review 1); a literal (`RE_PLAIN_VALUE`: a string, a number, an
+  object, a list, an instance — `new X()`, a cost guard: review 2…) and a context (`RE_CREATE_CONTEXT`: `createContext(…)`, React's API — React 19 renders one as its
+  own provider, `<X value>`: fourteen of a kit's listed, review 1) are `plain` — never a name to settle. A call given no
+  function keeps its verdict when what it is given first is a component's name or a string (`RE_HOC_FIRST`: a HOC's
+  shape, `withContext(Ark.Arrow, …, { defaultProps: { children: <Tip /> } })`, or an element factory's tag,
+  `withContext("span", …)` — six of a kit's lost, review 1; `t("hint", { link: <a /> })` has the second shape and is
+  listed knowingly), and a method's shorthand is a function given (`withProvider("div", "root", { wrapElement(…) { …
+  } })`). The file
+  gives back its `weak` names and its `candidates` — what it exports and the rules take for none (`!declared`), its
+  undeclared parts (`looseOf`: settled once an owner, the cost guard against parts × names), its re-exports under a name
+  of its own or a package's (`reexported`) —, DS_EXPORT_NAMES of them, past it `more`; and its `defaultName`. `usesOf`
+  reads a view: its imports (`importClause`: a default, `* as NS`, `{ a as b }`, over lines — a `type` one needs no
+  skip: what only a type names is neither rendered nor called —;
+  a `require` — `RE_REQUIRE_DECL` —, a whole one as a namespace), the tags it RENDERS (`RE_TAG_NAME`: a capitalised
+  name or a member, `<a.b`, where an expression may start — never after a name, a `)` or a `]`, unless `return` /
+  `yield`… (`RE_TAG_KEYWORD`) or the tag closes itself (`RE_SELF_CLOSED`: JSX text's `Press <Kbd />`) — nor a type
+  parameter: `<T,>`, `<T extends X>`, `<T = …>` (`RE_TYPE_PARAM_AFTER`); every closing tag), a provider's tag as written
+  (`providers`: `<X.Provider>` / `<X.Consumer>` — settle tells a context from a part named so), a context read
+  (`RE_USE_CONTEXT`: `useContext(X)`, React 19's `use(X)` — bare or React's, never `app.use(Router)`: `contexts`), a
+  part read as an object (`RE_MEMBER_READ`: `Button.Sizes.Large`, `UI.List.Sizes.Large` through a namespace — never in
+  a tag) and scriptView's `called`. `settle` asks the names of every component file read (and of a component folder's
+  barrel, `RE_BARREL` + `inComponentFolder`: read apart from the component files' DS_EXPORT_FILES — a kit of
+  `button/index.ts` + `button/button.tsx` folders reads as many as before — its weak names "unproven": a `.ts` file
+  holds no JSX) of their own file (by the local name) and of every other script of the project (DS_USAGE_FILES and
+  DS_USAGE_CHARS read, the files that may hold JSX first, then the shorter path; a file that writes none of the names
+  asked, nor a default export's, is never viewed; a `.ts` one is read only when a weak name is asked — it may call,
+  never render; a story's or a test's CALL is no evidence — `render: (args) => Button(args)`, review 1): a name it
+  writes is followed through its import (`resolve`, once a folder, a module and a name: one name exported by a
+  thousand kits walked their list for each tag, review 1) to the files the module may be — `placeOf` over the walk's
+  `projectPlaces` (the folders holding a package.json / tsconfig.json / jsconfig.json, DS_PROJECT_ROOTS; the manifests'
+  `name`s asked lazily by `packageOf` — the folders that bear the name's last segment first, from an index built once,
+  then the walk's order, each with a budget of DS_PACKAGE_NAMES: review 2, the walk's first 500 lost `@acme/ui` behind
+  520 examples; review 3, one shared budget let a miss asked first spend it; review 4, each folder name's group is read
+  once and the walk goes on from where the last ask stopped — each miss walked the manifests again, ×4 to ×8. A name's
+  folders are EVERY one named like its last segment — shadcn's templates each hold a `packages/ui` named
+  `@workspace/ui`, the first alone lost the others' —, else the first other folder read under it, so whichever import
+  asks first, an example of the same name never takes the package's place — `next/link` asked first had bound `@acme/ui`
+  to `examples/a`, review 4): a relative path; a bare or scoped module as a workspace package's (each of its folders, its
+  subpath and the subpath below its `src/`; the root's own: no leading `/`, review 2); `RE_ALIAS_SPEC` (`@/`, `~/`, `#`)
+  and a path of two segments or more from each root above the file — the project's own folder always — and its `src/` /
+  `app/` (review 2: `~/*` → `./app/*`, React Router's; review 3 narrowed `app/` to `~/`, review 4 restored it: shadcn's
+  React Router monorepo writes `@/*` → `./app/*`, and the match narrowing spared needs the same file under `app/` and
+  `src/`). A tsconfig's `paths` are NOT read: review 2 had them read, and review 3 found them taking a `..` target as
+  text, read past every bound (20,000 `tsconfig.<x>.json` in a folder: 13.6 s) and short of TypeScript's own rules three
+  ways (a `*` catch-all, two configs in a folder, the longest prefix) — the guess, which lost nothing on the corpus,
+  stands, and an alias spelled like a scope or pointing elsewhere (Laravel's `./resources/js/*`) is a row to add by
+  hand — another package names no file of the project, and is none (review 1: the module's
+  segments matched ANYWHERE, `@wordpress/components` was every `components/` folder) —; `pointsTo` takes a file or a
+  folder (its index, a barrel's file under it) of a key (`moduleKey`: lower case, no extension, no platform infix),
+  asked of the file's own prefixes against a Set of the keys (review 2: a page thirty roots deep had ninety keys, each
+  asked of every exporting file), by the exported name (`byName`),
+  a default import by the file's base name (`byBase`) and its `defaultName`. A provider's tag is the part it names when
+  the file gives one so (`exportsOf` — a candidate part too, hung on what an alias stands on, review 2 —: `Tooltip.Provider`
+  of `Object.assign(Root, { Provider })`; in its own file by the local name or the exported one, `TipRoot.Provider`
+  rendered as `<Tip.Provider>`, review 2), else its root used as a context; a member read settles a part alone (a component's static, `UI.Badge.displayName`, is none). The verdict:
+  a candidate is a component when rendered and never a context; a weak one is none when a context, or called / read as
+  an object and never rendered; an unproven one only when rendered. A STRONG one is never asked. Every file's names are
+  rows before any candidate (a barrel's re-export took the row of the file that declares it, review 1). The bound
+  ends the search WITHOUT A WORD — evidence looked for, as the global stylesheets are (review 5 of 1.35.0): said
+  (review 1's `usage-files`) it put mui, mantine and gutenberg out of sync for good, and what lies past it is a name its
+  file's rules settle alone, 1.35.2's reading. A feature's report reads none of it — nor the exports (`scanCode(root,
+  false)`). Cost: the reads (on Windows about half a millisecond a file — a big monorepo's report takes seconds more);
+  the views are linear (the cost fixtures, each a ratio: runs of tags, of members, an import clause that never closes,
+  lines of `(/` with a backtick, 2,000 undeclared parts under 2,090 names, a page that names nothing asked, one name of
+  a thousand kits through a hundred namespaces, a barrel's 500 re-exports of the project's own file). What it cannot
+  see, said in the user docs: a name no file renders where the reader sees it (a kit consumed elsewhere; past the
+  bound; a default import under another local name in a file that writes none of the names asked; through a re-export
+  outside a component folder's `index.ts`, a tsconfig `paths` alias spelled like a scope or to another folder, a
+  package's `exports` map; in
+  `.mdx` / `.vue` / `.svelte`; `React.createElement(X)`), a component the project only calls; a helper, a part on a
+  name that is none, a call whose function renders, while the project never calls them nor reads them as objects; a
+  top-level alias of an import that is none; a call given a string or a capitalised name first, or a method beside an
+  element, whose JSX is an element handed over (`t("hint", …)`, React's element cloner given a component first); a call
+  given an object with a `render`, or curried around an import; a class that renders JSX and that the project never
+  constructs.
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),
@@ -1471,3 +1569,97 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   deleting one, time the hostile inputs without it; (2) a bound moved into a helper must keep its every caller
   bounded — the walk below the `)` lost its bound when the line it started from changed; (3) compare a fix round
   with its PARENT first, and say which version a number is against.
+- **1.35.3** (the owner's "resolve all of that" after 1.35.2's report: what it left to add by hand and what it listed
+  knowingly). Four releases had refined what ONE file's text tells; what was left is what it cannot tell — so the scan
+  asks the project's other files (What the project's files settle): a component is rendered, a helper is called. Beside
+  it: a call is one only when it is given a function (an element handed over, a promise of a module are none), two
+  parts on one line, CommonJS, a component folder's barrel, a regex's backtick, a string after `return`, a workspace
+  `!negation`, two levels down when nothing is declared. What the first draft got wrong, found before the commit:
+  candidates × parts asked once per exported name (8 million joins for a file of 2,090 names and 4,000 statics: 4.9 s —
+  `looseOf` settles an owner once, and a literal is no candidate); barrels counted against the component files (a kit of
+  `index.ts` + component per folder would have hit the bound at half its size); a `.ts` file read when only candidates
+  were asked (it can never render: an Angular monorepo would have read thousands for nothing); `module.exports = { … }`
+  cut at a value's first `}` (the export-list reader never expects braces — now its literal is read by depth); a
+  workspace file that names nothing read as "declares none" (rush.json with no project, a pnpm list that never closes).
+  The mutation list was written before the fixtures: 93 mutants, 85 caught at first; of the eight, three were code no
+  input reaches — deleted (a `type` import's skip: what only a type names is neither rendered nor called; `pointsTo`'s
+  `/index`, which a file under the folder already is; one of two `full` guards, each enough alone) — and five wanted a
+  fixture (an arrow with and without JSX the project calls, an `exports.X` alone, the parts cost in a project of its
+  own, a page that names nothing asked: never parsed). 90 of 90 on the last pass.
+- **1.35.3 review 1** (one fresh reviewer on the feature commit; 17 public repositories cloned shallow — 106,069 files,
+  8,847 names compared with 6571453 —, 25 rule cases, 9 workspace layouts, 7 cost probes, 44 mutants) — 1 HIGH, 6
+  MEDIUM, 10 LOW, 2 cosmetic, all but four regressions. HIGH: a workspace package's `!negations` had no bound and a
+  matcher was built for every folder (103 s for ten manifests) — now each alternative is one RegExp compiled once,
+  200 of them, said past it. MEDIUM: React 19 contexts listed (rendered as their own provider, read with `use`: now
+  `createContext` is never a name to settle); six real components of a kit dropped (`withContext(Ark.X, …, { …
+  <Y /> })`: a component's name or a string first keeps the verdict, and a method's shorthand is a function given);
+  a weak root dropped by its own `Provider` part's tag; another package's module settled the project's names (its
+  segments matched anywhere: now an alias goes from the project's roots, a bare or scoped module only to a workspace
+  package's manifest `name`); `usage-files` put three of the repositories out of sync for good (now the search ends
+  without a word, as the global stylesheets' — the precedent of review 5 of 1.35.0); one name exported by a thousand
+  kits walked their list for each tag (`resolve` is memoised). LOW: a re-export took the row's path (names before
+  candidates), a component's static read through a namespace and a story's call dropped weak components, the guess
+  read a library's `examples/` and a `web/` app's `fixtures/` (a published root is a package of its own; the second
+  level only when the first holds none), negations ignored the order npm reads them in, the barrels' bound count, the
+  docs' lists. Beside them, found re-running the reviewer's tools: a top-level alias of an import asked for nothing
+  but cost (no longer asked), a statement's JSX asked once an entry (cached). (Said here, at first, that "the corpus
+  ratio fell from ×2.5–×8.7 to ×1.0–×4.0": one run on a quieter machine — review 2 measured ×1 to ×9 against 1.35.2 and
+  no fall against the feature commit; the user docs give the measured range.) After the fixes, on the same corpus: no name a real component lost, 0 `usage-files`, Chakra's 6
+  drops and Mantine's 14 contexts gone; the reviewer's rules 0 failing. Lessons: (1) a module's NAME is no path —
+  resolve it the way a bundler would (roots, workspace names) or not at all; (2) evidence searched for ends without a
+  word, as a candidate search does — a bound said there makes every big project a false alarm; (3) when a new rule
+  (a function given) drops real shapes, find what the shapes share (a component or a tag first, a method) before
+  narrowing the rule's reach.
+- **1.35.3 review 2** (the short round the owner chose: one fresh reviewer on review 1's fix commit, three trees side
+  by side — d6e00d1, 69a2765, 6571453 —, the 17 repositories again, 60 mutants) — 1 HIGH, 2 MEDIUM, 8 LOW, 3
+  cosmetic. HIGH: review 1's own fix — the negations compiled into one RegExp over the path — backtracked exponentially
+  (13.8 s for one line of `**` and two-`*` names; the feature's dynamic program was linear): the segments are compiled
+  once and matched by `globMatch` again. MEDIUM: the widened "a package of its own" switched off the first guessed
+  level for any `npm init` root (a `name` and a `main`): the library's signs now block the second level alone; a weak
+  root rendered as its own `<X.Provider>` part in its own file, the part hung on the root's local name, was still taken
+  for a context (`exportsOf` asked too). LOW: aliases of a tsconfig's `paths` (`~/*` → `./app/*`, `@components/*`) and
+  its base URL were guessed, never read (then read, `jsonPlain` — review 3 took the reading out again); the root
+  package's keys began with a `/`; workspace
+  names lost behind 520 manifests (`packageOf`, lazy); a page thirty roots deep cost ×2.8 (`pointsTo` by prefixes); `new`
+  had been dropped from the literals as "no input reaches it" — it was a cost guard (an instance asked read the pages:
+  restored, with a fixture); the docs' ratio claim; pnpm negations read in npm's order (now put last); 16 mutants of the
+  reviewer survived — fixtures for each that is reachable. Found while fixing: a candidate part hung on what an alias
+  stands on was never one (the names' expansion followed `stands`, the candidates' did not); and, re-running the
+  corpus, a regression of this round's own — a folder's default import written `"../"` was looked up by its TEXT's last
+  segment (none) instead of where it resolves: gutenberg's block title component, rendered in its own test, was lost. Lessons: (1) a fix that
+  compiles a matcher must keep the matcher's complexity — "compile once" is no licence to change the algorithm;
+  (2) widening a rule to cover one layout (`examples/`) must be checked against the layouts the old rule served
+  (`npm init`'s root); (3) "no input reaches it" is a mutation's verdict on the TESTS — a cost guard needs a timed
+  fixture before it is deleted.
+- **1.35.3 review 3** (the third short round: one fresh reviewer on b86a52f; four trees side by side; `globMatch`
+  against a reference matcher on 200,018 cases, no mismatch; the corpus identical to d6e00d1's) — 1 HIGH, 2 MEDIUM,
+  7 LOW, 4 cosmetic, each HIGH and MEDIUM made by review 2's fixes. HIGH: the candidates' new `stands` chain asked a part
+  no name could take (`P_1`, a lower-case alias) once a name — never stopped by the 500, 13.6 s for one file: a part's
+  key and a name that can take one are one-segment names (`RE_NAME_SEGMENT`) before anything is asked. MEDIUM: the
+  tsconfig `paths` reading review 2 added took a `..` target as text (chakra's own `apps/www` configs) and read every
+  `tsconfig*.json` with no bound — together with three LOWs on its semantics (a `*` catch-all, two configs in a folder;
+  and, noted, the longest prefix), the reading was taken out, not refined: the guess from the roots, `src/` and `app/`
+  covers React Router's `~/*` → `./app/*`, and what it cannot see is said. LOW: `packageOf` scanned every manifest's
+  folder for each miss and shared one budget with the walk's reads (an index, two budgets); a provider root matched by
+  an exported name could be another binding (the local one only); pnpm's negations moved last let Lerna's default in;
+  15 of the reviewer's 50 mutants survived — fixtures for the reachable ones (a `**` across two folders, a `*` name that
+  must not match, `module` / `exports`, two aliases away, a jsconfig.json root). Found replaying the reviewer's probes
+  on the fix: `app/`, guessed for every alias, took a file a `@/*` → `./src/*` config never points to — narrowed to a
+  `~/` alias's (review 4 restored it). Lesson, the series' own: a LOW of review
+  2 answered with a new mechanism (the configs) brought review 3's two MEDIUMs — a fix's reach must stay the finding's;
+  when the cheap answer (`app/` in the guess) covers the case found, the larger one waits for a release of its own.
+- **1.35.3 review 4** (the fourth short round: one fresh reviewer on 7ab042a; the corpus identical to b86a52f's, report
+  time ×0.76 to ×1.08; the HIGH's file 1,634 → 16 ms) — no HIGH, no MEDIUM; 4 LOW, 1 cosmetic, fixed without a round of
+  their own, as agreed. LOW: a package name's folder hung on which import asked first — a miss (`next/link`) walked to
+  `examples/a`, named `@acme/ui` too, before `packages/ui` was asked, and only the first of shadcn's seven
+  `@workspace/ui` templates was a package: every folder named like the name's last segment is one of its, and wins over
+  any other (already so in review 2's tree); each miss walked the manifests again and read its folder name's group again
+  (×4 to ×8 isolated, tens of ms on the corpus's largest): a cursor, a group once; review 3's narrowing of `app/` to `~/`
+  lost shadcn's React Router monorepo (`@/*` → `./app/*`, a layout its CLI writes) to spare a match that needs the same
+  file under `app/` and `src/` — restored, and "the guess that lost nothing" said of the corpus alone; test gaps — a bare
+  path into `app/`, a folder in capitals. Cosmetic: the project's own folder is a root with no manifest. Survivors kept,
+  each a bound of reads linear in what the walk already met: the folder-name group's own budget (with the roots kept
+  bounded: a group of 5,000 costs ×1.5 to ×1.8, no fixture tells it from load) and the walk's restart and the group read
+  at each ask (tens of ms at the corpus's scale). Lesson: a narrowing is a change of rule like any other — review 3's
+  was checked against the probe that prompted it and the fixtures, never against the layouts the wider rule served;
+  ask "who writes this alias?" of the starters (shadcn's, Laravel's, T3's) before taking a shape out.
