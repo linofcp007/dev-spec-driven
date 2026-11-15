@@ -174,7 +174,8 @@ function componentOf(rel) {
 //     `= Origin as Compound` — never `= Infinity`, `= Number.MAX_SAFE_INTEGER`, a local enum's member), or — 1.35.2 —
 //     a call of ANY other function that shows what it wraps: it renders (JSX in its statement: `observer(() =>
 //     <div />)`, under another wrapper — `inject("s")(observer(() => …))` —, after another argument) and what its
-//     last argument list holds FIRST is no object, list or element; or it loads on demand (`dynamic(() =>
+//     last argument list (a later line at its margin may open it: `})((props) => …`) holds FIRST is no object,
+//     list or element; or it loads on demand (`dynamic(() =>
 //     import(…))`); it is given a `render` that is defined and JSX (`createReactClass({ … })`); or it is applied to
 //     a component — its last argument list is one name that is a component of the FILE's own (`withRouter(Nav)`),
 //     or, curried, one it imports (`withStyles(styles)(TableCell)`);
@@ -194,13 +195,14 @@ function componentOf(rel) {
 // up to DS_LINE_MAX. What it still misses is a row to add by hand, as the docs say: a component made by a call that
 // shows nothing (`createComponent(config)`, a single call around a name the file only imports — `motion(Box)` —, a
 // call around a component and another argument — `contextConnect(Menu, "Menu")` —, a call given an object first —
-// `createIcon({ … })`), a class with an imported base that renders through it, parts hung on an imported component,
+// `createIcon({ … })`, `createField({ type }, (props) => …)` —, an element first — `createSvgIcon(<path />, "Home")`),
+// a class with an imported base that renders through it, parts hung on an imported component,
 // CommonJS `exports.X`, a re-export from a package under a new name, an element with text at the margin that begins
-// with a letter (it ends the statement). What it still reads too
+// with a letter or follows a line that ends with `;` or `}` (it ends the statement). What it still reads too
 // much, knowingly: a PascalCase helper nothing tells apart (exported, one or two lower-case parameters, never called
 // in its file), an alias or a part that stands on an imported name that is no component (an enum's member,
 // `Button.Sizes = Sizes`), a call that only looks like a component's (its statement holds JSX and it is given no
-// object first — `memoize((n) => <Icon />)`, `mount(root, <App />)` —, given an object with a `render`, around a
+// object first — `memoize((n) => <Icon />)`, `mount(root, <App />)`, `createRoot(el).render(<App />)` —, given an object with a `render`, around a
 // component of the file, curried around an import), a class that is no React component and has a `render` that
 // returns JSX. And the other way: a real
 // component with three parameters, a capitalised first one, or called in its file with no JSX of its own is taken
@@ -346,6 +348,7 @@ const RE_WORD_CHAR = /[\p{L}\p{N}_$]/u;
 const RE_TYPED_PARAM = /^\s*[\p{L}_$][\p{L}\p{N}_$]*\??\s*:/u; // (of what a `(` holds) a parameter with its type: a declaration's list, never a call's
 const DS_CALL_PEEK = 80; // characters read after a `(` / a `)` to tell what the name before it is
 const RE_DYNAMIC_IMPORT = /(?<![\p{L}\p{N}_$.])import\s*\(/u;
+const RE_LOCAL_BEFORE = /(?:^|[^\p{L}\p{N}_$])(?:const|let|var)\s+$/u; // (of the text before a `render =`) a local variable's
 const RE_RENDER = /(?<![\p{L}\p{N}_$.])render\s*(?=[=:(])/gu; // a `render` that is no member's: what follows it tells (scriptView's renders)
 // a line without what its strings hold — the ones that close on it (quoteEnd): `"</div>"` is no JSX, `"Total(x)"` no call
 function withoutStrings(l) {
@@ -468,31 +471,33 @@ function scriptView(text) {
   // (`render(<App />, el)`, `return render(…)`): what follows its `)` tells. Review 2 of 1.35.2: a pattern of one line
   // missed the brace below, a list over lines, a call in a default, a class on one line. Review 3: a list left open is
   // followed down ONCE a line (each `render(` of a line of them read the sixty lines below: 8.8 s a scan), from the
-  // line that closes it (its brace may stand below THAT one); a ternary's call is none.
+  // line that closes it (its brace may stand below THAT one); a ternary's call is none. Review 4: the blank lines below
+  // that `)` were read through to the statement's end, unbounded, once for each `render(` above it (minutes a scan) —
+  // they are read once a line, DS_DECL_LINES deep (readOn).
   const renders = (i) => {
+    const readOn = (q, rest) => { for (let r = q + 1; rest === "" && r < next[i] && r <= q + DS_DECL_LINES; r++) rest = plain[r].trimStart(); return rest; };
     for (let k = i; k < next[i]; k++) {
       const p = plain[k];
       if (!p.includes("render")) continue;
-      let close = null, below; // below: the line that closes a list left open on this one, and what follows its `)` — asked ONCE a line
+      let close = null, below; // below: what follows the `)` that closes a list left open on this line — asked ONCE a line
       RE_RENDER.lastIndex = 0;
       for (let m = RE_RENDER.exec(p); m; m = RE_RENDER.exec(p)) {
         const at = m.index + m[0].length, c = p[at];
-        // (a field: `render = () => …`, `render = this.renderRow` — never an element's attribute, `render={…}` / `render="…"`)
-        if (c === "=") { const v = p.slice(at + 1, at + 1 + DS_CALL_PEEK).trimStart(); if (v[0] === "(" || RE_NAME_HEAD.test(v)) return true; continue; }
+        // (a field: `render = () => …`, `render = <T,>(row) => …`, `render = this.renderRow` — never an element's attribute,
+        // `render={…}` / `render="…"`, nor a local variable: `const render = this.options.inline` — review 4 of 1.35.2)
+        if (c === "=") { const v = p.slice(at + 1, at + 1 + DS_CALL_PEEK).trimStart(); if (!RE_LOCAL_BEFORE.test(p.slice(Math.max(0, m.index - 8), m.index)) && (v[0] === "(" || RE_NAME_HEAD.test(v) || RE_VALUE_GENERIC.test(v))) return true; continue; }
         if (c === ":") { if (RE_VALUE_FUNCTION.test(p.slice(at + 1, at + 1 + DS_CALL_PEEK).trimStart())) return true; continue; }
         let j = m.index - 1;
         while (j >= 0 && (p[j] === " " || p[j] === "\t")) j--;
         if (p[j] === "?") continue; // (a ternary's call: `ready ? render(job) : <Spinner />` — its `:` is no return type)
         if (close == null) close = closers(p);
-        let rest, line = k;
-        if (close[at] !== -1) rest = p.slice(close[at] + 1).trimStart();
+        let rest;
+        if (close[at] !== -1) rest = readOn(k, p.slice(close[at] + 1).trimStart()); // (one `)` ends a line: once a line)
         else {
-          if (below === undefined) { below = null; for (let q = k + 1; below == null && q < next[i] && q <= k + DS_DECL_LINES; q++) { const t = plain[q].trimStart(); if (t[0] === ")") below = [q, t.slice(1).trimStart()]; } }
+          if (below === undefined) { below = null; for (let q = k + 1; below == null && q < next[i] && q <= k + DS_DECL_LINES; q++) { const t = plain[q].trimStart(); if (t[0] === ")") below = readOn(q, t.slice(1).trimStart()); } }
           if (below == null) continue;
-          line = below[0];
-          rest = below[1];
+          rest = below;
         }
-        for (let q = line + 1; rest === "" && q < next[i]; q++) rest = plain[q].trimStart();
         if (rest[0] === "{" || rest[0] === ":") return true;
       }
     }
@@ -601,6 +606,22 @@ function uncast(v) {
   }
   return v;
 }
+// A value in parentheses, unwrapped — a cast inside them aside: `(Root as any)` → `Root` (four deep at most). Linear.
+function unwrapped(v) {
+  const none = {};
+  for (let d = 0; d < 4 && v[0] === "(" && v.endsWith(")"); d++) {
+    let depth = 0, k = 0;
+    for (; k < v.length; k++) {
+      const c = v[k];
+      if (isQuote(c)) { const e = quoteEnd(v, k, none); if (e !== -1) k = e; continue; }
+      if (c === "(") depth++;
+      else if (c === ")" && --depth === 0) break;
+    }
+    if (k !== v.length - 1) break;
+    v = uncast(v.slice(1, -1).trim());
+  }
+  return v;
+}
 // Where the LAST argument list of a call opens, at the call's own depth: its first `(` — the callee's type arguments
 // aside —, then each `(` that follows a `)` back at that depth (`connect(a)(` …; never a `)(` inside an argument:
 // `() => select(id)()`). → its place, -1 when the text holds no call. Linear.
@@ -620,7 +641,8 @@ function lastList(value) {
 // line ends, null when the text holds no call.
 const givenFirst = (value) => { const open = lastList(value); return open === -1 ? null : value.slice(open + 1).trimStart(); };
 // The arguments of that list, cut at the commas of its own depth — never one inside a bracket, a string, or the
-// arguments of a type (`{ Header } as Record<string, React.FC>`: a `<` right after a name) → their texts (the last may
+// arguments of a type (`{ Header } as Record<string, React.FC>`: a `<` right after a name, at the list's own depth — a
+// comparison inside a function given, `/a<b/`, opens none: review 4 of 1.35.2) → their texts (the last may
 // go on below), null when the text holds no call. Linear.
 function givenArgs(value) {
   const open = lastList(value);
@@ -628,17 +650,21 @@ function givenArgs(value) {
   const args = [], none = {};
   const push = (from, to) => { const t = value.slice(from, to).trim(); if (t !== "") args.push(t); };
   let start = open + 1, k = open + 1;
-  for (let depth = 0, angle = 0; k < value.length; k++) {
+  for (let depth = 0, angle = 0, fresh = true; k < value.length; k++) {
     const c = value[k];
+    // (fresh: nothing read yet — a generic arrow that begins the FIRST argument, the one a name or a component is asked of, `<T,>(p) => …`, opens a type's list)
+    const begins = fresh && c !== " " && c !== "\t";
+    if (begins) fresh = false;
     if (isQuote(c)) { const e = quoteEnd(value, k, none); if (e !== -1) k = e; continue; }
-    if (c === "<") { if (angle > 0 || RE_WORD_CHAR.test(value[k - 1])) angle++; continue; }
-    if (c === ">") { if (angle > 0) angle--; continue; }
+    if (c === "<") { if (depth === 0 && (angle > 0 || RE_WORD_CHAR.test(value[k - 1]) || (begins && RE_VALUE_GENERIC.test(value.slice(k, k + DS_CALL_PEEK))))) angle++; continue; }
+    if (c === ">") { if (depth === 0 && angle > 0) angle--; continue; }
     if (c === "(" || c === "[" || c === "{") depth++;
     else if (c === ")" || c === "]" || c === "}") { if (depth === 0) break; depth--; } else if (c === "," && depth === 0 && angle === 0) { push(start, k); start = k + 1; }
   }
   push(start, k);
   return args;
 }
+const RE_CURRIED_LINE = /^[\]})]*\)(?=\()/; // a line that opens a call's next list: `)(`, `})(` (Prettier's break of a curried call)
 const RE_LONE_NAME = /^(\p{Lu}[\p{L}\p{N}_$]*),?$/u; // a HOC's one argument on a line of its own (a formatter's break of a long line)
 const RE_COMPOUND_NAME = /^\p{Lu}[\p{L}\p{N}]*(?:\.\p{Lu}[\p{L}\p{N}]*)?$/u; // a component's name — or a part's: `Card.Header`
 const RE_PART_KEY = /^\p{Lu}[\p{L}\p{N}_$]*$/u; // a part's key is a component's name: `Header` — never `displayName`, `defaultProps`
@@ -682,6 +708,23 @@ function exportedComponents(text) {
       list += "," + more;
     }
     return end === -1 ? null : { list: list.slice(0, end), rest: list.slice(end + 1), at };
+  };
+  // What the LAST argument list of a call over lines holds first, when a later line of its statement opens that list:
+  // a line at the statement's OWN margin that begins with closers and `)(` (`})((props) => …`; an indented one is an
+  // argument's own call) → its text after the `(` — the next line's when the list opens and the line ends —, null when
+  // there is none or only an empty list (`)();`). One pass over the extent.
+  const curriedFirst = (i) => {
+    const head = view.plain[i], pad = head.length - head.trimStart().length;
+    let first = null;
+    for (let k = i + 1; k < view.next[i]; k++) {
+      const l = code[k];
+      const m = RE_CURRIED_LINE.exec(l.slice(pad)); // (read from the statement's margin: an indented one begins with blanks)
+      if (!m) continue;
+      let given = givenFirst(l.slice(pad + m[0].length));
+      if (given === "") { given = null; for (let q = k + 1; given == null && q < view.next[i] && q <= k + DS_DECL_LINES; q++) if (code[q].trim() !== "") given = code[q].trim(); }
+      if (given != null && given[0] !== ")") first = given;
+    }
+    return first;
   };
   // What a declared value is → true (a component) | false. What only the whole file can tell waits in `aliases` /
   // `applies` / `spaced`: another component under a new name, a function applied to one, React's wrapper under an
@@ -730,7 +773,10 @@ function exportedComponents(text) {
     let first = givenFirst(value);
     const below = !entry && first === "" ? view.rows(i, 2) : [];
     if (below.length) first = below[0];
-    if (first != null && first[0] !== "{" && first[0] !== "[" && (first[0] !== "<" || RE_VALUE_GENERIC.test(first))) {
+    // (…of its LAST list, which a later line may open: `withStyles({ … })((props) => …)` over lines is given a function last,
+    // `createFileRoute("/a")({ component: … })` an object — review 4 of 1.35.2; a lone `<` opens a generic's parameters)
+    if (!entry && first != null) { const later = curriedFirst(i); if (later != null) first = later; }
+    if (first != null && first[0] !== "{" && first[0] !== "[" && (first[0] !== "<" || first === "<" || RE_VALUE_GENERIC.test(first))) {
       const text = entry ? withoutStrings(piece) : null;
       if (entry ? RE_JSX.test(text) || RE_DYNAMIC_IMPORT.test(text) : view.holds(i, view.jsx) || view.matches(i, RE_DYNAMIC_IMPORT)) return true;
     }
@@ -761,14 +807,15 @@ function exportedComponents(text) {
     // (a cast's type, a component written there)
     const entries = [];
     for (let k = 1; k < args.length; k++) if (args[k][0] === "{") for (const e of braceEntries(args[k], 1)) if (RE_PART_KEY.test(e[0])) entries.push(e);
-    const head = uncast(args[0]);
+    const head = unwrapped(uncast(args[0])); // (`Object.assign((Root as any), { Item })`: Root — review 4)
     const first = RE_VALUE_ALIAS.test(head) ? RE_NAME_HEAD.exec(head)[0] : null;
     const to = owner == null ? first : owner;
     if (to == null) return null; // (a component written there, and no name to hang its parts on)
     if (first != null) {
       // a NAME first: with parts it is the compound idiom — that component under a new name; with none (`{ displayName }`,
       // a second name) it is one only of a component of the file's own, as a single call of any function is
-      if (owner != null) { stands.set(owner, first); if (entries.length) aliases.push([owner, first]); else applies.push([owner, first, false]); }
+      // (a member first — `Object.assign(Card.Root, { Title })` — is that member alone: nothing stands on its owner, review 4)
+      if (owner != null) { if (!head.includes(".")) stands.set(owner, first); if (entries.length) aliases.push([owner, first]); else applies.push([owner, first, false]); }
     } else if (kindOf(owner, args[0], i, args[0])) mine(owner); // a component WRITTEN there (`forwardRef(…)`, a function)
     // (the parts are recorded whatever the first argument is — review 3 of 1.35.2: decided first, a HOC's call there
     // returned before them, and `Object.assign(contextConnect(Root, "Menu"), { Item })` lost the menu and its twelve parts)
@@ -777,13 +824,16 @@ function exportedComponents(text) {
       if (value == null) aliases.push([to + "." + key, key]);
       else if (kindOf(to + "." + key, value, i, value)) mine(to + "." + key);
     }
-    // (…and a call first — a HOC with its arguments — is a component when one of its parts is: the idiom says so)
-    if (first == null) for (const [key] of entries) aliases.push([owner, owner + "." + key]);
+    // (…and a CALL first — a HOC with its arguments — is a component when one of its parts is: the idiom says so; never
+    // `{}`, `new Emitter()` — a registry of components is none, review 4 of 1.35.2)
+    if (first == null && RE_VALUE_CALL.test(head)) for (const [key] of entries) aliases.push([owner, owner + "." + key]);
     return first;
   }
   for (let i = 0; i < code.length; i++) {
     let line = code[i];
-    if (line === "") continue;
+    // (a line that starts inside a template is no statement's — scriptView starts none there —, and asked here its extent
+    // ran to the next start, the file's end: once a line, quadratic — review 4 of 1.35.2)
+    if (view.tpl[i] || line === "") continue;
     let c = line[0];
     // an indented `export` is the module's own; a decorator on the line of what it decorates is not the statement
     if (c === " " || c === "\t") { if (!RE_INDENTED_EXPORT.test(line)) continue; line = line.trimStart(); c = "e"; }
@@ -901,14 +951,23 @@ function exportedComponents(text) {
   // DS_ALIAS_PASSES deep); a name exported twice (by name and as the default) is expanded once — else its parts took
   // the room of the next component's, without a word (review 3 of 1.35.2).
   let more = budget.ahead < 0, room = DS_EXPORT_NAMES; // (more: a declaration went unread, a part past the cap — said)
-  const expanded = new Set();
+  // (each owner's parts that are components, settled once — never once an exported name; a key hung on the root AND on
+  // its alias is one part, and a part that is no component spends no room: review 4 of 1.35.2)
+  const expanded = new Set(), settled = new Map();
+  const partsOf = (owner) => {
+    if (!settled.has(owner)) settled.set(owner, parts.has(owner) ? [...parts.get(owner)].filter((key) => declared.has(owner + "." + key)) : []);
+    return settled.get(owner);
+  };
   for (let k = 0, n = exported.length; k < n && room >= 0; k++) {
     const [name, local] = exported[k];
     if (expanded.has(name) || !declared.has(local)) continue;
     expanded.add(name);
-    for (let owner = local, d = 0; owner != null && d <= DS_ALIAS_PASSES && room >= 0; owner = stands.get(owner), d++) {
-      for (const key of parts.get(owner) || []) {
-        if (room-- === 0) { more = true; break; }
+    const given = new Set();
+    chain: for (let owner = local, d = 0; owner != null && d <= DS_ALIAS_PASSES; owner = stands.get(owner), d++) {
+      for (const key of partsOf(owner)) {
+        if (given.has(key)) continue;
+        given.add(key);
+        if (room-- === 0) { more = true; break chain; }
         exported.push([name + "." + key, owner + "." + key]);
       }
     }

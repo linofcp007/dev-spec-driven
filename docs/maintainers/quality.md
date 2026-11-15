@@ -626,7 +626,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   text or in a regex would derail one). On it stand: a call of any function is a component when its extent
   holds JSX or loads (`RE_DYNAMIC_IMPORT`) — UNLESS what its LAST argument list holds first is an object, a list or
   an element (`givenFirst` over `lastList`: the list at the call's own depth, never a `)(` inside an argument, the
-  callee's type arguments aside; on its line, or the first line below when the list opens and the line ends): a
+  callee's type arguments aside; on its line, or the first line below when the list opens and the line ends — or
+  the list a LATER line opens at the statement's own margin, `})((props) => …`: `curriedFirst`, review 4): a
   configuration, or an element handed over — a generic arrow (`RE_VALUE_GENERIC`) is neither. The rule asks nothing
   of the arguments themselves: asked whether one IS a function (reviews 1 and 2 of 1.35.2), it cut them apart and
   lost whatever a type's comma or a line break stood in (review 3). Or when its
@@ -637,8 +638,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   call around an imported name says nothing (`createContext(DefaultTheme)`, `Object.freeze(IconSizes)`). A class is
   one when it renders — `renders`: a `render` that is DEFINED (what follows its `)` is a `{` or a return type, on
   its line, below it, or after a list over lines — a line's open lists followed down ONCE, `DS_DECL_LINES` deep,
-  and read on from the line that closes them; a field whose value begins a function or a name: `render =
-  memoize(…)`; `render: function`), never a call of one (a ternary's too), a member's (`this.render = …`) or an
+  and read on from the line that closes them, the blank lines below it `DS_DECL_LINES` deep too (`readOn`); a field
+  whose value begins a function, a generic's `<T,>` or a name — `render = memoize(…)` —, never a local `const
+  render` (`RE_LOCAL_BEFORE`); `render: function`), never a call of one (a ternary's too), a member's (`this.render = …`) or an
   element's attribute (`render={…}`, `render="span"`) — and JSX; an element in
   parentheses and a function called at once (`RE_IIFE_END`, only of a value that IS a function in parentheses) are
   no function's value. A PascalCase function is a helper by a PROPERTY (`isHelper`): its first parameter is a
@@ -654,16 +656,19 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   its arguments by `givenArgs` (cut at the commas of the list's own depth, a type's arguments aside, to the `)` that
   closes it), EVERY literal after the first argument, its capitalised keys alone — `RE_PART_KEY`; with no such key
   the const is the component it is given only when that one is the file's own; a component written as its first
-  argument makes the const one, and a call there — a HOC's, with its arguments — makes it one when a part of it is;
+  argument makes the const one, and a CALL there (never `{}`, `new X()`) — a HOC's, with its arguments — makes it one
+  when a part of it is; a member there (`Card.Root`) stands on nothing;
   the parts are recorded WHATEVER the first argument is: record, then decide) is declared as `Owner.Part` and
   exported under each name its owner is exported by — its own and those of the component it stands on by its bare
-  name (`stands`, `DS_ALIAS_PASSES` deep; never a member's: `= Tabs.List`), each exported name expanded once,
-  `DS_EXPORT_NAMES` of them in all, a part past them SAID (`more`); an ENTRY is asked of its own text (`kindOf`'s
+  name (`stands`, `DS_ALIAS_PASSES` deep; never a member's: `= Tabs.List`), each exported name expanded once —
+  a key once, a part that is no component spending no room (`partsOf`, settled once an owner) —, `DS_EXPORT_NAMES`
+  of them in all, a part past them SAID (`more`); an ENTRY is asked of its own text (`kindOf`'s
   `piece`), never of the statement it stands in. `RE_COMPOUND_NAME` lets one dot through, and `dsKey` gives `Card.Header` the key of
   `CardHeader` — a design may cite either. Decorators are taken off the line (`undecorated`); React's wrappers are
   asked of the names an import of `react` gives (`RE_VALUE_SPACED`); a destructuring from an import, or a `require`,
   gives names an alias may stand on (`borrowed`). Linear: every pattern has its hostile line in the tests, and an
-  extent has no cap because extents never overlap. Known, and said in the user docs: an even number of stray
+  extent has no cap because extents never overlap — the main loop asks statement STARTS only: a line that starts
+  inside a template is none (asked, its extent was the file's — review 4 of 1.35.2). Known, and said in the user docs: an even number of stray
   backticks hides what stands between them, a template inside another's `${ … }` over lines is read as code; an
   alias or a part that stands on an imported name is taken for a component (the name's own file would say), and so
   is a call that only looks like one's (its extent holds JSX and it is given no object first — `mount(root,
@@ -904,7 +909,7 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   no input could reach (a filter the caller repeats, a guard on an unclosed decorator, a keyword list of fourteen
   where three are ever met) and named a dozen fixtures; 111 caught at first, two more pieces deleted (a fragment's
   `</>` holds `/>`; the order a brace list expands in), five fixtures were under a rule that answered first (a
-  plural and a line of text both under a tag: each rule needs the input ONLY it answers). Review 1 of 1.35.2's fix round: 64 mutations, 52 caught at first — eleven of the twelve were fixtures a NEW rule had made blind (a function that returns JSX is a component whoever calls it: every "this is no call" fixture whose component held the text itself was answered by that rule first; one stray backtick switched its file's template state off, and the template fixtures of that file with it), one a line the cap below it repeats, deleted: 63 of 63. A rule added in a fix round changes which input each OLDER rule alone answers — the mutation pass is rerun whole, not on the lines the round touched. Review 2 of 1.35.2's fix round: 39 mutations, 31 caught at first; one alternative was redundant and went (React's wrapper as what a call is given: the call that is given a function covers it), four wanted a fixture, one condition had no observable effect and went, and two of the three I had marked "no fixture" were not equivalent at all — writing their fixtures found a false positive (an element's `render={…}` attribute read as a class's `render` field): a mutant marked unreachable is a claim to check, not a note to file. 38 of 38. Review 3 of 1.35.2's fix round: 176 mutations — the pass WHOLE: this round's fifty and the 126 of the three lists before it that still name a line of the code. 168 caught at first; of the eight, two pieces had no input only they answer and went (a part asked a second time whether it is declared; a template's line skipped where its text is already empty) and six wanted a fixture — four of them rules of EARLIER rounds that this round's simpler call rule had started to answer first (a `)(` at the margin under a line that ends with `}`, an expression's `{` at the margin of a `<pre>`, a cast on what an `Object.assign` with no part is given, a value that is no call: `new Runner(…)`). The second pass found two more (the line that closes a template with a `;` after its backtick starts no statement; the arguments of a list end at its `)`), the third none: 176 of 176. The older lists are RUN every round, not archived — a rule that got simpler changes which input each older rule alone answers, exactly as an added one does.
+  plural and a line of text both under a tag: each rule needs the input ONLY it answers). Review 1 of 1.35.2's fix round: 64 mutations, 52 caught at first — eleven of the twelve were fixtures a NEW rule had made blind (a function that returns JSX is a component whoever calls it: every "this is no call" fixture whose component held the text itself was answered by that rule first; one stray backtick switched its file's template state off, and the template fixtures of that file with it), one a line the cap below it repeats, deleted: 63 of 63. A rule added in a fix round changes which input each OLDER rule alone answers — the mutation pass is rerun whole, not on the lines the round touched. Review 2 of 1.35.2's fix round: 39 mutations, 31 caught at first; one alternative was redundant and went (React's wrapper as what a call is given: the call that is given a function covers it), four wanted a fixture, one condition had no observable effect and went, and two of the three I had marked "no fixture" were not equivalent at all — writing their fixtures found a false positive (an element's `render={…}` attribute read as a class's `render` field): a mutant marked unreachable is a claim to check, not a note to file. 38 of 38. Review 3 of 1.35.2's fix round: 176 mutations — the pass WHOLE: this round's fifty and the 126 of the three lists before it that still name a line of the code. 168 caught at first; of the eight, two pieces had no input only they answer and went (a part asked a second time whether it is declared; a template's line skipped where its text is already empty) and six wanted a fixture — four of them rules of EARLIER rounds that this round's simpler call rule had started to answer first (a `)(` at the margin under a line that ends with `}`, an expression's `{` at the margin of a `<pre>`, a cast on what an `Object.assign` with no part is given, a value that is no call: `new Runner(…)`). The second pass found two more (the line that closes a template with a `;` after its backtick starts no statement; the arguments of a list end at its `)`), the third none: 176 of 176. The older lists are RUN every round, not archived — a rule that got simpler changes which input each older rule alone answers, exactly as an added one does. Review 4 of 1.35.2's fix round: the pass whole again — this round's 53 (17 of them review 3's pieces whose lines it rewrote, ported; 13 the reviewer's own mutants) and the earlier lists' 153 that still apply. 199 of 209 caught at first (before the round's last two fixes); of the ten, one is caught by the cost check that now owns it, four wanted a fixture (two later `)(` lists, `render = <Spinner />`, a blank after the `(`, the bound on the blank lines below a `)` — whose first fixture put its `render(` lines at the margin, where each began a statement of its own: a COST fixture that never reached the loop it was written for, until it was timed with and without the bound), three had no effect any input shows (an indentation condition the anchored pattern already answers — removed; a second room check — a labeled break now; an inner break the names' cap makes equivalent — dropped). 204 of 206 on the last pass, run after the last fix; the two left are equivalent on every input: a literal as an `Object.assign`'s FIRST argument (the owner it is given to is never a component, so its parts hang on nothing) and the reviewer's own near no-op.
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
@@ -1440,3 +1445,29 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   quoting a number; (4) a cost fix needs a hostile input for EACH loop it bounds (a line of `render(`, and a column
   of them); (5) a guard no input can reach is not kept "to be safe" — it is deleted, or its input is found (an
   expression's `{` at the margin of a `<pre>` was one).
+- **1.35.2 review 4** (one fresh reviewer on review 3's fix commit alone — the short round the owner chose again; the
+  first reviewer was stopped by a usage limit and a second one finished from its files; five versions side by side,
+  32,122 real files) — 2 HIGH, 0 MEDIUM, 12 LOW, 4 cosmetic; no real shape lost. Both HIGH were costs the round
+  before had MADE, each by a simplification: `renders`, rewritten to follow a line's open lists once, read the blank
+  lines below the closing `)` to the statement's end once for EVERY `render(` above it (an unbounded walk the old
+  code had stopped at once — 318 s a scan of hostile files); and the main loop's skip of a line that starts inside
+  a template, removed by the mutation pass as "no observable effect" — its effect was a COST: such a line, asked as
+  a statement, has the file for its extent (250 s). LOW: the call rule asked the declaration's line for the LAST
+  list, so a curried call over lines was judged by its first (`withStyles({ … })((props) => …)` lost,
+  `createFileRoute("/a")({ component })` listed) — `curriedFirst` reads a later `)(` line at the statement's own
+  margin; an `Object.assign` around no call made a component of its parts (`{}`, `new Emitter()`); a member first
+  stood on its owner's parts (and, checked against d83914e, a root cast in parentheses or a generic arrow first —
+  `Object.assign(<T,>(p) => …, { Option })`, whose `<T,>` comma cut the argument — had lost theirs); a type's `<` counted inside a function given (`/a<b/`); a generic arrow as a `render`
+  field or on a line of its own; a local `const render` read as a field; the parts' room spent by keys hung on a root
+  AND its alias, and by statics that are no component (the "declared" filter the round before had removed as
+  answering no input — it answered the room); five mutants of the reviewer no fixture caught. Left, and said: an
+  element first (`createSvgIcon(<path />, "Home")`), an object first with a function after it, the calls it named
+  that only look like a component's (three of its five are the docs' examples), margin text after a line that ends with `;` or `}` (a line of blanks between
+  them passes that on: it ends and starts nothing). Corrected: the round before's
+  grammar ("none lost") and differential fuzz were measured against 78860d5, not the parent — against fd971cc,
+  420 of 4,200 shapes were lost (an object first, then a function: the subtraction's price, said in the docs); and
+  the docs' "called after a comparison or another operator" had been stale since the feature commit. Lessons:
+  (1) a mutation pass sees only what the tests assert — a piece "with no observable effect" may be a COST guard: before
+  deleting one, time the hostile inputs without it; (2) a bound moved into a helper must keep its every caller
+  bounded — the walk below the `)` lost its bound when the line it started from changed; (3) compare a fix round
+  with its PARENT first, and say which version a number is against.

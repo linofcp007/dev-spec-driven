@@ -27,11 +27,12 @@ of one file's text cannot know, and it is said below.
   is one name the file declares (`withRouter(Nav)`, `connect(mapState)(List)`, on a line of its own or with a cast
   after it too) — or, when the application is curried, imports (`withStyles(styles)(TableCell)`). `memoize(() => 1)`,
   `z.object({ … })`, `createContext(DefaultTheme)` and `observer(() => null)` show none of it and stay out — and so
-  does a call whose last argument list BEGINS with an object, a list or an element, whatever JSX it holds: a
-  configuration (a table's columns, a router's routes) or an element handed over (`renderToString(<p />)`).
+  does a call whose LAST argument list — a later line may open it: `})((props) => …` — BEGINS with an object, a
+  list or an element, whatever JSX it holds: a configuration (a table's columns, a router's routes) or an element
+  handed over (`renderToString(<p />)`).
 - **A class is a component by what it does.** Whatever it extends — an imported base class, a mixin —, a class with
   a `render` that is defined (a method, its brace below or its list over lines too; a field: `render = () => …`,
-  `render = memoize(…)`) and JSX in its body is one. And a decorator no longer hides it: on the class's own
+  `render = memoize(…)` — never a local `const render`) and JSX in its body is one. And a decorator no longer hides it: on the class's own
   line (`@observer export class X`, with arguments), after `export` / `export default`, or over the lines above.
 - **A component's parts.** `Card.Header = CardHeader`, `Card.Body = (props) => …` and the capitalised keys of
   `Object.assign(Card, { Header, Body: CardBody })` — as a value, a statement or the default export; of every
@@ -55,19 +56,21 @@ of one file's text cannot know, and it is said below.
 Still a row to add by hand: a component made by a call that shows nothing — `createComponent(config)`, a single call
 around a name the file only imports (`motion(Box)`) or around a cast (`withRouter(View as any)`), a call around a
 component AND another argument that holds no JSX itself (`contextConnect(Menu, "Menu")`, `chakra(Box, { … })`), a
-call given an object first — even one that holds JSX (`createIcon({ path: <path /> })`) —, a class that renders only
+call given an object first — even one that holds JSX or a function after it (`createIcon({ path: <path /> })`,
+`createField({ type: "text" }, (props) => …)`) —, an element first (`createSvgIcon(<path />, "Home")`), a class that renders only
 through its imported base, parts hung on a component the file imports, two parts on one line, `export const {
 Header, Content } = Layout;`, a component exported with `exports.X`, re-exported from a package under a new name,
-kept in a barrel or a `.ts` file, or whose element holds text at the margin that begins with a letter (the lines of
-a `<pre>`: the text ends its statement). And a
+kept in a barrel or a `.ts` file, or whose element holds text at the margin that begins with a letter or follows a
+line that ends with `;` or `}` (the lines of a `<pre>`: the text ends its statement). And a
 real component the rules take for a helper: one with three parameters, one whose first parameter is a capitalised
 name, one the file calls as a function that holds no JSX of its own (a portal, a `createElement` one). Still listed,
 knowingly: a PascalCase helper nothing tells apart (exported, with one or two lower-case parameters, and never called
-in its own file — or called where the reader does not see a call: with type arguments, after a comparison or another
-operator, after `throw` / `yield` / `export default`, inside a template); an alias or a part that stands on an
+in its own file — or called where the reader does not see a call: with type arguments, after `throw` / `yield` /
+`export default`, inside a template); an alias or a part that stands on an
 imported name that is no component (`Button.Sizes = Sizes`, an enum's member); a call that only looks like a
 component's — its statement holds JSX and it is given no object first (`memoize((name) => <Icon />)`, a factory of
-columns, `mount(root, <App />)`), given an object with a `render` method and JSX, around a component of the file
+columns, `mount(root, <App />)`, `createRoot(el).render(<App />)`,
+`createBrowserRouter(createRoutesFromElements(<Route />))`, `t("hint", { link: <a /> })`), given an object with a `render` method and JSX, around a component of the file
 (`createContext(Button)`), curried around an import (`configureStore(options)(Reducers)`), an `Object.assign`
 around a call with a capitalised key that stands on a component; a class that is no React component and has a
 `render` that returns JSX. A file's template literals are told by its backticks: two stray ones — in two regular expressions, in an
