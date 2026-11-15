@@ -591,7 +591,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, root, tmp, libSource
     const listed = [...lists.eager, ...lists.lazy].sort();
     const onDisk = libSources().map((f) => path.relative(engDir, f).split(path.sep).join("/"))
       .filter((f) => !f.startsWith("..") && f !== "index.js" && f !== "ctx.js").sort();
-    const core = new Set(["fs", "path", "os", "crypto", "module"]);
+    const core = new Set(["fs", "path", "os", "crypto", "module", "worker_threads"]); // (worker_threads: files.js's readFileHeads, 1.35.4)
     const badReq = [];
     for (const f of libSources()) for (const m of fs.readFileSync(f, "utf8").matchAll(/\brequire\(\s*(["'])([^"']+)\1\s*\)/g))
       if (!core.has(m[2].replace(/^node:/, "")) && !/^\.\.?\//.test(m[2])) badReq.push(path.relative(root, f) + ": " + m[2]);

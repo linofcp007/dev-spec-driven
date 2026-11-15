@@ -721,13 +721,22 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   (`providers`: `<X.Provider>` / `<X.Consumer>` — settle tells a context from a part named so), a context read
   (`RE_USE_CONTEXT`: `useContext(X)`, React 19's `use(X)` — bare or React's, never `app.use(Router)`: `contexts`), a
   part read as an object (`RE_MEMBER_READ`: `Button.Sizes.Large`, `UI.List.Sizes.Large` through a namespace — never in
-  a tag) and scriptView's `called`. `settle` asks the names of every component file read (and of a component folder's
+  a tag) and scriptView's `called`; a call that renders a name — what a tag compiles to (1.35.4: `RE_FACTORY_CALL`
+  bound to an import of `RE_JSX_RUNTIME`'s modules — `createElement` / `h` / `createVNode`, the runtimes' `jsx` / `jsxs` /
+  `jsxDEV`, a namespace's or a default import's member —; its first argument, `RE_FIRST_ARG`, any case, type arguments
+  aside, the first line below with text when the call's line ends at its `(`; `typeInto`: the same sets as a tag;
+  a file that binds no factory is not read again — a cost guard); and what the file passes on (`reexports`, 1.35.4: `export {
+  … } from` over lines — a list's lines are its entries, read once; one that never closes is given up —, `export *`,
+  `export * as NS`, a name imported and exported again). The other scripts are viewed `lite` (scriptView's statement,
+  next-statement and JSX passes skipped: what usesOf reads alone — 15 to 29% of the view, 1.35.4). `settle` asks the names of every component file read (and of a component folder's
   barrel, `RE_BARREL` + `inComponentFolder`: read apart from the component files' DS_EXPORT_FILES — a kit of
   `button/index.ts` + `button/button.tsx` folders reads as many as before — its weak names "unproven": a `.ts` file
   holds no JSX) of their own file (by the local name) and of every other script of the project (DS_USAGE_FILES and
   DS_USAGE_CHARS read, the files that may hold JSX first, then the shorter path; a file that writes none of the names
-  asked, nor a default export's, is never viewed; a `.ts` one is read only when a weak name is asked — it may call,
-  never render; a story's or a test's CALL is no evidence — `render: (args) => Button(args)`, review 1): a name it
+  asked, nor a default export's, is never viewed; a `.ts` one is read only when a weak name is asked — it holds no JSX
+  and renders through a factory call alone: read for candidates too, it cost a Vue and a Svelte kit's reports ×6 for no
+  row, 1.35.4; then the markup files — `markupUses`, below —, the shorter path first, within the same bound; a story's or
+  a test's CALL is no evidence — `render: (args) => Button(args)`, review 1): a name it
   writes is followed through its import (`resolve`, once a folder, a module and a name: one name exported by a
   thousand kits walked their list for each tag, review 1) to the files the module may be — `placeOf` over the walk's
   `projectPlaces` (the folders holding a package.json / tsconfig.json / jsconfig.json, DS_PROJECT_ROOTS; the manifests'
@@ -743,11 +752,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   and a path of two segments or more from each root above the file — the project's own folder always — and its `src/` /
   `app/` (review 2: `~/*` → `./app/*`, React Router's; review 3 narrowed `app/` to `~/`, review 4 restored it: shadcn's
   React Router monorepo writes `@/*` → `./app/*`, and the match narrowing spared needs the same file under `app/` and
-  `src/`). A tsconfig's `paths` are NOT read: review 2 had them read, and review 3 found them taking a `..` target as
-  text, read past every bound (20,000 `tsconfig.<x>.json` in a folder: 13.6 s) and short of TypeScript's own rules three
-  ways (a `*` catch-all, two configs in a folder, the longest prefix) — the guess, which lost nothing on the corpus,
-  stands, and an alias spelled like a scope or pointing elsewhere (Laravel's `./resources/js/*`) is a row to add by
-  hand — another package names no file of the project, and is none (review 1: the module's
+  `src/`); where its `exports` map says (1.35.4 — below); where the config that governs the file says (1.35.4 —
+  `aliasReader`, below) — another package names no file of the project, and is none (review 1: the module's
   segments matched ANYWHERE, `@wordpress/components` was every `components/` folder) —; `pointsTo` takes a file or a
   folder (its index, a barrel's file under it) of a key (`moduleKey`: lower case, no extension, no platform infix),
   asked of the file's own prefixes against a Set of the keys (review 2: a page thirty roots deep had ninety keys, each
@@ -765,17 +771,90 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   false)`). Cost: the reads (on Windows about half a millisecond a file — a big monorepo's report takes seconds more);
   the views are linear (the cost fixtures, each a ratio: runs of tags, of members, an import clause that never closes,
   lines of `(/` with a backtick, 2,000 undeclared parts under 2,090 names, a page that names nothing asked, one name of
-  a thousand kits through a hundred namespaces, a barrel's 500 re-exports of the project's own file). What it cannot
-  see, said in the user docs: a name no file renders where the reader sees it (a kit consumed elsewhere; past the
-  bound; a default import under another local name in a file that writes none of the names asked; through a re-export
-  outside a component folder's `index.ts`, a tsconfig `paths` alias spelled like a scope or to another folder, a
-  package's `exports` map; in
-  `.mdx` / `.vue` / `.svelte`; `React.createElement(X)`), a component the project only calls; a helper, a part on a
-  name that is none, a call whose function renders, while the project never calls them nor reads them as objects; a
-  top-level alias of an import that is none; a call given a string or a capitalised name first, or a method beside an
-  element, whose JSX is an element handed over (`t("hint", …)`, React's element cloner given a component first); a call
-  given an object with a `render`, or curried around an import; a class that renders JSX and that the project never
-  constructs.
+  a thousand kits through a hundred namespaces, a barrel's 500 re-exports of the project's own file). 1.35.4 adds:
+  - **The governing config** (`aliasReader`, `inProject`; `configs`: every folder's `tsconfig.json`, else
+    `jsconfig.json`, the walk's bound alone — `jsconfig.json` sorts first, a folder's `tsconfig.json` stands): the nearest
+    folder at or above the importing file that holds one governs it (esbuild's rule — `include`, `files` and `references`
+    are not evaluated: a union over `references` would over-match without `include`). JSONC through `jsonPlain`, then
+    `JSON.parse`. `extends`: a string or a list, each over the one before it, the config's own options last; a relative
+    path alone (`./`, `../`), `.json` added when that path is MISSING; a package's (`@tsconfig/…`, `astro/tsconfigs/…`,
+    `.cfg/base.json` with no `./`) applies nothing; a rooted one, or one above the project, is UNKNOWN; a circle applies
+    nothing (TypeScript's "Circularity detected"); the stack is popped after each entry (a diamond applies the shared
+    config again). A written `paths` (any value: `null`, a list — none) REPLACES the chain's, resolved against the folder
+    of the config that wrote it; a written `baseUrl` replaces the chain's (a string from its writer's folder;
+    `${configDir}…` the governing config's folder; rooted, another `${`, or above the project: UNKNOWN; not a string:
+    none). A key: the exact one first (case-sensitive), else among the `*` keys the longest prefix that fits with its
+    suffix (a tie keeps the first written; a key of two `*` never fits); every string target of it, DS_TS_TARGETS, the
+    first `*` replaced (a `*` left — an empty match's, a second — names no file: dropped); `${configDir}` from the
+    governing folder; rooted or `${…}`: dropped; else from `baseUrl` when known, the writer's folder otherwise; above the
+    project: dropped. An entry `…/index` also stands for its folder (Nx's library entries; a relative `./x/index` keeps
+    naming the file: there the importer chose it). A key that matches adds only its targets and stops the `baseUrl`
+    fallback (TypeScript's `{ value: undefined }`); with none, a name of two segments or more below `baseUrl` (never a
+    rooted one). A read resolves the REAL path (`realpathSync.native`) and asks `isInsideDir(realRoot, …)` —
+    `projectFileInside` checks the last link alone, and an `extends` crosses folders the walk never entered (a hidden
+    `.svelte-kit/tsconfig.json`). UNKNOWN anywhere in the chain — not JSON once its comments are out, a link out of the
+    project, past DS_TS_CONFIGS reads (100), DS_TS_LINKS entries (32), DS_TS_STARS patterns (100) — makes the folder's
+    config tell NOTHING: it keeps 1.35.3's reading (an abstention where TypeScript's reading cannot be reproduced).
+    Memoised per governing folder (`tables` — a cost guard, timed). The keys are ADDED before the package lookup and
+    the guess, both unchanged. A default import looks up the base of EVERY key of the place (`lookup`, `keyBase`): a
+    config's target, a map's, need not share the guess's last segment. Review 3 of 1.35.3 had taken a first reading out
+    (a `..` target as text, no bound, short of TypeScript's rules three ways — a `*` catch-all returned early, two configs
+    in a folder, the first key not the longest); each is answered by a rule and a fixture.
+  - **A workspace package's `exports` map** (`exportsMap`, `reachTargets`, `targetsOf`, `exportedPaths`, `refused`): read
+    as Node's resolver reads one (lib/internal/modules/esm/resolve.js), sorted once as `readOne` reads the manifest's
+    `name` (no second read: ×2 to ×2.4 measured; targets reached once a key — compiled at read time cost ×3.6 on misses).
+    All keys subpaths (`.`), DS_EXPORT_KEYS at most — all or none: the longest key wins, a map read in part could pick a
+    shorter one. The subpath as written (`own`: case kept) — the exact key, else the first pattern by the longest base,
+    then the longest key, its match free to hold `/` but no refused segment (`.`, `..`, `node_modules`, `%`-encoded, split
+    on `/` and `\`); a key's value alone decides (`null`: nothing, never a shorter pattern). Its targets: a string that
+    starts `./` with no refused segment; a condition object's branches up to its `default`, any condition (what the module
+    MAY be: Chakra's `dev`); a list to its first accepted entry (a refused one, a `null`, an object passed — Node's code,
+    not its spec prose); DS_EXPORT_DEPTH (a crash guard: 100,000 nested lists overflowed), DS_EXPORT_TARGETS; every `*`
+    replaced; an index target is its folder. Kept up to DS_MAP_CHARS of manifests (a memory bound). The bare `.`, `main`,
+    `module`, `source` are never read: the folder already covers them. The map ADDS keys beside the subpath and `src/`.
+  - **What a module's own file passes on** (`filesOf`, `passesOf`, `closureOf`, `through`, `reach`, `look`; `mains`): the
+    follow starts at the files the module IS (a key's own, `<key>/index`, a package root's `src/index`) and goes on
+    through `export { … } from` links and `export *` closures to the file that declares the name; the evidence is noted
+    there, under the name it exports. A file's re-exports are read once (the files read before the search are prefilled),
+    up to DS_PASS_FILES / DS_PASS_CHARS of its own; a closure is indexed once a file (a walk once a name was quadratic:
+    90,000 steps on Chakra, 6,063 indexed); a query is memoised once a file, a name and a tail; DS_PASS_STEPS is charged
+    where the work happens — a named entry indexed, a module a star or a link reaches (1 + its keys + its files, checked
+    BEFORE it is followed), each candidate a lookup compares. A file's own explicit link hides its stars (ES's
+    ResolveExport), a star never passes a default, a cycle ends at a file seen. The follow is NOT filtered by the search's
+    names (Gutenberg's `__experimentalTreeGridItem as TreeGridItem` was lost by a guard); the prefilter (`wanted`) gains
+    the namespaces (`export * as NS`) the files read before the search pass on, and nothing a file read later passes on
+    (a verdict must not depend on the order). No name is ASKED because a file passes it on.
+  - **The markup files** (`markupRegions`, `markupComments`, `withoutCodeSpans`, `markupUses`, `tagsIn(…, true)`,
+    `RE_KEBAB_TAG` / `pascalOf`): an `.mdx`, `.vue`, `.svelte`, `.astro` file's SCRIPT (MDX's top-level ESM — column 0,
+    `import ` / `export `, where a block may start, never a paragraph's next line: micromark-extension-mdxjs-esm —; Vue's
+    and Svelte's `<script>` blocks; Astro's front matter) goes to usesOf, blanked elsewhere so line numbers hold and
+    trimmed of its indent (prettier-plugin-svelte indents a block's); its MARKUP to the tag loop with the comparison guard
+    off (in markup a word before a tag is text). Never read: fenced code (`fenceStep` — MDX has no indented code, so
+    `stripFencedCode` would be wrong), inline code spans (`backtickRuns`), front matter, `<!-- -->` / `{/* */}` across
+    lines, `<style>`, a Vue block but its script and root `<template>` (its depth counted), an Astro `<script>` (a client
+    script). In `.vue` alone a kebab tag with a dash is the component Vue resolves (`<my-button>` → MyButton; one word,
+    `<card>`, needs Vue's own element list: never). Read after every script, one queue, the same counters (markups first
+    or counted apart lost a script's reading).
+  - **Read ahead** (`readFileHeads`, files.js): the exports read and the usage queue take their files through it — the
+    first AHEAD_PROBE in sequence and timed; when they average AHEAD_SLOW_US or more and AHEAD_MIN remain, AHEAD_WORKERS
+    worker threads (`worker_threads`, Node core) open the rest, worker j the files j, j + W, …, each at most AHEAD_WINDOW
+    ahead of the one taken (a SharedArrayBuffer of counters and a stop flag; the main thread waits with `Atomics.wait`); a
+    worker silent for AHEAD_STALL_MS, or none that starts, leaves the rest to readFileHead. The text is readFileHead's
+    exactly (the same bounded read, `decodeText`, the same cut, the same order). Why: on Windows with on-access
+    antivirus an OPEN costs ~0.65 ms (stat 47 µs; no read API helps — only fewer or overlapped opens); 5,000 files read
+    in sequence took 3.2 s, sixteen at a time 0.64 s. Where opens are fast the probe never starts a worker.
+  What it cannot see, said in the user docs: a name no file renders where the reader sees it (a kit consumed elsewhere;
+  past a bound; a default import under another local name in a file that writes none of the names asked; an alias only
+  a config's `references`, a package's config, `package.json`'s `imports` or a bundler's alias writes; a name passed on
+  under another name by a file that is neither a component file nor a component folder's barrel, rendered only by files
+  that write no asked name; a re-export through CommonJS; a markup file's component with no import — Nuxt's, MDX's
+  `mdx-components.tsx` —, a one-word Vue tag, a Pug template, a dynamic component; a factory not imported from its
+  library, compiled CommonJS, a factory render only in a `.ts` file when no weak name is asked), a component the project
+  only calls; a helper, a part on a name that is none, a call whose function renders, while the project never calls them
+  nor reads them as objects; a top-level alias of an import that is none; a call given a string or a capitalised name
+  first, or a method beside an element, whose JSX is an element handed over (`t("hint", …)`, React's element cloner
+  given a component first); a call given an object with a `render`, or curried around an import; a class that renders
+  JSX and that the project never constructs.
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),
@@ -1663,3 +1742,21 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   at each ask (tens of ms at the corpus's scale). Lesson: a narrowing is a change of rule like any other — review 3's
   was checked against the probe that prompted it and the fixtures, never against the layouts the wider rule served;
   ask "who writes this alias?" of the starters (shadcn's, Laravel's, T3's) before taking a shape out.
+- **1.35.4** (the owner's "resolve all of that" after 1.35.3's report: the rows it left by hand, and its cost). Five
+  items, each designed and PROTOTYPED by its own agent on a copy of 50a4fae — its rules checked against the tool it
+  imitates (TypeScript 5.8's moduleNameResolver / commandLineParser, Node's esm/resolve.js and require.resolve on 15
+  shapes, micromark-extension-mdxjs-esm, Vue's compiler-sfc, React's and Vue's jsx-runtime sources), its mutation list
+  written before its fixtures (42, 43, 58, 34 and 40 mutants; every one caught but equivalents and timed cost guards) —
+  and a sixth that rebuilt the 19-repository corpus and profiled the cost: 70 to 90% of the settle step was the OPEN
+  of each file (Windows Defender's on-access scan, ~0.65 ms; stat 47 µs; no read API helps), which is why the read-ahead
+  exists. The five were merged with `git merge-file` one at a time (the exports agent's repo copy was a variant it had
+  rejected — ×2 to ×2.4 — and was rewritten from its design instead); where two met, the wider rule won (the default
+  import's base of EVERY key covers the map's keys and the config's). Corpus against 1.35.3: 15 lists identical, chakra
+  +261, ant-design −1 (a context), Laravel's Vue starter +1, shadcn-svelte +3 (a namespace's parts, listed knowingly);
+  report time ×0.3 to ×0.5 on the big repositories, small `.svelte` / `.vue` kits a few hundred ms more. Integration
+  catches: the export list's lookahead re-scanned its growing text for each new line and its lines were read again by
+  the next `export {` (quadratic on a file of lists that never close) — a list's lines are now its entries, read once;
+  the prototypes' code came without the file's comments, written back from the designs. Rejected after measuring:
+  reading every `.ts` file for candidates (×5 to ×8 on Vue / Svelte kits, no row), following SvelteKit's `$lib` from
+  markup (+75 part rows), a guard on the follow by the search's names (lost a real lower-case alias), a cross-call
+  cache (breaks the one-call read-cache rule).

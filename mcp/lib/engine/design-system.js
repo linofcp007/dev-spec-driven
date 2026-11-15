@@ -25,12 +25,13 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
-  isNetworkPath, isTestFile, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn,
-  walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot;
+  isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
+  stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns, fenceStep;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
-  isDirSafe, isInsideDir, isNetworkPath, isTestFile, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
-  stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot } = E); }
+  isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readFileHeads, readIfExists, realRootOf, specsRoot,
+  stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot, backtickRuns,
+  fenceStep } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
 const DS_READ_CHARS = 256 * 1024; // a file's characters read (a larger one is read up to there)
@@ -426,7 +427,7 @@ function scriptLines(body, templates) {
   }
   return { code, tpl, open: inside };
 }
-function scriptView(text) {
+function scriptView(text, lite) {
   const body = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   let lines = scriptLines(body, true);
   if (lines.open) lines = scriptLines(body, false);
@@ -441,14 +442,14 @@ function scriptView(text) {
   // ENDS a statement (`;` / `}`): text at the margin inside an element — `1. First clause` under a `<pre>` — ends none
   // (review 2 of 1.35.2).
   const starts = new Uint8Array(n);
-  for (let i = 0, ended = true; i < n; i++) {
+  if (!lite) for (let i = 0, ended = true; i < n; i++) {
     const l = code[i];
     if (l.trim() === "") continue; // (a line of blanks, a comment's place: it ends and starts nothing)
     if (!tpl[i] && (RE_NAME_START.test(l) || RE_INDENTED_EXPORT.test(l) || (ended && RE_STATEMENT_START.test(l)))) starts[i] = 1;
     const t = l.trimEnd();
     ended = t.endsWith(";") || t.endsWith("}");
   }
-  for (let i = n - 1, at = n; i >= 0; i--) {
+  if (!lite) for (let i = n - 1, at = n; i >= 0; i--) {
     next[i] = at;
     if (starts[i]) at = i;
     if ((plain[i].includes("<") || plain[i].includes("/>")) && RE_JSX.test(plain[i])) jsx[i] = 1;
@@ -488,6 +489,8 @@ function scriptView(text) {
       called.add(m[1]);
     }
   }
+  // (lite: what usesOf reads alone — the other scripts settle reads; 15 to 29% of their view's cost, 1.35.4)
+  if (lite) return { code, plain, tpl, called };
   // Does a statement DEFINE a `render`? A method (`render() {`, `render(): Node {` — its `{` on the line below, its list over
   // lines too), a field that is a function (`render = () =>`), createReactClass's `render: function` — never a CALL of one
   // (`render(<App />, el)`, `return render(…)`): what follows its `)` tells. Review 2 of 1.35.2: a pattern of one line
@@ -1156,10 +1159,17 @@ function exportedComponents(text) {
 // `<Card.Header>`), a helper is CALLED (`FormatPrice(value)` — scriptView's `called`), a context is given to `useContext(X)`
 // or provides (`<X.Provider>`), and a part that is an enum's member is read as an object (`Button.Sizes.Large`).
 // usesOf(view) → { rendered, called, contexts, members — the names as the file writes them (`Card.Header`, `UI.Button`) —,
-// imports: local name → { spec (the module), name: the name it has there ("default", "*" for a namespace) } }.
+// imports: local name → { spec (the module), name: the name it has there ("default", "*" for a namespace) },
+// reexports (1.35.4): what the file passes on — { named: exported name → { spec, name it has there }, stars: [spec] } | null }.
 // A tag is `<Name` (capitalised) or `<a.b` (a member: `<motion.div`, `<UI.Button`) where an expression may start — never
 // after a name or a `)` / `]` (`a < B`, `useState<Item>(`, `Array<Card>`), never a type's parameter (`<T,>`,
 // `<T extends X>`, `<T = unknown>`) — and every closing tag `</Name`. Strings, comments and a template's text aside. Linear.
+// A call that renders a name is read as the tag it compiles from (1.35.4): `createElement(X, …)`, `h(X)`, `createVNode(X)`,
+// `jsx(X, …)` — the library's own function, imported (any local name) or a member of its namespace / default import —,
+// its first argument the type as written, any case (a factory is given a value), on the first line below with text when
+// the call's line ends at its `(`. What a file passes on (1.35.4): `export { A, B as C, default as D } from "m"` (the list
+// over lines), `export * from "m"`, `export * as NS from "m"`, a name it imports exported again (`export { A }`,
+// `export default A`) — one statement a line, at the margin (an ambient `declare module` is indented: not the file's).
 const RE_TAG_NAME = /<(\/?)([\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)*)/gu;
 const RE_TAG_KEYWORD = /(?:^|[^\p{L}\p{N}_$])(?:return|yield|await|default|case|else)$/u; // the words an element may follow
 const RE_TYPE_PARAM_AFTER = /^(?:[=,]|extends(?![\p{L}\p{N}_$]))/u;
@@ -1168,10 +1178,29 @@ const RE_CONTEXT_TAG = /^(.+)\.(?:Provider|Consumer)$/;
 const RE_USE_CONTEXT = /(?<![\p{L}\p{N}_$.])(?:(?:[\p{L}_$][\p{L}\p{N}_$]*\.)?useContext|(?:React\.)?use)\s*\(\s*([\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)?)\s*[,)]/gu;
 // a part read as an object: `Button.Sizes.Large`, `UI.List.Sizes.Large` (through a namespace) — never in a tag
 const RE_MEMBER_READ = /(?<![\p{L}\p{N}_$.<\/])((?:[\p{L}_$][\p{L}\p{N}_$]*\.)?[\p{L}_$][\p{L}\p{N}_$]*\.\p{Lu}[\p{L}\p{N}_$]*)\.[\p{L}_$]/gu;
+// (…asked of a line that holds its tail alone: every match holds one, and it starts on a literal `.` — the look-behind
+// above is tried at every place of a line — 1.35.4)
+const RE_MEMBER_TAIL = /\.\p{Lu}[\p{L}\p{N}_$]*\.[\p{L}_$]/u;
 const RE_SELF_CLOSED = /^[^<>]*\/>/; // (of what follows a tag's name) it closes itself: `Press <Kbd /> to save` — no comparison, no type's arguments
 const RE_REQUIRE_DECL = /^(?:export\s+)?(?:const|let|var)\s+(?:([\p{L}_$][\p{L}\p{N}_$]*)|\{([^}]*)\})\s*=\s*require\s*\(\s*["']([^"']+)["']\s*\)/u;
 const RE_NAMESPACE_IMPORT = /^\*\s*as\s+([\p{L}_$][\p{L}\p{N}_$]*)$/u;
 const RE_FROM_END = /(?:^|\s)from$/;
+// A call that renders a name — what a tag compiles to (1.35.4): React's `createElement(X, …)` (the classic runtime's, and
+// what React gives for writing without JSX), Preact's `h(X)` / `createElement(X)`, Vue's `h(X)` (its render functions) and
+// `createVNode(X)` (its JSX plugin's), the automatic runtime's `jsx` / `jsxs` / `jsxDEV` (each library's `/jsx-runtime`,
+// `/jsx-dev-runtime`) — only the library's own: imported from it (any local name), or a member of its namespace / default
+// import. A closed list, as `createContext` is: `hastscript`'s `h`, `lucide`'s `createElement`, a local `h` render nothing.
+// Not a render: `cloneElement(el)` (given an element), `memo(X)` / `forwardRef(fn)` (a wrapper; a render function), `lazy`.
+const RE_JSX_RUNTIME = /^(?:react|preact(?:\/compat)?|vue)(\/jsx-(?:dev-)?runtime)?$/;
+const DS_FACTORIES = new Set(["createElement", "h", "createVNode"]); // the library's own module's
+const DS_RUNTIME_FACTORIES = new Set(["jsx", "jsxs", "jsxDEV"]); // …its `/jsx-runtime`, `/jsx-dev-runtime`'s
+// a call's head: a name — never a member's, nor inside a longer name: a run of letters is tried at its start alone (×290 on
+// a line of one long name without it) — or a namespace's member, flat type arguments aside (`React.createElement<P>(`)
+const RE_FACTORY_CALL = /(?<![\p{L}\p{N}_$.])([\p{L}_$][\p{L}\p{N}_$]*)(?:\.([\p{L}_$][\p{L}\p{N}_$]*))?(?:\s*<[^<>()]*>)?\s*\(/gu;
+// …its first argument, the type as written: a name or a member, ANY case (a factory is given a value: `<button>` is the
+// string "button", `createElement(icon)` a variable), type arguments aside (`h(Table<Row>, …)`), then a `,`, a `)` or the
+// line's end (group 2 undefined: the next line with text must go on with a `,` or a `)` — usesOf)
+const RE_FIRST_ARG = /^\s*([\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)*)(?:\s*<[^<>()]*>)?\s*(?:([,)])|$)/u;
 // an `import` clause (what stands between `import` and the module's quote) → its names, into `into`
 function importClause(text, spec, into) {
   let t = text.trim();
@@ -1193,9 +1222,40 @@ function importClause(text, spec, into) {
     if (RE_LOCAL_NAME.test(local)) into.set(local, { spec, name: w[0] });
   }
 }
+// the tags a line writes → into rendered / providers. markup: a markup file's line, read as written — a word before a tag
+// is text there, never a comparison's operand (a script's: as code, strings emptied)
+function tagsIn(p, rendered, providers, markup) {
+  RE_TAG_NAME.lastIndex = 0;
+  for (let m = RE_TAG_NAME.exec(p); m; m = RE_TAG_NAME.exec(p)) {
+    const name = m[2];
+    if (!name.includes(".") && !RE_COMPONENT_PARAM.test(name)) continue; // an intrinsic element: `<div`
+    if (!m[1]) {
+      const end = m.index + m[0].length, c = p[end];
+      if (c !== undefined && c !== " " && c !== "\t" && c !== ">" && c !== "/") continue;
+      let j = m.index - 1;
+      while (j >= 0 && (p[j] === " " || p[j] === "\t")) j--;
+      // (after a name or a `)` / `]`: a comparison or a type's arguments — unless it closes itself, JSX text's `Press <Kbd />`)
+      if (!markup && j >= 0 && (p[j] === ")" || p[j] === "]" || (RE_WORD_CHAR.test(p[j]) && !RE_TAG_KEYWORD.test(p.slice(Math.max(0, j - 7), j + 1)))) && !RE_SELF_CLOSED.test(p.slice(end, end + DS_CALL_PEEK))) continue;
+      if ((c === " " || c === "\t") && RE_TYPE_PARAM_AFTER.test(p.slice(end, end + DS_CALL_PEEK).trimStart())) continue;
+    }
+    typeInto(name, rendered, providers);
+  }
+}
+// a type as written — a tag's, a factory's first argument — into rendered, or into providers when it is a provider's
+// (a context's `<X.Provider>`, or a part of a component named so: settle tells)
+const typeInto = (name, rendered, providers) => { if (RE_CONTEXT_TAG.test(name)) providers.add(name); else rendered.add(name); };
+// what a file passes on (1.35.4): `export * from "m"`, `export * as NS from "m"`; `export { … }` — then its `from "m"`
+const RE_EXPORT_STAR = /^export\s*\*\s*(?:as\s+([\p{L}_$][\p{L}\p{N}_$]*)\s+)?from\s*["']([^"']+)["']/u;
+const RE_EXPORT_LIST = /^export\s*\{/;
+const RE_FROM_SPEC = /^\s*from\s*["']([^"']+)["']/;
+// what the follow through what files pass on may read and do (settle — 1.35.4): files and characters read for it, beside
+// the search's own, and the operations it is charged with
+const DS_PASS_FILES = 2000, DS_PASS_CHARS = 8 * 1024 * 1024, DS_PASS_STEPS = 100000;
 function usesOf(view) {
   const { code, plain, tpl } = view;
   const rendered = new Set(), contexts = new Set(), providers = new Set(), members = new Set(), imports = new Map();
+  let named = null, stars = null;
+  const locals = [], pass = (exported, spec, name) => { if (!named) named = new Map(); named.set(exported, { spec, name }); };
   for (let i = 0; i < plain.length; i++) {
     if (tpl[i]) continue;
     const p = plain[i];
@@ -1216,6 +1276,26 @@ function usesOf(view) {
       i = k;
       continue;
     }
+    if (l[0] === "e" && l.startsWith("export")) {
+      const star = RE_EXPORT_STAR.exec(l);
+      if (star) { if (star[1]) pass(star[1], star[2], "*"); else (stars || (stars = [])).push(star[2]); } else if (RE_EXPORT_LIST.test(l)) {
+        // (the list over lines, to its first `}` — DS_EXPORT_LIST_LINES at most: its lines are its entries, read once and
+        // never again as lines of their own; one that never closes passes nothing and is given up, as the export reader
+        // gives one up — linear)
+        let list = l, k = i;
+        for (let more = l; !more.includes("}") && k + 1 < code.length && k < i + DS_EXPORT_LIST_LINES;) { more = code[++k]; list += " " + more; }
+        const close = list.indexOf("}");
+        if (close !== -1) {
+          const from = RE_FROM_SPEC.exec(list.slice(close + 1));
+          for (const entry of list.slice(list.indexOf("{") + 1, close).split(",")) {
+            const w = entry.trim().split(/\s+/);
+            const exported = w[1] === "as" ? w[2] : w[0];
+            if (from) pass(exported, from[1], w[0]); else locals.push([exported, w[0]]);
+          }
+        }
+        i = k;
+      } else { const d = RE_EXPORT_DEFAULT_NAME.exec(l.trimEnd()); if (d) locals.push(["default", d[1]]); }
+    }
     if (l[0] === "c" || l[0] === "l" || l[0] === "v" || l[0] === "e") {
       const r = RE_REQUIRE_DECL.exec(l);
       if (r) {
@@ -1224,29 +1304,47 @@ function usesOf(view) {
         continue;
       }
     }
-    if (p.includes("<")) {
-      RE_TAG_NAME.lastIndex = 0;
-      for (let m = RE_TAG_NAME.exec(p); m; m = RE_TAG_NAME.exec(p)) {
-        const name = m[2];
-        if (!name.includes(".") && !RE_COMPONENT_PARAM.test(name)) continue; // an intrinsic element: `<div`
-        if (!m[1]) {
-          const end = m.index + m[0].length, c = p[end];
-          if (c !== undefined && c !== " " && c !== "\t" && c !== ">" && c !== "/") continue;
-          let j = m.index - 1;
-          while (j >= 0 && (p[j] === " " || p[j] === "\t")) j--;
-          // (after a name or a `)` / `]`: a comparison or a type's arguments — unless it closes itself, JSX text's `Press <Kbd />`)
-          if (j >= 0 && (p[j] === ")" || p[j] === "]" || (RE_WORD_CHAR.test(p[j]) && !RE_TAG_KEYWORD.test(p.slice(Math.max(0, j - 7), j + 1)))) && !RE_SELF_CLOSED.test(p.slice(end, end + DS_CALL_PEEK))) continue;
-          if ((c === " " || c === "\t") && RE_TYPE_PARAM_AFTER.test(p.slice(end, end + DS_CALL_PEEK).trimStart())) continue;
-        }
-        // (a provider's tag, as written: a context's `<X.Provider>` — or a part of a component named so, settle tells)
-        if (RE_CONTEXT_TAG.test(name)) providers.add(name);
-        else rendered.add(name);
+    if (p.includes("<")) tagsIn(p, rendered, providers, false);
+    if (p.includes("use")) { RE_USE_CONTEXT.lastIndex = 0; for (let m = RE_USE_CONTEXT.exec(p); m; m = RE_USE_CONTEXT.exec(p)) contexts.add(m[1]); }
+    if (p.includes(".") && RE_MEMBER_TAIL.test(p)) { RE_MEMBER_READ.lastIndex = 0; for (let m = RE_MEMBER_READ.exec(p); m; m = RE_MEMBER_READ.exec(p)) members.add(m[1]); }
+  }
+  // the factories the file imports — bound once every import is read (one below its call too): a name imported from a
+  // runtime, a namespace or default import of one; a file that imports none is not read again (a cost guard: ×7 on pages
+  // of calls)
+  const fns = new Set(), spaces = new Map();
+  for (const [local, imp] of imports) {
+    const rt = RE_JSX_RUNTIME.exec(imp.spec);
+    if (!rt) continue;
+    const own = rt[1] ? DS_RUNTIME_FACTORIES : DS_FACTORIES;
+    if (imp.name === "*" || imp.name === "default") spaces.set(local, own);
+    else if (own.has(imp.name)) fns.add(local);
+  }
+  if (fns.size || spaces.size) {
+    // (the first argument written on line `at`: a name that ends its line is one only when the next line with text goes on
+    // with a `,` or a `)` — never a ternary's condition broken after it, `createElement(` / `wide` / `? Dialog : Sheet`;
+    // each run of blank lines is read below one line at most: linear)
+    const first = (s, at) => {
+      const a = RE_FIRST_ARG.exec(s);
+      if (!a || a[2] !== undefined) return a ? a[1] : null;
+      for (let k = at + 1; k < plain.length; k++) { const t = plain[k].trimStart(); if (t !== "") return t[0] === "," || t[0] === ")" ? a[1] : null; }
+      return null;
+    };
+    for (let i = 0; i < plain.length; i++) {
+      const p = plain[i];
+      for (const m of p.matchAll(RE_FACTORY_CALL)) {
+        if (m[2] === undefined ? !fns.has(m[1]) : !(spaces.has(m[1]) && spaces.get(m[1]).has(m[2]))) continue;
+        const rest = p.slice(m.index + m[0].length);
+        let name = first(rest, i);
+        // (the call's line ends at its `(`: its first argument is the first line below with text — a formatter's break of a
+        // long call; each run of blank lines lies below one line alone: linear)
+        if (name == null && rest.trim() === "") for (let k = i + 1; k < plain.length; k++) if (plain[k].trim() !== "") { name = first(plain[k], k); break; }
+        if (name != null) typeInto(name, rendered, providers);
       }
     }
-    if (p.includes("use")) { RE_USE_CONTEXT.lastIndex = 0; for (let m = RE_USE_CONTEXT.exec(p); m; m = RE_USE_CONTEXT.exec(p)) contexts.add(m[1]); }
-    if (p.includes(".")) { RE_MEMBER_READ.lastIndex = 0; for (let m = RE_MEMBER_READ.exec(p); m; m = RE_MEMBER_READ.exec(p)) members.add(m[1]); }
   }
-  return { rendered, called: view.called, contexts, providers, members, imports };
+  // (a name it imports, exported again — the import's own name kept: "default", "*", the identifier)
+  for (const [exported, local] of locals) if (imports.has(local)) pass(exported, imports.get(local).spec, imports.get(local).name);
+  return { rendered, called: view.called, contexts, providers, members, imports, reexports: named || stars ? { named: named || new Map(), stars: stars || [] } : null };
 }
 // A token file by its name AND its place (tokenFileKind):
 //   style — a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss, theme.css): anywhere;
@@ -1794,9 +1892,14 @@ const jsonSource = (j) => !j.secret && j.list.length > 0 && (j.format || j.stron
 // (review 5 of 1.35.0) — past it a name stands as the file's own rules leave it, which is 1.35.2's reading (review 1 of
 // 1.35.3: said, it put mui, mantine and gutenberg out of sync for good). A name is followed through the file's imports
 // (`import { MotionBox } from "@/components/ui/motion"`, `import * as UI from "../ui"` and `<UI.Card.Header>`, a default
-// import: the file's default export's name) to the files the module may be (placeOf). → { dropped, rendered }:
-// "path\nname" of the weak ones the project shows are no component and of the candidates it renders. A barrel's weak name
-// is a candidate: a `.ts` file holds no JSX.
+// import: the file's default export's name) to the files the module may be (placeOf) — and on through what the module's
+// own file passes on, to the file that declares the name (1.35.4: any barrel, `export *`, `export * as NS`, a workspace
+// package's `src/index`; its own bounds — DS_PASS_FILES, DS_PASS_CHARS, DS_PASS_STEPS — ending without a word too). The
+// markup files (.mdx, .vue, .svelte, .astro — markupUses) are read after every script, within the same bound (1.35.4).
+// → { dropped, rendered }: "path\nname" of the weak ones the project shows are no component and of the candidates it
+// renders. A barrel's weak name is a candidate: a `.ts` file holds no JSX — what it renders goes through a factory call
+// (`createElement(X)`), read when the file is read: with no weak name asked, never (read for every candidate, a Vue or
+// a Svelte kit's report took ×6 for no row — 1.35.4).
 const DS_USAGE_FILES = 5000;
 const DS_USAGE_CHARS = 32 * 1024 * 1024;
 const DS_PROJECT_ROOTS = 2000; // folders holding a package.json / tsconfig.json / jsconfig.json the walk keeps (an alias's roots)
@@ -1805,6 +1908,129 @@ const RE_ROOT_FILE = /^(?:package|tsconfig|jsconfig)\.json$/;
 const RE_SCRIPT_FILE = /\.(?:tsx|jsx|ts|js|mjs|cjs|mts|cts)$/i;
 const RE_NOT_SCRIPT = /\.(?:d\.[cm]?ts|min\.[cm]?js)$/i;
 const RE_JSX_FILE = /\.(?:tsx|jsx|js|mjs|cjs)$/i; // a script that may hold JSX
+// --- what the markup files tell (1.35.4) ----------------------------------------------------------------------------------------
+// An .mdx, .vue, .svelte or .astro file renders the components its SCRIPT imports, in its MARKUP — the two read apart, so no
+// prose and no template text reaches the script reader (an apostrophe there opens a string) and no code reaches the tags':
+//   - .mdx: its ESM — an `import ` / `export ` at a line's start where a block may start (the file's top, below its YAML
+//     front matter, after a blank line or a fence; never a paragraph's next line), to the next blank line: MDX's own rule
+//     (micromark-extension-mdxjs-esm) —, and the rest is markup, never in fenced code (``` / ~~~ — MDX has no indented code),
+//     an inline code span, the front matter, a `{/* … */}` or an MDX 1 `<!-- … -->`;
+//   - .vue: its `<script>` blocks (`setup`, `lang="ts"` alike) are script, its root `<template>` — to the `</template>` that
+//     closes it, a nested `<template v-if>` counted — markup, any other top-level block (`<style>`, `<docs>`, `<i18n>`)
+//     neither; a kebab-case tag is the component Vue resolves it to (`<my-button>` → MyButton; one word — `<card>` — never:
+//     Vue tells it from an element by a list of its own);
+//   - .svelte: its `<script>` blocks (`context="module"`, `module`) are script, its `<style>` neither, the rest markup;
+//   - .astro: its front matter (`---` from the first line to the next) is script, its `<script>` (a client script: what it
+//     imports never reaches the template) and `<style>` neither, the rest markup.
+// A block's tags are lower case, as these formats write them (`<Style>` is a component). An HTML comment is none of them
+// (`<!-- the <script> tag -->` opens no script). A script's lines lose their indent (prettier-plugin-svelte indents a
+// block's). In markup a tag is read as written: a word before it is text, no comparison. One pass over the lines, each
+// opener looked for once past a place: linear.
+const RE_MARKUP_FILE = /\.(?:mdx|vue|svelte|astro)$/i;
+const RE_MDX_ESM = /^(?:import|export) /;
+const RE_KEBAB_TAG = /<\/?([a-z][a-z0-9]*(?:-[a-z0-9]+)+)(?=[\s>/]|$)/g;
+const RE_SFC_BLOCK = /<(?:(!--)|(script|style)(?=[\s>/]|$))/g; // (a .svelte / .astro file's markup: what ends it)
+const RE_VUE_TEMPLATE = /<(?:(!--)|(\/?)template(?=[\s>/]|$))/g; // (a .vue template's: its own tags, a comment)
+const RE_VUE_TOP = /<(?:(!--)|([a-z][a-z0-9-]*))/g; // (between a .vue file's blocks: the next one)
+const RE_EXPR_COMMENT = /\{\s*\/\*/g;
+// the markup lines without `{/* … */}` and `<!-- … -->` — over lines
+function markupComments(lines) {
+  const st = { close: "" };
+  return lines.map((l) => {
+    let out = "", i = 0, h = -2, x = -2;
+    while (i < l.length) {
+      if (st.close) { const e = l.indexOf(st.close, i); if (e === -1) return out; i = e + st.close.length; st.close = ""; continue; }
+      if (h !== -1 && h < i) h = l.indexOf("<!--", i);
+      if (x !== -1 && x < i) { RE_EXPR_COMMENT.lastIndex = i; const m = RE_EXPR_COMMENT.exec(l); x = m ? m.index : -1; }
+      const at = h === -1 ? x : x === -1 ? h : Math.min(h, x);
+      if (at === -1) return out + l.slice(i);
+      out += l.slice(i, at);
+      st.close = at === h ? "-->" : "*/";
+      i = at === h ? h + 4 : l.indexOf("*", x) + 1;
+    }
+    return out;
+  });
+}
+// a Markdown line without its inline code spans (a backtick run nothing closes goes too: it holds no tag)
+function withoutCodeSpans(l) {
+  if (!l.includes("`")) return l;
+  const ticks = backtickRuns(l);
+  let out = "", from = 0;
+  for (let k = l.indexOf("`"); k !== -1; k = l.indexOf("`", from)) { out += l.slice(from, k) + " "; from = ticks.spanEnd(k); }
+  return out + l.slice(from);
+}
+// → { script: the file's text, every line but its script's blanked; markup: its lines, everything but markup blanked }
+function markupRegions(text, rel) {
+  const lines = (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).split(/\r?\n/);
+  const n = lines.length, script = new Array(n).fill(""), markup = new Array(n).fill("");
+  const ext = rel.slice(rel.lastIndexOf(".") + 1).toLowerCase();
+  // (front matter: a `---` first line, to the next one → that one's place, -1: none)
+  const front = () => { if (lines[0] !== "---") return -1; for (let e = 1; e < n; e++) if (lines[e] === "---") return e; return -1; };
+  if (ext === "mdx") {
+    const st = { fence: null };
+    for (let i = front() + 1, open = true, esm = false; i < n; i++) {
+      const l = lines[i];
+      if (esm && l.trim() !== "") { script[i] = l; continue; }
+      esm = false;
+      if (fenceStep(st, l) || l.trim() === "") { open = true; continue; }
+      if (open && RE_MDX_ESM.test(l)) { script[i] = l; esm = true; continue; }
+      markup[i] = withoutCodeSpans(l);
+      open = false;
+    }
+    return { script: script.join("\n"), markup: markupComments(markup) };
+  }
+  let i = 0;
+  if (ext === "astro") { const e = front(); if (e !== -1) { for (let k = 1; k < e; k++) script[k] = lines[k]; i = e + 1; } }
+  // mode: markup · script · raw (read for nothing: a <style>, Astro's <script>, a .vue block but its script and template, a
+  // comment) · top (a .vue file, between its blocks); back: the mode a raw or script block returns to
+  let mode = ext === "vue" ? "top" : "markup", back = mode, closer = "", depth = 0;
+  for (; i < n; i++) {
+    const l = lines[i];
+    let k = 0, sc = "", mk = "";
+    while (k < l.length) {
+      if (mode === "script" || mode === "raw") {
+        const e = l.indexOf(closer, k);
+        if (mode === "script") sc += l.slice(k, e === -1 ? l.length : e);
+        if (e === -1) break;
+        k = e + closer.length;
+        mode = back;
+        continue;
+      }
+      const re = mode === "top" ? RE_VUE_TOP : ext === "vue" ? RE_VUE_TEMPLATE : RE_SFC_BLOCK;
+      re.lastIndex = k;
+      const m = re.exec(l);
+      if (mode === "markup") mk += l.slice(k, m ? m.index : l.length);
+      if (!m) break;
+      k = m.index + m[0].length;
+      if (m[1]) { back = mode; mode = "raw"; closer = "-->"; continue; }
+      if (mode === "top" && m[2] === "template") { mode = "markup"; depth = 1; } else if (mode === "markup" && ext === "vue") { if (m[2]) { if (--depth === 0) mode = "top"; } else depth++; continue; } else {
+        back = mode;
+        mode = m[2] === "script" && ext !== "astro" ? "script" : "raw";
+        closer = "</" + m[2];
+      }
+      // (what the block holds starts after its opening tag's `>` — when the line holds it: its attributes may go on below)
+      const g = styleTagEnd(l, k);
+      if (g !== -1) k = g + 1;
+    }
+    script[i] = sc.trimStart();
+    markup[i] = mk;
+  }
+  return { script: script.join("\n"), markup: markupComments(markup) };
+}
+const pascalOf = (kebab) => kebab.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join("");
+// → what a markup file tells, as usesOf does a script's: its script's imports, calls, contexts, members and JSX — and the
+// tags of its markup
+function markupUses(text, rel) {
+  const { script, markup } = markupRegions(text, rel);
+  const uses = usesOf(scriptView(script, true));
+  const vue = /\.vue$/i.test(rel);
+  for (const l of markup) {
+    if (!l.includes("<")) continue;
+    tagsIn(l, uses.rendered, uses.providers, true);
+    if (vue) { RE_KEBAB_TAG.lastIndex = 0; for (let m = RE_KEBAB_TAG.exec(l); m; m = RE_KEBAB_TAG.exec(l)) uses.rendered.add(pascalOf(m[1])); }
+  }
+  return uses;
+}
 const RE_BARREL = /^index\.[cm]?ts$/i;
 const RE_MODULE_EXT = /\.[cm]?[jt]sx?$/i;
 const RE_CAPITAL_WORD = /\p{Lu}[\p{L}\p{N}_$]*/gu;
@@ -1822,19 +2048,23 @@ const moduleKey = (rel) => rel.toLowerCase().replace(RE_MODULE_EXT, "").replace(
 // package's name settled the project's. Now:
 //   - a relative path: the path;
 //   - a workspace package by its manifest's `name` (`@acme/ui`, `@repo/ui/components/kit`: its folders, then the path
-//     below each and below its `src/`);
+//     below each and below its `src/` — and where its `exports` map says, 1.35.4: exportsMap; its root's `src/index` is
+//     the file the follow starts from, `mains`);
 //   - `@/…`, `~/…`, `#…` from each project root above the file (a folder holding a package.json / tsconfig.json /
 //     jsconfig.json, the project's own included) and its `src/` / `app/` (`~/*` → `./app/*`: React Router's; `@/*` →
 //     `./app/*`: shadcn's React Router monorepo — review 4 of 1.35.3, `app/` for `~/` alone lost it); a bare path of
 //     two segments or more the same way (`components/ui/kit`). Another package names no file of the project.
-// A tsconfig's `paths` are not read (review 3 of 1.35.3: read, they took a `..` target as text, ran past every bound
-// and fell short of TypeScript's own rules three ways — the guess, which lost nothing on the corpus, stands; an alias
-// spelled like a scope, `@components/*`, or pointing elsewhere — Laravel's `./resources/js/*` — is a row to add by hand).
-// project: { roots (a Set of folders), packageOf(name) }.
+// …and, whatever the module, where the config that governs the file says (1.35.4 — aliasReader): its `paths`, else its
+// `baseUrl`, read as TypeScript reads them. Review 3 of 1.35.3 had taken a first reading out for three shortfalls, each
+// answered now: a `..` is resolved — a path above the project is none —, the reading is bounded (two governing names,
+// read lazily, DS_TS_*), and TypeScript's rules are kept (the longest prefix, an exact key first, `extends`, a child's
+// `paths` replacing its parent's; a `*` that matches stops neither the package lookup nor the guess). What it gives ADDS
+// keys, never in the guess's place.
+// project: { roots (a Set of folders), packageOf(name), aliasKeys(dirs, spec, nSegs), exported(folder, sub) }.
 const RE_ALIAS_SPEC = /^(?:[@~]\/|#)/;
 function placeOf(spec, fromRel, project) {
   const clean = (segs) => segs.filter((s) => s !== "" && s !== ".");
-  const keys = new Set();
+  const keys = new Set(), mains = [];
   const join = (dir, rest) => moduleKey((dir === "" ? "" : dir + "/") + rest);
   if (spec[0] === ".") {
     const out = fromRel.split("/").slice(0, -1);
@@ -1849,16 +2079,24 @@ function placeOf(spec, fromRel, project) {
   const dirs = []; // the folders above the importing file, the nearest first, the project's root last
   for (let d = fromRel.slice(0, Math.max(0, fromRel.lastIndexOf("/"))); ; d = d.slice(0, Math.max(0, d.lastIndexOf("/")))) { dirs.push(d); if (d === "") break; }
   const low = spec.toLowerCase();
-  const segs = clean(low.split("/"));
+  const segs = clean(low.split("/")), own = clean(spec.split("/")); // (own: as written — a map's keys are matched as Node matches them)
+  // (1.35.4: the config that governs the file — its `paths`, else its `baseUrl` — ADDS keys, never in the guess's place)
+  for (const k of project.aliasKeys(dirs, spec, segs.length)) keys.add(k);
   for (let n = Math.min(segs.length, 2); n >= 1; n--) {
     const folders = project.packageOf(segs.slice(0, n).join("/"));
     if (folders == null) continue;
-    const sub = segs.slice(n).join("/");
+    const sub = segs.slice(n).join("/"), written = own.slice(n).join("/");
     for (const folder of folders) {
-      if (sub === "") keys.add(moduleKey(folder));
-      else { keys.add(join(folder, sub)); keys.add(join(folder, "src/" + sub)); }
+      if (sub === "") { keys.add(moduleKey(folder)); mains.push(moduleKey(folder) + "/src/index"); continue; }
+      keys.add(join(folder, sub));
+      keys.add(join(folder, "src/" + sub));
+      // (and where its `exports` map says — an index target is its folder, as a folder import is: 1.35.4)
+      for (const t of project.exported(folder, written)) {
+        const k = join(folder, t.split(/[\\/]/).filter((s) => s !== "").join("/"));
+        keys.add(k.endsWith("/index") ? k.slice(0, -6) : k);
+      }
     }
-    return { keys };
+    return { keys, mains };
   }
   // (`app/` for every alias: narrowed to `~/` in review 3 of 1.35.3, it lost shadcn's `@/*` → `./app/*` to spare a match
   // that needs the same file under `app/` and `src/` — review 4)
@@ -1868,6 +2106,8 @@ function placeOf(spec, fromRel, project) {
 }
 // may a file (its moduleKey) be the module an import names? (the key itself, or a folder above it — asked of the key's
 // own prefixes: a file deep under many roots is asked as many times as it has folders, never once a key)
+// the base name a module key gives a default import: its last segment — its folder's for an index
+const keyBase = (key) => { const s = key.split("/").filter((x) => x !== "" && x !== "." && x !== ".."); return s.length && s[s.length - 1] === "index" ? s[s.length - 2] || "" : s[s.length - 1] || ""; };
 const pointsTo = (key, at) => {
   if (at.keys.has(key)) return true;
   for (let k = key.lastIndexOf("/"); k > 0; k = key.lastIndexOf("/", k - 1)) if (at.keys.has(key.slice(0, k))) return true;
@@ -1883,10 +2123,207 @@ const pointsTo = (key, at) => {
 // segment, all of them (shadcn's templates each hold a `packages/ui` named `@workspace/ui`: the first alone lost the
 // others' — review 4), else the first other folder read under it; so whichever import asks first, the folder named like
 // the package wins over an example of the same name the walk met before it (review 4: `next/link` asked first bound
-// `@acme/ui` to `examples/a`).
-function projectPlaces(manifests, roots) {
-  const found = new Map(), read = new Set(), grouped = new Set(), spent = { own: 0, walk: 0 };
-  let bySegment = null, walked = 0;
+// `@acme/ui` to `examples/a`). Each manifest read has its `exports` map sorted once (1.35.4 — kept up to DS_MAP_CHARS).
+// --- the config that governs a file: its `paths` / `baseUrl` (1.35.4) ------------------------------------------------------
+// The nearest folder at or above the importing file that holds a `tsconfig.json`, else a `jsconfig.json`, governs it
+// (esbuild's rule; `include` / `files` / `references` are not evaluated). Its JSONC is read (jsonPlain), through
+// `extends` — a string or a list, each over the one before it, the config's own options last; a relative path alone (a
+// package's config writes nothing of the project's), `.json` added when that path names no file; a circle applies
+// nothing —; a written `paths` / `baseUrl` replaces the inherited one, `paths` relative to `baseUrl` when one is known,
+// else to the folder of the config that WROTE them, `${configDir}` the governing config's folder. A key: the exact one
+// first, else the longest prefix among the `*` keys (a suffix too; a tie keeps the first written); every target of it
+// (TypeScript stops at the first that exists: a later one that also exists over-matches, as the guess's `src/` and
+// `app/` do); with no key that fits, a name of two segments or more below `baseUrl`. An entry `…/index` stands for its
+// folder (Nx). What this scan cannot read as TypeScript would — not JSON once its comments are out, a rooted path, one
+// above the project, a link out of it, past a bound — makes the folder's config tell NOTHING: it keeps 1.35.3's reading.
+const DS_TS_CONFIGS = 100; // config files read for `paths` in a scan (each once: a governing one, an `extends` link, a miss)
+const DS_TS_LINKS = 32; // `extends` entries followed from one governing config (depth and width alike)
+const DS_TS_STARS = 100; // `*` patterns a config's `paths` may hold — past them it tells nothing
+const DS_TS_TARGETS = 10; // targets kept of a pattern
+const UNKNOWN = Symbol("unknown"), MISSING = Symbol("missing"); // what a config left unread may have written; no file there
+const RE_ROOTED = /^(?:\/|[A-Za-z]:\/)/;
+const CONFIG_DIR = "${configDir}";
+// a path from a project folder, `.` / `..` / empty segments resolved → project-relative, or null once it steps above the project
+function inProject(dir, p) {
+  const out = dir === "" ? [] : dir.split("/");
+  for (const s of p.split("/")) {
+    if (s === "" || s === ".") continue;
+    if (s !== "..") out.push(s);
+    else if (!out.length) return null;
+    else out.pop();
+  }
+  return out.join("/");
+}
+function aliasReader(configs, absRoot, realRoot) {
+  const BSL = String.fromCharCode(92);
+  const parsed = new Map(), tables = new Map();
+  let reads = 0;
+  const slash = (s) => s.split(BSL).join("/");
+  const record = (v) => v != null && typeof v === "object" && !Array.isArray(v);
+  // a config file → what JSON.parse gives once its comments and trailing commas are out | MISSING | UNKNOWN (not JSON
+  // so, a real path out of the project, past DS_TS_CONFIGS)
+  const readConfig = (rel) => {
+    if (parsed.has(rel)) return parsed.get(rel);
+    if (reads >= DS_TS_CONFIGS) return UNKNOWN;
+    reads++;
+    let v = MISSING;
+    try {
+      const real = fs.realpathSync.native(absRoot + path.sep + rel.split("/").join(path.sep));
+      const t = isInsideDir(realRoot, real) ? readFileHead(real, DS_READ_CHARS) : UNKNOWN;
+      if (t === UNKNOWN) v = UNKNOWN;
+      else if (t != null) try { v = JSON.parse(jsonPlain(t)); } catch { v = UNKNOWN; }
+    } catch { /* no such file */ }
+    parsed.set(rel, v);
+    return v;
+  };
+  // a written `paths` → { exact: Map, stars: [{ prefix, suffix, targets }], from } (an object's own keys; none for
+  // anything else) | UNKNOWN (past DS_TS_STARS)
+  const tableOf = (obj, from) => {
+    const t = { exact: new Map(), stars: [], from };
+    for (const [k, v] of Object.entries(record(obj) ? obj : {})) {
+      const targets = (Array.isArray(v) ? v : []).filter((x) => typeof x === "string").slice(0, DS_TS_TARGETS).map(slash);
+      const s = k.indexOf("*");
+      if (s === -1) t.exact.set(k, targets);
+      else if (t.stars.push({ prefix: k.slice(0, s), suffix: k.slice(s + 1), targets }) > DS_TS_STARS) return UNKNOWN;
+    }
+    return t;
+  };
+  // a written `baseUrl` → { dir } | { leaf } (`${configDir}…`: the governing config's folder) | { dir: null } (not a
+  // string: none) | UNKNOWN (rooted, out of the project)
+  const baseOf = (v, dir) => {
+    if (typeof v !== "string") return { dir: null };
+    const p = slash(v);
+    if (p.startsWith(CONFIG_DIR)) return { leaf: p.slice(CONFIG_DIR.length) };
+    const d = RE_ROOTED.test(p) || p.includes("${") ? null : inProject(dir, p);
+    return d == null ? UNKNOWN : { dir: d };
+  };
+  // a config over what it extends → { paths, base }: each undefined (written by none), UNKNOWN, or the last one written
+  const chain = (rel, stack, budget) => {
+    const c = readConfig(rel);
+    if (c === UNKNOWN) return { paths: UNKNOWN, base: UNKNOWN };
+    if (!record(c)) return {};
+    const dir = rel.slice(0, Math.max(0, rel.lastIndexOf("/")));
+    let paths, base;
+    const apply = (r) => { if (r.paths !== undefined) paths = r.paths; if (r.base !== undefined) base = r.base; };
+    for (const e of typeof c.extends === "string" ? [c.extends] : Array.isArray(c.extends) ? c.extends : []) {
+      if (typeof e !== "string") continue;
+      if (budget.n-- <= 0) { apply({ paths: UNKNOWN, base: UNKNOWN }); break; }
+      const p = slash(e);
+      // (a package's config — `@tsconfig/*`, a workspace's `@repo/typescript-config/…` — writes nothing of the project's)
+      if (!p.startsWith("./") && !p.startsWith("../")) { if (RE_ROOTED.test(p)) apply({ paths: UNKNOWN, base: UNKNOWN }); continue; }
+      let to = inProject(dir, p);
+      if (to == null) { apply({ paths: UNKNOWN, base: UNKNOWN }); continue; }
+      if (!to.endsWith(".json") && readConfig(to) === MISSING) to += ".json";
+      if (stack.has(to)) continue; // (a circle: TypeScript applies none of the config met again)
+      stack.add(to);
+      apply(chain(to, stack, budget));
+      stack.delete(to);
+    }
+    const o = Object(c.compilerOptions);
+    if (Object.prototype.hasOwnProperty.call(o, "paths")) paths = tableOf(o.paths, dir);
+    if (Object.prototype.hasOwnProperty.call(o, "baseUrl")) base = baseOf(o.baseUrl, dir);
+    return { paths, base };
+  };
+  // the governing config's table { exact, stars, from, base, leaf } | null (none, or one that tells nothing for sure)
+  const tableOfLeaf = (leaf) => {
+    if (tables.has(leaf)) return tables.get(leaf);
+    const rel = (leaf === "" ? "" : leaf + "/") + configs.get(leaf);
+    const r = chain(rel, new Set([rel]), { n: DS_TS_LINKS });
+    let t = null;
+    if (r.paths !== UNKNOWN && r.base !== UNKNOWN) {
+      const p = r.paths || { exact: new Map(), stars: [], from: leaf };
+      t = { exact: p.exact, stars: p.stars, from: p.from, leaf, base: r.base === undefined ? null : r.base.leaf != null ? inProject(leaf, r.base.leaf) : r.base.dir };
+    }
+    tables.set(leaf, t);
+    return t;
+  };
+  return (dirs, spec, nSegs) => {
+    const leaf = dirs.find((d) => configs.has(d)), out = [];
+    const t = leaf === undefined ? null : tableOfLeaf(leaf);
+    if (!t) return out;
+    let targets = t.exact.get(spec), star = null;
+    if (!targets) {
+      let best = null;
+      for (const p of t.stars) if ((best == null || p.prefix.length > best.prefix.length) && spec.length >= p.prefix.length + p.suffix.length && spec.startsWith(p.prefix) && spec.endsWith(p.suffix)) best = p;
+      if (best) { targets = best.targets; star = spec.slice(best.prefix.length, spec.length - best.suffix.length); }
+    }
+    if (targets) {
+      for (const raw of targets) {
+        const k = raw.indexOf("*");
+        const s = star && k !== -1 ? raw.slice(0, k) + star + raw.slice(k + 1) : raw;
+        if (s.includes("*")) continue; // (a `*` left — an empty one's, a second —: the path of no file, as TypeScript reads it)
+        const rel = s.startsWith(CONFIG_DIR) ? inProject(leaf, s.slice(CONFIG_DIR.length)) : RE_ROOTED.test(s) || s.includes("${") ? null : inProject(t.base != null ? t.base : t.from, s);
+        if (rel == null) continue;
+        const key = moduleKey(rel);
+        out.push(key);
+        // (an entry file stands for its folder, as a workspace package's name does: Nx's `"@org/ui": ["libs/ui/src/index.ts"]`)
+        if (key.endsWith("/index")) out.push(key.slice(0, -6));
+      }
+    } else if (t.base != null && nSegs >= 2 && !RE_ROOTED.test(spec)) {
+      // (no pattern fits: the name below `baseUrl` — of two segments or more, the guess's rule: one is a package's)
+      const rel = inProject(t.base, spec);
+      if (rel != null) out.push(moduleKey(rel));
+    }
+    return out;
+  };
+}
+// --- a workspace package's `exports` map (1.35.4) ---------------------------------------------------------------------------
+const DS_EXPORT_KEYS = 500; // a map's keys read: a map with more is not read (the guess alone)
+const DS_EXPORT_TARGETS = 16; // the files one key may be, through its conditions and lists
+const DS_EXPORT_DEPTH = 8; // conditions and lists nested under a key (a 100,000-deep list overflowed the stack unbounded)
+const DS_MAP_CHARS = 4 * 1024 * 1024; // the manifests whose maps are kept, in characters: past them a map is not read
+const RE_REFUSED_SEGMENT = /^(?:\.\.?|node_modules)$/i;
+// does a path hold a segment Node refuses — `.`, `..`, `node_modules`, `%`-encoded or not, split on `/` and `\` as Node splits it?
+const refused = (p) => p.split(/[\\/]/).some((s) => RE_REFUSED_SEGMENT.test(s.replace(/%([0-9a-f]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))));
+// A workspace package's `exports` map, read as Node's resolver reads one (lib/internal/modules/esm/resolve.js):
+// → { exact: Map(key → entry), patterns: [{ base, trail, len, entry }] in Node's order — the longest part before the `*`,
+// then the longest key } | null: none to read — keys that are no subpath's (a list's indices, Node's `.` sugar of
+// conditions) or a mix Node refuses, or more than DS_EXPORT_KEYS of them (all or none: the longest key wins, and a map
+// read in part could pick a shorter one than Node does). A key of two `*`s is no pattern: Node never matches it.
+function exportsMap(exp) {
+  const keys = Object.keys(exp);
+  if (keys.length > DS_EXPORT_KEYS || keys.some((k) => k[0] !== ".")) return null;
+  const exact = new Map(), patterns = [];
+  for (const k of keys) {
+    const star = k.indexOf("*"), entry = { value: exp[k], targets: null };
+    if (star === -1) exact.set(k, entry);
+    else if (k.indexOf("*", star + 1) === -1) patterns.push({ base: k.slice(0, star), trail: k.slice(star + 1), len: k.length, entry });
+  }
+  patterns.sort((a, b) => b.base.length - a.base.length || b.len - a.len);
+  return { exact, patterns };
+}
+// Every path a key's value may lead to — any condition's (what the module MAY be, as the guess's two keys are; Chakra's
+// `dev` too) — kept without its `./`: a condition object's keys up to its `default` (none after it is ever reached), a
+// list's entries up to the first target Node takes (one it refuses, a `null` or an object that may match nothing are
+// passed, as its resolver passes them), DS_EXPORT_DEPTH deep, DS_EXPORT_TARGETS of them. → whether a list ends at `t`.
+function reachTargets(t, out, depth) {
+  if (typeof t === "string") {
+    const ok = t.startsWith("./") && !refused(t.slice(2));
+    if (ok && out.length < DS_EXPORT_TARGETS) out.push(t.slice(2));
+    return ok;
+  }
+  if (t === null || typeof t !== "object" || depth >= DS_EXPORT_DEPTH) return false;
+  if (Array.isArray(t)) { for (const v of t) if (reachTargets(v, out, depth + 1)) break; return false; }
+  for (const k in t) { reachTargets(t[k], out, depth + 1); if (k === "default") break; }
+  return false;
+}
+// (a key's targets, reached once whatever the lookups — a cost guard, timed)
+const targetsOf = (entry) => { if (entry.targets === null) { entry.targets = []; reachTargets(entry.value, entry.targets, 0); } return entry.targets; };
+// → the paths in its package a subpath (as written) may be by the map: its own key's, else the first pattern's — every
+// `*` standing for what the subpath has there, `/` included —; none when that key is `null`, when no key matches (never a
+// shorter pattern than the one that does) or when the match holds a segment Node refuses (`@acme/ui/x/../y`)
+function exportedPaths(map, sub) {
+  const m = "./" + sub;
+  if (map.exact.has(m)) return targetsOf(map.exact.get(m));
+  const p = map.patterns.find((q) => m.length >= q.len && m.startsWith(q.base) && m.endsWith(q.trail));
+  if (!p) return [];
+  const match = m.slice(p.base.length, m.length - p.trail.length);
+  return refused(match) ? [] : targetsOf(p.entry).map((t) => t.split("*").join(match));
+}
+function projectPlaces(manifests, roots, configs, absRoot, realRoot) {
+  const aliasKeys = aliasReader(configs, absRoot, realRoot);
+  const found = new Map(), read = new Set(), grouped = new Set(), spent = { own: 0, walk: 0 }, mapAt = new Map();
+  let bySegment = null, walked = 0, kept = 0; // (kept: the characters of the manifests whose maps are kept — DS_MAP_CHARS)
   const lastOf = (s) => s.slice(s.lastIndexOf("/") + 1).toLowerCase();
   const readOne = (m, budget) => {
     if (read.has(m) || spent[budget] >= DS_PACKAGE_NAMES) return;
@@ -1896,6 +2333,8 @@ function projectPlaces(manifests, roots) {
     let j = null;
     try { j = text == null ? null : JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { /* no manifest */ }
     if (!j || typeof j.name !== "string" || j.name === "") return;
+    // (its `exports` map, sorted once — 1.35.4)
+    if (j.exports instanceof Object) { const map = exportsMap(j.exports); if (map && kept + text.length <= DS_MAP_CHARS) { kept += text.length; mapAt.set(m.dir, map); } }
     const name = j.name.toLowerCase(), named = lastOf(m.dir) === lastOf(name), e = found.get(name);
     if (!e || (named && !e.named)) found.set(name, { dirs: [m.dir], named });
     else if (named) e.dirs.push(m.dir);
@@ -1910,9 +2349,11 @@ function projectPlaces(manifests, roots) {
     for (; walked < manifests.length && !found.has(name) && spent.walk < DS_PACKAGE_NAMES; walked++) readOne(manifests[walked], "walk");
     return found.has(name) ? found.get(name).dirs : null;
   };
-  return { roots, packageOf };
+  // the paths in a package's folder its map gives a subpath (none without a map)
+  const exported = (dir, sub) => { const map = mapAt.get(dir); return map ? exportedPaths(map, sub) : []; };
+  return { roots, packageOf, aliasKeys, exported };
 }
-function settle(results, scripts, read, places) {
+function settle(results, scripts, markups, read, places) {
   const dropped = new Set(), rendered = new Set();
   const asked = new Map(), byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map(), exportsOf = new Map(), localsOf = new Map();
   const ask = (path, name, local, kind) => {
@@ -1944,6 +2385,107 @@ function settle(results, scripts, read, places) {
   // a provider's tag: the part it names when the file gives one so (`Tooltip.Provider`), else its root used as a context
   const provide = (path, name) => { if (exportsOf.has(path) && exportsOf.get(path).has(name)) note(path, name, "rendered"); else note(path, name.slice(0, name.lastIndexOf(".")), "context"); };
   const placesOf = new Map(), targets = new Map();
+  // (where a module may be, once a folder and a spec: placeOf)
+  const placed = (spec, from) => { const pk = from.slice(0, from.lastIndexOf("/") + 1) + "\n" + spec; if (!placesOf.has(pk)) placesOf.set(pk, placeOf(spec, from, project)); return placesOf.get(pk); };
+  const lookup = (at, imported, rest, out) => {
+    if (imported === "default") {
+      // (the file's base name is the last segment of where the module resolves — `import X from "../"` is its folder's —,
+      // or its folder's for an index: of EVERY place the module may be — a config's target, a package's map, named its own
+      // way, 1.35.4)
+      let n = 0;
+      for (const last of new Set([...at.keys].map(keyBase))) {
+        const list = byBase.get(last) || [];
+        n += list.length;
+        for (const path of list) if (defaults.has(path) && pointsTo(keys.get(path), at)) out.push([path, defaults.get(path) + rest]);
+      }
+      return n;
+    }
+    const name = imported === "*" ? rest.slice(1) : imported + rest;
+    const list = name !== "" && byName.has(name) ? byName.get(name) : [];
+    for (const path of list) if (pointsTo(keys.get(path), at)) out.push([path, name]);
+    const root = name !== "" && RE_CONTEXT_TAG.test(name) ? name.slice(0, name.lastIndexOf(".")) : null;
+    const parts = root != null && byName.has(root) ? byName.get(root) : [];
+    for (const path of parts) if (pointsTo(keys.get(path), at)) out.push([path, name]);
+    return list.length + parts.length;
+  };
+  // What a module's own file passes on (1.35.4), followed to the file that declares the name — the evidence goes to that
+  // file, under the name it exports (`export { Root as Dialog }` and `<Dialog />`: Root). The file(s) a module IS: a
+  // key's own, its `/index`, a package root's `src/index` (filesOf). What a file passes on is read once (the files read
+  // before the search: never again), up to DS_PASS_FILES / DS_PASS_CHARS beside the search's own. A file's `export *`
+  // closure is indexed once (closureOf); a query once a file and a name (through) — its own `export { X } from` hides its
+  // stars, a star never passes a default, a cycle ends at a file seen. Every operation is charged to DS_PASS_STEPS: past
+  // it, or past the reads, nothing more is followed — without a word (evidence looked for). No name is ASKED because a
+  // file passes it on. Over-approximated knowingly, as pointsTo's folder rule is: a name two stars pass on is followed
+  // into both, `./x` into `x.ts` and `x/index.ts`.
+  let byModule = null;
+  const filesOf = (at) => {
+    if (at.files) return at.files;
+    if (!byModule) { byModule = new Map(); for (const s of scripts) { const k = moduleKey(s.rel); if (!byModule.has(k)) byModule.set(k, []); byModule.get(k).push(s); } }
+    const out = [];
+    for (const k of at.keys) for (const f of [k, k + "/index"]) for (const s of byModule.get(f) || []) out.push(s);
+    for (const k of at.mains || []) for (const s of byModule.get(k) || []) out.push(s);
+    return (at.files = out);
+  };
+  const passes = new Map(), closures = new Map(), passed = new Map(), spent = { files: 0, chars: 0, steps: 0 };
+  for (const r of results) passes.set(r.path, r.uses.reexports);
+  const passesOf = (s) => {
+    if (passes.has(s.rel)) return passes.get(s.rel);
+    let e = null;
+    if (spent.files < DS_PASS_FILES && spent.chars < DS_PASS_CHARS) {
+      const text = readFileHead(s.full, DS_READ_CHARS);
+      spent.files++;
+      if (text != null) { spent.chars += text.length; e = usesOf(scriptView(text, true)).reexports; }
+    }
+    passes.set(s.rel, e);
+    return e;
+  };
+  // (every operation of the follow is charged to the one bound: a module a star or a link reaches — 1, its keys, its
+  // files —, a name a file passes on, once a closure it is in, and the candidates a lookup compares)
+  const reach = (at) => { spent.steps += 1 + at.keys.size + filesOf(at).length; return spent.steps <= DS_PASS_STEPS; };
+  const look = (at, imported, rest, out) => { spent.steps += lookup(at, imported, rest, out); };
+  const closureOf = (s) => {
+    if (closures.has(s.rel)) return closures.get(s.rel);
+    const c = { at: { keys: new Set() }, names: new Map() }, seen = new Set([s.rel]), todo = [s];
+    for (let q = 0; q < todo.length; q++) {
+      const f = todo[q], e = passesOf(f);
+      if (!e) continue;
+      spent.steps += e.named.size;
+      for (const [name, via] of e.named) { if (!c.names.has(name)) c.names.set(name, []); c.names.get(name).push([f, via]); }
+      for (const spec of e.stars) {
+        const at = placed(spec, f.rel);
+        if (!at) continue;
+        if (!reach(at)) break;
+        for (const k of at.keys) c.at.keys.add(k);
+        for (const g of at.files) if (!seen.has(g.rel)) { seen.add(g.rel); todo.push(g); }
+      }
+    }
+    closures.set(s.rel, c);
+    return c;
+  };
+  const through = (s, imported, rest) => {
+    const root = s.rel + "\n" + imported + "\n" + rest;
+    if (passed.has(root)) return passed.get(root);
+    const out = [], seen = new Set([root]), todo = [[s, imported, rest]];
+    for (let q = 0; q < todo.length; q++) {
+      const [f, imp, r] = todo[q];
+      let head = imp, tail = r;
+      if (imp === "*") { const d = r.indexOf(".", 1); head = d === -1 ? r.slice(1) : r.slice(1, d); tail = d === -1 ? "" : r.slice(d); }
+      const e = passesOf(f);
+      if (!e) continue;
+      const own = e.named.get(head);
+      const c = own || head === "default" ? null : closureOf(f);
+      if (c) look(c.at, head, tail, out);
+      for (const [g, via] of own ? [[f, own]] : c ? c.names.get(head) || [] : []) {
+        const at = placed(via.spec, g.rel);
+        if (!at) continue;
+        if (!reach(at)) break;
+        look(at, via.name, tail, out);
+        for (const h of at.files) { const k = h.rel + "\n" + via.name + "\n" + tail; if (!seen.has(k)) { seen.add(k); todo.push([h, via.name, tail]); } }
+      }
+    }
+    passed.set(root, out);
+    return out;
+  };
   const tell = (rel, uses) => {
     const file = rel.slice(rel.lastIndexOf("/") + 1);
     const tests = isTestFile(rel) || RE_NOT_COMPONENT_FILE.test(file); // (a story or a test may CALL a component: never a helper's sign — review 1)
@@ -1970,21 +2512,8 @@ function settle(results, scripts, read, places) {
       const rest = dot === -1 ? "" : written.slice(dot);
       const tk = dir + "\n" + imp.spec + "\n" + imp.name + "\n" + rest;
       if (targets.has(tk)) return targets.get(tk);
-      const pk = dir + "\n" + imp.spec;
-      if (!placesOf.has(pk)) placesOf.set(pk, placeOf(imp.spec, rel, project));
-      const at = placesOf.get(pk), out = [];
-      if (at && imp.name === "default") {
-        // (the file's base name is the last segment of where the module resolves — `import X from "../"` is its folder's —,
-        // or its folder's for an index)
-        const segs = at.keys.values().next().value.split("/").filter((s) => s !== "" && s !== "." && s !== "..");
-        const last = segs.length && segs[segs.length - 1] === "index" ? segs[segs.length - 2] || "" : segs[segs.length - 1] || "";
-        for (const path of byBase.get(last) || []) if (defaults.has(path) && pointsTo(keys.get(path), at)) out.push([path, defaults.get(path) + rest]);
-      } else if (at) {
-        const name = imp.name === "*" ? rest.slice(1) : imp.name + rest;
-        if (name !== "" && byName.has(name)) for (const path of byName.get(name)) if (pointsTo(keys.get(path), at)) out.push([path, name]);
-        // (a provider's tag may name a part no one asks: its file is followed all the same)
-        if (name !== "" && RE_CONTEXT_TAG.test(name)) { const root = name.slice(0, name.lastIndexOf(".")); if (byName.has(root)) for (const path of byName.get(root)) if (pointsTo(keys.get(path), at)) out.push([path, name]); }
-      }
+      const at = placed(imp.spec, rel), out = [];
+      if (at) { lookup(at, imp.name, rest, out); for (const f of filesOf(at)) for (const x of through(f, imp.name, rest)) out.push(x); }
       targets.set(tk, out);
       return out;
     };
@@ -1999,20 +2528,35 @@ function settle(results, scripts, read, places) {
   // the other scripts — a file that writes none of the names asked (nor a default export's) tells nothing: never viewed
   const wanted = new Set(defaults.values());
   for (const name of byName.keys()) { const dot = name.indexOf("."); wanted.add(dot === -1 ? name : name.slice(0, dot)); }
+  // (and a namespace a file read before the search passes on, `export * as NS from`: a name the search looks for — its
+  // renamed re-exports are candidates already; what a file read later passes on widens nothing: the test is fixed before
+  // the search, so that no verdict depends on the order — 1.35.4)
+  for (const r of results) if (r.uses.reexports) for (const [exported, via] of r.uses.reexports.named) if (via.name === "*") wanted.add(exported);
   const names = (text) => { RE_CAPITAL_WORD.lastIndex = 0; for (let m = RE_CAPITAL_WORD.exec(text); m; m = RE_CAPITAL_WORD.exec(text)) if (wanted.has(m[0])) return true; return false; };
   const done = new Set(read);
-  // (a `.ts` file renders nothing: with no weak name asked — a candidate is settled by a render alone — it is never read: an
-  // Angular project's thousands of them; the files that may hold JSX are read first)
+  // (a `.ts` file holds no JSX — it renders only through a factory call: with no weak name asked it is never read — an
+  // Angular project's thousands of them; read for every candidate, a Vue or a Svelte kit's report took ×6 for no row,
+  // 1.35.4 —; the files that may hold JSX are read first)
   const calls = [...asked.values()].some((m) => [...m.values()].some((e) => e.kind === "weak"));
   const order = (a, b) => (RE_JSX_FILE.test(b.rel) - RE_JSX_FILE.test(a.rel)) || a.rel.length - b.rel.length || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
+  // (then the markup files — 1.35.4 —, the shorter path first: after every script, within the same bound, so a script is
+  // read as 1.35.3 read it; read ahead where an open is slow — readFileHeads)
+  const scriptUses = (text) => usesOf(scriptView(text, true));
+  const queue = scripts.filter((f) => !done.has(f.rel) && (calls || RE_JSX_FILE.test(f.rel))).sort(order).map((s) => [s, scriptUses])
+    .concat(markups.sort((a, b) => a.rel.length - b.rel.length || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0)).map((s) => [s, markupUses]));
+  const heads = readFileHeads(queue.slice(0, DS_USAGE_FILES).map(([s]) => s.full), DS_READ_CHARS);
   let files = 0, chars = 0;
-  for (const s of scripts.filter((f) => !done.has(f.rel) && (calls || RE_JSX_FILE.test(f.rel))).sort(order)) {
-    if (files >= DS_USAGE_FILES || chars >= DS_USAGE_CHARS) break;
-    const text = readFileHead(s.full, DS_READ_CHARS);
-    files++;
-    if (text == null) continue;
-    chars += text.length;
-    if (names(text)) tell(s.rel, usesOf(scriptView(text)));
+  try {
+    for (const [s, uses] of queue) {
+      if (files >= DS_USAGE_FILES || chars >= DS_USAGE_CHARS) break;
+      const text = heads.next();
+      files++;
+      if (text == null) continue;
+      chars += text.length;
+      if (names(text)) tell(s.rel, uses(text, s.rel));
+    }
+  } finally {
+    heads.stop();
   }
   for (const [path, m] of asked) for (const [name, e] of m) {
     if (e.kind === "candidate") { if (e.rendered && !e.context) rendered.add(path + "\n" + name); } else if (e.kind === "unproven" ? !e.rendered || e.context : e.context || (!e.rendered && (e.called || e.member))) dropped.add(path + "\n" + name);
@@ -2023,8 +2567,8 @@ function scanCode(root, withComponents = true) {
   const realRoot = realRootOf(root);
   const byKey = new Map(), views = [], tokenFiles = [], sheets = [], found = [], routerRoots = new Set(), pageDirs = new Set(), nextConfigs = new Set();
   const fullOf = new Map(); // a component file's full path, by its relative one
-  const scripts = [], barrels = []; // every script file; a component folder's barrel (`index.ts`): read for what it re-exports
-  const roots = new Set(), packageFiles = []; // the folders that hold a package.json / tsconfig.json / jsconfig.json; the manifests
+  const scripts = [], barrels = [], markups = []; // every script file; a component folder's barrel (`index.ts`): read for what it re-exports; every markup file
+  const roots = new Set(), packageFiles = [], configs = new Map(); // the folders that hold a package.json / tsconfig.json / jsconfig.json; the manifests; folder → its config's name
   const counts = (rel) => isViewFile(rel) || isTokenFile(rel);
   const dirOf = (rel) => rel.slice(0, Math.max(0, rel.lastIndexOf("/")));
   const walk = walkProject(root, DS_FILE_CAP, (rel, full, name) => {
@@ -2039,7 +2583,12 @@ function scanCode(root, withComponents = true) {
     // (every script: what it renders, calls and imports may settle a component file's names — 1.35.3; and where the
     // project's roots and packages are, which its imports name)
     if (RE_SCRIPT_FILE.test(name) && !RE_NOT_SCRIPT.test(name)) scripts.push({ rel, full });
-    else if (RE_ROOT_FILE.test(name) && roots.size < DS_PROJECT_ROOTS) { roots.add(dirOf(rel)); if (name === "package.json") packageFiles.push({ dir: dirOf(rel), full }); }
+    else if (RE_MARKUP_FILE.test(name)) markups.push({ rel, full });
+    else if (RE_ROOT_FILE.test(name)) {
+      // (every folder's config, the walk's bound alone: the nearest one above a file governs it — 1.35.4)
+      if (name !== "package.json") configs.set(dirOf(rel), name); // (`jsconfig.json` sorts first: a folder's tsconfig.json stands)
+      if (roots.size < DS_PROJECT_ROOTS) { roots.add(dirOf(rel)); if (name === "package.json") packageFiles.push({ dir: dirOf(rel), full }); }
+    }
     if (RE_BARREL.test(name) && !isTestFile(rel) && inComponentFolder(rel)) barrels.push({ path: rel, full });
     if (!isViewFile(rel)) return;
     views.push({ rel, full });
@@ -2094,18 +2643,23 @@ function scanCode(root, withComponents = true) {
   const results = [], readPaths = []; // [the file's path, what it exports (exportedComponents), what it tells (usesOf)] — in reading order
   for (const [list, kind] of [[readable, "file"], [withComponents ? barrels.sort(byPath) : [], "barrel"]]) {
     let n = 0, chars = 0;
-    for (const c of list) {
-      if (n >= DS_EXPORT_FILES || chars >= DS_EXPORT_CHARS) { capped.exports = capped.exports || readPaths.length; break; }
-      const text = readFileHead(fullOf.get(c.path), DS_READ_CHARS);
-      n++;
-      if (kind === "file") filesRead++;
-      readPaths.push(c.path);
-      if (text == null) continue;
-      chars += text.length;
-      const found1 = exportedComponents(text);
-      if (found1.more) cutNames = true;
-      results.push({ path: c.path, found: found1, uses: usesOf(found1.view), barrel: kind === "barrel" });
-      found1.view = null; // (a view holds the file twice over: what it tells is kept, the view is not)
+    const heads = readFileHeads(list.slice(0, DS_EXPORT_FILES).map((c) => fullOf.get(c.path)), DS_READ_CHARS); // (read ahead where an open is slow)
+    try {
+      for (const c of list) {
+        if (n >= DS_EXPORT_FILES || chars >= DS_EXPORT_CHARS) { capped.exports = capped.exports || readPaths.length; break; }
+        const text = heads.next();
+        n++;
+        if (kind === "file") filesRead++;
+        readPaths.push(c.path);
+        if (text == null) continue;
+        chars += text.length;
+        const found1 = exportedComponents(text);
+        if (found1.more) cutNames = true;
+        results.push({ path: c.path, found: found1, uses: usesOf(found1.view), barrel: kind === "barrel" });
+        found1.view = null; // (a view holds the file twice over: what it tells is kept, the view is not)
+      }
+    } finally {
+      heads.stop();
     }
   }
   if (cutNames && !capped.exports) capped.exports = filesRead;
@@ -2113,7 +2667,7 @@ function scanCode(root, withComponents = true) {
   // dropped when the project calls it as a function or gives it to `useContext`, never rendering it; a CANDIDATE — a name
   // exported that the rules took for none — is one when the project renders it.
   let placed = null;
-  const verdict = settle(results, scripts, readPaths, () => placed || (placed = projectPlaces(packageFiles, roots)));
+  const verdict = settle(results, scripts, markups, readPaths, () => placed || (placed = projectPlaces(packageFiles, roots, configs, path.resolve(root), realRoot)));
   // (every file's names before any candidate: a barrel's re-export takes no row's path from the file that declares it —
   // review 1 of 1.35.3, `export { default as FiltersToggle } from "./toggle"`)
   const add = (r, name) => { const key = dsKey(name); if (key && !byKey.has(key)) byKey.set(key, { name, key, path: r.path, index: false, route: false }); };
