@@ -1513,10 +1513,11 @@ function braceExpand(pattern) {
   }
   return out;
 }
-// A `!negation`'s pattern (what follows the `!`) → its alternatives (a brace list expanded), each a list of segment matchers
-// — `**` any folders, a name with a `*` (two at most, as a walked one), a name — or null: none it can read (out of the
-// project, too long, too many segments). globMatch(n, parts): does a folder (its names) match one of them? Linear in
-// segments × names.
+// A `!negation`'s pattern (what follows the `!`) → its alternatives (a brace list expanded), each ONE anchored RegExp
+// over "/" + a folder's path — `**` any folders (none too), a name with a `*` (two at most, as a walked one), a name — or
+// null: none it can read (out of the project, too long, too many segments). Compiled once (review 1 of 1.35.3: a matcher
+// built for every folder, against 6,000 unbounded negations of ten packages, cost 103 s).
+const DS_WORKSPACE_NEGATIONS = 200; // the negation alternatives kept, the project's and its packages': past them, said
 function negation(p0) {
   const p = p0.trim();
   if (p === "" || p.length > DS_WORKSPACE_CHARS) return null;
@@ -1524,22 +1525,9 @@ function negation(p0) {
   for (const one of (p.includes("{") || p.includes("}") ? braceExpand(p) : [p]) || []) {
     const segs = one.split(String.fromCharCode(92)).join("/").split("/").filter((x) => x !== "" && x !== ".");
     if (!segs.length || segs.includes("..") || segs.length > DS_WORKSPACE_SEGMENTS || segs.some((x) => x !== "**" && x.split("*").length > 3)) continue;
-    out.push(segs.map((s) => (s === "**" ? null : s.includes("*") ? new RegExp("^" + s.split("*").map(escRe).join(".*") + "$") : s)));
+    out.push(new RegExp("^" + segs.map((s) => (s === "**" ? "(?:/[^/]+)*" : "/" + s.split("*").map(escRe).join("[^/]*"))).join("") + "$"));
   }
   return out.length ? out : null;
-}
-function globMatch(n, parts) {
-  const fits = (m, name) => (typeof m === "string" ? m === name : m.test(name));
-  return n.some((segs) => {
-    let next = new Uint8Array(parts.length + 1);
-    next[parts.length] = 1;
-    for (let i = segs.length - 1; i >= 0; i--) {
-      const cur = new Uint8Array(parts.length + 1);
-      for (let j = parts.length; j >= 0; j--) cur[j] = segs[i] === null ? (next[j] || (j < parts.length && cur[j + 1]) ? 1 : 0) : j < parts.length && next[j + 1] && fits(segs[i], parts[j]) ? 1 : 0;
-      next = cur;
-    }
-    return next[0] === 1;
-  });
 }
 // A JSON text with comments and trailing commas — what Rush's own reader accepts of rush.json — as plain JSON: `//` and
 // `/* */` comments out, a `,` before a `}` / `]` dropped, strings kept as written, a BOM dropped. Linear.
@@ -1685,13 +1673,21 @@ function workspaceDirs(projectRoot, patterns, visit) {
   // sixty packages that each repeat the root's `workspaces` were "cut" with everything read); past either they are
   // declared and unread: said.
   const todo = patterns.map((p) => [p, 0]);
-  // A `!negation` takes its folders out (1.35.3 — until then it removed nothing): each is matched against a folder before it
-  // is given — `*` within a name, `**` any folders between —, the project's own and a workspace package's for its folder.
-  const negations = [];
-  const negate = (p) => { const n = negation(p); if (n) negations.push(n); };
-  for (const p of patterns) if (p.trim()[0] === "!") negate(p.trim().slice(1));
-  const negated = (rel) => { const parts = rel.split("/"); return negations.some((n) => globMatch(n, parts)); };
-  let depth = 0, nested = 0;
+  // A `!negation` takes its folders out (1.35.3 — until then it removed nothing): the folders the patterns BEFORE it give,
+  // as npm reads a list (a later pattern gives them back — review 1 of 1.35.3); the project's own and a workspace
+  // package's for its folder (its place: where its next pattern is queued). DS_WORKSPACE_NEGATIONS alternatives, past
+  // them said — each is asked of every folder given.
+  const negations = []; // [RegExp, its place in the list]
+  const negate = (p, at) => {
+    // (asked before one is compiled: compiled past the bound, each costs as much — a list's alternatives, DS_WORKSPACE_BRACES
+    // at most, may pass it by that many)
+    if (negations.length >= DS_WORKSPACE_NEGATIONS) { cut = true; return; }
+    const n = negation(p);
+    if (n) for (const re of n) negations.push([re, at]);
+  };
+  patterns.forEach((p, k) => { if (p.trim()[0] === "!") negate(p.trim().slice(1), k); });
+  let depth = 0, nested = 0, current = 0; // current: the place of the pattern being followed
+  const negated = (rel) => { const s = "/" + rel; return negations.some(([re, at]) => at > current && re.test(s)); };
   const give = (rel) => {
     if (rel === "" || given.has(rel) || negated(rel) || !ask()) return;
     given.add(rel);
@@ -1699,7 +1695,7 @@ function workspaceDirs(projectRoot, patterns, visit) {
     if (more === false) { stop = true; return; }
     for (const p0 of Array.isArray(more) ? more : []) {
       const p = p0.trim();
-      if (p[0] === "!") { negate(rel + "/" + p.slice(1).trim()); continue; }
+      if (p[0] === "!") { negate(rel + "/" + p.slice(1).trim(), todo.length); continue; }
       if (p === "" || p[0] === "/" || p[0] === String.fromCharCode(92)) continue; // (a path from a root: names none of the package's own folders)
       if (depth >= DS_WORKSPACE_NESTED || nested >= DS_WORKSPACE_ASKED) { cut = true; break; }
       nested++;
@@ -1726,6 +1722,7 @@ function workspaceDirs(projectRoot, patterns, visit) {
   for (let q = 0; q < todo.length && !stop; q++) {
     const p0 = todo[q][0];
     depth = todo[q][1];
+    current = q;
     // Never upward, and a `!negation` removes nothing: such a pattern names none. A pattern the reader does not FOLLOW
     // is SAID (cut) — the project declared folders that went unread: one past DS_WORKSPACE_CHARS or
     // DS_WORKSPACE_SEGMENTS, a segment of more than two `*` (`ui-*`, `*-app`, `*-ui-*` are followed: more would make
@@ -1756,12 +1753,12 @@ function projectDependencies(projectRoot) {
     const pkg = manifestInto(realRoot, path.join(projectRoot, "package.json"), names);
     const declared = workspacePatterns(realRoot, projectRoot, pkg);
     cut = declared.more;
-    const own = pkg != null && isRecord(pkg.dependencies) && Object.keys(pkg.dependencies).length > 0; // the root is a package of its own
-    // (a project that declares none is looked through two levels down — `frontend/`, `apps/web/`, never inside a package:
-    // `**` — 1.35.3, one level until then; a bound of that guess is no declared folder left unread: never said. One with
-    // a workspace file that names nothing it can read is looked through one level, as before)
-    const guessed = !declared.declares, before = cut;
-    cut = workspaceDirs(projectRoot, declared.patterns.length ? declared.patterns : own ? [] : guessed ? ["**"] : ["*"], (rel) => {
+    // the root is a package of its own: an app (its `dependencies`) or a library — a published one (a `name`, not
+    // `private`) or one that declares what a published package does (`peerDependencies`, `main`, `module`, `exports`): its
+    // `examples/with-mui/` are not its kit (review 1 of 1.35.3)
+    const own = pkg != null && ((isRecord(pkg.dependencies) && Object.keys(pkg.dependencies).length > 0) || (typeof pkg.name === "string" && pkg.private !== true) ||
+      isRecord(pkg.peerDependencies) || pkg.main != null || pkg.module != null || pkg.exports != null);
+    const visit = (rel) => {
       const file = path.join(projectRoot, rel, "package.json");
       if (!projectFileInside(realRoot, file)) return true; // a folder that is no package
       if (read >= DS_WORKSPACE_MANIFESTS) { cut = true; return false; } // one more exists: said
@@ -1769,7 +1766,14 @@ function projectDependencies(projectRoot) {
       if (!sub) return true;
       read++;
       return manifestWorkspaces(sub); // (the workspaces a workspace package declares itself, for its own folder)
-    }) || cut;
+    };
+    // (a project that declares none is looked through one level down — `frontend/`, `client/` — and, when that level holds
+    // no package at all, the next — `apps/web/` (1.35.3; never when the first holds one: a `web/` app beside `fixtures/x/`
+    // — review 1); a bound of that guess is no declared folder left unread: never said. One with a workspace file that
+    // names nothing it can read is looked through one level, as before)
+    const guessed = !declared.declares, before = cut;
+    cut = workspaceDirs(projectRoot, declared.patterns.length ? declared.patterns : own ? [] : ["*"], visit) || cut;
+    if (guessed && !own && !declared.patterns.length && read === 0) cut = workspaceDirs(projectRoot, ["*/*"], visit) || cut;
     if (guessed) cut = before;
   } catch { /* whatever a manifest holds, the registry is read with the names found so far */ }
   if (cut) { names.cut = true; names.read = read; }

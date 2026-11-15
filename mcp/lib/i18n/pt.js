@@ -1528,7 +1528,6 @@ const msg = {
         "registry-rows": (n) => `  (só os primeiros ${n} componentes do registo são verificados quanto a um caminho que já não existe)`,
         "view-files": (n) => `  (só os primeiros ${n} ficheiros de vista da feature são lidos à procura de valores fixos)`,
         "component-files": (n) => `  (foram lidos ${n} ficheiros de componentes à procura dos outros componentes que exportam, e foi atingido um limite — os ficheiros ou caracteres lidos, ou os nomes guardados de um ficheiro: o resto não é comparado)`,
-        "usage-files": (n) => `  (foram lidos ${n} dos outros ficheiros de código do projeto à procura do que desenham e chamam, e foi atingido um limite — os ficheiros ou caracteres lidos: um nome que só os restantes desenham não é comparado)`,
         "workspace-manifests": (n) => `  (foi atingido um limite dos padrões de workspace — lidos ${n} dos ficheiros package.json dos pacotes do workspace: as bibliotecas dos restantes não são comparadas)`,
       },
       dsFeatureHead: (f, reuse, extend, news) => `Design system — ${f}: Reutilizar: ${reuse} · Estender: ${extend} · Novo: ${news}`,
