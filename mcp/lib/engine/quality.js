@@ -1650,8 +1650,10 @@ function workspacePatterns(realRoot, projectRoot, pkg) {
   // (lerna.json's `packages` — or Lerna's own default, `packages/*`, when nothing at all declares a workspace: beside
   // declared ones it would read a folder the project did not declare — review 2 of 1.35.1)
   const lerna = projectJson(realRoot, path.join(projectRoot, "lerna.json"));
-  if (lerna) take(Array.isArray(lerna.packages) ? lerna.packages : patterns.length ? [] : ["packages/*"]);
-  take(pnpmList.filter((p) => typeof p === "string" && p.trim()[0] === "!"));
+  // (pnpm's negations are a declaration too: with them, Lerna's default is not taken — review 3 of 1.35.3)
+  const pnpmNegations = pnpmList.filter((p) => typeof p === "string" && p.trim()[0] === "!");
+  if (lerna) take(Array.isArray(lerna.packages) ? lerna.packages : patterns.length || pnpmNegations.length ? [] : ["packages/*"]);
+  take(pnpmNegations);
   // (declares: a workspace file is there, whatever it names — a project that has one is never looked through as one with none)
   const declares = (pkg != null && pkg.workspaces != null) || yaml != null || rush.declared || lerna != null;
   return { patterns, more, declares };
@@ -2835,7 +2837,7 @@ function clarifyChange(projectDir, f, c) {
   return clarifyResult(projectDir, f, tracks, fm, add, questions, []);
 }
 
-module.exports = { jsonPlain, crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
+module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,

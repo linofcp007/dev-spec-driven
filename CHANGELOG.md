@@ -12,14 +12,13 @@ the code scan now asks the project's other files. A component is what the projec
 - **What the project's files settle.** A name a component file exports that its declaration does not settle is a
   component when a file of the project RENDERS it — `<MotionBox />`, `<Card.Header>`, `<UI.Content />` through a
   namespace, `Press <Kbd /> to save` —, followed through the file's imports to the files the module may be: a relative
-  path (the file, its folder's index, a file under a barrel's folder); an alias of the nearest `tsconfig*.json` /
-  `jsconfig*.json` above the importing file that declares `paths` (`"~/*": ["./app/*"]`, `"@components/*":
-  ["src/components/*"]`, comments and trailing commas read) and a bare path below its `baseUrl`; a workspace package by
-  its manifest's `name` (`@acme/design` in `packages/kit-internal/`, the root's own, a subpath below its `src/`:
-  `@repo/ui/components/kit`); and where no config says, `@/…`, `~/…`, `#…` and a path of two segments or more from each
-  project root above the file (a folder with a `package.json`, `tsconfig.json` or `jsconfig.json`) and its `src/` /
-  `app/`; a default import (`export default X`, `export { X as default }`, `export default function`, `module.exports =
-  X`), a `require`. Any other module — another package, even one whose last segment is the project's folder
+  path (the file, its folder's index, a file under a barrel's folder); a workspace package by its manifest's `name`
+  (`@acme/design` in `packages/kit-internal/`, the root's own, a subpath below its `src/`: `@repo/ui/components/kit`);
+  `@/…`, `~/…`, `#…` and a path of two segments or more from each project root above the file (a folder with a
+  `package.json`, `tsconfig.json` or `jsconfig.json`) and its `src/` — and its `app/` for `~/…` (`~/*` → `./app/*`,
+  React Router's); a
+  default import (`export default X`, `export { X as default }`, `export default function`, `module.exports = X`), a
+  `require`. Any other module — another package, even one whose last segment is the project's folder
   (`@wordpress/components`, `@other/ui`) — settles nothing. So `motion(Box)`, `createComponent(config)`, `createSvgIcon(<path />, "Home")`, `createIcon({ … })`,
   `createField({ type }, fn)`, `contextConnect(Menu, "Menu")`, a class that renders through its imported base, `export
   const { Header } = Layout`, a part hung on an imported component (`Tabs.Panel = …`), a component of three parameters,
@@ -37,8 +36,8 @@ the code scan now asks the project's other files. A component is what the projec
   (it renders nothing). The search ends at that bound without a word, as the global stylesheets' does: what lies past it
   is a name its file's rules settle alone, 1.35.2's reading. A feature's report — `spec_finish`'s — reads none of it, nor
   the component files' exports: it never asked for them. On Windows a file costs about half a millisecond to read: on 17
-  public repositories the project report took about ×1 to ×10 the time of 1.35.2's (primer: 75 → 600–800 ms;
-  gutenberg's 13,795 files: 2 to 4 s more).
+  public repositories the project report took about ×1 to ×11 the time of 1.35.2's (primer: 75–100 → 600–1,100 ms;
+  a big monorepo: 2 to 5 s more).
 - **A call is a component when it is given a function that renders** — `observer(() => …)`, `loadable(() =>
   import(…))` — or a component's name first (a HOC's shape: `withContext(Ark.Arrow, "arrow", { defaultProps: { children:
   <Tip /> } })`). With neither, its JSX is an element handed over and it is no component — `mount(root, <App />)`,
@@ -67,10 +66,10 @@ the code scan now asks the project's other files. A component is what the projec
 Still a row to add by hand: a component no file of the project renders where the reader sees it — a kit whose apps live
 in another repository; a name rendered only past the bound, or by a default import under another local name in a file
 that writes none of the names asked; one rendered through a re-export outside a component folder's `index.ts`
-(`export * as Tooltip from "./namespace"`, a `namespace.ts` of renamed re-exports), through an alias the project's
-roots and `src/` do not explain (tsconfig `paths` to another folder) or a package's `exports` map, or only in `.mdx` /
-`.vue` / `.svelte` files or with `React.createElement(X)`; through an alias a config `extends` from another file, or
-`paths` the reader cannot find above the importing file —, one in a lower-case `.js` file or in a `.ts` file that is no
+(`export * as Tooltip from "./namespace"`, a `namespace.ts` of renamed re-exports), through a tsconfig `paths` alias
+spelled like a scope (`@components/*`) or pointing elsewhere than a root's own folder or its `src/` (its `app/` for a
+`~/…` alone) — a tsconfig's `paths` are not read — or a package's `exports` map, or only in `.mdx` / `.vue` /
+`.svelte` files or with `React.createElement(X)`; one in a lower-case `.js` file or in a `.ts` file that is no
 component folder's barrel, and a real component the project only calls. Still listed, knowingly: a helper, a part on
 an imported name that is none, or a call whose function renders (`memoize((n) => <Icon />)`), while the project never
 calls it nor reads it as an object; a top-level alias of an imported name that is none; a call given a string or a

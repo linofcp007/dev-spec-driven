@@ -25,11 +25,11 @@ const i18n = require("../i18n.js");
 // Owned by other engine modules — used at call time only; engine/index.js links them once the tier has loaded.
 let activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage, detectTracks, dsKey,
   existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath, isDirSafe, isInsideDir,
-  isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn,
+  isNetworkPath, isTestFile, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode, stripHtmlComments, toPosix, unitIn,
   walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot;
 function __link(E) { ({ activeDesign, appendSpecText, DESIGN_SYSTEM_FILE, designSystemFindings, designSystemRegistry, designSystemUsage,
   detectTracks, dsKey, existingFeature, featureDirs, featureFilesOf, featureLang, FOLD_CASE, forgetCached, gitignoreRules, implementsPath,
-  isDirSafe, isInsideDir, isNetworkPath, isTestFile, jsonPlain, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
+  isDirSafe, isInsideDir, isNetworkPath, isTestFile, packageDependencies, projectDependencies, projectLang, readFileHead, readIfExists, realRootOf, specsRoot, stripEnds, stripFencedCode,
   stripHtmlComments, toPosix, unitIn, walkProject, withRoadmapLock, writeFileAtomic, RE_DS_COMPONENT_HEAD, RE_DS_COL, dsCell, dsNameSlot } = E); }
 
 const DS_FILE_CAP = 20000; // view / style / token files a walk counts (`truncated` past it)
@@ -708,6 +708,7 @@ function givenArgs(value) {
 const RE_CURRIED_LINE = /^[\]})]*\)(?=\()/; // a line that opens a call's next list: `)(`, `})(` (Prettier's break of a curried call)
 const RE_LONE_NAME = /^(\p{Lu}[\p{L}\p{N}_$]*),?$/u; // a HOC's one argument on a line of its own (a formatter's break of a long line)
 const RE_COMPOUND_NAME = /^\p{Lu}[\p{L}\p{N}]*(?:\.\p{Lu}[\p{L}\p{N}]*)?$/u; // a component's name — or a part's: `Card.Header`
+const RE_NAME_SEGMENT = /^\p{Lu}[\p{L}\p{N}]*$/u; // …one of its segments
 const RE_PART_KEY = /^\p{Lu}[\p{L}\p{N}_$]*$/u; // a part's key is a component's name: `Header` — never `displayName`, `defaultProps`
 const RE_PART = /^(\p{Lu}[\p{L}\p{N}_$]*)\.(\p{Lu}[\p{L}\p{N}_$]*)\s*=/u; // `Card.Header = …`
 const RE_OBJECT_ASSIGN = /^Object\.assign\s*\(/;
@@ -1133,14 +1134,17 @@ function exportedComponents(text) {
   // names of a root with 4,000 statics were 8 million names asked)
   const loose = new Map();
   const looseOf = (owner) => {
-    if (!loose.has(owner)) loose.set(owner, parts.has(owner) ? [...parts.get(owner)].filter((key) => !declared.has(owner + "." + key) && !plain.has(owner + "." + key)) : []);
+    // (a key a name could never be — `P_1`, `$x` — is none: asked, it spent no room and was asked once a name, review 3)
+    if (!loose.has(owner)) loose.set(owner, parts.has(owner) ? [...parts.get(owner)].filter((key) => RE_NAME_SEGMENT.test(key) && !declared.has(owner + "." + key) && !plain.has(owner + "." + key)) : []);
     return loose.get(owner);
   };
   for (let k = 0; k < exportedOwn; k++) {
     const [name, local] = exported[k];
     if (!declared.has(local)) candidate(name, local);
     // (the parts hung on what it stands on too, as its components' are: `PopRoot.Provider = …; export const Popover =
-    // PopRoot` — review 2 of 1.35.3)
+    // PopRoot` — review 2 of 1.35.3; a name that can take no part — lower case, an `_` — asks none: every part it asked
+    // was turned down unseen, and 6,000 such names × 5,000 parts took 13.6 s, review 3)
+    if (!RE_NAME_SEGMENT.test(name)) continue;
     for (let owner = local, d = 0; owner != null && d <= DS_ALIAS_PASSES && !full; owner = stands.get(owner), d++) for (const key of looseOf(owner)) candidate(name + "." + key, owner + "." + key);
   }
   for (const name of reexported) candidate(name, null);
@@ -1797,7 +1801,7 @@ const DS_USAGE_FILES = 5000;
 const DS_USAGE_CHARS = 32 * 1024 * 1024;
 const DS_PROJECT_ROOTS = 2000; // folders holding a package.json / tsconfig.json / jsconfig.json the walk keeps (an alias's roots)
 const DS_PACKAGE_NAMES = 500; // workspace manifests read for their `name` (a bare or scoped module's package)
-const RE_ROOT_FILE = /^(?:package\.json|[tj]sconfig(?:\.[\p{L}\p{N}_-]+)?\.json)$/u; // (`tsconfig.app.json`: Vite's paths)
+const RE_ROOT_FILE = /^(?:package|tsconfig|jsconfig)\.json$/;
 const RE_SCRIPT_FILE = /\.(?:tsx|jsx|ts|js|mjs|cjs|mts|cts)$/i;
 const RE_NOT_SCRIPT = /\.(?:d\.[cm]?ts|min\.[cm]?js)$/i;
 const RE_JSX_FILE = /\.(?:tsx|jsx|js|mjs|cjs)$/i; // a script that may hold JSX
@@ -1815,17 +1819,17 @@ const moduleKey = (rel) => rel.toLowerCase().replace(RE_MODULE_EXT, "").replace(
 // Where an import's module may be → { keys: a Set of the moduleKeys it may name — each the file itself or a folder (its
 // index, a barrel's file under it) } | null: none of the project's. Review 1 of 1.35.3: a module's segments matched
 // ANYWHERE in the project (`@wordpress/components` was every `components/` folder, `@other/ui` any `ui/`), so another
-// package's name settled the project's. Now, the way a bundler resolves one:
+// package's name settled the project's. Now:
 //   - a relative path: the path;
-//   - an alias of a tsconfig.json / jsconfig.json above the importing file — its `compilerOptions.paths` (`"~/*":
-//     ["./app/*"]`, `"@components/*": ["src/components/*"]`, review 2 of 1.35.3), the nearest config that has them —, then
-//     a bare path below its `baseUrl`;
 //   - a workspace package by its manifest's `name` (`@acme/ui`, `@repo/ui/components/kit`: its folder, then the path
 //     below it and below its `src/`);
-//   - with no config that says: `@/…`, `~/…`, `#…` from each project root above the file (a folder holding a
-//     package.json / tsconfig.json / jsconfig.json, the project's own included) and its `src/` / `app/`; a bare path of
-//     two segments or more the same way (`components/ui/kit`). Another package names no file of the project.
-// project: { roots (a Set of folders), configs (folder → { paths: [[prefix, star, [targets]]], base }), packageOf(name) }.
+//   - `@/…`, `~/…`, `#…` from each project root above the file (a folder holding a package.json / tsconfig.json /
+//     jsconfig.json, the project's own included) and its `src/` / `app/` (`~/*` → `./app/*`: React Router's); a bare
+//     path of two segments or more the same way (`components/ui/kit`). Another package names no file of the project.
+// A tsconfig's `paths` are not read (review 3 of 1.35.3: read, they took a `..` target as text, ran past every bound
+// and fell short of TypeScript's own rules three ways — the guess that lost nothing stands; an alias spelled like a
+// scope, `@components/*`, or pointing elsewhere is a row to add by hand).
+// project: { roots (a Set of folders), packageOf(name) }.
 const RE_ALIAS_SPEC = /^(?:[@~]\/|#)/;
 function placeOf(spec, fromRel, project) {
   const clean = (segs) => segs.filter((s) => s !== "" && s !== ".");
@@ -1843,19 +1847,6 @@ function placeOf(spec, fromRel, project) {
   }
   const dirs = []; // the folders above the importing file, the nearest first, the project's root last
   for (let d = fromRel.slice(0, Math.max(0, fromRel.lastIndexOf("/"))); ; d = d.slice(0, Math.max(0, d.lastIndexOf("/")))) { dirs.push(d); if (d === "") break; }
-  // (the nearest config that declares paths: its first prefix that fits, every target of it; then its baseUrl)
-  for (const d of dirs) {
-    const c = project.configs.get(d);
-    if (!c) continue;
-    for (const [prefix, star, targets] of c.paths) {
-      if (star ? !spec.startsWith(prefix) : spec !== prefix) continue;
-      const rest = star ? spec.slice(prefix.length) : "";
-      for (const t of targets) keys.add(join(c.base, clean((t.replace("*", rest)).split("/")).join("/")));
-      return { keys };
-    }
-    if (c.hasBase && !RE_ALIAS_SPEC.test(spec)) keys.add(join(c.base, clean(spec.split("/")).join("/")));
-    break;
-  }
   const low = spec.toLowerCase();
   const segs = clean(low.split("/"));
   for (let n = Math.min(segs.length, 2); n >= 1; n--) {
@@ -1866,7 +1857,10 @@ function placeOf(spec, fromRel, project) {
     else { keys.add(join(folder, sub)); keys.add(join(folder, "src/" + sub)); }
     return { keys };
   }
-  const guess = (rest) => { for (const d of dirs) if (d === "" || project.roots.has(d)) for (const sub of ["", "src/", "app/"]) keys.add(join(d, sub + rest)); };
+  // (`app/` for a `~/` alias alone — React Router's `~/*` → `./app/*`: tried for every one, it took a file a `@/*` →
+  // `./src/*` config never points to — review 3 of 1.35.3)
+  const subs = low.startsWith("~/") ? ["", "src/", "app/"] : ["", "src/"];
+  const guess = (rest) => { for (const d of dirs) if (d === "" || project.roots.has(d)) for (const sub of subs) keys.add(join(d, sub + rest)); };
   if (RE_ALIAS_SPEC.test(low)) { const rest = clean(low.replace(/^[@~]\//, "").replace(/^#/, "").split("/")).join("/"); if (rest !== "") guess(rest); } else if (segs.length >= 2) guess(segs.join("/"));
   return keys.size ? { keys } : null;
 }
@@ -1877,53 +1871,34 @@ const pointsTo = (key, at) => {
   for (let k = key.lastIndexOf("/"); k > 0; k = key.lastIndexOf("/", k - 1)) if (at.keys.has(key.slice(0, k))) return true;
   return false;
 };
-// The project's roots, its configs' `paths` / `baseUrl` and its workspace packages' names — from the walk's files, read on
-// first use. A package's name is asked lazily: the manifests whose folder bears the name's last segment first (`@acme/ui`
-// in `packages/ui/`), then the others in the walk's order, DS_PACKAGE_NAMES read at most (review 2 of 1.35.3: the first
-// 500 of the walk lost `@acme/ui` behind 520 `examples/*/package.json`).
-function projectPlaces(manifests, configs, roots) {
-  const json = (full, plain) => { const text = readFileHead(full, DS_READ_CHARS); try { const t = text == null ? null : text.charCodeAt(0) === 0xfeff ? text.slice(1) : text; return t == null ? null : JSON.parse(plain ? jsonPlain(t) : t); } catch { return null; } };
-  const byConfig = new Map();
-  for (const c of configs) {
-    if (byConfig.has(c.dir) && byConfig.get(c.dir).paths.length) continue;
-    const j = json(c.full, true), o = j && typeof j === "object" && j.compilerOptions && typeof j.compilerOptions === "object" ? j.compilerOptions : null;
-    if (!o) continue;
-    const hasBase = typeof o.baseUrl === "string", base = hasBase ? baseOf(c.dir, o.baseUrl) : c.dir;
-    const paths = [];
-    if (o.paths && typeof o.paths === "object") for (const [k, v] of Object.entries(o.paths).slice(0, 100)) {
-      const targets = (Array.isArray(v) ? v : []).filter((t) => typeof t === "string").slice(0, 10);
-      if (targets.length) paths.push([k.includes("*") ? k.slice(0, k.indexOf("*")) : k, k.includes("*"), targets]);
-    }
-    if (paths.length || hasBase) byConfig.set(c.dir, { paths, base, hasBase });
-  }
-  const names = new Map(), read = new Set();
-  let reads = 0;
-  const readOne = (m) => {
-    if (read.has(m) || reads >= DS_PACKAGE_NAMES) return;
+// The project's roots and its workspace packages' names — from the walk's manifests, read on first use. A name is asked
+// lazily: the manifests whose folder bears its last segment first (`@acme/ui` in `packages/ui/`, an index built once),
+// then the others in the walk's order, each with a budget of its own (DS_PACKAGE_NAMES — review 3 of 1.35.3: one budget,
+// a miss asked first — `next/link` — spent it, and `@acme/ui` behind 520 examples was lost again; and every miss scanned
+// every manifest's folder name, ×7.8 on 1,500 packages: the index).
+function projectPlaces(manifests, roots) {
+  const names = new Map(), read = new Set(), spent = { own: 0, walk: 0 };
+  let bySegment = null;
+  const readOne = (m, budget) => {
+    if (read.has(m) || spent[budget] >= DS_PACKAGE_NAMES) return;
     read.add(m);
-    reads++;
-    const j = json(m.full, false);
+    spent[budget]++;
+    const text = readFileHead(m.full, DS_READ_CHARS);
+    let j = null;
+    try { j = text == null ? null : JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { /* no manifest */ }
     if (j && typeof j.name === "string" && j.name !== "" && !names.has(j.name.toLowerCase())) names.set(j.name.toLowerCase(), m.dir);
   };
   const packageOf = (name) => {
     if (names.has(name)) return names.get(name);
-    const last = name.slice(name.lastIndexOf("/") + 1);
-    for (const m of manifests) if (!names.has(name) && m.dir.slice(m.dir.lastIndexOf("/") + 1).toLowerCase() === last) readOne(m);
-    for (let k = 0; k < manifests.length && !names.has(name) && reads < DS_PACKAGE_NAMES; k++) readOne(manifests[k]);
+    if (!bySegment) {
+      bySegment = new Map();
+      for (const m of manifests) { const s = m.dir.slice(m.dir.lastIndexOf("/") + 1).toLowerCase(); if (!bySegment.has(s)) bySegment.set(s, []); bySegment.get(s).push(m); }
+    }
+    for (const m of bySegment.get(name.slice(name.lastIndexOf("/") + 1)) || []) { if (names.has(name)) break; readOne(m, "own"); }
+    for (let k = 0; k < manifests.length && !names.has(name) && spent.walk < DS_PACKAGE_NAMES; k++) readOne(manifests[k], "walk");
     return names.has(name) ? names.get(name) : null;
   };
-  return { roots, configs: byConfig, packageOf };
-}
-// a config's `baseUrl` from its folder: `.` → the folder, `./src` → `<folder>/src` (out of the project: the folder)
-function baseOf(dir, rel) {
-  const out = dir === "" ? [] : dir.split("/");
-  for (const s of rel.split(String.fromCharCode(92)).join("/").split("/")) {
-    if (s === "" || s === ".") continue;
-    if (s !== "..") out.push(s);
-    else if (!out.length) return dir;
-    else out.pop();
-  }
-  return out.join("/");
+  return { roots, packageOf };
 }
 function settle(results, scripts, read, places) {
   const dropped = new Set(), rendered = new Set();
@@ -1970,7 +1945,8 @@ function settle(results, scripts, read, places) {
     // hung on the root and rendered as `<Tooltip.Provider>`: review 2 of 1.35.3 — else its root used as a context)
     if (mine) for (const p of uses.providers) {
       const part = localsOf.get(rel).has(p) || exportsOf.get(rel).has(p), root = p.slice(0, p.lastIndexOf("."));
-      for (const [name, e] of mine) if (part ? e.local === p || name === p : e.local === root || name === root) e[part ? "rendered" : "context"] = true;
+      // (a root used as a context is the LOCAL one: a name the file exports may stand on another — review 3)
+      for (const [name, e] of mine) if (part ? e.local === p || name === p : e.local === root) e[part ? "rendered" : "context"] = true;
     }
     if (!uses.imports.size) return;
     const dir = rel.slice(0, rel.lastIndexOf("/") + 1);
@@ -2036,7 +2012,7 @@ function scanCode(root, withComponents = true) {
   const byKey = new Map(), views = [], tokenFiles = [], sheets = [], found = [], routerRoots = new Set(), pageDirs = new Set(), nextConfigs = new Set();
   const fullOf = new Map(); // a component file's full path, by its relative one
   const scripts = [], barrels = []; // every script file; a component folder's barrel (`index.ts`): read for what it re-exports
-  const roots = new Set(), packageFiles = [], configFiles = []; // the folders that hold a package.json / tsconfig / jsconfig; the manifests; the configs
+  const roots = new Set(), packageFiles = []; // the folders that hold a package.json / tsconfig.json / jsconfig.json; the manifests
   const counts = (rel) => isViewFile(rel) || isTokenFile(rel);
   const dirOf = (rel) => rel.slice(0, Math.max(0, rel.lastIndexOf("/")));
   const walk = walkProject(root, DS_FILE_CAP, (rel, full, name) => {
@@ -2051,7 +2027,7 @@ function scanCode(root, withComponents = true) {
     // (every script: what it renders, calls and imports may settle a component file's names — 1.35.3; and where the
     // project's roots and packages are, which its imports name)
     if (RE_SCRIPT_FILE.test(name) && !RE_NOT_SCRIPT.test(name)) scripts.push({ rel, full });
-    else if (RE_ROOT_FILE.test(name) && roots.size < DS_PROJECT_ROOTS) { roots.add(dirOf(rel)); (name === "package.json" ? packageFiles : configFiles).push({ dir: dirOf(rel), full }); }
+    else if (RE_ROOT_FILE.test(name) && roots.size < DS_PROJECT_ROOTS) { roots.add(dirOf(rel)); if (name === "package.json") packageFiles.push({ dir: dirOf(rel), full }); }
     if (RE_BARREL.test(name) && !isTestFile(rel) && inComponentFolder(rel)) barrels.push({ path: rel, full });
     if (!isViewFile(rel)) return;
     views.push({ rel, full });
@@ -2125,7 +2101,7 @@ function scanCode(root, withComponents = true) {
   // dropped when the project calls it as a function or gives it to `useContext`, never rendering it; a CANDIDATE — a name
   // exported that the rules took for none — is one when the project renders it.
   let placed = null;
-  const verdict = settle(results, scripts, readPaths, () => placed || (placed = projectPlaces(packageFiles, configFiles, roots)));
+  const verdict = settle(results, scripts, readPaths, () => placed || (placed = projectPlaces(packageFiles, roots)));
   // (every file's names before any candidate: a barrel's re-export takes no row's path from the file that declares it —
   // review 1 of 1.35.3, `export { default as FiltersToggle } from "./toggle"`)
   const add = (r, name) => { const key = dsKey(name); if (key && !byKey.has(key)) byKey.set(key, { name, key, path: r.path, index: false, route: false }); };

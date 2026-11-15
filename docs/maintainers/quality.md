@@ -730,15 +730,18 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   never render; a story's or a test's CALL is no evidence — `render: (args) => Button(args)`, review 1): a name it
   writes is followed through its import (`resolve`, once a folder, a module and a name: one name exported by a
   thousand kits walked their list for each tag, review 1) to the files the module may be — `placeOf` over the walk's
-  `projectPlaces` (the folders holding a package.json / tsconfig / jsconfig, DS_PROJECT_ROOTS; the configs'
-  `compilerOptions.paths` and `baseUrl`, read with `jsonPlain` — comments, trailing commas —, `tsconfig.app.json` too;
-  the manifests' `name`s asked lazily by `packageOf`, the folders that bear the name's last segment first, DS_PACKAGE_NAMES
-  read — review 2: the walk's first 500 lost `@acme/ui` behind 520 examples): a relative path; the nearest config above
-  the importing file that declares `paths` or a `baseUrl` decides an alias (`"~/*": ["./app/*"]`, `"@components/*"`:
-  review 2 — a scope-shaped alias was never one) and a bare path below its `baseUrl`; a bare or scoped module as a
-  workspace package's (its folder, its subpath and the subpath below its `src/`; the root's own: no leading `/`, review
-  2); where no config says, `RE_ALIAS_SPEC` (`@/`, `~/`, `#`) and a path of two segments or more from each root above the
-  file and its `src/` / `app/` — another package names no file of the project, and is none (review 1: the module's
+  `projectPlaces` (the folders holding a package.json / tsconfig.json / jsconfig.json, DS_PROJECT_ROOTS; the manifests'
+  `name`s asked lazily by `packageOf` — the folders that bear the name's last segment first, from an index built once,
+  then the walk's order, each with a budget of DS_PACKAGE_NAMES: review 2, the walk's first 500 lost `@acme/ui` behind
+  520 examples; review 3, one shared budget let a miss asked first spend it): a relative path; a bare or scoped module
+  as a workspace package's (its folder, its subpath and the subpath below its `src/`; the root's own: no leading `/`,
+  review 2); `RE_ALIAS_SPEC` (`@/`, `~/`, `#`) and a path of two segments or more from each root above the file and its
+  `src/` — and its `app/` for a `~/` alias alone (review 2: `~/*` → `./app/*`, React Router's; review 3's oracle run:
+  tried for every alias, `app/` took a file a `@/*` → `./src/*` config never points to). A tsconfig's `paths` are NOT read: review 2 had them
+  read, and review 3 found them taking a `..` target as text, read past every bound (20,000 `tsconfig.<x>.json` in a
+  folder: 13.6 s) and short of TypeScript's own rules three ways (a `*` catch-all, two configs in a folder, the longest
+  prefix) — the guess that lost nothing stands, and an alias spelled like a scope or pointing elsewhere is a row to add
+  by hand — another package names no file of the project, and is none (review 1: the module's
   segments matched ANYWHERE, `@wordpress/components` was every `components/` folder) —; `pointsTo` takes a file or a
   folder (its index, a barrel's file under it) of a key (`moduleKey`: lower case, no extension, no platform infix),
   asked of the file's own prefixes against a Set of the keys (review 2: a page thirty roots deep had ninety keys, each
@@ -759,7 +762,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   a thousand kits through a hundred namespaces, a barrel's 500 re-exports of the project's own file). What it cannot
   see, said in the user docs: a name no file renders where the reader sees it (a kit consumed elsewhere; past the
   bound; a default import under another local name in a file that writes none of the names asked; through a re-export
-  outside a component folder's `index.ts`, a tsconfig `paths` alias to another folder, a package's `exports` map; in
+  outside a component folder's `index.ts`, a tsconfig `paths` alias spelled like a scope or to another folder, a
+  package's `exports` map; in
   `.mdx` / `.vue` / `.svelte`; `React.createElement(X)`), a component the project only calls; a helper, a part on a
   name that is none, a call whose function renders, while the project never calls them nor reads them as objects; a
   top-level alias of an import that is none; a call given a string or a capitalised name first, or a method beside an
@@ -1608,7 +1612,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   level for any `npm init` root (a `name` and a `main`): the library's signs now block the second level alone; a weak
   root rendered as its own `<X.Provider>` part in its own file, the part hung on the root's local name, was still taken
   for a context (`exportsOf` asked too). LOW: aliases of a tsconfig's `paths` (`~/*` → `./app/*`, `@components/*`) and
-  its `baseUrl` were guessed, never read (now read, `jsonPlain`); the root package's keys began with a `/`; workspace
+  its base URL were guessed, never read (then read, `jsonPlain` — review 3 took the reading out again); the root
+  package's keys began with a `/`; workspace
   names lost behind 520 manifests (`packageOf`, lazy); a page thirty roots deep cost ×2.8 (`pointsTo` by prefixes); `new`
   had been dropped from the literals as "no input reaches it" — it was a cost guard (an instance asked read the pages:
   restored, with a fixture); the docs' ratio claim; pnpm negations read in npm's order (now put last); 16 mutants of the
@@ -1620,3 +1625,20 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   (2) widening a rule to cover one layout (`examples/`) must be checked against the layouts the old rule served
   (`npm init`'s root); (3) "no input reaches it" is a mutation's verdict on the TESTS — a cost guard needs a timed
   fixture before it is deleted.
+- **1.35.3 review 3** (the third short round: one fresh reviewer on b86a52f; four trees side by side; `globMatch`
+  against a reference matcher on 200,018 cases, no mismatch; the corpus identical to d6e00d1's) — 1 HIGH, 2 MEDIUM,
+  7 LOW, 4 cosmetic, each HIGH and MEDIUM made by review 2's fixes. HIGH: the candidates' new `stands` chain asked a part
+  no name could take (`P_1`, a lower-case alias) once a name — never stopped by the 500, 13.6 s for one file: a part's
+  key and a name that can take one are one-segment names (`RE_NAME_SEGMENT`) before anything is asked. MEDIUM: the
+  tsconfig `paths` reading review 2 added took a `..` target as text (chakra's own `apps/www` configs) and read every
+  `tsconfig*.json` with no bound — together with three LOWs on its semantics (a `*` catch-all, two configs in a folder;
+  and, noted, the longest prefix), the reading was taken out, not refined: the guess from the roots, `src/` and (for `~/`) `app/`
+  covers React Router's `~/*` → `./app/*`, and what it cannot see is said. LOW: `packageOf` scanned every manifest's
+  folder for each miss and shared one budget with the walk's reads (an index, two budgets); a provider root matched by
+  an exported name could be another binding (the local one only); pnpm's negations moved last let Lerna's default in;
+  15 of the reviewer's 50 mutants survived — fixtures for the reachable ones (a `**` across two folders, a `*` name that
+  must not match, `module` / `exports`, two aliases away, a jsconfig.json root). Found replaying the reviewer's probes
+  on the fix: `app/`, guessed for every alias, took a file a `@/*` → `./src/*` config never points to — a `~/` alias's
+  alone now. Lesson, the series' own: a LOW of review
+  2 answered with a new mechanism (the configs) brought review 3's two MEDIUMs — a fix's reach must stay the finding's;
+  when the cheap answer (`app/` in the guess) covers the case found, the larger one waits for a release of its own.

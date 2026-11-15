@@ -306,26 +306,43 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
   // --- review 2 of 1.35.3 -----------------------------------------------------------------------------------------------------------
   {
     const p = project("review2", { "package.json": js({ name: "kit-root", private: true, dependencies: { react: "1" } }) });
-    // an alias of a tsconfig's `paths` (with comments: JSONC) and of a nested app's (`~/*` → `./app/*`, React Router's)
-    write(p, "tsconfig.json", "{\n  // the aliases\n  \"compilerOptions\": {\n    \"paths\": { \"@components/*\": [\"src/components/*\"], \"kit-exact\": [\"src/components/ui/exact-kit\"], },\n  },\n}\n");
-    // (an alias with no `*` names its module alone: `kit-exactly` is another one)
+    // `~/…` into a nested app's `app/` (React Router's `~/*` → `./app/*`): from its root (a tsconfig.json there — its
+    // `paths` are not read, review 3) and with a package.json alone; an alias spelled like a scope (`@components/…`) or
+    // a bare name of one segment settles nothing — rows by hand
+    write(p, "tsconfig.json", js({ compilerOptions: { paths: { "@components/*": ["src/components/*"] } } }));
     write(p, UI + "exact-kit.tsx", L(["export const ExactGlow = motion(Base);"]));
     write(p, "src/app/exact.tsx", L(["import { ExactGlow } from \"kit-exactly\";", "export const E = () => <ExactGlow />;"]));
     write(p, "apps/remix/tsconfig.json", js({ compilerOptions: { paths: { "~/*": ["./app/*"] } } }));
     write(p, "apps/remix/app/components/ui/remix-kit.tsx", L(["export const RemixGlow = motion(Base);"]));
     write(p, "apps/remix/app/routes/home.tsx", L(["import { RemixGlow } from \"~/components/ui/remix-kit\";", "export const H = () => <RemixGlow />;"]));
-    // a `baseUrl` no guess reaches (`lib`); Vite's `tsconfig.app.json` beside a `tsconfig.json` of a `baseUrl` alone (the
-    // app's paths stand); `~/…` into an app's `app/` with no config at all
-    write(p, "apps/legacy/tsconfig.json", js({ compilerOptions: { baseUrl: "lib" } }));
-    write(p, "apps/legacy/lib/components/ui/legacy-kit.tsx", L(["export const LegacyGlow = motion(Base);"]));
-    write(p, "apps/legacy/pages/home.tsx", L(["import { LegacyGlow } from \"components/ui/legacy-kit\";", "export const H = () => <LegacyGlow />;"]));
-    write(p, "apps/vite/tsconfig.app.json", js({ compilerOptions: { paths: { "@app/*": ["./source/*"] } } }));
-    write(p, "apps/vite/tsconfig.json", js({ compilerOptions: { baseUrl: "." } }));
-    write(p, "apps/vite/source/components/ui/vite-kit.tsx", L(["export const ViteGlow = motion(Base);"]));
-    write(p, "apps/vite/pages/home.tsx", L(["import { ViteGlow } from \"@app/components/ui/vite-kit\";", "export const H = () => <ViteGlow />;"]));
     write(p, "apps/rr/package.json", js({ name: "rr", private: true }));
+    // (a jsconfig.json alone is a root too)
+    write(p, "apps/js/jsconfig.json", "{}\n");
+    write(p, "apps/js/app/components/ui/js-kit.tsx", L(["export const JsGlow = motion(Base);"]));
+    write(p, "apps/js/app/routes/r.tsx", L(["import { JsGlow } from \"~/components/ui/js-kit\";", "export const R = () => <JsGlow />;"]));
+    // (a candidate part two aliases away: `R.Part`, `S1 = R`, `S2 = S1`; a provider root that is no local name: the
+    // imported `<Theme.Provider>` beside an exported `Mine as Theme` — review 3)
+    write(p, UI + "chain.tsx", L(["function R() { return null; }", "R.Part = makePart(config);", "const S1 = R;", "export const S2 = S1;"]));
+    write(p, UI + "shadow.tsx", L(["import { Theme } from \"./theme-lib\";", "function Mine() { return null; }", "export { Mine as Theme };", "export function Shell() { return <Theme.Provider value={1}><b /></Theme.Provider>; }"]));
+    write(p, "src/app/chain.tsx", L(["import { S2 } from \"@/components/ui/chain\";", "import { Kbd } from \"@/components/ui/kit\";", "export const C = () => <S2.Part />;"]));
     write(p, "apps/rr/app/components/ui/rr-kit.tsx", L(["export const RrGlow = motion(Base);"]));
     write(p, "apps/rr/app/routes/r.tsx", L(["import { RrGlow } from \"~/components/ui/rr-kit\";", "export const R = () => <RrGlow />;"]));
+    // (`app/` is a `~/` alias's alone: `@/…` from a root whose file sits in its `app/` settles nothing — review 3)
+    write(p, "apps/at/package.json", js({ name: "at", private: true }));
+    write(p, "apps/at/app/components/ui/at-kit.tsx", L(["export const AppGlow = motion(Base);"]));
+    write(p, "apps/at/app/routes/r.tsx", L(["import { AppGlow } from \"@/components/ui/at-kit\";", "export const R = () => <AppGlow />;"]));
+    // (a folder that is no root guesses nothing: a kit beside the page, under `src/app/components/`, is not what
+    // `@/components/…` names — review 3)
+    write(p, "src/app/components/ui/near-kit.tsx", L(["export const NearGlow = motion(Base);"]));
+    write(p, "src/app/near.tsx", L(["import { NearGlow } from \"@/components/ui/near-kit\";", "export const N = () => <NearGlow />;"]));
+    // (and a root's own folder and its `src/` for both: `@/*` → `./*`, a Next app without `src/`; `~/*` → `./src/*`,
+    // create-t3-app's)
+    write(p, "apps/next/package.json", js({ name: "next-app", private: true }));
+    write(p, "apps/next/components/ui/next-kit.tsx", L(["export const NextGlow = motion(Base);"]));
+    write(p, "apps/next/app/page.tsx", L(["import { NextGlow } from \"@/components/ui/next-kit\";", "export default function P() { return <NextGlow />; }"]));
+    write(p, "apps/t3/package.json", js({ name: "t3-app", private: true }));
+    write(p, "apps/t3/src/components/ui/t3-kit.tsx", L(["export const T3Glow = motion(Base);"]));
+    write(p, "apps/t3/src/pages/index.tsx", L(["import { T3Glow } from \"~/components/ui/t3-kit\";", "export default function P() { return <T3Glow />; }"]));
     // an unscoped workspace package; a `#…` import; the root package by its name (`kit-root/…`)
     write(p, "packages/core-kit/package.json", js({ name: "kit-core" }));
     write(p, "packages/core-kit/components/core.tsx", L(["export const CoreGlow = motion(Base);"]));
@@ -340,7 +357,7 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
       // an instance is a literal: never asked
       "export const Client = new QueryClient();",
       ""]));
-    write(p, "src/app/page.tsx", L(["import React from \"react\";", "import { AtGlow, NsCtx, Max2, Popover, Client } from \"@components/ui/kit\";", "import { HashGlow } from \"#components/ui/kit\";",
+    write(p, "src/app/page.tsx", L(["import React from \"react\";", "import { AtGlow } from \"@components/ui/kit\";", "import { NsCtx, Max2, Popover, Client } from \"@/components/ui/kit\";", "import { HashGlow } from \"#components/ui/kit\";",
       "import { RootGlow } from \"kit-root/src/components/ui/kit\";", "import { CoreGlow } from \"kit-core/components/core\";",
       "export default function Page() {", "  const c = React.use(NsCtx), between = lo <Max2 && hi > 3;",
       "  return <><AtGlow /><HashGlow /><RootGlow /><CoreGlow /><NsCtx value={1} /><Popover.Provider><Popover /></Popover.Provider><Client /></>;", "}"]));
@@ -350,8 +367,29 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     for (let i = 0; i < 520; i++) write(crowd, "examples/e" + String(i).padStart(3, "0") + "/package.json", js({ name: "example-" + i }));
     write(crowd, "packages/ui/package.json", js({ name: "@acme/ui" }));
     write(crowd, "packages/ui/src/components/fx.tsx", L(["export const CrowdGlow = motion(Base);"]));
-    write(crowd, "zapp/page.tsx", L(["import { CrowdGlow } from \"@acme/ui\";", "export const P = () => <CrowdGlow />;"]));
+    // (a miss asked first — `next/link` — spends the walk's budget, not the folder-named reads': review 3)
+    write(crowd, "zapp/page.tsx", L(["import Link from \"next/link\";", "import { CrowdGlow } from \"@acme/ui\";", "export const P = () => <Link><CrowdGlow /></Link>;"]));
     const crowdGot = seeded(crowd);
+    // (a name keeps the folder it was first found in: a miss asked between two imports of `@acme/ui` reads an example of
+    // the same name, and the second import still reaches packages/ui — review 3)
+    const dup = project("review3-dup", { "package.json": js({ private: true, workspaces: ["examples/*", "packages/*"] }) });
+    write(dup, "examples/a/package.json", js({ name: "@acme/ui" }));
+    write(dup, "packages/ui/package.json", js({ name: "@acme/ui" }));
+    write(dup, "packages/ui/src/components/fx.tsx", L(["export const DupGlow = motion(Base);"]));
+    write(dup, "zapp/page.tsx", L(["import { Other } from \"@acme/ui\";", "import Z from \"@zzz/missing\";", "import { DupGlow } from \"@acme/ui/components/fx\";", "export const P = () => <><Other /><Z /><DupGlow /></>;"]));
+    const dupGot = seeded(dup);
+    // (a tsconfig.json beside each of 300 manifests is no manifest: it spends none of the 500 names read, and a package
+    // named otherwise than its folder is still reached; the project's own folder is a root with no manifest of its own)
+    const tsc = project("review3-tsconfigs", { "package.json": js({ private: true, workspaces: ["examples/*", "packages/*"] }) });
+    for (let i = 0; i < 300; i++) { const e = "examples/e" + String(i).padStart(3, "0") + "/"; write(tsc, e + "package.json", js({ name: "example-" + i })); write(tsc, e + "tsconfig.json", "{}\n"); }
+    write(tsc, "packages/kit-internal/package.json", js({ name: "@acme/design" }));
+    write(tsc, "packages/kit-internal/src/components/fx.tsx", L(["export const DesignGlow = motion(Base);"]));
+    write(tsc, "zapp/page.tsx", L(["import { DesignGlow } from \"@acme/design/components/fx\";", "export const P = () => <DesignGlow />;"]));
+    const tscGot = seeded(tsc);
+    const bare = project("review3-bare", {});
+    write(bare, UI + "top-kit.tsx", L(["export const TopGlow = motion(Base);"]));
+    write(bare, "src/app/page.tsx", L(["import { TopGlow } from \"@/components/ui/top-kit\";", "export default function P() { return <TopGlow />; }"]));
+    const bareGot = seeded(bare);
     const ANTD = deps(["antd"]), MUI = deps(["@mui/material"]);
     const libs = (tag, files) => S.designSystemReport(project("review2-ws-" + tag, files)).found.libraries;
     const ws = {
@@ -365,6 +403,14 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     };
     // (pnpm's negations are moved, not repeated: 30 walked patterns and 20 negations are the 50 the bound allows)
     const fifty = S.designSystemReport(project("review2-ws-fifty", { "pnpm-workspace.yaml": "packages:\n" + Array.from({ length: 30 }, (_, i) => "  - 'p" + i + "/*'\n").join("") + Array.from({ length: 20 }, (_, i) => "  - '!p" + i + "/x*'\n").join("") })).limits;
+    // review 3: `**` across two folders and a `*` name that must not match; Lerna's default is not taken beside pnpm's
+    // negations; a library's `module` / `exports` keep the first level only
+    Object.assign(ws, {
+      starstar: libs("starstar", { "package.json": js({ private: true, workspaces: ["packages/*/*/*", "!packages/**/legacy", "!packages/x/y/leg*y"] }), "packages/a/b/legacy/package.json": ANTD, "packages/a/b/web/package.json": MUI, "packages/x/y/legacyz/package.json": deps(["@chakra-ui/react"]) }),
+      lernaPnpm: libs("lerna-pnpm", { "pnpm-workspace.yaml": "packages:\n  - '!packages/old'\n", "lerna.json": js({ version: "1.0.0" }), "packages/web/package.json": ANTD }),
+      moduleTwo: libs("module-two", { "package.json": js({ module: "x.mjs" }), "examples/x/package.json": ANTD }),
+      exportsTwo: libs("exports-two", { "package.json": js({ exports: "./x.js" }), "examples/x/package.json": ANTD }),
+    });
     // a negation of `**` and two-`*` names against ten nested folders of twenty `a`s: linear (13.8 s as one RegExp)
     const neg = (tag, bang) => {
       const d = project("review2-neg-" + tag, { "package.json": js({ private: true, workspaces: ["*/*/*/*/*/*/*/*/*/*", bang + "**/*a*a/**/*a*a/**/*a*a/**/*a*a/**/zz"] }) });
@@ -377,11 +423,15 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     const bars = project("review2-barrels", { "package.json": deps(["react"]) });
     for (let i = 0; i < 1001; i++) write(bars, UI + "b" + String(i).padStart(4, "0") + "/index.ts", "export { X" + i + " } from \"@acme/x\";\n");
     const barLimits = S.designSystemReport(bars).limits;
-    all("1.35.3 review 2: an alias of a tsconfig's `paths` (JSONC), of a nested app's (`~/*` → `./app/*`), of Vite's `tsconfig.app.json` (a `tsconfig.json` of a `baseUrl` alone beside it covers nothing), a bare path below a `baseUrl` no guess reaches, `~/…` into an app's `app/` with no config, a `#…` import, the root package and an unscoped workspace package by their names; `React.use(X)` reads a context, a comparison before a `>` is no tag; a provider's tag that names a candidate part, or a part hung on the root's local name in its own file, is that part; an instance (`new QueryClient()`) is never a name; a workspace name behind 520 manifests is found. Workspaces: a root that looks like a library (`npm init`'s `name` + `main`, a named root, a `main`) keeps the first guessed level — never the second; a private root (named, or with a script's `main`) keeps both; a pnpm negation narrows the patterns written after it; a negation of `**` and two-`*` names is matched in linear time; 1,001 barrels say the files read (got " + js({ got, crowdGot, ws, nms, barLimits }) + ")", {
-      names: () => js(got) === js(["AtGlow", "Core", "CoreGlow", "HashGlow", "Kit", "Popover", "Popover.Provider", "RemixGlow", "RemixKit", "RootGlow", "Tip", "Tip.Provider", "TipGroup",
-        "LegacyGlow", "LegacyKit", "ViteGlow", "ViteKit", "RrGlow", "RrKit", "ExactKit"].sort()),
+    all("1.35.3 review 2 / 3: `~/…` into a nested app's `app/` (from its root: a tsconfig.json — whose `paths` are not read —, a package.json; `@/…` never into `app/`; both into a root's own folder and its `src/` — the project's own folder a root without a manifest, a folder that is no root none), a `#…` import — an alias spelled like a scope (`@components/…`) and a bare name of one segment settle nothing —, the root package and an unscoped workspace package by their names; `React.use(X)` reads a context, a comparison before a `>` is no tag; a provider's tag that names a candidate part, or a part hung on the root's local name in its own file, is that part; an instance (`new QueryClient()`) is never a name; a workspace name behind 520 manifests is found, and keeps the folder it was first found in; a tsconfig.json beside 300 manifests spends none of the names read. Workspaces: a root that looks like a library (`npm init`'s `name` + `main`, a named root, a `main`) keeps the first guessed level — never the second; a private root (named, or with a script's `main`) keeps both; a pnpm negation narrows the patterns written after it; a negation of `**` and two-`*` names is matched in linear time; 1,001 barrels say the files read (got " + js({ got, crowdGot, dupGot, tscGot, bareGot, ws, nms, barLimits }) + ")", {
+      names: () => js(got) === js(["Core", "CoreGlow", "HashGlow", "Kit", "Popover", "Popover.Provider", "RemixGlow", "RemixKit", "RootGlow", "Tip", "Tip.Provider", "TipGroup",
+        "RrGlow", "RrKit", "ExactKit", "JsGlow", "JsKit", "AtKit", "NearKit", "NextGlow", "NextKit", "T3Glow", "T3Kit", "Chain", "S2", "S2.Part", "Shadow", "Theme", "Shell"].sort()),
       crowd: () => crowdGot.includes("CrowdGlow"),
-      ws: () => js(ws) === js({ npmInit: ["@mui/material"], namedDev: ["antd"], privateMain: ["antd"], privateMainTwo: ["antd"], mainTwo: [], namedPrivateTwo: ["antd"], pnpmFirst: ["@mui/material"] }) && fifty.length === 0,
+      dup: () => dupGot.includes("DupGlow"),
+      tsconfigs: () => tscGot.includes("DesignGlow"),
+      bare: () => bareGot.includes("TopGlow"),
+      ws: () => js(ws) === js({ npmInit: ["@mui/material"], namedDev: ["antd"], privateMain: ["antd"], privateMainTwo: ["antd"], mainTwo: [], namedPrivateTwo: ["antd"], pnpmFirst: ["@mui/material"],
+        starstar: ["@mui/material", "@chakra-ui/react"], lernaPnpm: [], moduleTwo: [], exportsTwo: [] }) && fifty.length === 0,
       negation: () => nms[0] < 2.5 * nms[1] + 150,
       barrels: () => js(barLimits) === js([{ code: "component-files", read: 1000 }]),
     });
@@ -497,13 +547,50 @@ exports.run = async ({ all, S, tmp, remeasure, require, __dirname }) => {
     };
     const wh = instances("new", "new QueryClient()"), wsoft = instances("call", "make()");
     const wms = remeasure(() => { const t0 = Date.now(); S.designSystemReport(wh); const t1 = Date.now(); S.designSystemReport(wsoft); return [t1 - t0, Date.now() - t1]; }, (s) => s[0] * 1.5 < s[1]);
+    //   review 3: 6,000 aliases of a root with 5,000 parts no name could be (`P_1`), and 2,090 lower-case aliases of one with
+    //   2,000 that could — never once a name a part (13.6 s): against the same parts hung on another root
+    const chainCost = (tag, root) => {
+      const d = project("cost-chain-" + tag, { "package.json": deps(["react"]) });
+      write(d, UI + "chain1.tsx", "function A() { return null; }\nfunction Z() { return null; }\n" + Array.from({ length: 5000 }, (_, i) => root + ".P_" + i + " = make();").join("\n") + "\n" + Array.from({ length: 6000 }, (_, i) => "export const B" + i + " = A;").join("\n") + "\n");
+      write(d, UI + "chain2.tsx", "function A() { return null; }\nfunction Z() { return null; }\n" + Array.from({ length: 2000 }, (_, i) => root + ".Q" + i + " = make();").join("\n") + "\n" + Array.from({ length: 2090 }, (_, i) => "export const b" + i + " = A;").join("\n") + "\n");
+      return d;
+    };
+    const kh = chainCost("hard", "A"), ks = chainCost("soft", "Z");
+    const kms = remeasure(() => { const t0 = Date.now(); S.designSystemReport(kh); const t1 = Date.now(); S.designSystemReport(ks); return [t1 - t0, Date.now() - t1]; }, (s) => s[0] < 2.5 * s[1] + 150);
+    //   review 3: 4,000 distinct external modules against 1,500 workspace manifests — a miss asked of an index of their
+    //   folders' names, never of each: against the same names imported from the project's own files
+    const missCost = (tag, external) => {
+      const d = project("cost-miss-" + tag, { "package.json": deps(["react"]) });
+      for (let i = 0; i < 1500; i++) write(d, "packages/p" + i + "/package.json", js({ name: "pkg-" + i }));
+      write(d, UI + "kit.tsx", L(["export const Moving = motion(Box);"]));
+      for (let j = 0; j < 100; j++) write(d, "src/app/p" + j + ".tsx", Array.from({ length: 40 }, (_, k) => "import { X" + k + " } from \"" + (external ? "ext-" + j + "-" + k : "../lib/x" + k) + "\";").join("\n") + "\nimport { Moving } from \"@/components/ui/kit\";\nexport const P = () => <>" + Array.from({ length: 40 }, (_, k) => "<X" + k + " />").join("") + "<Moving /></>;\n");
+      return d;
+    };
+    const mh = missCost("external", true), msoft = missCost("own", false);
+    const xms = remeasure(() => { const t0 = Date.now(); S.designSystemReport(mh); const t1 = Date.now(); S.designSystemReport(msoft); return [t1 - t0, Date.now() - t1]; }, (s) => s[0] < 2.5 * s[1] + 150);
+    //   review 3: 5,000 workspace manifests and 200 misses — the names read stay bounded (500 by their folders' name, 500 in
+    //   the walk's order, 2,000 roots kept; both bounds gone: ×2 to ×2.8, ×1.1 to ×1.4 with them): against the same pages
+    //   importing the project's own files
+    const boundCost = (tag, external) => {
+      const d = project("cost-bound-" + tag, { "package.json": deps(["react"]) });
+      for (let i = 0; i < 5000; i++) write(d, "packages/p" + i + "/package.json", js({ name: "pkg-" + i }));
+      write(d, UI + "kit.tsx", L(["export const Moving = motion(Box);"]));
+      for (let j = 0; j < 20; j++) write(d, "src/app/p" + j + ".tsx", Array.from({ length: 10 }, (_, k) => "import X" + k + " from \"" + (external ? "ext-" + j + "-" + k + "/sub" : "../lib/x" + k) + "\";").join("\n") + "\nimport { Moving } from \"../components/ui/kit\";\nexport const P = () => <>" + Array.from({ length: 10 }, (_, k) => "<X" + k + " />").join("") + "<Moving /></>;\n");
+      return d;
+    };
+    // (relative imports alone beside the misses: an alias asks the packages too)
+    const uh = boundCost("external", true), usoft = boundCost("own", false);
+    const ums = remeasure(() => { const t0 = Date.now(); S.designSystemReport(uh); const t1 = Date.now(); S.designSystemReport(usoft); return [t1 - t0, Date.now() - t1]; }, (s) => s[0] < 1.7 * s[1] + 60);
     // a feature's report on a project of many pages reads none of them for what they render
     const p = project("cost-feature", { "package.json": deps(["react"]) });
     write(p, UI + "kit.tsx", L(["export const Moving = motion(Box);"]));
     for (let i = 0; i < 400; i++) write(p, "src/app/p" + i + ".tsx", L(["import { Moving } from \"@/components/ui/kit\";", "export const P" + i + " = () => <Moving />;"]));
     S.createFeature(p, { name: "Price Tag", tracks: ["ui"], summary: "x" });
     const fms = remeasure(() => { const t0 = Date.now(); S.designSystemReport(p); const t1 = Date.now(); S.designSystemReport(p, { name: "price-tag" }); return [t1 - t0, Date.now() - t1]; }, (s) => s[1] * 2 < s[0]);
-    all("1.35.3: the usage reader gives up in linear time — runs of tags, closing tags and members, a `useContext(` of 1,900 brackets, an import clause that never closes, lines of `(/` with a backtick (a regex that never closes is looked for once a line) — no slower than the same files spelled out of reach; and a feature's report reads none of the project's pages for what they render — half the project report's time at most on 400 of them; 2,000 parts that are calls under 2,090 exported names are settled once an owner, 500 candidates kept and said; a page that writes none of the names asked is never parsed. Review 1 of 1.35.3: 20,000 negations of ten packages (each ten alternatives) against 900 folders cost no more than the same entries spelled as paths — 200 alternatives kept, said; one name exported by 1,000 kits and rendered through 100 namespaces by 300 pages is settled once a folder, a module and a name; four lines of `(/[/` and a backtick look for one regex a line; a barrel's 500 re-exports of the project's own file ask nothing; six files of 10,000 CommonJS entries the file calls ask each statement once; 500 top-level aliases of an import ask nothing; review 2: a page thirty roots deep costs no more than one under none, 500 instances ask nothing (got " + js({ ms, pms, qms, nms, bms, rms, ems, cms, ams, dms, wms, fms }) + ")", {
+    all("1.35.3: the usage reader gives up in linear time — runs of tags, closing tags and members, a `useContext(` of 1,900 brackets, an import clause that never closes, lines of `(/` with a backtick (a regex that never closes is looked for once a line) — no slower than the same files spelled out of reach; and a feature's report reads none of the project's pages for what they render — half the project report's time at most on 400 of them; 2,000 parts that are calls under 2,090 exported names are settled once an owner, 500 candidates kept and said; a page that writes none of the names asked is never parsed. Review 1 of 1.35.3: 20,000 negations of ten packages (each ten alternatives) against 900 folders cost no more than the same entries spelled as paths — 200 alternatives kept, said; one name exported by 1,000 kits and rendered through 100 namespaces by 300 pages is settled once a folder, a module and a name; four lines of `(/[/` and a backtick look for one regex a line; a barrel's 500 re-exports of the project's own file ask nothing; six files of 10,000 CommonJS entries the file calls ask each statement once; 500 top-level aliases of an import ask nothing; review 2: a page thirty roots deep costs no more than one under none, 500 instances ask nothing; review 3: aliases × parts no name could take ask nothing, 4,000 external modules against 1,500 manifests cost no more than the project's own, and 200 against 5,000 read a bounded number of them (got " + js({ ms, pms, qms, nms, bms, rms, ems, cms, ams, dms, wms, kms, xms, ums, fms }) + ")", {
+      chain: () => kms[0] < 2.5 * kms[1] + 150,
+      misses: () => xms[0] < 2.5 * xms[1] + 150,
+      bounds: () => ums[0] < 1.7 * ums[1] + 60,
       roots: () => dms[0] < 2.5 * dms[1] + 150,
       instances: () => wms[0] * 1.5 < wms[1],
       cjs: () => cms[0] < 2.5 * cms[1] + 150,
