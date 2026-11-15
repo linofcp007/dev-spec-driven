@@ -12,13 +12,15 @@ the code scan now asks the project's other files. A component is what the projec
 - **What the project's files settle.** A name a component file exports that its declaration does not settle is a
   component when a file of the project RENDERS it — `<MotionBox />`, `<Card.Header>`, `<UI.Content />` through a
   namespace, `Press <Kbd /> to save` —, followed through the file's imports to the files the module may be: a relative
-  path (the file, its folder's index, a file under a barrel's folder), an alias of the project (`@/…`, `~/…`, `#…`: from
-  each project root above the importing file — a folder with a `package.json`, `tsconfig.json` or `jsconfig.json` — and
-  its `src/`), a workspace package by its manifest's `name` (`@acme/design` in `packages/kit-internal/`, a subpath
-  below its `src/`: `@repo/ui/components/kit`), a `baseUrl` path (`components/ui/kit`), a default import (`export
-  default X`, `export { X as default }`, `export default function`, `module.exports = X`), a `require`. Any other
-  module — another package, even one whose last segment is the project's folder (`@wordpress/components`, `@other/ui`)
-  — settles nothing. So `motion(Box)`, `createComponent(config)`, `createSvgIcon(<path />, "Home")`, `createIcon({ … })`,
+  path (the file, its folder's index, a file under a barrel's folder); an alias of the nearest `tsconfig*.json` /
+  `jsconfig*.json` above the importing file that declares `paths` (`"~/*": ["./app/*"]`, `"@components/*":
+  ["src/components/*"]`, comments and trailing commas read) and a bare path below its `baseUrl`; a workspace package by
+  its manifest's `name` (`@acme/design` in `packages/kit-internal/`, the root's own, a subpath below its `src/`:
+  `@repo/ui/components/kit`); and where no config says, `@/…`, `~/…`, `#…` and a path of two segments or more from each
+  project root above the file (a folder with a `package.json`, `tsconfig.json` or `jsconfig.json`) and its `src/` /
+  `app/`; a default import (`export default X`, `export { X as default }`, `export default function`, `module.exports =
+  X`), a `require`. Any other module — another package, even one whose last segment is the project's folder
+  (`@wordpress/components`, `@other/ui`) — settles nothing. So `motion(Box)`, `createComponent(config)`, `createSvgIcon(<path />, "Home")`, `createIcon({ … })`,
   `createField({ type }, fn)`, `contextConnect(Menu, "Menu")`, a class that renders through its imported base, `export
   const { Header } = Layout`, a part hung on an imported component (`Tabs.Panel = …`), a component of three parameters,
   one whose `<pre>` text at the margin ended its statement — each is read once the project renders it. The other way, a
@@ -34,8 +36,9 @@ the code scan now asks the project's other files. A component is what the projec
   that writes none of the names asked is never parsed, and a `.ts` file is read only when there is a weak name to settle
   (it renders nothing). The search ends at that bound without a word, as the global stylesheets' does: what lies past it
   is a name its file's rules settle alone, 1.35.2's reading. A feature's report — `spec_finish`'s — reads none of it, nor
-  the component files' exports: it never asked for them. On Windows a file costs about half a millisecond to read: a
-  project report of a big monorepo takes seconds more than 1.35.2's.
+  the component files' exports: it never asked for them. On Windows a file costs about half a millisecond to read: on 17
+  public repositories the project report took about ×1 to ×10 the time of 1.35.2's (primer: 75 → 600–800 ms;
+  gutenberg's 13,795 files: 2 to 4 s more).
 - **A call is a component when it is given a function that renders** — `observer(() => …)`, `loadable(() =>
   import(…))` — or a component's name first (a HOC's shape: `withContext(Ark.Arrow, "arrow", { defaultProps: { children:
   <Tip /> } })`). With neither, its JSX is an element handed over and it is no component — `mount(root, <App />)`,
@@ -51,32 +54,36 @@ the code scan now asks the project's other files. A component is what the projec
 - **A regular expression's backtick is the regex's** (`/`([^`]+)`/`, a Markdown reader's), so two of them no longer hide
   the declarations between them; and in minified code a string right after `return` / `case` is a string (`return'</b>'`
   made a component of a call).
-- **Workspaces: a `!negation` takes its folders out** — the folders the patterns before it give, as npm reads a list
-  (a later pattern gives them back); a name, `*`, `**` (no folder too), a brace list; a workspace package's own for its
-  folder; 200 alternatives, past them said. A project that declares none is looked through one level down and, when
+- **Workspaces: a `!negation` takes its folders out** — in `package.json`, the folders the patterns before it give, as
+  npm reads a list (a later pattern gives them back); in `pnpm-workspace.yaml`, wherever it is written, as pnpm reads
+  one; a name, `*`, `**` (no folder too), a brace list; a workspace package's own for its folder; 200 alternatives,
+  past them said; matched in linear time. A project that declares none is looked through one level down and, when
   that level holds no package at all, the next (`apps/web/package.json`) — a bound of that guess is never said —,
-  unless its root is a package of its own: an app (`dependencies`) or, now, a library (a `name` that is not `private`,
-  or `peerDependencies`, `main`, `module`, `exports`: its `examples/with-mui/` are not its kit). A workspace file that
-  names nothing it can read keeps the one level.
+  unless its root is an app (`dependencies`: no guess, as before); a root that looks like a library (not `private`,
+  with a `name`, `peerDependencies`, `main`, `module` or `exports` — `npm init` writes a `name` and a `main`) keeps the
+  first level and never the second (its `examples/with-mui/` are not its kit). A workspace file that names nothing it
+  can read keeps the one level.
 
 Still a row to add by hand: a component no file of the project renders where the reader sees it — a kit whose apps live
 in another repository; a name rendered only past the bound, or by a default import under another local name in a file
 that writes none of the names asked; one rendered through a re-export outside a component folder's `index.ts`
 (`export * as Tooltip from "./namespace"`, a `namespace.ts` of renamed re-exports), through an alias the project's
 roots and `src/` do not explain (tsconfig `paths` to another folder) or a package's `exports` map, or only in `.mdx` /
-`.vue` / `.svelte` files or with `React.createElement(X)` —, one in a lower-case `.js` file or in a `.ts` file that is
-no component folder's barrel, and a real component the project only calls. Still listed, knowingly: a helper, a part on
+`.vue` / `.svelte` files or with `React.createElement(X)`; through an alias a config `extends` from another file, or
+`paths` the reader cannot find above the importing file —, one in a lower-case `.js` file or in a `.ts` file that is no
+component folder's barrel, and a real component the project only calls. Still listed, knowingly: a helper, a part on
 an imported name that is none, or a call whose function renders (`memoize((n) => <Icon />)`), while the project never
-calls it nor reads it as an object; a top-level alias of an imported name that is none; a call given a string first
-whose JSX is an element handed over (`t("hint", { link: <a /> })`), given an object with a `render`, or curried around
-an import (`configureStore(o)(Reducers)`); a class with a `render` that returns JSX the
+calls it nor reads it as an object; a top-level alias of an imported name that is none; a call given a string or a
+capitalised name first whose JSX is an element handed over (`t("hint", { link: <a /> })`, `cloneElement(Base, { icon:
+<Icon /> })`), one given a method beside an element (`extendTheme(base, { baseStyle(p) { … }, defaultProps: { icon:
+<Info /> } })`), given an object with a `render`, or curried around an import (`configureStore(o)(Reducers)`); a class with a `render` that returns JSX the
 project never constructs. A stray backtick in an element's text hides what stands up to the next one, and a template
 inside another's `${ … }` over lines is read as code. Still not read among workspaces: a manifest three levels below a
-root that declares none, a folder beside the declared ones, a sub-folder of a root that is an app itself; a pnpm
-negation written BEFORE the pattern it narrows removes nothing (npm's order).
+root that declares none (two, when the first level holds a package), a folder beside the declared ones, a sub-folder of
+a root that is an app itself.
 
 ### Tests
-- `node mcp/test.js` 2368 assertions, `node cli/test-cli.js` 663 (was 2361 / 663).
+- `node mcp/test.js` 2369 assertions, `node cli/test-cli.js` 663 (was 2361 / 663).
 
 ## [1.35.2] — 2026-11-14
 

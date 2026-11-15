@@ -1469,12 +1469,13 @@ function packageDependencies(folder) {
 // nested worktrees, DS_WORKSPACE_NESTED deep — 1.35.2) —,
 // each pattern followed folder by folder: a name, a `*` within one (`apps/*`, `packages/ui-*`), `**` (that folder and
 // two levels below it), a brace list expanded first (`{apps,libs}/*` — braceExpand, 1.35.2); a path that leaves the
-// project names none, and a `!negation` takes its folders out (1.35.3 — negation, globMatch). A project that
-// declares none (no workspace FILE at all) is looked through two levels down, never inside a package (`frontend/` beside
-// a Django app, `client/` + `server/`, `apps/web/` — `**`, 1.35.3; one level until then, and for a workspace file that
-// names nothing it can read) — unless its
-// root is a package of its own, with dependencies: an app whose `docs/` or `storybook/` site keeps another kit is not
-// that kit's project (review 1 of 1.35.1: the union made the report ask for libraries the app does not use). A `*`
+// project names none, and a `!negation` takes out the folders the patterns before it give (1.35.3 — negation, globMatch:
+// npm's order; pnpm's negations are put last, where they narrow every pattern). A project that declares none (no
+// workspace FILE at all) is looked through one level down (`frontend/` beside a Django app, `client/` + `server/`) and,
+// when that level holds no package, the next (`apps/web/` — 1.35.3) — unless its root is a package of its own, with
+// dependencies: an app whose `docs/` or `storybook/` site keeps another kit is not that kit's project (review 1 of
+// 1.35.1: the union made the report ask for libraries the app does not use); a root that looks like a library (not
+// `private`, with a `name`, `peerDependencies`, `main`, `module` or `exports`) keeps the first level and never the second. A `*`
 // never matches a link, a dot folder or node_modules, a NAMED folder that is a link names nothing, and `**` does not
 // look inside a folder that is a package. Bounded, and what a manifest holds never throws out of the registry's read:
 // DS_WORKSPACE_PATTERNS patterns of DS_WORKSPACE_CHARS characters and DS_WORKSPACE_SEGMENTS segments at most,
@@ -1513,10 +1514,12 @@ function braceExpand(pattern) {
   }
   return out;
 }
-// A `!negation`'s pattern (what follows the `!`) → its alternatives (a brace list expanded), each ONE anchored RegExp
-// over "/" + a folder's path — `**` any folders (none too), a name with a `*` (two at most, as a walked one), a name — or
-// null: none it can read (out of the project, too long, too many segments). Compiled once (review 1 of 1.35.3: a matcher
-// built for every folder, against 6,000 unbounded negations of ten packages, cost 103 s).
+// A `!negation`'s pattern (what follows the `!`) → its alternatives (a brace list expanded), each a list of segment
+// matchers compiled ONCE — null for `**` (any folders, none too), a RegExp anchored on ONE name for a name with a `*` (two
+// at most, as a walked one), the name itself — or null: none it can read (out of the project, too long, too many
+// segments). globMatch(segs, parts): does a folder (its names) match? A dynamic program over segments × names — linear in
+// both, never a RegExp over the whole path (review 2 of 1.35.3: `**` and two-`*` names in one RegExp backtracked, 13.8 s
+// for one line; review 1: a matcher built for every folder, against 6,000 unbounded negations, 103 s).
 const DS_WORKSPACE_NEGATIONS = 200; // the negation alternatives kept, the project's and its packages': past them, said
 function negation(p0) {
   const p = p0.trim();
@@ -1525,9 +1528,22 @@ function negation(p0) {
   for (const one of (p.includes("{") || p.includes("}") ? braceExpand(p) : [p]) || []) {
     const segs = one.split(String.fromCharCode(92)).join("/").split("/").filter((x) => x !== "" && x !== ".");
     if (!segs.length || segs.includes("..") || segs.length > DS_WORKSPACE_SEGMENTS || segs.some((x) => x !== "**" && x.split("*").length > 3)) continue;
-    out.push(new RegExp("^" + segs.map((s) => (s === "**" ? "(?:/[^/]+)*" : "/" + s.split("*").map(escRe).join("[^/]*"))).join("") + "$"));
+    out.push(segs.map((s) => (s === "**" ? null : s.includes("*") ? new RegExp("^" + s.split("*").map(escRe).join(".*") + "$") : s)));
   }
   return out.length ? out : null;
+}
+function globMatch(segs, parts) {
+  let next = new Uint8Array(parts.length + 1), cur = new Uint8Array(parts.length + 1);
+  next[parts.length] = 1;
+  for (let i = segs.length - 1; i >= 0; i--) {
+    const m = segs[i];
+    for (let j = parts.length; j >= 0; j--) {
+      if (m === null) cur[j] = next[j] || (j < parts.length && cur[j + 1]) ? 1 : 0;
+      else cur[j] = j < parts.length && next[j + 1] && (typeof m === "string" ? m === parts[j] : m.test(parts[j])) ? 1 : 0;
+    }
+    [next, cur] = [cur, next];
+  }
+  return next[0] === 1;
 }
 // A JSON text with comments and trailing commas — what Rush's own reader accepts of rush.json — as plain JSON: `//` and
 // `/* */` comments out, a `,` before a `}` / `]` dropped, strings kept as written, a BOM dropped. Linear.
@@ -1624,7 +1640,10 @@ function workspacePatterns(realRoot, projectRoot, pkg) {
   if (pkg) take(manifestWorkspaces(pkg));
   const pnpm = path.join(projectRoot, "pnpm-workspace.yaml");
   const yaml = projectFileInside(realRoot, pnpm) ? readFileHead(pnpm, DS_PACKAGE_CHARS) : null;
-  if (yaml != null) take(pnpmPackages(yaml));
+  // (pnpm reads a negation whatever its place — npm reads a list in order: pnpm's are put LAST, where they narrow every
+  // pattern before them — review 2 of 1.35.3)
+  const pnpmList = yaml == null ? [] : pnpmPackages(yaml);
+  take(pnpmList.filter((p) => typeof p !== "string" || p.trim()[0] !== "!"));
   const rush = rushFolders(realRoot, projectRoot);
   take(rush.folders);
   if (rush.unread) more = true;
@@ -1632,6 +1651,7 @@ function workspacePatterns(realRoot, projectRoot, pkg) {
   // declared ones it would read a folder the project did not declare — review 2 of 1.35.1)
   const lerna = projectJson(realRoot, path.join(projectRoot, "lerna.json"));
   if (lerna) take(Array.isArray(lerna.packages) ? lerna.packages : patterns.length ? [] : ["packages/*"]);
+  take(pnpmList.filter((p) => typeof p === "string" && p.trim()[0] === "!"));
   // (declares: a workspace file is there, whatever it names — a project that has one is never looked through as one with none)
   const declares = (pkg != null && pkg.workspaces != null) || yaml != null || rush.declared || lerna != null;
   return { patterns, more, declares };
@@ -1677,17 +1697,17 @@ function workspaceDirs(projectRoot, patterns, visit) {
   // as npm reads a list (a later pattern gives them back — review 1 of 1.35.3); the project's own and a workspace
   // package's for its folder (its place: where its next pattern is queued). DS_WORKSPACE_NEGATIONS alternatives, past
   // them said — each is asked of every folder given.
-  const negations = []; // [RegExp, its place in the list]
+  const negations = []; // [an alternative's segment matchers, its place in the list]
   const negate = (p, at) => {
     // (asked before one is compiled: compiled past the bound, each costs as much — a list's alternatives, DS_WORKSPACE_BRACES
     // at most, may pass it by that many)
     if (negations.length >= DS_WORKSPACE_NEGATIONS) { cut = true; return; }
     const n = negation(p);
-    if (n) for (const re of n) negations.push([re, at]);
+    if (n) for (const segs of n) negations.push([segs, at]);
   };
   patterns.forEach((p, k) => { if (p.trim()[0] === "!") negate(p.trim().slice(1), k); });
   let depth = 0, nested = 0, current = 0; // current: the place of the pattern being followed
-  const negated = (rel) => { const s = "/" + rel; return negations.some(([re, at]) => at > current && re.test(s)); };
+  const negated = (rel) => { let parts = null; return negations.some(([segs, at]) => at > current && globMatch(segs, parts || (parts = rel.split("/")))); };
   const give = (rel) => {
     if (rel === "" || given.has(rel) || negated(rel) || !ask()) return;
     given.add(rel);
@@ -1753,11 +1773,13 @@ function projectDependencies(projectRoot) {
     const pkg = manifestInto(realRoot, path.join(projectRoot, "package.json"), names);
     const declared = workspacePatterns(realRoot, projectRoot, pkg);
     cut = declared.more;
-    // the root is a package of its own: an app (its `dependencies`) or a library — a published one (a `name`, not
-    // `private`) or one that declares what a published package does (`peerDependencies`, `main`, `module`, `exports`): its
-    // `examples/with-mui/` are not its kit (review 1 of 1.35.3)
-    const own = pkg != null && ((isRecord(pkg.dependencies) && Object.keys(pkg.dependencies).length > 0) || (typeof pkg.name === "string" && pkg.private !== true) ||
-      isRecord(pkg.peerDependencies) || pkg.main != null || pkg.module != null || pkg.exports != null);
+    // the root is a package of its own — an app, its `dependencies`: no guess at all (1.35.2's rule); and one that looks
+    // like a library — not `private` (a private one is never published: its `main` is a script's), with a `name`,
+    // `peerDependencies`, `main`, `module` or `exports` — keeps the first guessed level (`npm init` writes a `name` and a
+    // `main`: a polyglot repository's `client/` stays its kit — review 2 of 1.35.3) but never the second (a library's
+    // `examples/with-mui/` — review 1)
+    const own = pkg != null && isRecord(pkg.dependencies) && Object.keys(pkg.dependencies).length > 0;
+    const library = pkg != null && pkg.private !== true && (typeof pkg.name === "string" || isRecord(pkg.peerDependencies) || pkg.main != null || pkg.module != null || pkg.exports != null);
     const visit = (rel) => {
       const file = path.join(projectRoot, rel, "package.json");
       if (!projectFileInside(realRoot, file)) return true; // a folder that is no package
@@ -1773,7 +1795,7 @@ function projectDependencies(projectRoot) {
     // names nothing it can read is looked through one level, as before)
     const guessed = !declared.declares, before = cut;
     cut = workspaceDirs(projectRoot, declared.patterns.length ? declared.patterns : own ? [] : ["*"], visit) || cut;
-    if (guessed && !own && !declared.patterns.length && read === 0) cut = workspaceDirs(projectRoot, ["*/*"], visit) || cut;
+    if (guessed && !own && !library && !declared.patterns.length && read === 0) cut = workspaceDirs(projectRoot, ["*/*"], visit) || cut;
     if (guessed) cut = before;
   } catch { /* whatever a manifest holds, the registry is read with the names found so far */ }
   if (cut) { names.cut = true; names.read = read; }
@@ -2813,7 +2835,7 @@ function clarifyChange(projectDir, f, c) {
   return clarifyResult(projectDir, f, tracks, fm, add, questions, []);
 }
 
-module.exports = { crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
+module.exports = { jsonPlain, crossFeatureAcs, crossAcDoctorDetail, renderCrossAcsMd, glossaryEntries, glossaryHits, briefGlossary,
   TRADEOFFS_SYN, RISKS_SYN, DESIGN_WEIGH_IDS, weighSection, designWeighChecks, designReuseGated, REUSE_SYN, reuseQuotedSection, briefReuse,
   clarify, criticalFlowState, criticalFlowCheck, CRITICAL_FLOW_IDS,
   DESIGN_SYSTEM_FILE, designSystemRegistry, designSystemUsage, designSystemFindings, designSystemCheck, designSystemGated, briefDesignSystem,
