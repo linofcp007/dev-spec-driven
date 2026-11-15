@@ -426,7 +426,8 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   `PureComponent` or a component class the file declares above it (`classHeader` reads the header to its `{`, what
   its brackets hold aside — type parameters over lines or holding a `>`, `extends` on the next line —, then
   `RE_CLASS_EXTENDS` / `RE_REACT_CLASS`: never `class LoginError extends Error`, `extends mixin(Component)`, a base
-  that is imported), or an exported const whose value
+  that is imported — or, 1.35.2, whatever it extends, a class that RENDERS: a `render` (`RE_RENDER`) and JSX in its
+  statement), or an exported const whose value
   is a function (`functionValue`: an arrow, `async`, a generic one — its `<` alone at the line's end too, shadcn's
   FormField —, `function`; a `(` is a parameter list's when its `)` is followed by `=>` or `:` or does not close on
   its line, so `(1 + 2) * 3` is a value; a parenthesis inside a quoted string is none — `quoteEnd`), one of React's
@@ -446,10 +447,9 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   re-export (`export { X } from`, `export *`: a barrel's). A name is read WHOLE, accents too. Top-level statements
   only (column 0), comments aside (`withoutComments` with `script` — a `/*` in a string opens none, and a script's
   strings are the ones that CLOSE on their line, backticks too (`quotedPlaces`): the apostrophe of `<p>Don't</p>`
-  quotes nothing — and `html: false`: `<!--` is no comment in a script), a BOM dropped; the reader keeps no
-  template state, so a
-  template literal's line at the margin reads as a statement — knowingly, as a PascalCase helper function and an
-  imported enum's member read as components. An `import` clause is an import STATEMENT's (`RE_IMPORT`: never
+  quotes nothing — and `html: false`: `<!--` is no comment in a script), a BOM dropped; a template literal's lines are text, never a statement (`scriptView`, 1.35.2 — until then a code
+  sample at the margin read as the file's own declarations); an imported enum's member still reads as a component,
+  knowingly. An `import` clause is an import STATEMENT's (`RE_IMPORT`: never
   `import.meta…`, `import(…)`, `importantSetup()`) and ends where one ends (`RE_IMPORT_END`: the module's quote, a
   `;`, the `=` of `import X = Y.Z`). Every pattern is anchored and unambiguous (a value is SLICED off the
   line, never captured by `(.*)$`; no `\s*;?\s*$`) — each has its hostile fixture. Bounds: `DS_EXPORT_FILES`
@@ -459,11 +459,10 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   read BELOW their line (a real file's never overlap; a file of `const A: X<` lines read sixty lines for each —
   spent, a declaration has no value and the file says `more`). A component with a file of its own keeps that file (read
   after every file's own name is known); a route segment's special file is a page and is not read. What it misses
-  is a row to add by hand, and the `unknown` hint still says so: a component wrapped by any other function
-  (`observer(…)`, a HOC, `dynamic(…)`) or by React's under another name (`R.forwardRef`, a wrapper in parentheses
-  that is cast), a class whose base is imported or that carries a decorator on its line, an alias of a destructured
-  or `require`d name, one declared indented or as a compound part (`Card.Header = …`), CommonJS
-  `exports.X`, a re-export from a package under a new name, a barrel that declares. A feature's own files are read
+  is a row to add by hand, and the `unknown` hint still says so (1.35.2 read most of what 1.35.1 listed here — The
+  export reader's view, below): a component made by a call that shows nothing (`createComponent(config)`,
+  `observer(() => null)`, a wrapper around a name the file never imports), a class that renders only through its
+  imported base, CommonJS `exports.X`, a re-export from a package under a new name, a barrel that declares. A feature's own files are read
   the same way for its New components' paths (`featureReport`: the finish wrote `—` for one its file exports
   beside the file's own — a component file's alone, its own file first). Review 1 of 1.35.1 measured the first
   draft on six real kits: 197 of 218 found, 7 non-components listed; its fix round found 204 and listed two, both
@@ -583,8 +582,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   union made the report ask, for good, for libraries the app does not use). What a pattern never reaches: upward
   (`..`), a link (a `*` match is a Dirent that is no directory; a NAMED folder is asked itself, `lstat`; a manifest
   that is a link out of the project is not read), and a `*` never matches a dot folder or node_modules — a NAMED
-  one is the project's own word. A `!negation` removes nothing and a brace list names nothing; said in the user
-  docs. A declared pattern the reader does not FOLLOW — past a bound, a brace list, a segment of three `*` — is
+  one is the project's own word. A `!negation` removes nothing; said in the user docs. A brace list is expanded
+  first (`braceExpand`, 1.35.2: the first list and the `}` that closes it, cut at the commas of its own depth — a nested
+  list adds its names, it does not multiply them; `DS_WORKSPACE_BRACES` patterns a list). A declared
+  pattern the reader does not FOLLOW — past a bound, a brace list it cannot expand (of one, never closed), a
+  segment of three `*` — is
   SAID (`cut`): the project named folders that went unread (review 2: dropped without a word, the report said in
   sync); a negation and a path out of the project are not — nothing went unread. Bounded, and nothing a manifest
   holds throws out of the registry's
@@ -597,8 +599,85 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   manifests read — 0 when the first pattern was the one not followed, never "at least 1"): the scan reports it
   (`limits`: workspace-manifests). The cost is paid only when a marker ASKS (a bare-number name, a note, a registry
   with no component row) and once per scan; a single-package project pays nothing but its root manifest.
-  `packageDependencies` stays ONE folder's manifest (`dependsOnNext` asks it of a router's folders). Not read, said
-  in the user docs: `rush.json`, a workspace a workspace package declares.
+  `packageDependencies` stays ONE folder's manifest (`dependsOnNext` asks it of a router's folders). 1.35.2 reads
+  what 1.35.1 said it did not: rush.json's `projects` (`rushFolders`: each `projectFolder`, a folder named in full —
+  `jsonPlain` takes the comments and trailing commas Rush allows out, strings kept; a rush.json that is no JSON is
+  declared and unread: said) and the `workspaces` a workspace package declares for its own folder (`manifestWorkspaces`,
+  given back by the visit and queued: `DS_WORKSPACE_NESTED` deep, as many as can be asked (`DS_WORKSPACE_ASKED`) —
+  past either, said; a path from a root and a negation name none). And the fifty are the patterns that are WALKED (`RE_WORKSPACE_WILD`): a
+  folder named in full costs one question (asked once, however many patterns share it), `DS_WORKSPACE_EXACT` of
+  them are followed — a rush.json names every project so.
+- **The export reader's view** (`scriptView`, design-system.js — 1.35.2) — until 1.35.2 the reader read one LINE of a
+  declaration; what 1.35.1 left to add by hand needs what a STATEMENT holds. The file is read once into: `code` (its
+  lines, comments out — `scriptLines`: a line that starts inside a template literal is read from the backtick that
+  closes it, so no comment opens in a template's text, and a script's `//` inside a string that closes on its line
+  is none: `quotedPlaces`' mask), `tpl` (the lines that start inside a template literal — text; a backtick that
+  never closes is a stray one, and then the file is read AGAIN with no template at all, as 1.35.1 read it), `next`
+  (where the next statement starts: a line at the margin that begins a name, `RE_NAME_START`; one that begins
+  anything else but a closer, a `{` — a brace on its own line is the statement's above — or an operator,
+  `RE_STATEMENT_START`, WHEN the line above — a line of blanks aside — ends a statement: text at the margin inside an element ends none
+  (an expression's `{` never starts one); or an
+  indented `export` of a declaration, `RE_INDENTED_EXPORT` — never the word `export` as an object's key or a
+  sentence's), `jsx` (the lines that hold
+  JSX: a closing tag or a self-closing one, `RE_JSX` — every element has one, and neither is anything else in a
+  script; `<Name` alone is a type argument's shape too; strings emptied first, `withoutStrings`) and `called` (the
+  capitalised names the file calls as a function). A statement's EXTENT is `[i, next[i])`: its closing lines at the
+  margin are its own — the formatting every formatter gives —, and NO bracket is matched across lines (a `(` in JSX
+  text or in a regex would derail one). On it stand: a call of any function is a component when its extent
+  holds JSX or loads (`RE_DYNAMIC_IMPORT`) — UNLESS what its LAST argument list holds first is an object, a list or
+  an element (`givenFirst` over `lastList`: the list at the call's own depth, never a `)(` inside an argument, the
+  callee's type arguments aside; on its line, or the first line below when the list opens and the line ends — or
+  the list a LATER line opens at the statement's own margin, `})((props) => …`: `curriedFirst`, review 4): a
+  configuration, or an element handed over — a generic arrow (`RE_VALUE_GENERIC`) is neither. The rule asks nothing
+  of the arguments themselves: asked whether one IS a function (reviews 1 and 2 of 1.35.2), it cut them apart and
+  lost whatever a type's comma or a line break stood in (review 3). Or when its
+  extent DEFINES a `render` and holds JSX (`renders`: `createReactClass`); or when its last argument list is ONE
+  capitalised name (`RE_HOC_ARG`, a cast after it cut off: `uncast`; on a line of its own: `RE_LONE_NAME`) that is a
+  component of the file's OWN (`own`: declared by a declaration, or an alias of one — never an alias of an import)
+  — or, the application being curried, one it imports (`applies`, settled with the aliases). A call given an object or a list is a configuration whatever JSX it holds; a single
+  call around an imported name says nothing (`createContext(DefaultTheme)`, `Object.freeze(IconSizes)`). A class is
+  one when it renders — `renders`: a `render` that is DEFINED (what follows its `)` is a `{` or a return type, on
+  its line, below it, or after a list over lines — a line's open lists followed down ONCE, `DS_DECL_LINES` deep,
+  and read on from the line that closes them, the blank lines below it `DS_DECL_LINES` deep too (`readOn`); a field
+  whose value begins a function, a generic's `<T,>` or a name — `render = memoize(…)` —, never a local `const
+  render` (`RE_LOCAL_BEFORE`); `render: function`), never a call of one (a ternary's too), a member's (`this.render = …`) or an
+  element's attribute (`render={…}`, `render="span"`) — and JSX; an element in
+  parentheses and a function called at once (`RE_IIFE_END`, only of a value that IS a function in parentheses) are
+  no function's value. A PascalCase function is a helper by a PROPERTY (`isHelper`): its first parameter is a
+  capitalised name, it has three (`paramList`, on the declaration's line: the commas of its own depth, type
+  parameters skipped — a `<` is one only right after a name), or the file calls it AND it renders nothing itself.
+  The second half is what makes the first safe: a name before a `(` is not always a call — a plural (`File(s)`), a
+  regex's, a typed parameter's or a method's header (`{` after its `)`), a signature (`:` after it), an element's
+  text (after a tag's `>`, an expression's `}`, under a tag's line, a sentence) — and `called` tells those apart by
+  what the name IS and where it STANDS (`closers`: each `(` of a line matched once), yet a function that returns
+  JSX is a component whoever calls it. An apostrophe right after a letter opens no string (`opensString`: `Don't`
+  in an element's text, `it's` in the comment after it — a pair of them quoted the `//` between, or a closing tag),
+  and no comment is open below a line that ends inside a template (`scriptLines`). A part (`RE_PART`, `Object.assign` — `assigned`: the statement read whole,
+  its arguments by `givenArgs` (cut at the commas of the list's own depth, a type's arguments aside, to the `)` that
+  closes it), EVERY literal after the first argument, its capitalised keys alone — `RE_PART_KEY`; with no such key
+  the const is the component it is given only when that one is the file's own; a component written as its first
+  argument makes the const one, and a CALL there (never `{}`, `new X()`) — a HOC's, with its arguments — makes it one
+  when a part of it is; a member there (`Card.Root`) stands on nothing;
+  the parts are recorded WHATEVER the first argument is: record, then decide) is declared as `Owner.Part` and
+  exported under each name its owner is exported by — its own and those of the component it stands on by its bare
+  name (`stands`, `DS_ALIAS_PASSES` deep; never a member's: `= Tabs.List`), each exported name expanded once —
+  a key once, a part that is no component spending no room (`partsOf`, settled once an owner) —, `DS_EXPORT_NAMES`
+  of them in all, a part past them SAID (`more`); an ENTRY is asked of its own text (`kindOf`'s
+  `piece`), never of the statement it stands in. `RE_COMPOUND_NAME` lets one dot through, and `dsKey` gives `Card.Header` the key of
+  `CardHeader` — a design may cite either. Decorators are taken off the line (`undecorated`); React's wrappers are
+  asked of the names an import of `react` gives (`RE_VALUE_SPACED`); a destructuring from an import, or a `require`,
+  gives names an alias may stand on (`borrowed`). Linear: every pattern has its hostile line in the tests, and an
+  extent has no cap because extents never overlap — the main loop asks statement STARTS only: a line that starts
+  inside a template is none (asked, its extent was the file's — review 4 of 1.35.2). Known, and said in the user docs: an even number of stray
+  backticks hides what stands between them, a template inside another's `${ … }` over lines is read as code; an
+  alias or a part that stands on an imported name is taken for a component (the name's own file would say), and so
+  is a call that only looks like one's (its extent holds JSX and it is given no object first — `mount(root,
+  <App />)` —, an object with a `render`, a component of the file — `createContext(Button)` —, curried around an
+  import); text at the margin that begins a NAME ends the statement it stands in (a `<pre>`'s lines), a quote right
+  after a word opens no string (minified `return'…'`), and a HOC given a component AND another argument shows
+  nothing (`contextConnect(Root, "Name")` — 41 components of one kit); a class that is no React component and
+  renders JSX is listed; and a REAL component with three parameters, a capitalised first one, or called in its
+  file with no JSX of its own is taken for a helper.
 - **A design value is THE gate on what is read out of a token file** (`designValue` → null · weak · strong). The scan picks
   files by NAME, a name is no proof of what a file holds, and what is read here is printed by the report and WRITTEN into a
   steering file a team commits. No list of credential key names is ever complete (review 4: 14 of 19 shapes passed one),
@@ -826,6 +905,11 @@ readers are in quality.js (every doctor and brief reads them); what reads the CO
   annotation's string), and listing what each new line would do if deleted named seven more before any ran (a
   second-layer guard needs a line with no `;`; a `/*` inside a template, after a `/*` no comment can open at,
   after an escaped quote; a chain of aliases; a base that is a function; an arrow in a class's type parameters).
+  1.35.2: 118 mutations of the new rules listed BEFORE the tests ran — listing them deleted six conditions that
+  no input could reach (a filter the caller repeats, a guard on an unclosed decorator, a keyword list of fourteen
+  where three are ever met) and named a dozen fixtures; 111 caught at first, two more pieces deleted (a fragment's
+  `</>` holds `/>`; the order a brace list expands in), five fixtures were under a rule that answered first (a
+  plural and a line of text both under a tag: each rule needs the input ONLY it answers). Review 1 of 1.35.2's fix round: 64 mutations, 52 caught at first — eleven of the twelve were fixtures a NEW rule had made blind (a function that returns JSX is a component whoever calls it: every "this is no call" fixture whose component held the text itself was answered by that rule first; one stray backtick switched its file's template state off, and the template fixtures of that file with it), one a line the cap below it repeats, deleted: 63 of 63. A rule added in a fix round changes which input each OLDER rule alone answers — the mutation pass is rerun whole, not on the lines the round touched. Review 2 of 1.35.2's fix round: 39 mutations, 31 caught at first; one alternative was redundant and went (React's wrapper as what a call is given: the call that is given a function covers it), four wanted a fixture, one condition had no observable effect and went, and two of the three I had marked "no fixture" were not equivalent at all — writing their fixtures found a false positive (an element's `render={…}` attribute read as a class's `render` field): a mutant marked unreachable is a claim to check, not a note to file. 38 of 38. Review 3 of 1.35.2's fix round: 176 mutations — the pass WHOLE: this round's fifty and the 126 of the three lists before it that still name a line of the code. 168 caught at first; of the eight, two pieces had no input only they answer and went (a part asked a second time whether it is declared; a template's line skipped where its text is already empty) and six wanted a fixture — four of them rules of EARLIER rounds that this round's simpler call rule had started to answer first (a `)(` at the margin under a line that ends with `}`, an expression's `{` at the margin of a `<pre>`, a cast on what an `Object.assign` with no part is given, a value that is no call: `new Runner(…)`). The second pass found two more (the line that closes a template with a `;` after its backtick starts no statement; the arguments of a list end at its `)`), the third none: 176 of 176. The older lists are RUN every round, not archived — a rule that got simpler changes which input each older rule alone answers, exactly as an added one does. Review 4 of 1.35.2's fix round: the pass whole again — this round's 53 (17 of them review 3's pieces whose lines it rewrote, ported; 13 the reviewer's own mutants) and the earlier lists' 153 that still apply. 199 of 209 caught at first (before the round's last two fixes); of the ten, one is caught by the cost check that now owns it, four wanted a fixture (two later `)(` lists, `render = <Spinner />`, a blank after the `(`, the bound on the blank lines below a `)` — whose first fixture put its `render(` lines at the margin, where each began a statement of its own: a COST fixture that never reached the loop it was written for, until it was timed with and without the bound), three had no effect any input shows (an indentation condition the anchored pattern already answers — removed; a second room check — a labeled break now; an inner break the names' cap makes equivalent — dropped). 204 of 206 on the last pass, run after the last fix; the two left are equivalent on every input: a literal as an `Object.assign`'s FIRST argument (the owner it is given to is never a component, so its parts hang on nothing) and the reviewer's own near no-op.
 - **Prose** — spec-implementer builds from the brief's part (a literal kept on purpose: its report's "Raw values kept on
   purpose"); the final / converge reviewer takes the findings and the raw values as candidate findings;
   `references/ui-design-patterns.md` → The registry.
@@ -1267,3 +1351,123 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   bound that drops an input in silence is the defect of a bound that cuts in silence: whatever the project
   DECLARED and went unread is said; (4) a rule borrowed from another language's reader (a stylesheet's quotes for a
   script) brings that language's assumptions: an option that switches a reader on must say whose rules it reads by.
+- **1.35.2** (2026-11-14) — the owner, on 1.35.1's report of what it still did not read: "can you resolve these
+  limits?". Six of nine went entirely — a brace list, rush.json, a workspace package's own workspaces, a decorator
+  on the class's line, a part hung on a component, an indented export — and three could only be narrowed, because
+  the reader reads one file's text with no parser and no types: a component wrapped by another function is told
+  by what the wrapped function SHOWS (JSX, a dynamic import, a known component as its argument), a class with an
+  imported base by what it does (`render` and JSX), a PascalCase helper by what the file does with it (calls it)
+  or what it takes (a component; three parameters). The step that made them possible was not a rule but a view:
+  the reader went from a declaration's LINE to a statement's EXTENT, and the extent is taken from the formatting
+  (the next line at the margin that starts a statement), never by matching brackets — the one robust property a
+  text reader has. What the build taught: (1) the first line-start rule for a call ("its line ends with `)` or
+  `;`") was four alternatives and still took `Total(USD)` for one; asking what FOLLOWS the `)` — and what the line
+  above ends with — is one question each; (2) a template literal needs state, and state can break (one stray
+  backtick): the fallback is the old behaviour for the whole file, decided at its end, not a guess per line; (3)
+  a fixture named after a helper file (`helpers.tsx`) was never read at all — the first run passed with every
+  helper rule untested: a fixture's own file must be one the scan reads, and the mutation pass is what said so.
+- **1.35.2 review 1** (one fresh reviewer on the feature commit, v1.35.1 as its oracle: 15 kits of real-shaped files,
+  85 rule cases, 9 monorepo layouts, 150,000 fuzz inputs, 89 mutations of its own) — 3 HIGH, 6 MEDIUM, 8 LOW, 4
+  cosmetic; nothing 1.35.1 found was lost (0 of 222) and nothing was read outside the project. All three HIGH sat
+  in the one piece written last and tested least — the parts reader: a nested `Object.assign(` inside the literal
+  re-read the statement it stood in, forever (the report, the seed and a +ui feature's finish threw); every part
+  under every exported name was a product with no bound (a 56K file killed the process: out of memory is not
+  caught); every entry walked the whole statement again (12 s a 256K file). MEDIUM: the one-argument rule took any
+  imported word for a component (`createContext(DefaultTheme)`, `Object.freeze(IconSizes)`), the JSX rule any call
+  that holds JSX (a table's column, a router), the template state was computed AFTER the comment reader (a
+  template holding ` // ` lost its closing backtick — the docs-site case the release was for), the literal was
+  read for 60 lines and the cut never said, pnpm's list past its 500th line had lost the bound that used to say it,
+  a destructuring that never closes re-read 200 lines a line. What the fix round did, each by a property: a call
+  is a component by the FUNCTION it is given; a single call's argument must be declared, a curried one's may be
+  imported (`withStyles(…)(TableCell)` — the reviewer's own kits said the first fix was too strict: 3 of 17 lost);
+  an entry is asked of its own text; the parts are a Set, the names capped while they are made; the lines are read
+  with the template state, and read again without it when it breaks; a helper is one the file calls AND that
+  renders nothing. On the reviewer's kits: 213 of 222 found (202 at the feature commit, 157 in 1.35.1), none lost,
+  no non-component gained (4); its 85 rule cases: 22 still differ from what a person lists, each of a kind the
+  docs name. Lessons: (1) the piece added last got one happy-path fixture a rule and no hostile one — every new
+  loop needs its product written down (what × what) before it ships, and a recursion its second level; (2) an
+  unbounded intermediate is a bound's absence wherever the final list is capped: cap where the thing is MADE; (3)
+  a rule that accepts "a name the file imports" accepts every word of every import — an import says a name
+  exists, never what it is; (4) two readers of one text must share its state: the comment reader and the template
+  reader each assumed the other had run; (5) the first fix of a finding is as likely too strict as the bug was too
+  loose — the oracle is the reviewer's kits on BOTH sides of the fix, and they were run before the commit.
+- **1.35.2 review 2** (one fresh reviewer on review 1's fix commit; three versions side by side — v1.35.1, the
+  feature commit, the fix — and 15,000 real files found on the machine) — no HIGH; nothing throws, nothing is
+  super-linear, nothing outside the project is read, stylesheets read exactly as before (on random lines — NOT the
+  1.76 M it claimed: review 3 found its generator repeats after 10,466 draws). 2
+  MEDIUM, both the PRICE of review 1's fixes, both against the feature commit (v1.35.1 read neither): "the function
+  it is given" was asked only of the first thing after the first `(` — MobX's own `inject("store")(observer(() =>
+  …))`, a function after another argument, one after a curried list that closes on a later line were no longer
+  components; and `Object.assign(Root, { displayName })` — no capitalised key — returned before it recorded what
+  the const stands on. 9 LOW: a block comment that opens on the line a template opens on and closes inside it
+  never ended (the one new loss against v1.35.1); the script-only `//` rule kept a comment when an apostrophe of
+  JSX text paired with one in the comment; the `render` pattern, tightened against calls, missed a brace below, a
+  list over lines, a class on one line; any margin line that was no closer started a statement (text under a
+  `<pre>` ended a class's extent); the literal of an `Object.assign` was its FIRST `{`; a HOC's argument on a line
+  of its own; parts of a component exported through an alias; an alias of an import passed for a component of the
+  file. The round, each by a property again: the arguments of the call's last list, each asked whether it is a
+  function or a call given one (`givenArgs`, and an asker of each that review 3 removed); `own` — a component by a
+  declaration of the file —
+  beside `declared`; `renders` asks what FOLLOWS the `)`; a statement starts at a non-name line only when the line
+  above ended one; an apostrophe after a letter opens no string. The notes' and the commit's claim that the 22
+  differing rule cases were "each of a kind the docs name" was wrong for seven — the two lists in the user docs
+  are now written FROM the reviewer's cases, both ways (missed, and taken for one). Lessons: (1) a rule made
+  stricter in a fix round is tested only by the case that prompted it — write the five nearest REAL shapes it must
+  still take before tightening (the MobX pattern was one line away from the fixture); (2) an early `return` for
+  "this is none" skips whatever bookkeeping stands below it: record first, decide after; (3) two state machines
+  over one text (comments, templates) must agree at the line where both change state — fix one and re-ask the
+  other; (4) a pattern that matched a call (`render(`) is not fixed by anchoring what follows on its line: ask the
+  question ("what follows its `)`") with the tool that answers it (the paren matcher), over lines too; (5) a
+  sentence about one's own results ("each of a kind the docs name") is a claim like any other: count before
+  writing it.
+- **1.35.2 review 3** (one fresh reviewer on review 2's fix commit alone — the short round the owner chose; four
+  versions side by side, a grammar of 4,200 call shapes, 15,168 real files of the machine's package caches) — no
+  HIGH; 4 MEDIUM, 12 LOW, 5 cosmetic. Three of the MEDIUM were once more the PRICE of the round before: asked
+  whether an argument IS a function, the call rule cut the arguments apart — a comma in a wrapper's type arguments
+  (`observer(forwardRef<El, Props>(…))`), a generic arrow, a wrapper whose own list goes on below were no longer
+  components; `Object.assign(hoc(Root, "Name"), { parts })` decided before it recorded, and lost a menu with its
+  twelve parts (a real kit's); and `renders`, following a list left open, read the sixty lines below once per
+  `render(` of a line (8.8 s a scan of hostile files). LOW: an alias of a member took its owner's parts
+  (`TabList.List`); a `render` field that is no function literal; a ternary's `render(…)`; the literal of an
+  `Object.assign` had to be its last argument; parts hung on a root AND on its alias; a line of blanks joined two
+  statements; a component exported twice spent the parts' room of the next one, silently. The round is NOT a
+  fourth refinement of "the function it is given": the call rule went back to the feature commit's — a call whose
+  statement holds JSX, which lost nothing in any corpus — MINUS the one shape that had prompted review 1 (what the
+  call is given first is an object, a list or an element); `assigned` records, then decides; `renders` follows a
+  line's open lists once. Left, and said in the user docs: a quote right after a word (minified `return'…'`),
+  margin text that begins with a letter, a HOC given a component and another argument (`contextConnect(Root,
+  "Name")`: 41 components of one kit, read by no version). The second review's "1.76 M random lines" was wrong — its
+  generator repeated after 10,466 draws. Lessons: (1) three rounds each fixed the last one's cases and broke their
+  neighbours — when a refined rule keeps losing real shapes, stop refining: go back to the older rule that lost
+  nothing and SUBTRACT the one shape that was wrong; (2) the oracle for "lost nothing" is every earlier version run
+  side by side on a grammar and on real files, kept as a tool and re-run after each edit — the fixtures hold only
+  what someone thought of; (3) a random test is as wide as its generator's period: count the distinct draws before
+  quoting a number; (4) a cost fix needs a hostile input for EACH loop it bounds (a line of `render(`, and a column
+  of them); (5) a guard no input can reach is not kept "to be safe" — it is deleted, or its input is found (an
+  expression's `{` at the margin of a `<pre>` was one).
+- **1.35.2 review 4** (one fresh reviewer on review 3's fix commit alone — the short round the owner chose again; the
+  first reviewer was stopped by a usage limit and a second one finished from its files; five versions side by side,
+  32,122 real files) — 2 HIGH, 0 MEDIUM, 12 LOW, 4 cosmetic; no real shape lost. Both HIGH were costs the round
+  before had MADE, each by a simplification: `renders`, rewritten to follow a line's open lists once, read the blank
+  lines below the closing `)` to the statement's end once for EVERY `render(` above it (an unbounded walk the old
+  code had stopped at once — 318 s a scan of hostile files); and the main loop's skip of a line that starts inside
+  a template, removed by the mutation pass as "no observable effect" — its effect was a COST: such a line, asked as
+  a statement, has the file for its extent (250 s). LOW: the call rule asked the declaration's line for the LAST
+  list, so a curried call over lines was judged by its first (`withStyles({ … })((props) => …)` lost,
+  `createFileRoute("/a")({ component })` listed) — `curriedFirst` reads a later `)(` line at the statement's own
+  margin; an `Object.assign` around no call made a component of its parts (`{}`, `new Emitter()`); a member first
+  stood on its owner's parts (and, checked against d83914e, a root cast in parentheses or a generic arrow first —
+  `Object.assign(<T,>(p) => …, { Option })`, whose `<T,>` comma cut the argument — had lost theirs); a type's `<` counted inside a function given (`/a<b/`); a generic arrow as a `render`
+  field or on a line of its own; a local `const render` read as a field; the parts' room spent by keys hung on a root
+  AND its alias, and by statics that are no component (the "declared" filter the round before had removed as
+  answering no input — it answered the room); five mutants of the reviewer no fixture caught. Left, and said: an
+  element first (`createSvgIcon(<path />, "Home")`), an object first with a function after it, the calls it named
+  that only look like a component's (three of its five are the docs' examples), margin text after a line that ends with `;` or `}` (a line of blanks between
+  them passes that on: it ends and starts nothing). Corrected: the round before's
+  grammar ("none lost") and differential fuzz were measured against 78860d5, not the parent — against fd971cc,
+  420 of 4,200 shapes were lost (an object first, then a function: the subtraction's price, said in the docs); and
+  the docs' "called after a comparison or another operator" had been stale since the feature commit. Lessons:
+  (1) a mutation pass sees only what the tests assert — a piece "with no observable effect" may be a COST guard: before
+  deleting one, time the hostile inputs without it; (2) a bound moved into a helper must keep its every caller
+  bounded — the walk below the `)` lost its bound when the line it started from changed; (3) compare a fix round
+  with its PARENT first, and say which version a number is against.

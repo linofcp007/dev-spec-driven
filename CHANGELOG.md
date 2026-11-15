@@ -3,6 +3,85 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.35.2] — 2026-11-14
+
+The limits 1.35.1 shipped saying, read. Its code scan named what it left for a row added by hand — a brace list,
+`rush.json` and a nested workspace; a component wrapped by another function, a class with an imported base, a decorator,
+an indented export, a compound part — and what it listed too much. Most of it is read now; what is left is what a reader
+of one file's text cannot know, and it is said below.
+
+### Changed
+- **Workspaces: brace lists, `rush.json`, nested workspaces.** A brace list is expanded (`{apps,libs}/*`,
+  `packages/{ui,core}-*`, a nested one; 20 patterns a list). `rush.json`'s `projects` are read, each `projectFolder` a
+  folder named in full — with the comments and trailing commas Rush allows. A workspace package's own `workspaces`
+  (Yarn's nested worktrees) are followed for its folder, two levels deep. A folder named in full no longer counts
+  among the 50 patterns — those are the ones that are walked — and 1,000 of them are followed. What is declared and
+  not read is still said (`limits`: `workspace-manifests`): a list of one (`{apps}/*`), a brace that never closes, a
+  `rush.json` that is no JSON, a third level of nesting.
+- **A component wrapped by another function is read when it shows what it wraps.** `observer(…)`, a HOC,
+  `dynamic(…)`: a PascalCase const whose value is a call is a component when the call renders — its statement holds
+  JSX: `observer(() => <div />)`, under another wrapper (`inject("store")(observer(() => …))`,
+  `observer(forwardRef<HTMLInputElement, Props>(…))`), after another argument, on its line or below — or loads on
+  demand (`dynamic(() => import("./chart"))`); when it is given a `render` that is defined and JSX
+  (`createReactClass({ render: function () { … } })`); or when it is applied to a component: its last argument list
+  is one name the file declares (`withRouter(Nav)`, `connect(mapState)(List)`, on a line of its own or with a cast
+  after it too) — or, when the application is curried, imports (`withStyles(styles)(TableCell)`). `memoize(() => 1)`,
+  `z.object({ … })`, `createContext(DefaultTheme)` and `observer(() => null)` show none of it and stay out — and so
+  does a call whose LAST argument list — a later line may open it: `})((props) => …` — BEGINS with an object, a
+  list or an element, whatever JSX it holds: a configuration (a table's columns, a router's routes) or an element
+  handed over (`renderToString(<p />)`).
+- **A class is a component by what it does.** Whatever it extends — an imported base class, a mixin —, a class with
+  a `render` that is defined (a method, its brace below or its list over lines too; a field: `render = () => …`,
+  `render = memoize(…)` — never a local `const render`) and JSX in its body is one. And a decorator no longer hides it: on the class's own
+  line (`@observer export class X`, with arguments), after `export` / `export default`, or over the lines above.
+- **A component's parts.** `Card.Header = CardHeader`, `Card.Body = (props) => …` and the capitalised keys of
+  `Object.assign(Card, { Header, Body: CardBody })` — as a value, a statement or the default export; of every
+  literal it is given after its first argument — are rows named `Card.Header`, under the name the component is
+  exported by — an alias of it too (`export const Card = CardRoot;`: the parts hung on either).
+  A design cites `Card.Header` (or `CardHeader`: the same key). An `Object.assign` with no such key
+  (`Object.assign(ButtonRoot, { displayName: "Button" })`) is the component it is given, when the file declares it;
+  one around a call (`Object.assign(contextConnect(Menu, "Menu"), { Item })`) is a component when a part of it is.
+- **An indented `export` of a declaration is read** (a namespace's too), **React under another name**
+  (`import * as R from "react"`: `R.forwardRef(…)`; a wrapper in parentheses that is cast), **and an alias of a name
+  the file borrows or casts** (`const { Root } = DialogPrimitive; export const Dialog = Root;`, a `require`'s,
+  `export const Typography = Origin as Compound;`).
+- **Fewer non-components listed.** A PascalCase function is not a component when the file shows it: it takes a
+  component (a HOC: `function WithTheme(Component)`), it takes three parameters, or the file CALLS it as a function
+  (`FormatPrice(value)` — a component is rendered, never called) and it renders nothing itself (no JSX in it). An
+  element in parentheses over lines (`const Logo = (` then `<svg />`), a function called at once
+  (`(function () { … })()`) and the lines of a template literal (a code sample in a docs component) are none either.
+  **A registry seeded by 1.35.1 will list the newly read components as missing**: paste the rows the report prints. A
+  row it seeded for a helper is yours to delete — the report does not flag it.
+
+Still a row to add by hand: a component made by a call that shows nothing — `createComponent(config)`, a single call
+around a name the file only imports (`motion(Box)`) or around a cast (`withRouter(View as any)`), a call around a
+component AND another argument that holds no JSX itself (`contextConnect(Menu, "Menu")`, `chakra(Box, { … })`), a
+call given an object first — even one that holds JSX or a function after it (`createIcon({ path: <path /> })`,
+`createField({ type: "text" }, (props) => …)`) —, an element first (`createSvgIcon(<path />, "Home")`), a class that renders only
+through its imported base, parts hung on a component the file imports, two parts on one line, `export const {
+Header, Content } = Layout;`, a component exported with `exports.X`, re-exported from a package under a new name,
+kept in a barrel or a `.ts` file, or whose element holds text at the margin that begins with a letter or follows a
+line that ends with `;` or `}` (the lines of a `<pre>`: the text ends its statement). And a
+real component the rules take for a helper: one with three parameters, one whose first parameter is a capitalised
+name, one the file calls as a function that holds no JSX of its own (a portal, a `createElement` one). Still listed,
+knowingly: a PascalCase helper nothing tells apart (exported, with one or two lower-case parameters, and never called
+in its own file — or called where the reader does not see a call: with type arguments, after `throw` / `yield` /
+`export default`, inside a template); an alias or a part that stands on an
+imported name that is no component (`Button.Sizes = Sizes`, an enum's member); a call that only looks like a
+component's — its statement holds JSX and it is given no object first (`memoize((name) => <Icon />)`, a factory of
+columns, `mount(root, <App />)`, `createRoot(el).render(<App />)`,
+`createBrowserRouter(createRoutesFromElements(<Route />))`, `t("hint", { link: <a /> })`), given an object with a `render` method and JSX, around a component of the file
+(`createContext(Button)`), curried around an import (`configureStore(options)(Reducers)`), an `Object.assign`
+around a call with a capitalised key that stands on a component; a class that is no React component and has a
+`render` that returns JSX. A file's template literals are told by its backticks: two stray ones — in two regular expressions, in an
+element's text — hide what stands between them, and a template inside another's `${ … }` over lines is read as code; in minified
+code a string right after a word (`return'…'`) is read from its closing quote. Still not read among workspaces: a
+manifest two levels below a root that declares none, a folder beside the declared ones, a sub-folder of a root that is
+an app itself; a `!negation` removes nothing.
+
+### Tests
+- `node mcp/test.js` 2361 assertions, `node cli/test-cli.js` 663 (was 2357 / 663).
+
 ## [1.35.1] — 2026-11-14
 
 The design-system registry without its two known limits. 1.35.0 shipped saying what it did not read: a monorepo's
