@@ -3,6 +3,60 @@
 All notable changes to **dev-spec-driven**. Format loosely follows Keep a Changelog;
 this project versions the plugin as a whole.
 
+## [1.35.3] — 2026-11-15
+
+What 1.35.2 left to add by hand, and what it listed knowingly. Both were what a reader of ONE file's text cannot know:
+the code scan now asks the project's other files. A component is what the project renders; a helper is what it calls.
+
+### Changed
+- **What the project's files settle.** A name a component file exports that its declaration does not settle is a
+  component when a file of the project RENDERS it — `<MotionBox />`, `<Card.Header>`, `<UI.Content />` through a
+  namespace, followed through the file's imports: a relative path (the file, its folder's index, a file under a
+  barrel's folder), an alias (`@/components/ui/kit`, `~/…`), a workspace package's name (`@acme/ui-kit`), a default import
+  (`export default X`, `export { X as default }`, `export default function`, `module.exports = X`), a `require`. So
+  `motion(Box)`, `createComponent(config)`, `createSvgIcon(<path />, "Home")`, `createIcon({ … })`, `createField({ type },
+  fn)`, `contextConnect(Menu, "Menu")`, a class that renders through its imported base, `export const { Header } =
+  Layout`, a part hung on an imported component (`Tabs.Panel = …`), a component of three parameters, one whose `<pre>`
+  text at the margin ended its statement — each is read once the project renders it. The other way, a component taken on
+  weaker grounds — a call, an alias of an import, a function or a class with no JSX of its own — is none when the
+  project CALLS it and never renders it (`FormatPrice(3)`, a memoized renderer, `new Renderer()`), gives it to
+  `useContext` or provides it (`<ButtonContext.Provider>`), or reads a part as an object (`Button.Sizes.Large`). A
+  component that shows it is one — JSX of its own, `forwardRef`, `memo`, `styled`, a class of React's — stays whatever
+  the project does with it; the same name rendered from another module (`antd`'s `Column`) settles nothing.
+  The project's other script files are read for it: 5,000 files and 32 MB, a file that writes none of the names asked
+  is never parsed, and a `.ts` file only when there is a weak name to settle — it renders nothing. Past a bound, with
+  names to settle, the report says so (`limits`: `usage-files`, in EN / PT / ES). A feature's report — `spec_finish`'s —
+  reads none of it, nor the component files' exports: it never asked for them.
+- **A call is a component when it is given a function that renders.** `observer(() => …)`, `loadable(() =>
+  import(…))`; with none, its JSX is an element handed over and it is no component — `mount(root, <App />)`,
+  `createRoot(el).render(<App />)`, `createBrowserRouter(createRoutesFromElements(<Route />))`, `t("hint", { link: <a
+  /> })` —, and a promise of a module (`import("./chart")`) is none either.
+- **Read too:** two parts on one line (`Card.Header = Header; Card.Body = Body;` — each asked of its own text),
+  CommonJS (`exports.Badge = …`, `module.exports.Chip = …`, `module.exports = { Badge, Tag: Badge, Inline: (props) =>
+  … }`), and a component folder's barrel (`index.ts`: a re-export under a name of its own — `export { Root as Dialog }
+  from "@radix-ui/react-dialog"` — or a package's, settled by what the project renders; read apart from the component
+  files' 1,000). A literal (a string, a number, an object) is never a name to settle.
+- **A regular expression's backtick is the regex's** (`/`([^`]+)`/`, a Markdown reader's), so two of them no longer hide
+  the declarations between them; and in minified code a string right after `return` / `case` is a string (`return'</b>'`
+  made a component of a call).
+- **Workspaces: a `!negation` takes its folders out** (a name, `*`, `**`, a brace list; a workspace package's own for its
+  folder), and a project that declares none is looked through two levels down (`apps/web/package.json`), never inside
+  a package — a bound of that guess is never said. A workspace file that names nothing it can read keeps the one level.
+
+Still a row to add by hand: a component no file of the project renders where the reader sees it — a kit whose apps live
+in another repository, a name rendered only past the bound, or by a default import under another local name in a file
+that writes none of the names asked —, one in a lower-case `.js` file or in a `.ts` file that is no component folder's
+barrel, and a real component the project only calls. Still listed, knowingly: a helper, an alias or a part on an
+imported name that is none, or a call whose function renders (`memoize((n) => <Icon />)`), while the project never calls
+it nor reads it as an object; a call given an object with a `render`, or curried around an import
+(`configureStore(o)(Reducers)`); a class with a `render` that returns JSX the project never constructs. A stray backtick
+in an element's text hides what stands up to the next one, and a template inside another's `${ … }` over lines is read as
+code. Still not read among workspaces: a manifest three levels below a root that declares none, a folder beside the
+declared ones, a sub-folder of a root that is an app itself.
+
+### Tests
+- `node mcp/test.js` 2367 assertions, `node cli/test-cli.js` 663 (was 2361 / 663).
+
 ## [1.35.2] — 2026-11-14
 
 The limits 1.35.1 shipped saying, read. Its code scan named what it left for a row added by hand — a brace list,

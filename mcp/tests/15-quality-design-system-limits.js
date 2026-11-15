@@ -348,7 +348,8 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
       "export function After2() { return <p>Can't</p>; } // isn't a " + BT + " tick", "export function Last2() { return null; }", ""]));
     // a backtick that never closes is a stray one: its file is read as 1.35.1 read it — in a file of its own (the files
     // above keep their template state)
-    write(p, UI + "stray.tsx", L(["const stray = /" + BT + "/;", "export function AfterStray() { return null; }", "const sample = " + BT, "export function Sampled() {}", BT + ";", ""]));
+    // (1.35.3: a regex's backtick is the regex's — the stray one stands in an element's text)
+    write(p, UI + "stray.tsx", L(["const Hint = () => <p>Press " + BT + " to open</p>;", "export function AfterStray() { return null; }", "const sample = " + BT, "export function Sampled() {}", BT + ";", ""]));
     const report = S.designSystemReport(p);
     S.scaffoldSteeringFile(p, "design-system.md"); // (the report lists its first 50 rows: the seed holds them all)
     const names = registry(p).components.map((c) => c.name).sort();

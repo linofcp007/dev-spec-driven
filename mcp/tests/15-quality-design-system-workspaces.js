@@ -83,7 +83,7 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
       tooling: { "package.json": js({ private: true, devDependencies: { concurrently: "1.0.0" } }), "client/package.json": deps(["antd"]), "server/package.json": deps(["express"]) },
       emptyDeps: { "package.json": js({ private: true, dependencies: {} }), "client/package.json": deps(["antd"]) }, // no dependency of its own
       none: { "manage.py": "print(1)\n" },
-      deeper: { "services/web/package.json": deps(["antd"]) }, // two levels below an undeclared root: not looked for
+      deeper: { "services/web/package.json": deps(["antd"]) }, // two levels below an undeclared root: looked for since 1.35.3 (15-quality-design-system-usage.js)
       ownRoot: { "package.json": deps(["react", "vite"]), "docs/package.json": deps(["antd"]) }, // the root is the app: its docs site's kit is not its own
       pnpmAfter: Object.assign({ "pnpm-workspace.yaml": "packages:\n  - 'packages/*'\nonlyBuiltDependencies:\n  - 'apps/*'\n" }, ROOT, WEB),
       pnpmNested: Object.assign({ "pnpm-workspace.yaml": "overrides:\n  packages:\n    - 'apps/*'\n" }, ROOT, WEB), // the key at the margin only
@@ -102,11 +102,11 @@ exports.run = async ({ all, S, tmp, approveBefore, remeasure, require, __dirname
     const lib = path.join(tmp, "proj-dsw-ws-gate-lib");
     S.scaffoldSteeringFile(lib, "design-system.md");
     const seeded = [/^_Libraries: antd_$/m.test(rd(lib, REG)), registry(lib).packaged];
-    all("1.35.1: the project's dependencies are its root package.json AND its workspace packages' — the folders it DECLARES: package.json `workspaces` (an array, or Yarn's `{packages}`; a `\\` is a separator), pnpm-workspace.yaml's `packages` (a block list with quotes, comments and blank lines, a flow list on its line or over several, the key quoted, a BOM), lerna.json's `packages` (or Lerna's default, `packages/*`) — or, when it declares none, the folders one level down: `frontend/package.json` beside a Django app, `client/` beside a root that only holds tooling. With the root manifest alone a monorepo's `antd 5` + `antd Table` was refused at size m though `apps/web` depends on antd, and its seed declared no library (1.35 review 10). Never two levels below an undeclared root, never a folder beside declared ones, never below a root that is a package of its own with dependencies (an app's `docs/` site keeps another kit), never another key of the YAML file, a nested one, the list of the key after `packages` nor a flow list that never closes (got " +
+    all("1.35.1: the project's dependencies are its root package.json AND its workspace packages' — the folders it DECLARES: package.json `workspaces` (an array, or Yarn's `{packages}`; a `\\` is a separator), pnpm-workspace.yaml's `packages` (a block list with quotes, comments and blank lines, a flow list on its line or over several, the key quoted, a BOM), lerna.json's `packages` (or Lerna's default, `packages/*`) — or, when it declares none, the folders one level down (two since 1.35.3): `frontend/package.json` beside a Django app, `client/` beside a root that only holds tooling. With the root manifest alone a monorepo's `antd 5` + `antd Table` was refused at size m though `apps/web` depends on antd, and its seed declared no library (1.35 review 10). Never a folder beside declared ones, never below a root that is a package of its own with dependencies (an app's `docs/` site keeps another kit), never another key of the YAML file, a nested one, the list of the key after `packages` nor a flow list that never closes (got " +
       js({ got, gate, seeded }) + ")", {
       declared: () => ["root", "npm", "yarn", "backslash", "pnpm", "pnpmFlow", "pnpmFlowLines", "pnpmBom", "pnpmQuoted", "lerna", "lernaDefault"].every((k) => got[k] === yes),
-      undeclared: () => got.undeclared === yes && got.tooling === yes && got.emptyDeps === yes,
-      none: () => ["none", "deeper", "ownRoot", "elsewhere", "pnpmOther", "pnpmAfter", "pnpmNested", "pnpmOpen"].every((k) => got[k] === no),
+      undeclared: () => got.undeclared === yes && got.tooling === yes && got.emptyDeps === yes && got.deeper === yes,
+      none: () => ["none", "ownRoot", "elsewhere", "pnpmOther", "pnpmAfter", "pnpmNested", "pnpmOpen"].every((k) => got[k] === no),
       gate: () => js(gate) === js(["approved", REFUSED, "approved"]),
       seeded: () => js(seeded) === js([true, true]),
     });

@@ -178,11 +178,13 @@ function componentOf(rel) {
 //     list or element; or it loads on demand (`dynamic(() =>
 //     import(…))`); it is given a `render` that is defined and JSX (`createReactClass({ … })`); or it is applied to
 //     a component — its last argument list is one name that is a component of the FILE's own (`withRouter(Nav)`),
-//     or, curried, one it imports (`withStyles(styles)(TableCell)`);
+//     or, curried, one it imports (`withStyles(styles)(TableCell)`) — the JSX a FUNCTION given renders (1.35.3: with
+//     none it is an element handed over, `mount(root, <App />)`);
 //   - a part hung on a component the file exports, under that component's exported name — an alias of it too —
 //     (1.35.2): `Card.Header = …`, the capitalised keys of `Object.assign(Card, { Header, Body: CardBody })` —
 //     `Card.Header`; an `Object.assign` with no such key is the component it is given, when the file declares it,
 //     and one around a call (a HOC's, with its arguments) is a component when a part of it is.
+// Exported on its declaration, in a list, as the default or by CommonJS (`exports.X = …`, `module.exports = { … }`, 1.35.3).
 // Never a type (`export type`, `export { type X }`), a re-export (`export { X } from`, `export *` — a barrel's), a constant
 // of any other value (`createContext(…)`, an object, `cva(…)`, `z.object(…)`, `memoize(() => 1)`, a call given an
 // object, a list or an element FIRST — whatever JSX it holds), a hook, a lower-case name (`FAQ`, `CTA` are
@@ -192,22 +194,17 @@ function componentOf(rel) {
 // never the name: no suffix list ("Context", "Props") is ever complete. Statements at the margin and indented `export`s
 // of a declaration (scriptView), a decorator on the line aside, comments aside (a `/*` or a `//` inside a quoted string
 // opens none, and `<!--` is no comment in a script), a template literal's lines aside, a BOM dropped; a line is read
-// up to DS_LINE_MAX. What it still misses is a row to add by hand, as the docs say: a component made by a call that
-// shows nothing (`createComponent(config)`, a single call around a name the file only imports — `motion(Box)` —, a
-// call around a component and another argument — `contextConnect(Menu, "Menu")` —, a call given an object first —
-// `createIcon({ … })`, `createField({ type }, (props) => …)` —, an element first — `createSvgIcon(<path />, "Home")`),
-// a class with an imported base that renders through it, parts hung on an imported component,
-// CommonJS `exports.X`, a re-export from a package under a new name, an element with text at the margin that begins
-// with a letter or follows a line that ends with `;` or `}` (it ends the statement). What it still reads too
-// much, knowingly: a PascalCase helper nothing tells apart (exported, one or two lower-case parameters, never called
-// in its file), an alias or a part that stands on an imported name that is no component (an enum's member,
-// `Button.Sizes = Sizes`), a call that only looks like a component's (its statement holds JSX and it is given no
-// object first — `memoize((n) => <Icon />)`, `mount(root, <App />)`, `createRoot(el).render(<App />)` —, given an object with a `render`, around a
-// component of the file, curried around an import), a class that is no React component and has a `render` that
-// returns JSX. And the other way: a real
-// component with three parameters, a capitalised first one, or called in its file with no JSX of its own is taken
-// for a helper. Two stray backticks (in two regular expressions, in an element's text) hide what stands between them;
-// in minified code a string right after a word (`return'…'`) is read from its closing quote.
+// up to DS_LINE_MAX. What one file cannot settle — a component made by a call that shows nothing (`motion(Box)`,
+// `createComponent(config)`, `contextConnect(Menu, "Menu")`, `createIcon({ … })`, `createSvgIcon(<path />, "Home")`), a
+// class with an imported base that renders through it, a real component taken for a helper, parts hung on an imported
+// component, `export const { Header } = Layout`, an element whose text at the margin ended its statement — is a
+// CANDIDATE, and what it takes on weaker grounds (a call, an alias of an import, a function or a class with no JSX of
+// its own) is WEAK: the project's other files settle both (settle, 1.35.3 — a candidate it renders is a component, a
+// weak one it only calls, gives to `useContext` or reads as an object is none). What NO file renders where the reader
+// sees it is still a row to add by hand, as the docs say; a helper, an alias on a name that is none or a call whose
+// function renders is still listed while the project never calls it; a call given an object with a `render` or
+// curried around an import, and a class that renders JSX the project never constructs, too. A stray backtick in an
+// element's text hides what stands up to the next one.
 const DS_EXPORT_FILES = 1000; // component files read for what else they export…
 const DS_EXPORT_CHARS = 4 * 1024 * 1024; // …and the characters read of them: past either, the report's `limits` says so
 const DS_EXPORT_NAMES = 500; // components kept of one file (what the registry's reader reads with their details)
@@ -222,6 +219,8 @@ const RE_CLASS_EXTENDS = /^\s*extends\s+((?:[\p{L}_$][\p{L}\p{N}_$]*\.)*[\p{L}_$
 const RE_REACT_CLASS = /^(?:React\.)?(?:Pure)?Component$/;
 const RE_IMPORT = /^import(?![\p{L}\p{N}_$.(])/u; // an import STATEMENT: never `import.meta…`, `import(…)`, `importantSetup()`
 const RE_IMPORT_END = /["'`;=]/; // where its clause ends: the module's quote — or the statement's own end (`import Dialog = Radix.Dialog;`)
+// (a `//` comment right after a name — `B,// it's fine` — is no part of an import's clause: its apostrophe ended it)
+const importCut = (l) => { const k = l.indexOf("//"), e = l.search(RE_IMPORT_END); return k !== -1 && (e === -1 || k < e) ? l.slice(0, k) : l; };
 const DS_ALIAS_PASSES = 8; // a chain of aliases declared bottom-up is followed that deep
 const RE_EXPORT_DEFAULT_NAME = /^export\s+default\s+([\p{L}_$][\p{L}\p{N}_$]*)\s*;?$/u; // (of a line trimmed at its end)
 const RE_VALUE_ASYNC = /^async\s*/u;
@@ -235,8 +234,10 @@ const RE_VALUE_ALIAS_LAST = /(?:^|\.)\p{Lu}[\p{L}\p{N}_$]*\s*;?$/u; // …whose 
 // apostrophe of JSX text, a template's first line). none: the quote characters known not to close further on — each
 // is looked for once past a place, so a line of them stays linear. (isQuote: the raw values' reader's, below.)
 // An apostrophe right after a letter is a word's (`Don't`, `it's`), never a string's opening: in JSX text and in a comment a
-// pair of them quoted what stood between — a `//`, a closing tag (review 2 of 1.35.2).
-const opensString = (s, k) => s[k] !== "'" || k === 0 || !RE_WORD_CHAR.test(s[k - 1]);
+// pair of them quoted what stood between — a `//`, a closing tag (review 2 of 1.35.2). Unless the word is one a value
+// follows — minified code's `return'…'`, `case'a':` (1.35.3: the string was read from its closing quote).
+const RE_QUOTE_KEYWORD = /(?:^|[^\p{L}\p{N}_$])(?:return|typeof|case|in|of|void|throw|yield|await|else|do|delete)$/u;
+const opensString = (s, k) => s[k] !== "'" || k === 0 || !RE_WORD_CHAR.test(s[k - 1]) || RE_QUOTE_KEYWORD.test(s.slice(Math.max(0, k - 9), k));
 function quoteEnd(s, i, none) {
   const q = s[i];
   if (none[q]) return -1;
@@ -362,7 +363,24 @@ function withoutStrings(l) {
   }
   return out + l.slice(from);
 }
-// → is a template literal open at the end of `s` (inside: at its start)? A quoted string that closes on the line holds none.
+// → is a template literal open at the end of `s` (inside: at its start)? A quoted string that closes on the line holds none,
+// nor does a regular expression's literal (1.35.3: `/`([^`]+)`/` — a Markdown reader's — opened one, and two of them hid the
+// code between: a `/` where a value starts, to the `/` that closes it on the line outside a `[…]`; once one does not close,
+// no further one is looked for on the line — linear).
+const RE_REGEX_BEFORE = /[(,=:[!&|?;{]/;
+const RE_REGEX_KEYWORD = /(?:^|[^\p{L}\p{N}_$])(?:return|typeof|case|in|of|void|throw|yield|await|else|do)$/u;
+function regexEnd(s, k) {
+  let j = k - 1;
+  while (j >= 0 && (s[j] === " " || s[j] === "\t")) j--;
+  if (!(j < 0 || RE_REGEX_BEFORE.test(s[j]) || (s[j] === ">" && s[j - 1] === "=") || (RE_WORD_CHAR.test(s[j]) && RE_REGEX_KEYWORD.test(s.slice(Math.max(0, j - 7), j + 1))))) return -1;
+  for (let e = k + 1, inClass = false; e < s.length; e++) {
+    const c = s[e];
+    if (c === BS) e++;
+    else if (inClass) { if (c === "]") inClass = false; } else if (c === "[") inClass = true;
+    else if (c === "/") return e;
+  }
+  return -2;
+}
 function templateOpen(s, inside) {
   if (!s.includes("`")) return inside;
   const none = {};
@@ -370,7 +388,11 @@ function templateOpen(s, inside) {
     const c = s[k];
     if (inside) { if (c === BS) k++; else if (c === "`") inside = false; continue; }
     if (c === "`") inside = true;
-    else if (c === "\"" || c === "'") { const e = quoteEnd(s, k, none); if (e !== -1) k = e; }
+    else if (c === "\"" || c === "'") { const e = quoteEnd(s, k, none); if (e !== -1) k = e; } else if (c === "/" && !none.regex && s[k + 1] !== "/" && s[k + 1] !== "*") {
+      const e = regexEnd(s, k);
+      if (e === -2) none.regex = true;
+      else if (e !== -1) k = e;
+    }
   }
   return inside;
 }
@@ -622,6 +644,21 @@ function unwrapped(v) {
   }
   return v;
 }
+// A line's statements, cut at each `;` of no bracket's depth and no string's (1.35.3) → their texts, each trimmed at its start. Linear.
+function statementsOf(line) {
+  const out = [], none = {};
+  let depth = 0, from = 0;
+  for (let k = 0; k < line.length; k++) {
+    const c = line[k];
+    if (isQuote(c) && opensString(line, k)) { const e = quoteEnd(line, k, none); if (e !== -1) k = e; continue; }
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") { if (depth > 0) depth--; } else if (c === ";" && depth === 0) { out.push(line.slice(from, k + 1).trimStart()); from = k + 1; }
+  }
+  const rest = line.slice(from).trimStart();
+  if (rest !== "") out.push(rest);
+  return out;
+}
+const RE_LOCAL_NAME = /^[\p{L}_$][\p{L}\p{N}_$]*$/u;
 // Where the LAST argument list of a call opens, at the call's own depth: its first `(` — the callee's type arguments
 // aside —, then each `(` that follows a `)` back at that depth (`connect(a)(` …; never a `)(` inside an argument:
 // `() => select(id)()`). → its place, -1 when the text holds no call. Linear.
@@ -680,6 +717,12 @@ const RE_VALUE_CALL = /^(?:[\p{L}_$][\p{L}\p{N}_$]*\.)*[\p{L}_$][\p{L}\p{N}_$]*(
 const RE_HOC_ARG = /\(\s*(\p{Lu}[\p{L}\p{N}_$]*)\s*\)+\s*;?$/u; // …whose last argument list is ONE capitalised name: `withRouter(Nav)`, `inject("s")(observer(Nav))`
 const RE_IIFE_END = /^\s*[})\]]*\)\s*\(/; // the last line of a function called at once: `})();`
 const RE_WRAPPED_CALL = /^(?:[\p{L}_$][\p{L}\p{N}_$]*\.)?[\p{L}_$][\p{L}\p{N}_$]*\s*[(<]/u; // (of what a `(` holds) a call: `(React.forwardRef(…)) as X`
+const RE_GIVES_FUNCTION = /=>|(?<![\p{L}\p{N}_$.])function(?![\p{L}\p{N}_$])/u; // (of a statement's code) a function given: an arrow, `function`
+const NONE = 0, WEAK = 1, STRONG = 2; // what a declaration shows (exportedComponents' kindOf)
+const RE_PLAIN_VALUE = /^(?:["'`\d.!{[\/+-]|(?:true|false|null|undefined|new|void|typeof|delete|await)(?![\p{L}\p{N}_$]))/u; // a literal's start: no component
+const RE_CJS_EXPORT = /^(?:module\.)?exports\.(\p{Lu}[\p{L}\p{N}_$]*)\s*=(?![=>])/u; // CommonJS: `exports.Button = …`
+const RE_CJS_MODULE = /^module\.exports\s*=(?![=>])/; // …`module.exports = { Button }`, `= Button`
+const RE_EXPORT_DEFAULT = /^export\s+default\s/;
 function exportedComponents(text) {
   const declared = new Set(); // the names declared as a component (a part's too: `Card.Header`)
   const classes = new Set(); // …those declared as a component CLASS: what a class below them may extend
@@ -693,7 +736,11 @@ function exportedComponents(text) {
   const exported = []; // [exported name, local name], as the file exports them
   const stands = new Map(); // a name → the component it stands on by its bare name: `const Card = CardRoot`, `Object.assign(CardRoot, …)` — its parts too
   const own = new Set(); // the declared names that are a component by a declaration of the FILE — never by an import alone
-  const mine = (name) => { declared.add(name); own.add(name); };
+  const strong = new Set(); // …those that are one by what they ARE (kindOf's STRONG): what the project's files never settle
+  const reexported = []; // the names the file re-exports under a name of its own, or from a package: `export { Root as Dialog } from "…"`
+  let defaultName = null; // the name the file's default export has (what `import X from "./file"` brings)
+  const plain = new Set(); // the names whose value is a literal (kindOf): no name to settle
+  const mine = (name, kind) => { declared.add(name); own.add(name); if (kind === STRONG) strong.add(name); };
   const view = scriptView(text);
   const code = view.code;
   const budget = { ahead: view.body.length }; // (declaredValue)
@@ -726,43 +773,50 @@ function exportedComponents(text) {
     }
     return first;
   };
-  // What a declared value is → true (a component) | false. What only the whole file can tell waits in `aliases` /
-  // `applies` / `spaced`: another component under a new name, a function applied to one, React's wrapper under an
-  // import's name. piece: the value is an ENTRY of a list read as one text (an `Object.assign` literal's) and is asked of
-  // its own text — never of the statement it stands in (review 1 of 1.35.2: each entry walked the whole statement
-  // again — 12 s for a 256K file — and a nested `Object.assign(` read the statement it stood in, forever).
+  // What a declared value is → STRONG (a component by what it is: a function that renders, React's wrapper, a `styled`
+  // one) | WEAK (one by what it shows — a function that renders nothing itself, a call: what the project's other files
+  // tell may still settle it, 1.35.3) | NONE. What only the whole file can tell waits in `aliases` / `applies` /
+  // `spaced`: another component under a new name, a function applied to one, React's wrapper under an import's name.
+  // piece: the value is an ENTRY of a list read as one text (an `Object.assign` literal's) and is asked of its own text
+  // — never of the statement it stands in (review 1 of 1.35.2: each entry walked the whole statement again — 12 s for a
+  // 256K file — and a nested `Object.assign(` read the statement it stood in, forever).
   const kindOf = (name, value, i, piece) => {
-    if (value == null || value === "") return false;
+    if (value == null || value === "") return NONE;
+    // (a literal — a string, a number, an object, a list, `true`, `new X()` — is no component whatever the project does
+    // with it: never a name to settle, 1.35.3)
+    if (RE_PLAIN_VALUE.test(value)) { plain.add(name); return NONE; }
     const entry = piece != null;
     const last = entry ? i : view.last(i);
+    const text = entry ? withoutStrings(piece) : null;
+    const renders = () => (entry ? RE_JSX.test(text) : view.holds(i, view.jsx));
     if (value[0] === "(") {
       const inner = value.slice(1).trimStart();
       // an ELEMENT in parentheses (`= (` then `<svg …` — never `<T extends Row>(props) =>`, a generic arrow), React's
       // wrapper in parentheses (`(forwardRef(…)) as X`), a function called at once (`(function () {` … `})();`): by
       // what the statement holds, not by its `(`
-      if (!entry && inner === "") { const below = view.after(i); if (below != null && below[0] === "<" && !RE_VALUE_GENERIC.test(below)) return false; }
+      if (!entry && inner === "") { const below = view.after(i); if (below != null && below[0] === "<" && !RE_VALUE_GENERIC.test(below)) return NONE; }
       if (RE_WRAPPED_CALL.test(inner)) {
-        if (RE_VALUE_WRAPPER.test(inner)) return true;
+        if (RE_VALUE_WRAPPER.test(inner)) return STRONG;
         const ns = RE_VALUE_SPACED.exec(inner);
-        if (ns) { spaced.push([name, ns[1]]); return false; }
+        if (ns) { spaced.push([name, ns[1]]); return NONE; }
       }
-      if (last !== i && inner !== "" && functionValue(inner, true) && RE_IIFE_END.test(code[last])) return false;
+      if (last !== i && inner !== "" && functionValue(inner, true) && RE_IIFE_END.test(code[last])) return NONE;
     }
-    if (functionValue(value)) return !isHelper(name, view, i, paramList(value, 0));
-    if (RE_VALUE_WRAPPER.test(value)) return true;
+    if (functionValue(value)) return isHelper(name, view, i, paramList(value, 0)) ? NONE : renders() ? STRONG : WEAK;
+    if (RE_VALUE_WRAPPER.test(value)) return STRONG;
     const ns = RE_VALUE_SPACED.exec(value);
-    if (ns) { spaced.push([name, ns[1]]); return false; }
+    if (ns) { spaced.push([name, ns[1]]); return NONE; }
     const bare = uncast(value);
     const alias = RE_VALUE_ALIAS.exec(bare);
     // (a BARE name is what the new one stands on — its parts are this one's too; a member of one is that member alone)
-    if (alias && RE_VALUE_ALIAS_LAST.test(bare)) { aliases.push([name, alias[1]]); if (!bare.includes(".")) stands.set(name, alias[1]); return false; }
+    if (alias && RE_VALUE_ALIAS_LAST.test(bare)) { aliases.push([name, alias[1]]); if (!bare.includes(".")) stands.set(name, alias[1]); return NONE; }
     if (RE_OBJECT_ASSIGN.test(value)) {
       // (an entry that is one itself — `Item: Object.assign(MenuItem, { Icon })` — is the component it is given)
       if (!entry) assigned(name, i);
       else { const first = RE_NAME_HEAD.exec(value.slice(value.indexOf("(") + 1).trimStart()); if (first) aliases.push([name, first[0]]); }
-      return false;
+      return NONE;
     }
-    if (!RE_VALUE_CALL.test(value)) return false;
+    if (!RE_VALUE_CALL.test(value)) return NONE;
     // Wrapped by any other function — `observer(…)`, a HOC, `dynamic(…)`: a component when its statement holds JSX (what
     // it wraps renders) or a dynamic `import(` (it loads on demand) — UNLESS what it is given FIRST is an object, a
     // list or an element: a configuration, whatever JSX it holds (`columnHelper.display({ cell: () => <b /> })`, a
@@ -776,12 +830,15 @@ function exportedComponents(text) {
     // (…of its LAST list, which a later line may open: `withStyles({ … })((props) => …)` over lines is given a function last,
     // `createFileRoute("/a")({ component: … })` an object — review 4 of 1.35.2; a lone `<` opens a generic's parameters)
     if (!entry && first != null) { const later = curriedFirst(i); if (later != null) first = later; }
-    if (first != null && first[0] !== "{" && first[0] !== "[" && (first[0] !== "<" || first === "<" || RE_VALUE_GENERIC.test(first))) {
-      const text = entry ? withoutStrings(piece) : null;
-      if (entry ? RE_JSX.test(text) || RE_DYNAMIC_IMPORT.test(text) : view.holds(i, view.jsx) || view.matches(i, RE_DYNAMIC_IMPORT)) return true;
+    // (…and a FUNCTION is given — an arrow, `function`: what renders is a function's body. With none, the JSX is an element
+    // handed over — `mount(root, <App />)`, `createRoot(el).render(<App />)`, `t("hint", { link: <a /> })`,
+    // `createBrowserRouter(createRoutesFromElements(<Route />))` — and a promise of a module is none: 1.35.3)
+    if (first != null && first[0] !== "{" && first[0] !== "[" && (first[0] !== "<" || first === "<" || RE_VALUE_GENERIC.test(first)) &&
+      (entry ? RE_GIVES_FUNCTION.test(text) : view.matches(i, RE_GIVES_FUNCTION))) {
+      if (entry ? RE_JSX.test(text) || RE_DYNAMIC_IMPORT.test(text) : view.holds(i, view.jsx) || view.matches(i, RE_DYNAMIC_IMPORT)) return WEAK;
     }
     // …or what it is given renders as a class does — a `render` and JSX: `createReactClass({ render() { … } })`
-    if (!entry && view.renders(i) && view.holds(i, view.jsx)) return true;
+    if (!entry && view.renders(i) && view.holds(i, view.jsx)) return WEAK;
     // …or it is applied to a component: its last argument list is that one name, a cast after it aside — one the file
     // DECLARES (`withRouter(Nav)`), or, when the application is CURRIED (`withStyles(styles)(TableCell)`, `connect(…)(List)`
     // — the shape of a HOC), one it imports. Of a name the file only imports a single call says nothing:
@@ -792,7 +849,7 @@ function exportedComponents(text) {
     // (…that one name on a line of its own, the `)` below it: a long line a formatter broke)
     const lone = below.length === 2 && below[1][0] === ")" ? RE_LONE_NAME.exec(below[0]) : null;
     if (lone) applies.push([name, lone[1], value.trimEnd().endsWith(")(")]);
-    return false;
+    return NONE;
   };
   // `Object.assign(Card, { Header: CardHeader, Body })` — a component's parts given at once: the capitalised keys of its
   // literal, each asked of its own text. owner: the name it is assigned to (none: Card itself). → the name of the
@@ -816,18 +873,52 @@ function exportedComponents(text) {
       // a second name) it is one only of a component of the file's own, as a single call of any function is
       // (a member first — `Object.assign(Card.Root, { Title })` — is that member alone: nothing stands on its owner, review 4)
       if (owner != null) { if (!head.includes(".")) stands.set(owner, first); if (entries.length) aliases.push([owner, first]); else applies.push([owner, first, false]); }
-    } else if (kindOf(owner, args[0], i, args[0])) mine(owner); // a component WRITTEN there (`forwardRef(…)`, a function)
+    } else { const k = kindOf(owner, args[0], i, args[0]); if (k) mine(owner, k); } // a component WRITTEN there (`forwardRef(…)`, a function)
     // (the parts are recorded whatever the first argument is — review 3 of 1.35.2: decided first, a HOC's call there
     // returned before them, and `Object.assign(contextConnect(Root, "Menu"), { Item })` lost the menu and its twelve parts)
     for (const [key, value] of entries) {
       part(to, key);
       if (value == null) aliases.push([to + "." + key, key]);
-      else if (kindOf(to + "." + key, value, i, value)) mine(to + "." + key);
+      else { const k = kindOf(to + "." + key, value, i, value); if (k) mine(to + "." + key, k); }
     }
     // (…and a CALL first — a HOC with its arguments — is a component when one of its parts is: the idiom says so; never
     // `{}`, `new Emitter()` — a registry of components is none, review 4 of 1.35.2)
     if (first == null && RE_VALUE_CALL.test(head)) for (const [key] of entries) aliases.push([owner, owner + "." + key]);
     return first;
+  }
+  // CommonJS (1.35.3): `exports.Button = …` / `module.exports.Button = …` is a declaration, exported; `module.exports = {
+  // Button, Card: CardRoot }` an export list (a value written there is asked as a declaration's); `module.exports =
+  // Button;` the default. → the statement's last line read, -1 when the line is none of them.
+  function commonJs(i, line) {
+    const named = RE_CJS_EXPORT.exec(line);
+    if (named) {
+      let value = line.slice(named[0].length).trim();
+      for (let m = i + 1; value === "" && m < view.next[i]; m++) value = code[m].trim();
+      const k = kindOf(named[1], value, i);
+      if (k) mine(named[1], k);
+      exported.push([named[1], named[1]]);
+      return i;
+    }
+    const whole = RE_CJS_MODULE.exec(line);
+    if (!whole) return -1;
+    const rest = line.slice(whole[0].length).trim();
+    if (rest[0] === "{") {
+      // (its literal read as one text, by the depth of its brackets — a value may hold braces of its own: `{ A: () => { … }, B }`)
+      const lines = [];
+      for (let k = i; k < view.next[i]; k++) lines.push(code[k]);
+      const text = lines.join(" ");
+      for (const [key, value] of braceEntries(text, text.indexOf("{") + 1)) {
+        if (!RE_PART_KEY.test(key)) continue;
+        if (value == null || RE_LOCAL_NAME.test(value)) { exported.push([key, value == null ? key : value]); continue; }
+        const k = kindOf(key, value, i, value);
+        if (k) mine(key, k);
+        exported.push([key, key]);
+      }
+      return view.next[i] - 1;
+    }
+    const bare = RE_EXPORT_DEFAULT_NAME.exec("export default " + rest);
+    if (bare) { exported.push([bare[1], bare[1]]); defaultName = bare[1]; }
+    return i;
   }
   for (let i = 0; i < code.length; i++) {
     let line = code[i];
@@ -842,14 +933,22 @@ function exportedComponents(text) {
     if (line !== code[i]) { code[i] = line; c = line[0]; } // (the readers below read the statement itself)
     if (c === undefined) continue;
     if (c !== "e" && c !== "f" && c !== "c" && c !== "a" && c !== "l" && c !== "v" && c !== "i") { // export, function, class / const, async, let, var, import
+      if (c === "m") { const at = commonJs(i, line); if (at !== -1) { i = at; continue; } }
       if (c >= "a" && c <= "z") continue;
-      // …or a part hung on a component: `Card.Header = …`, `Object.assign(Card, { … })`
+      // …or a part hung on a component: `Card.Header = …`, `Object.assign(Card, { … })` — two on one line too, each asked
+      // of its own text (1.35.3: `Card.Header = Header; Card.Body = Body;` gave the first the second's)
       const hung = RE_PART.exec(line);
       if (hung) {
-        let value = line.slice(hung[0].length).trim();
-        for (let m = i + 1; value === "" && m < view.next[i]; m++) value = code[m].trim();
-        part(hung[1], hung[2]);
-        if (kindOf(hung[1] + "." + hung[2], value, i)) mine(hung[1] + "." + hung[2]);
+        const pieces = line.indexOf(";") < line.trimEnd().length - 1 ? statementsOf(line) : [line];
+        for (let s = 0; s < pieces.length; s++) {
+          const h = s === 0 ? hung : RE_PART.exec(pieces[s]);
+          if (!h) continue;
+          let value = pieces[s].slice(h[0].length).trim();
+          if (s === pieces.length - 1) for (let m = i + 1; value === "" && m < view.next[i]; m++) value = code[m].trim();
+          part(h[1], h[2]);
+          const k = kindOf(h[1] + "." + h[2], value, i, pieces.length > 1 ? value : undefined);
+          if (k) mine(h[1] + "." + h[2], k);
+        }
       } else if (RE_OBJECT_ASSIGN.test(line)) assigned(null, i);
       continue;
     }
@@ -858,11 +957,9 @@ function exportedComponents(text) {
       // only, and to where one ends: review 2 of 1.35.1 — `import Dialog = Radix.Dialog;`, `import.meta.env.X;` and
       // `importantSetup();` hold no quote, and each took the lines below it for its clause (the declarations there unseen).
       if (!RE_IMPORT.test(line)) continue;
-      // (a `//` comment right after a name — `B,// it's fine` — is no part of the clause: its apostrophe ended it)
-      const cut = (l) => { const k = l.indexOf("//"), e = l.search(RE_IMPORT_END); return k !== -1 && (e === -1 || k < e) ? l.slice(0, k) : l; };
-      let clause = cut(line), end = clause.search(RE_IMPORT_END);
+      let clause = importCut(line), end = clause.search(RE_IMPORT_END);
       for (let last = i + DS_EXPORT_LIST_LINES; end === -1 && i + 1 < code.length && i < last;) {
-        const more = cut(code[++i]);
+        const more = importCut(code[++i]);
         const at = more.search(RE_IMPORT_END);
         if (at !== -1) end = clause.length + 1 + at;
         clause += " " + more;
@@ -875,14 +972,16 @@ function exportedComponents(text) {
     }
     const fn = RE_DECL_FN.exec(line);
     if (fn) {
-      if (fn[2] === "function") { if (!isHelper(fn[3], view, i, paramList(line, fn[0].length))) mine(fn[3]); } else {
+      if (fn[2] === "function") { if (!isHelper(fn[3], view, i, paramList(line, fn[0].length))) mine(fn[3], view.holds(i, view.jsx) ? STRONG : WEAK); } else {
         // a class is a component by what it EXTENDS — React's own, or a component class declared above it (a base class
         // of the file: a class is declared before the one that extends it) — or, whatever it extends (an imported
-        // base, a mixin), by what it DOES: it has a `render` and its body holds JSX
+        // base, a mixin), by what it DOES: it has a `render` and its body holds JSX (weak: a renderer of anything else
+        // has one too — the project's `new Renderer(…)` settles it, 1.35.3)
         const sup = RE_CLASS_EXTENDS.exec(classHeader(code, i, fn[0].length, budget));
-        if ((sup && (RE_REACT_CLASS.test(sup[1]) || classes.has(sup[1]))) || (view.renders(i) && view.holds(i, view.jsx))) { mine(fn[3]); classes.add(fn[3]); }
+        if (sup && (RE_REACT_CLASS.test(sup[1]) || classes.has(sup[1]))) { mine(fn[3], STRONG); classes.add(fn[3]); } else if (view.renders(i) && view.holds(i, view.jsx)) { mine(fn[3], WEAK); classes.add(fn[3]); }
       }
       if (fn[1]) exported.push([fn[3], fn[3]]);
+      if (fn[1] && RE_EXPORT_DEFAULT.test(line)) defaultName = fn[3];
       continue;
     }
     const cn = RE_DECL_CONST.exec(line);
@@ -890,13 +989,14 @@ function exportedComponents(text) {
       const value = declaredValue(code, i, cn[0].length, budget);
       const required = value == null ? null : RE_REQUIRE.exec(value);
       // (`const Radix = require(…)` is an import by another word)
-      if (required) { imported.add(cn[2]); if (required[1] === "react") react.add(cn[2]); } else if (kindOf(cn[2], value, i)) mine(cn[2]);
+      if (required) { imported.add(cn[2]); if (required[1] === "react") react.add(cn[2]); } else { const k = kindOf(cn[2], value, i); if (k) mine(cn[2], k); }
       if (cn[1]) exported.push([cn[2], cn[2]]);
       continue;
     }
     if (RE_DESTRUCTURED.test(line)) {
       // `const { Root, Trigger: Open } = DialogPrimitive;`, `= require(…)` — names the file BORROWS: what an alias may
       // stand on, as an import's (`export const Close = Root;`). One that never closes is given up as an export list is.
+      // Exported so (`export const { Header, Content } = Layout;`), each is a name the project's files may settle (1.35.3).
       const b = braces(i, line);
       if (!b) { i = Math.min(code.length - 1, i + DS_EXPORT_LIST_LINES); continue; }
       i = b.at;
@@ -905,26 +1005,42 @@ function exportedComponents(text) {
       const source = rest.slice(1).trimStart();
       const from = RE_REQUIRE.test(source) ? null : (RE_NAME_HEAD.exec(source) || [""])[0];
       if (from === "") continue;
+      const out = line[0] === "e";
       for (const [key, value] of braceEntries(b.list, 0)) {
         const local = RE_NAME_HEAD.exec(value == null ? key : value); // (`A`, `A: B`, `A = dflt`: the name it gives)
-        if (local) borrowed.push([local[0], from]);
+        if (!local) continue;
+        borrowed.push([local[0], from]);
+        if (out) exported.push([local[0], local[0]]);
       }
       continue;
     }
     const byName = RE_EXPORT_DEFAULT_NAME.exec(line.trimEnd());
-    if (byName) { exported.push([byName[1], byName[1]]); continue; }
-    if (RE_EXPORT_ASSIGN.test(line)) { const owner = assigned(null, i); if (owner) exported.push([owner, owner]); continue; }
+    if (byName) { exported.push([byName[1], byName[1]]); defaultName = byName[1]; continue; }
+    if (RE_EXPORT_ASSIGN.test(line)) { const owner = assigned(null, i); if (owner) { exported.push([owner, owner]); defaultName = owner; } continue; }
+    { const at = commonJs(i, line); if (at !== -1) { i = at; continue; } }
     if (!line.startsWith("export") || !/^export\s*\{/.test(line)) continue;
-    // `export { A, B as C, type D }` — it may go on over lines; followed by `from`, it re-exports another file's
+    // `export { A, B as C, type D }` — it may go on over lines; followed by `from`, it re-exports another file's: a name
+    // of its own (`Root as Dialog`) or a package's (`export { Button } from "@acme/ui"`) is one the project may settle
+    // (1.35.3) — a file's of the project under its own name is that file's
     const b = braces(i, line);
     if (!b) { i = Math.min(code.length - 1, i + DS_EXPORT_LIST_LINES); continue; }
     i = b.at;
-    if (b.rest.trimStart().startsWith("from")) continue;
+    const from = /^from\s*["']([^"']*)["']/.exec(b.rest.trimStart());
+    if (b.rest.trimStart().startsWith("from")) {
+      if (from) for (const entry of b.list.split(",")) {
+        const words = entry.trim().split(/\s+/);
+        if (!words[0] || words[0] === "type") continue;
+        if (words[1] === "as" && words[2] && words[2] !== "default") reexported.push(words[2]);
+        else if (!words[1] && from[1][0] !== ".") reexported.push(words[0]);
+      }
+      continue;
+    }
     for (const entry of b.list.split(",")) {
       const words = entry.trim().split(/\s+/);
       if (!words[0]) continue; // (`type X`: its "name" is the lower-case word — no component)
       const as = words[1] === "as" && words[2] ? words[2] : words[0];
       exported.push([as === "default" ? words[0] : as, words[0]]);
+      if (as === "default") defaultName = words[0];
     }
   }
   // What only the whole file tells — a function declared BELOW is hoisted, an import may follow its use (review 2 of
@@ -932,18 +1048,20 @@ function exportedComponents(text) {
   // React's wrapper under an import's name; a name borrowed from an import's; another component under a new name — a
   // capitalised name the file imports or declares, or a member of one; a function applied to one it declares — or,
   // curried, imports.
-  for (const [name, ns] of spaced) if (react.has(ns)) mine(name);
+  for (const [name, ns] of spaced) if (react.has(ns)) mine(name, STRONG);
   for (let pass = 0, found = aliases.length + applies.length + borrowed.length > 0; found && pass < DS_ALIAS_PASSES; pass++) {
     found = false;
     for (const b of borrowed) if (!imported.has(b[0]) && (b[1] == null || imported.has(b[1]) || declared.has(b[1]))) { imported.add(b[0]); found = true; }
     for (const a of aliases) {
       if (!declared.has(a[0]) && (imported.has(a[1]) || declared.has(a[1]))) { declared.add(a[0]); found = true; }
       if (!own.has(a[0]) && own.has(a[1])) { own.add(a[0]); found = true; }
+      if (!strong.has(a[0]) && strong.has(a[1])) { strong.add(a[0]); found = true; } // (another name of a strong one is one)
     }
     // (a single call needs a component of the FILE's own — an alias of an import is one by that import's word alone:
     // `const PMap = Plugins; … Object.entries(PMap)` was listed, review 2 of 1.35.2; a curried one may stand on any)
-    for (const a of applies) if (!declared.has(a[0]) && (own.has(a[1]) || (a[2] && (imported.has(a[1]) || declared.has(a[1]))))) { mine(a[0]); found = true; }
+    for (const a of applies) if (!declared.has(a[0]) && (own.has(a[1]) || (a[2] && (imported.has(a[1]) || declared.has(a[1]))))) { mine(a[0], WEAK); found = true; }
   }
+  const exportedOwn = exported.length; // (the names the file exports itself — its parts' are pushed below)
   // A component's parts are exported with it, under each name it is exported by: `Card.Header`. Each name once,
   // DS_EXPORT_NAMES of them in all — the names of a file are kept that far, and a file of 7,000 parts exported under
   // 7,000 names is 49 million names no one reads (review 1 of 1.35.2: the process died of it).
@@ -972,14 +1090,134 @@ function exportedComponents(text) {
       }
     }
   }
-  const names = [], seen = new Set();
+  const names = [], seen = new Set(), weak = new Set(), locals = new Map();
   for (const [name, local] of exported) {
     if (!declared.has(local) || !RE_COMPOUND_NAME.test(name) || seen.has(name)) continue;
     if (names.length >= DS_EXPORT_NAMES) { more = true; break; }
     seen.add(name);
     names.push(name);
+    locals.set(name, local);
+    if (!strong.has(local)) weak.add(name);
   }
-  return { names, more };
+  // What the file exports and the rules do not settle (1.35.3) — a name another file may RENDER: `motion(Box)`,
+  // `createComponent(config)`, a class that renders through its imported base, `export const { Header } = Layout`, a
+  // part hung on an imported component, a re-export under a name of its own. Each name once, DS_EXPORT_NAMES of them.
+  const candidates = [];
+  let full = false;
+  const candidate = (name, local) => {
+    if (seen.has(name) || !RE_COMPOUND_NAME.test(name) || plain.has(local)) return;
+    if (candidates.length >= DS_EXPORT_NAMES) { more = full = true; return; }
+    seen.add(name);
+    candidates.push({ name, local });
+  };
+  // (each owner's parts that are neither a component nor a literal, settled once — never once an exported name: 2,090
+  // names of a root with 4,000 statics were 8 million names asked)
+  const loose = new Map();
+  const looseOf = (owner) => {
+    if (!loose.has(owner)) loose.set(owner, parts.has(owner) ? [...parts.get(owner)].filter((key) => !declared.has(owner + "." + key) && !plain.has(owner + "." + key)) : []);
+    return loose.get(owner);
+  };
+  for (let k = 0; k < exportedOwn && !full; k++) {
+    const [name, local] = exported[k];
+    if (!declared.has(local)) candidate(name, local);
+    for (const key of looseOf(local)) candidate(name + "." + key, local + "." + key);
+  }
+  for (const name of reexported) candidate(name, null);
+  return { names, more, weak, locals, candidates, defaultName, view };
+}
+// --- what the project's files tell of a component file's names (1.35.3) ------------------------------------------------------------
+// A name one file cannot settle — a call that shows nothing (`motion(Box)`), a class that renders through its imported
+// base, a PascalCase function that renders nothing itself — another file can: a component is RENDERED (`<MotionBox />`,
+// `<Card.Header>`), a helper is CALLED (`FormatPrice(value)` — scriptView's `called`), a context is given to `useContext(X)`
+// or provides (`<X.Provider>`), and a part that is an enum's member is read as an object (`Button.Sizes.Large`).
+// usesOf(view) → { rendered, called, contexts, members — the names as the file writes them (`Card.Header`, `UI.Button`) —,
+// imports: local name → { spec (the module), name: the name it has there ("default", "*" for a namespace) } }.
+// A tag is `<Name` (capitalised) or `<a.b` (a member: `<motion.div`, `<UI.Button`) where an expression may start — never
+// after a name or a `)` / `]` (`a < B`, `useState<Item>(`, `Array<Card>`), never a type's parameter (`<T,>`,
+// `<T extends X>`, `<T = unknown>`) — and every closing tag `</Name`. Strings, comments and a template's text aside. Linear.
+const RE_TAG_NAME = /<(\/?)([\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)*)/gu;
+const RE_TAG_KEYWORD = /(?:^|[^\p{L}\p{N}_$])(?:return|yield|await|default|case|else)$/u; // the words an element may follow
+const RE_TYPE_PARAM_AFTER = /^(?:[=,]|extends(?![\p{L}\p{N}_$]))/u;
+const RE_CONTEXT_TAG = /^(.+)\.(?:Provider|Consumer)$/;
+const RE_USE_CONTEXT = /(?<![\p{L}\p{N}_$])(?:[\p{L}_$][\p{L}\p{N}_$]*\.)?useContext\s*\(\s*([\p{L}_$][\p{L}\p{N}_$]*(?:\.[\p{L}_$][\p{L}\p{N}_$]*)?)\s*[,)]/gu;
+const RE_MEMBER_READ = /(?<![\p{L}\p{N}_$.<\/])([\p{L}_$][\p{L}\p{N}_$]*\.\p{Lu}[\p{L}\p{N}_$]*)\.[\p{L}_$]/gu; // `Button.Sizes.Large` — never in a tag
+const RE_REQUIRE_DECL = /^(?:export\s+)?(?:const|let|var)\s+(?:([\p{L}_$][\p{L}\p{N}_$]*)|\{([^}]*)\})\s*=\s*require\s*\(\s*["']([^"']+)["']\s*\)/u;
+const RE_NAMESPACE_IMPORT = /^\*\s*as\s+([\p{L}_$][\p{L}\p{N}_$]*)$/u;
+const RE_FROM_END = /(?:^|\s)from$/;
+// an `import` clause (what stands between `import` and the module's quote) → its names, into `into`
+function importClause(text, spec, into) {
+  let t = text.trim();
+  if (RE_FROM_END.test(t)) t = t.slice(0, -4).trim();
+  if (t === "") return; // (`import type …` needs no skip: a name only a type is can be neither rendered nor called)
+  const open = t.indexOf("{");
+  for (const h of (open === -1 ? t : t.slice(0, open)).split(",")) {
+    const w = h.trim();
+    const ns = RE_NAMESPACE_IMPORT.exec(w);
+    if (ns) into.set(ns[1], { spec, name: "*" });
+    else if (RE_LOCAL_NAME.test(w)) into.set(w, { spec, name: "default" });
+  }
+  if (open === -1) return;
+  const close = t.indexOf("}", open);
+  for (const entry of t.slice(open + 1, close === -1 ? t.length : close).split(",")) {
+    const w = entry.trim().split(/\s+/);
+    if (!w[0]) continue;
+    const local = w[1] === "as" && w[2] ? w[2] : w[0];
+    if (RE_LOCAL_NAME.test(local)) into.set(local, { spec, name: w[0] });
+  }
+}
+function usesOf(view) {
+  const { code, plain, tpl } = view;
+  const rendered = new Set(), contexts = new Set(), members = new Set(), imports = new Map();
+  for (let i = 0; i < plain.length; i++) {
+    if (tpl[i]) continue;
+    const p = plain[i];
+    const l = code[i];
+    // an import — its clause may go on over lines, to the module's quote (an `import X = Y.Z;` has none: no module)
+    if (l[0] === "i" && RE_IMPORT.test(l)) {
+      let clause = importCut(l), k = i, q = clause.search(RE_IMPORT_END);
+      while (q === -1 && k + 1 < code.length && k < i + DS_EXPORT_LIST_LINES) {
+        const more = importCut(code[++k]);
+        const at = more.search(RE_IMPORT_END);
+        if (at !== -1) q = clause.length + 1 + at;
+        clause += " " + more;
+      }
+      if (q !== -1 && isQuote(clause[q])) {
+        const e = clause.indexOf(clause[q], q + 1);
+        if (e !== -1) importClause(clause.slice(6, q), clause.slice(q + 1, e), imports);
+      }
+      i = k;
+      continue;
+    }
+    if (l[0] === "c" || l[0] === "l" || l[0] === "v" || l[0] === "e") {
+      const r = RE_REQUIRE_DECL.exec(l);
+      if (r) {
+        if (r[1]) imports.set(r[1], { spec: r[3], name: "*" });
+        else for (const [key, value] of braceEntries(r[2], 0)) { const local = value == null ? key : value; if (RE_LOCAL_NAME.test(key) && RE_LOCAL_NAME.test(local)) imports.set(local, { spec: r[3], name: key }); }
+        continue;
+      }
+    }
+    if (p.includes("<")) {
+      RE_TAG_NAME.lastIndex = 0;
+      for (let m = RE_TAG_NAME.exec(p); m; m = RE_TAG_NAME.exec(p)) {
+        const name = m[2];
+        if (!name.includes(".") && !RE_COMPONENT_PARAM.test(name)) continue; // an intrinsic element: `<div`
+        if (!m[1]) {
+          let j = m.index - 1;
+          while (j >= 0 && (p[j] === " " || p[j] === "\t")) j--;
+          if (j >= 0 && (p[j] === ")" || p[j] === "]" || (RE_WORD_CHAR.test(p[j]) && !RE_TAG_KEYWORD.test(p.slice(Math.max(0, j - 7), j + 1))))) continue;
+          const end = m.index + m[0].length, c = p[end];
+          if (c !== undefined && c !== " " && c !== "\t" && c !== ">" && c !== "/") continue;
+          if ((c === " " || c === "\t") && RE_TYPE_PARAM_AFTER.test(p.slice(end, end + DS_CALL_PEEK).trimStart())) continue;
+        }
+        const ctx = RE_CONTEXT_TAG.exec(name);
+        if (ctx) contexts.add(ctx[1]);
+        else rendered.add(name);
+      }
+    }
+    if (p.includes("useContext")) { RE_USE_CONTEXT.lastIndex = 0; for (let m = RE_USE_CONTEXT.exec(p); m; m = RE_USE_CONTEXT.exec(p)) contexts.add(m[1]); }
+    if (p.includes(".")) { RE_MEMBER_READ.lastIndex = 0; for (let m = RE_MEMBER_READ.exec(p); m; m = RE_MEMBER_READ.exec(p)) members.add(m[1]); }
+  }
+  return { rendered, called: view.called, contexts, members, imports };
 }
 // A token file by its name AND its place (tokenFileKind):
 //   style — a stylesheet named for its tokens (tokens.css, _tokens.scss, tokens.dark.css, _variables.scss, theme.css): anywhere;
@@ -1517,10 +1755,141 @@ const jsonSource = (j) => !j.secret && j.list.length > 0 && (j.format || j.stron
 // file — a feature's are picked among them), files, truncated (the walk's file cap), capped ({tokenFiles, candidates, tokens, fileSize}:
 // the token read's bounds that cut something), realRoot }. The scan's corpus: no node_modules / .git / .specs / dist / build /
 // hidden folder, nor one the root .gitignore names.
-function scanCode(root) {
+// --- what the project's files settle (1.35.3) -----------------------------------------------------------------------------------
+// The names a component file cannot settle — its WEAK components (a call, an alias of an import, a function or a class that
+// renders nothing a reader can tie to it) and its CANDIDATES (exported, taken for none) — asked of every script of the
+// project: the component files' own (read for what they export) and then the others (DS_USAGE_FILES, DS_USAGE_CHARS — a
+// file that names none of the asked names is read, never viewed). A name is followed through the file's imports
+// (`import { MotionBox } from "@/components/ui/motion"`, `import * as UI from "../ui"` and `<UI.Card.Header>`, a default
+// import: the file's default export's name) to the files the module may be (`place`: a relative path — the file, its
+// folder's index, a file under it (a barrel) —; any other — an alias, a workspace package — by its path's segments, an
+// alias root aside: `@/components/ui/motion`, `@acme/ui`). → { dropped, rendered }: "path\nname" of the weak ones the
+// project shows are no component and of the candidates it renders. A barrel's weak name is a candidate: a `.ts` file holds
+// no JSX. Past the bound, with names asked, `capped.usage` says how many files were read.
+const DS_USAGE_FILES = 5000;
+const DS_USAGE_CHARS = 32 * 1024 * 1024;
+const DS_SCRIPT_LIST = 50000; // script files the walk keeps (past it: said as the usage bound)
+const RE_SCRIPT_FILE = /\.(?:tsx|jsx|ts|js|mjs|cjs|mts|cts)$/i;
+const RE_NOT_SCRIPT = /\.(?:d\.[cm]?ts|min\.[cm]?js)$/i;
+const RE_JSX_FILE = /\.(?:tsx|jsx|js|mjs|cjs)$/i; // a script that may hold JSX
+const RE_BARREL = /^index\.[cm]?ts$/i;
+const RE_MODULE_EXT = /\.[cm]?[jt]sx?$/i;
+const RE_CAPITAL_WORD = /\p{Lu}[\p{L}\p{N}_$]*/gu;
+const RE_ALIAS_ROOT = /^[@~#]/; // `@/…`, `~/…`, `#ui/…`, a package's scope
+// is a file under a component folder (its NEAREST telling folder is one — componentOf's rule, its name aside)?
+function inComponentFolder(rel) {
+  const segs = rel.split("/");
+  for (let at = segs.length - 2; at >= 0; at--) { const d = dirName(segs[at]); if (COMPONENT_DIRS.has(d)) return true; if (PAGE_DIRS.has(d)) return false; }
+  return false;
+}
+// a module's path as an import names it: lower case, no extension, no platform infix (`Button.native.tsx` → `button`)
+const moduleKey = (rel) => rel.toLowerCase().replace(RE_MODULE_EXT, "").replace(RE_PLATFORM_INFIX, "");
+// where an import's module may be → { key: a relative one's path from the root } | { run: "/seg/…/" } | null (none of the project's)
+function placeOf(spec, fromRel) {
+  if (spec[0] === ".") {
+    const out = fromRel.split("/").slice(0, -1);
+    for (const s of spec.split("/")) {
+      if (s === "" || s === ".") continue;
+      if (s !== "..") out.push(s);
+      else if (!out.length) return null;
+      else out.pop();
+    }
+    return { key: moduleKey(out.join("/")) };
+  }
+  const segs = spec.toLowerCase().split("/").filter((s) => s !== "" && s !== ".");
+  if (segs.length > 1 && RE_ALIAS_ROOT.test(segs[0])) segs.shift();
+  if (!segs.length || segs.includes("..")) return null;
+  segs[segs.length - 1] = segs[segs.length - 1].replace(RE_MODULE_EXT, "");
+  return { run: "/" + segs.join("/") + "/" };
+}
+// may a file (its moduleKey) be the module an import names? (a folder named: its index, or a barrel's file under it)
+const pointsTo = (key, at) => (at.key != null ? key === at.key || key.startsWith(at.key + "/") : ("/" + key + "/").includes(at.run));
+function settle(results, scripts, read, capped, scriptsCut) {
+  const dropped = new Set(), rendered = new Set();
+  const asked = new Map(), byName = new Map(), byBase = new Map(), keys = new Map(), defaults = new Map();
+  const ask = (path, name, local, kind) => {
+    if (!asked.has(path)) asked.set(path, new Map());
+    asked.get(path).set(name, { local, kind, rendered: false, called: false, context: false, member: false });
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(path);
+  };
+  for (const r of results) {
+    for (const name of r.found.weak) ask(r.path, name, r.found.locals.get(name), r.barrel ? "unproven" : "weak");
+    for (const c of r.found.candidates) ask(r.path, c.name, c.local, "candidate");
+    if (r.found.defaultName != null) defaults.set(r.path, r.found.defaultName);
+  }
+  if (!asked.size) return { dropped, rendered };
+  for (const path of asked.keys()) {
+    const key = moduleKey(path), segs = key.split("/");
+    keys.set(path, key);
+    const base = segs[segs.length - 1] === "index" && segs.length > 1 ? segs[segs.length - 2] : segs[segs.length - 1];
+    if (!byBase.has(base)) byBase.set(base, []);
+    byBase.get(base).push(path);
+  }
+  const note = (path, name, what) => { const e = asked.has(path) ? asked.get(path).get(name) : null; if (e) e[what] = true; };
+  const places = new Map();
+  const tell = (rel, uses) => {
+    const mine = asked.get(rel);
+    if (mine) for (const e of mine.values()) if (e.local != null) {
+      if (uses.rendered.has(e.local)) e.rendered = true;
+      if (uses.called.has(e.local)) e.called = true;
+      if (uses.contexts.has(e.local)) e.context = true;
+    }
+    if (!uses.imports.size) return;
+    const dir = rel.slice(0, rel.lastIndexOf("/") + 1);
+    const through = (written, what) => {
+      const dot = written.indexOf(".");
+      const imp = uses.imports.get(dot === -1 ? written : written.slice(0, dot));
+      if (!imp) return;
+      const rest = dot === -1 ? "" : written.slice(dot);
+      const pk = dir + "\n" + imp.spec;
+      if (!places.has(pk)) places.set(pk, placeOf(imp.spec, rel));
+      const at = places.get(pk);
+      if (!at) return;
+      if (imp.name === "default") {
+        const run = at.key != null ? at.key : at.run.slice(0, -1);
+        for (const path of byBase.get(run.slice(run.lastIndexOf("/") + 1)) || []) if (path !== rel && defaults.has(path) && pointsTo(keys.get(path), at)) note(path, defaults.get(path) + rest, what);
+        return;
+      }
+      const name = imp.name === "*" ? rest.slice(1) : imp.name + rest;
+      if (name === "" || !byName.has(name)) return;
+      for (const path of byName.get(name)) if (path !== rel && pointsTo(keys.get(path), at)) note(path, name, what);
+    };
+    for (const n of uses.rendered) through(n, "rendered");
+    for (const n of uses.called) through(n, "called");
+    for (const n of uses.contexts) through(n, "context");
+    for (const n of uses.members) through(n, "member");
+  };
+  for (const r of results) tell(r.path, r.uses);
+  // the other scripts — a file that writes none of the names asked (nor a default export's) tells nothing: never viewed
+  const wanted = new Set(defaults.values());
+  for (const name of byName.keys()) { const dot = name.indexOf("."); wanted.add(dot === -1 ? name : name.slice(0, dot)); }
+  const names = (text) => { RE_CAPITAL_WORD.lastIndex = 0; for (let m = RE_CAPITAL_WORD.exec(text); m; m = RE_CAPITAL_WORD.exec(text)) if (wanted.has(m[0])) return true; return false; };
+  const done = new Set(read);
+  // (a `.ts` file renders nothing: with no weak name asked — a candidate is settled by a render alone — it is never read: an
+  // Angular project's thousands of them)
+  const calls = [...asked.values()].some((m) => [...m.values()].some((e) => e.kind === "weak"));
+  let files = 0, chars = 0, left = scriptsCut;
+  for (const s of scripts.filter((f) => !done.has(f.rel) && (calls || RE_JSX_FILE.test(f.rel))).sort((a, b) => a.rel.length - b.rel.length || (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0))) {
+    if (files >= DS_USAGE_FILES || chars >= DS_USAGE_CHARS) { left = true; break; }
+    const text = readFileHead(s.full, DS_READ_CHARS);
+    files++;
+    if (text == null) continue;
+    chars += text.length;
+    if (names(text)) tell(s.rel, usesOf(scriptView(text)));
+  }
+  if (left) capped.usage = files;
+  for (const [path, m] of asked) for (const [name, e] of m) {
+    if (e.kind === "candidate") { if (e.rendered && !e.context) rendered.add(path + "\n" + name); } else if (e.kind === "unproven" ? !e.rendered || e.context : e.context || (!e.rendered && (e.called || e.member))) dropped.add(path + "\n" + name);
+  }
+  return { dropped, rendered };
+}
+function scanCode(root, withComponents = true) {
   const realRoot = realRootOf(root);
   const byKey = new Map(), views = [], tokenFiles = [], sheets = [], found = [], routerRoots = new Set(), pageDirs = new Set(), nextConfigs = new Set();
   const fullOf = new Map(); // a component file's full path, by its relative one
+  const scripts = [], barrels = []; // every script file; a component folder's barrel (`index.ts`): read for what it re-exports
+  let scriptsCut = false;
   const counts = (rel) => isViewFile(rel) || isTokenFile(rel);
   const dirOf = (rel) => rel.slice(0, Math.max(0, rel.lastIndexOf("/")));
   const walk = walkProject(root, DS_FILE_CAP, (rel, full, name) => {
@@ -1532,6 +1901,9 @@ function scanCode(root) {
     const kind = tokenFileKind(rel);
     if (kind) tokenFiles.push({ rel, full, kind });
     else if (isSheetCandidate(name)) sheets.push({ rel, full, rank: sheetRank(name), depth: rel.split("/").length });
+    // (every script: what it renders, calls and imports may settle a component file's names — 1.35.3)
+    if (RE_SCRIPT_FILE.test(name) && !RE_NOT_SCRIPT.test(name)) { if (scripts.length < DS_SCRIPT_LIST) scripts.push({ rel, full }); else scriptsCut = true; }
+    if (RE_BARREL.test(name) && !isTestFile(rel) && inComponentFolder(rel)) barrels.push({ path: rel, full });
     if (!isViewFile(rel)) return;
     views.push({ rel, full });
     if (isTestFile(rel)) return;
@@ -1568,27 +1940,55 @@ function scanCode(root) {
   //   exports — component files were left unread for what else they export, or one held more names than are kept (how
   //   many files were read; 0: nothing cut);   workspaces — a bound of the workspace patterns left a declared folder
   //   unread (manifests: how many workspace manifests WERE read — none, when the first pattern was the one not followed).
-  const capped = { tokenFiles: false, candidates: false, tokens: false, fileSize: null, exports: 0, workspaces: false, manifests: 0 };
+  //   usage — script files were left unread for what they tell of the names the component files do not settle (how many
+  //   WERE read, past the component files; said only when there were names to settle — 1.35.3).
+  const capped = { tokenFiles: false, candidates: false, tokens: false, fileSize: null, exports: 0, workspaces: false, manifests: 0, usage: null };
   // What else a component file exports (exportedComponents) — a name no file of its own holds; the shorter path first, as
   // above. Read after every file's own name is known: `card.tsx`'s CardHeader never takes `card-header.tsx`'s place.
   // Bounded in files AND in characters read (DS_EXPORT_FILES, DS_EXPORT_CHARS — review 1 of 1.35.1: 500 files of 256K
   // cost seconds on every scan, and a project of 520 small ones could never be in sync again).
-  const readable = files.filter((c) => RE_EXPORTS_EXT.test(c.path)).sort((a, b) => a.path.length - b.path.length || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  let filesRead = 0, charsRead = 0, cutNames = false;
-  for (const c of readable) {
-    if (filesRead >= DS_EXPORT_FILES || charsRead >= DS_EXPORT_CHARS) { capped.exports = filesRead; break; }
-    const text = readFileHead(fullOf.get(c.path), DS_READ_CHARS);
-    filesRead++;
-    if (text == null) continue;
-    charsRead += text.length;
-    const found1 = exportedComponents(text);
-    if (found1.more) cutNames = true;
-    for (const name of found1.names) {
-      const key = dsKey(name);
-      if (key && !byKey.has(key)) byKey.set(key, { name, key, path: c.path, index: false, route: false });
+  // A component folder's barrel (`index.ts`) is read too, for the names it re-exports under its own (1.35.3).
+  // (withComponents: false — a feature's report — reads none of it: it asks no component's name)
+  for (const b of barrels) fullOf.set(b.path, b.full);
+  const byPath = (a, b) => a.path.length - b.path.length || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  // (the barrels after the component files, by a count of their own: a kit of `button/index.ts` + `button/button.tsx`
+  // folders reads as many component files as before, and a barrel's name never takes a component file's place)
+  const readable = withComponents ? files.filter((c) => RE_EXPORTS_EXT.test(c.path)).sort(byPath) : [];
+  let filesRead = 0, cutNames = false;
+  const results = [], readPaths = []; // [the file's path, what it exports (exportedComponents), what it tells (usesOf)] — in reading order
+  for (const [list, kind] of [[readable, "file"], [withComponents ? barrels.sort(byPath) : [], "barrel"]]) {
+    let n = 0, chars = 0;
+    for (const c of list) {
+      if (n >= DS_EXPORT_FILES || chars >= DS_EXPORT_CHARS) { capped.exports = capped.exports || filesRead || n; break; }
+      const text = readFileHead(fullOf.get(c.path), DS_READ_CHARS);
+      n++;
+      if (kind === "file") filesRead++;
+      readPaths.push(c.path);
+      if (text == null) continue;
+      chars += text.length;
+      const found1 = exportedComponents(text);
+      if (found1.more) cutNames = true;
+      results.push({ path: c.path, found: found1, uses: usesOf(found1.view), barrel: kind === "barrel" });
+      found1.view = null; // (a view holds the file twice over: what it tells is kept, the view is not)
     }
   }
   if (cutNames && !capped.exports) capped.exports = filesRead;
+  // What the project's files tell of the names those files do not settle (1.35.3 — settle(), below): a WEAK component is
+  // dropped when the project calls it as a function or gives it to `useContext`, never rendering it; a CANDIDATE — a name
+  // exported that the rules took for none — is one when the project renders it.
+  const verdict = settle(results, scripts, readPaths, capped, scriptsCut);
+  for (const r of results) {
+    for (const name of r.found.names) {
+      if (verdict.dropped.has(r.path + "\n" + name)) continue;
+      const key = dsKey(name);
+      if (key && !byKey.has(key)) byKey.set(key, { name, key, path: r.path, index: false, route: false });
+    }
+    for (const { name } of r.found.candidates) {
+      if (!verdict.rendered.has(r.path + "\n" + name)) continue;
+      const key = dsKey(name);
+      if (key && !byKey.has(key)) byKey.set(key, { name, key, path: r.path, index: false, route: false });
+    }
+  }
   const take = (file, list) => {
     sources.push(file.rel);
     for (const t of list) {
@@ -1885,6 +2285,7 @@ const scanLimits = (scan) => [scan.truncated ? { code: "files", read: scan.files
   scan.capped.fileSize ? { code: "file-size", read: DS_READ_CHARS, file: scan.capped.fileSize } : null,
   scan.capped.tokens ? { code: "tokens", read: DS_TOKENS_MAX } : null,
   scan.capped.exports ? { code: "component-files", read: scan.capped.exports } : null,
+  scan.capped.usage != null ? { code: "usage-files", read: scan.capped.usage } : null,
   scan.capped.workspaces ? { code: "workspace-manifests", read: scan.capped.manifests } : null].filter(Boolean);
 function designSystemReport(projectDir, opts = {}) {
   const root = path.resolve(projectDir);
@@ -1894,7 +2295,7 @@ function designSystemReport(projectDir, opts = {}) {
   const f = named ? existingFeature(projectDir, opts.name) : null;
   if (f && !f.ok) return { ok: false, error: f.error, code: f.code };
   const reg = designSystemRegistry(specsRoot(projectDir));
-  const scan = scanCode(root);
+  const scan = scanCode(root, !f); // (a feature's report reads no component's name: neither what files export nor what the others tell)
   if (f) return featureReport(projectDir, root, f, reg, scan);
   const listed = reg ? reg.keys : new Set();
   const building = pendingNew(projectDir);
@@ -1944,7 +2345,7 @@ function featureReport(projectDir, root, f, reg, scan) {
   const exportsOf = []; // [a component file of the feature, what else it exports] — a New component's path below
   // (the token-FILE bounds reach a feature's report too: a stylesheet left out of the sources is read for raw values)
   // (…and never the bounds of what the PROJECT report lists: the tokens read, the component files read for their exports)
-  const limits = scanLimits(scan).filter((l) => l.code !== "tokens" && l.code !== "component-files" && l.code !== "workspace-manifests");
+  const limits = scanLimits(scan).filter((l) => l.code !== "tokens" && l.code !== "component-files" && l.code !== "usage-files" && l.code !== "workspace-manifests");
   let viewFiles = 0;
   for (const rel of mine) {
     if (tokenFiles.has(fold(rel)) || isTokenFile(rel)) continue;
@@ -2085,7 +2486,7 @@ function designSystemFinish(projectDir, slug, opts = {}) {
   const reg = designSystemRegistry(specsRoot(projectDir));
   if (!reg) return null;
   const root = path.resolve(projectDir);
-  const rep = featureReport(projectDir, root, f, reg, scanCode(root));
+  const rep = featureReport(projectDir, root, f, reg, scanCode(root, false));
   const pending = rep.newComponents.filter((c) => !c.registered);
   let registered = [];
   if (opts.write && opts.ready && pending.length) registered = registerComponents(projectDir, pending.map((c) => ({ name: c.name, key: dsKey(c.name), path: c.path, feature: f.slug })));
