@@ -26,7 +26,8 @@ when you offer it; it is opt-in (`/executeTask <feature> --subagents`, or the us
 
 1. `spec_doctor <feature>` → `readyToAdvance: true` and every gate approved (`gatesOk` — the **tasks** phase
    and, on +tdd / +ai, Phase 4 `tests`: the failing tests are written and approved — implementers make planned
-   tests green, they don't write the test plan).
+   tests green, they don't write the test plan). A `reviewPanel` in the result: the project's review panel (Review on
+   more than one model, below) — ledger its models.
 2. **Not on the default branch** without the user's explicit consent — create a feature branch (or a
    worktree) first.
 3. `trace_check <feature>` passes — phantom AC/T references become `unresolved` in every brief and
@@ -71,6 +72,7 @@ Task 3: fix round 1/5 (2 addressed, 0 open — <one-liners>; commits a1b2c3d..e4
 Task 3: parked — <finding> — Ruling: <why the code stands>
 Task 3: refactor candidate filed: refactor-pricing-rules (backlog)
 Task 3: complete (commits a1b2c3d..e4f5a6b, review clean)
+Final review: ×2 (requested opus, sonnet) — 1 agreed, 3 single, 2 minor
 Checkpoint US1: presented → approved
 Autonomy: through checkpoint US3 — granted by the user
 Checkpoint US2: summarized (autonomy) — not yet seen by the user
@@ -195,7 +197,8 @@ Dispatch **`dev-spec-driven:spec-reviewer`** in **task** mode with: the brief pa
 path, BASE/HEAD, the active tracks and the references folder path. The reviewer returns a verdict **per AC ID** (✅ / ❌ / ⚠️ cannot
 verify from the diff), track checks, the project's written rules and the history of rewritten lines, and Critical /
 Important / Minor findings, each Critical / Important one rated 0–100. Never tell a reviewer what not to flag. Resolve
-every ⚠️ yourself (you hold the cross-task context); a confirmed gap is a failed spec review.
+every ⚠️ yourself (you hold the cross-task context); a confirmed gap is a failed spec review. With a review panel, this ONE
+reviewer runs on the first panel model that differs from the implementer's — a second model's eyes at no extra dispatch.
 
 ### 6. Verify the findings
 
@@ -204,7 +207,8 @@ positive costs a round, and an implementer "fixing" correct code can break it. (
 plugin: each issue rated by a separate agent, only the confident ones kept.)
 
 - **What goes through:** every ❌ and every Critical / Important finding — and, later, each piece of new breakage a
-  re-review reports. **What doesn't:** the facts the report or the diff settle by themselves — a `_Verify:_` run
+  re-review reports. Reviewers on several models: merge their findings first, then one verify per MERGED finding (Review on
+  more than one model). **What doesn't:** the facts the report or the diff settle by themselves — a `_Verify:_` run
   missing, a non-zero exit, a piped exit code with no unpiped run, a planned test's expectation changed.
 - **How:** one **`dev-spec-driven:spec-verifier`** per finding, all dispatched in one message (they are
   independent), on the cheapest tier — standard for a security, concurrency or data-loss finding — with the finding
@@ -395,6 +399,9 @@ runs the branch-review checklist
 and the history of rewritten lines) and triages the ledger's deferred minors, unconfirmed and parked findings. If it
 returns findings: verify each Critical / Important one (§6), then ONE fix dispatch with the confirmed list, ONE scoped
 re-review, then adjudicate residuals as in the breaker. No second wave — residual load-bearing findings go to the human.
+**With a review panel** (`reviewPanel`): the same package to one final-mode reviewer on the most capable model and one
+on each panel model not already it, in one message; their findings merged before the verify pass (Review on more than one
+model); still ONE fix dispatch and ONE scoped re-review. Ledger the `Final review: ×N` line.
 
 ## The simplification pass (optional, before finishing)
 
@@ -463,7 +470,9 @@ finished feature's files changed — the baseline only says THAT they changed; c
    security-sensitive feature) with: the feature folder `.specs/<feature>/`, the active tracks, the `trace_check` result
    (its gaps and `code` block, pasted), the source roots to inspect and, after a drift, the drifted files. The reviewer
    is read-only and works AC by AC: implemented? (file:line) · tested? (test name / T-ID) → ✅ / ❌ / ⚠️, then returns —
-   in its reply — the missing work as **proposed tasks** shaped for `spec_append_tasks`.
+   in its reply — the missing work as **proposed tasks** shaped for `spec_append_tasks`. **With a review panel**
+   (`reviewPanel`): one converge reviewer on that tier and one on each panel model not already it, in one message — an AC
+   is ✅ only when every model says ✅, each ❌ still gets its verifier, the proposed tasks merged by AC and files.
 3. **Triage the proposals yourself.** A gap fixable within the approved ACs and design is a task. A gap that
    needs a different AC, design decision or test expectation is a **spec change** — back to its phase
    (`spec_impact` after the edit), never a task. **After a drift** (a finished feature), ask what the change meant: an ❌
@@ -480,6 +489,41 @@ finished feature's files changed — the baseline only says THAT they changed; c
 **No subagent tool?** Run the same AC-by-AC checklist inline and write the same per-AC table before proposing
 tasks. Either way, never append a task the human hasn't approved.
 
+## Review on more than one model (`meta.reviewModels`, opt-in)
+
+A fresh reviewer misses less than the context that wrote the code; a reviewer on another model misses different things
+again. The project's **review panel** — 2–3 model names in `roadmap.json → meta.reviewModels` (`spec_init {reviewModels:
+["opus", "sonnet"]}`, `["diverse"]` = opus + sonnet, `[]` off; CLI `init --review-models opus,sonnet | diverse | off`) —
+runs the feature-wide reviews once per model. `spec_doctor` and `spec_next_action` carry `reviewPanel: {models}` while it is
+set (none for an xs change or a spike); next_action's finish step then names the branch review first. The engine dispatches
+nothing and records nothing: what follows is yours.
+
+- **What it covers.** The final review and `/spec-review <feature> branch` (§ Final review), converge (§ Converge mode) and
+  the deep review's gate critics (`references/critic-review.md` §1). The panel ADDS models — it never replaces a review's own
+  tier: the final review is the most capable model plus each panel model not already it. Never multiplied: the task review
+  (its ONE reviewer runs on the first panel model other than the implementer's — §5), the pre-flight, the verifier, the cold
+  read, the visual and the simplify-mode review, a fix dispatch, a scoped re-review.
+- **Dispatch** one reviewer per model in ONE message, an explicit `model` on each, the same inputs to every one — never one
+  reviewer's output to another (each is a fresh goldfish).
+- **Merge first.** The same finding = the same file with overlapping lines, or the same AC ID, AND the same defect (the
+  input or state that breaks); in doubt, two findings. A merged finding keeps the higher severity and lists each model with
+  its confidence. Every finding of every model enters the merged list; minors are the union, deduped.
+- **Then verify each MERGED finding once** (§6): one verifier per merged finding, not one per model's copy — the merge is the
+  saving. Agreement only ranks a finding first: two models read the same package, so they can share a mistake about
+  pre-existing lines or an AC that asks for the behaviour — it never skips the verifier. A ⚠️ from any model is yours to
+  resolve. No vote: any confirmed finding or ❌ means Needs fixes.
+- **Ledger** `Final review: ×2 (requested opus, sonnet) — 1 agreed, 3 single, 2 minor` (agreed = raised by two or more
+  models). Name the models you REQUESTED: you can't see which one ran. **Resume:** the ledger already has that line since the
+  last task → the panel review ran; don't dispatch it again.
+- **When a model can't run.** Claude Code's Agent tool takes an alias only (`opus`, `sonnet`, `haiku`, `fable`) — a full model
+  ID or another host's name can't be passed there. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` (no `model` parameter), a mod's
+  `agent.spawn` hook that sets the model, an `availableModels` allowlist that substitutes it, or an `opus` alias whose family
+  the provider can't tell (set `ANTHROPIC_DEFAULT_OPUS_MODEL`) runs every reviewer on one model: say so in the ledger and the
+  report ("review ×2 requested opus, sonnet — the host ran one model"): fresh contexts, no model diversity. Without a subagent
+  tool (Cursor, Windsurf, Copilot, Gemini, claude.ai), review inline and say the panel was not run.
+- **Cost:** one more review dispatch per extra model per review it covers (the final review once a feature; converge and the
+  gate critics when you run them) — say so when the user turns it on (init's note does).
+
 ## Model selection
 
 Pass `model` explicitly on every dispatch. The implementer, the reviewer, the verifier and the simplifier declare
@@ -493,12 +537,13 @@ declares `model: inherit`: one semantic review per gate, on the session's own mo
 | Implementer working from prose, multi-file integration | standard (`sonnet`) — the floor for prose tasks |
 | Visual review (`spec-ui-reviewer`) | the session's own model (it declares `model: inherit`); the most capable at size l |
 | Pre-flight (the critic, brief mode) | cheapest (`haiku`) for a brief that carries the code or values; standard otherwise |
-| Task reviewer | standard (`sonnet`); scale up for subtle concurrency/security diffs |
+| Task reviewer | standard (`sonnet`); scale up for subtle concurrency/security diffs; with a review panel, the first panel model other than the implementer's |
 | Scoped re-review of a small fix | cheap-to-standard |
 | Verify pass (one finding) | cheapest (`haiku`); standard for a security, concurrency or data-loss finding |
 | Fix rounds 4–5 | one tier above the implementer that got stuck |
 | Final review, architecture-level judgment | most capable (`opus`) |
 | Simplifier | standard (`sonnet`); its simplify-mode review standard too |
+| Review panel (`reviewPanel`) | adds its models to the final review, converge and the gate critics — one reviewer each, beside the row's own model, never in place of it |
 
 Turn count beats token price: the cheapest models take 2–3× the turns on multi-step work.
 
@@ -522,4 +567,7 @@ Turn count beats token price: the cheapest models take 2–3× the turns on mult
 | "The new helper is tiny, no need to look for an existing one" | Tiny duplicates are how a codebase ends up with four retry wrappers. No **Reuse** block with the search in the report → send it back. |
 | "The reviewer is sure — skip the verifier" | A reviewer's certainty is a claim. One cheap verify per finding costs less than one fix round spent on a false positive. |
 | "Unconfirmed means wrong — drop it" | Unconfirmed means not proven. It skips the fix loop, not the ledger: the checkpoint shows it and the final review triages it. |
+| "The models disagree — take the majority" | There is no vote. Every model's findings enter the merged list; any confirmed finding or ❌ means Needs fixes. |
+| "Two models agree — skip the verifier" | They read the same package and can share a mistake. Agreement ranks a finding first; each merged finding is still verified once. |
+| "The second model only repeated the first — drop it" | Its value is what only it sees. Merge the repeats; keep every single-model finding for the verify pass. |
 | "The simplification broke a test — adjust the test" | The tests are the proof that behaviour didn't change. Revert the simplification. |

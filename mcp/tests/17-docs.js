@@ -694,6 +694,37 @@ exports.run = async ({
       "1.22 review P12: README.es.md says 'el gate de evidencia' (as es.js), never 'la puerta'; no command's ES description says 'feature' (got " + JSON.stringify(esDescFeature) + ")");
   }
 
+  { // 1.36 the review panel (meta.reviewModels) — the protocol is prose: merge first, then ONE verify per merged finding; the panel
+    // ADDS models; the ledger names the models REQUESTED; what collapses it; the agents stay unaware of it
+    const rd = (...p) => fs.readFileSync(path.join(root, ...p), "utf8").replace(/\r\n/g, "\n").replace(/\s+/g, " ");
+    const ref = (f) => rd("skills", "dev-spec-driven", "references", f);
+    const sub = ref("subagent-execution.md"), critic = ref("critic-review.md"), review = rd("commands", "spec-review.md");
+    const agents = fs.readdirSync(path.join(root, "agents")).filter((f) => f.endsWith(".md")).filter((f) => /reviewPanel|reviewModels/.test(rd("agents", f)));
+    const rows = [
+      ["subagent-execution: the section", sub, /## Review on more than one model \(`meta\.reviewModels`, opt-in\)/],
+      ["subagent-execution: the key", sub, /`reviewPanel: \{models\}`/],
+      ["subagent-execution: merge, then verify each merged finding once", sub, /\*\*Then verify each MERGED finding once\*\* \(§6\)/],
+      ["subagent-execution: agreement never skips the verifier", sub, /it never skips the verifier/],
+      ["subagent-execution: the panel adds models", sub, /The panel ADDS models — it never replaces a review's own tier: the final review is the most capable model plus each panel model not already it/],
+      ["subagent-execution: the ledger line, requested", sub, /Final review: ×2 \(requested opus, sonnet\) — 1 agreed, 3 single, 2 minor/],
+      // (by fragments: the full names are Claude Code's, allowlisted by 17-docs-identifiers.js as names no code holds)
+      ["subagent-execution: the collapse paths", sub, /_MODEL_FORCE` \(no `model` parameter\), a mod's `agent\.spawn` hook.*allowlist that substitutes it.*whose family the provider can't tell/],
+      ["subagent-execution: no subagent tool", sub, /review inline and say the panel was not run/],
+      ["subagent-execution: the task reviewer on another model", sub, /this ONE reviewer runs on the first panel model that differs from the implementer's/],
+      ["subagent-execution: the 'reviewer is sure' row kept", sub, /"The reviewer is sure — skip the verifier"/],
+      ["subagent-execution: no vote", sub, /"The models disagree — take the majority" \| There is no vote/],
+      ["critic-review §1: the gate critics on the panel", critic, /at size l, critics A and B on the panel's first two models \(a third model adds a third critic\); at s, m or no size, one critic per model\. The cold read stays one/],
+      ["spec-review branch: fresh reviewers per model", review, /one final-mode `dev-spec-driven:spec-reviewer` on the most capable model and one on each panel model not already it/],
+      ["spec-review converge: every model's ✅", review, /an AC is ✅ only when every model says ✅, every ❌ still verified/],
+      ["spec-doctor --deep", rd("commands", "spec-doctor.md"), /`reviewPanel` in this result.*critic-review\.md` §1/],
+      ["spec-setup init", rd("commands", "spec-setup.md"), /`reviewModels` \(`--review-models opus,sonnet \| diverse \| off`\)/],
+      ["spec-finish: the panel first", rd("commands", "spec-finish.md"), /`reviewPanel`\), the branch review on every model comes first/],
+      ...["README.md", "README.pt.md", "README.es.md"].map((f) => [f + ": spec_init's settings", rd(f), /\| `spec_init` \|[^|]*`reviewModels`/]),
+    ];
+    all("1.36 review panel: the prose protocol — subagent-execution.md's section (merge, verify each merged finding once, the panel adds models, the requested-models ledger line, the collapse paths), critic-review §1, spec-review branch / converge, spec-doctor, spec-setup, spec-finish, the READMEs' spec_init row; no agent file knows the panel (got agents " + JSON.stringify(agents) + ")",
+      Object.assign(Object.fromEntries(rows.map(([k, text, re]) => [k, () => re.test(text)])), { agentsUnaware: () => agents.length === 0 }));
+  }
+
   // Release hygiene: the three version fields agree.
   const vRoot = path.join(__dirname, "..");
   const vPkg = require(path.join(vRoot, "package.json")).version;

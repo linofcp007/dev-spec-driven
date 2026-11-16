@@ -105,6 +105,9 @@ History at the end.
   approvals. Lists (`tracks`, `dependsOn`, roles, milestone `features`) → a 3-way SET merge; keyed roadmap entries
   (`features`, `backlog` — case-insensitive —, `meta.milestones`, `meta.checks`, `meta.approvalRoles`) per key, a change
   beating a delete; `meta.specVersion` → the higher, `meta.changelogAt` → the later, `meta.evidenceSince` → the earlier.
+- **`meta.reviewModels` (1.36) takes the default rule on purpose** — an ORDERED list (the first model leads), at most 3: never
+  a set merge (a union of two panels could hold 4). One side changed it → that side; both changed it differently (another list,
+  or off against a change) → a real conflict (cli/tests/16-conventions-merge-state.js).
 - **A real conflict** (anything else both sides changed differently — a meta scalar, an unknown key): ours kept, the conflict
   written INTO the file as a top-level `mergeConflicts` list (valid JSON; each once — `mergeCanon`), exit 1, and doctor fails
   `merge-conflicts` until someone picks the values and deletes the list. An unparseable side merges nothing (exit 1).
@@ -384,6 +387,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.25** — `branch` (create --branch) merges as the earlier record.
 - **1.25.1 review 7** — `--install` / `--uninstall` lstat `.gitattributes` first: a cloned repository's link made --install
   write into the file it pointed at.
+- **1.36** — `meta.reviewModels` needs no rule of its own: the default 3-way per key gives the conflict an ordered, capped
+  list needs; a test holds it there.
 
 ### The locks
 - **1.13** — the cross-process feature lock: two MCP servers (or MCP + `dev-spec done`) on one feature lost ticks and evidence

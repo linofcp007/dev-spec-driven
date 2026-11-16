@@ -24,11 +24,17 @@ With a subagent tool, write the diff to `.specs/<feature>/.execution/review.diff
 `dev-spec-driven:spec-verifier` per finding (the finding verbatim, the diff, the merge base and HEAD, the feature folder) —
 in parallel; without one, check each yourself and say so. Report the findings rated 80 or more by severity, the rest one
 line each under "Unconfirmed (below 80)"; then `trace_check {name}` (`matrix: true` for the traceability matrix).
+**A review panel** (`spec_next_action {name}`'s `reviewPanel`) with a subagent tool: the reviewers are fresh — write the
+package as above and dispatch, in one message, one final-mode `dev-spec-driven:spec-reviewer` on the most capable model and
+one on each panel model not already it (`model` on each), instead of reviewing yourself; merge their findings, then verify
+each merged finding once (`subagent-execution.md` → Review on more than one model). Ledger `Final review: ×N (requested …)`.
 
 **converge** — the feature AC by AC against the code: `spec_status` + `trace_check {name, code: true}` (+ on a finished
 feature `spec_drift {name}`: its changed files go to the reviewer, the baseline only says that they changed), then
 `dev-spec-driven:spec-reviewer` in converge mode (inline without subagents): per AC implemented (file:line)? tested
 (T-ID)? → ✅ / ❌ / ⚠️, with proposed tasks (an ❌ checked by a `dev-spec-driven:spec-verifier` before it costs a task).
+With a review panel: one converge reviewer per model beside its own — an AC is ✅ only when every model says ✅, every ❌
+still verified, the tasks merged by AC and files.
 A gap that needs another AC, design decision or test is no task:
 `/spec-change <feature> impact`. After a drift, an ❌ the change didn't intend is a regression of a shipped AC
 (`/spec-bugfix`, not a task); one it intended is a spec change. Append only the tasks the user approves —

@@ -57,7 +57,7 @@ const TOOLS = [
   {
     name: "spec_init",
     description:
-      "Initialize .specs/ and the steering files of the tracks the project uses (core always; each track adds its own). Idempotent — never overwrites a file. `lang` writes the steering in that language and becomes the project default. Optional project settings, each unchanged when omitted and always reported back: `guard`, `stopCheck`, `approvalGuard`, `checks`, `guardian`, `evidence`, `approvalRoles`. Lowering a protection (guard, approvalGuard, roles, a check) is the user's decision — never without their consent.",
+      "Initialize .specs/ and the steering files of the tracks the project uses (core always; each track adds its own). Idempotent — never overwrites a file. `lang` writes the steering in that language and becomes the project default. Optional project settings, each unchanged when omitted and always reported back: `guard`, `stopCheck`, `approvalGuard`, `checks`, `guardian`, `evidence`, `approvalRoles`, `reviewModels` (2–3 review models, diverse or []). Lowering a protection (guard, approvalGuard, roles, a check) is the user's decision — never without their consent.",
     inputSchema: {
       type: "object",
       properties: {
@@ -70,6 +70,7 @@ const TOOLS = [
         checks: { type: "object", additionalProperties: { type: "string" }, description: "Project check commands {name: command}, e.g. {\"test\": \"npm test\"} — spec_finish needs a passing run of each; an empty command removes one." },
         guardian: { type: "boolean", description: "true: dev-guardian's gate as check `guardian` (a scan of minutes — only when the user asks); false removes it." },
         approvalRoles: { type: "object", description: "{<phase>: [<role>, …]}: every role signs the phase off; {} clears them." },
+        reviewModels: { type: "array", items: { type: "string" } }, // 1.36 the review panel — the settings sentence says it (budget)
         projectDir: PROJECT_DIR_INIT,
       },
     },

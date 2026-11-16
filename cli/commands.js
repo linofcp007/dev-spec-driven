@@ -98,6 +98,7 @@ const VALUE_FLAG_SPECS = [
   ["check", { repeatable: true }], // init --check name="cmd" (repeatable; name= removes) = spec_init {checks: {name: cmd}}
   ["guardian", { values: "on off", optional: true }], // init --guardian [on|off] — a bare --guardian is on (= spec_init {guardian: true|false})
   ["approval-guard", { values: "@approval-guard" }], // init --approval-guard off|ask|deny (= spec_init {approvalGuard})
+  ["review-models", { values: "diverse off" }], // init --review-models opus,sonnet|diverse|off (= spec_init {reviewModels}) — 1.36
   ["roles"], ["role"], ["through", { values: "@through" }], // init --roles …, approve --role <role> / --through <phase>
   ["since", { values: "last all" }], // changelog --since <ISO date|last|all>
   ["tracker", { values: "@tracker" }], // export [f] --tracker jira|linear
@@ -567,7 +568,7 @@ const COMMANDS = [
   },
   {
     name: "init",
-    options: ["lang", "tracks", "guard", "stop-check", "check", "guardian", "approval-guard", "evidence", "roles"],
+    options: ["lang", "tracks", "guard", "stop-check", "check", "guardian", "approval-guard", "evidence", "roles", "review-models"],
     args: ["@track..."],
     values: { evidence: "reported observed" },
     help: `  init [tracks...] [--lang]       Scaffold .specs/steering (--lang en|pt|pt-BR|es → project default)
@@ -584,7 +585,9 @@ const COMMANDS = [
                                   --roles requirements=product,design=tech+security: approvals by role (a listed phase is approved once
                                   every role signed its current content); --roles none clears them
                                   --approval-guard off|ask|deny: the human approval guard — an agent's approve (MCP or this CLI through
-                                  its shell tool), feature remove --yes or lowering this guard asks you (ask) or is refused (deny)`,
+                                  its shell tool), feature remove --yes or lowering this guard asks you (ask) or is refused (deny)
+                                  --review-models a,b[,c]|diverse|off: the review panel (roadmap.json meta.reviewModels) — the branch
+                                  review, the deep review's critics and converge run once per model (diverse: opus,sonnet)`,
     run(c) {
       const { flags, projectDir, out, fail, die, log } = c;
       // --guard on|off|scope = spec_init {guard: true|false|"scope"}; absent leaves the guard as it is.
@@ -645,6 +648,7 @@ const COMMANDS = [
         if (r.observedWarning) log("  " + r.observedWarning); // observed evidence without the approval guard
         if (r.guardianNote) log("  " + r.guardianNote); // 1.29: --guardian on / off
         if (r.guardianOffer) log("  " + r.guardianOffer); // dev-guardian installed (or .guardian/) and no check runs it: offered, never set
+        if (r.reviewModelsNote) log("  " + r.reviewModelsNote); // 1.36: --review-models set it, or the stored value is ignored
       });
     },
   },
@@ -2232,6 +2236,7 @@ const HELP_FOOT = `  The project: --project <dir> (an existing folder — only i
          --md / --csv / --gherkin / --adr / --write (export)  --since <ISO date|last|all> / --write (changelog)
          --text "<markdown>" (import plan|execplan|fluidplan)  --print-config (statusline)  --install / --uninstall / --check (merge-state)
          --guard on|off|scope / --stop-check on|off / --approval-guard off|ask|deny / --evidence reported|observed (init)  --message "…" / --agent <type> (stop-check)
+         --review-models a,b[,c]|diverse|off (init)
          Value flags need a value (--flag value or --flag=value); a following --flag is not one.
          Switches: --flag, or --flag=true|false (1/0, yes/no, on/off; anything else is an error).
          With --json a refused operation still prints its result ({"ok": false, "error": …}) on stdout, exit 1 — a usage error

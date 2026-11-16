@@ -46,6 +46,21 @@ Phase 6, opt-in.
   `/spec-review` branch / converge and the simplification pass start from the duplicate detector (`spec_scan {duplicates:
   true, name}` — quality.md → Duplicate-code detector): its `existing` runs are the reviewer's candidate findings, its `within`
   runs the simplifier's, each verified before it costs a fix.
+- **`reviewPanel` (1.36)** — `roadmap.json → meta.reviewModels`, opt-in: 2–3 model names checked by SHAPE, never a list of
+  known names (`RE_MODEL_NAME`: up to 128 characters — a Bedrock profile ARN —, a leading letter or digit, an optional `[1m]`
+  suffix; `REVIEW_RESERVED` inherit / default / diverse / off / none; duplicates case-insensitive, stored as given), the word
+  `"diverse"` (= `REVIEW_DIVERSE`, opus + sonnet — stored as the word, so a release can change the pair), off / `[]` deletes the
+  key. Set only by `spec_init {reviewModels}` / `init --review-models` (guards.js `reviewModelsInput` validated BEFORE any write —
+  `invalid-arguments` [reviewModels] —, `setReviewModels` inside the roadmap lock after `setApprovalGuard`); init always echoes
+  the current list (`reviewModels`, `[]` = none) and a `reviewModelsNote` when it set it — or when the stored value doesn't read
+  (`reviewModelsSetting`: `invalid` → no panel + the `ignored` note, never a roadmap shape error over an advisory setting;
+  `[]` / `["off"]` are silent; `["diverse"]` reads as the word). doctor.js `reviewPanel(c)` → `{models}` in every doctor result
+  (the lean one too) but an xs feature (a change — critic-review.md's xs row reviews nothing by default); a spike never gets
+  there; next_action copies the lean doctor's (gates-and-approvals.md → next_action). Not a guard-down (nothing enforces
+  it — the engine sees no dispatch); no per-task panel (the brief carries none: the final review on every model sees each
+  task's diff). What runs per model is prose: `references/subagent-execution.md` → Review on more than one model (merge
+  first, then ONE verify per merged finding; the panel adds models, never replaces a review's own tier; the task reviewer on
+  the first panel model other than the implementer's), `references/critic-review.md` §1 (the gate critics).
 
 ## Evidence
 
@@ -626,6 +641,12 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
 - **1.31** — the brief's `preflight` key and the pre-flight (from google/elephant-goldfish-model's zero-decision rule): a
   brief that left a design choice open was found only when the implementer came back NEEDS_CONTEXT — a dispatch spent — or
   not at all when it chose alone.
+- **1.36** — the review panel (`meta.reviewModels`, doctor's / next_action's `reviewPanel`): every review step ran ONE model —
+  the task review, the final / branch review and converge one spec-reviewer each, the size-l gate critics both on the session's
+  model, `/spec-review branch` read by the session that wrote the code. The design's per-task panel (a brief key, the critical
+  flows widening gate / converge) was cut before it shipped: it multiplied the most frequent dispatch, and the final review on
+  every model already covers each task; so was "two models agree → no verifier" (two reviewers of the same package share its
+  blind spots: merge, then verify each merged finding once).
 
 ### Evidence
 - **v1.12** — `_Verify:_` and the evidence verdict. A bare `{exitCode: 0}` was a valid record then — kept since as a legacy claim.

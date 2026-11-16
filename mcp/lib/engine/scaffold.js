@@ -32,6 +32,7 @@ let activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRole
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
   branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts; // 1.23 review 5 · 1.24 r6 · 1.25 (create --branch)
 let guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher; // guardian.js — 1.29 (init --guardian)
+let reviewModelsInput, reviewModelsSetting, setReviewModels; // guards.js — 1.36 the review panel (init --review-models)
 function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuardLevel, approvalRolesOf, artifactState,
   checksInput, checksPlanError, classify, createFlow, dayOf, detectTracks, ensureDir, ensureLockIgnore, enumArg, errs,
   evidenceMode, evidenceModeInput, existingFeature, featureDirs, featureLang, fingerprintMatches, flowOrderText,
@@ -50,7 +51,8 @@ function __link(E) { ({ activeTasks, allTracks, approvalGuardInput, approvalGuar
   CHANGE_FILE, featureSize, FEATURE_SIZES, headingMatches, isChangeDir, MARKER_TRACKS, sizeInput, TRACK_MARKER, TRACK_OVERLAPS, TRACK_SECTIONS, TRACK_TASK_OVERLAPS, trackTaskHeadingIs,
   trackSectionReport, sectionVerdict,
   appendSpecText, flatText, isDirSafe, slugifyFull, specsWriteContained, specTitle, tasksRewrite, specNameText, isSteeringStub,
-  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher } = E); }
+  branchNameOk, defaultBranchName, featureBranchRecord, gitRepoFacts, guardianChecks, guardianLauncherOn, guardianOffer, guardianOnNote, isGuardianCheck, setGuardianLauncher,
+  reviewModelsInput, reviewModelsSetting, setReviewModels } = E); }
 
 // spec_import's source formats — its `tool` enum, each with the name its notes print — and those that write .specs/steering/
 // files, not a feature. The importers (import/) load on first use (engine/index.js LAZY); these lists are read as the surfaces
@@ -131,12 +133,15 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   const roles = setsRoles ? validateApprovalRoles(opts.approvalRoles, normalizeLang(lang || projectLang(projectDir))) : null;
   if (roles && !roles.ok) return { ok: false, error: roles.error };
   const approvalGuard = approvalGuardInput(opts.approvalGuard); // "off" | "ask" | "deny" — anything else leaves it unchanged
+  // 1.36 the review panel (roadmap.json meta.reviewModels): 2–3 model names, "diverse" or off — a bad value refused before any write
+  const rmIn = reviewModelsInput(opts.reviewModels, lang || projectLang(projectDir));
+  if (rmIn && rmIn.error) return { ok: false, error: rmIn.error, code: "invalid-arguments", invalid: ["reviewModels"] };
   // 1.30: dev-guardian's gate on → its launcher, .specs/guardian.cjs, is written FIRST: a path the write gate refuses (a folder, a
   // link) stops init before meta.checks names a check that could never run; a launcher this call created is removed again when
   // meta.checks can't be written (review 8: init was not atomic).
   const launcher = opts.guardian === true ? guardianLauncherOn(projectDir, normalizeLang(lang || projectLang(projectDir))) : {};
   if (launcher.refusal) return launcher.refusal;
-  if (lang || setsGuard || nc || setsRoles || setsStop || approvalGuard || evMode) {
+  if (lang || setsGuard || nc || setsRoles || setsStop || approvalGuard || evMode || rmIn) {
     const meta = withRoadmapLock(projectDir, () => {
       const bad = roadmapError(projectDir) || (nc ? checksPlanError(projectDir, nc) : null);
       if (bad) return { ok: false, error: bad };
@@ -149,6 +154,7 @@ function initProject(projectDir, tracks, lang, opts = {}) {
       if (nc) writeChecks(projectDir, nc);
       if (setsRoles) setApprovalRoles(projectDir, roles.map);
       if (approvalGuard) setApprovalGuard(projectDir, approvalGuard);
+      if (rmIn) setReviewModels(projectDir, rmIn);
       return { ok: true };
     });
     if (!meta.ok) {
@@ -209,6 +215,14 @@ function initProject(projectDir, tracks, lang, opts = {}) {
   // (on: + no baseline yet, record one now — the user's step — and the .gitignore lines the project lacks: guardianOnNote)
   if (setsGuardian) res.guardianNote = res.guardian ? guardianOnNote(projectDir, res.checks.guardian, lng) : i18n.msg(lng).guardian.off;
   else { const offer = guardianOffer(projectDir, lng); if (offer) res.guardianOffer = offer; }
+  // 1.36: the CURRENT review panel ([] = none) — + a note when this call set it, or when the stored value doesn't read (ignored)
+  const rs = reviewModelsSetting(projectDir), RM = i18n.msg(lng).reviewModels;
+  res.reviewModels = rs.models;
+  if (rmIn) res.reviewModelsNote = rs.models.length ? RM.on(rs.models.join(", "), rs.diverse) : RM.off;
+  else if (rs.invalid !== undefined) {
+    const raw = JSON.stringify(rs.invalid);
+    res.reviewModelsNote = RM.ignored(raw.length > 120 ? raw.slice(0, 119) + "…" : raw);
+  }
   return res;
 }
 

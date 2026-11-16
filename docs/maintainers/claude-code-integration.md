@@ -25,6 +25,14 @@ right after a write), a feature's folder through `resolveFeature()` / `existingF
   the files the brief names) with its Read tool. The
   implementer, the simplifier and the reviewer keep CLAUDE.md: they write or judge code against the project's
   conventions. mcp/tests/17-docs.js holds both sides.
+- **A model per dispatch — the review panel (1.36).** An agent's frontmatter `model:` is its default; the Agent tool's
+  per-invocation `model` wins over it (then `CLAUDE_CODE_SUBAGENT_MODEL`, then the parent's) and takes an ALIAS only (`opus`,
+  `sonnet`, `haiku`, `fable`). The review panel (`meta.reviewModels`, tasks-and-evidence.md → Subagent-driven execution) is
+  that parameter, once per model, and nothing else: the agents' files stay unaware of it (their independence). It collapses
+  to one model, invisibly to the engine, under `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` (no `model` parameter), a mod whose
+  `agent.spawn` hook sets the model, an `availableModels` allowlist substitution, or an `opus` alias whose family the
+  provider can't tell (`ANTHROPIC_DEFAULT_OPUS_MODEL`); a full model ID can't be passed. So the controller ledgers the models
+  it REQUESTED, never "ran on" (`references/subagent-execution.md` → Review on more than one model).
 - **One dev-spec project rule — `mcp/lib/probe.js`.** Node core only, never the engine; every surface asks it — the hooks
   (lazily, past each one's pre-filter), hooks/hook-utils.js (it re-exports the readers), the CLI's engine-free paths
   (cli/completion.js `statusProbe` / `resolveProject`) and the engine: doctor.js `isDevSpecDir` IS `probe.isDevSpecProject`
@@ -592,6 +600,8 @@ How the rules above came to be, section by section — grep a release (`1.21.1`)
   fresh subagent had no conversation, but every CLAUDE.md file still loaded — the author's context in the reviewer's.
 - **1.32** — a sixth agent, spec-ui-reviewer (Shopify's Helix UI gate): the visual review needs a reviewer that sees only the
   images, so it is no mode of the code reviewer (which keeps CLAUDE.md and reads the diff).
+- **1.36** — the review panel dispatches the same agents with a `model` each; no agent file, hook or matcher changed (the
+  SubagentStop matcher still gates the implementer and the simplifier only — a reviewer reports no run).
 
 ### Guard mode
 - **1.13** — guard mode (`meta.guard`, `hooks/guard-hook.js`), first written up with the catalog / drift / restore notes.

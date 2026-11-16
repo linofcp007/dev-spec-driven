@@ -119,6 +119,14 @@ review findings — is in History at the end.
   (`approvalInForceAt()`; `tests`, fingerprint-less, always counts) and a revocation of a phase back as it was. Stale → the
   step stays `finish` with `staleBaseline` {finishedAt, since, newFiles}, an older execution sign-off is asked again
   (`executionSignOffStale()`); with drift too → `drift` + `staleBaseline` (`nx.driftedStale`).
+- **The review panel (1.36).** Every doctor result (the lean one too) carries `reviewPanel` {models} while `meta.reviewModels`
+  names 2–3 models (doctor.js `reviewPanel`; none for an xs feature or a spike — tasks-and-evidence.md → Subagent-driven
+  execution); next_action copies the lean doctor's, never computes it again, and its early returns (an invalid state or
+  roadmap) carry none. At a `finish` step — the first one or a re-finish (`staleBaseline`) — the recommendation STARTS with
+  `next.reviewBranch`: the branch review on every model before the step's own text, i.e. before the optional simplify pass
+  and the project checks' line (a fix round from that review would make their runs stale). A hint on the step, never a
+  step: verify / drift / finished set their own step and carry none, so nothing can loop; the controller's ledger line says
+  whether the review ran (the engine reads no ledger).
 - **finish blockers** (stable ids, in order — the `execution` approval refuses on exactly these): `state`, `roadmap` (never
   inside `doctor`), `doctor`, `root-cause`, `placeholders` (anywhere in the chain), `changed-since-approval` (by content),
   `tasks` (none), `open-tasks`, `verification`, `suite-evidence` (`meta.checks`), `approval-gates` (a phase missing a role's
@@ -440,6 +448,10 @@ here. "r5 review" is 1.23's fifth review.
 - **1.33** — two registry entries with no probe (warns, never in `GATES`): `critical-flows` (phase 2) and
   `critical-flow-tests` (phase 3), over one context view (`critical`); `approvePhase` stamps `critical: true` on the design
   and test-plan approvals (and their records) so an approval made before 1.33 is never flagged (quality.md → Critical flows).
+- **1.36** — doctor's `reviewPanel` {models} beside `size` (none for an xs feature or a spike) and next_action's finish-step
+  hint. The design appended the hint after the step's text, i.e. after the simplify clause and the project checks' line: the
+  order the protocol forbids (the simplify pass and the check runs come after the final review's fixes) — it is prepended. It
+  also covered only the first finish; a re-finish (new work after a finish) needs the panel review as much.
 
 ### Approval fingerprints and pending gates
 - **1.12 / 1.13** — approvals before 1.13 have no `.history/` snapshot (the fingerprint alone decides); an upgraded 1.12

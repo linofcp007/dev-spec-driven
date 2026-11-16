@@ -5,7 +5,7 @@ argument-hint: "[feature] [--run]"
 ---
 
 Feature: $ARGUMENTS — an optional simplification pass (`/spec-review <feature> simplify`) changes code: run it before
-this, not after.
+this, not after. With a review panel (`spec_next_action`'s `reviewPanel`), the branch review on every model comes first.
 
 1. `spec_finish {name, write: true}` (CLI `dev-spec finish <feature> --write`). Not `readyToFinish` → show the
    **blockers** and stop: failing doctor checks, open or unverified tasks, project checks without a passing run on the

@@ -1231,6 +1231,8 @@ const msg = {
       approveTests: (slug, what) => `Phase 4, the hard gate: ${({ tdd: "write every planned test and confirm each fails for the right reason", ai: "write the deterministic tests and the eval harness, and record the baseline", both: "write every planned test (each failing for the right reason) and the eval harness, and record the baseline" })[what]} — /spec ${slug} tests; no implementation code until then. Then approve — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implement task #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `All tasks done — close the feature with /spec-finish ${slug} (spec_finish): readiness report + merge summary. Optional, before it: /spec-review ${slug} simplify — a behaviour-preserving cleanup of the feature's own code, proven by its tests.`,
+      // 1.36 the review panel (meta.reviewModels), put BEFORE the finish step's text: the branch review on every model comes first
+      reviewBranch: (slug, list) => `Review panel (meta.reviewModels: ${list}): first the branch review on every model — /spec-review ${slug} branch, one fresh reviewer per model (in subagent execution: the final review) — unless the ledger already has its "Final review: ×N" line since the last task; then the optional simplify pass, the project checks and /spec-finish ${slug}.`,
       breakIntoTasks: (slug) => `Break the design into tasks — /spec ${slug} tasks.`,
       drifted: (slug, day, n, total, files) => `'${slug}' was finished on ${day}, but ${n} of ${total} implementing file(s) changed since: ${files} (${DEV_SPEC} drift ${slug}). The baseline only says that they changed — /spec-review ${slug} converge reads the code AC by AC, from those files. Then decide: the spec is now wrong → /spec-change ${slug} impact (or a new feature with _Supersedes:_); the code is wrong → fix it (/spec-bugfix); harmless → re-run /spec-finish ${slug} for a fresh baseline.`,
       // signOff: null (signed off — nothing left), {} (no execution approval yet) or {at, why} (an execution approval exists
@@ -2141,6 +2143,14 @@ const msg = {
       denyMcp: (list, command) => `dev-spec approval guard: refused — approvals are the human's, and an agent may not ${list}. ` +
         (command ? `Stop and ask the user to run it themselves, in their own terminal: ${command}` : "Stop and ask the user to make that change themselves, in their own editor or terminal") +
         " — then wait for them. Do not retry it by another route (the MCP tool, the CLI, a script or an edit of .specs/ files). (meta.approvalGuard: deny.)",
+    },
+    // 1.36 the review panel (roadmap.json meta.reviewModels · spec_init {reviewModels} · `dev-spec init --review-models`). Model names,
+    // `meta.reviewModels`, `diverse` and the slash commands stay English.
+    reviewModels: {
+      on: (list, diverse) => `Review panel ON (meta.reviewModels: ${list}${diverse ? " — diverse" : ""}): the branch review before merge, the deep review's gate critics and converge run once per model — the panel adds models, never replaces the review's own —, their findings merged and each verified once; the task reviewer runs on a panel model other than the implementer's. Each extra model costs one more review dispatch per review it covers. Claude Code dispatches aliases only (opus, sonnet, haiku, fable): there, another name runs the review on one model.`,
+      off: "Review panel OFF (meta.reviewModels): each review runs on one model.",
+      bad: (v) => `reviewModels takes 2–3 different model names (e.g. opus,sonnet — each a letter or digit first, then letters, digits or . _ : / @ -, up to 128 characters; never inherit, default, diverse, off or none), diverse, or off (got '${v}').`,
+      ignored: (v) => `meta.reviewModels holds ${v}, which is not 2–3 different model names or "diverse" — ignored: each review runs on one model. Set it with spec_init {reviewModels: ["opus", "sonnet"]} (${DEV_SPEC} init --review-models opus,sonnet), or diverse / off.`,
     },
     // human approvals over MCP elicitation (mcp/server.js: spec_approve, spec_feature remove, spec_init lowering a guard,
     // while meta.approvalGuard is ask | deny and the MCP client can ask its user — elicitation/create). `message` and the field

@@ -242,6 +242,7 @@ for specs not implemented yet, the converge pass for half-done ones) runs inline
 | Team merges of the spec state (`.state.json` / `roadmap.json` merged semantically by git) | ✅ `dev-spec merge-state --install` | ✅ same (git runs it) | ✅ same |
 | Observed evidence (each reported run stamped `observed`; opt-in `evidence: "observed"` verifies only runs the harness saw) | ✅ PostToolUse / PostToolUseFailure hook on Bash and PowerShell | — (no hook: every reported run reads `observed: false` — under `"observed"`, record runs with `dev-spec done <f> <n> --run`) | ✅ `done --run` / `finish --run` (stamped `"cli"`) |
 | Subagent execution (`/executeTask --subagents`) | ✅ | — (`dev-spec brief` per task, run inline) | — (`dev-spec brief`) |
+| Review on more than one model (opt-in `reviewModels`: the branch review, converge and the gate critics once per model) | ✅ a `model` per dispatch (aliases: opus, sonnet, haiku, fable) | the `reviewPanel` key — dispatched where the host has subagents and models, else reviewed inline | — (`init --review-models` sets it; `next-action` names it) |
 | Eval harness | ✅ | ✅ (CLI) | ✅ CLI |
 
 Claude-specific slash commands and hooks don't run inside other IDEs, but **every function they

@@ -1215,6 +1215,7 @@ const msg = {
       approveTests: (slug, what) => `Fase 4, o gate rígido: ${({ tdd: "escreve todos os testes planeados e confirma que cada um falha pela razão certa", ai: "escreve os testes determinísticos e o harness de evals, e regista a baseline", both: "escreve todos os testes planeados (cada um a falhar pela razão certa) e o harness de evals, e regista a baseline" })[what]} — /spec ${slug} tests; nenhum código de implementação antes disso. Depois aprova — /approve ${slug} tests.`,
       implement: (n, text, slug) => `Implementa a tarefa #${n}: ${text} — /executeTask ${slug}.`,
       allDone: (slug) => `Todas as tarefas feitas — fecha a feature com /spec-finish ${slug} (spec_finish): relatório de prontidão + resumo do merge. Opcional, antes disso: /spec-review ${slug} simplify — uma limpeza do código da própria feature sem mudar o comportamento, provada pelos seus testes.`,
+      reviewBranch: (slug, list) => `Painel de revisão (meta.reviewModels: ${list}): primeiro a revisão do ramo em cada modelo — /spec-review ${slug} branch, um revisor novo por modelo (na execução por subagentes: a revisão final) — a não ser que o ledger já tenha a sua linha "Final review: ×N" desde a última tarefa; depois a passagem de simplificação opcional, as verificações do projeto e /spec-finish ${slug}.`,
       breakIntoTasks: (slug) => `Divide o design em tarefas — /spec ${slug} tasks.`,
       drifted: (slug, day, n, total, files) => `'${slug}' foi fechada a ${day}, mas ${n} de ${total} ficheiro(s) de implementação mudaram desde então: ${files} (${DEV_SPEC} drift ${slug}). A baseline só diz que mudaram — /spec-review ${slug} converge lê o código critério a critério, a partir desses ficheiros. Depois decide: a spec está agora errada → /spec-change ${slug} impact (ou uma feature nova com _Supersedes:_); o código está errado → corrige-o (/spec-bugfix); inofensivo → volta a correr /spec-finish ${slug} para uma baseline nova.`,
       finished: (slug, day, total, signOff) => `'${slug}' está fechada (${day}) — os ${total} ficheiro(s) de implementação não mudaram desde então.` +
@@ -2036,6 +2037,12 @@ const msg = {
       denyMcp: (list, command) => `dev-spec approval guard: recusado — as aprovações são da pessoa, e um agente não pode ${list}. ` +
         (command ? `Pede ao utilizador que o execute ele próprio, no seu terminal: ${command}` : "Pede ao utilizador que faça ele próprio essa alteração, no seu editor ou terminal") +
         " — e espera por ele. Não tentes outra via (a ferramenta MCP, a CLI, um script ou uma edição dos ficheiros de .specs/). (meta.approvalGuard: deny.)",
+    },
+    reviewModels: {
+      on: (list, diverse) => `Painel de revisão LIGADO (meta.reviewModels: ${list}${diverse ? " — diverse" : ""}): a revisão do ramo antes do merge, os críticos do gate da revisão profunda e o converge correm uma vez por modelo — o painel acrescenta modelos, nunca substitui o da própria revisão —, com os achados juntos e cada um verificado uma vez; o revisor de cada tarefa corre num modelo do painel diferente do do implementador. Cada modelo a mais custa mais um despacho de revisão por cada revisão que cobre. O Claude Code só despacha aliases (opus, sonnet, haiku, fable): aí, outro nome faz a revisão num só modelo.`,
+      off: "Painel de revisão DESLIGADO (meta.reviewModels): cada revisão corre num só modelo.",
+      bad: (v) => `reviewModels aceita 2–3 nomes de modelo diferentes (p. ex. opus,sonnet — cada um começa por uma letra ou um dígito, depois letras, dígitos ou . _ : / @ -, até 128 caracteres; nunca inherit, default, diverse, off ou none), diverse, ou off (recebido '${v}').`,
+      ignored: (v) => `meta.reviewModels contém ${v}, que não são 2–3 nomes de modelo diferentes nem "diverse" — ignorado: cada revisão corre num só modelo. Define-o com spec_init {reviewModels: ["opus", "sonnet"]} (${DEV_SPEC} init --review-models opus,sonnet), ou diverse / off.`,
     },
     elicit: {
       message: (list, details) => `dev-spec: um agente pede para ${list}.` + (details ? " " + details : "") + " As aprovações são tuas: marca Aprovar só se aprovares isto.",

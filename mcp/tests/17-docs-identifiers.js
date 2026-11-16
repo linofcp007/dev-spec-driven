@@ -30,6 +30,8 @@ exports.run = async ({ ok, root, require }) => {
     // An identifier from outside this code base is allowed by name, with why.
     const OUTSIDE = new Set([
       "subagentStatusLine", // a Claude Code plugin `settings` key (claude-code-integration.md: why a plugin can't ship a status line)
+      // Claude Code's subagent model settings (claude-code-integration.md, 1.36: what collapses a review panel to one model)
+      "CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL_FORCE", "ANTHROPIC_DEFAULT_OPUS_MODEL", "availableModels",
     ]);
     const words = new Set();
     for (const f of codeFiles(["mcp", "cli", "hooks", "scripts", "evals"], /\.(?:js|mjs|cjs|json|sh|ps1|bash|zsh|fish)$/)) {

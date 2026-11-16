@@ -2343,6 +2343,52 @@ function setStopCheck(projectDir, on) {
   writeRoadmap(projectDir, rm);
 }
 
+// 1.36 — the review panel (roadmap.json meta.reviewModels, opt-in): the models the feature-wide reviews run once each on
+// (references/subagent-execution.md → Review on more than one model). Advisory — nothing enforces it, so no guard-down: the
+// engine dispatches nothing; doctor / next_action carry `reviewPanel` {models} (doctor.js reviewPanel), the controller branches on it.
+const REVIEW_DIVERSE = Object.freeze(["opus", "sonnet"]); // "diverse": the most capable + the standard tier (Claude Code aliases)
+const REVIEW_MODELS_MAX = 3;
+// a model name by its SHAPE, never a list of known names (they go stale; other hosts take full IDs): up to 128 characters — a Bedrock
+// inference-profile ARN —, a leading letter or digit (never a flag's dash), an optional `[1m]`-style suffix
+const RE_MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}(?:\[[A-Za-z0-9]{1,8}\])?$/;
+const REVIEW_RESERVED = new Set(["inherit", "default", "diverse", "off", "none"]); // directives, never a model
+// spec_init {reviewModels} (an array) / `init --review-models` (a word: "opus,sonnet", "diverse", "off") → undefined (not given) |
+// {off} | {diverse} | {models} | {error} — 2–3 distinct names (compared case-insensitively), stored as given.
+function reviewModelsInput(v, lang) {
+  if (v === undefined || v === null) return undefined;
+  const list = Array.isArray(v) ? v : typeof v === "string" ? v.split(/[\s,]+/) : null;
+  const bad = () => ({ error: i18n.msg(normalizeLang(lang)).reviewModels.bad(Array.isArray(v) ? v.join(",") : String(v)) });
+  if (!list || list.some((w) => typeof w !== "string")) return bad();
+  const low = list.map((w) => w.toLowerCase());
+  if (!list.length || (list.length === 1 && (low[0] === "off" || low[0] === "none"))) return { off: true };
+  if (list.length === 1 && low[0] === "diverse") return { diverse: true };
+  if (list.length < 2 || list.length > REVIEW_MODELS_MAX || new Set(low).size !== list.length ||
+    low.some((w) => REVIEW_RESERVED.has(w)) || !list.every((w) => RE_MODEL_NAME.test(w))) return bad();
+  return { models: list.slice() };
+}
+// roadmap.json meta.reviewModels → { models: [] | [2–3 names], diverse, invalid? } — "diverse" (or ["diverse"]) is REVIEW_DIVERSE;
+// [] / ["off"] no panel. A value that doesn't read is no panel either (`invalid`: init says it is ignored) — never a roadmap shape
+// error, which would refuse every write over an advisory setting. A roadmap.json that doesn't parse reads as no meta: no panel.
+function reviewModelsSetting(projectDir) {
+  const raw = (loadRoadmap(projectDir).rm.meta || {}).reviewModels;
+  if (raw === undefined) return { models: [], diverse: false };
+  const r = raw === "diverse" ? { diverse: true } : Array.isArray(raw) ? reviewModelsInput(raw) : { error: true };
+  if (r.diverse) return { models: REVIEW_DIVERSE.slice(), diverse: true };
+  if (r.models) return { models: r.models, diverse: false };
+  return r.off ? { models: [], diverse: false } : { models: [], diverse: false, invalid: raw };
+}
+// Inside initProject's roadmap lock: off deletes the key, diverse stores the word (a later release may change the pair), else the
+// list as given — no write when nothing changes.
+function setReviewModels(projectDir, r) {
+  const rm = readRoadmap(projectDir);
+  rm.meta = isObj(rm.meta) ? rm.meta : {};
+  const next = r.off ? undefined : r.diverse ? "diverse" : r.models;
+  if (JSON.stringify(rm.meta.reviewModels) === JSON.stringify(next)) return;
+  if (next === undefined) delete rm.meta.reviewModels;
+  else rm.meta.reviewModels = next;
+  writeRoadmap(projectDir, rm);
+}
+
 // The claim patterns of every language (i18n stopGate.claims / negators / admissions / fixed), compiled once: whole words
 // (unicode boundaries — JS \b never matched "concluído"), case-insensitive, ^/$ per line. Each claim pattern keeps the base
 // languages that list it (pt-BR is pt): the two negators the languages disagree on are read by language (stopNegates).
@@ -3006,6 +3052,7 @@ module.exports = { guardEnabled, guardCheck, setGuard, APPROVAL_GUARD_LEVELS, AP
   approvalCandidate, APPROVAL_WRITERS_ANY, APPROVAL_REMOVERS, APPROVAL_MOVERS, APPROVAL_WRITERS_TARGET,
   APPROVAL_WRITERS_INPLACE, approvalGuardInput, rawApprovalGuard, approvalGuardLevel, setApprovalGuard, shellCommandWords,
   approvalGuardDecision, STOP_RECENT_HOURS, guardLevel, guardInput, stopCheckEnabled, setStopCheck, stopProse,
+  reviewModelsInput, reviewModelsSetting, setReviewModels, // 1.36 the review panel (meta.reviewModels)
   stopClaimSources, STOP_FILTER_SOURCES, stopClaimFilter, stopClaims, stopActivity, recordSpecEdit, stopCheck, devSpecGlob,
   guardTargetPath, SESSION_MAX_UP, worktreeProject, sessionProject, sessionPath, readStopReport, approvalEditTargets,
   // the shell's file operations, fed scripts, MCP file tools, the edit guard on the shell

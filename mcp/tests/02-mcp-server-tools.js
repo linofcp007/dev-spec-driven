@@ -347,7 +347,7 @@ exports.run = async ({ ok, all, eq, rpc, S, root, tmp, SERVER, abort, list, cliI
     const ears = "1. **US-1.AC-1** — WHEN a user saves THE SYSTEM SHALL store the draft";
     // [operation, tool, arguments, CLI words (+ stdin)] — or a function: the same setup on both twins
     const steps = [
-      ["init", "spec_init", { tracks: ["sec"], guard: "scope", stopCheck: true, checks: { test: "npm test" }, evidence: "reported" }, ["init", "sec", "--guard", "scope", "--stop-check", "on", "--check", "test=npm test", "--evidence", "reported"]],
+      ["init", "spec_init", { tracks: ["sec"], guard: "scope", stopCheck: true, checks: { test: "npm test" }, evidence: "reported", reviewModels: ["opus", "sonnet"] }, ["init", "sec", "--guard", "scope", "--stop-check", "on", "--check", "test=npm test", "--evidence", "reported", "--review-models", "opus,sonnet"]], // 1.36: + the review panel (doctor / next_action carry it below)
       ["create", "spec_create", { name: "Login", tracks: ["tdd"], summary: "Users sign in", size: "m", includeBody: true }, ["create", "Login", "tdd", "--summary", "Users sign in", "--size", "m", "--include-body"]],
       ["create", "spec_create", { name: "Crash", kind: "bugfix", reproduction: "click save twice", rootCause: "a null session" }, ["bugfix", "Crash", "--reproduction", "click save twice", "--root-cause", "a null session"]],
       ["create", "spec_create", { name: "Probe", kind: "spike", question: "Does X scale?", timebox: "3d" }, ["spike", "Probe", "--question", "Does X scale?", "--timebox", "3d"]],
