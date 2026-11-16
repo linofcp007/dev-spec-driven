@@ -98,6 +98,11 @@ const text = {
       ["Linaje y Responsables", "- Orígenes → transformaciones → consumidores (un diagrama de linaje o el DAG de dbt) · el responsable de cada conjunto de datos y a quién se avisa cuando falla · el SLA de frescura del que dependen los consumidores · el historial que guarda cada tabla (dimensiones lentamente cambiantes: el tipo 1 sobrescribe, el tipo 2 guarda versiones)."],
       ["Retención y Coste", "- La retención por conjunto de datos y por nivel de almacenamiento (la zona bruta frente a la curada; caliente / templado / frío) — los datos personales siguen references/privacy-track.md · particionado y clustering para que una consulta lea solo lo que necesita · el coste esperado de almacenamiento y de consultas al mes y la alerta cuando se desvía."],
     ],
+    port: [
+      ["Línea Base del Comportamiento", "- Lo que se mantiene: las salidas, los errores y los efectos secundarios (y su orden) que produce el código antiguo · el corpus — entradas reales grabadas, la suite de pruebas antigua, fixtures — y por qué llega a los caminos que importan · dónde vive la línea base (su ruta) · grabada a partir del código ANTIGUO antes de que cambie cualquier código que cubre, nunca regenerada a partir del código nuevo (references/port-patterns.md)."],
+      ["Verificación Diferencial", "- El comando que ejecuta el código NUEVO sobre el corpus y lo compara con la línea base GRABADA (nunca con el código antiguo en ejecución — sigue funcionando después del cambio) · lo que se normaliza (fechas y horas, IDs generados, un orden que el contrato no fija, una tolerancia de coma flotante) y por qué nada de eso es comportamiento · cómo se informa una diferencia · después de portar, cada diferencia intencionada listada con el criterio que la pide — nunca silenciada."],
+      ["Mejoras Aplazadas", "- Cada limpieza o cambio de comportamiento detectado al portar, escrito aquí en lugar de hecho — se hace después de la verificación diferencial: en una tarea posterior (listada después de ella), en la pasada de simplificación (solo limpiezas que conservan el comportamiento) o en una funcionalidad siguiente."],
+    ],
   },
   // trackTasks — each built-in track's template tasks (none for +tdd — it only adds markers): the story heading and each task's
   // text, in the order of the layout's TRACK_TASK_PLAN (the criteria each task implements and makes green, its fixed markers).
@@ -183,6 +188,19 @@ const text = {
         "Backfill — el procedimiento para un rango de fechas (paralelismo, coste, una ejecución de prueba), ensayado en una partición y comparado con una sola ejecución",
         "Linaje, responsables y retención — orígenes → transformaciones → consumidores documentados, un responsable por conjunto de datos, la retención y el particionado de design.md aplicados",
       ],
+    },
+    port: {
+      leadHeading: "Historia US-1 — Línea Base del Comportamiento (antes de portar)",
+      heading: "Historia US-1 — Verificación Diferencial (la prueba de que nada cambió)",
+      tasks: [
+        "Grabar la línea base del comportamiento — ejecutar la implementación ANTIGUA sobre el corpus y guardar sus salidas y errores como línea base, antes de que cambie cualquier código que cubre",
+        "Verificación diferencial — ejecutar la implementación NUEVA sobre el corpus y compararla con la línea base grabada; cada diferencia es un error o una diferencia intencionada listada con su criterio",
+      ],
+      slots: {
+        baseline: "[ruta de la línea base grabada — las salidas antiguas por caso del corpus]",
+        verifyOld: "[comando que ejecuta la implementación ANTIGUA sobre el corpus y la compara con la línea base]",
+        verifyNew: "[comando que ejecuta la implementación NUEVA sobre el corpus y la compara con la línea base grabada]",
+      },
     },
   },
   // requirements — the title, the Summary, then the user stories (size S: the one story) up to the core criteria; the active
@@ -302,6 +320,10 @@ Resultados que la función debe lograr — negocio/UX, no implementación. Cuant
         "SI el job se vuelve a ejecutar para una partición ya cargada, ENTONCES EL SISTEMA DEBE producir el mismo resultado que una sola ejecución, sin filas duplicadas ni ausentes (una reejecución y un backfill idempotentes).",
         "SI los datos más recientes de [la tabla] son más antiguos que [su SLA de frescura], ENTONCES EL SISTEMA DEBE avisar a [la persona responsable] y marcar la tabla como desactualizada para sus consumidores.",
         "CUANDO cambie el esquema de [el origen], EL SISTEMA DEBE aceptar un cambio aditivo y retrocompatible y DEBE rechazar un cambio incompatible (una columna eliminada o renombrada, un tipo más restringido) antes de que ninguna fila llegue a [los consumidores].",
+      ],
+      port: [
+        "CUANDO la nueva implementación procese [el corpus — las entradas grabadas, fixtures o casos de prueba antiguos que guardan el comportamiento actual], EL SISTEMA DEBE producir las mismas salidas que la implementación antigua, caso por caso.",
+        "SI la implementación antigua rechaza una entrada de [el corpus] con un error, ENTONCES EL SISTEMA DEBE rechazarla con el mismo código o tipo de error.",
       ],
     },
   },
@@ -528,6 +550,8 @@ Cada AC debe aparecer en al menos una celda "Cubre". Lagunas (con justificación
       idempotentRerun: "una partición reejecutada o con backfill dos veces queda con las mismas filas que una ejecución — sin duplicados, sin huecos",
       freshness: "una partición más antigua que el SLA de frescura: la comprobación de frescura falla y avisa al responsable",
       schemaChange: "compatibilidad de cambios de esquema: una columna opcional nueva pasa, una columna eliminada / renombrada o un tipo más restringido se rechaza antes de la carga",
+      differential: "verificación diferencial: la salida nueva es igual a la línea base grabada en cada caso del corpus",
+      differentialErrors: "verificación diferencial: cada caso del corpus que falla recibe el código o tipo de error de la implementación antigua",
     },
   },
   // checklist — the items: the core four, +tdd's, then per marker track its sections item (n: the design sections to fill —
@@ -591,6 +615,11 @@ Tracks: ${label}. Marca antes de dar la función por terminada.`,
       (n) => `DATA: ${n} secciones obligatorias de diseño rellenadas (sin TODO) — cada conjunto de datos tiene un esquema, un responsable y una regla de compatibilidad; cada comprobación dice qué hace un fallo.`,
       "DATA: las comprobaciones de calidad de datos se ejecutan en la ingesta y antes de publicar — una fila errónea queda en cuarentena, nunca se carga; el aviso de frescura llega al responsable.",
       "DATA: una reejecución de partición y un backfill ensayados con datos de tamaño real dan las mismas filas que una ejecución; retención y particionado aplicados según el diseño.",
+    ],
+    port: [
+      (n) => `PORT: ${n} secciones obligatorias de diseño rellenadas (sin TODO) — el corpus indicado, lo que se normaliza y por qué.`,
+      "PORT: la línea base grabada a partir del código ANTIGUO antes de empezar el trabajo de portar — nunca regenerada a partir del código nuevo.",
+      "PORT: la verificación diferencial en verde en la versión final sobre todo el corpus; cada diferencia intencionada listada con el criterio que la pide.",
     ],
     saasLoadOnly: "SaaS: prueba de carga cumple el presupuesto (ruta crítica).",
     done: ["Doctor: `doctor` reporta readyToAdvance antes de cada gate.", "Todos los gates de fase aprobados (`approve`)."],
@@ -1075,7 +1104,7 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' ya existe.`,
       renameArchived: (slug) => `'${slug}' es el nombre de una función archivada (.specs/_archive/${slug}) — elige otro nombre (con el mismo nombre, ninguna de las dos podría archivarse ni restaurarse).`,
       slugTaken: (slug, held, name) => `'${name}' llega a la carpeta .specs/${slug}/, que contiene otra función ('${held}') — el nombre de la carpeta conserva solo los primeros 64 caracteres del nombre. No se cambió nada: usa un nombre más corto que se diferencie dentro de ellos (para trabajar en '${held}', usa el nombre '${slug}').`,
-      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
+      badTrack: "el track debe ser: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data | port",
       cycle: (chain) => `Dependencia circular: ${chain}`,
       nameRequired: "el nombre es obligatorio",
       noSpecs: (root) => `No hay .specs/ en ${root}`,
@@ -1309,6 +1338,7 @@ const msg = {
       unknown: (items, valid) => `Track${items.length > 1 ? "s" : ""} desconocido${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (¿querías decir '${u.suggestion}'?)` : "")).join(", ")}. Tracks válidos: ${valid}.`,
       cannotRemoveCore: "'core' está siempre activo — no se puede quitar.",
       bugfixNeedsTdd: "Un bugfix es siempre test-first — no se puede quitar +tdd.",
+      portBugfix: "+port no puede ir en un bugfix: un bugfix cambia el comportamiento a propósito, un port lo mantiene igual — porta en una funcionalidad propia (/spec) y corrige el bug antes o después.",
       notActive: (list) => `No activo: ${list} — nada que quitar.`,
       removed: (list, slug) => `Tracks desactivados: ${list}. No se borró ningún fichero — los artefactos inactivos se quedan donde están y vuelven a contar si vuelves a añadir el track. Vuelve a ejecutar /spec-doctor ${slug}.`,
       restoredSections: (list) => `El track eliminado cubría estas secciones de los tracks que quedan — vuelven a design.md, por rellenar: ${list}.`,
@@ -1630,6 +1660,8 @@ const msg = {
       bugGateFirst: (n, first) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz está sin rellenar y ninguna tarea la escribe — solo la tarea ${first} puede completarse hasta que la causa raíz esté escrita en bug.md (ninguna corrección antes de la causa raíz).`,
       bugGateFix: (n) => `La tarea ${n} aún no puede completarse: pone en verde la prueba de regresión — es una corrección — y bug.md → Causa Raíz está sin rellenar. Escribe allí primero la causa raíz, con su evidencia (ninguna corrección antes de que la causa raíz esté escrita en bug.md).`,
       bugGateTicked: (n, rc) => `La tarea ${n} aún no puede completarse: bug.md → Causa Raíz sigue vacía — la tarea ${rc} está marcada, pero lo que entrega es esa sección. Escribe allí la causa raíz, con su evidencia (ninguna corrección antes de que la causa raíz esté escrita en bug.md).`,
+      portHeld: (n, a, slug) => `La tarea ${n} espera a la tarea ${a} (+port — primero portar, después mejorar: el trabajo de portar espera a la línea base, una mejora a la verificación diferencial). No se registró nada. Marca primero la tarea ${a} con la ejecución de su _Verify:_ (${DEV_SPEC} done ${slug} ${a} --run); si la tarea ${n} va antes, muévela allí en tasks.md — un cambio del plan, aprobado de nuevo.`,
+      portHeldUnverified: (n, a, slug) => `La tarea ${n} espera a la tarea ${a} (+port): la tarea ${a} está marcada pero no verificada — solo una ejecución correcta de su _Verify:_ abre la barrera (${DEV_SPEC} done ${slug} ${a} --run; una tarea [PORT] sin un _Verify:_ ejecutable nunca la abre). No se registró nada.`,
       rootCauseTaskEmpty: (n) => `La tarea ${n} está marcada, pero bug.md → Causa Raíz sigue vacía — escribe allí la causa raíz, con su evidencia: las tareas siguientes (la prueba de regresión, la corrección) siguen rechazadas hasta que esté escrita.`,
       fill: (file, what, hint) => `Rellena ${file} — ${what}; luego ${hint}.`,
       fillMissing: "aún no existe",
@@ -2268,10 +2300,11 @@ const msg = {
         "SLIs & SLOs": "SLIs y SLOs", "Telemetry": "Telemetría", "Alerting & Runbooks": "Alertas y Runbooks", "Rollout & Rollback": "Despliegue y Reversión", "Health & Capacity": "Salud y Capacidad",
         "Data Contracts & Schema Evolution": "Contratos de Datos y Evolución del Esquema", "Data Quality": "Calidad de los Datos",
         "Pipeline Idempotency & Backfills": "Idempotencia del Pipeline y Backfills", "Lineage & Ownership": "Linaje y Responsables", "Retention & Cost": "Retención y Coste",
+        "Behaviour Baseline": "Línea Base del Comportamiento", "Differential Check": "Verificación Diferencial", "Deferred Improvements": "Mejoras Aplazadas",
       },
-      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas", dist: "las 5 rellenadas", api: "las 5 rellenadas", ui: "las 5 rellenadas", obs: "las 5 rellenadas", data: "las 5 rellenadas" },
+      allFilled: { sec: "las 5 rellenadas", privacy: "las 6 rellenadas", dist: "las 5 rellenadas", api: "las 5 rellenadas", ui: "las 5 rellenadas", obs: "las 5 rellenadas", data: "las 5 rellenadas", port: "las 3 rellenadas" },
       statusSections: { sec: (list) => `Secciones de seguridad: ${list}`, privacy: (list) => `Secciones de privacidad: ${list}`, dist: (list) => `Secciones de consistencia de datos: ${list}`, api: (list) => `Secciones del contrato de la API: ${list}`, ui: (list) => `Secciones de la interfaz: ${list}`, obs: (list) => `Secciones de operabilidad: ${list}`,
-        data: (list) => `Secciones del pipeline de datos: ${list}` },
+        data: (list) => `Secciones del pipeline de datos: ${list}`, port: (list) => `Secciones del port: ${list}` },
       finishChecks: {
         sec: ["+sec: SAST, auditoría de dependencias y análisis de secretos limpios en una ejecución local nueva; todas las pruebas de casos de abuso en verde.",
           "+sec: modelo de amenazas revisado contra el código final — ningún punto de entrada ni frontera de confianza nuevo sin mitigar."],
@@ -2287,6 +2320,8 @@ const msg = {
           "+obs: las métricas, los logs y las trazas que indica el diseño vistos emitiéndose desde la versión final — ningún dato personal en logs ni trazas."],
         data: ["+data: las comprobaciones de calidad de datos, una reejecución de partición y un ensayo de backfill en verde en una ejecución nueva con datos de tamaño real — las mismas filas que una ejecución, las filas erróneas en cuarentena.",
           "+data: cada conjunto de datos que escribe el código final cumple su contrato (esquema, responsable, SLA de frescura) y el linaje, la retención y el particionado de design.md."],
+        port: ["+port: la verificación diferencial en verde en la versión final sobre todo el corpus — cada diferencia que queda está listada en design.md con el criterio que la pide.",
+          "+port: los ficheros de la línea base sin cambios desde que se marcó la tarea de la línea base (su historial git más antiguo que los cambios de portar); cada Mejora Aplazada hecha en una tarea posterior o aún listada para después."],
       },
       clarify: {
         secAccess: "Especifica qué recibe quien llama sin autenticación o sin autorización (SI … ENTONCES EL SISTEMA DEBE denegar …) y el nivel ASVS al que apunta la función.",
@@ -2296,6 +2331,17 @@ const msg = {
         distDelivery: "Especifica la garantía de entrega (al menos una vez) y cómo un mensaje entregado dos veces se detecta y se aplica una sola vez (clave de idempotencia, inbox) — escríbelo como AC.",
         distFailure: "Especifica qué hace la función cuando cada dependencia (base de datos, broker, API externa) no está disponible o agota el tiempo de espera — como criterios SI … ENTONCES EL SISTEMA DEBE.",
       },
+    },
+
+    port: {
+      verifyOk: (b, d, waiting) => `orden del port: la tarea ${b} graba la línea base, la tarea ${d} comprueba el código nuevo contra ella${waiting ? ` — ${waiting} la esperan` : ""}.`,
+      verifyMissing: "+port: ninguna tarea graba la línea base y comprueba el código nuevo contra ella — el port necesita las dos, cada una con un _Verify:_ ejecutable (las tareas [PORT] de la plantilla, o tareas que citan un criterio [PORT] — references/port-patterns.md)",
+      noVerify: (list) => `una tarea [PORT] sin un _Verify:_ ejecutable nunca abre la barrera: ${list}`,
+      approvedAlready: "(las tareas ya están aprobadas — su próxima aprobación lo exige)",
+      baselineLate: (list, b) => `antes de la línea base (tarea ${b}): ${list} — mueve la línea base al principio, o puede grabarse a partir del código nuevo`,
+      dependsEscape: (list, b) => `un _Depends:_ que nunca llega a la línea base (tarea ${b}): ${list} — una oleada puede empezarlas antes; añádele ${b}`,
+      recheck: (d, list, slug) => `la verificación diferencial (tarea ${d}) no ha vuelto a pasar desde que una tarea posterior se marcó o se volvió a ejecutar (${list}) — ejecútala de nuevo sobre el código final: ${DEV_SPEC} done ${slug} ${d} --run`,
+      fence: (list) => `marcadas antes de que pasara la tarea [PORT] a la que esperan (entre paréntesis): ${list} — una tarea movida, +port quitado y añadido de nuevo, o una casilla marcada a mano; compruébalas contra la línea base y la verificación diferencial`,
     },
 
     markerSyntax: {
@@ -3430,6 +3476,10 @@ const brief = {
       ],
     },
     metricsRule: "Cada métrica listada arriba se emite de verdad — muestra la evidencia en el informe.",
+    portRules: {
+      port: () => "Tarea del port: conserva el comportamiento exactamente — las mismas salidas, errores y efectos secundarios que el código antiguo. Una limpieza o un cambio que detectes va a design.md → [PORT] Mejoras Aplazadas, nunca a esta tarea.",
+      after: (d) => `Después del port: la verificación diferencial (tarea ${d}) sigue en verde salvo las diferencias que piden los criterios de esta tarea — cada una listada en design.md → [PORT] Verificación Diferencial con el ID del criterio. Ejecuta de nuevo el _Verify:_ de la tarea ${d} cuando termines esta tarea.`,
+    },
     redRules: [
       "Esta es una tarea ROJA: escribe (o conserva) las pruebas planificadas exactamente como las describe el plan de pruebas — nada de código de producción ni de arreglo en esta tarea.",
       "Ejecútalas: deben FALLAR por la razón correcta — una aserción o \"no implementado\". Un fichero de prueba, módulo o script que falta, una errata o un comando que no se ejecuta no es una prueba en rojo (se rechaza como tal).",

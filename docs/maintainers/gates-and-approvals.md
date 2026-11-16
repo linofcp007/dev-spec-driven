@@ -35,7 +35,7 @@ review findings — is in History at the end.
   | design | placeholders, constitution-check, `design-weigh:reuse` (design-reuse — a size m / l plain feature's Reuse & Integration, 1.28; a bugfix signs off bug.md: root-cause, reproduction, placeholders), then `<track>-sections`, `ui-design-system` (1.35 — a size m / l +ui feature's Design System Usage rows against the registry), clarifications |
   | test-plan · eval-plan | placeholders, traceability · placeholders |
   | tests | `tests-in-code` (+tdd with test-plan.md: every planned T-ID named by a test file), `eval-sets` (+ai with eval-plan.md: evals/golden.json the feature's own, neither empty nor the sample) |
-  | tasks | placeholders, `placeholders:realTasks` (a real task beyond the scaffold's), traceability, task-deps; a change's plan (change.md): ears, placeholders, clarifications, ac-uniqueness, realTasks, change-scope, traceability, task-deps |
+  | tasks | placeholders, `placeholders:realTasks` (a real task beyond the scaffold's), traceability, `port-verify` (1.36 — a size m / l +port feature's baseline and differential check, each with a runnable `_Verify:_`), task-deps; a change's plan (change.md): ears, placeholders, clarifications, ac-uniqueness, realTasks, change-scope, traceability, task-deps |
   | execution | spec_finish's blockers (`finishFeature(…, {gateOnly: true})`) |
 - **Doctor agrees with the gates.** An approval check is also a doctor check that fails on what the approval refuses —
   `clarifications` counts requirements.md, a bugfix's bug.md AND design.md's own markers (`doctor.clarificationsOpenDesign`;
@@ -121,7 +121,8 @@ review findings — is in History at the end.
   (`executionSignOffStale()`); with drift too → `drift` + `staleBaseline` (`nx.driftedStale`).
 - **finish blockers** (stable ids, in order — the `execution` approval refuses on exactly these): `state`, `roadmap` (never
   inside `doctor`), `doctor`, `root-cause`, `placeholders` (anywhere in the chain), `changed-since-approval` (by content),
-  `tasks` (none), `open-tasks`, `verification`, `suite-evidence` (`meta.checks`), `approval-gates` (a phase missing a role's
+  `tasks` (none), `open-tasks`, `verification`, `port-recheck` (1.36 — +port: the differential check not passed again since a task
+  listed after it was ticked or re-run), `suite-evidence` (`meta.checks`), `approval-gates` (a phase missing a role's
   sign-off is pending); a spike: `spike`, `decision`, `open-tasks`. `warnings` never block (EC/NFR/SC,
   planned-not-in-code, legacy approvals missing a role, `outside-code-artifacts`, a file-date-only change, an expired
   waiver). spec_metrics' `finished` = the earlier of the first execution approval and `state.finished.at`.
@@ -131,6 +132,21 @@ review findings — is in History at the end.
   `_Makes green:_` task (the fix) is refused wherever it sits (`bugGate` / `bugGateTicked` name the root-cause task;
   `bugGateFix` when the fix is task 1). The root-cause task itself ticks with `rootCausePending: true` + a note; later
   refusals are then `bugGateTicked` ("the section is still empty").
+- **+port's execution gate (1.36, engine/port.js `portTask`).** Port first, improve later — beside the bugfix gate, at the same two
+  places (completeTask before anything is recorded, the brief so `done --run` runs nothing): the plan's two anchors, B (the
+  first task under the track's lead template heading — the one naming Behaviour Baseline —, else the first task citing a `[PORT]`
+  criterion, `trackAcIds`) and D (the last task under its other heading, else the last citing task). Every task listed after B (D
+  included) waits for B, every task listed after D waits for D, nothing before B is held; B == D: everything after waits for it.
+  An anchor opens the fence only ticked AND verified (`taskVerification`: no reason, not `nothingToVerify` — a note-only or
+  verify-less tick opens nothing: `gates.portHeldUnverified`). The refusal: `{gated: "port-order", heldBy: [n…], error}` — never
+  `waitsOn` (a successful tick's `_Depends:_` key). `undo` is never gated; +port off: no gate. The brief adds `portRole` (`port`
+  between B and D, `after` + `differential` past D) and its definition-of-done rule (`brief.portRules`). Read from the plan and
+  .state.json alone: no state of its own. doctor's `port-recheck` / `port-fence` (warns) and finish's `port-recheck` blocker read
+  the same anchors and the evidence `at` / `history` and `ticks` (`portRunState`): D's latest verifying run older than the latest
+  tick or run of a done task after it (re-run D — a forced execution approval waives it); a done task after an anchor first
+  ticked before that anchor first passed, while it never has, or with no record of when (a task moved, +port off and on, a
+  checkbox by hand). Known limits: the evidence history keeps 5 runs (the earliest one in the window counts as the first); the
+  fence orders ticks, not edits.
 
 ## Approval fingerprints and pending gates
 - **Content fingerprints.** An approval records its artifact's `textFingerprint` (tasks.md with checkboxes normalized):
@@ -336,6 +352,9 @@ finish / execution gate, every track criterion scaffolded.
   into **Decisions, reuse & risks** (`WEIGH_MERGED_SYN`), each track's **core-tier** sections only (`sizeDesignText()`,
   `TRACK_SECTIONS` `tier`), per track only the template tasks that implement a criterion (`sizeTasksText()`). An XS bugfix:
   the plan in one call, the common short-form tasks.md.
+- **+port's `port-verify`** (1.36) follows the same rule (`designReuseGated`): a FAIL at size m / l, where the tasks approval refuses
+  it, unless the tasks are approved already (a warn + `port.approvedAlready`); a warn at s / no size. The execution gate (Bugfix and
+  finish → +port's execution gate) holds at every size.
 - **m / l**: the full chain — and the design's **Reuse & Integration is an approval check** (1.28, `designReuseGated`):
   doctor fails `design-reuse` and the design gate refuses it until the section names what is reused, extended or new; a
   design approved before 1.28 (no `reuseGate` stamp) keeps the warning (quality.md → Reuse & Integration). At every size `CORE_SUPERSEDED_BY` (API Contracts / Error Handling under +api, Security
@@ -383,6 +402,8 @@ finish / execution gate, every track criterion scaffolded.
   bug.md → Reproduction / Root Cause / Expected and US-1.AC-1 `IF <condition> THEN THE SYSTEM SHALL <behaviour>`; only in a
   file this call created from the built-in builder (`prefilled`, else `prefillSkipped`); no prefill = byte-identical. The
   gates are untouched. `includeBody: true` (`--include-body`) returns `bodies` (`createdBodies()`).
+- **+port on a bugfix is refused** (1.36, `tracks.portBugfix` — createFeature and addTrack, before anything is written): a bugfix
+  changes behaviour on purpose, a port keeps it.
 - **`spec_finish`** writes a merge title + summary (`mergeTitle` / `mergeSummary`, `.execution/merge-summary.md`); it never
   merges, pushes or approves. `commitTitle(prefix, text)`: the line ≤ 72 (`COMMIT_TITLE_MAX`) while the prefix leaves the
   text ≥ 24, else the prefix + 24; `shortTitle()` cuts at the first sentence's last `,` `;` `—` `–` that fits (from a third
@@ -397,6 +418,8 @@ How the rules above came to be, section by section — grep a release (`1.24`) o
 here. "r5 review" is 1.23's fifth review.
 
 ### Gates
+- **1.36** — `port-verify` (phase 5, the tasks gate at m / l) and `port-runs` (emits `port-recheck` / `port-fence`, phase 6) in the
+  registry; `port-sections` among `<track>-sections`.
 - **1.12.1 / 1.13** — 1.13 made an approval a gate, not a stamp. Its placeholder test guessed from a bracket's shape and
   refused user content (`[free: 60, pro: 600]`, `[admin, billing-manager, read only]`…), blocking upgraded, finished 1.12
   specs — it became a lookup of the scaffolds' own texts; `LEGACY_TEMPLATE_PLACEHOLDERS` holds the 1.12.1 templates'
@@ -535,6 +558,13 @@ here. "r5 review" is 1.23's fifth review.
 
 ### Bugfix and finish
 - **v1.12** — the bugfix kind.
+- **1.36** — +port's execution gate beside the bugfix gate, and `port-recheck` among the finish blockers (the owner's "improve
+  later WITH an old-vs-new comparison"). The design's per-task flag (every task citing a `[PORT]` criterion its own anchor) let a
+  port task that cites the preservation criterion tick before the baseline, and a verified-only-by-name anchor (`!b.done`) let an
+  UNVERIFIED tick open the fence: two anchors, opened only by a verified tick. The refusal key is `heldBy` — `waitsOn` already
+  meant a successful tick's open `_Depends:_`. Cut from the design: a scope-guard `port-order`, the simplifier's `port-open`, +port
+  among `APPROVAL_GATED_TRACKS`, a requirements-gate `port-differential` (the scaffold writes the criteria, the placeholder gate
+  refuses their slots, `port-verify` needs an anchor).
 - **1.21 F3** — the bugfix prefill (no prefill = byte-identical to 1.20) and `commitTitle()`. **1.21 review A5** — a cut
   split a surrogate pair and a lone surrogate landed in merge-summary.md: `cutAt()`.
 - **1.21 F5 → 1.23.1** — 1.21 F5 introduced the short bugfix tasks.md for xs; 1.23.1 made it every size's (the XS and the

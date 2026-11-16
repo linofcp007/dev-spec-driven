@@ -74,3 +74,5 @@ the whole library.
 - +data: `references/data-pipeline-patterns.md` (data contracts and schema evolution, quality checks and quarantine,
   idempotent loads, backfills, late-arriving data, partitioning, facts / dimensions / SCD types, lineage, freshness SLAs,
   retention and cost, testing pipelines)
+- +port: `references/port-patterns.md` (port first, improve later: the corpus, the baseline recorded from the old code, the
+  differential check and its normalizations, intended differences, the fence `spec_complete_task` keeps, cut-over)

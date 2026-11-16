@@ -94,7 +94,9 @@ Write it to the report path, in the feature's language, under these headings —
   backticks when it holds one), its exit code written out right after it on the same line; the last lines of output go
   on INDENTED lines below it. In Claude Code a SubagentStop hook reads this file when you report DONE: everything after
   the last `## Final runs` heading counts, to the end of the file — unless every run there exits 0 and every project
-  check is one of those runs, your stop is sent back.
+  check is one of those runs, your stop is sent back. On a **+port** feature the differential check's `_Verify:_` (the
+  last `[PORT]` task's) is one of the final runs, and from design.md → `[PORT] Deferred Improvements` you take only the
+  cleanups that keep the behaviour.
 
 On a revert round, **append** a revert section (`## Revert round`: the commits reverted, why) and a new `## Final runs`
 after it — the last one is the one that counts.

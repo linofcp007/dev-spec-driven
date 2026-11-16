@@ -28,7 +28,8 @@ exports.run = async ({ ok, all, eq, S, tmp, root, handRoadmap }) => {
       // CHECK_PHASE is derived from the entries' `phase` — next_action ranks a failure by it
       checkPhase: () => js(Object.keys(CHECK_PHASE).sort()) === js(DOCTOR_CHECKS.filter((e) => e.phase).flatMap(idsOf).sort()) &&
         Object.values(CHECK_PHASE).every((n) => Number.isInteger(n) && n >= 1 && n <= 6) && CHECK_PHASE.ears === 1 && CHECK_PHASE["root-cause"] === 2 && CHECK_PHASE["evidence-moved"] === 6,
-      builtInSections: () => ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"].every((t) => entriesOf(t + "-sections").length === 1 && CHECK_PHASE[t + "-sections"] === 2) &&
+      // (every built-in marker track, read from the registry — 1.36: the list stopped at +data and +port's id went unchecked)
+      builtInSections: () => E.MARKER_TRACKS.length === 10 && E.MARKER_TRACKS.every((t) => entriesOf(t + "-sections").length === 1 && CHECK_PHASE[t + "-sections"] === 2) &&
         entriesOf("perfx-sections").length === 1,
     });
   }

@@ -35,6 +35,7 @@ When unsure, turn a track on.
 | **+ui** | a user-facing screen: design system, WCAG accessibility, UI states |
 | **+obs** | a service people depend on: SLOs, alerts and runbooks, safe rollout |
 | **+data** | pipelines between stores: ETL / ELT, a warehouse, quality checks, backfills |
+| **+port** | behaviour that exists, carried to new code: a baseline first, a differential check before any improvement |
 
 The tracks are stored with the feature; `dev-spec add-track` changes them (`--remove` turns one off, no file deleted).
 What each adds at every phase: `skills/dev-spec-driven/references/track-checklists.md`.

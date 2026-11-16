@@ -77,6 +77,10 @@ Pick only the criteria that fit the improvement (US-1.AC-1 and US-1.AC-7 always)
 - **Track:** usually `core`; add **+tdd** whenever behaviour must be pinned before moving code
   (almost always, for refactors). The red-green here is: write characterization tests → refactor →
   tests still green.
+- **A refactor that moves behaviour** (to another language, framework or module layout — a port, a rewrite): turn on
+  **+port** too. Its `[PORT]` criteria (`US-1.AC-36` / `37`) are this file's US-1.AC-1 and US-1.AC-7 made checkable — the same
+  outputs and errors on a named corpus — and its fence holds every cleanup until the differential check passes
+  (`references/port-patterns.md`).
 - **Grill first:** before touching the code, grill the requirements (`spec_clarify`, the user's
   `/clarify --grill` — or `/guardian-grill` on the current module) so you understand the branches you're about to
   move. Fold that Shared Understanding into the requirements — it's free RFC.

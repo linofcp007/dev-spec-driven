@@ -12,7 +12,7 @@
 escreve a spec contigo — requisitos EARS com IDs estáveis, um design, tarefas rastreáveis —, espera pela tua aprovação em
 cada gate e só dá uma tarefa por concluída com uma execução registada da sua verificação. Um só fluxo, mais **tracks**
 que se combinam para o que cada funcionalidade precisa (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data,
-ou os teus), servido por um **servidor MCP local e sem dependências**: sem `npm install`, sem rede, sem cloud, sem GitHub
++port, ou os teus), servido por um **servidor MCP local e sem dependências**: sem `npm install`, sem rede, sem cloud, sem GitHub
 Actions, sem custo por execução. Um plugin do Claude Code que também funciona em qualquer cliente MCP e numa CLI simples —
 em inglês, português (PT-PT e PT-BR) e espanhol.
 
@@ -122,6 +122,7 @@ combinam-se — um webhook do Stripe num SaaS multi-inquilino que resume faturas
 | **+ui** | O design system (componentes verificados contra o registo do projeto), os estados da interface, acessibilidade (WCAG 2.2 AA), design responsivo e i18n, um orçamento de desempenho |
 | **+obs** | SLOs e orçamentos de erro, telemetria, alertas e runbooks, lançamento e reversão |
 | **+data** | Contratos de dados, qualidade de dados, reexecuções e backfills idempotentes, linhagem, retenção |
+| **+port** | Primeiro o porte, depois as melhorias: o comportamento antigo gravado como linha de base, uma verificação diferencial sobre um corpus, as melhorias só depois dela — e a verificação corrida de novo quando estão feitas |
 
 **Um só design system para todos os ecrãs.** O `dev-spec steering design-system.md` escreve o
 `.specs/steering/design-system.md` a partir do teu código — os componentes e os tokens que o projeto já tem. A partir daí, o
@@ -315,7 +316,7 @@ dev-spec-driven/                      ← raiz do plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 ferramentas + prompts + recursos, sem dependências)
 │   ├── servers.json                  ← registo MCP do plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← a fachada do motor (o único objeto que o servidor, a CLI e os hooks carregam)
-│   ├── lib/engine/                   ← o motor: 25 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
+│   ├── lib/engine/                   ← o motor: 26 módulos, um por assunto (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + um importador por ferramenta de origem (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← conteúdo localizado (en · pt · es) + a derivação pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (um por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (a tua chave de API; --dry-run offline)

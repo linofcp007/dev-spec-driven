@@ -95,6 +95,9 @@ evidence that doesn't match the diff (wrong file, a subset of the suite) is **Im
   spans the design names; alerts linked to runbooks; liveness free of dependencies; the flag and the rollback path as designed.
 - **+data:** the dataset's schema matches its contract; the data-quality checks the task names run and quarantine bad rows;
   a re-run of a partition replaces it (overwrite / MERGE on a key — no blind append); late rows handled within the lookback window.
+- **+port:** a task of the port (the brief's `portRole: port`) changes NO behaviour — compare each ported unit with its old
+  version, line by line where they map: a cleanup or a changed output is **Important** (it belongs in `[PORT] Deferred
+  Improvements`); a task after the differential check names each difference it makes in Differential Check, with its criterion.
 - **Security (always):** injection, authz, data exposure in the changed code.
 
 ### 4. Code quality
@@ -189,7 +192,8 @@ all ACs (every AC has code + a test on +tdd), red-first evidence in git history 
 controller passed lists it per task when the commits follow the spec commit format (`/executeTask commit`); none passed → read `git log` yourself), scale sections honored and tenant isolation (+saas), eval delta
 and versioned prompts (+ai), threat-model mitigations and access control (+sec), the data inventory, retention and
 data subject rights honoured (+privacy), no dual write that bypasses its outbox / inbox (+dist), no breaking change inside a version (+api), the UI states and accessibility (+ui), telemetry, alerts
-and the rollback path (+obs), the data contracts, quality checks and idempotent loads (+data), security, and
+and the rollback path (+obs), the data contracts, quality checks and idempotent loads (+data), the old behaviour kept —
+every intended difference tied to a criterion, the baseline's git history older than the port's changes (+port), security, and
 duplication — the units the branch adds against the existing codebase and against each other (two tasks that each
 wrote the same helper). Decisions in `decisions.md` that the code contradicts are
 findings, and so is a written rule the branch breaks or a fix its rewritten lines undo (§5, over the whole branch:
@@ -212,7 +216,8 @@ The question is "does the code deliver every AC?", not "is this diff right?". Re
    harness wired, cost tracking present; +sec the `[SEC]` criteria (401 / 403 + audit, no secrets in output) and the
    abuse-case tests; +privacy export, erasure and retention implemented across every store of the data inventory;
    +dist outbox / idempotent consumers / concurrency control as designed and the failure-injection tests; +api the contract
-   file and the contract tests; +ui the state matrix and the accessibility checks; +obs the telemetry, the alerts and the rollback drill; +data the contracts, the quality checks and the idempotent loads;
+   file and the contract tests; +ui the state matrix and the accessibility checks; +obs the telemetry, the alerts and the rollback drill; +data the contracts, the quality checks and the idempotent loads; +port the
+   baseline, the differential check over the whole corpus and every Deferred Improvement made or still listed;
    security always.
 3. **Classify each gap:** a **task** (fixable within the approved ACs and design) or a **spec change** (needs a
    different AC, design decision or test expectation — list it apart; the controller routes it to its phase,

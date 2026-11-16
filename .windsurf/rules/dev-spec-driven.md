@@ -10,7 +10,7 @@ description: Spec-driven development with dev-spec-driven — use when planning 
 Follow the spec-driven workflow in `AGENTS.md` (repo root). Summary:
 
 - Plan before coding for non-trivial work. Classify the feature into composable tracks
-  (`core` always; add `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy`, `+dist`, `+api`, `+ui`, `+obs`, `+data` when warranted), then run requirements → design →
+  (`core` always; add `+tdd`, `+saas`, `+ai`, `+sec`, `+privacy`, `+dist`, `+api`, `+ui`, `+obs`, `+data`, `+port` when warranted), then run requirements → design →
   (tests/evals) → tasks → execute, with user approval at each phase gate.
 - Use the local engine for mechanical steps (zero-dependency, no CI):
   `node cli/dev-spec.js classify|init|create|next-action|doctor|trace|ears|next|brief|done|impact|append-tasks|decide|finish|stop-check|evals`
@@ -20,7 +20,7 @@ Follow the spec-driven workflow in `AGENTS.md` (repo root). Summary:
   The `spec-driven` MCP server exposes the same operations if configured.
 - Artifacts live in `.specs/<feature>/`. Keep AC IDs (`US-1.AC-1`) and task markers stable. Every task carries
   `_Requirements:_` and `_Verify: <command>_`, and `_Implements: <path>_` when it writes code (the files it creates or changes).
-- Mandatory +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data design sections must be filled (no leftover `> TODO`).
+- Mandatory +saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data/+port design sections must be filled (no leftover `> TODO`).
 - Approvals are the user's: run `dev-spec approve <feature> <phase>` only after their explicit yes for that phase — it
   refuses while the phase's checks fail; `--force` only when the user explicitly accepts the failing checks (it stays
   flagged).

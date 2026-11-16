@@ -11,8 +11,8 @@
 **Desarrollo guiado por specs, con el rigor a la medida del cambio.** Describes un cambio; el plugin lo clasifica, escribe
 la spec contigo — requisitos EARS con IDs estables, un diseño, tareas trazables —, espera tu aprobación en cada gate y
 solo da una tarea por terminada con una ejecución registrada de su verificación. Un solo flujo, más **tracks** que se
-combinan para lo que necesita cada función (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data, o los
-tuyos), servido por un **servidor MCP local y sin dependencias**: sin `npm install`, sin red, sin nube, sin GitHub
+combinan para lo que necesita cada función (+tdd, +saas, +ai, +sec, +privacy, +dist, +api, +ui, +obs, +data, +port, o
+los tuyos), servido por un **servidor MCP local y sin dependencias**: sin `npm install`, sin red, sin nube, sin GitHub
 Actions, sin coste por ejecución. Un plugin de Claude Code que también funciona en cualquier cliente MCP y en una CLI
 sencilla — en inglés, portugués (PT-PT y PT-BR) y español.
 
@@ -125,6 +125,7 @@ combinan — un webhook de Stripe en un SaaS multiinquilino que resume facturas 
 | **+ui** | El design system (componentes comprobados contra el registro del proyecto), los estados de la interfaz, accesibilidad (WCAG 2.2 AA), diseño adaptable e i18n, un presupuesto de rendimiento |
 | **+obs** | SLOs y presupuestos de errores, telemetría, alertas y runbooks, despliegue y reversión |
 | **+data** | Contratos de datos, calidad de datos, reejecuciones y backfills idempotentes, linaje, retención |
+| **+port** | Primero portar, después mejorar: el comportamiento antiguo grabado como línea base, una verificación diferencial sobre un corpus, las mejoras solo después — y la verificación ejecutada de nuevo cuando están hechas |
 
 **Un solo design system para todas las pantallas.** `dev-spec steering design-system.md` escribe
 `.specs/steering/design-system.md` a partir de tu código — los componentes y los tokens que el proyecto ya tiene. Desde
@@ -320,7 +321,7 @@ dev-spec-driven/                      ← raíz del plugin
 │   ├── server.js                     ← servidor MCP local por stdio (32 herramientas + prompts + recursos, sin dependencias)
 │   ├── servers.json                  ← registro MCP del plugin (plugin.json → mcpServers)
 │   ├── lib/spec.js                   ← la fachada del motor (el único objeto que cargan el servidor, la CLI y los hooks)
-│   ├── lib/engine/                   ← el motor: 25 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
+│   ├── lib/engine/                   ← el motor: 26 módulos, uno por asunto (core, files, state, markdown, tracks, classify, scaffold, tasks, port, evidence, trace, gates, doctor, finish, scan, …) + un importador por herramienta de origen (import/)
 │   ├── lib/i18n.js · lib/i18n/       ← contenido localizado (en · pt · es) + la derivación pt-BR
 │   ├── lib/prompts-resources.js      ← prompts MCP (uno por comando) + recursos specs://
 │   ├── evals/run-evals.js            ← harness de evals local (tu clave de API; --dry-run sin conexión)

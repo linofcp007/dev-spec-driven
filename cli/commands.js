@@ -541,7 +541,7 @@ const COMMANDS = [
   {
     name: "classify",
     options: TABLE,
-    help: `  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data), multilingual
+    help: `  classify "<description>" [--name "<feature>"]   Recommend tracks (core/+tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data/+port), multilingual
                                   --explain: every keyword match (table tier → final tier, cue / override, negation) + the
                                   project's signal overrides`,
     run(c) {
@@ -826,7 +826,7 @@ const COMMANDS = [
             : " (" + fm.sectionStatus[s.status && fm.sectionStatus[s.status] ? s.status : s.present ? "unfilled" : "missing"] + ")")).join(" · ");
         if (r.scaleSections) log(T.scaleSections(marks(r.scaleSections)));
         if (r.aiSections && r.aiSections.sections) log(T.aiSections(marks(r.aiSections.sections)));
-        for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data"]) if (r[tr + "Sections"]) log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
+        for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data", "port"]) if (r[tr + "Sections"]) log(fm.secPrivacy.statusSections[tr](marks(r[tr + "Sections"])));
         for (const p of Object.values(r.packSections || {})) log(fm.trackPacks.statusSections(p.marker, marks(p.sections))); // track packs
         if (r.missingPacks) log(fm.trackPacks.missing(r.missingPacks.map((n) => "+" + n).join(", ")));
       });
@@ -1070,7 +1070,8 @@ const COMMANDS = [
         // belongs to the task that gets ticked.
         const b = spec.taskBrief(projectDir, pos[0], pos[1]);
         if (!b.ok) return fail(b);
-        if (b.gated) return fail({ ok: false, gated: b.gated, error: b.gateError }); // complete_task would refuse it (bugfix: no fix before the root cause) — run nothing
+        // complete_task would refuse it (bugfix: no fix before the root cause; +port: a [PORT] task first — its heldBy) — run nothing
+        if (b.gated) return fail({ ok: false, gated: b.gated, ...(b.heldBy ? { heldBy: b.heldBy } : {}), error: b.gateError });
         const cmds = b.verify.filter((x) => !/^\[.*\]$/.test(x.trim()));
         if (!cmds.length) return fail({ ok: false, error: D.noRunnable(b.task.number) });
         const M = spec.msg(spec.featureLang(projectDir, pos[0]));
@@ -1339,13 +1340,13 @@ const COMMANDS = [
     name: "add-track",
     options: TABLE,
     args: ["@feature", "@optional-track..."],
-    help: `  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data (additive, never overwrites);
+    help: `  add-track <feature> <track...>  Escalate a feature to +tdd/+saas/+ai/+sec/+privacy/+dist/+api/+ui/+obs/+data/+port (additive, never overwrites);
                                   --remove turns a track off (non-destructive: files kept, listed as inactive);
                                   a project track pack (dev-spec tracks) is named the same way`,
     run(c) {
       const { pos, out, fail, usage, log } = c;
       const tr = c.withTracksFlag(pos.slice(1));
-      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy|dist|api|ui|obs|data>... (or a track pack's name — dev-spec tracks) [--remove]");
+      if (!pos[0] || !tr.length) usage("dev-spec add-track <feature> <tdd|saas|ai|sec|privacy|dist|api|ui|obs|data|port>... (or a track pack's name — dev-spec tracks) [--remove]");
       // Several tracks at once ("saas ai", "saas,ai"); --remove turns them off (files kept, listed as inactive).
       const r = c.call("add-track");
       if (!r.ok) return fail(r);
@@ -1908,7 +1909,7 @@ const COMMANDS = [
     options: TABLE,
     args: ["@import-tool", "@file"],
     help: `  import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path>   Import another tool's spec as a NEW feature (IDs → US-N.AC-M, scenarios → EARS,
-                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data
+                                  tasks renumbered, checkbox state kept); --name <feature> · --lang en|pt|pt-BR|es · --tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data,port
                                   plan = Claude Code plan mode / Cursor .cursor/plans, execplan = a Codex ExecPlan (PLANS.md),
                                   bmad = BMAD-METHOD docs (prd.md + docs/stories/), fluidplan = a fluidplan plan (.fluidplan/<id>/:
                                   plan.json + answers.json, PLAN.md + DECISIONS.md → tasks, criteria, decisions.md)
@@ -1927,7 +1928,7 @@ const COMMANDS = [
       // `import kiro-steering|cursor-rules [<path>]` (= spec_import {tool}: another tool's steering → .specs/steering/; no path →
       // the tool's own folder) and `--dry-run` on every form (= spec_import {dryRun: true}: nothing written, the same result + preview).
       const { flags, pos, projectDir, out, fail, usage, log } = c;
-      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data] [--dry-run] · import <plan|execplan|fluidplan> - | --text \"<markdown>\" · import <kiro-steering|cursor-rules> [<path>] [--dry-run]";
+      const usageLine = "dev-spec import <kiro|spec-kit|openspec|plan|execplan|bmad|fluidplan> <path> [--name <feature>] [--lang en|pt|pt-BR|es] [--tracks tdd,saas,ai,sec,privacy,dist,api,ui,obs,data,port] [--dry-run] · import <plan|execplan|fluidplan> - | --text \"<markdown>\" · import <kiro-steering|cursor-rules> [<path>] [--dry-run]";
       const fromStdin = pos[1] === "-";
       const hasText = typeof flags.text === "string";
       // (the engine's list, read only when the usage needs it: `import` alone is refused without the engine)

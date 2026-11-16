@@ -14,7 +14,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     const chk = (doc, id) => doc.checks.find((c) => c.id === id) || {};
 
     // --- the track list itself
-    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui,obs,data" && // 1.17 D: + dist; 1.19 T: + api, ui, obs; 1.21 F4: + data
+    ok(S.VALID_TRACKS.join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data,port" && S.OPTIONAL_TRACKS.join() === "tdd,saas,ai,sec,privacy,dist,api,ui,obs,data,port" && // 1.17 D: + dist; 1.19 T: + api, ui, obs; 1.21 F4: + data; 1.36: + port
       S.TRACK_MARKER.sec === "[SEC]" && S.TRACK_MARKER.privacy === "[PRIVACY]" && S.trackLabel(S.normalizeTracks("privacy sec saas")) === "core +saas +sec +privacy",
       "A2: sec and privacy are valid, composable tracks with English-stable markers, labelled in track order");
     const typo = S.createFeature(a2("typo"), "Typo", "privcy");
@@ -520,7 +520,7 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     const pChk = S.trackPacks(tp, "check");
     const probs = JSON.stringify(pChk);
     ok(!pDist.ok && /reserved/.test(pDist.error) && !pKafka.ok && /reserved/.test(pKafka.error) && /marker-reserved/.test(probs) &&
-      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data",
+      !S.parseTracks("events").tracks.includes("events") && S.trackPacks(tp, "list").builtIn.map((b) => b.name).join() === "core,tdd,saas,ai,sec,privacy,dist,api,ui,obs,data,port",
       "1.17 D12: a track pack named dist (or kafka) is refused, one with the marker DIST is invalid (marker-reserved); spec_tracks list names the built-in tracks (got " + js([pDist.error, pKafka.error, probs.slice(0, 300)]) + ")");
 
     // --- D13: project templates — the copied built-ins check clean; a design template with some [DIST] headings needs them all
@@ -1166,16 +1166,17 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
     const acIds = [...aReq.matchAll(/\*\*(US-\d+\.AC-\d+)\*\*/g)].map((m) => m[1]);
     const tIds = [...aPlan.matchAll(/^\| (T-\d+) \|/gm)].map((m) => m[1]);
     const aTr = S.traceCheck(allDir, every.slug), aDoc = S.specDoctor(allDir, every.slug);
-    // (1.21 F4: + [DATA], US-1.AC-32..35 — eleven tracks, 36 criteria and T-IDs, nine <track>-sections checks)
-    const order = ["[SaaS]", "[AI]", "[SEC]", "[PRIVACY]", "[DIST]", "[API]", "[UI]", "[OBS]", "[DATA]"].map((m) => aReq.indexOf("#### " + m));
-    all("1.19 T9: every built-in track — 36 unique criteria (the [API] / [UI] / [OBS] / [DATA] blocks after [DIST], US-1.AC-20..35), 36 unique T-IDs, unique task numbers, every template AC planned and tasked, nine <track>-sections checks (got " +
+    // (1.21 F4: + [DATA], US-1.AC-32..35 — eleven tracks, 36 criteria and T-IDs, nine <track>-sections checks; 1.36: + [PORT],
+    // US-1.AC-36..37 — twelve tracks, 38 criteria and T-IDs, ten <track>-sections checks)
+    const order = ["[SaaS]", "[AI]", "[SEC]", "[PRIVACY]", "[DIST]", "[API]", "[UI]", "[OBS]", "[DATA]", "[PORT]"].map((m) => aReq.indexOf("#### " + m));
+    all("1.19 T9: every built-in track — 38 unique criteria (the [API] / [UI] / [OBS] / [DATA] / [PORT] blocks after [DIST], US-1.AC-20..37), 38 unique T-IDs, unique task numbers, every template AC planned and tasked, ten <track>-sections checks (got " +
       js([every.label, acIds.length, tIds.length, order, aTr.uncoveredByTasks, aTr.uncoveredByTests]) + ")", [
-      () => every.ok, () => every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs +data", () => acIds.length === 36,
-      () => new Set(acIds).size === 36, () => acIds.includes("US-1.AC-35"), () => tIds.length === 36, () => new Set(tIds).size === 36,
+      () => every.ok, () => every.label === "core +tdd +saas +ai +sec +privacy +dist +api +ui +obs +data +port", () => acIds.length === 38,
+      () => new Set(acIds).size === 38, () => acIds.includes("US-1.AC-37"), () => tIds.length === 38, () => new Set(tIds).size === 38,
       () => new Set(aTasks.map((t) => t.number)).size === aTasks.length, () => order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])),
       () => !aTr.uncoveredByTasks.length, () => !aTr.uncoveredByTests.length, () => !aTr.phantomAcsInTasks.length,
       () => !aTr.phantomTestsInTasks.length, () => !(aTr.testsNotMappedToTasks || []).length,
-      () => ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
+      () => ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data", "port"].every((t) => chk(aDoc, t + "-sections").status === "fail"),
     ]);
 
     // --- 1.19 T10: the placeholder corpus stays bounded as tracks are added (every set of at most two optional tracks + all of them):
@@ -1191,9 +1192,11 @@ exports.run = async ({ ok, all, remeasure, rpc, payload, S, tmp, list, require, 
       t0 = process.hrtime.bigint(); texts = EI.templateCorpus().length; ratios.push(Number(process.hrtime.bigint() - t0) / unit);
     }
     ratios.sort((a, b) => a - b);
-    // (1.21: +data and the size variants brought it to ~1480 texts; since 1.20 a process reads the pre-generated corpus instead)
-    ok(texts > 900 && texts <= 1650 && ratios[1] <= 60,
-      `1.19 T10: the template corpus renders ${texts} texts (≤ 1650) in ~${ratios[1].toFixed(0)}× one all-tracks scaffold (≤ 60×; 1.18: 628 texts, ~19×; 1.19: ~1390)`);
+    // (1.21: +data and the size variants brought it to ~1480 texts; since 1.20 a process reads the pre-generated corpus instead.
+    // 1.36: +port — 1,723 texts measured: 11 optional tracks make 68 track sets (57 before) × 7 texts × 3 languages, + its blocks; the
+    // absolute bound 1,650 → 1,800, the relative one unchanged)
+    ok(texts > 900 && texts <= 1800 && ratios[1] <= 60,
+      `1.19 T10: the template corpus renders ${texts} texts (≤ 1800) in ~${ratios[1].toFixed(0)}× one all-tracks scaffold (≤ 60×; 1.18: 628 texts, ~19×; 1.19: ~1390; 1.36: ~1720)`);
 
     // --- 1.19 T11: the pt-BR twins of the new PT strings hold no European-only word, are idempotent and keep the markers / IDs
     const aBr = { name: "ARGN", tracks: ["core", "tdd", "api", "ui", "obs"], label: "core +tdd +api +ui +obs", slug: "argn", summary: "" };

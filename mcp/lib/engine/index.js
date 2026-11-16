@@ -24,7 +24,7 @@
  */
 
 const MODULES = ["./core.js", "./files.js", "./state.js", "./markdown.js", "./tracks.js", "./classify.js", "./packs.js",
-  "./templates.js", "./scaffold.js", "./tasks.js", "./evidence.js", "./guardian.js", "./trace.js", "./gates.js", "./doctor.js",
+  "./templates.js", "./scaffold.js", "./tasks.js", "./port.js", "./evidence.js", "./guardian.js", "./trace.js", "./gates.js", "./doctor.js",
   "./quality.js", "./finish.js", "./roadmap-md.js", "./decisions.js", "./export.js", "./guards.js", "./upgrade.js",
   "./scan.js"];
 const LAZY = ["./dupes.js", "./design-system.js", "./import/common.js", "./import/kiro.js", "./import/speckit.js", "./import/openspec.js",

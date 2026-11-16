@@ -22,7 +22,8 @@ let acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValid
   tasksProseText, templateBracketKeys, TRACK_MARKER, trackAcIds, trackDesignBlock, trackLabel, trackMarker,
   trackSectionTable, trackTaskBlock, trackTaskHeading, trackTemplateAcs, TRADEOFFS_SYN, weighSection, writeIfAbsent;
 let today; // core.js — the local calendar date (today / dayOf)
-function __link(E) { ({ today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, enumArg, existsCached,
+let taskBlocks, headingEntries; // a track block's lead section before the template's first task section (1.36, +port)
+function __link(E) { ({ taskBlocks, headingEntries, today, acDuplicates, artifactState, bugSectionFilled, customSteeringStub, earsValidate, enumArg, existsCached,
   extractAcIds, extractSection, extractTestIds, headingHasMarker, inactiveMarkerLines, insertPackRequirements,
   isInsideDir, writeInsideProject, isObj, isPackTrack, markerTracks, normalizeLang, normalizeTracks, own, packChecklistBlock,
   packCorpusSets, packOf, packRequirementsBlock, packTaskBlock, packTestRowsBlock, packTracks, parseTasks, planIdText,
@@ -235,6 +236,23 @@ function trackTestRowsBlock(tr, lang, used, map, tracks) {
   if (!rows.length) return null;
   return "\n## " + TRACK_MARKER[tr] + " " + heading + "\n\n" + lines[first - 2] + "\n" + lines[first - 1] + "\n" + rows.join("\n") + "\n";
 }
+// A track's task block of TWO sections (+port: the baseline's, then the differential check's — 1.36) → { head: the first
+// section, rest: the others }, or null for a block of one section.
+function splitLeadSection(block) {
+  const lines = block.split("\n");
+  const heads = lines.map((l, i) => (/^#{1,6}\s/.test(l) ? i : -1)).filter((i) => i >= 0);
+  return heads.length < 2 ? null : { head: lines.slice(heads[0], heads[1]).join("\n").trimEnd(), rest: "\n" + lines.slice(heads[1]).join("\n") };
+}
+// text + `section` inserted before the section heading (level ≥ 2, never in a fence or a comment) of its first task — before that task
+// itself when no such heading holds it; appended when there is no task at all.
+function beforeFirstTaskSection(text, section) {
+  const first = taskBlocks(text)[0];
+  if (!first) return text.trimEnd() + "\n\n" + section + "\n";
+  const lines = text.split("\n");
+  const head = headingEntries(lines).filter((h) => h.level >= 2 && h.i < first.line).pop();
+  lines.splice(head ? head.i : first.line, 0, section, "");
+  return lines.join("\n");
+}
 // An overridden design.md / requirements.md / tasks.md / test-plan.md + the active tracks' blocks it doesn't carry (the
 // rule above). reqText: () => the feature's requirements.md (tasks and test rows follow the IDs it defines for a track).
 // opts: only — the tracks to add blocks for (a built-in scaffold: its track packs; the i18n builders wrote the rest);
@@ -264,7 +282,12 @@ function withTrackBlocks(key, text, tracks, lang, reqText, opts = {}) {
     for (const tr of markerTracks()) {
       if (!want(tr)) continue;
       const block = isPackTrack(tr) ? packTaskBlock(packOf(tr), out, req, plan, lang, vars) : trackTaskBlock(tr, out, req, lang, trackIdMap(req, tr));
-      if (block) out = out.trimEnd() + "\n" + block;
+      if (!block) continue;
+      // a block of two sections (+port's baseline, then its differential check): the first goes before the template's first task
+      // section — nothing changes the code the baseline covers before it is recorded —, the rest at the end like every block
+      const lead = splitLeadSection(block);
+      if (lead) out = beforeFirstTaskSection(out, lead.head);
+      out = out.trimEnd() + "\n" + (lead ? lead.rest : block);
     }
   } else if (key === "test-plan") {
     const req = (reqText && reqText()) || "";

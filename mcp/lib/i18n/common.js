@@ -81,9 +81,10 @@ const TEMPLATE_ACS = { core: ["US-1.AC-1", "US-1.AC-2", "US-1.AC-3", "US-1.AC-4"
   api: ["US-1.AC-20", "US-1.AC-21", "US-1.AC-22", "US-1.AC-23"], // +api
   ui: ["US-1.AC-24", "US-1.AC-25", "US-1.AC-26", "US-1.AC-27"], // +ui
   obs: ["US-1.AC-28", "US-1.AC-29", "US-1.AC-30", "US-1.AC-31"], // +obs
-  data: ["US-1.AC-32", "US-1.AC-33", "US-1.AC-34", "US-1.AC-35"] }; // +data
+  data: ["US-1.AC-32", "US-1.AC-33", "US-1.AC-34", "US-1.AC-35"], // +data
+  port: ["US-1.AC-36", "US-1.AC-37"] }; // +port (1.36)
 // The optional tracks whose template criteria / tasks / sections follow the core ones, in track order.
-const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data"];
+const MARKER_TRACK_ORDER = ["saas", "ai", "sec", "privacy", "dist", "api", "ui", "obs", "data", "port"];
 // Each one's section marker as the templates write it — [SaaS], [AI], [SEC] … (English-stable; engine/tracks.js TRACK_MARKER).
 const MARKER_TAG = Object.fromEntries(MARKER_TRACK_ORDER.map((t) => [t, "[" + (t === "saas" ? "SaaS" : t.toUpperCase()) + "]"]));
 // The tracks classification.md lists signals for: +tdd, the built-in marker tracks, then a project's track packs (any
@@ -170,6 +171,9 @@ function templateTestRows(tracks, row, L, acs, size) {
   if (T["US-1.AC-32"]) rows.push(r("US-1.AC-32", L.integration, L.dataQuality, "tests/integration/...", "property"),
     r("US-1.AC-33", L.integration, L.idempotentRerun, "tests/integration/...", "property"), r("US-1.AC-34", L.integration, L.freshness, "tests/integration/..."),
     r("US-1.AC-35", L.contract, L.schemaChange, "tests/contract/..."));
+  // +port (1.36): the differential check over the corpus — the same output, the same error, for EVERY corpus case → property.
+  if (T["US-1.AC-36"]) rows.push(r("US-1.AC-36", L.integration, L.differential, "tests/differential/...", "property"),
+    r("US-1.AC-37", L.integration, L.differentialErrors, "tests/differential/...", "property"));
   return rows.join("\n");
 }
 

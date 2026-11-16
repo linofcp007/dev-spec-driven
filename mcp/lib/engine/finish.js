@@ -37,7 +37,8 @@ let DESIGN_SYSTEM_FILE; // quality.js — the registry's file name (a rename fol
 let suiteBlocker, guardianWarnings; // guardian.js — the suite blocker (with dev-guardian's gate: its verdict and what to do) · update dev-guardian, accepted gaps
 let today, dayOf; // core.js — the local calendar date (today / dayOf)
 let phaseFile; // state.js — the file a phase writes (tasks: an xs change's change.md)
-function __link(E) { ({ phaseFile, duplicationReport, designSystemFinish, DESIGN_SYSTEM_FILE, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
+let portOn, portFinishRecheck, evidenceRule; // port.js — +port's re-check of the differential check (1.36) · evidence.js
+function __link(E) { ({ portOn, portFinishRecheck, evidenceRule, phaseFile, duplicationReport, designSystemFinish, DESIGN_SYSTEM_FILE, suiteBlocker, guardianWarnings, today, dayOf, acIndex, activeDesign, activeTasks, artifactReport, bugSectionFilled, catalogDecisions,
   chainArtifacts, changedSinceApproval, clarificationMarkers, cleanTaskText, commitTag, criterionBlocks,
   crossFeatureAcs, DECISIONS_FILE, decisionSummaryLines, detectPhase, detectTracks, duplicateTaskNumbers, ensureDir,
   enumArg, errs, evidenceRecords, existingFeature, expectsFail, extractAcIds, extractSection, extractTestIds, featureDirs,
@@ -221,6 +222,10 @@ function finishFeature(projectDir, name, opts = {}) {
   if (!blocks.length) block("tasks", F.noTasks);
   if (open.length) block("open-tasks", F.open(open.map((n) => "#" + n).join(", ")));
   if (vs.unverified.length) block("verification", F.unverified(unverifiedLabel(vs, lng)));
+  // +port (1.36): the differential check last passed before an improvement listed after it was ticked — the improvements were
+  // never compared with the baseline (port.js; doctor warns port-recheck). A forced execution approval waives it, as any blocker.
+  const portRecheck = portOn(kind, tracks) ? portFinishRecheck(blocks, readIfExists(path.join(dir, "requirements.md")), vs.evidence, state.ticks, evidenceRule(projectDir), lng, slug) : null;
+  if (portRecheck) block("port-recheck", portRecheck);
   // meta.checks set → every check needs a passing run since the feature's last task activity (suiteStatus).
   const suite = suiteStatus(projectDir, state, dir);
   // (+ dev-guardian's gate: how to clear a failed one, or how to run and report it over MCP — 1.29)
@@ -255,7 +260,7 @@ function finishFeature(projectDir, name, opts = {}) {
   if (kind === "bugfix") checks.push(F.checkBug);
   if (tracks.includes("saas")) checks.push(F.checkLoad, F.checkObs);
   if (tracks.includes("ai")) checks.push(F.checkCost, F.checkSafety);
-  for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
+  for (const tr of ["sec", "privacy", "dist", "api", "ui", "obs", "data", "port"]) if (tracks.includes(tr)) checks.push(...i18n.msg(lng).secPrivacy.finishChecks[tr]);
 
   // Merge summary from the spec chain (usable as the merge commit message).
   const reqs = readIfExists(path.join(dir, "requirements.md")) || "";

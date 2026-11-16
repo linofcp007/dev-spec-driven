@@ -26,7 +26,12 @@ is in History at the end.
   block is appended as spec_add_track appends it (`trackDesignBlock`, `trackTaskBlock`, `trackRequirementsBlock` and
   `trackTestRowsBlock` numbered after the template's own IDs, from `trackIdMap`) — UNLESS the template already carries the
   track (its marker on a real heading, the localized Testability Notes, its task-block heading; a test plan citing its
-  criteria). Every other artifact, the bugfix and spike variants included, is written as the template says.
+  criteria). Every other artifact, the bugfix and spike variants included, is written as the template says. A task block of
+  TWO sections (+port, 1.36 — its baseline, then its differential check) puts its first one BEFORE the template's first task
+  section (`splitLeadSection` / `beforeFirstTaskSection`: before that section's heading, level ≥ 2 — or the first task itself
+  when no heading holds it) and appends the rest: nothing changes the code the baseline covers before it is recorded. Its tasks
+  keep the numbers after the template's own; next_task still serves the baseline first (tasks order is by section in file
+  order).
 - **Placeholder corpus:** `projectTemplateSets()` adds the templates' bracket texts, code-span slots and task lines (bug.md's
   join `bugTemplateSlots()`), so an untouched custom scaffold reads placeholder to doctor, approve and next_action. Scoped
   to the engine call's
@@ -252,6 +257,8 @@ engine/scan.js — area 13 of the suites.
 How the rules above came to be, section by section — grep a release (`1.21.1`) or a finding id (`M8`, `r6 B3`) here.
 
 ### Project templates
+- **1.36** — a two-section track block (+port) splits: its lead section before the template's first task section, the
+  rest appended (a template's tasks.md had the baseline after Polish, so baseline-first was lost for every project with one).
 - **1.14** — `.specs/templates/` introduced: a team's own scaffolds over the built-in i18n ones. `templates` and `exports`
   became reserved slugs; a feature created before 1.14 under either name stays a feature (the legacy exception).
 - **1.15** — `tracks` joined `RESERVED_SLUGS` (the project's track packs), with the same exception.

@@ -8,8 +8,9 @@ const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
 // 1.26 (the context diet): the size of tools/list in the default mode — measured 43,1xx characters with the clone's CLI path
-// counted as `dev-spec`; ~3% headroom so the gain is kept. Raise it only for a description a model needs.
-const TOOLS_LIST_CAP = 44500;
+// counted as `dev-spec`; ~3% headroom so the gain is kept. Raise it only for a description a model needs. (1.36: 44,500 → 45,000 —
+// four opt-in settings, each in its trimmed form; docs/maintainers/mcp.md → History.)
+const TOOLS_LIST_CAP = 45000;
 
 exports.handshake = true; // this file counts the handshake's assertions — every other process runs it muted
 exports.run = async ({

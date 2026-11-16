@@ -68,7 +68,7 @@ change, and `steering/<file>.md`. Keep the English-stable tokens exactly (`US-n.
 **tracks `[list|init <name>|check] [name] [--lang …]`** — `spec_tracks {action, name?, lang?}`: a team's own track pack
 in `.specs/tracks/<name>/` (`${CLAUDE_PLUGIN_ROOT}/skills/dev-spec-driven/references/project-tracks.md`). `track.json`:
 `name` = the folder, a `marker` (`^[A-Z][A-Z0-9]{1,11}$`, never a built-in marker — SAAS, AI, SEC, PRIVACY, DIST, API, UI,
-OBS, DATA —, a reserved word — TDD, CORE, SHARED, TODO, TBD, TBC, FIXME, NEEDS, NOTE, WIP — or an ID's shape: US / US1,
+OBS, DATA, PORT —, a reserved word — TDD, CORE, SHARED, TODO, TBD, TBC, FIXME, NEEDS, NOTE, WIP — or an ID's shape: US / US1,
 P1, AC / AC1, SC / SC1, EC / EC1, NFR / NFR1, T1), `title`, `signals`, `sections`. Use it like any track:
 `spec_create {tracks: ["tdd", "a11y"]}`. `check` reports each problem with its code; a bad pack is ignored as a whole.
 

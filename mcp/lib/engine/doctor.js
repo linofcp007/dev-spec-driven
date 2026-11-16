@@ -40,6 +40,7 @@ let expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, act
 let isPlaceholderTask, finishFeature, ghostMarkers; // the check registry (the tasks gate, the execution gate, its live views)
 let criticalFlowState, criticalFlowCheck; // quality.js — the critical-flow warns (1.33)
 let designSystemRegistry, designSystemCheck, designSystemGated; // quality.js — the design-system registry's check (1.35)
+let portOn, portPlanCheck, portPlanProbe, portRunChecks; // port.js — +port's fence (1.36)
 let dayOf; // core.js — the local calendar date (today / dayOf)
 let PROBE_IO; // files.js — the engine's view of the disk for the project probe (isDevSpecDir)
 function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyControls, controlVisible, acDuplicates, activeDesign, activeTasks,
@@ -67,7 +68,7 @@ function __link(E) { ({ dayOf, PROBE_IO, expandHome, projectChecks, verifyContro
   isChangeDir, changeScope, changeViews, criteriaText, CHANGE_FILE, planFastForwardEnd, approvalsInForce, testsStaleText,
   suspiciousVerify, worktreeProject, stateFromFile, roadmapGovernanceCheck, movedEvidence, unknownExpectValues, withoutTaskMarkers,
   branchView, evidenceMode, approvalGuardLevel, isPlaceholderTask, finishFeature, ghostMarkers, criticalFlowState, criticalFlowCheck,
-  designSystemRegistry, designSystemCheck, designSystemGated } = E); }
+  designSystemRegistry, designSystemCheck, designSystemGated, portOn, portPlanCheck, portPlanProbe, portRunChecks } = E); }
 
 // What the PostToolUse hook reports when design.md is saved: the design's mandatory checks for the feature's ACTIVE
 // tracks — [SaaS]/[AI] sections missing or unfilled, the Constitution Check (not for a bugfix: bug.md's Root Cause
@@ -298,6 +299,7 @@ function statusFeature(projectDir, name) {
     uiSections: trackView("ui"),
     obsSections: trackView("obs"),
     dataSections: trackView("data"), // 1.21 F4
+    portSections: trackView("port"), // 1.36
     ...(Object.keys(packSections).length ? { packSections } : {}),
     ...(missingPacks.length ? { missingPacks } : {}), // saved track packs the project lacks now (inactive — doctor: track-pack-missing)
   };
@@ -1026,7 +1028,7 @@ const DOCTOR_CHECKS = [
   // overlaps) and the stricter filled rule: a section holding nothing but the template's guidance lines fails — a WARN on a design
   // approved already (never a phase failed retroactively; its next approval asks — the approval holds every NEW one to it).
   { id: "<track>-sections", family: /-sections$/, phase: 2, emits: ["saas-sections", "ai-sections", "sec-sections", "privacy-sections", "dist-sections",
-    "api-sections", "ui-sections", "obs-sections", "data-sections"], applies: (c) => c.read("design.md") != null, run: (c) => {
+    "api-sections", "ui-sections", "obs-sections", "data-sections", "port-sections"], applies: (c) => c.read("design.md") != null, run: (c) => {
     const allFilled = { saas: c.m.saasAllFilled, ai: c.m.aiAllFilled, ...c.fm.secPrivacy.allFilled };
     const size = c.size, approved = isRecord(c.approvals.design), S = c.fm.sizes;
     return c.sections.map(([tr, mark, rows]) => {
@@ -1061,6 +1063,17 @@ const DOCTOR_CHECKS = [
       const r = designSystemCheck(c.designActive, c.lang, { registry: c.designSystem, gate: c.size, slug: c.slug }); // the approval being made: never legacy
       return [[r.status !== "fail", r.detail]];
     } } },
+  // 1.36 +port (engine/port.js): the fence the plan draws — the baseline and the differential check, each with a runnable _Verify:_ (a
+  // FAIL at size m / l, where the tasks approval refuses it — designReuseGated —, unless the tasks are approved already; a warn at s / no
+  // size); a task listed before the baseline, a _Depends:_ that never reaches it (warns). Not while tasks.md is a later phase's template.
+  // The anchors read the whole requirements.md (trackAcIds picks the [PORT] lines), as complete_task and spec_finish do.
+  { id: "port-verify", phase: 5, applies: (c) => portOn(c.kind, c.tracks) && c.exists("tasks.md") && !c.laterFiles.includes("tasks.md"),
+    run: (c) => portPlanCheck(c.blocks, c.reqs, c.kind, c.size, isRecord(c.approvals.tasks), c.lang),
+    gate: { tasks: (c) => portPlanProbe(c.blocks, c.reqs, c.kind, c.tracks, c.size, c.lang) } },
+  // … once tasks are ticked: the differential check not run again since the improvements were ticked (port-recheck — spec_finish
+  // blocks on it), a task ticked before the [PORT] task it waits for had passed (port-fence). Warns.
+  { id: "port-runs", emits: ["port-recheck", "port-fence"], phase: 6, applies: (c) => portOn(c.kind, c.tracks) && c.blocks.some((b) => b.done),
+    run: (c) => portRunChecks(c.blocks, c.reqs, c.vs.evidence, c.state.ticks, evidenceRule(c.projectDir), c.lang, c.slug) },
   // a saved track pack the project no longer has (its folder deleted, or the pack now invalid) — the track is inactive.
   { id: "track-pack-missing", applies: (c) => c.missingPacks.length > 0, run: (c) => {
     const reg = packRegistry(), st = readJson(statePath(c.dir)).data, K = c.fm.trackPacks;
@@ -1281,7 +1294,7 @@ const GATES = {
   // the plan of a change: ONE file holds its criteria and its tasks, one gate checks both
   tasks: { artifact: (c) => (c.kind === "change" ? { file: CHANGE_FILE, missing: !c.exists(CHANGE_FILE) } : { file: "tasks.md", missing: !c.exists("tasks.md") }),
     probes: (c) => (c.kind === "change" ? ["ears", "placeholders", "clarifications", "ac-uniqueness", "placeholders:realTasks", "change-scope", "traceability", "task-deps"]
-      : ["placeholders", "placeholders:realTasks", "traceability", "task-deps"]) },
+      : ["placeholders", "placeholders:realTasks", "traceability", "port-verify", "task-deps"]) },
   // Phase 4 has no artifact of its own: it signs off the failing tests (+tdd) / the eval harness (+ai) that implement an active plan —
   // nothing to approve without one (a core-only feature has no Phase 4).
   tests: { artifact: (c) => ({ file: c.tracks.includes("ai") && !c.tracks.includes("tdd") ? "eval-plan.md" : "test-plan.md", missing: !phaseActive("tests", c.tracks) || (!c.testsTdd && !c.testsAi) }),

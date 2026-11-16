@@ -100,6 +100,11 @@ const text = {
       ["Lineage & Ownership", "- Sources → transformations → consumers (a lineage diagram or the dbt DAG) · the owner of each dataset and who is told when it breaks · the freshness SLA consumers rely on · the history each table keeps (slowly changing dimensions: type 1 overwrites, type 2 keeps versions)."],
       ["Retention & Cost", "- Retention per dataset and storage tier (the raw zone vs the curated one; hot / warm / cold) — personal data follows references/privacy-track.md · partitioning and clustering so a query scans only what it needs · the expected storage and query cost per month and the alert when it drifts."],
     ],
+    port: [
+      ["Behaviour Baseline", "- What is kept: the outputs, errors and side effects (and their order) the old code produces · the corpus — recorded production inputs, the old test suite, fixtures — and why it reaches the paths that matter · where the baseline lives (its path) · recorded from the OLD code before any code it covers changes, never regenerated from the new code (references/port-patterns.md)."],
+      ["Differential Check", "- The command that runs the NEW code over the corpus and compares it with the RECORDED baseline (never with live old code — it still runs after the cut-over) · what is normalized (timestamps, generated IDs, an order the contract doesn't fix, a float tolerance) and why each is no behaviour · how a difference is reported · after the port, every intended difference listed with the criterion that asks for it — never silenced."],
+      ["Deferred Improvements", "- Each cleanup or behaviour change noticed during the port, written here instead of made — done after the differential check: as a later task (listed after it), in the simplification pass (behaviour-preserving cleanups only) or in a follow-up feature."],
+    ],
   },
   // trackTasks — each built-in track's template tasks (none for +tdd — it only adds markers): the story heading and each task's
   // text, in the order of the layout's TRACK_TASK_PLAN (the criteria each task implements and makes green, its fixed markers).
@@ -182,6 +187,21 @@ const text = {
         "Backfill — the procedure for a date range (parallelism, cost, a dry run), rehearsed on one partition and compared with a single run",
         "Lineage, ownership and retention — sources → transformations → consumers documented, an owner per dataset, the retention and partitioning from design.md applied",
       ],
+    },
+    // +port (1.36): two headings — the baseline's (the plan's first task) and the differential check's (after US-1) — and the slots
+    // of their _Implements:_ / _Verify:_ lines
+    port: {
+      leadHeading: "Story US-1 — Behaviour Baseline (before the port)",
+      heading: "Story US-1 — Differential Check (the port's proof)",
+      tasks: [
+        "Record the behaviour baseline — run the OLD implementation over the corpus and keep its outputs and errors as the baseline, before any code it covers changes",
+        "Differential check — run the NEW implementation over the corpus and compare it with the recorded baseline; every difference is a bug or an intended difference listed with its criterion",
+      ],
+      slots: {
+        baseline: "[path of the recorded baseline — the old outputs per corpus case]",
+        verifyOld: "[command that runs the OLD implementation on the corpus and compares it with the baseline]",
+        verifyNew: "[command that runs the NEW implementation on the corpus and compares it with the recorded baseline]",
+      },
     },
   },
   // requirements — the title, the Summary, then the user stories (size S: the one story) up to the core criteria; the active
@@ -301,6 +321,10 @@ Outcomes the feature must achieve — business/UX, not implementation. Quantify 
         "IF the job is re-run for a partition that was already loaded, THEN THE SYSTEM SHALL produce the same result as a single run, with no duplicate and no missing rows (an idempotent re-run and backfill).",
         "IF the newest data in [the table] is older than [its freshness SLA], THEN THE SYSTEM SHALL alert [the owner] and mark the table stale for its consumers.",
         "WHEN the schema of [the source] changes, THE SYSTEM SHALL accept an additive, backward-compatible change and SHALL reject a breaking change (a removed or renamed column, a narrowed type) before any row reaches [the consumers].",
+      ],
+      port: [
+        "WHEN the new implementation processes [the corpus — the recorded inputs, fixtures or old test cases that hold the current behaviour], THE SYSTEM SHALL produce the same outputs as the old implementation, case by case.",
+        "IF the old implementation rejects an input of [the corpus] with an error, THEN THE SYSTEM SHALL reject it with the same error code or type.",
       ],
     },
   },
@@ -526,6 +550,8 @@ Every AC must appear in at least one "Covers" cell. Gaps (with justification):
       idempotentRerun: "a partition re-run or backfilled twice leaves the same rows as one run — no duplicate, no gap",
       freshness: "a partition older than the freshness SLA: the freshness check fails and alerts the owner",
       schemaChange: "schema-change compatibility: an added optional column passes, a removed / renamed column or a narrowed type is rejected before the load",
+      differential: "differential check: the new output equals the recorded baseline on every corpus case",
+      differentialErrors: "differential check: every failing corpus case gets the old implementation's error code or type",
     },
   },
   // checklist — the items: the core four, +tdd's, then per marker track its sections item (n: the design sections to fill —
@@ -586,6 +612,11 @@ Tracks: ${label}. Tick before calling the feature done.`,
       (n) => `DATA: ${n} mandatory design sections filled (no TODO) — every dataset has a schema, an owner and a compatibility rule; every check says what a failure does.`,
       "DATA: the data-quality checks run at ingestion and before publishing — a bad row quarantined, never loaded; the freshness alert reaches the owner.",
       "DATA: a partition re-run and a backfill rehearsed on real-sized data give the same rows as one run; retention and partitioning applied as designed.",
+    ],
+    port: [
+      (n) => `PORT: ${n} mandatory design sections filled (no TODO) — the corpus named, what is normalized and why.`,
+      "PORT: the baseline recorded from the OLD code before the port's work started — never regenerated from the new code.",
+      "PORT: the differential check green on the final build over the whole corpus; every intended difference listed with the criterion that asks for it.",
     ],
     saasLoadOnly: "SaaS: load test meets budget (hot path).",
     done: ["Doctor: `doctor` reports readyToAdvance before each gate.", "All phase gates approved (`approve`)."],
@@ -1089,7 +1120,7 @@ const msg = {
       alreadyExists: (slug) => `'${slug}' already exists.`,
       renameArchived: (slug) => `'${slug}' is the name of an archived feature (.specs/_archive/${slug}) — pick another name (with one name, neither of them could be archived or restored).`,
       slugTaken: (slug, held, name) => `'${name}' reaches the folder .specs/${slug}/, which holds another feature ('${held}') — a folder name keeps the first 64 characters of the name. Nothing was changed: pass a shorter name that differs within them (to work on '${held}', name it '${slug}').`,
-      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data",
+      badTrack: "track must be one of: tdd | saas | ai | sec | privacy | dist | api | ui | obs | data | port",
       cycle: (chain) => `Circular dependency: ${chain}`,
       nameRequired: "name required",
       noSpecs: (root) => `No .specs/ at ${root}`,
@@ -1341,6 +1372,8 @@ const msg = {
       unknown: (items, valid) => `Unknown track${items.length > 1 ? "s" : ""}: ${items.map((u) => `'${u.token}'` + (u.suggestion ? ` (did you mean '${u.suggestion}'?)` : "")).join(", ")}. Valid tracks: ${valid}.`,
       cannotRemoveCore: "'core' is always on — it can't be removed.",
       bugfixNeedsTdd: "A bugfix is always test-first — +tdd can't be removed from it.",
+      // +port (1.36) on a bugfix — refused on create and add_track, before anything is written
+      portBugfix: "+port can't go on a bugfix: a bugfix changes behaviour on purpose, a port keeps it the same — port in a feature of its own (/spec), and fix the bug before or after it.",
       notActive: (list) => `Not active: ${list} — nothing to remove.`,
       removed: (list, slug) => `Removed ${list} from the active tracks. No file was deleted — the inactive artifacts stay in place and count again if you re-add the track. Re-run /spec-doctor ${slug}.`,
       // a sized design's section the removed track covered, written back (heading + TODO + guidance)
@@ -1703,6 +1736,9 @@ const msg = {
       bugGateFirst: (n, first) => `Task ${n} can't be completed yet: bug.md → Root Cause is not filled and no task writes it — only task ${first} can be completed until the root cause is written in bug.md (no fix before the root cause).`,
       bugGateFix: (n) => `Task ${n} can't be completed yet: it makes the regression test green — a fix — and bug.md → Root Cause is not filled. Write the root cause there, with its evidence, first (no fix before the root cause is written in bug.md).`,
       bugGateTicked: (n, rc) => `Task ${n} can't be completed yet: bug.md → Root Cause is still empty — task ${rc} is ticked, but its deliverable is that section. Write the root cause there, with its evidence (no fix before the root cause is written in bug.md).`,
+      // +port (1.36) — the fence: a task listed after a [PORT] anchor (the baseline, the differential check) waits for it
+      portHeld: (n, a, slug) => `Task ${n} waits for task ${a} (+port — port first, improve later: the port's work waits for the baseline, an improvement for the differential check). Nothing was recorded. Tick task ${a} with its _Verify:_ run first (${DEV_SPEC} done ${slug} ${a} --run); if task ${n} belongs before it, move it there in tasks.md — a plan change, approved again.`,
+      portHeldUnverified: (n, a, slug) => `Task ${n} waits for task ${a} (+port): task ${a} is ticked but not verified — only a passing run of its _Verify:_ opens the fence (${DEV_SPEC} done ${slug} ${a} --run; a [PORT] task without a runnable _Verify:_ never does). Nothing was recorded.`,
       rootCauseTaskEmpty: (n) => `Task ${n} is ticked, but bug.md → Root Cause is still empty — write the root cause there, with its evidence: the tasks after it (the regression test, the fix) stay refused until it is written.`,
       fill: (file, what, hint) => `Fill ${file} — ${what}; then ${hint}.`,
       fillMissing: "it doesn't exist yet",
@@ -2384,9 +2420,9 @@ const msg = {
     secPrivacy: {
       // Display names of the [SEC] / [PRIVACY] design sections — merged into sectionNames after MSG (EN: the canonical names).
       sectionNames: {},
-      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled", obs: "all 5 filled", data: "all 5 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
+      allFilled: { sec: "all 5 filled", privacy: "all 6 filled", dist: "all 5 filled", api: "all 5 filled", ui: "all 5 filled", obs: "all 5 filled", data: "all 5 filled", port: "all 3 filled" }, // doctor's sec-sections / privacy-sections / dist-sections / api-sections pass detail
       statusSections: { sec: (list) => `Security sections: ${list}`, privacy: (list) => `Privacy sections: ${list}`, dist: (list) => `Data consistency sections: ${list}`, api: (list) => `API contract sections: ${list}`, ui: (list) => `UI sections: ${list}`, obs: (list) => `Operability sections: ${list}`,
-        data: (list) => `Data pipeline sections: ${list}` }, // `dev-spec status`
+        data: (list) => `Data pipeline sections: ${list}`, port: (list) => `Port sections: ${list}` }, // `dev-spec status`
       finishChecks: { // spec_finish `checks`: what only a fresh run or a human can confirm
         sec: ["+sec: SAST, dependency audit and secret scan clean on a fresh local run; every abuse-case test green.",
           "+sec: threat model re-checked against the final code — no new entry point or trust boundary left unmitigated."],
@@ -2402,6 +2438,8 @@ const msg = {
           "+obs: the metrics, logs and traces the design names seen emitting from the final build — no personal data in logs or traces."],
         data: ["+data: the data-quality checks, a partition re-run and a backfill rehearsal green on a fresh run against real-sized data — the same rows as one run, bad rows quarantined.",
           "+data: every dataset the final code writes matches its contract (schema, owner, freshness SLA) and the lineage, retention and partitioning in design.md."],
+        port: ["+port: the differential check green on the final build over the whole corpus — every difference left is listed in design.md with the criterion that asks for it.",
+          "+port: the baseline files unchanged since the baseline task was ticked (their git history older than the port's changes); every Deferred Improvement made in a later task or still listed for later."],
       },
       clarify: { // spec_clarify questions for the track (asked while requirements.md says nothing about them)
         secAccess: "Specify what an unauthenticated or unauthorized caller gets (IF … THEN THE SYSTEM SHALL deny …) and the ASVS level the feature targets.",
@@ -2411,6 +2449,19 @@ const msg = {
         distDelivery: "Specify the delivery guarantee (at-least-once) and how a message delivered twice is detected and applied once (idempotency key, inbox) — write it as an AC.",
         distFailure: "Specify what the feature does when each dependency (database, broker, external API) is unavailable or times out — as IF … THEN THE SYSTEM SHALL criteria.",
       },
+    },
+
+    // +port (1.36): doctor's port-verify / port-recheck / port-fence details (and spec_finish's port-recheck blocker). b: the baseline
+    // task, d: the differential check — the two [PORT] anchors (engine/port.js)
+    port: {
+      verifyOk: (b, d, waiting) => `port order: task ${b} records the baseline, task ${d} checks the new code against it${waiting ? ` — ${waiting} wait for it` : ""}.`,
+      verifyMissing: "+port: no task records the baseline and checks the new code against it — the port needs both, each with a runnable _Verify:_ (the [PORT] template tasks, or tasks citing a [PORT] criterion — references/port-patterns.md)",
+      noVerify: (list) => `a [PORT] task without a runnable _Verify:_ never opens the fence: ${list}`,
+      approvedAlready: "(the tasks are approved already — their next approval requires it)",
+      baselineLate: (list, b) => `listed before the baseline (task ${b}): ${list} — move the baseline first, or it may be recorded from the new code`,
+      dependsEscape: (list, b) => `a _Depends:_ that never reaches the baseline (task ${b}): ${list} — a wave can start them before it; add ${b} to it`,
+      recheck: (d, list, slug) => `the differential check (task ${d}) has not passed again since a task after it was ticked or re-run (${list}) — run it again on the final code: ${DEV_SPEC} done ${slug} ${d} --run`,
+      fence: (list) => `ticked before the [PORT] task they wait for (in brackets) had passed: ${list} — a task moved, +port turned off and on, or a checkbox edited by hand; check them against the baseline and the differential check`,
     },
 
     // Marker-shaped text on a task line that yields no marker (doctor malformed-markers).
@@ -3644,6 +3695,11 @@ const brief = {
       ],
     },
     metricsRule: "Every metric listed above is actually emitted — show the evidence in the report.",
+    // +port (1.36): the definition of done of a task of the port (between the baseline and the differential check) and of one after it
+    portRules: {
+      port: () => "Port task: keep the behaviour exactly — the same outputs, errors and side effects as the old code. A cleanup or a change you notice goes under design.md → [PORT] Deferred Improvements, never into this task.",
+      after: (d) => `After the port: the differential check (task ${d}) stays green but for the differences this task's criteria ask for — each listed in design.md → [PORT] Differential Check with the criterion's ID. Run task ${d}'s _Verify:_ again once this task is done.`,
+    },
     // the definition of done of an _Expect: fail_ (red) task — replaces the loop's green-making rules.
     redRules: [
       "This is a RED task: write (or keep) the planned test(s) exactly as the test plan describes them — no production code and no fix in this task.",
